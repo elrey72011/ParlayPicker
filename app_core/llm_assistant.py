@@ -14,54 +14,66 @@ logger = logging.getLogger(__name__)
 # GEMINI (GOOGLE GENERATIVE AI) SETUP
 # -------------------------------------------------------------------
 try:
-    # Use google-genai package
-    from google import genai
-    from google.genai import types
+    # Use google-generativeai package (V1) as requested
+    import google.generativeai as genai
     _GEMINI_AVAILABLE = True
 except ImportError:
     genai = None
     _GEMINI_AVAILABLE = False
-    logger.warning("google-genai not found. Gemini features disabled.")
+    logger.warning("google-generativeai not found. Gemini features disabled.")
 
 
 # Global holding the currently active model name
-ACTIVE_MODEL = "gemini-1.5-flash-001"
+ACTIVE_MODEL = "gemini-1.5-flash"
 
-# Fallback list as requested (Updated for stability)
-MODEL_FALLBACKS = ["gemini-1.5-flash-001", "gemini-1.5-pro", "gemini-1.5-flash"]
+# Fallback list (still useful for internal tracking, though implementation focuses on ACTIVE_MODEL)
+MODEL_FALLBACKS = ["gemini-1.5-flash", "gemini-1.5-flash-001", "gemini-1.5-pro"]
 
-_GEMINI_CLIENT = None
+_GEMINI_MODEL = None
 
 def initialize_gemini():
-    """Initializes Google Generative AI Client with API Key."""
-    global _GEMINI_CLIENT
+    """Initialize Gemini with updated model"""
+    global _GEMINI_MODEL
     if not _GEMINI_AVAILABLE:
-        return
+        return None, "Library not available"
 
-    if _GEMINI_CLIENT is not None:
-        return
+    if _GEMINI_MODEL is not None:
+        return _GEMINI_MODEL, None
 
-    # Try to find API key in environment or Streamlit secrets
-    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    try:
+        # Get API key from Streamlit secrets
+        api_key = st.secrets.get("GEMINI_API_KEY") or st.secrets.get("GOOGLE_API_KEY")
 
-    # Fallback to st.secrets if not in env
-    if not api_key:
-        try:
-            api_key = st.secrets.get("GOOGLE_API_KEY") or st.secrets.get("GEMINI_API_KEY")
-        except Exception:
-            pass
+        # Also check env vars as fallback
+        if not api_key:
+            api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
 
-    if api_key:
-        try:
-            _GEMINI_CLIENT = genai.Client(api_key=api_key)
-        except Exception as e:
-            logger.error(f"Failed to initialize Gemini Client: {e}")
-            if hasattr(st, "session_state"):
-                st.session_state["gemini_disabled_reason"] = f"INIT_FAILED: {str(e)}"
-    else:
-        logger.warning("GEMINI_API_KEY or GOOGLE_API_KEY not found in env or secrets.")
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY not found in secrets or environment")
+
+        # Configure with API key
+        genai.configure(api_key=api_key)
+
+        # Use NEW model name
+        model = genai.GenerativeModel('gemini-1.5-flash')
+
+        # Test with simple call to verify key and model validity
+        # Using a very small token limit to keep it fast
+        model.generate_content(
+            "test",
+            generation_config=genai.types.GenerationConfig(max_output_tokens=5)
+        )
+
+        _GEMINI_MODEL = model
+        logger.info("✓ Gemini 1.5 Flash initialized successfully")
+        return model, None
+
+    except Exception as e:
+        error_msg = f"Gemini initialization failed: {str(e)}"
+        logger.error(error_msg)
         if hasattr(st, "session_state"):
-            st.session_state["gemini_disabled_reason"] = "MISSING_KEY"
+            st.session_state["gemini_disabled_reason"] = f"INIT_FAILED: {str(e)}"
+        return None, error_msg
 
 def _safe_json_extract(text: str) -> Dict[str, Any]:
     text = (text or "").strip()
@@ -107,8 +119,8 @@ def analyze_kalshi_context_with_llm(context_markdown: str, session_state: Option
             # Already disabled - skip silently
             return []
 
-    initialize_gemini()
-    if _GEMINI_CLIENT is None:
+    model, err = initialize_gemini()
+    if model is None:
         return []
 
     system_instructions = """You are a prediction market assistant that evaluates current prices for event contracts on Kalshi.
@@ -147,36 +159,11 @@ CONTEXT:
 """
 
     try:
-        text = ""
-        # Try models in order
-        for model_name in MODEL_FALLBACKS:
-            try:
-                # Rate limit protection (Increased to 3.5s)
-                time.sleep(3.5)  # Verified 3.5s rate limit
+        # Rate limit protection (Increased to 3.5s)
+        time.sleep(3.5)
 
-                resp = _GEMINI_CLIENT.models.generate_content(
-                    model=model_name,
-                    contents=prompt
-                )
-                text = getattr(resp, "text", "") or ""
-                break
-            except Exception as e:
-                exc_str = str(e)
-
-                # Check for APIKEYINVALID error
-                if "API_KEY_INVALID" in exc_str or "API key not valid" in exc_str or "INVALID_ARGUMENT" in exc_str or "400" in exc_str: # 400 often means bad request/key
-                    # Disable Gemini for the rest of this session
-                    if session_state is not None:
-                        if hasattr(session_state, "gemini_disabled_reason"):
-                            session_state.gemini_disabled_reason = "APIKEYINVALID"
-                        else:
-                            session_state["gemini_disabled_reason"] = "APIKEYINVALID"
-                    # Log ONE warning and return
-                    logger.warning(f"⚠️ Gemini API key invalid/error. Disabling Gemini for this session. Error: {exc_str}")
-                    return []
-
-                logger.warning(f"Kalshi LLM analysis failed with {model_name}: {e}")
-                continue
+        resp = model.generate_content(prompt)
+        text = getattr(resp, "text", "") or ""
 
         if not text:
             return []
@@ -203,6 +190,20 @@ CONTEXT:
         return cleaned
 
     except Exception as e:
+        exc_str = str(e)
+
+        # Check for APIKEYINVALID error
+        if "API_KEY_INVALID" in exc_str or "API key not valid" in exc_str or "INVALID_ARGUMENT" in exc_str or "400" in exc_str:
+            # Disable Gemini for the rest of this session
+            if session_state is not None:
+                if hasattr(session_state, "gemini_disabled_reason"):
+                    session_state.gemini_disabled_reason = "APIKEYINVALID"
+                else:
+                    session_state["gemini_disabled_reason"] = "APIKEYINVALID"
+            # Log ONE warning and return
+            logger.warning(f"⚠️ Gemini API key invalid/error. Disabling Gemini for this session. Error: {exc_str}")
+            return []
+
         logger.warning(f"LLM assistant call failed: {e}")
         return []
 
@@ -231,41 +232,32 @@ def generate_confidence_explanation(prompt: str, session_state: Optional[Any] = 
             # Already disabled - skip silently (no repeated warnings)
             return {}
 
-    initialize_gemini()
-    if _GEMINI_CLIENT is None:
+    model, err = initialize_gemini()
+    if model is None:
         return {}
 
-    # Try models in order
-    errors = []
-    for model_name in MODEL_FALLBACKS:
-        try:
-            # Rate limit protection
-            time.sleep(3.5)
+    try:
+        # Rate limit protection
+        time.sleep(3.5)
 
-            resp = _GEMINI_CLIENT.models.generate_content(
-                model=model_name,
-                contents=prompt
-            )
-            text = getattr(resp, "text", "") or ""
-            return _safe_json_extract(text)
-        except Exception as exc:
-            exc_str = str(exc)
-            errors.append(f"{model_name}: {exc_str}")
+        resp = model.generate_content(prompt)
+        text = getattr(resp, "text", "") or ""
+        return _safe_json_extract(text)
 
-            # Check for APIKEYINVALID error (Google API returns 400 with this message)
-            if "API_KEY_INVALID" in exc_str or "API key not valid" in exc_str or "INVALID_ARGUMENT" in exc_str or "400" in exc_str:
-                # Disable Gemini for the rest of this session
-                if session_state is not None:
-                    if hasattr(session_state, "gemini_disabled_reason"):
-                        session_state.gemini_disabled_reason = "APIKEYINVALID"
-                    else:
-                        session_state["gemini_disabled_reason"] = "APIKEYINVALID"
-                # Log ONE warning and return
-                logger.warning(f"⚠️ Gemini API key invalid. Disabling Gemini for this session. Error: {exc_str}")
-                return {}
+    except Exception as exc:
+        exc_str = str(exc)
 
-            continue
+        # Check for APIKEYINVALID error (Google API returns 400 with this message)
+        if "API_KEY_INVALID" in exc_str or "API key not valid" in exc_str or "INVALID_ARGUMENT" in exc_str or "400" in exc_str:
+            # Disable Gemini for the rest of this session
+            if session_state is not None:
+                if hasattr(session_state, "gemini_disabled_reason"):
+                    session_state.gemini_disabled_reason = "APIKEYINVALID"
+                else:
+                    session_state["gemini_disabled_reason"] = "APIKEYINVALID"
+            # Log ONE warning and return
+            logger.warning(f"⚠️ Gemini API key invalid. Disabling Gemini for this session. Error: {exc_str}")
+            return {}
 
-    # All models failed (but not due to invalid key)
-    logger.warning(f"Gemini confidence call failed on all fallbacks: {'; '.join(errors)}")
-    return {}
+        logger.warning(f"Gemini confidence call failed: {exc_str}")
+        return {}
