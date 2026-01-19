@@ -25,7 +25,7 @@ from app_core.kalshi_integrator import (
     parse_event_ticker_codes,
 )
 
-from app_core.llm_assistant import generate_confidence_explanation, initialize_gemini
+from app_core.llm_assistant import generate_confidence_explanation, initialize_gemini, generate_batch_confidence_explanation
 
 from app_core.reddit_sentiment import fetch_reddit_sentiment_map
 
@@ -12293,7 +12293,7 @@ if should_display:
                     return False
             return bool(pd.isna(v))
 
-        def _apply_gemini(row: pd.Series) -> pd.Series:
+        def _apply_gemini(row: pd.Series, batch_data: Optional[Dict] = None) -> pd.Series:
             row = row.copy()
             for col, default in [
                 ("gemini_mode", "guardrail"),
@@ -12331,32 +12331,36 @@ if should_display:
                 row["llm_disagreement_flag"] = False
                 return row
             try:
-                payload = {
-                    "league": row.get("League"),
-                    "home": row.get("Home"),
-                    "away": row.get("Away"),
-                    "commence_local": row.get("Commence (Local)"),
-                    "spread_pick": row.get("Spread & Pick"),
-                    "spread_line": row.get("spread_pick_line") or (row.get("Line") if str(row.get("Market")).lower() == "spread" else None),
-                    "spread_odds": row.get("spread_pick_odds"),
-                    "spread_prob_final": row.get("spread_prob"),
-                    "spread_prob_market": row.get("spread_prob_market"),
-                    "total_pick": row.get("Total & Pick"),
-                    "total_line": row.get("total_pick_line") or (row.get("Line") if str(row.get("Market")).lower() == "total" else None),
-                    "total_odds": row.get("total_pick_odds"),
-                    "total_prob_final": row.get("total_prob"),
-                    "total_prob_market": row.get("total_prob_market"),
-                    "kalshi_spread_prob": row.get("kalshi_prob_spread"),
-                    "kalshi_total_prob": row.get("kalshi_prob_total"),
-                    "kalshi_matched": bool(row.get("kalshi_matched")),
-                    "prob_engine": row.get("prob_engine"),
-                    "sentiment_badge": row.get("sentiment_badge"),
-                    "sentiment_flags": [row.get("spread_sentiment_note"), row.get("total_sentiment_note")],
-                    "warnings": row.get("Warnings"),
-                    "odds_placeholder_detected": row.get("odds_placeholder_detected"),
-                }
-                sig = _gemini_payload_signature(payload)
-                gem_res = cached_gemini_confidence(sig, payload) or {}
+                gem_res = {}
+                if batch_data:
+                    gem_res = batch_data
+                else:
+                    payload = {
+                        "league": row.get("League"),
+                        "home": row.get("Home"),
+                        "away": row.get("Away"),
+                        "commence_local": row.get("Commence (Local)"),
+                        "spread_pick": row.get("Spread & Pick"),
+                        "spread_line": row.get("spread_pick_line") or (row.get("Line") if str(row.get("Market")).lower() == "spread" else None),
+                        "spread_odds": row.get("spread_pick_odds"),
+                        "spread_prob_final": row.get("spread_prob"),
+                        "spread_prob_market": row.get("spread_prob_market"),
+                        "total_pick": row.get("Total & Pick"),
+                        "total_line": row.get("total_pick_line") or (row.get("Line") if str(row.get("Market")).lower() == "total" else None),
+                        "total_odds": row.get("total_pick_odds"),
+                        "total_prob_final": row.get("total_prob"),
+                        "total_prob_market": row.get("total_prob_market"),
+                        "kalshi_spread_prob": row.get("kalshi_prob_spread"),
+                        "kalshi_total_prob": row.get("kalshi_prob_total"),
+                        "kalshi_matched": bool(row.get("kalshi_matched")),
+                        "prob_engine": row.get("prob_engine"),
+                        "sentiment_badge": row.get("sentiment_badge"),
+                        "sentiment_flags": [row.get("spread_sentiment_note"), row.get("total_sentiment_note")],
+                        "warnings": row.get("Warnings"),
+                        "odds_placeholder_detected": row.get("odds_placeholder_detected"),
+                    }
+                    sig = _gemini_payload_signature(payload)
+                    gem_res = cached_gemini_confidence(sig, payload) or {}
                 flags = gem_res.get("flags") if isinstance(gem_res, dict) else []
                 if not isinstance(flags, list):
                     flags = gem_res.get("risk_flags") if isinstance(gem_res, dict) else []
@@ -12426,9 +12430,56 @@ if should_display:
             # Defensively dedupe columns before Gemini pass to prevent row.get(col) from returning Series
             df = df.loc[:, ~df.columns.duplicated()].copy()
 
+            # BATCH API CALL: Construct payloads for all eligible rows
+            batch_payloads = []
+
+            # Helper to construct payload (duplicated from _apply_gemini logic for batching)
+            for idx, row in df.iterrows():
+                if idx in gemini_allowed_idx:
+                    # Construct lightweight payload for batch matching allowed_fields
+                    p = {
+                        "game_id": str(idx),
+                        "league": row.get("League"),
+                        "home": row.get("Home"),
+                        "away": row.get("Away"),
+                        "commence_local": row.get("Commence (Local)"),
+                        "spread_pick": row.get("Spread & Pick"),
+                        "spread_line": row.get("spread_pick_line") or (row.get("Line") if str(row.get("Market")).lower() == "spread" else None),
+                        "spread_odds": row.get("spread_pick_odds"),
+                        "spread_prob_final": row.get("spread_prob"),
+                        "spread_prob_market": row.get("spread_prob_market"),
+                        "total_pick": row.get("Total & Pick"),
+                        "total_line": row.get("total_pick_line") or (row.get("Line") if str(row.get("Market")).lower() == "total" else None),
+                        "total_odds": row.get("total_pick_odds"),
+                        "total_prob_final": row.get("total_prob"),
+                        "total_prob_market": row.get("total_prob_market"),
+                        "kalshi_spread_prob": row.get("kalshi_prob_spread"),
+                        "kalshi_total_prob": row.get("kalshi_prob_total"),
+                        "kalshi_matched": bool(row.get("kalshi_matched")),
+                        "prob_engine": row.get("prob_engine"),
+                        "sentiment_badge": row.get("sentiment_badge"),
+                        "sentiment_flags": [row.get("spread_sentiment_note"), row.get("total_sentiment_note")],
+                        "warnings": row.get("Warnings"),
+                        "odds_placeholder_detected": row.get("odds_placeholder_detected"),
+                    }
+                    # Sanitize None values to make JSON cleaner (optional, but helpful)
+                    p = {k: (v if v is not None else "") for k, v in p.items()}
+                    batch_payloads.append(p)
+
+            # Call Batch API
+            batch_results = {}
+            if batch_payloads:
+                if logger:
+                    logger.info(f"Sending {len(batch_payloads)} games to Gemini in batches...")
+                batch_results = generate_batch_confidence_explanation(batch_payloads, session_state=st.session_state)
+
             gemini_results = []
             for idx, row in df.iterrows():
-                new_row = _apply_gemini(row)
+                # Pass pre-computed result if available
+                # Use str(idx) because we cast it above
+                batch_data = batch_results.get(str(idx))
+                new_row = _apply_gemini(row, batch_data=batch_data)
+
                 # We only want the new columns to avoid duplication issues
                 # Identify columns that were added or modified
                 # Since _apply_gemini returns a full row, we can just use the result directly

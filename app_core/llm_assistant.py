@@ -265,3 +265,111 @@ def generate_confidence_explanation(prompt: str, session_state: Optional[Any] = 
 
         logger.warning(f"Gemini confidence call failed: {exc_str}")
         return {}
+
+def generate_batch_confidence_explanation(games_data: List[Dict[str, Any]], session_state: Optional[Any] = None) -> Dict[str, Dict[str, Any]]:
+    """
+    Single Gemini call for all games at once (batch processing).
+
+    Args:
+        games_data: List of game dicts with pick info. Each dict must have a 'game_id' or unique identifier.
+        session_state: Optional Streamlit session_state to check/set gemini_disabled_reason
+
+    Returns:
+        Dict mapping game_id -> confidence assessment dict
+    """
+    # Check if Gemini is globally unavailable
+    if not _GEMINI_AVAILABLE or not games_data:
+        return {}
+
+    # Check session-level disable flag
+    if session_state is not None:
+        disabled_reason = getattr(session_state, "gemini_disabled_reason", None) or session_state.get("gemini_disabled_reason")
+        if disabled_reason:
+            return {}
+
+    client, err = initialize_gemini()
+    if client is None:
+        return {}
+
+    # Limit batch size to avoid token limits.
+    BATCH_SIZE = 50
+    all_results = {}
+
+    logger.info(f"Processing {len(games_data)} games in {max(1, (len(games_data) + BATCH_SIZE - 1) // BATCH_SIZE)} batches")
+
+    for i in range(0, len(games_data), BATCH_SIZE):
+        batch = games_data[i:i+BATCH_SIZE]
+
+        # Build prompt
+        prompt = f"""Analyze these {len(batch)} sports betting picks and provide confidence assessments.
+
+For each game, return a JSON object with:
+- game_id: The identifier provided in input
+- recommended_bet: <string describing the pick or 'none'>
+- confidence: HIGH/MEDIUM/LOW
+- explanation: Brief 1-sentence explanation explaining agreement or disagreement (max 240 chars)
+- flags: Array of short flag strings (e.g. "missing_odds", "contrarian")
+
+Games to analyze:
+{json.dumps(batch, indent=2, default=str)}
+
+Return ONLY a JSON array of objects. No markdown formatting.
+"""
+
+        try:
+            # Rate limit protection - slight delay between batches
+            time.sleep(2.0)
+
+            resp = client.models.generate_content(
+                model=ACTIVE_MODEL,
+                contents=prompt
+            )
+            text = getattr(resp, "text", "") or ""
+
+            # Parse response
+            # Sometimes it might be wrapped in ```json ... ```
+            text = text.strip()
+            if text.startswith("```json"):
+                text = text[7:]
+            if text.startswith("```"):
+                text = text[3:]
+            if text.endswith("```"):
+                text = text[:-3]
+            text = text.strip()
+
+            batch_results = []
+            try:
+                batch_results = json.loads(text)
+            except json.JSONDecodeError:
+                # Try _safe_json_extract logic for lists (roughly)
+                start = text.find("[")
+                end = text.rfind("]")
+                if start >= 0 and end > start:
+                    try:
+                        batch_results = json.loads(text[start:end+1])
+                    except:
+                        pass
+
+            if isinstance(batch_results, list):
+                for res in batch_results:
+                    if isinstance(res, dict) and 'game_id' in res:
+                        all_results[str(res['game_id'])] = res
+            else:
+                 logger.warning(f"Gemini batch response was not a list: {str(text)[:100]}")
+
+        except Exception as exc:
+             exc_str = str(exc)
+             # Check for APIKEYINVALID error
+             if "API_KEY_INVALID" in exc_str or "API key not valid" in exc_str or "INVALID_ARGUMENT" in exc_str or "400" in exc_str:
+                if session_state is not None:
+                    if hasattr(session_state, "gemini_disabled_reason"):
+                        session_state.gemini_disabled_reason = "APIKEYINVALID"
+                    else:
+                         session_state["gemini_disabled_reason"] = "APIKEYINVALID"
+                logger.warning(f"⚠️ Gemini API key invalid. Disabling. Error: {exc_str}")
+                return all_results # Return what we have
+
+             logger.warning(f"Gemini batch call failed: {exc_str}")
+             # We continue to next batch
+
+    return all_results
