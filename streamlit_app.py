@@ -4734,8 +4734,13 @@ kalshi_api_key = read_secret("KALSHI_API_KEY") or read_secret("kalshi_api_key")
 kalshi_api_secret = read_secret("KALSHI_API_SECRET") or read_secret("kalshi_api_secret")
 
 # Initialize Gemini API Key if available
-gemini_api_key = read_secret("GEMINI_API_KEY") or read_secret("GOOGLE_API_KEY") or getattr(config, "GEMINI_API_KEY", None)
+# Don't fallback to config.GEMINI_API_KEY if it might be dummy/missing
+gemini_api_key = read_secret("GEMINI_API_KEY") or read_secret("GOOGLE_API_KEY")
+if not gemini_api_key and getattr(config, "GEMINI_API_KEY", None) and not str(config.GEMINI_API_KEY).startswith("AIzaSyBIDJgxLuUouiBQrslV"):
+    gemini_api_key = config.GEMINI_API_KEY
+
 if gemini_api_key:
+    # Only set if we found a valid-looking key
     os.environ["GEMINI_API_KEY"] = gemini_api_key
     os.environ["GOOGLE_API_KEY"] = gemini_api_key
 keys_resolved = get_api_keys()
