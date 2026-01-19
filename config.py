@@ -184,6 +184,9 @@ NOTIFICATION_CONFIG = {
 # The Odds API (for live odds)
 THE_ODDS_API_KEY = os.getenv('THE_ODDS_API_KEY', 'b722c798f7bca605da45a09dba155152')
 
+# Gemini API Key
+GEMINI_API_KEY = "AIzaSyBIDJgxLuUouiBQrslV..."
+
 # Vertex AI Configuration
 VERTEX_CONFIG = {
     'project_id': GCP_CONFIG['project_id'],
