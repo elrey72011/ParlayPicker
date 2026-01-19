@@ -10992,7 +10992,8 @@ with tab_master:
             'theover_matched', 'theover_delta_final_prob',
             'market_stability', 'consensus_strength', 'confidence_score',
             'Pick_Confidence', 'confidence_reason', 'stats_quality',
-            'sentiment_available'
+            'sentiment_available',
+            'Pick_Reason_Short', 'TheOver_Impact'
         ]
         # Filter to only columns that exist in the dataframe
         results_columns = [col for col in user_columns if col in df.columns]
@@ -11734,6 +11735,12 @@ if should_display:
 
             top_df_display["TheOver_Impact"] = top_df_display.apply(_fmt_theover_impact, axis=1)
             # Add to reason short
+            # Safety check: Ensure Pick_Reason_Short exists
+            if "Pick_Reason_Short" not in top_df_display.columns:
+                logger.warning("Pick_Reason_Short missing from display df, initializing empty")
+                top_df_display["Pick_Reason_Short"] = ""
+
+            # Concatenate safely
             top_df_display["Pick_Reason_Short"] = top_df_display["Pick_Reason_Short"] + " | " + top_df_display["TheOver_Impact"]
 
         if not show_moneyline_details:
