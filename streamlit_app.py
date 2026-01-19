@@ -4833,6 +4833,18 @@ def fetch_odds_games(sport_key: str, run_id: Optional[str] = None) -> List[Dict[
                 logger.info(f"🎮 First game sample keys: {list(first_game.keys())}")
                 logger.info(f"🏀 First game: {first_game.get('home_team')} vs {first_game.get('away_team')}")
                 logger.info(f"⏰ Commence time: {first_game.get('commence_time')}")
+
+                # Apply strictly today-only filter (EST)
+                original_count = len(games)
+                logger.info(f"📅 Applying strict date filter to {original_count} games...")
+                games = filter_games_today_only(games)
+                filtered_count = len(games)
+
+                if filtered_count < original_count:
+                    logger.info(f"✅ DATE FILTER: Removed {original_count - filtered_count} games not on today's date (EST). Remaining: {filtered_count}")
+                else:
+                    logger.info(f"✅ DATE FILTER: All {original_count} games are on today's date (EST)")
+
                 # Success - return immediately
                 return games
             else:
