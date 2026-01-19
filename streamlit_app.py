@@ -6630,9 +6630,10 @@ kalshi_required_toggle = st.sidebar.checkbox(
 st.session_state["kalshi_required"] = kalshi_required_toggle
 if kalshi_integrator:
     kalshi_integrator.required = kalshi_required_toggle
-enable_sentiment = st.sidebar.checkbox(
-    "Enable Sentiment", value=st.session_state.get("enable_sentiment", True)
-)
+enable_sentiment = True  # Forced enabled for Reddit fallback
+# enable_sentiment = st.sidebar.checkbox(
+#     "Enable Sentiment", value=st.session_state.get("enable_sentiment", True)
+# )
 st.session_state["enable_sentiment"] = enable_sentiment
 if st.sidebar.button("Load Games", width="stretch"):
     st.cache_data.clear()  # Force a fresh API call
