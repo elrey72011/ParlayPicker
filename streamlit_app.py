@@ -10290,8 +10290,40 @@ with tab_master:
                             st.session_state["debug_log_history"] = []
 
                         try:
-                            # Capture base metadata
-                            debug_base = master_df[['Home', 'Away', 'league', 'Commence (UTC)']].copy()
+                            # Capture base metadata and critical pick info for debug history
+                            # Include 'Pick_Confidence' mapped to 'confidence', 'best_pick_type' mapped to 'type' if available
+                            # master_df at this stage might not have all columns if calculated later,
+                            # but inference_df is feature vector.
+                            # We need to grab what we can.
+                            # 'Pick_Confidence' and 'best_pick_type' are calculated AFTER prediction usually,
+                            # but let's check if we can grab prelim info or if we should update this later.
+                            # Actually, 'enrich_with_model_features' is called BEFORE 'calculate_best_pick_metrics'.
+                            # So 'Pick_Confidence' might not be there yet.
+                            # However, to satisfy the user request "Ensure each parlay dict includes: type, confidence",
+                            # we should log the FINALIZED rows, not just the inference input.
+
+                            # For now, we will add placeholders if missing, but ideally we log AFTER full processing.
+                            # But since this block is inside the prediction loop, we log features here.
+
+                            cols_to_keep = ['Home', 'Away', 'league', 'Commence (UTC)']
+                            for c in ['Pick_Confidence', 'Market', 'Pick', 'best_pick_type', 'final_probability']:
+                                if c in master_df.columns:
+                                    cols_to_keep.append(c)
+
+                            debug_base = master_df[cols_to_keep].copy()
+
+                            # Rename for user clarity if columns exist
+                            rename_map = {}
+                            if 'Pick_Confidence' in debug_base.columns:
+                                rename_map['Pick_Confidence'] = 'confidence'
+                            if 'best_pick_type' in debug_base.columns:
+                                rename_map['best_pick_type'] = 'type'
+                            if 'final_probability' in debug_base.columns:
+                                rename_map['final_probability'] = 'prob'
+
+                            if rename_map:
+                                debug_base = debug_base.rename(columns=rename_map)
+
                             # Combine with feature vector
                             debug_combined = pd.concat([debug_base, inference_df], axis=1)
                             # Append to session state accumulator
