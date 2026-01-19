@@ -1729,6 +1729,18 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
             conf_label = "LOW"
             reason = "NO_BET_POSSIBLE"
 
+        # Task 2: Downgrade confidence if stats quality is MISSING or FALLBACK
+        # "If FALLBACK or MISSING: confidence should be LIMITED"
+        stats_quality = row.get("stats_quality", "REAL")
+        if stats_quality == "MISSING":
+            conf_label = "LOW"
+            reason += f" [Stats: {stats_quality}]"
+        elif stats_quality == "FALLBACK":
+            # Cap at MEDIUM
+            if conf_label == "HIGH":
+                conf_label = "MEDIUM"
+            reason += f" [Stats: {stats_quality}]"
+
         # At_a_Glance_Confidence Clamping
         # "At_a_Glance_Confidence follows the same rule or is at most equal to Bet_Confidence, never higher."
         glance_conf = row.get("At_a_Glance_Confidence", "LOW")
@@ -3178,9 +3190,19 @@ def render_pipeline_banner() -> None:
             help="Games matched to Kalshi markets",
         )
         sentiment_delta = ", ".join(progress["sentiment_flags"]) if progress["sentiment_flags"] else ""
+        sentiment_status_label = "Ready" if progress["sentiment_ready"] else "Unavailable"
+
+        # Issue 2: Gemini Transparency - Show warning if sentiment/Gemini disabled
+        # Check if disabled via session state or config
+        gemini_disabled_reason = st.session_state.get("gemini_disabled_reason")
+        if gemini_disabled_reason or not progress["sentiment_ready"]:
+             # If specifically disabled due to error, show as warning in UI
+             if not progress["sentiment_ready"]:
+                 st.warning("⚠️ Sentiment analysis unavailable - predictions may be less accurate")
+
         cols[2].metric(
             "Sentiment",
-            "Ready" if progress["sentiment_ready"] else "Unavailable",
+            sentiment_status_label,
             delta=sentiment_delta or None,
         )
         # ============================================
@@ -6642,6 +6664,9 @@ if "master_results_df" in st.session_state:
         try:
             from datetime import datetime
             timestamp_str = datetime.now().strftime("%Y%m%d_%H%M")
+            # Fix Issue 1: Deduplicate columns before export
+            # Use explicit duplicate drop as requested
+            master_df = master_df.loc[:, ~master_df.columns.duplicated()]
             master_csv = master_df.to_csv(index=False).encode("utf-8")
             logger.info(f"Exporting {len(master_df)} rows from master_results_df to CSV for user download.")
             st.sidebar.download_button(
@@ -10856,6 +10881,13 @@ with tab_master:
                 new_hk_col = pd.DataFrame({"HasKalshiMarket": _has_kalshi_market_vectorized(df)}, index=df.index)
                 df = pd.concat([df, new_hk_col], axis=1)
 
+                # Issue 2: Add sentiment_available flag
+                # If sentiment_status is 'ok' or 'partial_cached', then available
+                if "sentiment_status" in df.columns:
+                    df["sentiment_available"] = df["sentiment_status"].astype(str).isin(["ok", "partial_cached", "cached"])
+                else:
+                    df["sentiment_available"] = False
+
                 kalshi_markets_count = df["HasKalshiMarket"].sum()
 
                 # Debug logging requested by user
@@ -10889,7 +10921,8 @@ with tab_master:
                     'Home_Sentiment', 'Away_Sentiment', 'Sentiment_Diff',
                     'kalshi_available', 'HasKalshiMarket',
                     'market_stability', 'consensus_strength', 'confidence_score',
-                    'Pick_Confidence', 'confidence_reason'
+                    'Pick_Confidence', 'confidence_reason', 'stats_quality',
+                    'sentiment_available'
                 ]
                 # Filter to only columns that exist in the dataframe
                 results_columns = [col for col in user_columns if col in df.columns]

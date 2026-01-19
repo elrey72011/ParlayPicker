@@ -1692,7 +1692,20 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     away_fallback = away_matched_names.isna()
     combined_fallback = home_fallback | away_fallback
     features_data["feature_stats_fallback"] = combined_fallback
-    features_data["stats_quality"] = combined_fallback.apply(lambda x: "Low (Fallback)" if x else "High (Real)")
+
+    # Task 2: Standardize stats_quality values (REAL/FALLBACK/MISSING)
+    # Optimized using np.select for vectorization
+    conditions = [
+        (home_fallback & away_fallback),  # Both missing
+        (home_fallback | away_fallback)   # At least one missing (but not both, covered above)
+    ]
+    choices = ["MISSING", "FALLBACK"]
+
+    # Generate stats_quality array
+    quality_arr = np.select(conditions, choices, default="REAL")
+
+    # Assign as Series with correct index
+    features_data["stats_quality"] = pd.Series(quality_arr, index=df.index)
 
     if combined_fallback.any():
         fallback_indices = df.index[combined_fallback]
