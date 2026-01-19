@@ -32,6 +32,7 @@ TEAM_ALIAS_MAP_BY_LEAGUE = {
         "Seattle": "Seattle Kraken", "New Jersey": "New Jersey Devils",
         "Buffalo": "Buffalo Sabres", "Philadelphia": "Philadelphia Flyers",
         "Ottawa": "Ottawa Senators", "Winnipeg": "Winnipeg Jets",
+        # Issue 3: Explicit mappings for TheOdds API mismatches
         "Toronto": "Toronto Maple Leafs", "Florida": "Florida Panthers",
         "Vancouver": "Vancouver Canucks", "Montreal": "Montreal Canadiens",
         "NY Rangers": "New York Rangers", "NY Islanders": "New York Islanders",
@@ -60,6 +61,10 @@ TEAM_ALIAS_MAP_BY_LEAGUE = {
         "BOS": "Boston Celtics", "CHI": "Chicago Bulls",
         "CLE": "Cleveland Cavaliers", "MIA": "Miami Heat",
         "ORL": "Orlando Magic", "TOR": "Toronto Raptors",
+        # Issue 3: Explicit City -> Full Name mappings for TheOdds API mismatches
+        "Denver": "Denver Nuggets",
+        "Chicago": "Chicago Bulls",
+        "Houston": "Houston Rockets",
     },
     "NFL": {
         "Arizona": "Arizona Cardinals", "Atlanta": "Atlanta Falcons",
@@ -78,6 +83,11 @@ TEAM_ALIAS_MAP_BY_LEAGUE = {
         "San Francisco": "San Francisco 49ers", "Seattle": "Seattle Seahawks",
         "Tampa Bay": "Tampa Bay Buccaneers", "Tennessee": "Tennessee Titans",
         "Washington": "Washington Commanders",
+        # Issue 3: Explicit City -> Full Name mappings for TheOdds API mismatches
+        "Denver": "Denver Broncos",
+        "Chicago": "Chicago Bears",
+        "Houston": "Houston Texans",
+        "New England": "New England Patriots",
     },
     "NCAAB": {
         "South Carolina": "South Carolina Gamecocks", "Arkansas": "Arkansas Razorbacks",
