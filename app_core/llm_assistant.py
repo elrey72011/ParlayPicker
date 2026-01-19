@@ -56,8 +56,12 @@ def initialize_gemini():
             _GEMINI_CLIENT = genai.Client(api_key=api_key)
         except Exception as e:
             logger.error(f"Failed to initialize Gemini Client: {e}")
+            if hasattr(st, "session_state"):
+                st.session_state["gemini_disabled_reason"] = f"INIT_FAILED: {str(e)}"
     else:
         logger.warning("GEMINI_API_KEY or GOOGLE_API_KEY not found in env or secrets.")
+        if hasattr(st, "session_state"):
+            st.session_state["gemini_disabled_reason"] = "MISSING_KEY"
 
 def _safe_json_extract(text: str) -> Dict[str, Any]:
     text = (text or "").strip()

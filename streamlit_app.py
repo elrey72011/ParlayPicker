@@ -25,7 +25,7 @@ from app_core.kalshi_integrator import (
     parse_event_ticker_codes,
 )
 
-from app_core.llm_assistant import generate_confidence_explanation
+from app_core.llm_assistant import generate_confidence_explanation, initialize_gemini
 
 from app_core.reddit_sentiment import fetch_reddit_sentiment_map
 
@@ -4117,6 +4117,9 @@ def init_data_clients() -> Tuple[Dict[str, Any], Dict[str, Any]]:
 # Must be the first Streamlit call
 st.set_page_config(page_title="ParlayDesk", layout="wide")
 
+# Issue 3: Validate API key before attempting to use Gemini
+initialize_gemini()
+
 # Task 3: Initialize TheOver Raw Debug State
 if "theover_raw_df" not in st.session_state:
     st.session_state["theover_raw_df"] = pd.DataFrame()
@@ -6483,6 +6486,40 @@ def load_games(selected_leagues: Union[str, List[str]], run_id: Optional[str] = 
     moneyline_count_filtered = sum(1 for g in filtered_games if g.get("best_ml_book") is not None)
     spreads_count_filtered = sum(1 for g in filtered_games if g.get("best_spread_book") is not None)
     totals_count_filtered = sum(1 for g in filtered_games if g.get("best_total_book") is not None)
+
+    # CRITICAL FIX: Retry logic if games list is empty on initial load
+    # This addresses the "Loaded 0 games" issue
+    if len(filtered_games) == 0 and not all_leagues_failed:
+        logger.warning(f"⚠️ Initial fetch returned 0 games. Attempting retry...")
+        try:
+            # Short sleep before retry
+            time.sleep(1.5)
+            # Retry fetching games (using same params)
+            retry_games = []
+            for league_conf in leagues_to_fetch:
+                # Use cached function but force refresh if possible (not easily exposed here, relying on transient issue resolution)
+                # In practice, get_games usually hits cache, but if cache was empty result, we might want to bypass.
+                # For now, simplest retry.
+                try:
+                    lg_games = get_games(
+                        sport=league_conf["sport_key"],
+                        regions="us",
+                        markets="h2h,spreads,totals",
+                        odds_format="american",
+                        date_format="iso",
+                    )
+                    if lg_games:
+                        retry_games.extend(lg_games)
+                except Exception as e:
+                    logger.warning(f"Retry fetch failed for {league_conf['sport_key']}: {e}")
+
+            if retry_games:
+                filtered_games = retry_games
+                logger.info(f"✅ Retry fetch SUCCESS: {len(filtered_games)} games loaded.")
+            else:
+                logger.error("❌ Retry fetch failed: Still 0 games.")
+        except Exception as e:
+            logger.error(f"Retry logic failed: {e}")
 
     # Set fetch status for atomic ingest + UI gating
     if len(filtered_games) > 0:
@@ -10927,14 +10964,26 @@ with tab_master:
         def _apply_stats_quality_penalty(row):
             # Only apply if explicitly MISSING (ESPN/REAL are fine)
             if row.get("stats_quality") == "MISSING":
-                # Force LOW confidence if currently MEDIUM/HIGH
+                # Downgrade confidence bucket
                 conf = row.get("Pick_Confidence")
-                if conf in ("MEDIUM", "HIGH"):
+                reason = str(row.get("confidence_reason") or "")
+
+                # Strict downgrade logic
+                if conf == "HIGH":
+                    row["Pick_Confidence"] = "MEDIUM"
+                    reason += " (downgraded: missing stats)"
+                elif conf == "MEDIUM":
                     row["Pick_Confidence"] = "LOW"
-                    reason = str(row.get("confidence_reason") or "")
-                    row["confidence_reason"] = (
-                        reason + " | STATS MISSING – using neutral baseline features"
-                    ).strip(" |")
+                    reason += " (downgraded: missing stats)"
+                elif conf == "LOW":
+                    # Already low, just append reason
+                    reason += " (stats missing)"
+                else:
+                    # Default/Unknown -> LOW
+                    row["Pick_Confidence"] = "LOW"
+                    reason += " (stats missing)"
+
+                row["confidence_reason"] = reason.strip(" |")
 
                 # Dampen probabilities (shrink edge by 50%)
                 for col in ["spread_prob_pick_final", "total_prob_pick_final", "Best Overall Prob", "final_probability"]:
@@ -11189,7 +11238,32 @@ if should_display:
         # We have results - proceed with display
         df = st.session_state["master_results_df"]
 
-        # Fix #1: NCAAB Warning Banner for Missing Stats
+        # Fix #1: Stats Coverage Dashboard & Warnings
+
+        # --- STATS COVERAGE DASHBOARD ---
+        if "stats_quality" in df.columns and "league" in df.columns:
+            st.markdown("### 📊 Data Quality Report")
+            quality_cols = st.columns(4)
+            leagues = sorted(df["league"].unique())
+
+            for i, lg in enumerate(leagues):
+                lg_df = df[df["league"] == lg]
+                total = len(lg_df)
+                if total == 0: continue
+
+                full_stats = len(lg_df[lg_df["stats_quality"].isin(["REAL", "ESPN"])])
+                missing = total - full_stats
+                pct = (full_stats / total) * 100
+
+                status_icon = "✅" if pct > 90 else "⚠️" if pct > 50 else "❌"
+
+                with quality_cols[i % 4]:
+                    st.metric(
+                        f"{lg} Coverage",
+                        f"{full_stats}/{total}",
+                        f"{pct:.0f}% Full Stats {status_icon}"
+                    )
+
         # Check for missing stats
         missing_stats_games = df[
             df["stats_quality"] == "MISSING"
@@ -11201,12 +11275,9 @@ if should_display:
 
             if not ncaab_missing.empty or not ncaaf_missing.empty:
                 st.warning(
-                    f"⚠️ **STATS DATA UNAVAILABLE** ⚠️\n\n"
-                    f"{len(ncaab_missing)} college basketball games and "
-                    f"{len(ncaaf_missing)} college football games are using "
-                    f"**neutral baseline stats** (not real team data).\n\n"
-                    f"**Affected Teams**: Confidence levels may be inaccurate. "
-                    f"Recommend treating these as LOW confidence regardless of displayed level."
+                    f"⚠️ **LIMITED STATS COVERAGE** ⚠️\n\n"
+                    f"{len(ncaab_missing)} NCAAB and {len(ncaaf_missing)} NCAAF games have missing team statistics.\n"
+                    f"Predictions for these games use a **neutral baseline model** and confidence is automatically downgraded."
                 )
 
                 # Option: Show which teams
@@ -12408,6 +12479,14 @@ if should_display:
             key="market_stability_filter"
         )
 
+        # Stats Quality Filter (New)
+        stats_quality_filter = st.sidebar.radio(
+            "Stats Data Quality",
+            ["All Games", "Full Stats Only", "Missing/Partial Only"],
+            index=0,
+            key="stats_quality_filter"
+        )
+
         # Confidence Filter Controls (Re-enabled)
         confidence_mode = st.selectbox(
             "Confidence filter",
@@ -12453,6 +12532,14 @@ if should_display:
 
         if market_stability_filter:
             df_master_view = df_master_view[df_master_view['market_stability'].isin(market_stability_filter)]
+
+        # Apply Stats Quality Filter
+        if stats_quality_filter == "Full Stats Only":
+            if "stats_quality" in df_master_view.columns:
+                df_master_view = df_master_view[df_master_view["stats_quality"].isin(["REAL", "ESPN"])]
+        elif stats_quality_filter == "Missing/Partial Only":
+            if "stats_quality" in df_master_view.columns:
+                df_master_view = df_master_view[~df_master_view["stats_quality"].isin(["REAL", "ESPN"])]
 
         # Enrich with Best Picks for Export/Display
         df_master_view = calculate_best_pick_metrics(df_master_view)
