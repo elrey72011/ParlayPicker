@@ -9,6 +9,7 @@ import threading
 import concurrent.futures
 import re
 import time
+import requests
 
 # -------------------------------------------------------------------------
 # Library Imports with Fail-Safe Wrappers
@@ -1101,10 +1102,10 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
             if season_stats:
                 season_year = season_year - 1
 
-        # If still empty, do NOT treat as outage; just return []
+        # If still empty, do NOT treat as outage; try ESPN fallback
         if not season_stats:
-            logger.warning("NCAAF stats unavailable (CFBD auth failed or no data). Continuing without NCAAF stats.")
-            return []
+            logger.warning("NCAAF stats unavailable via CFBD. Attempting ESPN fallback...")
+            return fetch_from_espn_ncaaf(season_year)
 
         season_games = _fetch_games_for_year(season_year)
 
@@ -1256,6 +1257,67 @@ def fetch_nhl_stats(season_year: int) -> List[Dict[str, Any]]:
         logger.error(f"Failed to fetch NHL stats: {e}", exc_info=True)
         return []
 
+def fetch_from_espn_ncaaf(season_year: int) -> List[Dict[str, Any]]:
+    """
+    Fetch NCAAF stats from ESPN hidden API (Fallback).
+    """
+    try:
+        logger.info(f"Fetching NCAAF stats from ESPN for season: {season_year}")
+        url = "https://site.api.espn.com/apis/v2/sports/football/college-football/standings"
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+
+        stats = []
+
+        # Iterate through conferences (children)
+        children = data.get("children", [])
+        for conf in children:
+            entries = conf.get("standings", {}).get("entries", [])
+            for entry in entries:
+                team_info = entry.get("team", {})
+                team_name = team_info.get("displayName")
+                if not team_name:
+                    continue
+
+                # Extract stats
+                stat_list = entry.get("stats", [])
+                stat_map = {s.get("name"): s.get("value") for s in stat_list}
+
+                wins = stat_map.get("wins", 0.0)
+                losses = stat_map.get("losses", 0.0)
+                points_for = stat_map.get("pointsFor", 0.0)
+                points_against = stat_map.get("pointsAgainst", 0.0)
+
+                games = wins + losses
+                if games == 0:
+                    continue
+
+                win_pct = wins / games
+                ppg = points_for / games
+                oppg = points_against / games
+
+                stats.append({
+                    "team_norm": robust_normalize_team(team_name, league="NCAAF"),
+                    "league_key": "NCAAF",
+                    "win_pct": float(win_pct),
+                    "home_win_pct": float(win_pct), # Approx
+                    "away_win_pct": float(win_pct), # Approx
+                    "points_per_game": float(ppg),
+                    "points_allowed_per_game": float(oppg),
+                    "turnovers": 0.0, # Not available in standings summary
+                    "streak": 0.0,
+                    "last5_win_pct": float(win_pct),
+                    "source": "ESPN_FALLBACK"
+                })
+
+        logger.info(f"Successfully fetched NCAAF stats from ESPN for {len(stats)} teams.")
+        return stats
+
+    except Exception as e:
+        logger.error(f"ESPN NCAAF fallback failed: {e}")
+        return []
+
 @st.cache_data(ttl=21600)
 def fetch_ncaab_stats(season_year: int) -> List[Dict[str, Any]]:
     """
@@ -1400,9 +1462,9 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
         """Safely converts scalars or Series to numeric and fills NaNs."""
         try:
             if isinstance(val, (pd.Series, pd.Index)):
-                return pd.to_numeric(val, errors='coerce').fillna(fill_val)
+                return pd.to_numeric(val, errors='coerce').fillna(fill_val).infer_objects(copy=False)
             if isinstance(val, (list, tuple, np.ndarray)):
-                return pd.to_numeric(pd.Series(val), errors='coerce').fillna(fill_val)
+                return pd.to_numeric(pd.Series(val), errors='coerce').fillna(fill_val).infer_objects(copy=False)
             parsed = pd.to_numeric(val, errors='coerce')
             return fill_val if pd.isna(parsed) else parsed
         except Exception:
@@ -1703,7 +1765,7 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                 values.append(val if val is not None else np.nan)
             else:
                 values.append(np.nan)
-        return pd.Series(values, index=df_idx).fillna(default_series)
+        return pd.Series(values, index=df_idx).fillna(default_series).infer_objects(copy=False)
 
     # Populate features_data
     home_fallback = home_matched_names.isna()
@@ -1851,10 +1913,10 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     if 'Home_ML' in df.columns:
         ml_probs = df['Home_ML'].apply(ml_to_prob)
         # Fill missing values in prob_series with calculated ML probs
-        prob_series = prob_series.fillna(ml_probs)
+        prob_series = prob_series.fillna(ml_probs).infer_objects(copy=False)
 
     # Step 3: Final fallback to 0.5 only if still NaN
-    features_data['implied_home_prob'] = prob_series.fillna(0.5)
+    features_data['implied_home_prob'] = prob_series.fillna(0.5).infer_objects(copy=False)
 
     features_data['sentiment_diff'] = safe_numeric_fill(df.get('Sentiment_Diff'), 0.0)
     features_data['kalshi_prob'] = safe_numeric_fill(df.get('kalshi_prob'), 0.5)
@@ -1872,8 +1934,8 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     # Time features
     if 'Commence (UTC)' in df.columns:
         dt_series = pd.to_datetime(df['Commence (UTC)'], errors='coerce')
-        features_data['feature_commence_hour'] = dt_series.dt.hour.fillna(19.0)
-        features_data['feature_commence_day_of_week'] = dt_series.dt.dayofweek.fillna(6.0)
+        features_data['feature_commence_hour'] = dt_series.dt.hour.fillna(19.0).infer_objects(copy=False)
+        features_data['feature_commence_day_of_week'] = dt_series.dt.dayofweek.fillna(6.0).infer_objects(copy=False)
     else:
         features_data['feature_commence_hour'] = 19.0
         features_data['feature_commence_day_of_week'] = 6.0

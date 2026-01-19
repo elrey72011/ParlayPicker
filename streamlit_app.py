@@ -3324,7 +3324,7 @@ def apply_confidence_filter(df: pd.DataFrame, confidence_mode: str, show_low: bo
         confidence_missing_warning = True
 
     # Make the counting logic safe - column is guaranteed to exist after above checks
-    conf = filtered["Pick_Confidence"].astype(str).fillna("LOW")
+    conf = filtered["Pick_Confidence"].astype(str).fillna("LOW").infer_objects(copy=False)
     base_low = int((conf == "LOW").sum())
     base_med = int((conf == "MEDIUM").sum())
     base_high = int((conf == "HIGH").sum())
@@ -3342,7 +3342,7 @@ def apply_confidence_filter(df: pd.DataFrame, confidence_mode: str, show_low: bo
         filtered = filtered[filtered["Pick_Confidence"] != "LOW"]
 
     # Recalculate confidence stats after filtering
-    conf_after = filtered["Pick_Confidence"].astype(str).fillna("LOW")
+    conf_after = filtered["Pick_Confidence"].astype(str).fillna("LOW").infer_objects(copy=False)
     low_after = int((conf_after == "LOW").sum())
     counts = conf_after.value_counts(dropna=False).to_dict() if len(conf_after) > 0 else {}
 
@@ -4977,7 +4977,7 @@ def get_model_prob(game: Dict[str, Any], sentiment_diff: Optional[float]) -> Tup
 
         features_df = features_df.reindex(columns=VERTEX_FEATURE_COLUMNS)
         for col in features_df.columns:
-            features_df[col] = pd.to_numeric(features_df[col], errors="coerce").fillna(0.0).astype(float)
+            features_df[col] = pd.to_numeric(features_df[col], errors="coerce").fillna(0.0).infer_objects(copy=False).astype(float)
 
         instances = features_df.values.tolist()
         if not instances:
@@ -10309,7 +10309,7 @@ with tab_master:
                             if isinstance(col_data, pd.DataFrame):
                                 col_data = col_data.iloc[:, 0]
                             default_val = 0.5 if "prob" in col else 0.0
-                            inference_df[col] = pd.to_numeric(col_data, errors='coerce').fillna(default_val).astype(float)
+                            inference_df[col] = pd.to_numeric(col_data, errors='coerce').fillna(default_val).infer_objects(copy=False).astype(float)
 
                         # 6. Accumulate Debug Data (Base Dict + Feature Vector)
                         if "debug_log_history" not in st.session_state:
@@ -10399,7 +10399,7 @@ with tab_master:
                             logger.info("Skipping prediction: inference_df is empty.")
 
                         # Safe Edge Calculation
-                        implied_probs = pd.to_numeric(master_df.get("Implied_Prob"), errors='coerce').fillna(0.5)
+                        implied_probs = pd.to_numeric(master_df.get("Implied_Prob"), errors='coerce').fillna(0.5).infer_objects(copy=False)
                         master_df["AI_Edge"] = master_df["AI_Prob"] - implied_probs
 
                 # 4. CONSENSUS ENRICHMENT: Add consensus votes to master_df
@@ -10539,12 +10539,12 @@ with tab_master:
                     # Apply individually to avoid ValueError
                     for col, val in fill_map.items():
                         if col in master_df.columns:
-                            master_df[col] = master_df[col].fillna(val)
+                            master_df[col] = master_df[col].fillna(val).infer_objects(copy=False)
                     # Fill visual cols with empty string
                     visual_cols = ["spread_sentiment_arrow", "total_sentiment_arrow", "spread_sentiment_note", "total_sentiment_note"]
                     for col in visual_cols:
                         if col in master_df.columns:
-                            master_df[col] = master_df[col].fillna("")
+                            master_df[col] = master_df[col].fillna("").infer_objects(copy=False)
 
                     # Defragment DataFrame after multiple concat operations
                     master_df = master_df.copy()
@@ -10861,7 +10861,7 @@ with tab_master:
                     """
                     # Convert columns to numeric, coercing errors to NaN
                     def _to_num(col):
-                        return pd.to_numeric(df.get(col, pd.Series([0]*len(df), index=df.index)), errors='coerce').fillna(0)
+                        return pd.to_numeric(df.get(col, pd.Series([0]*len(df), index=df.index)), errors='coerce').fillna(0).infer_objects(copy=False)
 
                     k_matched = df.get("kalshi_matched", pd.Series([False]*len(df), index=df.index)).fillna(False).infer_objects(copy=False).astype(bool)
 
@@ -11092,6 +11092,33 @@ if should_display:
 
         # We have results - proceed with display
         df = st.session_state["master_results_df"]
+
+        # Fix #1: NCAAB Warning Banner for Missing Stats
+        # Check for missing stats
+        missing_stats_games = df[
+            df["stats_quality"] == "MISSING"
+        ] if "stats_quality" in df.columns else pd.DataFrame()
+
+        if len(missing_stats_games) > 0:
+            ncaab_missing = missing_stats_games[missing_stats_games["league"] == "NCAAB"]
+            ncaaf_missing = missing_stats_games[missing_stats_games["league"] == "NCAAF"]
+
+            if not ncaab_missing.empty or not ncaaf_missing.empty:
+                st.warning(
+                    f"⚠️ **STATS DATA UNAVAILABLE** ⚠️\n\n"
+                    f"{len(ncaab_missing)} college basketball games and "
+                    f"{len(ncaaf_missing)} college football games are using "
+                    f"**neutral baseline stats** (not real team data).\n\n"
+                    f"**Affected Teams**: Confidence levels may be inaccurate. "
+                    f"Recommend treating these as LOW confidence regardless of displayed level."
+                )
+
+                # Option: Show which teams
+                if len(missing_stats_games) <= 10:
+                    with st.expander("Show affected games"):
+                        for _, game in missing_stats_games.iterrows():
+                            st.caption(f"• {game['Home']} vs {game['Away']} ({game['league']})")
+
         st.success(f"✅ Loaded {len(df)} rows for analysis (Master Analysis Tab)")
 
         # Initialize view frame immediately to avoid NameError
@@ -11438,8 +11465,8 @@ if should_display:
         # if not include_low_in_top:
         #     top_df = top_df[top_df["Pick_Confidence"].isin(["HIGH", "MEDIUM"])]
         try:
-            top_df["st_conf_rank"] = top_df["st_conf_rank"].fillna(0)
-            top_df["decisiveness"] = top_df["decisiveness"].fillna(0.0)
+            top_df["st_conf_rank"] = top_df["st_conf_rank"].fillna(0).infer_objects(copy=False)
+            top_df["decisiveness"] = top_df["decisiveness"].fillna(0.0).infer_objects(copy=False)
             top_df = top_df.sort_values(
                 by=["spread_edge", "st_conf_rank", "decisiveness"],
                 ascending=[False, False, False],
@@ -11801,7 +11828,7 @@ if should_display:
                  continue
 
             if col in ['AI_Prob', 'Implied_Prob', 'spread_edge', 'total_edge', 'final_prob', 'edge', 'Overall Prob', 'Spread Prob', 'Total Prob', 'ML Prob']:
-                top_df_ui[col] = pd.to_numeric(top_df_ui[col], errors='coerce').fillna(0.0)
+                top_df_ui[col] = pd.to_numeric(top_df_ui[col], errors='coerce').fillna(0.0).infer_objects(copy=False)
             else:
                 top_df_ui[col] = top_df_ui[col].astype(str).replace('None', 'N/A')
 
@@ -12064,11 +12091,11 @@ if should_display:
         }.items():
             if col not in df.columns:
                 df[col] = default
-            df[col] = df[col].fillna(default)
+            df[col] = df[col].fillna(default).infer_objects(copy=False)
         overall_for_rank = pd.to_numeric(
             df.get("At_a_Glance_Confidence") if "At_a_Glance_Confidence" in df.columns else pd.Series(dtype=float),
             errors="coerce",
-        ).fillna(pd.to_numeric(df.get("Pick_Confidence"), errors="coerce")).fillna(0)
+        ).fillna(pd.to_numeric(df.get("Pick_Confidence"), errors="coerce")).fillna(0).infer_objects(copy=False)
         df["_gemini_rank_metric"] = overall_for_rank
         gemini_allowed_idx = set(
             df.sort_values(by="_gemini_rank_metric", ascending=False, na_position="last")
@@ -12221,7 +12248,7 @@ if should_display:
             ]:
                 if col not in df.columns:
                     df[col] = default
-                df[col] = df[col].fillna(default)
+                df[col] = df[col].fillna(default).infer_objects(copy=False)
         else:
             # Defensively dedupe columns before Gemini pass to prevent row.get(col) from returning Series
             df = df.loc[:, ~df.columns.duplicated()].copy()
@@ -12264,7 +12291,7 @@ if should_display:
             df = pd.concat([df, new_cols_df], axis=1)
 
         # 2. Fill NaNs efficiently
-        df = df.fillna(gemini_defaults)
+        df = df.fillna(gemini_defaults).infer_objects(copy=False)
         try:
             null_counts = df[["gemini_mode", "gemini_alignment", "gemini_rationale", "gemini_flags_short"]].isna().sum()
             if null_counts.sum() > 0 and logger:
@@ -12379,11 +12406,11 @@ if should_display:
             cols_to_force_numeric = ["AI_Prob", "model_prob_home", "final_probability", "Implied_Prob", "spread_edge", "total_edge"]
             valid_force_cols = [c for c in cols_to_force_numeric if c in df_master_view_display.columns]
             if valid_force_cols:
-                df_master_view_display[valid_force_cols] = df_master_view_display[valid_force_cols].apply(pd.to_numeric, errors='coerce').fillna(0.0)
+                df_master_view_display[valid_force_cols] = df_master_view_display[valid_force_cols].apply(pd.to_numeric, errors='coerce').fillna(0.0).infer_objects(copy=False)
 
         try:
-            df_master_view["st_conf_rank"] = df_master_view["st_conf_rank"].fillna(0)
-            df_master_view["decisiveness"] = df_master_view["decisiveness"].fillna(0.0)
+            df_master_view["st_conf_rank"] = df_master_view["st_conf_rank"].fillna(0).infer_objects(copy=False)
+            df_master_view["decisiveness"] = df_master_view["decisiveness"].fillna(0.0).infer_objects(copy=False)
             df_master_view = df_master_view.sort_values(
                 by=["st_conf_rank", "decisiveness", "Commence (UTC)"],
                 ascending=[False, False, True],
