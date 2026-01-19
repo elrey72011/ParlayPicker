@@ -6554,9 +6554,19 @@ league = selected_sports[0] if selected_sports else (_all_keys[0] if _all_keys e
 
 # Detect if selection changed to invalidate cache
 last_selection = st.session_state.get("_last_selected_sports")
-if last_selection != selected_sports:
+
+# Sort both lists for reliable comparison (multiselect order can vary)
+_last_sorted = sorted(last_selection) if last_selection else []
+_curr_sorted = sorted(selected_sports) if selected_sports else []
+
+if _last_sorted != _curr_sorted:
+    logger.info(f"Sport selection changed: {last_selection} -> {selected_sports}")
+    # Only invalidate if we actually have a change
     if "master_df" in st.session_state:
-        del st.session_state["master_df"]
+        # Don't delete key, just empty it to avoid KeyErrors
+        st.session_state["master_df"] = pd.DataFrame()
+        st.session_state["master_results_df"] = pd.DataFrame()
+        st.session_state["analysis_complete"] = False
     st.session_state["_last_selected_sports"] = selected_sports
 st.session_state["league"] = league
 kalshi_required_toggle = st.sidebar.checkbox(
@@ -6573,7 +6583,11 @@ if st.sidebar.button("Load Games", width="stretch"):
     st.cache_data.clear()  # Force a fresh API call
     # Invalidate master_df when loading new games
     if "master_df" in st.session_state:
-        del st.session_state["master_df"]
+        # Don't delete key, just reset
+        st.session_state["master_df"] = pd.DataFrame()
+        st.session_state["master_results_df"] = pd.DataFrame()
+        st.session_state["analysis_complete"] = False
+
     # Generate new run_id for this load
     import uuid
     new_run_id = str(uuid.uuid4())[:8]
