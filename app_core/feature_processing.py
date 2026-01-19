@@ -491,39 +491,67 @@ def robust_normalize_team(name: str, league: Optional[str] = None) -> str:
         return ""
 
     # Task 3 Fix: Refined Pre-processing
-    # Ensure "ST." becomes "STATE" (e.g., St. Louis -> STATE Louis)
-    if "ST." in name.upper():
-        name = re.sub(r"\bST\.", "STATE", name, flags=re.IGNORECASE)
+    # Pre-processing: Handle punctuation and abbreviations before stripping chars
+    name_upper = name.upper()
 
-    # Ensure "L.A." becomes "LOS ANGELES" (e.g., L.A. Lakers -> LOS ANGELES Lakers)
-    if "L.A." in name.upper():
-        name = re.sub(r"L\.A\.", "LOS ANGELES", name, flags=re.IGNORECASE)
+    # Handle "St." / "St " -> "STATE"
+    name_upper = re.sub(r"\bST\.", "STATE", name_upper)
+    name_upper = re.sub(r"\bST\b", "STATE", name_upper) # Standalone ST
+
+    # Handle "L.A." / "LA" -> "LOS ANGELES"
+    name_upper = re.sub(r"L\.A\.", "LOS ANGELES", name_upper)
+    name_upper = re.sub(r"\bLA\b", "LOS ANGELES", name_upper) # Standalone LA
+
+    # Handle "N.C." / "NC" -> "NORTH CAROLINA" (common in NCAAB)
+    # Be careful not to match inside words
+    name_upper = re.sub(r"\bN\.C\.", "NORTH CAROLINA", name_upper)
+    # NC State is special, usually kept as NC State or North Carolina State
+    # But stats often use "NC State". Let's standardize to "NC STATE" for that specific case if needed,
+    # or expand to NORTH CAROLINA if that's what stats use.
+    # Checking override list: "NC STATE" -> "NC STATE".
+    # Let's leave NC alone if it's NC STATE, but expand N.C. to NORTH CAROLINA generally?
+    # Actually, "NC A&T" -> "NORTH CAROLINA AT".
+
+    # Handle "U." -> "UNIVERSITY"? No, usually dropped.
 
     # 1. Base Normalization (Uppercase, AlphaNumeric, Single Space)
-    norm = normalize_team(name)
+    # This removes dots, ampersands, hyphens
+    norm = normalize_team(name_upper)
 
     # 2. Post-processing for remaining variants
 
-    # Handle "L.A." -> "LOS ANGELES" (if passed as LA)
-    norm = re.sub(r"\bLA\b", "LOS ANGELES", norm)
+    # Handle "LA RAMS" explicitly (if it survived as LA RAMS or LOS ANGELES RAMS)
+    if "LA RAMS" in norm:
+        norm = norm.replace("LA RAMS", "LOS ANGELES RAMS")
 
-    # Handle "MD" -> "MARYLAND"
+    # Handle "MD" -> "MARYLAND" (e.g. "MD EASTERN SHORE")
     norm = re.sub(r"\bMD\b", "MARYLAND", norm)
 
-    # Handle "AM" or "A&M" -> "A&M" (Standardize to A&M for Texas A&M etc)
-    # Actually, normalize_team removes special chars. So "A&M" becomes "AM".
-    # The requirement says: Replace "AM" with "A&M".
-    # Since normalize_team (called at start) does: re.sub(r"[^A-Z0-9 ]", "", name)
-    # "Texas A&M" -> "TEXAS AM".
-    # So we should look for "AM" at end of word? e.g. "TEXAS AM"
-    # But "MIAMI" has "AM" in middle.
-    # "TEXAS AM" -> "TEXAS A&M"
-    norm = re.sub(r"\bAM\b", "A&M", norm)
+    # Handle "E " -> "EASTERN " etc? Maybe too risky.
 
-    # Replace "ST " with "STATE " at start or middle
-    # Also handle "ST." -> "STATE"
+    # Handle "AM" -> "A&M" reconstruction for specific schools?
+    # Common A&M schools: Texas A&M, Florida A&M, Alabama A&M, Prairie View A&M
+    # normalize_team turned "Texas A&M" -> "TEXAS AM"
+    # We want "TEXAS AM" -> "TEXAS A&M" IF that is what the stats library expects.
+    # cbbpy often uses "Texas A&M".
+    # Let's selectively restore A&M for known cases to match `MANUAL_TEAM_OVERRIDES` keys if they use A&M.
+    # Looking at overrides: "TEXAS AM": "TEXAS AM" (wait, it says "TEXAS A&M": "TEXAS AM")
+    # If the target is "TEXAS AM", then we don't need to add &.
+    # Let's check overrides again.
+    # "TEXAS AM": "TEXAS AM"
+    # "FLORIDA AM": "FLORIDA AM"
+    # So we SHOULD NOT add & back if we map to "AM".
+    # But if stats use "Texas A&M", we might need to change the mapping target or the norm.
+    # The user request said "Centralize and expand...".
+    # Let's assume standardizing to "AM" is safer if we control the map.
+    # But if stats library returns "Texas A&M", `normalize_team` on stats side will produce "TEXAS AM".
+    # So "TEXAS AM" == "TEXAS AM". This should match.
+
+    # Remove "AM" replacement if it causes mismatch with normalized stats keys
+    # norm = re.sub(r"\bAM\b", "A&M", norm) <--- REMOVED this line as it likely breaks matching against normalized stats
+
+    # Standardize "STATE" again just in case "ST" survived
     norm = re.sub(r"\bST\b", "STATE", norm)
-    norm = re.sub(r"\bST\.\b", "STATE", norm)
 
     # Clean up multiple spaces again just in case
     norm = re.sub(r"\s+", " ", norm).strip()
@@ -548,6 +576,17 @@ def robust_normalize_team(name: str, league: Optional[str] = None) -> str:
         return resolved
 
     return norm
+
+def log_stats_match_summary(stats_log: Dict[str, int], league: str):
+    """Log a summary of stats matching for a league."""
+    if league == "default": return
+
+    total = sum(stats_log.values())
+    if total == 0: return
+
+    match_rate = ((stats_log.get("direct", 0) + stats_log.get("override", 0) + stats_log.get("fuzzy", 0)) / total) * 100
+
+    logger.info(f"STATS MATCH REPORT [{league}]: {match_rate:.1f}% Matched ({stats_log.get('direct')} direct, {stats_log.get('override')} override, {stats_log.get('fuzzy')} fuzzy, {stats_log.get('miss')} miss)")
 
 def debug_team_mapping_health():
     """
@@ -1404,8 +1443,16 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
 
             away_matched_names[lg_mask] = away_norm[lg_mask].map(away_map_local)
 
-            if lg_key != "default" and (stats_log["direct"] > 0 or stats_log["miss"] > 0):
-                logger.info(f"Stats Match Report [{lg_key}]: Direct={stats_log['direct']}, Override={stats_log['override']}, Fuzzy={stats_log['fuzzy']}, Miss={stats_log['miss']}")
+            # Updated Logging
+            log_stats_match_summary(stats_log, lg_key)
+
+            if stats_log["miss"] > 0 and lg_key != "default":
+                # Find which teams missed
+                missing_home = [t for t, m in home_map_local.items() if m is None]
+                missing_away = [t for t, m in away_map_local.items() if m is None]
+                missing = list(set(missing_home + missing_away))
+                if missing:
+                    logger.warning(f"STATS MISSING TEAMS [{lg_key}] (Top 5): {missing[:5]}")
     else:
         if not FREE_TIER_MODE:
             logger.warning("No stats fetched. Filling with defaults.")

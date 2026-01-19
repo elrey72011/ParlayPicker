@@ -666,9 +666,10 @@ def price_to_prob(price: Any) -> Optional[float]:
 
 def _extract_market_type(title: str, ticker: str) -> str:
     t = (title or "").upper()
-    if "SPREAD" in t or "POINTS" in t: return "spread"
-    if "TOTAL" in t or "OVER/UNDER" in t or "O/U" in t: return "total"
-    if "MONEYLINE" in t or "ML" in t: return "moneyline"
+    tick = (ticker or "").upper()
+    if "SPREAD" in t or "POINTS" in t or "SPREAD" in tick: return "spread"
+    if "TOTAL" in t or "OVER/UNDER" in t or "O/U" in t or "TOTAL" in tick: return "total"
+    if "MONEYLINE" in t or "ML" in t or "WINNER" in t: return "moneyline"
     return "generic"
 
 def _extract_teams_from_ticker(ticker: str) -> List[str]:
@@ -912,15 +913,16 @@ def _match_via_events(
             if floor_str or cap_str or strike_str:
                 logger.debug(f"      Line info: floor={floor_str}, cap={cap_str}, strike={strike_str}")
 
+            # Expanded logic using market_type from ticker check
             if "winner" in title or market_type == "moneyline":
                 winner_market = m
-                logger.debug(f"      ✓ Classified as WINNER")
+                logger.debug(f"      ✓ Classified as WINNER (title='{title}' or type='{market_type}')")
             elif market_type == "spread" or "spread" in title or "points" in title:
                 spread_markets.append(m)
-                logger.debug(f"      ✓ Classified as SPREAD")
+                logger.debug(f"      ✓ Classified as SPREAD (title='{title}' or type='{market_type}')")
             elif market_type == "total" or "total" in title or "over" in title or "under" in title:
                 total_markets.append(m)
-                logger.debug(f"      ✓ Classified as TOTAL")
+                logger.debug(f"      ✓ Classified as TOTAL (title='{title}' or type='{market_type}')")
 
         # Log summary of classifications
         logger.info(f"🎯 KALSHI MATCH [{league}]: Event {best_event.get('ticker')} - "

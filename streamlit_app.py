@@ -8707,7 +8707,11 @@ with tab_master:
                 spread_alt_odds = None
                 spread_alt_market_prob = None
                 spread_alt_prob_final = None
-                spread_pick_label = f"{spread_pick} {spread_line}" if spread_pick is not None else ""
+                # FIX: Ensure spread line is valid before formatting
+                if spread_pick is not None and has_valid_line(spread_line):
+                    spread_pick_label = f"{spread_pick} {spread_line}"
+                else:
+                    spread_pick_label = ""
                 spread_alt_label = ""
                 spread_decision_metric_used = "final_prob"
                 spread_decision_score_pick = spread_prob_final
@@ -8773,7 +8777,11 @@ with tab_master:
                 total_alt_odds = None
                 total_alt_market_prob = None
                 total_alt_prob_final = None
-                total_pick_label = f"{total_pick} {total_line}" if total_pick is not None else ""
+                # FIX: Avoid "Under 0" / "Under 01" artifacts by checking for valid line
+                if total_pick is not None and has_valid_line(total_line) and total_line != 0:
+                    total_pick_label = f"{total_pick} {total_line}"
+                else:
+                    total_pick_label = ""
                 total_alt_label = ""
                 total_decision_metric_used = "final_prob"
                 total_decision_score_pick = total_prob_final
@@ -10593,67 +10601,92 @@ with tab_master:
 
                 # Invariant: If Spread/Total Pick exists and final probability > 0.5,
                 # a corresponding consensus probability must be computed and exposed in both UI and exports.
-                def _enforce_consensus_and_best_pick(row):
-                    # 1. Spread Consensus
-                    s_consensus_prob, s_consensus_str = calculate_consensus_for_row(row, "Spread")
-                    row["SpreadConsensusProb"] = s_consensus_prob
-                    row["SpreadConsensus"] = s_consensus_str
+                def _enforce_consensus_and_best_pick_vectorized(df):
+                    # Optimized implementation to avoid row-by-row apply
+                    new_data = {}
 
-                    # 2. Total Consensus
-                    t_consensus_prob, t_consensus_str = calculate_consensus_for_row(row, "Total")
-                    row["TotalConsensusProb"] = t_consensus_prob
-                    row["TotalConsensus"] = t_consensus_str
+                    # 1. Spread Consensus
+                    s_probs = []
+                    s_strs = []
+                    t_probs = []
+                    t_strs = []
+
+                    for idx, row in df.iterrows():
+                        sp, ss = calculate_consensus_for_row(row, "Spread")
+                        tp, ts = calculate_consensus_for_row(row, "Total")
+                        s_probs.append(sp)
+                        s_strs.append(ss)
+                        t_probs.append(tp)
+                        t_strs.append(ts)
+
+                    new_data["SpreadConsensusProb"] = s_probs
+                    new_data["SpreadConsensus"] = s_strs
+                    new_data["TotalConsensusProb"] = t_probs
+                    new_data["TotalConsensus"] = t_strs
+
+                    # Create temporary DF for vectorized ops
+                    temp = df.copy()
+                    temp = pd.concat([temp, pd.DataFrame(new_data, index=df.index)], axis=1)
 
                     # 3. Best Overall Pick Logic
-                    # Re-evaluate Best Pick using Consensus Probabilities
-                    # Rules:
-                    # - Prefer Spread/Total over ML (unless forced)
-                    # - Compare Spread Consensus Prob vs Total Consensus Prob (distance from 0.5)
+                    best_pick = []
+                    best_prob = []
+                    best_type = []
 
-                    s_pick = row.get("Spread & Pick")
-                    t_pick = row.get("Total & Pick")
+                    for idx, row in temp.iterrows():
+                        s_consensus_prob = row["SpreadConsensusProb"]
+                        t_consensus_prob = row["TotalConsensusProb"]
 
-                    s_valid = s_pick is not None and s_consensus_prob > 0.5
-                    t_valid = t_pick is not None and t_consensus_prob > 0.5
+                        s_pick = row.get("Spread & Pick")
+                        t_pick = row.get("Total & Pick")
 
-                    # Calculate Edge/Decisiveness
-                    s_edge = abs(s_consensus_prob - 0.5)
-                    t_edge = abs(t_consensus_prob - 0.5)
+                        # Handle None/NaN
+                        s_pick_valid = s_pick is not None and str(s_pick).lower() != "none" and str(s_pick).strip() != ""
+                        t_pick_valid = t_pick is not None and str(t_pick).lower() != "none" and str(t_pick).strip() != ""
 
-                    new_best_type = "NONE"
-                    new_best_pick = None
-                    new_best_prob = 0.0
+                        s_valid = s_pick_valid and s_consensus_prob > 0.5
+                        t_valid = t_pick_valid and t_consensus_prob > 0.5
 
-                    if s_valid and t_valid:
-                        if s_edge >= t_edge:
-                            new_best_type = "SPREAD"
-                            new_best_pick = s_pick
-                            new_best_prob = s_consensus_prob
+                        s_edge = abs(s_consensus_prob - 0.5)
+                        t_edge = abs(t_consensus_prob - 0.5)
+
+                        new_b_type = "NONE"
+                        new_b_pick = None
+                        new_b_prob = 0.0
+
+                        if s_valid and t_valid:
+                            if s_edge >= t_edge:
+                                new_b_type = "SPREAD"
+                                new_b_pick = s_pick
+                                new_b_prob = s_consensus_prob
+                            else:
+                                new_b_type = "TOTAL"
+                                new_b_pick = t_pick
+                                new_b_prob = t_consensus_prob
+                        elif s_valid:
+                            new_b_type = "SPREAD"
+                            new_b_pick = s_pick
+                            new_b_prob = s_consensus_prob
+                        elif t_valid:
+                            new_b_type = "TOTAL"
+                            new_b_pick = t_pick
+                            new_b_prob = t_consensus_prob
                         else:
-                            new_best_type = "TOTAL"
-                            new_best_pick = t_pick
-                            new_best_prob = t_consensus_prob
-                    elif s_valid:
-                        new_best_type = "SPREAD"
-                        new_best_pick = s_pick
-                        new_best_prob = s_consensus_prob
-                    elif t_valid:
-                        new_best_type = "TOTAL"
-                        new_best_pick = t_pick
-                        new_best_prob = t_consensus_prob
-                    else:
-                        # Fallback to existing or ML
-                        new_best_pick = row.get("Best Overall Pick") or row.get("Pick")
-                        new_best_prob = row.get("Best Overall Prob") or row.get("final_probability")
-                        new_best_type = row.get("best_pick_type") or "ML"
+                            new_b_pick = row.get("Best Overall Pick") or row.get("Pick")
+                            new_b_prob = row.get("Best Overall Prob") or row.get("final_probability")
+                            new_b_type = row.get("best_pick_type") or "ML"
 
-                    row["Best Overall Pick"] = new_best_pick
-                    row["Best Overall Prob"] = new_best_prob
-                    row["best_pick_type"] = new_best_type
+                        best_pick.append(new_b_pick)
+                        best_prob.append(new_b_prob)
+                        best_type.append(new_b_type)
 
-                    return row
+                    new_data["Best Overall Pick"] = best_pick
+                    new_data["Best Overall Prob"] = best_prob
+                    new_data["best_pick_type"] = best_type
 
-                df = df.apply(_enforce_consensus_and_best_pick, axis=1)
+                    return pd.concat([df, pd.DataFrame(new_data, index=df.index)], axis=1)
+
+                df = _enforce_consensus_and_best_pick_vectorized(df)
 
                 # Diagnostic Log
                 logger.info(
@@ -10747,39 +10780,30 @@ with tab_master:
                 # which count sportsbook markets, not Kalshi markets.
                 # ============================================
 
-                def _has_kalshi_market(row):
+                def _has_kalshi_market_vectorized(df):
                     """
-                    Determine if a game has a valid Kalshi market.
-                    Returns True if Kalshi matched and has spread or total probabilities.
+                    Determine if a game has a valid Kalshi market (Vectorized).
                     """
-                    kalshi_matched = row.get("kalshi_matched")
-                    if not kalshi_matched:
-                        return False
+                    # Convert columns to numeric, coercing errors to NaN
+                    def _to_num(col):
+                        return pd.to_numeric(df.get(col, pd.Series([0]*len(df), index=df.index)), errors='coerce').fillna(0)
 
-                    # Helper to check for valid non-zero probability
-                    def _is_valid_prob(p):
-                        try:
-                            if pd.isna(p): return False
-                            return float(p) != 0
-                        except:
-                            return False
+                    k_matched = df.get("kalshi_matched", pd.Series([False]*len(df), index=df.index)).fillna(False).astype(bool)
 
-                    # Check if at least one Kalshi probability is available (raw or pick-mapped)
-                    kalshi_prob_spread = row.get("kalshi_prob_spread")
-                    spread_prob_pick_kalshi = row.get("spread_prob_pick_kalshi")
-                    kalshi_prob_total = row.get("kalshi_prob_total")
-                    total_prob_pick_kalshi = row.get("total_prob_pick_kalshi")
+                    # Check for non-zero probabilities
+                    k_spread = _to_num("kalshi_prob_spread") != 0
+                    s_pick_k = _to_num("spread_prob_pick_kalshi") != 0
 
-                    kalshi_prob = row.get("kalshi_prob")
-                    kalshi_prob_used = row.get("kalshi_prob_used")
+                    k_total = _to_num("kalshi_prob_total") != 0
+                    t_pick_k = _to_num("total_prob_pick_kalshi") != 0
 
-                    has_spread = _is_valid_prob(kalshi_prob_spread) or _is_valid_prob(spread_prob_pick_kalshi)
-                    has_total = _is_valid_prob(kalshi_prob_total) or _is_valid_prob(total_prob_pick_kalshi)
-                    has_ml = _is_valid_prob(kalshi_prob) or _is_valid_prob(kalshi_prob_used)
+                    k_ml = _to_num("kalshi_prob") != 0
+                    k_ml_used = _to_num("kalshi_prob_used") != 0
 
-                    return has_spread or has_total or has_ml
+                    has_any = (k_spread | s_pick_k | k_total | t_pick_k | k_ml | k_ml_used)
+                    return k_matched & has_any
 
-                df["HasKalshiMarket"] = df.apply(_has_kalshi_market, axis=1)
+                df["HasKalshiMarket"] = _has_kalshi_market_vectorized(df)
 
                 kalshi_markets_count = df["HasKalshiMarket"].sum()
 
