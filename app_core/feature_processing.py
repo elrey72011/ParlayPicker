@@ -221,7 +221,29 @@ MANUAL_TEAM_OVERRIDES = {
     "TEXAS AM": "TEXAS AM",
     "TEXAS A&M": "TEXAS AM",
 
-    # Task: Fix Missing NCAAB Stats - Extended Mappings
+    # Task: Fix Missing NCAAB Stats - Extended Mappings (Issue #3)
+    "TULANE GREEN WAVE": "TULANE",
+    "NORTH TEXAS MEAN GREEN": "NORTH TEXAS",
+    "MEMPHIS TIGERS": "MEMPHIS",
+    "UTSA ROADRUNNERS": "UTSA",
+    "HOUSTON COUGARS": "HOUSTON",
+    "ARIZONA ST SUN DEVILS": "ARIZONA STATE",
+    "ARIZONA STATE SUN DEVILS": "ARIZONA STATE",
+    "SOUTH FLORIDA BULLS": "SOUTH FLORIDA",
+    "USF BULLS": "SOUTH FLORIDA",
+    "UAB BLAZERS": "UAB",
+    "FAU OWLS": "FLORIDA ATLANTIC",
+    "FLORIDA ATLANTIC OWLS": "FLORIDA ATLANTIC",
+    "CHARLOTTE 49ERS": "CHARLOTTE",
+    "RICE OWLS": "RICE",
+    "TULSA GOLDEN HURRICANE": "TULSA",
+    "ECU PIRATES": "EAST CAROLINA",
+    "EAST CAROLINA PIRATES": "EAST CAROLINA",
+    "SMU MUSTANGS": "SMU",
+    "TEMPLE OWLS": "TEMPLE",
+    "WICHITA ST SHOCKERS": "WICHITA STATE",
+    "WICHITA STATE SHOCKERS": "WICHITA STATE",
+
     "MORGAN ST": "MORGAN STATE",
     "NORFOLK ST": "NORFOLK STATE",
     "HOWARD": "HOWARD",
@@ -1376,7 +1398,9 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                         continue
 
                 # 4. Fuzzy Match (Normalized Space) - Lower threshold for better recall
-                match_norm = fuzzy_match_team_robust(t_norm, stats_index_norm_keys, threshold=65.0)
+                # Use even lower threshold for NCAAB/NCAAF where mascots cause noise
+                fuzzy_thresh = 60.0 if lg_key in ["NCAAB", "NCAAF"] else 65.0
+                match_norm = fuzzy_match_team_robust(t_norm, stats_index_norm_keys, threshold=fuzzy_thresh)
                 if match_norm:
                     # Map back to raw key
                     home_map_local[t_norm] = stats_index_norm_map[match_norm]
@@ -1428,7 +1452,9 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                         continue
 
                 # 4. Fuzzy Match (Normalized Space) - Lower threshold for better recall
-                match_norm = fuzzy_match_team_robust(t_norm, stats_index_norm_keys, threshold=65.0)
+                # Use even lower threshold for NCAAB/NCAAF where mascots cause noise
+                fuzzy_thresh = 60.0 if lg_key in ["NCAAB", "NCAAF"] else 65.0
+                match_norm = fuzzy_match_team_robust(t_norm, stats_index_norm_keys, threshold=fuzzy_thresh)
                 if match_norm:
                     # Map back to raw key
                     away_map_local[t_norm] = stats_index_norm_map[match_norm]
