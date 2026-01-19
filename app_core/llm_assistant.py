@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 # GEMINI (GOOGLE GENERATIVE AI) SETUP
 # -------------------------------------------------------------------
 try:
+    # TODO: google.generativeai is deprecated. Migrate to google.genai.
+    # See TODO_GENAI_MIGRATION.md
     import google.generativeai as genai
     from google.generativeai import GenerativeModel
     _GEMINI_AVAILABLE = True
