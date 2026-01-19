@@ -10993,11 +10993,21 @@ with tab_master:
             'market_stability', 'consensus_strength', 'confidence_score',
             'Pick_Confidence', 'confidence_reason', 'stats_quality',
             'sentiment_available',
-            'Pick_Reason_Short', 'TheOver_Impact'
+            'Pick_Reason_Short', 'TheOver_Impact',
+            # Issue #1: Add missing TheOver integration columns
+            'theover_pick', 'theover_hit_rate', 'theover_source_model', 'theover_prob_used',
+            'theover_matched', 'theover_delta_final_prob', 'final_prob_without_theover'
         ]
         # Filter to only columns that exist in the dataframe
         results_columns = [col for col in user_columns if col in df.columns]
         st.session_state["master_results_df"] = df[results_columns].copy()
+
+        # Validation: Ensure TheOver columns are present (Issue #1 Fix)
+        # This prevents concatenation errors in downstream logic if columns are missing
+        if "theover_pick" not in st.session_state["master_results_df"].columns:
+            logger.warning("theover_pick column missing from display dataframe - initializing empty")
+            st.session_state["master_results_df"]["theover_pick"] = ""
+
         logger.info(f"   Created master_results_df with {len(results_columns)} user-facing columns (vs {len(df.columns)} in raw)")
 
         st.session_state["master_stats_persistent"] = master_stats

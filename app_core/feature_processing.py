@@ -1722,7 +1722,10 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                 missing = list(set(missing_home + missing_away))
                 if missing:
                     logger.warning(f"STATS MISSING TEAMS [{lg_key}] (Top 20): {missing[:20]}")
+                    # Issue #2: Explicitly log all missing teams for ticket creation
+                    logger.info(f"Missing stats teams: {missing}")
                     if lg_key == "NCAAB":
+                        logger.info("Action: Create ticket 'Investigate NCAAB stats coverage for low-tier conferences'")
                         ncaab_match_stats["unmatched_teams"].extend(missing)
 
             # Explicit match rate log as requested
