@@ -235,7 +235,22 @@ def build_game_summary_v2(df: pd.DataFrame) -> pd.DataFrame:
             best_spread = spread_rows.loc[pd.to_numeric(spread_rows["final_probability"], errors='coerce').fillna(-1.0).idxmax()]
 
             # Set Spread Pick
-            spread_pick = best_spread.get("Spread & Pick") or (str(best_spread.get("Pick") or "") + " " + str(best_spread.get("Line") or ""))
+            # Fix: Ensure we don't construct "Team 0" or similar invalid strings
+            s_line = best_spread.get("Line")
+            if best_spread.get("Spread & Pick"):
+                spread_pick = best_spread.get("Spread & Pick")
+            elif best_spread.get("Pick"):
+                try:
+                    s_val = float(s_line) if s_line is not None else 0.0
+                    if abs(s_val) > 0.001:
+                        # Format as float to strip leading zeros ("01" -> "1.0")
+                        spread_pick = f"{best_spread.get('Pick')} {s_val:g}"
+                    else:
+                        spread_pick = None
+                except (ValueError, TypeError):
+                    spread_pick = None
+            else:
+                spread_pick = None
 
             # Set Spread Prob
             spread_prob = (best_spread.get("spread_prob_pick_final")
@@ -283,7 +298,23 @@ def build_game_summary_v2(df: pd.DataFrame) -> pd.DataFrame:
         if not total_rows.empty:
             best_total = total_rows.loc[pd.to_numeric(total_rows["final_probability"], errors='coerce').fillna(-1.0).idxmax()]
 
-            total_pick = best_total.get("Total & Pick") or (str(best_total.get("Pick") or "") + " " + str(best_total.get("Line") or ""))
+            # Set Total Pick
+            # Fix: Avoid "Under 0" and "Under 01" artifacts
+            t_line = best_total.get("Line")
+            if best_total.get("Total & Pick"):
+                total_pick = best_total.get("Total & Pick")
+            elif best_total.get("Pick"):
+                try:
+                    t_val = float(t_line) if t_line is not None else 0.0
+                    if abs(t_val) > 0.001:
+                        # Format as float to strip leading zeros ("01" -> "1.0")
+                        total_pick = f"{best_total.get('Pick')} {t_val:g}"
+                    else:
+                        total_pick = None
+                except (ValueError, TypeError):
+                    total_pick = None
+            else:
+                total_pick = None
 
             total_prob = (best_total.get("total_prob_pick_final")
                           or best_total.get("total_prob_adj")
