@@ -116,6 +116,8 @@ try:
 except Exception:  # pragma: no cover - optional import
     alt = None
 
+import config
+
 # -----------------
 # Trace Columns Constant (Refactored)
 # -----------------
@@ -4728,7 +4730,7 @@ kalshi_api_key = read_secret("KALSHI_API_KEY") or read_secret("kalshi_api_key")
 kalshi_api_secret = read_secret("KALSHI_API_SECRET") or read_secret("kalshi_api_secret")
 
 # Initialize Gemini API Key if available
-gemini_api_key = read_secret("GEMINI_API_KEY") or read_secret("GOOGLE_API_KEY")
+gemini_api_key = read_secret("GEMINI_API_KEY") or read_secret("GOOGLE_API_KEY") or getattr(config, "GEMINI_API_KEY", None)
 if gemini_api_key:
     os.environ["GEMINI_API_KEY"] = gemini_api_key
     os.environ["GOOGLE_API_KEY"] = gemini_api_key
