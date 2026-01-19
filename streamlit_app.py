@@ -1397,16 +1397,16 @@ def enrich_picks_with_roi_metrics(df: pd.DataFrame) -> pd.DataFrame:
 
     # 1. Calculate Edge (Math vs Market Gap)
     # Ensure columns are numeric to avoid errors
-    df['spread_implied_prob'] = pd.to_numeric(df['spread_implied_prob'], errors='coerce').fillna(0.0)
-    df['total_implied_prob'] = pd.to_numeric(df['total_implied_prob'], errors='coerce').fillna(0.0)
+    df['spread_implied_prob'] = pd.to_numeric(df['spread_implied_prob'], errors='coerce').fillna(0.0).infer_objects(copy=False)
+    df['total_implied_prob'] = pd.to_numeric(df['total_implied_prob'], errors='coerce').fillna(0.0).infer_objects(copy=False)
     
     # Use adjusted probabilities if available, else raw
     s_prob = df['spread_prob_adj'] if 'spread_prob_adj' in df.columns else df.get('spread_prob')
     t_prob = df['total_prob_adj'] if 'total_prob_adj' in df.columns else df.get('total_prob')
 
     # Fallback to 0 if column missing or null
-    s_prob = pd.to_numeric(s_prob, errors='coerce').fillna(0.0)
-    t_prob = pd.to_numeric(t_prob, errors='coerce').fillna(0.0)
+    s_prob = pd.to_numeric(s_prob, errors='coerce').fillna(0.0).infer_objects(copy=False)
+    t_prob = pd.to_numeric(t_prob, errors='coerce').fillna(0.0).infer_objects(copy=False)
 
     df['spread_edge'] = s_prob - df['spread_implied_prob']
     df['total_edge'] = t_prob - df['total_implied_prob']
@@ -3040,9 +3040,9 @@ def pipeline_progress_snapshot() -> Dict[str, Any]:
     master_df = st.session_state.get("master_results_df")
     if master_df is not None and not master_df.empty and "kalshi_matched" in master_df.columns:
         # Count unique games (by Home/Away) that have at least one Kalshi match
-        # Use .fillna(False) to handle any None/NaN values, and convert to bool for robust comparison
+        # Use .fillna(False).infer_objects(copy=False) to handle any None/NaN values, and convert to bool for robust comparison
         try:
-            matched_mask = master_df["kalshi_matched"].fillna(False).infer_objects(copy=False).astype(bool)
+            matched_mask = master_df["kalshi_matched"].fillna(False).infer_objects(copy=False).infer_objects(copy=False).astype(bool)
             matched_rows = master_df[matched_mask]
             if not matched_rows.empty:
                 unique_games = matched_rows.groupby(["Home", "Away"]).size()
@@ -4977,7 +4977,7 @@ def get_model_prob(game: Dict[str, Any], sentiment_diff: Optional[float]) -> Tup
 
         features_df = features_df.reindex(columns=VERTEX_FEATURE_COLUMNS)
         for col in features_df.columns:
-            features_df[col] = pd.to_numeric(features_df[col], errors="coerce").fillna(0.0).infer_objects(copy=False).astype(float)
+            features_df[col] = pd.to_numeric(features_df[col], errors="coerce").fillna(0.0).infer_objects(copy=False).infer_objects(copy=False).astype(float)
 
         instances = features_df.values.tolist()
         if not instances:
@@ -10544,7 +10544,7 @@ with tab_master:
                     visual_cols = ["spread_sentiment_arrow", "total_sentiment_arrow", "spread_sentiment_note", "total_sentiment_note"]
                     for col in visual_cols:
                         if col in master_df.columns:
-                            master_df[col] = master_df[col].fillna("").infer_objects(copy=False)
+                            master_df[col] = master_df[col].fillna("").infer_objects(copy=False).infer_objects(copy=False)
 
                     # Defragment DataFrame after multiple concat operations
                     master_df = master_df.copy()
@@ -10861,9 +10861,9 @@ with tab_master:
                     """
                     # Convert columns to numeric, coercing errors to NaN
                     def _to_num(col):
-                        return pd.to_numeric(df.get(col, pd.Series([0]*len(df), index=df.index)), errors='coerce').fillna(0).infer_objects(copy=False)
+                        return pd.to_numeric(df.get(col, pd.Series([0]*len(df), index=df.index)), errors='coerce').fillna(0).infer_objects(copy=False).infer_objects(copy=False)
 
-                    k_matched = df.get("kalshi_matched", pd.Series([False]*len(df), index=df.index)).fillna(False).infer_objects(copy=False).astype(bool)
+                    k_matched = df.get("kalshi_matched", pd.Series([False]*len(df), index=df.index)).fillna(False).infer_objects(copy=False).infer_objects(copy=False).astype(bool)
 
                     # Check for non-zero probabilities
                     k_spread = _to_num("kalshi_prob_spread") != 0
@@ -10879,100 +10879,169 @@ with tab_master:
                     return k_matched & has_any
 
                 # Fix for Fragmentation (Issue #4)
-                new_hk_col = pd.DataFrame({"HasKalshiMarket": _has_kalshi_market_vectorized(df)}, index=df.index)
+                has_kalshi_series = _has_kalshi_market_vectorized(df)
+                new_hk_col = pd.DataFrame({"HasKalshiMarket": has_kalshi_series}, index=df.index)
                 df = pd.concat([df, new_hk_col], axis=1)
 
-                # Issue 2: Add sentiment_available flag
-                # If sentiment_status is 'ok' or 'partial_cached', then available
-                if "sentiment_status" in df.columns:
-                    df["sentiment_available"] = df["sentiment_status"].astype(str).isin(["ok", "partial_cached", "cached"])
-                else:
-                    df["sentiment_available"] = False
+        # -------------------------------------------------------------------------
+        # TASK 4: Kalshi Mode (Transparency)
+        # -------------------------------------------------------------------------
+        def _map_kalshi_mode(row):
+            if not row.get("kalshi_available", False):
+                return "none"
+            # If we have market data (HasKalshiMarket), it's "full"
+            # Otherwise if matched but no data, "partial"
+            # If not matched, "none"
 
-                kalshi_markets_count = df["HasKalshiMarket"].sum()
+            # Use pre-computed HasKalshiMarket if available
+            has_market = row.get("HasKalshiMarket", False)
+            if has_market:
+                return "full"
 
-                # Debug logging requested by user
-                try:
-                    total_games_count = len(df)
-                    kalshi_matched_raw_count = df["kalshi_matched"].fillna(False).infer_objects(copy=False).astype(bool).sum()
-                    logger.info(
-                        "Kalshi summary: total=%s, with_kalshi=%s, kalshi_matched_raw=%s",
-                        total_games_count,
-                        kalshi_markets_count,
-                        kalshi_matched_raw_count
-                    )
-                except Exception as e:
-                    logger.warning(f"Failed to log Kalshi summary stats: {e}")
+            status = str(row.get("kalshistatus", "")).lower()
+            if status in ("matched", "strictmatch", "seriesmatch") or row.get("kalshi_matched"):
+                return "partial"
+            return "none"
 
-                logger.info(f"✅ HasKalshiMarket flag added: {kalshi_markets_count} games have valid Kalshi markets")
+        df["Kalshi_Mode"] = df.apply(_map_kalshi_mode, axis=1)
 
-                # CRITICAL: Save to session state
-                logger.info(f"Saving df ({len(df)} rows) to session state...")
-                st.session_state["master_df"] = df  # Raw data with all internal columns
+        # -------------------------------------------------------------------------
+        # TASK 1: Stats Quality Penalty (NCAAB)
+        # -------------------------------------------------------------------------
+        def _apply_stats_quality_penalty(row):
+            # Only apply if explicitly MISSING (ESPN/REAL are fine)
+            if row.get("stats_quality") == "MISSING":
+                # Force LOW confidence if currently MEDIUM/HIGH
+                conf = row.get("Pick_Confidence")
+                if conf in ("MEDIUM", "HIGH"):
+                    row["Pick_Confidence"] = "LOW"
+                    reason = str(row.get("confidence_reason") or "")
+                    row["confidence_reason"] = (
+                        reason + " | STATS MISSING – using neutral baseline features"
+                    ).strip(" |")
 
-                # Create filtered version for user export (remove internal/debug columns)
-                # Keep only user-relevant columns for the "All Picks" export
-                user_columns = [
-                    'league', 'Home', 'Away', 'Commence (UTC)', 'Commence (Local)', 'Local Date',
-                    'Market', 'Pick', 'Final Probability', 'Confidence Level',
-                    'Best Overall Pick', 'Best Overall Prob', 'Best Overall Market',
-                    'Spread & Pick', 'spread_prob_pick_final', 'SpreadConsensusProb', 'SpreadConsensus',
-                    'Total & Pick', 'total_prob_pick_final', 'TotalConsensusProb', 'TotalConsensus',
-                    'Home_ML', 'Away_ML', 'Home_Spread', 'Away_Spread', 'Total_Line',
-                    'Home_Sentiment', 'Away_Sentiment', 'Sentiment_Diff',
-                    'kalshi_available', 'HasKalshiMarket',
-                    'market_stability', 'consensus_strength', 'confidence_score',
-                    'Pick_Confidence', 'confidence_reason', 'stats_quality',
-                    'sentiment_available'
-                ]
-                # Filter to only columns that exist in the dataframe
-                results_columns = [col for col in user_columns if col in df.columns]
-                st.session_state["master_results_df"] = df[results_columns].copy()
-                logger.info(f"   Created master_results_df with {len(results_columns)} user-facing columns (vs {len(df.columns)} in raw)")
+                # Dampen probabilities (shrink edge by 50%)
+                for col in ["spread_prob_pick_final", "total_prob_pick_final", "Best Overall Prob", "final_probability"]:
+                    val = row.get(col)
+                    if val is not None and pd.notna(val):
+                        try:
+                            fval = float(val)
+                            # Dampen towards 0.5
+                            row[col] = 0.5 + (fval - 0.5) * 0.5
+                        except Exception:
+                            pass
 
-                st.session_state["master_stats_persistent"] = master_stats
+            # TASK 3: TheOver Transparency
+            # Append delta to reason if used
+            if row.get("theover_matched") or row.get("theover_used_in_pick"):
+                delta = row.get("theover_delta_final_prob") or row.get("theover_delta")
+                if delta is not None:
+                    try:
+                        d_val = float(delta)
+                        if abs(d_val) > 0.001:
+                            reason = str(row.get("confidence_reason") or "")
+                            row["confidence_reason"] = (
+                                reason + f" | TheOver boosted edge by {d_val:.3f}"
+                            ).strip(" |")
+                    except Exception:
+                        pass
 
-                # Final consistency check log (Integrity Log)
-                try:
-                    logger.info(
-                        "Integrity: rows=%s, spread_picks=%s, spread_consensus=%s, total_picks=%s, total_consensus=%s, best_overall=%s",
-                        len(df),
-                        int(df['Spread & Pick'].notna().sum()) if 'Spread & Pick' in df.columns else 0,
-                        int(df.get('SpreadConsensusProb', pd.Series(dtype=float)).notna().sum()),
-                        int(df['Total & Pick'].notna().sum()) if 'Total & Pick' in df.columns else 0,
-                        int(df.get('TotalConsensusProb', pd.Series(dtype=float)).notna().sum()),
-                        int(df['Best Overall Pick'].notna().sum()) if 'Best Overall Pick' in df.columns else 0,
-                    )
-                except Exception as e:
-                    logger.warning(f"Failed to log integrity metrics: {e}")
+            return row
 
-                # Set flag to indicate data is ready for display
-                st.session_state["analysis_complete"] = True
-                st.session_state["data_ready"] = True
+        df = df.apply(_apply_stats_quality_penalty, axis=1)
 
-                logger.info(f"✅ Saved {len(df)} rows to session state")
-                logger.info(f"   - st.session_state['master_df']: {len(st.session_state['master_df'])} rows")
-                logger.info(f"   - st.session_state['master_results_df']: {len(st.session_state['master_results_df'])} rows")
-                logger.info(f"✅ Data ready flags set")
+        # Issue 2: Add sentiment_available flag
+        # If sentiment_status is 'ok' or 'partial_cached', then available
+        if "sentiment_status" in df.columns:
+            df["sentiment_available"] = df["sentiment_status"].astype(str).isin(["ok", "partial_cached", "cached"])
+        else:
+            df["sentiment_available"] = False
 
-                # Log final sentiment analysis summary
-                if not df.empty:
-                    sentiment_cols_present = [col for col in ["Home_Sentiment", "Away_Sentiment", "Sentiment_Diff", "sentiment_score", "sentiment_weight"] if col in df.columns]
-                    logger.info(f"Sentiment columns present in final results: {sentiment_cols_present}")
-                    if "Sentiment_Diff" in df.columns:
-                        games_with_sentiment = df["Sentiment_Diff"].notna().sum()
-                        total_games = len(df)
-                        logger.info(f"Final sentiment coverage: {games_with_sentiment}/{total_games} picks have sentiment data")
-                        if games_with_sentiment > 0:
-                            avg_sentiment = df["Sentiment_Diff"].mean()
-                            logger.info(f"Average sentiment differential: {avg_sentiment:.3f}")
-                    if "sentiment_weight" in df.columns:
-                        avg_weight = df["sentiment_weight"].mean()
-                        logger.info(f"Average sentiment weight in final probabilities: {avg_weight:.3f} (Mode A: should be 0.0, sentiment used for UI display only)")
+        kalshi_markets_count = df["HasKalshiMarket"].sum()
 
-                # Show success message and rerun to display results immediately
-                st.success(f"✅ Analysis complete! Generated {len(df)} picks.")
-                st.rerun()
+        # Debug logging requested by user
+        try:
+            total_games_count = len(df)
+            kalshi_matched_raw_count = df["kalshi_matched"].fillna(False).infer_objects(copy=False).infer_objects(copy=False).astype(bool).sum()
+            logger.info(
+                "Kalshi summary: total=%s, with_kalshi=%s, kalshi_matched_raw=%s",
+                total_games_count,
+                kalshi_markets_count,
+                kalshi_matched_raw_count
+            )
+        except Exception as e:
+            logger.warning(f"Failed to log Kalshi summary stats: {e}")
+
+        logger.info(f"✅ HasKalshiMarket flag added: {kalshi_markets_count} games have valid Kalshi markets")
+
+        # CRITICAL: Save to session state
+        logger.info(f"Saving df ({len(df)} rows) to session state...")
+        st.session_state["master_df"] = df  # Raw data with all internal columns
+
+        # Create filtered version for user export (remove internal/debug columns)
+        # Keep only user-relevant columns for the "All Picks" export
+        user_columns = [
+            'league', 'Home', 'Away', 'Commence (UTC)', 'Commence (Local)', 'Local Date',
+            'Market', 'Pick', 'Final Probability', 'Confidence Level',
+            'Best Overall Pick', 'Best Overall Prob', 'Best Overall Market',
+            'Spread & Pick', 'spread_prob_pick_final', 'SpreadConsensusProb', 'SpreadConsensus',
+            'Total & Pick', 'total_prob_pick_final', 'TotalConsensusProb', 'TotalConsensus',
+            'Home_ML', 'Away_ML', 'Home_Spread', 'Away_Spread', 'Total_Line',
+            'Home_Sentiment', 'Away_Sentiment', 'Sentiment_Diff',
+            'kalshi_available', 'HasKalshiMarket', 'Kalshi_Mode',
+            'theover_matched', 'theover_delta_final_prob',
+            'market_stability', 'consensus_strength', 'confidence_score',
+            'Pick_Confidence', 'confidence_reason', 'stats_quality',
+            'sentiment_available'
+        ]
+        # Filter to only columns that exist in the dataframe
+        results_columns = [col for col in user_columns if col in df.columns]
+        st.session_state["master_results_df"] = df[results_columns].copy()
+        logger.info(f"   Created master_results_df with {len(results_columns)} user-facing columns (vs {len(df.columns)} in raw)")
+
+        st.session_state["master_stats_persistent"] = master_stats
+
+        # Final consistency check log (Integrity Log)
+        try:
+            logger.info(
+                "Integrity: rows=%s, spread_picks=%s, spread_consensus=%s, total_picks=%s, total_consensus=%s, best_overall=%s",
+                len(df),
+                int(df['Spread & Pick'].notna().sum()) if 'Spread & Pick' in df.columns else 0,
+                int(df.get('SpreadConsensusProb', pd.Series(dtype=float)).notna().sum()),
+                int(df['Total & Pick'].notna().sum()) if 'Total & Pick' in df.columns else 0,
+                int(df.get('TotalConsensusProb', pd.Series(dtype=float)).notna().sum()),
+                int(df['Best Overall Pick'].notna().sum()) if 'Best Overall Pick' in df.columns else 0,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to log integrity metrics: {e}")
+
+        # Set flag to indicate data is ready for display
+        st.session_state["analysis_complete"] = True
+        st.session_state["data_ready"] = True
+
+        logger.info(f"✅ Saved {len(df)} rows to session state")
+        logger.info(f"   - st.session_state['master_df']: {len(st.session_state['master_df'])} rows")
+        logger.info(f"   - st.session_state['master_results_df']: {len(st.session_state['master_results_df'])} rows")
+        logger.info(f"✅ Data ready flags set")
+
+        # Log final sentiment analysis summary
+        if not df.empty:
+            sentiment_cols_present = [col for col in ["Home_Sentiment", "Away_Sentiment", "Sentiment_Diff", "sentiment_score", "sentiment_weight"] if col in df.columns]
+            logger.info(f"Sentiment columns present in final results: {sentiment_cols_present}")
+            if "Sentiment_Diff" in df.columns:
+                games_with_sentiment = df["Sentiment_Diff"].notna().sum()
+                total_games = len(df)
+                logger.info(f"Final sentiment coverage: {games_with_sentiment}/{total_games} picks have sentiment data")
+                if games_with_sentiment > 0:
+                    avg_sentiment = df["Sentiment_Diff"].mean()
+                    logger.info(f"Average sentiment differential: {avg_sentiment:.3f}")
+            if "sentiment_weight" in df.columns:
+                avg_weight = df["sentiment_weight"].mean()
+                logger.info(f"Average sentiment weight in final probabilities: {avg_weight:.3f} (Mode A: should be 0.0, sentiment used for UI display only)")
+
+        # Show success message and rerun to display results immediately
+        st.success(f"✅ Analysis complete! Generated {len(df)} picks.")
+        st.rerun()
 
     if "model_last_error" in st.session_state:
         st.error(f"Prediction Error: {st.session_state['model_last_error']}")
@@ -11465,8 +11534,8 @@ if should_display:
         # if not include_low_in_top:
         #     top_df = top_df[top_df["Pick_Confidence"].isin(["HIGH", "MEDIUM"])]
         try:
-            top_df["st_conf_rank"] = top_df["st_conf_rank"].fillna(0).infer_objects(copy=False)
-            top_df["decisiveness"] = top_df["decisiveness"].fillna(0.0).infer_objects(copy=False)
+            top_df["st_conf_rank"] = top_df["st_conf_rank"].fillna(0).infer_objects(copy=False).infer_objects(copy=False)
+            top_df["decisiveness"] = top_df["decisiveness"].fillna(0.0).infer_objects(copy=False).infer_objects(copy=False)
             top_df = top_df.sort_values(
                 by=["spread_edge", "st_conf_rank", "decisiveness"],
                 ascending=[False, False, False],
@@ -11828,7 +11897,7 @@ if should_display:
                  continue
 
             if col in ['AI_Prob', 'Implied_Prob', 'spread_edge', 'total_edge', 'final_prob', 'edge', 'Overall Prob', 'Spread Prob', 'Total Prob', 'ML Prob']:
-                top_df_ui[col] = pd.to_numeric(top_df_ui[col], errors='coerce').fillna(0.0).infer_objects(copy=False)
+                top_df_ui[col] = pd.to_numeric(top_df_ui[col], errors='coerce').fillna(0.0).infer_objects(copy=False).infer_objects(copy=False)
             else:
                 top_df_ui[col] = top_df_ui[col].astype(str).replace('None', 'N/A')
 
@@ -12053,7 +12122,7 @@ if should_display:
         if missing_cols:
              df = pd.concat([df, pd.DataFrame(columns=missing_cols)], axis=1)
         if "reddit_used" in df.columns:
-            df["reddit_used"] = df["reddit_used"].fillna(False).infer_objects(copy=False)
+            df["reddit_used"] = df["reddit_used"].fillna(False).infer_objects(copy=False).infer_objects(copy=False)
         df = add_spread_total_confidence(df)
         df = df.copy()
         df = enrich_picks_with_roi_metrics(df)
@@ -12095,7 +12164,7 @@ if should_display:
         overall_for_rank = pd.to_numeric(
             df.get("At_a_Glance_Confidence") if "At_a_Glance_Confidence" in df.columns else pd.Series(dtype=float),
             errors="coerce",
-        ).fillna(pd.to_numeric(df.get("Pick_Confidence"), errors="coerce")).fillna(0).infer_objects(copy=False)
+        ).fillna(pd.to_numeric(df.get("Pick_Confidence"), errors="coerce")).fillna(0).infer_objects(copy=False).infer_objects(copy=False)
         df["_gemini_rank_metric"] = overall_for_rank
         gemini_allowed_idx = set(
             df.sort_values(by="_gemini_rank_metric", ascending=False, na_position="last")
@@ -12406,11 +12475,11 @@ if should_display:
             cols_to_force_numeric = ["AI_Prob", "model_prob_home", "final_probability", "Implied_Prob", "spread_edge", "total_edge"]
             valid_force_cols = [c for c in cols_to_force_numeric if c in df_master_view_display.columns]
             if valid_force_cols:
-                df_master_view_display[valid_force_cols] = df_master_view_display[valid_force_cols].apply(pd.to_numeric, errors='coerce').fillna(0.0).infer_objects(copy=False)
+                df_master_view_display[valid_force_cols] = df_master_view_display[valid_force_cols].apply(pd.to_numeric, errors='coerce').fillna(0.0).infer_objects(copy=False).infer_objects(copy=False)
 
         try:
-            df_master_view["st_conf_rank"] = df_master_view["st_conf_rank"].fillna(0).infer_objects(copy=False)
-            df_master_view["decisiveness"] = df_master_view["decisiveness"].fillna(0.0).infer_objects(copy=False)
+            df_master_view["st_conf_rank"] = df_master_view["st_conf_rank"].fillna(0).infer_objects(copy=False).infer_objects(copy=False)
+            df_master_view["decisiveness"] = df_master_view["decisiveness"].fillna(0.0).infer_objects(copy=False).infer_objects(copy=False)
             df_master_view = df_master_view.sort_values(
                 by=["st_conf_rank", "decisiveness", "Commence (UTC)"],
                 ascending=[False, False, True],

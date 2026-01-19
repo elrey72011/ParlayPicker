@@ -1785,7 +1785,23 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     quality_arr = np.select(conditions, choices, default="REAL")
 
     # Assign as Series with correct index
-    features_data["stats_quality"] = pd.Series(quality_arr, index=df.index)
+    quality_series = pd.Series(quality_arr, index=df.index)
+
+    # Task: Identify ESPN source to distinguish from REAL (CFBD/Native)
+    default_source = pd.Series([""] * len(df), index=df.index)
+
+    # Re-use _map_stat_impl to pull 'source' field
+    home_source = _map_stat_impl(home_matched_names, "source", default_source, league_keys, global_stats_lookup, df.index)
+    away_source = _map_stat_impl(away_matched_names, "source", default_source, league_keys, global_stats_lookup, df.index)
+
+    # If source is ESPN_FALLBACK, mark as ESPN (only if currently REAL)
+    is_espn = (home_source == "ESPN_FALLBACK") | (away_source == "ESPN_FALLBACK")
+
+    # Update only if currently REAL (don't overwrite MISSING/FALLBACK)
+    mask_update_espn = is_espn & (quality_series == "REAL")
+    quality_series[mask_update_espn] = "ESPN"
+
+    features_data["stats_quality"] = quality_series
 
     if combined_fallback.any():
         fallback_indices = df.index[combined_fallback]
