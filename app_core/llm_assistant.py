@@ -15,30 +15,30 @@ logger = logging.getLogger(__name__)
 # -------------------------------------------------------------------
 try:
     # Use google-generativeai package (V1) as requested
-    import google.generativeai as genai
+    from google import genai
     _GEMINI_AVAILABLE = True
 except ImportError:
     genai = None
     _GEMINI_AVAILABLE = False
-    logger.warning("google-generativeai not found. Gemini features disabled.")
+    logger.warning("google-genai not found. Gemini features disabled.")
 
 
 # Global holding the currently active model name
-ACTIVE_MODEL = "gemini-1.5-flash"
+ACTIVE_MODEL = "gemini-2.5-flash"
 
 # Fallback list (still useful for internal tracking, though implementation focuses on ACTIVE_MODEL)
-MODEL_FALLBACKS = ["gemini-1.5-flash", "gemini-1.5-flash-001", "gemini-1.5-pro"]
+MODEL_FALLBACKS = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
 
-_GEMINI_MODEL = None
+_GEMINI_CLIENT = None
 
 def initialize_gemini():
     """Initialize Gemini with updated model"""
-    global _GEMINI_MODEL
+    global _GEMINI_CLIENT
     if not _GEMINI_AVAILABLE:
         return None, "Library not available"
 
-    if _GEMINI_MODEL is not None:
-        return _GEMINI_MODEL, None
+    if _GEMINI_CLIENT is not None:
+        return _GEMINI_CLIENT, None
 
     try:
         # Get API key from Streamlit secrets
@@ -52,21 +52,19 @@ def initialize_gemini():
             raise ValueError("GEMINI_API_KEY not found in secrets or environment")
 
         # Configure with API key
-        genai.configure(api_key=api_key)
-
-        # Use NEW model name
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        client = genai.Client(api_key=api_key)
 
         # Test with simple call to verify key and model validity
         # Using a very small token limit to keep it fast
-        model.generate_content(
-            "test",
-            generation_config=genai.types.GenerationConfig(max_output_tokens=5)
+        client.models.generate_content(
+            model=ACTIVE_MODEL,
+            contents="test",
+            config=genai.types.GenerateContentConfig(max_output_tokens=5)
         )
 
-        _GEMINI_MODEL = model
-        logger.info("✓ Gemini 1.5 Flash initialized successfully")
-        return model, None
+        _GEMINI_CLIENT = client
+        logger.info("✓ Gemini 2.5 Flash initialized successfully")
+        return client, None
 
     except Exception as e:
         error_msg = f"Gemini initialization failed: {str(e)}"
@@ -119,8 +117,8 @@ def analyze_kalshi_context_with_llm(context_markdown: str, session_state: Option
             # Already disabled - skip silently
             return []
 
-    model, err = initialize_gemini()
-    if model is None:
+    client, err = initialize_gemini()
+    if client is None:
         return []
 
     system_instructions = """You are a prediction market assistant that evaluates current prices for event contracts on Kalshi.
@@ -162,7 +160,10 @@ CONTEXT:
         # Rate limit protection (Increased to 3.5s)
         time.sleep(3.5)
 
-        resp = model.generate_content(prompt)
+        resp = client.models.generate_content(
+            model=ACTIVE_MODEL,
+            contents=prompt
+        )
         text = getattr(resp, "text", "") or ""
 
         if not text:
@@ -232,15 +233,18 @@ def generate_confidence_explanation(prompt: str, session_state: Optional[Any] = 
             # Already disabled - skip silently (no repeated warnings)
             return {}
 
-    model, err = initialize_gemini()
-    if model is None:
+    client, err = initialize_gemini()
+    if client is None:
         return {}
 
     try:
         # Rate limit protection
         time.sleep(3.5)
 
-        resp = model.generate_content(prompt)
+        resp = client.models.generate_content(
+            model=ACTIVE_MODEL,
+            contents=prompt
+        )
         text = getattr(resp, "text", "") or ""
         return _safe_json_extract(text)
 
