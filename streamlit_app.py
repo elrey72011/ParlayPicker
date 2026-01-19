@@ -10324,6 +10324,13 @@ with tab_master:
                             if rename_map:
                                 debug_base = debug_base.rename(columns=rename_map)
 
+                            # Fallback for 'type' if best_pick_type is missing
+                            if 'type' not in debug_base.columns:
+                                if 'Market' in debug_base.columns:
+                                    debug_base['type'] = debug_base['Market']
+                                else:
+                                    debug_base['type'] = "unknown"
+
                             # Combine with feature vector
                             debug_combined = pd.concat([debug_base, inference_df], axis=1)
                             # Append to session state accumulator
