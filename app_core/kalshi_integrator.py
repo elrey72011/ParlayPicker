@@ -664,23 +664,28 @@ def price_to_prob(price: Any) -> Optional[float]:
     except: pass
     return None
 
-def _extract_market_type(title: str, ticker: str) -> str:
+def _extract_market_type(title: str, ticker: str, subtitle: str = "") -> str:
     t = (title or "").upper()
     tick = (ticker or "").upper()
+    sub = (subtitle or "").upper()
 
     # Debug: Log input for classification analysis
-    # logger.debug(f"_extract_market_type input: ticker={tick}, title={t}")
+    # logger.debug(f"_extract_market_type input: ticker={tick}, title={t}, subtitle={sub}")
 
     # 1. Spread detection
+    # "Winning Margin" is often used for spreads in some contexts, but usually "Point Spread"
     if "SPREAD" in tick or "KXNBASPREAD" in tick or "KXNFLSPREAD" in tick: return "spread"
     if "SPREAD" in t or "POINT SPREAD" in t or "POINTS" in t: return "spread"
+    if "SPREAD" in sub or "POINT SPREAD" in sub: return "spread"
 
     # 2. Total detection
     if "TOTAL" in tick or "KXNBATOTAL" in tick or "KXNFLTOTAL" in tick: return "total"
     if "TOTAL" in t or "OVER/UNDER" in t or "O/U" in t or "TOTAL POINTS" in t: return "total"
+    if "TOTAL" in sub or "TOTAL POINTS" in sub: return "total"
 
     # 3. Moneyline/Winner detection
     if "MONEYLINE" in t or "ML" in t or "WINNER" in t: return "moneyline"
+    if "WINNER" in sub: return "moneyline"
 
     return "generic"
 
@@ -912,10 +917,10 @@ def _match_via_events(
             subtitle = (m.get("subtitle") or "").lower()
 
             # Classify market type
-            market_type = _extract_market_type(title, ticker)
+            market_type = _extract_market_type(title, ticker, subtitle)
 
             # Debug: Log market classification
-            logger.debug(f"   Market {idx+1}: ticker={ticker[:40]}, type={market_type}, title={title[:60]}")
+            logger.debug(f"   Market {idx+1}: ticker={ticker[:40]}, type={market_type}, title={title[:60]}, sub={subtitle[:40]}")
 
             # Extract line information for spread/total
             floor_str = m.get("floor_strike") or m.get("floor")
@@ -926,13 +931,14 @@ def _match_via_events(
                 logger.debug(f"      Line info: floor={floor_str}, cap={cap_str}, strike={strike_str}")
 
             # Expanded logic using market_type from ticker check
-            if "winner" in title or market_type == "moneyline":
+            # Prioritize explicit classification from _extract_market_type
+            if market_type == "moneyline" or "winner" in title:
                 winner_market = m
                 logger.debug(f"      ✓ Classified as WINNER (title='{title}' or type='{market_type}')")
-            elif market_type == "spread" or "spread" in title or "points" in title:
+            elif market_type == "spread" or "spread" in title or "points" in title or "spread" in subtitle:
                 spread_markets.append(m)
                 logger.debug(f"      ✓ Classified as SPREAD (title='{title}' or type='{market_type}')")
-            elif market_type == "total" or "total" in title or "over" in title or "under" in title:
+            elif market_type == "total" or "total" in title or "over" in title or "under" in title or "total" in subtitle:
                 total_markets.append(m)
                 logger.debug(f"      ✓ Classified as TOTAL (title='{title}' or type='{market_type}')")
 
