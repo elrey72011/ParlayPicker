@@ -138,6 +138,9 @@ TEAM_ALIAS_MAP_BY_LEAGUE = {
         "BINGHAMTON": "Binghamton Bearcats",
         "Saint Joseph's": "Saint Joseph's Hawks",
         "LIU": "LIU Sharks",
+        # Fix #5: Team Name Mapping Issues
+        "New Orleans": "New Orleans Privateers",
+        "NEW ORLEANS": "New Orleans Privateers",
     },
     "NCAAF": {
         # Add NCAAF specific mappings if needed
@@ -465,6 +468,7 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
         csv_away = _resolve_team_alias(csv_away, league)
 
         # Issue 1: Validate Team Names against League
+        # CRITICAL: Prevent cross-league contamination (e.g. NHL teams in NBA)
         if not _validate_team_for_league(csv_home, league):
             logger.warning(f"Contamination detected: {csv_home} in {league}. Skipping.")
             continue
@@ -978,7 +982,8 @@ def process_theover_inputs(
         return pd.DataFrame(), stats
 
     # Fix: Pandas Concat Warning (filter empty DFs first)
-    valid_dfs = [df for df in dfs if not df.empty]
+    # Ensure no None entries and no empty dataframes
+    valid_dfs = [df for df in dfs if df is not None and not df.empty]
     if valid_dfs:
         combined = pd.concat(valid_dfs, ignore_index=True)
     else:

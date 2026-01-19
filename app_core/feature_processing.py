@@ -565,6 +565,12 @@ MANUAL_TEAM_OVERRIDES = {
     "CHICAGO STATE": "CHICAGO STATE",
     "CSU": "CHICAGO STATE", # Conflict with Charleston Southern / Cleveland State - check context if possible or assume major one
 
+    # Fix: Explicit mappings for TheOver Data Issues
+    "NEW ORLEANS SAINTS": "NEW ORLEANS PRIVATEERS",
+    "NEW ORLEANS": "NEW ORLEANS PRIVATEERS",
+    "MIAMI HURRICANES": "MIAMI", # Already present but ensuring
+    "MIAMI HEAT": "MIAMI HEAT", # Protection against NBA confusion if needed
+
     # State abbreviation mappings
     "ARIZONA ST": "ARIZONA STATE",
     "WASHINGTON ST": "WASHINGTON STATE",
