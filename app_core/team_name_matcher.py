@@ -121,7 +121,7 @@ class TeamNameMatcher:
         'TCU': 'TEXAS CHRISTIAN',
         'LSU': 'LOUISIANA STATE',
         'BYU': 'BRIGHAM YOUNG',
-        'VCU': 'VIRGINIA COMMONWEALTH',
+        'VCU': 'VCU RAMS',
         'UMBC': 'MARYLAND BALTIMORE COUNTY',
         'UNCW': 'NORTH CAROLINA WILMINGTON',
         'UNCG': 'NORTH CAROLINA GREENSBORO',

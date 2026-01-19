@@ -376,6 +376,14 @@ def _validate_team_for_league(team_name: str, league: str) -> bool:
                 # Exception: "GIANTS" is invalid for NBA, but might be valid if team moved? No.
                 return False
 
+        # Additional Strict Check for NHL teams in NBA (Fix #3)
+        if "NHL" in TEAM_ALIAS_MAP_BY_LEAGUE:
+            for nhl_team in TEAM_ALIAS_MAP_BY_LEAGUE["NHL"].values():
+                # If a known NHL team name is present in the NBA team name
+                nhl_norm = nhl_team.upper()
+                if nhl_norm == team_upper or (len(nhl_norm) > 4 and nhl_norm in team_upper):
+                     return False
+
     return True
 
 def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[Dict[str, Any]], stats_collector: List[Dict]) -> pd.DataFrame:
@@ -969,7 +977,12 @@ def process_theover_inputs(
         stats["raw_df"] = pd.DataFrame()
         return pd.DataFrame(), stats
 
-    combined = pd.concat(dfs, ignore_index=True)
+    # Fix: Pandas Concat Warning (filter empty DFs first)
+    valid_dfs = [df for df in dfs if not df.empty]
+    if valid_dfs:
+        combined = pd.concat(valid_dfs, ignore_index=True)
+    else:
+        combined = pd.DataFrame()
 
     # Task 3: Capture the raw combined dataframe before deduplication for debugging
     stats["raw_df"] = combined.copy()
