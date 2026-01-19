@@ -3042,7 +3042,7 @@ def pipeline_progress_snapshot() -> Dict[str, Any]:
         # Count unique games (by Home/Away) that have at least one Kalshi match
         # Use .fillna(False) to handle any None/NaN values, and convert to bool for robust comparison
         try:
-            matched_mask = master_df["kalshi_matched"].fillna(False).astype(bool)
+            matched_mask = master_df["kalshi_matched"].fillna(False).infer_objects(copy=False).astype(bool)
             matched_rows = master_df[matched_mask]
             if not matched_rows.empty:
                 unique_games = matched_rows.groupby(["Home", "Away"]).size()
@@ -6664,9 +6664,10 @@ if "master_results_df" in st.session_state:
         try:
             from datetime import datetime
             timestamp_str = datetime.now().strftime("%Y%m%d_%H%M")
-            # Fix Issue 1: Deduplicate columns before export
-            # Use explicit duplicate drop as requested
-            master_df = master_df.loc[:, ~master_df.columns.duplicated()]
+            # Fix Issue 1: Deduplicate columns and fix concatenated headers
+            master_df = master_df.loc[:, ~master_df.columns.duplicated()].copy()
+            # Fix concatenated column names (e.g. "ProbProb" -> "Prob")
+            master_df.columns = master_df.columns.str.replace(r'^(.+)\1+$', r'\1', regex=True)
             master_csv = master_df.to_csv(index=False).encode("utf-8")
             logger.info(f"Exporting {len(master_df)} rows from master_results_df to CSV for user download.")
             st.sidebar.download_button(
@@ -10862,7 +10863,7 @@ with tab_master:
                     def _to_num(col):
                         return pd.to_numeric(df.get(col, pd.Series([0]*len(df), index=df.index)), errors='coerce').fillna(0)
 
-                    k_matched = df.get("kalshi_matched", pd.Series([False]*len(df), index=df.index)).fillna(False).astype(bool)
+                    k_matched = df.get("kalshi_matched", pd.Series([False]*len(df), index=df.index)).fillna(False).infer_objects(copy=False).astype(bool)
 
                     # Check for non-zero probabilities
                     k_spread = _to_num("kalshi_prob_spread") != 0
@@ -10893,7 +10894,7 @@ with tab_master:
                 # Debug logging requested by user
                 try:
                     total_games_count = len(df)
-                    kalshi_matched_raw_count = df["kalshi_matched"].fillna(False).astype(bool).sum()
+                    kalshi_matched_raw_count = df["kalshi_matched"].fillna(False).infer_objects(copy=False).astype(bool).sum()
                     logger.info(
                         "Kalshi summary: total=%s, with_kalshi=%s, kalshi_matched_raw=%s",
                         total_games_count,
@@ -12025,7 +12026,7 @@ if should_display:
         if missing_cols:
              df = pd.concat([df, pd.DataFrame(columns=missing_cols)], axis=1)
         if "reddit_used" in df.columns:
-            df["reddit_used"] = df["reddit_used"].fillna(False)
+            df["reddit_used"] = df["reddit_used"].fillna(False).infer_objects(copy=False)
         df = add_spread_total_confidence(df)
         df = df.copy()
         df = enrich_picks_with_roi_metrics(df)

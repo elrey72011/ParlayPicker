@@ -447,6 +447,20 @@ MANUAL_TEAM_OVERRIDES = {
     "SAINT FRANCIS PA": "SAINT FRANCIS (PA)",
     "ST FRANCIS (PA)": "SAINT FRANCIS (PA)",
     "STATE FRANCIS PA": "SAINT FRANCIS (PA)", # Post-normalization fix
+    "MONMOUTH HAWKS": "MONMOUTH",
+    "ALBANY GREAT DANES": "ALBANY",
+    "TOWSON TIGERS": "TOWSON",
+    "BINGHAMTON BEARCATS": "BINGHAMTON",
+    "BROWN BEARS": "BROWN",
+    "NJIT HIGHLANDERS": "NJIT",
+    "MERCYHURST LAKERS": "MERCYHURST",
+    "YALE BULLDOGS": "YALE",
+    "SIENA SAINTS": "SIENA",
+    "FAIRLEIGH DICKINSON KNIGHTS": "FAIRLEIGH DICKINSON",
+    "HARVARD CRIMSON": "HARVARD",
+    "SAINT PETERS PEACOCKS": "SAINT PETER'S",
+    "MAINE BLACK BEARS": "MAINE",
+    "QUINNIPIAC BOBCATS": "QUINNIPIAC",
     "MT ST MARYS": "MOUNT ST MARY'S",
     "MOUNT ST MARYS": "MOUNT ST MARY'S",
     "MT SAINT MARYS": "MOUNT ST MARY'S",
@@ -1011,8 +1025,10 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
 
     def _make_client(primary: bool) -> "cfbd.ApiClient":
         cfg = cfbd.Configuration()
-        # Task 4: Fix Authorization
-        cfg.api_key['Authorization'] = token  # Raw key only
+        # Fix Issue #4: Proper CFBD Authorization handling
+        # Ensure token doesn't have extra whitespace
+        clean_token = token.strip()
+        cfg.api_key['Authorization'] = clean_token
         cfg.api_key_prefix['Authorization'] = 'Bearer'
         return cfbd.ApiClient(cfg)
 
@@ -1312,7 +1328,9 @@ def fetch_ncaab_stats(season_year: int) -> List[Dict[str, Any]]:
                 "points_allowed_per_game": oppg,
                 "turnovers": avg_tov,
                 "streak": 0.0,
-                "last5_win_pct": win_pct
+                "last5_win_pct": win_pct,
+                "quality": "REAL",
+                "confidence_multiplier": 1.0
             })
 
         logger.info(f"Successfully fetched NCAAB stats for {len(stats)} teams.")

@@ -6,6 +6,7 @@ import time
 import json
 import logging
 from typing import Any, Dict, List
+import streamlit as st
 
 logger = logging.getLogger(__name__)
 
@@ -33,13 +34,15 @@ def initialize_gemini():
     if not _GEMINI_AVAILABLE:
         return
 
-    # Try to find API key in environment or Streamlit secrets (if available via env var injection)
+    # Try to find API key in environment or Streamlit secrets
     api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+
+    # Fallback to st.secrets if not in env
     if not api_key:
-        # Check if we can get it from streamlit secrets via a helper if it was injected into env
-        # Note: In Streamlit Cloud, secrets are often loaded into env or accessed via st.secrets.
-        # Here we assume the calling app might have set the env var from st.secrets.
-        pass
+        try:
+            api_key = st.secrets.get("GOOGLE_API_KEY") or st.secrets.get("GEMINI_API_KEY")
+        except Exception:
+            pass
 
     if api_key:
         try:
@@ -47,8 +50,7 @@ def initialize_gemini():
         except Exception as e:
             logger.error(f"Failed to initialize Gemini: {e}")
     else:
-        # logger.warning("GEMINI_API_KEY or GOOGLE_API_KEY not found.")
-        pass
+        logger.warning("GEMINI_API_KEY or GOOGLE_API_KEY not found in env or secrets.")
 
 def _safe_json_extract(text: str) -> Dict[str, Any]:
     text = (text or "").strip()
