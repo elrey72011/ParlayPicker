@@ -12392,29 +12392,27 @@ if should_display:
             key="market_stability_filter"
         )
 
-        # FORCE DISPLAY: Disable confidence filter UI elements - they are ignored
-        # These are kept for backward compatibility but have no effect on display
+        # Confidence Filter Controls (Re-enabled)
         confidence_mode = st.selectbox(
-            "Confidence filter (DISABLED - showing all rows)",
+            "Confidence filter",
             ["All", "High+Medium (recommended)", "High only"],
             index=0,
             key="confidence_filter_mode",
-            disabled=True,
         )
-        # Action: Set hide_low_confidence to False as the hardcoded default
-        st.session_state.setdefault("hide_low_confidence", False)
+
         hide_low = st.checkbox(
-            "Hide low-confidence picks (DISABLED - showing all rows)",
+            "Hide low-confidence picks",
             value=False,
             key="hide_low_confidence",
-            disabled=True,
         )
-        # FORCE DISPLAY: Always use "All" mode and show_low=True to display all 139 rows
-        # This bypasses any UI filter settings to ensure full visibility
+
         if logger:
             logger.info(f"apply_confidence_filter input: {len(df)} rows, columns={list(df.columns)[:20]}...")
             logger.info(f"   Has Pick_Confidence: {'Pick_Confidence' in df.columns}")
-        df_master_view, confidence_stats = apply_confidence_filter(df, "All", True)
+
+        # Apply filter based on user selection (Fix Issue #7)
+        # Note: If hide_low is False (unchecked), show_low is True
+        df_master_view, confidence_stats = apply_confidence_filter(df, confidence_mode, not hide_low)
 
         # Display warning if Pick_Confidence column was missing
         if confidence_stats.get("warning"):
@@ -12444,28 +12442,25 @@ if should_display:
         df_master_view = calculate_best_pick_metrics(df_master_view)
 
         # --- MERGE GAME SUMMARY COLUMNS ---
-        # Skip summary merge if Gemini is disabled (prevents merge errors from missing Gemini fields)
-        gemini_disabled = st.session_state.get("gemini_disabled_reason") is not None
-        if gemini_disabled:
-            logger.info("⚠️ Skipping game summary merge because Gemini is disabled")
-        else:
-            try:
-                summary_df_merge = build_game_summary(st.session_state["master_df"])
-                if not summary_df_merge.empty and not df_master_view.empty:
-                    # Avoid duplicate join keys in right frame
-                    join_keys = ["league", "Home", "Away", "Commence (UTC)"]
-                    cols_to_use = [c for c in summary_df_merge.columns if c not in ["Commence (Local)", "Local Date"]]
+        # Fix Issue #6: Always attempt summary merge even if Gemini is disabled
+        # build_game_summary relies on data probabilities, not just Gemini fields.
+        try:
+            summary_df_merge = build_game_summary(st.session_state["master_df"])
+            if not summary_df_merge.empty and not df_master_view.empty:
+                # Avoid duplicate join keys in right frame
+                join_keys = ["league", "Home", "Away", "Commence (UTC)"]
+                cols_to_use = [c for c in summary_df_merge.columns if c not in ["Commence (Local)", "Local Date"]]
 
-                    df_master_view = pd.merge(
-                        df_master_view,
-                        summary_df_merge[cols_to_use],
-                        on=join_keys,
-                        how="left"
-                    )
-                    # Task 3: Optimization - Replace fragmented column assignments with copy
-                    df_master_view = df_master_view.copy()
-            except Exception as e:
-                logger.warning(f"⚠️ Summary merge failed: {e}")
+                df_master_view = pd.merge(
+                    df_master_view,
+                    summary_df_merge[cols_to_use],
+                    on=join_keys,
+                    how="left"
+                )
+                # Task 3: Optimization - Replace fragmented column assignments with copy
+                df_master_view = df_master_view.copy()
+        except Exception as e:
+            logger.warning(f"⚠️ Summary merge failed: {e}")
 
         counts = confidence_stats.get("counts") or {}
         st.caption(
