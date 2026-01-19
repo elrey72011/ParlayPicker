@@ -272,6 +272,16 @@ first_game_full_search = {} # Fixed: Initialize as dict, not boolean, to support
 # Utility helpers (null-safe probability handling)
 # -----------------
 
+def clean_line_str(val: Any) -> Optional[str]:
+    """Format betting line to strip leading zeros (e.g. '01' -> '1', '1.5' -> '1.5')."""
+    if val is None:
+        return None
+    try:
+        f = float(val)
+        return f"{f:g}"
+    except Exception:
+        return str(val)
+
 def safe_float(x: Any) -> Optional[float]:
     """Convert to float; return None on blanks/NaN/non-numeric."""
     if x is None:
@@ -9508,7 +9518,7 @@ with tab_master:
                         "kalshi_game_prefix_used": (candidate_debug.get("winner_meta") or {}).get("winner_prefix"),
                         "kalshi_wanted_tokens": (candidate_debug.get("winner_meta") or {}).get("allowed_date_tokens"),
                         "Sentiment_Diff": sentiment_diff,
-                        "Spread & Pick": f"{spread_pick} {spread_line} ({spread_prob_final*100:.1f}%)" if (spread_pick is not None and spread_prob_final is not None) else (f"{spread_pick} {spread_line}" if spread_pick is not None else None),
+                        "Spread & Pick": f"{spread_pick} {clean_line_str(spread_line)} ({spread_prob_final*100:.1f}%)" if (spread_pick is not None and spread_prob_final is not None) else (f"{spread_pick} {clean_line_str(spread_line)}" if spread_pick is not None else None),
                         "spread_pick_team": spread_pick_team,
                         "spread_pick_line": spread_pick_line,
                         "spread_pick_odds": spread_pick_odds,
@@ -9516,7 +9526,7 @@ with tab_master:
                         "spread_prob": spread_prob,
                         "spread_confidence": None,
                         "spread_confidence_reason": None,
-                        "Total & Pick": f"{total_pick} {total_line} ({total_prob_final*100:.1f}%)" if (total_pick is not None and total_prob_final is not None) else (f"{total_pick} {total_line}" if total_pick is not None else None),
+                        "Total & Pick": f"{total_pick} {clean_line_str(total_line)} ({total_prob_final*100:.1f}%)" if (total_pick is not None and total_prob_final is not None) else (f"{total_pick} {clean_line_str(total_line)}" if total_pick is not None else None),
                         "total_pick_side": total_pick_side,
                         "total_pick_line": total_line,
                         "total_pick_odds": total_pick_odds,
@@ -9784,7 +9794,7 @@ with tab_master:
                         "kalshi_game_prefix_used": (candidate_debug.get("winner_meta") or {}).get("winner_prefix"),
                         "kalshi_wanted_tokens": (candidate_debug.get("winner_meta") or {}).get("allowed_date_tokens"),
                         "Sentiment_Diff": sentiment_diff,
-                        "Spread & Pick": f"{spread_pick} {spread_line} ({spread_prob_final*100:.1f}%)" if (spread_pick is not None and spread_prob_final is not None) else (f"{spread_pick} {spread_line}" if spread_pick is not None else None),
+                        "Spread & Pick": f"{spread_pick} {clean_line_str(spread_line)} ({spread_prob_final*100:.1f}%)" if (spread_pick is not None and spread_prob_final is not None) else (f"{spread_pick} {clean_line_str(spread_line)}" if spread_pick is not None else None),
                         "spread_pick_team": spread_pick_team,
                         "spread_pick_line": spread_pick_line,
                         "spread_pick_odds": spread_pick_odds,
@@ -9792,7 +9802,7 @@ with tab_master:
                         "spread_prob": spread_prob,
                         "spread_confidence": None,
                         "spread_confidence_reason": None,
-                        "Total & Pick": f"{total_pick} {total_line} ({total_prob_final*100:.1f}%)" if (total_pick is not None and total_prob_final is not None) else (f"{total_pick} {total_line}" if total_pick is not None else None),
+                        "Total & Pick": f"{total_pick} {clean_line_str(total_line)} ({total_prob_final*100:.1f}%)" if (total_pick is not None and total_prob_final is not None) else (f"{total_pick} {clean_line_str(total_line)}" if total_pick is not None else None),
                         "total_pick_side": total_pick_side,
                         "total_pick_line": total_line,
                         "total_pick_odds": total_pick_odds,
@@ -10803,7 +10813,9 @@ with tab_master:
                     has_any = (k_spread | s_pick_k | k_total | t_pick_k | k_ml | k_ml_used)
                     return k_matched & has_any
 
-                df["HasKalshiMarket"] = _has_kalshi_market_vectorized(df)
+                # Fix for Fragmentation (Issue #4)
+                new_hk_col = pd.DataFrame({"HasKalshiMarket": _has_kalshi_market_vectorized(df)}, index=df.index)
+                df = pd.concat([df, new_hk_col], axis=1)
 
                 kalshi_markets_count = df["HasKalshiMarket"].sum()
 

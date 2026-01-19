@@ -516,6 +516,26 @@ class ParlayOptimizer:
             "longshots_1": result["longshots"]
         }
 
+    def validate_pick_string(self, pick_str: str) -> bool:
+        """
+        Validate pick string to reject artifacts like "Under 01", "Team 01".
+        Returns True if valid, False if artifact detected.
+        """
+        if not pick_str or not isinstance(pick_str, str):
+            return False
+
+        import re
+        # Reject artifacts: " 01", " 11", " 00" at end of string
+        # This catches "Portland Trail Blazers 01" and "Under 01"
+        if re.search(r'\s0\d$', str(pick_str)):
+            return False
+
+        # Reject "Under 0" or "Over 0" (unless followed by decimal like 0.5)
+        if re.search(r'^(Under|Over)\s+0$', str(pick_str)):
+            return False
+
+        return True
+
     def calculate_consensus_votes(self, row: pd.Series) -> Tuple[int, int, Dict[str, bool]]:
         """
         Calculate consensus votes from multiple sources for a single pick.
@@ -634,16 +654,25 @@ class ParlayOptimizer:
         # Calculate consensus for each playable pick
         consensus_data = []
         for idx, row in playable.iterrows():
+            # Validate pick string to filter out artifacts (e.g. "Under 01")
+            pick_str = row.get("Pick") or row.get("Spread & Pick") or row.get("Total & Pick")
+            if not self.validate_pick_string(pick_str):
+                playable.at[idx, "AI_Edge"] = -1.0 # Disqualify
+                continue
+
             consensus_votes, consensus_total, vote_details = self.calculate_consensus_votes(row)
             playable.at[idx, "consensus_votes"] = consensus_votes
             playable.at[idx, "consensus_total"] = consensus_total
             playable.at[idx, "consensus_ratio"] = consensus_votes / consensus_total if consensus_total > 0 else 0
             consensus_data.append({
                 "index": idx,
-                "pick": row.get("Pick") or row.get("Spread & Pick") or row.get("Total & Pick"),
+                "pick": pick_str,
                 "consensus": f"{consensus_votes}/{consensus_total}",
                 "vote_details": vote_details
             })
+
+        # Re-filter after validation
+        playable = playable[playable["AI_Edge"] > 0.00].copy()
 
         # Log sample consensus calculations
         logger.info(f"Consensus calculation for {min(5, len(consensus_data))} sample picks:")

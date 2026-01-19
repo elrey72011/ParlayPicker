@@ -667,9 +667,21 @@ def price_to_prob(price: Any) -> Optional[float]:
 def _extract_market_type(title: str, ticker: str) -> str:
     t = (title or "").upper()
     tick = (ticker or "").upper()
-    if "SPREAD" in t or "POINTS" in t or "SPREAD" in tick: return "spread"
-    if "TOTAL" in t or "OVER/UNDER" in t or "O/U" in t or "TOTAL" in tick: return "total"
+
+    # Debug: Log input for classification analysis
+    # logger.debug(f"_extract_market_type input: ticker={tick}, title={t}")
+
+    # 1. Spread detection
+    if "SPREAD" in tick or "KXNBASPREAD" in tick or "KXNFLSPREAD" in tick: return "spread"
+    if "SPREAD" in t or "POINT SPREAD" in t or "POINTS" in t: return "spread"
+
+    # 2. Total detection
+    if "TOTAL" in tick or "KXNBATOTAL" in tick or "KXNFLTOTAL" in tick: return "total"
+    if "TOTAL" in t or "OVER/UNDER" in t or "O/U" in t or "TOTAL POINTS" in t: return "total"
+
+    # 3. Moneyline/Winner detection
     if "MONEYLINE" in t or "ML" in t or "WINNER" in t: return "moneyline"
+
     return "generic"
 
 def _extract_teams_from_ticker(ticker: str) -> List[str]:
