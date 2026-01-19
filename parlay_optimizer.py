@@ -728,6 +728,28 @@ class ParlayOptimizer:
                 consensus_ratio2 = consensus_votes2 / consensus_total2 if consensus_total2 > 0 else 0
                 avg_consensus_ratio = (consensus_ratio1 + consensus_ratio2) / 2
 
+                # Determine Parlay Type
+                m1 = str(row1.get("Market", "")).lower()
+                m2 = str(row2.get("Market", "")).lower()
+
+                legs_markets = [m1, m2]
+                spreads = sum(1 for m in legs_markets if "spread" in m)
+                totals = sum(1 for m in legs_markets if "total" in m)
+                mls = sum(1 for m in legs_markets if "money" in m or "ml" in m)
+
+                if spreads == 2:
+                    parlay_type = "2-leg spread"
+                elif totals == 2:
+                    parlay_type = "2-leg total"
+                elif mls == 2:
+                    parlay_type = "2-leg moneyline"
+                else:
+                    parts = []
+                    if spreads: parts.append(f"{spreads} spread")
+                    if totals: parts.append(f"{totals} total")
+                    if mls: parts.append(f"{mls} ML")
+                    parlay_type = f"mixed ({' + '.join(parts)})"
+
                 parlay_candidates.append({
                     "leg1": {
                         "pick": pick1,
@@ -747,6 +769,7 @@ class ParlayOptimizer:
                         "consensus_votes": consensus_votes2,
                         "consensus_total": consensus_total2
                     },
+                    "type": parlay_type,
                     "parlay_prob": parlay_prob,
                     "parlay_decimal_odds": parlay_decimal_odds,
                     "parlay_american_odds": parlay_american_odds,

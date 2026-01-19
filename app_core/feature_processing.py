@@ -425,6 +425,7 @@ MANUAL_TEAM_OVERRIDES = {
     "GEORGE MASON": "GEORGE MASON",
     "GW": "GEORGE WASHINGTON",
     "GEORGE WASHINGTON": "GEORGE WASHINGTON",
+    "GWU": "GEORGE WASHINGTON",
     "G GARDNER WEBB": "GARDNER WEBB",
     "GARDNER WEBB": "GARDNER WEBB",
     "ST THOMAS MN": "ST THOMAS (MN)",
@@ -440,6 +441,114 @@ MANUAL_TEAM_OVERRIDES = {
     "LOUISIANA LAFAYETTE": "LOUISIANA",
     "UL MONROE": "LOUISIANA MONROE",
     "ULM": "LOUISIANA MONROE",
+
+    # Extended NCAAB Aliases (Issue #2 Resolution)
+    "ST FRANCIS PA": "SAINT FRANCIS (PA)",
+    "SAINT FRANCIS PA": "SAINT FRANCIS (PA)",
+    "ST FRANCIS (PA)": "SAINT FRANCIS (PA)",
+    "STATE FRANCIS PA": "SAINT FRANCIS (PA)", # Post-normalization fix
+    "MT ST MARYS": "MOUNT ST MARY'S",
+    "MOUNT ST MARYS": "MOUNT ST MARY'S",
+    "MT SAINT MARYS": "MOUNT ST MARY'S",
+    "MT STATE MARYS": "MOUNT ST MARY'S", # Post-normalization fix
+    "N COLORADO": "NORTHERN COLORADO",
+    "NORTHERN COLORADO": "NORTHERN COLORADO",
+    "UNC BEARS": "NORTHERN COLORADO",
+    "ARIZONA ST": "ARIZONA STATE",
+    "ASU": "ARIZONA STATE",
+    "WASHINGTON ST": "WASHINGTON STATE",
+    "WAZZU": "WASHINGTON STATE",
+    "CHARLESTON SO": "CHARLESTON SOUTHERN",
+    "CHARLESTON SOUTHERN": "CHARLESTON SOUTHERN",
+    "CSU": "CHARLESTON SOUTHERN", # Context dependent, but often implies this in Big South
+    "LOYOLA CHICAGO": "LOYOLA CHICAGO",
+    "LOYOLA (IL)": "LOYOLA CHICAGO",
+    "LOYOLA IL": "LOYOLA CHICAGO",
+    "DETROIT MERCY": "DETROIT MERCY",
+    "DETROIT": "DETROIT MERCY",
+    "UD MERCY": "DETROIT MERCY",
+    "ST PETERS": "SAINT PETER'S",
+    "SAINT PETERS": "SAINT PETER'S",
+    "ST PETER'S": "SAINT PETER'S",
+    "LIU": "LONG ISLAND UNIVERSITY",
+    "LONG ISLAND": "LONG ISLAND UNIVERSITY",
+    "LIU BROOKLYN": "LONG ISLAND UNIVERSITY",
+    "LIU SHARKS": "LONG ISLAND UNIVERSITY",
+    "ST FRANCIS BK": "ST FRANCIS BROOKLYN", # Defunct/merged?
+    "ST FRANCIS NY": "ST FRANCIS BROOKLYN",
+    "SC STATE": "SOUTH CAROLINA STATE",
+    "SOUTH CAROLINA ST": "SOUTH CAROLINA STATE",
+    "SCSU": "SOUTH CAROLINA STATE",
+    "UMASS LOWELL": "UMASS LOWELL",
+    "MASS LOWELL": "UMASS LOWELL",
+    "MASSACHUSETTS LOWELL": "UMASS LOWELL",
+    "NJIT": "NJIT",
+    "NEW JERSEY TECH": "NJIT",
+    "UMBC": "UMBC",
+    "MD BALTIMORE CO": "UMBC",
+    "MARYLAND BALTIMORE COUNTY": "UMBC",
+    "UNKW": "UNC WILMINGTON",
+    "UNC WILMINGTON": "UNC WILMINGTON",
+    "UNCW": "UNC WILMINGTON",
+    "NC WILMINGTON": "UNC WILMINGTON",
+    "UNCG": "UNC GREENSBORO",
+    "UNC GREENSBORO": "UNC GREENSBORO",
+    "NC GREENSBORO": "UNC GREENSBORO",
+    "UNCA": "UNC ASHEVILLE",
+    "UNC ASHEVILLE": "UNC ASHEVILLE",
+    "NC ASHEVILLE": "UNC ASHEVILLE",
+    "CAMPBELL": "CAMPBELL",
+    "CAMPBELL CAMELS": "CAMPBELL",
+    "HIGH POINT": "HIGH POINT",
+    "HPU": "HIGH POINT",
+    "RADFORD": "RADFORD",
+    "WINTHROP": "WINTHROP",
+    "PRESBYTERIAN": "PRESBYTERIAN",
+    "PC BLUE HOSE": "PRESBYTERIAN",
+    "USC UPSTATE": "USC UPSTATE",
+    "SC UPSTATE": "USC UPSTATE",
+    "SOUTH CAROLINA UPSTATE": "USC UPSTATE",
+    "ETSU": "EAST TENNESSEE STATE",
+    "EAST TENNESSEE ST": "EAST TENNESSEE STATE",
+    "CHATTANOOGA": "CHATTANOOGA",
+    "UTC": "CHATTANOOGA",
+    "SAMFORD": "SAMFORD",
+    "FURMAN": "FURMAN",
+    "WOFFORD": "WOFFORD",
+    "THE CITADEL": "THE CITADEL",
+    "CITADEL": "THE CITADEL",
+    "VMI": "VMI",
+    "VIRGINIA MILITARY": "VMI",
+    "MERCER": "MERCER",
+    "WESTERN CAROLINA": "WESTERN CAROLINA",
+    "WCU": "WESTERN CAROLINA",
+    "UNCG": "UNC GREENSBORO",
+    "SAM HOUSTON": "SAM HOUSTON STATE",
+    "SAM HOUSTON ST": "SAM HOUSTON STATE",
+    "SHSU": "SAM HOUSTON STATE",
+    "STEPHEN F AUSTIN": "STEPHEN F AUSTIN",
+    "SFA": "STEPHEN F AUSTIN",
+    "ABILENE CHRISTIAN": "ABILENE CHRISTIAN",
+    "ACU": "ABILENE CHRISTIAN",
+    "LAMAR": "LAMAR",
+    "LU": "LAMAR",
+    "UT RIO GRANDE": "UT RIO GRANDE VALLEY",
+    "UT RIO GRANDE VALLEY": "UT RIO GRANDE VALLEY",
+    "UTRGV": "UT RIO GRANDE VALLEY",
+    "TARLETON": "TARLETON STATE",
+    "TARLETON ST": "TARLETON STATE",
+    "DIXIE STATE": "UTAH TECH",
+    "UTAH TECH": "UTAH TECH",
+    "CAL BAPTIST": "CALIFORNIA BAPTIST",
+    "CBU": "CALIFORNIA BAPTIST",
+    "SEATTLE U": "SEATTLE U",
+    "SEATTLE": "SEATTLE U",
+    "GRAND CANYON": "GRAND CANYON",
+    "GCU": "GRAND CANYON",
+    "NEW MEXICO ST": "NEW MEXICO STATE",
+    "NMSU": "NEW MEXICO STATE",
+    "CHICAGO STATE": "CHICAGO STATE",
+    "CSU": "CHICAGO STATE", # Conflict with Charleston Southern / Cleveland State - check context if possible or assume major one
 
     # NHL accent + city-only fixes
     "MONTRÉAL CANADIENS": "MONTREAL CANADIENS",
@@ -1493,7 +1602,14 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                 missing_away = [t for t, m in away_map_local.items() if m is None]
                 missing = list(set(missing_home + missing_away))
                 if missing:
-                    logger.warning(f"STATS MISSING TEAMS [{lg_key}] (Top 5): {missing[:5]}")
+                    logger.warning(f"STATS MISSING TEAMS [{lg_key}] (Top 20): {missing[:20]}")
+
+            # Explicit match rate log as requested
+            total_matches = stats_log.get('direct', 0) + stats_log.get('override', 0) + stats_log.get('fuzzy', 0)
+            total_attempts = total_matches + stats_log.get('miss', 0)
+            if total_attempts > 0:
+                match_pct = (total_matches / total_attempts) * 100
+                logger.info(f"{lg_key} Stats Match Rate: {total_matches}/{total_attempts} ({match_pct:.1f}%)")
     else:
         if not FREE_TIER_MODE:
             logger.warning("No stats fetched. Filling with defaults.")
