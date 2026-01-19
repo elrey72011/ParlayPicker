@@ -1324,89 +1324,141 @@ def fetch_from_espn_ncaaf(season_year: int) -> List[Dict[str, Any]]:
         logger.error(f"ESPN NCAAF fallback failed: {e}")
         return []
 
-@st.cache_data(ttl=21600)
-def fetch_ncaab_stats(season_year: int) -> List[Dict[str, Any]]:
+def fetch_from_espn_ncaab(season_year: int) -> List[Dict[str, Any]]:
     """
-    Fetch NCAAB stats using CBBpy.
-    This library scrapes, so we MUST wrap in timeout.
+    Fetch NCAAB stats from ESPN hidden API (Fallback).
     """
-    if cbb_s is None:
-        return []
-
-    def _scrape_worker():
-        # cbbpy usage: get_team_stats(season=2024) - check docs/usage
-        # assuming cbb_s.get_team_stats or similar
-        # Based on common usage: cbbpy.mens_scraper.get_season_stats(season=2024)
-        # Note: function names might vary, using best effort from typical usage
-        try:
-            # get_season_stats usually returns a DataFrame
-            # season year for 2024-25 is usually 2025
-            return cbb_s.get_stats(season=season_year + 1)
-        except Exception as e:
-            return None
-
     try:
-        logger.info(f"Fetching NCAAB stats for season: {season_year}")
-
-        # Run in thread with timeout
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(_scrape_worker)
-            try:
-                # 5 Second Timeout
-                df = future.result(timeout=15)
-            except concurrent.futures.TimeoutError:
-                logger.warning("NCAAB stats fetch timed out (5s limit).")
-                return []
-            except Exception as e:
-                logger.warning(f"NCAAB stats fetch failed: {e}")
-                return []
-
-        if df is None or df.empty:
-            return []
-
-        # Process DataFrame
-        # Expect columns: team, games, points, opponents_points, wins, etc.
-        # Column names in cbbpy can be verbose.
+        logger.info(f"Fetching NCAAB stats from ESPN for season: {season_year}")
+        url = "https://site.api.espn.com/apis/v2/sports/basketball/mens-college-basketball/standings"
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
 
         stats = []
-        for _, row in df.iterrows():
-            team_name = row.get('team', '')
-            if not team_name: continue
+        children = data.get("children", [])
+        for conf in children:
+            entries = conf.get("standings", {}).get("entries", [])
+            for entry in entries:
+                team_info = entry.get("team", {})
+                team_name = team_info.get("displayName")
+                if not team_name:
+                    continue
 
-            games = float(row.get('games', 0))
-            if games == 0: continue
+                # Stats parsing
+                stat_list = entry.get("stats", [])
+                stat_map = {s.get("name"): s.get("value") for s in stat_list}
 
-            wins = float(row.get('wins', 0))
-            points = float(row.get('points', 0))
-            opp_points = float(row.get('opp_points', 0)) # Verify col name
-            turnovers = float(row.get('turnovers', 0))
+                wins = float(stat_map.get("wins", 0))
+                losses = float(stat_map.get("losses", 0))
+                ppg = float(stat_map.get("avgPointsFor", 0))
+                oppg = float(stat_map.get("avgPointsAgainst", 0))
 
-            win_pct = wins / games
-            ppg = points / games
-            oppg = opp_points / games
-            avg_tov = turnovers / games
+                games = wins + losses
+                win_pct = wins / games if games > 0 else 0.0
 
-            stats.append({
-                "team_norm": robust_normalize_team(team_name, league="NCAAB"),
-                "league_key": "NCAAB",
-                "win_pct": win_pct,
-                "home_win_pct": win_pct,
-                "away_win_pct": win_pct,
-                "points_per_game": ppg,
-                "points_allowed_per_game": oppg,
-                "turnovers": avg_tov,
-                "streak": 0.0,
-                "last5_win_pct": win_pct,
-                "quality": "REAL",
-                "confidence_multiplier": 1.0
-            })
+                stats.append({
+                    "team_norm": robust_normalize_team(team_name, league="NCAAB"),
+                    "league_key": "NCAAB",
+                    "win_pct": win_pct,
+                    "home_win_pct": win_pct, # Approx
+                    "away_win_pct": win_pct, # Approx
+                    "points_per_game": ppg,
+                    "points_allowed_per_game": oppg,
+                    "turnovers": 0.0, # Not in basic standings
+                    "streak": 0.0,
+                    "last5_win_pct": win_pct, # Approx
+                    "source": "ESPN_FALLBACK"
+                })
 
-        logger.info(f"Successfully fetched NCAAB stats for {len(stats)} teams.")
+        logger.info(f"Successfully fetched NCAAB stats from ESPN for {len(stats)} teams.")
         return stats
 
     except Exception as e:
-        logger.warning(f"Failed to fetch NCAAB stats wrapper: {e}")
+        logger.error(f"ESPN NCAAB fallback failed: {e}")
         return []
+
+@st.cache_data(ttl=21600)
+def fetch_ncaab_stats(season_year: int) -> List[Dict[str, Any]]:
+    """
+    Fetch NCAAB stats using CBBpy or ESPN Fallback.
+    """
+
+    stats = []
+
+    # Try CBBpy first
+    if cbb_s is not None:
+        def _scrape_worker():
+            try:
+                # cbbpy 2.1.2 issues - often missing get_stats
+                # If valid function exists, use it
+                if hasattr(cbb_s, 'get_stats'):
+                    return cbb_s.get_stats(season=season_year + 1)
+                else:
+                    raise AttributeError("cbbpy module has no attribute 'get_stats'")
+            except Exception as e:
+                # Raise to be caught by wrapper
+                raise e
+
+        try:
+            logger.info(f"Fetching NCAAB stats for season: {season_year}")
+
+            # Run in thread with timeout
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(_scrape_worker)
+                try:
+                    df = future.result(timeout=15)
+
+                    if df is not None and not df.empty:
+                        # Process DataFrame from CBBpy
+                        for _, row in df.iterrows():
+                            team_name = row.get('team', '')
+                            if not team_name: continue
+
+                            games = float(row.get('games', 0))
+                            if games == 0: continue
+
+                            wins = float(row.get('wins', 0))
+                            points = float(row.get('points', 0))
+                            opp_points = float(row.get('opp_points', 0))
+                            turnovers = float(row.get('turnovers', 0))
+
+                            win_pct = wins / games
+                            ppg = points / games
+                            oppg = opp_points / games
+                            avg_tov = turnovers / games
+
+                            stats.append({
+                                "team_norm": robust_normalize_team(team_name, league="NCAAB"),
+                                "league_key": "NCAAB",
+                                "win_pct": win_pct,
+                                "home_win_pct": win_pct,
+                                "away_win_pct": win_pct,
+                                "points_per_game": ppg,
+                                "points_allowed_per_game": oppg,
+                                "turnovers": avg_tov,
+                                "streak": 0.0,
+                                "last5_win_pct": win_pct,
+                                "quality": "REAL",
+                                "confidence_multiplier": 1.0
+                            })
+
+                        logger.info(f"Successfully fetched NCAAB stats (CBBpy) for {len(stats)} teams.")
+
+                except concurrent.futures.TimeoutError:
+                    logger.warning("NCAAB stats fetch timed out (cbbpy).")
+                except Exception as e:
+                    logger.warning(f"NCAAB stats fetch failed (cbbpy): {e}")
+
+        except Exception as e:
+            logger.warning(f"Failed to fetch NCAAB stats wrapper: {e}")
+
+    # Fallback to ESPN if CBBpy failed or returned no stats
+    if not stats:
+        logger.warning("NCAAB stats unavailable via CBBpy. Attempting ESPN fallback...")
+        return fetch_from_espn_ncaab(season_year)
+
+    return stats
 
 # -------------------------------------------------------------------------
 
