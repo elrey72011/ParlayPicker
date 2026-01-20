@@ -10961,6 +10961,51 @@ with tab_master:
 
                 df = _enforce_consensus_and_best_pick_vectorized(df)
 
+                # --------------------------------------------------------
+                # TASK: Add Edge Column (Model Prob - Consensus Prob)
+                # --------------------------------------------------------
+                def calculate_edge(df):
+                    edge_formatted = []
+                    for idx, row in df.iterrows():
+                        market_val = str(row.get('Market', ''))
+                        consensus = None
+
+                        if 'Spread' in market_val:
+                            consensus = row.get('SpreadConsensusProb')
+                        elif 'Total' in market_val:
+                            consensus = row.get('TotalConsensusProb')
+
+                        # Check for valid consensus
+                        # "If consensus is missing/NaN, set Edge = 0.0."
+                        if pd.isna(consensus) or consensus is None:
+                            edge_val = 0.0
+                        else:
+                            try:
+                                c_val = float(consensus)
+                                m_val = float(row.get('Best Overall Prob', 0.5) or 0.5)
+                                edge_val = m_val - c_val
+                            except Exception:
+                                edge_val = 0.0
+
+                        edge_pct = edge_val * 100
+                        # Format as string "X.XX%" for readability
+                        edge_formatted.append(f"{edge_pct:.2f}%")
+                    return edge_formatted
+
+                # Insert Edge column immediately after 'Best Overall Prob'
+                if 'Best Overall Prob' in df.columns:
+                    try:
+                        edge_values = calculate_edge(df)
+                        # Remove 'Edge' if it already exists to avoid duplication error on insert
+                        if 'Edge' in df.columns:
+                            df.drop(columns=['Edge'], inplace=True)
+
+                        loc_index = df.columns.get_loc('Best Overall Prob') + 1
+                        df.insert(loc=loc_index, column='Edge', value=edge_values)
+                        logger.info("✅ Edge column added successfully")
+                    except Exception as e:
+                        logger.warning(f"Failed to add Edge column: {e}")
+
                 # Diagnostic Log
                 logger.info(
                     "Consensus summary: rows=%s, with_spread_pick=%s, with_spread_consensus=%s, with_total_pick=%s, with_total_consensus=%s",
