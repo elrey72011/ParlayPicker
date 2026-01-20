@@ -3124,6 +3124,10 @@ def pipeline_progress_snapshot() -> Dict[str, Any]:
     # ============================================
     kalshi_markets_count = 0
     if master_df is not None and not master_df.empty:
+        # Fallback for initial load if matched_games > 0 but markets count fails
+        if matched_games > 0:
+            kalshi_markets_count = matched_games
+
         try:
             # Check if HasKalshiMarket column already exists (from Master Analysis tab)
             if "HasKalshiMarket" in master_df.columns:
@@ -3212,9 +3216,10 @@ def pipeline_progress_snapshot() -> Dict[str, Any]:
     master_stats = st.session_state.get("master_stats") or {}
     return {
         "games_loaded": games_loaded,
-        "kalshi_matched": matched_games,
+        "kalshi_matched": kalshi_markets_count,
         "kalshi_markets": kalshi_markets_count,  # NEW: Count of games with valid Kalshi markets
         "sentiment_ready": sentiment_ready,
+        "gemini_ready": st.session_state.get("gemini_initialized", False),
         "sentiment_flags": sentiment_flags,
         "model_ready": model_ready,
         "rows_out": rows_out,
@@ -3240,6 +3245,13 @@ def render_pipeline_banner() -> None:
         # Issue 2: Gemini Transparency - Show warning if sentiment/Gemini disabled
         # Check if disabled via session state or config
         gemini_disabled_reason = st.session_state.get("gemini_disabled_reason")
+        gemini_ready = progress.get("gemini_ready", False)
+
+        # Gemini Status Logic
+        gemini_status_text = "Ready" if gemini_ready else "Missing"
+        if gemini_disabled_reason:
+            gemini_status_text = "Disabled"
+
         if gemini_disabled_reason or not progress["sentiment_ready"]:
              # If specifically disabled due to error, show as warning in UI
              if not progress["sentiment_ready"]:
@@ -3250,6 +3262,10 @@ def render_pipeline_banner() -> None:
             sentiment_status_label,
             delta=sentiment_delta or None,
         )
+        # Separate Gemini Metric (or combined if preferred, but user asked for status)
+        # Using caption for now as cols[2] is taken by Sentiment
+        if not gemini_ready:
+             st.caption(f"⚠️ Gemini: {gemini_status_text} ({gemini_disabled_reason or 'Not Initialized'})")
         # ============================================
         # MARKETS BADGE: Shows count of games with valid Kalshi markets
         # ============================================
@@ -4161,7 +4177,12 @@ def init_data_clients() -> Tuple[Dict[str, Any], Dict[str, Any]]:
 st.set_page_config(page_title="ParlayDesk", layout="wide")
 
 # Issue 3: Validate API key before attempting to use Gemini
-initialize_gemini()
+# Set gemini_initialized flag for UI status check
+client, error = initialize_gemini()
+if client:
+    st.session_state["gemini_initialized"] = True
+else:
+    st.session_state["gemini_initialized"] = False
 
 # Task 3: Initialize TheOver Raw Debug State
 if "theover_raw_df" not in st.session_state:
@@ -6837,7 +6858,7 @@ sportsdata_present = (
 )
 api_sports_status = "OK" if api_sports_present or any(v for v in api_sports_clients.values() if v) else "MISSING"
 sportsdata_status = "OK" if sportsdata_present or any(v for v in sportsdata_clients.values() if v) else "MISSING"
-gemini_ready = bool(get_secret_any("GEMINI_API_KEY"))
+gemini_ready = st.session_state.get("gemini_initialized", False) or bool(get_secret_any("GEMINI_API_KEY"))
 st.sidebar.markdown("---")
 st.sidebar.subheader("Status")
 sentiment_meta_sidebar = st.session_state.get("sentiment_meta") or init_sentiment_meta()
