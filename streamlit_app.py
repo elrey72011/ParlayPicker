@@ -1053,6 +1053,8 @@ def compute_final_probability(
     sentiment_adj: Optional[float],
     weights_dict: Dict[str, Any], # Deprecated, will use Hardcoded Globals
     sentiment_score: Optional[float] = None,
+    home_team: Optional[str] = None,
+    away_team: Optional[str] = None,
 ) -> Tuple[Optional[float], Optional[float], Dict[str, float], str, List[str], Optional[float]]:
     """
     Blend available probabilities with weight re-normalization.
@@ -1063,97 +1065,152 @@ def compute_final_probability(
     weights_used: Dict[str, float] = {"w_implied": 0.0, "w_kalshi": 0.0, "w_model": 0.0, "w_sentiment": 0.0, "w_theover": 0.0}
     kalshi_prob_for_pick = map_kalshi_prob_for_pick(kalshi_prob_yes, kalshi_side_yes, pick_side)
 
-    # Task 1: Hardcoded Global Weights (No Dynamic Shifting)
-    # Values: Kalshi 0.45, Market 0.40, TheOver 0.15
-    # FIXED: Removed ML Model (0.20) and Sentiment (0.05) - both broken/unavailable
-    # Logic:
-    # - Only use working sources: Market odds, Kalshi prediction markets, TheOver data
-    # - Missing sources are imputed with 0.5 (neutral)
-    # - Total weights sum to 1.0
+    # Task: Re-enable Sentiment with configurable weight
+    # Global Config Weights:
+    # Market: 0.30, Kalshi: 0.35, Model: 0.15, TheOver: 0.15, Sentiment: 0.05
 
-    # 1. Define Static Weights (Hardcoded per User Request)
-    # Check if model is loaded (model_prob present) and use it if requested
-    if model_prob is not None:
-        # Use Model (20%), Kalshi (35%), Market (30%), TheOver (15%)
-        w_kalshi_base = 0.35
-        w_market_base = 0.30
-        w_theover_base = 0.15
-        w_model_base = 0.20
-    else:
-        # Fallback: Kalshi 45, Market 40, TheOver 15
-        w_kalshi_base = 0.45
-        w_market_base = 0.40
-        w_theover_base = 0.15
-        w_model_base = 0.0
+    # 1. Define Weights from Config
+    # Check if model is loaded (model_prob present)
+    model_active = model_prob is not None
+
+    w_kalshi_base = KALSHI_WEIGHT
+    w_market_base = MARKET_WEIGHT
+    w_theover_base = THEOVER_WEIGHT
+    w_model_base = ML_MODEL_WEIGHT if model_active else 0.0
+    w_sentiment_base = SENTIMENT_WEIGHT
 
     # 2. Check Availability
     has_kalshi = kalshi_prob_for_pick is not None
     has_market = implied_prob is not None
     has_theover = theover_prob is not None
 
-    # 3. Use base weights
-    # Weights already sum to 1.0
-    w_kalshi = w_kalshi_base
-    w_market = w_market_base
-    w_theover = w_theover_base
-    w_model = w_model_base
+    # Sentiment Check: Must have a score and NOT be rate limited
+    # We rely on caller to pass valid score, but we should double check validity flags if possible.
+    # Currently caller passes score if available.
+    # We'll treat score not None as available.
+    has_sentiment = sentiment_score is not None
 
-    # 4. Build Sources (Only working sources: Market, Kalshi, TheOver)
-    # Apply probability clamping to prevent extreme values (5-95% range)
+    # Also check rate limit flag if possible (caller responsibility mostly)
+    # If NewsAPI is rate limited, sentiment_score should be None or ignored.
+    if newsapi_cooldown_active():
+        has_sentiment = False
 
-    # Market (0.40 weight) - clamp to prevent extreme probabilities
-    implied_prob_clamped = clamp_prob(implied_prob, lo=0.05, hi=0.95) if has_market else None
-    p_market = clamp(implied_prob_clamped) if implied_prob_clamped is not None else 0.5
-    sources.append(("implied", p_market, w_market))
+    # 3. Build Sources & Normalize Weights
+    # If a source is missing, its weight is redistributed among others proportionally (or simply ignored and we renormalize sum)
 
-    # Kalshi (0.45 weight) - clamp to prevent extreme probabilities
-    kalshi_prob_clamped = clamp_prob(kalshi_prob_for_pick, lo=0.05, hi=0.95) if has_kalshi else None
-    p_kalshi = clamp(kalshi_prob_clamped) if kalshi_prob_clamped is not None else 0.5
-    sources.append(("kalshi", p_kalshi, w_kalshi))
+    # Market
+    if has_market:
+        implied_prob_clamped = clamp_prob(implied_prob, lo=0.05, hi=0.95)
+        p_market = clamp(implied_prob_clamped) if implied_prob_clamped is not None else 0.5
+        sources.append(("implied", p_market, w_market_base))
 
-    # TheOver (0.15 weight) - clamp to prevent extreme probabilities
-    theover_prob_clamped = clamp_prob(theover_prob, lo=0.05, hi=0.95) if has_theover else None
-    p_theover = clamp(theover_prob_clamped) if theover_prob_clamped is not None else 0.5
-    sources.append(("theover", p_theover, w_theover))
+    # Kalshi
+    if has_kalshi:
+        kalshi_prob_clamped = clamp_prob(kalshi_prob_for_pick, lo=0.05, hi=0.95)
+        p_kalshi = clamp(kalshi_prob_clamped) if kalshi_prob_clamped is not None else 0.5
+        sources.append(("kalshi", p_kalshi, w_kalshi_base))
 
-    # ML Model (if available)
-    if w_model > 0 and model_prob is not None:
+    # TheOver
+    if has_theover:
+        theover_prob_clamped = clamp_prob(theover_prob, lo=0.05, hi=0.95)
+        p_theover = clamp(theover_prob_clamped) if theover_prob_clamped is not None else 0.5
+        sources.append(("theover", p_theover, w_theover_base))
+
+    # Model
+    if w_model_base > 0 and model_prob is not None:
          model_prob_clamped = clamp_prob(model_prob, lo=0.05, hi=0.95)
          p_model = clamp(model_prob_clamped) if model_prob_clamped is not None else 0.5
-         sources.append(("model", p_model, w_model))
+         sources.append(("model", p_model, w_model_base))
 
-    # REMOVED: Sentiment (APIs unavailable/broken)
+    # Sentiment Integration
+    # Logic:
+    # 1. Determine direction based on pick_side vs sentiment (Home/Away).
+    # 2. Calculate "Sentiment Probability" = 0.5 + (Directional Score * Scaling Factor).
+    # 3. Add to blend with w_sentiment.
 
-    # 5. Calculate Weighted Sum
-    # Weights sum to 1.0 (0.40 + 0.45 + 0.15 = 1.0)
+    if has_sentiment and w_sentiment_base > 0:
+        # Determine directional impact
+        # sentiment_score is typically (Home Sentiment - Away Sentiment)
+        # Range -1 to 1.
 
-    # Update weights_used for display
-    weights_used["w_implied"] = w_market
-    weights_used["w_kalshi"] = w_kalshi
-    weights_used["w_model"] = w_model
-    weights_used["w_theover"] = w_theover
-    weights_used["w_sentiment"] = 0.0  # Removed - APIs unavailable
+        # If Pick is Home: Impact = Score
+        # If Pick is Away: Impact = -Score
 
-    # Calculate Base Prob
-    # Sum(P * W) where weights sum to 1.0
-    base_prob = sum((p if p is not None else 0.5) * w for _, p, w in sources)
+        direction = 0.0
+
+        # 1. Try matching with Home/Away teams if provided
+        if home_team and away_team:
+            p_norm = str(pick_side or "").lower().strip()
+            h_norm = str(home_team).lower().strip()
+            a_norm = str(away_team).lower().strip()
+
+            # Simple string matching (can be improved with fuzzy if needed, but names usually align in row)
+            if p_norm == h_norm:
+                direction = 1.0
+            elif p_norm == a_norm:
+                direction = -1.0
+            # Else: pick might be Over/Under (no direction from team sentiment usually)
+
+        # 2. Fallback: Kalshi side inference
+        if direction == 0.0 and kalshi_side_yes and pick_side:
+            ks = str(kalshi_side_yes).lower()
+            ps = str(pick_side).lower()
+            if ks == "home":
+                if ps == "home" or ps == ks: direction = 1.0 # Pick is Home
+                else: direction = -1.0 # Pick is Away
+            elif ks == "away":
+                if ps == "away" or ps == ks: direction = -1.0 # Pick is Away
+                else: direction = 1.0 # Pick is Home
+
+        # 3. Fallback: Literal "Home" / "Away"
+        if direction == 0.0 and pick_side:
+            ps = str(pick_side).lower()
+            if ps == "home": direction = 1.0
+            elif ps == "away": direction = -1.0
+
+        if direction != 0.0:
+            # Score -1 to 1.
+            # p_sent = 0.5 + (score * direction * 0.3)
+            # score=1 (Home Strong), direction=1 (Pick Home) -> 0.8
+            # score=1 (Home Strong), direction=-1 (Pick Away) -> 0.2
+
+            s_val = float(sentiment_score)
+            p_sent = 0.5 + (s_val * direction * 0.3)
+            p_sent = clamp(p_sent, 0.05, 0.95)
+            sources.append(("sentiment", p_sent, w_sentiment_base))
+
+    # 4. Normalize Weights
+    total_weight = sum(w for _, _, w in sources)
+    if total_weight > 0:
+        # Re-normalize
+        sources = [(n, p, w / total_weight) for n, p, w in sources]
+    else:
+        # Fallback if no sources (unlikely)
+        if not sources:
+             sources.append(("implied", 0.5, 1.0))
+
+    # 5. Populate weights_used
+    for n, p, w in sources:
+        if n == "implied": weights_used["w_implied"] = w
+        elif n == "kalshi": weights_used["w_kalshi"] = w
+        elif n == "model": weights_used["w_model"] = w
+        elif n == "theover": weights_used["w_theover"] = w
+        elif n == "sentiment": weights_used["w_sentiment"] = w
+
+    # 6. Calculate Base Prob
+    base_prob = sum(p * w for _, p, w in sources)
 
     # Log the probability calculation
     sources_str = ", ".join([f"{name}={p:.3f}*{w:.3f}" for name, p, w in sources])
     logger.debug(f"Probability blend: {sources_str} = {base_prob:.3f}")
 
-    # Reconstruct weights_norm list for downstream compatibility (though normalization is effectively 1.0)
-    weights_norm: List[Tuple[str, float, float]] = []
-    for name, p, w in sources:
-        weights_norm.append((name, p, w))
-
-    # Determine Driver (Highest Weight) - Kalshi at 0.45 is highest
-    driver = "kalshi"
-
-    # Re-enable Sentiment Adjustment if available (Task: Sentiment score via UI is used, but adjustment might be zeroed in weighting)
-    # The user instruction "no sentiment (APIs unavailable/broken)" removed it from weighting.
-    # However, if we do have a score, we can apply a small tweak if desired, but user said remove it.
-    # We will respect the removal from weighting but keep the logging.
+    # Determine Driver
+    if sources:
+        # Sort by weight desc
+        sorted_sources = sorted(sources, key=lambda x: x[2], reverse=True)
+        driver = sorted_sources[0][0]
+    else:
+        driver = "none"
 
     final_prob = clamp(base_prob or 0.0, 0.0, 1.0)
     if driver == "kalshi" and kalshi_prob_for_pick is not None and kalshi_prob_for_pick < 0.5:
@@ -8692,6 +8749,8 @@ with tab_master:
                     spread_sentiment_adj,
                     spread_weights,
                     sentiment_score=sentiment_diff,
+                    home_team=home,
+                    away_team=away,
                 )
 
                 # Calculate TheOver Impact (Invariant: delta = final - without)
@@ -8803,6 +8862,8 @@ with tab_master:
                     total_sentiment_adj,
                     total_weights,
                     sentiment_score=sentiment_diff,
+                    home_team=home,
+                    away_team=away,
                 )
 
                 # Calculate TheOver Impact (Invariant: delta = final - without)
@@ -9187,6 +9248,8 @@ with tab_master:
                             sentiment_adj,
                             current_ml_weights,
                             sentiment_score=sentiment_diff,
+                            home_team=home,
+                            away_team=away,
                         )
                         sentiment_info = sentiment_impact_for_pick(sentiment_adj, pick, home, away)
                         sentiment_direction = sentiment_info.get("sentiment_direction")
