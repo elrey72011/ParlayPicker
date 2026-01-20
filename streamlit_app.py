@@ -11489,6 +11489,9 @@ if should_display:
             "consensus_weight_total",
             "consensus_guardrails",
             "gemini_error",
+            "geminitotalconfidence",
+            "geminirationalize",
+            "geminierrorflag",
         ]
         df_master_view_display = df_master_view.drop(columns=[c for c in TRACE_COLS if c in df_master_view.columns], errors="ignore")
         show_moneyline_details = st.checkbox("Show Moneyline details", value=False, key="show_moneyline_details")
