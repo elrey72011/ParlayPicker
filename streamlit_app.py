@@ -2293,7 +2293,13 @@ def sentiment_payload_to_meta(payload: Dict[str, Any]) -> Dict[str, Any]:
     # Log sentiment validation decision
     if sentiment_valid:
         if has_data:
-            logger.info(f"Sentiment valid with data: score={score:.3f}, sources={sources}, confidence={confidence:.2f}")
+            try:
+                if score is not None and confidence is not None:
+                    logger.info(f"Sentiment valid with data: score={score:.3f}, sources={sources}, confidence={confidence:.2f}")
+                else:
+                    logger.error(f"SENTIMENT DEBUG: score={score}, confidence={confidence}, sources={sources}")
+            except Exception as format_error:
+                logger.error(f"Format string error in sentiment logging: {format_error}")
         else:
             logger.info(f"Sentiment valid (neutral): no articles found, but API call succeeded (error={error})")
     else:
@@ -2952,10 +2958,9 @@ def get_slate_sentiment(enable_sentiment: bool, teams: List[str], league: str, n
         meta["sentiment_status_counts"] = {"DATA_ERROR": 1}
         return {"map": {}, "meta_map": {}, "meta": meta, "debug": {"error": str(exc)}}
     except Exception as exc:  # pragma: no cover - defensive
-        logger.error(f"🚨 UNKNOWN SENTIMENT ERROR: {type(exc).__name__}")
-        logger.error(f"Full error: {str(exc)[:500]}")
-        logger.error(f"Traceback:")
-        logger.error(traceback.format_exc())
+        logger.error(f"SENTIMENT CALC FAILED: {type(exc).__name__}")
+        logger.error(f"Error message: {str(exc)}")
+        logger.error(f"Full traceback:\n{traceback.format_exc()}")
         meta["sentiment_source"] = "error_exception"
         meta["sentiment_sample_status"] = "EXCEPTION"
         meta["sentiment_disabled_reason"] = "exception_in_sentiment"
@@ -11135,6 +11140,7 @@ with tab_master:
             # Issue #1: Add Gemini & Sentiment columns (User Request)
             'PickConfidence', 'PickReason', 'geminitotalconfidence', 'geminirationalize', 'geminierrorflag',
             'HomeSentiment', 'AwaySentiment', 'SentimentDiff', 'sentimentscore', 'sentimentstatus',
+            'modelprob', 'finalprob', 'confidencebucket',
             # Issue #1: Add missing TheOver integration columns
             'theover_pick', 'theover_hit_rate', 'theover_source_model', 'theover_prob_used',
             'theover_matched', 'theover_delta_final_prob', 'final_prob_without_theover'

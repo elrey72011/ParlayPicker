@@ -255,10 +255,31 @@ class PredictionEngine:
             probs = self.model.predict(dmatrix)
 
             # Handle potential single-value return or array
+            final_probs = []
             if hasattr(probs, "__iter__"):
-                return [float(p) for p in probs]
+                raw_probs = [float(p) for p in probs]
             else:
-                return [float(probs)]
+                raw_probs = [float(probs)]
+
+            # Check for placeholder value 0.623034656047821
+            PLACEHOLDER_VAL = 0.623034656047821
+
+            for idx, p in enumerate(raw_probs):
+                 if abs(p - PLACEHOLDER_VAL) < 0.000001:
+                      # Detected placeholder, force fallback for this row
+                      try:
+                          row = df.iloc[idx]
+                          features = build_model_feature_row_from_record(row.to_dict())
+                          fallback_prob = self._calculate_statistical_prob(features)
+                          final_probs.append(fallback_prob)
+                          logger.warning(f"Jules: Detected placeholder model output {p}. Falling back to statistical prob {fallback_prob:.3f}.")
+                      except Exception as fallback_err:
+                          logger.error(f"Fallback calculation failed during placeholder fix: {fallback_err}")
+                          final_probs.append(p) # Keep original if fallback fails
+                 else:
+                      final_probs.append(p)
+
+            return final_probs
         except Exception as e:
             logger.error(f"Batch prediction failed: {e}", exc_info=True)
             # Fallback to statistical calculation for batch on error
