@@ -7565,6 +7565,8 @@ with tab_master:
                 model_prob_home = None
                 model_warn = None
                 sentiment_diff = None  # Ensure initialized
+                total_sentiment_debug = None
+                spread_sentiment_debug = None
 
                 # DIAGNOSTIC: Track row creation for each game
                 ml_row_created = False
@@ -8795,7 +8797,7 @@ with tab_master:
                 )
 
                 # Capture Sentiment Debug Data (Total)
-                if total_sentiment_debug and total_sentiment_debug.get("used"):
+                if total_sentiment_debug and isinstance(total_sentiment_debug, dict) and total_sentiment_debug.get("used"):
                     row["total_wsentiment_used"] = total_sentiment_debug.get("weight", 0.0)
                     row["total_sentiment_adj"] = total_sentiment_debug.get("adj", 0.0)
                     row["total_sentiment_prob"] = total_sentiment_debug.get("prob", 0.0)
@@ -8809,7 +8811,13 @@ with tab_master:
                             row["wsentiment_used"] = total_sentiment_debug.get("weight", 0.0)
                             row["sentiment_adj"] = total_sentiment_debug.get("adj", 0.0)
                             row["sentiment_prob"] = total_sentiment_debug.get("prob", 0.0)
+                else:
+                    row["total_wsentiment_used"] = 0.0
+                    row["total_sentiment_adj"] = 0.0
+                    row["total_sentiment_prob"] = None
 
+                # Capture Sentiment Debug Data (Spread)
+                if spread_sentiment_debug and isinstance(spread_sentiment_debug, dict) and spread_sentiment_debug.get("used"):
                     row["spread_wsentiment_used"] = spread_sentiment_debug.get("weight", 0.0)
                     row["spread_sentiment_adj"] = spread_sentiment_debug.get("adj", 0.0)
                     row["spread_sentiment_prob"] = spread_sentiment_debug.get("prob", 0.0)
@@ -8820,6 +8828,10 @@ with tab_master:
                         row["wsentiment_used"] = spread_sentiment_debug.get("weight", 0.0)
                         row["sentiment_adj"] = spread_sentiment_debug.get("adj", 0.0)
                         row["sentiment_prob"] = spread_sentiment_debug.get("prob", 0.0)
+                else:
+                    row["spread_wsentiment_used"] = 0.0
+                    row["spread_sentiment_adj"] = 0.0
+                    row["spread_sentiment_prob"] = None
 
                 # Calculate TheOver Impact (Invariant: delta = final - without)
                 if theover_prob_final_spread is not None:
