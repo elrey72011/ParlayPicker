@@ -7755,18 +7755,27 @@ with tab_master:
                         theover_pick_team = matched_side_row.get("theover_pick")
 
                         if theover_line is not None and theover_pick_team:
-                            # Convert spread line to probability using logistic function
-                            # Standard conversion: each point ≈ 2.8% probability shift
-                            # Formula: P = 1 / (1 + e^(-line/3.5))
-                            # Examples:
-                            #   Line -10 → P ≈ 0.12 (12% underdog)
-                            #   Line -3  → P ≈ 0.31 (31% underdog)
-                            #   Line +3  → P ≈ 0.69 (69% favorite)
-                            #   Line +10 → P ≈ 0.88 (88% favorite)
-
                             try:
-                                # Calculate base probability from spread line
-                                raw_prob = 1.0 / (1.0 + math.exp(-theover_line / 3.5))
+                                # DETECT ODDS vs POINTS
+                                # If absolute value is large (>= 40), treat as American Odds (Moneyline)
+                                # If small (< 40), treat as Point Spread
+
+                                if abs(theover_line) >= 40:
+                                    # --- MONEYLINE ODDS CALCULATION ---
+                                    # Convert American Odds to Probability
+                                    if theover_line < 0:
+                                        raw_prob = -theover_line / (-theover_line + 100)
+                                    else:
+                                        raw_prob = 100 / (theover_line + 100)
+
+                                    logger.info(f"TheOver Sides: Treated {theover_line} as Moneyline Odds -> {raw_prob:.3f}")
+
+                                else:
+                                    # --- SPREAD POINTS CALCULATION ---
+                                    # Existing logistic function for spreads
+                                    # Formula: P = 1 / (1 + e^(-line/3.5))
+                                    raw_prob = 1.0 / (1.0 + math.exp(-theover_line / 3.5))
+                                    logger.info(f"TheOver Sides: Treated {theover_line} as Spread Points -> {raw_prob:.3f}")
 
                                 # Apply confidence boost to simulate TheOver's model edge
                                 # TheOver typically shows 75-92% hit rates, implying ~5-15% edge
