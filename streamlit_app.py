@@ -11080,8 +11080,8 @@ with tab_master:
                                 edge_val = 0.0
 
                         edge_pct = edge_val * 100
-                        # Format as string "X.XX%" for readability
-                        edge_formatted.append(f"{edge_pct:.2f}%")
+                        # Format as string "X.X%" for readability with sign
+                        edge_formatted.append(f"{edge_pct:+.1f}%")
                     return edge_formatted
 
                 # Insert Edge column immediately after 'Best Overall Prob'
@@ -11377,7 +11377,7 @@ with tab_master:
         user_columns = [
             'league', 'Home', 'Away', 'Commence (UTC)', 'Commence (Local)', 'Local Date',
             'Market', 'Pick', 'Final Probability', 'Confidence Level',
-            'Best Overall Pick', 'Best Overall Prob',
+            'Best Overall Pick', 'Best Overall Prob', 'Edge',
             'wsentiment_used', 'sentiment_adj', 'sentiment_prob', # Added
             'Best Overall Market',
             'Spread & Pick', 'spread_prob_pick_final', 'SpreadConsensusProb', 'SpreadConsensus',
@@ -11669,6 +11669,7 @@ if should_display:
             "TotalConsensus",
             "Best Overall Pick",
             "Best Overall Prob",
+            "Edge",
             "best_pick_type",
             "kalshi_weight",
             "odds_weight",
