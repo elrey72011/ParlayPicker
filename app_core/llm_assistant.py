@@ -401,3 +401,86 @@ Return ONLY a JSON array of objects. No markdown formatting.
              # We continue to next batch
 
     return all_results
+
+def generate_pick_rationale(pick, home_team, away_team, market, prob, edge, session_state=None):
+    """
+    Calls Gemini to explain why this pick has value.
+    Returns dict with 'confidence' and 'rationale' keys.
+    """
+    if not _GEMINI_AVAILABLE:
+        return {'confidence': '', 'rationale': '', 'error': 'Gemini not available'}
+
+    # Check session-level disable flag
+    if session_state is not None:
+        disabled_reason = getattr(session_state, "gemini_disabled_reason", None) or session_state.get("gemini_disabled_reason")
+        if disabled_reason:
+            return {'confidence': '', 'rationale': '', 'error': f'Gemini disabled: {disabled_reason}'}
+
+    client, error = initialize_gemini()
+    if not client:
+        return {'confidence': '', 'rationale': '', 'error': error}
+
+    # Format edge/prob as percentage string if float, otherwise use as string
+    try:
+        edge_val = float(edge)
+        edge_str = f"{edge_val:.1%}"
+    except (ValueError, TypeError):
+        edge_str = str(edge)
+
+    try:
+        prob_val = float(prob)
+        prob_str = f"{prob_val:.1%}"
+    except (ValueError, TypeError):
+        prob_str = str(prob)
+
+    prompt = f"""
+    You are a sports betting analyst. Explain why this pick has value:
+
+    Game: {away_team} @ {home_team}
+    Market: {market}
+    Pick: {pick}
+    Model Probability: {prob_str}
+    Edge vs Market: {edge_str}
+
+    Provide:
+    1. A confidence rating (LOW/MEDIUM/HIGH)
+    2. A 1-2 sentence rationale focusing on the edge driver
+
+    Format:
+    CONFIDENCE: [rating]
+    RATIONALE: [explanation]
+    """
+
+    try:
+        # Rate limit protection
+        time.sleep(1.0)
+
+        response = client.models.generate_content(
+            model=ACTIVE_MODEL,
+            contents=prompt
+        )
+        text = getattr(response, "text", "") or ""
+
+        # Parse response
+        lines = text.split('\n')
+        conf_line = [l for l in lines if 'CONFIDENCE:' in l]
+        rat_line = [l for l in lines if 'RATIONALE:' in l]
+
+        confidence = conf_line[0].split(':', 1)[1].strip() if conf_line else ''
+        rationale = rat_line[0].split(':', 1)[1].strip() if rat_line else text[:200]
+
+        # Fallback cleanup
+        confidence = confidence.upper()
+        if confidence not in ["HIGH", "MEDIUM", "LOW"]:
+            # Try to infer if possible or leave as is
+            pass
+
+        return {
+            'confidence': confidence,
+            'rationale': rationale,
+            'error': ''
+        }
+    except Exception as e:
+        exc_str = str(e)
+        logger.warning(f"generate_pick_rationale failed: {exc_str}")
+        return {'confidence': '', 'rationale': '', 'error': exc_str[:100]}
