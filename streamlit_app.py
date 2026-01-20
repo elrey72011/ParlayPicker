@@ -7751,7 +7751,8 @@ with tab_master:
                     else:
                         # TheOver.ai Sides export lacks WinProbability - calculate from spread line
                         theover_line = safe_float(matched_side_row.get("theover_line"))
-                        theover_pick_team = matched_side_row.get("theover_side_pick_team")
+                        # Correctly use 'theover_pick' which contains the team name
+                        theover_pick_team = matched_side_row.get("theover_pick")
 
                         if theover_line is not None and theover_pick_team:
                             # Convert spread line to probability using logistic function
