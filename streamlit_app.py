@@ -7764,7 +7764,7 @@ with tab_master:
                                     # --- MONEYLINE ODDS CALCULATION ---
                                     # Convert American Odds to Probability
                                     if theover_line < 0:
-                                        raw_prob = -theover_line / (-theover_line + 100)
+                                        raw_prob = -theover_line / (-theover_line + 100.0)
                                     else:
                                         raw_prob = 100 / (theover_line + 100)
 
@@ -12893,6 +12893,7 @@ if should_display:
                 # Global Hard Cap Check
                 total_calls = st.session_state.get("gemini_calls_made", 0)
                 if total_calls >= MAX_GEMINI_CALLS_PER_RUN:
+                    logger.warning("Gemini skipped: per-run call limit reached")
                     new_row["gemini_mode"] = "guardrail"
                     new_row["gemini_rationale"] = "Gemini skipped: per-run call limit reached."
                     new_row['gemini_total_confidence'] = 'SKIPPED'
@@ -12949,9 +12950,10 @@ if should_display:
                             )
 
                             # Update Session Counter
+                            st.session_state["gemini_calls_made"] = st.session_state.get("gemini_calls_made", 0) + 1
+                            calls_this_run += 1
+
                             if not gemini_data.get('error'):
-                                st.session_state["gemini_calls_made"] = st.session_state.get("gemini_calls_made", 0) + 1
-                                calls_this_run += 1
                                 # Update Cache
                                 st.session_state["gemini_cache"][row_key] = gemini_data
 
