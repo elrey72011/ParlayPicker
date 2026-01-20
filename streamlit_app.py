@@ -608,7 +608,13 @@ MAX_SENTIMENT_TEAMS_PER_RUN = 15
 NEWSAPI_COOLDOWN_HOURS = 12
 REDDIT_CACHE_TTL = timedelta(hours=12)
 DECISION_TRACE_SAMPLE_LEAGUES = {"NFL", "NBA", "NCAAB"}
-MAX_GEMINI_CALLS_PER_RUN = 20
+MAX_GEMINI_CALLS_PER_RUN = 25
+
+if "gemini_calls_made" not in st.session_state:
+    st.session_state["gemini_calls_made"] = 0
+
+if "gemini_cache" not in st.session_state:
+    st.session_state["gemini_cache"] = {}
 
 
 def _parse_cooldown_ts(raw: Any) -> Optional[datetime]:
@@ -3073,6 +3079,27 @@ def _gemini_payload_signature(payload: Dict[str, Any]) -> str:
         return json.dumps(payload, sort_keys=True, default=str)
     except Exception:
         return str(payload)
+
+
+def gemini_row_key(row: pd.Series) -> str:
+    """
+    Generate a stable cache key for a row's Gemini call.
+    Includes: League, Teams, Market, Pick, Date, and Probability.
+    """
+    try:
+        # Only use fields that define the decision uniquely
+        key_parts = [
+            str(row.get("League") or row.get("league")),
+            str(row.get("Home") or row.get("home_team")),
+            str(row.get("Away") or row.get("away_team")),
+            str(row.get("Market") or row.get("best_pick_type")),
+            str(row.get("Pick") or row.get("best_pick")),
+            str(row.get("Commence (Local)") or ""),
+            f"{safe_float(row.get('final_probability') or row.get('Best Overall Prob') or 0.0):.4f}",
+        ]
+        return "|".join(key_parts)
+    except Exception:
+        return str(row.name)
 
 
 def gemini_confidence_explain(row_dict: Dict[str, Any]) -> Dict[str, Any]:
@@ -7177,10 +7204,19 @@ with tab_master:
     )
     st.session_state["kalshi_match_only"] = kalshi_match_only
     use_gemini_explanations = st.checkbox(
-        "Use Gemini Confidence + Explanation",
-        value=st.session_state.get("use_gemini_explanations", True),
+        "Use Gemini Confidence + Explanation (costs apply)",
+        value=st.session_state.get("use_gemini_explanations", False),
         key="use_gemini_explanations",
+        help="When enabled, Gemini is called to generate explanations for a limited number of top picks. Costs may apply."
     )
+
+    # Show usage
+    if use_gemini_explanations:
+        calls = st.session_state.get("gemini_calls_made", 0)
+        limit = MAX_GEMINI_CALLS_PER_RUN
+        st.caption(f"Gemini usage this session: **{calls}** / {limit} calls")
+        if calls >= limit:
+            st.warning("⚠️ Per-session limit reached. Refresh to reset.")
     use_model_numeric_probs = st.checkbox(
         "Local Model Predictions",
         value=st.session_state.get("use_model_numeric_probs", True),
@@ -12824,86 +12860,75 @@ if should_display:
             # Defensively dedupe columns before Gemini pass to prevent row.get(col) from returning Series
             df = df.loc[:, ~df.columns.duplicated()].copy()
 
-            # BATCH API CALL: Construct payloads for all eligible rows
-            batch_payloads = []
-
-            # Helper to construct payload (duplicated from _apply_gemini logic for batching)
-            for idx, row in df.iterrows():
-                if idx in gemini_allowed_idx:
-                    # Construct lightweight payload for batch matching allowed_fields
-                    p = {
-                        "game_id": str(idx),
-                        "league": row.get("League"),
-                        "home": row.get("Home"),
-                        "away": row.get("Away"),
-                        "commence_local": row.get("Commence (Local)"),
-                        "spread_pick": row.get("Spread & Pick"),
-                        "spread_line": row.get("spread_pick_line") or (row.get("Line") if str(row.get("Market")).lower() == "spread" else None),
-                        "spread_odds": row.get("spread_pick_odds"),
-                        "spread_prob_final": row.get("spread_prob"),
-                        "spread_prob_market": row.get("spread_prob_market"),
-                        "total_pick": row.get("Total & Pick"),
-                        "total_line": row.get("total_pick_line") or (row.get("Line") if str(row.get("Market")).lower() == "total" else None),
-                        "total_odds": row.get("total_pick_odds"),
-                        "total_prob_final": row.get("total_prob"),
-                        "total_prob_market": row.get("total_prob_market"),
-                        "kalshi_spread_prob": row.get("kalshi_prob_spread"),
-                        "kalshi_total_prob": row.get("kalshi_prob_total"),
-                        "kalshi_matched": bool(row.get("kalshi_matched")),
-                        "prob_engine": row.get("prob_engine"),
-                        "sentiment_badge": row.get("sentiment_badge"),
-                        "sentiment_flags": [row.get("spread_sentiment_note"), row.get("total_sentiment_note")],
-                        "warnings": row.get("Warnings"),
-                        "odds_placeholder_detected": row.get("odds_placeholder_detected"),
-                    }
-                    # Sanitize None values to make JSON cleaner (optional, but helpful)
-                    p = {k: (v if v is not None else "") for k, v in p.items()}
-                    batch_payloads.append(p)
-
-            # Call Batch API (Preserved for backward compatibility if needed, but overridden below)
-            # The user requested specific new function generate_pick_rationale to populate blank columns.
-            # We will use this function primarily, falling back to existing logic if needed or integrating.
-
-            # Since the user wants to populate specific columns that are currently blank:
-            # gemini_total_confidence, gemini_rationalize, gemini_error_flag
-            # We will run the row-by-row loop with the NEW function as requested.
-
-            gemini_calls_made = 0
-            MAX_GEMINI_CALLS = 50  # Adjust based on quota
-
             gemini_results = []
+
+            # Enforce hard session limit
+            calls_this_run = 0
+
             for idx, row in df.iterrows():
                 # Apply legacy/batch logic first (sets gemini_mode etc)
-                # We can skip batch call for now to save quota if we are doing row-by-row
-                # But _apply_gemini expects batch_data or calls single API
-
-                # To follow instructions: "Call Gemini for ALL picks ... Wire It Into the Main Loop"
-                # We will call the new function here.
-
-                # 1. Base Apply (using existing logic, maybe disabled/neutral if no batch data)
-                # This ensures structure is maintained
+                # But override gemini_mode to guardrail if not in allowed_idx or over limit
                 new_row = _apply_gemini(row, batch_data=None)
 
-                # 2. Apply New Logic
-                if gemini_calls_made < MAX_GEMINI_CALLS:
-                     try:
-                         # Calculate Edge numeric
-                         edge_val = new_row.get('Edge')
-                         if isinstance(edge_val, str) and '%' in edge_val:
-                             try:
-                                 edge_val = float(edge_val.strip('%')) / 100.0
-                             except:
-                                 edge_val = 0.0
-                         elif edge_val is None:
-                             edge_val = 0.0
+                # Check if this row is selected for processing (by _apply_gemini logic)
+                is_selected = new_row.get("gemini_mode") == "active"
 
-                         prob_val = new_row.get('Best Overall Prob')
-                         if prob_val is None:
-                             prob_val = new_row.get('final_probability')
+                if not is_selected:
+                    new_row['gemini_total_confidence'] = 'SKIPPED'
+                    new_row['gemini_rationalize'] = 'Skipped (Low Conf/Limit)'
+                    new_row['gemini_error_flag'] = ''
+                    gemini_results.append(new_row)
+                    continue
 
-                         # Only call if we have valid pick/prob
-                         if new_row.get('Pick') and prob_val:
-                             gemini_data = generate_pick_rationale(
+                # Global Hard Cap Check
+                total_calls = st.session_state.get("gemini_calls_made", 0)
+                if total_calls >= MAX_GEMINI_CALLS_PER_RUN:
+                    new_row["gemini_mode"] = "guardrail"
+                    new_row["gemini_rationale"] = "Gemini skipped: per-run call limit reached."
+                    new_row['gemini_total_confidence'] = 'SKIPPED'
+                    new_row['gemini_rationalize'] = 'Rate limit reached'
+                    new_row['gemini_error_flag'] = 'rate_limit'
+                    gemini_results.append(new_row)
+                    continue
+
+                # CACHING LOGIC
+                row_key = gemini_row_key(new_row)
+                cached_data = st.session_state["gemini_cache"].get(row_key)
+
+                if cached_data:
+                    # Use cached data
+                    new_row['gemini_total_confidence'] = cached_data.get('confidence', '')
+                    new_row['gemini_rationalize'] = cached_data.get('rationale', '')
+                    new_row['gemini_error_flag'] = cached_data.get('error', '')
+                    new_row['overall_confidence'] = cached_data.get('confidence', '') or new_row.get('overall_confidence')
+                    if cached_data.get('rationale'):
+                        new_row['gemini_rationale'] = cached_data.get('rationale')
+
+                    # Log cache hit
+                    if logger:
+                        logger.debug(f"Gemini Cache Hit: {row_key}")
+
+                else:
+                    # Perform API Call
+                    try:
+                        # Calculate Edge numeric
+                        edge_val = new_row.get('Edge')
+                        if isinstance(edge_val, str) and '%' in edge_val:
+                            try:
+                                edge_val = float(edge_val.strip('%')) / 100.0
+                            except:
+                                edge_val = 0.0
+                        elif edge_val is None:
+                            edge_val = 0.0
+
+                        prob_val = new_row.get('Best Overall Prob')
+                        if prob_val is None:
+                            prob_val = new_row.get('final_probability')
+
+                        # Only call if we have valid pick/prob
+                        if new_row.get('Pick') and prob_val:
+                            # CALL API
+                            gemini_data = generate_pick_rationale(
                                 pick=new_row.get('Pick'),
                                 home_team=new_row.get('Home'),
                                 away_team=new_row.get('Away'),
@@ -12912,33 +12937,33 @@ if should_display:
                                 edge=edge_val,
                                 session_state=st.session_state
                             )
-                             new_row['gemini_total_confidence'] = gemini_data.get('confidence', '')
-                             new_row['gemini_rationalize'] = gemini_data.get('rationale', '')
-                             new_row['gemini_error_flag'] = gemini_data.get('error', '')
 
-                             if not gemini_data.get('error'):
-                                 gemini_calls_made += 1
+                            # Update Session Counter
+                            if not gemini_data.get('error'):
+                                st.session_state["gemini_calls_made"] = st.session_state.get("gemini_calls_made", 0) + 1
+                                calls_this_run += 1
+                                # Update Cache
+                                st.session_state["gemini_cache"][row_key] = gemini_data
 
-                                 # Also update legacy columns to ensure UI consistency
-                                 new_row['overall_confidence'] = gemini_data.get('confidence', '') or new_row.get('overall_confidence')
-                                 if gemini_data.get('rationale'):
-                                     new_row['gemini_rationale'] = gemini_data.get('rationale')
-                             else:
-                                 # Fallback
-                                 pass
-                         else:
-                             new_row['gemini_total_confidence'] = 'SKIPPED'
-                             new_row['gemini_rationalize'] = 'Missing Pick/Prob'
-                             new_row['gemini_error_flag'] = 'missing_data'
+                            # Populate Row
+                            new_row['gemini_total_confidence'] = gemini_data.get('confidence', '')
+                            new_row['gemini_rationalize'] = gemini_data.get('rationale', '')
+                            new_row['gemini_error_flag'] = gemini_data.get('error', '')
 
-                     except Exception as e:
-                         new_row['gemini_total_confidence'] = ''
-                         new_row['gemini_rationalize'] = ''
-                         new_row['gemini_error_flag'] = str(e)[:100]
-                else:
-                    new_row['gemini_total_confidence'] = 'SKIPPED'
-                    new_row['gemini_rationalize'] = 'Rate limit reached'
-                    new_row['gemini_error_flag'] = 'rate_limit'
+                            if not gemini_data.get('error'):
+                                # Also update legacy columns to ensure UI consistency
+                                new_row['overall_confidence'] = gemini_data.get('confidence', '') or new_row.get('overall_confidence')
+                                if gemini_data.get('rationale'):
+                                    new_row['gemini_rationale'] = gemini_data.get('rationale')
+                        else:
+                            new_row['gemini_total_confidence'] = 'SKIPPED'
+                            new_row['gemini_rationalize'] = 'Missing Pick/Prob'
+                            new_row['gemini_error_flag'] = 'missing_data'
+
+                    except Exception as e:
+                        new_row['gemini_total_confidence'] = ''
+                        new_row['gemini_rationalize'] = ''
+                        new_row['gemini_error_flag'] = str(e)[:100]
 
                 gemini_results.append(new_row)
 
