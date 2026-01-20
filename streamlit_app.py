@@ -1128,6 +1128,29 @@ def compute_final_probability(
     # 2. Calculate "Sentiment Probability" = 0.5 + (Directional Score * Scaling Factor).
     # 3. Add to blend with w_sentiment.
 
+    # 4. Calculate Base Prob (Before Sentiment)
+    # This is required because Sentiment adjustment is based on the consensus of other models
+    base_sources = [s for s in sources]
+    base_total_w = sum(w for _, _, w in base_sources)
+
+    if base_total_w > 0:
+        base_prob_val = sum(p * w for _, p, w in base_sources) / base_total_w
+    else:
+        base_prob_val = 0.5
+
+    # Sentiment Integration
+    # Logic:
+    # 1. Determine direction based on pick_side vs sentiment (Home/Away).
+    # 2. Calculate "Sentiment Probability" = Base Prob + (Directional Score * Scaling Factor).
+    # 3. Add to blend with w_sentiment.
+
+    sentiment_data = {
+        "used": False,
+        "adj": 0.0,
+        "prob": base_prob_val,
+        "weight": 0.0
+    }
+
     if has_sentiment and w_sentiment_base > 0:
         # Determine directional impact
         # sentiment_score is typically (Home Sentiment - Away Sentiment)
@@ -1170,13 +1193,27 @@ def compute_final_probability(
 
         if direction != 0.0:
             # Score -1 to 1.
-            # p_sent = 0.5 + (score * direction * 0.3)
-            # score=1 (Home Strong), direction=1 (Pick Home) -> 0.8
-            # score=1 (Home Strong), direction=-1 (Pick Away) -> 0.2
+            # Convert to prob adjustment:
+            # Target: 1-3% prob impact when score != 0.
+            # If w_sentiment is 0.10, we need p_sent to be significantly different from base_prob.
+            # formula: sentiment_prob = base_prob + (score * direction * 0.5)
+            # Example: score=0.45, dir=1 -> adj=0.225. p_sent = base + 0.225.
+            # Impact with 0.1 weight: 0.1 * 0.225 = 0.0225 (2.25%) -> Meets 1-3% target.
 
             s_val = float(sentiment_score)
-            p_sent = 0.5 + (s_val * direction * 0.3)
-            p_sent = clamp(p_sent, 0.05, 0.95)
+
+            # Clamp s_val (signal) just in case
+            s_val = max(-1.0, min(1.0, s_val))
+
+            raw_adj = s_val * direction * 0.5
+            p_sent = base_prob_val + raw_adj
+            p_sent = clamp(p_sent, 0.01, 0.99)
+
+            sentiment_data["used"] = True
+            sentiment_data["adj"] = raw_adj
+            sentiment_data["prob"] = p_sent
+            sentiment_data["weight"] = w_sentiment_base
+
             sources.append(("sentiment", p_sent, w_sentiment_base))
 
     # 4. Normalize Weights
@@ -1198,11 +1235,11 @@ def compute_final_probability(
         elif n == "sentiment": weights_used["w_sentiment"] = w
 
     # 6. Calculate Base Prob
-    base_prob = sum(p * w for _, p, w in sources)
+    final_prob_val = sum(p * w for _, p, w in sources)
 
     # Log the probability calculation
     sources_str = ", ".join([f"{name}={p:.3f}*{w:.3f}" for name, p, w in sources])
-    logger.debug(f"Probability blend: {sources_str} = {base_prob:.3f}")
+    logger.debug(f"Probability blend: {sources_str} = {final_prob_val:.3f}")
 
     # Determine Driver
     if sources:
@@ -1212,11 +1249,15 @@ def compute_final_probability(
     else:
         driver = "none"
 
-    final_prob = clamp(base_prob or 0.0, 0.0, 1.0)
+    final_prob = clamp(final_prob_val or 0.0, 0.0, 1.0)
     if driver == "kalshi" and kalshi_prob_for_pick is not None and kalshi_prob_for_pick < 0.5:
         warnings.append("kalshi_pick_mismatch")
 
-    return final_prob, base_prob, weights_used, driver, warnings, kalshi_prob_for_pick
+    # Update sentiment_data with final normalized weight if used
+    if sentiment_data["used"]:
+        sentiment_data["weight"] = weights_used.get("w_sentiment", 0.0)
+
+    return final_prob, base_prob_val, weights_used, driver, warnings, kalshi_prob_for_pick, sentiment_data
 
 
 def build_decision_trace(
@@ -8710,7 +8751,7 @@ with tab_master:
                 # Calculate SPREAD probability WITHOUT TheOver
                 _weights_no_to = spread_weights.copy()
                 _weights_no_to["theover_weight"] = 0.0
-                spread_prob_no_to, _, _, _, _, _ = compute_final_probability(
+                spread_prob_no_to, _, _, _, _, _, _ = compute_final_probability(
                     spread_pick_side_key,
                     spread_prob_market,
                     kalshi_prob_spread if kalshi_spread.get("kalshi_matched") else None,
@@ -8739,7 +8780,7 @@ with tab_master:
                 # DEBUG: Log spread probability calculation inputs
                 logger.info(f"SPREAD PROB CALC for {home} vs {away}: spread_pick_side={spread_pick_side_key}, spread_market={spread_prob_market:.4f}, spread_implied={spread_implied}, kalshi={kalshi_prob_spread}")
 
-                spread_prob_final, spread_base_prob, spread_weights_used, spread_decision_driver, spread_warnings_new, spread_kalshi_prob_for_pick = compute_final_probability(
+                spread_prob_final, spread_base_prob, spread_weights_used, spread_decision_driver, spread_warnings_new, spread_kalshi_prob_for_pick, spread_sentiment_debug = compute_final_probability(
                     spread_pick_side_key,
                     spread_prob_market,
                     kalshi_prob_spread if kalshi_spread.get("kalshi_matched") else None,
@@ -8753,9 +8794,36 @@ with tab_master:
                     away_team=away,
                 )
 
+                # Capture Sentiment Debug Data (Total)
+                if total_sentiment_debug and total_sentiment_debug.get("used"):
+                    row["total_wsentiment_used"] = total_sentiment_debug.get("weight", 0.0)
+                    row["total_sentiment_adj"] = total_sentiment_debug.get("adj", 0.0)
+                    row["total_sentiment_prob"] = total_sentiment_debug.get("prob", 0.0)
+
+                    # Update generic columns if this is the chosen market
+                    # If spread wasn't sentiment driven but total is, update
+                    # Or if spread sentiment data is missing
+                    if total_decision_driver == "sentiment" or total_sentiment_debug.get("weight", 0.0) > 0.05:
+                        # Prefer Total sentiment data if it's the driver or we haven't set it yet
+                        if "wsentiment_used" not in row or total_decision_driver == "sentiment":
+                            row["wsentiment_used"] = total_sentiment_debug.get("weight", 0.0)
+                            row["sentiment_adj"] = total_sentiment_debug.get("adj", 0.0)
+                            row["sentiment_prob"] = total_sentiment_debug.get("prob", 0.0)
+
+                    row["spread_wsentiment_used"] = spread_sentiment_debug.get("weight", 0.0)
+                    row["spread_sentiment_adj"] = spread_sentiment_debug.get("adj", 0.0)
+                    row["spread_sentiment_prob"] = spread_sentiment_debug.get("prob", 0.0)
+
+                    # Update generic columns if this is the chosen market (Spread is default favored in loop usually)
+                    # We will override later if Total is better, but this ensures data exists
+                    if spread_decision_driver == "sentiment" or spread_sentiment_debug.get("weight", 0.0) > 0.05:
+                        row["wsentiment_used"] = spread_sentiment_debug.get("weight", 0.0)
+                        row["sentiment_adj"] = spread_sentiment_debug.get("adj", 0.0)
+                        row["sentiment_prob"] = spread_sentiment_debug.get("prob", 0.0)
+
                 # Calculate TheOver Impact (Invariant: delta = final - without)
                 if theover_prob_final_spread is not None:
-                    spread_prob_no_to, _, _, _, _, _ = compute_final_probability(
+                    spread_prob_no_to, _, _, _, _, _, _ = compute_final_probability(
                         spread_pick_side_key,
                         spread_prob_market,
                         kalshi_prob_spread if kalshi_spread.get("kalshi_matched") else None,
@@ -8823,7 +8891,7 @@ with tab_master:
                 # Calculate TOTAL probability WITHOUT TheOver
                 _weights_total_no_to = total_weights.copy()
                 _weights_total_no_to["theover_weight"] = 0.0
-                total_prob_no_to, _, _, _, _, _ = compute_final_probability(
+                total_prob_no_to, _, _, _, _, _, _ = compute_final_probability(
                     total_pick_side_key,
                     total_prob_market,
                     kalshi_prob_total if kalshi_total.get("kalshi_matched") else None,
@@ -8852,7 +8920,7 @@ with tab_master:
                 # DEBUG: Log total probability calculation inputs
                 logger.info(f"TOTAL PROB CALC for {home} vs {away}: total_pick_side={total_pick_side_key}, total_market={total_prob_market:.4f}, total_implied={total_implied}, kalshi={kalshi_prob_total}")
 
-                total_prob_final, total_base_prob, total_weights_used, total_decision_driver, total_warnings_new, total_kalshi_prob_for_pick = compute_final_probability(
+                total_prob_final, total_base_prob, total_weights_used, total_decision_driver, total_warnings_new, total_kalshi_prob_for_pick, total_sentiment_debug = compute_final_probability(
                     total_pick_side_key,
                     total_prob_market,
                     kalshi_prob_total if kalshi_total.get("kalshi_matched") else None,
@@ -8868,7 +8936,7 @@ with tab_master:
 
                 # Calculate TheOver Impact (Invariant: delta = final - without)
                 if theover_prob_final_total is not None:
-                    total_prob_no_to, _, _, _, _, _ = compute_final_probability(
+                    total_prob_no_to, _, _, _, _, _, _ = compute_final_probability(
                         total_pick_side_key,
                         total_prob_market,
                         kalshi_prob_total if kalshi_total.get("kalshi_matched") else None,
@@ -9238,7 +9306,7 @@ with tab_master:
                                 league_name
                             )
 
-                        final_prob_blend, base_prob_blend, weights_used, decision_driver, warnings_new, kalshi_prob_for_pick = compute_final_probability(
+                        final_prob_blend, base_prob_blend, weights_used, decision_driver, warnings_new, kalshi_prob_for_pick, ml_sentiment_debug = compute_final_probability(
                             pick_side,
                             implied_pick,
                             kalshi_prob_used if kalshi_winner.get("kalshi_matched") else None,
@@ -9251,6 +9319,18 @@ with tab_master:
                             home_team=home,
                             away_team=away,
                         )
+
+                        # Capture Sentiment Debug Data (ML)
+                        if ml_sentiment_debug and ml_sentiment_debug.get("used"):
+                            row["ml_wsentiment_used"] = ml_sentiment_debug.get("weight", 0.0)
+                            row["ml_sentiment_adj"] = ml_sentiment_debug.get("adj", 0.0)
+                            row["ml_sentiment_prob"] = ml_sentiment_debug.get("prob", 0.0)
+
+                            # If ML is the main market (e.g. for ML-only sports or fallback), update globals
+                            if "wsentiment_used" not in row or decision_driver == "sentiment":
+                                row["wsentiment_used"] = ml_sentiment_debug.get("weight", 0.0)
+                                row["sentiment_adj"] = ml_sentiment_debug.get("adj", 0.0)
+                                row["sentiment_prob"] = ml_sentiment_debug.get("prob", 0.0)
                         sentiment_info = sentiment_impact_for_pick(sentiment_adj, pick, home, away)
                         sentiment_direction = sentiment_info.get("sentiment_direction")
                         sentiment_score_val = sentiment_info.get("sentiment_score")
@@ -11205,6 +11285,36 @@ with tab_master:
 
         df = df.apply(_apply_stats_quality_penalty, axis=1)
 
+        # -------------------------------------------------------------------------
+        # TASK 5: Update confidence_reason with Sentiment Impact
+        # -------------------------------------------------------------------------
+        def _update_reason_with_sentiment(row):
+            w_sent = float(row.get("wsentiment_used") or 0.0)
+            adj = float(row.get("sentiment_adj") or 0.0)
+
+            # Ensure Pick_Reason_Short exists/synced
+            if "Pick_Reason_Short" not in row or pd.isna(row["Pick_Reason_Short"]):
+                row["Pick_Reason_Short"] = row.get("confidence_reason", "")
+
+            # Thresholds: Weight > 5% and Adjustment > 1%
+            if w_sent > 0.05 and abs(adj) > 0.01:
+                direction = "Bullish" if adj > 0 else "Bearish"
+                tag = f"sentiment={direction}"
+
+                # Update confidence_reason
+                reason = str(row.get("confidence_reason") or "")
+                if tag not in reason:
+                    row["confidence_reason"] = (reason + f" | {tag}").strip(" |")
+
+                # Update Pick_Reason_Short
+                short = str(row.get("Pick_Reason_Short") or "")
+                if tag not in short:
+                    row["Pick_Reason_Short"] = (short + f" | {tag}").strip(" |")
+
+            return row
+
+        df = df.apply(_update_reason_with_sentiment, axis=1)
+
         # Issue 2: Add sentiment_available flag
         # If sentiment_status is 'ok' or 'partial_cached', then available
         if "sentiment_status" in df.columns:
@@ -11255,7 +11365,9 @@ with tab_master:
         user_columns = [
             'league', 'Home', 'Away', 'Commence (UTC)', 'Commence (Local)', 'Local Date',
             'Market', 'Pick', 'Final Probability', 'Confidence Level',
-            'Best Overall Pick', 'Best Overall Prob', 'Best Overall Market',
+            'Best Overall Pick', 'Best Overall Prob',
+            'wsentiment_used', 'sentiment_adj', 'sentiment_prob', # Added
+            'Best Overall Market',
             'Spread & Pick', 'spread_prob_pick_final', 'SpreadConsensusProb', 'SpreadConsensus',
             'Total & Pick', 'total_prob_pick_final', 'TotalConsensusProb', 'TotalConsensus',
             'Home_ML', 'Away_ML', 'Home_Spread', 'Away_Spread', 'Total_Line',
