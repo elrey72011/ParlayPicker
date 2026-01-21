@@ -1812,14 +1812,14 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
         s_score = _score(s_prob, s_edge)
         t_score = _score(t_prob, t_edge)
 
-        # ML Score not needed for best_pick selection as ML is disqualified
-        # ml_score = _score(ml_prob, ml_edge)
+        # ML Score needed for best_pick selection
+        ml_score = _score(ml_prob, ml_edge)
 
         # Valid Flags (Prob > 0.0 check is mostly to avoid default zeros if they slipped in)
         s_valid = (s_prob is not None and s_pick is not None)
         t_valid = (t_prob is not None and t_pick is not None)
-        # ml_valid is tracked but not used for best_pick candidacy
-        ml_valid = (ml_prob is not None and ml_pick is not None)
+        # ml_valid is tracked and can be used for best_pick candidacy if eligible
+        ml_valid = (ml_prob is not None and ml_pick is not None and ml_eligible)
 
         # 4. Selection Logic
         best_type = "SPREAD" # Default
@@ -1828,62 +1828,48 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
         best_edge = s_edge
         reason = "Default"
 
-        # Priority: Strict Spread/Total Only. Moneyline never Best Pick.
+        # Priority: Include all valid markets, but still prioritize Spread/Total over ML
         candidates = []
         if s_valid: candidates.append("SPREAD")
         if t_valid: candidates.append("TOTAL")
-
-        # Explicitly Exclude Moneyline (Task 1) - Ensure ML never enters candidate pool
-        # If any legacy logic added "ML" to candidates, remove it.
-        if "ML" in candidates:
-            candidates.remove("ML")
+        if ml_valid: candidates.append("ML")
 
         candidate_types_str = "|".join(candidates)
 
         # Decision
-        # Compare Final Probability directly as requested by user
-        # "Logic: For every game, compare the final_probability of the Spread vs. the Total. The one with the highest confidence/edge becomes the official recommendation."
-        # Note: s_prob and t_prob here ARE the final probabilities (adjusted or raw).
-
+        # Compare all valid markets (Spread, Total, ML) and select the one with highest score
+        # Priority: Spread/Total still preferred over ML when scores are similar
         # Use score which combines prob and edge as "confidence/edge" metric.
-        if s_valid and t_valid:
-            # Strictly compare scores derived from Prob + Edge
-            if t_score > s_score:
-                best_type = "TOTAL"
-                best_pick = t_pick
-                best_prob = t_prob
-                best_edge = t_edge
-                reason = "Total > Spread"
+
+        # Collect all candidates with their scores
+        market_scores = []
+        if s_valid:
+            market_scores.append(("SPREAD", s_score, s_pick, s_prob, s_edge))
+        if t_valid:
+            market_scores.append(("TOTAL", t_score, t_pick, t_prob, t_edge))
+        if ml_valid:
+            market_scores.append(("ML", ml_score, ml_pick, ml_prob, ml_edge))
+
+        if market_scores:
+            # Sort by score (highest first), with tie-breaker preferring Spread > Total > ML
+            type_priority = {"SPREAD": 0, "TOTAL": 1, "ML": 2}
+            market_scores.sort(key=lambda x: (-x[1], type_priority.get(x[0], 3)))
+
+            # Select the best
+            best_type, _, best_pick, best_prob, best_edge = market_scores[0]
+
+            if len(market_scores) > 1:
+                second_type = market_scores[1][0]
+                reason = f"{best_type} > {second_type}"
             else:
-                best_type = "SPREAD"
-                best_pick = s_pick
-                best_prob = s_prob
-                best_edge = s_edge
-                reason = "Spread > Total"
-        elif s_valid:
-            best_type = "SPREAD"
-            best_pick = s_pick
-            best_prob = s_prob
-            best_edge = s_edge
-            reason = "Only Spread Valid"
-        elif t_valid:
-            best_type = "TOTAL"
-            best_pick = t_pick
-            best_prob = t_prob
-            best_edge = t_edge
-            reason = "Only Total Valid"
+                reason = f"Only {best_type} Valid"
         else:
-            # Both Missing/Invalid. Fallback to Spread (Empty/Low Confidence)
-            # Even if ML is valid, we force Spread/Total type to avoid ML recommendation loop.
-            # STRICTLY enforce no ML fallback.
+            # No valid markets at all
             best_type = "SPREAD"
             best_pick = s_pick # Might be None
             best_prob = s_prob if s_prob is not None else 0.5
             best_edge = s_edge
-            if ml_valid:
-                reason = "Forced Spread (ML used as signal only)"
-            else:
-                reason = "No Valid Markets"
+            reason = "No Valid Markets"
 
         # 5. Confidence Logic (Updated)
         # HIGH: edge >= 0.02 (and 0.52 <= prob <= 0.75 sanity check)
@@ -8722,6 +8708,13 @@ with tab_master:
                     if model_available:
                         model_prob_home, model_warn = get_prediction_prob(g, sentiment_diff)
                         model_mode = "enabled" if model_prob_home is not None else "error"
+                        # Add specific warning for placeholder-based fallbacks
+                        if model_warn and "Placeholder" in model_warn:
+                            if "FallbackPlaceholderDetected" not in warnings:
+                                warnings.append("FallbackPlaceholderDetected")
+                        elif model_warn and "Fallback" in model_warn:
+                            if "ModelFallbackUsed" not in warnings:
+                                warnings.append("ModelFallbackUsed")
                     else:
                         model_warn = "model_missing_prob"
                         model_mode = "missing"
@@ -10180,7 +10173,7 @@ with tab_master:
                         kalshi_spread.get("kalshi_reason"),
                         spread_row.get("sentiment_score"),
                         spread_row.get("sentiment_label"),
-                        bool(use_model_numeric_probs and model_prob_home is not None),
+                        model_used_for_spread,
                         reason_short,
                         warnings,
                         kalshi_spread.get("kalshi_yes_side") or "home",
@@ -10407,7 +10400,7 @@ with tab_master:
                     kalshi_total.get("kalshi_reason"),
                     total_row.get("sentiment_score"),
                     total_row.get("sentiment_label"),
-                    bool(use_model_numeric_probs and model_prob_home is not None),
+                    model_used_for_total,
                     reason_short,
                     warnings,
                     kalshi_total.get("kalshi_yes_side") or "over",
@@ -11626,27 +11619,31 @@ with tab_master:
         # Keep only user-relevant columns for the "All Picks" export
         user_columns = [
             'league', 'Home', 'Away', 'Commence (UTC)', 'Commence (Local)', 'Local Date',
-            'Market', 'Pick', 'Final Probability', 'Confidence Level',
+            'Market', 'Pick', 'final_probability', 'Pick_Confidence',
             'Best Overall Pick', 'Best Overall Prob', 'Edge',
             'wsentiment_used', 'sentiment_adj', 'sentiment_prob', # Added
             'Best Overall Market',
             'Spread & Pick', 'spread_prob_pick_final', 'SpreadConsensusProb', 'SpreadConsensus',
             'Total & Pick', 'total_prob_pick_final', 'TotalConsensusProb', 'TotalConsensus',
-            'Home_ML', 'Away_ML', 'Home_Spread', 'Away_Spread', 'Total_Line',
+            'best_spread_price', 'best_total_price', 'spread_pick_line', 'total_pick_line',
             'Home_Sentiment', 'Away_Sentiment', 'Sentiment_Diff',
             'kalshi_available', 'HasKalshiMarket', 'Kalshi_Mode',
             'theover_matched', 'theover_delta_final_prob',
-            'market_stability', 'consensus_strength', 'confidence_score',
+            'spread_prob_market', 'total_prob_market', 'decisiveness',
             'Pick_Confidence', 'confidence_reason', 'stats_quality',
             'sentiment_available',
-            'Pick_Reason_Short', 'TheOver_Impact',
+            'Pick_Reason_Short', 'theover_delta_final_prob',
             # Issue #1: Add Gemini & Sentiment columns (User Request)
             'PickConfidence', 'PickReason', 'geminitotalconfidence', 'geminirationalize', 'geminierrorflag',
             'HomeSentiment', 'AwaySentiment', 'SentimentDiff', 'sentimentscore', 'sentimentstatus',
-            'modelprob', 'finalprob', 'confidencebucket',
+            'model_spread_prob', 'model_total_prob', 'AI_Prob', 'consensus_prob', 'consensus_prob_adj',
             # Issue #1: Add missing TheOver integration columns
             'theover_pick', 'theover_hit_rate', 'theover_source_model', 'theover_prob_used',
-            'theover_matched', 'theover_delta_final_prob', 'final_prob_without_theover'
+            'theover_matched', 'theover_delta_final_prob', 'final_prob_without_theover',
+            # Add probability weights for transparency
+            'kalshi_weight', 'odds_weight', 'ml_weight', 'sentiment_weight',
+            # Add decision trace info
+            'decision_driver', 'prob_engine', 'model_mode', 'Warnings'
         ]
         # Filter to only columns that exist in the dataframe
         results_columns = [col for col in user_columns if col in df.columns]
