@@ -157,6 +157,7 @@ class PredictionEngine:
             # DEBUG LOGGING (Issue #3)
             logger.debug(f"Jules df_in shape: {df_in.shape}")
             logger.debug(f"Jules model type: {type(self.model)}")
+            logger.debug(f"Jules input dtypes: {df_in.dtypes}")
 
             # Ensure columns match training schema (safety)
             # DMatrix handles sparse/missing, but consistency helps
@@ -165,6 +166,8 @@ class PredictionEngine:
 
             # DEBUG LOGGING (Issue #3)
             logger.debug(f"Jules raw output: {prob}, type: {type(prob)}")
+            if abs(float(prob) - 0.623034656047821) < 0.0001:
+                 logger.warning("Jules: Single prediction returned EXACT placeholder value.")
 
             return {"prob": float(prob), "note": "Local XGBoost Inference"}
         except Exception as e:
@@ -267,6 +270,7 @@ class PredictionEngine:
             # Detailed Logging BEFORE prediction (Issue #3)
             logger.debug(f"Jules input shape: {inference_data.shape}")
             logger.debug(f"Jules input types: {inference_data.dtypes}")
+            logger.debug(f"Jules model type: {type(self.model)}")
             if not inference_data.empty:
                 logger.debug(f"Jules input sample: {inference_data.iloc[0].to_dict()}")
 
@@ -279,6 +283,8 @@ class PredictionEngine:
                 logger.debug(f"Jules raw output sample: {probs[:5] if len(probs) > 5 else probs}")
             else:
                 logger.debug(f"Jules raw output: {probs}")
+                if abs(float(probs) - 0.623034656047821) < 0.0001:
+                    logger.warning("Jules: Single prediction returned EXACT placeholder value.")
 
             # Handle potential single-value return or array
             final_probs = []
