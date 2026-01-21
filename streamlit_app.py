@@ -1552,9 +1552,11 @@ def enrich_picks_with_roi_metrics(df: pd.DataFrame) -> pd.DataFrame:
 
     # ROI COLUMN SAFETY SHIELD: Ensure required columns exist to prevent KeyError crash
     required = ['spread_implied_prob', 'total_implied_prob', 'spread_width', 'total_width', 'spread_prob_adj', 'total_prob_adj']
-    for col in required:
-        if col not in df.columns:
-            df[col] = 0.0
+
+    # Batch assignment to reduce fragmentation (Issue #5)
+    missing_required = [c for c in required if c not in df.columns]
+    if missing_required:
+        df = pd.concat([df, pd.DataFrame(0.0, index=df.index, columns=missing_required)], axis=1)
 
     # 1. Calculate Edge (Math vs Market Gap)
     # Ensure columns are numeric to avoid errors
@@ -1608,16 +1610,35 @@ def get_best_ml_picks(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
         return pd.DataFrame()
 
+    # Defensive: Deduplicate columns to prevent DataFrame-return-on-access errors
+    df = df.loc[:, ~df.columns.duplicated()].copy()
+
     # Filter to rows where best_pick_type is ML (from deduped master results)
     # Try both column names for compatibility
+    target_col = None
     if "best_pick_type" in df.columns:
-        df_ml = df[df["best_pick_type"].str.upper().str.contains("ML", na=False)].copy()
+        target_col = "best_pick_type"
     elif "bestpicktype" in df.columns:
-        df_ml = df[df["bestpicktype"].str.upper().str.contains("ML", na=False)].copy()
+        target_col = "bestpicktype"
+
+    if target_col:
+        # Ensure string access works - verify it's object or string type
+        # If not (e.g. all NaNs might be float), try to coerce safely
+        try:
+            if df[target_col].dtype != 'object' and not isinstance(df[target_col].dtype, pd.StringDtype):
+                 df[target_col] = df[target_col].astype(str)
+
+            df_ml = df[df[target_col].str.upper().str.contains("ML", na=False)].copy()
+        except Exception as e:
+            logger.warning(f"Error filtering for ML picks on column {target_col}: {e}")
+            df_ml = pd.DataFrame()
     else:
         # Fallback to Market column if best_pick_type not available
         logger.warning("best_pick_type column not found, falling back to Market == 'Moneyline'")
-        df_ml = df[df["Market"] == "Moneyline"].copy()
+        if "Market" in df.columns:
+            df_ml = df[df["Market"] == "Moneyline"].copy()
+        else:
+            df_ml = pd.DataFrame()
 
     if df_ml.empty:
         logger.info("No ML picks found after filtering")
@@ -5241,8 +5262,8 @@ def get_model_prob(game: Dict[str, Any], sentiment_diff: Optional[float]) -> Tup
             return None, "schemamismatch"
 
         features_df = features_df.reindex(columns=VERTEX_FEATURE_COLUMNS)
-        for col in features_df.columns:
-            features_df[col] = pd.to_numeric(features_df[col], errors="coerce").fillna(0.0).infer_objects(copy=False).infer_objects(copy=False).astype(float)
+        # Optimized bulk numeric conversion (Issue #5)
+        features_df = features_df.apply(pd.to_numeric, errors='coerce').fillna(0.0).astype(float)
 
         instances = features_df.values.tolist()
         if not instances:
@@ -10998,15 +11019,17 @@ with tab_master:
                         "sentiment_confidence": float(sentiment_meta_for_export.get("sentiment_confidence") or 0.0),
                         "sentiment_score": float(sentiment_meta_for_export.get("sentiment_score") or 0.0),
                     }
-                    # Apply individually to avoid ValueError
-                    for col, val in fill_map.items():
-                        if col in master_df.columns:
-                            master_df[col] = master_df[col].fillna(val).infer_objects(copy=False)
+                    # Apply batch fillna (Issue #5)
+                    # Filter fill_map to existing columns
+                    valid_fill_map = {k: v for k, v in fill_map.items() if k in master_df.columns}
+                    if valid_fill_map:
+                        master_df = master_df.fillna(valid_fill_map).infer_objects(copy=False)
+
                     # Fill visual cols with empty string
                     visual_cols = ["spread_sentiment_arrow", "total_sentiment_arrow", "spread_sentiment_note", "total_sentiment_note"]
-                    for col in visual_cols:
-                        if col in master_df.columns:
-                            master_df[col] = master_df[col].fillna("").infer_objects(copy=False).infer_objects(copy=False)
+                    valid_visual_cols = [c for c in visual_cols if c in master_df.columns]
+                    if valid_visual_cols:
+                        master_df[valid_visual_cols] = master_df[valid_visual_cols].fillna("").infer_objects(copy=False)
 
                     # Defragment DataFrame after multiple concat operations
                     master_df = master_df.copy()
@@ -12798,16 +12821,21 @@ if should_display:
                     key="gemini_full_run",
                     help="Bypass the per-run limit (may be slower).",
                 )
-        for col, default in {
+        gemini_defaults_pre = {
             "gemini_mode": "guardrail",
             "gemini_alignment": "NEUTRAL",
             "gemini_rationale": "",
             "gemini_flags_short": "",
             "gemini_risk_flags": json.dumps([]),
-        }.items():
-            if col not in df.columns:
-                df[col] = default
-            df[col] = df[col].fillna(default).infer_objects(copy=False)
+        }
+
+        # Batch add missing columns
+        missing_gemini_cols = {k: v for k, v in gemini_defaults_pre.items() if k not in df.columns}
+        if missing_gemini_cols:
+             df = pd.concat([df, pd.DataFrame(missing_gemini_cols, index=df.index)], axis=1)
+
+        # Batch fillna
+        df = df.fillna(gemini_defaults_pre).infer_objects(copy=False)
         overall_for_rank = pd.to_numeric(
             df.get("At_a_Glance_Confidence") if "At_a_Glance_Confidence" in df.columns else pd.Series(dtype=float),
             errors="coerce",
@@ -12838,14 +12866,16 @@ if should_display:
 
         def _apply_gemini(row: pd.Series, batch_data: Optional[Dict] = None) -> pd.Series:
             row = row.copy()
-            for col, default in [
-                ("gemini_mode", "guardrail"),
-                ("gemini_alignment", "NEUTRAL"),
-                ("gemini_rationale", ""),
-                ("gemini_flags_short", ""),
-                ("gemini_risk_flags", json.dumps([])),
-                ("llm_disagreement_flag", False),
-            ]:
+            gemini_row_defaults = {
+                "gemini_mode": "guardrail",
+                "gemini_alignment": "NEUTRAL",
+                "gemini_rationale": "",
+                "gemini_flags_short": "",
+                "gemini_risk_flags": json.dumps([]),
+                "llm_disagreement_flag": False,
+            }
+            # Update row safely using defaults if missing/empty
+            for col, default in gemini_row_defaults.items():
                 val = row.get(col, None)
                 if (col not in row.index) or _is_missing_value(val):
                     row[col] = default
@@ -12976,17 +13006,20 @@ if should_display:
             if logger:
                 logger.info(f"⚠️ Skipping Gemini enrichment loop. Reason: {gemini_disabled_reason or 'User disabled Gemini explanations'}")
             # Set default Gemini values for all rows without iterating
-            for col, default in [
-                ("gemini_mode", "disabled"),
-                ("gemini_alignment", "NEUTRAL"),
-                ("gemini_rationale", "Gemini disabled."),
-                ("gemini_flags_short", ""),
-                ("gemini_risk_flags", json.dumps([])),
-                ("llm_disagreement_flag", False),
-            ]:
-                if col not in df.columns:
-                    df[col] = default
-                df[col] = df[col].fillna(default).infer_objects(copy=False)
+            gemini_disabled_defaults = {
+                "gemini_mode": "disabled",
+                "gemini_alignment": "NEUTRAL",
+                "gemini_rationale": "Gemini disabled.",
+                "gemini_flags_short": "",
+                "gemini_risk_flags": json.dumps([]),
+                "llm_disagreement_flag": False,
+            }
+            # Batch add
+            missing_disabled = {k: v for k, v in gemini_disabled_defaults.items() if k not in df.columns}
+            if missing_disabled:
+                 df = pd.concat([df, pd.DataFrame(missing_disabled, index=df.index)], axis=1)
+            # Batch fill
+            df = df.fillna(gemini_disabled_defaults).infer_objects(copy=False)
         else:
             # Defensively dedupe columns before Gemini pass to prevent row.get(col) from returning Series
             df = df.loc[:, ~df.columns.duplicated()].copy()
@@ -13055,6 +13088,13 @@ if should_display:
                         # Only call if we have valid pick/prob
                         if new_row.get('Pick') and prob_val:
                             # CALL API
+                            # Log before call (Issue #4)
+                            current_calls = st.session_state.get("gemini_calls_made", 0)
+                            logger.info(f"Gemini call attempt {current_calls + 1}...")
+
+                            # Update Session Counter BEFORE call to ensure counting attempts
+                            st.session_state["gemini_calls_made"] = current_calls + 1
+
                             gemini_data = generate_pick_rationale(
                                 pick=new_row.get('Pick'),
                                 home_team=new_row.get('Home'),
@@ -13065,8 +13105,6 @@ if should_display:
                                 session_state=st.session_state
                             )
 
-                            # Update Session Counter
-                            st.session_state["gemini_calls_made"] = st.session_state.get("gemini_calls_made", 0) + 1
                             calls_this_run += 1
 
                             if not gemini_data.get('error'):
