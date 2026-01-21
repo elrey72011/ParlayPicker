@@ -422,6 +422,7 @@ class PredictionEngine:
         try:
             # Always fallback if model not loaded
             if self.use_fallback:
+                logger.info(f"Predict Batch: Using fallback for {len(df)} rows (Model fallback active).")
                 # Enhanced statistical fallback using team features
                 probs = []
                 for idx, row in df.iterrows():
@@ -477,6 +478,8 @@ class PredictionEngine:
                  placeholder_count = sum(1 for p in raw_probs if abs(p - PLACEHOLDER_VAL) < PLACEHOLDER_TOLERANCE)
                  if placeholder_count > 0:
                       logger.info(f"Batch prediction: {placeholder_count}/{len(raw_probs)} placeholder values detected, using fallbacks.")
+                 else:
+                      logger.info(f"Batch prediction: {len(raw_probs)} rows processed successfully with model.")
 
             for idx, p in enumerate(raw_probs):
                  if abs(p - PLACEHOLDER_VAL) < PLACEHOLDER_TOLERANCE:
