@@ -47,12 +47,14 @@ VERTEX_FEATURE_COLUMNS: List[str] = [
 ]
 
 def safefloat(val: Any) -> float:
-    """Safely convert to float, defaulting to 0.0 on error/None."""
+    """Safely convert to float, defaulting to 0.0 on error/None/NaN/inf."""
     if val is None:
         return 0.0
     try:
         f = float(val)
-        if f != f: return 0.0 # NaN
+        # Check for NaN or inf
+        if f != f or np.isinf(f):
+            return 0.0
         return f
     except (ValueError, TypeError):
         return 0.0
@@ -220,23 +222,23 @@ class PredictionEngine:
                         else:
                             self.use_fallback = True
                     else:
-                        logger.warning(f"Jules: Model file at {model_path} format unknown or invalid. Using statistical fallback.")
+                        logger.info(f"Model file format unknown or invalid at {model_path}. Using statistical fallback.")
                         self.use_fallback = True
 
                 except Exception as e:
                     self.use_fallback = True
-                    logger.error(f"[MODEL_DEBUG] Jules: Failed to load model from {model_path}: {e}")
+                    logger.error(f"[MODEL_DEBUG] Failed to load model from {model_path}: {e}")
                     logger.error(f"[MODEL_DEBUG] Exception type: {type(e).__name__}")
                     logger.error(f"[MODEL_DEBUG] Exception details: {traceback.format_exc()}")
             else:
                 self.use_fallback = True
-                logger.warning(f"Jules: Model file at {model_path} is empty. Using statistical fallback.")
+                logger.info(f"Model file at {model_path} is empty. Using statistical fallback.")
         else:
             self.use_fallback = True
             global _LOGGED_MODEL_MISSING
             if not _LOGGED_MODEL_MISSING:
-                logger.warning(
-                    f"Jules: Model file missing at {model_path}. Using statistical fallback."
+                logger.info(
+                    f"Model file missing at {model_path}. Using statistical fallback."
                 )
                 _LOGGED_MODEL_MISSING = True
 
@@ -271,14 +273,13 @@ class PredictionEngine:
             PLACEHOLDER_TOLERANCE = 1e-9
 
             if abs(prob - PLACEHOLDER_VALUE) < PLACEHOLDER_TOLERANCE:
-                logger.warning(f"Jules: Model validation detected placeholder output ({prob}) on zero input.")
-                logger.warning("Jules: Disabling model for this session to use statistical fallback.")
+                logger.info(f"Model validation: placeholder detected on zero input, using fallback mode.")
                 self.use_fallback = True
             else:
-                logger.debug(f"Jules: Model validation passed. Zero-input output: {prob}")
+                logger.debug(f"Model validation passed. Zero-input output: {prob}")
 
         except Exception as e:
-            logger.warning(f"Jules: Model validation failed with error: {e}. Defaulting to fallback.")
+            logger.info(f"Model validation failed: {e}. Defaulting to fallback.")
             self.use_fallback = True
 
     def get_prediction(self, features):
@@ -308,8 +309,10 @@ class PredictionEngine:
             # Select only the required columns in the correct order
             df_in = df_in[VERTEX_FEATURE_COLUMNS].copy()
 
-            # Ensure proper types
-            df_in = df_in.apply(pd.to_numeric, errors='coerce').fillna(0.0).astype(float)
+            # Ensure proper types - critical for preventing placeholder values
+            df_in = df_in.apply(pd.to_numeric, errors='coerce').fillna(0.0)
+            # Replace any remaining inf values
+            df_in = df_in.replace([np.inf, -np.inf], 0.0).astype(float)
 
             # DEBUG LOGGING (Issue #1)
             logger.debug(f"[MODEL_DEBUG] Input shape: {df_in.shape}")
@@ -336,9 +339,8 @@ class PredictionEngine:
             PLACEHOLDER_TOLERANCE = 1e-9
 
             if abs(prob - PLACEHOLDER_VALUE) < PLACEHOLDER_TOLERANCE:
-                 # Downgraded from CRITICAL to WARNING/INFO since we handle it gracefully
-                 logger.info(f"Single prediction is placeholder value {prob}. Using fallback.")
-                 # FALLBACK
+                 # Using fallback gracefully when placeholder detected
+                 logger.debug(f"Placeholder value detected ({prob:.3f}), using statistical fallback.")
                  fallback_prob = self._calculate_statistical_prob(features)
                  return {"prob": fallback_prob, "note": "Fallback (Placeholder Detected)"}
 
@@ -438,8 +440,10 @@ class PredictionEngine:
             # Select only the required columns in the correct order
             inference_data = df[VERTEX_FEATURE_COLUMNS].copy()
 
-            # Ensure proper casting and fillna to prevent errors
-            inference_data = inference_data.apply(pd.to_numeric, errors='coerce').fillna(0.0).astype(float)
+            # Ensure proper casting and fillna to prevent errors - critical for preventing placeholder values
+            inference_data = inference_data.apply(pd.to_numeric, errors='coerce').fillna(0.0)
+            # Replace any remaining inf values
+            inference_data = inference_data.replace([np.inf, -np.inf], 0.0).astype(float)
 
             # Detailed Logging BEFORE prediction (Issue #1)
             logger.debug(f"[MODEL_DEBUG] Batch input shape: {inference_data.shape}")
@@ -468,11 +472,11 @@ class PredictionEngine:
             PLACEHOLDER_VAL = 0.623034656047821
             PLACEHOLDER_TOLERANCE = 1e-9
 
-            # Check mask
+            # Check for placeholders in batch
             if isinstance(raw_probs, list):
                  placeholder_count = sum(1 for p in raw_probs if abs(p - PLACEHOLDER_VAL) < PLACEHOLDER_TOLERANCE)
                  if placeholder_count > 0:
-                      logger.error(f"[CRITICAL] Batch prediction contains {placeholder_count} placeholder values!")
+                      logger.info(f"Batch prediction: {placeholder_count}/{len(raw_probs)} placeholder values detected, using fallbacks.")
 
             for idx, p in enumerate(raw_probs):
                  if abs(p - PLACEHOLDER_VAL) < PLACEHOLDER_TOLERANCE:
@@ -485,7 +489,7 @@ class PredictionEngine:
                           features = build_model_feature_row_from_record(row.to_dict())
                           fallback_prob = self._calculate_statistical_prob(features)
                           final_probs.append(fallback_prob)
-                          logger.warning(f"Jules: Detected placeholder model output {p}. Falling back to statistical prob {fallback_prob:.3f}.")
+                          logger.debug(f"Placeholder at index {idx}: using fallback prob {fallback_prob:.3f}")
                       except Exception as fallback_err:
                           logger.error(f"Fallback calculation failed during placeholder fix: {fallback_err}")
                           final_probs.append(p) # Keep original if fallback fails
