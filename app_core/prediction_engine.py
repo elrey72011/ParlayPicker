@@ -263,8 +263,22 @@ class PredictionEngine:
 
             # Ensure proper casting and fillna to prevent errors
             inference_data = inference_data.apply(pd.to_numeric, errors='coerce').fillna(0.0).astype(float)
+
+            # Detailed Logging BEFORE prediction (Issue #3)
+            logger.debug(f"Jules input shape: {inference_data.shape}")
+            logger.debug(f"Jules input types: {inference_data.dtypes}")
+            if not inference_data.empty:
+                logger.debug(f"Jules input sample: {inference_data.iloc[0].to_dict()}")
+
             dmatrix = xgb.DMatrix(inference_data)
             probs = self.model.predict(dmatrix)
+
+            # Detailed Logging AFTER prediction (Issue #3)
+            logger.debug(f"Jules raw output type: {type(probs)}")
+            if hasattr(probs, "__iter__"):
+                logger.debug(f"Jules raw output sample: {probs[:5] if len(probs) > 5 else probs}")
+            else:
+                logger.debug(f"Jules raw output: {probs}")
 
             # Handle potential single-value return or array
             final_probs = []

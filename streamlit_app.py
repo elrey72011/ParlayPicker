@@ -613,6 +613,10 @@ MAX_GEMINI_CALLS_PER_RUN = 25
 if "gemini_calls_made" not in st.session_state:
     st.session_state["gemini_calls_made"] = 0
 
+# Ensure gemini_calls_made is initialized correctly and preserved
+if "gemini_calls_made" not in st.session_state:
+    st.session_state["gemini_calls_made"] = 0
+
 if "gemini_cache" not in st.session_state:
     st.session_state["gemini_cache"] = {}
 
@@ -12911,7 +12915,9 @@ if should_display:
                 return row
 
             # Hard stop enforcement
-            if calls_made >= MAX_GEMINI_CALLS_PER_RUN and not batch_data:
+            # Re-read session state to ensure fresh count
+            current_calls = st.session_state.get("gemini_calls_made", 0)
+            if current_calls >= MAX_GEMINI_CALLS_PER_RUN and not batch_data:
                 row["gemini_mode"] = "limit_reached"
                 row["gemini_alignment"] = "NEUTRAL"
                 row["gemini_rationale"] = "Gemini skipped: session limit reached."
@@ -13029,6 +13035,13 @@ if should_display:
             # Enforce hard session limit
             calls_this_run = 0
 
+            # List of columns we might modify/add in the loop to avoid schema issues
+            gemini_cols = [
+                'gemini_mode', 'gemini_alignment', 'gemini_rationale', 'gemini_flags_short',
+                'gemini_risk_flags', 'llm_disagreement_flag', 'gemini_error_flag',
+                'gemini_total_confidence', 'gemini_error', 'overall_confidence'
+            ]
+
             for idx, row in df.iterrows():
                 # Apply legacy/batch logic first (sets gemini_mode etc)
                 # This function now correctly enforces limits internally and returns 'limit_reached' mode
@@ -13135,7 +13148,24 @@ if should_display:
 
             if gemini_results:
                 # Rebuild dataframe preserving original index
-                df = pd.DataFrame(gemini_results, index=df.index)
+                # OPTIMIZATION: Extract only changed columns and concat
+                # This prevents recreating the entire massive dataframe if only a few columns changed
+
+                # Convert list of Series to DataFrame
+                gemini_df = pd.DataFrame(gemini_results, index=df.index)
+
+                # Identify columns that were actually updated (present in gemini_cols)
+                # plus any new ones created
+                updated_cols = [c for c in gemini_df.columns if c in gemini_cols or c not in df.columns]
+
+                if updated_cols:
+                    # Drop existing versions of these columns from original df
+                    df = df.drop(columns=[c for c in updated_cols if c in df.columns], errors='ignore')
+                    # Concat with new columns
+                    df = pd.concat([df, gemini_df[updated_cols]], axis=1)
+                else:
+                    # Fallback if logic fails (replace full df)
+                    df = gemini_df
 
         if "_gemini_rank_metric" in df.columns:
             df = df.drop(columns=["_gemini_rank_metric"])
