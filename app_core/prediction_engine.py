@@ -101,9 +101,14 @@ class PredictionEngine:
         self.use_fallback = True # Default to fallback
 
         # Explicitly check for model file existence
-        model_exists = os.path.exists(model_path) and os.path.getsize(model_path) > 0
-
+        # DEBUG LOGGING (Issue #1)
+        logger.debug(f"Model file path: {model_path}")
+        model_exists = os.path.exists(model_path)
+        logger.debug(f"Model file exists: {model_exists}")
         if model_exists:
+            logger.debug(f"Model file size: {os.path.getsize(model_path)} bytes")
+
+        if model_exists and os.path.getsize(model_path) > 0:
             try:
                 # Check if file is valid JSON (basic check)
                 is_valid_json = False
@@ -118,14 +123,18 @@ class PredictionEngine:
                 if is_valid_json:
                     self.model.load_model(model_path)
                     self.use_fallback = False
-                    logger.info(f"Jules: Loaded local model from {model_path}")
+                    logger.debug(f"Jules: Loaded local model from {model_path}")
+                    logger.debug(f"Model type: {type(self.model)}")
+                    # xgb.Booster doesn't always have get_params in all versions/interfaces, but we can try dump
+                    # logger.debug(f"Model attributes: {self.model.attributes()}")
                 else:
                     logger.warning(f"Jules: Model file at {model_path} is invalid/empty JSON. Using statistical fallback.")
                     self.use_fallback = True
 
             except Exception as e:
                 self.use_fallback = True
-                logger.error(f"Jules: Failed to load model from {model_path}: {e}. Using statistical fallback.")
+                logger.error(f"Jules: Failed to load model from {model_path}: {e}")
+                logger.error(f"Exception type: {type(e)}")
         else:
             self.use_fallback = True
             global _LOGGED_MODEL_MISSING
@@ -141,7 +150,7 @@ class PredictionEngine:
         Zero latency, zero cost.
         """
         try:
-            # DEBUG LOGGING (Issue #3)
+            # DEBUG LOGGING (Issue #1)
             logger.debug(f"Jules input features: {features}")
 
             if self.use_fallback:
@@ -154,20 +163,33 @@ class PredictionEngine:
             # Create DataFrame safely
             df_in = pd.DataFrame([features])
 
-            # DEBUG LOGGING (Issue #3)
-            logger.debug(f"Jules df_in shape: {df_in.shape}")
+            # Ensure input has the correct columns (just like predict_batch)
+            missing_cols = [col for col in VERTEX_FEATURE_COLUMNS if col not in df_in.columns]
+            if missing_cols:
+                 for c in missing_cols:
+                     df_in[c] = 0.0
+
+            # Select only the required columns in the correct order
+            df_in = df_in[VERTEX_FEATURE_COLUMNS].copy()
+
+            # DEBUG LOGGING (Issue #1)
+            logger.debug(f"Input features shape: {df_in.shape}")
+            logger.debug(f"Input dtypes: {df_in.dtypes}")
             logger.debug(f"Jules model type: {type(self.model)}")
-            logger.debug(f"Jules input dtypes: {df_in.dtypes}")
 
             # Ensure columns match training schema (safety)
             # DMatrix handles sparse/missing, but consistency helps
             dmatrix = xgb.DMatrix(df_in)
             prob = self.model.predict(dmatrix)[0]
 
-            # DEBUG LOGGING (Issue #3)
-            logger.debug(f"Jules raw output: {prob}, type: {type(prob)}")
-            if abs(float(prob) - 0.623034656047821) < 0.0001:
+            # DEBUG LOGGING (Issue #1)
+            logger.debug(f"Raw prediction: {prob}")
+            logger.debug(f"Prediction type: {type(prob)}")
+            if abs(float(prob) - 0.623034656047821) < 0.000001:
                  logger.warning("Jules: Single prediction returned EXACT placeholder value.")
+                 logger.debug(f"Is placeholder? True")
+            else:
+                 logger.debug(f"Is placeholder? False")
 
             return {"prob": float(prob), "note": "Local XGBoost Inference"}
         except Exception as e:
@@ -267,41 +289,44 @@ class PredictionEngine:
             # Ensure proper casting and fillna to prevent errors
             inference_data = inference_data.apply(pd.to_numeric, errors='coerce').fillna(0.0).astype(float)
 
-            # Detailed Logging BEFORE prediction (Issue #3)
-            logger.debug(f"Jules input shape: {inference_data.shape}")
-            logger.debug(f"Jules input types: {inference_data.dtypes}")
-            logger.debug(f"Jules model type: {type(self.model)}")
+            # Detailed Logging BEFORE prediction (Issue #1)
+            logger.debug(f"Input features shape: {inference_data.shape}")
+            logger.debug(f"Input dtypes: {inference_data.dtypes}")
             if not inference_data.empty:
-                logger.debug(f"Jules input sample: {inference_data.iloc[0].to_dict()}")
+                logger.debug(f"Features sample:\n{inference_data.iloc[0].to_dict()}")
+                logger.debug(f"Feature names: {list(inference_data.columns)}")
 
             dmatrix = xgb.DMatrix(inference_data)
             probs = self.model.predict(dmatrix)
 
-            # Detailed Logging AFTER prediction (Issue #3)
-            logger.debug(f"Jules raw output type: {type(probs)}")
-            if hasattr(probs, "__iter__"):
-                logger.debug(f"Jules raw output sample: {probs[:5] if len(probs) > 5 else probs}")
-            else:
-                logger.debug(f"Jules raw output: {probs}")
-                if abs(float(probs) - 0.623034656047821) < 0.0001:
-                    logger.warning("Jules: Single prediction returned EXACT placeholder value.")
+            # Detailed Logging AFTER prediction (Issue #1)
+            logger.debug(f"Raw prediction type: {type(probs)}")
+            if hasattr(probs, "shape"):
+                 logger.debug(f"Prediction shape: {probs.shape}")
 
             # Handle potential single-value return or array
             final_probs = []
             if hasattr(probs, "__iter__"):
                 raw_probs = [float(p) for p in probs]
+                logger.debug(f"Prediction values sample: {raw_probs[:5]}")
             else:
                 raw_probs = [float(probs)]
+                logger.debug(f"Prediction values: {raw_probs}")
 
             # Check for placeholder value 0.623034656047821
             PLACEHOLDER_VAL = 0.623034656047821
+
+            # Check mask
+            placeholder_mask = [abs(p - PLACEHOLDER_VAL) < 0.000001 for p in raw_probs]
+            if any(placeholder_mask):
+                logger.debug(f"Placeholder mask sample: {placeholder_mask[:5]}")
 
             for idx, p in enumerate(raw_probs):
                  if abs(p - PLACEHOLDER_VAL) < 0.000001:
                       # Detected placeholder, force fallback for this row
                       try:
                           row = df.iloc[idx]
-                          # LOG DETAILS OF PLACEHOLDER ROW (Issue #3)
+                          # LOG DETAILS OF PLACEHOLDER ROW (Issue #1)
                           logger.debug(f"Placeholder row details: {row.to_dict()}")
 
                           features = build_model_feature_row_from_record(row.to_dict())

@@ -616,6 +616,7 @@ if "gemini_calls_made" not in st.session_state:
 # Ensure gemini_calls_made is initialized correctly and preserved
 if "gemini_calls_made" not in st.session_state:
     st.session_state["gemini_calls_made"] = 0
+    logger.info("Startup: Initialized gemini_calls_made to 0")
 else:
     # Log startup state for debugging
     logger.info(f"Startup: Gemini calls made this session: {st.session_state['gemini_calls_made']}")
@@ -12805,10 +12806,15 @@ if should_display:
             "market_stability",
         ]
 
-        # Batch assign missing columns to avoid fragmentation
+        # Batch assign missing columns to avoid fragmentation (Issue #2 Fix)
         missing_cols = [col for col in required_display_cols if col not in df.columns]
         if missing_cols:
-             df = pd.concat([df, pd.DataFrame(columns=missing_cols)], axis=1)
+             # Create dataframe with proper index to avoid misalignment and fragmentation
+             # Using pd.concat with empty frame having index is cleaner
+             new_cols_df = pd.DataFrame(index=df.index, columns=missing_cols)
+             df = pd.concat([df, new_cols_df], axis=1)
+             df = df.copy() # Defragment
+
         if "reddit_used" in df.columns:
             df["reddit_used"] = df["reddit_used"].fillna(False).infer_objects(copy=False).infer_objects(copy=False)
         df = add_spread_total_confidence(df)
@@ -12855,6 +12861,7 @@ if should_display:
         missing_gemini_cols = {k: v for k, v in gemini_defaults_pre.items() if k not in df.columns}
         if missing_gemini_cols:
              df = pd.concat([df, pd.DataFrame(missing_gemini_cols, index=df.index)], axis=1)
+             df = df.copy() # Defragment
 
         # Batch fillna
         df = df.fillna(gemini_defaults_pre).infer_objects(copy=False)
@@ -13121,6 +13128,15 @@ if should_display:
                             # CALL API
                             # Log before call (Issue #4)
                             current_calls = st.session_state.get("gemini_calls_made", 0)
+
+                            # HARD STOP CHECK (Explicit)
+                            if current_calls >= MAX_GEMINI_CALLS_PER_RUN:
+                                 new_row['gemini_total_confidence'] = 'SKIPPED'
+                                 new_row['gemini_rationalize'] = 'Limit Reached'
+                                 new_row['gemini_error_flag'] = 'limit_reached'
+                                 gemini_results.append(new_row)
+                                 continue
+
                             logger.info(f"Gemini call attempt {current_calls + 1}...")
 
                             # Update Session Counter BEFORE call to ensure counting attempts
@@ -13207,6 +13223,7 @@ if should_display:
             # Create a DataFrame for new columns and concat
             new_cols_df = pd.DataFrame(cols_to_add, index=df.index)
             df = pd.concat([df, new_cols_df], axis=1)
+            df = df.copy() # Defragment
 
         # 2. Fill NaNs efficiently
         df = df.fillna(gemini_defaults).infer_objects(copy=False)
