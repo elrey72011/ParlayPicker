@@ -10728,24 +10728,24 @@ with tab_master:
 
             master_df = pd.DataFrame.from_records(accumulated_rows)
 
-            # Apply moneyline pivot logic IMMEDIATELY after creation
-            # Refactored to avoid apply(axis=1) if pivot_market returns a Series,
-            # OR ensuring we handle it if it modifies row in place (which apply(axis=1) does by default returning a new Series/DF)
-            # pivot_market returns the modified ROW.
-            # To be safer and potentially faster, we can just apply it and assign back,
-            # but apply(axis=1) is generally slow.
-            # However, logic is complex (conditionals). Vectorizing is hard without refactoring pivot_market logic.
-            # Given row count (~122), apply is acceptable but let's at least acknowledge the potential Series return issue.
-            # If pivot_market returns a Series, result is a DataFrame.
-
-            # To ensure robustness, we'll iterate efficiently or use apply with result_type='expand' if needed,
-            # but standard apply with dict-return functions usually works for simple updates if assigned back.
-            # Actually, pivot_market modifies 'row' dict in place if passed a dict, but here it gets a Series.
-            # It returns the modified Series.
-
-            master_df = master_df.apply(pivot_market, axis=1)
+            # DISABLED: Moneyline pivot logic
+            # Previous constraint required "Market column must never say 'Moneyline'"
+            # However, users need ML picks to be exported as ML picks, not converted to Spread/Total
+            # The pivot_market function was converting all ML rows to Spread or Total,
+            # preventing ML picks from appearing in exports
+            #
+            # Old logic (DISABLED):
+            # master_df = master_df.apply(pivot_market, axis=1)
+            #
+            # NEW BEHAVIOR: Preserve Moneyline market rows for export
+            # ML picks will be exported with Market="Moneyline" alongside Spread and Total picks
 
             logger.info(f"master_df created: {len(master_df)} rows, {len(master_df.columns)} columns")
+
+            # Log market breakdown
+            if not master_df.empty and "Market" in master_df.columns:
+                market_counts = master_df["Market"].value_counts()
+                logger.info(f"Market breakdown after creation: {dict(market_counts)}")
             if master_df.empty:
                 logger.error("CRITICAL: master_df is EMPTY!")
             # ============================================
@@ -11153,36 +11153,37 @@ with tab_master:
                 # Add game key for grouping
                 master_df = add_game_key(master_df)
 
-                # UPDATED DEDUPLICATION: Preserve ML rows separately
-                # Split ML rows from Spread/Total rows
+                # UPDATED DEDUPLICATION: Preserve ALL market types per game
+                # Keep one row per (game, market) combination instead of one row per game
+                # This ensures we export Spread, Total, AND ML picks for each game
+
+                # Separate rows by market type for logging
                 ml_rows = master_df[master_df["Market"] == "Moneyline"].copy()
-                non_ml_rows = master_df[master_df["Market"] != "Moneyline"].copy()
+                spread_rows = master_df[master_df["Market"] == "Spread"].copy()
+                total_rows = master_df[master_df["Market"] == "Total"].copy()
+                other_rows = master_df[~master_df["Market"].isin(["Moneyline", "Spread", "Total"])].copy()
 
-                logger.info(f"Split: {len(ml_rows)} ML rows, {len(non_ml_rows)} Spread/Total rows")
+                logger.info(f"Market breakdown: {len(ml_rows)} ML, {len(spread_rows)} Spread, {len(total_rows)} Total, {len(other_rows)} Other")
 
-                # Deduplicate non-ML rows (Spread/Total) using ranking
-                if not non_ml_rows.empty:
-                    non_ml_rows["_best_pick_rank"] = non_ml_rows.apply(rank_row_for_best_pick, axis=1)
-                    idx_best_non_ml = non_ml_rows.groupby("game_key")["_best_pick_rank"].idxmax()
-                    df_non_ml = non_ml_rows.loc[idx_best_non_ml].copy()
-                    df_non_ml = df_non_ml.drop(columns=["_best_pick_rank"], errors="ignore")
+                # Deduplicate by (game_key, Market) to keep one row per game per market type
+                # This preserves all three market types: Spread, Total, and ML
+                if not master_df.empty:
+                    # Add ranking for tie-breaking within same (game, market) combination
+                    master_df["_pick_rank"] = master_df.apply(rank_row_for_best_pick, axis=1)
+
+                    # Group by BOTH game_key AND Market to keep all market types
+                    idx_best = master_df.groupby(["game_key", "Market"])["_pick_rank"].idxmax()
+                    df = master_df.loc[idx_best].copy()
+                    df = df.drop(columns=["_pick_rank"], errors="ignore")
                 else:
-                    df_non_ml = pd.DataFrame()
+                    df = pd.DataFrame()
 
-                # Deduplicate ML rows separately (keep one ML row per game, prefer highest edge)
-                if not ml_rows.empty:
-                    # For ML rows, use edge as ranking metric
-                    ml_rows["_ml_rank"] = ml_rows["final_probability"].apply(lambda x: abs(float(x or 0.5) - 0.5) if x is not None else 0)
-                    idx_best_ml = ml_rows.groupby("game_key")["_ml_rank"].idxmax()
-                    df_ml = ml_rows.loc[idx_best_ml].copy()
-                    df_ml = df_ml.drop(columns=["_ml_rank"], errors="ignore")
-                else:
-                    df_ml = pd.DataFrame()
+                # Log results by market type after deduplication
+                df_ml_after = df[df["Market"] == "Moneyline"] if not df.empty else pd.DataFrame()
+                df_spread_after = df[df["Market"] == "Spread"] if not df.empty else pd.DataFrame()
+                df_total_after = df[df["Market"] == "Total"] if not df.empty else pd.DataFrame()
 
-                # Combine both back together
-                df = pd.concat([df_non_ml, df_ml], ignore_index=True)
-
-                logger.info(f"After deduplication: {len(df_non_ml)} Spread/Total rows, {len(df_ml)} ML rows, {len(df)} total")
+                logger.info(f"After deduplication: {len(df_spread_after)} Spread, {len(df_total_after)} Total, {len(df_ml_after)} ML rows, {len(df)} total")
                 # Optionally keep game_key for reference; remove if not needed:
                 # df = df.drop(columns=["game_key"], errors="ignore")
 
@@ -11386,53 +11387,20 @@ with tab_master:
                 # CRITICAL: Apply moneyline pivot logic before saving to session state
                 logger.info(f"Applying moneyline pivot logic to {len(df)} rows...")
 
-                def _force_pivot(row):
-                    if row.get('Market') == 'Moneyline':
-                        # Check availability of data
-                        s_pick = row.get('Spread & Pick')
-                        t_pick = row.get('Total & Pick')
+                # DISABLED: Force pivot logic
+                # This was converting ML rows to Spread/Total based on edge comparison
+                # However, we want to preserve all market types (Spread, Total, ML) for export
+                # The deduplication logic now groups by (game_key, Market) to keep all market types
+                #
+                # Old logic (DISABLED):
+                # def _force_pivot(row):
+                #     if row.get('Market') == 'Moneyline':
+                #         ... [pivot ML to Spread/Total based on edge]
+                # df = df.apply(_force_pivot, axis=1)
+                #
+                # NEW BEHAVIOR: Preserve all Market types without pivoting
 
-                        # Validate if picks are actually present
-                        has_spread = s_pick is not None and str(s_pick).strip() != '' and str(s_pick).lower() != 'none'
-                        has_total = t_pick is not None and str(t_pick).strip() != '' and str(t_pick).lower() != 'none'
-
-                        s_edge = float(row.get('spread_edge', 0) or 0)
-                        t_edge = float(row.get('total_edge', 0) or 0)
-
-                        # Logic to determine target market
-                        target = None
-
-                        if has_spread and has_total:
-                            if s_edge >= t_edge:
-                                target = 'Spread'
-                            else:
-                                target = 'Total'
-                        elif has_spread:
-                            target = 'Spread'
-                        elif has_total:
-                            target = 'Total'
-                        else:
-                            target = 'Keep_ML'
-
-                        if target == 'Spread':
-                            row['Market'] = 'Spread'
-                            row['Pick'] = s_pick
-                            row['best_pick_type'] = 'SPREAD'
-                            row['edge'] = s_edge
-                        elif target == 'Total':
-                            row['Market'] = 'Total'
-                            row['Pick'] = t_pick
-                            row['best_pick_type'] = 'TOTAL'
-                            row['edge'] = t_edge
-                        elif target == 'Keep_ML':
-                            row['Market'] = 'Moneyline'
-                            row['best_pick_type'] = 'ML'
-                            # Keep the existing moneyline pick and probability
-
-                    return row
-
-                df = df.apply(_force_pivot, axis=1)
-                logger.info(f"Pivot logic applied successfully")
+                logger.info(f"Skipping pivot logic - preserving all market types (Spread, Total, ML)")
 
                 # ============================================
                 # ADD HASKALSHIMARKET FLAG
@@ -13329,22 +13297,18 @@ if should_display:
         if confidence_stats.get("warning"):
             st.warning(confidence_stats["warning"])
 
-        # Task 2: Force Spread/Total Pivot (Applied immediately after df_master_view creation)
-        def force_spread_total_pivot(row):
-            if row.get('Market') == "Moneyline":
-                # Pivot to whichever alternative has the higher probability
-                spread_prob = safe_float(row.get('spread_prob_pick_final', 0)) or 0
-                total_prob = safe_float(row.get('total_prob_pick_final', 0)) or 0
-
-                if spread_prob >= total_prob:
-                    row['Market'] = "Spread"
-                    row['Pick'] = row.get('Spread & Pick', row.get('Pick'))
-                else:
-                    row['Market'] = "Total"
-                    row['Pick'] = row.get('Total & Pick', row.get('Pick'))
-            return row
-
-        df_master_view = df_master_view.apply(force_spread_total_pivot, axis=1)
+        # DISABLED: Force Spread/Total Pivot for UI display
+        # This was converting ML rows to Spread/Total in the Master Analysis tab view
+        # However, we want to preserve and display all market types including Moneyline
+        # User can toggle "Show Moneyline rows" checkbox below to filter if needed
+        #
+        # Old logic (DISABLED):
+        # def force_spread_total_pivot(row):
+        #     if row.get('Market') == "Moneyline":
+        #         [pivot to Spread or Total based on probability]
+        # df_master_view = df_master_view.apply(force_spread_total_pivot, axis=1)
+        #
+        # NEW BEHAVIOR: Preserve all Market types in UI display
 
         if market_stability_filter:
             df_master_view = df_master_view[df_master_view['market_stability'].isin(market_stability_filter)]
