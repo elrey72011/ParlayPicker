@@ -6740,6 +6740,15 @@ def load_games(selected_leagues: Union[str, List[str]], run_id: Optional[str] = 
         st.session_state["games_fetch_status"] = "empty"
         logger.warning(f"⚠️ Games fetch EMPTY: API succeeded but returned 0 games (run_id: {run_id})")
 
+    if not filtered_games:
+        if st.session_state.get("games"):
+            logger.warning("Fetch returned 0 games; keeping last-known-good games in session_state")
+            filtered_games = st.session_state["games"]
+            st.warning("⚠️ New data fetch empty. Using cached games.")
+        else:
+            logger.error("CRITICAL: games list is empty!")
+            st.stop()
+
     st.session_state["games"] = filtered_games
     st.session_state["commence_stats"] = commence_stats_total
     st.session_state["market_counts"] = {
@@ -7741,51 +7750,64 @@ with tab_master:
                         logger.warning("TheOver Totals: No valid hit_rate found - excluding")
 
                 theover_prob_spread = None
+                theover_prob_ml = None
+
                 if matched_side_row:
                     hit_rate = safe_float(matched_side_row.get("theover_hit_rate"))
+                    theover_line_val = safe_float(matched_side_row.get("theover_line"))
 
-                    # Check if we have a valid hit rate from TheOver
-                    if hit_rate and hit_rate > 0:
-                        theover_prob_spread = hit_rate
-                        logger.info(f"TheOver Sides: Using provided hit_rate {hit_rate:.3f}")
-                    else:
-                        # TheOver.ai Sides export lacks WinProbability - calculate from spread line
-                        theover_line = safe_float(matched_side_row.get("theover_line"))
-                        # Correctly use 'theover_pick' which contains the team name
-                        theover_pick_team = matched_side_row.get("theover_pick")
+                    # Detect ML vs Spread based on line magnitude
+                    is_moneyline_side = theover_line_val is not None and abs(theover_line_val) >= 40
 
-                        if theover_line is not None and theover_pick_team:
+                    if is_moneyline_side:
+                        # MONEYLINE CALCULATION
+                        if hit_rate and hit_rate > 0:
+                             theover_prob_ml = hit_rate
+                        elif theover_line_val is not None:
                             try:
-                                # DETECT ODDS vs POINTS
-                                # If absolute value is large (>= 40), treat as American Odds (Moneyline)
-                                # If small (< 40), treat as Point Spread
-
-                                if abs(theover_line) >= 40:
-                                    # --- MONEYLINE ODDS CALCULATION ---
-                                    if theover_line < 0:
-                                        raw_prob = -theover_line / (-theover_line + 100.0)
-                                    else:
-                                        raw_prob = 100.0 / (theover_line + 100.0)
-
-                                    adjusted_prob = raw_prob + 0.07
-                                    theover_prob_spread = max(0.10, min(0.95, adjusted_prob))
-                                    logger.info(f"TheOver Sides: Moneyline {theover_line} -> {theover_prob_spread:.3f}")
+                                # Convert American Odds to Implied Probability
+                                if theover_line_val < 0:
+                                    raw_prob = (-theover_line_val) / (-theover_line_val + 100.0)
                                 else:
+                                    raw_prob = 100.0 / (theover_line_val + 100.0)
+                                # Boost slightly for being a "Pick" (0.07 edge assumption)
+                                theover_prob_ml = clamp(raw_prob + 0.07, 0.10, 0.95)
+                                logger.info(f"TheOver Moneyline: {theover_line_val} -> {theover_prob_ml:.3f}")
+                            except Exception as e:
+                                logger.warning(f"TheOver ML calc error: {e}")
+                                theover_prob_ml = None
+                    else:
+                        # SPREAD CALCULATION
+                        # Check if we have a valid hit rate from TheOver
+                        if hit_rate and hit_rate > 0:
+                            theover_prob_spread = hit_rate
+                            logger.info(f"TheOver Sides: Using provided hit_rate {hit_rate:.3f}")
+                        else:
+                            # TheOver.ai Sides export lacks WinProbability - calculate from spread line
+                            theover_pick_team = matched_side_row.get("theover_pick")
+
+                            if theover_line_val is not None and theover_pick_team:
+                                try:
+                                    # Treat as spread points (e.g. -5.5)
+                                    # Use logistic function to estimate win prob from line
+                                    # Assuming standard -110 odds baseline (52.4%) + line advantage
+                                    # Simplified model: 0.524 + (line * -0.02) ? No, that depends on direction.
+
                                     # --- SPREAD POINTS CALCULATION ---
-                                    raw_prob = 1.0 / (1.0 + math.exp(-theover_line / 3.5))
+                                    # Use the sigmoid logic from previous version
+                                    raw_prob = 1.0 / (1.0 + math.exp(-theover_line_val / 3.5))
                                     adjusted_prob = raw_prob + 0.07
                                     theover_prob_spread = max(0.10, min(0.95, adjusted_prob))
-                                    logger.info(f"TheOver Sides: Spread {theover_line} -> {theover_prob_spread:.3f}")
-
-                            except (ValueError, OverflowError) as e:
-                                logger.warning(f"TheOver Sides: Failed to calculate probability from line {theover_line}: {e}")
+                                    logger.info(f"TheOver Spread: {theover_line_val} -> {theover_prob_spread:.3f}")
+                                except Exception:
+                                    theover_prob_spread = None
+                            else:
+                                # No line available - cannot calculate probability
+                                logger.info(f"TheOver Sides: No hit_rate or line available for calculation - excluding")
                                 theover_prob_spread = None
-                        else:
-                            # No line available - cannot calculate probability
-                            logger.info(f"TheOver Sides: No hit_rate or line available for calculation - excluding")
-                            theover_prob_spread = None
-                            # Clear matched_side_row so it doesn't count as "matched"
-                            matched_side_row = None
+                                # Only clear matched_side_row if it was SUPPOSED to be spread but failed
+                                if not is_moneyline_side:
+                                     matched_side_row = None
                 # --- THEOVER MATCHING END ---
 
                 # 1) Define Weights (FIXED: Removed broken model and sentiment sources)
@@ -9476,6 +9498,14 @@ with tab_master:
                                 ]
                             ),
                             "consensus_guardrails": ";".join((consensus_weights or {}).get("guardrails") or []),
+                            # THEOVER INTEGRATION (Moneyline)
+                            "theover_prob": theover_prob_ml,
+                            "theover_ml_odds": (theover_matched_side or {}).get("theover_line") if theover_matched_side else None,
+                            "theover_pick": (theover_matched_side or {}).get("theover_pick") if theover_matched_side else None,
+                            "theover_hit_rate": (theover_matched_side or {}).get("theover_hit_rate") if theover_matched_side else None,
+                            "theover_source_model": (theover_matched_side or {}).get("theover_source_model") if theover_matched_side else None,
+                            "theover_prob_used": theover_prob_ml,
+                            "theover_matched": bool(theover_matched_side and theover_prob_ml is not None),
                             "Home_Sentiment": home_sent,
                             "Away_Sentiment": away_sent,
                             "Sentiment_Diff": sentiment_diff,
@@ -9745,15 +9775,17 @@ with tab_master:
                         ml_row = apply_sentiment_defaults(ml_row, sentiment_defaults_base)
 
                         # Task 3: Force Moneyline Pivot (Inside Loop)
-                        if ml_row.get("Market") == "Moneyline":
-                            s_edge = safe_float(ml_row.get("spread_edge")) or 0.0
-                            t_edge = safe_float(ml_row.get("total_edge")) or 0.0
-                            if s_edge >= t_edge:
-                                ml_row["Market"] = "Spread"
-                                ml_row["Pick"] = ml_row.get("Spread & Pick")
-                            else:
-                                ml_row["Market"] = "Total"
-                                ml_row["Pick"] = ml_row.get("Total & Pick")
+                        # DISABLED: We want to keep Moneyline rows explicitly for display/export
+                        # The UI logic will pivot later if needed for 'Best Pick', but we need the raw ML row.
+                        # if ml_row.get("Market") == "Moneyline":
+                        #     s_edge = safe_float(ml_row.get("spread_edge")) or 0.0
+                        #     t_edge = safe_float(ml_row.get("total_edge")) or 0.0
+                        #     if s_edge >= t_edge:
+                        #         ml_row["Market"] = "Spread"
+                        #         ml_row["Pick"] = ml_row.get("Spread & Pick")
+                        #     else:
+                        #         ml_row["Market"] = "Total"
+                        #         ml_row["Pick"] = ml_row.get("Total & Pick")
 
                         accumulated_rows.append(ml_row)
                         ml_row_created = True
