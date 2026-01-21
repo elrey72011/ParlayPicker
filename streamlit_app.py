@@ -9555,10 +9555,11 @@ with tab_master:
                             "Commence (Local)": commence_local,
                             "Local Date": commence_date_local,
                             "Market": "Moneyline",
+                            "best_pick_type": "ML",
                             "Book": g.get("best_ml_book"),
                             "Home_ML": home_ml,
                             "Away_ML": away_ml,
-                            "Pick": pick,
+                            "Pick": f"{pick} ML" if pick else None,
                             "Implied_Prob": implied_pick,
                             "AI_Prob": ai_prob_base,
                             "ai_prob_adj": ai_prob_row,
@@ -11137,15 +11138,36 @@ with tab_master:
                 # Add game key for grouping
                 master_df = add_game_key(master_df)
 
-                # Compute ranking score for each row
-                master_df["_best_pick_rank"] = master_df.apply(rank_row_for_best_pick, axis=1)
+                # UPDATED DEDUPLICATION: Preserve ML rows separately
+                # Split ML rows from Spread/Total rows
+                ml_rows = master_df[master_df["Market"] == "Moneyline"].copy()
+                non_ml_rows = master_df[master_df["Market"] != "Moneyline"].copy()
 
-                # For each unique game, keep only the row with highest rank
-                idx_best = master_df.groupby("game_key")["_best_pick_rank"].idxmax()
-                df = master_df.loc[idx_best].copy()
+                logger.info(f"Split: {len(ml_rows)} ML rows, {len(non_ml_rows)} Spread/Total rows")
 
-                # Clean up helper columns
-                df = df.drop(columns=["_best_pick_rank"], errors="ignore")
+                # Deduplicate non-ML rows (Spread/Total) using ranking
+                if not non_ml_rows.empty:
+                    non_ml_rows["_best_pick_rank"] = non_ml_rows.apply(rank_row_for_best_pick, axis=1)
+                    idx_best_non_ml = non_ml_rows.groupby("game_key")["_best_pick_rank"].idxmax()
+                    df_non_ml = non_ml_rows.loc[idx_best_non_ml].copy()
+                    df_non_ml = df_non_ml.drop(columns=["_best_pick_rank"], errors="ignore")
+                else:
+                    df_non_ml = pd.DataFrame()
+
+                # Deduplicate ML rows separately (keep one ML row per game, prefer highest edge)
+                if not ml_rows.empty:
+                    # For ML rows, use edge as ranking metric
+                    ml_rows["_ml_rank"] = ml_rows["final_probability"].apply(lambda x: abs(float(x or 0.5) - 0.5) if x is not None else 0)
+                    idx_best_ml = ml_rows.groupby("game_key")["_ml_rank"].idxmax()
+                    df_ml = ml_rows.loc[idx_best_ml].copy()
+                    df_ml = df_ml.drop(columns=["_ml_rank"], errors="ignore")
+                else:
+                    df_ml = pd.DataFrame()
+
+                # Combine both back together
+                df = pd.concat([df_non_ml, df_ml], ignore_index=True)
+
+                logger.info(f"After deduplication: {len(df_non_ml)} Spread/Total rows, {len(df_ml)} ML rows, {len(df)} total")
                 # Optionally keep game_key for reference; remove if not needed:
                 # df = df.drop(columns=["game_key"], errors="ignore")
 

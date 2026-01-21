@@ -740,9 +740,78 @@ class ParlayOptimizer:
                 # EV = parlay_prob * (parlay_decimal_odds - 1) - (1 - parlay_prob) * 1
                 ev = (parlay_prob * (parlay_decimal_odds - 1)) - (1 - parlay_prob)
 
-                # Get pick labels
-                pick1 = row1.get("Pick") or row1.get("Spread & Pick") or row1.get("Total & Pick") or "Unknown"
-                pick2 = row2.get("Pick") or row2.get("Spread & Pick") or row2.get("Total & Pick") or "Unknown"
+                # Helper function to format pick label properly
+                def format_pick_label(row):
+                    """Format pick label based on market type and available data"""
+                    market_type = str(row.get("Market", "")).lower()
+
+                    # For Spread markets
+                    if "spread" in market_type:
+                        pick_team = row.get("Pick", "")
+                        # Remove " ML" suffix if present (shouldn't be, but just in case)
+                        if pick_team.endswith(" ML"):
+                            pick_team = pick_team[:-3].strip()
+
+                        # Try to get line from various fields
+                        line = row.get("spread_pick_line") or row.get("Line")
+
+                        # Try to determine opponent
+                        home = row.get("Home", "")
+                        away = row.get("Away", "")
+                        opponent = away if pick_team == home else home if pick_team == away else ""
+
+                        if line is not None and line != 0 and str(line) not in ["", "None", "nan", "01"]:
+                            # Format line with sign
+                            line_str = f"{float(line):+.1f}" if float(line) != 0 else "PK"
+                            if opponent:
+                                return f"{pick_team} {line_str} vs {opponent}"
+                            else:
+                                return f"{pick_team} {line_str}"
+                        else:
+                            # Fallback to Spread & Pick if available
+                            spread_pick_str = row.get("Spread & Pick")
+                            if spread_pick_str and str(spread_pick_str) not in ["", "None", "nan"]:
+                                # Remove probability percentage if present
+                                spread_pick_str = str(spread_pick_str).split("(")[0].strip()
+                                return spread_pick_str
+                            return pick_team if pick_team else "Unknown"
+
+                    # For Total markets
+                    elif "total" in market_type:
+                        pick_side = row.get("Pick", "")  # Should be "Over" or "Under"
+                        # Remove " ML" suffix if present
+                        if pick_side.endswith(" ML"):
+                            pick_side = pick_side[:-3].strip()
+
+                        # Try to get total line from various fields
+                        total = row.get("total_pick_line") or row.get("Line")
+
+                        if total is not None and str(total) not in ["", "None", "nan", "0", "01"]:
+                            return f"{pick_side} {float(total):.1f}"
+                        else:
+                            # Fallback to Total & Pick if available
+                            total_pick_str = row.get("Total & Pick")
+                            if total_pick_str and str(total_pick_str) not in ["", "None", "nan"]:
+                                # Remove probability percentage if present
+                                total_pick_str = str(total_pick_str).split("(")[0].strip()
+                                return total_pick_str
+                            return pick_side if pick_side else "Unknown"
+
+                    # For Moneyline markets
+                    elif "money" in market_type or "ml" in market_type:
+                        pick_team = row.get("Pick", "")
+                        # Pick should already have " ML" suffix from our fix
+                        if not pick_team.endswith(" ML"):
+                            pick_team = f"{pick_team} ML"
+                        return pick_team if pick_team else "Unknown"
+
+                    # Fallback for other markets
+                    else:
+                        return row.get("Pick") or row.get("Spread & Pick") or row.get("Total & Pick") or "Unknown"
+
+                # Get pick labels using the improved formatter
+                pick1 = format_pick_label(row1)
+                pick2 = format_pick_label(row2)
 
                 # Get consensus data
                 consensus_votes1 = row1.get("consensus_votes", 0)
