@@ -1121,6 +1121,17 @@ def compute_final_probability(
     if has_theover:
         theover_prob_clamped = clamp_prob(theover_prob, lo=0.05, hi=0.95)
         p_theover = clamp(theover_prob_clamped) if theover_prob_clamped is not None else 0.5
+
+        # RESCALE: Remap extreme TheOver confidence to a narrower band [0.55, 0.75]
+        # This prevents TheOver from acting as a 95% confidence override.
+        if p_theover > 0.5:
+             # Scale (0.5, 0.95] -> (0.5, 0.75]
+             # Factor = (0.75 - 0.5) / (0.95 - 0.5) = 0.25 / 0.45 ≈ 0.555
+             p_theover = 0.5 + (p_theover - 0.5) * 0.555
+        elif p_theover < 0.5:
+             # Scale [0.05, 0.5) -> [0.25, 0.5)
+             p_theover = 0.5 - (0.5 - p_theover) * 0.555
+
         sources.append(("theover", p_theover, w_theover_base))
 
     # Model
@@ -1241,18 +1252,60 @@ def compute_final_probability(
         elif n == "theover": weights_used["w_theover"] = w
         elif n == "sentiment": weights_used["w_sentiment"] = w
 
-    # 6. Calculate Base Prob
-    final_prob_val = sum(p * w for _, p, w in sources)
+    # 6. Calculate Final Prob with TheOver Clamping
+    # We must ensure TheOver never shifts the probability by more than 0.10 (or 0.03 in extreme cases).
+
+    raw_final_prob = sum(p * w for _, p, w in sources)
+
+    # Calculate Prob WITHOUT TheOver for Delta Clamping
+    # We reconstruct the blend excluding 'theover' source
+    sources_no_to = [s for s in sources if s[0] != "theover"]
+    w_total_no_to = sum(w for _, _, w in sources_no_to)
+
+    if w_total_no_to > 0:
+        prob_no_to = sum(p * w for _, p, w in sources_no_to) / w_total_no_to
+    else:
+        prob_no_to = 0.5 # Fallback if TheOver is the ONLY source (unlikely)
+
+    # Calculate Delta
+    theover_delta = raw_final_prob - prob_no_to
+    sentiment_data["theover_delta"] = theover_delta # Pass back for debugging/text generation
+
+    # Check for Extreme Odds (Moneyline Disabled scenario)
+    # If implied_prob is < 0.25 (>+300) or > 0.75 (<-300), we treat as extreme.
+    # Note: ml_allowed threshold is 300.
+    is_extreme = False
+    if implied_prob is not None:
+        if implied_prob < 0.24 or implied_prob > 0.76: # Approx 300 odds
+            is_extreme = True
+
+    # Define Cap
+    # Standard Cap: 0.10
+    # Extreme Cap: 0.03
+    max_delta = 0.03 if is_extreme else 0.10
+
+    # Clamp Delta
+    clamped_delta = clamp(theover_delta, -max_delta, max_delta)
+
+    # Apply Clamped Delta
+    final_prob_val = prob_no_to + clamped_delta
+    sentiment_data["theover_delta_clamped"] = clamped_delta
 
     # Log the probability calculation
     sources_str = ", ".join([f"{name}={p:.3f}*{w:.3f}" for name, p, w in sources])
-    logger.debug(f"Probability blend: {sources_str} = {final_prob_val:.3f}")
+    logger.debug(f"Probability blend: {sources_str} = {raw_final_prob:.3f} -> Clamped to {final_prob_val:.3f} (Delta: {theover_delta:.3f}->{clamped_delta:.3f})")
 
     # Determine Driver
     if sources:
         # Sort by weight desc
         sorted_sources = sorted(sources, key=lambda x: x[2], reverse=True)
         driver = sorted_sources[0][0]
+
+        # Update driver text if TheOver is significant
+        if "theover" in [s[0] for s in sources]:
+            # If TheOver weight > 0 and delta is significant
+            if abs(clamped_delta) > 0.03:
+                driver += " + TheOver"
     else:
         driver = "none"
 
@@ -8949,7 +9002,10 @@ with tab_master:
                         spread_weights,
                         sentiment_score=sentiment_diff,
                     )
-                    theover_delta_spread = (spread_prob_final or 0.0) - (spread_prob_no_to or 0.0)
+                    if isinstance(spread_sentiment_debug, dict) and "theover_delta_clamped" in spread_sentiment_debug:
+                        theover_delta_spread = spread_sentiment_debug.get("theover_delta_clamped")
+                    else:
+                        theover_delta_spread = (spread_prob_final or 0.0) - (spread_prob_no_to or 0.0)
                 else:
                     spread_prob_no_to = spread_prob_final
                     theover_delta_spread = 0.0
@@ -9062,7 +9118,10 @@ with tab_master:
                         total_weights,
                         sentiment_score=sentiment_diff,
                     )
-                    theover_delta_total = (total_prob_final or 0.0) - (total_prob_no_to or 0.0)
+                    if isinstance(total_sentiment_debug, dict) and "theover_delta_clamped" in total_sentiment_debug:
+                        theover_delta_total = total_sentiment_debug.get("theover_delta_clamped")
+                    else:
+                        theover_delta_total = (total_prob_final or 0.0) - (total_prob_no_to or 0.0)
                 else:
                     total_prob_no_to = total_prob_final
                     theover_delta_total = 0.0
@@ -11400,8 +11459,16 @@ with tab_master:
                         d_val = float(delta)
                         if abs(d_val) > 0.001:
                             reason = str(row.get("confidence_reason") or "")
+
+                            # Enhanced Text Logic (Requirement B)
+                            msg = ""
+                            if abs(d_val) <= 0.05:
+                                msg = f"TheOver mild boost ({d_val:+.3f})"
+                            else:
+                                msg = f"TheOver-driven boost ({d_val:+.3f})"
+
                             row["confidence_reason"] = (
-                                reason + f" | TheOver boosted edge by {d_val:.3f}"
+                                reason + f" | {msg}"
                             ).strip(" |")
                     except Exception:
                         pass
@@ -11417,15 +11484,30 @@ with tab_master:
             w_sent = float(row.get("wsentiment_used") or 0.0)
             adj = float(row.get("sentiment_adj") or 0.0)
 
+            # Check if sentiment was actually available/valid
+            sentiment_valid = row.get("sentiment_available", False)
+
             # Ensure Pick_Reason_Short exists/synced
             if "Pick_Reason_Short" not in row or pd.isna(row["Pick_Reason_Short"]):
                 row["Pick_Reason_Short"] = row.get("confidence_reason", "")
 
             # Thresholds: Weight > 5% and Adjustment > 1%
-            if w_sent > 0.05 and abs(adj) > 0.01:
+            # Also handle "unused" case
+
+            tag = ""
+            if not sentiment_valid:
+                 # Sentiment disabled or unavailable - explicitly unused?
+                 # User said: "If sentiment is effectively unused... prefix to sentiment=unused or just omit it."
+                 # Let's omit it if invalid, unless specifically requested.
+                 pass
+            elif w_sent > 0.05 and abs(adj) > 0.01:
                 direction = "Bullish" if adj > 0 else "Bearish"
                 tag = f"sentiment={direction}"
+            elif sentiment_valid:
+                # Valid but neutral/small impact
+                tag = "sentiment=neutral"
 
+            if tag:
                 # Update confidence_reason
                 reason = str(row.get("confidence_reason") or "")
                 if tag not in reason:
@@ -12775,22 +12857,40 @@ if should_display:
             row["total_confidence"] = base_total_conf
             row["spread_confidence_base"] = base_spread_conf
             row["total_confidence_base"] = base_total_conf
+
+            # Check limits immediately (Requirement 3B)
+            calls_made = st.session_state.get("gemini_calls_made", 0)
+
             if not use_gemini_explanations:
                 row["gemini_mode"] = "disabled"
                 row["gemini_alignment"] = "NEUTRAL"
                 row["gemini_rationale"] = "Gemini disabled by user."
-                row["gemini_flags_short"] = row.get("gemini_flags_short") or ""
+                row["gemini_flags_short"] = row.get("gemini_flags_short") or "skipped_disabled"
                 row["gemini_risk_flags"] = row.get("gemini_risk_flags") or json.dumps([])
                 row["llm_disagreement_flag"] = False
                 return row
+
+            # If not in allowed set (confidence ranking)
             if row.name not in gemini_allowed_idx:
                 row["gemini_mode"] = "guardrail"
                 row["gemini_alignment"] = "NEUTRAL"
                 row["gemini_rationale"] = "Gemini skipped: outside evaluation limit."
-                row["gemini_flags_short"] = row.get("gemini_flags_short") or ""
+                row["gemini_flags_short"] = row.get("gemini_flags_short") or "skipped_limit"
                 row["gemini_risk_flags"] = row.get("gemini_risk_flags") or json.dumps([])
                 row["llm_disagreement_flag"] = False
                 return row
+
+            # Hard stop enforcement
+            if calls_made >= MAX_GEMINI_CALLS_PER_RUN and not batch_data:
+                row["gemini_mode"] = "limit_reached"
+                row["gemini_alignment"] = "NEUTRAL"
+                row["gemini_rationale"] = "Gemini skipped: session limit reached."
+                row["gemini_flags_short"] = "limit_reached"
+                row["gemini_risk_flags"] = json.dumps(["limit_reached"])
+                row["llm_disagreement_flag"] = False
+                row["gemini_error_flag"] = "limit_reached"
+                return row
+
             try:
                 gem_res = {}
                 if batch_data:
@@ -12898,28 +12998,23 @@ if should_display:
 
             for idx, row in df.iterrows():
                 # Apply legacy/batch logic first (sets gemini_mode etc)
-                # But override gemini_mode to guardrail if not in allowed_idx or over limit
+                # This function now correctly enforces limits internally and returns 'limit_reached' mode
                 new_row = _apply_gemini(row, batch_data=None)
 
                 # Check if this row is selected for processing (by _apply_gemini logic)
                 is_selected = new_row.get("gemini_mode") == "active"
 
                 if not is_selected:
-                    new_row['gemini_total_confidence'] = 'SKIPPED'
-                    new_row['gemini_rationalize'] = 'Skipped (Low Conf/Limit)'
-                    new_row['gemini_error_flag'] = ''
-                    gemini_results.append(new_row)
-                    continue
+                    # Logic already handled inside _apply_gemini for skip reasons
+                    # Ensure audit fields are populated
+                    if not new_row.get('gemini_total_confidence'):
+                         new_row['gemini_total_confidence'] = 'SKIPPED'
+                    if not new_row.get('gemini_rationalize'):
+                         reason = new_row.get('gemini_rationale', 'Skipped')
+                         new_row['gemini_rationalize'] = reason
+                    if not new_row.get('gemini_error_flag'):
+                         new_row['gemini_error_flag'] = new_row.get('gemini_flags_short', '')
 
-                # Global Hard Cap Check
-                total_calls = st.session_state.get("gemini_calls_made", 0)
-                if total_calls >= MAX_GEMINI_CALLS_PER_RUN:
-                    logger.warning("Gemini skipped: per-run call limit reached")
-                    new_row["gemini_mode"] = "guardrail"
-                    new_row["gemini_rationale"] = "Gemini skipped: per-run call limit reached."
-                    new_row['gemini_total_confidence'] = 'SKIPPED'
-                    new_row['gemini_rationalize'] = 'Rate limit reached'
-                    new_row['gemini_error_flag'] = 'rate_limit'
                     gemini_results.append(new_row)
                     continue
 
