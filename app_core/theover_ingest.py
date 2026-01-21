@@ -795,7 +795,9 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
                 if final_pick_type == "TOTAL":
                     final_pick_val = match.group(1).upper()
             else:
-                match_spread = re.search(r'(-?\d+\.?\d*)$', raw_pick)
+                # Improved regex to handle parenthesized lines like "(-102)" or "-5.5"
+                # Match a number at the end, optionally surrounded by parens, tolerating whitespace
+                match_spread = re.search(r'\(?\s*(-?\d+\.?\d*)\s*\)?$', raw_pick)
                 if match_spread:
                      line_val = float(match_spread.group(1))
 
@@ -864,7 +866,18 @@ def parse_theover_public_betting_text(raw_text: str, pick_type_hint: str = "UNKN
         else:
             if not line.startswith("Backed by") and not line.startswith("Analyze"):
                 pick_type = "SIDE"
-                pick_val = line.split("(")[0].strip()
+                # Try to extract line from side pick
+                # Format might be "Team (-110)" or "Team -5.5"
+                line_match = re.search(r'\(?\s*(-?\d+\.?\d*)\s*\)?$', line)
+                if line_match:
+                     try:
+                        pick_line = float(line_match.group(1))
+                        # Remove the line part from the team name
+                        pick_val = line[:line_match.start()].strip()
+                     except (ValueError, TypeError):
+                        pick_val = line.split("(")[0].strip()
+                else:
+                     pick_val = line.split("(")[0].strip()
 
         if pick_type != "UNKNOWN":
             model_name = "TheOver"
