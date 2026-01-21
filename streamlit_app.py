@@ -11303,8 +11303,18 @@ with tab_master:
                             df.drop(columns=['Edge'], inplace=True)
 
                         loc_index = df.columns.get_loc('Best Overall Prob') + 1
-                        df.insert(loc=loc_index, column='Edge', value=edge_values)
-                        logger.info("✅ Edge column added successfully")
+
+                        # CRITICAL FIX 2: Replace df.insert with pd.concat to avoid fragmentation
+                        # Create DataFrame for Edge
+                        edge_df = pd.DataFrame({'Edge': edge_values}, index=df.index)
+
+                        # Split and Concat
+                        df_left = df.iloc[:, :loc_index]
+                        df_right = df.iloc[:, loc_index:]
+
+                        df = pd.concat([df_left, edge_df, df_right], axis=1).copy()
+
+                        logger.info("✅ Edge column added successfully (Defragmented)")
                     except Exception as e:
                         logger.warning(f"Failed to add Edge column: {e}")
 
