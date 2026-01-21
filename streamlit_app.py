@@ -3283,7 +3283,7 @@ def pipeline_progress_snapshot() -> Dict[str, Any]:
         # Count unique games (by Home/Away) that have at least one Kalshi match
         # Use .fillna(False).infer_objects(copy=False) to handle any None/NaN values, and convert to bool for robust comparison
         try:
-            matched_mask = master_df["kalshi_matched"].fillna(False).infer_objects(copy=False).infer_objects(copy=False).astype(bool)
+            matched_mask = master_df["kalshi_matched"].fillna(False).astype(bool)
             matched_rows = master_df[matched_mask]
             if not matched_rows.empty:
                 unique_games = matched_rows.groupby(["Home", "Away"]).size()
@@ -9207,7 +9207,7 @@ with tab_master:
                 spread_alt_prob_final = None
                 # FIX: Ensure spread line is valid before formatting
                 if spread_pick is not None and has_valid_line(spread_line):
-                    spread_pick_label = f"{spread_pick} {spread_line}"
+                    spread_pick_label = f"{spread_pick} {clean_line_str(spread_line)}"
                 else:
                     spread_pick_label = ""
                 spread_alt_label = ""
@@ -9277,7 +9277,7 @@ with tab_master:
                 total_alt_prob_final = None
                 # FIX: Avoid "Under 0" / "Under 01" artifacts by checking for valid line
                 if total_pick is not None and has_valid_line(total_line) and total_line != 0:
-                    total_pick_label = f"{total_pick} {total_line}"
+                    total_pick_label = f"{total_pick} {clean_line_str(total_line)}"
                 else:
                     total_pick_label = ""
                 total_alt_label = ""
@@ -9550,6 +9550,7 @@ with tab_master:
                             "league": league_name,
                             "Home": home,
                             "Away": away,
+                            "Game": f"{away} @ {home}",
                             "Commence (UTC)": commence_iso,
                             "Commence (Local)": commence_local,
                             "Local Date": commence_date_local,
@@ -9921,6 +9922,7 @@ with tab_master:
                     warnings_field = ";".join(warnings) if warnings else None
                     spread_row = {
                         "league": league_name, "Home": home, "Away": away,
+                        "Game": f"{away} @ {home}",
                         "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
                         "Market": "Spread", "Book": g.get("best_spread_book"),
                         "Pick": spread_pick, "Implied_Prob": spread_prob_market, "Line": spread_line, "AI_Prob": model_spread_prob if model_used_for_spread else None,
@@ -10221,6 +10223,7 @@ with tab_master:
                     warnings_field = ";".join(warnings) if warnings else None
                     total_row = {
                         "league": league_name, "Home": home, "Away": away,
+                        "Game": f"{away} @ {home}",
                         "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
                         "Market": "Total", "Book": g.get("best_total_book"),
                         "Pick": total_pick, "Implied_Prob": total_prob_market, "Line": total_line, "AI_Prob": model_total_prob if model_used_for_total else None,
@@ -11269,6 +11272,8 @@ with tab_master:
                             consensus = row.get('SpreadConsensusProb')
                         elif 'Total' in market_val:
                             consensus = row.get('TotalConsensusProb')
+                        elif 'Moneyline' in market_val or 'ML' in market_val:
+                            consensus = row.get('consensus_prob_adj') or row.get('Implied_Prob')
 
                         # Check for valid consensus
                         # "If consensus is missing/NaN, set Edge = 0.0."
@@ -11383,7 +11388,9 @@ with tab_master:
                             row['best_pick_type'] = 'TOTAL'
                             row['edge'] = t_edge
                         elif target == 'Keep_ML':
-                            row['Market'] = 'ML (No Spread/Total Avail)'
+                            row['Market'] = 'Moneyline'
+                            row['best_pick_type'] = 'ML'
+                            # Keep the existing moneyline pick and probability
 
                     return row
 
@@ -11411,7 +11418,7 @@ with tab_master:
                     def _to_num(col):
                         return pd.to_numeric(df.get(col, pd.Series([0]*len(df), index=df.index)), errors='coerce').fillna(0).infer_objects(copy=False).infer_objects(copy=False)
 
-                    k_matched = df.get("kalshi_matched", pd.Series([False]*len(df), index=df.index)).fillna(False).infer_objects(copy=False).infer_objects(copy=False).astype(bool)
+                    k_matched = df.get("kalshi_matched", pd.Series([False]*len(df), index=df.index)).fillna(False).astype(bool)
 
                     # Check for non-zero probabilities
                     k_spread = _to_num("kalshi_prob_spread") != 0
@@ -11575,7 +11582,7 @@ with tab_master:
         # Debug logging requested by user
         try:
             total_games_count = len(df)
-            kalshi_matched_raw_count = df["kalshi_matched"].fillna(False).infer_objects(copy=False).infer_objects(copy=False).astype(bool).sum()
+            kalshi_matched_raw_count = df["kalshi_matched"].fillna(False).astype(bool).sum()
             logger.info(
                 "Kalshi summary: total=%s, with_kalshi=%s, kalshi_matched_raw=%s",
                 total_games_count,
@@ -12826,7 +12833,7 @@ if should_display:
              df = df.copy() # Defragment
 
         if "reddit_used" in df.columns:
-            df["reddit_used"] = df["reddit_used"].fillna(False).infer_objects(copy=False).infer_objects(copy=False)
+            df["reddit_used"] = df["reddit_used"].fillna(False).astype(bool)
         df = add_spread_total_confidence(df)
         df = df.copy()
         df = enrich_picks_with_roi_metrics(df)
