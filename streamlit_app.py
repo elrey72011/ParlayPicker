@@ -616,6 +616,9 @@ if "gemini_calls_made" not in st.session_state:
 # Ensure gemini_calls_made is initialized correctly and preserved
 if "gemini_calls_made" not in st.session_state:
     st.session_state["gemini_calls_made"] = 0
+else:
+    # Log startup state for debugging
+    logger.info(f"Startup: Gemini calls made this session: {st.session_state['gemini_calls_made']}")
 
 if "gemini_cache" not in st.session_state:
     st.session_state["gemini_cache"] = {}
@@ -1575,8 +1578,11 @@ def enrich_picks_with_roi_metrics(df: pd.DataFrame) -> pd.DataFrame:
     s_prob = pd.to_numeric(s_prob, errors='coerce').fillna(0.0).infer_objects(copy=False)
     t_prob = pd.to_numeric(t_prob, errors='coerce').fillna(0.0).infer_objects(copy=False)
 
-    df['spread_edge'] = s_prob - df['spread_implied_prob']
-    df['total_edge'] = t_prob - df['total_implied_prob']
+    # Fix Issue #5: Use pd.concat for new columns to avoid fragmentation warnings
+    # Construct a new DataFrame for the new metrics
+    metrics_data = {}
+    metrics_data['spread_edge'] = s_prob - df['spread_implied_prob']
+    metrics_data['total_edge'] = t_prob - df['total_implied_prob']
     
     # 2. Define Market Stability (Volatility Indicator)
     def classify_stability(row):
@@ -1587,7 +1593,10 @@ def enrich_picks_with_roi_metrics(df: pd.DataFrame) -> pd.DataFrame:
             return "WIDE"
         return "TIGHT"
     
-    df['market_stability'] = df.apply(classify_stability, axis=1)
+    metrics_data['market_stability'] = df.apply(classify_stability, axis=1)
+
+    # Concatenate the new metrics
+    df = pd.concat([df, pd.DataFrame(metrics_data, index=df.index)], axis=1)
     df = df.copy()
     
     # 3. Handle 'Market_Badge' Labeling
@@ -10958,9 +10967,14 @@ with tab_master:
                         consensus_breakdown_cols.append(consensus_breakdown)
 
                     # Bulk assign to avoid fragmentation
-                    master_df["consensus_votes"] = consensus_vote_cols
-                    master_df["consensus_total"] = consensus_total_cols
-                    master_df["consensus"] = consensus_breakdown_cols
+                    # Create a DataFrame for new columns and concat once
+                    consensus_df_update = pd.DataFrame({
+                        "consensus_votes": consensus_vote_cols,
+                        "consensus_total": consensus_total_cols,
+                        "consensus": consensus_breakdown_cols
+                    }, index=master_df.index)
+
+                    master_df = pd.concat([master_df, consensus_df_update], axis=1)
 
                     # Merge vote details
                     if vote_details_list:
@@ -12805,6 +12819,10 @@ if should_display:
         gemini_row_limit = int(st.session_state.get("gemini_row_limit", MAX_GEMINI_CALLS_PER_RUN) or MAX_GEMINI_CALLS_PER_RUN)
         gemini_full_run = bool(st.session_state.get("gemini_full_run", False))
         if use_gemini_explanations:
+            # Check if limit already reached globally
+            if st.session_state.get("gemini_calls_made", 0) >= MAX_GEMINI_CALLS_PER_RUN:
+                 st.warning(f"⚠️ Gemini API limit reached ({st.session_state.get('gemini_calls_made')}). Explanations will be skipped.")
+
             col_limit, col_full = st.columns([3, 2])
             with col_limit:
                 gemini_row_limit = int(
