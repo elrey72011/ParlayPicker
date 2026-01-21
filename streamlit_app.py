@@ -1325,7 +1325,14 @@ def compute_final_probability(
 
     final_prob = clamp(final_prob_val or 0.0, 0.0, 1.0)
     if driver == "kalshi" and kalshi_prob_for_pick is not None and kalshi_prob_for_pick < 0.5:
-        warnings.append("kalshi_pick_mismatch")
+        # Task 4: Distinguish Kalshi mismatch types
+        mismatch_delta = 0.5 - kalshi_prob_for_pick
+        if mismatch_delta > 0.20:
+             # Very strong disagreement -> likely mapping error or extreme edge
+             warnings.append(f"kalshi_pick_mismatch_structural({kalshi_prob_for_pick:.2f})")
+        else:
+             # Mild disagreement -> edge
+             warnings.append(f"kalshi_pick_mismatch_edge({kalshi_prob_for_pick:.2f})")
 
     # Update sentiment_data with final normalized weight if used
     if sentiment_data["used"]:
@@ -1788,7 +1795,8 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
             else:
                  ml_pick = row.get("Away")
 
-        # FIX: Strict Moneyline Suppression using helper
+        # FIX: Relaxed Moneyline Suppression
+        # Instead of strict disqualification, we allow extreme odds but tag them for low confidence/warning.
         is_allowed = ml_allowed(ml_home_price, ml_away_price, threshold=300)
 
         ml_eligible = True
@@ -1797,10 +1805,11 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
         moneyline_disabled_reason = ""
 
         if not is_allowed:
-            ml_eligible = False
-            moneyline_disabled = True
-            moneyline_disabled_reason = "Moneyline disabled: both sides odds > 300"
-            ml_suppressed_reason = "both_sides>300"
+            # Task 2: Allow ML picks even if extreme, but flag them.
+            # Do NOT set ml_eligible = False.
+            moneyline_disabled = False # Changed from True
+            moneyline_disabled_reason = "Extreme odds (>300) detected"
+            ml_suppressed_reason = "extreme_odds_warning"
 
         # Check data availability
         if ml_home_price is None or ml_away_price is None:
@@ -1907,10 +1916,15 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
         if e_val < 0 and conf_label == "HIGH":
             conf_label = "MEDIUM"
 
-        # Force LOW if ML was suppressed but selected (Fallback scenario)
-        if best_type == "ML" and not ml_eligible:
+        # Force LOW if ML was suppressed (extreme odds)
+        if best_type == "ML" and ml_suppressed_reason == "extreme_odds_warning":
             conf_label = "LOW"
-            reason += " [Suppressed]"
+            reason += " [Extreme Odds]"
+
+        # Force LOW if ML was truly ineligible (e.g. missing odds)
+        if best_type == "ML" and not ml_eligible and ml_suppressed_reason != "extreme_odds_warning":
+            conf_label = "LOW"
+            reason += " [Suppressed/Missing]"
 
         # Force LOW if Pick is None (No Bet)
         if best_pick is None:

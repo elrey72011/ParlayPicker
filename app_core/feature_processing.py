@@ -637,6 +637,39 @@ MANUAL_TEAM_OVERRIDES = {
     "CHICAGO STATE": "CHICAGO STATE",
     "CSU": "CHICAGO STATE", # Conflict with Charleston Southern / Cleveland State - check context if possible or assume major one
 
+    # User Reported Missing NCAAB Teams (Jan 21)
+    "AMERICAN": "AMERICAN UNIVERSITY",
+    "AMERICAN U": "AMERICAN UNIVERSITY",
+    "COLGATE": "COLGATE",
+    "CREIGHTON": "CREIGHTON",
+    "XAVIER": "XAVIER",
+    "KENTUCKY": "KENTUCKY",
+    "TEXAS": "TEXAS",
+    "RICE": "RICE",
+    "TEMPLE": "TEMPLE",
+    "SOUTH DAKOTA": "SOUTH DAKOTA",
+    "NORTH ALABAMA": "NORTH ALABAMA",
+    "QUEENS": "QUEENS (NC)",
+    "QUEENS UNIVERSITY": "QUEENS (NC)",
+    "QUEENS UNIV": "QUEENS (NC)",
+    "OMAHA": "NEBRASKA OMAHA",
+    "NEBRASKA OMAHA": "NEBRASKA OMAHA",
+    "UNO": "NEBRASKA OMAHA",
+    "ST THOMAS": "ST THOMAS (MN)",
+    "ST THOMAS MN": "ST THOMAS (MN)",
+    "BELLARMINE": "BELLARMINE",
+    "LIPSCOMB": "LIPSCOMB",
+    "STETSON": "STETSON",
+    "AUSTIN PEAY": "AUSTIN PEAY",
+    "CENTRAL ARKANSAS": "CENTRAL ARKANSAS",
+    "EASTERN KENTUCKY": "EASTERN KENTUCKY",
+    "NORTH FLORIDA": "NORTH FLORIDA",
+    "JACKSONVILLE": "JACKSONVILLE",
+    "FLORIDA GULF COAST": "FLORIDA GULF COAST",
+    "FGCU": "FLORIDA GULF COAST",
+    "KENNESAW STATE": "KENNESAW STATE",
+    "KENNESAW ST": "KENNESAW STATE",
+
     # Fix: Explicit mappings for TheOver Data Issues
     "NEW ORLEANS SAINTS": "NEW ORLEANS PRIVATEERS",
     "NEW ORLEANS": "NEW ORLEANS PRIVATEERS",
@@ -1741,9 +1774,6 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                 if lg_key == "NFL":
                     logger.debug(f"NFL match t_norm={t_norm!r} key={key!r}")
 
-                if lg_key == "NCAAB" and "florida" in key:
-                    logger.debug(f"NCAAB Debug: norm_key={key!r} in index? {key in stats_index_norm_map}")
-
                 # 1. Try Mapping (TEAM_NAME_MAPPING)
                 # Task 5: TEAM_NAME_MAPPING keys are already lowercase, key is lowercase.
                 if key in TEAM_NAME_MAPPING:
@@ -1783,7 +1813,14 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                         logger.debug(f"Fuzzy match: '{t_norm}' -> '{match_norm}' ({lg_key})")
                 else:
                     if lg_key != "default":
-                        logger.warning(f"TEAM MATCH FAILURE ({lg_key}): '{t_norm}' not found. Candidates: {stats_index_norm_keys[:5]}")
+                        # Enhanced logging for NCAAB failures
+                        if lg_key == "NCAAB":
+                             logger.warning(f"NCAAB MATCH FAIL: GameTeam='{t_norm}' (Key='{key}') not found in {len(stats_index_norm_keys)} stats keys.")
+                             # Find closest generic match for debug
+                             closest = process.extractOne(key, stats_index_norm_keys, scorer=fuzz.ratio) if rapidfuzz else "N/A"
+                             logger.warning(f"  -> Closest candidate: {closest}")
+                        else:
+                             logger.warning(f"TEAM MATCH FAILURE ({lg_key}): '{t_norm}' not found. Candidates: {stats_index_norm_keys[:5]}")
                     home_map_local[t_norm] = None
                     stats_log["miss"] += 1
 
@@ -1838,7 +1875,12 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                         logger.debug(f"Fuzzy match: '{t_norm}' -> '{match_norm}' ({lg_key})")
                 else:
                     if lg_key != "default":
-                        logger.warning(f"TEAM MATCH FAILURE ({lg_key}): '{t_norm}' not found. Candidates: {stats_index_norm_keys[:5]}")
+                        if lg_key == "NCAAB":
+                             logger.warning(f"NCAAB MATCH FAIL: GameTeam='{t_norm}' (Key='{key}') not found in {len(stats_index_norm_keys)} stats keys.")
+                             closest = process.extractOne(key, stats_index_norm_keys, scorer=fuzz.ratio) if rapidfuzz else "N/A"
+                             logger.warning(f"  -> Closest candidate: {closest}")
+                        else:
+                             logger.warning(f"TEAM MATCH FAILURE ({lg_key}): '{t_norm}' not found. Candidates: {stats_index_norm_keys[:5]}")
                     away_map_local[t_norm] = None
                     stats_log["miss"] += 1
 
