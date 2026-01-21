@@ -141,6 +141,9 @@ class PredictionEngine:
         Zero latency, zero cost.
         """
         try:
+            # DEBUG LOGGING (Issue #3)
+            logger.debug(f"Jules input features: {features}")
+
             if self.use_fallback:
                 # Enhanced statistical fallback using team features
                 # Instead of flat 0.52, use win%, ppg, and implied prob
@@ -150,10 +153,19 @@ class PredictionEngine:
             # Ensure input is 2D (batch of 1)
             # Create DataFrame safely
             df_in = pd.DataFrame([features])
+
+            # DEBUG LOGGING (Issue #3)
+            logger.debug(f"Jules df_in shape: {df_in.shape}")
+            logger.debug(f"Jules model type: {type(self.model)}")
+
             # Ensure columns match training schema (safety)
             # DMatrix handles sparse/missing, but consistency helps
             dmatrix = xgb.DMatrix(df_in)
             prob = self.model.predict(dmatrix)[0]
+
+            # DEBUG LOGGING (Issue #3)
+            logger.debug(f"Jules raw output: {prob}, type: {type(prob)}")
+
             return {"prob": float(prob), "note": "Local XGBoost Inference"}
         except Exception as e:
             logger.error(f"Prediction error: {e}. Using fallback.")
@@ -269,6 +281,9 @@ class PredictionEngine:
                       # Detected placeholder, force fallback for this row
                       try:
                           row = df.iloc[idx]
+                          # LOG DETAILS OF PLACEHOLDER ROW (Issue #3)
+                          logger.debug(f"Placeholder row details: {row.to_dict()}")
+
                           features = build_model_feature_row_from_record(row.to_dict())
                           fallback_prob = self._calculate_statistical_prob(features)
                           final_probs.append(fallback_prob)
