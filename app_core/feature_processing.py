@@ -303,6 +303,76 @@ MANUAL_TEAM_OVERRIDES = {
     "TENNESSEE VOLUNTEERS": "TENNESSEE",
     "ALABAMA CRIMSON TIDE": "ALABAMA",
     "AUBURN TIGERS": "AUBURN",
+
+    # Extended NCAAB mappings to fix missing stats issues
+    "CREIGHTON BLUEJAYS": "CREIGHTON",
+    "XAVIER MUSKETEERS": "XAVIER",
+    "MARQUETTE GOLDEN EAGLES": "MARQUETTE",
+    "PROVIDENCE FRIARS": "PROVIDENCE",
+    "BUTLER BULLDOGS": "BUTLER",
+    "SETON HALL PIRATES": "SETON HALL",
+    "ST JOHNS RED STORM": "ST JOHNS",
+    "SAINT JOHNS RED STORM": "ST JOHNS",
+    "DEPAUL BLUE DEMONS": "DEPAUL",
+    "GEORGETOWN HOYAS": "GEORGETOWN",
+    "IOWA HAWKEYES": "IOWA",
+    "IOWA STATE CYCLONES": "IOWA STATE",
+    "ILLINOIS FIGHTING ILLINI": "ILLINOIS",
+    "INDIANA HOOSIERS": "INDIANA",
+    "MICHIGAN WOLVERINES": "MICHIGAN",
+    "MINNESOTA GOLDEN GOPHERS": "MINNESOTA",
+    "NEBRASKA CORNHUSKERS": "NEBRASKA",
+    "NORTHWESTERN WILDCATS": "NORTHWESTERN",
+    "OHIO STATE BUCKEYES": "OHIO STATE",
+    "PENN STATE NITTANY LIONS": "PENN STATE",
+    "RUTGERS SCARLET KNIGHTS": "RUTGERS",
+    "WISCONSIN BADGERS": "WISCONSIN",
+    "MARYLAND TERRAPINS": "MARYLAND",
+    "SOUTH CAROLINA GAMECOCKS": "SOUTH CAROLINA",
+    "ARKANSAS RAZORBACKS": "ARKANSAS",
+    "FLORIDA GATORS": "FLORIDA",
+    "GEORGIA BULLDOGS": "GEORGIA",
+    "MISSOURI TIGERS": "MISSOURI",
+    "MISSISSIPPI STATE BULLDOGS": "MISSISSIPPI STATE",
+    "VANDERBILT COMMODORES": "VANDERBILT",
+    "OREGON DUCKS": "OREGON",
+    "OREGON STATE BEAVERS": "OREGON STATE",
+    "WASHINGTON HUSKIES": "WASHINGTON",
+    "WASHINGTON STATE COUGARS": "WASHINGTON STATE",
+    "CALIFORNIA GOLDEN BEARS": "CALIFORNIA",
+    "STANFORD CARDINAL": "STANFORD",
+    "COLORADO BUFFALOES": "COLORADO",
+    "UTAH UTES": "UTAH",
+    "PITTSBURGH PANTHERS": "PITTSBURGH",
+    "SYRACUSE ORANGE": "SYRACUSE",
+    "BOSTON COLLEGE EAGLES": "BOSTON COLLEGE",
+    "CLEMSON TIGERS": "CLEMSON",
+    "FLORIDA STATE SEMINOLES": "FLORIDA STATE",
+    "GEORGIA TECH YELLOW JACKETS": "GEORGIA TECH",
+    "LOUISVILLE CARDINALS": "LOUISVILLE",
+    "NOTRE DAME FIGHTING IRISH": "NOTRE DAME",
+    "VIRGINIA CAVALIERS": "VIRGINIA",
+    "VIRGINIA TECH HOKIES": "VIRGINIA TECH",
+    "WAKE FOREST DEMON DEACONS": "WAKE FOREST",
+    "CINCINNATI BEARCATS": "CINCINNATI",
+    "KANSAS STATE WILDCATS": "KANSAS STATE",
+    "OKLAHOMA SOONERS": "OKLAHOMA",
+    "OKLAHOMA STATE COWBOYS": "OKLAHOMA STATE",
+    "TEXAS LONGHORNS": "TEXAS",
+    "TEXAS TECH RED RAIDERS": "TEXAS TECH",
+    "WEST VIRGINIA MOUNTAINEERS": "WEST VIRGINIA",
+    "TCU HORNED FROGS": "TCU",
+    "BOISE STATE BRONCOS": "BOISE STATE",
+    "COLORADO STATE RAMS": "COLORADO STATE",
+    "FRESNO STATE BULLDOGS": "FRESNO STATE",
+    "NEVADA WOLF PACK": "NEVADA",
+    "NEW MEXICO LOBOS": "NEW MEXICO",
+    "SAN DIEGO STATE AZTECS": "SAN DIEGO STATE",
+    "UNLV REBELS": "UNLV",
+    "UTAH STATE AGGIES": "UTAH STATE",
+    "WYOMING COWBOYS": "WYOMING",
+    "AIR FORCE FALCONS": "AIR FORCE",
+    "SAN JOSE STATE SPARTANS": "SAN JOSE STATE",
     "TEXAS LONGHORNS": "TEXAS",
     "VIRGINIA CAVALIERS": "VIRGINIA",
     "ILLINOIS FIGHTING ILLINI": "ILLINOIS",
@@ -1702,7 +1772,8 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
 
                 # 4. Fuzzy Match (Normalized Space) - Lower threshold for better recall
                 # Use even lower threshold for NCAAB/NCAAF where mascots cause noise
-                fuzzy_thresh = 60.0 if lg_key in ["NCAAB", "NCAAF"] else 65.0
+                # Further reduced from 60.0 to 55.0 for NCAAB to improve matching
+                fuzzy_thresh = 55.0 if lg_key in ["NCAAB", "NCAAF"] else 65.0
                 match_norm = fuzzy_match_team_robust(t_norm, stats_index_norm_keys, threshold=fuzzy_thresh)
                 if match_norm:
                     # Map back to raw key
@@ -1756,7 +1827,8 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
 
                 # 4. Fuzzy Match (Normalized Space) - Lower threshold for better recall
                 # Use even lower threshold for NCAAB/NCAAF where mascots cause noise
-                fuzzy_thresh = 60.0 if lg_key in ["NCAAB", "NCAAF"] else 65.0
+                # Further reduced from 60.0 to 55.0 for NCAAB to improve matching
+                fuzzy_thresh = 55.0 if lg_key in ["NCAAB", "NCAAF"] else 65.0
                 match_norm = fuzzy_match_team_robust(t_norm, stats_index_norm_keys, threshold=fuzzy_thresh)
                 if match_norm:
                     # Map back to raw key

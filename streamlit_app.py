@@ -301,11 +301,20 @@ def safe_float(x: Any) -> Optional[float]:
         return None
 
 def ml_allowed(home_ml, away_ml, threshold=300):
+    """
+    Check if ML picks are allowed based on odds threshold.
+    Now more permissive - only rejects if BOTH sides are extreme.
+    Returns True if at least ONE side is within threshold.
+    """
     try:
         vals = []
         if home_ml is not None: vals.append(float(home_ml))
         if away_ml is not None: vals.append(float(away_ml))
-        return all(abs(v) <= threshold for v in vals) and len(vals) > 0
+        if not vals:
+            return False
+        # NEW LOGIC: Allow if ANY side is within threshold (not ALL)
+        # This allows picks on the non-extreme side even if the other side is >300
+        return any(abs(v) <= threshold for v in vals)
     except Exception:
         return False
 
@@ -1277,7 +1286,8 @@ def compute_final_probability(
 
     # Check for Extreme Odds (Moneyline Disabled scenario)
     # If implied_prob is < 0.25 (>+300) or > 0.75 (<-300), we treat as extreme.
-    # Note: ml_allowed threshold is 300.
+    # Note: ml_allowed now uses permissive logic (allows if ANY side <= 300)
+    # Heavy chalk threshold is 400 for model weight suppression
     is_extreme = False
     if implied_prob is not None:
         if implied_prob < 0.24 or implied_prob > 0.76: # Approx 300 odds
@@ -1789,8 +1799,8 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
         if not is_allowed:
             ml_eligible = False
             moneyline_disabled = True
-            moneyline_disabled_reason = "Moneyline disabled: odds > 300"
-            ml_suppressed_reason = "abs(ML)>300"
+            moneyline_disabled_reason = "Moneyline disabled: both sides odds > 300"
+            ml_suppressed_reason = "both_sides>300"
 
         # Check data availability
         if ml_home_price is None or ml_away_price is None:
@@ -9427,8 +9437,12 @@ with tab_master:
 
                 # MONEYLINE ROW
                 def _ml_extreme(price: Optional[float]) -> bool:
+                    """
+                    Check if ML odds are too extreme to generate picks.
+                    Relaxed from 500 to 800 to allow more ML picks.
+                    """
                     try:
-                        return abs(float(price)) >= 500
+                        return abs(float(price)) >= 800
                     except Exception:
                         return False
 
@@ -9465,13 +9479,14 @@ with tab_master:
                         kalshi_yes_side = kalshi_winner.get("kalshi_yes_side")
 
                         # ML Suppression / Weighting Logic
-                        # If absolute American odds > 300: model_weight = 0, kalshi_weight = 0.6, implied_weight = 0.4
+                        # If absolute American odds > 400: model_weight = 0, kalshi_weight = 0.6, implied_weight = 0.4
+                        # Relaxed from 300 to 400 to allow more ML picks with model weight
                         current_ml_weights = moneyline_weights.copy()
                         is_heavy_chalk = False
                         try:
                             h_p = float(home_ml) if home_ml is not None else 0
                             a_p = float(away_ml) if away_ml is not None else 0
-                            if abs(h_p) > 300 or abs(a_p) > 300:
+                            if abs(h_p) > 400 or abs(a_p) > 400:
                                 is_heavy_chalk = True
                         except:
                             pass
@@ -9483,7 +9498,7 @@ with tab_master:
                             current_ml_weights["odds_weight"] = 0.4
                             current_ml_weights["sentiment_weight"] = 0.0
                             current_ml_weights["theover_weight"] = 0.0
-                            warnings.append("ml_disabled_odds_gt_300")
+                            warnings.append("ml_disabled_odds_gt_400")
                         else:
                             # Standard Dynamic Weighting
                             ml_odds_weight = 0.30
@@ -9510,7 +9525,7 @@ with tab_master:
                             kalshi_prob_used if kalshi_winner.get("kalshi_matched") else None,
                             kalshi_yes_side,
                             ai_prob_base,
-                            None, # No TheOver for Moneyline yet
+                            theover_prob_ml,  # FIX: Use TheOver probability for ML picks
                             sentiment_adj,
                             current_ml_weights,
                             sentiment_score=sentiment_diff,
