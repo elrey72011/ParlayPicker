@@ -7762,31 +7762,20 @@ with tab_master:
 
                                 if abs(theover_line) >= 40:
                                     # --- MONEYLINE ODDS CALCULATION ---
-                                    # Convert American Odds to Probability
                                     if theover_line < 0:
                                         raw_prob = -theover_line / (-theover_line + 100.0)
                                     else:
-                                        raw_prob = 100 / (theover_line + 100)
+                                        raw_prob = 100.0 / (theover_line + 100.0)
 
-                                    logger.info(f"TheOver Sides: Treated {theover_line} as Moneyline Odds -> {raw_prob:.3f}")
-
+                                    adjusted_prob = raw_prob + 0.07
+                                    theover_prob_spread = max(0.10, min(0.95, adjusted_prob))
+                                    logger.info(f"TheOver Sides: Moneyline {theover_line} -> {theover_prob_spread:.3f}")
                                 else:
                                     # --- SPREAD POINTS CALCULATION ---
-                                    # Existing logistic function for spreads
-                                    # Formula: P = 1 / (1 + e^(-line/3.5))
                                     raw_prob = 1.0 / (1.0 + math.exp(-theover_line / 3.5))
-                                    logger.info(f"TheOver Sides: Treated {theover_line} as Spread Points -> {raw_prob:.3f}")
-
-                                # Apply confidence boost to simulate TheOver's model edge
-                                # TheOver typically shows 75-92% hit rates, implying ~5-15% edge
-                                # We'll add a conservative 7% boost
-                                edge_boost = 0.07
-                                adjusted_prob = raw_prob + edge_boost
-
-                                # Clamp to reasonable bounds (min 10%, max 95%)
-                                theover_prob_spread = max(0.10, min(0.95, adjusted_prob))
-
-                                logger.info(f"TheOver Sides: Calculated prob {theover_prob_spread:.3f} from line {theover_line:+.1f} (pick: {theover_pick_team})")
+                                    adjusted_prob = raw_prob + 0.07
+                                    theover_prob_spread = max(0.10, min(0.95, adjusted_prob))
+                                    logger.info(f"TheOver Sides: Spread {theover_line} -> {theover_prob_spread:.3f}")
 
                             except (ValueError, OverflowError) as e:
                                 logger.warning(f"TheOver Sides: Failed to calculate probability from line {theover_line}: {e}")
