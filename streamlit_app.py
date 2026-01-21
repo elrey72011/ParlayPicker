@@ -11599,6 +11599,7 @@ with tab_master:
         st.session_state["master_df"] = df  # Raw data with all internal columns
 
         # Issue 1: Alias internal columns to user-requested names for export
+        # FIXED: Use pd.concat to avoid fragmentation (was causing PerformanceWarning)
         alias_map = {
             "Pick_Confidence": "PickConfidence",
             "Pick_Reason_Short": "PickReason",
@@ -11611,9 +11612,15 @@ with tab_master:
             "sentiment_score": "sentimentscore",
             "sentiment_status": "sentimentstatus"
         }
+        # Build alias columns in a single operation
+        alias_cols = {}
         for internal, external in alias_map.items():
             if internal in df.columns and external not in df.columns:
-                df[external] = df[internal]
+                alias_cols[external] = df[internal]
+
+        if alias_cols:
+            # Concatenate all new columns at once to avoid fragmentation
+            df = pd.concat([df, pd.DataFrame(alias_cols, index=df.index)], axis=1).copy()
 
         # Create filtered version for user export (remove internal/debug columns)
         # Keep only user-relevant columns for the "All Picks" export
