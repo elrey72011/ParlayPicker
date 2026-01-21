@@ -610,16 +610,12 @@ REDDIT_CACHE_TTL = timedelta(hours=12)
 DECISION_TRACE_SAMPLE_LEAGUES = {"NFL", "NBA", "NCAAB"}
 MAX_GEMINI_CALLS_PER_RUN = 25
 
-if "gemini_calls_made" not in st.session_state:
-    st.session_state["gemini_calls_made"] = 0
-
-# Ensure gemini_calls_made is initialized correctly and preserved
+# INIT ONCE at app startup
 if "gemini_calls_made" not in st.session_state:
     st.session_state["gemini_calls_made"] = 0
     logger.info("Startup: Initialized gemini_calls_made to 0")
 else:
-    # Log startup state for debugging
-    logger.info(f"Startup: Gemini calls made this session: {st.session_state['gemini_calls_made']}")
+    logger.info(f"Startup: Resuming with {st.session_state['gemini_calls_made']} calls made")
 
 if "gemini_cache" not in st.session_state:
     st.session_state["gemini_cache"] = {}

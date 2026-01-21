@@ -2,6 +2,8 @@ import pandas as pd
 import xgboost as xgb
 import os
 import logging
+import traceback
+import numpy as np
 from pathlib import Path
 import json
 from typing import List, Optional, Any, Dict, Mapping, Tuple
@@ -84,6 +86,91 @@ def match_team_name(target: str, candidates: List[str], threshold: float = 80.0)
     """
     return TeamNameMatcher.match_team(target, candidates, threshold=threshold/100.0)
 
+def diagnose_model_type(model_path):
+    """Identify model framework"""
+    if not os.path.exists(model_path):
+        return None, "missing"
+
+    # Check file magic bytes
+    try:
+        with open(model_path, 'rb') as f:
+            magic = f.read(4)
+        logger.debug(f"[MODEL_FRAMEWORK] File magic bytes: {magic.hex()}")
+    except Exception as e:
+        logger.warning(f"[MODEL_FRAMEWORK] Failed to read magic bytes: {e}")
+        magic = b""
+
+    # Try different load methods
+    import pickle
+    import joblib
+    import json
+
+    # Try pickle
+    try:
+        with open(model_path, 'rb') as f:
+            model = pickle.load(f)
+        logger.debug(f"[MODEL_FRAMEWORK] ✅ Loaded as pickle: {type(model)}")
+        return model, "pickle"
+    except Exception:
+        pass
+
+    # Try joblib
+    try:
+        model = joblib.load(model_path)
+        logger.debug(f"[MODEL_FRAMEWORK] ✅ Loaded as joblib: {type(model)}")
+        return model, "joblib"
+    except Exception:
+        pass
+
+    # Try JSON
+    try:
+        with open(model_path, 'r') as f:
+            model = json.load(f)
+        logger.debug(f"[MODEL_FRAMEWORK] ✅ Loaded as JSON: {type(model)}")
+        return model, "json"
+    except Exception:
+        pass
+
+    return None, "unknown"
+
+def is_model_trained(model):
+    """Check if model has actual weights"""
+
+    # For XGBoost Booster
+    if isinstance(model, xgb.Booster):
+        try:
+            # Check if it has trees
+            trees = model.get_dump()
+            if not trees or len(trees) == 0:
+                logger.error("[TRAINED] XGBoost model has NO trees - never trained!")
+                return False
+            logger.debug(f"[TRAINED] XGBoost has {len(trees)} trees")
+            return True
+        except Exception as e:
+            logger.warning(f"[TRAINED] XGBoost check failed: {e}")
+            return True # Assume true if we can't check, to avoid false negatives on valid models
+
+    # For sklearn
+    if hasattr(model, 'n_estimators'):
+        if not hasattr(model, 'estimators_') or model.estimators_ is None:
+            logger.error("[TRAINED] Sklearn model estimators not fitted!")
+            return False
+        logger.debug(f"[TRAINED] Sklearn has {len(model.estimators_)} estimators")
+        return True
+
+    # For any model with coef_ or feature_importances_
+    if hasattr(model, 'coef_'):
+        if model.coef_ is None or model.coef_.size == 0:
+            logger.error("[TRAINED] Model has no coefficients - never trained!")
+            return False
+
+    if hasattr(model, 'feature_importances_'):
+        if model.feature_importances_ is None or (hasattr(model.feature_importances_, 'sum') and model.feature_importances_.sum() == 0):
+            logger.error("[TRAINED] Model has no feature importances - never trained!")
+            return False
+
+    return True
+
 class PredictionEngine:
     def __init__(self, model_path=None):
         self.model = xgb.Booster()
@@ -91,10 +178,6 @@ class PredictionEngine:
         # Robust path resolution relative to this file
         if model_path is None:
             # app_core/prediction_engine.py -> parents[1] = root -> models/model.json
-            # Correct path resolution:
-            # __file__ is /app/app_core/prediction_engine.py
-            # parents[0] is /app/app_core
-            # parents[1] is /app
             root_dir = Path(__file__).resolve().parents[1]
             model_path = str(root_dir / "models" / "model.json")
 
@@ -102,39 +185,52 @@ class PredictionEngine:
 
         # Explicitly check for model file existence
         # DEBUG LOGGING (Issue #1)
-        logger.debug(f"Model file path: {model_path}")
+        logger.debug(f"[MODEL_DEBUG] Model file path: {model_path}")
         model_exists = os.path.exists(model_path)
-        logger.debug(f"Model file exists: {model_exists}")
+        logger.debug(f"[MODEL_DEBUG] Model file exists: {model_exists}")
+
         if model_exists:
-            logger.debug(f"Model file size: {os.path.getsize(model_path)} bytes")
+            size = os.path.getsize(model_path)
+            logger.debug(f"[MODEL_DEBUG] Model file size: {size} bytes")
 
-        if model_exists and os.path.getsize(model_path) > 0:
-            try:
-                # Check if file is valid JSON (basic check)
-                is_valid_json = False
-                with open(model_path, 'r') as f:
-                    try:
-                        content = json.load(f)
-                        if content:
-                            is_valid_json = True
-                    except json.JSONDecodeError:
-                        pass # Invalid JSON, use fallback
+            if size > 0:
+                try:
+                    # Diagnose model type first
+                    loaded_model, framework = diagnose_model_type(model_path)
+                    logger.info(f"[MODEL_FRAMEWORK] Detected framework: {framework}")
 
-                if is_valid_json:
-                    self.model.load_model(model_path)
-                    self.use_fallback = False
-                    logger.debug(f"Jules: Loaded local model from {model_path}")
-                    logger.debug(f"Model type: {type(self.model)}")
-                    # xgb.Booster doesn't always have get_params in all versions/interfaces, but we can try dump
-                    # logger.debug(f"Model attributes: {self.model.attributes()}")
-                else:
-                    logger.warning(f"Jules: Model file at {model_path} is invalid/empty JSON. Using statistical fallback.")
+                    if framework == "json":
+                        # If it's JSON, load into XGBoost Booster
+                        self.model.load_model(model_path)
+
+                        # Validate training
+                        if is_model_trained(self.model):
+                            self.use_fallback = False
+                            logger.debug(f"[MODEL_DEBUG] Jules: Loaded local XGBoost model from {model_path}")
+                        else:
+                            logger.critical("[TRAINED] MODEL NOT TRAINED - ABORT")
+                            self.use_fallback = True
+
+                    elif framework in ["pickle", "joblib"] and loaded_model is not None:
+                        # If we loaded a pickle/joblib object, use it directly
+                        self.model = loaded_model
+                        if is_model_trained(self.model):
+                            self.use_fallback = False
+                            logger.debug(f"[MODEL_DEBUG] Jules: Loaded local {framework} model from {model_path}")
+                        else:
+                            self.use_fallback = True
+                    else:
+                        logger.warning(f"Jules: Model file at {model_path} format unknown or invalid. Using statistical fallback.")
+                        self.use_fallback = True
+
+                except Exception as e:
                     self.use_fallback = True
-
-            except Exception as e:
+                    logger.error(f"[MODEL_DEBUG] Jules: Failed to load model from {model_path}: {e}")
+                    logger.error(f"[MODEL_DEBUG] Exception type: {type(e).__name__}")
+                    logger.error(f"[MODEL_DEBUG] Exception details: {traceback.format_exc()}")
+            else:
                 self.use_fallback = True
-                logger.error(f"Jules: Failed to load model from {model_path}: {e}")
-                logger.error(f"Exception type: {type(e)}")
+                logger.warning(f"Jules: Model file at {model_path} is empty. Using statistical fallback.")
         else:
             self.use_fallback = True
             global _LOGGED_MODEL_MISSING
@@ -146,16 +242,15 @@ class PredictionEngine:
 
     def get_prediction(self, features):
         """
-        Jules: Replacing Vertex AI request with local XGBoost inference.
+        Jules: Replacing Vertex AI request with local inference.
         Zero latency, zero cost.
         """
         try:
             # DEBUG LOGGING (Issue #1)
-            logger.debug(f"Jules input features: {features}")
+            logger.debug(f"[MODEL_DEBUG] Input features: {features}")
 
             if self.use_fallback:
                 # Enhanced statistical fallback using team features
-                # Instead of flat 0.52, use win%, ppg, and implied prob
                 prob = self._calculate_statistical_prob(features)
                 return {"prob": prob, "note": "Statistical Fallback (Feature-Based)"}
 
@@ -172,28 +267,44 @@ class PredictionEngine:
             # Select only the required columns in the correct order
             df_in = df_in[VERTEX_FEATURE_COLUMNS].copy()
 
-            # DEBUG LOGGING (Issue #1)
-            logger.debug(f"Input features shape: {df_in.shape}")
-            logger.debug(f"Input dtypes: {df_in.dtypes}")
-            logger.debug(f"Jules model type: {type(self.model)}")
-
-            # Ensure columns match training schema (safety)
-            # DMatrix handles sparse/missing, but consistency helps
-            dmatrix = xgb.DMatrix(df_in)
-            prob = self.model.predict(dmatrix)[0]
+            # Ensure proper types
+            df_in = df_in.apply(pd.to_numeric, errors='coerce').fillna(0.0).astype(float)
 
             # DEBUG LOGGING (Issue #1)
-            logger.debug(f"Raw prediction: {prob}")
-            logger.debug(f"Prediction type: {type(prob)}")
-            if abs(float(prob) - 0.623034656047821) < 0.000001:
-                 logger.warning("Jules: Single prediction returned EXACT placeholder value.")
-                 logger.debug(f"Is placeholder? True")
+            logger.debug(f"[MODEL_DEBUG] Input shape: {df_in.shape}")
+            logger.debug(f"[MODEL_DEBUG] Input dtypes: {df_in.dtypes}")
+            logger.debug(f"[MODEL_DEBUG] Feature names: {list(df_in.columns)}")
+            logger.debug(f"[MODEL_DEBUG] First row sample:\n{df_in.iloc[0] if len(df_in) > 0 else 'empty'}")
+
+            # Run prediction
+            if isinstance(self.model, xgb.Booster):
+                dmatrix = xgb.DMatrix(df_in)
+                prediction = self.model.predict(dmatrix)
+                # XGBoost predict returns numpy array, take first element
+                prob = float(prediction[0])
             else:
-                 logger.debug(f"Is placeholder? False")
+                # Sklearn-like interface
+                prediction = self.model.predict_proba(df_in)[:, 1]
+                prob = float(prediction[0])
 
-            return {"prob": float(prob), "note": "Local XGBoost Inference"}
+            # DEBUG LOGGING (Issue #1)
+            logger.debug(f"[MODEL_DEBUG] Raw prediction: {prob}")
+
+            # HARD REJECTION of placeholder values (Section 4)
+            PLACEHOLDER_VALUE = 0.623034656047821
+            PLACEHOLDER_TOLERANCE = 1e-9
+
+            if abs(prob - PLACEHOLDER_VALUE) < PLACEHOLDER_TOLERANCE:
+                 logger.error(f"[CRITICAL] Single prediction is placeholder value {prob}! Not using model.")
+                 logger.error(f"[CRITICAL] Model file may be corrupted or untrained.")
+                 # FALLBACK
+                 fallback_prob = self._calculate_statistical_prob(features)
+                 return {"prob": fallback_prob, "note": "Fallback (Placeholder Detected)"}
+
+            return {"prob": float(prob), "note": "Local Inference"}
         except Exception as e:
             logger.error(f"Prediction error: {e}. Using fallback.")
+            logger.error(f"Exception details: {traceback.format_exc()}")
             prob = self._calculate_statistical_prob(features)
             return {"prob": prob, "note": f"Error Fallback: {str(e)[:20]}"}
 
@@ -290,39 +401,40 @@ class PredictionEngine:
             inference_data = inference_data.apply(pd.to_numeric, errors='coerce').fillna(0.0).astype(float)
 
             # Detailed Logging BEFORE prediction (Issue #1)
-            logger.debug(f"Input features shape: {inference_data.shape}")
-            logger.debug(f"Input dtypes: {inference_data.dtypes}")
+            logger.debug(f"[MODEL_DEBUG] Batch input shape: {inference_data.shape}")
             if not inference_data.empty:
-                logger.debug(f"Features sample:\n{inference_data.iloc[0].to_dict()}")
-                logger.debug(f"Feature names: {list(inference_data.columns)}")
+                logger.debug(f"[MODEL_DEBUG] First row sample: {inference_data.iloc[0].to_dict()}")
 
-            dmatrix = xgb.DMatrix(inference_data)
-            probs = self.model.predict(dmatrix)
+            if isinstance(self.model, xgb.Booster):
+                dmatrix = xgb.DMatrix(inference_data)
+                probs = self.model.predict(dmatrix)
+            else:
+                probs = self.model.predict_proba(inference_data)[:, 1]
 
             # Detailed Logging AFTER prediction (Issue #1)
-            logger.debug(f"Raw prediction type: {type(probs)}")
+            logger.debug(f"[MODEL_DEBUG] Raw prediction type: {type(probs)}")
             if hasattr(probs, "shape"):
-                 logger.debug(f"Prediction shape: {probs.shape}")
+                 logger.debug(f"[MODEL_DEBUG] Prediction shape: {probs.shape}")
 
             # Handle potential single-value return or array
             final_probs = []
             if hasattr(probs, "__iter__"):
                 raw_probs = [float(p) for p in probs]
-                logger.debug(f"Prediction values sample: {raw_probs[:5]}")
             else:
                 raw_probs = [float(probs)]
-                logger.debug(f"Prediction values: {raw_probs}")
 
             # Check for placeholder value 0.623034656047821
             PLACEHOLDER_VAL = 0.623034656047821
+            PLACEHOLDER_TOLERANCE = 1e-9
 
             # Check mask
-            placeholder_mask = [abs(p - PLACEHOLDER_VAL) < 0.000001 for p in raw_probs]
-            if any(placeholder_mask):
-                logger.debug(f"Placeholder mask sample: {placeholder_mask[:5]}")
+            if isinstance(raw_probs, list):
+                 placeholder_count = sum(1 for p in raw_probs if abs(p - PLACEHOLDER_VAL) < PLACEHOLDER_TOLERANCE)
+                 if placeholder_count > 0:
+                      logger.error(f"[CRITICAL] Batch prediction contains {placeholder_count} placeholder values!")
 
             for idx, p in enumerate(raw_probs):
-                 if abs(p - PLACEHOLDER_VAL) < 0.000001:
+                 if abs(p - PLACEHOLDER_VAL) < PLACEHOLDER_TOLERANCE:
                       # Detected placeholder, force fallback for this row
                       try:
                           row = df.iloc[idx]
