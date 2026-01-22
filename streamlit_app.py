@@ -1075,6 +1075,7 @@ def compute_final_probability(
     sentiment_score: Optional[float] = None,
     home_team: Optional[str] = None,
     away_team: Optional[str] = None,
+    kalshi_data: Optional[Dict[str, Any]] = None,
 ) -> Tuple[Optional[float], Optional[float], Dict[str, float], str, List[str], Optional[float]]:
     """
     Blend available probabilities with weight re-normalization.
@@ -1337,9 +1338,16 @@ def compute_final_probability(
              logger.warning(f"  - Our Final Probability: {final_prob:.3f}")
              logger.warning(f"  - Delta: {mismatch_delta:.3f}")
              logger.warning(f"  - Possible Causes: Wrong contract selected, YES/NO sides swapped, or misaligned line")
+             # Safely log Kalshi contract details if available
              if kalshi_data and isinstance(kalshi_data, dict):
-                 logger.warning(f"  - Kalshi Contract: {kalshi_data.get('contract_id', 'N/A')}")
-                 logger.warning(f"  - Kalshi Label: {kalshi_data.get('label', 'N/A')}")
+                 kalshi_ticker = kalshi_data.get('kalshi_ticker') or kalshi_data.get('kalshi_event_ticker') or 'N/A'
+                 kalshi_label = kalshi_data.get('kalshi_label') or 'N/A'
+                 kalshi_title = kalshi_data.get('kalshi_title') or 'N/A'
+                 logger.warning(f"  - Kalshi Ticker: {kalshi_ticker}")
+                 logger.warning(f"  - Kalshi Label: {kalshi_label}")
+                 logger.warning(f"  - Kalshi Title: {kalshi_title}")
+             else:
+                 logger.warning(f"  - Kalshi contract data not available for detailed logging")
         else:
              # Mild disagreement -> edge
              warnings.append(f"kalshi_pick_mismatch_edge({kalshi_prob_for_pick:.2f})")
@@ -8977,6 +8985,7 @@ with tab_master:
                     spread_sentiment_adj,
                     _weights_no_to,
                     sentiment_score=sentiment_diff,
+                    kalshi_data=kalshi_spread if kalshi_spread.get("kalshi_matched") else None,
                 )
 
                 # Update Kalshi weight dynamically
@@ -9008,6 +9017,7 @@ with tab_master:
                     sentiment_score=sentiment_diff,
                     home_team=home,
                     away_team=away,
+                    kalshi_data=kalshi_spread if kalshi_spread.get("kalshi_matched") else None,
                 )
 
                 # Capture Sentiment Debug Data (Total)
@@ -9059,6 +9069,7 @@ with tab_master:
                         spread_sentiment_adj,
                         spread_weights,
                         sentiment_score=sentiment_diff,
+                        kalshi_data=kalshi_spread if kalshi_spread.get("kalshi_matched") else None,
                     )
                     if isinstance(spread_sentiment_debug, dict) and "theover_delta_clamped" in spread_sentiment_debug:
                         theover_delta_spread = spread_sentiment_debug.get("theover_delta_clamped")
@@ -9130,6 +9141,7 @@ with tab_master:
                     total_sentiment_adj,
                     _weights_total_no_to,
                     sentiment_score=sentiment_diff,
+                    kalshi_data=kalshi_total if kalshi_total.get("kalshi_matched") else None,
                 )
 
                 # Update Kalshi weight dynamically
@@ -9161,6 +9173,7 @@ with tab_master:
                     sentiment_score=sentiment_diff,
                     home_team=home,
                     away_team=away,
+                    kalshi_data=kalshi_total if kalshi_total.get("kalshi_matched") else None,
                 )
 
                 # Calculate TheOver Impact (Invariant: delta = final - without)
@@ -9175,6 +9188,7 @@ with tab_master:
                         total_sentiment_adj,
                         total_weights,
                         sentiment_score=sentiment_diff,
+                        kalshi_data=kalshi_total if kalshi_total.get("kalshi_matched") else None,
                     )
                     if isinstance(total_sentiment_debug, dict) and "theover_delta_clamped" in total_sentiment_debug:
                         theover_delta_total = total_sentiment_debug.get("theover_delta_clamped")
@@ -9559,6 +9573,7 @@ with tab_master:
                             sentiment_score=sentiment_diff,
                             home_team=home,
                             away_team=away,
+                            kalshi_data=kalshi_winner if kalshi_winner.get("kalshi_matched") else None,
                         )
 
                         # Capture Sentiment Debug Data (ML)
