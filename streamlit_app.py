@@ -1078,342 +1078,152 @@ def compute_final_probability(
     kalshi_data: Optional[Dict[str, Any]] = None,
 ) -> Tuple[Optional[float], Optional[float], Dict[str, float], str, List[str], Optional[float]]:
     """
-    Blend available probabilities with weight re-normalization.
+    Blend available probabilities using STATIC weights without renormalization.
     Returns (final_prob, base_prob, weights_used, driver, warnings, kalshi_prob_for_pick).
     """
     warnings: List[str] = []
-    sources: List[Tuple[str, Optional[float], float]] = []
-    weights_used: Dict[str, float] = {"w_implied": 0.0, "w_kalshi": 0.0, "w_model": 0.0, "w_sentiment": 0.0, "w_theover": 0.0}
     kalshi_prob_for_pick = map_kalshi_prob_for_pick(kalshi_prob_yes, kalshi_side_yes, pick_side)
 
-    # Task 1.3: Post-Selection Kalshi Validation with Auto-Flip
-    # If Kalshi probability is extreme (<0.15 or >0.85), check if flipping YES/NO makes more sense
-    if kalshi_prob_for_pick is not None and implied_prob is not None:
-        if kalshi_prob_for_pick < 0.15 or kalshi_prob_for_pick > 0.85:
-            # Calculate flipped probability
-            flipped_prob = 1.0 - kalshi_prob_for_pick
+    # Weights from Config (Static)
+    W_KALSHI = KALSHI_WEIGHT      # 0.35
+    W_MARKET = MARKET_WEIGHT      # 0.30
+    W_MODEL = ML_MODEL_WEIGHT     # 0.20
+    W_THEOVER = THEOVER_WEIGHT    # 0.10
+    W_SENTIMENT = SENTIMENT_WEIGHT # 0.05
 
-            # Check which aligns better with implied odds
-            delta_original = abs(kalshi_prob_for_pick - implied_prob)
-            delta_flipped = abs(flipped_prob - implied_prob)
+    weights_used = {
+        "w_implied": W_MARKET,
+        "w_kalshi": W_KALSHI,
+        "w_model": W_MODEL,
+        "w_theover": W_THEOVER,
+        "w_sentiment": W_SENTIMENT
+    }
 
-            if delta_flipped < delta_original and delta_original > 0.20:
-                # Flipping makes significantly more sense
-                warnings.append(f"kalshi_side_autoflipped(original={kalshi_prob_for_pick:.2f},flipped={flipped_prob:.2f})")
-                logger.warning(f"KALSHI SIDE AUTO-FLIP DETECTED:")
-                logger.warning(f"  - Original Kalshi Prob for Pick: {kalshi_prob_for_pick:.3f}")
-                logger.warning(f"  - Flipped Kalshi Prob: {flipped_prob:.3f}")
-                logger.warning(f"  - Implied Probability: {implied_prob:.3f}")
-                logger.warning(f"  - Delta (Original): {delta_original:.3f}")
-                logger.warning(f"  - Delta (Flipped): {delta_flipped:.3f}")
-                logger.warning(f"  - Action: Using flipped probability for better alignment")
+    # 1. Market (Implied Prob)
+    # If missing, use neutral 0.5
+    if implied_prob is not None:
+        p_market = clamp_prob(implied_prob, 0.05, 0.95) or 0.5
+    else:
+        p_market = 0.5
 
-                # Use flipped probability
-                kalshi_prob_for_pick = flipped_prob
-            elif kalshi_prob_for_pick < 0.15 or kalshi_prob_for_pick > 0.85:
-                # Extreme probability but flipping doesn't help - log warning
-                warnings.append(f"kalshi_extreme_prob({kalshi_prob_for_pick:.2f})")
-                logger.warning(f"KALSHI EXTREME PROBABILITY WARNING:")
-                logger.warning(f"  - Kalshi Prob for Pick: {kalshi_prob_for_pick:.3f}")
-                logger.warning(f"  - Implied Probability: {implied_prob:.3f}")
-                logger.warning(f"  - Note: Extreme Kalshi probability detected, but flipping does not improve alignment")
-
-    # Task: Re-enable Sentiment with configurable weight
-    # Global Config Weights:
-    # Market: 0.30, Kalshi: 0.35, Model: 0.15, TheOver: 0.15, Sentiment: 0.05
-
-    # 1. Define Weights from Config
-    # Check if model is loaded (model_prob present)
-    model_active = model_prob is not None
-
-    w_kalshi_base = KALSHI_WEIGHT
-    w_market_base = MARKET_WEIGHT
-    w_theover_base = THEOVER_WEIGHT
-    w_model_base = ML_MODEL_WEIGHT if model_active else 0.0
-    w_sentiment_base = SENTIMENT_WEIGHT
-
-    # 2. Check Availability
-    has_kalshi = kalshi_prob_for_pick is not None
-    has_market = implied_prob is not None
-    has_theover = theover_prob is not None
-
-    # Sentiment Check: Must have a score and NOT be rate limited
-    # We rely on caller to pass valid score, but we should double check validity flags if possible.
-    # Currently caller passes score if available.
-    # We'll treat score not None as available.
-    has_sentiment = sentiment_score is not None
-
-    # Also check rate limit flag if possible (caller responsibility mostly)
-    # If NewsAPI is rate limited, sentiment_score should be None or ignored.
-    if newsapi_cooldown_active():
-        has_sentiment = False
-
-    # 3. Build Sources & Normalize Weights
-    # If a source is missing, its weight is redistributed among others proportionally (or simply ignored and we renormalize sum)
-
-    # Market
-    if has_market:
-        implied_prob_clamped = clamp_prob(implied_prob, lo=0.05, hi=0.95)
-        p_market = clamp(implied_prob_clamped) if implied_prob_clamped is not None else 0.5
-        sources.append(("implied", p_market, w_market_base))
-
-    # Kalshi with Validation
-    if has_kalshi:
-        kalshi_prob_clamped = clamp_prob(kalshi_prob_for_pick, lo=0.05, hi=0.95)
-        p_kalshi = clamp(kalshi_prob_clamped) if kalshi_prob_clamped is not None else 0.5
-
-        # Task 1.1: Add Kalshi Probability Validation
-        # Validate Kalshi probability against implied odds before using it
+    # 2. Kalshi
+    # If missing or validation failed, use neutral 0.5
+    p_kalshi = 0.5
+    if kalshi_prob_for_pick is not None:
+        # Validate Kalshi probability against implied odds
         kalshi_validated = True
-        if has_market and implied_prob is not None:
-            delta = abs(p_kalshi - implied_prob)
+        if implied_prob is not None:
+            delta = abs(kalshi_prob_for_pick - implied_prob)
             if delta > 0.25:  # 25% threshold
                 kalshi_validated = False
                 warnings.append(f"kalshi_validation_failed(delta={delta:.2f})")
-                logger.warning(f"KALSHI VALIDATION FAILED:")
-                logger.warning(f"  - Kalshi Probability: {p_kalshi:.3f}")
-                logger.warning(f"  - Implied Probability: {implied_prob:.3f}")
-                logger.warning(f"  - Delta: {delta:.3f} (>0.25 threshold)")
-                logger.warning(f"  - Action: Setting Kalshi weight to 0 for this pick")
 
-                # Safely log additional context if available
-                if home_team and away_team:
-                    logger.warning(f"  - Game: {away_team} @ {home_team}")
-                    logger.warning(f"  - Pick Side: {pick_side}")
-
-        # Only add Kalshi to sources if it passed validation
         if kalshi_validated:
-            sources.append(("kalshi", p_kalshi, w_kalshi_base))
+            p_kalshi = clamp_prob(kalshi_prob_for_pick, 0.05, 0.95) or 0.5
+
+    # 3. Model
+    # If missing, use neutral 0.5
+    p_model = clamp_prob(model_prob, 0.05, 0.95) if model_prob is not None else 0.5
+
+    # 4. TheOver
+    # If missing, use neutral 0.5
+    p_theover = 0.5
+    if theover_prob is not None:
+        raw_to = clamp_prob(theover_prob, 0.05, 0.95) or 0.5
+        # RESCALE logic: [0.55, 0.75] band
+        if raw_to > 0.5:
+             p_theover = 0.5 + (raw_to - 0.5) * 0.555
+        elif raw_to < 0.5:
+             p_theover = 0.5 - (0.5 - raw_to) * 0.555
         else:
-            # Set weight to 0 by not adding to sources
-            has_kalshi = False  # Mark as unavailable so weight gets redistributed
+             p_theover = 0.5
 
-    # TheOver
-    if has_theover:
-        theover_prob_clamped = clamp_prob(theover_prob, lo=0.05, hi=0.95)
-        p_theover = clamp(theover_prob_clamped) if theover_prob_clamped is not None else 0.5
+    # 5. Sentiment
+    # If missing or rate limited, use neutral 0.5
+    p_sentiment = 0.5
+    sentiment_data = {"used": False, "weight": W_SENTIMENT, "prob": 0.5, "adj": 0.0}
 
-        # RESCALE: Remap extreme TheOver confidence to a narrower band [0.55, 0.75]
-        # This prevents TheOver from acting as a 95% confidence override.
-        if p_theover > 0.5:
-             # Scale (0.5, 0.95] -> (0.5, 0.75]
-             # Factor = (0.75 - 0.5) / (0.95 - 0.5) = 0.25 / 0.45 ≈ 0.555
-             p_theover = 0.5 + (p_theover - 0.5) * 0.555
-        elif p_theover < 0.5:
-             # Scale [0.05, 0.5) -> [0.25, 0.5)
-             p_theover = 0.5 - (0.5 - p_theover) * 0.555
-
-        sources.append(("theover", p_theover, w_theover_base))
-
-    # Model
-    if w_model_base > 0 and model_prob is not None:
-         model_prob_clamped = clamp_prob(model_prob, lo=0.05, hi=0.95)
-         p_model = clamp(model_prob_clamped) if model_prob_clamped is not None else 0.5
-         sources.append(("model", p_model, w_model_base))
-
-    # Sentiment Integration
-    # Logic:
-    # 1. Determine direction based on pick_side vs sentiment (Home/Away).
-    # 2. Calculate "Sentiment Probability" = 0.5 + (Directional Score * Scaling Factor).
-    # 3. Add to blend with w_sentiment.
-
-    # 4. Calculate Base Prob (Before Sentiment)
-    # This is required because Sentiment adjustment is based on the consensus of other models
-    base_sources = [s for s in sources]
-    base_total_w = sum(w for _, _, w in base_sources)
-
-    if base_total_w > 0:
-        base_prob_val = sum(p * w for _, p, w in base_sources) / base_total_w
-    else:
-        base_prob_val = 0.5
-
-    # Sentiment Integration
-    # Logic:
-    # 1. Determine direction based on pick_side vs sentiment (Home/Away).
-    # 2. Calculate "Sentiment Probability" = Base Prob + (Directional Score * Scaling Factor).
-    # 3. Add to blend with w_sentiment.
-
-    sentiment_data = {
-        "used": False,
-        "adj": 0.0,
-        "prob": base_prob_val,
-        "weight": 0.0
-    }
-
-    if has_sentiment and w_sentiment_base > 0:
-        # Determine directional impact
-        # sentiment_score is typically (Home Sentiment - Away Sentiment)
-        # Range -1 to 1.
-
-        # If Pick is Home: Impact = Score
-        # If Pick is Away: Impact = -Score
-
+    if sentiment_score is not None and not newsapi_cooldown_active():
+        # Determine direction
         direction = 0.0
-
-        # 1. Try matching with Home/Away teams if provided
         if home_team and away_team:
             p_norm = str(pick_side or "").lower().strip()
             h_norm = str(home_team).lower().strip()
             a_norm = str(away_team).lower().strip()
+            if p_norm == h_norm: direction = 1.0
+            elif p_norm == a_norm: direction = -1.0
 
-            # Simple string matching (can be improved with fuzzy if needed, but names usually align in row)
-            if p_norm == h_norm:
-                direction = 1.0
-            elif p_norm == a_norm:
-                direction = -1.0
-            # Else: pick might be Over/Under (no direction from team sentiment usually)
-
-        # 2. Fallback: Kalshi side inference
+        # Fallback: Kalshi side
         if direction == 0.0 and kalshi_side_yes and pick_side:
             ks = str(kalshi_side_yes).lower()
             ps = str(pick_side).lower()
             if ks == "home":
-                if ps == "home" or ps == ks: direction = 1.0 # Pick is Home
-                else: direction = -1.0 # Pick is Away
+                direction = 1.0 if (ps == "home" or ps == ks) else -1.0
             elif ks == "away":
-                if ps == "away" or ps == ks: direction = -1.0 # Pick is Away
-                else: direction = 1.0 # Pick is Home
+                direction = -1.0 if (ps == "away" or ps == ks) else 1.0
 
-        # 3. Fallback: Literal "Home" / "Away"
         if direction == 0.0 and pick_side:
             ps = str(pick_side).lower()
             if ps == "home": direction = 1.0
             elif ps == "away": direction = -1.0
 
         if direction != 0.0:
-            # Score -1 to 1.
-            # Convert to prob adjustment:
-            # Target: 1-3% prob impact when score != 0.
-            # If w_sentiment is 0.10, we need p_sent to be significantly different from base_prob.
-            # formula: sentiment_prob = base_prob + (score * direction * 0.5)
-            # Example: score=0.45, dir=1 -> adj=0.225. p_sent = base + 0.225.
-            # Impact with 0.1 weight: 0.1 * 0.225 = 0.0225 (2.25%) -> Meets 1-3% target.
-
-            s_val = float(sentiment_score)
-
-            # Clamp s_val (signal) just in case
-            s_val = max(-1.0, min(1.0, s_val))
-
-            raw_adj = s_val * direction * 0.5
-            p_sent = base_prob_val + raw_adj
-            p_sent = clamp(p_sent, 0.01, 0.99)
-
+            s_val = max(-1.0, min(1.0, float(sentiment_score)))
+            # Scaling factor: 0.5 (score 1.0 -> 0.5 adj -> prob 1.0)
+            # With weight 0.05, max impact is 0.025
+            adj = s_val * direction * 0.5
+            p_sentiment = clamp(0.5 + adj, 0.01, 0.99)
             sentiment_data["used"] = True
-            sentiment_data["adj"] = raw_adj
-            sentiment_data["prob"] = p_sent
-            sentiment_data["weight"] = w_sentiment_base
+            sentiment_data["adj"] = adj
+            sentiment_data["prob"] = p_sentiment
 
-            sources.append(("sentiment", p_sent, w_sentiment_base))
+    # --- CALCULATION (Weighted Sum, No Normalization) ---
+    raw_final_prob = (
+        (p_market * W_MARKET) +
+        (p_kalshi * W_KALSHI) +
+        (p_model * W_MODEL) +
+        (p_theover * W_THEOVER) +
+        (p_sentiment * W_SENTIMENT)
+    )
 
-    # 4. Normalize Weights
-    total_weight = sum(w for _, _, w in sources)
-    if total_weight > 0:
-        # Re-normalize
-        sources = [(n, p, w / total_weight) for n, p, w in sources]
+    # Base prob (without TheOver) for delta checks
+    # Re-normalize remaining weights to sum to 1.0 for fair comparison
+    w_rest = W_MARKET + W_KALSHI + W_MODEL + W_SENTIMENT
+    if w_rest > 0:
+        prob_no_to = (
+            (p_market * W_MARKET) +
+            (p_kalshi * W_KALSHI) +
+            (p_model * W_MODEL) +
+            (p_sentiment * W_SENTIMENT)
+        ) / w_rest
     else:
-        # Fallback if no sources (unlikely)
-        if not sources:
-             sources.append(("implied", 0.5, 1.0))
+        prob_no_to = 0.5
 
-    # 5. Populate weights_used
-    for n, p, w in sources:
-        if n == "implied": weights_used["w_implied"] = w
-        elif n == "kalshi": weights_used["w_kalshi"] = w
-        elif n == "model": weights_used["w_model"] = w
-        elif n == "theover": weights_used["w_theover"] = w
-        elif n == "sentiment": weights_used["w_sentiment"] = w
-
-    # 6. Calculate Final Prob with TheOver Clamping
-    # We must ensure TheOver never shifts the probability by more than 0.10 (or 0.03 in extreme cases).
-
-    raw_final_prob = sum(p * w for _, p, w in sources)
-
-    # Calculate Prob WITHOUT TheOver for Delta Clamping
-    # We reconstruct the blend excluding 'theover' source
-    sources_no_to = [s for s in sources if s[0] != "theover"]
-    w_total_no_to = sum(w for _, _, w in sources_no_to)
-
-    if w_total_no_to > 0:
-        prob_no_to = sum(p * w for _, p, w in sources_no_to) / w_total_no_to
-    else:
-        prob_no_to = 0.5 # Fallback if TheOver is the ONLY source (unlikely)
-
-    # Calculate Delta
+    # TheOver Delta Clamping
     theover_delta = raw_final_prob - prob_no_to
-    sentiment_data["theover_delta"] = theover_delta # Pass back for debugging/text generation
+    sentiment_data["theover_delta"] = theover_delta
 
-    # Check for Extreme Odds (Moneyline Disabled scenario)
-    # If implied_prob is < 0.25 (>+300) or > 0.75 (<-300), we treat as extreme.
-    # Note: ml_allowed now uses permissive logic (allows if ANY side <= 300)
-    # Heavy chalk threshold is 400 for model weight suppression
+    # Extreme Odds check
     is_extreme = False
     if implied_prob is not None:
-        if implied_prob < 0.24 or implied_prob > 0.76: # Approx 300 odds
+        if implied_prob < 0.24 or implied_prob > 0.76:
             is_extreme = True
 
-    # Define Cap
-    # Standard Cap: 0.10
-    # Extreme Cap: 0.03
     max_delta = 0.03 if is_extreme else 0.10
-
-    # Clamp Delta
     clamped_delta = clamp(theover_delta, -max_delta, max_delta)
 
-    # Apply Clamped Delta
+    # Apply Clamped Delta (adjust final prob back)
     final_prob_val = prob_no_to + clamped_delta
     sentiment_data["theover_delta_clamped"] = clamped_delta
 
-    # Log the probability calculation
-    sources_str = ", ".join([f"{name}={p:.3f}*{w:.3f}" for name, p, w in sources])
-    logger.debug(f"Probability blend: {sources_str} = {raw_final_prob:.3f} -> Clamped to {final_prob_val:.3f} (Delta: {theover_delta:.3f}->{clamped_delta:.3f})")
+    final_prob = clamp(final_prob_val, 0.0, 1.0)
 
-    # Determine Driver
-    if sources:
-        # Sort by weight desc
-        sorted_sources = sorted(sources, key=lambda x: x[2], reverse=True)
-        driver = sorted_sources[0][0]
+    # Determine Driver (simply highest weight used)
+    driver = "kalshi" # Kalshi is highest weight (0.35) by default
+    if abs(clamped_delta) > 0.03:
+        driver += " + TheOver"
 
-        # Update driver text if TheOver is significant
-        if "theover" in [s[0] for s in sources]:
-            # If TheOver weight > 0 and delta is significant
-            if abs(clamped_delta) > 0.03:
-                driver += " + TheOver"
-    else:
-        driver = "none"
-
-    final_prob = clamp(final_prob_val or 0.0, 0.0, 1.0)
-    if driver == "kalshi" and kalshi_prob_for_pick is not None and kalshi_prob_for_pick < 0.5:
-        # Task 4: Distinguish Kalshi mismatch types
-        mismatch_delta = 0.5 - kalshi_prob_for_pick
-        if mismatch_delta > 0.20:
-             # Very strong disagreement -> likely mapping error or extreme edge
-             warnings.append(f"kalshi_pick_mismatch_structural({kalshi_prob_for_pick:.2f})")
-             # Enhanced logging for structural mismatches to aid debugging
-             logger.warning(f"KALSHI STRUCTURAL MISMATCH DETECTED:")
-             logger.warning(f"  - Pick Side: {pick_side}")
-             logger.warning(f"  - Kalshi Probability for Pick: {kalshi_prob_for_pick:.3f} (< 0.30)")
-             logger.warning(f"  - Our Final Probability: {final_prob:.3f}")
-             logger.warning(f"  - Delta: {mismatch_delta:.3f}")
-             logger.warning(f"  - Possible Causes: Wrong contract selected, YES/NO sides swapped, or misaligned line")
-             # Safely log Kalshi contract details if available
-             if kalshi_data and isinstance(kalshi_data, dict):
-                 kalshi_ticker = kalshi_data.get('kalshi_ticker') or kalshi_data.get('kalshi_event_ticker') or 'N/A'
-                 kalshi_label = kalshi_data.get('kalshi_label') or 'N/A'
-                 kalshi_title = kalshi_data.get('kalshi_title') or 'N/A'
-                 logger.warning(f"  - Kalshi Ticker: {kalshi_ticker}")
-                 logger.warning(f"  - Kalshi Label: {kalshi_label}")
-                 logger.warning(f"  - Kalshi Title: {kalshi_title}")
-             else:
-                 logger.warning(f"  - Kalshi contract data not available for detailed logging")
-        else:
-             # Mild disagreement -> edge
-             warnings.append(f"kalshi_pick_mismatch_edge({kalshi_prob_for_pick:.2f})")
-
-    # Update sentiment_data with final normalized weight if used
-    if sentiment_data["used"]:
-        sentiment_data["weight"] = weights_used.get("w_sentiment", 0.0)
-
-    return final_prob, base_prob_val, weights_used, driver, warnings, kalshi_prob_for_pick, sentiment_data
+    return final_prob, prob_no_to, weights_used, driver, warnings, kalshi_prob_for_pick, sentiment_data
 
 
 def build_decision_trace(
@@ -2228,6 +2038,48 @@ def build_clean_glance(conf: Any, prob: Any, books: Any, width: Any, market_type
     return f"{conf_norm} | {fmt_prob(prob)} | {depth_label(books)} | {market_width_label(width, market_type)}"
 
 
+def detect_placeholder_odds(row: pd.Series) -> pd.Series:
+    """
+    Detects if odds are placeholders (-110/-110 with 0 line).
+    Logic: Trigger flag if both Home and Away ML are exactly -110 AND the spread_point is 0.0 or None.
+    """
+    # Check ML (Implied) -110
+    # We check if implied prob is close to 0.5238 (which is -110)
+    # Actually, simpler to check raw odds if available, or implied prob.
+    # Let's use implied prob ~ 0.5238 (+/- small epsilon) on BOTH sides?
+    # Or just check if implied prob is exactly -110 derived.
+
+    # Better: check columns if they exist.
+    # We need spread odds home/away usually.
+
+    s_home_odds = row.get("spread_odds_home")
+    s_away_odds = row.get("spread_odds_away")
+    s_line = row.get("spread_point") # Or spread_line
+
+    is_placeholder = False
+
+    # Helper to check -110
+    def is_minus_110(val):
+        try:
+            f = float(val)
+            return abs(f + 110.0) < 0.1
+        except:
+            return False
+
+    # Check strict condition
+    if is_minus_110(s_home_odds) and is_minus_110(s_away_odds):
+        # Check line
+        if s_line is None or (try_float(s_line) == 0.0):
+            is_placeholder = True
+
+    return is_placeholder
+
+def try_float(x):
+    try:
+        return float(x)
+    except:
+        return 0.0
+
 def add_spread_total_confidence(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
         return df
@@ -2245,10 +2097,46 @@ def add_spread_total_confidence(df: pd.DataFrame) -> pd.DataFrame:
         total_odds_valid = row.get("total_odds_valid")
 
         # Validation checks
+        # Fix: Use new detect_placeholder_odds logic directly or ensure flag is correct
+        # Since we haven't bulk-applied detect_placeholder yet, let's do inline check
+
+        # Validation checks
+
+        # Check for Spread placeholder
+        # Logic: Both sides -110 AND line is 0.0
+        s_home = row.get("spread_odds_home")
+        s_away = row.get("spread_odds_away")
+        s_line = row.get("spread_point")
+
+        # Create temp row for helper
+        s_row = pd.Series({
+            "spread_odds_home": s_home,
+            "spread_odds_away": s_away,
+            "spread_point": s_line
+        })
+        is_spread_placeholder = detect_placeholder_odds(s_row)
+
         if spread_odds_valid is None:
-            spread_odds_valid = safe_float(row.get("spread_implied_prob")) is not None and not bool(row.get("spread_odds_placeholder_detected"))
+            spread_odds_valid = safe_float(row.get("spread_implied_prob")) is not None and not is_spread_placeholder
+
+        # Check for Total placeholder
+        # Total usually has standard -110, so placeholder is just Line=0
+        # Re-use helper but map total keys to expected spread keys?
+        # Helper expects "spread_odds_home", "spread_odds_away", "spread_point"
+        # Total uses "total_odds_over", "total_odds_under", "total_point" usually
+        t_over = row.get("total_odds_over")
+        t_under = row.get("total_odds_under")
+        t_line = row.get("total_point")
+
+        t_row = pd.Series({
+            "spread_odds_home": t_over,
+            "spread_odds_away": t_under,
+            "spread_point": t_line
+        })
+        is_total_placeholder = detect_placeholder_odds(t_row)
+
         if total_odds_valid is None:
-            total_odds_valid = safe_float(row.get("total_implied_prob")) is not None and not bool(row.get("total_odds_placeholder_detected"))
+            total_odds_valid = safe_float(row.get("total_implied_prob")) is not None and not is_total_placeholder
 
         spread_width_val = safe_float(row.get("spread_width"))
         total_width_val = safe_float(row.get("total_width"))
@@ -13556,6 +13444,14 @@ if should_display:
 
         # Hard-gate: Skip Gemini loop entirely if disabled or unconfigured
         gemini_disabled_reason = st.session_state.get("gemini_disabled_reason")
+
+        # Define default Gemini dict structure for result collection
+        gemini_result_keys = [
+            'gemini_mode', 'gemini_alignment', 'gemini_rationale', 'gemini_flags_short',
+            'gemini_risk_flags', 'llm_disagreement_flag', 'gemini_error_flag',
+            'gemini_total_confidence', 'gemini_error', 'overall_confidence'
+        ]
+
         if gemini_disabled_reason or not use_gemini_explanations:
             if logger:
                 logger.info(f"⚠️ Skipping Gemini enrichment loop. Reason: {gemini_disabled_reason or 'User disabled Gemini explanations'}")
@@ -13578,38 +13474,35 @@ if should_display:
             # Defensively dedupe columns before Gemini pass to prevent row.get(col) from returning Series
             df = df.loc[:, ~df.columns.duplicated()].copy()
 
-            gemini_results = []
+            # Dictionary to collect results by index (more efficient than list of Series)
+            gemini_updates_dict = {}
 
             # Enforce hard session limit
             calls_this_run = 0
-
-            # List of columns we might modify/add in the loop to avoid schema issues
-            gemini_cols = [
-                'gemini_mode', 'gemini_alignment', 'gemini_rationale', 'gemini_flags_short',
-                'gemini_risk_flags', 'llm_disagreement_flag', 'gemini_error_flag',
-                'gemini_total_confidence', 'gemini_error', 'overall_confidence'
-            ]
 
             for idx, row in df.iterrows():
                 # Apply legacy/batch logic first (sets gemini_mode etc)
                 # This function now correctly enforces limits internally and returns 'limit_reached' mode
                 new_row = _apply_gemini(row, batch_data=None)
 
+                # Collect fields from new_row into update dict
+                update_data = {k: new_row.get(k) for k in gemini_result_keys if k in new_row}
+
                 # Check if this row is selected for processing (by _apply_gemini logic)
-                is_selected = new_row.get("gemini_mode") == "active"
+                is_selected = update_data.get("gemini_mode") == "active"
 
                 if not is_selected:
                     # Logic already handled inside _apply_gemini for skip reasons
                     # Ensure audit fields are populated
-                    if not new_row.get('gemini_total_confidence'):
-                         new_row['gemini_total_confidence'] = 'SKIPPED'
-                    if not new_row.get('gemini_rationalize'):
-                         reason = new_row.get('gemini_rationale', 'Skipped')
-                         new_row['gemini_rationalize'] = reason
-                    if not new_row.get('gemini_error_flag'):
-                         new_row['gemini_error_flag'] = new_row.get('gemini_flags_short', '')
+                    if not update_data.get('gemini_total_confidence'):
+                         update_data['gemini_total_confidence'] = 'SKIPPED'
+                    if not update_data.get('gemini_rationalize'):
+                         reason = update_data.get('gemini_rationale', 'Skipped')
+                         update_data['gemini_rationalize'] = reason
+                    if not update_data.get('gemini_error_flag'):
+                         update_data['gemini_error_flag'] = update_data.get('gemini_flags_short', '')
 
-                    gemini_results.append(new_row)
+                    gemini_updates_dict[idx] = update_data
                     continue
 
                 # CACHING LOGIC
@@ -13618,12 +13511,12 @@ if should_display:
 
                 if cached_data:
                     # Use cached data
-                    new_row['gemini_total_confidence'] = cached_data.get('confidence', '')
-                    new_row['gemini_rationalize'] = cached_data.get('rationale', '')
-                    new_row['gemini_error_flag'] = cached_data.get('error', '')
-                    new_row['overall_confidence'] = cached_data.get('confidence', '') or new_row.get('overall_confidence')
+                    update_data['gemini_total_confidence'] = cached_data.get('confidence', '')
+                    update_data['gemini_rationalize'] = cached_data.get('rationale', '')
+                    update_data['gemini_error_flag'] = cached_data.get('error', '')
+                    update_data['overall_confidence'] = cached_data.get('confidence', '') or update_data.get('overall_confidence')
                     if cached_data.get('rationale'):
-                        new_row['gemini_rationale'] = cached_data.get('rationale')
+                        update_data['gemini_rationale'] = cached_data.get('rationale')
 
                     # Log cache hit
                     if logger:
@@ -13654,10 +13547,10 @@ if should_display:
 
                             # HARD STOP CHECK (Explicit)
                             if current_calls >= MAX_GEMINI_CALLS_PER_RUN:
-                                 new_row['gemini_total_confidence'] = 'SKIPPED'
-                                 new_row['gemini_rationalize'] = 'Limit Reached'
-                                 new_row['gemini_error_flag'] = 'limit_reached'
-                                 gemini_results.append(new_row)
+                                 update_data['gemini_total_confidence'] = 'SKIPPED'
+                                 update_data['gemini_rationalize'] = 'Limit Reached'
+                                 update_data['gemini_error_flag'] = 'limit_reached'
+                                 gemini_updates_dict[idx] = update_data
                                  continue
 
                             logger.info(f"Gemini call attempt {current_calls + 1}...")
@@ -13681,48 +13574,46 @@ if should_display:
                                 # Update Cache
                                 st.session_state["gemini_cache"][row_key] = gemini_data
 
-                            # Populate Row
-                            new_row['gemini_total_confidence'] = gemini_data.get('confidence', '')
-                            new_row['gemini_rationalize'] = gemini_data.get('rationale', '')
-                            new_row['gemini_error_flag'] = gemini_data.get('error', '')
+                            # Populate Update Dict
+                            update_data['gemini_total_confidence'] = gemini_data.get('confidence', '')
+                            update_data['gemini_rationalize'] = gemini_data.get('rationale', '')
+                            update_data['gemini_error_flag'] = gemini_data.get('error', '')
 
                             if not gemini_data.get('error'):
                                 # Also update legacy columns to ensure UI consistency
-                                new_row['overall_confidence'] = gemini_data.get('confidence', '') or new_row.get('overall_confidence')
+                                update_data['overall_confidence'] = gemini_data.get('confidence', '') or update_data.get('overall_confidence')
                                 if gemini_data.get('rationale'):
-                                    new_row['gemini_rationale'] = gemini_data.get('rationale')
+                                    update_data['gemini_rationale'] = gemini_data.get('rationale')
                         else:
-                            new_row['gemini_total_confidence'] = 'SKIPPED'
-                            new_row['gemini_rationalize'] = 'Missing Pick/Prob'
-                            new_row['gemini_error_flag'] = 'missing_data'
+                            update_data['gemini_total_confidence'] = 'SKIPPED'
+                            update_data['gemini_rationalize'] = 'Missing Pick/Prob'
+                            update_data['gemini_error_flag'] = 'missing_data'
 
                     except Exception as e:
-                        new_row['gemini_total_confidence'] = ''
-                        new_row['gemini_rationalize'] = ''
-                        new_row['gemini_error_flag'] = str(e)[:100]
+                        update_data['gemini_total_confidence'] = ''
+                        update_data['gemini_rationalize'] = ''
+                        update_data['gemini_error_flag'] = str(e)[:100]
 
-                gemini_results.append(new_row)
+                gemini_updates_dict[idx] = update_data
 
-            if gemini_results:
+            if gemini_updates_dict:
                 # Rebuild dataframe preserving original index
                 # OPTIMIZATION: Extract only changed columns and concat
                 # This prevents recreating the entire massive dataframe if only a few columns changed
 
-                # Convert list of Series to DataFrame
-                gemini_df = pd.DataFrame(gemini_results, index=df.index)
+                # Convert dict of dicts to DataFrame
+                gemini_df = pd.DataFrame.from_dict(gemini_updates_dict, orient='index')
 
-                # Identify columns that were actually updated (present in gemini_cols)
-                # plus any new ones created
-                updated_cols = [c for c in gemini_df.columns if c in gemini_cols or c not in df.columns]
+                # Align index
+                gemini_df.index = df.index # Assuming order preserved, but better safe:
+                # Actually from_dict(orient='index') sets index correctly from keys if they match
 
-                if updated_cols:
-                    # Drop existing versions of these columns from original df
-                    df = df.drop(columns=[c for c in updated_cols if c in df.columns], errors='ignore')
-                    # Concat with new columns
-                    df = pd.concat([df, gemini_df[updated_cols]], axis=1)
-                else:
-                    # Fallback if logic fails (replace full df)
-                    df = gemini_df
+                # Drop existing versions of these columns from original df
+                # Only if they exist
+                df = df.drop(columns=[c for c in gemini_df.columns if c in df.columns], errors='ignore')
+
+                # Concat with new columns
+                df = pd.concat([df, gemini_df], axis=1)
 
         if "_gemini_rank_metric" in df.columns:
             df = df.drop(columns=["_gemini_rank_metric"])
