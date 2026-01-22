@@ -8,6 +8,7 @@ from typing import Dict, Optional
 
 import requests
 from app_core.sentiment_pipeline import league_label
+from app_core.sentiment_cache import get_cache  # Task 2.2: Import persistent cache
 
 
 class RealSentimentAnalyzer:
@@ -86,6 +87,24 @@ class RealSentimentAnalyzer:
     def get_team_sentiment(self, team_name: str, sport: str) -> Dict[str, float]:
         """Return a sentiment payload for the requested team."""
 
+        # Task 2.2: Check persistent cache first (12-hour TTL)
+        persistent_cache = get_cache()
+        cached_data = persistent_cache.get(team_name)
+
+        if cached_data:
+            # Cache hit - return cached sentiment
+            return {
+                "score": cached_data.get("sentiment_score", 0.0),
+                "confidence": 0.8,  # High confidence for cached data
+                "sources": 0,  # Unknown, but cached
+                "trend": cached_data.get("sentiment_label", "neutral").lower(),
+                "method": "Persistent Cache",
+                "fetch_info": cached_data.get("fetch_info", {}),
+                "cached": True,
+                "cached_at": cached_data.get("cached_at"),
+            }
+
+        # Cache miss - check in-memory cache for backwards compatibility
         cache_key = f"{team_name}_{sport}_{datetime.now().date()}"
 
         if cache_key in self.sentiment_cache:
@@ -94,15 +113,26 @@ class RealSentimentAnalyzer:
             if age < self.cache_duration:
                 return cached["data"]
 
+        # No cache - fetch from NewsAPI
         if self.news_api_key:
             result = self._analyze_with_newsapi(team_name, sport)
         else:
             result = self._fallback_neutral()
 
+        # Store in both caches
         self.sentiment_cache[cache_key] = {
             "data": result,
             "timestamp": datetime.now(),
         }
+
+        # Task 2.2: Store in persistent cache for 12-hour reuse
+        # Only cache if we got a successful result (not rate limited)
+        fetch_info = result.get("fetch_info", {})
+        if not fetch_info.get("rate_limited", False):
+            sentiment_score = result.get("score", 0.0)
+            sentiment_label = result.get("trend", "neutral").capitalize()
+            persistent_cache.set(team_name, sentiment_score, sentiment_label, fetch_info)
+
         return result
 
     def _analyze_with_newsapi(self, team_name: str, sport: str) -> Dict:
