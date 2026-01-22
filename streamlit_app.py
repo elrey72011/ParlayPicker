@@ -1688,18 +1688,35 @@ def enrich_picks_with_roi_metrics(df: pd.DataFrame) -> pd.DataFrame:
     df = pd.concat([df, pd.DataFrame(metrics_data, index=df.index)], axis=1)
     df = df.copy()
     
-    # 3. Handle 'Market_Badge' Labeling
-    def update_badge(row):
-        existing = str(row.get('Market_Badge') or "")
-        stability = row.get('market_stability')
-        if stability == "WIDE":
-            if "WIDE MARKET" not in existing:
-                 return (existing + ";WIDE MARKET").strip(";")
-        return existing
-
+    # 3. Handle 'Market_Badge' Labeling - Vectorized
     if 'Market_Badge' in df.columns:
-        df['Market_Badge'] = df.apply(update_badge, axis=1)
-        df = df.copy()
+        # Create boolean mask for WIDE stability
+        is_wide = metrics_data['market_stability'] == "WIDE"
+
+        # Get existing badges as strings, filling NaNs
+        existing_badges = df['Market_Badge'].astype(str).replace('nan', '').replace('None', '')
+
+        # Define update function for vectorization
+        # If wide and not already labeled, append
+        # This logic is slightly complex to vectorize perfectly with string operations,
+        # but list comprehension is faster than apply
+
+        new_badges = []
+        for idx, val in existing_badges.items():
+            if is_wide.get(idx, False):
+                if "WIDE MARKET" not in val:
+                    new_val = (val + ";WIDE MARKET").strip(";")
+                    new_badges.append(new_val)
+                else:
+                    new_badges.append(val)
+            else:
+                new_badges.append(val)
+
+        # Assign back directly (since we already did concat above, this is safe-ish,
+        # or we could make a new series and concat, but replacing an existing column is usually okay
+        # if the frame isn't fragmented yet. To be safe, we'll assign to the column).
+        # Actually, let's just update the column in place since we just de-fragmented with concat
+        df['Market_Badge'] = new_badges
     
     return df
 
@@ -2214,16 +2231,25 @@ def build_clean_glance(conf: Any, prob: Any, books: Any, width: Any, market_type
 def add_spread_total_confidence(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
         return df
+
+    # Work on a copy to avoid side effects
     df = df.copy()
 
-    def _apply(row: pd.Series) -> pd.Series:
+    # Pre-allocate list for new columns
+    new_data = []
+
+    # Iterate row-by-row but collect results
+    for idx, row in df.iterrows():
         warnings_text = str(row.get("Warnings") or "")
         spread_odds_valid = row.get("spread_odds_valid")
         total_odds_valid = row.get("total_odds_valid")
+
+        # Validation checks
         if spread_odds_valid is None:
             spread_odds_valid = safe_float(row.get("spread_implied_prob")) is not None and not bool(row.get("spread_odds_placeholder_detected"))
         if total_odds_valid is None:
             total_odds_valid = safe_float(row.get("total_implied_prob")) is not None and not bool(row.get("total_odds_placeholder_detected"))
+
         spread_width_val = safe_float(row.get("spread_width"))
         total_width_val = safe_float(row.get("total_width"))
         spread_books_count = row.get("spread_books_count")
@@ -2231,6 +2257,7 @@ def add_spread_total_confidence(df: pd.DataFrame) -> pd.DataFrame:
         mixed_side_flag = "spread_range_mixed_sides_detected" in warnings_text
         proxy_flag = "model_proxy_for_spread_total" in warnings_text
 
+        # Compute confidence
         spread_conf, spread_reason = confidence_from_market(
             spread_books_count, spread_width_val, spread_odds_valid, mixed_side_flag, proxy_flag, market_kind="spread"
         )
@@ -2238,6 +2265,7 @@ def add_spread_total_confidence(df: pd.DataFrame) -> pd.DataFrame:
             total_books_count, total_width_val, total_odds_valid, False, proxy_flag, market_kind="total"
         )
 
+        # Compute probabilities
         spread_prob_val = row.get("spread_prob") if row.get("spread_prob") is not None else row.get("spread_prob_market_based")
         if spread_prob_val is None:
             penalty = 0.0
@@ -2245,6 +2273,7 @@ def add_spread_total_confidence(df: pd.DataFrame) -> pd.DataFrame:
                 penalty = min(0.05, spread_width_val * 0.02)
             spread_prob_val = clamp(0.5 - (penalty or 0.0))
             spread_reason = ";".join(filter(None, [spread_reason, "missing_implied_prob"]))
+
         total_prob_val = row.get("total_prob") if row.get("total_prob") is not None else row.get("total_prob_market_based")
         if total_prob_val is None:
             penalty = 0.0
@@ -2257,27 +2286,8 @@ def add_spread_total_confidence(df: pd.DataFrame) -> pd.DataFrame:
             spread_conf, spread_reason, total_conf, total_reason
         )
 
-        row["spread_prob"] = spread_prob_val
-        row["spread_confidence"] = spread_conf
-        row["spread_confidence_reason"] = spread_reason
-        row["spread_odds_valid"] = spread_odds_valid
-        row["total_prob"] = total_prob_val
-        row["total_confidence"] = total_conf
-        row["total_confidence_reason"] = total_reason
-        row["total_odds_valid"] = total_odds_valid
-        row["At_a_Glance_Confidence"] = overall_conf
-        row["At_a_Glance_Score"] = overall_score
-        row["At_a_Glance_Reason"] = overall_reason
-        row["Spread_Glance"] = build_clean_glance(
-            spread_conf, spread_prob_val, spread_books_count, spread_width_val, "spread"
-        )
-        row["Total_Glance"] = build_clean_glance(
-            total_conf, total_prob_val, total_books_count, total_width_val, "total"
-        )
-        row["Spread_Glance_Reason"] = spread_reason
-        row["Total_Glance_Reason"] = total_reason
+        # Sentiment Integration
         sentiment_level = _normalize_sentiment_level(row.get("sentiment_level"))
-        # Robustly handle NaN/None before integer conversion
         raw_articles = row.get("sentiment_articles_used")
         articles_used = int(float(raw_articles)) if pd.notnull(raw_articles) and raw_articles != "" else 0
         sentiment_strength = str(row.get("sentiment_strength") or "").upper() or sentiment_strength_from_articles(
@@ -2306,33 +2316,30 @@ def add_spread_total_confidence(df: pd.DataFrame) -> pd.DataFrame:
             total_adj_val = compute_market_sentiment_adjustment(
                 sentiment_level, sentiment_strength, "total", sentiment_signal
             )
-        row["sentiment_level"] = sentiment_level
-        row["sentiment_strength"] = sentiment_strength
-        row["sentiment_badge"] = sentiment_badge
-        row["sentiment_articles_used"] = articles_used
-        row["spread_sentiment_adj"] = spread_adj_val
-        row["total_sentiment_adj"] = total_adj_val
+
+        # Adjusted Probs
+        spread_prob_adj = None
+        total_prob_adj = None
         if sentiment_level == "league":
             spread_adj_val = 0.0
             total_adj_val = 0.0
-            row["spread_sentiment_adj"] = 0.0
-            row["total_sentiment_adj"] = 0.0
-            row["spread_prob_adj"] = spread_prob_val
-            row["total_prob_adj"] = total_prob_val
+            spread_prob_adj = spread_prob_val
+            total_prob_adj = total_prob_val
         else:
-            row["spread_prob_adj"] = clamp((spread_prob_val or 0.0) + spread_adj_val, 0.01, 0.99) if spread_prob_val is not None else None
-            row["total_prob_adj"] = clamp((total_prob_val or 0.0) + total_adj_val, 0.01, 0.99) if total_prob_val is not None else None
+            spread_prob_adj = clamp((spread_prob_val or 0.0) + spread_adj_val, 0.01, 0.99) if spread_prob_val is not None else None
+            total_prob_adj = clamp((total_prob_val or 0.0) + total_adj_val, 0.01, 0.99) if total_prob_val is not None else None
+
         market_kind = str(row.get("Market") or "").lower()
-        if market_kind == "spread" and row.get("spread_prob_adj") is not None:
-            row["consensus_prob_adj"] = row.get("spread_prob_adj")
-        if market_kind == "total" and row.get("total_prob_adj") is not None:
-            row["consensus_prob_adj"] = row.get("total_prob_adj")
-        spread_prob_adj = row.get("spread_prob_adj")
-        total_prob_adj = row.get("total_prob_adj")
+        consensus_prob_adj = None
+        if market_kind == "spread" and spread_prob_adj is not None:
+            consensus_prob_adj = spread_prob_adj
+        if market_kind == "total" and total_prob_adj is not None:
+            consensus_prob_adj = total_prob_adj
+
         spread_prob_display = round_pct(spread_prob_adj)
         total_prob_display = round_pct(total_prob_adj)
-        row["spread_prob_display"] = spread_prob_display
-        row["total_prob_display"] = total_prob_display
+
+        # Sentiment Visuals
         spread_arrow = ""
         total_arrow = ""
         spread_note = None
@@ -2345,10 +2352,7 @@ def add_spread_total_confidence(df: pd.DataFrame) -> pd.DataFrame:
         elif sentiment_level in {"team", "game"} and not signal_zero:
             spread_arrow = prob_arrow(row.get("spread_prob"), spread_prob_adj)
             total_arrow = prob_arrow(row.get("total_prob"), total_prob_adj)
-        row["spread_sentiment_arrow"] = spread_arrow
-        row["total_sentiment_arrow"] = total_arrow
-        row["spread_sentiment_note"] = spread_note
-        row["total_sentiment_note"] = total_note
+
         def _glance_with_signal(conf_val: Any, prob_display: Optional[int], books: Any, width_val: Any, market_type: str, arrow_val: str, note_val: Optional[str]) -> str:
             prob_text = prob_display if prob_display not in {"", None} else "—"
             signal = ""
@@ -2357,22 +2361,18 @@ def add_spread_total_confidence(df: pd.DataFrame) -> pd.DataFrame:
             elif arrow_val:
                 signal = f" {arrow_val}"
             return f"{conf_val or 'LOW'} | {prob_text} {signal}".rstrip() + f" | {depth_label(books)} | {market_width_label(width_val, market_type)}"
+
         clean_spread_glance = _glance_with_signal(
             spread_conf, spread_prob_display, spread_books_count, spread_width_val, "spread", spread_arrow, spread_note
         )
         clean_total_glance = _glance_with_signal(
             total_conf, total_prob_display, total_books_count, total_width_val, "total", total_arrow, total_note
         )
-        row["Spread_Glance"] = clean_spread_glance
-        row["Total_Glance"] = clean_total_glance
-        row["Spread_Glance_Clean"] = clean_spread_glance
-        row["Total_Glance_Clean"] = clean_total_glance
+
         conf_rank_map = {"HIGH": 3, "MEDIUM": 2, "LOW": 1}
         spread_conf_rank = conf_rank_map.get(str(spread_conf or "LOW").upper(), 1)
         total_conf_rank = conf_rank_map.get(str(total_conf or "LOW").upper(), 1)
-        row["spread_conf_rank"] = spread_conf_rank
-        row["total_conf_rank"] = total_conf_rank
-        row["st_conf_rank"] = min(spread_conf_rank, total_conf_rank)
+
         decisiveness = 0.0
         try:
             if spread_prob_adj is not None:
@@ -2381,10 +2381,59 @@ def add_spread_total_confidence(df: pd.DataFrame) -> pd.DataFrame:
                 decisiveness += abs(float(total_prob_adj) - 0.5)
         except Exception:
             decisiveness = 0.0
-        row["decisiveness"] = decisiveness
-        return row
 
-    return df.apply(_apply, axis=1)
+        # Collect data for this row
+        new_data.append({
+            "spread_prob": spread_prob_val,
+            "spread_confidence": spread_conf,
+            "spread_confidence_reason": spread_reason,
+            "spread_odds_valid": spread_odds_valid,
+            "total_prob": total_prob_val,
+            "total_confidence": total_conf,
+            "total_confidence_reason": total_reason,
+            "total_odds_valid": total_odds_valid,
+            "At_a_Glance_Confidence": overall_conf,
+            "At_a_Glance_Score": overall_score,
+            "At_a_Glance_Reason": overall_reason,
+            "Spread_Glance": build_clean_glance(spread_conf, spread_prob_val, spread_books_count, spread_width_val, "spread"),
+            "Total_Glance": build_clean_glance(total_conf, total_prob_val, total_books_count, total_width_val, "total"),
+            "Spread_Glance_Reason": spread_reason,
+            "Total_Glance_Reason": total_reason,
+            "sentiment_level": sentiment_level,
+            "sentiment_strength": sentiment_strength,
+            "sentiment_badge": sentiment_badge,
+            "sentiment_articles_used": articles_used,
+            "spread_sentiment_adj": spread_adj_val,
+            "total_sentiment_adj": total_adj_val,
+            "spread_prob_adj": spread_prob_adj,
+            "total_prob_adj": total_prob_adj,
+            "consensus_prob_adj": consensus_prob_adj,
+            "spread_prob_display": spread_prob_display,
+            "total_prob_display": total_prob_display,
+            "spread_sentiment_arrow": spread_arrow,
+            "total_sentiment_arrow": total_arrow,
+            "spread_sentiment_note": spread_note,
+            "total_sentiment_note": total_note,
+            "Spread_Glance_Clean": clean_spread_glance,
+            "Total_Glance_Clean": clean_total_glance,
+            "spread_conf_rank": spread_conf_rank,
+            "total_conf_rank": total_conf_rank,
+            "st_conf_rank": min(spread_conf_rank, total_conf_rank),
+            "decisiveness": decisiveness
+        })
+
+    # Create DataFrame from new data and concat once
+    if new_data:
+        new_cols_df = pd.DataFrame(new_data, index=df.index)
+
+        # Drop columns if they exist to allow overwrite
+        cols_to_drop = [c for c in new_cols_df.columns if c in df.columns]
+        if cols_to_drop:
+            df = df.drop(columns=cols_to_drop)
+
+        df = pd.concat([df, new_cols_df], axis=1)
+
+    return df
 
 
 def compute_sentiment_adj_row(row: Dict[str, Any]) -> Tuple[float, str]:
@@ -6790,6 +6839,11 @@ def load_games(selected_leagues: Union[str, List[str]], run_id: Optional[str] = 
     any_games_loaded = False
     all_leagues_failed = True
 
+    # 1. Guard: If no leagues selected or just "All Sports" placeholder (if applicable), skip
+    if not leagues:
+        logger.info("load_games: No leagues selected, skipping fetch.")
+        return []
+
     for selected_league in leagues:
         sport_key = SPORT_KEYS.get(selected_league)
         if not sport_key:
@@ -6952,16 +7006,28 @@ def load_games(selected_leagues: Union[str, List[str]], run_id: Optional[str] = 
         logger.error(f"❌ Games fetch ERROR: All leagues failed to load (run_id: {run_id})")
     else:
         st.session_state["games_fetch_status"] = "empty"
-        logger.warning(f"⚠️ Games fetch EMPTY: API succeeded but returned 0 games (run_id: {run_id})")
+        # Only log warning if user explicitly requested run; otherwise INFO
+        if run_id:
+            logger.warning(f"⚠️ Games fetch EMPTY: API succeeded but returned 0 games (run_id: {run_id})")
+        else:
+            logger.info(f"ℹ️ Games fetch EMPTY (Startup/Auto): API returned 0 games.")
 
     if not filtered_games:
         if st.session_state.get("games"):
             logger.warning("Fetch returned 0 games; keeping last-known-good games in session_state")
             filtered_games = st.session_state["games"]
-            st.warning("⚠️ New data fetch empty. Using cached games.")
+            # Only show UI warning if run_id set
+            if run_id:
+                st.warning("⚠️ New data fetch empty. Using cached games.")
         else:
-            logger.error("CRITICAL: games list is empty!")
-            st.stop()
+            # Cold start empty state - do NOT stop/crash, just log
+            if run_id:
+                logger.warning("⚠️ games list is empty after explicit fetch!")
+                st.error("No games found for selected parameters.")
+            else:
+                logger.info("ℹ️ Startup: games list is empty (waiting for user load).")
+            # Return empty list instead of stopping, so UI can render empty state
+            return []
 
     st.session_state["games"] = filtered_games
     st.session_state["commence_stats"] = commence_stats_total
