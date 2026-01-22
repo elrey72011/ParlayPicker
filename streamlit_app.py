@@ -11948,10 +11948,11 @@ with tab_master:
 
         # Create filtered version for user export (remove internal/debug columns)
         # Keep only user-relevant columns for the "All Picks" export
+        # FORCE ORDER: ['league', 'Home', 'Away', 'Market', 'Pick', 'final_probability', 'edge', 'Pick_Confidence']
         user_columns = [
-            'league', 'Home', 'Away', 'Commence (UTC)', 'Commence (Local)', 'Local Date',
-            'Market', 'Pick', 'final_probability', 'Pick_Confidence',
-            'Best Overall Pick', 'Best Overall Prob', 'Edge',
+            'league', 'Home', 'Away', 'Market', 'Pick', 'final_probability', 'Edge', 'Pick_Confidence',
+            'Commence (UTC)', 'Commence (Local)', 'Local Date',
+            'Best Overall Pick', 'Best Overall Prob',
             'wsentiment_used', 'sentiment_adj', 'sentiment_prob', # Added
             'Best Overall Market',
             'Spread & Pick', 'spread_prob_pick_final', 'SpreadConsensusProb', 'SpreadConsensus',
@@ -12048,6 +12049,11 @@ with tab_master:
 
         # Filter to only columns that exist in the dataframe
         results_columns = [col for col in user_columns if col in df.columns]
+
+        # Ensure best_pick_type is clean (Task 4: Data Cleaning)
+        if "best_pick_type" in df.columns:
+            df["best_pick_type"] = df["best_pick_type"].fillna("UNKNOWN")
+
         st.session_state["master_results_df"] = df[results_columns].copy()
 
         # Safety check for missing columns (User Request)
