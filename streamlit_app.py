@@ -3017,8 +3017,8 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
 
         if meta["sentiment_valid"] and meta_score is not None:
             sentiment_map[team] = meta_score
-            # Log successful sentiment collection (UI display only, NOT used in probability blend per Mode A)
-            logger.info(f"Sentiment COLLECTED for {team}: score={meta_score:.3f} (UI display only - not used in probability blend), valid={meta['sentiment_valid']}, source={meta.get('sentiment_source', 'unknown')}, status={meta.get('sentiment_status')}")
+            # MODE B: Sentiment collection now integrated into probability blend (was Mode A: UI display only)
+            logger.info(f"Sentiment COLLECTED for {team}: score={meta_score:.3f} (Mode B: used in probability blend), valid={meta['sentiment_valid']}, source={meta.get('sentiment_source', 'unknown')}, status={meta.get('sentiment_status')}")
         else:
             sentiment_map[team] = None
             debug["missing_teams"].append(team)
@@ -8941,8 +8941,16 @@ with tab_master:
                 total_pick_side = None
                 total_pick_odds = None
                 best_total_price = None
+
+                # FIX: Propagate model predictions to spread and total markets
+                # The model_prob_home from get_prediction_prob() is the home team win probability
+                # For spread/total markets, we use this as the base model prediction
                 model_spread_prob = None
                 model_total_prob = None
+                if use_model_numeric_probs and model_prob_home is not None:
+                    # Use model prediction for both spread and total markets
+                    model_spread_prob = model_prob_home
+                    model_total_prob = model_prob_home
                 if g.get("total_point") is not None:
                     over_prob = american_to_implied(g.get("over_price"))
                     under_prob = american_to_implied(g.get("under_price"))
@@ -9131,8 +9139,8 @@ with tab_master:
                     if spread_weights.get("ml_weight", 0) > 0.15:
                         spread_weights["ml_weight"] -= 0.05
 
-                # Sentiment weight always 0.0 (disabled per Mode A)
-                spread_weights["sentiment_weight"] = 0.0
+                # MODE B: Sentiment weight enabled in probability calculations (was Mode A: disabled)
+                # spread_weights["sentiment_weight"] = 0.0  # DISABLED to enable sentiment integration
 
                 # Calculate SPREAD probability WITHOUT TheOver
                 _weights_no_to = spread_weights.copy()
@@ -9700,15 +9708,16 @@ with tab_master:
                             current_ml_weights["w_model"] = 0.0 # Ensure explicit key also zeroed
                             current_ml_weights["kalshi_weight"] = 0.6
                             current_ml_weights["odds_weight"] = 0.4
-                            current_ml_weights["sentiment_weight"] = 0.0
+                            # MODE B: Keep sentiment weight from config (was Mode A: forced to 0.0)
+                            # current_ml_weights["sentiment_weight"] = 0.0  # DISABLED to enable sentiment
                             current_ml_weights["theover_weight"] = 0.0
                             warnings.append("ml_extreme_odds_flag")
                         else:
                             # Standard Dynamic Weighting
                             ml_odds_weight = 0.30
                             current_ml_weights["odds_weight"] = ml_odds_weight
-                            # Sentiment weight always 0.0 (disabled per Mode A)
-                            current_ml_weights["sentiment_weight"] = 0.0
+                            # MODE B: Keep sentiment weight from config (was Mode A: forced to 0.0)
+                            # current_ml_weights["sentiment_weight"] = 0.0  # DISABLED to enable sentiment
 
                             _ml_kalshi_matched = bool(kalshi_winner.get("kalshi_matched"))
                             _ml_k_prob = map_kalshi_prob_for_pick(
@@ -12142,7 +12151,7 @@ with tab_master:
                     logger.info(f"Average sentiment differential: {avg_sentiment:.3f}")
             if "sentiment_weight" in df.columns:
                 avg_weight = df["sentiment_weight"].mean()
-                logger.info(f"Average sentiment weight in final probabilities: {avg_weight:.3f} (Mode A: should be 0.0, sentiment used for UI display only)")
+                logger.info(f"Average sentiment weight in final probabilities: {avg_weight:.3f} (Mode B: sentiment integrated in probability calculations, expected ~0.10)")
 
         # Show success message and rerun to display results immediately
         st.success(f"✅ Analysis complete! Generated {len(df)} picks.")
