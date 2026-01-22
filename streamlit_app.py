@@ -7073,7 +7073,18 @@ if "debug_accumulator" in st.session_state and st.session_state["debug_accumulat
 # Debug log history (alternate debug log)
 if "debug_log_history" in st.session_state and st.session_state["debug_log_history"]:
     try:
-        debug_history_json = json.dumps(st.session_state["debug_log_history"], default=str, indent=2)
+        # RESCUE FIX #3: Force type map to kill NaNs before JSON export
+        debug_data = st.session_state["debug_log_history"]
+        if isinstance(debug_data, list) and len(debug_data) > 0:
+            debug_df = pd.DataFrame(debug_data)
+            # Apply hard type mapping to prevent NaN in "type" field
+            if "Market" in debug_df.columns:
+                type_map = {"Moneyline": "ML", "Spread": "SPREAD", "Total": "TOTAL"}
+                debug_df["type"] = debug_df["Market"].map(type_map).fillna("UNKNOWN")
+            # Convert back to list of dicts
+            debug_data = debug_df.to_dict('records')
+
+        debug_history_json = json.dumps(debug_data, default=str, indent=2)
         st.sidebar.download_button(
             label="📊 Download Debug Log (History)",
             data=debug_history_json,
@@ -12075,7 +12086,20 @@ with tab_master:
         final_prob_col = "final_probability" if "final_probability" in df.columns else "Best Overall Prob"
         df["_final_prob_numeric"] = pd.to_numeric(df[final_prob_col], errors='coerce').fillna(0.5)
 
-        df['_sel_score'] = (df['_final_prob_numeric'] - 0.5).abs() + df['_edge_numeric']
+        # RESCUE FIX #1: Force _sel_score to numeric with fallback to 0
+        df['_sel_score'] = pd.to_numeric(
+            (df['_final_prob_numeric'] - 0.5).abs() + df['_edge_numeric'],
+            errors='coerce'
+        ).fillna(0)
+
+        # RESCUE FIX #1: Debug print to verify _sel_score calculation
+        if not df.empty:
+            st.write("### 🔍 Debug: Selection Score Calculation")
+            debug_cols = ['league', 'Home', 'Away', 'Commence (UTC)', '_sel_score']
+            available_debug_cols = [col for col in debug_cols if col in df.columns]
+            if available_debug_cols:
+                st.write(df[available_debug_cols].head())
+                logger.info(f"DEBUG: master_df has {len(df)} rows before grouping")
 
         # Group by game and pick the highest score
         # Use game_key if available, else group keys
@@ -12089,7 +12113,15 @@ with tab_master:
         if group_keys:
              df_collapsed = df.sort_values('_sel_score', ascending=False).groupby(group_keys).head(1)
              logger.info(f"Champion Selection: Collapsed {len(df)} rows to {len(df_collapsed)} single-row games")
-             df = df_collapsed.drop(columns=['_sel_score', '_edge_numeric', '_final_prob_numeric'], errors='ignore').reset_index(drop=True)
+
+             # RESCUE FIX #1: Fallback if grouped dataframe is empty
+             if df_collapsed.empty:
+                 logger.error(f"⚠️ CRITICAL: Groupby resulted in 0 rows! Falling back to raw dataframe with {len(df)} rows")
+                 st.warning(f"⚠️ Grouping failed - showing all {len(df)} picks instead of collapsed view")
+                 # Keep the raw dataframe instead of empty result
+                 df = df.drop(columns=['_sel_score', '_edge_numeric', '_final_prob_numeric'], errors='ignore').reset_index(drop=True)
+             else:
+                 df = df_collapsed.drop(columns=['_sel_score', '_edge_numeric', '_final_prob_numeric'], errors='ignore').reset_index(drop=True)
         else:
              logger.warning("Champion Selection: Missing group keys, skipping collapse")
 
