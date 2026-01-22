@@ -1748,7 +1748,9 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
         league_keys = pd.Series(["default"] * len(df), index=df.index)
 
     # Make sure we always have a stable League column for downstream use
-    df["League"] = league_keys
+    # OPTIMIZATION: Add to features_data instead of direct assignment to avoid fragmentation
+    # features_data is initialized at start of function
+    features_data["League"] = league_keys
 
     # ------------------------------------------------------------
     # 3) Fetch stats AFTER league_keys exists (ok if empty)

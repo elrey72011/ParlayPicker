@@ -12046,6 +12046,47 @@ with tab_master:
         if "data_quality_grade" not in user_columns:
             user_columns.insert(user_columns.index("data_quality_score") + 1, "data_quality_grade")
 
+        # -------------------------------------------------------------------------
+        # TASK 1: Implement "Champion Selection" (The 1-Row Fix)
+        # -------------------------------------------------------------------------
+        # Calculate a selection score (Edge + Decisiveness)
+        # Use 'edge' (float) if available, otherwise try to parse 'Edge' (string)
+        if "edge" in df.columns:
+             df["_edge_numeric"] = pd.to_numeric(df["edge"], errors='coerce').fillna(0.0)
+        elif "Edge" in df.columns:
+             # Convert string percentage to float safely (Issue: Vector error handling)
+             df["_edge_numeric"] = pd.to_numeric(df["Edge"].astype(str).str.rstrip('%'), errors='coerce').fillna(0.0) / 100.0
+        else:
+             df["_edge_numeric"] = 0.0
+
+        final_prob_col = "final_probability" if "final_probability" in df.columns else "Best Overall Prob"
+        df["_final_prob_numeric"] = pd.to_numeric(df[final_prob_col], errors='coerce').fillna(0.5)
+
+        df['_sel_score'] = (df['_final_prob_numeric'] - 0.5).abs() + df['_edge_numeric']
+
+        # Group by game and pick the highest score
+        # Use game_key if available, else group keys
+        if "game_key" in df.columns:
+             group_keys = ["game_key"]
+        else:
+             group_keys = ["league", "Home", "Away", "Commence (UTC)"]
+             # Ensure these columns exist
+             group_keys = [k for k in group_keys if k in df.columns]
+
+        if group_keys:
+             df_collapsed = df.sort_values('_sel_score', ascending=False).groupby(group_keys).head(1)
+             logger.info(f"Champion Selection: Collapsed {len(df)} rows to {len(df_collapsed)} single-row games")
+             df = df_collapsed.drop(columns=['_sel_score', '_edge_numeric', '_final_prob_numeric'], errors='ignore').reset_index(drop=True)
+        else:
+             logger.warning("Champion Selection: Missing group keys, skipping collapse")
+
+        # -------------------------------------------------------------------------
+        # TASK 4: Clean Up NaN in Debug Exports
+        # -------------------------------------------------------------------------
+        # Ensure best_pick_type and Market are never null before JSON serialization
+        if "best_pick_type" in df.columns and "Market" in df.columns:
+             df["best_pick_type"] = df["best_pick_type"].fillna(df["Market"]).fillna("UNKNOWN")
+
         # Filter to only columns that exist in the dataframe
         results_columns = [col for col in user_columns if col in df.columns]
         st.session_state["master_results_df"] = df[results_columns].copy()
@@ -13614,6 +13655,7 @@ if should_display:
 
                 # Concat with new columns
                 df = pd.concat([df, gemini_df], axis=1)
+                df = df.copy() # Defragment
 
         if "_gemini_rank_metric" in df.columns:
             df = df.drop(columns=["_gemini_rank_metric"])
