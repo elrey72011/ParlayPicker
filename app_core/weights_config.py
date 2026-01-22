@@ -3,6 +3,6 @@
 
 KALSHI_WEIGHT = 0.35
 MARKET_WEIGHT = 0.30
-ML_MODEL_WEIGHT = 0.15 # Reduced to make room for Sentiment/TheOver
-THEOVER_WEIGHT = 0.15  # Increased to 0.15 per instructions
-SENTIMENT_WEIGHT = 0.10 # Increased to 0.10 per instructions (Target: 1-3% prob impact)
+ML_MODEL_WEIGHT = 0.20 # Increased to 0.20
+THEOVER_WEIGHT = 0.10  # Reduced to 0.10
+SENTIMENT_WEIGHT = 0.05 # Reduced to 0.05
