@@ -1086,6 +1086,38 @@ def compute_final_probability(
     weights_used: Dict[str, float] = {"w_implied": 0.0, "w_kalshi": 0.0, "w_model": 0.0, "w_sentiment": 0.0, "w_theover": 0.0}
     kalshi_prob_for_pick = map_kalshi_prob_for_pick(kalshi_prob_yes, kalshi_side_yes, pick_side)
 
+    # Task 1.3: Post-Selection Kalshi Validation with Auto-Flip
+    # If Kalshi probability is extreme (<0.15 or >0.85), check if flipping YES/NO makes more sense
+    if kalshi_prob_for_pick is not None and implied_prob is not None:
+        if kalshi_prob_for_pick < 0.15 or kalshi_prob_for_pick > 0.85:
+            # Calculate flipped probability
+            flipped_prob = 1.0 - kalshi_prob_for_pick
+
+            # Check which aligns better with implied odds
+            delta_original = abs(kalshi_prob_for_pick - implied_prob)
+            delta_flipped = abs(flipped_prob - implied_prob)
+
+            if delta_flipped < delta_original and delta_original > 0.20:
+                # Flipping makes significantly more sense
+                warnings.append(f"kalshi_side_autoflipped(original={kalshi_prob_for_pick:.2f},flipped={flipped_prob:.2f})")
+                logger.warning(f"KALSHI SIDE AUTO-FLIP DETECTED:")
+                logger.warning(f"  - Original Kalshi Prob for Pick: {kalshi_prob_for_pick:.3f}")
+                logger.warning(f"  - Flipped Kalshi Prob: {flipped_prob:.3f}")
+                logger.warning(f"  - Implied Probability: {implied_prob:.3f}")
+                logger.warning(f"  - Delta (Original): {delta_original:.3f}")
+                logger.warning(f"  - Delta (Flipped): {delta_flipped:.3f}")
+                logger.warning(f"  - Action: Using flipped probability for better alignment")
+
+                # Use flipped probability
+                kalshi_prob_for_pick = flipped_prob
+            elif kalshi_prob_for_pick < 0.15 or kalshi_prob_for_pick > 0.85:
+                # Extreme probability but flipping doesn't help - log warning
+                warnings.append(f"kalshi_extreme_prob({kalshi_prob_for_pick:.2f})")
+                logger.warning(f"KALSHI EXTREME PROBABILITY WARNING:")
+                logger.warning(f"  - Kalshi Prob for Pick: {kalshi_prob_for_pick:.3f}")
+                logger.warning(f"  - Implied Probability: {implied_prob:.3f}")
+                logger.warning(f"  - Note: Extreme Kalshi probability detected, but flipping does not improve alignment")
+
     # Task: Re-enable Sentiment with configurable weight
     # Global Config Weights:
     # Market: 0.30, Kalshi: 0.35, Model: 0.15, TheOver: 0.15, Sentiment: 0.05
@@ -1125,11 +1157,36 @@ def compute_final_probability(
         p_market = clamp(implied_prob_clamped) if implied_prob_clamped is not None else 0.5
         sources.append(("implied", p_market, w_market_base))
 
-    # Kalshi
+    # Kalshi with Validation
     if has_kalshi:
         kalshi_prob_clamped = clamp_prob(kalshi_prob_for_pick, lo=0.05, hi=0.95)
         p_kalshi = clamp(kalshi_prob_clamped) if kalshi_prob_clamped is not None else 0.5
-        sources.append(("kalshi", p_kalshi, w_kalshi_base))
+
+        # Task 1.1: Add Kalshi Probability Validation
+        # Validate Kalshi probability against implied odds before using it
+        kalshi_validated = True
+        if has_market and implied_prob is not None:
+            delta = abs(p_kalshi - implied_prob)
+            if delta > 0.25:  # 25% threshold
+                kalshi_validated = False
+                warnings.append(f"kalshi_validation_failed(delta={delta:.2f})")
+                logger.warning(f"KALSHI VALIDATION FAILED:")
+                logger.warning(f"  - Kalshi Probability: {p_kalshi:.3f}")
+                logger.warning(f"  - Implied Probability: {implied_prob:.3f}")
+                logger.warning(f"  - Delta: {delta:.3f} (>0.25 threshold)")
+                logger.warning(f"  - Action: Setting Kalshi weight to 0 for this pick")
+
+                # Safely log additional context if available
+                if home_team and away_team:
+                    logger.warning(f"  - Game: {away_team} @ {home_team}")
+                    logger.warning(f"  - Pick Side: {pick_side}")
+
+        # Only add Kalshi to sources if it passed validation
+        if kalshi_validated:
+            sources.append(("kalshi", p_kalshi, w_kalshi_base))
+        else:
+            # Set weight to 0 by not adding to sources
+            has_kalshi = False  # Mark as unavailable so weight gets redistributed
 
     # TheOver
     if has_theover:
@@ -6515,8 +6572,53 @@ def _match_kalshi_market_impl(
     def simple_select(markets: List[Dict[str, Any]], market_type: str) -> Dict[str, Any]:
         if not markets:
             return base_result(f"no_{market_type}_market", market_type)
-        chosen = markets[0]
+
+        # Task 1.2: Improved Kalshi Contract Selection for Spreads/Totals
+        # Instead of blindly taking markets[0], score candidates and infer YES side intelligently
+
+        scored_candidates = []
+        for market in markets:
+            score = 0.0
+            ticker_upper = str(market.get("event_ticker") or market.get("ticker") or "").upper()
+
+            # Scoring: Prefer markets that match date token
+            if allowed_date_tokens and any(tok in ticker_upper for tok in allowed_date_tokens):
+                score += 100.0
+
+            # Prefer markets with team code matches
+            if home_code_candidates and away_code_candidates:
+                code_home_hit = any(code in ticker_upper for code in home_code_candidates)
+                code_away_hit = any(code in ticker_upper for code in away_code_candidates)
+                if code_home_hit and code_away_hit:
+                    score += 50.0
+
+            scored_candidates.append((score, market))
+
+        # Select best-scoring candidate
+        if scored_candidates:
+            best_score, chosen = max(scored_candidates, key=lambda x: x[0])
+        else:
+            chosen = markets[0]
+            best_score = 0.0
+
         prob, line = extract_prob_and_line(chosen, market_type)
+
+        # Task 1.2: Intelligent YES side inference instead of hardcoding
+        # Use same logic as winner matching
+        yes_side_inferred = infer_yes_side(chosen)
+
+        # Fallback to reasonable defaults if inference fails
+        if not yes_side_inferred:
+            if market_type == "total":
+                yes_side_inferred = "over"  # For totals, YES = over is standard
+            else:
+                # For spreads, try to infer from line or default to home
+                yes_side_inferred = "home"
+
+        # Add debug logging
+        logger.debug(f"Kalshi {market_type} match: ticker={chosen.get('event_ticker')}, "
+                    f"yes_side={yes_side_inferred}, prob={prob:.3f}, line={line}, score={best_score}")
+
         return {
             "kalshi_available": True,
             "kalshi_label": f"matched_{market_type}",
@@ -6525,11 +6627,11 @@ def _match_kalshi_market_impl(
             "kalshi_matched": True,
             "kalshi_prob": prob,
             "kalshi_market_type": market_type,
-            "kalshi_match_score": None,
+            "kalshi_match_score": best_score,
             "kalshi_ticker": chosen.get("event_ticker") or chosen.get("ticker"),
             "kalshi_line": line,
             "kalshi_title": chosen.get("title"),
-            "kalshi_yes_side": "over" if market_type == "total" else "home",
+            "kalshi_yes_side": yes_side_inferred,  # Now uses intelligent inference
         }
 
     winner_meta = {
@@ -6969,6 +7071,31 @@ if st.sidebar.button("Clear Debug Log"):
     st.session_state["debug_accumulator"] = []
     st.success("Debug log cleared.")
 
+# Task 2.3: Add Cache Clear Button
+if st.sidebar.button("Clear Sentiment Cache"):
+    from app_core.sentiment_cache import get_cache
+    cache = get_cache()
+    stats_before = cache.get_stats()
+    entries_cleared = cache.clear()
+    st.success(f"Sentiment cache cleared! Removed {entries_cleared} entries.")
+    st.info(f"Cache was using {stats_before['valid_entries']} valid entries "
+            f"(+{stats_before['expired_entries']} expired) with {stats_before['ttl_hours']}-hour TTL.")
+
+# Display cache stats
+try:
+    from app_core.sentiment_cache import get_cache
+    cache = get_cache()
+    cache_stats = cache.get_stats()
+    if cache_stats['total_entries'] > 0:
+        st.sidebar.caption(
+            f"📦 Sentiment Cache: {cache_stats['valid_entries']} valid, "
+            f"{cache_stats['expired_entries']} expired "
+            f"({cache_stats['ttl_hours']}h TTL)"
+        )
+except Exception as e:
+    # Silently fail if cache not available
+    pass
+
 # ═══════════════════════════════════════════════════════════════════════
 # DEBUG EXPORTS SECTION - Always accessible regardless of analysis state
 # ═══════════════════════════════════════════════════════════════════════
@@ -7050,6 +7177,35 @@ if "master_results_df" in st.session_state:
             master_df = master_df.loc[:, ~master_df.columns.duplicated()].copy()
             # Fix concatenated column names (e.g. "ProbProb" -> "Prob")
             master_df.columns = master_df.columns.str.replace(r'^(.+)\1+$', r'\1', regex=True)
+
+            # Task 3.2: Log Data Quality Summary before export
+            if "data_quality_score" in master_df.columns and "data_quality_grade" in master_df.columns:
+                logger.info("=" * 60)
+                logger.info("DATA QUALITY SUMMARY")
+                logger.info("=" * 60)
+
+                # Calculate statistics
+                mean_score = master_df["data_quality_score"].mean()
+                median_score = master_df["data_quality_score"].median()
+                min_score = master_df["data_quality_score"].min()
+                max_score = master_df["data_quality_score"].max()
+
+                logger.info(f"Total Picks: {len(master_df)}")
+                logger.info(f"Average Quality Score: {mean_score:.1f}/100")
+                logger.info(f"Median Quality Score: {median_score:.1f}/100")
+                logger.info(f"Score Range: {min_score:.0f} - {max_score:.0f}")
+                logger.info("")
+
+                # Grade distribution
+                grade_counts = master_df["data_quality_grade"].value_counts().sort_index()
+                logger.info("Grade Distribution:")
+                for grade in ["A", "B", "C", "D", "F"]:
+                    count = grade_counts.get(grade, 0)
+                    percentage = (count / len(master_df)) * 100 if len(master_df) > 0 else 0
+                    logger.info(f"  Grade {grade}: {count:3d} picks ({percentage:5.1f}%)")
+
+                logger.info("=" * 60)
+
             master_csv = master_df.to_csv(index=False).encode("utf-8")
             logger.info(f"Exporting {len(master_df)} rows from master_results_df to CSV for user download.")
             st.sidebar.download_button(
@@ -11771,6 +11927,76 @@ with tab_master:
             # Add decision trace info
             'decision_driver', 'prob_engine', 'model_mode', 'Warnings'
         ]
+        # Task 3.1: Calculate Data Quality Score before export
+        def calculate_data_quality_score(row) -> int:
+            """
+            Calculate data quality score (0-100) based on warnings and data availability.
+
+            Deductions:
+            - FallbackPlaceholderDetected: -15 points
+            - kalshi_pick_mismatch: -25 points
+            - No TheOver data: -10 points
+            - No sentiment: -10 points
+            - Fallback stats: -5 points
+            """
+            score = 100  # Start with perfect score
+
+            warnings_str = str(row.get("Warnings", "")).lower()
+
+            # Check for FallbackPlaceholderDetected
+            if "fallbackplaceholderdetected" in warnings_str:
+                score -= 15
+
+            # Check for Kalshi mismatches (structural or edge)
+            if "kalshi_pick_mismatch" in warnings_str:
+                score -= 25
+            elif "kalshi_validation_failed" in warnings_str:
+                score -= 20
+
+            # Check for TheOver data availability
+            theover_matched = row.get("theover_matched", False)
+            if not theover_matched or theover_matched == "False" or theover_matched == 0:
+                score -= 10
+
+            # Check for sentiment availability
+            sentiment_available = row.get("sentiment_available", False)
+            if not sentiment_available or sentiment_available == "False" or sentiment_available == 0:
+                score -= 10
+
+            # Check for fallback stats
+            stats_quality = str(row.get("stats_quality", "")).lower()
+            if "fallback" in stats_quality or "espn" in stats_quality:
+                score -= 5
+
+            # Ensure score doesn't go below 0
+            return max(0, score)
+
+        def calculate_grade(score: int) -> str:
+            """Convert numeric score to letter grade."""
+            if score >= 90:
+                return "A"
+            elif score >= 80:
+                return "B"
+            elif score >= 70:
+                return "C"
+            elif score >= 60:
+                return "D"
+            else:
+                return "F"
+
+        # Apply data quality calculations
+        logger.info("Calculating data quality scores...")
+        df["data_quality_score"] = df.apply(calculate_data_quality_score, axis=1)
+        df["data_quality_grade"] = df["data_quality_score"].apply(calculate_grade)
+        logger.info(f"Data quality scores calculated. Mean score: {df['data_quality_score'].mean():.1f}")
+
+        # Add quality columns to user_columns list
+        if "data_quality_score" not in user_columns:
+            user_columns.insert(user_columns.index("Warnings") if "Warnings" in user_columns else len(user_columns),
+                              "data_quality_score")
+        if "data_quality_grade" not in user_columns:
+            user_columns.insert(user_columns.index("data_quality_score") + 1, "data_quality_grade")
+
         # Filter to only columns that exist in the dataframe
         results_columns = [col for col in user_columns if col in df.columns]
         st.session_state["master_results_df"] = df[results_columns].copy()
