@@ -483,6 +483,33 @@ MANUAL_TEAM_OVERRIDES = {
     "SOUTHERN ILLINOIS": "SOUTHERN ILLINOIS",
     "SIU": "SOUTHERN ILLINOIS",
     "LONG BEACH ST": "LONG BEACH STATE",
+
+    # Additional NCAAB overrides to fix FallbackPlaceholderDetected issues
+    "COLGATE RAIDERS": "COLGATE",
+    "AMERICAN EAGLES": "AMERICAN",
+    "WESTERN CAROLINA CATAMOUNTS": "WESTERN CAROLINA",
+    "HOLY CROSS CRUSADERS": "HOLY CROSS",
+    "NAVY MIDSHIPMEN": "NAVY",
+    "MERCER BEARS": "MERCER",
+    "QUEENS ROYALS": "QUEENS",
+    "QUEENS NC": "QUEENS",
+    "QUEENS UNIVERSITY": "QUEENS",
+    "NORTH ALABAMA LIONS": "NORTH ALABAMA",
+    "MURRAY STATE RACERS": "MURRAY STATE",
+    "MURRAY ST": "MURRAY STATE",
+    "ST MARYS": "SAINT MARYS",
+    "SAINT MARYS": "SAINT MARYS",
+    "ST MARY'S": "SAINT MARYS",
+    "SAINT MARY'S": "SAINT MARYS",
+    "ST LOUIS": "SAINT LOUIS",
+    "ST BONAVENTURE": "ST BONAVENTURE",
+    "ST JOHNS": "ST JOHNS",
+    "SAINT JOHNS": "ST JOHNS",
+    "ST JOHN'S": "ST JOHNS",
+
+    # NHL common variations (for Colorado vs Anaheim type issues)
+    "COLORADO AVALANCHE": "COLORADO AVALANCHE",
+    "ANAHEIM DUCKS": "ANAHEIM DUCKS",
     "LONG BEACH STATE": "LONG BEACH STATE",
     "CSU NORTHRIDGE": "CSU NORTHRIDGE",
     "CSUN": "CSU NORTHRIDGE",
@@ -865,15 +892,48 @@ def robust_normalize_team(name: str, league: Optional[str] = None) -> str:
     return norm
 
 def log_stats_match_summary(stats_log: Dict[str, int], league: str):
-    """Log a summary of stats matching for a league."""
+    """
+    Log a summary of stats matching for a league.
+    Tracks match rate and fallback percentage for data quality monitoring.
+    """
     if league == "default": return
 
     total = sum(stats_log.values())
     if total == 0: return
 
-    match_rate = ((stats_log.get("direct", 0) + stats_log.get("override", 0) + stats_log.get("fuzzy", 0)) / total) * 100
+    direct = stats_log.get("direct", 0)
+    override = stats_log.get("override", 0)
+    fuzzy = stats_log.get("fuzzy", 0)
+    miss = stats_log.get("miss", 0)
 
-    logger.info(f"STATS MATCH REPORT [{league}]: {match_rate:.1f}% Matched ({stats_log.get('direct')} direct, {stats_log.get('override')} override, {stats_log.get('fuzzy')} fuzzy, {stats_log.get('miss')} miss)")
+    matched = direct + override + fuzzy
+    match_rate = (matched / total) * 100
+    fallback_rate = (miss / total) * 100
+
+    logger.info(f"STATS MATCH REPORT [{league}]: {match_rate:.1f}% Matched, {fallback_rate:.1f}% Fallback ({direct} direct, {override} override, {fuzzy} fuzzy, {miss} miss)")
+
+    # Store metrics for export reporting (optional: store in session state)
+    if not hasattr(log_stats_match_summary, '_metrics'):
+        log_stats_match_summary._metrics = {}
+    log_stats_match_summary._metrics[league] = {
+        "match_rate": match_rate,
+        "fallback_rate": fallback_rate,
+        "direct": direct,
+        "override": override,
+        "fuzzy": fuzzy,
+        "miss": miss,
+        "total": total
+    }
+
+
+def get_stats_match_metrics() -> Dict[str, Dict[str, Any]]:
+    """
+    Retrieve stats match metrics for all leagues.
+    Returns dict of league -> metrics.
+    """
+    if hasattr(log_stats_match_summary, '_metrics'):
+        return log_stats_match_summary._metrics
+    return {}
 
 def debug_team_mapping_health():
     """
