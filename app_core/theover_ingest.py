@@ -135,6 +135,7 @@ TEAM_ALIAS_MAP_BY_LEAGUE = {
         # Issue #2 & #3 Fixes
         "UMBC": "UMBC Retrievers",
         "UUMC": "UMBC Retrievers",
+        "UAB": "UAB Blazers",
         "BINGHAMTON": "Binghamton Bearcats",
         "Saint Joseph's": "Saint Joseph's Hawks",
         "LIU": "LIU Sharks",
