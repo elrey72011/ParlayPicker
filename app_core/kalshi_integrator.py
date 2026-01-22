@@ -687,7 +687,8 @@ def _extract_market_type(title: str, ticker: str, subtitle: str = "", market: Di
     # Check if ticker ends with -TeamCode-Number (e.g. -PHX-6.5)
     # or contains negative/positive number
     # Regex for spread-like suffix: -[A-Z]{2,4}-?[\d\.]+
-    if re.search(r'-[A-Z]{2,4}-?[\d\.]+$', tick):
+    # EXCEPTION: Ensure "OVER" and "UNDER" are not mistaken for team codes
+    if re.search(r'-[A-Z]{2,4}-?[\d\.]+$', tick) and "OVER" not in tick and "UNDER" not in tick:
          # If subtitle has "winner", it's a winner market. If it has numbers, likely spread.
          if "WINNER" not in sub and "TOTAL" not in sub:
              return "spread"
@@ -706,6 +707,13 @@ def _extract_market_type(title: str, ticker: str, subtitle: str = "", market: Di
     # Fix Issue #1: Aggressive suffix check for total (e.g. -OVER220, -UNDER220)
     if "OVER" in tick or "UNDER" in tick:
         return "total"
+
+    # Task 2 Fix: Check for explicit league-specific total/spread keywords in ticker
+    # e.g. KXNCAABTOTAL, KXNCAABSPREAD
+    if "KXNCAABTOTAL" in tick or "KXNCAAFTOTAL" in tick or "KXMLBTOTAL" in tick or "KXNHLTOTAL" in tick:
+        return "total"
+    if "KXNCAABSPREAD" in tick or "KXNCAAFSPREAD" in tick or "KXMLBSPREAD" in tick or "KXNHLSPREAD" in tick:
+        return "spread"
 
     # 3. Moneyline/Winner detection
     if "MONEYLINE" in t or "ML" in t or "WINNER" in t: return "moneyline"
@@ -1748,6 +1756,22 @@ class KalshiIntegrator:
                 max_pages=max_pages,
                 extra_params=params,
             )
+
+            # --- DEBUG LOGGING (Task 2) ---
+            if chunk:
+                logger.info(f"Kalshi debug: fetched {len(chunk)} markets for series={series}")
+                sample_tickers = [str(m.get("ticker")) for m in chunk[:10]]
+                logger.info(f"Kalshi debug sample tickers: {sample_tickers}")
+
+                # Count by prefix
+                prefix_counts = {}
+                for m in chunk:
+                    t = str(m.get("ticker") or "").upper()
+                    p = t.split('-')[0] if '-' in t else t
+                    prefix_counts[p] = prefix_counts.get(p, 0) + 1
+                logger.info(f"Kalshi debug prefix counts: {prefix_counts}")
+            # ------------------------------
+
             pages = max(pages, min(max_pages, len(chunk) // 200 + 1))
             for m in chunk or []:
                 key = str(m.get("event_ticker") or m.get("ticker") or "").upper()
