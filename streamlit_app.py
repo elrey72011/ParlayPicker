@@ -1114,7 +1114,7 @@ def compute_final_probability(
         kalshi_validated = True
         if implied_prob is not None:
             delta = abs(kalshi_prob_for_pick - implied_prob)
-            if delta > 0.25:  # 25% threshold
+            if delta > 0.60:  # 60% threshold - loosened to capture high-edge opportunities
                 kalshi_validated = False
                 warnings.append(f"kalshi_validation_failed(delta={delta:.2f})")
 
@@ -7849,6 +7849,8 @@ with tab_master:
 
                 # Initialize warnings list from game data
                 warnings = list(g.get("warnings") or [])
+                # Save base warnings to prevent leakage between market types (ML -> Spread -> Total)
+                base_game_warnings = list(warnings)
 
                 # Weights & Status Defaults (Fix NameErrors)
                 spread_weights = {}
@@ -10091,6 +10093,9 @@ with tab_master:
                 # FIX: Only create spread row if spread odds are valid AND line is valid (not None/NaN)
                 # This prevents synthetic "None/69.6/NaN" rows for NHL games with missing spread markets
 
+                # Reset warnings to base game warnings (prevent ML warnings from leaking into Spread)
+                warnings = list(base_game_warnings)
+
                 # Add warning if spread line is invalid
                 if not has_valid_line(spread_line) and g.get("home_spread_point") is not None:
                     warnings.append("no_valid_spread")
@@ -10395,6 +10400,9 @@ with tab_master:
                 # TOTAL ROW
                 # FIX: Only create total row if total odds are valid AND line is valid (not None/NaN)
                 # This prevents synthetic "None/69.6/NaN" rows for NHL games with missing total markets
+
+                # Reset warnings to base game warnings (prevent ML + Spread warnings from leaking into Total)
+                warnings = list(base_game_warnings)
 
                 # Add warning if total line is invalid
                 if not has_valid_line(total_line) and g.get("total_point") is not None:
@@ -11917,6 +11925,11 @@ with tab_master:
             logger.warning(f"Failed to log Kalshi summary stats: {e}")
 
         logger.info(f"✅ HasKalshiMarket flag added: {kalshi_markets_count} games have valid Kalshi markets")
+
+        # Fix NaN type field before export (map from Market column)
+        if "type" not in df.columns:
+            df["type"] = None
+        df["type"] = df["type"].fillna(df["Market"].map({"Moneyline": "ML", "Spread": "SPREAD", "Total": "TOTAL"}))
 
         # CRITICAL: Save to session state
         logger.info(f"Saving df ({len(df)} rows) to session state...")
@@ -13655,13 +13668,10 @@ if should_display:
 
                 # Concat with new columns
                 df = pd.concat([df, gemini_df], axis=1)
-                df = df.copy() # Defragment
 
         if "_gemini_rank_metric" in df.columns:
             df = df.drop(columns=["_gemini_rank_metric"])
 
-        # Reset memory layout
-        df = df.copy()
         # Ensure Gemini columns are never null before export (Optimized)
         gemini_defaults = {
             "gemini_alignment": "NEUTRAL",
@@ -13672,17 +13682,19 @@ if should_display:
             "gemini_total_confidence": "",
             "gemini_error_flag": "",
         }
-        
+
         # 1. Add missing columns efficiently
         cols_to_add = {k: v for k, v in gemini_defaults.items() if k not in df.columns}
         if cols_to_add:
             # Create a DataFrame for new columns and concat
             new_cols_df = pd.DataFrame(cols_to_add, index=df.index)
             df = pd.concat([df, new_cols_df], axis=1)
-            df = df.copy() # Defragment
 
         # 2. Fill NaNs efficiently
         df = df.fillna(gemini_defaults).infer_objects(copy=False)
+
+        # Single defragmentation copy after all Gemini operations
+        df = df.copy()
         try:
             null_counts = df[["gemini_mode", "gemini_alignment", "gemini_rationale", "gemini_flags_short"]].isna().sum()
             if null_counts.sum() > 0 and logger:
