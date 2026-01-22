@@ -1330,6 +1330,16 @@ def compute_final_probability(
         if mismatch_delta > 0.20:
              # Very strong disagreement -> likely mapping error or extreme edge
              warnings.append(f"kalshi_pick_mismatch_structural({kalshi_prob_for_pick:.2f})")
+             # Enhanced logging for structural mismatches to aid debugging
+             logger.warning(f"KALSHI STRUCTURAL MISMATCH DETECTED:")
+             logger.warning(f"  - Pick Side: {pick_side}")
+             logger.warning(f"  - Kalshi Probability for Pick: {kalshi_prob_for_pick:.3f} (< 0.30)")
+             logger.warning(f"  - Our Final Probability: {final_prob:.3f}")
+             logger.warning(f"  - Delta: {mismatch_delta:.3f}")
+             logger.warning(f"  - Possible Causes: Wrong contract selected, YES/NO sides swapped, or misaligned line")
+             if kalshi_data and isinstance(kalshi_data, dict):
+                 logger.warning(f"  - Kalshi Contract: {kalshi_data.get('contract_id', 'N/A')}")
+                 logger.warning(f"  - Kalshi Label: {kalshi_data.get('label', 'N/A')}")
         else:
              # Mild disagreement -> edge
              warnings.append(f"kalshi_pick_mismatch_edge({kalshi_prob_for_pick:.2f})")
@@ -9492,8 +9502,12 @@ with tab_master:
                         implied_pick = implied_prob_for_pick(home_ml, away_ml, pick_side)
                         kalshi_yes_side = kalshi_winner.get("kalshi_yes_side")
 
-                        # ML Suppression / Weighting Logic
-                        # If absolute American odds > 400: model_weight = 0, kalshi_weight = 0.6, implied_weight = 0.4
+                        # ML Extreme Odds Weighting Logic
+                        # When absolute American odds > 400 (heavy favorite/underdog):
+                        # - Model weight -> 0% (model struggles with extreme games)
+                        # - Kalshi weight -> 60% (market consensus is more reliable)
+                        # - Odds weight -> 40% (implied probability)
+                        # NOTE: ML picks are still INCLUDED, just with adjusted weights (not disabled)
                         # Relaxed from 300 to 400 to allow more ML picks with model weight
                         current_ml_weights = moneyline_weights.copy()
                         is_heavy_chalk = False
@@ -9512,7 +9526,7 @@ with tab_master:
                             current_ml_weights["odds_weight"] = 0.4
                             current_ml_weights["sentiment_weight"] = 0.0
                             current_ml_weights["theover_weight"] = 0.0
-                            warnings.append("ml_disabled_odds_gt_400")
+                            warnings.append("ml_extreme_odds_flag")
                         else:
                             # Standard Dynamic Weighting
                             ml_odds_weight = 0.30
@@ -9945,7 +9959,10 @@ with tab_master:
                     ai_prob_base = None
                     ai_prob_row = None
                     model_spread_prob = None
+                    # Market-only spread: Using market-implied probability instead of model
+                    # This happens when spread odds are available but model prediction is not used
                     warnings.append("market_based_spread_prob")
+                    spread_prob_engine = "market_only"
                     # Add warning if spread_pick is None
                     if spread_pick is None:
                         warnings.append("spread_pick_none")
@@ -10246,7 +10263,10 @@ with tab_master:
                 if total_valid_check:
                     ai_prob_base = None
                     ai_prob_row = None
+                    # Market-only total: Using market-implied probability instead of model
+                    # This happens when total odds are available but model prediction is not used
                     warnings.append("market_based_total_prob")
+                    total_prob_engine = "market_only"
                     # Add warning if total_pick is None
                     if total_pick is None:
                         warnings.append("total_pick_none")
@@ -10727,6 +10747,71 @@ with tab_master:
             else:
                 logger.info(f"SUCCESS: Created {len(accumulated_rows)} total rows from {len(games_to_process)} games")
                 logger.info(f"Average rows per game: {len(accumulated_rows) / len(games_to_process):.2f}")
+
+            # ============================================
+            # DATA QUALITY METRICS SUMMARY
+            # ============================================
+            logger.info(f"\n{'='*80}")
+            logger.info(f"DATA QUALITY METRICS")
+            logger.info(f"{'='*80}")
+
+            # TheOver Usage Metrics
+            total_games = len(games_to_process)
+            if total_games > 0:
+                theover_totals_pct = (theover_matched_count_totals / total_games) * 100
+                theover_sides_pct = (theover_matched_count_sides / total_games) * 100
+                logger.info(f"TheOver Coverage:")
+                logger.info(f"  - Totals: {theover_matched_count_totals}/{total_games} games ({theover_totals_pct:.1f}%)")
+                logger.info(f"  - Sides: {theover_matched_count_sides}/{total_games} games ({theover_sides_pct:.1f}%)")
+
+            # Stats Match Metrics (from feature_processing)
+            try:
+                from app_core.feature_processing import get_stats_match_metrics
+                stats_metrics = get_stats_match_metrics()
+                if stats_metrics:
+                    logger.info(f"Stats Match Quality by League:")
+                    for league, metrics in stats_metrics.items():
+                        logger.info(f"  - {league}: {metrics['match_rate']:.1f}% matched, {metrics['fallback_rate']:.1f}% fallback")
+            except Exception as e:
+                logger.debug(f"Could not retrieve stats metrics: {e}")
+
+            # Market-Only Pick Counts
+            market_only_spread_count = sum(1 for row in accumulated_rows if "market_based_spread_prob" in str(row.get("Warnings", "")))
+            market_only_total_count = sum(1 for row in accumulated_rows if "market_based_total_prob" in str(row.get("Warnings", "")))
+            if len(accumulated_rows) > 0:
+                logger.info(f"Market-Only Picks:")
+                logger.info(f"  - Spread: {market_only_spread_count} rows (market-implied only)")
+                logger.info(f"  - Total: {market_only_total_count} rows (market-implied only)")
+
+            # Extreme Odds Flags
+            extreme_odds_count = sum(1 for row in accumulated_rows if "ml_extreme_odds_flag" in str(row.get("Warnings", "")))
+            if extreme_odds_count > 0:
+                logger.info(f"ML Extreme Odds: {extreme_odds_count} picks with odds >400 (model weight reduced)")
+
+            logger.info(f"{'='*80}\n")
+
+            # Store data quality metrics in session state for UI display
+            data_quality_metrics = {
+                "theover_totals_count": theover_matched_count_totals,
+                "theover_sides_count": theover_matched_count_sides,
+                "theover_totals_pct": (theover_matched_count_totals / total_games * 100) if total_games > 0 else 0,
+                "theover_sides_pct": (theover_matched_count_sides / total_games * 100) if total_games > 0 else 0,
+                "total_games": total_games,
+                "market_only_spread_count": market_only_spread_count,
+                "market_only_total_count": market_only_total_count,
+                "extreme_odds_count": extreme_odds_count,
+                "stats_match_metrics": {},
+            }
+            # Add stats match metrics if available
+            try:
+                from app_core.feature_processing import get_stats_match_metrics
+                stats_metrics = get_stats_match_metrics()
+                if stats_metrics:
+                    data_quality_metrics["stats_match_metrics"] = stats_metrics
+            except Exception as e:
+                logger.debug(f"Could not store stats metrics: {e}")
+
+            st.session_state["data_quality_metrics"] = data_quality_metrics
             # ============================================
 
             # Update master_stats with final row count
