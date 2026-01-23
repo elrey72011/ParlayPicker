@@ -2960,7 +2960,15 @@ def compute_team_sentiment_map(news_api_key: Optional[str], games: List[Dict[str
             sentiment_map[team] = None
             debug["missing_teams"].append(team)
             # Log why sentiment was excluded
-            logger.warning(f"Sentiment EXCLUDED for {team}: valid={meta['sentiment_valid']}, score={meta_score}, error={meta.get('error', 'none')}, status={meta.get('sentiment_status')}, sources={meta.get('sentiment_articles_used', 0)}")
+
+            # Reduce log noise for expected rate limiting
+            is_rate_limited = meta.get('sentiment_rate_limited') or meta.get('error') == 'rate_limited' or str(meta.get('sentiment_status')) == 'rate_limited'
+            msg = f"Sentiment EXCLUDED for {team}: valid={meta['sentiment_valid']}, score={meta_score}, error={meta.get('error', 'none')}, status={meta.get('sentiment_status')}, sources={meta.get('sentiment_articles_used', 0)}"
+
+            if is_rate_limited:
+                logger.info(msg)
+            else:
+                logger.warning(msg)
 
     if sentiment_map:
         present_scores = [(t, s) for t, s in sentiment_map.items() if s is not None]
@@ -7458,7 +7466,7 @@ with tab_master:
         if games_with_ml == 0 and games_with_spread == 0 and games_with_total == 0:
             logger.error("CRITICAL: ALL games are missing market data!")
     else:
-        logger.error("CRITICAL: games list is empty!")
+        logger.debug("Games list empty (expected during initialization)")
 
     logger.info("="*80)
     # ============================================
