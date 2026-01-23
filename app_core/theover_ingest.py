@@ -145,6 +145,8 @@ TEAM_ALIAS_MAP_BY_LEAGUE = {
         # Fix #5: Team Name Mapping Issues
         "New Orleans": "New Orleans Privateers",
         "NEW ORLEANS": "New Orleans Privateers",
+        "FIU": "Florida Int'l Golden Panthers",
+        "Sacramento State": "Sacramento St Hornets",
     },
     "NCAAF": {
         # Add NCAAF specific mappings if needed
@@ -152,6 +154,9 @@ TEAM_ALIAS_MAP_BY_LEAGUE = {
         "Ohio St": "Ohio State Buckeyes", "Michigan": "Michigan Wolverines",
         "USC": "USC Trojans", "Texas": "Texas Longhorns",
         "Oklahoma": "Oklahoma Sooners", "Florida": "Florida Gators",
+        "UAB": "UAB Blazers",
+        "FIU": "Florida Int'l Golden Panthers",
+        "Sacramento State": "Sacramento St Hornets",
     }
 }
 
