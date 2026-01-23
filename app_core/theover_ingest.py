@@ -397,10 +397,12 @@ def _validate_team_for_league(team_name: str, league: str) -> bool:
             if other_league == league:
                 continue  # Skip same league
 
-            # Check if team_name matches any team from other league
+            # Check if team_name matches any FULL TEAM NAME from other league
+            # CRITICAL FIX: Only check full names, NOT aliases (aliases are often shared city names)
+            # This prevents false positives like "Boston" (NBA) matching "Boston" (NHL alias)
             for alias, full_name in other_teams.items():
-                if team_upper == full_name.upper() or team_upper == alias.upper():
-                    # Exact match to a team from a different league
+                if team_upper == full_name.upper():
+                    # Exact match to a full team name from a different league
                     logger.warning(f"Cross-League Contamination: '{team_name}' matches {other_league} team '{full_name}' but league is {league}")
                     return False
 
