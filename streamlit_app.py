@@ -11055,7 +11055,8 @@ with tab_master:
             # ATOMIC ROW COLLAPSE: Force 1-Row-Per-Game BEFORE Enrichment
             # ============================================
             # Calculate a selection score based on Decisiveness and Edge
-            master_df['_sel_score'] = (master_df['final_probability'] - 0.5).abs() + (master_df['edge'].fillna(0) if 'edge' in master_df.columns else 0)
+            edge_col = master_df['edge'].fillna(0) if 'edge' in master_df.columns else pd.Series(0, index=master_df.index)
+            master_df['_sel_score'] = (master_df['final_probability'] - 0.5).abs() + edge_col
 
             # Sort and group by game metadata to keep ONLY the single best row per game
             game_keys = ["league", "Home", "Away", "Commence (UTC)"]
@@ -11470,9 +11471,9 @@ with tab_master:
                 # Add game key for grouping
                 master_df = add_game_key(master_df)
 
-                # UPDATED DEDUPLICATION: Preserve ALL market types per game
-                # Keep one row per (game, market) combination instead of one row per game
-                # This ensures we export Spread, Total, AND ML picks for each game
+                # ATOMIC ROW COLLAPSE ALREADY COMPLETED: 1-Row-Per-Game enforced earlier
+                # The atomic collapse at line 11055-11072 already reduced to single champion row per game
+                # This deduplication now preserves that 1-row-per-game guarantee
 
                 # Separate rows by market type for logging
                 ml_rows = master_df[master_df["Market"] == "Moneyline"].copy()
@@ -11480,16 +11481,16 @@ with tab_master:
                 total_rows = master_df[master_df["Market"] == "Total"].copy()
                 other_rows = master_df[~master_df["Market"].isin(["Moneyline", "Spread", "Total"])].copy()
 
-                logger.info(f"Market breakdown: {len(ml_rows)} ML, {len(spread_rows)} Spread, {len(total_rows)} Total, {len(other_rows)} Other")
+                logger.info(f"Market breakdown before final dedup: {len(ml_rows)} ML, {len(spread_rows)} Spread, {len(total_rows)} Total, {len(other_rows)} Other")
 
-                # Deduplicate by (game_key, Market) to keep one row per game per market type
-                # This preserves all three market types: Spread, Total, and ML
+                # FIX: Deduplicate by game_key ONLY to enforce 1-row-per-game (not 1 per market!)
+                # This prevents the 172-row redundancy bug (3 rows per game)
                 if not master_df.empty:
-                    # Add ranking for tie-breaking within same (game, market) combination
+                    # Add ranking for tie-breaking within same game
                     master_df["_pick_rank"] = master_df.apply(rank_row_for_best_pick, axis=1)
 
-                    # Group by BOTH game_key AND Market to keep all market types
-                    idx_best = master_df.groupby(["game_key", "Market"])["_pick_rank"].idxmax()
+                    # Group by game_key ONLY to keep single best row per game (FIX: removed Market from groupby)
+                    idx_best = master_df.groupby(["game_key"])["_pick_rank"].idxmax()
                     df = master_df.loc[idx_best].copy()
                     df = df.drop(columns=["_pick_rank"], errors="ignore")
                 else:
@@ -12178,7 +12179,9 @@ with tab_master:
                 logger.info(f"Average sentiment weight in final probabilities: {avg_weight:.3f} (Mode B: sentiment integrated in probability calculations, expected ~0.10)")
 
         # Show success message and rerun to display results immediately
-        st.success(f"✅ Analysis complete! Generated {len(df)} picks.")
+        num_games = len(st.session_state.get('games', []))
+        num_rows = len(st.session_state['master_results_df'])
+        st.success(f"✅ Produced {num_rows} rows from {num_games} games")
         st.rerun()
 
     if "model_last_error" in st.session_state:
