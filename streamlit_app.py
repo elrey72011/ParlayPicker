@@ -120,6 +120,9 @@ except Exception:  # pragma: no cover - optional import
 
 import config
 
+# Silence FutureWarning for downcasting behavior in pandas
+pd.set_option('future.no_silent_downcasting', True)
+
 # -----------------
 # Trace Columns Constant (Refactored)
 # -----------------
@@ -11062,70 +11065,38 @@ with tab_master:
             # ============================================
             # ATOMIC ROW COLLAPSE: Force 1-Row-Per-Game BEFORE Enrichment
             # ============================================
-            # Count unique games for logging
-            if not master_df.empty:
-                game_count_cols = [c for c in ['league', 'Home', 'Away'] if c in master_df.columns]
-                if game_count_cols:
-                    unique_games = master_df[game_count_cols].drop_duplicates().shape[0]
-                else:
-                    unique_games = "unknown"
-            else:
-                unique_games = 0
-            logger.info(f"ATOMIC COLLAPSE: Starting with {len(master_df)} rows across {unique_games} games")
-
-            # Calculate a selection score based on Decisiveness and Edge
-            # Use safe numeric conversion to handle any data type issues
-            if 'edge' in master_df.columns:
-                edge_col = pd.to_numeric(master_df['edge'], errors='coerce').fillna(0.0)
-            else:
-                edge_col = pd.Series(0.0, index=master_df.index)
-
-            # Safe conversion for final_probability
+            # 1. Selection Score = Decisiveness + Edge
+            # Ensure safe numeric conversion for final_probability and edge
             if 'final_probability' in master_df.columns:
-                final_prob = pd.to_numeric(master_df['final_probability'], errors='coerce').fillna(0.5)
+                _final_prob = pd.to_numeric(master_df['final_probability'], errors='coerce').fillna(0.5)
             else:
-                # Fallback to other probability columns
-                final_prob = pd.Series(0.5, index=master_df.index)
-                for col in ['AI_Prob', 'Implied_Prob', 'best_overall_prob']:
-                    if col in master_df.columns:
-                        final_prob = pd.to_numeric(master_df[col], errors='coerce').fillna(0.5)
-                        break
+                _final_prob = pd.Series(0.5, index=master_df.index)
 
-            master_df['_sel_score'] = (final_prob - 0.5).abs() + edge_col
+            if 'edge' in master_df.columns:
+                _edge = pd.to_numeric(master_df['edge'], errors='coerce').fillna(0.0)
+            else:
+                _edge = pd.Series(0.0, index=master_df.index)
 
-            # Sort and group by game metadata to keep ONLY the single best row per game
+            master_df['_sel_score'] = (_final_prob - 0.5).abs() + _edge
+
+            # 2. Group by game and pick only the highest scoring row
             game_keys = ["league", "Home", "Away", "Commence (UTC)"]
-            # Verify all keys exist before grouping
-            missing_keys = [k for k in game_keys if k not in master_df.columns]
-            if missing_keys:
-                logger.error(f"ATOMIC COLLAPSE FAILED: Missing required columns: {missing_keys}")
-                logger.error(f"Available columns: {list(master_df.columns)}")
-                # CRITICAL: Still try to collapse with available keys (minimum: league, Home, Away)
-                available_keys = [k for k in ["league", "Home", "Away"] if k in master_df.columns]
-                if len(available_keys) >= 3:
-                    logger.warning(f"Attempting collapse with partial keys: {available_keys}")
-                    df_collapsed = master_df.sort_values('_sel_score', ascending=False).groupby(available_keys, dropna=False).head(1)
-                    master_df = df_collapsed.drop(columns=['_sel_score'], errors='ignore').reset_index(drop=True).copy()
-                    logger.info(f"ATOMIC COLLAPSE: Partial collapse successful - {len(master_df)} rows")
-                else:
-                    logger.error(f"ATOMIC COLLAPSE: Cannot collapse - insufficient keys. Keeping all {len(master_df)} rows")
-                    master_df = master_df.drop(columns=['_sel_score'], errors='ignore')
+
+            # Check keys exist to avoid KeyError
+            if all(k in master_df.columns for k in game_keys):
+                df_collapsed = master_df.sort_values('_sel_score', ascending=False).groupby(game_keys).head(1)
             else:
-                df_collapsed = master_df.sort_values('_sel_score', ascending=False).groupby(game_keys, dropna=False).head(1)
+                # Fallback: try collapsing with available keys if possible
+                available_keys = [k for k in game_keys if k in master_df.columns]
+                if len(available_keys) >= 3:
+                    df_collapsed = master_df.sort_values('_sel_score', ascending=False).groupby(available_keys).head(1)
+                else:
+                    df_collapsed = master_df
 
-                # Reset memory layout to stop fragmentation warnings
-                master_df = df_collapsed.drop(columns=['_sel_score'], errors='ignore').reset_index(drop=True).copy()
-
-                logger.info(f"ATOMIC COLLAPSE: Successfully collapsed to {len(master_df)} rows (1 per game)")
-
-                # Log market breakdown after collapse
-                if not master_df.empty and "Market" in master_df.columns:
-                    market_counts = master_df["Market"].value_counts()
-                    logger.info(f"Market breakdown after ATOMIC collapse: {dict(market_counts)}")
-
-            # Sync BOTH session state keys to this clean 1-row-per-game version
-            st.session_state["master_df"] = master_df.copy()
-            st.session_state["master_results_df"] = master_df.copy()
+            # 3. Finalize memory to stop fragmentation and sync both session states
+            master_df = df_collapsed.drop(columns=['_sel_score'], errors='ignore').reset_index(drop=True).copy()
+            st.session_state["master_df"] = master_df
+            st.session_state["master_results_df"] = master_df
 
             logger.info(f"ATOMIC COLLAPSE: Session state updated with {len(master_df)} rows")
             # ============================================
