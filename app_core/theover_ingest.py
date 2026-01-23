@@ -54,6 +54,7 @@ TEAM_ALIAS_MAP_BY_LEAGUE = {
         "GSW": "Golden State Warriors", "LAL": "Los Angeles Lakers",
         "LAC": "Los Angeles Clippers", "BKN": "Brooklyn Nets",
         "OKC": "Oklahoma City Thunder", "NOP": "New Orleans Pelicans",
+        "New Orleans": "New Orleans Pelicans",  # CRITICAL: League-lock to prevent NCAAB cross-contamination
         "SAS": "San Antonio Spurs", "UTA": "Utah Jazz",
         "WAS": "Washington Wizards", "CHA": "Charlotte Hornets",
         "PHX": "Phoenix Suns", "MIL": "Milwaukee Bucks",
@@ -648,6 +649,10 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
                         # Filter (Relaxed 12h Buffer) to ignore UTC vs local offsets
                         valid_game = None
                         for g_cand in common_games:
+                            # CRITICAL: Only match within same league (prevent cross-league contamination)
+                            if league != "UNKNOWN" and _normalize_league_str(g_cand.get("league", "UNKNOWN")) != league:
+                                continue  # Skip to next candidate
+
                             # If input has no date, accept the first game (legacy behavior)
                             if not input_dt:
                                 valid_game = g_cand
