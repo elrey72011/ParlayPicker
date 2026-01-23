@@ -336,6 +336,9 @@ def _resolve_team_alias(name: str, league: str) -> str:
     """
     Resolve team alias with league-specific context.
     Uses league-specific mappings to prevent cross-sport contamination.
+
+    CRITICAL: Only uses league-specific map when league is known.
+    NO FALLBACK to global map to prevent cross-league contamination.
     """
     if not isinstance(name, str):
         return str(name)
@@ -347,7 +350,8 @@ def _resolve_team_alias(name: str, league: str) -> str:
     league_norm = _normalize_league_str(league)
 
     # 1. League-Specific Lookup (PRIORITY)
-    if league_norm in TEAM_ALIAS_MAP_BY_LEAGUE:
+    # LEAGUE-LOCK: Only use league-specific map when league is known
+    if league_norm != "UNKNOWN" and league_norm in TEAM_ALIAS_MAP_BY_LEAGUE:
         league_map = TEAM_ALIAS_MAP_BY_LEAGUE[league_norm]
 
         # Exact match (case-sensitive)
@@ -359,14 +363,19 @@ def _resolve_team_alias(name: str, league: str) -> str:
             if k.lower() == name.lower():
                 return v
 
-    # 2. Fallback to Global Map (if league-specific fails)
-    if name in TEAM_ALIAS_MAP:
-        return TEAM_ALIAS_MAP[name]
+        # LEAGUE-LOCK: If league is known but no match found, return original
+        # DO NOT fall back to global map to prevent cross-league contamination
+        return name
 
-    # 3. Case-insensitive global lookup
-    for k, v in TEAM_ALIAS_MAP.items():
-        if k.lower() == name.lower():
-            return v
+    # 2. Fallback to Global Map ONLY if league is UNKNOWN
+    if league_norm == "UNKNOWN":
+        if name in TEAM_ALIAS_MAP:
+            return TEAM_ALIAS_MAP[name]
+
+        # 3. Case-insensitive global lookup
+        for k, v in TEAM_ALIAS_MAP.items():
+            if k.lower() == name.lower():
+                return v
 
     # 4. Return original if no match
     return name
