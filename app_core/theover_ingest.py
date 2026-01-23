@@ -84,6 +84,12 @@ TEAM_ALIAS_MAP_BY_LEAGUE = {
         "Portland": "Portland Trail Blazers",
         "San Antonio": "San Antonio Spurs",
         "Utah": "Utah Jazz",
+        # Fix: Add missing city name aliases to prevent false contamination warnings
+        "Boston": "Boston Celtics",
+        "Toronto": "Toronto Raptors",
+        "New Orleans": "New Orleans Pelicans",
+        "Memphis": "Memphis Grizzlies",
+        "Sacramento": "Sacramento Kings",
     },
     "NFL": {
         "Arizona": "Arizona Cardinals", "Atlanta": "Atlanta Falcons",
@@ -147,6 +153,10 @@ TEAM_ALIAS_MAP_BY_LEAGUE = {
         "NEW ORLEANS": "New Orleans Privateers",
         "FIU": "Florida Int'l Golden Panthers",
         "Sacramento State": "Sacramento St Hornets",
+        # Fix: Add missing city name aliases to prevent false contamination warnings
+        "Buffalo": "Buffalo Bulls",
+        "Indiana": "Indiana Hoosiers",
+        "Charlotte": "Charlotte 49ers",
     },
     "NCAAF": {
         # Add NCAAF specific mappings if needed
@@ -390,17 +400,20 @@ def _validate_team_for_league(team_name: str, league: str) -> bool:
     team_upper = team_name.upper()
 
     # Cross-League Contamination Prevention
-    # Check if team_name matches a team from a DIFFERENT league
+    # Check if team_name matches a FULL team name from a DIFFERENT league
+    # NOTE: We only check full_name, NOT alias, to avoid false positives
+    # (e.g., "Boston" as a city name should not trigger "Boston Bruins" contamination)
     if league in TEAM_ALIAS_MAP_BY_LEAGUE:
         # Get all teams from OTHER leagues
         for other_league, other_teams in TEAM_ALIAS_MAP_BY_LEAGUE.items():
             if other_league == league:
                 continue  # Skip same league
 
-            # Check if team_name matches any team from other league
+            # Check if team_name matches any FULL team name from other league
+            # IMPORTANT: Only check full_name, not alias, to prevent false positives
             for alias, full_name in other_teams.items():
-                if team_upper == full_name.upper() or team_upper == alias.upper():
-                    # Exact match to a team from a different league
+                if team_upper == full_name.upper():
+                    # Exact match to a FULL team name from a different league
                     logger.warning(f"Cross-League Contamination: '{team_name}' matches {other_league} team '{full_name}' but league is {league}")
                     return False
 
