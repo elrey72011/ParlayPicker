@@ -11079,6 +11079,58 @@ with tab_master:
 
             master_df['_sel_score'] = (_final_prob - 0.5).abs() + _edge
 
+            # ============================================
+            # ML ODDS PENALTY: Penalize extreme ML picks (odds beyond ±250)
+            # ============================================
+            ML_ODDS_THRESHOLD = 250  # Don't prefer ML picks with odds beyond ±250
+            ML_ODDS_PENALTY_FACTOR = 0.5  # Multiply selection score by this (makes spread/total 2x more likely)
+
+            # Track ML picks before penalty
+            ml_picks_before = len(master_df[master_df['Market'] == 'Moneyline']) if 'Market' in master_df.columns else 0
+            extreme_ml_count = 0
+
+            # Apply penalty to extreme ML picks
+            for idx, row in master_df.iterrows():
+                # Only apply to Moneyline market
+                if row.get('Market') != 'Moneyline':
+                    continue
+
+                # Get the odds for this pick
+                home_ml = row.get('Home_ML', 0)
+                away_ml = row.get('Away_ML', 0)
+                pick = row.get('Pick', '')
+                home_team = row.get('Home', '')
+
+                # Determine which side was picked (check if home team is in pick text)
+                if home_team and home_team in pick:
+                    odds = home_ml
+                else:
+                    odds = away_ml
+
+                # Check if odds are extreme (beyond ±250)
+                try:
+                    odds_value = float(odds) if odds is not None else 0
+                    is_extreme = abs(odds_value) > ML_ODDS_THRESHOLD
+
+                    if is_extreme:
+                        # Log for debugging
+                        logger.info(f"⚠️ Extreme ML odds detected: {pick} at {odds_value:+.0f}")
+
+                        # Apply penalty to selection score
+                        # This makes spread/total ~2x more likely to be selected
+                        master_df.at[idx, '_sel_score'] = master_df.at[idx, '_sel_score'] * ML_ODDS_PENALTY_FACTOR
+
+                        # Add flags for tracking
+                        master_df.at[idx, 'extreme_ml_odds'] = True
+                        master_df.at[idx, 'ml_odds_penalty_applied'] = True
+                        extreme_ml_count += 1
+                except (ValueError, TypeError):
+                    # Skip if odds cannot be converted to float
+                    continue
+
+            logger.info(f"⚠️ ML Odds Filter: Applied penalty to {extreme_ml_count}/{ml_picks_before} ML picks with odds beyond ±{ML_ODDS_THRESHOLD}")
+            # ============================================
+
             # 2. Group by game and pick only the highest scoring row
             game_keys = ["league", "Home", "Away", "Commence (UTC)"]
 
@@ -11099,6 +11151,20 @@ with tab_master:
             st.session_state["master_results_df"] = master_df
 
             logger.info(f"ATOMIC COLLAPSE: Session state updated with {len(master_df)} rows")
+
+            # Log market distribution after ATOMIC COLLAPSE
+            if not master_df.empty and 'Market' in master_df.columns:
+                market_distribution = master_df['Market'].value_counts()
+                total_picks = len(master_df)
+                logger.info("📊 Best Pick Selection by Market (After ML Odds Filter):")
+                for market, count in market_distribution.items():
+                    pct = (count / total_picks) * 100
+                    logger.info(f"   {market}: {count} picks ({pct:.1f}%)")
+
+                # Show how many extreme ML picks were still selected
+                if 'extreme_ml_odds' in master_df.columns:
+                    extreme_selected = master_df['extreme_ml_odds'].fillna(False).sum()
+                    logger.info(f"⚠️ Extreme ML picks (odds > ±{ML_ODDS_THRESHOLD}) selected as best: {extreme_selected}/{total_picks}")
             # ============================================
 
             # Task 4: Enrich with Consensus (Sharpness Delta)
