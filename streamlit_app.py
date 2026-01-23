@@ -11055,7 +11055,7 @@ with tab_master:
             # ATOMIC ROW COLLAPSE: Force 1-Row-Per-Game BEFORE Enrichment
             # ============================================
             # Calculate a selection score based on Decisiveness and Edge
-            master_df['_sel_score'] = (master_df['final_probability'] - 0.5).abs() + master_df.get('edge', 0).fillna(0)
+            master_df['_sel_score'] = (master_df['final_probability'] - 0.5).abs() + (master_df['edge'].fillna(0) if 'edge' in master_df.columns else 0)
 
             # Sort and group by game metadata to keep ONLY the single best row per game
             game_keys = ["league", "Home", "Away", "Commence (UTC)"]
