@@ -155,6 +155,7 @@ TEAM_ALIAS_MAP_BY_LEAGUE = {
         "USC": "USC Trojans", "Texas": "Texas Longhorns",
         "Oklahoma": "Oklahoma Sooners", "Florida": "Florida Gators",
         "UAB": "UAB Blazers",
+        "Uab": "UAB Blazers",
         "FIU": "Florida Int'l Golden Panthers",
         "Sacramento State": "Sacramento St Hornets",
     }
@@ -744,6 +745,16 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
                         f"Top H: {top_h[0]} ({top_h[1]:.1f})",
                         f"Top A: {top_a[0]} ({top_a[1]:.1f})"
                     ]
+
+        # CRITICAL: Enforce strict league matching to prevent cross-sport contamination
+        if matched_game_obj and league != "UNKNOWN":
+            matched_league = _normalize_league_str(matched_game_obj.get("league", "UNKNOWN"))
+            if matched_league != league:
+                logger.warning(f"Cross-League Contamination Blocked: Input {league} matched {matched_league} game ({matched_game_obj.get('home_team')} vs {matched_game_obj.get('away_team')}). Voiding match.")
+                matched_game_obj = None
+                match_confidence = 0.0
+                match_status = "FAIL"
+                closest_matches.append(f"BLOCKED: Cross-League {league}->{matched_league}")
 
         # Logging
         stats_collector.append({
