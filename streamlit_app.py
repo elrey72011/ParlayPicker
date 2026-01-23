@@ -12181,7 +12181,7 @@ with tab_master:
         # Show success message and rerun to display results immediately
         num_games = len(st.session_state.get('games', []))
         num_rows = len(st.session_state['master_results_df'])
-        st.success(f"✅ Produced {num_rows} rows from {num_games} games")
+        st.success(f"Produced {num_rows} rows from {num_games} games")
         st.rerun()
 
     if "model_last_error" in st.session_state:
