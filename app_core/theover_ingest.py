@@ -10,6 +10,7 @@ import re
 import logging
 from typing import Tuple, Optional, Dict, List, Any, Union
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from app_core.feature_processing import robust_normalize_team
 from app_core.kalshi_integrator import team_code_for_league
 from app_core.team_name_matcher import TeamNameMatcher
@@ -399,8 +400,8 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
         return pd.DataFrame()
 
     records = []
-    # Use the current slate date from the system, or today's date if not passed.
-    slate_date = datetime.now().strftime("%Y-%m-%d")
+    # Use the current slate date in US/Eastern timezone to match OddsAPI date handling
+    slate_date = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d")
 
     logger.info(f"Transforming TheOver DataFrame ({pick_type_default}) with {len(df)} rows.")
 
@@ -851,7 +852,7 @@ def parse_theover_public_betting_text(raw_text: str, pick_type_hint: str = "UNKN
     lines = [l.strip() for l in raw_text.split('\n') if l.strip()]
 
     current_league = "UNKNOWN"
-    current_date = datetime.now().strftime("%Y-%m-%d")
+    current_date = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d")
     current_away = ""
     current_home = ""
 

@@ -1462,7 +1462,7 @@ def enrich_picks_with_roi_metrics(df: pd.DataFrame) -> pd.DataFrame:
     # Batch assignment to reduce fragmentation (Issue #5)
     missing_required = [c for c in required if c not in df.columns]
     if missing_required:
-        df = pd.concat([df, pd.DataFrame(0.0, index=df.index, columns=missing_required)], axis=1)
+        df = pd.concat([df, pd.DataFrame(0.0, index=df.index, columns=missing_required)], axis=1).copy()
 
     # 1. Calculate Edge (Math vs Market Gap)
     # Ensure columns are numeric to avoid errors
@@ -1881,7 +1881,7 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
     if cols_to_drop:
         df = df.drop(columns=cols_to_drop)
 
-    return pd.concat([df, new_cols], axis=1)
+    return pd.concat([df, new_cols], axis=1).copy()
 
 
 def reorder_master_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -2319,7 +2319,7 @@ def add_spread_total_confidence(df: pd.DataFrame) -> pd.DataFrame:
         if cols_to_drop:
             df = df.drop(columns=cols_to_drop)
 
-        df = pd.concat([df, new_cols_df], axis=1)
+        df = pd.concat([df, new_cols_df], axis=1).copy()
 
     return df
 
@@ -11142,7 +11142,7 @@ with tab_master:
                         missing_cols = [col for col in VERTEX_FEATURE_COLUMNS if col not in master_df.columns]
                         if missing_cols:
                             zeros_df = pd.DataFrame(0.0, index=master_df.index, columns=missing_cols)
-                            master_df = pd.concat([master_df, zeros_df], axis=1)
+                            master_df = pd.concat([master_df, zeros_df], axis=1).copy()
 
                         inference_df = master_df[VERTEX_FEATURE_COLUMNS].copy()
 
@@ -11201,7 +11201,7 @@ with tab_master:
                                     debug_base['type'] = "unknown"
 
                             # Combine with feature vector
-                            debug_combined = pd.concat([debug_base, inference_df], axis=1)
+                            debug_combined = pd.concat([debug_base, inference_df], axis=1).copy()
                             # Append to session state accumulator
                             st.session_state["debug_log_history"].extend(debug_combined.to_dict('records'))
                         except Exception as e:
@@ -11321,14 +11321,14 @@ with tab_master:
                         "consensus": consensus_breakdown_cols
                     }, index=master_df.index)
 
-                    master_df = pd.concat([master_df, consensus_df_update], axis=1)
+                    master_df = pd.concat([master_df, consensus_df_update], axis=1).copy()
 
                     # Merge vote details
                     if vote_details_list:
                         vote_details_df = pd.DataFrame(vote_details_list, index=master_df.index)
                         # Remove duplicate columns if any overlap
                         vote_details_df = vote_details_df.drop(columns=[c for c in vote_details_df.columns if c in master_df.columns], errors="ignore")
-                        master_df = pd.concat([master_df, vote_details_df], axis=1)
+                        master_df = pd.concat([master_df, vote_details_df], axis=1).copy()
 
                     logger.info(f"Consensus enrichment complete for {len(master_df)} picks")
 
@@ -11375,7 +11375,7 @@ with tab_master:
                     }
                     # Create DataFrame for new columns and concat
                     meta_df = pd.DataFrame(meta_updates, index=master_df.index)
-                    master_df = pd.concat([master_df, meta_df], axis=1)
+                    master_df = pd.concat([master_df, meta_df], axis=1).copy()
 
                     # Fill remaining fields using bulk fillna
                     # Fix: Ensure no 'None' values are passed to fillna
@@ -11573,7 +11573,7 @@ with tab_master:
 
                     # Create temporary DF for vectorized ops
                     temp = df.copy()
-                    temp = pd.concat([temp, pd.DataFrame(new_data, index=df.index)], axis=1)
+                    temp = pd.concat([temp, pd.DataFrame(new_data, index=df.index)], axis=1).copy()
 
                     # 3. Best Overall Pick Logic
                     best_pick = []
@@ -11631,7 +11631,7 @@ with tab_master:
                     new_data["Best Overall Prob"] = best_prob
                     new_data["best_pick_type"] = best_type
 
-                    return pd.concat([df, pd.DataFrame(new_data, index=df.index)], axis=1)
+                    return pd.concat([df, pd.DataFrame(new_data, index=df.index)], axis=1).copy()
 
                 df = _enforce_consensus_and_best_pick_vectorized(df)
 
@@ -11779,7 +11779,7 @@ with tab_master:
                 # Fix for Fragmentation (Issue #4)
                 has_kalshi_series = _has_kalshi_market_vectorized(df)
                 new_hk_col = pd.DataFrame({"HasKalshiMarket": has_kalshi_series}, index=df.index)
-                df = pd.concat([df, new_hk_col], axis=1)
+                df = pd.concat([df, new_hk_col], axis=1).copy()
 
         # -------------------------------------------------------------------------
         # TASK 4: Kalshi Mode (Transparency)
@@ -11942,9 +11942,9 @@ with tab_master:
             df["type"] = None
         df["type"] = df["type"].fillna(df["Market"].map({"Moneyline": "ML", "Spread": "SPREAD", "Total": "TOTAL"}))
 
-        # CRITICAL: Save to session state
-        logger.info(f"Saving df ({len(df)} rows) to session state...")
-        st.session_state["master_df"] = df  # Raw data with all internal columns
+        # NOTE: master_df will be saved AFTER champion selection to ensure both session_state
+        # variables hold the collapsed 1-row-per-game dataframe
+        logger.info(f"Preparing df ({len(df)} rows) for champion selection...")
 
         # Issue 1: Alias internal columns to user-requested names for export
         # FIXED: Use pd.concat to avoid fragmentation (was causing PerformanceWarning)
@@ -12132,6 +12132,11 @@ with tab_master:
         if "best_pick_type" in df.columns and "Market" in df.columns:
              df["best_pick_type"] = df["best_pick_type"].fillna(df["Market"]).fillna("UNKNOWN")
 
+        # CRITICAL: Save collapsed dataframe to session state
+        # Both master_df and master_results_df should hold the same collapsed 1-row-per-game data
+        logger.info(f"Saving collapsed df ({len(df)} rows) to session state...")
+        st.session_state["master_df"] = df.copy()  # Collapsed data with all internal columns
+
         # Filter to only columns that exist in the dataframe
         results_columns = [col for col in user_columns if col in df.columns]
         st.session_state["master_results_df"] = df[results_columns].copy()
@@ -12210,7 +12215,7 @@ with tab_master:
         # Optimization: Bulk add missing columns
         missing_top = [c for c in required_display_cols if c not in top_df.columns]
         if missing_top:
-            top_df = pd.concat([top_df, pd.DataFrame(columns=missing_top)], axis=1)
+            top_df = pd.concat([top_df, pd.DataFrame(columns=missing_top)], axis=1).copy()
         # FORCE DISPLAY: Show all 139 rows regardless of confidence (filter disabled)
         # if not include_low_in_top:
         #     top_df = top_df[top_df["Pick_Confidence"].isin(["HIGH", "MEDIUM"])]
@@ -12709,7 +12714,7 @@ if should_display:
         # Optimization: Bulk add missing columns
         missing_top = [c for c in required_display_cols if c not in top_df.columns]
         if missing_top:
-            top_df = pd.concat([top_df, pd.DataFrame(columns=missing_top)], axis=1)
+            top_df = pd.concat([top_df, pd.DataFrame(columns=missing_top)], axis=1).copy()
         # FORCE DISPLAY: Show all 139 rows regardless of confidence (filter disabled)
         # if not include_low_in_top:
         #     top_df = top_df[top_df["Pick_Confidence"].isin(["HIGH", "MEDIUM"])]
