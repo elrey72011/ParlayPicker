@@ -6850,39 +6850,9 @@ def load_games(selected_leagues: Union[str, List[str]], run_id: Optional[str] = 
     spreads_count_filtered = sum(1 for g in filtered_games if g.get("best_spread_book") is not None)
     totals_count_filtered = sum(1 for g in filtered_games if g.get("best_total_book") is not None)
 
-    # CRITICAL FIX: Retry logic if games list is empty on initial load
-    # This addresses the "Loaded 0 games" issue
-    if len(filtered_games) == 0 and not all_leagues_failed:
-        logger.warning(f"⚠️ Initial fetch returned 0 games. Attempting retry...")
-        try:
-            # Short sleep before retry
-            time.sleep(1.5)
-            # Retry fetching games (using same params)
-            retry_games = []
-            for league_conf in leagues_to_fetch:
-                # Use cached function but force refresh if possible (not easily exposed here, relying on transient issue resolution)
-                # In practice, get_games usually hits cache, but if cache was empty result, we might want to bypass.
-                # For now, simplest retry.
-                try:
-                    lg_games = get_games(
-                        sport=league_conf["sport_key"],
-                        regions="us",
-                        markets="h2h,spreads,totals",
-                        odds_format="american",
-                        date_format="iso",
-                    )
-                    if lg_games:
-                        retry_games.extend(lg_games)
-                except Exception as e:
-                    logger.warning(f"Retry fetch failed for {league_conf['sport_key']}: {e}")
-
-            if retry_games:
-                filtered_games = retry_games
-                logger.info(f"✅ Retry fetch SUCCESS: {len(filtered_games)} games loaded.")
-            else:
-                logger.error("❌ Retry fetch failed: Still 0 games.")
-        except Exception as e:
-            logger.error(f"Retry logic failed: {e}")
+    # HARD-CODED DATA FLOW FIX: filtered_games = games_final is the ONLY active logic
+    # Retry logic and fallback mechanisms DISABLED to ensure fresh API data always flows through
+    # (Previously, retry/fallback logic was interfering with data ingestion)
 
     # Set fetch status for atomic ingest + UI gating
     if len(filtered_games) > 0:
@@ -6900,22 +6870,11 @@ def load_games(selected_leagues: Union[str, List[str]], run_id: Optional[str] = 
         else:
             logger.info(f"ℹ️ Games fetch EMPTY (Startup/Auto): API returned 0 games.")
 
+    # HARD-CODED DATA FLOW FIX: No fallback to cached games
+    # Always return what the API gives us (filtered_games = games_final)
     if not filtered_games:
-        if st.session_state.get("games"):
-            logger.warning("Fetch returned 0 games; keeping last-known-good games in session_state")
-            filtered_games = st.session_state["games"]
-            # Only show UI warning if run_id set
-            if run_id:
-                st.warning("⚠️ New data fetch empty. Using cached games.")
-        else:
-            # Cold start empty state - do NOT stop/crash, just log
-            if run_id:
-                logger.warning("⚠️ games list is empty after explicit fetch!")
-                st.error("No games found for selected parameters.")
-            else:
-                logger.info("ℹ️ Startup: games list is empty (waiting for user load).")
-            # Return empty list instead of stopping, so UI can render empty state
-            return []
+        logger.warning("⚠️ games list is empty after fetch - returning empty list")
+        return []
 
     st.session_state["games"] = filtered_games
     st.session_state["commence_stats"] = commence_stats_total
@@ -11093,50 +11052,23 @@ with tab_master:
             master_df = master_df.reset_index(drop=True)
 
             # ============================================
-            # CHAMPION COLLAPSE: Force 1-Row-Per-Game BEFORE Enrichment
+            # ATOMIC ROW COLLAPSE: Force 1-Row-Per-Game BEFORE Enrichment
             # ============================================
             # Calculate a selection score based on Decisiveness and Edge
-            # Use existing probability column (may vary by stage)
-            prob_col = None
-            for candidate in ['final_probability', 'finalprobability', 'Best Overall Prob', 'AI_Prob']:
-                if candidate in master_df.columns:
-                    prob_col = candidate
-                    break
-
-            if prob_col is None:
-                # Fallback: use 0.5 if no probability column exists yet
-                master_df['_prob_numeric'] = 0.5
-            else:
-                master_df['_prob_numeric'] = pd.to_numeric(master_df[prob_col], errors='coerce').fillna(0.5)
-
-            # Edge column may not exist yet, default to 0
-            if 'edge' in master_df.columns:
-                master_df['_edge_numeric'] = pd.to_numeric(master_df['edge'], errors='coerce').fillna(0.0)
-            else:
-                master_df['_edge_numeric'] = 0.0
-
-            master_df['_sel_score'] = (master_df['_prob_numeric'] - 0.5).abs() + master_df['_edge_numeric']
+            master_df['_sel_score'] = (master_df['final_probability'] - 0.5).abs() + master_df.get('edge', 0).fillna(0)
 
             # Sort and group by game metadata to keep ONLY the single best row per game
             game_keys = ["league", "Home", "Away", "Commence (UTC)"]
-            # Ensure all keys exist
-            game_keys = [k for k in game_keys if k in master_df.columns]
+            df_collapsed = master_df.sort_values('_sel_score', ascending=False).groupby(game_keys).head(1)
 
-            if game_keys and not master_df.empty:
-                rows_before_collapse = len(master_df)
-                df_collapsed = master_df.sort_values('_sel_score', ascending=False).groupby(game_keys).head(1)
+            # Reset memory layout to stop fragmentation warnings
+            master_df = df_collapsed.drop(columns=['_sel_score']).reset_index(drop=True).copy()
 
-                # Reset memory layout to stop fragmentation warnings
-                master_df = df_collapsed.drop(columns=['_sel_score', '_prob_numeric', '_edge_numeric'], errors='ignore').reset_index(drop=True).copy()
+            # Sync BOTH session state keys to this clean 1-row-per-game version
+            st.session_state["master_df"] = master_df
+            st.session_state["master_results_df"] = master_df
 
-                logger.info(f"CHAMPION COLLAPSE: Reduced {rows_before_collapse} rows to {len(master_df)} (1 per game)")
-
-                # Sync both session state variables to this clean collapsed version IMMEDIATELY
-                # This ensures downstream tabs and exports use the collapsed data
-                st.session_state["master_df"] = master_df.copy()
-                st.session_state["master_results_df"] = master_df.copy()
-            else:
-                logger.warning("CHAMPION COLLAPSE: Skipped due to missing game_keys or empty dataframe")
+            logger.info(f"ATOMIC COLLAPSE: Collapsed to {len(master_df)} rows (1 per game)")
             # ============================================
 
             # Task 4: Enrich with Consensus (Sharpness Delta)
