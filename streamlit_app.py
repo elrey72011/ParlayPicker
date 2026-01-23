@@ -11054,22 +11054,53 @@ with tab_master:
             # ============================================
             # ATOMIC ROW COLLAPSE: Force 1-Row-Per-Game BEFORE Enrichment
             # ============================================
+            logger.info(f"ATOMIC COLLAPSE: Starting with {len(master_df)} rows across {master_df.get('game_key', master_df[['league', 'Home', 'Away']]).nunique() if not master_df.empty else 0} games")
+
             # Calculate a selection score based on Decisiveness and Edge
-            edge_col = master_df['edge'].fillna(0) if 'edge' in master_df.columns else pd.Series(0, index=master_df.index)
-            master_df['_sel_score'] = (master_df['final_probability'] - 0.5).abs() + edge_col
+            # Use safe numeric conversion to handle any data type issues
+            if 'edge' in master_df.columns:
+                edge_col = pd.to_numeric(master_df['edge'], errors='coerce').fillna(0.0)
+            else:
+                edge_col = pd.Series(0.0, index=master_df.index)
+
+            # Safe conversion for final_probability
+            if 'final_probability' in master_df.columns:
+                final_prob = pd.to_numeric(master_df['final_probability'], errors='coerce').fillna(0.5)
+            else:
+                # Fallback to other probability columns
+                final_prob = pd.Series(0.5, index=master_df.index)
+                for col in ['AI_Prob', 'Implied_Prob', 'best_overall_prob']:
+                    if col in master_df.columns:
+                        final_prob = pd.to_numeric(master_df[col], errors='coerce').fillna(0.5)
+                        break
+
+            master_df['_sel_score'] = (final_prob - 0.5).abs() + edge_col
 
             # Sort and group by game metadata to keep ONLY the single best row per game
             game_keys = ["league", "Home", "Away", "Commence (UTC)"]
-            df_collapsed = master_df.sort_values('_sel_score', ascending=False).groupby(game_keys).head(1)
+            # Verify all keys exist before grouping
+            missing_keys = [k for k in game_keys if k not in master_df.columns]
+            if missing_keys:
+                logger.error(f"ATOMIC COLLAPSE FAILED: Missing required columns: {missing_keys}")
+                logger.error(f"Available columns: {list(master_df.columns)}")
+            else:
+                df_collapsed = master_df.sort_values('_sel_score', ascending=False).groupby(game_keys, dropna=False).head(1)
 
-            # Reset memory layout to stop fragmentation warnings
-            master_df = df_collapsed.drop(columns=['_sel_score']).reset_index(drop=True).copy()
+                # Reset memory layout to stop fragmentation warnings
+                master_df = df_collapsed.drop(columns=['_sel_score'], errors='ignore').reset_index(drop=True).copy()
+
+                logger.info(f"ATOMIC COLLAPSE: Successfully collapsed to {len(master_df)} rows (1 per game)")
+
+                # Log market breakdown after collapse
+                if not master_df.empty and "Market" in master_df.columns:
+                    market_counts = master_df["Market"].value_counts()
+                    logger.info(f"Market breakdown after ATOMIC collapse: {dict(market_counts)}")
 
             # Sync BOTH session state keys to this clean 1-row-per-game version
             st.session_state["master_df"] = master_df
             st.session_state["master_results_df"] = master_df
 
-            logger.info(f"ATOMIC COLLAPSE: Collapsed to {len(master_df)} rows (1 per game)")
+            logger.info(f"ATOMIC COLLAPSE: Session state updated with {len(master_df)} rows")
             # ============================================
 
             # Task 4: Enrich with Consensus (Sharpness Delta)
@@ -12051,8 +12082,10 @@ with tab_master:
             user_columns.insert(user_columns.index("data_quality_score") + 1, "data_quality_grade")
 
         # -------------------------------------------------------------------------
-        # TASK 1: Implement "Champion Selection" (The 1-Row Fix)
+        # TASK 1: Implement "Champion Selection" (The 1-Row Fix) - FINAL ENFORCEMENT
         # -------------------------------------------------------------------------
+        logger.info(f"Champion Selection: Starting with {len(df)} rows")
+
         # Calculate a selection score (Edge + Decisiveness)
         # Use 'edge' (float) if available, otherwise try to parse 'Edge' (string)
         if "edge" in df.columns:
@@ -12072,38 +12105,35 @@ with tab_master:
             errors='coerce'
         ).fillna(0)
 
-        # RESCUE FIX #1: Debug print to verify _sel_score calculation
-        if not df.empty:
-            st.write("### 🔍 Debug: Selection Score Calculation")
-            debug_cols = ['league', 'Home', 'Away', 'Commence (UTC)', '_sel_score']
-            available_debug_cols = [col for col in debug_cols if col in df.columns]
-            if available_debug_cols:
-                st.write(df[available_debug_cols].head())
-                logger.info(f"DEBUG: master_df has {len(df)} rows before grouping")
-
         # Group by game and pick the highest score
-        # Use game_key if available, else group keys
-        if "game_key" in df.columns:
-             group_keys = ["game_key"]
-        else:
-             group_keys = ["league", "Home", "Away", "Commence (UTC)"]
-             # Ensure these columns exist
-             group_keys = [k for k in group_keys if k in df.columns]
+        # CRITICAL FIX: Always use standard game keys (NOT game_key) to ensure proper grouping
+        group_keys = ["league", "Home", "Away", "Commence (UTC)"]
+        # Ensure these columns exist
+        group_keys = [k for k in group_keys if k in df.columns]
 
-        if group_keys:
-             df_collapsed = df.sort_values('_sel_score', ascending=False).groupby(group_keys).head(1)
-             logger.info(f"Champion Selection: Collapsed {len(df)} rows to {len(df_collapsed)} single-row games")
+        if group_keys and len(group_keys) >= 3:  # Need at least league, home, away
+             rows_before = len(df)
+             df_collapsed = df.sort_values('_sel_score', ascending=False).groupby(group_keys, dropna=False).head(1)
 
              # RESCUE FIX #1: Fallback if grouped dataframe is empty
-             if df_collapsed.empty:
+             if df_collapsed.empty and not df.empty:
                  logger.error(f"⚠️ CRITICAL: Groupby resulted in 0 rows! Falling back to raw dataframe with {len(df)} rows")
                  st.warning(f"⚠️ Grouping failed - showing all {len(df)} picks instead of collapsed view")
                  # Keep the raw dataframe instead of empty result
                  df = df.drop(columns=['_sel_score', '_edge_numeric', '_final_prob_numeric'], errors='ignore').reset_index(drop=True)
              else:
                  df = df_collapsed.drop(columns=['_sel_score', '_edge_numeric', '_final_prob_numeric'], errors='ignore').reset_index(drop=True)
+                 logger.info(f"✅ Champion Selection: Collapsed {rows_before} rows to {len(df)} rows (1 per game)")
+
+                 # Log market breakdown after final collapse
+                 if not df.empty and "Market" in df.columns:
+                     market_counts = df["Market"].value_counts()
+                     logger.info(f"Market breakdown after Champion Selection: {dict(market_counts)}")
         else:
-             logger.warning("Champion Selection: Missing group keys, skipping collapse")
+             logger.error(f"Champion Selection: Missing required group keys! Available columns: {list(df.columns)}")
+             logger.error(f"Group keys found: {group_keys}")
+             # Continue without collapse but log the issue
+             df = df.drop(columns=['_sel_score', '_edge_numeric', '_final_prob_numeric'], errors='ignore').reset_index(drop=True)
 
         # -------------------------------------------------------------------------
         # TASK 4: Clean Up NaN in Debug Exports
