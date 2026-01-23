@@ -373,28 +373,47 @@ def _resolve_team_alias(name: str, league: str) -> str:
 
 def _validate_team_for_league(team_name: str, league: str) -> bool:
     """
-    Simple validation to catch obvious cross-sport contamination.
+    Strict validation to catch cross-sport contamination.
     Returns True if valid (or unknown), False if clearly invalid.
+    Implements cross-league checks for NBA, NFL, NHL, NCAAB, NCAAF.
     """
     league = _normalize_league_str(league)
     team_upper = team_name.upper()
 
-    # NBA Validation
-    if league == "NBA":
-        invalid_tokens = ["FALCONS", "COWBOYS", "BRUINS", "LIONS", "HURRICANES", "COMMANDERS", "EAGLES", "GIANTS"]
-        for token in invalid_tokens:
-            # Check if token is present as a whole word (simple check)
-            if token in team_upper:
-                # Exception: "GIANTS" is invalid for NBA, but might be valid if team moved? No.
-                return False
+    # Cross-League Contamination Prevention
+    # Check if team_name matches a team from a DIFFERENT league
+    if league in TEAM_ALIAS_MAP_BY_LEAGUE:
+        # Get all teams from OTHER leagues
+        for other_league, other_teams in TEAM_ALIAS_MAP_BY_LEAGUE.items():
+            if other_league == league:
+                continue  # Skip same league
 
-        # Additional Strict Check for NHL teams in NBA (Fix #3)
-        if "NHL" in TEAM_ALIAS_MAP_BY_LEAGUE:
-            for nhl_team in TEAM_ALIAS_MAP_BY_LEAGUE["NHL"].values():
-                # If a known NHL team name is present in the NBA team name
-                nhl_norm = nhl_team.upper()
-                if nhl_norm == team_upper or (len(nhl_norm) > 4 and nhl_norm in team_upper):
-                     return False
+            # Check if team_name matches any team from other league
+            for alias, full_name in other_teams.items():
+                if team_upper == full_name.upper() or team_upper == alias.upper():
+                    # Exact match to a team from a different league
+                    logger.warning(f"Cross-League Contamination: '{team_name}' matches {other_league} team '{full_name}' but league is {league}")
+                    return False
+
+    # Legacy token-based validation for additional safety
+    if league == "NBA":
+        invalid_tokens = ["FALCONS", "COWBOYS", "BRUINS", "LIONS", "HURRICANES", "COMMANDERS", "EAGLES", "GIANTS", "SAINTS", "PRIVATEERS"]
+        for token in invalid_tokens:
+            if token in team_upper:
+                logger.warning(f"Invalid token '{token}' found in NBA team name '{team_name}'")
+                return False
+    elif league == "NFL":
+        invalid_tokens = ["PELICANS", "WARRIORS", "LAKERS", "CELTICS", "KNICKS", "PRIVATEERS"]
+        for token in invalid_tokens:
+            if token in team_upper:
+                logger.warning(f"Invalid token '{token}' found in NFL team name '{team_name}'")
+                return False
+    elif league == "NCAAB":
+        invalid_tokens = ["PELICANS", "SAINTS", "FALCONS", "COWBOYS"]
+        for token in invalid_tokens:
+            if token in team_upper:
+                logger.warning(f"Invalid token '{token}' found in NCAAB team name '{team_name}'")
+                return False
 
     return True
 
@@ -555,6 +574,7 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
         # If league is UNKNOWN, do not attempt to match against the entire world.
         if league == "UNKNOWN":
             candidates = []
+            logger.debug(f"Skipping match for {csv_home} vs {csv_away}: League is UNKNOWN")
         else:
             # Verification Pattern: Ensure the logic follows: league_candidates = [g for g in games if g['league'] == row['league']]
             # Explicitly filter games for the current league to prevent cross-league pollution (e.g. NFL Houston vs NCAAB Houston)
@@ -568,6 +588,9 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
                 if g.get("away_team"):
                     candidates_set.add(TeamNameMatcher.normalize(g.get("away_team")).upper().strip())
             candidates = list(candidates_set)
+
+            # Log league-specific filtering for debugging
+            logger.debug(f"League-Gated Matching: Found {len(candidates)} unique teams from {len(league_candidates)} {league} games for matching {csv_home} vs {csv_away}")
 
         if candidates:
             # Pairwise Resolution Logic (Task 2)
