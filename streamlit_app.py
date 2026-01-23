@@ -11092,6 +11092,53 @@ with tab_master:
             master_df = master_df.loc[:, ~master_df.columns.duplicated()].copy()
             master_df = master_df.reset_index(drop=True)
 
+            # ============================================
+            # CHAMPION COLLAPSE: Force 1-Row-Per-Game BEFORE Enrichment
+            # ============================================
+            # Calculate a selection score based on Decisiveness and Edge
+            # Use existing probability column (may vary by stage)
+            prob_col = None
+            for candidate in ['final_probability', 'finalprobability', 'Best Overall Prob', 'AI_Prob']:
+                if candidate in master_df.columns:
+                    prob_col = candidate
+                    break
+
+            if prob_col is None:
+                # Fallback: use 0.5 if no probability column exists yet
+                master_df['_prob_numeric'] = 0.5
+            else:
+                master_df['_prob_numeric'] = pd.to_numeric(master_df[prob_col], errors='coerce').fillna(0.5)
+
+            # Edge column may not exist yet, default to 0
+            if 'edge' in master_df.columns:
+                master_df['_edge_numeric'] = pd.to_numeric(master_df['edge'], errors='coerce').fillna(0.0)
+            else:
+                master_df['_edge_numeric'] = 0.0
+
+            master_df['_sel_score'] = (master_df['_prob_numeric'] - 0.5).abs() + master_df['_edge_numeric']
+
+            # Sort and group by game metadata to keep ONLY the single best row per game
+            game_keys = ["league", "Home", "Away", "Commence (UTC)"]
+            # Ensure all keys exist
+            game_keys = [k for k in game_keys if k in master_df.columns]
+
+            if game_keys and not master_df.empty:
+                rows_before_collapse = len(master_df)
+                df_collapsed = master_df.sort_values('_sel_score', ascending=False).groupby(game_keys).head(1)
+
+                # Reset memory layout to stop fragmentation warnings
+                master_df = df_collapsed.drop(columns=['_sel_score', '_prob_numeric', '_edge_numeric'], errors='ignore').reset_index(drop=True).copy()
+
+                logger.info(f"CHAMPION COLLAPSE: Reduced {rows_before_collapse} rows to {len(master_df)} (1 per game)")
+
+                # Sync both session state variables to this clean collapsed version IMMEDIATELY
+                # This ensures downstream tabs and exports use the collapsed data
+                st.session_state["master_df"] = master_df.copy()
+                st.session_state["master_results_df"] = master_df.copy()
+            else:
+                logger.warning("CHAMPION COLLAPSE: Skipped due to missing game_keys or empty dataframe")
+            # ============================================
+
             # Task 4: Enrich with Consensus (Sharpness Delta)
             # Must be done before sentiment integration or model features if model uses it
             with st.spinner("📊 Ingesting Public Consensus Data..."):
