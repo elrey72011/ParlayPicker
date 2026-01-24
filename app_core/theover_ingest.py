@@ -27,6 +27,75 @@ except ImportError:
 
 logger = logging.getLogger("app_core.theover_ingest")
 
+# =============================================================================
+# FUZZY MATCHING THRESHOLDS - CRITICAL FOR ACCURATE GAME MATCHING
+# =============================================================================
+# These thresholds prevent incorrect matches like "Texas Longhorns" -> "Texas Southern Tigers"
+# or "Georgia Bulldogs" -> "Alabama A&M Bulldogs"
+
+MIN_INDIVIDUAL_TEAM_THRESHOLD = 75.0  # Each team must score at least this individually
+MIN_COMBINED_THRESHOLD = 80.0  # Average of both team scores must be at least this
+MIN_FALLBACK_THRESHOLD = 0.80  # For the TeamNameMatcher.match_game fallback (0.0-1.0 scale)
+
+# Ambiguous team name pairs that should be blocked from fuzzy matching
+# Format: (input_substring_upper, wrong_match_substring_upper)
+# If input contains first pattern and candidate contains second, REJECT the match
+AMBIGUOUS_TEAM_BLOCKS = [
+    # Texas schools - prevent "Texas" matching to HBCU/smaller Texas schools
+    ("TEXAS LONGHORNS", "TEXAS SOUTHERN"),
+    ("TEXAS LONGHORNS", "TEXAS STATE"),
+    ("TEXAS LONGHORNS", "TEXAS AM CC"),
+    ("TEXAS LONGHORNS", "TEXAS AM CORPUS"),
+    ("LONGHORNS", "TEXAS SOUTHERN"),
+    # Georgia schools - prevent "Georgia Bulldogs" matching to Georgia State/Southern
+    ("GEORGIA BULLDOGS", "GEORGIA STATE"),
+    ("GEORGIA BULLDOGS", "GEORGIA SOUTHERN"),
+    ("GEORGIA BULLDOGS", "ALABAMA AM"),  # Both have "Bulldogs"
+    # Alabama schools
+    ("ALABAMA CRIMSON", "ALABAMA AM"),
+    ("ALABAMA CRIMSON", "ALABAMA STATE"),
+    # Miami schools
+    ("MIAMI HURRICANES", "MIAMI OH"),
+    ("MIAMI HURRICANES", "MIAMI REDHAWKS"),
+    # Northern schools - prevent Northern Kentucky matching Northern Illinois
+    ("NORTHERN KENTUCKY", "NORTHERN ILLINOIS"),
+    ("NORTHERN KY", "NORTHERN ILLINOIS"),
+    ("NKU", "NORTHERN ILLINOIS"),
+    # Wright State shouldn't match Ball State
+    ("WRIGHT STATE", "BALL STATE"),
+    ("WRIGHT ST", "BALL STATE"),
+    # Coastal Carolina shouldn't match random schools
+    ("COASTAL CAROLINA", "BALL STATE"),
+    ("COASTAL CAROLINA", "NORTHERN ILLINOIS"),
+    # Southern Miss shouldn't match Southern Illinois
+    ("SOUTHERN MISS", "SOUTHERN ILLINOIS"),
+    ("SOUTHERN MISSISSIPPI", "SOUTHERN ILLINOIS"),
+    # Indiana schools
+    ("INDIANA HOOSIERS", "INDIANA STATE"),
+]
+
+
+def _is_ambiguous_match(input_team: str, candidate_team: str) -> bool:
+    """
+    Check if this match is a known ambiguous pairing that should be rejected.
+    Returns True if the match should be BLOCKED.
+    """
+    input_upper = input_team.upper()
+    candidate_upper = candidate_team.upper()
+
+    for input_pattern, block_pattern in AMBIGUOUS_TEAM_BLOCKS:
+        # Check if input matches the pattern and candidate matches the block
+        if input_pattern in input_upper and block_pattern in candidate_upper:
+            logger.debug(f"Ambiguous match blocked: '{input_team}' -> '{candidate_team}' (pattern: {input_pattern} vs {block_pattern})")
+            return True
+        # Also check reverse (candidate has the main name, input has the confusing one)
+        if input_pattern in candidate_upper and block_pattern in input_upper:
+            logger.debug(f"Ambiguous match blocked (reverse): '{input_team}' -> '{candidate_team}'")
+            return True
+
+    return False
+
+
 # League-specific team alias mappings to prevent cross-league contamination
 TEAM_ALIAS_MAP_BY_LEAGUE = {
     "NHL": {
@@ -869,11 +938,21 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
             for h_cand, h_s in h_candidates[:5]:
                 for a_cand, a_s in a_candidates[:5]:
 
-                    # Relaxed Threshold for Pair Validation:
-                    # If we find a VALID GAME, we can tolerate slightly lower individual scores
-                    # because the existence of the pairing confirms the identity.
-                    # Lowering 75.0 -> 50.0 allows "AR-Pine Bluff" (58.8) to match if pair is valid.
-                    if h_s < 50.0 or a_s < 50.0:
+                    # CRITICAL: Individual team threshold check
+                    # Each team must meet the minimum threshold to prevent partial name matches
+                    # e.g., "Texas" matching "Texas Southern" or "Georgia" matching "Georgia State"
+                    if h_s < MIN_INDIVIDUAL_TEAM_THRESHOLD or a_s < MIN_INDIVIDUAL_TEAM_THRESHOLD:
+                        continue
+
+                    # Check combined score threshold
+                    avg_score = (h_s + a_s) / 2.0
+                    if avg_score < MIN_COMBINED_THRESHOLD:
+                        logger.debug(f"MATCH_REJECTED (low combined): {csv_home} vs {csv_away} -> {h_cand} vs {a_cand} ({avg_score:.1f}% < {MIN_COMBINED_THRESHOLD}%)")
+                        continue
+
+                    # Check for ambiguous team name pairs that should be blocked
+                    if _is_ambiguous_match(csv_home, h_cand) or _is_ambiguous_match(csv_away, a_cand):
+                        logger.info(f"MATCH_REJECTED (ambiguous): {csv_home} vs {csv_away} -> {h_cand} vs {a_cand}")
                         continue
 
                     # Check for valid game intersection (Home/Away Agnostic)
@@ -929,15 +1008,13 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
                                 break
 
                         if valid_game:
-                            # Boost score if a valid game exists (Confirmation Bonus)
-                            # If we found a real game match, this is almost certainly correct.
-                            # We use the raw fuzzy score but guarantee acceptance if > best.
-                            avg_score = (h_s + a_s) / 2.0
-
+                            # Valid game found - use the avg_score already calculated above
+                            # (avg_score was calculated and validated before entering this block)
                             if avg_score > best_pair_score:
                                 best_pair_score = avg_score
                                 best_pair_game = valid_game
                                 best_pair_names = (h_cand, a_cand)
+                                logger.debug(f"MATCH_CANDIDATE: {csv_home} vs {csv_away} -> {h_cand} vs {a_cand} ({avg_score:.1f}%)")
 
             # 3. Final Decision
             if best_pair_game:
@@ -964,16 +1041,17 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
                 if league_tuples:
                     # Pass just the (home, away) tuples to the matcher
                     simple_tuples = [(t[0], t[1]) for t in league_tuples]
-                    matched_tuple = TeamNameMatcher.match_game(csv_home, csv_away, simple_tuples, threshold=0.70)
+                    matched_tuple = TeamNameMatcher.match_game(csv_home, csv_away, simple_tuples, threshold=MIN_FALLBACK_THRESHOLD)
 
                     if matched_tuple:
                         # Find the game object for this tuple
                         for h_t, a_t, g_obj in league_tuples:
                             if (h_t, a_t) == matched_tuple:
                                 matched_game_obj = g_obj
-                                match_confidence = 0.70 # Fallback confidence
+                                match_confidence = MIN_FALLBACK_THRESHOLD * 100  # Convert to percentage
                                 match_status = "MATCH"
-                                closest_matches = [f"Robust Fallback: {matched_tuple}"]
+                                closest_matches = [f"Robust Fallback: {matched_tuple} (threshold: {MIN_FALLBACK_THRESHOLD:.0%})"]
+                                logger.debug(f"MATCH_FALLBACK: {csv_home} vs {csv_away} -> {matched_tuple}")
                                 break
 
                 if not matched_game_obj:
