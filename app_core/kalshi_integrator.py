@@ -862,6 +862,13 @@ def _match_via_events(
     Attempt to match a game to an event by scanning the /events endpoint first.
     This is more efficient and accurate for leagues with structured tickers (NBA/NFL/NCAA).
     """
+    # DEBUG: Log input parameters
+    logger.info(f"🔍 KALSHI MATCH ATTEMPT [{league}]:")
+    logger.info(f"   Game Time (UTC): {game_dt_utc}")
+    logger.info(f"   Home Codes: {home_codes}")
+    logger.info(f"   Away Codes: {away_codes}")
+    logger.info(f"   Status Filter: {status}")
+
     # 1. Determine series ticker
     series_ticker = None
     if league == "NBA": series_ticker = "KXNBAGAME"
@@ -872,24 +879,48 @@ def _match_via_events(
     elif league == "NHL": series_ticker = "KXNHLGAME"
 
     if not series_ticker:
+        logger.info(f"   ❌ No series ticker for league {league}")
         return None
+
+    logger.info(f"   Series Ticker: {series_ticker}")
 
     # 2. Fetch events (using cache inside get_events)
+    # IMPORTANT: Try without status filter first to get all events
+    # This significantly improves match rate as it doesn't filter out events in different statuses
     try:
-        # Request with_nested_markets=True is now default in updated get_events
-        events_resp = integrator.get_events(series_ticker, status=status)
-    except Exception:
+        # First try without status filter to get ALL events
+        events_resp = integrator.get_events(series_ticker, status=None)
+        events = events_resp.get("events", [])
+        logger.info(f"   Total Events Fetched (no status filter): {len(events)}")
+
+        # If no events found and status was specified, try with status filter
+        if not events and status:
+            logger.info(f"   Retrying with status={status}...")
+            events_resp = integrator.get_events(series_ticker, status=status)
+            events = events_resp.get("events", [])
+            logger.info(f"   Total Events Fetched (with status={status}): {len(events)}")
+    except Exception as e:
+        logger.warning(f"   ❌ Failed to fetch events: {e}")
         return None
 
-    events = events_resp.get("events", [])
     if not events:
+        logger.info(f"   ❌ No events found for {series_ticker}")
         return None
+
+    # Log sample events for debugging
+    logger.info(f"   Sample Event Tickers (first 5):")
+    for i, evt in enumerate(events[:5]):
+        ticker = evt.get("ticker", "N/A")
+        close_time = evt.get("close_time", "N/A")
+        logger.info(f"      [{i+1}] {ticker} (closes: {close_time})")
 
     best_event = None
     best_score = 0.0
+    best_details = None
 
     # Time window for matching (hours)
-    TIME_WINDOW_HOURS = 36
+    # Increased from 36 to 72 to be more generous with date matching
+    TIME_WINDOW_HOURS = 72
 
     for evt in events:
         ticker = evt.get("ticker")
@@ -906,12 +937,16 @@ def _match_via_events(
 
         # Check codes against our candidates
         score_1 = 0
-        if evt_away_code in resolved_away: score_1 += 50
-        if evt_home_code in resolved_home: score_1 += 50
+        away_match_1 = evt_away_code in resolved_away
+        home_match_1 = evt_home_code in resolved_home
+        if away_match_1: score_1 += 50
+        if home_match_1: score_1 += 50
 
         score_2 = 0
-        if evt_away_code in resolved_home: score_2 += 50
-        if evt_home_code in resolved_away: score_2 += 50
+        away_match_2 = evt_away_code in resolved_home
+        home_match_2 = evt_home_code in resolved_away
+        if away_match_2: score_2 += 50
+        if home_match_2: score_2 += 50
 
         match_score = max(score_1, score_2)
 
@@ -919,23 +954,61 @@ def _match_via_events(
             continue
 
         # Time check
+        time_diff_hours = None
         close_ts = evt.get("close_time") # ISO string
         if close_ts:
             try:
                 dt = datetime.fromisoformat(str(close_ts).replace("Z", "+00:00"))
                 if dt.tzinfo is None: dt = pytz.utc.localize(dt)
 
-                diff_hours = abs((dt - game_dt_utc).total_seconds()) / 3600.0
-                if diff_hours > TIME_WINDOW_HOURS:
-                    match_score -= 20 # Penalty for time mismatch
+                time_diff_hours = abs((dt - game_dt_utc).total_seconds()) / 3600.0
+                if time_diff_hours > TIME_WINDOW_HOURS:
+                    # Reduced penalty from -20 to -10 to allow matches with minor time differences
+                    # Perfect match (100) with penalty (100-10=90) still passes threshold (85)
+                    match_score -= 10 # Penalty for time mismatch
             except:
                 pass
+
+        # Log potential matches (score >= 50)
+        logger.info(f"   Potential Match: {ticker}")
+        logger.info(f"      Parsed: away={parsed.get('away')}, home={parsed.get('home')}")
+        logger.info(f"      Resolved: away={evt_away_code}, home={evt_home_code}")
+        logger.info(f"      Score: {match_score} (direct={score_1}, swap={score_2})")
+        if time_diff_hours is not None:
+            logger.info(f"      Time Diff: {time_diff_hours:.1f} hours")
 
         if match_score > best_score:
             best_score = match_score
             best_event = evt
+            best_details = {
+                "ticker": ticker,
+                "parsed_away": parsed.get("away"),
+                "parsed_home": parsed.get("home"),
+                "resolved_away": evt_away_code,
+                "resolved_home": evt_home_code,
+                "score_1": score_1,
+                "score_2": score_2,
+                "time_diff_hours": time_diff_hours
+            }
 
-    if best_event and best_score >= 90: # High confidence match
+    # Log final result
+    # Lowered threshold from 90 to 85 to improve match rate
+    # This allows for minor time mismatches while still requiring both teams to match
+    MATCH_THRESHOLD = 85
+
+    if best_event:
+        logger.info(f"   Best Match Found: {best_details['ticker']}")
+        logger.info(f"      Score: {best_score} (threshold: {MATCH_THRESHOLD})")
+        logger.info(f"      Details: {best_details}")
+        if best_score < MATCH_THRESHOLD:
+            logger.warning(f"   ❌ Best score {best_score} < {MATCH_THRESHOLD} threshold - NO MATCH")
+            return None
+        logger.info(f"   ✅ MATCH SUCCESSFUL")
+    else:
+        logger.warning(f"   ❌ NO MATCHES FOUND")
+        return None
+
+    if best_event and best_score >= MATCH_THRESHOLD: # High confidence match
         # Extract nested markets from the event object directly
         markets = best_event.get("markets", [])
 
@@ -1064,13 +1137,17 @@ def _match_via_events(
 def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time: Optional[datetime], integrator: "KalshiIntegrator" = None, status: Optional[str] = None) -> KalshiMatchResult:
     league_key = (league or "").upper()
     kalshi = integrator or KalshiIntegrator()
-    
+
     if not kalshi or not kalshi.api_key:
         return KalshiMatchResult(matched=False, kalshi_available=False, label="", probability=None, raw_event_id=None, reason="no_integrator")
 
     # Use robust candidate generation
     home_clean = clean_team_name(home_team)
     away_clean = clean_team_name(away_team)
+
+    # DEBUG: Log team name cleaning
+    logger.info(f"🎯 Kalshi Match Request [{league_key}]: {away_team} @ {home_team}")
+    logger.info(f"   Cleaned Names: {away_clean} @ {home_clean}")
 
     # Generate extended candidates including league-specific mappings
     home_codes = _build_team_codes(home_team)
@@ -1084,6 +1161,10 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
     mapped_away = team_code_for_league(league_key, away_team)
     if mapped_away and mapped_away != "UNK" and mapped_away not in away_codes:
         away_codes.insert(0, mapped_away)
+
+    # DEBUG: Log generated codes
+    logger.info(f"   Mapped Codes: away={mapped_away}, home={mapped_home}")
+    logger.info(f"   Full Code Candidates: away={away_codes}, home={home_codes}")
 
     # NEW: Try Event-Based Matching First
     if game_time and league_key in ["NBA", "NFL", "NCAAB", "NCAAF", "MLB", "NHL"]:
