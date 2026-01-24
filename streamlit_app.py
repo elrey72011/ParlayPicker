@@ -9127,42 +9127,9 @@ with tab_master:
                     kalshi_data=kalshi_spread if kalshi_spread.get("kalshi_matched") else None,
                 )
 
-                # Capture Sentiment Debug Data (Total)
-                if total_sentiment_debug and isinstance(total_sentiment_debug, dict) and total_sentiment_debug.get("used"):
-                    row["total_wsentiment_used"] = total_sentiment_debug.get("weight", 0.0)
-                    row["total_sentiment_adj"] = total_sentiment_debug.get("adj", 0.0)
-                    row["total_sentiment_prob"] = total_sentiment_debug.get("prob", 0.0)
-
-                    # Update generic columns if this is the chosen market
-                    # If spread wasn't sentiment driven but total is, update
-                    # Or if spread sentiment data is missing
-                    if total_decision_driver == "sentiment" or total_sentiment_debug.get("weight", 0.0) > 0.05:
-                        # Prefer Total sentiment data if it's the driver or we haven't set it yet
-                        if "wsentiment_used" not in row or total_decision_driver == "sentiment":
-                            row["wsentiment_used"] = total_sentiment_debug.get("weight", 0.0)
-                            row["sentiment_adj"] = total_sentiment_debug.get("adj", 0.0)
-                            row["sentiment_prob"] = total_sentiment_debug.get("prob", 0.0)
-                else:
-                    row["total_wsentiment_used"] = 0.0
-                    row["total_sentiment_adj"] = 0.0
-                    row["total_sentiment_prob"] = None
-
-                # Capture Sentiment Debug Data (Spread)
-                if spread_sentiment_debug and isinstance(spread_sentiment_debug, dict) and spread_sentiment_debug.get("used"):
-                    row["spread_wsentiment_used"] = spread_sentiment_debug.get("weight", 0.0)
-                    row["spread_sentiment_adj"] = spread_sentiment_debug.get("adj", 0.0)
-                    row["spread_sentiment_prob"] = spread_sentiment_debug.get("prob", 0.0)
-
-                    # Update generic columns if this is the chosen market (Spread is default favored in loop usually)
-                    # We will override later if Total is better, but this ensures data exists
-                    if spread_decision_driver == "sentiment" or spread_sentiment_debug.get("weight", 0.0) > 0.05:
-                        row["wsentiment_used"] = spread_sentiment_debug.get("weight", 0.0)
-                        row["sentiment_adj"] = spread_sentiment_debug.get("adj", 0.0)
-                        row["sentiment_prob"] = spread_sentiment_debug.get("prob", 0.0)
-                else:
-                    row["spread_wsentiment_used"] = 0.0
-                    row["spread_sentiment_adj"] = 0.0
-                    row["spread_sentiment_prob"] = None
+                # REMOVED: Misplaced sentiment debug capture code (lines 9130-9165)
+                # This code was trying to use undefined variable 'row' before row objects were created
+                # Sentiment debug data is already captured in spread_row and total_row creation blocks later
 
                 # Calculate TheOver Impact (Invariant: delta = final - without)
                 if theover_prob_final_spread is not None:
