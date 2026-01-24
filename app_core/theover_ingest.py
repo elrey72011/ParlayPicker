@@ -148,24 +148,45 @@ TEAM_ALIAS_MAP_BY_LEAGUE = {
         "NEW ORLEANS": "New Orleans Privateers",
         "FIU": "Florida Int'l Golden Panthers",
         "Sacramento State": "Sacramento St Hornets",
-        # Issue #2: Explicit mappings for commonly problematic team names
-        # Ivy League teams
+        # Issue #2 & #3: Explicit mappings for commonly problematic team names
+        # Ivy League teams - CRITICAL for correct matching
         "Brown": "Brown Bears",
         "BROWN": "Brown Bears",
+        "Brown Bears": "Brown Bears",
         "Princeton": "Princeton Tigers",
         "PRINCETON": "Princeton Tigers",
+        "Princeton Tigers": "Princeton Tigers",
         "Yale": "Yale Bulldogs",
         "YALE": "Yale Bulldogs",
+        "Yale Bulldogs": "Yale Bulldogs",
         "Harvard": "Harvard Crimson",
         "HARVARD": "Harvard Crimson",
+        "Harvard Crimson": "Harvard Crimson",
         "Columbia": "Columbia Lions",
         "COLUMBIA": "Columbia Lions",
+        "Columbia Lions": "Columbia Lions",
         "Cornell": "Cornell Big Red",
         "CORNELL": "Cornell Big Red",
+        "Cornell Big Red": "Cornell Big Red",
         "Dartmouth": "Dartmouth Big Green",
         "DARTMOUTH": "Dartmouth Big Green",
+        "Dartmouth Big Green": "Dartmouth Big Green",
         "Penn": "Penn Quakers",
         "PENN": "Penn Quakers",
+        "Penn Quakers": "Penn Quakers",
+        # Virginia schools - prevent matching to West Virginia
+        "Virginia": "Virginia Cavaliers",
+        "VIRGINIA": "Virginia Cavaliers",
+        "UVA": "Virginia Cavaliers",
+        # Missouri Valley / lesser-known teams
+        "Drake": "Drake Bulldogs",
+        "DRAKE": "Drake Bulldogs",
+        "Drake Bulldogs": "Drake Bulldogs",
+        "Indiana St": "Indiana State Sycamores",
+        "Indiana State": "Indiana State Sycamores",
+        "INDIANA STATE": "Indiana State Sycamores",
+        "Incarnate Word": "Incarnate Word Cardinals",
+        "UIW": "Incarnate Word Cardinals",
         # State schools - explicit to prevent Georgia -> Georgia State confusion
         "Georgia": "Georgia Bulldogs",
         "GEORGIA": "Georgia Bulldogs",
@@ -588,24 +609,39 @@ def _validate_team_for_league(team_name: str, league: str) -> bool:
     Strict validation to catch cross-sport contamination.
     Returns True if valid (or unknown), False if clearly invalid.
     Implements cross-league checks for NBA, NFL, NHL, NCAAB, NCAAF.
+
+    CRITICAL FIX: NCAAB and NCAAF share the same school names (e.g., Cincinnati Bearcats,
+    Georgia Bulldogs, Texas Longhorns). These are NOT contamination - they're the same
+    schools playing different sports. Only check for contamination between leagues that
+    have truly distinct teams (professional leagues vs each other).
     """
     league = _normalize_league_str(league)
     team_upper = team_name.upper()
 
+    # Define which leagues share team names and should NOT cross-check
+    # NCAAB and NCAAF are college sports that share the same schools
+    COLLEGE_LEAGUES = {"NCAAB", "NCAAF"}
+    # Professional leagues have unique franchise names
+    PROFESSIONAL_LEAGUES = {"NBA", "NFL", "NHL", "MLB"}
+
     # Cross-League Contamination Prevention
-    # Check if team_name matches a team from a DIFFERENT league
+    # Only check contamination between leagues that have DISTINCT team pools
     if league in TEAM_ALIAS_MAP_BY_LEAGUE:
-        # Get all teams from OTHER leagues
         for other_league, other_teams in TEAM_ALIAS_MAP_BY_LEAGUE.items():
             if other_league == league:
                 continue  # Skip same league
 
-            # Check if team_name matches any FULL TEAM NAME from other league
-            # CRITICAL FIX: Only check full names, NOT aliases (aliases are often shared city names)
-            # This prevents false positives like "Boston" (NBA) matching "Boston" (NHL alias)
+            # CRITICAL FIX: Skip cross-check between NCAAB and NCAAF
+            # These leagues share the same schools (Cincinnati Bearcats, Georgia Bulldogs, etc.)
+            # A team appearing in both is NOT contamination - it's the same school in different sports
+            if league in COLLEGE_LEAGUES and other_league in COLLEGE_LEAGUES:
+                continue  # Don't cross-check college leagues against each other
+
+            # Only cross-check professional leagues against each other
+            # and professional vs college (NBA team in NCAAB data = contamination)
             for alias, full_name in other_teams.items():
                 if team_upper == full_name.upper():
-                    # Exact match to a full team name from a different league
+                    # Exact match to a full team name from a different league category
                     logger.warning(f"Cross-League Contamination: '{team_name}' matches {other_league} team '{full_name}' but league is {league}")
                     return False
 

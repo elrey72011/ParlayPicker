@@ -243,16 +243,51 @@ class TeamNameMatcher:
         'NC CENTRAL': 'NORTH CAROLINA CENTRAL',
 
         # --- ISSUE #2: Explicit mappings for commonly problematic team names ---
-        # Ivy League teams (often appear as just school name)
+        # Ivy League teams - CRITICAL: These must map to exact full names with mascot
+        # to prevent fuzzy matching picking "Baylor Bears" for "Brown" or "LSU Tigers" for "Princeton"
         'BROWN': 'BROWN BEARS',
+        'BROWN BEARS': 'BROWN BEARS',
         'PRINCETON': 'PRINCETON TIGERS',
+        'PRINCETON TIGERS': 'PRINCETON TIGERS',
         'YALE': 'YALE BULLDOGS',
+        'YALE BULLDOGS': 'YALE BULLDOGS',
         'HARVARD': 'HARVARD CRIMSON',
+        'HARVARD CRIMSON': 'HARVARD CRIMSON',
         'COLUMBIA': 'COLUMBIA LIONS',
+        'COLUMBIA LIONS': 'COLUMBIA LIONS',
         'CORNELL': 'CORNELL BIG RED',
+        'CORNELL BIG RED': 'CORNELL BIG RED',
         'DARTMOUTH': 'DARTMOUTH BIG GREEN',
+        'DARTMOUTH BIG GREEN': 'DARTMOUTH BIG GREEN',
         'PENN': 'PENN QUAKERS',
+        'PENN QUAKERS': 'PENN QUAKERS',
         'PENNSYLVANIA': 'PENN QUAKERS',
+
+        # Virginia schools - prevent "Virginia" matching to "West Virginia"
+        'VIRGINIA': 'VIRGINIA CAVALIERS',
+        'VIRGINIA CAVALIERS': 'VIRGINIA CAVALIERS',
+        'UVA': 'VIRGINIA CAVALIERS',
+        'WEST VIRGINIA': 'WEST VIRGINIA MOUNTAINEERS',
+        'WEST VIRGINIA MOUNTAINEERS': 'WEST VIRGINIA MOUNTAINEERS',
+        'WVU': 'WEST VIRGINIA MOUNTAINEERS',
+
+        # North Carolina schools - prevent matching to Incarnate Word or other schools
+        'NORTH CAROLINA': 'NORTH CAROLINA TAR HEELS',
+        'NORTH CAROLINA TAR HEELS': 'NORTH CAROLINA TAR HEELS',
+        'UNC TAR HEELS': 'NORTH CAROLINA TAR HEELS',
+        'TAR HEELS': 'NORTH CAROLINA TAR HEELS',
+
+        # Missouri Valley / lesser-known teams that get fuzzy matched wrong
+        'DRAKE': 'DRAKE BULLDOGS',
+        'DRAKE BULLDOGS': 'DRAKE BULLDOGS',
+        'INDIANA STATE': 'INDIANA STATE SYCAMORES',
+        'INDIANA STATE SYCAMORES': 'INDIANA STATE SYCAMORES',
+        'INDIANA ST': 'INDIANA STATE SYCAMORES',
+        'INDIANA ST SYCAMORES': 'INDIANA STATE SYCAMORES',
+
+        # Other problematic teams
+        'INCARNATE WORD': 'INCARNATE WORD CARDINALS',
+        'UIW': 'INCARNATE WORD CARDINALS',
 
         # State schools that get confused with "State" variants
         'GEORGIA': 'GEORGIA BULLDOGS',
