@@ -27,6 +27,85 @@ except ImportError:
 
 logger = logging.getLogger("app_core.theover_ingest")
 
+# =====================================================
+# THEOVER MATCHING THRESHOLDS - Critical Bug Fix
+# =====================================================
+# These thresholds prevent incorrect game matching where
+# TheOver data from unrelated games is applied to picks.
+#
+# Examples of bad matches that were accepted before this fix:
+#   - Georgia Bulldogs vs Texas Longhorns -> Texas Southern vs Alabama A&M (63.89%)
+#   - Northern KY vs Wright St. -> Ball State vs Northern Illinois (71.52%)
+#   - Southern Miss vs Coastal Carolina -> Ball State vs Northern Illinois (54.44%)
+#
+# The fix requires BOTH high combined AND individual team scores.
+
+# Minimum confidence for the combined average of both team matches
+# Matches below this will be rejected even if a valid game pair exists
+MIN_COMBINED_THRESHOLD = 80.0
+
+# Minimum confidence required for EACH individual team
+# Prevents cases where one team matches well but the other is completely wrong
+MIN_INDIVIDUAL_THRESHOLD = 70.0
+
+# Minimum threshold for fallback robust matching
+MIN_FALLBACK_THRESHOLD = 0.75
+
+# Ambiguous team name pairs that should NEVER be matched to each other
+# Format: (partial_name_in_input, wrong_full_name_to_block)
+# These are teams whose names are substrings of other unrelated teams
+AMBIGUOUS_TEAM_BLOCKS = {
+    # Texas schools - "Texas" should not match "Texas Southern", "Texas A&M-CC", etc.
+    ("TEXAS", "TEXAS SOUTHERN"),
+    ("TEXAS", "TEXAS A&M CORPUS CHRISTI"),
+    ("TEXAS", "TEXAS A&M CC"),
+    ("TEXAS", "TEXAS STATE"),
+    # Georgia schools - "Georgia" should not match "Georgia Southern", "Georgia State", etc.
+    ("GEORGIA", "GEORGIA SOUTHERN"),
+    ("GEORGIA", "GEORGIA STATE"),
+    ("GEORGIA", "GEORGIA TECH"),  # Different sport/conference context
+    # Miami schools
+    ("MIAMI", "MIAMI OH"),
+    ("MIAMI", "MIAMI OHIO"),
+    # Northern schools - prevent "Northern KY" matching "Northern Illinois", etc.
+    ("NORTHERN KENTUCKY", "NORTHERN ILLINOIS"),
+    ("NORTHERN KY", "NORTHERN ILLINOIS"),
+    # Southern schools
+    ("SOUTHERN MISS", "SOUTHERN"),
+    ("SOUTHERN MISS", "SOUTHERN ILLINOIS"),
+    ("SOUTHERN MISSISSIPPI", "SOUTHERN ILLINOIS"),
+    # Ball State vs other Ball schools
+    ("BALL STATE", "BALL"),
+    # Alabama schools
+    ("ALABAMA", "ALABAMA A&M"),
+    ("ALABAMA", "ALABAMA STATE"),
+    ("ALABAMA", "UAB"),
+    # Carolina schools
+    ("COASTAL CAROLINA", "NORTH CAROLINA"),
+    ("COASTAL CAROLINA", "SOUTH CAROLINA"),
+    # Wright State specific
+    ("WRIGHT ST", "BALL STATE"),
+    ("WRIGHT STATE", "BALL STATE"),
+}
+
+
+def _is_ambiguous_match(input_team: str, matched_team: str) -> bool:
+    """
+    Check if the matched team is a known ambiguous/wrong match for the input.
+    Returns True if the match should be BLOCKED.
+    """
+    input_norm = input_team.upper().strip()
+    matched_norm = matched_team.upper().strip()
+
+    for partial_input, blocked_match in AMBIGUOUS_TEAM_BLOCKS:
+        # Check if input contains the partial pattern and matched team contains the blocked pattern
+        if partial_input in input_norm and blocked_match in matched_norm:
+            # But make sure input is NOT the blocked team itself (e.g., "Texas Southern" input is valid)
+            if blocked_match not in input_norm:
+                return True
+    return False
+
+
 # League-specific team alias mappings to prevent cross-league contamination
 TEAM_ALIAS_MAP_BY_LEAGUE = {
     "NHL": {
@@ -869,11 +948,18 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
             for h_cand, h_s in h_candidates[:5]:
                 for a_cand, a_s in a_candidates[:5]:
 
-                    # Relaxed Threshold for Pair Validation:
-                    # If we find a VALID GAME, we can tolerate slightly lower individual scores
-                    # because the existence of the pairing confirms the identity.
-                    # Lowering 75.0 -> 50.0 allows "AR-Pine Bluff" (58.8) to match if pair is valid.
-                    if h_s < 50.0 or a_s < 50.0:
+                    # CRITICAL BUG FIX: Stricter Threshold for Pair Validation
+                    # Previous threshold of 50.0 allowed completely wrong matches like:
+                    #   - "Georgia vs Texas" matching "Texas Southern vs Alabama A&M" (63%)
+                    #   - "Northern KY vs Wright St" matching "Ball State vs Northern Illinois" (71%)
+                    # Now require MIN_INDIVIDUAL_THRESHOLD (70.0) for EACH team.
+                    if h_s < MIN_INDIVIDUAL_THRESHOLD or a_s < MIN_INDIVIDUAL_THRESHOLD:
+                        logger.debug(f"MATCH_REJECTED (low individual): {csv_home}={h_s:.1f}%, {csv_away}={a_s:.1f}% - below {MIN_INDIVIDUAL_THRESHOLD}%")
+                        continue
+
+                    # Check for ambiguous team name matches that should be blocked
+                    if _is_ambiguous_match(csv_home, h_cand) or _is_ambiguous_match(csv_away, a_cand):
+                        logger.info(f"MATCH_BLOCKED (ambiguous): {csv_home} vs {csv_away} -> {h_cand} vs {a_cand} - known ambiguous pair")
                         continue
 
                     # Check for valid game intersection (Home/Away Agnostic)
@@ -929,10 +1015,15 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
                                 break
 
                         if valid_game:
-                            # Boost score if a valid game exists (Confirmation Bonus)
-                            # If we found a real game match, this is almost certainly correct.
-                            # We use the raw fuzzy score but guarantee acceptance if > best.
+                            # Calculate combined confidence score
                             avg_score = (h_s + a_s) / 2.0
+
+                            # CRITICAL BUG FIX: Require minimum combined threshold
+                            # This prevents matches like "Southern Miss vs Coastal Carolina"
+                            # matching "Ball State vs Northern Illinois" at 54% combined.
+                            if avg_score < MIN_COMBINED_THRESHOLD:
+                                logger.info(f"MATCH_REJECTED (low combined): {csv_home} vs {csv_away} -> {h_cand} vs {a_cand} ({avg_score:.1f}%) - below {MIN_COMBINED_THRESHOLD}% threshold")
+                                continue  # Skip this pair, try next candidate
 
                             if avg_score > best_pair_score:
                                 best_pair_score = avg_score
@@ -963,17 +1054,19 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
                 league_tuples = game_tuples_by_league.get(league, [])
                 if league_tuples:
                     # Pass just the (home, away) tuples to the matcher
+                    # Use stricter MIN_FALLBACK_THRESHOLD (0.75) instead of 0.70
                     simple_tuples = [(t[0], t[1]) for t in league_tuples]
-                    matched_tuple = TeamNameMatcher.match_game(csv_home, csv_away, simple_tuples, threshold=0.70)
+                    matched_tuple = TeamNameMatcher.match_game(csv_home, csv_away, simple_tuples, threshold=MIN_FALLBACK_THRESHOLD)
 
                     if matched_tuple:
                         # Find the game object for this tuple
                         for h_t, a_t, g_obj in league_tuples:
                             if (h_t, a_t) == matched_tuple:
                                 matched_game_obj = g_obj
-                                match_confidence = 0.70 # Fallback confidence
+                                match_confidence = MIN_FALLBACK_THRESHOLD * 100  # Convert to percentage
                                 match_status = "MATCH"
                                 closest_matches = [f"Robust Fallback: {matched_tuple}"]
+                                logger.debug(f"MATCH_FALLBACK: {csv_home} vs {csv_away} -> {matched_tuple} via robust matcher")
                                 break
 
                 if not matched_game_obj:
