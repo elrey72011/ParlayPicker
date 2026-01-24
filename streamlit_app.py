@@ -11047,19 +11047,23 @@ with tab_master:
             master_df['_sel_score'] = (_final_prob - 0.5).abs() + _edge
 
             # ============================================
-            # ML ODDS PENALTY: Tiered penalties for extreme ML picks (odds beyond ±250)
+            # ML ODDS PENALTY: Tiered penalties + EXCLUSION for extreme ML picks (odds beyond ±250)
             # ============================================
             ML_ODDS_THRESHOLD = 250  # Base threshold - don't prefer ML picks with odds beyond ±250
+            ML_ODDS_EXCLUSION_THRESHOLD = 400  # Complete exclusion - remove from selection pool
 
             # Tiered penalty factors based on odds extremity
-            ML_ODDS_PENALTY_MODERATE = 0.5  # 250-300: 50% penalty (2x preference for spread/total)
-            ML_ODDS_PENALTY_STRONG = 0.3    # 300-400: 70% penalty (3.3x preference for spread/total)
-            ML_ODDS_PENALTY_EXTREME = 0.1   # 400+: 90% penalty (10x preference for spread/total)
+            ML_ODDS_PENALTY_MODERATE = 0.3  # 250-300: 70% penalty (3.3x preference for spread/total) - STRENGTHENED from 0.5
+            ML_ODDS_PENALTY_STRONG = 0.15   # 300-400: 85% penalty (6.7x preference for spread/total) - STRENGTHENED from 0.3
 
             # Track ML picks before penalty
             ml_picks_before = len(master_df[master_df['Market'] == 'Moneyline']) if 'Market' in master_df.columns else 0
             extreme_ml_count = 0
-            penalty_counts = {'MODERATE': 0, 'STRONG': 0, 'EXTREME': 0}
+            excluded_count = 0
+            penalty_counts = {'MODERATE': 0, 'STRONG': 0, 'EXCLUDED': 0}
+
+            # Initialize exclusion flag
+            master_df['_ml_excluded'] = False
 
             # Apply tiered penalties to extreme ML picks
             for idx, row in master_df.iterrows():
@@ -11079,37 +11083,43 @@ with tab_master:
                 else:
                     odds = away_ml
 
-                # Check if odds are extreme and apply tiered penalty
+                # Check if odds are extreme and apply tiered penalty or exclusion
                 try:
                     odds_value = float(odds) if odds is not None else 0
                     abs_odds = abs(odds_value)
 
                     if abs_odds > ML_ODDS_THRESHOLD:
                         # Determine penalty tier based on odds extremity
-                        if abs_odds > 400:
-                            penalty_factor = ML_ODDS_PENALTY_EXTREME
-                            severity = "EXTREME"
-                            penalty_counts['EXTREME'] += 1
+                        if abs_odds > ML_ODDS_EXCLUSION_THRESHOLD:
+                            # COMPLETE EXCLUSION - remove from selection pool entirely
+                            master_df.at[idx, '_ml_excluded'] = True
+                            severity = "EXCLUDED"
+                            penalty_counts['EXCLUDED'] += 1
+                            excluded_count += 1
+                            logger.info(f"🚫 EXCLUDING extreme ML: {pick} at {odds_value:+.0f} (odds > ±{ML_ODDS_EXCLUSION_THRESHOLD})")
                         elif abs_odds > 300:
                             penalty_factor = ML_ODDS_PENALTY_STRONG
                             severity = "STRONG"
                             penalty_counts['STRONG'] += 1
+                            # Log with severity level
+                            logger.info(f"⚠️ {severity} ML odds: {pick} at {odds_value:+.0f} (penalty: {int((1-penalty_factor)*100)}%)")
+                            # Apply tiered penalty to selection score
+                            master_df.at[idx, '_sel_score'] = master_df.at[idx, '_sel_score'] * penalty_factor
                         else:
                             penalty_factor = ML_ODDS_PENALTY_MODERATE
                             severity = "MODERATE"
                             penalty_counts['MODERATE'] += 1
+                            # Log with severity level
+                            logger.info(f"⚠️ {severity} ML odds: {pick} at {odds_value:+.0f} (penalty: {int((1-penalty_factor)*100)}%)")
+                            # Apply tiered penalty to selection score
+                            master_df.at[idx, '_sel_score'] = master_df.at[idx, '_sel_score'] * penalty_factor
 
-                        # Log with severity level
-                        logger.info(f"⚠️ {severity} ML odds: {pick} at {odds_value:+.0f} (penalty: {int((1-penalty_factor)*100)}%)")
-
-                        # Apply tiered penalty to selection score
-                        master_df.at[idx, '_sel_score'] = master_df.at[idx, '_sel_score'] * penalty_factor
-
-                        # Add flags for tracking
-                        master_df.at[idx, 'extreme_ml_odds'] = True
-                        master_df.at[idx, 'ml_odds_penalty_applied'] = True
-                        master_df.at[idx, 'ml_odds_penalty_tier'] = severity
-                        extreme_ml_count += 1
+                        # Add flags for tracking (except for excluded picks)
+                        if severity != "EXCLUDED":
+                            master_df.at[idx, 'extreme_ml_odds'] = True
+                            master_df.at[idx, 'ml_odds_penalty_applied'] = True
+                            master_df.at[idx, 'ml_odds_penalty_tier'] = severity
+                            extreme_ml_count += 1
                 except (ValueError, TypeError):
                     # Skip if odds cannot be converted to float
                     continue
@@ -11117,11 +11127,15 @@ with tab_master:
             # Log summary of penalties applied
             logger.info(f"⚠️ ML Odds Filter: Applied tiered penalties to {extreme_ml_count}/{ml_picks_before} ML picks:")
             if penalty_counts['MODERATE'] > 0:
-                logger.info(f"   📊 MODERATE (±250-300, 50% penalty): {penalty_counts['MODERATE']} picks")
+                logger.info(f"   📊 MODERATE (±250-300, 70% penalty): {penalty_counts['MODERATE']} picks")
             if penalty_counts['STRONG'] > 0:
-                logger.info(f"   📊 STRONG (±300-400, 70% penalty): {penalty_counts['STRONG']} picks")
-            if penalty_counts['EXTREME'] > 0:
-                logger.info(f"   📊 EXTREME (±400+, 90% penalty): {penalty_counts['EXTREME']} picks")
+                logger.info(f"   📊 STRONG (±300-400, 85% penalty): {penalty_counts['STRONG']} picks")
+            if penalty_counts['EXCLUDED'] > 0:
+                logger.info(f"   🚫 EXCLUDED (±400+, complete exclusion): {penalty_counts['EXCLUDED']} picks")
+
+            # Filter out excluded picks before ATOMIC COLLAPSE
+            master_df = master_df[~master_df['_ml_excluded']].copy()
+            logger.info(f"🔍 Excluded {excluded_count} extreme ML picks (odds > ±{ML_ODDS_EXCLUSION_THRESHOLD}) from selection pool")
             # ============================================
 
             # 2. Group by game and pick only the highest scoring row
@@ -11154,10 +11168,11 @@ with tab_master:
                     pct = (count / total_picks) * 100
                     logger.info(f"   {market}: {count} picks ({pct:.1f}%)")
 
-                # Show how many extreme ML picks were still selected
+                # Show how many extreme ML picks were still selected (after penalties applied)
                 if 'extreme_ml_odds' in master_df.columns:
                     extreme_selected = master_df['extreme_ml_odds'].fillna(False).sum()
-                    logger.info(f"⚠️ Extreme ML picks (odds > ±{ML_ODDS_THRESHOLD}) selected as best: {extreme_selected}/{total_picks}")
+                    logger.info(f"⚠️ Extreme ML picks (±250-400, penalized) selected as best: {extreme_selected}/{total_picks}")
+                    logger.info(f"✅ Very extreme ML picks (±400+) were EXCLUDED: {excluded_count} picks removed from pool")
             # ============================================
 
             # Task 4: Enrich with Consensus (Sharpness Delta)
