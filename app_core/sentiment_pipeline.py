@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import random
 import re
 from datetime import datetime, timedelta, timezone
 import time
@@ -10,6 +11,13 @@ from typing import Any, Dict, List, Optional, Tuple
 import requests
 import streamlit as st
 from app_core.reddit_sentiment import fetch_reddit_sentiment_map
+from app_core.sentiment_cache import (
+    get_cache,
+    load_persistent_cooldown,
+    save_persistent_cooldown,
+    is_cooldown_active,
+    get_cooldown_remaining_seconds,
+)
 
 # Configure logger for sentiment pipeline
 logger = logging.getLogger(__name__)
@@ -227,9 +235,25 @@ def fetch_team_newsapi_cached(
 
 
 @st.cache_data(ttl=21600)
-def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Optional[str] = None, *, max_retries: int = 2, retry_delay: float = 0.75, date_bucket: Optional[str] = None) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Optional[str] = None, *, max_retries: int = 3, retry_delay: float = 0.75, date_bucket: Optional[str] = None) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """Fetch recent articles for a team; returns (articles, info) where info contains status/error."""
     date_bucket = date_bucket or datetime.now(timezone.utc).date().isoformat()
+
+    # Check if cooldown is active before making any request
+    cooldown_active, cooldown_msg = _check_and_enforce_cooldown()
+    if cooldown_active:
+        logger.info(f"Skipping NewsAPI for {team}: {cooldown_msg}")
+        return [], {
+            "error": "cooldown_active",
+            "status": None,
+            "status_code": None,
+            "league_query": league_query or league,
+            "totalResults": None,
+            "q": None,
+            "rate_limited": True,
+            "auth_error": False,
+            "cooldown_msg": cooldown_msg,
+        }
 
     # User Request: Ensure we check general secrets if key is missing
     if not news_api_key:
@@ -335,10 +359,24 @@ def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Opt
 
             if status != 200:
                 error_key = "rate_limited" if rate_limited else ("bad_key" if auth_error else "http_error")
-                if rate_limited and attempts <= max_retries and not articles:
-                    time.sleep(retry_delay * attempts)
-                    last_error = error_key
-                    continue
+                if rate_limited:
+                    # Use exponential backoff with jitter for rate limiting
+                    backoff_delay = _exponential_backoff_with_jitter(attempts)
+                    logger.warning(f"Rate limited (429) for {team}. Attempt {attempts}/{max_retries}. Waiting {backoff_delay:.2f}s")
+
+                    # If we've exceeded max retries, set persistent cooldown
+                    if attempts >= max_retries:
+                        cooldown_until = datetime.now() + timedelta(hours=COOLDOWN_HOURS)
+                        save_persistent_cooldown(cooldown_until, reason="429_rate_limit")
+                        try:
+                            st.session_state["sentiment_cooldown_until"] = cooldown_until.isoformat()
+                        except Exception:
+                            pass
+                        logger.warning(f"Max retries exceeded. Setting {COOLDOWN_HOURS}h cooldown until {cooldown_until.isoformat()}")
+                    elif not articles:
+                        time.sleep(backoff_delay)
+                        last_error = error_key
+                        continue
                 return articles, {
                     "error": error_key,
                     "status": status,
@@ -368,7 +406,9 @@ def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Opt
         except Exception as exc:
             last_error = str(exc)
             if attempts <= max_retries:
-                time.sleep(retry_delay * attempts)
+                backoff_delay = _exponential_backoff_with_jitter(attempts)
+                logger.debug(f"Request exception for {team}: {exc}. Retrying in {backoff_delay:.2f}s")
+                time.sleep(backoff_delay)
                 continue
             return [], {
                 "error": last_error,
@@ -461,6 +501,64 @@ def team_sentiment_from_articles(articles: List[Dict[str, Any]]) -> float:
 MAX_SENTIMENT_CALLS = 200
 COOLDOWN_HOURS = 12
 
+# Exponential backoff configuration
+BACKOFF_BASE_SECONDS = 1.0
+BACKOFF_MAX_SECONDS = 60.0
+BACKOFF_JITTER_FACTOR = 0.3  # 30% jitter
+
+
+def _exponential_backoff_with_jitter(attempt: int, base: float = BACKOFF_BASE_SECONDS, max_delay: float = BACKOFF_MAX_SECONDS) -> float:
+    """
+    Calculate exponential backoff delay with jitter.
+
+    Args:
+        attempt: The attempt number (0-indexed)
+        base: Base delay in seconds
+        max_delay: Maximum delay in seconds
+
+    Returns:
+        Delay in seconds with jitter applied
+    """
+    # Exponential backoff: base * 2^attempt
+    delay = min(base * (2 ** attempt), max_delay)
+
+    # Add jitter: +/- 30% randomness
+    jitter = delay * BACKOFF_JITTER_FACTOR * (2 * random.random() - 1)
+    final_delay = max(0.1, delay + jitter)
+
+    logger.debug(f"Backoff attempt {attempt}: base_delay={delay:.2f}s, jitter={jitter:.2f}s, final={final_delay:.2f}s")
+    return final_delay
+
+
+def _check_and_enforce_cooldown() -> Tuple[bool, Optional[str]]:
+    """
+    Check if cooldown is active and should prevent API calls.
+
+    Returns:
+        (is_active, message) - True if cooldown is active, with optional message
+    """
+    # First check persistent cooldown (survives app restarts)
+    persistent_cooldown = load_persistent_cooldown()
+    if persistent_cooldown and datetime.now(timezone.utc).replace(tzinfo=None) < persistent_cooldown:
+        remaining = get_cooldown_remaining_seconds()
+        return True, f"Persistent cooldown active ({remaining/3600:.1f}h remaining)"
+
+    # Then check session state cooldown
+    try:
+        cooldown_str = st.session_state.get("sentiment_cooldown_until")
+        if cooldown_str:
+            cooldown_dt = datetime.fromisoformat(cooldown_str)
+            if cooldown_dt.tzinfo is None:
+                cooldown_dt = cooldown_dt.replace(tzinfo=timezone.utc)
+            now_utc = datetime.now(timezone.utc)
+            if now_utc < cooldown_dt:
+                remaining = (cooldown_dt - now_utc).total_seconds()
+                return True, f"Session cooldown active ({remaining/3600:.1f}h remaining)"
+    except Exception as e:
+        logger.debug(f"Error checking session cooldown: {e}")
+
+    return False, None
+
 
 def _normalize_team_key(name: Any) -> str:
     cleaned = re.sub(r"[#.,]", " ", str(name or ""))
@@ -505,7 +603,15 @@ def build_team_sentiment_map(
 
     now_utc = datetime.now(timezone.utc)
     cooldown_until_dt: Optional[datetime] = None
-    if cooldown_until:
+
+    # First check persistent cooldown (survives app restarts)
+    persistent_cooldown = load_persistent_cooldown()
+    if persistent_cooldown:
+        cooldown_until_dt = persistent_cooldown.replace(tzinfo=timezone.utc) if persistent_cooldown.tzinfo is None else persistent_cooldown
+        logger.info(f"Using persistent cooldown: {cooldown_until_dt.isoformat()}")
+
+    # Then check passed-in cooldown parameter
+    if not cooldown_until_dt and cooldown_until:
         try:
             if isinstance(cooldown_until, str):
                 cooldown_until_dt = datetime.fromisoformat(cooldown_until)
@@ -518,6 +624,9 @@ def build_team_sentiment_map(
         except Exception:
             cooldown_until_dt = None
     cooldown_active = bool(cooldown_until_dt and now_utc < cooldown_until_dt)
+
+    # Get cache instance for stale fallback
+    sentiment_cache = get_cache()
 
     sentiment_map: Dict[str, Optional[float]] = {}
     meta_map: Dict[str, Dict[str, Any]] = {}
@@ -574,6 +683,39 @@ def build_team_sentiment_map(
 
         if stop_fetching or debug["calls_made"] >= max_calls or not news_api_key:
             debug["calls_capped"] = debug["calls_capped"] or debug["calls_made"] >= max_calls or stop_fetching
+
+            # Try to get stale cache data as fallback when rate limited
+            stale_cache_data = sentiment_cache.get(team, allow_stale=True)
+            if stale_cache_data and stale_cache_data.get("sentiment_score") is not None:
+                score_val = stale_cache_data.get("sentiment_score")
+                is_stale = stale_cache_data.get("is_stale", False)
+                age_hours = stale_cache_data.get("age_hours", 0)
+
+                sentiment_map[team] = score_val
+                meta_map[team] = {
+                    "sentiment_valid": True,
+                    "score": score_val,
+                    "confidence": 0.4 if is_stale else 0.6,  # Lower confidence for stale data
+                    "sources": 1,
+                    "sentiment_source": "stale_cache" if is_stale else "cache",
+                    "sentiment_level": "team",
+                    "sentiment_strength": "WEAK",
+                    "sentiment_badge": "TEAM_WEAK",
+                    "sentiment_articles_used": 1,
+                    "sentiment_query_used": None,
+                    "cached": True,
+                    "is_stale": is_stale,
+                    "cache_age_hours": age_hours,
+                    "error": None,
+                }
+                debug["article_counts"][team] = 1
+                debug["articles_total"] += 1
+                debug["cached_teams"] += 1
+                debug["used_cached"] = True
+                if is_stale:
+                    logger.info(f"Using stale cache for {team} (age={age_hours:.1f}h) during rate limit")
+                continue
+
             if prev_meta:
                 used_score = prev_score if prev_meta.get("sentiment_valid") else None
                 sentiment_map[team] = used_score
@@ -650,10 +792,15 @@ def build_team_sentiment_map(
                 debug["rate_limited"] = True
                 cooldown_until_dt = now_utc + timedelta(hours=COOLDOWN_HOURS)
                 debug["cooldown_until"] = cooldown_until_dt.isoformat()
+
+                # Save persistent cooldown to survive app restarts
+                save_persistent_cooldown(cooldown_until_dt.replace(tzinfo=None), reason="429_in_build_map")
+
                 try:
                     st.session_state["sentiment_cooldown_until"] = cooldown_until_dt.isoformat()
                 except Exception:
                     pass
+                logger.warning(f"Rate limit hit in build_team_sentiment_map. Setting {COOLDOWN_HOURS}h cooldown until {cooldown_until_dt.isoformat()}")
                 stop_fetching = True
                 break
 

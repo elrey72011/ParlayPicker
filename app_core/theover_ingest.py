@@ -148,6 +148,60 @@ TEAM_ALIAS_MAP_BY_LEAGUE = {
         "NEW ORLEANS": "New Orleans Privateers",
         "FIU": "Florida Int'l Golden Panthers",
         "Sacramento State": "Sacramento St Hornets",
+        # Issue #2: Explicit mappings for commonly problematic team names
+        # Ivy League teams
+        "Brown": "Brown Bears",
+        "BROWN": "Brown Bears",
+        "Princeton": "Princeton Tigers",
+        "PRINCETON": "Princeton Tigers",
+        "Yale": "Yale Bulldogs",
+        "YALE": "Yale Bulldogs",
+        "Harvard": "Harvard Crimson",
+        "HARVARD": "Harvard Crimson",
+        "Columbia": "Columbia Lions",
+        "COLUMBIA": "Columbia Lions",
+        "Cornell": "Cornell Big Red",
+        "CORNELL": "Cornell Big Red",
+        "Dartmouth": "Dartmouth Big Green",
+        "DARTMOUTH": "Dartmouth Big Green",
+        "Penn": "Penn Quakers",
+        "PENN": "Penn Quakers",
+        # State schools - explicit to prevent Georgia -> Georgia State confusion
+        "Georgia": "Georgia Bulldogs",
+        "GEORGIA": "Georgia Bulldogs",
+        "Texas": "Texas Longhorns",
+        "TEXAS": "Texas Longhorns",
+        "Florida": "Florida Gators",
+        "FLORIDA": "Florida Gators",
+        # Abbreviated schools
+        "SMU": "SMU Mustangs",
+        "UTSA": "UTSA Roadrunners",
+        "Temple": "Temple Owls",
+        "TEMPLE": "Temple Owls",
+        "Tulane": "Tulane Green Wave",
+        "TULANE": "Tulane Green Wave",
+        "Tulsa": "Tulsa Golden Hurricane",
+        "TULSA": "Tulsa Golden Hurricane",
+        "Rice": "Rice Owls",
+        "RICE": "Rice Owls",
+        "Memphis": "Memphis Tigers",
+        "MEMPHIS": "Memphis Tigers",
+        "Houston": "Houston Cougars",
+        "HOUSTON": "Houston Cougars",
+        "Cincinnati": "Cincinnati Bearcats",
+        "CINCINNATI": "Cincinnati Bearcats",
+        "Pitt": "Pittsburgh Panthers",
+        "PITT": "Pittsburgh Panthers",
+        "Wake Forest": "Wake Forest Demon Deacons",
+        "WAKE FOREST": "Wake Forest Demon Deacons",
+        "Boston College": "Boston College Eagles",
+        "BOSTON COLLEGE": "Boston College Eagles",
+        "Notre Dame": "Notre Dame Fighting Irish",
+        "NOTRE DAME": "Notre Dame Fighting Irish",
+        "Stanford": "Stanford Cardinal",
+        "STANFORD": "Stanford Cardinal",
+        "Cal": "California Golden Bears",
+        "CAL": "California Golden Bears",
     },
     "NCAAF": {
         # Add NCAAF specific mappings if needed
@@ -159,6 +213,74 @@ TEAM_ALIAS_MAP_BY_LEAGUE = {
         "Uab": "UAB Blazers",
         "FIU": "Florida Int'l Golden Panthers",
         "Sacramento State": "Sacramento St Hornets",
+        # Issue #2: Explicit mappings for commonly problematic team names
+        "GEORGIA": "Georgia Bulldogs",
+        "TEXAS": "Texas Longhorns",
+        "FLORIDA": "Florida Gators",
+        "ALABAMA": "Alabama Crimson Tide",
+        "SMU": "SMU Mustangs",
+        "UTSA": "UTSA Roadrunners",
+        "Temple": "Temple Owls",
+        "TEMPLE": "Temple Owls",
+        "Memphis": "Memphis Tigers",
+        "MEMPHIS": "Memphis Tigers",
+        "Houston": "Houston Cougars",
+        "HOUSTON": "Houston Cougars",
+        "Tulane": "Tulane Green Wave",
+        "TULANE": "Tulane Green Wave",
+        "Tulsa": "Tulsa Golden Hurricane",
+        "TULSA": "Tulsa Golden Hurricane",
+        "Rice": "Rice Owls",
+        "RICE": "Rice Owls",
+        "Cincinnati": "Cincinnati Bearcats",
+        "CINCINNATI": "Cincinnati Bearcats",
+        "Army": "Army Black Knights",
+        "ARMY": "Army Black Knights",
+        "Navy": "Navy Midshipmen",
+        "NAVY": "Navy Midshipmen",
+        "Air Force": "Air Force Falcons",
+        "AIR FORCE": "Air Force Falcons",
+        "Pitt": "Pittsburgh Panthers",
+        "PITT": "Pittsburgh Panthers",
+        "Pittsburgh": "Pittsburgh Panthers",
+        "PITTSBURGH": "Pittsburgh Panthers",
+        "Wake Forest": "Wake Forest Demon Deacons",
+        "WAKE FOREST": "Wake Forest Demon Deacons",
+        "Florida St": "Florida State Seminoles",
+        "FLORIDA STATE": "Florida State Seminoles",
+        "Florida State": "Florida State Seminoles",
+        "Georgia Tech": "Georgia Tech Yellow Jackets",
+        "GEORGIA TECH": "Georgia Tech Yellow Jackets",
+        "Virginia Tech": "Virginia Tech Hokies",
+        "VIRGINIA TECH": "Virginia Tech Hokies",
+        "Boston College": "Boston College Eagles",
+        "BOSTON COLLEGE": "Boston College Eagles",
+        "Notre Dame": "Notre Dame Fighting Irish",
+        "NOTRE DAME": "Notre Dame Fighting Irish",
+        "Stanford": "Stanford Cardinal",
+        "STANFORD": "Stanford Cardinal",
+        "Cal": "California Golden Bears",
+        "CAL": "California Golden Bears",
+        "California": "California Golden Bears",
+        "CALIFORNIA": "California Golden Bears",
+        "Tennessee": "Tennessee Volunteers",
+        "TENNESSEE": "Tennessee Volunteers",
+        "Kentucky": "Kentucky Wildcats",
+        "KENTUCKY": "Kentucky Wildcats",
+        "Auburn": "Auburn Tigers",
+        "AUBURN": "Auburn Tigers",
+        "Arkansas": "Arkansas Razorbacks",
+        "ARKANSAS": "Arkansas Razorbacks",
+        "Ole Miss": "Ole Miss Rebels",
+        "OLE MISS": "Ole Miss Rebels",
+        "Mississippi": "Ole Miss Rebels",
+        "MISSISSIPPI": "Ole Miss Rebels",
+        "South Carolina": "South Carolina Gamecocks",
+        "SOUTH CAROLINA": "South Carolina Gamecocks",
+        "Vanderbilt": "Vanderbilt Commodores",
+        "VANDERBILT": "Vanderbilt Commodores",
+        "Missouri": "Missouri Tigers",
+        "MISSOURI": "Missouri Tigers",
     }
 }
 
@@ -173,6 +295,85 @@ def generate_canonical_key(league: str, date_str: str, home_code: str, away_code
     Format: {league}|{home_code}|{away_code}|{local_date}
     """
     return f"{league}|{home_code}|{away_code}|{date_str}"
+
+
+# Context-aware disambiguation rules
+# Maps (team_short_name, opponent_indicator) -> full_team_name
+DISAMBIGUATION_RULES: Dict[str, Dict[str, str]] = {
+    # When "Georgia" plays a major SEC/CFP team, it's Georgia Bulldogs, not Georgia State
+    "GEORGIA": {
+        "vs_SEC": "Georgia Bulldogs",
+        "vs_CFP": "Georgia Bulldogs",
+        "default": "Georgia Bulldogs",  # Default to main program
+    },
+    # When "Texas" plays a major SEC/CFP team, it's Texas Longhorns, not Texas A&M or Texas State
+    "TEXAS": {
+        "vs_SEC": "Texas Longhorns",
+        "vs_CFP": "Texas Longhorns",
+        "default": "Texas Longhorns",  # Default to main program
+    },
+    # When "Florida" plays a major team, it's Florida Gators, not Florida State or FIU
+    "FLORIDA": {
+        "vs_SEC": "Florida Gators",
+        "vs_CFP": "Florida Gators",
+        "default": "Florida Gators",
+    },
+    # When "Miami" is in NCAAB context with Florida teams, it could be either
+    "MIAMI": {
+        "vs_ACC": "Miami Hurricanes",  # Florida school
+        "vs_MAC": "Miami RedHawks",  # Ohio school
+        "default": "Miami Hurricanes",
+    },
+}
+
+# Major conference/power program indicators for disambiguation
+SEC_TEAMS = {
+    "GEORGIA", "FLORIDA", "ALABAMA", "AUBURN", "LSU", "TENNESSEE", "KENTUCKY",
+    "ARKANSAS", "MISSISSIPPI", "OLE MISS", "MISSOURI", "SOUTH CAROLINA",
+    "VANDERBILT", "TEXAS", "OKLAHOMA", "TEXAS A&M", "TEXAS AM"
+}
+
+CFP_CONTENDER_TEAMS = SEC_TEAMS | {
+    "OHIO STATE", "MICHIGAN", "PENN STATE", "USC", "NOTRE DAME", "OREGON",
+    "WASHINGTON", "CLEMSON", "FLORIDA STATE", "MIAMI", "NORTH CAROLINA"
+}
+
+
+def _disambiguate_team_name(team_name: str, opponent_name: str, league: str) -> str:
+    """
+    Disambiguate potentially ambiguous team names using opponent context.
+
+    Args:
+        team_name: The potentially ambiguous team name (e.g., "Georgia")
+        opponent_name: The opponent's name (for context)
+        league: The league (NCAAB, NCAAF, etc.)
+
+    Returns:
+        The disambiguated team name
+    """
+    team_upper = team_name.upper().strip()
+    opponent_upper = opponent_name.upper().strip() if opponent_name else ""
+
+    # If not in disambiguation rules, return original
+    if team_upper not in DISAMBIGUATION_RULES:
+        return team_name
+
+    rules = DISAMBIGUATION_RULES[team_upper]
+
+    # Check if opponent is a major program (suggests playing against flagship school)
+    if opponent_upper in CFP_CONTENDER_TEAMS:
+        context = "vs_CFP"
+    elif opponent_upper in SEC_TEAMS:
+        context = "vs_SEC"
+    else:
+        context = "default"
+
+    result = rules.get(context) or rules.get("default") or team_name
+
+    if result != team_name:
+        logger.info(f"Disambiguated '{team_name}' to '{result}' (opponent: {opponent_name}, context: {context})")
+
+    return result
 
 def load_theover_file(uploaded_file):
     """
@@ -503,6 +704,12 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
         # Extract Team Names
         csv_home = str(row.get("HOMETEAM", "")).strip()
         csv_away = str(row.get("AWAYTEAM", "")).strip()
+
+        # Apply Context-Aware Disambiguation BEFORE alias resolution
+        # This helps resolve "Georgia" vs "Georgia State" based on opponent
+        if league in ("NCAAB", "NCAAF"):
+            csv_home = _disambiguate_team_name(csv_home, csv_away, league)
+            csv_away = _disambiguate_team_name(csv_away, csv_home, league)
 
         # Apply Context-Aware Alias Resolution
         csv_home = _resolve_team_alias(csv_home, league)

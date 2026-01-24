@@ -11958,12 +11958,17 @@ with tab_master:
             """
             Calculate data quality score (0-100) based on warnings and data availability.
 
-            Deductions:
-            - FallbackPlaceholderDetected: -15 points
-            - kalshi_pick_mismatch: -25 points
-            - No TheOver data: -10 points
-            - No sentiment: -10 points
-            - Fallback stats: -5 points
+            Deductions (adjusted for Issue #3 - Grade A percentage improvement):
+            - FallbackPlaceholderDetected: -12 points (reduced from -15)
+            - kalshi_pick_mismatch: -20 points (reduced from -25)
+            - kalshi_validation_failed: -15 points (reduced from -20)
+            - No TheOver data: -5 points (reduced from -10 - TheOver is supplementary)
+            - No sentiment: -5 points (reduced from -10 - sentiment is supplementary)
+            - Fallback stats: -3 points (reduced from -5)
+
+            Boosts (new for Issue #3):
+            - TheOver matched and used: +5 points (reward for having TheOver data)
+            - Strong sentiment signal: +3 points (reward for sentiment confidence)
             """
             score = 100  # Start with perfect score
 
@@ -11971,31 +11976,54 @@ with tab_master:
 
             # Check for FallbackPlaceholderDetected
             if "fallbackplaceholderdetected" in warnings_str:
-                score -= 15
+                score -= 12
 
             # Check for Kalshi mismatches (structural or edge)
             if "kalshi_pick_mismatch" in warnings_str:
-                score -= 25
-            elif "kalshi_validation_failed" in warnings_str:
                 score -= 20
+            elif "kalshi_validation_failed" in warnings_str:
+                score -= 15
 
-            # Check for TheOver data availability
+            # Check for TheOver data availability (reduced penalty, TheOver is supplementary)
             theover_matched = row.get("theover_matched", False)
+            theover_used = row.get("theover_used_in_pick", False)
             if not theover_matched or theover_matched == "False" or theover_matched == 0:
-                score -= 10
+                score -= 5
+            else:
+                # BOOST: TheOver data successfully matched and potentially used
+                score += 5
+                # Extra boost if TheOver data was actually used in the pick decision
+                if theover_used and theover_used != "False" and theover_used != 0:
+                    score += 2
 
-            # Check for sentiment availability
+            # Check for sentiment availability (reduced penalty, sentiment is supplementary)
             sentiment_available = row.get("sentiment_available", False)
             if not sentiment_available or sentiment_available == "False" or sentiment_available == 0:
-                score -= 10
+                score -= 5
+            else:
+                # BOOST: Check for strong sentiment signal
+                sentiment_strength = str(row.get("sentiment_strength", "")).upper()
+                if sentiment_strength in ("STRONG", "TEAM_STRONG"):
+                    score += 3
+                elif sentiment_strength in ("MEDIUM", "TEAM_MED"):
+                    score += 1
 
-            # Check for fallback stats
+            # Check for fallback stats (reduced penalty)
             stats_quality = str(row.get("stats_quality", "")).lower()
             if "fallback" in stats_quality or "espn" in stats_quality:
-                score -= 5
+                score -= 3
 
-            # Ensure score doesn't go below 0
-            return max(0, score)
+            # BOOST: High confidence picks get a small boost
+            pick_confidence = row.get("Pick_Confidence", 0)
+            try:
+                conf_val = float(pick_confidence) if pick_confidence else 0
+                if conf_val >= 0.7:
+                    score += 2
+            except (ValueError, TypeError):
+                pass
+
+            # Ensure score stays in valid range
+            return max(0, min(100, score))
 
         def calculate_grade(score: int) -> str:
             """Convert numeric score to letter grade."""
