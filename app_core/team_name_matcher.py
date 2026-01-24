@@ -241,6 +241,63 @@ class TeamNameMatcher:
         # --- NEW MANUAL MAPPINGS FOR THEOVER.AI ---
         'CENTRAL FLORIDA': 'UCF',
         'NC CENTRAL': 'NORTH CAROLINA CENTRAL',
+
+        # --- ISSUE #2: Explicit mappings for commonly problematic team names ---
+        # Ivy League teams (often appear as just school name)
+        'BROWN': 'BROWN BEARS',
+        'PRINCETON': 'PRINCETON TIGERS',
+        'YALE': 'YALE BULLDOGS',
+        'HARVARD': 'HARVARD CRIMSON',
+        'COLUMBIA': 'COLUMBIA LIONS',
+        'CORNELL': 'CORNELL BIG RED',
+        'DARTMOUTH': 'DARTMOUTH BIG GREEN',
+        'PENN': 'PENN QUAKERS',
+        'PENNSYLVANIA': 'PENN QUAKERS',
+
+        # State schools that get confused with "State" variants
+        'GEORGIA': 'GEORGIA BULLDOGS',
+        'TEXAS': 'TEXAS LONGHORNS',
+        'FLORIDA': 'FLORIDA GATORS',
+        'ALABAMA': 'ALABAMA CRIMSON TIDE',
+        'TENNESSEE': 'TENNESSEE VOLUNTEERS',
+        'KENTUCKY': 'KENTUCKY WILDCATS',
+        'AUBURN': 'AUBURN TIGERS',
+        'ARKANSAS': 'ARKANSAS RAZORBACKS',
+        'MISSISSIPPI': 'OLE MISS REBELS',
+        'LOUISIANA': 'LOUISIANA RAGIN CAJUNS',
+        'SOUTH CAROLINA': 'SOUTH CAROLINA GAMECOCKS',
+
+        # Abbreviated names that fail fuzzy matching
+        'SMU': 'SMU MUSTANGS',
+        'SOUTHERN METHODIST': 'SMU MUSTANGS',
+        'UTSA': 'UTSA ROADRUNNERS',
+        'TEXAS SAN ANTONIO': 'UTSA ROADRUNNERS',
+        'TEMPLE': 'TEMPLE OWLS',
+        'TULANE': 'TULANE GREEN WAVE',
+        'TULSA': 'TULSA GOLDEN HURRICANE',
+        'RICE': 'RICE OWLS',
+        'ARMY': 'ARMY BLACK KNIGHTS',
+        'NAVY': 'NAVY MIDSHIPMEN',
+        'AIR FORCE': 'AIR FORCE FALCONS',
+
+        # AAC/Conference USA teams
+        'MEMPHIS': 'MEMPHIS TIGERS',
+        'HOUSTON': 'HOUSTON COUGARS',
+        'CINCINNATI': 'CINCINNATI BEARCATS',
+
+        # Other commonly abbreviated schools
+        'PITT': 'PITTSBURGH PANTHERS',
+        'PITTSBURGH': 'PITTSBURGH PANTHERS',
+        'WAKE': 'WAKE FOREST DEMON DEACONS',
+        'WAKE FOREST': 'WAKE FOREST DEMON DEACONS',
+        'FLORIDA STATE': 'FLORIDA STATE SEMINOLES',
+        'GEORGIA TECH': 'GEORGIA TECH YELLOW JACKETS',
+        'VIRGINIA TECH': 'VIRGINIA TECH HOKIES',
+        'BOSTON COLLEGE': 'BOSTON COLLEGE EAGLES',
+        'NOTRE DAME': 'NOTRE DAME FIGHTING IRISH',
+        'STANFORD': 'STANFORD CARDINAL',
+        'CAL': 'CALIFORNIA GOLDEN BEARS',
+        'CALIFORNIA': 'CALIFORNIA GOLDEN BEARS',
     }
     
     @classmethod
