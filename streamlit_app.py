@@ -114,6 +114,15 @@ except ImportError:
     ParlayOptimizer = None
 
 try:
+    from shotgun_mode import generate_shotgun_mode_parlays
+    from shotgun_mode_ui import display_shotgun_mode_ui, display_shotgun_mode_summary, display_shotgun_mode_help
+except ImportError:
+    generate_shotgun_mode_parlays = None
+    display_shotgun_mode_ui = None
+    display_shotgun_mode_summary = None
+    display_shotgun_mode_help = None
+
+try:
     import altair as alt  # type: ignore
 except Exception:  # pragma: no cover - optional import
     alt = None
@@ -13960,3 +13969,89 @@ with tab_shotgun:
                 st.dataframe(longshots[display_cols], hide_index=True, width="stretch")
             else:
                 st.info("No longshots available")
+
+        # === NEW: MULTI-PARLAY GENERATOR ===
+        st.markdown("---")
+        st.markdown("---")
+
+        # Check if generate function is available
+        if generate_shotgun_mode_parlays is not None and display_shotgun_mode_ui is not None:
+            # Display help section
+            if display_shotgun_mode_help is not None:
+                display_shotgun_mode_help()
+
+            # Add enable checkbox
+            enable_auto_parlays = st.checkbox(
+                "🎯 Enable Auto-Parlay Generator (2-leg & 3-leg combinations)",
+                value=False,
+                key="enable_auto_parlays",
+                help="Automatically generates optimized 2-leg and 3-leg parlays from eligible picks"
+            )
+
+            if enable_auto_parlays:
+                # Get master results dataframe
+                master_results_df = st.session_state.get("master_results_df")
+
+                if master_results_df is not None and not master_results_df.empty:
+                    # Configuration options
+                    st.markdown("### ⚙️ Configuration")
+                    config_col1, config_col2 = st.columns(2)
+
+                    with config_col1:
+                        num_2leg = st.slider(
+                            "Number of 2-Leg Parlays",
+                            min_value=5,
+                            max_value=50,
+                            value=20,
+                            step=5,
+                            key="shotgun_num_2leg"
+                        )
+
+                    with config_col2:
+                        num_3leg = st.slider(
+                            "Number of 3-Leg Parlays",
+                            min_value=5,
+                            max_value=50,
+                            value=20,
+                            step=5,
+                            key="shotgun_num_3leg"
+                        )
+
+                    # Generate button
+                    if st.button("🚀 Generate Optimized Parlays", key="generate_parlays_button"):
+                        with st.spinner("Generating optimized parlays..."):
+                            try:
+                                # Generate parlays
+                                shotgun_results = generate_shotgun_mode_parlays(
+                                    master_results_df,
+                                    num_2leg=num_2leg,
+                                    num_3leg=num_3leg
+                                )
+
+                                # Store in session state
+                                st.session_state["shotgun_auto_parlays"] = shotgun_results
+
+                                # Display summary
+                                if display_shotgun_mode_summary is not None:
+                                    display_shotgun_mode_summary(shotgun_results['stats'])
+
+                                st.success("✅ Parlays generated successfully!")
+
+                            except Exception as e:
+                                st.error(f"❌ Error generating parlays: {e}")
+                                logger.error(f"Shotgun Mode error: {e}", exc_info=True)
+
+                    # Display generated parlays if they exist
+                    shotgun_auto_parlays = st.session_state.get("shotgun_auto_parlays")
+                    if shotgun_auto_parlays:
+                        parlays_2leg = shotgun_auto_parlays.get('2leg', [])
+                        parlays_3leg = shotgun_auto_parlays.get('3leg', [])
+
+                        if parlays_2leg or parlays_3leg:
+                            display_shotgun_mode_ui(parlays_2leg, parlays_3leg)
+                        else:
+                            st.warning("No parlays were generated. Try adjusting filters or check if you have enough eligible picks.")
+                else:
+                    st.warning("⚠️ No picks available. Run Master Analysis first to generate parlays.")
+        else:
+            st.info("ℹ️ Auto-Parlay Generator module not available. Please check installation.")
