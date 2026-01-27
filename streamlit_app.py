@@ -6622,8 +6622,9 @@ def _match_kalshi_market_impl(
                 yes_side_inferred = "home"
 
         # Add debug logging - use info level for visibility
+        prob_str = f"{prob:.3f}" if prob else "N/A"
         logger.info(f"✅ KALSHI {market_type.upper()} MATCH: ticker={chosen.get('ticker') or chosen.get('event_ticker')}, "
-                    f"prob={prob:.3f if prob else 'N/A'}, line={line}, score={best_score}")
+                    f"prob={prob_str}, line={line}, score={best_score}")
 
         return {
             "kalshi_available": True,
