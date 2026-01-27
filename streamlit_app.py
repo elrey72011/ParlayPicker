@@ -5430,16 +5430,49 @@ def fetch_kalshi_markets(
             [m for m in markets_raw if ticker_upper(m).startswith(f"{game_prefix_used}-")]
         )
         split = kalshi_integrator.split_market_kinds(markets_raw, selected_league)
+
+        # FIX: Include GAME, TOTAL, and SPREAD markets in the pool
+        # Previously only GAME markets were included, causing spread/total matching to fail
+        allowed_prefixes = [game_prefix_used]
+
+        # Add TOTAL and SPREAD prefixes based on league
+        league_series = LEAGUE_SERIES_MAP.get(league_upper, [])
+        if isinstance(league_series, list):
+            for series in league_series:
+                if series and series not in allowed_prefixes:
+                    allowed_prefixes.append(series)
+
+        # Also add explicit TOTAL/SPREAD variations
+        base_prefix = game_prefix_used.replace("GAME", "")  # e.g., KXNBA
+        if base_prefix:
+            for suffix in ["TOTAL", "SPREAD"]:
+                variant = f"{base_prefix}{suffix}"
+                if variant not in allowed_prefixes:
+                    allowed_prefixes.append(variant)
+
         game_pool: List[Dict[str, Any]] = [
             m
             for m in (split.get("single_game_candidates") or [])
-            if ticker_upper(m).startswith(game_prefix_used)
+            if any(ticker_upper(m).startswith(pfx) for pfx in allowed_prefixes)
         ]
+
+        # Log what prefixes we're using
+        logger.info(f"🔍 KALSHI POOL FILTER: Using prefixes {allowed_prefixes}")
+        logger.info(f"🔍 KALSHI POOL FILTER: Found {len(game_pool)} markets in pool")
+
         if not game_pool and game_prefix_used != winner_prefix:
+            allowed_prefixes = [winner_prefix]
+            # Re-add TOTAL/SPREAD for the winner prefix
+            base_prefix = winner_prefix.replace("GAME", "")
+            if base_prefix:
+                for suffix in ["TOTAL", "SPREAD"]:
+                    variant = f"{base_prefix}{suffix}"
+                    if variant not in allowed_prefixes:
+                        allowed_prefixes.append(variant)
             game_pool = [
                 m
                 for m in (split.get("single_game_candidates") or [])
-                if ticker_upper(m).startswith(winner_prefix)
+                if any(ticker_upper(m).startswith(pfx) for pfx in allowed_prefixes)
             ]
             game_prefix_used = winner_prefix
         if not game_pool and league_upper == "NCAAB":
@@ -5466,6 +5499,12 @@ def fetch_kalshi_markets(
         st.session_state.setdefault("kalshi_game_prefix_map", {})[
             league_upper
         ] = game_prefix_used
+
+        # FIX: Log the breakdown of market types in the pool
+        game_count = len([m for m in game_pool if "GAME" in ticker_upper(m)])
+        total_count = len([m for m in game_pool if "TOTAL" in ticker_upper(m)])
+        spread_count = len([m for m in game_pool if "SPREAD" in ticker_upper(m)])
+        logger.info(f"🔍 KALSHI POOL BREAKDOWN [{league_upper}]: GAME={game_count}, TOTAL={total_count}, SPREAD={spread_count}")
 
         if wanted_tokens:
             filtered = []
@@ -6405,6 +6444,16 @@ def _match_kalshi_market_impl(
     logger.info(f"   - Spread markets: {len(spreads)}" + (f" (sample: {spreads[0].get('ticker', 'N/A')})" if spreads else ""))
     logger.info(f"   - Unknown markets: {len(unknown)}" + (f" (sample: {unknown[0].get('ticker', 'N/A')})" if unknown else ""))
 
+    # FIX: Enhanced debug logging for spread/total matching
+    if totals:
+        logger.info(f"   📊 TOTAL MARKET DETAILS: {len(totals)} markets available")
+        for t in totals[:3]:
+            logger.info(f"      - {t.get('ticker')} | title: {t.get('title', '')[:40]} | last_price: {t.get('last_price')}")
+    if spreads:
+        logger.info(f"   📊 SPREAD MARKET DETAILS: {len(spreads)} markets available")
+        for s in spreads[:3]:
+            logger.info(f"      - {s.get('ticker')} | title: {s.get('title', '')[:40]} | last_price: {s.get('last_price')}")
+
     winner_candidate_debug: List[Dict[str, Any]] = []
     best_winner: Optional[Dict[str, Any]] = None
     best_score: Optional[float] = None
@@ -6572,9 +6621,9 @@ def _match_kalshi_market_impl(
                 # For spreads, try to infer from line or default to home
                 yes_side_inferred = "home"
 
-        # Add debug logging
-        logger.debug(f"Kalshi {market_type} match: ticker={chosen.get('event_ticker')}, "
-                    f"yes_side={yes_side_inferred}, prob={prob:.3f}, line={line}, score={best_score}")
+        # Add debug logging - use info level for visibility
+        logger.info(f"✅ KALSHI {market_type.upper()} MATCH: ticker={chosen.get('ticker') or chosen.get('event_ticker')}, "
+                    f"prob={prob:.3f if prob else 'N/A'}, line={line}, score={best_score}")
 
         return {
             "kalshi_available": True,
