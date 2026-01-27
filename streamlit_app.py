@@ -8022,6 +8022,25 @@ with tab_master:
                                 # Only clear matched_side_row if it was SUPPOSED to be spread but failed
                                 if not is_moneyline_side:
                                      matched_side_row = None
+
+                # --- FIX: Use SIDE data for ML picks when ML-specific data unavailable ---
+                # If TheOver has a spread pick but no ML pick, derive ML probability from spread data
+                # A spread pick for a team suggests confidence in their performance, which partially
+                # informs moneyline probability (covering spread often correlates with winning outright)
+                theover_side_used_for_ml = False
+                if theover_prob_ml is None and theover_prob_spread is not None and matched_side_row:
+                    # Use the spread hit_rate as a weaker signal for ML
+                    # Apply a dampening factor since spread != moneyline
+                    # If hit_rate is 55% for spread, ML prob is closer to 50% but still favors that team
+                    spread_hit_rate = safe_float(matched_side_row.get("theover_hit_rate"))
+                    if spread_hit_rate and spread_hit_rate > 0:
+                        # Convert spread confidence to ML confidence
+                        # Formula: ML_prob = 0.50 + (spread_hit_rate - 0.50) * 0.7
+                        # This dampens the signal while preserving direction
+                        ml_from_spread = 0.50 + (spread_hit_rate - 0.50) * 0.7
+                        theover_prob_ml = clamp(ml_from_spread, 0.35, 0.65)
+                        theover_side_used_for_ml = True
+                        logger.info(f"TheOver: Using SIDE hit_rate {spread_hit_rate:.3f} for ML -> {theover_prob_ml:.3f}")
                 # --- THEOVER MATCHING END ---
 
                 # 1) Define Weights - Using values from weights_config.py
@@ -9080,7 +9099,20 @@ with tab_master:
                     else:
                         theover_prob_final_spread = 1.0 - theover_prob_spread
 
-                    spread_weights["theover_weight"] = 0.10
+                    # Dynamic weighting based on TheOver hit_rate
+                    # Strong signal (>=60%): 15% weight
+                    # Moderate signal (>=55%): 12% weight
+                    # Weak signal (<55%): 8% weight
+                    spread_hit_rate = safe_float((theover_matched_side or {}).get("theover_hit_rate"))
+                    if spread_hit_rate and spread_hit_rate >= 0.60:
+                        spread_weights["theover_weight"] = 0.15
+                    elif spread_hit_rate and spread_hit_rate >= 0.55:
+                        spread_weights["theover_weight"] = 0.12
+                    elif spread_hit_rate:
+                        spread_weights["theover_weight"] = 0.08
+                    else:
+                        spread_weights["theover_weight"] = 0.10  # Default
+
                     # Reduce model weight slightly if model is used, else rely on normalization
                     if spread_weights.get("ml_weight", 0) > 0.15:
                         spread_weights["ml_weight"] -= 0.05
@@ -9171,10 +9203,10 @@ with tab_master:
                     # Nudge: +0.02 if agree, -0.02 if strongly disagree (and we picked it)
                     if agree:
                         spread_prob_final = clamp(spread_prob_final + 0.02, 0.01, 0.95)
-                        spread_warnings_new.append("theover_agrees")
+                        spread_warnings_new.append("theover_spread_agrees")
                     else:
                         spread_prob_final = clamp(spread_prob_final - 0.02, 0.05, 0.99)
-                        spread_warnings_new.append("theover_disagrees")
+                        spread_warnings_new.append("theover_spread_disagrees")
 
                     # Update delta to reflect nudge
                     theover_delta_spread = (spread_prob_final or 0.0) - (spread_prob_no_to or 0.0)
@@ -9207,7 +9239,20 @@ with tab_master:
                     else:
                         theover_prob_final_total = 1.0 - theover_prob_total
 
-                    total_weights["theover_weight"] = 0.10
+                    # Dynamic weighting based on TheOver hit_rate
+                    # Strong signal (>=60%): 15% weight
+                    # Moderate signal (>=55%): 12% weight
+                    # Weak signal (<55%): 8% weight
+                    total_hit_rate = safe_float((theover_matched_total or {}).get("theover_hit_rate"))
+                    if total_hit_rate and total_hit_rate >= 0.60:
+                        total_weights["theover_weight"] = 0.15
+                    elif total_hit_rate and total_hit_rate >= 0.55:
+                        total_weights["theover_weight"] = 0.12
+                    elif total_hit_rate:
+                        total_weights["theover_weight"] = 0.08
+                    else:
+                        total_weights["theover_weight"] = 0.10  # Default
+
                     if total_weights.get("ml_weight", 0) > 0.15:
                         total_weights["ml_weight"] -= 0.05
 
@@ -9290,10 +9335,10 @@ with tab_master:
                     # Nudge: +0.02 if agree, -0.02 if strongly disagree (and we picked it)
                     if agree:
                         total_prob_final = clamp(total_prob_final + 0.02, 0.01, 0.95)
-                        total_warnings_new.append("theover_agrees")
+                        total_warnings_new.append("theover_total_agrees")
                     else:
                         total_prob_final = clamp(total_prob_final - 0.02, 0.05, 0.99)
-                        total_warnings_new.append("theover_disagrees")
+                        total_warnings_new.append("theover_total_disagrees")
 
                     # Update delta to reflect nudge
                     theover_delta_total = (total_prob_final or 0.0) - (total_prob_no_to or 0.0)
@@ -9645,6 +9690,19 @@ with tab_master:
                                 league_name
                             )
 
+                            # Dynamic TheOver weight based on hit_rate for ML picks
+                            if theover_prob_ml is not None:
+                                ml_hit_rate = safe_float((theover_matched_side or {}).get("theover_hit_rate"))
+                                if ml_hit_rate and ml_hit_rate >= 0.60:
+                                    current_ml_weights["theover_weight"] = 0.15
+                                elif ml_hit_rate and ml_hit_rate >= 0.55:
+                                    current_ml_weights["theover_weight"] = 0.12
+                                elif ml_hit_rate:
+                                    current_ml_weights["theover_weight"] = 0.08
+                                # If SIDE data was used for ML, apply reduced weight (weaker signal)
+                                if theover_side_used_for_ml:
+                                    current_ml_weights["theover_weight"] = current_ml_weights.get("theover_weight", 0.10) * 0.7
+
                         final_prob_blend, base_prob_blend, weights_used, decision_driver, warnings_new, kalshi_prob_for_pick, ml_sentiment_debug = compute_final_probability(
                             pick_side,
                             implied_pick,
@@ -9730,9 +9788,10 @@ with tab_master:
                             "theover_ml_odds": (theover_matched_side or {}).get("theover_line") if theover_matched_side else None,
                             "theover_pick": (theover_matched_side or {}).get("theover_pick") if theover_matched_side else None,
                             "theover_hit_rate": (theover_matched_side or {}).get("theover_hit_rate") if theover_matched_side else None,
-                            "theover_source_model": (theover_matched_side or {}).get("theover_source_model") if theover_matched_side else None,
+                            "theover_source_model": (theover_matched_side or {}).get("theover_model") if theover_matched_side else None,
                             "theover_prob_used": theover_prob_ml,
                             "theover_matched": bool(theover_matched_side and theover_prob_ml is not None),
+                            "theover_side_used_for_ml": theover_side_used_for_ml,
                             "Home_Sentiment": home_sent,
                             "Away_Sentiment": away_sent,
                             "Sentiment_Diff": sentiment_diff,
@@ -10212,10 +10271,10 @@ with tab_master:
                         "best_total_mode_point": g.get("best_total_mode_point"),
                         "best_total_price": best_total_price,
                         "Warnings": warnings_field,
-                        "theover_pick": (theover_matched_side or {}).get("pick_team"),
+                        "theover_pick": (theover_matched_side or {}).get("theover_pick"),
                         "theover_pick_type": "SIDE" if theover_matched_side else None,
-                        "theover_hit_rate": (theover_matched_side or {}).get("source_hit_rate"),
-                        "theover_source_model": (theover_matched_side or {}).get("source_model"),
+                        "theover_hit_rate": (theover_matched_side or {}).get("theover_hit_rate"),
+                        "theover_source_model": (theover_matched_side or {}).get("theover_model"),
                         "theover_prob_used": theover_prob_spread,
                         "theover_matched": bool(theover_matched_side),
                         "theover_delta_final_prob": theover_delta_spread,
@@ -10495,10 +10554,10 @@ with tab_master:
                         "best_total_mode_point": g.get("best_total_mode_point"),
                         "best_total_price": best_total_price,
                         "Warnings": warnings_field,
-                        "theover_pick": (theover_matched_total or {}).get("pick_team"),
+                        "theover_pick": (theover_matched_total or {}).get("theover_pick"),
                         "theover_pick_type": "TOTAL" if theover_matched_total else None,
-                        "theover_hit_rate": (theover_matched_total or {}).get("source_hit_rate"),
-                        "theover_source_model": (theover_matched_total or {}).get("source_model"),
+                        "theover_hit_rate": (theover_matched_total or {}).get("theover_hit_rate"),
+                        "theover_source_model": (theover_matched_total or {}).get("theover_model"),
                         "theover_prob_used": theover_prob_total,
                         "theover_matched": bool(theover_matched_total),
                         "theover_delta_final_prob": theover_delta_total,
