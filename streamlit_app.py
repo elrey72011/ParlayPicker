@@ -8992,18 +8992,93 @@ with tab_master:
                 spread_pick_side_key = "home" if spread_pick_team == home else ("away" if spread_pick_team == away else None)
 
                 # --- THEOVER SIDE RESOLUTION ---
+                # FIX: Use precise team code matching and LINE sign validation
+                # to prevent DEN/DET confusion and similar issues
                 theover_spread_pick_side = None
                 if theover_matched_side:
                     p_team = theover_matched_side.get("theover_pick")
+                    theover_line_raw = theover_matched_side.get("theover_line")
+                    home_code_to = theover_matched_side.get("home_code", "")
+                    away_code_to = theover_matched_side.get("away_code", "")
+
                     if p_team:
+                        p_upper = str(p_team).upper().strip()
                         p_norm = robust_normalize_team(p_team, league=league_name)
                         h_norm = robust_normalize_team(home, league=league_name)
                         a_norm = robust_normalize_team(away, league=league_name)
-                        # Use loose matching
-                        if p_norm == h_norm or h_norm in p_norm or p_norm in h_norm:
-                            theover_spread_pick_side = "home"
-                        elif p_norm == a_norm or a_norm in p_norm or p_norm in a_norm:
-                            theover_spread_pick_side = "away"
+
+                        # Step 1: Try exact code match first (most reliable)
+                        # This prevents DEN matching both "DENVER" and incorrectly being close to "DETROIT"
+                        code_matched = False
+                        if home_code_to and away_code_to:
+                            if p_upper == home_code_to.upper():
+                                theover_spread_pick_side = "home"
+                                code_matched = True
+                                logger.debug(f"TheOver pick '{p_team}' exact code match to home '{home_code_to}'")
+                            elif p_upper == away_code_to.upper():
+                                theover_spread_pick_side = "away"
+                                code_matched = True
+                                logger.debug(f"TheOver pick '{p_team}' exact code match to away '{away_code_to}'")
+
+                        # Step 2: If no exact code match, try normalized name matching
+                        if not code_matched:
+                            # Use strict matching - full string match or prefix match, not substring
+                            if p_norm == h_norm or h_norm.startswith(p_norm) or p_norm.startswith(h_norm):
+                                theover_spread_pick_side = "home"
+                            elif p_norm == a_norm or a_norm.startswith(p_norm) or p_norm.startswith(a_norm):
+                                theover_spread_pick_side = "away"
+                            else:
+                                # Fallback: loose substring matching (but log warning)
+                                if p_norm in h_norm or h_norm in p_norm:
+                                    theover_spread_pick_side = "home"
+                                    logger.warning(f"TheOver pick '{p_team}' loose match to home '{home}' - verify accuracy")
+                                elif p_norm in a_norm or a_norm in p_norm:
+                                    theover_spread_pick_side = "away"
+                                    logger.warning(f"TheOver pick '{p_team}' loose match to away '{away}' - verify accuracy")
+
+                        # Step 3: LINE sign validation and correction
+                        # Convention: negative line = favorite, positive line = underdog
+                        # If LINE is negative and we matched to underdog (or vice versa), warn
+                        if theover_spread_pick_side and theover_line_raw is not None:
+                            try:
+                                line_float = float(theover_line_raw)
+                                home_spread = safe_float(g.get("home_spread_point"))
+
+                                # Determine who is favorite based on home spread from odds
+                                if home_spread is not None:
+                                    home_is_favorite = home_spread < 0
+
+                                    # Check for LINE sign mismatch
+                                    # TheOver LINE should match the picked team's spread perspective
+                                    if theover_spread_pick_side == "home":
+                                        # If home is picked, LINE should reflect home's spread
+                                        # Home favorite: negative LINE expected
+                                        # Home underdog: positive LINE expected
+                                        if home_is_favorite and line_float > 0:
+                                            # Possible wrong team - home is favorite but LINE is positive
+                                            logger.warning(
+                                                f"TheOver LINE mismatch for {home} vs {away}: "
+                                                f"picked home ({p_team}) with LINE +{line_float}, "
+                                                f"but home spread is {home_spread} (favorite). "
+                                                f"Consider if away team was intended pick."
+                                            )
+                                        elif not home_is_favorite and line_float < 0:
+                                            # Home is underdog but LINE is negative
+                                            logger.warning(
+                                                f"TheOver LINE mismatch for {home} vs {away}: "
+                                                f"picked home ({p_team}) with LINE {line_float}, "
+                                                f"but home spread is {home_spread} (underdog)."
+                                            )
+                                    elif theover_spread_pick_side == "away":
+                                        away_is_favorite = not home_is_favorite
+                                        if away_is_favorite and line_float > 0:
+                                            logger.warning(
+                                                f"TheOver LINE mismatch for {home} vs {away}: "
+                                                f"picked away ({p_team}) with LINE +{line_float}, "
+                                                f"but away is favorite."
+                                            )
+                            except (ValueError, TypeError):
+                                pass
 
                 theover_total_pick_side = None
                 if theover_matched_total:
