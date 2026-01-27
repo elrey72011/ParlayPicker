@@ -52,6 +52,15 @@ def test_nba_game(home_team, away_team, game_time_str):
         print(f"✅ SUCCESS - Event ID: {result.raw_event_id}")
         print(f"   Label: {result.label}")
         print(f"   Probability: {result.probability}")
+        # Show spread/total market availability
+        has_spread = bool(getattr(result, 'spread_markets', None))
+        has_total = bool(getattr(result, 'total_markets', None))
+        spread_count = len(result.spread_markets) if hasattr(result, 'spread_markets') and result.spread_markets else 0
+        total_count = len(result.total_markets) if hasattr(result, 'total_markets') and result.total_markets else 0
+        print(f"   📊 SPREAD/TOTAL STATUS:")
+        print(f"      Winner: ✅ (matched)")
+        print(f"      Spread: {'✅' if has_spread else '❌'} ({spread_count} markets)")
+        print(f"      Total:  {'✅' if has_total else '❌'} ({total_count} markets)")
     else:
         print(f"❌ FAILED TO MATCH")
         if hasattr(result, 'debug') and result.debug:
@@ -100,6 +109,74 @@ if __name__ == "__main__":
         home_team="New Orleans Pelicans",
         away_team="Memphis Grizzlies",
         game_time_str="2026-01-24T01:00:00"  # Approximate time
+    )
+
+    # ============================================
+    # NHL TESTS - Verify spread/total fix works for NHL too
+    # ============================================
+    print("\n" + "="*80)
+    print("KALSHI NHL MATCHING DEBUG TEST")
+    print("Testing NHL games for spread/total fix verification")
+    print("="*80)
+
+    def test_nhl_game(home_team, away_team, game_time_str):
+        """Test matching for a specific NHL game"""
+        print(f"\n{'='*80}")
+        print(f"Testing: {away_team} @ {home_team}")
+        print(f"Time: {game_time_str}")
+        print(f"{'='*80}\n")
+
+        game_time = datetime.fromisoformat(game_time_str.replace("Z", "+00:00"))
+        if game_time.tzinfo is None:
+            game_time = pytz.utc.localize(game_time)
+
+        kalshi = KalshiIntegrator()
+        if not kalshi.api_key:
+            print("❌ No Kalshi API key found. Set KALSHI_API_KEY environment variable.")
+            return
+
+        result = match_game_to_kalshi(
+            league="NHL",
+            home_team=home_team,
+            away_team=away_team,
+            game_time=game_time,
+            integrator=kalshi,
+            status=None
+        )
+
+        print("\n" + "="*80)
+        print("RESULT:")
+        print("="*80)
+        print(f"Matched: {result.matched}")
+        print(f"Kalshi Available: {result.kalshi_available}")
+        print(f"Reason: {result.reason}")
+        if result.matched:
+            print(f"✅ SUCCESS - Event ID: {result.raw_event_id}")
+            print(f"   Label: {result.label}")
+            has_spread = bool(getattr(result, 'spread_markets', None))
+            has_total = bool(getattr(result, 'total_markets', None))
+            spread_count = len(result.spread_markets) if hasattr(result, 'spread_markets') and result.spread_markets else 0
+            total_count = len(result.total_markets) if hasattr(result, 'total_markets') and result.total_markets else 0
+            print(f"   📊 SPREAD/TOTAL STATUS:")
+            print(f"      Winner: ✅ (matched)")
+            print(f"      Spread: {'✅' if has_spread else '❌'} ({spread_count} markets)")
+            print(f"      Total:  {'✅' if has_total else '❌'} ({total_count} markets)")
+        else:
+            print(f"❌ FAILED TO MATCH")
+        print("="*80 + "\n")
+
+    # NHL Test: Anaheim @ Vancouver (from issue description)
+    test_nhl_game(
+        home_team="Vancouver Canucks",
+        away_team="Anaheim Ducks",
+        game_time_str="2026-01-29T03:00:00"  # Approximate time
+    )
+
+    # NHL Test: Boston @ Nashville
+    test_nhl_game(
+        home_team="Nashville Predators",
+        away_team="Boston Bruins",
+        game_time_str="2026-01-28T01:00:00"  # Approximate time
     )
 
     print("\n" + "="*80)

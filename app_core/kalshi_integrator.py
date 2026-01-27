@@ -1075,8 +1075,8 @@ def _match_via_events(
                         spread_markets.extend(spread_mkts)
                         logger.info(f"   ✅ Found {len(spread_mkts)} spread markets from event {spread_event_ticker}")
                     else:
-                        # Fallback: Search in series for markets containing the date-team ID
-                        logger.info(f"   No direct spread event match, searching in series...")
+                        # Fallback 1: Search in series EVENTS for matching date-team ID
+                        logger.info(f"   No direct spread event match, searching in series events...")
                         series_resp = integrator.get_events(spread_series, status=None)
                         series_events = series_resp.get("events", [])
                         for evt in series_events:
@@ -1089,6 +1089,26 @@ def _match_via_events(
                                     evt_markets = evt_mkts_resp.get("markets", [])
                                 spread_markets.extend(evt_markets)
                                 logger.info(f"   ✅ Added {len(evt_markets)} spread markets from {evt_tick}")
+
+                        # Fallback 2: If still no spread markets, fetch MARKETS directly by series_ticker
+                        # This is critical for NBA/NHL where events API may not return spread/total events
+                        if not spread_markets:
+                            logger.info(f"   No spread events found, fetching markets directly by series_ticker={spread_series}...")
+                            series_markets = integrator.get_markets_paginated(
+                                status=None,
+                                limit=200,
+                                max_pages=3,
+                                extra_params={"series_ticker": spread_series}
+                            )
+                            logger.info(f"   Fetched {len(series_markets)} markets from series {spread_series}")
+                            # Filter markets by date_team_id in ticker or event_ticker
+                            for mkt in series_markets:
+                                mkt_ticker = str(mkt.get("ticker") or "").upper()
+                                mkt_event_ticker = str(mkt.get("event_ticker") or "").upper()
+                                if date_team_id.upper() in mkt_ticker or date_team_id.upper() in mkt_event_ticker:
+                                    spread_markets.append(mkt)
+                            if spread_markets:
+                                logger.info(f"   ✅ Found {len(spread_markets)} spread markets matching {date_team_id} from series")
             except Exception as e:
                 logger.warning(f"   ⚠️ Failed to fetch spread markets: {e}")
 
@@ -1102,8 +1122,8 @@ def _match_via_events(
                         total_markets.extend(total_mkts)
                         logger.info(f"   ✅ Found {len(total_mkts)} total markets from event {total_event_ticker}")
                     else:
-                        # Fallback: Search in series for markets containing the date-team ID
-                        logger.info(f"   No direct total event match, searching in series...")
+                        # Fallback 1: Search in series EVENTS for matching date-team ID
+                        logger.info(f"   No direct total event match, searching in series events...")
                         series_resp = integrator.get_events(total_series, status=None)
                         series_events = series_resp.get("events", [])
                         for evt in series_events:
@@ -1116,6 +1136,26 @@ def _match_via_events(
                                     evt_markets = evt_mkts_resp.get("markets", [])
                                 total_markets.extend(evt_markets)
                                 logger.info(f"   ✅ Added {len(evt_markets)} total markets from {evt_tick}")
+
+                        # Fallback 2: If still no total markets, fetch MARKETS directly by series_ticker
+                        # This is critical for NBA/NHL where events API may not return spread/total events
+                        if not total_markets:
+                            logger.info(f"   No total events found, fetching markets directly by series_ticker={total_series}...")
+                            series_markets = integrator.get_markets_paginated(
+                                status=None,
+                                limit=200,
+                                max_pages=3,
+                                extra_params={"series_ticker": total_series}
+                            )
+                            logger.info(f"   Fetched {len(series_markets)} markets from series {total_series}")
+                            # Filter markets by date_team_id in ticker or event_ticker
+                            for mkt in series_markets:
+                                mkt_ticker = str(mkt.get("ticker") or "").upper()
+                                mkt_event_ticker = str(mkt.get("event_ticker") or "").upper()
+                                if date_team_id.upper() in mkt_ticker or date_team_id.upper() in mkt_event_ticker:
+                                    total_markets.append(mkt)
+                            if total_markets:
+                                logger.info(f"   ✅ Found {len(total_markets)} total markets matching {date_team_id} from series")
             except Exception as e:
                 logger.warning(f"   ⚠️ Failed to fetch total markets: {e}")
 
