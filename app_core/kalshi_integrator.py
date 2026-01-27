@@ -2072,8 +2072,10 @@ class KalshiIntegrator:
         game_hits = len(game_markets)
         futures_hits = len(futures_noise)
 
-        if game_markets:
-            all_markets = game_markets
+        # FIX: Do NOT replace all_markets with game_markets here!
+        # This was discarding TOTAL and SPREAD markets for NBA/NHL.
+        # We need ALL market types (GAME, TOTAL, SPREAD) in the pool.
+        # The filtering for specific game types happens in streamlit_app.py's game_pool.
 
         self.last_fetch_meta = {
             "league": league_key,
@@ -2085,7 +2087,7 @@ class KalshiIntegrator:
             "prefix": prefix,
             "futures_noise": len(futures_noise) if futures_noise else None,
             "game_hits": game_hits,
-            "filtered_to_game_markets": bool(game_hits),
+            "includes_all_market_types": True,  # FIX: Now includes GAME, TOTAL, SPREAD
             "series_targets": series_targets,
             "game_prefix_used": used_game_prefix,
         }
@@ -2098,6 +2100,13 @@ class KalshiIntegrator:
             "markets": all_markets,
             "meta": self.last_fetch_meta,
         }
+
+        # FIX: Log market type breakdown to verify TOTAL/SPREAD are included
+        game_count = len([m for m in all_markets if "GAME" in str(m.get("ticker", "")).upper()])
+        total_count = len([m for m in all_markets if "TOTAL" in str(m.get("ticker", "")).upper()])
+        spread_count = len([m for m in all_markets if "SPREAD" in str(m.get("ticker", "")).upper()])
+        logger.info(f"✅ get_league_markets returning {len(all_markets)} markets for {league_key}: GAME={game_count}, TOTAL={total_count}, SPREAD={spread_count}")
+
         return all_markets
 
     def _filter_markets_for_league(self, markets: List[Dict[str, Any]], league: Optional[str]) -> List[Dict[str, Any]]:
