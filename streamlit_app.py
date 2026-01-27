@@ -1761,32 +1761,31 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
         best_edge = s_edge
         reason = "Default"
 
-        # Priority: Include all valid markets, but still prioritize Spread/Total over ML
+        # Priority: ONLY consider Spread and Total - EXCLUDE ML from Best Overall Pick
+        # ML should only be shown for analysis purposes, not as primary recommendation
         candidates = []
         if s_valid: candidates.append("SPREAD")
         if t_valid: candidates.append("TOTAL")
-        if ml_valid: candidates.append("ML")
+        # REMOVED: if ml_valid: candidates.append("ML") - ML excluded per user requirement
 
         candidate_types_str = "|".join(candidates)
 
         # Decision
-        # Compare all valid markets (Spread, Total, ML) and select the one with highest score
-        # Priority: Spread/Total still preferred over ML when scores are similar
+        # Compare ONLY Spread and Total markets (ML excluded for parlay building)
         # Use score which combines prob and edge as "confidence/edge" metric.
 
-        # Collect all candidates with their scores
+        # Collect all candidates with their scores (ML excluded)
         market_scores = []
         if s_valid:
             market_scores.append(("SPREAD", s_score, s_pick, s_prob, s_edge))
         if t_valid:
             market_scores.append(("TOTAL", t_score, t_pick, t_prob, t_edge))
-        if ml_valid:
-            market_scores.append(("ML", ml_score, ml_pick, ml_prob, ml_edge))
+        # REMOVED: ML from market_scores - ML excluded per user requirement
 
         if market_scores:
-            # Sort by score (highest first), with tie-breaker preferring Spread > Total > ML
-            type_priority = {"SPREAD": 0, "TOTAL": 1, "ML": 2}
-            market_scores.sort(key=lambda x: (-x[1], type_priority.get(x[0], 3)))
+            # Sort by score (highest first), with tie-breaker preferring Spread > Total
+            type_priority = {"SPREAD": 0, "TOTAL": 1}
+            market_scores.sort(key=lambda x: (-x[1], type_priority.get(x[0], 2)))
 
             # Select the best
             best_type, _, best_pick, best_prob, best_edge = market_scores[0]
@@ -11756,9 +11755,21 @@ with tab_master:
                             new_b_pick = t_pick
                             new_b_prob = t_consensus_prob
                         else:
-                            new_b_pick = row.get("Best Overall Pick") or row.get("Pick")
-                            new_b_prob = row.get("Best Overall Prob") or row.get("final_probability")
-                            new_b_type = row.get("best_pick_type") or "ML"
+                            # Fallback: Use spread or total pick even if prob <= 0.5, but NEVER use ML
+                            # Prefer spread over total in fallback, as it's more common for parlays
+                            if s_pick_valid:
+                                new_b_type = "SPREAD"
+                                new_b_pick = s_pick
+                                new_b_prob = s_consensus_prob if s_consensus_prob else 0.5
+                            elif t_pick_valid:
+                                new_b_type = "TOTAL"
+                                new_b_pick = t_pick
+                                new_b_prob = t_consensus_prob if t_consensus_prob else 0.5
+                            else:
+                                # No valid spread or total pick available - leave as None
+                                new_b_type = "NONE"
+                                new_b_pick = None
+                                new_b_prob = None
 
                         best_pick.append(new_b_pick)
                         best_prob.append(new_b_prob)
