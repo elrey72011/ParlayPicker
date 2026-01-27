@@ -1219,6 +1219,83 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
              except Exception:
                  pass
 
+        # --- PICK VALIDATION (Fix DEN/DET confusion bug) ---
+        # Validate that PICK matches either home_code or away_code for SIDE picks
+        pick_validation_status = "valid"
+        pick_validation_warning = None
+
+        if final_pick_type == "SIDE" and final_pick_val:
+            pick_upper = final_pick_val.upper().strip()
+
+            # Check for exact match with home or away code
+            pick_matches_home = (pick_upper == home_code.upper())
+            pick_matches_away = (pick_upper == away_code.upper())
+
+            if not pick_matches_home and not pick_matches_away:
+                # PICK doesn't exactly match either team code
+                # Check for similar codes (e.g., DEN vs DET - 1 char difference)
+                def levenshtein_distance(s1: str, s2: str) -> int:
+                    """Calculate Levenshtein distance between two strings."""
+                    if len(s1) < len(s2):
+                        return levenshtein_distance(s2, s1)
+                    if len(s2) == 0:
+                        return len(s1)
+                    prev_row = range(len(s2) + 1)
+                    for i, c1 in enumerate(s1):
+                        curr_row = [i + 1]
+                        for j, c2 in enumerate(s2):
+                            insertions = prev_row[j + 1] + 1
+                            deletions = curr_row[j] + 1
+                            substitutions = prev_row[j] + (c1 != c2)
+                            curr_row.append(min(insertions, deletions, substitutions))
+                        prev_row = curr_row
+                    return prev_row[-1]
+
+                dist_to_home = levenshtein_distance(pick_upper, home_code.upper())
+                dist_to_away = levenshtein_distance(pick_upper, away_code.upper())
+
+                # Check for potential confusion (codes differ by 1-2 characters)
+                if dist_to_home <= 2 or dist_to_away <= 2:
+                    # Similar code detected - potential confusion
+                    if dist_to_home <= dist_to_away:
+                        pick_validation_status = "potential_mismatch"
+                        pick_validation_warning = (
+                            f"PICK '{pick_upper}' similar to home code '{home_code}' "
+                            f"(dist={dist_to_home}), but also close to away '{away_code}' "
+                            f"(dist={dist_to_away}). Verify correct team."
+                        )
+                        logger.warning(f"TheOver pick validation: {pick_validation_warning} "
+                                      f"for {csv_away} @ {csv_home}")
+                    else:
+                        pick_validation_status = "potential_mismatch"
+                        pick_validation_warning = (
+                            f"PICK '{pick_upper}' similar to away code '{away_code}' "
+                            f"(dist={dist_to_away}), but also close to home '{home_code}' "
+                            f"(dist={dist_to_home}). Verify correct team."
+                        )
+                        logger.warning(f"TheOver pick validation: {pick_validation_warning} "
+                                      f"for {csv_away} @ {csv_home}")
+                else:
+                    # PICK doesn't match and isn't similar - likely full team name
+                    # Try to match by checking if pick contains team name
+                    csv_home_norm = TeamNameMatcher.normalize(csv_home).upper()
+                    csv_away_norm = TeamNameMatcher.normalize(csv_away).upper()
+                    pick_norm = TeamNameMatcher.normalize(final_pick_val).upper()
+
+                    if pick_norm in csv_home_norm or csv_home_norm in pick_norm:
+                        # Matches home team name
+                        pick_validation_status = "valid_name_match"
+                    elif pick_norm in csv_away_norm or csv_away_norm in pick_norm:
+                        # Matches away team name
+                        pick_validation_status = "valid_name_match"
+                    else:
+                        pick_validation_status = "unmatched"
+                        pick_validation_warning = (
+                            f"PICK '{final_pick_val}' doesn't match home '{csv_home}' "
+                            f"({home_code}) or away '{csv_away}' ({away_code})"
+                        )
+                        logger.warning(f"TheOver pick validation: {pick_validation_warning}")
+
         records.append({
             "theover_key": canon_key,
             "league": league,
@@ -1232,7 +1309,9 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
             "theover_hit_rate": hit_rate,
             "raw_text": str(row.to_dict()),
             "away_team_raw": csv_away,
-            "home_team_raw": csv_home
+            "home_team_raw": csv_home,
+            "pick_validation_status": pick_validation_status,
+            "pick_validation_warning": pick_validation_warning
         })
 
     return pd.DataFrame(records)
