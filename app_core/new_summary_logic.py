@@ -388,17 +388,19 @@ def build_game_summary_v2(df: pd.DataFrame) -> pd.DataFrame:
         # --- Overall Pick ---
         # Updated logic: Best Overall should only consider real spread/total picks with:
         # 1. Valid lines (not None/NaN)
-        # 2. Sane probabilities (50-65% range)
+        # 2. Probability > 50% (pick has positive expected value)
         # 3. No "no_valid_spread_or_total" warning
         # 4. Confidence bucket is MEDIUM or HIGH (not LOW)
 
-        # Helper to check if probability is in valid range (50-65%)
+        # Helper to check if probability is in valid range (> 50%)
         def _is_valid_prob_range(p):
             if p is None:
                 return False
             try:
                 p_float = float(p)
-                return 0.50 <= p_float <= 0.65
+                # FIX: Changed from 50-65% range to just > 50%
+                # A 68% spread should be selected over a 37.6% total
+                return p_float > 0.50
             except:
                 return False
 

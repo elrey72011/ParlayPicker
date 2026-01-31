@@ -10257,7 +10257,7 @@ with tab_master:
                         "Game": f"{away} @ {home}",
                         "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
                         "Market": "Spread", "Book": g.get("best_spread_book"),
-                        "Pick": spread_pick, "Implied_Prob": spread_prob_market, "Line": spread_line, "AI_Prob": model_spread_prob if model_used_for_spread else None,
+                        "Pick": f"{spread_pick} {spread_line:+.1f}" if (spread_pick is not None and spread_line is not None) else spread_pick, "Implied_Prob": spread_prob_market, "Line": spread_line, "AI_Prob": model_spread_prob if model_used_for_spread else None,
                         "ml_home_implied": american_to_implied_prob(g.get("home_ml_price")),
                         "ml_away_implied": american_to_implied_prob(g.get("away_ml_price")),
                         "spread_pick_side": spread_pick_side_key,
@@ -10564,7 +10564,7 @@ with tab_master:
                         "Game": f"{away} @ {home}",
                         "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
                         "Market": "Total", "Book": g.get("best_total_book"),
-                        "Pick": total_pick, "Implied_Prob": total_prob_market, "Line": total_line, "AI_Prob": model_total_prob if model_used_for_total else None,
+                        "Pick": f"{total_pick} {total_line}" if (total_pick is not None and total_line is not None) else total_pick, "Implied_Prob": total_prob_market, "Line": total_line, "AI_Prob": model_total_prob if model_used_for_total else None,
                         "ml_home_implied": american_to_implied_prob(g.get("home_ml_price")),
                         "ml_away_implied": american_to_implied_prob(g.get("away_ml_price")),
                         "spread_pick_side": spread_pick_side_key,
@@ -11712,13 +11712,16 @@ with tab_master:
                     temp = pd.concat([temp, pd.DataFrame(new_data, index=df.index)], axis=1).copy()
 
                     # 3. Best Overall Pick Logic
+                    # FIX: Compare probabilities directly (highest wins), not by edge
+                    # Use spread_prob_pick_final and total_prob_pick_final for comparison
                     best_pick = []
                     best_prob = []
                     best_type = []
 
                     for idx, row in temp.iterrows():
-                        s_consensus_prob = row["SpreadConsensusProb"]
-                        t_consensus_prob = row["TotalConsensusProb"]
+                        # Use the final probabilities shown in the pick strings for comparison
+                        s_final_prob = safe_float(row.get("spread_prob_pick_final")) or 0.0
+                        t_final_prob = safe_float(row.get("total_prob_pick_final")) or 0.0
 
                         s_pick = row.get("Spread & Pick")
                         t_pick = row.get("Total & Pick")
@@ -11727,44 +11730,52 @@ with tab_master:
                         s_pick_valid = s_pick is not None and str(s_pick).lower() != "none" and str(s_pick).strip() != ""
                         t_pick_valid = t_pick is not None and str(t_pick).lower() != "none" and str(t_pick).strip() != ""
 
-                        s_valid = s_pick_valid and s_consensus_prob > 0.5
-                        t_valid = t_pick_valid and t_consensus_prob > 0.5
-
-                        s_edge = abs(s_consensus_prob - 0.5)
-                        t_edge = abs(t_consensus_prob - 0.5)
+                        # A pick is valid if it has a valid string and probability > 0.5
+                        s_valid = s_pick_valid and s_final_prob > 0.5
+                        t_valid = t_pick_valid and t_final_prob > 0.5
 
                         new_b_type = "NONE"
                         new_b_pick = None
                         new_b_prob = 0.0
 
                         if s_valid and t_valid:
-                            if s_edge >= t_edge:
+                            # FIX: Compare probabilities directly - highest probability wins
+                            if s_final_prob >= t_final_prob:
                                 new_b_type = "SPREAD"
                                 new_b_pick = s_pick
-                                new_b_prob = s_consensus_prob
+                                new_b_prob = s_final_prob
                             else:
                                 new_b_type = "TOTAL"
                                 new_b_pick = t_pick
-                                new_b_prob = t_consensus_prob
+                                new_b_prob = t_final_prob
                         elif s_valid:
                             new_b_type = "SPREAD"
                             new_b_pick = s_pick
-                            new_b_prob = s_consensus_prob
+                            new_b_prob = s_final_prob
                         elif t_valid:
                             new_b_type = "TOTAL"
                             new_b_pick = t_pick
-                            new_b_prob = t_consensus_prob
+                            new_b_prob = t_final_prob
                         else:
                             # Fallback: Use spread or total pick even if prob <= 0.5, but NEVER use ML
-                            # Prefer spread over total in fallback, as it's more common for parlays
-                            if s_pick_valid:
+                            # Compare probabilities directly in fallback as well
+                            if s_pick_valid and t_pick_valid:
+                                if s_final_prob >= t_final_prob:
+                                    new_b_type = "SPREAD"
+                                    new_b_pick = s_pick
+                                    new_b_prob = s_final_prob if s_final_prob else 0.5
+                                else:
+                                    new_b_type = "TOTAL"
+                                    new_b_pick = t_pick
+                                    new_b_prob = t_final_prob if t_final_prob else 0.5
+                            elif s_pick_valid:
                                 new_b_type = "SPREAD"
                                 new_b_pick = s_pick
-                                new_b_prob = s_consensus_prob if s_consensus_prob else 0.5
+                                new_b_prob = s_final_prob if s_final_prob else 0.5
                             elif t_pick_valid:
                                 new_b_type = "TOTAL"
                                 new_b_pick = t_pick
-                                new_b_prob = t_consensus_prob if t_consensus_prob else 0.5
+                                new_b_prob = t_final_prob if t_final_prob else 0.5
                             else:
                                 # No valid spread or total pick available - leave as None
                                 new_b_type = "NONE"
