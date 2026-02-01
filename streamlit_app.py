@@ -3569,8 +3569,9 @@ def score_pick_confidence(row: Dict[str, Any]) -> Tuple[str, str, bool]:
 
     Rule-based confidence using edge and data quality:
     - If no valid spread or total: LOW
-    - If edge >= 0.08 AND Kalshi available AND decision_driver is Kalshi: HIGH
-    - If edge >= 0.03: MEDIUM
+    - If actual edge < 0 (model_prob < implied_prob): LOW (NEVER HIGH for negative edge)
+    - If edge >= 0.08 AND Kalshi available AND decision_driver is Kalshi AND positive actual edge: HIGH
+    - If edge >= 0.03 AND positive actual edge: MEDIUM
     - Otherwise: LOW
 
     Best Overall picks can only come from MEDIUM/HIGH confidence rows, never LOW.
@@ -3582,29 +3583,66 @@ def score_pick_confidence(row: Dict[str, Any]) -> Tuple[str, str, bool]:
     if final_prob is None:
         return "UNKNOWN", "UNKNOWN: missing final probability", False
 
-    # Calculate edge (distance from 0.5, signed)
-    edge = abs(final_prob - 0.5)
+    # Calculate decisiveness edge (distance from 0.5)
+    decisiveness_edge = abs(final_prob - 0.5)
+
+    # FIX: Calculate ACTUAL edge (model_prob - implied_prob/consensus)
+    # This determines if we have positive value vs the market
+    actual_edge = None
+    if "spread" in market:
+        # Use spread edge if available
+        actual_edge = safe_float(row.get("spread_edge"))
+        if actual_edge is None:
+            implied = safe_float(row.get("spread_implied_prob") or row.get("SpreadConsensusProb"))
+            model_prob = safe_float(row.get("spread_prob_pick_final") or row.get("spread_prob_adj"))
+            if implied is not None and model_prob is not None:
+                actual_edge = model_prob - implied
+    elif "total" in market:
+        # Use total edge if available
+        actual_edge = safe_float(row.get("total_edge"))
+        if actual_edge is None:
+            implied = safe_float(row.get("total_implied_prob") or row.get("TotalConsensusProb"))
+            model_prob = safe_float(row.get("total_prob_pick_final") or row.get("total_prob_adj"))
+            if implied is not None and model_prob is not None:
+                actual_edge = model_prob - implied
+
+    # Fallback: if actual_edge still None, estimate from Edge column (string like "+5.2%")
+    if actual_edge is None:
+        edge_str = str(row.get("Edge") or row.get("edge") or "")
+        if edge_str and '%' in edge_str:
+            try:
+                actual_edge = float(edge_str.replace('%', '').strip()) / 100.0
+            except (ValueError, TypeError):
+                pass
+
+    # Final fallback: use 0 if we can't determine actual edge
+    if actual_edge is None:
+        actual_edge = 0.0
 
     # Check if there are no valid spread or total lines
     if "no_valid_spread_or_total" in warnings_text:
         tier = "LOW"
         reason = "no_valid_spread_or_total"
+    # FIX: CRITICAL - Negative edge ALWAYS results in LOW confidence
+    elif actual_edge < 0:
+        tier = "LOW"
+        reason = f"negative_edge={actual_edge:.3f} (<0, no value vs market)"
     else:
         # Get decision driver and Kalshi availability
         decision_driver = str(row.get("decision_driver") or "").lower()
         kalshi_weight = safe_float(row.get("kalshi_weight"))
         kalshi_available = kalshi_weight is not None and kalshi_weight > 0
 
-        # Apply edge-based rules
-        if edge >= 0.08 and kalshi_available and decision_driver == "kalshi":
+        # Apply edge-based rules (only with positive actual edge)
+        if decisiveness_edge >= 0.08 and kalshi_available and decision_driver == "kalshi" and actual_edge >= 0.05:
             tier = "HIGH"
-            reason = f"edge={edge:.3f} (≥0.08), kalshi_driven"
-        elif edge >= 0.03:
+            reason = f"decisiveness={decisiveness_edge:.3f}, actual_edge={actual_edge:.3f} (≥0.05), kalshi_driven"
+        elif decisiveness_edge >= 0.03 and actual_edge >= 0:
             tier = "MEDIUM"
-            reason = f"edge={edge:.3f} (≥0.03)"
+            reason = f"decisiveness={decisiveness_edge:.3f}, actual_edge={actual_edge:.3f} (≥0)"
         else:
             tier = "LOW"
-            reason = f"edge={edge:.3f} (<0.03)"
+            reason = f"decisiveness={decisiveness_edge:.3f}, actual_edge={actual_edge:.3f} (insufficient)"
 
     sentiment_dir = row.get("sentiment_direction") or "neutral"
     confidence_reason = f"{tier}: {reason} | driver={row.get('decision_driver') or 'unknown'} | sentiment={sentiment_dir}"
@@ -11239,95 +11277,36 @@ with tab_master:
             master_df['_sel_score'] = (_final_prob - 0.5).abs() + _edge
 
             # ============================================
-            # ML ODDS PENALTY: Tiered penalties + EXCLUSION for extreme ML picks (odds beyond ±250)
+            # FIX: EXCLUDE ALL MONEYLINE PICKS - Only use Spread and Total for parlays
+            # User requirement: No ML in parlays - only Spread and Total markets
             # ============================================
-            ML_ODDS_THRESHOLD = 250  # Base threshold - don't prefer ML picks with odds beyond ±250
-            ML_ODDS_EXCLUSION_THRESHOLD = 400  # Complete exclusion - remove from selection pool
-
-            # Tiered penalty factors based on odds extremity
-            ML_ODDS_PENALTY_MODERATE = 0.3  # 250-300: 70% penalty (3.3x preference for spread/total) - STRENGTHENED from 0.5
-            ML_ODDS_PENALTY_STRONG = 0.15   # 300-400: 85% penalty (6.7x preference for spread/total) - STRENGTHENED from 0.3
-
-            # Track ML picks before penalty
             ml_picks_before = len(master_df[master_df['Market'] == 'Moneyline']) if 'Market' in master_df.columns else 0
-            extreme_ml_count = 0
-            excluded_count = 0
-            penalty_counts = {'MODERATE': 0, 'STRONG': 0, 'EXCLUDED': 0}
+            if ml_picks_before > 0:
+                logger.info(f"🚫 EXCLUDING ALL {ml_picks_before} Moneyline picks - using Spread/Total only")
+                master_df = master_df[master_df['Market'] != 'Moneyline'].copy()
+                logger.info(f"📊 After ML exclusion: {len(master_df)} rows remain (Spread + Total only)")
 
-            # Initialize exclusion flag
+            # ============================================
+            # LEGACY ML ODDS PENALTY CODE - DISABLED (all ML now excluded above)
+            # ============================================
+            ML_ODDS_THRESHOLD = 250  # No longer used - all ML excluded
+            ML_ODDS_EXCLUSION_THRESHOLD = 400  # No longer used - all ML excluded
+
+            # Tiered penalty factors - No longer used
+            ML_ODDS_PENALTY_MODERATE = 0.3
+            ML_ODDS_PENALTY_STRONG = 0.15
+
+            # Track ML picks - all now excluded
+            extreme_ml_count = 0
+            excluded_count = ml_picks_before  # All ML excluded
+            penalty_counts = {'MODERATE': 0, 'STRONG': 0, 'EXCLUDED': ml_picks_before}
+
+            # Initialize exclusion flag (not needed since all ML already excluded, but kept for compatibility)
             master_df['_ml_excluded'] = False
 
-            # Apply tiered penalties to extreme ML picks
-            for idx, row in master_df.iterrows():
-                # Only apply to Moneyline market
-                if row.get('Market') != 'Moneyline':
-                    continue
-
-                # Get the odds for this pick
-                home_ml = row.get('Home_ML', 0)
-                away_ml = row.get('Away_ML', 0)
-                pick = row.get('Pick', '')
-                home_team = row.get('Home', '')
-
-                # Determine which side was picked (check if home team is in pick text)
-                if home_team and home_team in pick:
-                    odds = home_ml
-                else:
-                    odds = away_ml
-
-                # Check if odds are extreme and apply tiered penalty or exclusion
-                try:
-                    odds_value = float(odds) if odds is not None else 0
-                    abs_odds = abs(odds_value)
-
-                    if abs_odds > ML_ODDS_THRESHOLD:
-                        # Determine penalty tier based on odds extremity
-                        if abs_odds > ML_ODDS_EXCLUSION_THRESHOLD:
-                            # COMPLETE EXCLUSION - remove from selection pool entirely
-                            master_df.at[idx, '_ml_excluded'] = True
-                            severity = "EXCLUDED"
-                            penalty_counts['EXCLUDED'] += 1
-                            excluded_count += 1
-                            logger.info(f"🚫 EXCLUDING extreme ML: {pick} at {odds_value:+.0f} (odds > ±{ML_ODDS_EXCLUSION_THRESHOLD})")
-                        elif abs_odds > 300:
-                            penalty_factor = ML_ODDS_PENALTY_STRONG
-                            severity = "STRONG"
-                            penalty_counts['STRONG'] += 1
-                            # Log with severity level
-                            logger.info(f"⚠️ {severity} ML odds: {pick} at {odds_value:+.0f} (penalty: {int((1-penalty_factor)*100)}%)")
-                            # Apply tiered penalty to selection score
-                            master_df.at[idx, '_sel_score'] = master_df.at[idx, '_sel_score'] * penalty_factor
-                        else:
-                            penalty_factor = ML_ODDS_PENALTY_MODERATE
-                            severity = "MODERATE"
-                            penalty_counts['MODERATE'] += 1
-                            # Log with severity level
-                            logger.info(f"⚠️ {severity} ML odds: {pick} at {odds_value:+.0f} (penalty: {int((1-penalty_factor)*100)}%)")
-                            # Apply tiered penalty to selection score
-                            master_df.at[idx, '_sel_score'] = master_df.at[idx, '_sel_score'] * penalty_factor
-
-                        # Add flags for tracking (except for excluded picks)
-                        if severity != "EXCLUDED":
-                            master_df.at[idx, 'extreme_ml_odds'] = True
-                            master_df.at[idx, 'ml_odds_penalty_applied'] = True
-                            master_df.at[idx, 'ml_odds_penalty_tier'] = severity
-                            extreme_ml_count += 1
-                except (ValueError, TypeError):
-                    # Skip if odds cannot be converted to float
-                    continue
-
-            # Log summary of penalties applied
-            logger.info(f"⚠️ ML Odds Filter: Applied tiered penalties to {extreme_ml_count}/{ml_picks_before} ML picks:")
-            if penalty_counts['MODERATE'] > 0:
-                logger.info(f"   📊 MODERATE (±250-300, 70% penalty): {penalty_counts['MODERATE']} picks")
-            if penalty_counts['STRONG'] > 0:
-                logger.info(f"   📊 STRONG (±300-400, 85% penalty): {penalty_counts['STRONG']} picks")
-            if penalty_counts['EXCLUDED'] > 0:
-                logger.info(f"   🚫 EXCLUDED (±400+, complete exclusion): {penalty_counts['EXCLUDED']} picks")
-
-            # Filter out excluded picks before ATOMIC COLLAPSE
-            master_df = master_df[~master_df['_ml_excluded']].copy()
-            logger.info(f"🔍 Excluded {excluded_count} extreme ML picks (odds > ±{ML_ODDS_EXCLUSION_THRESHOLD}) from selection pool")
+            # LEGACY: ML penalty loop - no longer needed since all ML excluded above
+            # Loop will not execute because no ML rows remain in master_df
+            logger.info(f"✅ ML Exclusion Complete: All {ml_picks_before} Moneyline picks excluded, only Spread/Total remain")
             # ============================================
 
             # 2. Group by game and pick only the highest scoring row
@@ -11793,6 +11772,66 @@ with tab_master:
                     return pd.concat([df, pd.DataFrame(new_data, index=df.index)], axis=1).copy()
 
                 df = _enforce_consensus_and_best_pick_vectorized(df)
+
+                # --------------------------------------------------------
+                # FIX: Sync Market and Pick columns with Best Overall Pick
+                # User requirement: Market/Pick must match Best Overall Pick logic
+                # --------------------------------------------------------
+                def _sync_market_pick_with_best_overall(df):
+                    """
+                    Update Market and Pick columns to match Best Overall Pick.
+                    This ensures the exported Market/Pick always shows the highest probability
+                    pick between Spread and Total (no ML).
+                    """
+                    if 'best_pick_type' not in df.columns:
+                        logger.warning("best_pick_type column not found, cannot sync Market/Pick")
+                        return df
+
+                    df = df.copy()
+                    synced_count = 0
+
+                    for idx, row in df.iterrows():
+                        best_type = str(row.get('best_pick_type', '')).upper()
+                        current_market = str(row.get('Market', ''))
+
+                        # Map best_pick_type to Market name
+                        target_market = None
+                        target_pick = None
+                        target_prob = None
+
+                        if best_type == 'SPREAD':
+                            target_market = 'Spread'
+                            target_pick = row.get('Spread & Pick')
+                            target_prob = row.get('spread_prob_pick_final')
+                        elif best_type == 'TOTAL':
+                            target_market = 'Total'
+                            target_pick = row.get('Total & Pick')
+                            target_prob = row.get('total_prob_pick_final')
+                        elif best_type == 'NONE':
+                            # No valid pick - keep as is or set to None
+                            continue
+                        else:
+                            # Unknown type - skip
+                            continue
+
+                        # Update Market and Pick if they don't match
+                        if target_market and current_market != target_market:
+                            df.at[idx, 'Market'] = target_market
+                            synced_count += 1
+
+                        if target_pick is not None:
+                            df.at[idx, 'Pick'] = target_pick
+
+                        if target_prob is not None:
+                            df.at[idx, 'final_probability'] = target_prob
+
+                        # Also set Best Overall Market for export
+                        df.at[idx, 'Best Overall Market'] = target_market
+
+                    logger.info(f"✅ Market/Pick sync complete: {synced_count} rows updated to match Best Overall Pick")
+                    return df
+
+                df = _sync_market_pick_with_best_overall(df)
 
                 # --------------------------------------------------------
                 # TASK: Add Edge Column (Model Prob - Consensus Prob)
