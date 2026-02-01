@@ -289,11 +289,17 @@ first_game_full_search = {} # Fixed: Initialize as dict, not boolean, to support
 # -----------------
 
 def clean_line_str(val: Any) -> Optional[str]:
-    """Format betting line to strip leading zeros (e.g. '01' -> '1', '1.5' -> '1.5')."""
+    """Format betting line to strip leading zeros (e.g. '01' -> '1', '1.5' -> '1.5').
+
+    Returns None for NaN values to prevent 'Over nan' in pick strings.
+    """
     if val is None:
         return None
     try:
         f = float(val)
+        # Handle NaN - return None instead of 'nan' string
+        if pd.isna(f) or (isinstance(f, float) and f != f):  # NaN check
+            return None
         return f"{f:g}"
     except Exception:
         return str(val)
@@ -10061,7 +10067,7 @@ with tab_master:
                             "spread_prob": spread_prob,
                             "spread_confidence": None,
                             "spread_confidence_reason": None,
-                            "Total & Pick": f"{total_pick} {total_line} ({total_prob_final*100:.1f}%)" if (total_pick is not None and total_prob_final is not None) else (f"{total_pick} {total_line}" if total_pick is not None else None),
+                            "Total & Pick": f"{total_pick} {clean_line_str(total_line)} ({total_prob_final*100:.1f}%)" if (total_pick is not None and total_prob_final is not None and clean_line_str(total_line) is not None) else (f"{total_pick} {clean_line_str(total_line)}" if (total_pick is not None and clean_line_str(total_line) is not None) else None),
                             "total_pick_side": total_pick_side,
                             "total_pick_line": total_line,
                             "total_pick_odds": total_pick_odds,
@@ -10410,7 +10416,7 @@ with tab_master:
                         "spread_prob": spread_prob,
                         "spread_confidence": None,
                         "spread_confidence_reason": None,
-                        "Total & Pick": f"{total_pick} {clean_line_str(total_line)} ({total_prob_final*100:.1f}%)" if (total_pick is not None and total_prob_final is not None) else (f"{total_pick} {clean_line_str(total_line)}" if total_pick is not None else None),
+                        "Total & Pick": f"{total_pick} {clean_line_str(total_line)} ({total_prob_final*100:.1f}%)" if (total_pick is not None and total_prob_final is not None and clean_line_str(total_line) is not None) else (f"{total_pick} {clean_line_str(total_line)}" if (total_pick is not None and clean_line_str(total_line) is not None) else None),
                         "total_pick_side": total_pick_side,
                         "total_pick_line": total_line,
                         "total_pick_odds": total_pick_odds,
@@ -10693,7 +10699,7 @@ with tab_master:
                         "spread_prob": spread_prob,
                         "spread_confidence": None,
                         "spread_confidence_reason": None,
-                        "Total & Pick": f"{total_pick} {clean_line_str(total_line)} ({total_prob_final*100:.1f}%)" if (total_pick is not None and total_prob_final is not None) else (f"{total_pick} {clean_line_str(total_line)}" if total_pick is not None else None),
+                        "Total & Pick": f"{total_pick} {clean_line_str(total_line)} ({total_prob_final*100:.1f}%)" if (total_pick is not None and total_prob_final is not None and clean_line_str(total_line) is not None) else (f"{total_pick} {clean_line_str(total_line)}" if (total_pick is not None and clean_line_str(total_line) is not None) else None),
                         "total_pick_side": total_pick_side,
                         "total_pick_line": total_line,
                         "total_pick_odds": total_pick_odds,
@@ -11705,9 +11711,19 @@ with tab_master:
                         s_pick = row.get("Spread & Pick")
                         t_pick = row.get("Total & Pick")
 
-                        # Handle None/NaN
-                        s_pick_valid = s_pick is not None and str(s_pick).lower() != "none" and str(s_pick).strip() != ""
-                        t_pick_valid = t_pick is not None and str(t_pick).lower() != "none" and str(t_pick).strip() != ""
+                        # Handle None/NaN - also check for "nan" in pick string (e.g., "Over nan")
+                        s_pick_valid = (
+                            s_pick is not None and
+                            str(s_pick).lower() != "none" and
+                            str(s_pick).strip() != "" and
+                            "nan" not in str(s_pick).lower()
+                        )
+                        t_pick_valid = (
+                            t_pick is not None and
+                            str(t_pick).lower() != "none" and
+                            str(t_pick).strip() != "" and
+                            "nan" not in str(t_pick).lower()
+                        )
 
                         # A pick is valid if it has a valid string and probability > 0.5
                         s_valid = s_pick_valid and s_final_prob > 0.5
@@ -12356,6 +12372,126 @@ with tab_master:
         # Ensure best_pick_type and Market are never null before JSON serialization
         if "best_pick_type" in df.columns and "Market" in df.columns:
              df["best_pick_type"] = df["best_pick_type"].fillna(df["Market"]).fillna("UNKNOWN")
+
+        # -------------------------------------------------------------------------
+        # CRITICAL FIX: Final Market/Pick Sync with Best Overall Pick
+        # -------------------------------------------------------------------------
+        # This is the FINAL enforcement to ensure Market and Pick columns ALWAYS
+        # match whichever has the higher probability between Spread and Total.
+        # This fixes the 37% mismatch issue where Market showed wrong value.
+        # -------------------------------------------------------------------------
+        def _final_market_pick_sync(df):
+            """
+            Final sync to ensure Market and Pick match the higher probability pick.
+
+            Rules:
+            1. Compare spread_prob_pick_final vs total_prob_pick_final
+            2. Set Market to whichever is higher (Spread or Total)
+            3. Set Pick to the corresponding pick string (without probability)
+            4. If total line is NaN/missing, default to Spread
+            5. Update final_probability to match the selected pick
+            """
+            if df.empty:
+                return df
+
+            df = df.copy()
+            synced_count = 0
+            nan_total_count = 0
+
+            for idx, row in df.iterrows():
+                # Get probabilities
+                spread_prob = safe_float(row.get('spread_prob_pick_final')) or 0.0
+                total_prob = safe_float(row.get('total_prob_pick_final')) or 0.0
+
+                # Get pick strings
+                spread_pick_full = row.get('Spread & Pick')
+                total_pick_full = row.get('Total & Pick')
+
+                # Check for NaN in total line (indicated by "nan" in pick string or missing line)
+                total_line = row.get('total_pick_line')
+                total_has_nan = (
+                    total_line is None or
+                    (isinstance(total_line, float) and pd.isna(total_line)) or
+                    (total_pick_full and 'nan' in str(total_pick_full).lower())
+                )
+
+                # Validate pick strings
+                spread_valid = (
+                    spread_pick_full is not None and
+                    str(spread_pick_full).lower() not in ('none', '', 'nan') and
+                    'nan' not in str(spread_pick_full).lower()
+                )
+                total_valid = (
+                    total_pick_full is not None and
+                    str(total_pick_full).lower() not in ('none', '', 'nan') and
+                    not total_has_nan
+                )
+
+                # Determine target market based on probability comparison
+                current_market = str(row.get('Market', ''))
+                target_market = None
+                target_pick = None
+                target_prob = None
+
+                if spread_valid and total_valid:
+                    # Both valid - pick the higher probability
+                    if spread_prob >= total_prob:
+                        target_market = 'Spread'
+                        target_pick = spread_pick_full
+                        target_prob = spread_prob
+                    else:
+                        target_market = 'Total'
+                        target_pick = total_pick_full
+                        target_prob = total_prob
+                elif spread_valid and not total_valid:
+                    # Only spread valid (total has NaN or missing)
+                    target_market = 'Spread'
+                    target_pick = spread_pick_full
+                    target_prob = spread_prob
+                    if total_has_nan:
+                        nan_total_count += 1
+                        # Add warning for missing total line
+                        existing_warnings = str(row.get('Warnings', '') or '')
+                        new_warning = 'missing_totals_defaulting_to_spread'
+                        if new_warning not in existing_warnings:
+                            updated_warnings = f"{existing_warnings};{new_warning}" if existing_warnings else new_warning
+                            df.at[idx, 'Warnings'] = updated_warnings
+                elif total_valid and not spread_valid:
+                    # Only total valid
+                    target_market = 'Total'
+                    target_pick = total_pick_full
+                    target_prob = total_prob
+                else:
+                    # Neither valid - keep current
+                    continue
+
+                # Update if different
+                if target_market and current_market != target_market:
+                    df.at[idx, 'Market'] = target_market
+                    synced_count += 1
+
+                if target_pick is not None:
+                    df.at[idx, 'Pick'] = target_pick
+
+                if target_prob is not None:
+                    df.at[idx, 'final_probability'] = target_prob
+
+                # Also update best_pick_type to match
+                df.at[idx, 'best_pick_type'] = target_market.upper() if target_market else row.get('best_pick_type')
+                df.at[idx, 'Best Overall Market'] = target_market
+
+            logger.info(f"✅ FINAL Market/Pick sync: {synced_count} rows updated to match highest probability")
+            if nan_total_count > 0:
+                logger.info(f"⚠️ {nan_total_count} games had NaN total lines - defaulted to Spread")
+
+            return df
+
+        df = _final_market_pick_sync(df)
+
+        # Log market distribution after final sync
+        if not df.empty and 'Market' in df.columns:
+            market_dist = df['Market'].value_counts()
+            logger.info(f"📊 Final Market distribution: {dict(market_dist)}")
 
         # CRITICAL: Save collapsed dataframe to session state
         # Both master_df and master_results_df should hold the same collapsed 1-row-per-game data
