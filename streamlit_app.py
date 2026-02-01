@@ -12186,11 +12186,13 @@ with tab_master:
 
         # Create filtered version for user export (remove internal/debug columns)
         # Keep only user-relevant columns for the "All Picks" export
+        # FIX: Removed duplicate column entries that caused CSV header/data mismatch
+        # (Pick_Confidence, theover_matched, theover_delta_final_prob were listed multiple times)
         user_columns = [
             'league', 'Home', 'Away', 'Commence (UTC)', 'Commence (Local)', 'Local Date',
             'Market', 'Pick', 'final_probability', 'Pick_Confidence',
             'Best Overall Pick', 'Best Overall Prob', 'Edge',
-            'wsentiment_used', 'sentiment_adj', 'sentiment_prob', # Added
+            'wsentiment_used', 'sentiment_adj', 'sentiment_prob',
             'Best Overall Market',
             'Spread & Pick', 'spread_prob_pick_final', 'SpreadConsensusProb', 'SpreadConsensus',
             'Total & Pick', 'total_prob_pick_final', 'TotalConsensusProb', 'TotalConsensus',
@@ -12199,19 +12201,19 @@ with tab_master:
             'kalshi_available', 'HasKalshiMarket', 'Kalshi_Mode',
             'theover_matched', 'theover_delta_final_prob',
             'spread_prob_market', 'total_prob_market', 'decisiveness',
-            'Pick_Confidence', 'confidence_reason', 'stats_quality',
+            'confidence_reason', 'stats_quality',
             'sentiment_available',
-            'Pick_Reason_Short', 'theover_delta_final_prob',
-            # Issue #1: Add Gemini & Sentiment columns (User Request)
+            'Pick_Reason_Short',
+            # Gemini & Sentiment columns
             'PickConfidence', 'PickReason', 'geminitotalconfidence', 'geminirationalize', 'geminierrorflag',
             'HomeSentiment', 'AwaySentiment', 'SentimentDiff', 'sentimentscore', 'sentimentstatus',
             'model_spread_prob', 'model_total_prob', 'AI_Prob', 'consensus_prob', 'consensus_prob_adj',
-            # Issue #1: Add missing TheOver integration columns
+            # TheOver integration columns
             'theover_pick', 'theover_hit_rate', 'theover_source_model', 'theover_prob_used',
-            'theover_matched', 'theover_delta_final_prob', 'final_prob_without_theover',
-            # Add probability weights for transparency
+            'final_prob_without_theover',
+            # Probability weights for transparency
             'kalshi_weight', 'odds_weight', 'ml_weight', 'sentiment_weight',
-            # Add decision trace info
+            # Decision trace info
             'decision_driver', 'prob_engine', 'model_mode', 'Warnings'
         ]
         # Task 3.1: Calculate Data Quality Score before export
@@ -12499,7 +12501,21 @@ with tab_master:
         st.session_state["master_df"] = df.copy()  # Collapsed data with all internal columns
 
         # Filter to only columns that exist in the dataframe
-        results_columns = [col for col in user_columns if col in df.columns]
+        # FIX: Deduplicate to prevent CSV header/data column count mismatch
+        results_columns_raw = [col for col in user_columns if col in df.columns]
+        # Remove duplicates while preserving order
+        seen = set()
+        results_columns = []
+        for col in results_columns_raw:
+            if col not in seen:
+                seen.add(col)
+                results_columns.append(col)
+
+        # Warn if duplicates were found (shouldn't happen after fix, but safety check)
+        if len(results_columns) != len(results_columns_raw):
+            dup_count = len(results_columns_raw) - len(results_columns)
+            logger.warning(f"FIX APPLIED: Removed {dup_count} duplicate column(s) from export to prevent CSV mismatch")
+
         st.session_state["master_results_df"] = df[results_columns].copy()
 
         # Safety check for missing columns (User Request)
