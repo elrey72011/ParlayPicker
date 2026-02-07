@@ -35,8 +35,8 @@ def verify_weights():
         checks = [
             '"ml_weight": 0.20',
             '"sentiment_weight": 0.05',
-            '"kalshi_weight": 0.35',
-            '"odds_weight": 0.30',
+            '"kalshi_weight": 0.55',
+            '"odds_weight": 0.15',
             '"theover_weight": 0.10'
         ]
 
