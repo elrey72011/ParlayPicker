@@ -1046,7 +1046,7 @@ def dynamic_kalshi_weight(
     implied_pick_prob: Optional[float],
     kalshi_matched: bool,
     league: Optional[str],
-    base_default: float = 0.35,
+    base_default: float = 0.55,
 ) -> float:
     """
     Compute a dynamic Kalshi weight based on signal strength and league.
@@ -1065,11 +1065,11 @@ def dynamic_kalshi_weight(
     # League-based caps (NBA/NFL get higher max weight than small-conference NCAAB)
     lg = (league or "").upper()
     if lg in ("NBA", "NFL"):
-        max_w = 0.5
+        max_w = 0.70  # UP from 0.5
     elif lg in ("NHL", "MLB"):
-        max_w = 0.4
+        max_w = 0.60  # UP from 0.4
     else:
-        max_w = 0.3  # NCAAB, NCAAF, etc.
+        max_w = 0.50  # UP from 0.3
 
     # Piecewise mapping from edge size to weight
     if edge < 0.03:
@@ -1103,9 +1103,9 @@ def compute_final_probability(
     kalshi_prob_for_pick = map_kalshi_prob_for_pick(kalshi_prob_yes, kalshi_side_yes, pick_side)
 
     # Weights from Config (Static)
-    W_KALSHI = KALSHI_WEIGHT      # 0.35
-    W_MARKET = MARKET_WEIGHT      # 0.30
-    W_MODEL = ML_MODEL_WEIGHT     # 0.20
+    W_KALSHI = KALSHI_WEIGHT      # 0.55 (UP from 0.35)
+    W_MARKET = MARKET_WEIGHT      # 0.15 (DOWN from 0.30)
+    W_MODEL = ML_MODEL_WEIGHT     # 0.15 (DOWN from 0.20)
     W_THEOVER = THEOVER_WEIGHT    # 0.10
     W_SENTIMENT = SENTIMENT_WEIGHT # 0.05
 
@@ -1237,7 +1237,7 @@ def compute_final_probability(
     final_prob = clamp(final_prob_val, 0.0, 1.0)
 
     # Determine Driver (simply highest weight used)
-    driver = "kalshi" # Kalshi is highest weight (0.35) by default
+    driver = "kalshi" # Kalshi is highest weight (0.55) - Option 2
     if abs(clamped_delta) > 0.03:
         driver += " + TheOver"
 
@@ -9832,8 +9832,8 @@ with tab_master:
                         if is_heavy_chalk:
                             current_ml_weights["ml_weight"] = 0.0
                             current_ml_weights["w_model"] = 0.0 # Ensure explicit key also zeroed
-                            current_ml_weights["kalshi_weight"] = 0.6
-                            current_ml_weights["odds_weight"] = 0.4
+                            current_ml_weights["kalshi_weight"] = 0.75  # UP from 0.6
+                            current_ml_weights["odds_weight"] = 0.25    # DOWN from 0.4
                             # MODE B: Keep sentiment weight from config (was Mode A: forced to 0.0)
                             # current_ml_weights["sentiment_weight"] = 0.0  # DISABLED to enable sentiment
                             current_ml_weights["theover_weight"] = 0.0
