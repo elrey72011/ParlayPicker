@@ -1,8 +1,15 @@
 # Hardcoded Global Weights for Probability Blending
-# User Instruction: "Stop the dynamic weight shifting. Use these static values."
+# Two-tier system: Kalshi-heavy when Kalshi agrees, fallback when it doesn't
 
-KALSHI_WEIGHT = 0.55      # UP from 0.35 - Prediction markets highest signal
-MARKET_WEIGHT = 0.10      # DOWN from 0.30 - Bookmaker odds include vig
-ML_MODEL_WEIGHT = 0.125    # DOWN from 0.20 - Historical model
-THEOVER_WEIGHT = 0.175     # SAME
-SENTIMENT_WEIGHT = 0.05   # SAME
+# Tier 1: Kalshi agrees (prob >= 55% for pick side)
+KALSHI_WEIGHT = 0.55      # Prediction markets highest signal
+MARKET_WEIGHT = 0.15      # Bookmaker odds
+ML_MODEL_WEIGHT = 0.15    # Historical model
+THEOVER_WEIGHT = 0.10     # TheOver consensus
+SENTIMENT_WEIGHT = 0.05   # News sentiment
+
+# Tier 2: Fallback weights (Kalshi disagrees or unavailable)
+FALLBACK_MARKET_WEIGHT = 0.35
+FALLBACK_ML_WEIGHT = 0.35
+FALLBACK_THEOVER_WEIGHT = 0.20
+FALLBACK_SENTIMENT_WEIGHT = 0.10
