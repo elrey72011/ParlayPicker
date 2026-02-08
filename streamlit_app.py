@@ -9586,8 +9586,11 @@ with tab_master:
                 spread_prob_margin = None
                 spread_prob_pick_market = spread_prob_market
                 spread_prob_alt_market = None
-                spread_prob_pick_kalshi = kalshi_prob_spread if kalshi_spread.get("kalshi_matched") else None
-                spread_prob_alt_kalshi = None
+                # FIX: Use the pick-side-mapped Kalshi probability, not the raw YES-side probability.
+                # spread_kalshi_prob_for_pick is correctly mapped to the pick side by
+                # map_kalshi_prob_for_pick() inside compute_final_probability().
+                spread_prob_pick_kalshi = spread_kalshi_prob_for_pick
+                spread_prob_alt_kalshi = (1.0 - spread_kalshi_prob_for_pick) if spread_kalshi_prob_for_pick is not None else None
                 if spread_pick_team in {home, away}:
                     spread_alt_team = away if spread_pick_team == home else home
                     spread_alt_line = home_spread_point if spread_pick_team == away else away_spread_point
@@ -9656,8 +9659,14 @@ with tab_master:
                 total_prob_margin = None
                 total_prob_pick_market = total_prob_market
                 total_prob_alt_market = None
-                total_prob_pick_kalshi = kalshi_prob_total if kalshi_total.get("kalshi_matched") else None
-                total_prob_alt_kalshi = None
+                # FIX: Use the pick-side-mapped Kalshi probability, not the raw YES-side probability.
+                # kalshi_prob_total is the raw Kalshi YES-side prob (e.g., 5% for Over),
+                # but total_kalshi_prob_for_pick is correctly mapped to the pick side
+                # (e.g., 95% for Under when pick=Under and Kalshi YES=Over at 5%).
+                # Using the raw value caused an apparent "inversion" where the consensus
+                # display showed K:5% while the final probability was ~77%.
+                total_prob_pick_kalshi = total_kalshi_prob_for_pick
+                total_prob_alt_kalshi = (1.0 - total_kalshi_prob_for_pick) if total_kalshi_prob_for_pick is not None else None
                 if total_pick_side in {"Over", "Under"}:
                     total_alt_side = "Under" if total_pick_side == "Over" else "Over"
                     total_alt_label = f"{total_alt_side} {total_line}" if total_line is not None else total_alt_side
