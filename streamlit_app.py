@@ -1148,7 +1148,8 @@ def compute_final_probability(
         kalshi_validated = True
         if implied_prob is not None:
             delta = abs(kalshi_prob_for_pick - implied_prob)
-            if delta > 0.60:  # 60% threshold - loosened to capture high-edge opportunities
+            if delta > 0.40:  # 40% threshold - reject extreme disagreements
+                # Extreme disagreement likely means wrong Kalshi line was matched
                 kalshi_validated = False
                 warnings.append(f"kalshi_validation_failed(delta={delta:.2f})")
 
@@ -6645,6 +6646,10 @@ def _match_kalshi_market_impl(
         # Task 1.2: Improved Kalshi Contract Selection for Spreads/Totals
         # Instead of blindly taking markets[0], score candidates and infer YES side intelligently
 
+        # Get sportsbook consensus line for line-proximity scoring
+        sportsbook_total_line = safe_float(game.get("total_point"))
+        sportsbook_spread_line = safe_float(game.get("home_spread_point"))
+
         scored_candidates = []
         for market in markets:
             score = 0.0
@@ -6661,6 +6666,24 @@ def _match_kalshi_market_impl(
                 if code_home_hit and code_away_hit:
                     score += 50.0
 
+            # Line-proximity scoring: strongly prefer markets whose line matches the sportsbook
+            # Without this, the system picks an arbitrary line (e.g., Over 250 instead of Over 215)
+            # which produces extreme probabilities (5% for Over 250 is correct but irrelevant)
+            market_line = safe_float(market.get("floor_strike") or market.get("cap_strike"))
+            if market_line is not None and market_type in ("total", "spread"):
+                ref_line = sportsbook_total_line if market_type == "total" else sportsbook_spread_line
+                if ref_line is not None:
+                    line_diff = abs(market_line - ref_line)
+                    if line_diff <= 0.5:
+                        score += 300.0  # Exact match (within rounding)
+                    elif line_diff <= 2.0:
+                        score += 250.0  # Very close
+                    elif line_diff <= 5.0:
+                        score += 200.0 - (line_diff * 10)  # Close, decreasing bonus
+                    elif line_diff <= 10.0:
+                        score += 100.0  # Moderate distance
+                    # Lines > 10 points away get no line bonus
+
             scored_candidates.append((score, market))
 
         # Select best-scoring candidate
@@ -6676,7 +6699,10 @@ def _match_kalshi_market_impl(
         if market_type == "total":
             # For total markets, YES side is "over" or "under" — determine from ticker/title
             # DO NOT use infer_yes_side() which returns "home"/"away" from team codes
-            chosen_ticker = str(chosen.get("event_ticker") or chosen.get("ticker") or "").upper()
+            # FIX: Use individual market ticker first (contains "OVER"/"UNDER" suffix),
+            # then fall back to event_ticker (which is just the event-level identifier
+            # like KXNBATOTAL-26FEB08BOSSEA and never contains Over/Under direction)
+            chosen_ticker = str(chosen.get("ticker") or chosen.get("event_ticker") or "").upper()
             chosen_title = str(chosen.get("title") or "").lower()
             if "UNDER" in chosen_ticker or "under" in chosen_title:
                 yes_side_inferred = "under"
@@ -6691,7 +6717,17 @@ def _match_kalshi_market_impl(
         # Add debug logging - use info level for visibility
         prob_str = f"{prob:.3f}" if prob else "N/A"
         logger.info(f"✅ KALSHI {market_type.upper()} MATCH: ticker={chosen.get('ticker') or chosen.get('event_ticker')}, "
-                    f"prob={prob_str}, line={line}, score={best_score}")
+                    f"prob={prob_str}, line={line}, yes_side={yes_side_inferred}, score={best_score}")
+
+        # Warn if selected Kalshi line is far from sportsbook line
+        if market_type == "total" and line is not None and sportsbook_total_line is not None:
+            line_gap = abs(line - sportsbook_total_line)
+            if line_gap > 5.0:
+                logger.warning(f"⚠️ KALSHI LINE MISMATCH: Kalshi line={line} vs Sportsbook line={sportsbook_total_line} (gap={line_gap:.1f})")
+        elif market_type == "spread" and line is not None and sportsbook_spread_line is not None:
+            line_gap = abs(line - sportsbook_spread_line)
+            if line_gap > 3.0:
+                logger.warning(f"⚠️ KALSHI LINE MISMATCH: Kalshi line={line} vs Sportsbook line={sportsbook_spread_line} (gap={line_gap:.1f})")
 
         return {
             "kalshi_available": True,
