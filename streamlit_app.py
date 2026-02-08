@@ -6535,9 +6535,9 @@ def _match_kalshi_market_impl(
             if first and first == away_code_expected:
                 return "away"
             if second and second == home_code_expected:
-                return "away"
-            if second and second == away_code_expected:
                 return "home"
+            if second and second == away_code_expected:
+                return "away"
         return None
 
     home_code_candidates = [c.upper() for c in team_code_candidates(league_name, game.get("home_team"))]
@@ -6672,16 +6672,20 @@ def _match_kalshi_market_impl(
 
         prob, line = extract_prob_and_line(chosen, market_type)
 
-        # Task 1.2: Intelligent YES side inference instead of hardcoding
-        # Use same logic as winner matching
-        yes_side_inferred = infer_yes_side(chosen)
-
-        # Fallback to reasonable defaults if inference fails
-        if not yes_side_inferred:
-            if market_type == "total":
-                yes_side_inferred = "over"  # For totals, YES = over is standard
+        # Task 1.2: Intelligent YES side inference
+        if market_type == "total":
+            # For total markets, YES side is "over" or "under" — determine from ticker/title
+            # DO NOT use infer_yes_side() which returns "home"/"away" from team codes
+            chosen_ticker = str(chosen.get("event_ticker") or chosen.get("ticker") or "").upper()
+            chosen_title = str(chosen.get("title") or "").lower()
+            if "UNDER" in chosen_ticker or "under" in chosen_title:
+                yes_side_inferred = "under"
             else:
-                # For spreads, try to infer from line or default to home
+                yes_side_inferred = "over"  # Default for totals (YES = Over is standard)
+        else:
+            # For winner/spread markets, use team code inference
+            yes_side_inferred = infer_yes_side(chosen)
+            if not yes_side_inferred:
                 yes_side_inferred = "home"
 
         # Add debug logging - use info level for visibility
