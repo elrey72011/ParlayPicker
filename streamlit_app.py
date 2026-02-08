@@ -90,6 +90,10 @@ from app_core.weights_config import (
     ML_MODEL_WEIGHT,
     THEOVER_WEIGHT,
     SENTIMENT_WEIGHT,
+    FALLBACK_MARKET_WEIGHT,
+    FALLBACK_ML_WEIGHT,
+    FALLBACK_THEOVER_WEIGHT,
+    FALLBACK_SENTIMENT_WEIGHT,
 )
 
 from app_core.consensus_ingest import enrich_with_consensus
@@ -1102,12 +1106,24 @@ def compute_final_probability(
     warnings: List[str] = []
     kalshi_prob_for_pick = map_kalshi_prob_for_pick(kalshi_prob_yes, kalshi_side_yes, pick_side)
 
-    # Weights from Config (Static)
-    W_KALSHI = KALSHI_WEIGHT      # 0.55 (UP from 0.35)
-    W_MARKET = MARKET_WEIGHT      # 0.15 (DOWN from 0.30)
-    W_MODEL = ML_MODEL_WEIGHT     # 0.15 (DOWN from 0.20)
-    W_THEOVER = THEOVER_WEIGHT    # 0.10
-    W_SENTIMENT = SENTIMENT_WEIGHT # 0.05
+    # Determine if Kalshi agrees with pick (prob >= 55% for our side)
+    kalshi_agrees = kalshi_prob_for_pick is not None and kalshi_prob_for_pick >= 0.55
+
+    # Set weights based on Kalshi agreement
+    if kalshi_agrees:
+        # Tier 1: Kalshi-heavy weights
+        W_KALSHI = KALSHI_WEIGHT           # 0.55
+        W_MARKET = MARKET_WEIGHT           # 0.15
+        W_MODEL = ML_MODEL_WEIGHT          # 0.15
+        W_THEOVER = THEOVER_WEIGHT         # 0.10
+        W_SENTIMENT = SENTIMENT_WEIGHT     # 0.05
+    else:
+        # Tier 2: Fallback weights (exclude Kalshi)
+        W_KALSHI = 0.0
+        W_MARKET = FALLBACK_MARKET_WEIGHT      # 0.35
+        W_MODEL = FALLBACK_ML_WEIGHT           # 0.35
+        W_THEOVER = FALLBACK_THEOVER_WEIGHT    # 0.20
+        W_SENTIMENT = FALLBACK_SENTIMENT_WEIGHT # 0.10
 
     weights_used = {
         "w_implied": W_MARKET,
@@ -1236,8 +1252,11 @@ def compute_final_probability(
 
     final_prob = clamp(final_prob_val, 0.0, 1.0)
 
-    # Determine Driver (simply highest weight used)
-    driver = "kalshi" # Kalshi is highest weight (0.55) - Option 2
+    # Determine Driver based on weight tier
+    if kalshi_agrees:
+        driver = "kalshi"
+    else:
+        driver = "Fallback (Market+ML)"
     if abs(clamped_delta) > 0.03:
         driver += " + TheOver"
 
@@ -3634,21 +3653,22 @@ def score_pick_confidence(row: Dict[str, Any]) -> Tuple[str, str, bool]:
         tier = "LOW"
         reason = f"negative_edge={actual_edge:.3f} (<0, no value vs market)"
     else:
-        # Get decision driver and Kalshi availability
-        decision_driver = str(row.get("decision_driver") or "").lower()
-        kalshi_weight = safe_float(row.get("kalshi_weight"))
-        kalshi_available = kalshi_weight is not None and kalshi_weight > 0
+        # Get Kalshi agreement status
+        kalshi_prob_for_pick = safe_float(row.get("kalshi_prob_for_pick") or row.get("spread_prob_pick_kalshi") or row.get("total_prob_pick_kalshi"))
+        kalshi_agrees = kalshi_prob_for_pick is not None and kalshi_prob_for_pick >= 0.55
 
-        # Apply edge-based rules (only with positive actual edge)
-        if decisiveness_edge >= 0.08 and kalshi_available and decision_driver == "kalshi" and actual_edge >= 0.05:
+        # Two-tier confidence system
+        if kalshi_agrees and decisiveness_edge >= 0.08 and actual_edge >= 0.05:
+            # Tier 1: Kalshi agrees with strong metrics
             tier = "HIGH"
-            reason = f"decisiveness={decisiveness_edge:.3f}, actual_edge={actual_edge:.3f} (≥0.05), kalshi_driven"
+            reason = f"kalshi_agrees ({kalshi_prob_for_pick:.1%}), decisiveness={decisiveness_edge:.3f}, edge={actual_edge:.3f}"
         elif decisiveness_edge >= 0.03 and actual_edge >= 0:
+            # Tier 2: Fallback (Kalshi disagrees or unavailable, but metrics OK)
             tier = "MEDIUM"
-            reason = f"decisiveness={decisiveness_edge:.3f}, actual_edge={actual_edge:.3f} (≥0)"
+            reason = f"fallback_mode, decisiveness={decisiveness_edge:.3f}, edge={actual_edge:.3f}"
         else:
             tier = "LOW"
-            reason = f"decisiveness={decisiveness_edge:.3f}, actual_edge={actual_edge:.3f} (insufficient)"
+            reason = f"insufficient_metrics, decisiveness={decisiveness_edge:.3f}, edge={actual_edge:.3f}"
 
     sentiment_dir = row.get("sentiment_direction") or "neutral"
     confidence_reason = f"{tier}: {reason} | driver={row.get('decision_driver') or 'unknown'} | sentiment={sentiment_dir}"
@@ -9736,14 +9756,20 @@ with tab_master:
                     kalshi_prob = clamp(kalshi_prob_used)
                     decision_driver = "Unknown"
                     base_prob = None
-                    if kalshi_prob is not None:
+                    if kalshi_prob is not None and kalshi_prob >= 0.55:
+                        # Tier 1: Kalshi agrees
                         decision_driver = "Kalshi"
                         base_prob = kalshi_prob
-                        weights_debug["kalshi_weight"] = 1.0
+                        weights_debug["kalshi_weight"] = 0.55
+                        weights_debug["odds_weight"] = 0.15
+                        weights_debug["ml_weight"] = 0.15
                     elif odds_prob is not None:
-                        decision_driver = "Odds"
-                        base_prob = odds_prob
-                        weights_debug["odds_weight"] = 1.0
+                        # Tier 2: Fallback to Market + ML
+                        decision_driver = "Fallback (Market+ML)"
+                        base_prob = (odds_prob * 0.5) + ((ai_prob or odds_prob) * 0.5)
+                        weights_debug["kalshi_weight"] = 0.0
+                        weights_debug["odds_weight"] = 0.35
+                        weights_debug["ml_weight"] = 0.35
                     elif ai_prob is not None:
                         decision_driver = "ML"
                         base_prob = ai_prob
