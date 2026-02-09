@@ -1175,7 +1175,8 @@ def compute_final_probability(
         W_MODEL = 0.0
 
     # 4. TheOver
-    p_theover = 0.0
+    # If missing, use neutral 0.5
+    p_theover = 0.5
     if theover_prob is not None:
         raw_to = clamp_prob(theover_prob, 0.05, 0.95) or 0.5
         # RESCALE logic: [0.55, 0.75] band
@@ -1185,8 +1186,6 @@ def compute_final_probability(
              p_theover = 0.5 - (0.5 - raw_to) * 0.555
         else:
              p_theover = 0.5
-    else:
-        W_THEOVER = 0.0
 
     # 5. Sentiment
     # If missing or rate limited, zero weight
