@@ -1360,7 +1360,9 @@ def _match_via_events(
             if yes_bid and yes_ask:
                  prob = (yes_bid + yes_ask) / 2.0
             elif yes_bid:
-                 prob = yes_bid
+                 # Prefer last_price (actual trade) over yes_bid (lowest buy offer)
+                 lp = _kalshi_price_norm(target_market, "last_price_dollars", "last_price")
+                 prob = lp if lp else yes_bid
             else:
                  lp = _kalshi_price_norm(target_market, "last_price_dollars", "last_price")
                  if lp:
