@@ -6363,6 +6363,30 @@ def _match_kalshi_market_impl(
         }
         return mapping.get(skey, skey.upper())
 
+    def _kalshi_prices(market: Dict[str, Any]) -> Tuple[Optional[float], Optional[float], Optional[float], Optional[float]]:
+        """Read Kalshi bid/ask/last prices, returning (yes_bid, yes_ask, no_bid, last_price) all normalized to 0-1.
+
+        Prefers the current *_dollars string fields (already in 0-1 dollar range).
+        Falls back to deprecated integer-cent fields (divided by 100).
+        """
+        def _read(dollars_key: str, cents_key: str) -> Optional[float]:
+            # Prefer _dollars field (string like "0.5600", already 0-1 range)
+            d = safe_float(market.get(dollars_key))
+            if d is not None and d > 0:
+                return d
+            # Fallback to deprecated integer-cent field
+            c = safe_float(market.get(cents_key))
+            if c is not None and c > 0:
+                return c / 100.0
+            return None
+
+        return (
+            _read("yes_bid_dollars", "yes_bid"),
+            _read("yes_ask_dollars", "yes_ask"),
+            _read("no_bid_dollars", "no_bid"),
+            _read("last_price_dollars", "last_price"),
+        )
+
     def extract_prob_and_line(
         market: Dict[str, Any], market_type: str
     ) -> Tuple[Optional[float], Optional[float]]:
@@ -6377,39 +6401,36 @@ def _match_kalshi_market_impl(
                 line = None
 
         # 2. Probability (midpoint of yes_bid and yes_ask)
-        yes_bid = safe_float(market.get("yes_bid"))
-        yes_ask = safe_float(market.get("yes_ask"))
-        no_bid = safe_float(market.get("no_bid"))
+        # Uses _dollars fields (current API) with fallback to cent fields (deprecated)
+        yes_bid, yes_ask, no_bid, last_price = _kalshi_prices(market)
 
         prob = None
 
         if yes_bid is not None and yes_ask is not None:
-            # Direct midpoint of yes_bid and yes_ask
-            prob = ((yes_bid + yes_ask) / 2.0) / 100.0
+            # Direct midpoint (values already normalized to 0-1)
+            prob = (yes_bid + yes_ask) / 2.0
 
         elif yes_bid is not None and no_bid is not None:
-            # Fallback: Implied Ask = 100 - no_bid
-            implied_yes_ask = 100.0 - no_bid
-            prob = ((yes_bid + implied_yes_ask) / 2.0) / 100.0
+            # Implied ask = 1.0 - no_bid (values already 0-1)
+            implied_yes_ask = 1.0 - no_bid
+            prob = (yes_bid + implied_yes_ask) / 2.0
 
         elif yes_bid is not None:
             # Fallback if only yes_bid available
-            prob = yes_bid / 100.0
+            prob = yes_bid
 
         elif no_bid is not None:
             # Fallback if YES bid missing (Prob YES = 1 - Prob NO)
-            prob = 1.0 - (no_bid / 100.0)
+            prob = 1.0 - no_bid
 
         # Final fallback to last_price if bids empty
-        if prob is None:
-            lp = safe_float(market.get("last_price"))
-            if lp is not None and lp > 0:
-                prob = lp / 100.0
+        if prob is None and last_price is not None and last_price > 0:
+            prob = last_price
 
         return clamp(prob, 0.0, 1.0), line
 
     def winner_score(market: Dict[str, Any]) -> float:
-        for key in ["liquidity", "volume", "open_interest", "last_price"]:
+        for key in ["liquidity_dollars", "liquidity", "volume", "open_interest", "last_price_dollars", "last_price"]:
             try:
                 val = float(market.get(key))
                 if val is not None:
@@ -6420,31 +6441,28 @@ def _match_kalshi_market_impl(
 
     def winner_prob(market: Dict[str, Any]) -> Optional[float]:
         # Use midpoint of yes_bid and yes_ask (same logic as extract_prob_and_line)
-        yes_bid = safe_float(market.get("yes_bid"))
-        yes_ask = safe_float(market.get("yes_ask"))
-        no_bid = safe_float(market.get("no_bid"))
+        # Reads _dollars fields (current API) with fallback to cent fields (deprecated)
+        yes_bid, yes_ask, no_bid, last_price = _kalshi_prices(market)
 
         prob = None
 
         if yes_bid is not None and yes_ask is not None:
-            # Direct midpoint of yes_bid and yes_ask
-            prob = ((yes_bid + yes_ask) / 2.0) / 100.0
+            # Direct midpoint (values already normalized to 0-1)
+            prob = (yes_bid + yes_ask) / 2.0
         elif yes_bid is not None and no_bid is not None:
-            # Derive yes_ask from no_bid: implied_yes_ask = 100 - no_bid
-            implied_yes_ask = 100.0 - no_bid
-            prob = ((yes_bid + implied_yes_ask) / 2.0) / 100.0
+            # Implied ask = 1.0 - no_bid (values already 0-1)
+            implied_yes_ask = 1.0 - no_bid
+            prob = (yes_bid + implied_yes_ask) / 2.0
         elif yes_bid is not None:
             # Fallback if only yes_bid available
-            prob = yes_bid / 100.0
+            prob = yes_bid
         elif no_bid is not None:
             # Fallback if YES bid missing (Prob YES = 1 - Prob NO)
-            prob = 1.0 - (no_bid / 100.0)
+            prob = 1.0 - no_bid
 
         # Final fallback to last_price if bids empty
-        if prob is None:
-            last_price = safe_float(market.get("last_price"))
-            if last_price is not None:
-                prob = clamp(last_price / 100.0, 0.0, 1.0)
+        if prob is None and last_price is not None:
+            prob = clamp(last_price, 0.0, 1.0)
 
         return clamp(prob, 0.0, 1.0) if prob is not None else None
 
@@ -6549,6 +6567,17 @@ def _match_kalshi_market_impl(
     logger.info(f"   - Spread markets: {len(spreads)}" + (f" (sample: {spreads[0].get('ticker', 'N/A')})" if spreads else ""))
     logger.info(f"   - Unknown markets: {len(unknown)}" + (f" (sample: {unknown[0].get('ticker', 'N/A')})" if unknown else ""))
 
+    # DEBUG: Log pricing field availability on first market to verify API response format
+    if kalshi_markets:
+        _sample = kalshi_markets[0]
+        logger.info(f"   💲 PRICING FIELDS (sample {_sample.get('ticker', 'N/A')}): "
+                     f"yes_bid_dollars={_sample.get('yes_bid_dollars')}, "
+                     f"yes_ask_dollars={_sample.get('yes_ask_dollars')}, "
+                     f"yes_bid={_sample.get('yes_bid')}, "
+                     f"yes_ask={_sample.get('yes_ask')}, "
+                     f"last_price_dollars={_sample.get('last_price_dollars')}, "
+                     f"last_price={_sample.get('last_price')}")
+
     # FIX: Enhanced debug logging for spread/total matching
     if totals:
         logger.info(f"   📊 TOTAL MARKET DETAILS: {len(totals)} markets available")
@@ -6637,6 +6666,9 @@ def _match_kalshi_market_impl(
             "volume": m.get("volume"),
             "open_interest": m.get("open_interest"),
             "last_price": m.get("last_price"),
+            "yes_bid_dollars": m.get("yes_bid_dollars"),
+            "yes_ask_dollars": m.get("yes_ask_dollars"),
+            "last_price_dollars": m.get("last_price_dollars"),
             "score": score,
             "date_match": date_match,
             "home_hit": team_hit or code_home_hit,

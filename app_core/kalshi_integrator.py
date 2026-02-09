@@ -753,6 +753,33 @@ def price_to_prob(price: Any) -> Optional[float]:
     except: pass
     return None
 
+
+def safe_float(x: Any) -> Optional[float]:
+    """Convert to float; return None on blanks/NaN/non-numeric."""
+    if x is None:
+        return None
+    if isinstance(x, str) and x.strip().lower() in {"", "none", "nan", "n/a"}:
+        return None
+    try:
+        val = float(x)
+        if val != val:  # NaN
+            return None
+        return val
+    except Exception:
+        return None
+
+
+def _kalshi_price_norm(mkt: Dict[str, Any], dollars_key: str, cents_key: str) -> Optional[float]:
+    """Read a Kalshi price field, preferring *_dollars (0-1 string) over deprecated cent int."""
+    d = safe_float(mkt.get(dollars_key))
+    if d is not None and d > 0:
+        return d
+    c = safe_float(mkt.get(cents_key))
+    if c is not None and c > 0:
+        return c / 100.0
+    return None
+
+
 def _extract_market_type(title: str, ticker: str, subtitle: str = "", market: Dict[str, Any] = None) -> str:
     t = (title or "").upper()
     tick = (ticker or "").upper()
@@ -859,14 +886,20 @@ def _parse_market_metadata(mkt: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             teams = ticker_teams[:2]
 
     market_type = _extract_market_type(title, ticker, subtitle=mkt.get("subtitle", ""), market=mkt)
-    # Use midpoint of yes_bid/yes_ask if both available, else fall back to yes_price/last_price
-    _yb = price_to_prob(mkt.get("yes_bid"))
-    _ya = price_to_prob(mkt.get("yes_ask"))
+    # Use midpoint of yes_bid/yes_ask if both available, else fall back to last_price
+    # Prefer _dollars fields (current API); fall back to deprecated cent fields
+    _yb = _kalshi_price_norm(mkt, "yes_bid_dollars", "yes_bid")
+    _ya = _kalshi_price_norm(mkt, "yes_ask_dollars", "yes_ask")
     if _yb is not None and _ya is not None and _yb > 0 and _ya > 0:
         prob = (_yb + _ya) / 2.0
     else:
-        prob_source = (mkt.get("yes_price") or mkt.get("last_price") or mkt.get("yes_ask") or mkt.get("implied_prob"))
-        prob = price_to_prob(prob_source)
+        # Fallback chain: yes_price, last_price_dollars, last_price, yes_ask_dollars, yes_ask
+        prob_source_dollar = safe_float(mkt.get("last_price_dollars"))
+        if prob_source_dollar is not None and prob_source_dollar > 0:
+            prob = prob_source_dollar
+        else:
+            prob_source = (mkt.get("yes_price") or mkt.get("last_price") or mkt.get("yes_ask") or mkt.get("implied_prob"))
+            prob = price_to_prob(prob_source)
 
     return {"title": title, "market_date": market_dt, "teams": teams, "probability": prob, "market_type": market_type}
 
@@ -1320,14 +1353,18 @@ def _match_via_events(
             target_market = markets[0] # Fallback
 
         if target_market:
-             # Calculate prob
-            yes_bid = target_market.get("yes_bid")
-            yes_ask = target_market.get("yes_ask")
+             # Calculate prob using _dollars fields (current API) with cent fallback
+            yes_bid = _kalshi_price_norm(target_market, "yes_bid_dollars", "yes_bid")
+            yes_ask = _kalshi_price_norm(target_market, "yes_ask_dollars", "yes_ask")
             prob = None
             if yes_bid and yes_ask:
-                 prob = ((yes_bid + yes_ask) / 2) / 100.0
-            elif target_market.get("last_price"):
-                 prob = target_market.get("last_price") / 100.0
+                 prob = (yes_bid + yes_ask) / 2.0
+            elif yes_bid:
+                 prob = yes_bid
+            else:
+                 lp = _kalshi_price_norm(target_market, "last_price_dollars", "last_price")
+                 if lp:
+                     prob = lp
 
             # Enhanced debug info
             debug_info = {
