@@ -1133,16 +1133,20 @@ def compute_final_probability(
         "w_sentiment": W_SENTIMENT
     }
 
+    # FIX: When a source is unavailable (None), zero its weight instead of using
+    # 0.5 neutral. This prevents missing sources from diluting the probability
+    # toward 50%. Weights are renormalized after all sources are evaluated.
+
     # 1. Market (Implied Prob)
-    # If missing, use neutral 0.5
     if implied_prob is not None:
         p_market = clamp_prob(implied_prob, 0.05, 0.95) or 0.5
     else:
-        p_market = 0.5
+        p_market = 0.0
+        W_MARKET = 0.0
 
     # 2. Kalshi
-    # If missing or validation failed, use neutral 0.5
-    p_kalshi = 0.5
+    p_kalshi = 0.0
+    kalshi_is_available = False
     if kalshi_prob_for_pick is not None:
         # Validate Kalshi probability against implied odds
         kalshi_validated = True
@@ -1155,14 +1159,20 @@ def compute_final_probability(
 
         if kalshi_validated:
             p_kalshi = clamp_prob(kalshi_prob_for_pick, 0.05, 0.95) or 0.5
+            kalshi_is_available = True
+
+    if not kalshi_is_available:
+        W_KALSHI = 0.0
 
     # 3. Model
-    # If missing, use neutral 0.5
-    p_model = clamp_prob(model_prob, 0.05, 0.95) if model_prob is not None else 0.5
+    if model_prob is not None:
+        p_model = clamp_prob(model_prob, 0.05, 0.95) or 0.5
+    else:
+        p_model = 0.0
+        W_MODEL = 0.0
 
     # 4. TheOver
-    # If missing, use neutral 0.5
-    p_theover = 0.5
+    p_theover = 0.0
     if theover_prob is not None:
         raw_to = clamp_prob(theover_prob, 0.05, 0.95) or 0.5
         # RESCALE logic: [0.55, 0.75] band
@@ -1172,10 +1182,12 @@ def compute_final_probability(
              p_theover = 0.5 - (0.5 - raw_to) * 0.555
         else:
              p_theover = 0.5
+    else:
+        W_THEOVER = 0.0
 
     # 5. Sentiment
-    # If missing or rate limited, use neutral 0.5
-    p_sentiment = 0.5
+    # If missing or rate limited, zero weight
+    p_sentiment = 0.0
     sentiment_data = {"used": False, "weight": W_SENTIMENT, "prob": 0.5, "adj": 0.0}
 
     if sentiment_score is not None and not newsapi_cooldown_active():
@@ -1212,17 +1224,35 @@ def compute_final_probability(
             sentiment_data["adj"] = adj
             sentiment_data["prob"] = p_sentiment
 
-    # --- CALCULATION (Weighted Sum, No Normalization) ---
-    raw_final_prob = (
-        (p_market * W_MARKET) +
-        (p_kalshi * W_KALSHI) +
-        (p_model * W_MODEL) +
-        (p_theover * W_THEOVER) +
-        (p_sentiment * W_SENTIMENT)
-    )
+    # Zero sentiment weight if sentiment was not actually used
+    if not sentiment_data.get("used"):
+        W_SENTIMENT = 0.0
+
+    # Update weights_used to reflect actual weights after zeroing unavailable sources
+    weights_used = {
+        "w_implied": W_MARKET,
+        "w_kalshi": W_KALSHI,
+        "w_model": W_MODEL,
+        "w_theover": W_THEOVER,
+        "w_sentiment": W_SENTIMENT
+    }
+    sentiment_data["weight"] = W_SENTIMENT
+
+    # --- CALCULATION (Weighted Sum with Normalization) ---
+    # Normalize weights to sum to 1.0 so missing sources don't dilute the result
+    w_total = W_MARKET + W_KALSHI + W_MODEL + W_THEOVER + W_SENTIMENT
+    if w_total > 0:
+        raw_final_prob = (
+            (p_market * W_MARKET) +
+            (p_kalshi * W_KALSHI) +
+            (p_model * W_MODEL) +
+            (p_theover * W_THEOVER) +
+            (p_sentiment * W_SENTIMENT)
+        ) / w_total
+    else:
+        raw_final_prob = 0.5
 
     # Base prob (without TheOver) for delta checks
-    # Re-normalize remaining weights to sum to 1.0 for fair comparison
     w_rest = W_MARKET + W_KALSHI + W_MODEL + W_SENTIMENT
     if w_rest > 0:
         prob_no_to = (
@@ -6105,17 +6135,19 @@ def filter_kalshi_game_markets(
             # if not prefix_ok:
             #    continue
             date_match = any(tok in t for tok in allowed_date_tokens)
+            # Only use team codes >= 3 chars to prevent false positives from short codes like "ST", "AL"
             h_found = False
             if home_codes:
-                h_found = any(code in t for code in home_codes)
+                h_found = any(code in t for code in home_codes if len(code) >= 3)
 
             a_found = False
             if away_codes:
-                a_found = any(code in t for code in away_codes)
+                a_found = any(code in t for code in away_codes if len(code) >= 3)
 
-            # Relaxed Logic:
-            # 1. If Date Matches: Accept if at least one team is found (covers bad code maps)
-            # 2. If Date Fails: Accept only if BOTH teams found (strong signal overrides date)
+            # Matching Logic:
+            # 1. If Date Matches AND both teams found: strong match
+            # 2. If Date Matches AND one team found: acceptable (covers bad code maps)
+            # 3. If Date Fails: Accept only if BOTH teams found (strong signal overrides date)
 
             keep = False
             if date_match:
@@ -6152,8 +6184,8 @@ def filter_kalshi_game_markets(
                 team_hit = bool(team_tokens(home_team).intersection(blob_tokens)) and bool(
                     team_tokens(away_team).intersection(blob_tokens)
                 )
-                code_home_hit = home_codes and any(code in t for code in home_codes)
-                code_away_hit = away_codes and any(code in t for code in away_codes)
+                code_home_hit = home_codes and any(code in t for code in home_codes if len(code) >= 3)
+                code_away_hit = away_codes and any(code in t for code in away_codes if len(code) >= 3)
                 code_hit = code_home_hit and code_away_hit
                 if not (team_hit or code_hit):
                     continue
@@ -6558,8 +6590,8 @@ def _match_kalshi_market_impl(
         date_match = bool(allowed_date_tokens and any(tok in ticker_upper for tok in allowed_date_tokens))
         home_hit = bool(home_tokens.intersection(tokens))
         away_hit = bool(away_tokens.intersection(tokens))
-        code_home_hit = home_code_candidates and any(code in ticker_upper for code in home_code_candidates)
-        code_away_hit = away_code_candidates and any(code in ticker_upper for code in away_code_candidates)
+        code_home_hit = home_code_candidates and any(code in ticker_upper for code in home_code_candidates if len(code) >= 3)
+        code_away_hit = away_code_candidates and any(code in ticker_upper for code in away_code_candidates if len(code) >= 3)
         code_hit = bool(code_home_hit and code_away_hit)
         team_hit = bool(home_hit and away_hit)
 
@@ -6659,10 +6691,10 @@ def _match_kalshi_market_impl(
             if allowed_date_tokens and any(tok in ticker_upper for tok in allowed_date_tokens):
                 score += 100.0
 
-            # Prefer markets with team code matches
+            # Prefer markets with team code matches (require 3+ char codes to prevent false positives)
             if home_code_candidates and away_code_candidates:
-                code_home_hit = any(code in ticker_upper for code in home_code_candidates)
-                code_away_hit = any(code in ticker_upper for code in away_code_candidates)
+                code_home_hit = any(code in ticker_upper for code in home_code_candidates if len(code) >= 3)
+                code_away_hit = any(code in ticker_upper for code in away_code_candidates if len(code) >= 3)
                 if code_home_hit and code_away_hit:
                     score += 50.0
 
@@ -6690,8 +6722,19 @@ def _match_kalshi_market_impl(
         if scored_candidates:
             best_score, chosen = max(scored_candidates, key=lambda x: x[0])
         else:
-            chosen = markets[0]
+            chosen = None
             best_score = 0.0
+
+        # MINIMUM SCORE THRESHOLD: Prevent phantom Kalshi matches from cross-game contamination.
+        # Score breakdown: date match=100, both team codes=50, line proximity=up to 300.
+        # Without a date match (score < 100), the market is likely for a different game/date.
+        # A date-only match (100) without team codes is still weak evidence, but date+line
+        # (400) is acceptable since line proximity validates the match.
+        MINIMUM_MATCH_SCORE = 100.0
+        if chosen is None or best_score < MINIMUM_MATCH_SCORE:
+            logger.info(f"⚠️ KALSHI {market_type.upper()} REJECTED: score={best_score:.0f} below threshold {MINIMUM_MATCH_SCORE} "
+                        f"(candidates={len(scored_candidates)})")
+            return base_result(f"no_{market_type}_market_below_threshold", market_type)
 
         prob, line = extract_prob_and_line(chosen, market_type)
 
