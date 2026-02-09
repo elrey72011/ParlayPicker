@@ -471,15 +471,18 @@ NCAAF_TEAM_CODE_MAP: Dict[str, str] = {
 }
 
 NCAAB_TEAM_CODE_MAP: Dict[str, str] = {
-    "DUKE": "DUK", "NORTH CAROLINA": "UNC", "KANSAS": "KAN", "KENTUCKY": "KEN",
-    "GONZAGA": "GON", "BAYLOR": "BAY", "ARIZONA": "ARI", "UCLA": "UCL",
+    "DUKE": "DUK", "NORTH CAROLINA": "UNC", "KANSAS": "KU", "KENTUCKY": "KEN",
+    "KANSAS JAYHAWKS": "KU",
+    "GONZAGA": "GON", "BAYLOR": "BAY", "ARIZONA": "ARIZ", "UCLA": "UCL",
+    "ARIZONA WILDCATS": "ARIZ",
     "HOUSTON": "HOU", "PURDUE": "PUR", "UCONN": "CON", "CONNECTICUT": "CON",
     "VILLANOVA": "VIL", "MICHIGAN STATE": "MSU", "TENNESSEE": "TEN", "ALABAMA": "ALA",
     "AUBURN": "AUB", "TEXAS": "TEX", "VIRGINIA": "VIR", "ILLINOIS": "ILL",
     "ARKANSAS": "ARK", "INDIANA": "IND", "MICHIGAN": "MIC", "OHIO STATE": "OSU",
     "FLORIDA": "FLO", "TEXAS TECH": "TTU", "WISCONSIN": "WIS", "MARYLAND": "MAR",
     "IOWA": "IOW", "XAVIER": "XAV", "CREIGHTON": "CRE", "MARQUETTE": "MAR",
-    "PROVIDENCE": "PRO", "SETON HALL": "SET", "ST. JOHN'S": "STJ", "ST JOHNS": "STJ",
+    "PROVIDENCE": "PRO", "SETON HALL": "SET", "ST. JOHN'S": "SJU", "ST JOHNS": "SJU",
+    "ST. JOHN'S RED STORM": "SJU", "SAINT JOHN'S": "SJU",
     "GEORGETOWN": "GEO", "BUTLER": "BUT", "DEPAUL": "DEP", "MEMPHIS": "MEM",
     "CINCINNATI": "CIN", "SMU": "SMU", "WICHITA STATE": "WIC", "TEMPLE": "TEM",
     "TULANE": "TUL", "USF": "USF", "UCF": "UCF", "ECU": "ECU", "TULSA": "TUL",
@@ -540,7 +543,7 @@ NCAAB_TEAM_CODE_MAP: Dict[str, str] = {
     "PRAIRIE VIEW A&M PANTHERS": "PVAM",
     "FLORIDA A&M": "FAMU", "FLORIDA A M": "FAMU", "FLORIDA A&M RATTLERS": "FAMU",
     "JACKSON ST": "JKST", "JACKSON STATE": "JKST", "JACKSON ST TIGERS": "JKST",
-    "ALCORN ST": "ALC", "ALCORN STATE": "ALC", "ALCORN ST BRAVES": "ALC",
+    "ALCORN ST": "ALCN", "ALCORN STATE": "ALCN", "ALCORN ST BRAVES": "ALCN",
     "MISS VALLEY ST": "MVSU", "MISSISSIPPI VALLEY STATE": "MVSU",
     "MISSISSIPPI VALLEY ST": "MVSU",
     "ARKANSAS-PINE BLUFF": "UAPB", "ARKANSAS PINE BLUFF": "UAPB",
@@ -553,7 +556,7 @@ NCAAB_TEAM_CODE_MAP: Dict[str, str] = {
     "STEPHEN F. AUSTIN": "SFA", "STEPHEN F AUSTIN": "SFA",
     "STEPHEN F AUSTIN LUMBERJACKS": "SFA", "SFA LUMBERJACKS": "SFA",
     "CENTRAL ARKANSAS": "CARK", "CENTRAL ARKANSAS BEARS": "CARK",
-    "NORTH ALABAMA": "UNA", "NORTH ALABAMA LIONS": "UNA",
+    "NORTH ALABAMA": "KUNA", "NORTH ALABAMA LIONS": "KUNA",
     "EAST TEXAS A&M": "ETAM", "EAST TEXAS A M": "ETAM",
     "EAST TEXAS A&M LIONS": "ETAM",
     "NEW ORLEANS PRIVATEERS": "UNO",
@@ -565,17 +568,17 @@ NCAAB_TEAM_CODE_MAP: Dict[str, str] = {
     "EVANSVILLE": "EVAN", "EVANSVILLE ACES": "EVAN", "EVANSVILLE PURPLE ACES": "EVAN",
     "BELMONT": "BEL", "BELMONT BRUINS": "BEL",
     "BRADLEY": "BRAD", "BRADLEY BRAVES": "BRAD",
-    "VALPARAISO": "VAL", "VALPARAISO BEACONS": "VAL",
+    "VALPARAISO": "VALP", "VALPARAISO BEACONS": "VALP",
     "DRAKE": "DRKE", "DRAKE BULLDOGS": "DRKE",
     "MISSOURI ST": "MOST", "MISSOURI STATE": "MOST",
     "NORTHERN IOWA": "UNI", "NORTHERN IOWA PANTHERS": "UNI",
-    "MURRAY ST": "MURS", "MURRAY STATE": "MURS",
+    "MURRAY ST": "MURR", "MURRAY STATE": "MURR", "MURRAY ST RACERS": "MURR",
     # --- Other missing teams ---
     "TEXAS A&M-CC": "AMCC", "TEXAS A&M CORPUS CHRISTI": "AMCC",
     "TEXAS A M CC": "AMCC", "TEXAS A M CORPUS CHRISTI": "AMCC",
     "ST FRANCIS PA": "SFP", "ST. FRANCIS PA": "SFP", "SAINT FRANCIS PA": "SFP",
     "ST FRANCIS": "SFP",
-    "CHICAGO ST": "CHST", "CHICAGO STATE": "CHST",
+    "CHICAGO ST": "CSU", "CHICAGO STATE": "CSU", "CHICAGO ST COUGARS": "CSU",
     "SOUTHEAST MISSOURI": "SEMO", "SOUTHEAST MISSOURI ST": "SEMO",
     "SOUTHEAST MISSOURI STATE": "SEMO",
     "UT MARTIN": "UTM", "TENNESSEE MARTIN": "UTM",
@@ -587,6 +590,29 @@ NCAAB_TEAM_CODE_MAP: Dict[str, str] = {
     "LINDENWOOD": "LIND",
     "LITTLE ROCK": "UALR", "ARKANSAS LITTLE ROCK": "UALR",
     "SOUTHERN MISS": "USM", "SOUTHERN MISSISSIPPI": "USM",
+    # --- Missing teams for Feb 9 2026 games ---
+    "YALE": "YALE", "YALE BULLDOGS": "YALE",
+    "HOWARD": "HOW", "HOWARD BISON": "HOW",
+    "NAVY": "NAVY", "NAVY MIDSHIPMEN": "NAVY",
+    "BUCKNELL": "BUCK", "BUCKNELL BISON": "BUCK",
+    "DELAWARE ST": "DSU", "DELAWARE STATE": "DSU", "DELAWARE ST HORNETS": "DSU",
+    "NORTH CAROLINA CENTRAL": "NCCU", "NC CENTRAL": "NCCU",
+    "NORTH CAROLINA CENTRAL EAGLES": "NCCU",
+    "UNC WILMINGTON": "UNCW", "UNC WILMINGTON SEAHAWKS": "UNCW",
+    "CHARLESTON": "COFC", "CHARLESTON COUGARS": "COFC",
+    "COLLEGE OF CHARLESTON": "COFC",
+    "HOUSTON CHRISTIAN": "HCU", "HOUSTON CHRISTIAN HUSKIES": "HCU",
+    "MCNEESE": "MCNS", "MCNEESE ST": "MCNS", "MCNEESE STATE": "MCNS",
+    "MCNEESE COWBOYS": "MCNS",
+    "INCARNATE WORD": "UIW", "INCARNATE WORD CARDINALS": "UIW",
+    "SE LOUISIANA": "SELA", "SOUTHEASTERN LOUISIANA": "SELA",
+    "SE LOUISIANA LIONS": "SELA", "SOUTHEASTERN LOUISIANA LIONS": "SELA",
+    "ST. FRANCIS (PA)": "SFP", "ST FRANCIS (PA)": "SFP",
+    "ST. FRANCIS (PA) RED FLASH": "SFP",
+    "PRAIRIE VIEW PANTHERS": "PVAM",
+    "ARKANSAS-PINE BLUFF GOLDEN LIONS": "UAPB",
+    "MISS VALLEY ST DELTA DEVILS": "MVSU",
+    "BETHUNE-COOKMAN WILDCATS": "BCU",
 }
 
 # Alias Maps: Kalshi Variant -> Canonical Internal Code
@@ -599,7 +625,7 @@ NCAAB_CODE_ALIASES: Dict[str, str] = {
     "CONN": "CON",
     "MINN": "MIN",
     "WISC": "WIS",
-    "ARIZ": "ARI",
+    "ARI": "ARIZ",  # Arizona: ARI -> ARIZ (Kalshi uses ARIZ)
     "CINC": "CIN",
     "GONZ": "GON",
     "VILL": "VIL",
@@ -611,6 +637,14 @@ NCAAB_CODE_ALIASES: Dict[str, str] = {
     "SETO": "SET",
     "GEOR": "GEO",
     "DEPA": "DEP",
+    # Aliases for codes changed to match Kalshi tickers
+    "KAN": "KU",    # Kansas: KAN -> KU
+    "STJ": "SJU",   # St. John's: STJ -> SJU
+    "ALC": "ALCN",  # Alcorn St: ALC -> ALCN
+    "VAL": "VALP",  # Valparaiso: VAL -> VALP
+    "MURS": "MURR", # Murray St: MURS -> MURR
+    "UNA": "KUNA",  # North Alabama: UNA -> KUNA
+    "CHST": "CSU",  # Chicago St: CHST -> CSU (Kalshi code)
 }
 
 NCAAF_CODE_ALIASES: Dict[str, str] = {
@@ -832,8 +866,14 @@ def _parse_market_metadata(mkt: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             teams = ticker_teams[:2]
 
     market_type = _extract_market_type(title, ticker, subtitle=mkt.get("subtitle", ""), market=mkt)
-    prob_source = (mkt.get("yes_price") or mkt.get("last_price") or mkt.get("yes_ask") or mkt.get("implied_prob"))
-    prob = price_to_prob(prob_source)
+    # Use midpoint of yes_bid/yes_ask if both available, else last_price
+    _yb = price_to_prob(mkt.get("yes_bid"))
+    _ya = price_to_prob(mkt.get("yes_ask"))
+    if _yb is not None and _ya is not None and _yb > 0 and _ya > 0:
+        prob = (_yb + _ya) / 2.0
+    else:
+        prob_source = (mkt.get("last_price") or mkt.get("yes_price") or mkt.get("yes_ask") or mkt.get("implied_prob"))
+        prob = price_to_prob(prob_source)
 
     return {"title": title, "market_date": market_dt, "teams": teams, "probability": prob, "market_type": market_type}
 
