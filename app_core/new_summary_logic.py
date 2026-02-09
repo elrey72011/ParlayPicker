@@ -93,36 +93,39 @@ def calculate_consensus_for_row(row: pd.Series, market_type: str = "Spread") -> 
         p_sentiment = 0.5 + sent_adj
 
     # 2. Build Sources List using Static Weights
-    # If source is missing, use 0.5 (neutral)
+    # FIX: When a source is unavailable (None), set its weight to 0 instead of
+    # using 0.5 (neutral). This prevents missing sources from diluting the
+    # consensus toward 50%. Weights are redistributed proportionally to
+    # available sources via normalization (total_w division).
     sources = []
 
     # Market
-    w_m = MARKET_WEIGHT
-    val_m = p_market if p_market is not None else 0.5
+    w_m = MARKET_WEIGHT if p_market is not None else 0.0
+    val_m = p_market if p_market is not None else 0.0
     sources.append(("M", val_m, w_m))
 
     # Kalshi
-    w_k = KALSHI_WEIGHT
-    val_k = p_kalshi if p_kalshi is not None else 0.5
+    w_k = KALSHI_WEIGHT if p_kalshi is not None else 0.0
+    val_k = p_kalshi if p_kalshi is not None else 0.0
     sources.append(("K", val_k, w_k))
 
     # Model
-    w_ml = ML_MODEL_WEIGHT
-    val_ml = p_model if p_model is not None else 0.5
+    w_ml = ML_MODEL_WEIGHT if p_model is not None else 0.0
+    val_ml = p_model if p_model is not None else 0.0
     sources.append(("AI", val_ml, w_ml))
 
     # TheOver
-    w_to = THEOVER_WEIGHT
-    val_to = p_theover if p_theover is not None else 0.5
+    w_to = THEOVER_WEIGHT if p_theover is not None else 0.0
+    val_to = p_theover if p_theover is not None else 0.0
     sources.append(("TO", val_to, w_to))
 
     # Sentiment
-    w_s = SENTIMENT_WEIGHT
-    val_s = p_sentiment if p_sentiment is not None else 0.5
+    w_s = SENTIMENT_WEIGHT if p_sentiment is not None else 0.0
+    val_s = p_sentiment if p_sentiment is not None else 0.0
     sources.append(("S", val_s, w_s))
 
     # 3. Calculate Weighted Sum
-    # Sum of weights should be 1.0 based on config, but we normalize just in case
+    # Normalize by total available weight to redistribute missing source weights proportionally
     total_w = sum(s[2] for s in sources)
     weighted_sum = sum(s[1] * s[2] for s in sources)
 
