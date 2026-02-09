@@ -1164,11 +1164,6 @@ def compute_final_probability(
             p_kalshi = clamp_prob(kalshi_prob_for_pick, 0.05, 0.95) or 0.5
             kalshi_is_available = True
 
-            # Thin market detection: reduce Kalshi weight for low-liquidity markets
-            if kalshi_data and kalshi_data.get("kalshi_thin_market"):
-                W_KALSHI = W_KALSHI * 0.3  # 70% reduction for thin markets
-                warnings.append("kalshi_thin_market")
-
     if not kalshi_is_available:
         W_KALSHI = 0.0
 
@@ -6370,7 +6365,7 @@ def _match_kalshi_market_impl(
             except Exception:
                 line = None
 
-        # 2. Probability — use midpoint of bid/ask spread
+        # 2. Probability — use midpoint of yes_bid/yes_ask when available
         yes_bid = safe_float(market.get("yes_bid"))
         yes_ask = safe_float(market.get("yes_ask"))
         no_bid = safe_float(market.get("no_bid"))
@@ -6388,22 +6383,19 @@ def _match_kalshi_market_impl(
             mid_cents = (yes_bid + implied_yes_ask) / 2.0
             prob = mid_cents / 100.0
 
-        elif yes_ask is not None and yes_bid is not None:
-            # Fallback: use bid if ask also present (already handled above)
-            prob = (yes_bid + yes_ask) / 200.0
+        elif yes_bid is not None:
+            # Fallback if NO bid missing
+            prob = yes_bid / 100.0
 
-        # Fallback to last_price (better than bare yes_bid)
+        elif no_bid is not None:
+            # Fallback if YES bid missing (Prob YES = 1 - Prob NO)
+            prob = 1.0 - (no_bid / 100.0)
+
+        # Final fallback to last_price if bids empty
         if prob is None:
             lp = safe_float(market.get("last_price"))
             if lp is not None and lp > 0:
                 prob = lp / 100.0
-
-        # Final fallback: bare yes_bid only if nothing else available
-        if prob is None:
-            if yes_bid is not None and yes_bid > 0:
-                prob = yes_bid / 100.0
-            elif no_bid is not None:
-                prob = 1.0 - (no_bid / 100.0)
 
         return clamp(prob, 0.0, 1.0), line
 
@@ -6740,14 +6732,6 @@ def _match_kalshi_market_impl(
             if line_gap > 3.0:
                 logger.warning(f"⚠️ KALSHI LINE MISMATCH: Kalshi line={line} vs Sportsbook line={sportsbook_spread_line} (gap={line_gap:.1f})")
 
-        # Thin market detection: flag markets with low volume and open interest
-        mkt_volume = safe_float(chosen.get("volume")) or 0
-        mkt_open_interest = safe_float(chosen.get("open_interest")) or 0
-        thin_market = bool(mkt_volume < 10 and mkt_open_interest < 5)
-        if thin_market:
-            logger.warning(f"⚠️ KALSHI THIN MARKET: {chosen.get('ticker') or chosen.get('event_ticker')} "
-                           f"volume={mkt_volume}, open_interest={mkt_open_interest}")
-
         return {
             "kalshi_available": True,
             "kalshi_label": f"matched_{market_type}",
@@ -6761,9 +6745,6 @@ def _match_kalshi_market_impl(
             "kalshi_line": line,
             "kalshi_title": chosen.get("title"),
             "kalshi_yes_side": yes_side_inferred,  # Now uses intelligent inference
-            "kalshi_volume": mkt_volume,
-            "kalshi_open_interest": mkt_open_interest,
-            "kalshi_thin_market": thin_market,
         }
 
     winner_meta = {
@@ -8052,8 +8033,7 @@ with tab_master:
 
                 # FIX: Use RAW team names for team code generation, NOT the
                 # cross-league TEAM_ALIAS_MAP which causes contamination (e.g.
-                # "New Orleans Pelicans" -> "New Orleans Privateers" via NCAAB,
-                # "Los Angeles Lakers" -> "Los Angeles Rams" via NFL substring).
+                # "New Orleans Pelicans" -> "New Orleans Saints" via NFL substring).
                 # The TheOver ingest uses raw game team names, so the main loop
                 # must also use raw names to produce matching canonical keys.
                 home_norm = home_team
@@ -9063,11 +9043,7 @@ with tab_master:
                 kalshi_event_used = (
                     kalshi_winner.get("kalshi_event_ticker") if kalshi_winner.get("kalshi_matched") else None
                 )
-                if (
-                    kalshi_winner.get("kalshi_matched")
-                    or kalshi_spread.get("kalshi_matched")
-                    or kalshi_total.get("kalshi_matched")
-                ):
+                if kalshi_winner.get("kalshi_matched"):
                     kalshi_status_value = "matched"
                 else:
                     kalshi_status_value = "NO_MATCH"
@@ -10547,9 +10523,6 @@ with tab_master:
                         "kalshi_match_reason": kalshi_spread.get("kalshi_reason") or kalshi_winner.get("kalshi_reason"),
                         "kalshi_game_prefix_used": (candidate_debug.get("winner_meta") or {}).get("winner_prefix"),
                         "kalshi_wanted_tokens": (candidate_debug.get("winner_meta") or {}).get("allowed_date_tokens"),
-                        "kalshi_thin_market": kalshi_spread.get("kalshi_thin_market", False),
-                        "kalshi_volume": kalshi_spread.get("kalshi_volume"),
-                        "kalshi_open_interest": kalshi_spread.get("kalshi_open_interest"),
                         "Sentiment_Diff": sentiment_diff,
                         "Spread & Pick": f"{spread_pick} {clean_line_str(spread_line)} ({spread_prob_final*100:.1f}%)" if (spread_pick is not None and spread_prob_final is not None) else (f"{spread_pick} {clean_line_str(spread_line)}" if spread_pick is not None else None),
                         "spread_pick_team": spread_pick_team,
@@ -10833,9 +10806,6 @@ with tab_master:
                         "kalshi_match_reason": kalshi_total.get("kalshi_reason") or kalshi_winner.get("kalshi_reason"),
                         "kalshi_game_prefix_used": (candidate_debug.get("winner_meta") or {}).get("winner_prefix"),
                         "kalshi_wanted_tokens": (candidate_debug.get("winner_meta") or {}).get("allowed_date_tokens"),
-                        "kalshi_thin_market": kalshi_total.get("kalshi_thin_market", False),
-                        "kalshi_volume": kalshi_total.get("kalshi_volume"),
-                        "kalshi_open_interest": kalshi_total.get("kalshi_open_interest"),
                         "Sentiment_Diff": sentiment_diff,
                         "Spread & Pick": f"{spread_pick} {clean_line_str(spread_line)} ({spread_prob_final*100:.1f}%)" if (spread_pick is not None and spread_prob_final is not None) else (f"{spread_pick} {clean_line_str(spread_line)}" if spread_pick is not None else None),
                         "spread_pick_team": spread_pick_team,
