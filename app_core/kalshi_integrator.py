@@ -472,7 +472,9 @@ NCAAF_TEAM_CODE_MAP: Dict[str, str] = {
 
 NCAAB_TEAM_CODE_MAP: Dict[str, str] = {
     "DUKE": "DUK", "NORTH CAROLINA": "UNC", "KANSAS": "KAN", "KENTUCKY": "KEN",
+    "KANSAS JAYHAWKS": "KAN",
     "GONZAGA": "GON", "BAYLOR": "BAY", "ARIZONA": "ARI", "UCLA": "UCL",
+    "ARIZONA WILDCATS": "ARI",
     "HOUSTON": "HOU", "PURDUE": "PUR", "UCONN": "CON", "CONNECTICUT": "CON",
     "VILLANOVA": "VIL", "MICHIGAN STATE": "MSU", "TENNESSEE": "TEN", "ALABAMA": "ALA",
     "AUBURN": "AUB", "TEXAS": "TEX", "VIRGINIA": "VIR", "ILLINOIS": "ILL",
@@ -480,6 +482,7 @@ NCAAB_TEAM_CODE_MAP: Dict[str, str] = {
     "FLORIDA": "FLO", "TEXAS TECH": "TTU", "WISCONSIN": "WIS", "MARYLAND": "MAR",
     "IOWA": "IOW", "XAVIER": "XAV", "CREIGHTON": "CRE", "MARQUETTE": "MAR",
     "PROVIDENCE": "PRO", "SETON HALL": "SET", "ST. JOHN'S": "STJ", "ST JOHNS": "STJ",
+    "ST. JOHN'S RED STORM": "STJ", "SAINT JOHN'S": "STJ",
     "GEORGETOWN": "GEO", "BUTLER": "BUT", "DEPAUL": "DEP", "MEMPHIS": "MEM",
     "CINCINNATI": "CIN", "SMU": "SMU", "WICHITA STATE": "WIC", "TEMPLE": "TEM",
     "TULANE": "TUL", "USF": "USF", "UCF": "UCF", "ECU": "ECU", "TULSA": "TUL",
@@ -569,13 +572,13 @@ NCAAB_TEAM_CODE_MAP: Dict[str, str] = {
     "DRAKE": "DRKE", "DRAKE BULLDOGS": "DRKE",
     "MISSOURI ST": "MOST", "MISSOURI STATE": "MOST",
     "NORTHERN IOWA": "UNI", "NORTHERN IOWA PANTHERS": "UNI",
-    "MURRAY ST": "MURS", "MURRAY STATE": "MURS",
+    "MURRAY ST": "MURS", "MURRAY STATE": "MURS", "MURRAY ST RACERS": "MURS",
     # --- Other missing teams ---
     "TEXAS A&M-CC": "AMCC", "TEXAS A&M CORPUS CHRISTI": "AMCC",
     "TEXAS A M CC": "AMCC", "TEXAS A M CORPUS CHRISTI": "AMCC",
     "ST FRANCIS PA": "SFP", "ST. FRANCIS PA": "SFP", "SAINT FRANCIS PA": "SFP",
     "ST FRANCIS": "SFP",
-    "CHICAGO ST": "CHST", "CHICAGO STATE": "CHST",
+    "CHICAGO ST": "CHST", "CHICAGO STATE": "CHST", "CHICAGO ST COUGARS": "CHST",
     "SOUTHEAST MISSOURI": "SEMO", "SOUTHEAST MISSOURI ST": "SEMO",
     "SOUTHEAST MISSOURI STATE": "SEMO",
     "UT MARTIN": "UTM", "TENNESSEE MARTIN": "UTM",
@@ -856,8 +859,14 @@ def _parse_market_metadata(mkt: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             teams = ticker_teams[:2]
 
     market_type = _extract_market_type(title, ticker, subtitle=mkt.get("subtitle", ""), market=mkt)
-    prob_source = (mkt.get("yes_price") or mkt.get("last_price") or mkt.get("yes_ask") or mkt.get("implied_prob"))
-    prob = price_to_prob(prob_source)
+    # Use midpoint of yes_bid/yes_ask if both available, else fall back to yes_price/last_price
+    _yb = price_to_prob(mkt.get("yes_bid"))
+    _ya = price_to_prob(mkt.get("yes_ask"))
+    if _yb is not None and _ya is not None and _yb > 0 and _ya > 0:
+        prob = (_yb + _ya) / 2.0
+    else:
+        prob_source = (mkt.get("yes_price") or mkt.get("last_price") or mkt.get("yes_ask") or mkt.get("implied_prob"))
+        prob = price_to_prob(prob_source)
 
     return {"title": title, "market_date": market_dt, "teams": teams, "probability": prob, "market_type": market_type}
 

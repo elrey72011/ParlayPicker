@@ -6391,7 +6391,7 @@ def _match_kalshi_market_impl(
         # Final fallback to last_price if bids empty
         if prob is None:
             lp = safe_float(market.get("last_price"))
-            if lp is not None:
+            if lp is not None and lp > 0:
                 prob = lp / 100.0
 
         return clamp(prob, 0.0, 1.0), line
@@ -8028,26 +8028,17 @@ with tab_master:
                     local_dt = commence_utc.astimezone(ZoneInfo("America/New_York"))
                     local_date_str = local_dt.strftime("%Y-%m-%d")
 
-                # Task 2: Apply TEAM_ALIAS_MAP normalization before matching
-                # Normalize team names using the alias map before generating codes
-                # Robust normalization: Find if any short name is part of the raw name
+                # FIX: Use RAW team names for team code generation, NOT the
+                # cross-league TEAM_ALIAS_MAP which causes contamination (e.g.
+                # "New Orleans Pelicans" -> "New Orleans Saints" via NFL substring).
+                # The TheOver ingest uses raw game team names, so the main loop
+                # must also use raw names to produce matching canonical keys.
                 home_norm = home_team
-                for short_name, long_name in TEAM_ALIAS_MAP.items():
-                    if short_name.lower() in home_team.lower():
-                        home_norm = long_name
-                        break
                 away_norm = away_team
-                for short_name, long_name in TEAM_ALIAS_MAP.items():
-                    if short_name.lower() in away_team.lower():
-                        away_norm = long_name
-                        break
 
-                # 1. Resolve Team Codes (Prefer Kalshi, then System)
-                # Note: kalshi match happens later in the loop usually, but we need codes now.
-                # Ideally we check st.session_state['kalshi_match_results'] if already run?
-                # Or just use the system fallback which is robust enough for ingestion matching.
-                home_code = team_code_for_league(league_name, home_norm)
-                away_code = team_code_for_league(league_name, away_norm)
+                # 1. Resolve Team Codes using RAW team names (matches TheOver ingest behavior)
+                home_code = team_code_for_league(league_name, home_team)
+                away_code = team_code_for_league(league_name, away_team)
 
                 # 2. Generate Master Key
                 # Normalize league to match ingestion (NBA, NFL, etc.)
@@ -8059,11 +8050,11 @@ with tab_master:
                 elif "NCAAB" in norm_league_key or "COLLEGE BASKETBALL" in norm_league_key: norm_league_key = "NCAAB"
                 elif "NCAAF" in norm_league_key or "COLLEGE FOOTBALL" in norm_league_key: norm_league_key = "NCAAF"
 
-                # Regenerate codes with normalized league and aliased team names
-                home_code_norm = team_code_for_league(norm_league_key, home_norm)
-                away_code_norm = team_code_for_league(norm_league_key, away_norm)
+                # Generate codes with normalized league and RAW team names
+                home_code_norm = team_code_for_league(norm_league_key, home_team)
+                away_code_norm = team_code_for_league(norm_league_key, away_team)
 
-                # Task 2: Ensure canon_key uses these mapped codes
+                # Generate canonical keys matching TheOver ingest format
                 master_key_exact = generate_canonical_key(norm_league_key, local_date_str, home_code_norm, away_code_norm)
                 master_key_teams = f"{norm_league_key}|{away_code_norm}|{home_code_norm}"
 
@@ -8082,24 +8073,52 @@ with tab_master:
                     # Fallback to first if available (fuzzy date)
                     return candidates[0] if candidates else None
 
-                # Look for TOTAL match (Exact then Team)
+                # Also build a swapped key for robustness (in case home/away order differs)
+                master_key_exact_swap = generate_canonical_key(norm_league_key, local_date_str, away_code_norm, home_code_norm)
+                master_key_teams_swap = f"{norm_league_key}|{home_code_norm}|{away_code_norm}"
+
+                # Look for TOTAL match (Exact then Team, then swapped variants)
                 if master_key_exact in theover_lookup_exact:
                     # Check for TOTAL type
                     cands = [r for r in theover_lookup_exact[master_key_exact] if r["theover_market_type"] == "TOTAL"]
+                    if cands: matched_total_row = cands[0]
+
+                if not matched_total_row and master_key_exact_swap in theover_lookup_exact:
+                    cands = [r for r in theover_lookup_exact[master_key_exact_swap] if r["theover_market_type"] == "TOTAL"]
                     if cands: matched_total_row = cands[0]
 
                 if not matched_total_row and master_key_teams in theover_lookup_teams:
                     cands = [c for c in theover_lookup_teams[master_key_teams] if c["theover_market_type"] == "TOTAL"]
                     matched_total_row = find_best_date_match(cands, local_date_str)
 
-                # Look for SIDE match (Exact then Team)
+                if not matched_total_row and master_key_teams_swap in theover_lookup_teams:
+                    cands = [c for c in theover_lookup_teams[master_key_teams_swap] if c["theover_market_type"] == "TOTAL"]
+                    matched_total_row = find_best_date_match(cands, local_date_str)
+
+                # Look for SIDE match (Exact then Team, then swapped variants)
                 if master_key_exact in theover_lookup_exact:
                     cands = [r for r in theover_lookup_exact[master_key_exact] if r["theover_market_type"] == "SIDE"]
+                    if cands: matched_side_row = cands[0]
+
+                if not matched_side_row and master_key_exact_swap in theover_lookup_exact:
+                    cands = [r for r in theover_lookup_exact[master_key_exact_swap] if r["theover_market_type"] == "SIDE"]
                     if cands: matched_side_row = cands[0]
 
                 if not matched_side_row and master_key_teams in theover_lookup_teams:
                     cands = [c for c in theover_lookup_teams[master_key_teams] if c["theover_market_type"] == "SIDE"]
                     matched_side_row = find_best_date_match(cands, local_date_str)
+
+                if not matched_side_row and master_key_teams_swap in theover_lookup_teams:
+                    cands = [c for c in theover_lookup_teams[master_key_teams_swap] if c["theover_market_type"] == "SIDE"]
+                    matched_side_row = find_best_date_match(cands, local_date_str)
+
+                # Diagnostic logging for TheOver matching
+                if not matched_total_row and not matched_side_row and theover_lookup_exact:
+                    logger.debug(
+                        f"TheOver NO MATCH: {away_team} @ {home_team} | "
+                        f"key_exact={master_key_exact} | key_teams={master_key_teams} | "
+                        f"codes=({away_code_norm}@{home_code_norm})"
+                    )
 
                 # If matched, update counters
                 if matched_total_row: theover_matched_count_totals += 1
