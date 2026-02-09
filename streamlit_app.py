@@ -6416,14 +6416,19 @@ def _match_kalshi_market_impl(
             prob = (yes_bid + implied_yes_ask) / 2.0
 
         elif yes_bid is not None:
-            # Fallback if only yes_bid available
-            prob = yes_bid
+            # Prefer last_price (actual trade) over yes_bid (lowest buy offer)
+            # On thin markets, yes_bid is heavily biased low (e.g. 0.05) while
+            # last_price reflects the most recent agreed-upon fair value
+            if last_price is not None and last_price > 0:
+                prob = last_price
+            else:
+                prob = yes_bid
 
         elif no_bid is not None:
             # Fallback if YES bid missing (Prob YES = 1 - Prob NO)
             prob = 1.0 - no_bid
 
-        # Final fallback to last_price if bids empty
+        # Final fallback to last_price if all bids empty
         if prob is None and last_price is not None and last_price > 0:
             prob = last_price
 
@@ -6454,13 +6459,16 @@ def _match_kalshi_market_impl(
             implied_yes_ask = 1.0 - no_bid
             prob = (yes_bid + implied_yes_ask) / 2.0
         elif yes_bid is not None:
-            # Fallback if only yes_bid available
-            prob = yes_bid
+            # Prefer last_price (actual trade) over yes_bid (lowest buy offer)
+            if last_price is not None and last_price > 0:
+                prob = last_price
+            else:
+                prob = yes_bid
         elif no_bid is not None:
             # Fallback if YES bid missing (Prob YES = 1 - Prob NO)
             prob = 1.0 - no_bid
 
-        # Final fallback to last_price if bids empty
+        # Final fallback to last_price if all bids empty
         if prob is None and last_price is not None:
             prob = clamp(last_price, 0.0, 1.0)
 
