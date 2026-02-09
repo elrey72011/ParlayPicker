@@ -24,6 +24,9 @@ from app_core.kalshi_integrator import (
     league_series_ticker,
     team_code_for_league,
     parse_event_ticker_codes,
+    resolve_team_code,
+    NCAAB_CODE_ALIASES,
+    NCAAF_CODE_ALIASES,
 )
 
 from app_core.llm_assistant import generate_confidence_explanation, initialize_gemini, generate_batch_confidence_explanation, generate_pick_rationale
@@ -6035,6 +6038,31 @@ def debug_search_markets_for_game(
     }
 
 
+def _get_kalshi_code_variants(code: str, league: str) -> set:
+    """Get all Kalshi ticker code variants for a team (canonical + aliases).
+
+    For example, NC State canonical="NCS" also has alias "NCST" that Kalshi
+    may use in tickers. Returns {"NCS", "NCST"} so we can match either form.
+    """
+    if not code:
+        return set()
+    variants = {code.upper()}
+    canonical = resolve_team_code(code.upper(), league)
+    variants.add(canonical)
+    # Add reverse aliases: find all alias codes that resolve to the same canonical
+    alias_map: Dict[str, str] = {}
+    league_u = (league or "").upper()
+    if league_u == "NCAAB":
+        alias_map = NCAAB_CODE_ALIASES
+    elif league_u == "NCAAF":
+        alias_map = NCAAF_CODE_ALIASES
+    for alias, target in alias_map.items():
+        if target == canonical or target == code.upper():
+            variants.add(alias)
+    variants.discard("")
+    return variants
+
+
 def filter_kalshi_game_markets(
     markets: List[Dict[str, Any]],
     game_time_utc: Optional[datetime],
@@ -6044,6 +6072,13 @@ def filter_kalshi_game_markets(
     home_code: Optional[str] = None,
     away_code: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
+    """Filter Kalshi markets to only those matching THIS specific game.
+
+    Uses EXACT team-code matching: parses the team-code block from each Kalshi
+    ticker suffix (e.g. 'AAMUGRAM' from KXNCAAMBTOTAL-26FEB09AAMUGRAM) and
+    compares it against the expected away+home code concatenation for the game.
+    No fuzzy/substring fallback — wrong ticker is worse than no ticker.
+    """
     try:
         tz_name = get_local_tz()
         local_tz = None
@@ -6059,144 +6094,64 @@ def filter_kalshi_game_markets(
             game_dt = game_dt.replace(tzinfo=timezone.utc)
         game_local = game_dt.astimezone(local_tz) if (game_dt and local_tz) else game_dt
 
-        # Extended Date matching window (-1 to +2 days) to catch early markets
+        # Date matching window (-1 to +2 days)
         allowed_date_tokens: List[str] = []
         if game_local:
             base_date = game_local.date()
             for delta in (-1, 0, 1, 2):
                 allowed_date_tokens.append((base_date + timedelta(days=delta)).strftime("%y%b%d").upper())
 
-        date_token = allowed_date_tokens[1] if len(allowed_date_tokens) > 1 else "UNKNOWN"
-
         league_upper = (league or "").upper()
 
-        # PERMISSIVE FILTER: Relaxed prefix check
-        # Instead of strict prefix, just check for league signal in ticker if available
-        # But honestly, trusting team codes is better.
+        # Get game's primary team codes from the mapping
+        game_home_code = (home_code or team_code_for_league(league, home_team) or "").upper()
+        game_away_code = (away_code or team_code_for_league(league, away_team) or "").upper()
 
-        # Prefer provided codes; fall back to mapping from team names and extra heuristics.
-        home_codes = []
-        away_codes = []
-        if home_code:
-            home_codes.append(str(home_code).upper())
-        home_codes.extend(team_code_candidates(league, home_team))
-        if away_code:
-            away_codes.append(str(away_code).upper())
-        away_codes.extend(team_code_candidates(league, away_team))
+        # Build all possible team-block variants (away_code + home_code)
+        # including alias variants so e.g. NCS+LOU and NCST+LOU both match
+        home_variants = _get_kalshi_code_variants(game_home_code, league_upper)
+        away_variants = _get_kalshi_code_variants(game_away_code, league_upper)
 
-        # Initialize allowed_prefixes from LEAGUE_SERIES_MAP
-        allowed_prefixes = []
-        series_list = LEAGUE_SERIES_MAP.get(league_upper, [])
-        if isinstance(series_list, list):
-            allowed_prefixes = [str(s).upper() for s in series_list if s]
-        elif series_list:
-            allowed_prefixes = [str(series_list).upper()]
+        expected_blocks: set = set()
+        for ac in away_variants:
+            for hc in home_variants:
+                if ac and hc:
+                    expected_blocks.add(ac + hc)
 
-        # Fallback to generic KX prefix if no specific prefixes found
-        if not allowed_prefixes:
-            allowed_prefixes = [f"KX{league_upper}"]
+        logger.info(
+            f"🔍 KALSHI FILTER [EXACT]: {away_team} @ {home_team} | "
+            f"codes=({game_away_code}@{game_home_code}) | "
+            f"blocks={expected_blocks} | dates={allowed_date_tokens}"
+        )
 
-        def ticker_upper(market: Dict[str, Any]) -> str:
-            return str(market.get("event_ticker") or market.get("ticker") or "").upper()
-        if date_token and not allowed_date_tokens:
-            allowed_date_tokens.append(date_token)
+        # Regex to extract date token + team block from ticker suffix
+        # e.g. KXNCAAMBTOTAL-26FEB09AAMUGRAM -> date=26FEB09, team_block=AAMUGRAM
+        _TICKER_SUFFIX_RE = re.compile(r"-(\d{2}[A-Z]{3}\d{2})([A-Z0-9]+)$")
 
         matched: List[Dict[str, Any]] = []
-
-        # DIAGNOSTIC: Log filtering params for debugging
-        first_market_ticker = ticker_upper(markets[0]) if markets else "NO_MARKETS"
-        # Always log for debugging visibility
-        logger.info(f"🔍 KALSHI FILTER: League={league_upper}, Prefixes={allowed_prefixes}, DateTokens={allowed_date_tokens}")
-        if league_upper in {"NBA", "NHL", "NCAAB"}:
-             logger.info(f"🔍 KALSHI FILTER: Home codes={home_codes}, Away codes={away_codes}")
-             logger.info(f"🔍 KALSHI FILTER: Sample market ticker: {first_market_ticker}")
-
         for m in markets or []:
-            t = ticker_upper(m)
-            # if "GAME" not in t: continue  <-- REMOVED per instruction to allow SPREAD/TOTAL tickers
+            t = str(m.get("event_ticker") or m.get("ticker") or "").upper()
 
-            prefix_ok = any(t.startswith(pfx) for pfx in allowed_prefixes)
+            suffix_match = _TICKER_SUFFIX_RE.search(t)
+            if not suffix_match:
+                continue
 
-            # Relaxed Prefix Logic for College Sports (often mislabeled or varied)
-            # FIXED: Removed "and 'GAME' in t" to allow SPREAD and TOTAL markets
-            if not prefix_ok and league_upper in {"NCAAB", "NCAAF"}:
-                if ("NCAAB" in t or "NCAA" in t or "NCAAF" in t):
-                    prefix_ok = True
+            ticker_date = suffix_match.group(1)
+            ticker_team_block = suffix_match.group(2)
 
-            # Allow "KX" generic prefix fallback if league-specific fails
-            # FIXED: Removed "and 'GAME' in t" to allow SPREAD and TOTAL markets
-            if not prefix_ok and t.startswith("KX"):
-                 prefix_ok = True
+            # Date must match
+            if ticker_date not in set(allowed_date_tokens):
+                continue
 
-            # Best Effort: Do NOT strictly filter by prefix here if we are desperate,
-            # but usually prefix filtering is safe. If user says "Best Effort", maybe we keep it loose?
-            # Let's keep prefix_ok logic but ensure it catches everything relevant.
-
-            # if not prefix_ok:
-            #    continue
-            date_match = any(tok in t for tok in allowed_date_tokens)
-            # Only use team codes >= 3 chars to prevent false positives from short codes like "ST", "AL"
-            h_found = False
-            if home_codes:
-                h_found = any(code in t for code in home_codes if len(code) >= 3)
-
-            a_found = False
-            if away_codes:
-                a_found = any(code in t for code in away_codes if len(code) >= 3)
-
-            # Matching Logic:
-            # 1. If Date Matches AND both teams found: strong match
-            # 2. If Date Matches AND one team found: acceptable (covers bad code maps)
-            # 3. If Date Fails: Accept only if BOTH teams found (strong signal overrides date)
-
-            keep = False
-            if date_match:
-                if h_found or a_found:
-                    keep = True
-            else:
-                if h_found and a_found:
-                    keep = True
-
-            if keep:
+            # EXACT team-block match — no substring, no fuzzy
+            if ticker_team_block in expected_blocks:
                 matched.append(m)
 
-        # Fallback: relax date token filtering while still enforcing team presence to avoid cross-sport contamination.
-        if not matched:
-            fallback_candidates: List[Tuple[float, Dict[str, Any]]] = []
-            fallback_no_date: List[Tuple[float, Dict[str, Any]]] = []
-            for m in markets or []:
-                t = ticker_upper(m)
-                # if "GAME" not in t: continue  <-- REMOVED per instruction
-
-                if not (
-                    any(t.startswith(pfx) for pfx in allowed_prefixes)
-                    or ("NCAAB" in t or "NCAA" in t or "NCAAF" in t)
-                ):
-                    continue
-                blob = " ".join(
-                    [
-                        t,
-                        str(m.get("title") or ""),
-                        str(m.get("rules") or m.get("rules_primary") or ""),
-                    ]
-                ).lower()
-                blob_tokens = {tok for tok in re.findall(r"[a-z0-9]+", blob)}
-                team_hit = bool(team_tokens(home_team).intersection(blob_tokens)) and bool(
-                    team_tokens(away_team).intersection(blob_tokens)
-                )
-                code_home_hit = home_codes and any(code in t for code in home_codes if len(code) >= 3)
-                code_away_hit = away_codes and any(code in t for code in away_codes if len(code) >= 3)
-                code_hit = code_home_hit and code_away_hit
-                if not (team_hit or code_hit):
-                    continue
-                date_hit = bool(allowed_date_tokens and any(tok in t for tok in allowed_date_tokens))
-                score = (2 if team_hit else 0) + (2 if code_hit else 0) + (1 if date_hit else 0)
-                target_list = fallback_candidates if date_hit else fallback_no_date
-                target_list.append((score, m))
-
-            chosen = fallback_candidates or fallback_no_date
-            if chosen:
-                matched = [m for _, m in sorted(chosen, key=lambda kv: kv[0], reverse=True)]
+        if not matched and expected_blocks:
+            logger.info(
+                f"⚠️ KALSHI FILTER [EXACT]: No matches for {game_away_code}@{game_home_code}. "
+                f"Expected blocks: {expected_blocks}. Markets scanned: {len(markets or [])}"
+            )
 
         return matched
     except Exception:
@@ -7966,6 +7921,7 @@ with tab_master:
             }
             # Dictionary mapping for robust access (User Request: "Switch to Dictionary Mapping")
             kalshi_match_results: Dict[str, Dict[str, Any]] = {}
+            _kalshi_ticker_owners: Dict[str, str] = {}  # ticker -> game_id for collision detection
             # --- CLEANED MASTER ANALYSIS LOOP ---
 
             # --- PRE-LOOP BATCH ENRICHMENT (PARITY FIX) ---
@@ -9037,6 +8993,24 @@ with tab_master:
                 kalshi_match_results[_k_id] = {
                     "game": g, "matches": kalshi_matches, "candidate_debug": candidate_debug
                 }
+
+                # --- COLLISION DETECTION: Ensure no ticker is used by multiple games ---
+                for _mtype in ("winner", "spread", "total"):
+                    _km = kalshi_matches.get(_mtype, {})
+                    _kticker = _km.get("kalshi_event_ticker")
+                    if _kticker and _km.get("kalshi_matched"):
+                        if _kticker in _kalshi_ticker_owners:
+                            _prev_owner = _kalshi_ticker_owners[_kticker]
+                            logger.warning(
+                                f"🚨 KALSHI TICKER COLLISION: {_kticker} ({_mtype}) "
+                                f"claimed by [{_k_id}] but already used by [{_prev_owner}]. "
+                                f"Rejecting duplicate — setting kalshi_matched=False."
+                            )
+                            _km["kalshi_matched"] = False
+                            _km["kalshi_reason"] = f"collision_with_{_prev_owner}"
+                            _km["kalshi_prob"] = None
+                        else:
+                            _kalshi_ticker_owners[_kticker] = _k_id
 
                 # Null-safe Kalshi fields used downstream
                 kalshi_prob_used = (
