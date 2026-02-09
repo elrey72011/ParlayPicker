@@ -1164,6 +1164,11 @@ def compute_final_probability(
             p_kalshi = clamp_prob(kalshi_prob_for_pick, 0.05, 0.95) or 0.5
             kalshi_is_available = True
 
+            # Thin market detection: reduce Kalshi weight for low-liquidity markets
+            if kalshi_data and kalshi_data.get("kalshi_thin_market"):
+                W_KALSHI = W_KALSHI * 0.3  # 70% reduction for thin markets
+                warnings.append("kalshi_thin_market")
+
     if not kalshi_is_available:
         W_KALSHI = 0.0
 
@@ -6365,32 +6370,40 @@ def _match_kalshi_market_impl(
             except Exception:
                 line = None
 
-        # 2. Probability (Reciprocal Logic: Implied Ask = 100 - Opposite Bid)
+        # 2. Probability — use midpoint of bid/ask spread
         yes_bid = safe_float(market.get("yes_bid"))
+        yes_ask = safe_float(market.get("yes_ask"))
         no_bid = safe_float(market.get("no_bid"))
 
         prob = None
 
-        if yes_bid is not None and no_bid is not None:
-            # Implied Ask for YES = 100 - Bid for NO
-            # Midpoint = (YES_Bid + (100 - NO_Bid)) / 200
+        if yes_bid is not None and yes_ask is not None and yes_bid > 0 and yes_ask > 0:
+            # Best method: direct midpoint of yes bid/ask
+            mid_cents = (yes_bid + yes_ask) / 2.0
+            prob = mid_cents / 100.0
+
+        elif yes_bid is not None and no_bid is not None:
+            # Reciprocal method: Implied Ask = 100 - No_Bid
             implied_yes_ask = 100.0 - no_bid
             mid_cents = (yes_bid + implied_yes_ask) / 2.0
             prob = mid_cents / 100.0
 
-        elif yes_bid is not None:
-            # Fallback if NO bid missing
-            prob = yes_bid / 100.0
+        elif yes_ask is not None and yes_bid is not None:
+            # Fallback: use bid if ask also present (already handled above)
+            prob = (yes_bid + yes_ask) / 200.0
 
-        elif no_bid is not None:
-            # Fallback if YES bid missing (Prob YES = 1 - Prob NO)
-            prob = 1.0 - (no_bid / 100.0)
-
-        # Final fallback to last_price if bids empty
+        # Fallback to last_price (better than bare yes_bid)
         if prob is None:
             lp = safe_float(market.get("last_price"))
-            if lp is not None:
+            if lp is not None and lp > 0:
                 prob = lp / 100.0
+
+        # Final fallback: bare yes_bid only if nothing else available
+        if prob is None:
+            if yes_bid is not None and yes_bid > 0:
+                prob = yes_bid / 100.0
+            elif no_bid is not None:
+                prob = 1.0 - (no_bid / 100.0)
 
         return clamp(prob, 0.0, 1.0), line
 
@@ -6727,6 +6740,14 @@ def _match_kalshi_market_impl(
             if line_gap > 3.0:
                 logger.warning(f"⚠️ KALSHI LINE MISMATCH: Kalshi line={line} vs Sportsbook line={sportsbook_spread_line} (gap={line_gap:.1f})")
 
+        # Thin market detection: flag markets with low volume and open interest
+        mkt_volume = safe_float(chosen.get("volume")) or 0
+        mkt_open_interest = safe_float(chosen.get("open_interest")) or 0
+        thin_market = bool(mkt_volume < 10 and mkt_open_interest < 5)
+        if thin_market:
+            logger.warning(f"⚠️ KALSHI THIN MARKET: {chosen.get('ticker') or chosen.get('event_ticker')} "
+                           f"volume={mkt_volume}, open_interest={mkt_open_interest}")
+
         return {
             "kalshi_available": True,
             "kalshi_label": f"matched_{market_type}",
@@ -6740,6 +6761,9 @@ def _match_kalshi_market_impl(
             "kalshi_line": line,
             "kalshi_title": chosen.get("title"),
             "kalshi_yes_side": yes_side_inferred,  # Now uses intelligent inference
+            "kalshi_volume": mkt_volume,
+            "kalshi_open_interest": mkt_open_interest,
+            "kalshi_thin_market": thin_market,
         }
 
     winner_meta = {
@@ -8026,26 +8050,18 @@ with tab_master:
                     local_dt = commence_utc.astimezone(ZoneInfo("America/New_York"))
                     local_date_str = local_dt.strftime("%Y-%m-%d")
 
-                # Task 2: Apply TEAM_ALIAS_MAP normalization before matching
-                # Normalize team names using the alias map before generating codes
-                # Robust normalization: Find if any short name is part of the raw name
+                # FIX: Use RAW team names for team code generation, NOT the
+                # cross-league TEAM_ALIAS_MAP which causes contamination (e.g.
+                # "New Orleans Pelicans" -> "New Orleans Privateers" via NCAAB,
+                # "Los Angeles Lakers" -> "Los Angeles Rams" via NFL substring).
+                # The TheOver ingest uses raw game team names, so the main loop
+                # must also use raw names to produce matching canonical keys.
                 home_norm = home_team
-                for short_name, long_name in TEAM_ALIAS_MAP.items():
-                    if short_name.lower() in home_team.lower():
-                        home_norm = long_name
-                        break
                 away_norm = away_team
-                for short_name, long_name in TEAM_ALIAS_MAP.items():
-                    if short_name.lower() in away_team.lower():
-                        away_norm = long_name
-                        break
 
-                # 1. Resolve Team Codes (Prefer Kalshi, then System)
-                # Note: kalshi match happens later in the loop usually, but we need codes now.
-                # Ideally we check st.session_state['kalshi_match_results'] if already run?
-                # Or just use the system fallback which is robust enough for ingestion matching.
-                home_code = team_code_for_league(league_name, home_norm)
-                away_code = team_code_for_league(league_name, away_norm)
+                # 1. Resolve Team Codes using RAW team names (matches TheOver ingest behavior)
+                home_code = team_code_for_league(league_name, home_team)
+                away_code = team_code_for_league(league_name, away_team)
 
                 # 2. Generate Master Key
                 # Normalize league to match ingestion (NBA, NFL, etc.)
@@ -8057,11 +8073,11 @@ with tab_master:
                 elif "NCAAB" in norm_league_key or "COLLEGE BASKETBALL" in norm_league_key: norm_league_key = "NCAAB"
                 elif "NCAAF" in norm_league_key or "COLLEGE FOOTBALL" in norm_league_key: norm_league_key = "NCAAF"
 
-                # Regenerate codes with normalized league and aliased team names
-                home_code_norm = team_code_for_league(norm_league_key, home_norm)
-                away_code_norm = team_code_for_league(norm_league_key, away_norm)
+                # Generate codes with normalized league and RAW team names
+                home_code_norm = team_code_for_league(norm_league_key, home_team)
+                away_code_norm = team_code_for_league(norm_league_key, away_team)
 
-                # Task 2: Ensure canon_key uses these mapped codes
+                # Generate canonical keys matching TheOver ingest format
                 master_key_exact = generate_canonical_key(norm_league_key, local_date_str, home_code_norm, away_code_norm)
                 master_key_teams = f"{norm_league_key}|{away_code_norm}|{home_code_norm}"
 
@@ -8080,24 +8096,52 @@ with tab_master:
                     # Fallback to first if available (fuzzy date)
                     return candidates[0] if candidates else None
 
-                # Look for TOTAL match (Exact then Team)
+                # Also build a swapped key for robustness (in case home/away order differs)
+                master_key_exact_swap = generate_canonical_key(norm_league_key, local_date_str, away_code_norm, home_code_norm)
+                master_key_teams_swap = f"{norm_league_key}|{home_code_norm}|{away_code_norm}"
+
+                # Look for TOTAL match (Exact then Team, then swapped variants)
                 if master_key_exact in theover_lookup_exact:
                     # Check for TOTAL type
                     cands = [r for r in theover_lookup_exact[master_key_exact] if r["theover_market_type"] == "TOTAL"]
+                    if cands: matched_total_row = cands[0]
+
+                if not matched_total_row and master_key_exact_swap in theover_lookup_exact:
+                    cands = [r for r in theover_lookup_exact[master_key_exact_swap] if r["theover_market_type"] == "TOTAL"]
                     if cands: matched_total_row = cands[0]
 
                 if not matched_total_row and master_key_teams in theover_lookup_teams:
                     cands = [c for c in theover_lookup_teams[master_key_teams] if c["theover_market_type"] == "TOTAL"]
                     matched_total_row = find_best_date_match(cands, local_date_str)
 
-                # Look for SIDE match (Exact then Team)
+                if not matched_total_row and master_key_teams_swap in theover_lookup_teams:
+                    cands = [c for c in theover_lookup_teams[master_key_teams_swap] if c["theover_market_type"] == "TOTAL"]
+                    matched_total_row = find_best_date_match(cands, local_date_str)
+
+                # Look for SIDE match (Exact then Team, then swapped variants)
                 if master_key_exact in theover_lookup_exact:
                     cands = [r for r in theover_lookup_exact[master_key_exact] if r["theover_market_type"] == "SIDE"]
+                    if cands: matched_side_row = cands[0]
+
+                if not matched_side_row and master_key_exact_swap in theover_lookup_exact:
+                    cands = [r for r in theover_lookup_exact[master_key_exact_swap] if r["theover_market_type"] == "SIDE"]
                     if cands: matched_side_row = cands[0]
 
                 if not matched_side_row and master_key_teams in theover_lookup_teams:
                     cands = [c for c in theover_lookup_teams[master_key_teams] if c["theover_market_type"] == "SIDE"]
                     matched_side_row = find_best_date_match(cands, local_date_str)
+
+                if not matched_side_row and master_key_teams_swap in theover_lookup_teams:
+                    cands = [c for c in theover_lookup_teams[master_key_teams_swap] if c["theover_market_type"] == "SIDE"]
+                    matched_side_row = find_best_date_match(cands, local_date_str)
+
+                # Diagnostic logging for TheOver matching
+                if not matched_total_row and not matched_side_row and theover_lookup_exact:
+                    logger.debug(
+                        f"TheOver NO MATCH: {away_team} @ {home_team} | "
+                        f"key_exact={master_key_exact} | key_teams={master_key_teams} | "
+                        f"codes=({away_code_norm}@{home_code_norm})"
+                    )
 
                 # If matched, update counters
                 if matched_total_row: theover_matched_count_totals += 1
@@ -9019,7 +9063,11 @@ with tab_master:
                 kalshi_event_used = (
                     kalshi_winner.get("kalshi_event_ticker") if kalshi_winner.get("kalshi_matched") else None
                 )
-                if kalshi_winner.get("kalshi_matched"):
+                if (
+                    kalshi_winner.get("kalshi_matched")
+                    or kalshi_spread.get("kalshi_matched")
+                    or kalshi_total.get("kalshi_matched")
+                ):
                     kalshi_status_value = "matched"
                 else:
                     kalshi_status_value = "NO_MATCH"
@@ -10499,6 +10547,9 @@ with tab_master:
                         "kalshi_match_reason": kalshi_spread.get("kalshi_reason") or kalshi_winner.get("kalshi_reason"),
                         "kalshi_game_prefix_used": (candidate_debug.get("winner_meta") or {}).get("winner_prefix"),
                         "kalshi_wanted_tokens": (candidate_debug.get("winner_meta") or {}).get("allowed_date_tokens"),
+                        "kalshi_thin_market": kalshi_spread.get("kalshi_thin_market", False),
+                        "kalshi_volume": kalshi_spread.get("kalshi_volume"),
+                        "kalshi_open_interest": kalshi_spread.get("kalshi_open_interest"),
                         "Sentiment_Diff": sentiment_diff,
                         "Spread & Pick": f"{spread_pick} {clean_line_str(spread_line)} ({spread_prob_final*100:.1f}%)" if (spread_pick is not None and spread_prob_final is not None) else (f"{spread_pick} {clean_line_str(spread_line)}" if spread_pick is not None else None),
                         "spread_pick_team": spread_pick_team,
@@ -10782,6 +10833,9 @@ with tab_master:
                         "kalshi_match_reason": kalshi_total.get("kalshi_reason") or kalshi_winner.get("kalshi_reason"),
                         "kalshi_game_prefix_used": (candidate_debug.get("winner_meta") or {}).get("winner_prefix"),
                         "kalshi_wanted_tokens": (candidate_debug.get("winner_meta") or {}).get("allowed_date_tokens"),
+                        "kalshi_thin_market": kalshi_total.get("kalshi_thin_market", False),
+                        "kalshi_volume": kalshi_total.get("kalshi_volume"),
+                        "kalshi_open_interest": kalshi_total.get("kalshi_open_interest"),
                         "Sentiment_Diff": sentiment_diff,
                         "Spread & Pick": f"{spread_pick} {clean_line_str(spread_line)} ({spread_prob_final*100:.1f}%)" if (spread_pick is not None and spread_prob_final is not None) else (f"{spread_pick} {clean_line_str(spread_line)}" if spread_pick is not None else None),
                         "spread_pick_team": spread_pick_team,
