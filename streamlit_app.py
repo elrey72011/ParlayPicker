@@ -1175,7 +1175,8 @@ def compute_final_probability(
         W_MODEL = 0.0
 
     # 4. TheOver
-    p_theover = 0.0
+    # If missing, use neutral 0.5
+    p_theover = 0.5
     if theover_prob is not None:
         raw_to = clamp_prob(theover_prob, 0.05, 0.95) or 0.5
         # RESCALE logic: [0.55, 0.75] band
@@ -1185,8 +1186,6 @@ def compute_final_probability(
              p_theover = 0.5 - (0.5 - raw_to) * 0.555
         else:
              p_theover = 0.5
-    else:
-        W_THEOVER = 0.0
 
     # 5. Sentiment
     # If missing or rate limited, zero weight
@@ -8083,24 +8082,52 @@ with tab_master:
                     # Fallback to first if available (fuzzy date)
                     return candidates[0] if candidates else None
 
-                # Look for TOTAL match (Exact then Team)
+                # Also build a swapped key for robustness (in case home/away order differs)
+                master_key_exact_swap = generate_canonical_key(norm_league_key, local_date_str, away_code_norm, home_code_norm)
+                master_key_teams_swap = f"{norm_league_key}|{home_code_norm}|{away_code_norm}"
+
+                # Look for TOTAL match (Exact then Team, then swapped variants)
                 if master_key_exact in theover_lookup_exact:
                     # Check for TOTAL type
                     cands = [r for r in theover_lookup_exact[master_key_exact] if r["theover_market_type"] == "TOTAL"]
+                    if cands: matched_total_row = cands[0]
+
+                if not matched_total_row and master_key_exact_swap in theover_lookup_exact:
+                    cands = [r for r in theover_lookup_exact[master_key_exact_swap] if r["theover_market_type"] == "TOTAL"]
                     if cands: matched_total_row = cands[0]
 
                 if not matched_total_row and master_key_teams in theover_lookup_teams:
                     cands = [c for c in theover_lookup_teams[master_key_teams] if c["theover_market_type"] == "TOTAL"]
                     matched_total_row = find_best_date_match(cands, local_date_str)
 
-                # Look for SIDE match (Exact then Team)
+                if not matched_total_row and master_key_teams_swap in theover_lookup_teams:
+                    cands = [c for c in theover_lookup_teams[master_key_teams_swap] if c["theover_market_type"] == "TOTAL"]
+                    matched_total_row = find_best_date_match(cands, local_date_str)
+
+                # Look for SIDE match (Exact then Team, then swapped variants)
                 if master_key_exact in theover_lookup_exact:
                     cands = [r for r in theover_lookup_exact[master_key_exact] if r["theover_market_type"] == "SIDE"]
+                    if cands: matched_side_row = cands[0]
+
+                if not matched_side_row and master_key_exact_swap in theover_lookup_exact:
+                    cands = [r for r in theover_lookup_exact[master_key_exact_swap] if r["theover_market_type"] == "SIDE"]
                     if cands: matched_side_row = cands[0]
 
                 if not matched_side_row and master_key_teams in theover_lookup_teams:
                     cands = [c for c in theover_lookup_teams[master_key_teams] if c["theover_market_type"] == "SIDE"]
                     matched_side_row = find_best_date_match(cands, local_date_str)
+
+                if not matched_side_row and master_key_teams_swap in theover_lookup_teams:
+                    cands = [c for c in theover_lookup_teams[master_key_teams_swap] if c["theover_market_type"] == "SIDE"]
+                    matched_side_row = find_best_date_match(cands, local_date_str)
+
+                # Diagnostic logging for TheOver matching
+                if not matched_total_row and not matched_side_row and theover_lookup_exact:
+                    logger.debug(
+                        f"TheOver NO MATCH: {away_team} @ {home_team} | "
+                        f"key_exact={master_key_exact} | key_teams={master_key_teams} | "
+                        f"codes=({away_code_norm}@{home_code_norm})"
+                    )
 
                 # If matched, update counters
                 if matched_total_row: theover_matched_count_totals += 1
