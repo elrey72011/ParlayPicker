@@ -1175,7 +1175,8 @@ def compute_final_probability(
         W_MODEL = 0.0
 
     # 4. TheOver
-    p_theover = 0.0
+    # If missing, use neutral 0.5
+    p_theover = 0.5
     if theover_prob is not None:
         raw_to = clamp_prob(theover_prob, 0.05, 0.95) or 0.5
         # RESCALE logic: [0.55, 0.75] band
@@ -1185,8 +1186,6 @@ def compute_final_probability(
              p_theover = 0.5 - (0.5 - raw_to) * 0.555
         else:
              p_theover = 0.5
-    else:
-        W_THEOVER = 0.0
 
     # 5. Sentiment
     # If missing or rate limited, zero weight
@@ -6365,26 +6364,24 @@ def _match_kalshi_market_impl(
             except Exception:
                 line = None
 
-        # 2. Probability — use midpoint of yes_bid/yes_ask when available
+        # 2. Probability (midpoint of yes_bid and yes_ask)
         yes_bid = safe_float(market.get("yes_bid"))
         yes_ask = safe_float(market.get("yes_ask"))
         no_bid = safe_float(market.get("no_bid"))
 
         prob = None
 
-        if yes_bid is not None and yes_ask is not None and yes_bid > 0 and yes_ask > 0:
-            # Best method: direct midpoint of yes bid/ask
-            mid_cents = (yes_bid + yes_ask) / 2.0
-            prob = mid_cents / 100.0
+        if yes_bid is not None and yes_ask is not None:
+            # Direct midpoint of yes_bid and yes_ask
+            prob = ((yes_bid + yes_ask) / 2.0) / 100.0
 
         elif yes_bid is not None and no_bid is not None:
-            # Reciprocal method: Implied Ask = 100 - No_Bid
+            # Fallback: Implied Ask = 100 - no_bid
             implied_yes_ask = 100.0 - no_bid
-            mid_cents = (yes_bid + implied_yes_ask) / 2.0
-            prob = mid_cents / 100.0
+            prob = ((yes_bid + implied_yes_ask) / 2.0) / 100.0
 
         elif yes_bid is not None:
-            # Fallback if NO bid missing
+            # Fallback if only yes_bid available
             prob = yes_bid / 100.0
 
         elif no_bid is not None:
