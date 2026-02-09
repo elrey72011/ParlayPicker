@@ -6125,14 +6125,21 @@ def filter_kalshi_game_markets(
 
         # Regex to extract date token + team block from ticker suffix
         # e.g. KXNCAAMBTOTAL-26FEB09AAMUGRAM -> date=26FEB09, team_block=AAMUGRAM
-        _TICKER_SUFFIX_RE = re.compile(r"-(\d{2}[A-Z]{3}\d{2})([A-Z0-9]+)$")
+        # NOTE: Do NOT anchor with $ — ticker field (vs event_ticker) may have
+        # market-level suffixes like -NY, -OVER, -5.5 after the team block.
+        # Use [A-Z]+ (letters only) to stop at first non-letter.
+        _TICKER_SUFFIX_RE = re.compile(r"-(\d{2}[A-Z]{3}\d{2})([A-Z]{3,})")
 
         matched: List[Dict[str, Any]] = []
+        _regex_fail_count = 0
+        _date_fail_count = 0
+        _team_fail_sample: Optional[str] = None
         for m in markets or []:
             t = str(m.get("event_ticker") or m.get("ticker") or "").upper()
 
             suffix_match = _TICKER_SUFFIX_RE.search(t)
             if not suffix_match:
+                _regex_fail_count += 1
                 continue
 
             ticker_date = suffix_match.group(1)
@@ -6140,16 +6147,21 @@ def filter_kalshi_game_markets(
 
             # Date must match
             if ticker_date not in set(allowed_date_tokens):
+                _date_fail_count += 1
                 continue
 
             # EXACT team-block match — no substring, no fuzzy
             if ticker_team_block in expected_blocks:
                 matched.append(m)
+            elif _team_fail_sample is None:
+                _team_fail_sample = f"{t}→block={ticker_team_block}"
 
         if not matched and expected_blocks:
-            logger.info(
+            logger.warning(
                 f"⚠️ KALSHI FILTER [EXACT]: No matches for {game_away_code}@{game_home_code}. "
-                f"Expected blocks: {expected_blocks}. Markets scanned: {len(markets or [])}"
+                f"Expected blocks: {expected_blocks}. Markets scanned: {len(markets or [])}. "
+                f"Regex fails: {_regex_fail_count}, Date fails: {_date_fail_count}, "
+                f"Team block sample: {_team_fail_sample}"
             )
 
         return matched
@@ -6423,13 +6435,7 @@ def _match_kalshi_market_impl(
                 prob = clamp(last_price / 100.0, 0.0, 1.0)
         return prob
 
-    if not kalshi_integrator:
-        base = {t: base_result("kalshi_not_configured", t) for t in ["total", "spread", "winner"]}
-        return base, {"total": [], "spread": [], "winner": []}
-    if not kalshi_markets:
-        base = {t: base_result("no_game_like_markets_in_window", t) for t in ["total", "spread", "winner"]}
-        return base, {"total": [], "spread": [], "winner": []}
-
+    # Compute diagnostic fields BEFORE early returns so they're always available
     league_name = league_from_game(game)
 
     commence_raw = (
@@ -6463,6 +6469,39 @@ def _match_kalshi_market_impl(
 
     away_code_expected = team_code_for_league(league_name, game.get("away_team"))
     home_code_expected = team_code_for_league(league_name, game.get("home_team"))
+
+    def _early_debug(reason: str) -> Dict[str, Any]:
+        """Build a debug dict for early-return paths that still includes diagnostics."""
+        return {
+            "total": [], "spread": [], "winner": [],
+            "winner_meta": {
+                "expected_date_token": date_token,
+                "expected_codes": {"away": away_code_expected, "home": home_code_expected},
+                "winner_match_status": "early_return",
+                "winner_no_match_reason": reason,
+                "matched_event_ticker": None,
+                "matched_ticker": None,
+                "kalshi_date_token_used": date_token,
+                "winner_prefix": winner_prefix,
+                "strict_candidate_count": 0,
+                "allowed_date_tokens": allowed_date_tokens,
+            },
+            "kalshi_game_prefix_used": winner_prefix,
+            "kalshi_wanted_tokens": allowed_date_tokens,
+        }
+
+    if not kalshi_integrator:
+        base = {t: base_result("kalshi_not_configured", t) for t in ["total", "spread", "winner"]}
+        return base, _early_debug("kalshi_not_configured")
+    if not kalshi_markets:
+        base = {t: base_result("no_game_like_markets_in_window", t) for t in ["total", "spread", "winner"]}
+        logger.warning(
+            f"⚠️ KALSHI IMPL: No markets passed to matcher for "
+            f"{game.get('away_team')} @ {game.get('home_team')} | "
+            f"league={league_name} | prefix={winner_prefix} | dates={allowed_date_tokens} | "
+            f"codes=({away_code_expected}@{home_code_expected})"
+        )
+        return base, _early_debug("no_game_like_markets_in_window")
 
     def market_tokens(market: Dict[str, Any]) -> set:
         blob = " ".join(
@@ -6843,11 +6882,24 @@ def match_kalshi_market(
 
     except Exception as exc:
         logger.error(f"match_kalshi_market failed: {exc}", exc_info=True)
+        # Compute minimal diagnostics even on error
+        _err_league = (game.get("league") or game.get("sport_key") or "").upper()
+        _err_prefix = league_game_prefix(_err_league) if _err_league else "UNKNOWN"
+        _err_debug = {
+            "winner_meta": {
+                "winner_prefix": _err_prefix,
+                "allowed_date_tokens": [],
+                "winner_match_status": "exception",
+                "winner_no_match_reason": f"error: {str(exc)}",
+            },
+            "kalshi_game_prefix_used": _err_prefix,
+            "kalshi_wanted_tokens": [],
+        }
         return {
             "winner": base_result(f"error: {str(exc)}", "winner"),
             "spread": base_result(f"error: {str(exc)}", "spread"),
             "total": base_result(f"error: {str(exc)}", "total"),
-        }, {}
+        }, _err_debug
 
 
 # -----------------
@@ -8519,6 +8571,21 @@ with tab_master:
                 away = g.get("away_team")
                 league_markets = kalshi_markets_by_league.get(league_key, []) or kalshi_markets_by_league.get(league_name, [])
 
+                # DIAGNOSTIC: Log league_markets availability for first few games
+                if idx < 3:
+                    _lm_keys = list(kalshi_markets_by_league.keys())
+                    logger.info(
+                        f"🔍 KALSHI LEAGUE MARKETS: Game {idx+1} - league_key={league_key}, "
+                        f"league_name={league_name}, league_markets_count={len(league_markets)}, "
+                        f"dict_keys={_lm_keys}"
+                    )
+                if not league_markets and idx == 0:
+                    logger.warning(
+                        f"⚠️ KALSHI: league_markets is EMPTY for league_key={league_key}, "
+                        f"league_name={league_name}. Dict keys: {list(kalshi_markets_by_league.keys())}. "
+                        f"Dict sizes: { {k: len(v) for k, v in kalshi_markets_by_league.items()} }"
+                    )
+
                 # DEFINE THESE HERE TO FIX THE NAMEERROR
                 commence_iso = g.get("commence_time_iso_utc") or safe_iso(g.get("commence_time_iso"))
                 commence_local = fmt_local_time(g.get("commence_time_local"))
@@ -10171,8 +10238,8 @@ with tab_master:
                             "kalshi_candidate_count": candidate_debug.get("candidate_count"),
                             "kalshi_best_score": candidate_debug.get("best_score"),
                             "kalshi_match_reason": kalshi_winner.get("kalshi_reason"),
-                            "kalshi_game_prefix_used": (candidate_debug.get("winner_meta") or {}).get("winner_prefix"),
-                            "kalshi_wanted_tokens": (candidate_debug.get("winner_meta") or {}).get("allowed_date_tokens"),
+                            "kalshi_game_prefix_used": (candidate_debug.get("winner_meta") or {}).get("winner_prefix") or candidate_debug.get("kalshi_game_prefix_used"),
+                            "kalshi_wanted_tokens": (candidate_debug.get("winner_meta") or {}).get("allowed_date_tokens") or candidate_debug.get("kalshi_wanted_tokens"),
                             "Spread & Pick": f"{spread_pick} {spread_line} ({spread_prob_final*100:.1f}%)" if (spread_pick is not None and spread_prob_final is not None) else (f"{spread_pick} {spread_line}" if spread_pick is not None else None),
                             "spread_pick_team": spread_pick_team,
                             "spread_pick_line": spread_pick_line,
@@ -10518,8 +10585,8 @@ with tab_master:
                         "kalshi_candidate_count": candidate_debug.get("candidate_count"),
                         "kalshi_best_score": candidate_debug.get("best_score"),
                         "kalshi_match_reason": kalshi_spread.get("kalshi_reason") or kalshi_winner.get("kalshi_reason"),
-                        "kalshi_game_prefix_used": (candidate_debug.get("winner_meta") or {}).get("winner_prefix"),
-                        "kalshi_wanted_tokens": (candidate_debug.get("winner_meta") or {}).get("allowed_date_tokens"),
+                        "kalshi_game_prefix_used": (candidate_debug.get("winner_meta") or {}).get("winner_prefix") or candidate_debug.get("kalshi_game_prefix_used"),
+                        "kalshi_wanted_tokens": (candidate_debug.get("winner_meta") or {}).get("allowed_date_tokens") or candidate_debug.get("kalshi_wanted_tokens"),
                         "Sentiment_Diff": sentiment_diff,
                         "Spread & Pick": f"{spread_pick} {clean_line_str(spread_line)} ({spread_prob_final*100:.1f}%)" if (spread_pick is not None and spread_prob_final is not None) else (f"{spread_pick} {clean_line_str(spread_line)}" if spread_pick is not None else None),
                         "spread_pick_team": spread_pick_team,
@@ -10801,8 +10868,8 @@ with tab_master:
                         "kalshi_candidate_count": candidate_debug.get("candidate_count"),
                         "kalshi_best_score": candidate_debug.get("best_score"),
                         "kalshi_match_reason": kalshi_total.get("kalshi_reason") or kalshi_winner.get("kalshi_reason"),
-                        "kalshi_game_prefix_used": (candidate_debug.get("winner_meta") or {}).get("winner_prefix"),
-                        "kalshi_wanted_tokens": (candidate_debug.get("winner_meta") or {}).get("allowed_date_tokens"),
+                        "kalshi_game_prefix_used": (candidate_debug.get("winner_meta") or {}).get("winner_prefix") or candidate_debug.get("kalshi_game_prefix_used"),
+                        "kalshi_wanted_tokens": (candidate_debug.get("winner_meta") or {}).get("allowed_date_tokens") or candidate_debug.get("kalshi_wanted_tokens"),
                         "Sentiment_Diff": sentiment_diff,
                         "Spread & Pick": f"{spread_pick} {clean_line_str(spread_line)} ({spread_prob_final*100:.1f}%)" if (spread_pick is not None and spread_prob_final is not None) else (f"{spread_pick} {clean_line_str(spread_line)}" if spread_pick is not None else None),
                         "spread_pick_team": spread_pick_team,
@@ -11026,8 +11093,8 @@ with tab_master:
                         "kalshi_candidate_count": candidate_debug.get("candidate_count"),
                         "kalshi_best_score": candidate_debug.get("best_score"),
                         "kalshi_match_reason": kalshi_winner.get("kalshi_reason"),
-                        "kalshi_game_prefix_used": (candidate_debug.get("winner_meta") or {}).get("winner_prefix"),
-                        "kalshi_wanted_tokens": (candidate_debug.get("winner_meta") or {}).get("allowed_date_tokens"),
+                        "kalshi_game_prefix_used": (candidate_debug.get("winner_meta") or {}).get("winner_prefix") or candidate_debug.get("kalshi_game_prefix_used"),
+                        "kalshi_wanted_tokens": (candidate_debug.get("winner_meta") or {}).get("allowed_date_tokens") or candidate_debug.get("kalshi_wanted_tokens"),
                         "Home_Sentiment": home_sent,
                         "Away_Sentiment": away_sent,
                         "Sentiment_Diff": sentiment_diff,
