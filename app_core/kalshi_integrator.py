@@ -587,6 +587,21 @@ NCAAB_TEAM_CODE_MAP: Dict[str, str] = {
     "LINDENWOOD": "LIND",
     "LITTLE ROCK": "UALR", "ARKANSAS LITTLE ROCK": "UALR",
     "SOUTHERN MISS": "USM", "SOUTHERN MISSISSIPPI": "USM",
+    # --- Feb 9 missing teams (discovered via Kalshi API) ---
+    "BUCKNELL": "BUCK", "BUCKNELL BISON": "BUCK",
+    "CHARLESTON": "COFC", "COLLEGE OF CHARLESTON": "COFC", "CHARLESTON COUGARS": "COFC",
+    "DELAWARE ST": "DSU", "DELAWARE STATE": "DSU", "DELAWARE ST HORNETS": "DSU",
+    "HOUSTON CHRISTIAN": "HCU", "HOUSTON CHRISTIAN HUSKIES": "HCU",
+    "HOWARD": "HOW", "HOWARD BISON": "HOW",
+    "INCARNATE WORD": "IW", "INCARNATE WORD CARDINALS": "IW",
+    "MCNEESE": "MCNS", "MCNEESE ST": "MCNS", "MCNEESE STATE": "MCNS",
+    "MCNEESE COWBOYS": "MCNS",
+    "NAVY": "NAVY", "NAVY MIDSHIPMEN": "NAVY",
+    "NORTH CAROLINA CENTRAL": "NCCU", "NC CENTRAL": "NCCU", "NCCU EAGLES": "NCCU",
+    "SOUTHEASTERN LOUISIANA": "SELA", "SE LOUISIANA": "SELA",
+    "SOUTHEASTERN LOUISIANA LIONS": "SELA",
+    "UNC WILMINGTON": "UNCW", "UNC WILMINGTON SEAHAWKS": "UNCW",
+    "YALE": "YALE", "YALE BULLDOGS": "YALE",
 }
 
 # Alias Maps: Kalshi Variant -> Canonical Internal Code
@@ -611,6 +626,15 @@ NCAAB_CODE_ALIASES: Dict[str, str] = {
     "SETO": "SET",
     "GEOR": "GEO",
     "DEPA": "DEP",
+    # Kalshi ticker variants discovered from Feb 9 events
+    "ALCN": "ALC",     # Alcorn St. (Kalshi uses ALCN, we use ALC)
+    "ARPB": "UAPB",    # Arkansas-Pine Bluff (Kalshi uses ARPB, we use UAPB)
+    "COOK": "BCU",     # Bethune-Cookman (Kalshi uses COOK, we use BCU)
+    "KU": "KAN",       # Kansas (Kalshi uses KU, we use KAN)
+    "MURR": "MURS",    # Murray St. (Kalshi uses MURR, we use MURS)
+    "PV": "PVAM",      # Prairie View A&M (Kalshi uses PV, we use PVAM)
+    "SJU": "STJ",      # St. John's (Kalshi uses SJU, we use STJ)
+    "VALP": "VAL",     # Valparaiso (Kalshi uses VALP, we use VAL)
 }
 
 NCAAF_CODE_ALIASES: Dict[str, str] = {
