@@ -6364,21 +6364,24 @@ def _match_kalshi_market_impl(
             except Exception:
                 line = None
 
-        # 2. Probability (Reciprocal Logic: Implied Ask = 100 - Opposite Bid)
+        # 2. Probability (midpoint of yes_bid and yes_ask)
         yes_bid = safe_float(market.get("yes_bid"))
+        yes_ask = safe_float(market.get("yes_ask"))
         no_bid = safe_float(market.get("no_bid"))
 
         prob = None
 
-        if yes_bid is not None and no_bid is not None:
-            # Implied Ask for YES = 100 - Bid for NO
-            # Midpoint = (YES_Bid + (100 - NO_Bid)) / 200
+        if yes_bid is not None and yes_ask is not None:
+            # Direct midpoint of yes_bid and yes_ask
+            prob = ((yes_bid + yes_ask) / 2.0) / 100.0
+
+        elif yes_bid is not None and no_bid is not None:
+            # Fallback: Implied Ask = 100 - no_bid
             implied_yes_ask = 100.0 - no_bid
-            mid_cents = (yes_bid + implied_yes_ask) / 2.0
-            prob = mid_cents / 100.0
+            prob = ((yes_bid + implied_yes_ask) / 2.0) / 100.0
 
         elif yes_bid is not None:
-            # Fallback if NO bid missing
+            # Fallback if only yes_bid available
             prob = yes_bid / 100.0
 
         elif no_bid is not None:
