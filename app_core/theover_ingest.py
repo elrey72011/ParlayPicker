@@ -1316,9 +1316,11 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
 
     return pd.DataFrame(records)
 
-def parse_theover_public_betting_text(raw_text: str, pick_type_hint: str = "UNKNOWN") -> pd.DataFrame:
+def parse_theover_public_betting_text(raw_text: str, pick_type_hint: str = "UNKNOWN", games: List[Dict[str, Any]] = None) -> pd.DataFrame:
     """
     Parse raw text paste from TheOver.ai.
+    When games list is provided, resolve pasted team names to canonical game names
+    so that team codes match the main loop's codes.
     """
     rows = []
     lines = [l.strip() for l in raw_text.split('\n') if l.strip()]
@@ -1327,6 +1329,25 @@ def parse_theover_public_betting_text(raw_text: str, pick_type_hint: str = "UNKN
     current_date = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d")
     current_away = ""
     current_home = ""
+
+    # Build a lookup for resolving pasted names to canonical game names
+    # Maps (league, short_name_lower) -> canonical_name from OddsAPI
+    _game_name_lookup: Dict[str, List[Dict[str, str]]] = {}
+    if games:
+        for g in games:
+            g_league = _normalize_league_str(g.get("league", "UNKNOWN"))
+            for role in ("home_team", "away_team"):
+                full_name = g.get(role, "")
+                if not full_name:
+                    continue
+                parts = full_name.lower().split()
+                # Index by last word (e.g., "celtics"), full name, and first word
+                for token in set([full_name.lower(), parts[-1] if parts else "", parts[0] if parts else ""]):
+                    if token:
+                        bucket_key = f"{g_league}|{token}"
+                        if bucket_key not in _game_name_lookup:
+                            _game_name_lookup[bucket_key] = []
+                        _game_name_lookup[bucket_key].append({"canonical": full_name, "role": role})
 
     i = 0
     while i < len(lines):
@@ -1348,6 +1369,35 @@ def parse_theover_public_betting_text(raw_text: str, pick_type_hint: str = "UNKN
             if len(parts) >= 2:
                 current_away = parts[0].strip()
                 current_home = parts[1].strip()
+                # Resolve pasted names to canonical OddsAPI names using games lookup
+                if _game_name_lookup and current_league != "UNKNOWN":
+                    for raw_name, attr in [("current_home", current_home), ("current_away", current_away)]:
+                        name_lower = attr.lower().strip()
+                        # Try exact, then last word, then first word
+                        resolved = None
+                        for token in [name_lower] + (name_lower.split()[-1:] if name_lower.split() else []):
+                            bucket_key = f"{current_league}|{token}"
+                            candidates = _game_name_lookup.get(bucket_key, [])
+                            if len(candidates) == 1:
+                                resolved = candidates[0]["canonical"]
+                                break
+                            elif len(candidates) > 1:
+                                # Multiple candidates — try to pick the best
+                                # Prefer exact match
+                                for c in candidates:
+                                    if c["canonical"].lower() == name_lower:
+                                        resolved = c["canonical"]
+                                        break
+                                if not resolved:
+                                    # Use first candidate (best guess)
+                                    resolved = candidates[0]["canonical"]
+                                break
+                        if resolved:
+                            if raw_name == "current_home":
+                                current_home = resolved
+                            else:
+                                current_away = resolved
+                            logger.debug(f"TheOver paste resolved '{attr}' -> '{resolved}'")
                 i += 1
                 continue
 
@@ -1473,10 +1523,10 @@ def process_theover_inputs(
             logger.error(f"Error processing Sides file: {e}", exc_info=True)
 
     if totals_paste and totals_paste.strip():
-        dfs.append(parse_theover_public_betting_text(totals_paste, pick_type_hint="TOTAL"))
+        dfs.append(parse_theover_public_betting_text(totals_paste, pick_type_hint="TOTAL", games=games))
 
     if sides_paste and sides_paste.strip():
-        dfs.append(parse_theover_public_betting_text(sides_paste, pick_type_hint="SIDE"))
+        dfs.append(parse_theover_public_betting_text(sides_paste, pick_type_hint="SIDE", games=games))
 
     stats["total_rows"] = stats["raw_totals_rows"] + stats["raw_sides_rows"]
 

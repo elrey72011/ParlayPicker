@@ -6419,21 +6419,34 @@ def _match_kalshi_market_impl(
         return 0.0
 
     def winner_prob(market: Dict[str, Any]) -> Optional[float]:
-        def _avg_price(fields: List[str]) -> Optional[float]:
-            vals = [safe_float(market.get(f)) for f in fields]
-            vals = [v for v in vals if v is not None]
-            if not vals:
-                return None
-            return sum(vals) / len(vals)
+        # Use midpoint of yes_bid and yes_ask (same logic as extract_prob_and_line)
+        yes_bid = safe_float(market.get("yes_bid"))
+        yes_ask = safe_float(market.get("yes_ask"))
+        no_bid = safe_float(market.get("no_bid"))
 
-        yes_avg = _avg_price(["yes_bid", "yes_ask"])
-        no_avg = _avg_price(["no_bid", "no_ask"])
-        prob = market_prob_from_prices(yes_avg, no_avg)
+        prob = None
+
+        if yes_bid is not None and yes_ask is not None:
+            # Direct midpoint of yes_bid and yes_ask
+            prob = ((yes_bid + yes_ask) / 2.0) / 100.0
+        elif yes_bid is not None and no_bid is not None:
+            # Derive yes_ask from no_bid: implied_yes_ask = 100 - no_bid
+            implied_yes_ask = 100.0 - no_bid
+            prob = ((yes_bid + implied_yes_ask) / 2.0) / 100.0
+        elif yes_bid is not None:
+            # Fallback if only yes_bid available
+            prob = yes_bid / 100.0
+        elif no_bid is not None:
+            # Fallback if YES bid missing (Prob YES = 1 - Prob NO)
+            prob = 1.0 - (no_bid / 100.0)
+
+        # Final fallback to last_price if bids empty
         if prob is None:
             last_price = safe_float(market.get("last_price"))
             if last_price is not None:
                 prob = clamp(last_price / 100.0, 0.0, 1.0)
-        return prob
+
+        return clamp(prob, 0.0, 1.0) if prob is not None else None
 
     # Compute diagnostic fields BEFORE early returns so they're always available
     league_name = league_from_game(game)
@@ -7779,6 +7792,16 @@ with tab_master:
                                 theover_lookup_teams[tm_key] = []
                             theover_lookup_teams[tm_key].append(row_dict)
 
+                # DEBUG: Log TheOver lookup keys for diagnosis
+                if theover_lookup_exact:
+                    sample_exact_keys = list(theover_lookup_exact.keys())[:5]
+                    sample_team_keys = list(theover_lookup_teams.keys())[:5]
+                    logger.info(f"🔍 THEOVER LOOKUP BUILT: {len(theover_lookup_exact)} exact keys, {len(theover_lookup_teams)} team keys")
+                    logger.info(f"🔍 THEOVER EXACT KEY SAMPLES: {sample_exact_keys}")
+                    logger.info(f"🔍 THEOVER TEAM KEY SAMPLES: {sample_team_keys}")
+                else:
+                    logger.warning("⚠️ THEOVER LOOKUP EMPTY: No TheOver data was ingested")
+
                 st.session_state["DECISION_TRACE_SAMPLES"] = {}
 
                 def store_decision_trace_sample(
@@ -8110,6 +8133,14 @@ with tab_master:
                 master_key_exact = generate_canonical_key(norm_league_key, local_date_str, home_code_norm, away_code_norm)
                 master_key_teams = f"{norm_league_key}|{away_code_norm}|{home_code_norm}"
 
+                # DEBUG: Log first few games' TheOver keys for diagnosis
+                if idx < 3 and theover_lookup_exact:
+                    logger.info(f"🔍 THEOVER MATCH ATTEMPT [{idx}]: {away_team} @ {home_team}")
+                    logger.info(f"   exact_key={master_key_exact}")
+                    logger.info(f"   team_key={master_key_teams}")
+                    logger.info(f"   exact_hit={master_key_exact in theover_lookup_exact}")
+                    logger.info(f"   team_hit={master_key_teams in theover_lookup_teams}")
+
                 # 3. Match TheOver Data
                 matched_total_row = None
                 matched_side_row = None
@@ -8164,10 +8195,49 @@ with tab_master:
                     cands = [c for c in theover_lookup_teams[master_key_teams_swap] if c["theover_market_type"] == "SIDE"]
                     matched_side_row = find_best_date_match(cands, local_date_str)
 
+                # FALLBACK: Raw team name matching when key-based lookup fails
+                # This handles cases where TheOver paste text uses short names (e.g. "Celtics")
+                # that generate different codes than OddsAPI full names (e.g. "Boston Celtics")
+                if (not matched_total_row or not matched_side_row) and theover_lookup_exact:
+                    home_norm_lower = home_team.lower().strip()
+                    away_norm_lower = away_team.lower().strip()
+                    # Extract last word of team name for matching (e.g., "Boston Celtics" -> "celtics")
+                    home_last = home_norm_lower.split()[-1] if home_norm_lower.split() else ""
+                    away_last = away_norm_lower.split()[-1] if away_norm_lower.split() else ""
+                    for _to_key, _to_rows in theover_lookup_exact.items():
+                        for _to_row in _to_rows:
+                            _to_home_raw = str(_to_row.get("home_team_raw") or "").lower().strip()
+                            _to_away_raw = str(_to_row.get("away_team_raw") or "").lower().strip()
+                            # Match if raw names are substrings or last-word matches
+                            home_hit = (
+                                home_norm_lower == _to_home_raw
+                                or home_last == _to_home_raw
+                                or _to_home_raw in home_norm_lower
+                                or home_norm_lower in _to_home_raw
+                            )
+                            away_hit = (
+                                away_norm_lower == _to_away_raw
+                                or away_last == _to_away_raw
+                                or _to_away_raw in away_norm_lower
+                                or away_norm_lower in _to_away_raw
+                            )
+                            if home_hit and away_hit:
+                                mtype = _to_row.get("theover_market_type")
+                                if mtype == "TOTAL" and not matched_total_row:
+                                    matched_total_row = _to_row
+                                    logger.info(f"✅ TheOver FALLBACK TOTAL: {away_team} @ {home_team} matched via raw names")
+                                elif mtype == "SIDE" and not matched_side_row:
+                                    matched_side_row = _to_row
+                                    logger.info(f"✅ TheOver FALLBACK SIDE: {away_team} @ {home_team} matched via raw names")
+                            if matched_total_row and matched_side_row:
+                                break
+                        if matched_total_row and matched_side_row:
+                            break
+
                 # Diagnostic logging for TheOver matching
                 if not matched_total_row and not matched_side_row and theover_lookup_exact:
-                    logger.debug(
-                        f"TheOver NO MATCH: {away_team} @ {home_team} | "
+                    logger.info(
+                        f"⚠️ TheOver NO MATCH: {away_team} @ {home_team} | "
                         f"key_exact={master_key_exact} | key_teams={master_key_teams} | "
                         f"codes=({away_code_norm}@{home_code_norm})"
                     )
