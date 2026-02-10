@@ -12767,6 +12767,32 @@ with tab_master:
         # This MUST run before Gemini so rationale matches the flipped pick
         logger.info("Applying Best Pick Metrics (Flip & Confidence) before Gemini...")
         df = calculate_best_pick_metrics(df)
+
+        # PIPELINE FIX: Drop stragglers < 50% and Recalculate Confidence
+        if 'final_probability' in df.columns:
+             rows_before_drop = len(df)
+             df = df[df['final_probability'] >= 0.50]
+             rows_dropped = rows_before_drop - len(df)
+             if rows_dropped > 0:
+                 logger.warning(f"Dropped {rows_dropped} picks with probability < 50% (Flip Leak Fix)")
+
+             # Recalculate Confidence LAST
+             logger.info("Recalculating Confidence on final probabilities...")
+             df['Pick_Confidence'] = df.apply(
+                 lambda row: calculate_confidence(row.get('final_probability'), row.get('stats_quality', 'REAL')),
+                 axis=1
+             )
+
+             # Update confidence_reason to reflect new confidence label
+             def _update_reason(row):
+                 conf = row.get('Pick_Confidence', 'LOW')
+                 reason = str(row.get('confidence_reason', ''))
+                 if ':' in reason:
+                     return f"{conf}:{reason.split(':', 1)[1]}"
+                 return f"{conf}: {reason}"
+
+             df['confidence_reason'] = df.apply(_update_reason, axis=1)
+
         df = df.copy()
 
         # -------------------------------------------------------------------------
