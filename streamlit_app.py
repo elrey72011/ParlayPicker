@@ -5656,18 +5656,24 @@ def fetch_kalshi_markets(
 
     wanted_tokens = date_tokens_from_commence(commence_times_utc)
 
+    # NCAAB/NCAAF have far more markets per series than pro leagues (~3000+).
+    # 5 pages × 200 = 1000 cap misses games beyond page 5.
+    _ncaab_pages = 20   # 20 × 200 = 4,000 markets — covers full NCAAB slate
+    _default_pages = 5
+    _pages_needed = _ncaab_pages if league_upper in ("NCAAB", "NCAAF") else _default_pages
+
     try:
         markets_raw = kalshi_integrator.get_league_markets(
             selected_league,
             min_prefix_hits=20,
-            max_pages=5,
+            max_pages=_pages_needed,
         )
         last_params = kalshi_integrator.last_request_params or {}
         st.session_state["kalshi_last_request_params"] = last_params
         st.session_state["kalshi_last_request_status_included"] = "status" in last_params
         st.session_state["kalshi_request_params_snapshot"] = dict(last_params)
         if not markets_raw:
-            markets_raw = kalshi_integrator.get_markets_paginated(status=None, max_pages=5)
+            markets_raw = kalshi_integrator.get_markets_paginated(status=None, max_pages=_pages_needed)
             st.session_state["kalshi_last_request_params"] = kalshi_integrator.last_request_params
         markets_raw = markets_raw or []
 
@@ -5977,10 +5983,11 @@ def kalshi_health(selected_league: str = "NBA") -> Dict[str, Any]:
         markets_raw: List[Dict[str, Any]] = []
 
         if not prefix_counts or not prefix_counts.get("game_pool"):
+            _hc_pages = 10 if league_upper in ("NCAAB", "NCAAF") else 5
             markets_raw = kalshi_integrator.get_league_markets(
                 selected_league,
                 min_prefix_hits=1,
-                max_pages=2,
+                max_pages=_hc_pages,
             ) or []
             tickers = [m.get("event_ticker") or m.get("ticker") or "" for m in markets_raw]
             prefix_counts = {

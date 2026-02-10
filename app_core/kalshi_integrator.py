@@ -500,7 +500,9 @@ NCAAB_TEAM_CODE_MAP: Dict[str, str] = {
     "LSU": "LSU", "TEXAS A&M": "TAM", "MISSISSIPPI STATE": "MSU", "OLE MISS": "MIS",
     "MISSOURI": "MIZ", "SOUTH CAROLINA": "SCA", "GEORGIA": "GEO", "VANDERBILT": "VAN",
     "OREGON": "ORE", "OREGON STATE": "OSU", "USC": "USC", "WASHINGTON": "WAS",
-    "WASHINGTON STATE": "WSU", "COLORADO": "COL", "UTAH": "UTA", "ARIZONA STATE": "ASU",
+    "WASHINGTON STATE": "WSU", "WASHINGTON ST": "WSU", "WASHINGTON ST COUGARS": "WSU",
+    "WASHINGTON STATE COUGARS": "WSU",
+    "COLORADO": "COL", "UTAH": "UTA", "ARIZONA STATE": "ASU",
     "CALIFORNIA": "CAL", "STANFORD": "STA", "RUTGERS": "RUT", "PENN STATE": "PSU",
     "MINNESOTA": "MIN", "NORTHWESTERN": "NOR", "NEBRASKA": "NEB",
     # New additions from logs/user
@@ -605,6 +607,16 @@ NCAAB_TEAM_CODE_MAP: Dict[str, str] = {
     "SOUTHEASTERN LOUISIANA LIONS": "SELA",
     "UNC WILMINGTON": "UNCW", "UNC WILMINGTON SEAHAWKS": "UNCW",
     "YALE": "YALE", "YALE BULLDOGS": "YALE",
+    # --- Feb 10 audit additions ---
+    "SAN JOSE ST": "SJSU", "SAN JOSE STATE": "SJSU", "SAN JOSE STATE SPARTANS": "SJSU",
+    "SJSU": "SJSU", "SAN JOSE": "SJSU",
+    "COLORADO ST": "CSU", "COLORADO STATE RAMS": "CSU", "COLORADO ST RAMS": "CSU",
+    "DUKE BLUE DEVILS": "DUK",
+    "NOTRE DAME FIGHTING IRISH": "UND",
+    "VIRGINIA CAVALIERS": "VIR",
+    "OKLAHOMA ST": "OSU", "OKLAHOMA ST COWBOYS": "OSU", "OKLAHOMA STATE COWBOYS": "OSU",
+    "HOUSTON COUGARS": "HOU",
+    "ARIZONA ST": "ASU", "ARIZONA STATE SUN DEVILS": "ASU", "ARIZONA ST SUN DEVILS": "ASU",
 }
 
 # Alias Maps: Kalshi Variant -> Canonical Internal Code
@@ -638,6 +650,12 @@ NCAAB_CODE_ALIASES: Dict[str, str] = {
     "PV": "PVAM",      # Prairie View A&M (Kalshi uses PV, we use PVAM)
     "SJU": "STJ",      # St. John's (Kalshi uses SJU, we use STJ)
     "VALP": "VAL",     # Valparaiso (Kalshi uses VALP, we use VAL)
+    # Proactive aliases for common Kalshi variants (Feb 10 audit)
+    "DUKE": "DUK",     # Kalshi likely uses DUKE, we use DUK
+    "UVA": "VIR",      # Kalshi likely uses UVA, we use VIR
+    "ND": "UND",       # Notre Dame (Kalshi likely uses ND, we use UND)
+    "NDAME": "UND",    # Notre Dame alternate
+    "OKST": "OSU",     # Oklahoma St (Kalshi likely uses OKST, we use OSU)
 }
 
 NCAAF_CODE_ALIASES: Dict[str, str] = {
@@ -2155,6 +2173,27 @@ class KalshiIntegrator:
 
         all_markets = list(collected.values())
         logger.info(f"Kalshi get_league_markets: {len(all_markets)} unique markets after ticker-level dedup")
+
+        # --- DIAGNOSTIC: dump all unique team blocks from NCAAB tickers ---
+        if league_key in ("NCAAB", "NCAAF"):
+            _diag_blocks: set = set()
+            _date_re = re.compile(r"\d{2}[A-Z]{3}\d{2}")
+            for _m in all_markets:
+                _t = str(_m.get("event_ticker") or _m.get("ticker") or "").upper()
+                _parts = _t.split("-")
+                if len(_parts) >= 2:
+                    _suffix = "-".join(_parts[1:])
+                    _dm = _date_re.match(_suffix)
+                    if _dm:
+                        _block = _suffix[_dm.end():]
+                        if _block:
+                            _diag_blocks.add(_block)
+            logger.info(
+                f"🔍 KALSHI ALL {league_key} TEAM BLOCKS ({len(_diag_blocks)}): "
+                f"{sorted(_diag_blocks)}"
+            )
+        # --- END DIAGNOSTIC ---
+
         used_game_prefix = game_prefix
         game_markets = [
             m
