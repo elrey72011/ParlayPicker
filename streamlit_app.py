@@ -9139,8 +9139,11 @@ with tab_master:
                     away_code,
                 )
 
-                # De-dupe results
-                deduped = {m.get("event_ticker") or m.get("ticker"): m for m in filtered_markets}
+                # De-dupe results by individual market ticker (NOT event_ticker).
+                # event_ticker is shared by all sub-markets in one event (e.g. Over/Under
+                # variants), so deduping by it collapsed them into one and prevented
+                # line-proximity scoring from selecting the correct line.
+                deduped = {m.get("ticker") or m.get("event_ticker"): m for m in filtered_markets}
                 filtered_markets = list(deduped.values())
                 filtered_counts.append(len(filtered_markets))
 
