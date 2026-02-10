@@ -2019,6 +2019,31 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
     return pd.concat([df, new_cols], axis=1).copy()
 
 
+def generate_reasoning(row):
+    """
+    Generates the short reasoning string for the pick.
+    Ensures that logic reflects the final flipped state.
+    """
+    conf = row.get('Pick_Confidence', 'LOW')
+    reason = str(row.get('Best_ST_Reason', ''))
+    driver = str(row.get('decision_driver', 'unknown'))
+
+    # Construct base reason
+    full_reason = f"{conf}: {reason} | driver={driver}"
+
+    # Append TheOver impact if present
+    if row.get("theover_matched") and "theover_delta_final_prob" in row:
+        try:
+            delta = float(row.get("theover_delta_final_prob", 0))
+            if abs(delta) > 0.005:
+                direction = "boost" if delta > 0 else "drag"
+                full_reason += f" | TheOver: {delta:+.3f} ({direction})"
+        except:
+            pass
+
+    return full_reason
+
+
 def reorder_master_columns(df: pd.DataFrame) -> pd.DataFrame:
     """
     Ensure fixed front columns then pick columns; preserve remaining order.
@@ -12778,20 +12803,12 @@ with tab_master:
 
              # Recalculate Confidence LAST
              logger.info("Recalculating Confidence on final probabilities...")
-             df['Pick_Confidence'] = df.apply(
-                 lambda row: calculate_confidence(row.get('final_probability'), row.get('stats_quality', 'REAL')),
-                 axis=1
-             )
+             df['Pick_Confidence'] = df.apply(calculate_confidence, axis=1)
 
-             # Update confidence_reason to reflect new confidence label
-             def _update_reason(row):
-                 conf = row.get('Pick_Confidence', 'LOW')
-                 reason = str(row.get('confidence_reason', ''))
-                 if ':' in reason:
-                     return f"{conf}:{reason.split(':', 1)[1]}"
-                 return f"{conf}: {reason}"
-
-             df['confidence_reason'] = df.apply(_update_reason, axis=1)
+             # Generate Reasoning LAST (to ensure it sees final state)
+             df['Pick_Reason_Short'] = df.apply(generate_reasoning, axis=1)
+             # Also update internal confidence_reason for consistency
+             df['confidence_reason'] = df['Pick_Reason_Short']
 
         df = df.copy()
 
