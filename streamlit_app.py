@@ -5364,6 +5364,8 @@ def fetch_odds_games(sport_key: str, run_id: Optional[str] = None) -> List[Dict[
         "markets": "h2h,spreads,totals",
         "oddsFormat": "american",
         "dateFormat": "iso",
+        # Ensure we capture games starting now/today by widening the window
+        "commenceTimeFrom": (datetime.now(timezone.utc) - timedelta(hours=6)).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
 
     # Retry configuration: exponential backoff
