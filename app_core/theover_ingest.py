@@ -67,7 +67,7 @@ MANUAL_ALIASES = {
     "Ole Miss": "Mississippi",
     "NC State": "North Carolina State",
 
-    # Reverse Mappings (CRITICAL for fixing the current failures)
+    # Reverse Mappings (Critical for bidirectional matching)
     "Milwaukee Panthers": "Milwaukee",
     "IUPUI Jaguars": "IU Indianapolis",
     "TCU Horned Frogs": "TCU",
