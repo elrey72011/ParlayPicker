@@ -54,13 +54,21 @@ MIN_FALLBACK_THRESHOLD = 0.75
 MANUAL_ALIASES = {
     # Forward
     "Oklahoma St": "Oklahoma St Cowboys",
+    "Oklahoma State": "Oklahoma St Cowboys",
     "Arizona St": "Arizona St Sun Devils",
+    "Arizona State": "Arizona St Sun Devils",
     "TCU": "TCU Horned Frogs",
+    "Texas Christian": "TCU Horned Frogs",
     "IU Indianapolis": "IUPUI Jaguars",
     "Milwaukee": "Milwaukee Panthers",
     "Iowa State": "Iowa State Cyclones",
+    "Eastern Illinois": "Eastern Illinois Panthers",
+    "Western Illinois": "Western Illinois Leathernecks",
     "Fresno St.": "Fresno St Bulldogs",
     "Utah St.": "Utah State Aggies",
+    "Colorado St.": "Colorado St Rams",
+    "San Jose St.": "San José St Spartans",
+    "Washington St.": "Washington St Cougars",
     "Miami-Florida": "Miami Hurricanes",
     "Southern Methodist": "SMU Mustangs",
     "Ole Miss": "Mississippi",
@@ -71,7 +79,12 @@ MANUAL_ALIASES = {
     "TCU Horned Frogs": "TCU",
     "Oklahoma St Cowboys": "Oklahoma St",
     "Arizona St Sun Devils": "Arizona St",
-    "Iowa State Cyclones": "Iowa State"
+    "Iowa State Cyclones": "Iowa State",
+    "Eastern Illinois Panthers": "Eastern Illinois",
+    "Western Illinois Leathernecks": "Western Illinois",
+    "Colorado St Rams": "Colorado St.",
+    "San José St Spartans": "San Jose St.",
+    "Washington St Cougars": "Washington St.",
 }
 
 # Ambiguous team name pairs that should NEVER be matched to each other
