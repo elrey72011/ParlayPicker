@@ -2357,8 +2357,8 @@ def build_model_feature_row_from_record(record: Mapping[str, Any]) -> Dict[str, 
     return row
 
 def calculate_confidence(row):
-    # FORCE LOGIC: Probability is the ONLY factor for HIGH confidence
-    # We ignore EV and Moneyline completely for this classification.
+    # FORCE LOGIC: High Confidence = Probability >= 60%
+    # We explicitly IGNORE Moneyline/EV here.
     prob = row.get('final_probability', 0)
 
     if prob >= 0.60:
