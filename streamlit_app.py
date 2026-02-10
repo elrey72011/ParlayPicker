@@ -1935,7 +1935,8 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
         e_val = best_edge if best_edge is not None else 0.0
 
         # Base Confidence from Edge
-        if e_val >= 0.02:
+        # Logic: If final_probability > 60%, tag it as "HIGH", regardless of the Moneyline/EV.
+        if p_val > 0.60:
             conf_label = "HIGH"
         elif e_val >= -0.01:
             conf_label = "MEDIUM"
@@ -1945,12 +1946,16 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
         # Sanity Checks (Downgrades)
         # "final_prob is within a sane band (e.g. 0.52 <= final_prob <= 0.75)"
         if conf_label == "HIGH":
-            if not (0.52 <= p_val <= 0.75):
-                conf_label = "MEDIUM"
+            # Allow prob > 0.60, but maybe cap extreme if needed?
+            # User instruction: "If final_probability > 60% ... tag as HIGH"
+            # We preserve the sanity check for upper bound if desired, but user didn't specify.
+            # However, let's just implement what was asked.
+            pass
 
         # "If edge < 0, Bet_Confidence is never HIGH." (Covered by e_val >= 0.02)
-        if e_val < 0 and conf_label == "HIGH":
-            conf_label = "MEDIUM"
+        # User requested to IGNORE EV for HIGH confidence if prob > 60%.
+        # So we skip the negative edge downgrade for HIGH if driven by prob.
+        # However, for MEDIUM/LOW, edge still matters.
 
         # Force LOW if ML was suppressed (extreme odds)
         if best_type == "ML" and ml_suppressed_reason == "extreme_odds_warning":
@@ -12750,6 +12755,25 @@ with tab_master:
                               "data_quality_score")
         if "data_quality_grade" not in user_columns:
             user_columns.insert(user_columns.index("data_quality_score") + 1, "data_quality_grade")
+
+        # --- PIPELINE REORDERING (Fix Logic Flow) ---
+        # 1. Enrich with Reddit/News sentiment usage flags
+        if "reddit_used" in df.columns:
+            df["reddit_used"] = df["reddit_used"].fillna(False).astype(bool)
+
+        # 2. Add Spread/Total Confidence (Calculates At_a_Glance_Score, probs)
+        df = add_spread_total_confidence(df)
+        df = df.copy()
+
+        # 3. Enrich with ROI Metrics (Calculates Edge)
+        df = enrich_picks_with_roi_metrics(df)
+        df = df.copy()
+
+        # 4. Calculate Best Pick Metrics (Flips picks, sets confidence)
+        # This MUST run before Gemini so rationale matches the flipped pick
+        logger.info("Applying Best Pick Metrics (Flip & Confidence) before Gemini...")
+        df = calculate_best_pick_metrics(df)
+        df = df.copy()
 
         # -------------------------------------------------------------------------
         # TASK 1: Implement "Champion Selection" (The 1-Row Fix) - FINAL ENFORCEMENT
