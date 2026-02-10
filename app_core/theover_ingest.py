@@ -227,7 +227,12 @@ TEAM_ALIAS_MAP_BY_LEAGUE = {
         "NEW ORLEANS": "New Orleans Privateers",
         "FIU": "Florida Int'l Golden Panthers",
         "Sacramento State": "Sacramento St Hornets",
-        # Issue #2 & #3: Explicit mappings for commonly problematic team names
+        # Issue #2, #3, #4: Explicit mappings for commonly problematic team names
+        "Texas Christian": "TCU Horned Frogs",
+        "Oklahoma State": "Oklahoma St Cowboys",
+        "Arizona State": "Arizona St Sun Devils",
+        "Milwaukee": "Milwaukee Panthers",
+        "IUPUI": "IUPUI Jaguars",
         # Ivy League teams - CRITICAL for correct matching
         "Brown": "Brown Bears",
         "BROWN": "Brown Bears",
@@ -1113,7 +1118,8 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
         # --- KEY GENERATION ---
         # Critical: Use matched canonical names if available
         if matched_game_obj:
-            league = matched_game_obj.get("league", league)
+            # FIX: Normalize league to ensure consistent key generation (NCAAB vs College Basketball)
+            league = _normalize_league_str(matched_game_obj.get("league", league))
             # Use commence_date_local from matched game if available
             date_val = matched_game_obj.get("commence_date_local") or slate_date
             home_code = team_code_for_league(league, matched_game_obj.get("home_team"))
