@@ -1861,6 +1861,70 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
             best_edge = s_edge
             reason = "No Valid Markets"
 
+        # --- FIX ISSUE #1: SANITY FLIP FOR LOSING PICKS ---
+        # If the best pick has < 50% probability, we must flip it to the other side.
+        # This ensures we never recommend a losing bet.
+        if best_prob is not None and best_prob < 0.50:
+             try:
+                 original_prob = best_prob
+                 # Flip Probability
+                 best_prob = 1.0 - original_prob
+                 # Flip Edge (approximate: NewEdge = (1-P) - (1-Implied) = Implied - P = -Edge)
+                 best_edge = -best_edge
+
+                 flipped_text = None
+
+                 # Flip the Pick String
+                 if best_type == "TOTAL" and best_pick:
+                      if "Over" in str(best_pick):
+                           flipped_text = str(best_pick).replace("Over", "Under")
+                      elif "Under" in str(best_pick):
+                           flipped_text = str(best_pick).replace("Under", "Over")
+                 elif best_type == "SPREAD" and best_pick:
+                      home = row.get("Home")
+                      away = row.get("Away")
+
+                      if home and away:
+                           p_clean = str(best_pick).strip()
+                           # Extract line number at end of string (e.g. " -5.5", " +3.0", " 7.5")
+                           line_match = re.search(r'(-?\d+\.?\d*)$', p_clean)
+
+                           if line_match:
+                                line_val = float(line_match.group(1))
+                                team_part = p_clean[:line_match.start()].strip()
+
+                                # Identify current team
+                                current_is_home = False
+                                current_is_away = False
+
+                                # Robust check
+                                if team_part and (team_part in str(home) or str(home) in team_part):
+                                     current_is_home = True
+                                elif team_part and (team_part in str(away) or str(away) in team_part):
+                                     current_is_away = True
+
+                                # Flip
+                                if current_is_home:
+                                     new_team = away
+                                     new_line = -line_val
+                                     flipped_text = f"{new_team} {new_line:+g}"
+                                elif current_is_away:
+                                     new_team = home
+                                     new_line = -line_val
+                                     flipped_text = f"{new_team} {new_line:+g}"
+
+                 if flipped_text:
+                      best_pick = flipped_text
+                      reason += f" [FLIPPED: {original_prob*100:.1f}%->{best_prob*100:.1f}%]"
+                 else:
+                      # If flip failed text parsing, just warn but keep prob flip?
+                      # No, safer to just keep it low and let confidence filter catch it?
+                      # User requested explicitly to flip.
+                      reason += " [FLIP_TEXT_FAILED]"
+
+             except Exception as e:
+                 reason += " [FLIP_ERROR]"
+
         # 5. Confidence Logic (Updated)
         # HIGH: edge >= 0.02 (and 0.52 <= prob <= 0.75 sanity check)
         # MEDIUM: -0.01 <= edge < 0.02
@@ -4814,6 +4878,73 @@ def fmt_local_time(dt: Optional[datetime]) -> str:
     except Exception:
         return ""
 
+def robust_get_prices(outcomes: List[Dict], home_team: str, away_team: str) -> Tuple[Optional[float], Optional[float]]:
+    """Robust extraction of home/away prices using normalization."""
+    if not home_team or not away_team:
+        return None, None
+
+    prices_map = {}
+    for o in outcomes:
+        nm = o.get("name")
+        pr = o.get("price")
+        if nm and pr is not None:
+            prices_map[TeamNameMatcher.normalize(nm)] = pr
+
+    home_norm = TeamNameMatcher.normalize(home_team)
+    away_norm = TeamNameMatcher.normalize(away_team)
+
+    h_price = prices_map.get(home_norm)
+    a_price = prices_map.get(away_norm)
+
+    # Fuzzy/Substring Fallback
+    if h_price is None:
+        for k, v in prices_map.items():
+            if k in home_norm or home_norm in k:
+                h_price = v
+                break
+    if a_price is None:
+        for k, v in prices_map.items():
+            if k in away_norm or away_norm in k:
+                a_price = v
+                break
+
+    return h_price, a_price
+
+def robust_get_spreads(outcomes: List[Dict], home_team: str, away_team: str):
+    """Robust extraction of spread point/price."""
+    if not home_team or not away_team:
+        return None, None, None, None
+
+    # Map normalized -> (point, price)
+    data_map = {}
+    for o in outcomes:
+        nm = o.get("name")
+        pt = o.get("point")
+        pr = o.get("price")
+        if nm:
+            data_map[TeamNameMatcher.normalize(nm)] = (pt, pr)
+
+    home_norm = TeamNameMatcher.normalize(home_team)
+    away_norm = TeamNameMatcher.normalize(away_team)
+
+    h_data = data_map.get(home_norm)
+    a_data = data_map.get(away_norm)
+
+    if h_data is None:
+        for k, v in data_map.items():
+            if k in home_norm or home_norm in k:
+                h_data = v
+                break
+    if a_data is None:
+        for k, v in data_map.items():
+            if k in away_norm or away_norm in k:
+                a_data = v
+                break
+
+    if h_data and a_data:
+        return h_data[0], h_data[1], a_data[0], a_data[1]
+    return None, None, None, None
+
 def extract_h2h_prices(game: Dict[str, Any]) -> Dict[str, Any]:
     home = game.get("home_team")
     away = game.get("away_team")
@@ -4821,12 +4952,11 @@ def extract_h2h_prices(game: Dict[str, Any]) -> Dict[str, Any]:
         for market in bm.get("markets") or []:
             if market.get("key") != "h2h":
                 continue
-            outcomes = market.get("outcomes") or []
-            prices = {o.get("name"): o.get("price") for o in outcomes if o.get("name")}
-            if home in prices and away in prices:
+            h_p, a_p = robust_get_prices(market.get("outcomes") or [], home, away)
+            if h_p is not None and a_p is not None:
                 return {
-                    "home_odds": prices.get(home),
-                    "away_odds": prices.get(away),
+                    "home_odds": h_p,
+                    "away_odds": a_p,
                     "book": bm.get("title") or bm.get("key"),
                 }
     return {"home_odds": None, "away_odds": None, "book": None}
@@ -4868,9 +4998,7 @@ def extract_best_market(game: Dict[str, Any]) -> Dict[str, Any]:
             key = market.get("key")
             outcomes = market.get("outcomes") or []
             if key == "h2h":
-                prices = {o.get("name"): o.get("price") for o in outcomes if o.get("name")}
-                home_price = prices.get(home)
-                away_price = prices.get(away)
+                home_price, away_price = robust_get_prices(outcomes, home, away)
                 if home_price is None or away_price is None:
                     continue
                 price_scores = [
@@ -4886,12 +5014,9 @@ def extract_best_market(game: Dict[str, Any]) -> Dict[str, Any]:
                     }
                 )
             elif key == "spreads":
-                price_map = {o.get("name"): (o.get("point"), o.get("price")) for o in outcomes if o.get("name")}
-                if home in price_map and away in price_map:
-                    home_point, home_price = price_map.get(home)
-                    away_point, away_price = price_map.get(away)
-                    if home_point is None or away_point is None:
-                        continue
+                home_point, home_price, away_point, away_price = robust_get_spreads(outcomes, home, away)
+
+                if home_point is not None and away_point is not None:
                     spread_offers.append(
                         {
                             "book": bm_name,
@@ -8702,7 +8827,14 @@ with tab_master:
                 commence_date_local = g.get("commence_date_local") or ""
 
                 try:
-                    enrichment = enrich_game_context(g, league_key, api_sports_key, sportsdata_key)
+                    # Fix Issue #5: Use league-specific keys if available
+                    _as_keys = keys_resolved.get("api_sports_keys", {}) or {}
+                    _sd_keys = keys_resolved.get("sportsdata_keys", {}) or {}
+
+                    _league_as_key = _as_keys.get(league_key) or _as_keys.get("default") or api_sports_key
+                    _league_sd_key = _sd_keys.get(league_key) or _sd_keys.get("default") or sportsdata_key
+
+                    enrichment = enrich_game_context(g, league_key, _league_as_key, _league_sd_key)
                 except Exception as exc:
                     if league_key == 'NCAAF':
                         logger.warning(f"NCAAF Stats Outage - Using Defaults: {exc}")
@@ -12791,6 +12923,83 @@ with tab_master:
         # CRITICAL: Save collapsed dataframe to session state
         # Both master_df and master_results_df should hold the same collapsed 1-row-per-game data
         logger.info(f"Saving collapsed df ({len(df)} rows) to session state...")
+        # --- GEMINI ENRICHMENT (Moved & Fixed) ---
+        use_gemini_explanations = st.session_state.get("use_gemini_explanations", True)
+        gemini_row_limit = int(st.session_state.get("gemini_row_limit", MAX_GEMINI_CALLS_PER_RUN) or MAX_GEMINI_CALLS_PER_RUN)
+        gemini_full_run = bool(st.session_state.get("gemini_full_run", False))
+
+        # Rank rows for Gemini priority
+        df["_gemini_rank"] = pd.to_numeric(df.get("At_a_Glance_Confidence_Score"), errors='coerce').fillna(0)
+        sorted_indices = df.sort_values("_gemini_rank", ascending=False).index
+        allowed_indices = set(sorted_indices[:gemini_row_limit]) if not gemini_full_run else set(df.index)
+
+        if not use_gemini_explanations:
+             df["gemini_mode"] = "disabled"
+             df["gemini_rationale"] = "Disabled by user"
+        else:
+             # Iterate and update
+             gemini_updates = {}
+
+             for idx, row in df.iterrows():
+                 if idx not in allowed_indices:
+                     gemini_updates[idx] = {"gemini_mode": "guardrail", "gemini_rationale": "Skipped (Limit)"}
+                     continue
+
+                 # Check session limit
+                 if st.session_state.get("gemini_calls_made", 0) >= MAX_GEMINI_CALLS_PER_RUN and not gemini_full_run:
+                     gemini_updates[idx] = {"gemini_mode": "limit_reached", "gemini_rationale": "Session limit reached"}
+                     continue
+
+                 # Call API (Cached)
+                 row_key = f"{row.get('league')}_{row.get('Home')}_{row.get('Away')}"
+                 cached = st.session_state["gemini_cache"].get(row_key)
+
+                 if cached:
+                     gemini_updates[idx] = {
+                         "gemini_mode": "active",
+                         "gemini_rationale": cached.get("rationale"),
+                         "gemini_total_confidence": cached.get("confidence"),
+                         "gemini_error": cached.get("error")
+                     }
+                 else:
+                     # Real Call
+                     st.session_state["gemini_calls_made"] += 1
+                     try:
+                         res = generate_pick_rationale(
+                             pick=row.get("Pick") or row.get("Best Overall Pick"),
+                             home_team=row.get("Home"),
+                             away_team=row.get("Away"),
+                             market=row.get("Market"),
+                             prob=row.get("final_probability"),
+                             edge=row.get("Edge"),
+                             session_state=st.session_state
+                         )
+                         st.session_state["gemini_cache"][row_key] = res
+                         gemini_updates[idx] = {
+                             "gemini_mode": "active",
+                             "gemini_rationale": res.get("rationale"),
+                             "gemini_total_confidence": res.get("confidence"),
+                             "gemini_error": res.get("error")
+                         }
+                     except Exception as e:
+                         gemini_updates[idx] = {"gemini_mode": "error", "gemini_error": str(e)}
+
+             # Apply updates
+             if gemini_updates:
+                 gem_df = pd.DataFrame.from_dict(gemini_updates, orient='index')
+                 # Merge: drop old columns then concat new ones
+                 df = df.drop(columns=[c for c in gem_df.columns if c in df.columns], errors='ignore')
+                 df = pd.concat([df, gem_df], axis=1)
+
+        # Fix Issue 6 & 7: Column Availability
+        if 'kalshi_status' in df.columns:
+             df['kalshi_available'] = df['kalshi_status'].fillna('').astype(str).str.lower().isin(['matched', 'strictmatch', 'seriesmatch'])
+        else:
+             df['kalshi_available'] = False
+
+        if 'theover_prob' not in df.columns and 'theover_prob_used' in df.columns:
+             df['theover_prob'] = df['theover_prob_used']
+
         st.session_state["master_df"] = df.copy()  # Collapsed data with all internal columns
 
         # Filter to only columns that exist in the dataframe
@@ -13995,424 +14204,6 @@ if should_display:
         df = df.copy()
         df = enrich_picks_with_roi_metrics(df)
         df = df.copy()
-        use_gemini_explanations = st.session_state.get("use_gemini_explanations", True)
-        gemini_row_limit = int(st.session_state.get("gemini_row_limit", MAX_GEMINI_CALLS_PER_RUN) or MAX_GEMINI_CALLS_PER_RUN)
-        gemini_full_run = bool(st.session_state.get("gemini_full_run", False))
-        if use_gemini_explanations:
-            # Check if limit already reached globally
-            if st.session_state.get("gemini_calls_made", 0) >= MAX_GEMINI_CALLS_PER_RUN:
-                 st.warning(f"⚠️ Gemini API limit reached ({st.session_state.get('gemini_calls_made')}). Explanations will be skipped.")
-
-            col_limit, col_full = st.columns([3, 2])
-            with col_limit:
-                gemini_row_limit = int(
-                    st.number_input(
-                        "Gemini rows to evaluate (top by confidence)",
-                        min_value=5,
-                        max_value=500,
-                        value=gemini_row_limit,
-                        step=5,
-                        key="gemini_row_limit",
-                        help="Limits Gemini calls per run to protect quotas.",
-                    )
-                )
-            with col_full:
-                gemini_full_run = st.checkbox(
-                    "Run Gemini on all rows",
-                    value=gemini_full_run,
-                    key="gemini_full_run",
-                    help="Bypass the per-run limit (may be slower).",
-                )
-        gemini_defaults_pre = {
-            "gemini_mode": "guardrail",
-            "gemini_alignment": "NEUTRAL",
-            "gemini_rationale": "",
-            "gemini_flags_short": "",
-            "gemini_risk_flags": json.dumps([]),
-        }
-
-        # Batch add missing columns
-        missing_gemini_cols = {k: v for k, v in gemini_defaults_pre.items() if k not in df.columns}
-        if missing_gemini_cols:
-             df = pd.concat([df, pd.DataFrame(missing_gemini_cols, index=df.index)], axis=1)
-             df = df.copy() # Defragment
-
-        # Batch fillna
-        df = df.fillna(gemini_defaults_pre).infer_objects(copy=False)
-        overall_for_rank = pd.to_numeric(
-            df.get("At_a_Glance_Confidence") if "At_a_Glance_Confidence" in df.columns else pd.Series(dtype=float),
-            errors="coerce",
-        ).fillna(pd.to_numeric(df.get("Pick_Confidence"), errors="coerce")).fillna(0).infer_objects(copy=False).infer_objects(copy=False)
-
-        # FIX: Use bulk assignment with concat instead of direct column assignment to prevent fragmentation
-        rank_metric_df = pd.DataFrame({"_gemini_rank_metric": overall_for_rank}, index=df.index)
-        df = pd.concat([df, rank_metric_df], axis=1).copy()
-        gemini_allowed_idx = set(
-            df.sort_values(by="_gemini_rank_metric", ascending=False, na_position="last")
-            .head(gemini_row_limit if gemini_row_limit > 0 else len(df))
-            .index
-        )
-        if gemini_full_run:
-            gemini_allowed_idx = set(df.index)
-
-        def _is_missing_value(v):
-            """
-            Helper to safely check if a value is missing, handling Series/array cases.
-            Returns True if the value is None, NaN, or if a Series/array with all NaN values.
-            """
-            if v is None:
-                return True
-            # If somehow a Series/array lands here, require ALL missing
-            if hasattr(v, "__iter__") and not isinstance(v, (str, bytes)) and not np.isscalar(v):
-                try:
-                    return pd.isna(v).all()
-                except Exception:
-                    return False
-            return bool(pd.isna(v))
-
-        def _apply_gemini(row: pd.Series, batch_data: Optional[Dict] = None) -> pd.Series:
-            row = row.copy()
-            gemini_row_defaults = {
-                "gemini_mode": "guardrail",
-                "gemini_alignment": "NEUTRAL",
-                "gemini_rationale": "",
-                "gemini_flags_short": "",
-                "gemini_risk_flags": json.dumps([]),
-                "llm_disagreement_flag": False,
-            }
-            # Update row safely using defaults if missing/empty
-            for col, default in gemini_row_defaults.items():
-                val = row.get(col, None)
-                if (col not in row.index) or _is_missing_value(val):
-                    row[col] = default
-            base_overall = row.get("At_a_Glance_Confidence") or row.get("Pick_Confidence")
-            base_spread_conf = row.get("spread_confidence")
-            base_total_conf = row.get("total_confidence")
-            row["overall_confidence"] = base_overall
-            row["spread_confidence"] = base_spread_conf
-            row["total_confidence"] = base_total_conf
-            row["spread_confidence_base"] = base_spread_conf
-            row["total_confidence_base"] = base_total_conf
-
-            # Check limits immediately (Requirement 3B)
-            calls_made = st.session_state.get("gemini_calls_made", 0)
-
-            if not use_gemini_explanations:
-                row["gemini_mode"] = "disabled"
-                row["gemini_alignment"] = "NEUTRAL"
-                row["gemini_rationale"] = "Gemini disabled by user."
-                row["gemini_flags_short"] = row.get("gemini_flags_short") or "skipped_disabled"
-                row["gemini_risk_flags"] = row.get("gemini_risk_flags") or json.dumps([])
-                row["llm_disagreement_flag"] = False
-                return row
-
-            # If not in allowed set (confidence ranking)
-            if row.name not in gemini_allowed_idx:
-                row["gemini_mode"] = "guardrail"
-                row["gemini_alignment"] = "NEUTRAL"
-                row["gemini_rationale"] = "Gemini skipped: outside evaluation limit."
-                row["gemini_flags_short"] = row.get("gemini_flags_short") or "skipped_limit"
-                row["gemini_risk_flags"] = row.get("gemini_risk_flags") or json.dumps([])
-                row["llm_disagreement_flag"] = False
-                return row
-
-            # Hard stop enforcement
-            # Re-read session state to ensure fresh count
-            current_calls = st.session_state.get("gemini_calls_made", 0)
-            if current_calls >= MAX_GEMINI_CALLS_PER_RUN and not batch_data:
-                row["gemini_mode"] = "limit_reached"
-                row["gemini_alignment"] = "NEUTRAL"
-                row["gemini_rationale"] = "Gemini skipped: session limit reached."
-                row["gemini_flags_short"] = "limit_reached"
-                row["gemini_risk_flags"] = json.dumps(["limit_reached"])
-                row["llm_disagreement_flag"] = False
-                row["gemini_error_flag"] = "limit_reached"
-                return row
-
-            try:
-                gem_res = {}
-                if batch_data:
-                    gem_res = batch_data
-                else:
-                    payload = {
-                        "league": row.get("League"),
-                        "home": row.get("Home"),
-                        "away": row.get("Away"),
-                        "commence_local": row.get("Commence (Local)"),
-                        "spread_pick": row.get("Spread & Pick"),
-                        "spread_line": row.get("spread_pick_line") or (row.get("Line") if str(row.get("Market")).lower() == "spread" else None),
-                        "spread_odds": row.get("spread_pick_odds"),
-                        "spread_prob_final": row.get("spread_prob"),
-                        "spread_prob_market": row.get("spread_prob_market"),
-                        "total_pick": row.get("Total & Pick"),
-                        "total_line": row.get("total_pick_line") or (row.get("Line") if str(row.get("Market")).lower() == "total" else None),
-                        "total_odds": row.get("total_pick_odds"),
-                        "total_prob_final": row.get("total_prob"),
-                        "total_prob_market": row.get("total_prob_market"),
-                        "kalshi_spread_prob": row.get("kalshi_prob_spread"),
-                        "kalshi_total_prob": row.get("kalshi_prob_total"),
-                        "kalshi_matched": bool(row.get("kalshi_matched")),
-                        "prob_engine": row.get("prob_engine"),
-                        "sentiment_badge": row.get("sentiment_badge"),
-                        "sentiment_flags": [row.get("spread_sentiment_note"), row.get("total_sentiment_note")],
-                        "warnings": row.get("Warnings"),
-                        "odds_placeholder_detected": row.get("odds_placeholder_detected"),
-                    }
-                    sig = _gemini_payload_signature(payload)
-                    gem_res = cached_gemini_confidence(sig, payload) or {}
-                flags = gem_res.get("flags") if isinstance(gem_res, dict) else []
-                if not isinstance(flags, list):
-                    flags = gem_res.get("risk_flags") if isinstance(gem_res, dict) else []
-                flags_list = [str(f) for f in flags] if isinstance(flags, list) else []
-                if gem_res.get("gemini_error"):
-                    row["gemini_error"] = gem_res.get("gemini_error")
-                    row["gemini_mode"] = "disabled"
-                    row["llm_disagreement_flag"] = False
-                    row["gemini_alignment"] = "NEUTRAL"
-                    row["gemini_rationale"] = "Gemini disabled: service unavailable."
-                    row["gemini_flags_short"] = row.get("gemini_flags_short") or "gemini_disabled"
-                    row["gemini_risk_flags"] = json.dumps(flags_list) if flags_list else json.dumps(["gemini_disabled"])
-                    if not row.get("prob_engine"):
-                        row["prob_engine"] = "market_only"
-                    return row
-                pick_val = (row.get("Pick") or row.get("Spread & Pick") or row.get("Total & Pick") or "").strip()
-                recommended = str(gem_res.get("recommended_bet") or "").strip()
-                if recommended and pick_val and recommended.lower() == pick_val.lower():
-                    row["gemini_alignment"] = "AGREE"
-                elif not recommended:
-                    row["gemini_alignment"] = "NEUTRAL"
-                else:
-                    row["gemini_alignment"] = "DISAGREE"
-                rationale_text = gem_res.get("explanation") or gem_res.get("gemini_rationale") or ""
-                row["gemini_rationale"] = str(rationale_text)[:240]
-                row["gemini_risk_flags"] = json.dumps(flags_list) if flags_list else json.dumps([])
-                row["gemini_flags_short"] = ";".join(flags_list[:4])
-                row["llm_disagreement_flag"] = row.get("gemini_alignment") == "DISAGREE"
-                row["gemini_mode"] = "active"
-                row["gemini_error"] = None
-
-            except Exception as exc:
-                row["gemini_mode"] = "error"
-                row["gemini_error"] = str(exc)[:240]
-                row["llm_disagreement_flag"] = False
-                row["gemini_alignment"] = "NEUTRAL"
-                row["gemini_rationale"] = f"Gemini error: {row.get('gemini_error')}"
-                existing_flags = str(row.get("gemini_flags_short") or "").strip()
-                if existing_flags:
-                    row["gemini_flags_short"] = f"{existing_flags};gemini_error"
-                else:
-                    row["gemini_flags_short"] = "gemini_error"
-            return row
-
-        # User Request 3: Optimized Column Insertion (Gemini)
-        # Avoid apply() which constructs a new DataFrame for every row.
-        # Instead, iterate, collect new metrics, and concat once.
-
-        # Hard-gate: Skip Gemini loop entirely if disabled or unconfigured
-        gemini_disabled_reason = st.session_state.get("gemini_disabled_reason")
-
-        # Define default Gemini dict structure for result collection
-        gemini_result_keys = [
-            'gemini_mode', 'gemini_alignment', 'gemini_rationale', 'gemini_flags_short',
-            'gemini_risk_flags', 'llm_disagreement_flag', 'gemini_error_flag',
-            'gemini_total_confidence', 'gemini_error', 'overall_confidence'
-        ]
-
-        if gemini_disabled_reason or not use_gemini_explanations:
-            if logger:
-                logger.info(f"⚠️ Skipping Gemini enrichment loop. Reason: {gemini_disabled_reason or 'User disabled Gemini explanations'}")
-            # Set default Gemini values for all rows without iterating
-            gemini_disabled_defaults = {
-                "gemini_mode": "disabled",
-                "gemini_alignment": "NEUTRAL",
-                "gemini_rationale": "Gemini disabled.",
-                "gemini_flags_short": "",
-                "gemini_risk_flags": json.dumps([]),
-                "llm_disagreement_flag": False,
-            }
-            # Batch add
-            missing_disabled = {k: v for k, v in gemini_disabled_defaults.items() if k not in df.columns}
-            if missing_disabled:
-                 df = pd.concat([df, pd.DataFrame(missing_disabled, index=df.index)], axis=1)
-            # Batch fill
-            df = df.fillna(gemini_disabled_defaults).infer_objects(copy=False)
-        else:
-            # Defensively dedupe columns before Gemini pass to prevent row.get(col) from returning Series
-            df = df.loc[:, ~df.columns.duplicated()].copy()
-
-            # Dictionary to collect results by index (more efficient than list of Series)
-            gemini_updates_dict = {}
-
-            # Enforce hard session limit
-            calls_this_run = 0
-
-            for idx, row in df.iterrows():
-                # Apply legacy/batch logic first (sets gemini_mode etc)
-                # This function now correctly enforces limits internally and returns 'limit_reached' mode
-                new_row = _apply_gemini(row, batch_data=None)
-
-                # Collect fields from new_row into update dict
-                update_data = {k: new_row.get(k) for k in gemini_result_keys if k in new_row}
-
-                # Check if this row is selected for processing (by _apply_gemini logic)
-                is_selected = update_data.get("gemini_mode") == "active"
-
-                if not is_selected:
-                    # Logic already handled inside _apply_gemini for skip reasons
-                    # Ensure audit fields are populated
-                    if not update_data.get('gemini_total_confidence'):
-                         update_data['gemini_total_confidence'] = 'SKIPPED'
-                    if not update_data.get('gemini_rationalize'):
-                         reason = update_data.get('gemini_rationale', 'Skipped')
-                         update_data['gemini_rationalize'] = reason
-                    if not update_data.get('gemini_error_flag'):
-                         update_data['gemini_error_flag'] = update_data.get('gemini_flags_short', '')
-
-                    gemini_updates_dict[idx] = update_data
-                    continue
-
-                # CACHING LOGIC
-                row_key = gemini_row_key(new_row)
-                cached_data = st.session_state["gemini_cache"].get(row_key)
-
-                if cached_data:
-                    # Use cached data
-                    update_data['gemini_total_confidence'] = cached_data.get('confidence', '')
-                    update_data['gemini_rationalize'] = cached_data.get('rationale', '')
-                    update_data['gemini_error_flag'] = cached_data.get('error', '')
-                    update_data['overall_confidence'] = cached_data.get('confidence', '') or update_data.get('overall_confidence')
-                    if cached_data.get('rationale'):
-                        update_data['gemini_rationale'] = cached_data.get('rationale')
-
-                    # Log cache hit
-                    if logger:
-                        logger.debug(f"Gemini Cache Hit: {row_key}")
-
-                else:
-                    # Perform API Call
-                    try:
-                        # Calculate Edge numeric
-                        edge_val = new_row.get('Edge')
-                        if isinstance(edge_val, str) and '%' in edge_val:
-                            try:
-                                edge_val = float(edge_val.strip('%')) / 100.0
-                            except:
-                                edge_val = 0.0
-                        elif edge_val is None:
-                            edge_val = 0.0
-
-                        prob_val = new_row.get('Best Overall Prob')
-                        if prob_val is None:
-                            prob_val = new_row.get('final_probability')
-
-                        # Only call if we have valid pick/prob
-                        if new_row.get('Pick') and prob_val:
-                            # CALL API
-                            # Log before call (Issue #4)
-                            current_calls = st.session_state.get("gemini_calls_made", 0)
-
-                            # HARD STOP CHECK (Explicit)
-                            if current_calls >= MAX_GEMINI_CALLS_PER_RUN:
-                                 update_data['gemini_total_confidence'] = 'SKIPPED'
-                                 update_data['gemini_rationalize'] = 'Limit Reached'
-                                 update_data['gemini_error_flag'] = 'limit_reached'
-                                 gemini_updates_dict[idx] = update_data
-                                 continue
-
-                            logger.info(f"Gemini call attempt {current_calls + 1}...")
-
-                            # Update Session Counter BEFORE call to ensure counting attempts
-                            st.session_state["gemini_calls_made"] = current_calls + 1
-
-                            gemini_data = generate_pick_rationale(
-                                pick=new_row.get('Pick'),
-                                home_team=new_row.get('Home'),
-                                away_team=new_row.get('Away'),
-                                market=new_row.get('Market'),
-                                prob=prob_val,
-                                edge=edge_val,
-                                session_state=st.session_state
-                            )
-
-                            calls_this_run += 1
-
-                            if not gemini_data.get('error'):
-                                # Update Cache
-                                st.session_state["gemini_cache"][row_key] = gemini_data
-
-                            # Populate Update Dict
-                            update_data['gemini_total_confidence'] = gemini_data.get('confidence', '')
-                            update_data['gemini_rationalize'] = gemini_data.get('rationale', '')
-                            update_data['gemini_error_flag'] = gemini_data.get('error', '')
-
-                            if not gemini_data.get('error'):
-                                # Also update legacy columns to ensure UI consistency
-                                update_data['overall_confidence'] = gemini_data.get('confidence', '') or update_data.get('overall_confidence')
-                                if gemini_data.get('rationale'):
-                                    update_data['gemini_rationale'] = gemini_data.get('rationale')
-                        else:
-                            update_data['gemini_total_confidence'] = 'SKIPPED'
-                            update_data['gemini_rationalize'] = 'Missing Pick/Prob'
-                            update_data['gemini_error_flag'] = 'missing_data'
-
-                    except Exception as e:
-                        update_data['gemini_total_confidence'] = ''
-                        update_data['gemini_rationalize'] = ''
-                        update_data['gemini_error_flag'] = str(e)[:100]
-
-                gemini_updates_dict[idx] = update_data
-
-            if gemini_updates_dict:
-                # Rebuild dataframe preserving original index
-                # OPTIMIZATION: Extract only changed columns and concat
-                # This prevents recreating the entire massive dataframe if only a few columns changed
-
-                # Convert dict of dicts to DataFrame
-                gemini_df = pd.DataFrame.from_dict(gemini_updates_dict, orient='index')
-
-                # Align index
-                gemini_df.index = df.index # Assuming order preserved, but better safe:
-                # Actually from_dict(orient='index') sets index correctly from keys if they match
-
-                # Drop existing versions of these columns from original df
-                # Only if they exist
-                df = df.drop(columns=[c for c in gemini_df.columns if c in df.columns], errors='ignore')
-
-                # Concat with new columns
-                df = pd.concat([df, gemini_df], axis=1)
-
-        if "_gemini_rank_metric" in df.columns:
-            df = df.drop(columns=["_gemini_rank_metric"])
-
-        # Ensure Gemini columns are never null before export (Optimized)
-        gemini_defaults = {
-            "gemini_alignment": "NEUTRAL",
-            "gemini_rationale": "",
-            "gemini_flags_short": "",
-            "gemini_mode": "guardrail",
-            "prob_engine": "market_only",
-            "gemini_total_confidence": "",
-            "gemini_error_flag": "",
-        }
-
-        # 1. Add missing columns efficiently
-        cols_to_add = {k: v for k, v in gemini_defaults.items() if k not in df.columns}
-        if cols_to_add:
-            # Create a DataFrame for new columns and concat
-            new_cols_df = pd.DataFrame(cols_to_add, index=df.index)
-            df = pd.concat([df, new_cols_df], axis=1)
-
-        # 2. Fill NaNs efficiently
-        df = df.fillna(gemini_defaults).infer_objects(copy=False)
-
-        # Single defragmentation copy after all Gemini operations
-        df = df.copy()
-        try:
-            null_counts = df[["gemini_mode", "gemini_alignment", "gemini_rationale", "gemini_flags_short"]].isna().sum()
-            if null_counts.sum() > 0 and logger:
-                logger.warning("Gemini columns contained nulls after apply: %s", dict(null_counts))
-        except Exception:
-            pass
 
         market_stability_filter = st.sidebar.multiselect(
             "Market Stability",
