@@ -746,11 +746,21 @@ def team_code_for_league(league: str, team_name: str) -> str:
     return "UNK"
 
 def price_to_prob(price: Any) -> Optional[float]:
+    """Convert a Kalshi price to a 0-1 probability.
+
+    Handles both legacy cent integers (0-99) and current dollar values (0.0-1.0).
+    As of Jan 2026, the Kalshi API only returns dollar-range values, but we
+    keep the cent fallback for any cached/historical data.
+    """
     if price is None: return None
     try:
         val = float(price)
-        if 0.0 <= val <= 100.0: return max(0.0, min(1.0, val / 100.0))
-    except: pass
+        if 0.0 <= val <= 1.0:
+            return val  # Already in dollar/probability range
+        if 1.0 < val <= 100.0:
+            return val / 100.0  # Legacy cent value
+    except Exception:
+        pass
     return None
 
 
@@ -886,20 +896,28 @@ def _parse_market_metadata(mkt: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             teams = ticker_teams[:2]
 
     market_type = _extract_market_type(title, ticker, subtitle=mkt.get("subtitle", ""), market=mkt)
-    # Use midpoint of yes_bid/yes_ask if both available, else fall back to last_price
-    # Prefer _dollars fields (current API); fall back to deprecated cent fields
+    # Use midpoint of yes_bid/yes_ask if both available, else fall back to last_price.
+    # Prefer _dollars fields (current API); fall back to deprecated cent fields.
+    # Uses the same normalization as _kalshi_prices() in streamlit_app.py.
     _yb = _kalshi_price_norm(mkt, "yes_bid_dollars", "yes_bid")
     _ya = _kalshi_price_norm(mkt, "yes_ask_dollars", "yes_ask")
+    _nb = _kalshi_price_norm(mkt, "no_bid_dollars", "no_bid")
+    _lp = _kalshi_price_norm(mkt, "last_price_dollars", "last_price")
+
+    prob = None
     if _yb is not None and _ya is not None and _yb > 0 and _ya > 0:
         prob = (_yb + _ya) / 2.0
-    else:
-        # Fallback chain: yes_price, last_price_dollars, last_price, yes_ask_dollars, yes_ask
-        prob_source_dollar = safe_float(mkt.get("last_price_dollars"))
-        if prob_source_dollar is not None and prob_source_dollar > 0:
-            prob = prob_source_dollar
-        else:
-            prob_source = (mkt.get("yes_price") or mkt.get("last_price") or mkt.get("yes_ask") or mkt.get("implied_prob"))
-            prob = price_to_prob(prob_source)
+    elif _yb is not None and _nb is not None:
+        implied_ya = 1.0 - _nb
+        prob = (_yb + implied_ya) / 2.0
+    elif _yb is not None:
+        prob = _lp if (_lp is not None and _lp > 0) else _yb
+    elif _nb is not None:
+        prob = 1.0 - _nb
+
+    # Final fallback to last_price
+    if prob is None and _lp is not None and _lp > 0:
+        prob = _lp
 
     return {"title": title, "market_date": market_dt, "teams": teams, "probability": prob, "market_type": market_type}
 
@@ -1353,20 +1371,26 @@ def _match_via_events(
             target_market = markets[0] # Fallback
 
         if target_market:
-             # Calculate prob using _dollars fields (current API) with cent fallback
+            # Calculate prob using _dollars fields (current API) with cent fallback.
+            # Matches the same cascade as _kalshi_prices()/winner_prob() in streamlit_app.py.
             yes_bid = _kalshi_price_norm(target_market, "yes_bid_dollars", "yes_bid")
             yes_ask = _kalshi_price_norm(target_market, "yes_ask_dollars", "yes_ask")
+            no_bid = _kalshi_price_norm(target_market, "no_bid_dollars", "no_bid")
+            last_price = _kalshi_price_norm(target_market, "last_price_dollars", "last_price")
             prob = None
-            if yes_bid and yes_ask:
-                 prob = (yes_bid + yes_ask) / 2.0
-            elif yes_bid:
-                 # Prefer last_price (actual trade) over yes_bid (lowest buy offer)
-                 lp = _kalshi_price_norm(target_market, "last_price_dollars", "last_price")
-                 prob = lp if lp else yes_bid
-            else:
-                 lp = _kalshi_price_norm(target_market, "last_price_dollars", "last_price")
-                 if lp:
-                     prob = lp
+            if yes_bid is not None and yes_ask is not None:
+                prob = (yes_bid + yes_ask) / 2.0
+            elif yes_bid is not None and no_bid is not None:
+                implied_yes_ask = 1.0 - no_bid
+                prob = (yes_bid + implied_yes_ask) / 2.0
+            elif yes_bid is not None:
+                # Prefer last_price (actual trade) over yes_bid (lowest buy offer)
+                prob = last_price if (last_price is not None and last_price > 0) else yes_bid
+            elif no_bid is not None:
+                prob = 1.0 - no_bid
+            # Final fallback to last_price
+            if prob is None and last_price is not None and last_price > 0:
+                prob = last_price
 
             # Enhanced debug info
             debug_info = {
@@ -2119,11 +2143,18 @@ class KalshiIntegrator:
 
             pages = max(pages, min(max_pages, len(chunk) // 200 + 1))
             for m in chunk or []:
-                key = str(m.get("event_ticker") or m.get("ticker") or "").upper()
+                # FIX: Dedup by individual market `ticker`, NOT `event_ticker`.
+                # event_ticker is shared by all sub-markets in an event (e.g.
+                # Over 230 and Under 230 both have event_ticker KXNBATOTAL-...).
+                # Deduping by event_ticker collapsed all sub-markets into ONE,
+                # preventing line-proximity scoring from seeing the full set and
+                # producing stale/wrong kalshi_prob values for spread/total.
+                key = str(m.get("ticker") or m.get("event_ticker") or "").upper()
                 if key and key not in collected:
                     collected[key] = m
 
         all_markets = list(collected.values())
+        logger.info(f"Kalshi get_league_markets: {len(all_markets)} unique markets after ticker-level dedup")
         used_game_prefix = game_prefix
         game_markets = [
             m
