@@ -53,18 +53,23 @@ MIN_FALLBACK_THRESHOLD = 0.75
 
 # Validated Manual Aliases (User Requested)
 MANUAL_ALIASES = {
+    # Source -> Target (Standard)
     "Oklahoma St": "Oklahoma St Cowboys",
     "Arizona St": "Arizona St Sun Devils",
     "TCU": "TCU Horned Frogs",
     "IU Indianapolis": "IUPUI Jaguars",
     "Milwaukee": "Milwaukee Panthers",
-    "Iowa State": "Iowa State Cyclones", # Source is "Iowa State", Target is "Iowa State Cyclones"
+    "Iowa State": "Iowa State Cyclones",
     "Fresno St.": "Fresno St Bulldogs",
     "Utah St.": "Utah State Aggies",
     "Miami-Florida": "Miami Hurricanes",
     "Southern Methodist": "SMU Mustangs",
     "Ole Miss": "Mississippi",
-    "NC State": "North Carolina State"
+    "NC State": "North Carolina State",
+
+    # Reverse Mappings (Just in case source/target are flipped in logic)
+    "Milwaukee Panthers": "Milwaukee",
+    "IUPUI Jaguars": "IU Indianapolis"
 }
 
 # Ambiguous team name pairs that should NEVER be matched to each other
