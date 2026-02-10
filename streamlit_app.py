@@ -12929,7 +12929,8 @@ with tab_master:
         gemini_full_run = bool(st.session_state.get("gemini_full_run", False))
 
         # Rank rows for Gemini priority
-        df["_gemini_rank"] = pd.to_numeric(df.get("At_a_Glance_Confidence_Score"), errors='coerce').fillna(0)
+        # Use the correct column name found in your CSV
+        df["_gemini_rank"] = pd.to_numeric(df.get("At_a_Glance_Score"), errors='coerce').fillna(0)
         sorted_indices = df.sort_values("_gemini_rank", ascending=False).index
         allowed_indices = set(sorted_indices[:gemini_row_limit]) if not gemini_full_run else set(df.index)
 
