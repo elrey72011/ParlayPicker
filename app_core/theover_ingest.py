@@ -51,9 +51,8 @@ MIN_INDIVIDUAL_THRESHOLD = 70.0
 # Minimum threshold for fallback robust matching
 MIN_FALLBACK_THRESHOLD = 0.75
 
-# Validated Manual Aliases (User Requested)
 MANUAL_ALIASES = {
-    # Forward Mappings (Source -> Master)
+    # Forward
     "Oklahoma St": "Oklahoma St Cowboys",
     "Arizona St": "Arizona St Sun Devils",
     "TCU": "TCU Horned Frogs",
@@ -66,8 +65,7 @@ MANUAL_ALIASES = {
     "Southern Methodist": "SMU Mustangs",
     "Ole Miss": "Mississippi",
     "NC State": "North Carolina State",
-
-    # Reverse Mappings (Critical for bidirectional matching)
+    # Reverse (Crucial for fuzzy matcher)
     "Milwaukee Panthers": "Milwaukee",
     "IUPUI Jaguars": "IU Indianapolis",
     "TCU Horned Frogs": "TCU",

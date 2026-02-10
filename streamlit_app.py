@@ -11703,6 +11703,39 @@ with tab_master:
 
             master_df = pd.DataFrame.from_records(accumulated_rows)
 
+            # --- BACKFILL STRATEGY: INJECT MISSING GAMES ---
+            # 1. Create a set of existing games in Master (API) to avoid duplicates
+            # Key format: "LEAGUE|HOME_TEAM" (normalized)
+            master_keys = set(
+                (master_df['league'] + "|" + master_df['Home'].str.upper().str.strip()).tolist()
+            )
+
+            backfill_rows = []
+            for idx, row in theover_df.iterrows():
+                # Construct the key for the Raw Game
+                raw_league = str(row.get('league', '')).strip()
+                raw_home = str(row.get('home_team_raw', '')).upper().strip()
+                raw_key = f"{raw_league}|{raw_home}"
+
+                # If this game is NOT in the Master list, create a "Ghost Row"
+                if raw_key not in master_keys:
+                    backfill_rows.append({
+                        'league': row.get('league'),
+                        'Home': row.get('home_team_raw'), # Use Raw Name
+                        'Away': row.get('away_team_raw'),
+                        'Commence (UTC)': pd.Timestamp.now(timezone.utc), # Default to active
+                        'Market': 'Spread',
+                        'Home_ML': None, # Odds are missing, but we keep the game
+                        'Away_ML': None,
+                        'is_backfilled': True
+                    })
+
+            if backfill_rows:
+                print(f"⚠️ FORCE-BACKFILLING {len(backfill_rows)} MISSING GAMES FROM SOURCE.")
+                backfill_df = pd.DataFrame(backfill_rows)
+                master_df = pd.concat([master_df, backfill_df], ignore_index=True)
+            # --- END BACKFILL ---
+
             # DISABLED: Moneyline pivot logic
             # Previous constraint required "Market column must never say 'Moneyline'"
             # However, users need ML picks to be exported as ML picks, not converted to Spread/Total
