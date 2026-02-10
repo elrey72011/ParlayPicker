@@ -2366,25 +2366,18 @@ def calculate_confidence(final_probability: float, stats_quality: str = "REAL") 
 
     Downgrades if stats_quality is MISSING or FALLBACK.
     """
+    # FORCE PROBABILITY-ONLY CONFIDENCE
     try:
         if final_probability is None:
             return "LOW"
         prob = float(final_probability)
+        if prob >= 0.60:
+            return "HIGH"
+        if prob >= 0.55:
+            return "MEDIUM"
+        return "LOW"
     except (ValueError, TypeError):
         return "LOW"
 
-    if prob >= 0.60:
-        conf = "HIGH"
-    elif prob >= 0.55:
-        conf = "MEDIUM"
-    else:
-        conf = "LOW"
-
-    # Downgrade based on stats quality (Existing Logic Preserved)
-    if stats_quality == "MISSING":
-        return "LOW"
-    elif stats_quality == "FALLBACK":
-        if conf == "HIGH":
-            return "MEDIUM"
-
-    return conf
+    # Dead code removed
+    return "LOW"
