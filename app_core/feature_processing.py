@@ -2356,28 +2356,13 @@ def build_model_feature_row_from_record(record: Mapping[str, Any]) -> Dict[str, 
 
     return row
 
-def calculate_confidence(final_probability: float, stats_quality: str = "REAL") -> str:
-    """
-    Calculate confidence based on probability thresholds (Soft Fallback).
+def calculate_confidence(row):
+    # DIRECT PROBABILITY CHECK - NO EXCEPTIONS
+    prob = row.get('final_probability', 0)
 
-    HIGH: final_probability >= 60%
-    MEDIUM: final_probability >= 55%
-    LOW: final_probability < 55%
-
-    Downgrades if stats_quality is MISSING or FALLBACK.
-    """
-    # FORCE PROBABILITY-ONLY CONFIDENCE
-    try:
-        if final_probability is None:
-            return "LOW"
-        prob = float(final_probability)
-        if prob >= 0.60:
-            return "HIGH"
-        if prob >= 0.55:
-            return "MEDIUM"
+    if prob >= 0.60:
+        return "HIGH"
+    elif prob >= 0.55:
+        return "MEDIUM"
+    else:
         return "LOW"
-    except (ValueError, TypeError):
-        return "LOW"
-
-    # Dead code removed
-    return "LOW"
