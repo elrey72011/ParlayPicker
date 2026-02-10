@@ -67,12 +67,13 @@ MANUAL_ALIASES = {
     "Ole Miss": "Mississippi",
     "NC State": "North Carolina State",
 
-    # Reverse/Alternative Mappings (To catch inverted sources)
+    # Reverse Mappings (CRITICAL for fixing the current failures)
     "Milwaukee Panthers": "Milwaukee",
     "IUPUI Jaguars": "IU Indianapolis",
     "TCU Horned Frogs": "TCU",
     "Oklahoma St Cowboys": "Oklahoma St",
-    "Arizona St Sun Devils": "Arizona St"
+    "Arizona St Sun Devils": "Arizona St",
+    "Iowa State Cyclones": "Iowa State"
 }
 
 # Ambiguous team name pairs that should NEVER be matched to each other
