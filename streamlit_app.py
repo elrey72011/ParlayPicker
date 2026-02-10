@@ -3783,17 +3783,11 @@ def score_pick_confidence(row: Dict[str, Any]) -> Tuple[str, str, bool]:
         tier = "LOW"
         reason = f"negative_edge={actual_edge:.3f} (<0, no value vs market)"
     else:
-        # Get Kalshi agreement status
-        kalshi_prob_for_pick = safe_float(row.get("kalshi_prob_for_pick") or row.get("spread_prob_pick_kalshi") or row.get("total_prob_pick_kalshi"))
-        kalshi_agrees = kalshi_prob_for_pick is not None and kalshi_prob_for_pick >= 0.55
-
-        # Two-tier confidence system
-        if kalshi_agrees and decisiveness_edge >= 0.08 and actual_edge >= 0.05:
-            # Tier 1: Kalshi agrees with strong metrics
+        # Probability-based confidence (final_prob already blends all sources)
+        if final_prob >= 0.60:
             tier = "HIGH"
-            reason = f"kalshi_agrees ({kalshi_prob_for_pick:.1%}), decisiveness={decisiveness_edge:.3f}, edge={actual_edge:.3f}"
+            reason = f"high_probability ({final_prob:.1%}), decisiveness={decisiveness_edge:.3f}, edge={actual_edge:.3f}"
         elif decisiveness_edge >= 0.03 and actual_edge >= 0:
-            # Tier 2: Fallback (Kalshi disagrees or unavailable, but metrics OK)
             tier = "MEDIUM"
             reason = f"fallback_mode, decisiveness={decisiveness_edge:.3f}, edge={actual_edge:.3f}"
         else:
@@ -5364,8 +5358,6 @@ def fetch_odds_games(sport_key: str, run_id: Optional[str] = None) -> List[Dict[
         "markets": "h2h,spreads,totals",
         "oddsFormat": "american",
         "dateFormat": "iso",
-        # Ensure we capture games starting now/today by widening the window
-        "commenceTimeFrom": (datetime.now(timezone.utc) - timedelta(hours=6)).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
 
     # Retry configuration: exponential backoff
@@ -10422,7 +10414,7 @@ with tab_master:
                             "theover_hit_rate": (theover_matched_side or {}).get("theover_hit_rate") if theover_matched_side else None,
                             "theover_source_model": (theover_matched_side or {}).get("theover_model") if theover_matched_side else None,
                             "theover_prob_used": theover_prob_ml,
-                            "theover_matched": bool(theover_matched_side and theover_prob_ml is not None),
+                            "theover_matched": bool(theover_matched_side),
                             "theover_side_used_for_ml": theover_side_used_for_ml,
                             "Home_Sentiment": home_sent,
                             "Away_Sentiment": away_sent,
@@ -10766,6 +10758,8 @@ with tab_master:
                         "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
                         "Market": "Spread", "Book": g.get("best_spread_book"),
                         "Pick": f"{spread_pick} {spread_line:+.1f}" if (spread_pick is not None and spread_line is not None) else spread_pick, "Implied_Prob": spread_prob_market, "Line": spread_line, "AI_Prob": model_spread_prob if model_used_for_spread else None,
+                        "Home_ML": home_ml,
+                        "Away_ML": away_ml,
                         "ml_home_implied": american_to_implied_prob(g.get("home_ml_price")),
                         "ml_away_implied": american_to_implied_prob(g.get("away_ml_price")),
                         "spread_pick_side": spread_pick_side_key,
@@ -10907,6 +10901,7 @@ with tab_master:
                         "theover_pick_type": "SIDE" if theover_matched_side else None,
                         "theover_hit_rate": (theover_matched_side or {}).get("theover_hit_rate"),
                         "theover_source_model": (theover_matched_side or {}).get("theover_model"),
+                        "theover_prob": theover_prob_spread,
                         "theover_prob_used": theover_prob_spread,
                         "theover_matched": bool(theover_matched_side),
                         "theover_delta_final_prob": theover_delta_spread,
@@ -11073,6 +11068,8 @@ with tab_master:
                         "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
                         "Market": "Total", "Book": g.get("best_total_book"),
                         "Pick": f"{total_pick} {total_line}" if (total_pick is not None and total_line is not None) else total_pick, "Implied_Prob": total_prob_market, "Line": total_line, "AI_Prob": model_total_prob if model_used_for_total else None,
+                        "Home_ML": home_ml,
+                        "Away_ML": away_ml,
                         "ml_home_implied": american_to_implied_prob(g.get("home_ml_price")),
                         "ml_away_implied": american_to_implied_prob(g.get("away_ml_price")),
                         "spread_pick_side": spread_pick_side_key,
@@ -11190,8 +11187,9 @@ with tab_master:
                         "theover_pick_type": "TOTAL" if theover_matched_total else None,
                         "theover_hit_rate": (theover_matched_total or {}).get("theover_hit_rate"),
                         "theover_source_model": (theover_matched_total or {}).get("theover_model"),
+                        "theover_prob": theover_prob_total,
                         "theover_prob_used": theover_prob_total,
-                        "theover_matched": bool(theover_matched_total),
+                        "theover_matched": bool(theover_matched_total or theover_matched_side),
                         "theover_delta_final_prob": theover_delta_total,
                         "final_prob_without_theover": total_prob_no_to,
                         "theover_changed_pick": theover_changed_pick_total,
@@ -11201,7 +11199,7 @@ with tab_master:
                         "kalshi_event_ticker": kalshi_total.get("raw_event_id"),
                         "kalshi_series": None,
                         "normalization_source": "Dynamic",
-                        "theover_available": bool(theover_matched_total),
+                        "theover_available": bool(theover_matched_total or theover_matched_side),
                         "theover_line": (theover_matched_total or {}).get("theover_line"),
                         "theover_status": (theover_matched_total or {}).get("theover_model", "None"),
                         "theover_total_available": bool(theover_matched_total),
@@ -11703,38 +11701,6 @@ with tab_master:
 
             master_df = pd.DataFrame.from_records(accumulated_rows)
 
-            # --- BACKFILL STRATEGY: INJECT MISSING GAMES ---
-            # 1. Create a set of existing games in Master (API) to avoid duplicates
-            # Key format: "LEAGUE|HOME_TEAM" (normalized)
-            master_keys = set(
-                (master_df['league'] + "|" + master_df['Home'].str.upper().str.strip()).tolist()
-            )
-
-            backfill_rows = []
-            for idx, row in theover_df.iterrows():
-                # Construct the key for the Raw Game
-                raw_league = str(row.get('league', '')).strip()
-                raw_home = str(row.get('home_team_raw', '')).upper().strip()
-                raw_key = f"{raw_league}|{raw_home}"
-
-                # If this game is NOT in the Master list, create a "Ghost Row"
-                if raw_key not in master_keys:
-                    backfill_rows.append({
-                        'league': row.get('league'),
-                        'Home': row.get('home_team_raw'), # Use Raw Name
-                        'Away': row.get('away_team_raw'),
-                        'Commence (UTC)': pd.Timestamp.now(timezone.utc), # Default to active
-                        'Market': 'Spread',
-                        'Home_ML': None, # Odds are missing, but we keep the game
-                        'Away_ML': None,
-                        'is_backfilled': True
-                    })
-
-            if backfill_rows:
-                print(f"⚠️ FORCE-BACKFILLING {len(backfill_rows)} MISSING GAMES FROM SOURCE.")
-                backfill_df = pd.DataFrame(backfill_rows)
-                master_df = pd.concat([master_df, backfill_df], ignore_index=True)
-            # --- END BACKFILL ---
 
             # DISABLED: Moneyline pivot logic
             # Previous constraint required "Market column must never say 'Moneyline'"
@@ -13112,8 +13078,11 @@ with tab_master:
         else:
              df['kalshi_available'] = False
 
-        if 'theover_prob' not in df.columns and 'theover_prob_used' in df.columns:
-             df['theover_prob'] = df['theover_prob_used']
+        if 'theover_prob_used' in df.columns:
+            if 'theover_prob' not in df.columns:
+                df['theover_prob'] = df['theover_prob_used']
+            else:
+                df['theover_prob'] = df['theover_prob'].fillna(df['theover_prob_used'])
 
         st.session_state["master_df"] = df.copy()  # Collapsed data with all internal columns
 
