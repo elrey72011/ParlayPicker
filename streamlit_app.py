@@ -1956,7 +1956,13 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
         stats_quality = row.get("stats_quality", "REAL")
 
         # Use shared calculation logic
-        conf_label = calculate_confidence(p_val, stats_quality)
+        # Force simple probability-based confidence (matching the core logic)
+        if p_val >= 0.60:
+            conf_label = "HIGH"
+        elif p_val >= 0.55:
+            conf_label = "MEDIUM"
+        else:
+            conf_label = "LOW"
 
         # Force LOW if ML was suppressed (extreme odds)
         if best_type == "ML" and ml_suppressed_reason == "extreme_odds_warning":
