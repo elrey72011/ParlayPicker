@@ -1915,7 +1915,8 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
 
                  if flipped_text:
                       best_pick = flipped_text
-                      reason += f" [FLIPPED: {original_prob*100:.1f}%->{best_prob*100:.1f}%]"
+                      # Reset reason string to avoid stale "negative_edge" text from previous logic
+                      reason = f"Flipped to Winning Pick ({original_prob*100:.1f}%->{best_prob*100:.1f}%)"
                  else:
                       # If flip failed text parsing, just warn but keep prob flip?
                       # No, safer to just keep it low and let confidence filter catch it?
@@ -1992,18 +1993,25 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
         bet_lean = (conf_label == "LOW")
         conf_score = (p_val - 0.5) + e_val
 
+        # Recalculate confidence_reason to reflect the final state (flipped or not)
+        # This fixes the "stale metadata" issue where flipped picks still showed "negative_edge" reason
+        driver = str(row.get("decision_driver") or "unknown")
+        confidence_reason = f"{conf_label}: {reason} | driver={driver}"
+
         return pd.Series([
             best_type, best_pick, p_val, reason, e_val,
             conf_label, bet_lean, conf_score,
             ml_eligible, ml_suppressed_reason, candidate_types_str,
             moneyline_disabled, moneyline_disabled_reason,
-            glance_conf
+            glance_conf,
+            confidence_reason
         ], index=[
             "best_pick_type", "best_pick", "final_prob", "Best_ST_Reason", "edge",
             "Bet_Confidence", "Bet_Lean", "Bet_Confidence_Score",
             "ml_eligible", "ml_suppressed_reason", "candidate_types_available",
             "moneyline_disabled", "moneyline_disabled_reason",
-            "At_a_Glance_Confidence"
+            "At_a_Glance_Confidence",
+            "confidence_reason"
         ])
 
     # Batch apply
@@ -4907,6 +4915,10 @@ def robust_get_prices(outcomes: List[Dict], home_team: str, away_team: str) -> T
             if k in away_norm or away_norm in k:
                 a_price = v
                 break
+
+    if h_price is None or a_price is None:
+        # Debug log for missing prices to help diagnose matching issues
+        logger.debug(f"Missing ML Prices: Home='{home_team}'->'{home_norm}' ({h_price}), Away='{away_team}'->'{away_norm}' ({a_price}). Market Keys: {list(prices_map.keys())}")
 
     return h_price, a_price
 
