@@ -73,6 +73,7 @@ from app_core.feature_processing import (
     enrich_with_model_features,
     build_model_feature_row_from_record,
     robust_normalize_team,
+    calculate_confidence,
 )
 
 from app_core.sportsdata import (
@@ -1519,6 +1520,91 @@ def pivot_market(row):
 
     return row
 
+def enforce_winning_picks(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Enforces that all picks are on the winning side (probability > 50%).
+    If prob < 50%, flips the pick (Home<->Away, Over<->Under) and probability (1-p).
+    """
+    if df is None or df.empty:
+        return df
+
+    df = df.copy()
+
+    def _flip_row(row):
+        # 1. Spread Logic
+        s_prob = safe_float(row.get("spread_prob_adj")) or safe_float(row.get("spread_prob")) or safe_float(row.get("spread_prob_market_based"))
+        s_pick = row.get("Spread & Pick")
+
+        # If probability exists and is < 0.50, flip it
+        if s_prob is not None and s_prob < 0.50:
+            new_prob = 1.0 - s_prob
+
+            # Flip Pick String
+            if s_pick:
+                home = str(row.get("Home") or "")
+                away = str(row.get("Away") or "")
+                p_clean = str(s_pick).strip()
+
+                # Regex for line number at end
+                line_match = re.search(r'(-?\d+\.?\d*)$', p_clean)
+                new_pick = s_pick # Fallback
+
+                if line_match:
+                    line_val = float(line_match.group(1))
+                    team_part = p_clean[:line_match.start()].strip()
+
+                    # Identify current team
+                    current_is_home = False
+                    current_is_away = False
+
+                    # Robust check
+                    if team_part and home and (team_part in home or home in team_part):
+                        current_is_home = True
+                    elif team_part and away and (team_part in away or away in team_part):
+                        current_is_away = True
+
+                    # Flip
+                    if current_is_home:
+                        new_team = away
+                        new_line = -line_val
+                        new_pick = f"{new_team} {new_line:+g}"
+                    elif current_is_away:
+                        new_team = home
+                        new_line = -line_val
+                        new_pick = f"{new_team} {new_line:+g}"
+
+                row["Spread & Pick"] = new_pick
+
+            # Update Probs
+            row["spread_prob_adj"] = new_prob
+            if "spread_prob" in row: row["spread_prob"] = new_prob
+            if "spread_prob_market_based" in row: row["spread_prob_market_based"] = new_prob
+
+            # Note: We rely on downstream to recalculate edge using new prob
+
+        # 2. Total Logic
+        t_prob = safe_float(row.get("total_prob_adj")) or safe_float(row.get("total_prob")) or safe_float(row.get("total_prob_market_based"))
+        t_pick = row.get("Total & Pick")
+
+        if t_prob is not None and t_prob < 0.50:
+            new_prob = 1.0 - t_prob
+
+            # Flip Pick String
+            if t_pick:
+                if "Over" in str(t_pick):
+                    row["Total & Pick"] = str(t_pick).replace("Over", "Under")
+                elif "Under" in str(t_pick):
+                    row["Total & Pick"] = str(t_pick).replace("Under", "Over")
+
+            # Update Probs
+            row["total_prob_adj"] = new_prob
+            if "total_prob" in row: row["total_prob"] = new_prob
+            if "total_prob_market_based" in row: row["total_prob_market_based"] = new_prob
+
+        return row
+
+    return df.apply(_flip_row, axis=1)
+
 def enrich_picks_with_roi_metrics(df: pd.DataFrame) -> pd.DataFrame:
     """
     Jules: Call this function to prepare the 'Infallible' dashboard view.
@@ -1861,101 +1947,16 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
             best_edge = s_edge
             reason = "No Valid Markets"
 
-        # --- FIX ISSUE #1: SANITY FLIP FOR LOSING PICKS ---
-        # If the best pick has < 50% probability, we must flip it to the other side.
-        # This ensures we never recommend a losing bet.
-        if best_prob is not None and best_prob < 0.50:
-             try:
-                 original_prob = best_prob
-                 # Flip Probability
-                 best_prob = 1.0 - original_prob
-                 # Flip Edge (approximate: NewEdge = (1-P) - (1-Implied) = Implied - P = -Edge)
-                 best_edge = -best_edge
-
-                 flipped_text = None
-
-                 # Flip the Pick String
-                 if best_type == "TOTAL" and best_pick:
-                      if "Over" in str(best_pick):
-                           flipped_text = str(best_pick).replace("Over", "Under")
-                      elif "Under" in str(best_pick):
-                           flipped_text = str(best_pick).replace("Under", "Over")
-                 elif best_type == "SPREAD" and best_pick:
-                      home = row.get("Home")
-                      away = row.get("Away")
-
-                      if home and away:
-                           p_clean = str(best_pick).strip()
-                           # Extract line number at end of string (e.g. " -5.5", " +3.0", " 7.5")
-                           line_match = re.search(r'(-?\d+\.?\d*)$', p_clean)
-
-                           if line_match:
-                                line_val = float(line_match.group(1))
-                                team_part = p_clean[:line_match.start()].strip()
-
-                                # Identify current team
-                                current_is_home = False
-                                current_is_away = False
-
-                                # Robust check
-                                if team_part and (team_part in str(home) or str(home) in team_part):
-                                     current_is_home = True
-                                elif team_part and (team_part in str(away) or str(away) in team_part):
-                                     current_is_away = True
-
-                                # Flip
-                                if current_is_home:
-                                     new_team = away
-                                     new_line = -line_val
-                                     flipped_text = f"{new_team} {new_line:+g}"
-                                elif current_is_away:
-                                     new_team = home
-                                     new_line = -line_val
-                                     flipped_text = f"{new_team} {new_line:+g}"
-
-                 if flipped_text:
-                      best_pick = flipped_text
-                      # Reset reason string to avoid stale "negative_edge" text from previous logic
-                      reason = f"Flipped to Winning Pick ({original_prob*100:.1f}%->{best_prob*100:.1f}%)"
-                 else:
-                      # If flip failed text parsing, just warn but keep prob flip?
-                      # No, safer to just keep it low and let confidence filter catch it?
-                      # User requested explicitly to flip.
-                      reason += " [FLIP_TEXT_FAILED]"
-
-             except Exception as e:
-                 reason += " [FLIP_ERROR]"
-
-        # 5. Confidence Logic (Updated)
-        # HIGH: edge >= 0.02 (and 0.52 <= prob <= 0.75 sanity check)
-        # MEDIUM: -0.01 <= edge < 0.02
-        # LOW: edge < -0.01
+        # 5. Confidence Logic (Refactored)
+        # Using soft fallback model based on Probability
+        # Flip logic is now handled upstream in enforce_winning_picks()
 
         p_val = best_prob if best_prob is not None else 0.5
         e_val = best_edge if best_edge is not None else 0.0
+        stats_quality = row.get("stats_quality", "REAL")
 
-        # Base Confidence from Edge
-        # Logic: If final_probability > 60%, tag it as "HIGH", regardless of the Moneyline/EV.
-        if p_val > 0.60:
-            conf_label = "HIGH"
-        elif e_val >= -0.01:
-            conf_label = "MEDIUM"
-        else:
-            conf_label = "LOW"
-
-        # Sanity Checks (Downgrades)
-        # "final_prob is within a sane band (e.g. 0.52 <= final_prob <= 0.75)"
-        if conf_label == "HIGH":
-            # Allow prob > 0.60, but maybe cap extreme if needed?
-            # User instruction: "If final_probability > 60% ... tag as HIGH"
-            # We preserve the sanity check for upper bound if desired, but user didn't specify.
-            # However, let's just implement what was asked.
-            pass
-
-        # "If edge < 0, Bet_Confidence is never HIGH." (Covered by e_val >= 0.02)
-        # User requested to IGNORE EV for HIGH confidence if prob > 60%.
-        # So we skip the negative edge downgrade for HIGH if driven by prob.
-        # However, for MEDIUM/LOW, edge still matters.
+        # Use shared calculation logic
+        conf_label = calculate_confidence(p_val, stats_quality)
 
         # Force LOW if ML was suppressed (extreme odds)
         if best_type == "ML" and ml_suppressed_reason == "extreme_odds_warning":
@@ -1971,18 +1972,6 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
         if best_pick is None:
             conf_label = "LOW"
             reason = "NO_BET_POSSIBLE"
-
-        # Task 2: Downgrade confidence if stats quality is MISSING or FALLBACK
-        # "If FALLBACK or MISSING: confidence should be LIMITED"
-        stats_quality = row.get("stats_quality", "REAL")
-        if stats_quality == "MISSING":
-            conf_label = "LOW"
-            reason += f" [Stats: {stats_quality}]"
-        elif stats_quality == "FALLBACK":
-            # Cap at MEDIUM
-            if conf_label == "HIGH":
-                conf_label = "MEDIUM"
-            reason += f" [Stats: {stats_quality}]"
 
         # At_a_Glance_Confidence Clamping
         # "At_a_Glance_Confidence follows the same rule or is at most equal to Bet_Confidence, never higher."
@@ -12763,6 +12752,11 @@ with tab_master:
 
         # 2. Add Spread/Total Confidence (Calculates At_a_Glance_Score, probs)
         df = add_spread_total_confidence(df)
+        df = df.copy()
+
+        # 2a. Enforce Winning Picks (Flip logic moved upstream)
+        # Ensures picks are on the winning side before edge calculation
+        df = enforce_winning_picks(df)
         df = df.copy()
 
         # 3. Enrich with ROI Metrics (Calculates Edge)

@@ -51,6 +51,22 @@ MIN_INDIVIDUAL_THRESHOLD = 70.0
 # Minimum threshold for fallback robust matching
 MIN_FALLBACK_THRESHOLD = 0.75
 
+# Validated Manual Aliases (User Requested)
+MANUAL_ALIASES = {
+    "Oklahoma St": "Oklahoma St Cowboys",
+    "Arizona St": "Arizona St Sun Devils",
+    "TCU": "TCU Horned Frogs",
+    "IU Indianapolis": "IUPUI Jaguars",
+    "Fresno St.": "Fresno St Bulldogs",
+    "Utah St.": "Utah State Aggies",
+    "Miami-Florida": "Miami Hurricanes",
+    "Southern Methodist": "SMU Mustangs",
+    "Ole Miss": "Mississippi",
+    "NC State": "North Carolina State",
+    "Iowa State": "Iowa State Cyclones",
+    "Milwaukee": "Milwaukee Panthers"
+}
+
 # Ambiguous team name pairs that should NEVER be matched to each other
 # Format: (partial_name_in_input, wrong_full_name_to_block)
 # These are teams whose names are substrings of other unrelated teams
@@ -682,6 +698,10 @@ def _resolve_team_alias(name: str, league: str) -> str:
 
     # Fix: Strip quotes and whitespace
     name = name.strip().strip('"').strip("'").strip()
+
+    # 0. Check Manual Aliases first (User Override)
+    if name in MANUAL_ALIASES:
+        return MANUAL_ALIASES[name]
 
     # Normalize league string
     league_norm = _normalize_league_str(league)
