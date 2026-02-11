@@ -6451,7 +6451,9 @@ def filter_kalshi_game_markets(
                     home_score = fuzz.partial_ratio(ht_lower, title_lower)
                     away_score = fuzz.partial_ratio(at_lower, title_lower)
 
-                    if home_score > 80 and away_score > 80:
+                    # Find MATCHTHRESHOLD
+                    MATCHTHRESHOLD = 70 if league == 'NCAAB' else 85  # Lower for NCAAB code mismatches
+                    if home_score >= MATCHTHRESHOLD and away_score >= MATCHTHRESHOLD:
                         fuzzy_matches.append(m)
 
                 if fuzzy_matches:
@@ -6964,7 +6966,9 @@ def _match_kalshi_market_impl(
                 score_h = fuzz_scorer(home_raw, title_lower)
                 score_a = fuzz_scorer(away_raw, title_lower)
 
-                if score_h >= 80 and score_a >= 80:
+                # Find MATCHTHRESHOLD
+                MATCHTHRESHOLD = 70 if league_name == 'NCAAB' else 85
+                if score_h >= MATCHTHRESHOLD and score_a >= MATCHTHRESHOLD:
                     team_hit = True
 
         if not (team_hit or code_hit):
@@ -7004,6 +7008,19 @@ def _match_kalshi_market_impl(
         best_score, best_winner = max(fallback_no_date, key=lambda kv: kv[0])
         best_reason = "fallback_no_date_token"
 
+    # After winner market search fails, FORCE spread/total (NCAAB ONLY)
+    if not best_winner and (spreads or totals) and league_name == 'NCAAB':
+        # Accept BEST spread or total market
+        if spreads:
+            best_winner = max(spreads, key=lambda m: m.get('volume', 0) or 0)
+            logger.info(f"NCAAB SPREAD FALLBACK: {best_winner.get('ticker')}")
+        elif totals:
+            best_winner = max(totals, key=lambda m: m.get('volume', 0) or 0)
+            logger.info(f"NCAAB TOTAL FALLBACK: {best_winner.get('ticker')}")
+
+        best_reason = "forced_spread_total_fallback"
+        best_score = 50.0  # Assign dummy score for fallback
+
     if best_winner:
         prob = winner_prob(best_winner)
         winner_result = {
@@ -7021,6 +7038,12 @@ def _match_kalshi_market_impl(
             "kalshi_yes_side": infer_yes_side(best_winner),
         }
     else:
+        # LOG MATCH FAILURES (~line 8700 before return None)
+        if not best_winner:
+            logger.warning(f"NCAAB NO MATCH: {game.get('away_team')}@{game.get('home_team')} | bestscore={best_score if 'best_score' in locals() else 0} | markets={len(kalshi_markets)}")
+            sample_titles = [m.get('title', '')[:50] for m in kalshi_markets[:3]]
+            logger.warning(f"Sample titles: {sample_titles}")
+
         no_reason = winner_reason_override or best_reason or "no_winner_market_for_game"
         winner_result = base_result(no_reason, "winner")
 
