@@ -12798,6 +12798,21 @@ with tab_master:
         df = enforce_winning_picks(df)
         df = df.copy()
 
+        # 2b. Sync consensus probs with flipped values (v96 fix)
+        # enforce_winning_picks updates spread_prob_adj/total_prob_adj but NOT
+        # SpreadConsensusProb/TotalConsensusProb. calculate_best_pick_metrics reads
+        # consensus probs first, so stale values cause final_probability < 50%.
+        if 'spread_prob_adj' in df.columns and 'SpreadConsensusProb' in df.columns:
+            mask = df['spread_prob_adj'] != df['SpreadConsensusProb']
+            if mask.any():
+                logger.info(f"Syncing {mask.sum()} SpreadConsensusProb values with flipped spread_prob_adj")
+                df.loc[mask, 'SpreadConsensusProb'] = df.loc[mask, 'spread_prob_adj']
+        if 'total_prob_adj' in df.columns and 'TotalConsensusProb' in df.columns:
+            mask = df['total_prob_adj'] != df['TotalConsensusProb']
+            if mask.any():
+                logger.info(f"Syncing {mask.sum()} TotalConsensusProb values with flipped total_prob_adj")
+                df.loc[mask, 'TotalConsensusProb'] = df.loc[mask, 'total_prob_adj']
+
         # 3. Enrich with ROI Metrics (Calculates Edge)
         df = enrich_picks_with_roi_metrics(df)
         df = df.copy()
@@ -12807,13 +12822,41 @@ with tab_master:
         logger.info("Applying Best Pick Metrics (Flip & Confidence) before Gemini...")
         df = calculate_best_pick_metrics(df)
 
-        # PIPELINE FIX: Drop stragglers < 50% and Recalculate Confidence
+        # PIPELINE FIX v96: Flip (not drop) stragglers < 50% and Recalculate Confidence
+        # v95 dropped entire games here, losing 5 games (3 NBA + 2 NCAAB).
+        # v96 flips remaining sub-50% picks to the opposite side with LOW confidence.
         if 'final_probability' in df.columns:
-             rows_before_drop = len(df)
-             df = df[df['final_probability'] >= 0.50]
-             rows_dropped = rows_before_drop - len(df)
-             if rows_dropped > 0:
-                 logger.warning(f"Dropped {rows_dropped} picks with probability < 50% (Flip Leak Fix)")
+             mask_below_50 = df['final_probability'] < 0.50
+             if mask_below_50.any():
+                 logger.warning(f"Flipping {mask_below_50.sum()} picks with probability < 50% (v96 Flip Leak Fix)")
+                 # Flip the probability
+                 df.loc[mask_below_50, 'final_probability'] = 1.0 - df.loc[mask_below_50, 'final_probability']
+                 # Flip the Best Overall Pick to opposite side
+                 for idx in df[mask_below_50].index:
+                     row = df.loc[idx]
+                     best_market = str(row.get('Best Overall Market', '')).lower()
+                     if 'spread' in best_market:
+                         home = str(row.get('Home', ''))
+                         away = str(row.get('Away', ''))
+                         current_pick = str(row.get('Best Overall Pick', ''))
+                         if home and home in current_pick:
+                             line_match = re.search(r'(-?\d+\.?\d*)$', current_pick)
+                             if line_match:
+                                 new_line = -float(line_match.group(1))
+                                 df.at[idx, 'Best Overall Pick'] = f"{away} {new_line:+g}"
+                         elif away and away in current_pick:
+                             line_match = re.search(r'(-?\d+\.?\d*)$', current_pick)
+                             if line_match:
+                                 new_line = -float(line_match.group(1))
+                                 df.at[idx, 'Best Overall Pick'] = f"{home} {new_line:+g}"
+                     elif 'total' in best_market:
+                         current_pick = str(row.get('Best Overall Pick', ''))
+                         if 'Over' in current_pick:
+                             df.at[idx, 'Best Overall Pick'] = current_pick.replace('Over', 'Under')
+                         elif 'Under' in current_pick:
+                             df.at[idx, 'Best Overall Pick'] = current_pick.replace('Under', 'Over')
+                 # Force LOW confidence on flipped picks
+                 df.loc[mask_below_50, 'Pick_Confidence'] = 'LOW'
 
              # Recalculate Confidence LAST
              logger.info("Recalculating Confidence on final probabilities...")
