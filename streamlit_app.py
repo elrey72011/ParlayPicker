@@ -5717,9 +5717,17 @@ def fetch_kalshi_markets(
 
     # NCAAB/NCAAF have far more markets per series than pro leagues (~3000+).
     # 5 pages × 200 = 1000 cap misses games beyond page 5.
+    # TASK 2: Force NCAAB to fetch full slate (20 pages)
     _ncaab_pages = 20   # 20 × 200 = 4,000 markets — covers full NCAAB slate
     _default_pages = 5
-    _pages_needed = _ncaab_pages if league_upper in ("NCAAB", "NCAAF") else _default_pages
+
+    # Explicitly check for NCAAB to ensure correct pagination
+    if league_upper == "NCAAB":
+        _pages_needed = 20
+    elif league_upper == "NCAAF":
+        _pages_needed = 20
+    else:
+        _pages_needed = _default_pages
 
     logger.info(f"KALSHI FETCH START - League: {league_upper}")
     logger.info(f"  Pagination: {_pages_needed} pages (expect ~{_pages_needed * 200} markets)")
@@ -5838,17 +5846,27 @@ def fetch_kalshi_markets(
 
             logger.info(f"  AFTER DATE FILTER: {len(filtered)} markets")
 
+            # --- TASK 4: Minimal Logging to Prove the Fix Took (NCAAB) ---
+            if league_upper == "NCAAB":
+                logger.info(
+                    "KALSHI NCAAB DEBUG: raw=%d, after_prefix=%d, after_date=%d",
+                    len(markets_raw), len(game_pool), len(filtered)
+                )
+
+            # --- TASK 3: Do NOT Let Filters Collapse NCAAB to Zero Markets ---
             if filtered:
                 game_pool = filtered
                 game_pool_counts = prefix_count(game_pool)
             elif game_pool:
+                # SAFETY: don’t wipe the pool
                 logger.warning(
-                    f"KALSHI DATE FILTER SKIPPED: Would remove all {len(game_pool)} markets. "
-                    f"Using unfiltered pool."
+                    "KALSHI NCAAB: date/prefix filter removed all %d markets, using unfiltered pool",
+                    len(game_pool),
                 )
                 st.session_state["kalshi_date_filter_warning"] = (
                     "date_token_filter_removed_all_markets; using unfiltered pool"
                 )
+                # keep original gamepool
 
         league_key = league_upper
         st.session_state.setdefault("kalshi_markets_raw", {})[league_key] = markets_raw
