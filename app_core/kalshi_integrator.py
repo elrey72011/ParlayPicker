@@ -1167,9 +1167,10 @@ def _match_via_events(
 
                 time_diff_hours = abs((dt - game_dt_utc).total_seconds()) / 3600.0
                 if time_diff_hours > TIME_WINDOW_HOURS:
-                    # Reduced penalty from -20 to -10 to allow matches with minor time differences
-                    # Perfect match (100) with penalty (100-10=90) still passes threshold (85)
-                    match_score -= 10 # Penalty for time mismatch
+                    if league != 'NCAAB':  # NO TIME PENALTY FOR NCAAB
+                        # Reduced penalty from -20 to -10 to allow matches with minor time differences
+                        # Perfect match (100) with penalty (100-10=90) still passes threshold (85)
+                        match_score -= 10 # Penalty for time mismatch
             except:
                 pass
 

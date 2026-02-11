@@ -6452,7 +6452,7 @@ def filter_kalshi_game_markets(
                     away_score = fuzz.partial_ratio(at_lower, title_lower)
 
                     # Find MATCHTHRESHOLD
-                    MATCHTHRESHOLD = 70 if league == 'NCAAB' else 85  # Lower for NCAAB code mismatches
+                    MATCHTHRESHOLD = 60 if league == 'NCAAB' else 85  # Ultra-low for NCAAB
                     if home_score >= MATCHTHRESHOLD and away_score >= MATCHTHRESHOLD:
                         fuzzy_matches.append(m)
 
@@ -6967,7 +6967,7 @@ def _match_kalshi_market_impl(
                 score_a = fuzz_scorer(away_raw, title_lower)
 
                 # Find MATCHTHRESHOLD
-                MATCHTHRESHOLD = 70 if league_name == 'NCAAB' else 85
+                MATCHTHRESHOLD = 60 if league_name == 'NCAAB' else 85  # Ultra-low for NCAAB
                 if score_h >= MATCHTHRESHOLD and score_a >= MATCHTHRESHOLD:
                     team_hit = True
 
@@ -7008,18 +7008,22 @@ def _match_kalshi_market_impl(
         best_score, best_winner = max(fallback_no_date, key=lambda kv: kv[0])
         best_reason = "fallback_no_date_token"
 
-    # After winner market search fails, FORCE spread/total (NCAAB ONLY)
+    # FORCE NCAAB MATCH if ANY spread/total found (User Request 2)
     if not best_winner and (spreads or totals) and league_name == 'NCAAB':
-        # Accept BEST spread or total market
         if spreads:
-            best_winner = max(spreads, key=lambda m: m.get('volume', 0) or 0)
-            logger.info(f"NCAAB SPREAD FALLBACK: {best_winner.get('ticker')}")
+            best_winner = sorted(spreads, key=lambda m: m.get('volume', 0) or 0, reverse=True)[0]
         elif totals:
-            best_winner = max(totals, key=lambda m: m.get('volume', 0) or 0)
-            logger.info(f"NCAAB TOTAL FALLBACK: {best_winner.get('ticker')}")
+            best_winner = sorted(totals, key=lambda m: m.get('volume', 0) or 0, reverse=True)[0]
+        else:
+            best_winner = kalshi_markets[0] # Should not happen given check above
+
+        # Log with requested format
+        away_tm = game.get('away_team', 'Away')
+        home_tm = game.get('home_team', 'Home')
+        logger.info(f"NCAAB FORCE MARKET: {best_winner.get('ticker')} {away_tm}@{home_tm}")
 
         best_reason = "forced_spread_total_fallback"
-        best_score = 50.0  # Assign dummy score for fallback
+        best_score = 60.0 # User requested MATCHTHRESHOLD=60, so we give it 60 to pass checks
 
     if best_winner:
         prob = winner_prob(best_winner)
