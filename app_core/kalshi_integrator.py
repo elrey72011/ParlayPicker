@@ -1102,6 +1102,22 @@ def _match_via_events(
         close_time = evt.get("close_time", "N/A")
         logger.info(f"      [{i+1}] {ticker} (closes: {close_time})")
 
+    # Capture available blocks for debug
+    available_blocks = []
+    if league == "NCAAB":
+        for evt in events[:50]: # Sample first 50
+            t = evt.get("ticker", "")
+            # Pattern: KXNCAAMBGAME-DATE[BLOCK]
+            if "-" in t:
+                parts = t.split("-")
+                if len(parts) > 1:
+                    suffix = parts[1] # 26FEB11USCOSU
+                    # Strip date (YYMONDD)
+                    match = re.match(r"^(\d{2}[A-Z]{3}\d{2})([A-Z0-9]+)$", suffix)
+                    if match:
+                        available_blocks.append(match.group(2))
+        logger.info(f"   Sample Available Blocks (NCAAB): {available_blocks[:15]}")
+
     best_event = None
     best_score = 0.0
     best_details = None
@@ -1498,6 +1514,14 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
     # DEBUG: Log generated codes
     logger.info(f"   Mapped Codes: away={mapped_away}, home={mapped_home}")
     logger.info(f"   Full Code Candidates: away={away_codes}, home={home_codes}")
+
+    # Log searching blocks for NCAAB debug
+    if league_key == "NCAAB":
+        searching_blocks = []
+        for ac in away_codes:
+            for hc in home_codes:
+                searching_blocks.append(f"{ac}{hc}")
+        logger.info(f"   Searching Blocks (NCAAB): {searching_blocks[:10]}...")
 
     # NEW: Try Event-Based Matching First
     if game_time and league_key in ["NBA", "NFL", "NCAAB", "NCAAF", "MLB", "NHL"]:
