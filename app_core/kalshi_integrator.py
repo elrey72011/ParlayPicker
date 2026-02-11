@@ -477,7 +477,7 @@ NCAAB_TEAM_CODE_MAP: Dict[str, str] = {
     "ARIZONA WILDCATS": "ARI",
     "HOUSTON": "HOU", "PURDUE": "PUR", "UCONN": "CON", "CONNECTICUT": "CON",
     "VILLANOVA": "VIL", "MICHIGAN STATE": "MSU", "TENNESSEE": "TEN", "ALABAMA": "ALA",
-    "AUBURN": "AUB", "TEXAS": "TEX", "VIRGINIA": "VIR", "ILLINOIS": "ILL",
+    "AUBURN": "AUB", "TEXAS": "TEX", "VIRGINIA": "UVA", "ILLINOIS": "ILL",
     "ARKANSAS": "ARK", "INDIANA": "IND", "MICHIGAN": "MIC", "OHIO STATE": "OSU",
     "FLORIDA": "FLO", "TEXAS TECH": "TTU", "WISCONSIN": "WIS", "MARYLAND": "MAR",
     "IOWA": "IOW", "XAVIER": "XAV", "CREIGHTON": "CRE", "MARQUETTE": "MAR",
@@ -502,7 +502,7 @@ NCAAB_TEAM_CODE_MAP: Dict[str, str] = {
     "OREGON": "ORE", "OREGON STATE": "OSU", "USC": "USC", "WASHINGTON": "WAS",
     "WASHINGTON STATE": "WSU", "WASHINGTON ST": "WSU", "WASHINGTON ST COUGARS": "WSU",
     "WASHINGTON STATE COUGARS": "WSU",
-    "COLORADO": "COL", "UTAH": "UTA", "ARIZONA STATE": "ASU",
+    "COLORADO": "COL", "UTAH": "UTAH", "ARIZONA STATE": "ASU",
     "CALIFORNIA": "CAL", "STANFORD": "STA", "RUTGERS": "RUT", "PENN STATE": "PSU",
     "MINNESOTA": "MIN", "NORTHWESTERN": "NOR", "NEBRASKA": "NEB",
     # New additions from logs/user
@@ -522,9 +522,9 @@ NCAAB_TEAM_CODE_MAP: Dict[str, str] = {
     "FORT WAYNE": "PFW",
     "PURDUE FORT WAYNE": "PFW",
     "IPFW": "PFW",
-    "MILWAUKEE": "MIL",
+    "MILWAUKEE": "MILW",
     "GREEN BAY": "GB",
-    "IUPUI": "IUP",
+    "IUPUI": "IUIN",
     "UIC": "UIC",
     "NORTHERN KENTUCKY": "NKU",
     "WRIGHT STATE": "WRI",
@@ -613,10 +613,27 @@ NCAAB_TEAM_CODE_MAP: Dict[str, str] = {
     "COLORADO ST": "CSU", "COLORADO STATE RAMS": "CSU", "COLORADO ST RAMS": "CSU",
     "DUKE BLUE DEVILS": "DUK",
     "NOTRE DAME FIGHTING IRISH": "UND",
-    "VIRGINIA CAVALIERS": "VIR",
+    "VIRGINIA CAVALIERS": "UVA",
     "OKLAHOMA ST": "OSU", "OKLAHOMA ST COWBOYS": "OSU", "OKLAHOMA STATE COWBOYS": "OSU",
     "HOUSTON COUGARS": "HOU",
     "ARIZONA ST": "ASU", "ARIZONA STATE SUN DEVILS": "ASU", "ARIZONA ST SUN DEVILS": "ASU",
+    # --- v96 team code fixes (Kalshi code corrections) ---
+    "UTAH UTES": "UTAH",
+    "FLORIDA ST SEMINOLES": "FSU",
+    "AIR FORCE": "AFA", "AIR FORCE FALCONS": "AFA",
+    "FRESNO ST": "FRES", "FRESNO STATE": "FRES", "FRESNO ST BULLDOGS": "FRES",
+    "FRESNO STATE BULLDOGS": "FRES", "FRESNO": "FRES",
+    "WESTERN ILLINOIS": "WIU", "WESTERN ILLINOIS LEATHERNECKS": "WIU",
+    "SAINT JOSEPH'S": "JOES", "ST JOSEPH'S": "JOES", "ST. JOSEPH'S": "JOES",
+    "SAINT JOSEPH'S HAWKS": "JOES", "ST JOSEPH'S HAWKS": "JOES",
+    "GEORGE WASHINGTON": "GW", "GW": "GW", "GW REVOLUTIONARIES": "GW",
+    "GEORGE WASHINGTON REVOLUTIONARIES": "GW",
+    "RHODE ISLAND": "URI", "RHODE ISLAND RAMS": "URI",
+    "GEORGE MASON": "GMU", "GEORGE MASON PATRIOTS": "GMU",
+    "MILWAUKEE PANTHERS": "MILW",
+    "IUPUI JAGUARS": "IUIN", "IU INDIANAPOLIS": "IUIN",
+    "IU INDIANAPOLIS JAGUARS": "IUIN",
+    "SAN JOSÉ ST": "SJSU", "SAN JOSÉ ST SPARTANS": "SJSU",
 }
 
 # Alias Maps: Kalshi Variant -> Canonical Internal Code
@@ -652,10 +669,20 @@ NCAAB_CODE_ALIASES: Dict[str, str] = {
     "VALP": "VAL",     # Valparaiso (Kalshi uses VALP, we use VAL)
     # Proactive aliases for common Kalshi variants (Feb 10 audit)
     "DUKE": "DUK",     # Kalshi likely uses DUKE, we use DUK
-    "UVA": "VIR",      # Kalshi likely uses UVA, we use VIR
     "ND": "UND",       # Notre Dame (Kalshi likely uses ND, we use UND)
     "NDAME": "UND",    # Notre Dame alternate
     "OKST": "OSU",     # Oklahoma St (Kalshi likely uses OKST, we use OSU)
+    # --- v96 reverse lookup aliases (old system codes → correct Kalshi codes) ---
+    "VIR": "UVA",      # Virginia: was VIR, Kalshi uses UVA
+    "UTA": "UTAH",     # Utah: was UTA, Kalshi uses UTAH
+    "SAN": "SJSU",     # San Jose St: heuristic generated SAN, Kalshi uses SJSU
+    "AIR": "AFA",      # Air Force: heuristic generated AIR, Kalshi uses AFA
+    "FRE": "FRES",     # Fresno St: heuristic generated FRE, Kalshi uses FRES
+    "SAI": "JOES",     # Saint Joseph's: heuristic generated SAI, Kalshi uses JOES
+    "GWR": "GW",       # GW Revolutionaries: heuristic generated GWR, Kalshi uses GW
+    "RHO": "URI",      # Rhode Island: heuristic generated RHO, Kalshi uses URI
+    "MIL": "MILW",     # Milwaukee: was MIL, Kalshi uses MILW
+    "IUP": "IUIN",     # IUPUI: was IUP, Kalshi uses IUIN
 }
 
 NCAAF_CODE_ALIASES: Dict[str, str] = {
