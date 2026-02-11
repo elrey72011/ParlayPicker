@@ -5706,11 +5706,10 @@ def fetch_kalshi_markets(
             if not dt_utc:
                 continue
             dt_local = dt_utc.astimezone(local_tz) if local_tz else dt_utc
-
-            # Widen window to ±2 days to handle timezone shifts and Kalshi inconsistencies
-            for offset in [-2, -1, 0, 1, 2]:
-                dt_adj = dt_local + timedelta(days=offset)
-                tokens.add(dt_adj.strftime("%y%b%d").upper())
+            base_date = dt_local.date()
+            for delta in [-2, -1, 0, 1, 2]:  # ±2 days
+                date_variant = base_date + timedelta(days=delta)
+                tokens.add(date_variant.strftime("%y%b%d").upper())
         return tokens
 
     wanted_tokens = date_tokens_from_commence(commence_times_utc)
@@ -5854,19 +5853,13 @@ def fetch_kalshi_markets(
                 )
 
             # --- TASK 3: Do NOT Let Filters Collapse NCAAB to Zero Markets ---
-            if filtered:
+            # SAFETY: Don't collapse to zero markets
+            if not filtered and game_pool:
+                logger.warning(f"KALSHI DATE FILTER SKIPPED: Would remove all {len(game_pool)} markets. Using unfiltered pool.")
+                st.session_state["kalshi_date_filter_warning"] = "skipped_zero_pool"
+            else:
                 game_pool = filtered
                 game_pool_counts = prefix_count(game_pool)
-            elif game_pool:
-                # SAFETY: don’t wipe the pool
-                logger.warning(
-                    "KALSHI NCAAB: date/prefix filter removed all %d markets, using unfiltered pool",
-                    len(game_pool),
-                )
-                st.session_state["kalshi_date_filter_warning"] = (
-                    "date_token_filter_removed_all_markets; using unfiltered pool"
-                )
-                # keep original gamepool
 
         league_key = league_upper
         st.session_state.setdefault("kalshi_markets_raw", {})[league_key] = markets_raw
