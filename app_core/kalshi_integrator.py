@@ -2195,6 +2195,9 @@ class KalshiIntegrator:
                 extra_params=params,
             )
 
+            # v104 FIX: Log per-series fetch count for pagination diagnostics
+            logger.info(f"KALSHI POOL: series={series} fetched={len(chunk)} markets (max_pages={max_pages})")
+
             # --- DEBUG LOGGING (Task 2) ---
             if chunk:
                 logger.info(f"Kalshi debug: fetched {len(chunk)} markets for series={series}")
