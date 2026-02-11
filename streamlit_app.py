@@ -1044,10 +1044,14 @@ def map_kalshi_prob_for_pick(
         return None
     if not kalshi_yes_side or not pick_side:
         return prob
-    pick_norm = str(pick_side).lower()
-    yes_norm = str(kalshi_yes_side).lower()
+
+    # Robust normalization using TeamNameMatcher
+    pick_norm = TeamNameMatcher.normalize(str(pick_side))
+    yes_norm = TeamNameMatcher.normalize(str(kalshi_yes_side))
+
     if yes_norm == pick_norm:
         return prob
+
     return 1.0 - prob
 
 
@@ -10079,6 +10083,9 @@ with tab_master:
                 # map_kalshi_prob_for_pick() inside compute_final_probability().
                 spread_prob_pick_kalshi = spread_kalshi_prob_for_pick
                 spread_prob_alt_kalshi = (1.0 - spread_kalshi_prob_for_pick) if spread_kalshi_prob_for_pick is not None else None
+
+                # FIX (Bug 1): Explicitly calculate spread_prob_pick_final using the PICK side Kalshi prob
+                spread_prob_pick_final = blend_kalshi_market(spread_prob_pick_kalshi, spread_prob_pick_market)
                 if spread_pick_team in {home, away}:
                     spread_alt_team = away if spread_pick_team == home else home
                     spread_alt_line = home_spread_point if spread_pick_team == away else away_spread_point
@@ -10155,6 +10162,9 @@ with tab_master:
                 # display showed K:5% while the final probability was ~77%.
                 total_prob_pick_kalshi = total_kalshi_prob_for_pick
                 total_prob_alt_kalshi = (1.0 - total_kalshi_prob_for_pick) if total_kalshi_prob_for_pick is not None else None
+
+                # FIX (Bug 1): Explicitly calculate total_prob_pick_final using the PICK side Kalshi prob
+                total_prob_pick_final = blend_kalshi_market(total_prob_pick_kalshi, total_prob_pick_market)
                 if total_pick_side in {"Over", "Under"}:
                     total_alt_side = "Under" if total_pick_side == "Over" else "Over"
                     total_alt_label = f"{total_alt_side} {total_line}" if total_line is not None else total_alt_side
