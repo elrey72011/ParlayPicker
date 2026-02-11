@@ -645,7 +645,7 @@ MAX_SENTIMENT_TEAMS_PER_RUN = 200
 NEWSAPI_COOLDOWN_HOURS = 12
 REDDIT_CACHE_TTL = timedelta(hours=12)
 DECISION_TRACE_SAMPLE_LEAGUES = {"NFL", "NBA", "NCAAB"}
-MAX_GEMINI_CALLS_PER_RUN = 25
+MAX_GEMINI_CALLS_PER_RUN = 40  # v99 FIX (Bug 6): Increased from 25 to handle larger game slates (68+ games)
 
 # INIT ONCE at app startup
 if "gemini_calls_made" not in st.session_state:
@@ -1144,10 +1144,23 @@ def compute_final_probability(
     p_kalshi = 0.0
     kalshi_is_available = False
     if kalshi_prob_for_pick is not None:
-        # Validate Kalshi probability against implied odds
+        # v99 FIX (Bug 3): Validate using BOTH side interpretations.
+        # If yes_side was wrongly inferred, kalshi_prob_for_pick is on the wrong side.
+        # Compare both kalshi_prob and (1-kalshi_prob) against implied; use whichever
+        # is closer. This auto-corrects wrong-side mapping and prevents false rejections.
         kalshi_validated = True
         if implied_prob is not None:
-            delta = abs(kalshi_prob_for_pick - implied_prob)
+            delta_as_is = abs(kalshi_prob_for_pick - implied_prob)
+            delta_flipped = abs((1.0 - kalshi_prob_for_pick) - implied_prob)
+
+            if delta_flipped < delta_as_is:
+                # The flipped side is closer to implied — yes_side was likely wrong
+                warnings.append(f"kalshi_side_auto_corrected(raw_delta={delta_as_is:.2f},flipped_delta={delta_flipped:.2f})")
+                kalshi_prob_for_pick = 1.0 - kalshi_prob_for_pick
+                delta = delta_flipped
+            else:
+                delta = delta_as_is
+
             if delta > 0.40:  # 40% threshold - reject extreme disagreements
                 # Extreme disagreement likely means wrong Kalshi line was matched
                 kalshi_validated = False
@@ -9731,6 +9744,16 @@ with tab_master:
                 kalshi_prob_spread = safe_float(kalshi_spread.get("kalshi_prob"))
                 kalshi_prob_total = safe_float(kalshi_total.get("kalshi_prob"))
 
+                # v99 FIX (Bug 2): Treat illiquid Kalshi markets as no-data.
+                # Kalshi prob <= 0.02 means no trades / illiquid — using it as a real
+                # probability is wrong (0.000 becomes 1.000 after pick-side flip).
+                if kalshi_prob_spread is not None and kalshi_prob_spread <= 0.02:
+                    logger.info(f"⚠️ KALSHI SPREAD ILLIQUID for {home} vs {away}: prob={kalshi_prob_spread:.3f} ≤ 0.02, treating as no-data")
+                    kalshi_prob_spread = None
+                if kalshi_prob_total is not None and kalshi_prob_total <= 0.02:
+                    logger.info(f"⚠️ KALSHI TOTAL ILLIQUID for {home} vs {away}: prob={kalshi_prob_total:.3f} ≤ 0.02, treating as no-data")
+                    kalshi_prob_total = None
+
                 # v98 FIX (Bug B): Pre-compute pick-side Kalshi probabilities BEFORE
                 # passing to compute_final_probability. This ensures logs show the
                 # correct pick-side value and avoids any side-mismatch issues.
@@ -12204,16 +12227,18 @@ with tab_master:
                     temp = pd.concat([temp, pd.DataFrame(new_data, index=df.index)], axis=1).copy()
 
                     # 3. Best Overall Pick Logic
-                    # FIX: Compare probabilities directly (highest wins), not by edge
-                    # Use spread_prob_pick_final and total_prob_pick_final for comparison
+                    # v99 FIX (Bug 4): Use SpreadConsensusProb/TotalConsensusProb for comparison.
+                    # Previously used spread_prob_pick_final/total_prob_pick_final which may differ
+                    # from consensus probs (due to TheOver delta clamping differences).
+                    # This caused Best Overall Market="Spread" but Best Overall Prob=TotalConsensusProb.
                     best_pick = []
                     best_prob = []
                     best_type = []
 
                     for idx, row in temp.iterrows():
-                        # Use the final probabilities shown in the pick strings for comparison
-                        s_final_prob = safe_float(row.get("spread_prob_pick_final")) or 0.0
-                        t_final_prob = safe_float(row.get("total_prob_pick_final")) or 0.0
+                        # Use consensus probabilities for comparison (what user sees)
+                        s_final_prob = safe_float(row.get("SpreadConsensusProb")) or safe_float(row.get("spread_prob_pick_final")) or 0.0
+                        t_final_prob = safe_float(row.get("TotalConsensusProb")) or safe_float(row.get("total_prob_pick_final")) or 0.0
 
                         s_pick = row.get("Spread & Pick")
                         t_pick = row.get("Total & Pick")

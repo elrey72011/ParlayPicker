@@ -48,9 +48,10 @@ def calculate_consensus_for_row(row: pd.Series, market_type: str = "Spread") -> 
         if p_market is None: p_market = _get_f("spread_prob_market_based")
         if p_market is None: p_market = _get_f("spread_prob_market")
 
-        # Kalshi
+        # Kalshi — v99 FIX (Bug 1): ONLY use pick-side-adjusted Kalshi probability.
+        # NEVER fall back to raw kalshi_prob_spread which is on the YES-contract side,
+        # not the pick side. Using the raw value produces wrong-side blending.
         p_kalshi = _get_f("spread_prob_pick_kalshi")
-        if p_kalshi is None: p_kalshi = _get_f("kalshi_prob_spread")
 
         # AI
         p_model = _get_f("model_spread_prob")
@@ -64,9 +65,9 @@ def calculate_consensus_for_row(row: pd.Series, market_type: str = "Spread") -> 
         if p_market is None: p_market = _get_f("total_prob_market_based")
         if p_market is None: p_market = _get_f("total_prob_market")
 
-        # Kalshi
+        # Kalshi — v99 FIX (Bug 1): ONLY use pick-side-adjusted Kalshi probability.
+        # NEVER fall back to raw kalshi_prob_total which is on the YES-contract side.
         p_kalshi = _get_f("total_prob_pick_kalshi")
-        if p_kalshi is None: p_kalshi = _get_f("kalshi_prob_total")
 
         # AI
         p_model = _get_f("model_total_prob")
