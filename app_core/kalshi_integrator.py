@@ -2155,7 +2155,7 @@ class KalshiIntegrator:
         league_key = (league or "").upper()
         prefix = LEAGUE_SERIES_MAP.get(league_key)
         normalized_status = normalize_status(status)
-        cache_key = f"{league_key}:{normalized_status or 'any'}"
+        cache_key = f"{league_key}:{normalized_status or 'any'}:{max_pages}"
         now = time.time()
         cached = self._league_cache.get(cache_key)
         if cached and (now - cached.get("ts", 0)) < self._league_cache_ttl:
