@@ -5690,7 +5690,7 @@ def fetch_kalshi_markets(
         }
 
     def date_tokens_from_commence(commence_list: Optional[List[str]]) -> set:
-        """Convert commence_time ISO strings -> Kalshi tokens like 25DEC17 using app local date."""
+        """Convert commence_time ISO strings -> Kalshi tokens like 25DEC17 using app local date (±2 days)."""
         if not commence_list:
             return set()
 
@@ -5706,7 +5706,11 @@ def fetch_kalshi_markets(
             if not dt_utc:
                 continue
             dt_local = dt_utc.astimezone(local_tz) if local_tz else dt_utc
-            tokens.add(dt_local.strftime("%y%b%d").upper())
+
+            # Widen window to ±2 days to handle timezone shifts and Kalshi inconsistencies
+            for offset in [-2, -1, 0, 1, 2]:
+                dt_adj = dt_local + timedelta(days=offset)
+                tokens.add(dt_adj.strftime("%y%b%d").upper())
         return tokens
 
     wanted_tokens = date_tokens_from_commence(commence_times_utc)
@@ -5717,12 +5721,16 @@ def fetch_kalshi_markets(
     _default_pages = 5
     _pages_needed = _ncaab_pages if league_upper in ("NCAAB", "NCAAF") else _default_pages
 
+    logger.info(f"KALSHI FETCH START - League: {league_upper}")
+    logger.info(f"  Pagination: {_pages_needed} pages (expect ~{_pages_needed * 200} markets)")
+
     try:
         markets_raw = kalshi_integrator.get_league_markets(
             selected_league,
             min_prefix_hits=20,
             max_pages=_pages_needed,
         )
+        logger.info(f"  RAW FETCH: {len(markets_raw)} markets retrieved")
         last_params = kalshi_integrator.last_request_params or {}
         st.session_state["kalshi_last_request_params"] = last_params
         st.session_state["kalshi_last_request_status_included"] = "status" in last_params
@@ -5818,17 +5826,26 @@ def fetch_kalshi_markets(
         total_count = len([m for m in game_pool if "TOTAL" in ticker_upper(m)])
         spread_count = len([m for m in game_pool if "SPREAD" in ticker_upper(m)])
         logger.info(f"🔍 KALSHI POOL BREAKDOWN [{league_upper}]: GAME={game_count}, TOTAL={total_count}, SPREAD={spread_count}")
+        logger.info(f"  AFTER PREFIX FILTER: {len(game_pool)} markets")
 
         if wanted_tokens:
+            logger.info(f"  Date tokens ({len(wanted_tokens)}): {sorted(list(wanted_tokens))[:10]}...")
             filtered = []
             for m in game_pool:
                 t = ticker_upper(m)
                 if any(tok in t for tok in wanted_tokens):
                     filtered.append(m)
+
+            logger.info(f"  AFTER DATE FILTER: {len(filtered)} markets")
+
             if filtered:
                 game_pool = filtered
                 game_pool_counts = prefix_count(game_pool)
             elif game_pool:
+                logger.warning(
+                    f"KALSHI DATE FILTER SKIPPED: Would remove all {len(game_pool)} markets. "
+                    f"Using unfiltered pool."
+                )
                 st.session_state["kalshi_date_filter_warning"] = (
                     "date_token_filter_removed_all_markets; using unfiltered pool"
                 )
