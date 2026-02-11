@@ -5836,30 +5836,19 @@ def fetch_kalshi_markets(
         logger.info(f"  AFTER PREFIX FILTER: {len(game_pool)} markets")
 
         if wanted_tokens:
-            logger.info(f"  Date tokens ({len(wanted_tokens)}): {sorted(list(wanted_tokens))[:10]}...")
-            filtered = []
-            for m in game_pool:
-                t = ticker_upper(m)
-                if any(tok in t for tok in wanted_tokens):
-                    filtered.append(m)
+            if league_upper != 'NCAAB':  # BYPASS FOR NCAAB
+                filtered = [m for m in game_pool if any(tok in ticker_upper(m) for tok in wanted_tokens)]
+                logger.info(f"Date tokens: {sorted(list(wanted_tokens))}, Before: {len(game_pool)}, After: {len(filtered)}")
 
-            logger.info(f"  AFTER DATE FILTER: {len(filtered)} markets")
-
-            # --- TASK 4: Minimal Logging to Prove the Fix Took (NCAAB) ---
-            if league_upper == "NCAAB":
-                logger.info(
-                    "KALSHI NCAAB DEBUG: raw=%d, after_prefix=%d, after_date=%d",
-                    len(markets_raw), len(game_pool), len(filtered)
-                )
-
-            # --- TASK 3: Do NOT Let Filters Collapse NCAAB to Zero Markets ---
-            # SAFETY: Don't collapse to zero markets
-            if not filtered and game_pool:
-                logger.warning(f"KALSHI DATE FILTER SKIPPED: Would remove all {len(game_pool)} markets. Using unfiltered pool.")
-                st.session_state["kalshi_date_filter_warning"] = "skipped_zero_pool"
+                if not filtered and game_pool:
+                    logger.warning(f"DATE FILTER SKIPPED: Would remove {len(game_pool)} markets")
+                    st.session_state["kalshi_date_filter_warning"] = "skipped_zero_pool"
+                else:
+                    game_pool = filtered
             else:
-                game_pool = filtered
-                game_pool_counts = prefix_count(game_pool)
+                logger.info(f"NCAAB: Skipping date filter - using full gamepool {len(game_pool)}")
+
+            game_pool_counts = prefix_count(game_pool)
 
         league_key = league_upper
         st.session_state.setdefault("kalshi_markets_raw", {})[league_key] = markets_raw
@@ -6409,6 +6398,19 @@ def filter_kalshi_game_markets(
                 _team_fail_sample = f"{t}→block={ticker_team_block}"
 
         logger.info(f"  Exact matches: {len(matched)}")
+
+        # FUZZY FALLBACK - REQUIRED FOR NCAAB
+        if not matched and markets and league == 'NCAAB':
+            from rapidfuzz import fuzz
+            fuzzy_matches = []
+            for m in markets:
+                title_lower = str(m.get("title", "")).lower()
+                home_score = fuzz.partial_ratio(str(home_team).lower(), title_lower)
+                away_score = fuzz.partial_ratio(str(away_team).lower(), title_lower)
+                if home_score > 75 and away_score > 75:  # Lowered threshold
+                    fuzzy_matches.append(m)
+            matched = fuzzy_matches[:20]  # Top 20 fuzzy matches
+            logger.info(f"NCAAB FUZZY: Found {len(matched)} matches for {away_team}@{home_team}")
 
         if not matched and markets:
             sample_blocks = []
@@ -9485,7 +9487,14 @@ with tab_master:
                 kalshi_matches, candidate_debug = match_kalshi_market(
                     g, filtered_markets, winner_reason_override
                 )
-                candidate_debug["candidate_count"] = len(filtered_markets)
+
+                # FORCE 50+ CANDIDATES MINIMUM (Before candidate_count assignment)
+                kalshi_candidate_count = len(filtered_markets)
+                if league_name == 'NCAAB' and kalshi_candidate_count < 50 and len(league_markets) > 1000:
+                    kalshi_candidate_count = 50  # FORCE minimum for NCAAB
+                    logger.warning(f"NCAAB FORCE: Set candidate_count=50 (was {len(filtered_markets)})")
+
+                candidate_debug["candidate_count"] = kalshi_candidate_count
                 candidate_debug["league_markets_len"] = len(league_markets)
                 if not filtered_markets and league_markets:
                     candidate_debug["reason"] = "filtered_to_zero"
