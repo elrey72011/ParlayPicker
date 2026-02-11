@@ -2126,7 +2126,7 @@ class KalshiIntegrator:
         *,
         status: Optional[str] = None,
         min_prefix_hits: int = 200,
-        max_pages: int = 5,
+        max_pages: int = 50,
     ) -> List[Dict[str, Any]]:
         league_key = (league or "").upper()
         prefix = LEAGUE_SERIES_MAP.get(league_key)
