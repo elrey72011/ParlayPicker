@@ -6363,6 +6363,12 @@ def filter_kalshi_game_markets(
                 if ac and hc:
                     expected_blocks.add(ac + hc)
 
+        logger.info(f"KALSHI FILTER DEBUG - {away_team} @ {home_team}")
+        logger.info(f"  Expected codes: away={game_away_code}, home={game_home_code}")
+        logger.info(f"  Away variants: {away_variants}, Home variants: {home_variants}")
+        logger.info(f"  Expected blocks: {list(expected_blocks)[:5]}...")  # Sample
+        logger.info(f"  Markets available: {len(markets or [])}")
+
         logger.info(
             f"🔍 KALSHI FILTER [EXACT]: {away_team} @ {home_team} | "
             f"codes=({game_away_code}@{game_home_code}) | "
@@ -6401,6 +6407,40 @@ def filter_kalshi_game_markets(
                 matched.append(m)
             elif _team_fail_sample is None:
                 _team_fail_sample = f"{t}→block={ticker_team_block}"
+
+        logger.info(f"  Exact matches: {len(matched)}")
+
+        if not matched and markets:
+            sample_blocks = []
+            for m in markets[:10]:
+                 t = str(m.get("event_ticker") or m.get("ticker") or "").upper()
+                 match = _TICKER_SUFFIX_RE.search(t)
+                 if match:
+                     sample_blocks.append(match.group(2))
+                 else:
+                     sample_blocks.append("n/a")
+            logger.warning(f"  NO EXACT MATCH - Sample Kalshi blocks: {sample_blocks}")
+
+        # FUZZY FALLBACK if exact fails
+        if not matched and markets:
+            if fuzz:
+                fuzzy_matches = []
+                ht_lower = str(home_team).lower()
+                at_lower = str(away_team).lower()
+
+                for m in markets:
+                    title_lower = str(m.get("title", "")).lower()
+                    home_score = fuzz.partial_ratio(ht_lower, title_lower)
+                    away_score = fuzz.partial_ratio(at_lower, title_lower)
+
+                    if home_score > 80 and away_score > 80:
+                        fuzzy_matches.append(m)
+
+                if fuzzy_matches:
+                    matched = fuzzy_matches[:10]  # Top 10 fuzzy matches
+                    logger.info(f"Fuzzy fallback found {len(matched)} matches (away={away_team} home={home_team})")
+            else:
+                logger.warning("Rapidfuzz not available, skipping fuzzy fallback.")
 
         if not matched and expected_blocks:
             logger.warning(
