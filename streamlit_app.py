@@ -1807,6 +1807,10 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
         s_prob = _safe("SpreadConsensusProb")
         if s_prob is None: s_prob = _safe("spread_prob_adj")
         if s_prob is None: s_prob = _safe("spread_prob")
+        # Ensure we use the winning-side probability (post-flip)
+        # This prevents champion selection from comparing pre-flip sub-50% values
+        if s_prob is not None and s_prob < 0.50:
+            s_prob = 1.0 - s_prob
         s_edge = _safe("spread_edge") or 0.0
 
         # Total
@@ -1814,6 +1818,9 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
         t_prob = _safe("TotalConsensusProb")
         if t_prob is None: t_prob = _safe("total_prob_adj")
         if t_prob is None: t_prob = _safe("total_prob")
+        # Ensure we use the winning-side probability (post-flip)
+        if t_prob is not None and t_prob < 0.50:
+            t_prob = 1.0 - t_prob
         t_edge = _safe("total_edge") or 0.0
 
         # Moneyline
@@ -6964,10 +6971,35 @@ def _match_kalshi_market_impl(
             else:
                 yes_side_inferred = "over"  # Default for totals (YES = Over is standard)
         else:
-            # For winner/spread markets, use team code inference
-            yes_side_inferred = infer_yes_side(chosen)
-            if not yes_side_inferred:
-                yes_side_inferred = "home"
+            # For winner/spread markets, parse team code from individual contract ticker suffix.
+            # Individual tickers look like: KXNBASPREAD-26FEB10INDNYK-NYK27
+            # The suffix after the last dash (NYK27) contains the team code for the YES side.
+            # Strip trailing digits/dots to get the team code (NYK).
+            individual_ticker = str(chosen.get("ticker") or "").upper()
+            suffix = individual_ticker.rsplit("-", 1)[-1] if "-" in individual_ticker else ""
+            suffix_team = re.sub(r'[\d.]+$', '', suffix).strip()
+
+            if suffix_team and len(suffix_team) >= 2:
+                home_codes_upper = {c.upper() for c in (home_code_candidates or [])}
+                away_codes_upper = {c.upper() for c in (away_code_candidates or [])}
+                if suffix_team in home_codes_upper:
+                    yes_side_inferred = "home"
+                    logger.info(f"  → yes_side=home from ticker suffix '{suffix_team}' matching home_codes={home_codes_upper}")
+                elif suffix_team in away_codes_upper:
+                    yes_side_inferred = "away"
+                    logger.info(f"  → yes_side=away from ticker suffix '{suffix_team}' matching away_codes={away_codes_upper}")
+                else:
+                    # Suffix didn't match known codes, fall back to legacy inference
+                    yes_side_inferred = infer_yes_side(chosen)
+                    if not yes_side_inferred:
+                        yes_side_inferred = "home"
+                    logger.info(f"  → yes_side={yes_side_inferred} (suffix '{suffix_team}' unmatched, legacy fallback)")
+            else:
+                # No parseable suffix, fall back to legacy inference
+                yes_side_inferred = infer_yes_side(chosen)
+                if not yes_side_inferred:
+                    yes_side_inferred = "home"
+                logger.info(f"  → yes_side={yes_side_inferred} (no suffix parsed from '{individual_ticker}', legacy fallback)")
 
         # Add debug logging - use info level for visibility
         prob_str = f"{prob:.3f}" if prob else "N/A"
@@ -12822,6 +12854,19 @@ with tab_master:
         logger.info("Applying Best Pick Metrics (Flip & Confidence) before Gemini...")
         df = calculate_best_pick_metrics(df)
 
+        # v97 FIX: Sync final_probability and Best Overall columns with calculate_best_pick_metrics output.
+        # calculate_best_pick_metrics outputs 'final_prob', 'best_pick', 'best_pick_type' which use
+        # post-flip probabilities. But downstream code (Flip Leak Fix, calculate_confidence) reads
+        # 'final_probability' and 'Best Overall Prob/Pick/Market' which were set earlier with pre-flip values.
+        # Without this sync, champion selection picks the correct market but the result never propagates.
+        if 'final_prob' in df.columns:
+            df['final_probability'] = df['final_prob']
+            df['Best Overall Prob'] = df['final_prob']
+        if 'best_pick' in df.columns:
+            df['Best Overall Pick'] = df['best_pick']
+        if 'best_pick_type' in df.columns:
+            df['Best Overall Market'] = df['best_pick_type']
+
         # PIPELINE FIX v96: Flip (not drop) stragglers < 50% and Recalculate Confidence
         # v95 dropped entire games here, losing 5 games (3 NBA + 2 NCAAB).
         # v96 flips remaining sub-50% picks to the opposite side with LOW confidence.
@@ -14406,6 +14451,15 @@ if should_display:
 
         # Enrich with Best Picks for Export/Display
         df_master_view = calculate_best_pick_metrics(df_master_view)
+
+        # v97 FIX: Sync final_probability and Best Overall columns in Master Analysis view
+        if 'final_prob' in df_master_view.columns:
+            df_master_view['final_probability'] = df_master_view['final_prob']
+            df_master_view['Best Overall Prob'] = df_master_view['final_prob']
+        if 'best_pick' in df_master_view.columns:
+            df_master_view['Best Overall Pick'] = df_master_view['best_pick']
+        if 'best_pick_type' in df_master_view.columns:
+            df_master_view['Best Overall Market'] = df_master_view['best_pick_type']
 
         # --- MERGE GAME SUMMARY COLUMNS ---
         # Fix Issue #6: Always attempt summary merge even if Gemini is disabled
