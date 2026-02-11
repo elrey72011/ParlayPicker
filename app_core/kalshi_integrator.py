@@ -107,7 +107,7 @@ LEAGUE_SERIES_MAP: Dict[str, Any] = {
     "MLB": ["KXMLBGAME", "KXMLBTOTAL", "KXMLBSPREAD", "KXMLB"],
     "NHL": ["KXNHLGAME", "KXNHLTOTAL", "KXNHLSPREAD", "KXNHL"],
     "NCAAF": ["KXNCAAFGAME", "KXNCAAFTOTAL", "KXNCAAFSPREAD", "KXNCAAF"],
-    "NCAAB": ["KXNCAAMBGAME", "KXNCAAMBTOTAL", "KXNCAAMBSPREAD", "KXNCAABGAME", "KXNCAAB"],
+    "NCAAB": ["KXNCAAMBGAME", "KXNCAAMB", "KXNCAAMBTOTAL", "KXNCAAMBSPREAD"],
 }
 
 
@@ -877,10 +877,10 @@ def _extract_market_type(title: str, ticker: str, subtitle: str = "", market: Di
         return "total"
 
     # Task 2 Fix: Check for explicit league-specific total/spread keywords in ticker
-    # e.g. KXNCAABTOTAL, KXNCAABSPREAD
-    if "KXNCAABTOTAL" in tick or "KXNCAAFTOTAL" in tick or "KXMLBTOTAL" in tick or "KXNHLTOTAL" in tick:
+    # e.g. KXNCAAMBTOTAL, KXNCAAMBSPREAD
+    if "KXNCAAMBTOTAL" in tick or "KXNCAAFTOTAL" in tick or "KXMLBTOTAL" in tick or "KXNHLTOTAL" in tick:
         return "total"
-    if "KXNCAABSPREAD" in tick or "KXNCAAFSPREAD" in tick or "KXMLBSPREAD" in tick or "KXNHLSPREAD" in tick:
+    if "KXNCAAMBSPREAD" in tick or "KXNCAAFSPREAD" in tick or "KXMLBSPREAD" in tick or "KXNHLSPREAD" in tick:
         return "spread"
 
     # 3. Moneyline/Winner detection

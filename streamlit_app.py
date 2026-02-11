@@ -1158,23 +1158,15 @@ def compute_final_probability(
     p_kalshi = 0.0
     kalshi_is_available = False
     if kalshi_prob_for_pick is not None:
-        # v99 FIX (Bug 3): Validate using BOTH side interpretations.
-        # If yes_side was wrongly inferred, kalshi_prob_for_pick is on the wrong side.
-        # Compare both kalshi_prob and (1-kalshi_prob) against implied; use whichever
-        # is closer. This auto-corrects wrong-side mapping and prevents false rejections.
+        # v102 FIX: Removed auto-correction that flipped kalshi_prob_for_pick when
+        # the flipped value was closer to implied_prob. That logic systematically
+        # inverted Kalshi's independent signal whenever Kalshi and the market
+        # disagreed about which side of 50% the probability fell on, causing
+        # the blend to use the ALT-side Kalshi prob instead of the PICK-side.
+        # Now we trust map_kalshi_prob_for_pick() and only reject on extreme delta.
         kalshi_validated = True
         if implied_prob is not None:
-            delta_as_is = abs(kalshi_prob_for_pick - implied_prob)
-            delta_flipped = abs((1.0 - kalshi_prob_for_pick) - implied_prob)
-
-            if delta_flipped < delta_as_is:
-                # The flipped side is closer to implied — yes_side was likely wrong
-                warnings.append(f"kalshi_side_auto_corrected(raw_delta={delta_as_is:.2f},flipped_delta={delta_flipped:.2f})")
-                kalshi_prob_for_pick = 1.0 - kalshi_prob_for_pick
-                delta = delta_flipped
-            else:
-                delta = delta_as_is
-
+            delta = abs(kalshi_prob_for_pick - implied_prob)
             if delta > 0.40:  # 40% threshold - reject extreme disagreements
                 # Extreme disagreement likely means wrong Kalshi line was matched
                 kalshi_validated = False
