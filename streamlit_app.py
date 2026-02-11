@@ -6371,6 +6371,20 @@ def filter_kalshi_game_markets(
         # Use [A-Z]+ (letters only) to stop at first non-letter.
         _TICKER_SUFFIX_RE = re.compile(r"-(\d{2}[A-Z]{3}\d{2})([A-Z]{3,})")
 
+        def tickerteamblock(m):
+            t = str(m.get("event_ticker") or m.get("ticker") or "").upper()
+            match = _TICKER_SUFFIX_RE.search(t)
+            if match:
+                return match.group(2)
+            return None
+
+        # NEW LOGGING (Requested)
+        logger.info(f"NCAAB DEBUG {away_team}@{home_team}")
+        logger.info(f"  Codes: away={away_variants}, home={home_variants}")
+        logger.info(f"  Expected blocks: {list(expected_blocks)[:5]}")
+        sample_blocks = [tickerteamblock(m) for m in (markets or [])[:10]]
+        logger.info(f"  Kalshi blocks: {sample_blocks}")
+
         matched: List[Dict[str, Any]] = []
         _regex_fail_count = 0
         _date_fail_count = 0
@@ -6399,18 +6413,20 @@ def filter_kalshi_game_markets(
 
         logger.info(f"  Exact matches: {len(matched)}")
 
-        # FUZZY FALLBACK - REQUIRED FOR NCAAB
-        if not matched and markets and league == 'NCAAB':
+        # FUZZY FALLBACK - NCAAB ONLY (NEW)
+        if len(matched) == 0 and league == 'NCAAB' and len(markets or []) > 10:
             from rapidfuzz import fuzz
-            fuzzy_matches = []
-            for m in markets:
-                title_lower = str(m.get("title", "")).lower()
-                home_score = fuzz.partial_ratio(str(home_team).lower(), title_lower)
-                away_score = fuzz.partial_ratio(str(away_team).lower(), title_lower)
-                if home_score > 75 and away_score > 75:  # Lowered threshold
-                    fuzzy_matches.append(m)
-            matched = fuzzy_matches[:20]  # Top 20 fuzzy matches
-            logger.info(f"NCAAB FUZZY: Found {len(matched)} matches for {away_team}@{home_team}")
+            fuzzy = []
+            for m in markets or []:
+                title = str(m.get('title', '')).lower()
+                # Use safe strings for teams
+                h_score = fuzz.partial_ratio(str(home_team).lower(), title)
+                a_score = fuzz.partial_ratio(str(away_team).lower(), title)
+                if h_score > 70 and a_score > 70:  # Team names in title
+                    fuzzy.append(m)
+            matched = fuzzy[:20]  # Top 20 fuzzy
+            logger.info(f"NCAAB FUZZY MATCH {away_team}@{home_team}: {len(matched)} found")
+            logger.info(f"{away_team}@{home_team}: exact=0, fuzzy={len(matched)}")
 
         if not matched and markets:
             sample_blocks = []
