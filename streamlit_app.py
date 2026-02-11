@@ -94,10 +94,6 @@ from app_core.weights_config import (
     ML_MODEL_WEIGHT,
     THEOVER_WEIGHT,
     SENTIMENT_WEIGHT,
-    FALLBACK_MARKET_WEIGHT,
-    FALLBACK_ML_WEIGHT,
-    FALLBACK_THEOVER_WEIGHT,
-    FALLBACK_SENTIMENT_WEIGHT,
 )
 
 from app_core.consensus_ingest import enrich_with_consensus
@@ -565,7 +561,13 @@ def calculate_pick_quality_metrics(row: Dict[str, Any]) -> Dict[str, Any]:
     # Extract probabilities
     final_prob = safe_float(row.get("final_probability") or row.get("spread_prob_pick_final") or row.get("total_prob_pick_final"))
     market_prob = safe_float(row.get("spread_prob_pick_market") or row.get("total_prob_pick_market") or row.get("Implied_Prob"))
-    kalshi_prob = safe_float(row.get("spread_prob_pick_kalshi") or row.get("total_prob_pick_kalshi") or row.get("kalshi_prob_for_pick"))
+    # v98 FIX: Use proper None check to avoid 0.0 falsy issue with `or`
+    _kp = row.get("spread_prob_pick_kalshi")
+    if _kp is None:
+        _kp = row.get("total_prob_pick_kalshi")
+    if _kp is None:
+        _kp = row.get("kalshi_prob_for_pick")
+    kalshi_prob = safe_float(_kp)
     model_prob = safe_float(row.get("model_spread_prob") or row.get("model_total_prob") or row.get("AI_Prob"))
     sentiment_score = safe_float(row.get("sentiment_score"))
     pick_side = row.get("Pick") or row.get("spread_pick_team") or row.get("total_pick_side")
@@ -1110,24 +1112,14 @@ def compute_final_probability(
     warnings: List[str] = []
     kalshi_prob_for_pick = map_kalshi_prob_for_pick(kalshi_prob_yes, kalshi_side_yes, pick_side)
 
-    # Determine if Kalshi agrees with pick (prob >= 55% for our side)
-    kalshi_agrees = kalshi_prob_for_pick is not None and kalshi_prob_for_pick >= 0.55
-
-    # Set weights based on Kalshi agreement
-    if kalshi_agrees:
-        # Tier 1: Kalshi-heavy weights
-        W_KALSHI = KALSHI_WEIGHT           # 0.55
-        W_MARKET = MARKET_WEIGHT           # 0.15
-        W_MODEL = ML_MODEL_WEIGHT          # 0.15
-        W_THEOVER = THEOVER_WEIGHT         # 0.10
-        W_SENTIMENT = SENTIMENT_WEIGHT     # 0.05
-    else:
-        # Tier 2: Fallback weights (exclude Kalshi)
-        W_KALSHI = 0.0
-        W_MARKET = FALLBACK_MARKET_WEIGHT      # 0.35
-        W_MODEL = FALLBACK_ML_WEIGHT           # 0.35
-        W_THEOVER = FALLBACK_THEOVER_WEIGHT    # 0.20
-        W_SENTIMENT = FALLBACK_SENTIMENT_WEIGHT # 0.10
+    # v98 FIX (Bug A): Single-tier weights — always start with configured weights.
+    # Sources that are unavailable or fail validation get zeroed below;
+    # normalization redistributes their weight proportionally to remaining sources.
+    W_KALSHI = KALSHI_WEIGHT           # 0.55
+    W_MARKET = MARKET_WEIGHT           # 0.15
+    W_MODEL = ML_MODEL_WEIGHT          # 0.15
+    W_THEOVER = THEOVER_WEIGHT         # 0.10
+    W_SENTIMENT = SENTIMENT_WEIGHT     # 0.05
 
     weights_used = {
         "w_implied": W_MARKET,
@@ -1286,11 +1278,13 @@ def compute_final_probability(
 
     final_prob = clamp(final_prob_val, 0.0, 1.0)
 
-    # Determine Driver based on weight tier
-    if kalshi_agrees:
+    # v98 FIX: Determine driver based on which source has highest effective weight
+    if W_KALSHI > 0 and W_KALSHI >= max(W_MARKET, W_MODEL, W_THEOVER, W_SENTIMENT):
         driver = "kalshi"
+    elif W_MARKET > 0 or W_MODEL > 0:
+        driver = "Market+ML"
     else:
-        driver = "Fallback (Market+ML)"
+        driver = "Fallback"
     if abs(clamped_delta) > 0.03:
         driver += " + TheOver"
 
@@ -3796,7 +3790,7 @@ def score_pick_confidence(row: Dict[str, Any]) -> Tuple[str, str, bool]:
             reason = f"high_probability ({final_prob:.1%}), decisiveness={decisiveness_edge:.3f}, edge={actual_edge:.3f}"
         elif decisiveness_edge >= 0.03 and actual_edge >= 0:
             tier = "MEDIUM"
-            reason = f"fallback_mode, decisiveness={decisiveness_edge:.3f}, edge={actual_edge:.3f}"
+            reason = f"medium_signal, decisiveness={decisiveness_edge:.3f}, edge={actual_edge:.3f}"
         else:
             tier = "LOW"
             reason = f"insufficient_metrics, decisiveness={decisiveness_edge:.3f}, edge={actual_edge:.3f}"
@@ -9736,6 +9730,21 @@ with tab_master:
                 total_prob_market = total_prob_market_based if total_prob_market_based is not None else total_implied
                 kalshi_prob_spread = safe_float(kalshi_spread.get("kalshi_prob"))
                 kalshi_prob_total = safe_float(kalshi_total.get("kalshi_prob"))
+
+                # v98 FIX (Bug B): Pre-compute pick-side Kalshi probabilities BEFORE
+                # passing to compute_final_probability. This ensures logs show the
+                # correct pick-side value and avoids any side-mismatch issues.
+                kalshi_prob_spread_for_pick = map_kalshi_prob_for_pick(
+                    kalshi_prob_spread if kalshi_spread.get("kalshi_matched") else None,
+                    kalshi_spread.get("kalshi_yes_side") or "home",
+                    spread_pick_side_key
+                )
+                kalshi_prob_total_for_pick = map_kalshi_prob_for_pick(
+                    kalshi_prob_total if kalshi_total.get("kalshi_matched") else None,
+                    kalshi_total.get("kalshi_yes_side") or "over",
+                    total_pick_side_key
+                )
+
                 model_used_for_spread = bool(use_model_numeric_probs and model_spread_prob is not None)
                 model_used_for_total = bool(use_model_numeric_probs and model_total_prob is not None)
                 # Inject TheOver prob if available
@@ -9774,8 +9783,8 @@ with tab_master:
                 spread_prob_no_to, _, _, _, _, _, _ = compute_final_probability(
                     spread_pick_side_key,
                     spread_prob_market,
-                    kalshi_prob_spread if kalshi_spread.get("kalshi_matched") else None,
-                    kalshi_spread.get("kalshi_yes_side") or "home",
+                    kalshi_prob_spread_for_pick,  # v98: pre-flipped to pick side
+                    spread_pick_side_key,         # v98: yes_side=pick_side (no-op in mapping)
                     model_spread_prob if model_used_for_spread else None,
                     None,
                     spread_sentiment_adj,
@@ -9786,26 +9795,21 @@ with tab_master:
 
                 # Update Kalshi weight dynamically
                 _spread_kalshi_matched = bool(kalshi_spread.get("kalshi_matched"))
-                _spread_k_prob = map_kalshi_prob_for_pick(
-                    kalshi_prob_spread if _spread_kalshi_matched else None,
-                    kalshi_spread.get("kalshi_yes_side") or "home",
-                    spread_pick_side_key
-                )
                 spread_weights["kalshi_weight"] = dynamic_kalshi_weight(
-                    _spread_k_prob,
+                    kalshi_prob_spread_for_pick,  # v98: use pre-flipped value
                     spread_prob_market,
                     _spread_kalshi_matched,
                     league_name
                 )
 
-                # DEBUG: Log spread probability calculation inputs
-                logger.info(f"SPREAD PROB CALC for {home} vs {away}: spread_pick_side={spread_pick_side_key}, spread_market={spread_prob_market:.4f}, spread_implied={spread_implied}, kalshi={kalshi_prob_spread}")
+                # DEBUG: Log spread probability calculation inputs (v98: show pick-side Kalshi prob)
+                logger.info(f"SPREAD PROB CALC for {home} vs {away}: spread_pick_side={spread_pick_side_key}, spread_market={spread_prob_market:.4f}, spread_implied={spread_implied}, kalshi={kalshi_prob_spread_for_pick}")
 
                 spread_prob_final, spread_base_prob, spread_weights_used, spread_decision_driver, spread_warnings_new, spread_kalshi_prob_for_pick, spread_sentiment_debug = compute_final_probability(
                     spread_pick_side_key,
                     spread_prob_market,
-                    kalshi_prob_spread if kalshi_spread.get("kalshi_matched") else None,
-                    kalshi_spread.get("kalshi_yes_side") or "home",
+                    kalshi_prob_spread_for_pick,  # v98: pre-flipped to pick side
+                    spread_pick_side_key,         # v98: yes_side=pick_side (no-op in mapping)
                     model_spread_prob if model_used_for_spread else None,
                     theover_prob_final_spread,
                     spread_sentiment_adj,
@@ -9825,8 +9829,8 @@ with tab_master:
                     spread_prob_no_to, _, _, _, _, _, _ = compute_final_probability(
                         spread_pick_side_key,
                         spread_prob_market,
-                        kalshi_prob_spread if kalshi_spread.get("kalshi_matched") else None,
-                        kalshi_spread.get("kalshi_yes_side") or "home",
+                        kalshi_prob_spread_for_pick,  # v98: pre-flipped to pick side
+                        spread_pick_side_key,         # v98: yes_side=pick_side (no-op)
                         model_spread_prob if model_used_for_spread else None,
                         None, # Exclude TheOver
                         spread_sentiment_adj,
@@ -9868,7 +9872,7 @@ with tab_master:
                 theover_used_in_pick_spread = bool(theover_prob_final_spread is not None)
 
                 if spread_prob_final is None:
-                    spread_prob_final = blend_kalshi_market(kalshi_prob_spread, spread_prob_market) if kalshi_spread.get("kalshi_matched") else spread_prob_market
+                    spread_prob_final = blend_kalshi_market(kalshi_prob_spread_for_pick, spread_prob_market) if kalshi_spread.get("kalshi_matched") else spread_prob_market
                     if model_used_for_spread and model_spread_prob is not None:
                         spread_prob_final = clamp(model_spread_prob)
                     spread_base_prob = spread_prob_final
@@ -9910,8 +9914,8 @@ with tab_master:
                 total_prob_no_to, _, _, _, _, _, _ = compute_final_probability(
                     total_pick_side_key,
                     total_prob_market,
-                    kalshi_prob_total if kalshi_total.get("kalshi_matched") else None,
-                    kalshi_total.get("kalshi_yes_side") or "over",
+                    kalshi_prob_total_for_pick,  # v98: pre-flipped to pick side
+                    total_pick_side_key,         # v98: yes_side=pick_side (no-op)
                     model_total_prob if model_used_for_total else None,
                     None,
                     total_sentiment_adj,
@@ -9922,26 +9926,21 @@ with tab_master:
 
                 # Update Kalshi weight dynamically
                 _total_kalshi_matched = bool(kalshi_total.get("kalshi_matched"))
-                _total_k_prob = map_kalshi_prob_for_pick(
-                    kalshi_prob_total if _total_kalshi_matched else None,
-                    kalshi_total.get("kalshi_yes_side") or "over",
-                    total_pick_side_key
-                )
                 total_weights["kalshi_weight"] = dynamic_kalshi_weight(
-                    _total_k_prob,
+                    kalshi_prob_total_for_pick,  # v98: use pre-flipped value
                     total_prob_market,
                     _total_kalshi_matched,
                     league_name
                 )
 
-                # DEBUG: Log total probability calculation inputs
-                logger.info(f"TOTAL PROB CALC for {home} vs {away}: total_pick_side={total_pick_side_key}, total_market={total_prob_market:.4f}, total_implied={total_implied}, kalshi={kalshi_prob_total}")
+                # DEBUG: Log total probability calculation inputs (v98: show pick-side Kalshi prob)
+                logger.info(f"TOTAL PROB CALC for {home} vs {away}: total_pick_side={total_pick_side_key}, total_market={total_prob_market:.4f}, total_implied={total_implied}, kalshi={kalshi_prob_total_for_pick}")
 
                 total_prob_final, total_base_prob, total_weights_used, total_decision_driver, total_warnings_new, total_kalshi_prob_for_pick, total_sentiment_debug = compute_final_probability(
                     total_pick_side_key,
                     total_prob_market,
-                    kalshi_prob_total if kalshi_total.get("kalshi_matched") else None,
-                    kalshi_total.get("kalshi_yes_side") or "over",
+                    kalshi_prob_total_for_pick,  # v98: pre-flipped to pick side
+                    total_pick_side_key,         # v98: yes_side=pick_side (no-op)
                     model_total_prob if model_used_for_total else None,
                     theover_prob_final_total,
                     total_sentiment_adj,
@@ -9957,8 +9956,8 @@ with tab_master:
                     total_prob_no_to, _, _, _, _, _, _ = compute_final_probability(
                         total_pick_side_key,
                         total_prob_market,
-                        kalshi_prob_total if kalshi_total.get("kalshi_matched") else None,
-                        kalshi_total.get("kalshi_yes_side") or "over",
+                        kalshi_prob_total_for_pick,  # v98: pre-flipped to pick side
+                        total_pick_side_key,         # v98: yes_side=pick_side (no-op)
                         model_total_prob if model_used_for_total else None,
                         None, # Exclude TheOver
                         total_sentiment_adj,
@@ -10000,7 +9999,7 @@ with tab_master:
                 theover_used_in_pick_total = bool(theover_prob_final_total is not None)
 
                 if total_prob_final is None:
-                    total_prob_final = blend_kalshi_market(kalshi_prob_total, total_prob_market) if kalshi_total.get("kalshi_matched") else total_prob_market
+                    total_prob_final = blend_kalshi_market(kalshi_prob_total_for_pick, total_prob_market) if kalshi_total.get("kalshi_matched") else total_prob_market
                     if model_used_for_total and model_total_prob is not None:
                         total_prob_final = clamp(model_total_prob)
                     total_base_prob = total_prob_final
@@ -10307,6 +10306,14 @@ with tab_master:
                         implied_pick = implied_prob_for_pick(home_ml, away_ml, pick_side)
                         kalshi_yes_side = kalshi_winner.get("kalshi_yes_side")
 
+                        # v98 FIX (Bug B): Pre-compute pick-side Kalshi prob for moneyline
+                        _ml_kalshi_matched = bool(kalshi_winner.get("kalshi_matched"))
+                        kalshi_prob_ml_for_pick = map_kalshi_prob_for_pick(
+                            kalshi_prob_used if _ml_kalshi_matched else None,
+                            kalshi_yes_side,
+                            pick_side
+                        )
+
                         # ML Extreme Odds Weighting Logic
                         # When absolute American odds > 400 (heavy favorite/underdog):
                         # - Model weight -> 0% (model struggles with extreme games)
@@ -10340,14 +10347,8 @@ with tab_master:
                             # MODE B: Keep sentiment weight from config (was Mode A: forced to 0.0)
                             # current_ml_weights["sentiment_weight"] = 0.0  # DISABLED to enable sentiment
 
-                            _ml_kalshi_matched = bool(kalshi_winner.get("kalshi_matched"))
-                            _ml_k_prob = map_kalshi_prob_for_pick(
-                                kalshi_prob_used if _ml_kalshi_matched else None,
-                                kalshi_yes_side,
-                                pick_side
-                            )
                             current_ml_weights["kalshi_weight"] = dynamic_kalshi_weight(
-                                _ml_k_prob,
+                                kalshi_prob_ml_for_pick,  # v98: use pre-flipped value
                                 implied_pick,
                                 _ml_kalshi_matched,
                                 league_name
@@ -10369,8 +10370,8 @@ with tab_master:
                         final_prob_blend, base_prob_blend, weights_used, decision_driver, warnings_new, kalshi_prob_for_pick, ml_sentiment_debug = compute_final_probability(
                             pick_side,
                             implied_pick,
-                            kalshi_prob_used if kalshi_winner.get("kalshi_matched") else None,
-                            kalshi_yes_side,
+                            kalshi_prob_ml_for_pick,  # v98: pre-flipped to pick side
+                            pick_side,                # v98: yes_side=pick_side (no-op)
                             ai_prob_base,
                             theover_prob_ml,  # FIX: Use TheOver probability for ML picks
                             sentiment_adj,
@@ -12038,13 +12039,17 @@ with tab_master:
                         # Get probabilities based on market type
                         if market == "spread":
                             market_prob = safe_float(row.get("spread_prob_pick_market"))
-                            kalshi_prob = safe_float(row.get("spread_prob_pick_kalshi") or row.get("kalshi_prob_spread"))
+                            # v98 FIX: Use proper None check instead of `or` (0.0 is falsy in Python)
+                            _spk = row.get("spread_prob_pick_kalshi")
+                            kalshi_prob = safe_float(_spk if _spk is not None else row.get("kalshi_prob_spread"))
                             model_prob = safe_float(row.get("model_spread_prob"))
                             final_prob = safe_float(row.get("spread_prob_pick_final"))
                             pick_side = row.get("spread_pick_team")
                         elif market == "total":
                             market_prob = safe_float(row.get("total_prob_pick_market"))
-                            kalshi_prob = safe_float(row.get("total_prob_pick_kalshi") or row.get("kalshi_prob_total"))
+                            # v98 FIX: Use proper None check instead of `or` (0.0 is falsy in Python)
+                            _tpk = row.get("total_prob_pick_kalshi")
+                            kalshi_prob = safe_float(_tpk if _tpk is not None else row.get("kalshi_prob_total"))
                             model_prob = safe_float(row.get("model_total_prob"))
                             final_prob = safe_float(row.get("total_prob_pick_final"))
                             pick_side = row.get("total_pick_side")
@@ -13802,9 +13807,11 @@ if should_display:
         def _add_consensus_breakdown(row):
             """Add consensus breakdown for both Spread and Total picks."""
             # Get spread consensus breakdown
+            # v98 FIX: Use proper None check for Kalshi prob fallback
+            _s_k = row.get("spread_prob_pick_kalshi")
             spread_consensus = format_consensus_breakdown(
                 market_prob=safe_float(row.get("spread_prob_pick_market")),
-                kalshi_prob=safe_float(row.get("spread_prob_pick_kalshi") or row.get("kalshi_prob_spread")),
+                kalshi_prob=safe_float(_s_k if _s_k is not None else row.get("kalshi_prob_spread")),
                 model_prob=safe_float(row.get("model_spread_prob")),
                 sentiment_score=safe_float(row.get("sentiment_score")),
                 final_prob=safe_float(row.get("spread_prob_pick_final")),
@@ -13812,9 +13819,11 @@ if should_display:
             )
 
             # Get total consensus breakdown
+            # v98 FIX: Use proper None check for Kalshi prob fallback
+            _t_k = row.get("total_prob_pick_kalshi")
             total_consensus = format_consensus_breakdown(
                 market_prob=safe_float(row.get("total_prob_pick_market")),
-                kalshi_prob=safe_float(row.get("total_prob_pick_kalshi") or row.get("kalshi_prob_total")),
+                kalshi_prob=safe_float(_t_k if _t_k is not None else row.get("kalshi_prob_total")),
                 model_prob=safe_float(row.get("model_total_prob")),
                 sentiment_score=safe_float(row.get("sentiment_score")),
                 final_prob=safe_float(row.get("total_prob_pick_final")),
