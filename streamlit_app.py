@@ -1543,6 +1543,11 @@ def enforce_winning_picks(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
         return df
 
+    # Logging: Count potential flips
+    s_flip_candidates = len(df[df['spread_prob_adj'] < 0.5]) if 'spread_prob_adj' in df.columns else 0
+    t_flip_candidates = len(df[df['total_prob_adj'] < 0.5]) if 'total_prob_adj' in df.columns else 0
+    logger.info(f"Enforcing winning picks on {len(df)} rows. Candidates: Spread={s_flip_candidates}, Total={t_flip_candidates}")
+
     df = df.copy()
 
     def _flip_row(row):
@@ -1554,39 +1559,53 @@ def enforce_winning_picks(df: pd.DataFrame) -> pd.DataFrame:
         if s_prob is not None and s_prob < 0.50:
             new_prob = 1.0 - s_prob
 
-            # Flip Pick String
+            # Flip Pick String (Simplified Logic)
             if s_pick:
-                home = str(row.get("Home") or "")
-                away = str(row.get("Away") or "")
-                p_clean = str(s_pick).strip()
+                pick_str = str(s_pick)
+                home = str(row.get("Home") or "").strip()
+                away = str(row.get("Away") or "").strip()
 
-                # Regex for line number at end
-                line_match = re.search(r'(-?\d+\.?\d*)$', p_clean)
-                new_pick = s_pick # Fallback
+                # Check containment
+                is_home = home and (home in pick_str)
+                is_away = away and (away in pick_str)
 
-                if line_match:
-                    line_val = float(line_match.group(1))
-                    team_part = p_clean[:line_match.start()].strip()
+                # If ambiguous (neither or both), try partial matching from existing logic
+                if not is_home and not is_away:
+                    # Regex for line number at end to extract team part
+                    line_match = re.search(r'(-?\d+\.?\d*)$', pick_str.strip())
+                    if line_match:
+                        team_part = pick_str[:line_match.start()].strip()
+                        if team_part and home and (team_part in home or home in team_part):
+                            is_home = True
+                        elif team_part and away and (team_part in away or away in team_part):
+                            is_away = True
 
-                    # Identify current team
-                    current_is_home = False
-                    current_is_away = False
+                new_pick = pick_str
+                if is_home and away:
+                    # Replace team name (careful not to replace parts of line if coincidental)
+                    # We assume team name is at the start
+                    # Strategy: Replace the team name, then flip the line number at the end
+                    if home in pick_str:
+                        new_pick = pick_str.replace(home, away)
+                    else:
+                        # Partial match case - try to reconstruct
+                        line_match = re.search(r'(-?\d+\.?\d*)$', pick_str.strip())
+                        if line_match:
+                            new_pick = f"{away} {line_match.group(1)}"
 
-                    # Robust check
-                    if team_part and home and (team_part in home or home in team_part):
-                        current_is_home = True
-                    elif team_part and away and (team_part in away or away in team_part):
-                        current_is_away = True
+                    # Flip line sign
+                    new_pick = re.sub(r'([+-]?\d+(?:\.\d+)?)$', lambda m: f"{float(m.group(1)) * -1:+g}", new_pick)
 
-                    # Flip
-                    if current_is_home:
-                        new_team = away
-                        new_line = -line_val
-                        new_pick = f"{new_team} {new_line:+g}"
-                    elif current_is_away:
-                        new_team = home
-                        new_line = -line_val
-                        new_pick = f"{new_team} {new_line:+g}"
+                elif is_away and home:
+                    if away in pick_str:
+                        new_pick = pick_str.replace(away, home)
+                    else:
+                        line_match = re.search(r'(-?\d+\.?\d*)$', pick_str.strip())
+                        if line_match:
+                            new_pick = f"{home} {line_match.group(1)}"
+
+                    # Flip line sign
+                    new_pick = re.sub(r'([+-]?\d+(?:\.\d+)?)$', lambda m: f"{float(m.group(1)) * -1:+g}", new_pick)
 
                 row["Spread & Pick"] = new_pick
 
@@ -1621,10 +1640,11 @@ def enforce_winning_picks(df: pd.DataFrame) -> pd.DataFrame:
 
             # Flip Pick String
             if t_pick:
-                if "Over" in str(t_pick):
-                    row["Total & Pick"] = str(t_pick).replace("Over", "Under")
-                elif "Under" in str(t_pick):
-                    row["Total & Pick"] = str(t_pick).replace("Under", "Over")
+                pick_str = str(t_pick)
+                if "Over" in pick_str:
+                    row["Total & Pick"] = pick_str.replace("Over", "Under")
+                elif "Under" in pick_str:
+                    row["Total & Pick"] = pick_str.replace("Under", "Over")
 
             # Update Probs
             row["total_prob_adj"] = new_prob
@@ -1645,7 +1665,14 @@ def enforce_winning_picks(df: pd.DataFrame) -> pd.DataFrame:
 
         return row
 
-    return df.apply(_flip_row, axis=1)
+    result_df = df.apply(_flip_row, axis=1)
+
+    # Logging: Count post-flip
+    s_flipped_bad = len(result_df[result_df['spread_prob_adj'] < 0.5]) if 'spread_prob_adj' in result_df.columns else 0
+    t_flipped_bad = len(result_df[result_df['total_prob_adj'] < 0.5]) if 'total_prob_adj' in result_df.columns else 0
+    logger.info(f"Finished enforcing winning picks. Remaining <50%: Spread={s_flipped_bad}, Total={t_flipped_bad}")
+
+    return result_df
 
 def enrich_picks_with_roi_metrics(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -13049,6 +13076,15 @@ with tab_master:
         # Ensures picks are on the winning side before edge calculation
         df = enforce_winning_picks(df)
         df = df.copy()
+
+        # Assertion Check (CRITICAL FIX)
+        if not df.empty:
+            for col in ['spread_prob_adj', 'total_prob_adj']:
+                if col in df.columns:
+                    # Check for non-null values < 0.50
+                    bad_rows = df[df[col].notna() & (df[col] < 0.50)]
+                    if not bad_rows.empty:
+                        logger.error(f"CRITICAL ASSERTION FAILED: {len(bad_rows)} picks in {col} still have prob < 50%")
 
         # 2b. Sync consensus probs with flipped values (v96 fix)
         # enforce_winning_picks updates spread_prob_adj/total_prob_adj but NOT
