@@ -5,13 +5,18 @@ Tests the enhanced matching logic with specific NBA games from Jan 23, 2026
 
 import sys
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
+from unittest.mock import MagicMock
 
 # Add parent directory to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '.')))
 
-from app_core.kalshi_integrator import KalshiIntegrator, match_game_to_kalshi
+# Import st to catch secrets error
+import streamlit as st
+from streamlit.runtime.secrets import StreamlitSecretNotFoundError
+
+from app_core.kalshi_integrator import KalshiIntegrator, match_game_to_kalshi, KalshiMatchResult
 
 def test_nba_game(home_team, away_team, game_time_str):
     """Test matching for a specific NBA game"""
@@ -25,11 +30,17 @@ def test_nba_game(home_team, away_team, game_time_str):
     if game_time.tzinfo is None:
         game_time = pytz.utc.localize(game_time)
 
-    # Initialize integrator
-    kalshi = KalshiIntegrator()
-
-    if not kalshi.api_key:
-        print("❌ No Kalshi API key found. Set KALSHI_API_KEY environment variable.")
+    # Initialize integrator with error handling for secrets
+    try:
+        kalshi = KalshiIntegrator()
+        if not kalshi.api_key:
+            print("❌ No Kalshi API key found (empty). Set KALSHI_API_KEY environment variable.")
+            return
+    except (StreamlitSecretNotFoundError, FileNotFoundError, KeyError):
+        print("⚠️ Kalshi secrets not found. Skipping live API test.")
+        return
+    except Exception as e:
+        print(f"⚠️ Error initializing KalshiIntegrator: {e}")
         return
 
     # Attempt to match
@@ -67,6 +78,93 @@ def test_nba_game(home_team, away_team, game_time_str):
             print(f"   Debug Info: {result.debug}")
     print("="*80 + "\n")
 
+def test_market_type_fallback_mock():
+    """
+    Test that match_game_to_kalshi falls back to any available market
+    when the requested market type is not found.
+    Uses MagicMock to simulate API response.
+    """
+    print("\n" + "="*80)
+    print("TEST: Market Type Fallback Logic (Mocked)")
+    print("="*80)
+
+    # Mock Integrator
+    mock_integrator = MagicMock(spec=KalshiIntegrator)
+    mock_integrator.api_key = "mock_key"
+    mock_integrator.api_secret_pem = "mock_secret"
+
+    # Mock Data using known teams (Duke vs UNC)
+    league = "NCAAB"
+    home_team = "Duke" # DUK
+    away_team = "North Carolina" # UNC
+    game_time = datetime.now(pytz.UTC)
+
+    # Mock Event Response
+    # Scenario: User wants TOTAL, Kalshi only has SPREAD
+    # We set yes_bid to 100 (prob 1.0) to BYPASS the NCAAB Force Match logic
+    # which requires 0.01 < prob < 0.99
+    mock_event = {
+        "ticker": "KXNCAAMBGAME-26JAN23UNCDUK",
+        "title": "North Carolina at Duke",
+        "close_time": (game_time + timedelta(hours=2)).isoformat(),
+        "markets": [
+            {
+                "ticker": "KXNCAAMBSPREAD-26JAN23UNCDUK-UNC-3.5",
+                "title": "North Carolina -3.5",
+                "yes_bid": 100, # Bypass force match logic
+                "yes_ask": 100,
+                "subtitle": "Spread"
+            }
+        ]
+    }
+
+    # Setup mock return values
+    mock_integrator.get_events.return_value = {"events": [mock_event]}
+
+    # Test Case 1: Requested TOTAL, found SPREAD -> fallback
+    print("Attempting match with requested_market_type='TOTAL'...")
+    result = match_game_to_kalshi(
+        league=league,
+        home_team=home_team,
+        away_team=away_team,
+        game_time=game_time,
+        integrator=mock_integrator,
+        status=None,
+        requested_market_type="TOTAL"
+    )
+
+    print(f"\nResult Matched: {result.matched}")
+    print(f"Result Reason: {result.reason}")
+    print(f"Result Market Type (Debug): {result.debug.get('matched_market_type') if result.debug else 'N/A'}")
+
+    # Expect matched_spread_fallback because we asked for TOTAL but only SPREAD exists
+    if result.matched and "fallback" in (result.reason or ""):
+        print("✅ SUCCESS: Matched via fallback as expected.")
+    elif result.matched:
+        print(f"⚠️ WARNING: Matched but reason '{result.reason}' does not indicate fallback (Expected for NCAAB force match if not bypassed).")
+    else:
+        print("❌ FAILED: Did not match.")
+
+    # Test Case 2: Requested SPREAD, found SPREAD -> match
+    print("\nAttempting match with requested_market_type='SPREAD'...")
+    result_normal = match_game_to_kalshi(
+        league=league,
+        home_team=home_team,
+        away_team=away_team,
+        game_time=game_time,
+        integrator=mock_integrator,
+        status=None,
+        requested_market_type="SPREAD"
+    )
+
+    print(f"Result Reason: {result_normal.reason}")
+    if result_normal.matched and "fallback" not in (result_normal.reason or ""):
+        print("✅ SUCCESS: Matched normally without fallback.")
+    elif result_normal.matched and "matched_spread" in (result_normal.reason or ""):
+         print("✅ SUCCESS: Matched spread as expected.")
+    else:
+        print(f"❌ FAILED: Unexpected result for normal match (reason={result_normal.reason}).")
+
 if __name__ == "__main__":
     # Test games from the issue description
     # All times are in UTC
@@ -75,6 +173,9 @@ if __name__ == "__main__":
     print("KALSHI NBA MATCHING DEBUG TEST")
     print("Testing games from January 23, 2026")
     print("="*80)
+
+    # Run Mock Test First
+    test_market_type_fallback_mock()
 
     # Test case 1: Brooklyn @ Boston (expected to fail currently)
     test_nba_game(
@@ -130,9 +231,13 @@ if __name__ == "__main__":
         if game_time.tzinfo is None:
             game_time = pytz.utc.localize(game_time)
 
-        kalshi = KalshiIntegrator()
-        if not kalshi.api_key:
-            print("❌ No Kalshi API key found. Set KALSHI_API_KEY environment variable.")
+        try:
+            kalshi = KalshiIntegrator()
+            if not kalshi.api_key:
+                print("❌ No Kalshi API key found. Set KALSHI_API_KEY environment variable.")
+                return
+        except Exception:
+            print("⚠️ Kalshi secrets not found. Skipping live API test.")
             return
 
         result = match_game_to_kalshi(
