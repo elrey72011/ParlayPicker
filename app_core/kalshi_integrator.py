@@ -135,6 +135,7 @@ def parse_event_ticker_codes(event_ticker: str) -> Dict[str, str]:
     # Date token: 2 digits, 3 letters, 2 digits.
     match = re.match(r"^(\d{2}[A-Z]{3}\d{2})([A-Z0-9]+)$", suffix)
     if not match:
+        logger.warning(f"Failed to parse event ticker suffix: {suffix} (full: {event_ticker})")
         return {}
 
     date_token = match.group(1)
@@ -967,6 +968,11 @@ def _parse_market_metadata(mkt: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if prob is not None:
         logger.info(f"Kalshi prob calc: market={ticker}, yes_side={title}, yes_bid={_yb}, yes_ask={_ya}, mid_prob={prob:.3f}")
 
+    # Add yes_side inference for logging
+    yes_side = title  # Default yes side is the title
+    if prob is not None:
+         logger.info(f"Kalshi metadata: yes_side='{yes_side}', prob={prob:.3f}")
+
     return {"title": title, "market_date": market_dt, "teams": teams, "probability": prob, "market_type": market_type}
 
 def _build_team_codes(team_name: str) -> List[str]:
@@ -1610,6 +1616,15 @@ def _match_via_events(
             # Final fallback to last_price
             if prob is None and last_price is not None and last_price > 0:
                 prob = last_price
+
+            # Enhanced Match Logging (Task 1)
+            target_ticker = target_market.get("ticker")
+            target_title = target_market.get("title")
+            logger.info(f"🎯 Kalshi Match Selected: {target_ticker}")
+            logger.info(f"   Title (Yes Side): {target_title}")
+            logger.info(f"   Prob (Raw): {prob if prob is not None else 'None'}")
+            if prob is not None and abs(prob - 0.5) < 0.01:
+                logger.warning(f"   ⚠️ Neutral probability (0.50) for {target_ticker} - likely default or no data")
 
             # Enhanced debug info
             debug_info = {

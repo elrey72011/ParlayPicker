@@ -1036,19 +1036,76 @@ def implied_prob_for_pick(odds_home: Any, odds_away: Any, pick_side: Optional[st
 
 
 def map_kalshi_prob_for_pick(
-    kalshi_prob_yes: Optional[float], kalshi_yes_side: Optional[str], pick_side: Optional[str]
+    kalshi_prob_yes: Optional[float],
+    kalshi_yes_side: Optional[str],
+    pick_side: Optional[str],
+    home_team: Optional[str] = None,
+    away_team: Optional[str] = None
 ) -> Optional[float]:
     """Map a Kalshi yes-probability to the selected pick side.
 
-    The kalshi_prob_yes should already be correctly oriented by upstream
-    kalshi_integrator.py logic. We only need to validate and pass through.
+    Determines if the pick_side matches the kalshi_yes_side.
+    If match: returns prob.
+    If mismatch: returns 1.0 - prob.
     """
     prob = safe_float(kalshi_prob_yes)
     if prob is None:
         return None
 
-    # Trust upstream mapping - no inversion needed
-    # The kalshi_integrator.py should provide prob already mapped to pick_side
+    # Defensive check for exactly 0.5 (neutral default)
+    if abs(prob - 0.5) < 0.001:
+        logger.warning(f"⚠️ Kalshi neutral prob (0.50) for {pick_side} (Yes: {kalshi_yes_side}) - likely default")
+        return prob
+
+    if not pick_side or not kalshi_yes_side:
+        return prob
+
+    # Normalize strings
+    pick_norm = TeamNameMatcher.normalize(pick_side)
+    yes_norm = TeamNameMatcher.normalize(kalshi_yes_side)
+
+    # 1. Direct Match
+    if pick_norm == yes_norm:
+        return prob
+
+    # 2. Check Over/Under explicit
+    if "over" in pick_norm and "over" in yes_norm: return prob
+    if "under" in pick_norm and "under" in yes_norm: return prob
+    if "over" in pick_norm and "under" in yes_norm: return 1.0 - prob
+    if "under" in pick_norm and "over" in yes_norm: return 1.0 - prob
+
+    # 3. Check "Home"/"Away" generic placeholders
+    # If Kalshi side is explicit "HOME" or "AWAY" (from infer_yes_side)
+    if yes_norm == "home":
+        if home_team and TeamNameMatcher.normalize(home_team) in pick_norm: return prob
+        if away_team and TeamNameMatcher.normalize(away_team) in pick_norm: return 1.0 - prob
+    if yes_norm == "away":
+        if away_team and TeamNameMatcher.normalize(away_team) in pick_norm: return prob
+        if home_team and TeamNameMatcher.normalize(home_team) in pick_norm: return 1.0 - prob
+
+    # 4. Check Team vs Team
+    if home_team and away_team:
+        home_norm = TeamNameMatcher.normalize(home_team)
+        away_norm = TeamNameMatcher.normalize(away_team)
+
+        # If Yes is Home
+        if yes_norm == home_norm:
+            if pick_norm == away_norm: return 1.0 - prob
+            if pick_norm == home_norm: return prob
+
+        # If Yes is Away
+        if yes_norm == away_norm:
+            if pick_norm == home_norm: return 1.0 - prob
+            if pick_norm == away_norm: return prob
+
+    # If we reached here, mapping is ambiguous
+    # Check fuzzy?
+    if fuzz:
+        if fuzz.ratio(pick_norm, yes_norm) > 80:
+            return prob
+
+    # Default to raw prob but log
+    logger.info(f"Kalshi mapping fallback: yes='{kalshi_yes_side}', pick='{pick_side}' -> using raw {prob}")
     return prob
 
 
@@ -1111,7 +1168,9 @@ def compute_final_probability(
     Returns (final_prob, base_prob, weights_used, driver, warnings, kalshi_prob_for_pick).
     """
     warnings: List[str] = []
-    kalshi_prob_for_pick = map_kalshi_prob_for_pick(kalshi_prob_yes, kalshi_side_yes, pick_side)
+    kalshi_prob_for_pick = map_kalshi_prob_for_pick(
+        kalshi_prob_yes, kalshi_side_yes, pick_side, home_team, away_team
+    )
 
     # Logging verification for P0 Bug (Blend Input Check)
     if kalshi_prob_yes is not None:
@@ -1162,7 +1221,15 @@ def compute_final_probability(
         # the blend to use the ALT-side Kalshi prob instead of the PICK-side.
         # Now we trust map_kalshi_prob_for_pick() and only reject on extreme delta.
         kalshi_validated = True
-        if implied_prob is not None:
+
+        # User Requirement: Reject neutral Kalshi data (0.50 +/- 0.02)
+        # This catches "no opinion" or default values
+        if abs(kalshi_prob_for_pick - 0.5) < 0.02:
+            kalshi_validated = False
+            warnings.append("kalshi_rejected_neutral")
+            logger.info(f"Rejecting neutral Kalshi data for {pick_side} (prob={kalshi_prob_for_pick:.3f})")
+
+        if kalshi_validated and implied_prob is not None:
             delta = abs(kalshi_prob_for_pick - implied_prob)
             # v104 FIX (Bug 2): Widen threshold from 0.40 to 0.55. The v103 fix ensures
             # correct pick-side Kalshi prob mapping, so large deltas now reflect genuine
