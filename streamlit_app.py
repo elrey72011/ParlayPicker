@@ -1879,142 +1879,80 @@ def pivot_market(row):
 
 def enforce_winning_picks(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Enforces that all picks are on the winning side (probability > 50%).
-    If prob < 50%, flips the pick (Home<->Away, Over<->Under) and probability (1-p).
+    VALIDATION CHECKPOINT: Verify all picks have probability >= 50%.
+
+    After Prompts #1 and #2 are applied, this function should NOT need to fix anything.
+    It just verifies that pick selection worked correctly.
+
+    If any picks have prob < 50%, this raises an error - indicating that
+    Prompt #1 (Kalshi mapping) or Prompt #2 (pick selection) is broken.
+
+    Args:
+        df: DataFrame with final picks
+
+    Returns:
+        df: Same DataFrame (unchanged if all picks are valid)
+
+    Raises:
+        ValueError: If any picks have prob < 50%
     """
-    if df is None or df.empty:
-        return df
+    logger.info(f"enforce_winning_picks() CALLED - Validating {len(df)} picks...")
 
-    # Logging: Count potential flips
-    s_flip_candidates = len(df[df['spread_prob_adj'] < 0.5]) if 'spread_prob_adj' in df.columns else 0
-    t_flip_candidates = len(df[df['total_prob_adj'] < 0.5]) if 'total_prob_adj' in df.columns else 0
-    logger.info(f"Enforcing winning picks on {len(df)} rows. Candidates: Spread={s_flip_candidates}, Total={t_flip_candidates}")
+    # Aliasing for robustness: Ensure 'prob' column exists (use 'final_probability' if available)
+    if 'prob' not in df.columns and 'final_probability' in df.columns:
+        df = df.copy()
+        df['prob'] = df['final_probability']
+    elif 'prob' not in df.columns:
+        # Fallback if neither exists (should not happen based on pipeline)
+        logger.warning("prob column missing in enforce_winning_picks! Checking if 'Best Overall Prob' exists...")
+        if 'Best Overall Prob' in df.columns:
+             df = df.copy()
+             df['prob'] = df['Best Overall Prob']
 
-    df = df.copy()
+    # Count picks with prob < 50%
+    if 'prob' in df.columns:
+        losing_picks = df[df['prob'] < 0.50]
+        losing_count = len(losing_picks)
+    else:
+        logger.error("CRITICAL: No probability column found for validation!")
+        losing_count = 0 # Avoid crash but log error
 
-    def _flip_row(row):
-        # 1. Spread Logic
-        s_prob = safe_float(row.get("spread_prob_adj")) or safe_float(row.get("spread_prob")) or safe_float(row.get("spread_prob_market_based"))
-        s_pick = row.get("Spread & Pick")
+    if losing_count > 0:
+        # CRITICAL ERROR - pick selection is broken
+        logger.error(f"❌ CRITICAL: {losing_count}/{len(df)} picks have prob < 50%!")
+        logger.error(f"This means Prompt #1 (Kalshi mapping) or Prompt #2 (pick selection) is broken.")
+        logger.error(f"\\nSample losing picks:")
 
-        # If probability exists and is < 0.50, flip it
-        if s_prob is not None and s_prob < 0.50:
-            new_prob = 1.0 - s_prob
+        for idx, row in losing_picks.head(10).iterrows():
+            logger.error(f"  Game: {row.get('Home', 'Unknown')} vs {row.get('Away', 'Unknown')}")
+            logger.error(f"    Pick: {row.get('Pick', 'Unknown')} | Prob: {row.get('prob', 0.0):.3f} (should be >= 0.50)")
 
-            # Flip Pick String (Simplified Logic)
-            if s_pick:
-                pick_str = str(s_pick)
-                home = str(row.get("Home") or "").strip()
-                away = str(row.get("Away") or "").strip()
+            # Show spread details if available
+            if 'spreadprobpickfinal' in row and pd.notna(row['spreadprobpickfinal']):
+                logger.error(f"    Spread pick prob: {row['spreadprobpickfinal']:.3f}")
+                logger.error(f"    Spread alt prob: {row.get('spreadprobaltfinal', 'N/A')}")
 
-                # Check containment
-                is_home = home and (home in pick_str)
-                is_away = away and (away in pick_str)
+            # Show total details if available
+            if 'totalprobpickfinal' in row and pd.notna(row['totalprobpickfinal']):
+                logger.error(f"    Total pick prob: {row['totalprobpickfinal']:.3f}")
+                logger.error(f"    Total alt prob: {row.get('totalprobaltfinal', 'N/A')}")
 
-                # If ambiguous (neither or both), try partial matching from existing logic
-                if not is_home and not is_away:
-                    # Regex for line number at end to extract team part
-                    line_match = re.search(r'(-?\d+\.?\d*)$', pick_str.strip())
-                    if line_match:
-                        team_part = pick_str[:line_match.start()].strip()
-                        if team_part and home and (team_part in home or home in team_part):
-                            is_home = True
-                        elif team_part and away and (team_part in away or away in team_part):
-                            is_away = True
+            logger.error("")  # Blank line
 
-                new_pick = pick_str
-                if is_home and away:
-                    # Replace team name (careful not to replace parts of line if coincidental)
-                    # We assume team name is at the start
-                    # Strategy: Replace the team name, then flip the line number at the end
-                    if home in pick_str:
-                        new_pick = pick_str.replace(home, away)
-                    else:
-                        # Partial match case - try to reconstruct
-                        line_match = re.search(r'(-?\d+\.?\d*)$', pick_str.strip())
-                        if line_match:
-                            new_pick = f"{away} {line_match.group(1)}"
+        # Raise error to halt execution
+        raise ValueError(
+            f"❌ {losing_count} picks have prob < 50%. "
+            f"Fix Prompt #1 (Kalshi mapping) or Prompt #2 (pick selection) before proceeding."
+        )
 
-                    # Flip line sign
-                    new_pick = re.sub(r'([+-]?\d+(?:\.\d+)?)$', lambda m: f"{float(m.group(1)) * -1:+g}", new_pick)
+    # All picks are valid
+    if 'prob' in df.columns:
+        logger.info(f"✅ All {len(df)} picks have prob >= 50%")
+        logger.info(f"   Min prob: {df['prob'].min():.3f}")
+        logger.info(f"   Max prob: {df['prob'].max():.3f}")
+        logger.info(f"   Avg prob: {df['prob'].mean():.3f}")
 
-                elif is_away and home:
-                    if away in pick_str:
-                        new_pick = pick_str.replace(away, home)
-                    else:
-                        line_match = re.search(r'(-?\d+\.?\d*)$', pick_str.strip())
-                        if line_match:
-                            new_pick = f"{home} {line_match.group(1)}"
-
-                    # Flip line sign
-                    new_pick = re.sub(r'([+-]?\d+(?:\.\d+)?)$', lambda m: f"{float(m.group(1)) * -1:+g}", new_pick)
-
-                row["Spread & Pick"] = new_pick
-
-            # Update Probs
-            row["spread_prob_adj"] = new_prob
-            if "spread_prob" in row: row["spread_prob"] = new_prob
-            if "spread_prob_market_based" in row: row["spread_prob_market_based"] = new_prob
-
-            # v103 FIX: Swap Kalshi pick/alt columns to match the new (flipped) pick direction
-            # v104 FIX (Bug 2): Guard against NaN — only swap when BOTH values are valid floats.
-            # If spread_prob_alt_kalshi is NaN (common when Kalshi has no alt-side data),
-            # swapping would corrupt spread_prob_pick_kalshi with NaN, losing valid Kalshi data.
-            if "spread_prob_pick_kalshi" in row and "spread_prob_alt_kalshi" in row:
-                old_pick_k = safe_float(row.get("spread_prob_pick_kalshi"))
-                old_alt_k = safe_float(row.get("spread_prob_alt_kalshi"))
-                if old_pick_k is not None and old_alt_k is not None:
-                    row["spread_prob_pick_kalshi"] = old_alt_k
-                    row["spread_prob_alt_kalshi"] = old_pick_k
-                elif old_pick_k is not None:
-                    # Only pick exists: flip it to alt, compute new pick as 1-pick
-                    row["spread_prob_pick_kalshi"] = 1.0 - old_pick_k
-                    row["spread_prob_alt_kalshi"] = old_pick_k
-
-            # Note: We rely on downstream to recalculate edge using new prob
-
-        # 2. Total Logic
-        t_prob = safe_float(row.get("total_prob_adj")) or safe_float(row.get("total_prob")) or safe_float(row.get("total_prob_market_based"))
-        t_pick = row.get("Total & Pick")
-
-        if t_prob is not None and t_prob < 0.50:
-            new_prob = 1.0 - t_prob
-
-            # Flip Pick String
-            if t_pick:
-                pick_str = str(t_pick)
-                if "Over" in pick_str:
-                    row["Total & Pick"] = pick_str.replace("Over", "Under")
-                elif "Under" in pick_str:
-                    row["Total & Pick"] = pick_str.replace("Under", "Over")
-
-            # Update Probs
-            row["total_prob_adj"] = new_prob
-            if "total_prob" in row: row["total_prob"] = new_prob
-            if "total_prob_market_based" in row: row["total_prob_market_based"] = new_prob
-
-            # v103 FIX: Swap Kalshi pick/alt columns to match the new (flipped) pick direction
-            # v104 FIX (Bug 2): Guard against NaN — same pattern as spread swap above.
-            if "total_prob_pick_kalshi" in row and "total_prob_alt_kalshi" in row:
-                old_pick_k = safe_float(row.get("total_prob_pick_kalshi"))
-                old_alt_k = safe_float(row.get("total_prob_alt_kalshi"))
-                if old_pick_k is not None and old_alt_k is not None:
-                    row["total_prob_pick_kalshi"] = old_alt_k
-                    row["total_prob_alt_kalshi"] = old_pick_k
-                elif old_pick_k is not None:
-                    row["total_prob_pick_kalshi"] = 1.0 - old_pick_k
-                    row["total_prob_alt_kalshi"] = old_pick_k
-
-        return row
-
-    result_df = df.apply(_flip_row, axis=1)
-
-    # Logging: Count post-flip
-    s_flipped_bad = len(result_df[result_df['spread_prob_adj'] < 0.5]) if 'spread_prob_adj' in result_df.columns else 0
-    t_flipped_bad = len(result_df[result_df['total_prob_adj'] < 0.5]) if 'total_prob_adj' in result_df.columns else 0
-    logger.info(f"Finished enforcing winning picks. Remaining <50%: Spread={s_flipped_bad}, Total={t_flipped_bad}")
-
-    return result_df
+    return df
 
 def enrich_picks_with_roi_metrics(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -13529,34 +13467,6 @@ with tab_master:
         df = add_spread_total_confidence(df)
         df = df.copy()
 
-        # 2a. Enforce Winning Picks (Flip logic moved upstream)
-        # Ensures picks are on the winning side before edge calculation
-        df = enforce_winning_picks(df)
-        df = df.copy()
-
-        # Assertion Check (CRITICAL FIX)
-        if not df.empty:
-            for col in ['spread_prob_adj', 'total_prob_adj']:
-                if col in df.columns:
-                    # Check for non-null values < 0.50
-                    bad_rows = df[df[col].notna() & (df[col] < 0.50)]
-                    if not bad_rows.empty:
-                        logger.error(f"CRITICAL ASSERTION FAILED: {len(bad_rows)} picks in {col} still have prob < 50%")
-
-        # 2b. Sync consensus probs with flipped values (v96 fix)
-        # enforce_winning_picks updates spread_prob_adj/total_prob_adj but NOT
-        # SpreadConsensusProb/TotalConsensusProb. calculate_best_pick_metrics reads
-        # consensus probs first, so stale values cause final_probability < 50%.
-        if 'spread_prob_adj' in df.columns and 'SpreadConsensusProb' in df.columns:
-            mask = df['spread_prob_adj'] != df['SpreadConsensusProb']
-            if mask.any():
-                logger.info(f"Syncing {mask.sum()} SpreadConsensusProb values with flipped spread_prob_adj")
-                df.loc[mask, 'SpreadConsensusProb'] = df.loc[mask, 'spread_prob_adj']
-        if 'total_prob_adj' in df.columns and 'TotalConsensusProb' in df.columns:
-            mask = df['total_prob_adj'] != df['TotalConsensusProb']
-            if mask.any():
-                logger.info(f"Syncing {mask.sum()} TotalConsensusProb values with flipped total_prob_adj")
-                df.loc[mask, 'TotalConsensusProb'] = df.loc[mask, 'total_prob_adj']
 
         # 3. Enrich with ROI Metrics (Calculates Edge)
         df = enrich_picks_with_roi_metrics(df)
@@ -13758,6 +13668,48 @@ with tab_master:
         if not df.empty and 'Market' in df.columns:
             market_dist = df['Market'].value_counts()
             logger.info(f"📊 Final Market distribution: {dict(market_dist)}")
+
+        # After all pick selection is complete
+        logger.info("Running final validation...")
+        df = enforce_winning_picks(df)
+        logger.info("Final validation PASSED ✅")
+
+        # Summary statistics
+        logger.info("\n" + "="*60)
+        logger.info("FINAL PICK SUMMARY")
+        logger.info("="*60)
+
+        total_picks = len(df)
+        # Robust prob column access
+        prob_col = 'final_probability' if 'final_probability' in df.columns else 'prob'
+        if prob_col not in df.columns:
+            prob_col = 'Best Overall Prob'
+
+        if prob_col in df.columns:
+            high_conf_picks = len(df[df[prob_col] >= 0.70])
+            medium_conf_picks = len(df[(df[prob_col] >= 0.60) & (df[prob_col] < 0.70)])
+            low_conf_picks = len(df[(df[prob_col] >= 0.50) & (df[prob_col] < 0.60)])
+
+            logger.info(f"Total picks: {total_picks}")
+            if total_picks > 0:
+                logger.info(f"  High confidence (≥70%): {high_conf_picks} ({high_conf_picks/total_picks*100:.1f}%)")
+                logger.info(f"  Medium confidence (60-70%): {medium_conf_picks} ({medium_conf_picks/total_picks*100:.1f}%)")
+                logger.info(f"  Low confidence (50-60%): {low_conf_picks} ({low_conf_picks/total_picks*100:.1f}%)")
+            logger.info(f"  Average probability: {df[prob_col].mean():.1%}")
+
+            # Kalshi usage stats
+            if 'HasKalshiMarket' in df.columns:
+                kalshi_games = df[df['HasKalshiMarket'] == True]
+                k_len = len(kalshi_games)
+                logger.info(f"\nKalshi markets: {k_len}/{total_picks} ({k_len/total_picks*100 if total_picks > 0 else 0:.1f}%)")
+
+                if k_len > 0:
+                    kalshi_high_conf = len(kalshi_games[kalshi_games[prob_col] >= 0.70])
+                    logger.info(f"  High confidence with Kalshi: {kalshi_high_conf}/{k_len} ({kalshi_high_conf/k_len*100:.1f}%)")
+        else:
+            logger.warning("Could not generate summary statistics: Probability column missing")
+
+        logger.info("="*60 + "\n")
 
         # CRITICAL: Save collapsed dataframe to session state
         # Both master_df and master_results_df should hold the same collapsed 1-row-per-game data
