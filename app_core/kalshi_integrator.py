@@ -1235,7 +1235,7 @@ def _match_via_events(
              except Exception:
                 markets = []
 
-        if not markets:
+        if not markets and league != 'NCAAB':
             return None
 
         # ENHANCED: Classify all markets as winner/spread/total
@@ -1458,40 +1458,55 @@ def _match_via_events(
         # NCAAB FORCE MATCH logic (Step 2)
         logger.info(f"NCAAB FINAL {best_event.get('ticker')} | markets={len(markets)} | bestscore={best_score} | target={target_market.get('ticker') if target_market else 'NONE'}")
 
-        if target_market:
-            # Fix #1: Repositioned NCAAB force match logic INSIDE target_market check
-            if league == 'NCAAB':
-                # FORCE MATCH
-                # Use same prob calc as winner_prob / _kalshi_price_norm
-                yes_bid = _kalshi_price_norm(target_market, "yes_bid_dollars", "yes_bid")
-                yes_ask = _kalshi_price_norm(target_market, "yes_ask_dollars", "yes_ask")
-                no_bid = _kalshi_price_norm(target_market, "no_bid_dollars", "no_bid")
-                last_price = _kalshi_price_norm(target_market, "last_price_dollars", "last_price")
+        # NCAAB FORCE MATCH - Execute BEFORE target_market check
+        if league == 'NCAAB' and best_event and best_score >= 80:
+            logger.info(f"🎯 NCAAB FORCE MATCH: {best_event.get('ticker')} score={best_score}")
+
+            # Try to get any market from the event
+            force_market = None
+            if markets:
+                force_market = markets[0]
+            else:
+                # Fetch markets explicitly if not in event object
+                try:
+                    mkts_resp = integrator._request("GET", "/markets", params={"event_ticker": best_event.get("ticker")})
+                    fetched_markets = mkts_resp.get("markets", [])
+                    if fetched_markets:
+                        force_market = fetched_markets[0]
+                        logger.info(f"   Fetched {len(fetched_markets)} markets for force match")
+                except Exception as e:
+                    logger.warning(f"   Failed to fetch markets: {e}")
+
+            if force_market:
+                # Calculate probability
+                yes_bid = _kalshi_price_norm(force_market, "yes_bid_dollars", "yes_bid")
+                yes_ask = _kalshi_price_norm(force_market, "yes_ask_dollars", "yes_ask")
+                no_bid = _kalshi_price_norm(force_market, "no_bid_dollars", "no_bid")
+                last_price = _kalshi_price_norm(force_market, "last_price_dollars", "last_price")
+
                 prob = None
                 if yes_bid is not None and yes_ask is not None:
                     prob = (yes_bid + yes_ask) / 2.0
                 elif yes_bid is not None and no_bid is not None:
                     prob = (yes_bid + (1.0 - no_bid)) / 2.0
-                elif yes_bid is not None:
-                    prob = last_price if (last_price is not None and last_price > 0) else yes_bid
-                elif no_bid is not None:
-                    prob = 1.0 - no_bid
-                if prob is None and last_price is not None and last_price > 0:
+                elif last_price is not None and last_price > 0:
                     prob = last_price
-
-                final_prob = prob if prob is not None else 0.5
 
                 return KalshiMatchResult(
                     matched=True,
                     kalshi_available=True,
-                    label=target_market.get('title'),
-                    probability=final_prob,
+                    label=force_market.get('title', 'NCAAB Market'),
+                    probability=prob if prob is not None else 0.5,
                     raw_event_id=best_event.get('ticker'),
                     league=league,
                     reason='ncaab_force_match',
                     market_type='force',
                     game_date=game_dt_utc
                 )
+            else:
+                logger.warning(f"   ⚠️ NCAAB force match: No markets available for {best_event.get('ticker')}")
+
+        if target_market:
             # Calculate prob using _dollars fields (current API) with cent fallback.
             # Matches the same cascade as _kalshi_prices()/winner_prob() in streamlit_app.py.
             yes_bid = _kalshi_price_norm(target_market, "yes_bid_dollars", "yes_bid")
