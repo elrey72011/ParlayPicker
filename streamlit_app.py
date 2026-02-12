@@ -27,6 +27,7 @@ from app_core.kalshi_integrator import (
     resolve_team_code,
     NCAAB_CODE_ALIASES,
     NCAAF_CODE_ALIASES,
+    match_game_to_kalshi,
 )
 
 from app_core.llm_assistant import generate_confidence_explanation, initialize_gemini, generate_batch_confidence_explanation, generate_pick_rationale
@@ -7567,7 +7568,7 @@ def match_kalshi_market(
     winner_reason_override: Optional[str] = None,
 ) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, List[Dict[str, Any]]]]:
     """
-    Safely finds a Kalshi market match.
+    Safely finds a Kalshi market match using match_game_to_kalshi with V2 API support.
     Guarantees a dictionary return to prevent TypeError.
     MANDATORY RETURN: {"sentiment_diff": 0.0, "status": "Neutral"} on error.
     """
@@ -7587,65 +7588,98 @@ def match_kalshi_market(
             "kalshi_title": None,
             "kalshi_yes_side": None,
             "sentiment_diff": 0.0,
-            "status": "Neutral"
+            "status": "Neutral",
+            "market_found": False
         }
 
     try:
-        # Check if helper exists in scope, otherwise define fallback or import
-        if '_match_kalshi_market_impl' not in globals():
-             # If impl is missing, return safe default immediately
+        if not kalshi_integrator:
              return {
-                "winner": base_result("impl_missing", "winner"),
-                "spread": base_result("impl_missing", "spread"),
-                "total": base_result("impl_missing", "total"),
+                "winner": base_result("no_integrator", "winner"),
+                "spread": base_result("no_integrator", "spread"),
+                "total": base_result("no_integrator", "total"),
             }, {}
 
-        # Use existing implementation logic if available
-        res, debug = _match_kalshi_market_impl(game, kalshi_markets, winner_reason_override)
+        league = (game.get("league") or game.get("sport_key") or "").upper()
+        # Map common league names if needed, though kalshi_integrator handles most
+        if league == "BASKETBALL_NBA": league = "NBA"
+        elif league == "AMERICANFOOTBALL_NFL": league = "NFL"
 
-        # Validation: Ensure result is a dictionary
-        if not isinstance(res, dict):
-             return {
-                "winner": base_result("invalid_return_type", "winner"),
-                "spread": base_result("invalid_return_type", "spread"),
-                "total": base_result("invalid_return_type", "total"),
-            }, {}
+        home = game.get("home_team") or game.get("Home")
+        away = game.get("away_team") or game.get("Away")
 
-        # Enforce defaults for keys if missing
-        for k in ["winner", "spread", "total"]:
-            if k not in res or not isinstance(res[k], dict):
-                res[k] = base_result(f"missing_{k}_key", k)
+        # Parse game time
+        commence = game.get("commence_time") or game.get("Commence (UTC)")
+        game_dt = None
+        if commence:
+            if isinstance(commence, datetime):
+                game_dt = commence
+            else:
+                try:
+                    game_dt = datetime.fromisoformat(str(commence).replace("Z", "+00:00"))
+                except:
+                    pass
 
-            # MANDATORY FIELDS FORCE
-            if "sentiment_diff" not in res[k] or res[k]["sentiment_diff"] is None:
-                res[k]["sentiment_diff"] = 0.0
-            if "status" not in res[k]:
-                res[k]["status"] = "Neutral"
-            if "market_found" not in res[k]: # Ensure boolean flag if downstream needs it (though usually implied by matched)
-                 res[k]["market_found"] = bool(res[k].get("kalshi_matched"))
+        # Helper to map KalshiMatchResult to dict
+        def _map_result(res: Any, m_type: str) -> Dict[str, Any]:
+            # res is KalshiMatchResult object
+            base = base_result(res.reason or "unknown", m_type)
+            if res.matched:
+                base.update({
+                    "kalshi_matched": True,
+                    "kalshi_prob": res.probability,
+                    "kalshi_label": res.label,
+                    "kalshi_event_ticker": res.raw_event_id or res.event_ticker,
+                    "kalshi_ticker": res.market_ticker,
+                    "kalshi_title": res.label, # Title is label
+                    "kalshi_yes_side": res.label, # Yes side is typically the title
+                    "market_found": True,
+                    "kalshi_match_score": 100 if res.matched else 0, # Placeholder score
+                })
+                # If market_type is spread/total, we might want to extract line?
+                # KalshiMatchResult doesn't carry line info explicitly yet, but title might have it.
+            return base
 
-        return res, debug
+        # 1. Match Winner
+        res_winner = match_game_to_kalshi(
+            league=league, home_team=home, away_team=away, game_time=game_dt,
+            integrator=kalshi_integrator, status=None, requested_market_type="WINNER"
+        )
+
+        # 2. Match Spread
+        res_spread = match_game_to_kalshi(
+            league=league, home_team=home, away_team=away, game_time=game_dt,
+            integrator=kalshi_integrator, status=None, requested_market_type="SPREAD"
+        )
+
+        # 3. Match Total
+        res_total = match_game_to_kalshi(
+            league=league, home_team=home, away_team=away, game_time=game_dt,
+            integrator=kalshi_integrator, status=None, requested_market_type="TOTAL"
+        )
+
+        results = {
+            "winner": _map_result(res_winner, "winner"),
+            "spread": _map_result(res_spread, "spread"),
+            "total": _map_result(res_total, "total"),
+        }
+
+        # Aggregated debug info
+        debug = {
+            "winner_debug": res_winner.debug if res_winner else None,
+            "spread_debug": res_spread.debug if res_spread else None,
+            "total_debug": res_total.debug if res_total else None,
+        }
+
+        return results, debug
 
     except Exception as exc:
         logger.error(f"match_kalshi_market failed: {exc}", exc_info=True)
-        # Compute minimal diagnostics even on error
-        _err_league = (game.get("league") or game.get("sport_key") or "").upper()
-        _err_prefix = league_game_prefix(_err_league) if _err_league else "UNKNOWN"
-        _err_debug = {
-            "winner_meta": {
-                "winner_prefix": _err_prefix,
-                "allowed_date_tokens": [],
-                "winner_match_status": "exception",
-                "winner_no_match_reason": f"error: {str(exc)}",
-            },
-            "kalshi_game_prefix_used": _err_prefix,
-            "kalshi_wanted_tokens": [],
-        }
         return {
             "winner": base_result(f"error: {str(exc)}", "winner"),
             "spread": base_result(f"error: {str(exc)}", "spread"),
             "total": base_result(f"error: {str(exc)}", "total"),
-        }, _err_debug
+        }, {}
 
 
 # -----------------

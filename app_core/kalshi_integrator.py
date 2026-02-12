@@ -1244,6 +1244,7 @@ def _match_via_events(
 
     for evt in events:
         ticker = evt.get("ticker")
+        logger.info(f"Event ticker parsing: input='{ticker}' → parsed={parse_event_ticker_codes(ticker)}")
         parsed = parse_event_ticker_codes(ticker)
         if not parsed:
             continue
@@ -1342,7 +1343,7 @@ def _match_via_events(
     # This allows for minor time mismatches while still requiring both teams to match
     # LOWERED TEMPORARILY for diagnosis (was 70)
     # Will collect data on near-misses (score 50-69) to identify missing aliases
-    MATCH_THRESHOLD = 50
+    MATCH_THRESHOLD = 70
 
     if best_event:
         logger.info(f"   Best Match Found: {best_details['ticker']}")
@@ -1810,15 +1811,20 @@ def _match_via_events(
                 "is_fallback": "fallback" in (match_reason_detail or "")
             }
 
+            m_type = "winner"
+            if "spread" in (match_reason_detail or ""): m_type = "spread"
+            elif "total" in (match_reason_detail or ""): m_type = "total"
+
             return KalshiMatchResult(
                 matched=True,
                 kalshi_available=True,
                 label=target_market.get("title"),
                 probability=prob if prob is not None else 0.5,
                 raw_event_id=best_event.get("ticker"),
+                market_ticker=target_market.get("ticker"),
                 league=league,
                 reason=match_reason_detail or "matched_via_events_api",
-                market_type="winner",
+                market_type=m_type,
                 game_date=game_dt_utc,
                 debug=debug_info
             )
@@ -2224,6 +2230,7 @@ class KalshiIntegrator:
                 "KALSHI-ACCESS-TIMESTAMP": timestamp,
             }
             try:
+                logger.info(f"Kalshi API Call: key={'SET' if self.api_key else 'MISSING'}, url={url}")
                 resp = self.session.request(
                     method,
                     url,
