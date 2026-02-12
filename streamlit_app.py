@@ -1197,7 +1197,8 @@ def map_kalshi_prob_for_pick(
     pick_side: Optional[str],  # "home" or "away" - which side we're evaluating
     pick_team: Optional[str] = None,  # actual team name
     home_team: Optional[str] = None,
-    away_team: Optional[str] = None
+    away_team: Optional[str] = None,
+    spread_line: Optional[float] = None  # NEW
 ) -> Optional[float]:
     """
     Map Kalshi yes probability to the correct pick side.
@@ -1209,6 +1210,7 @@ def map_kalshi_prob_for_pick(
         pick_team: The actual team name we're evaluating
         home_team: Home team name
         away_team: Away team name
+        spread_line: Spread line value (optional) used for over/under spread logic
 
     Returns:
         float: Probability that the pick_side will cover the spread (0.0 to 1.0)
@@ -1240,7 +1242,14 @@ def map_kalshi_prob_for_pick(
     kalshi_yes_is_home = False
     kalshi_yes_norm = TeamNameMatcher.normalize(kalshi_yes_side) if kalshi_yes_side else ""
 
-    if kalshi_yes_norm == "HOME":
+    # NEW LOGIC: Handle Over/Under phrasing in spread markets
+    if "OVER" in kalshi_yes_norm:
+        # Over generally maps to Home in standard spread markets (Diff = Home - Away)
+        kalshi_yes_is_home = True
+    elif "UNDER" in kalshi_yes_norm:
+        # Under generally maps to Away
+        kalshi_yes_is_home = False
+    elif kalshi_yes_norm == "HOME":
         kalshi_yes_is_home = True
     elif kalshi_yes_norm == "AWAY":
         kalshi_yes_is_home = False
@@ -1393,7 +1402,8 @@ def compute_final_probability(
                 pick_side="home",
                 pick_team=home_team,
                 home_team=home_team,
-                away_team=away_team
+                away_team=away_team,
+                spread_line=kalshi_data.get("spread_line") if kalshi_data else None  # NEW
             )
             # Calculate for Away
             p_away = map_kalshi_prob_for_pick(
@@ -1402,7 +1412,8 @@ def compute_final_probability(
                 pick_side="away",
                 pick_team=away_team,
                 home_team=home_team,
-                away_team=away_team
+                away_team=away_team,
+                spread_line=kalshi_data.get("spread_line") if kalshi_data else None  # NEW
             )
 
             # Validation Logging
@@ -1444,7 +1455,8 @@ def compute_final_probability(
         else:
             # Fallback for unknown types
             kalshi_prob_for_pick = map_kalshi_prob_for_pick(
-                kalshi_prob_yes, kalshi_side_yes, pick_side, pick_side, home_team, away_team
+                kalshi_prob_yes, kalshi_side_yes, pick_side, pick_side, home_team, away_team,
+                spread_line=kalshi_data.get("spread_line") if kalshi_data else None  # NEW
             )
 
     # Logging verification for P0 Bug (Blend Input Check)
@@ -1497,9 +1509,10 @@ def compute_final_probability(
         # Now we trust map_kalshi_prob_for_pick() and only reject on extreme delta.
         kalshi_validated = True
 
-        # User Requirement: Reject neutral Kalshi data (0.50 +/- 0.02)
-        # This catches "no opinion" or default values
-        if abs(kalshi_prob_for_pick - 0.5) < 0.02:
+        # User Requirement: Reject neutral Kalshi data (0.50 +/- 0.005)
+        # Tightened from 0.02 to 0.005 to only reject truly neutral values
+        # 49.5% is a valid 1% edge signal, not neutral
+        if abs(kalshi_prob_for_pick - 0.5) < 0.005:
             kalshi_validated = False
             warnings.append("kalshi_rejected_neutral")
             logger.info(f"Rejecting neutral Kalshi data for {pick_side} (prob={kalshi_prob_for_pick:.3f})")
