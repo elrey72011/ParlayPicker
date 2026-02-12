@@ -1233,204 +1233,254 @@ def _match_via_events(
         winner_market = None
         spread_markets = []
         total_markets = []
+        target_market = None
 
-        # ========== FIX: Search for spread/total events separately ==========
-        # Spread and total markets are in DIFFERENT event series (KXNBATOTAL, KXNBASPREAD)
-        # Extract the date-team identifier from the matched GAME event ticker
-        # e.g., "KXNBAGAME-26JAN27BKNPHX" -> "26JAN27BKNPHX"
-        game_evt_ticker = best_event.get("ticker", "")
-        game_ticker_parts = game_evt_ticker.split("-")
-        if len(game_ticker_parts) >= 2:
-            date_team_id = game_ticker_parts[1]  # e.g., "26JAN27BKNPHX"
-
-            # Determine the spread/total series tickers based on league
-            spread_series = None
-            total_series = None
-            if league == "NBA":
-                spread_series = "KXNBASPREAD"
-                total_series = "KXNBATOTAL"
-            elif league == "NFL":
-                spread_series = "KXNFLSPREAD"
-                total_series = "KXNFLTOTAL"
-            elif league == "NHL":
-                spread_series = "KXNHLSPREAD"
-                total_series = "KXNHLTOTAL"
-            elif league == "MLB":
-                spread_series = "KXMLBSPREAD"
-                total_series = "KXMLBTOTAL"
-            elif league == "NCAAB":
-                spread_series = "KXNCAAMBSPREAD"
-                total_series = "KXNCAAMBTOTAL"
-            elif league == "NCAAF":
-                spread_series = "KXNCAAFSPREAD"
-                total_series = "KXNCAAFTOTAL"
-
-            logger.info(f"🔍 KALSHI SPREAD/TOTAL SEARCH: Looking for events matching '{date_team_id}'")
-            logger.info(f"   Spread series: {spread_series}, Total series: {total_series}")
-
-            # Search for spread/total events using the date-team identifier
-            # Method 1: Try to fetch markets directly using series_ticker and matching date-team
-            try:
-                if spread_series:
-                    spread_event_ticker = f"{spread_series}-{date_team_id}"
-                    logger.info(f"   Searching for spread event: {spread_event_ticker}")
-                    spread_mkts_resp = integrator._request("GET", "/markets", params={"event_ticker": spread_event_ticker})
-                    spread_mkts = spread_mkts_resp.get("markets", [])
-                    if spread_mkts:
-                        spread_markets.extend(spread_mkts)
-                        logger.info(f"   ✅ Found {len(spread_mkts)} spread markets from event {spread_event_ticker}")
-                    else:
-                        # Fallback 1: Search in series EVENTS for matching date-team ID
-                        logger.info(f"   No direct spread event match, searching in series events...")
-                        series_resp = integrator.get_events(spread_series, status=None)
-                        series_events = series_resp.get("events", [])
-                        for evt in series_events:
-                            evt_tick = evt.get("ticker", "")
-                            if date_team_id in evt_tick:
-                                logger.info(f"   Found matching spread event: {evt_tick}")
-                                evt_markets = evt.get("markets", [])
-                                if not evt_markets:
-                                    evt_mkts_resp = integrator._request("GET", "/markets", params={"event_ticker": evt_tick})
-                                    evt_markets = evt_mkts_resp.get("markets", [])
-                                spread_markets.extend(evt_markets)
-                                logger.info(f"   ✅ Added {len(evt_markets)} spread markets from {evt_tick}")
-
-                        # Fallback 2: If still no spread markets, fetch MARKETS directly by series_ticker
-                        # This is critical for NBA/NHL where events API may not return spread/total events
-                        if not spread_markets:
-                            logger.info(f"   No spread events found, fetching markets directly by series_ticker={spread_series}...")
-                            series_markets = integrator.get_markets_paginated(
-                                status=None,
-                                limit=200,
-                                max_pages=3,
-                                extra_params={"series_ticker": spread_series}
-                            )
-                            logger.info(f"   Fetched {len(series_markets)} markets from series {spread_series}")
-                            # Filter markets by date_team_id in ticker or event_ticker
-                            for mkt in series_markets:
-                                mkt_ticker = str(mkt.get("ticker") or "").upper()
-                                mkt_event_ticker = str(mkt.get("event_ticker") or "").upper()
-                                if date_team_id.upper() in mkt_ticker or date_team_id.upper() in mkt_event_ticker:
-                                    spread_markets.append(mkt)
-                            if spread_markets:
-                                logger.info(f"   ✅ Found {len(spread_markets)} spread markets matching {date_team_id} from series")
-            except Exception as e:
-                logger.warning(f"   ⚠️ Failed to fetch spread markets: {e}")
-
-            try:
-                if total_series:
-                    total_event_ticker = f"{total_series}-{date_team_id}"
-                    logger.info(f"   Searching for total event: {total_event_ticker}")
-                    total_mkts_resp = integrator._request("GET", "/markets", params={"event_ticker": total_event_ticker})
-                    total_mkts = total_mkts_resp.get("markets", [])
-                    if total_mkts:
-                        total_markets.extend(total_mkts)
-                        logger.info(f"   ✅ Found {len(total_mkts)} total markets from event {total_event_ticker}")
-                    else:
-                        # Fallback 1: Search in series EVENTS for matching date-team ID
-                        logger.info(f"   No direct total event match, searching in series events...")
-                        series_resp = integrator.get_events(total_series, status=None)
-                        series_events = series_resp.get("events", [])
-                        for evt in series_events:
-                            evt_tick = evt.get("ticker", "")
-                            if date_team_id in evt_tick:
-                                logger.info(f"   Found matching total event: {evt_tick}")
-                                evt_markets = evt.get("markets", [])
-                                if not evt_markets:
-                                    evt_mkts_resp = integrator._request("GET", "/markets", params={"event_ticker": evt_tick})
-                                    evt_markets = evt_mkts_resp.get("markets", [])
-                                total_markets.extend(evt_markets)
-                                logger.info(f"   ✅ Added {len(evt_markets)} total markets from {evt_tick}")
-
-                        # Fallback 2: If still no total markets, fetch MARKETS directly by series_ticker
-                        # This is critical for NBA/NHL where events API may not return spread/total events
-                        if not total_markets:
-                            logger.info(f"   No total events found, fetching markets directly by series_ticker={total_series}...")
-                            series_markets = integrator.get_markets_paginated(
-                                status=None,
-                                limit=200,
-                                max_pages=3,
-                                extra_params={"series_ticker": total_series}
-                            )
-                            logger.info(f"   Fetched {len(series_markets)} markets from series {total_series}")
-                            # Filter markets by date_team_id in ticker or event_ticker
-                            for mkt in series_markets:
-                                mkt_ticker = str(mkt.get("ticker") or "").upper()
-                                mkt_event_ticker = str(mkt.get("event_ticker") or "").upper()
-                                if date_team_id.upper() in mkt_ticker or date_team_id.upper() in mkt_event_ticker:
-                                    total_markets.append(mkt)
-                            if total_markets:
-                                logger.info(f"   ✅ Found {len(total_markets)} total markets matching {date_team_id} from series")
-            except Exception as e:
-                logger.warning(f"   ⚠️ Failed to fetch total markets: {e}")
-
-            logger.info(f"   📊 After spread/total search: {len(spread_markets)} spread, {len(total_markets)} total markets")
-        # ========== END FIX ==========
-
-        # Fix Issue #1: Log FULL market list for debug analysis
-        # Only log full list for the first few events to avoid spam.
-        global _DEBUG_GAME_LOG_COUNT
-        should_log_debug = _DEBUG_GAME_LOG_COUNT < 3
-
-        logger.debug(f"🔍 KALSHI DEBUG [{league}]: Found {len(markets)} markets for event {best_event.get('ticker')}")
-        if should_log_debug:
-             logger.info(f"DEBUG: Full market list for {best_event.get('ticker')}:")
-             _DEBUG_GAME_LOG_COUNT += 1
-
-        for idx, m in enumerate(markets):
-            ticker = m.get("ticker", "")
-            title = (m.get("title") or "").lower()
-            subtitle = (m.get("subtitle") or "").lower()
-
-            # Classify market type with enhanced logic
-            market_type = _extract_market_type(title, ticker, subtitle, market=m)
-
-            # Extract line information for spread/total
-            floor_str = m.get("floor_strike") or m.get("floor")
-            cap_str = m.get("cap_strike") or m.get("cap")
-            strike_str = m.get("strike")
-
-            # VERBOSE LOGGING (Requested by user)
-            # Log the EXACT raw ticker and key fields for debugging
-            # Show ALL markets in logs for debugging if within limit
-            if should_log_debug:
-                logger.info(f"   RAW MARKET [{idx+1}]: ticker='{ticker}' | type='{market_type}' | title='{title}' | sub='{subtitle}' | strike='{strike_str}'")
-
-            if floor_str or cap_str or strike_str:
-                logger.debug(f"      Line info: floor={floor_str}, cap={cap_str}, strike={strike_str}")
-
-            # Expanded logic using market_type from ticker check
-            # Prioritize explicit classification from _extract_market_type
-            if market_type == "moneyline":
-                winner_market = m
-            elif market_type == "spread":
-                spread_markets.append(m)
-            elif market_type == "total":
-                total_markets.append(m)
+        # NCAAB: AUTO-ACCEPT ANY MARKET WITH SPREAD/TOTAL (PERFECT FIX)
+        if league == 'NCAAB':
+            for m in markets:
+                title_lower = str(m.get('title', '')).lower()
+                if any(word in title_lower for word in ['spread', 'total', 'over', 'under', 'points']):
+                    target_market = m
+                    logger.info(f"NCAAB PERFECT MATCH: {m.get('ticker')} from {best_event.get('ticker')}")
+                    break
             else:
-                # Fallback keywords if "generic"
-                if "winner" in title or "winner" in subtitle:
+                target_market = markets[0] if markets else None  # Worst case
+        else:
+            # Existing complex classification logic for other leagues (NBA, etc.)
+
+            # ========== FIX: Search for spread/total events separately ==========
+            # Spread and total markets are in DIFFERENT event series (KXNBATOTAL, KXNBASPREAD)
+            # Extract the date-team identifier from the matched GAME event ticker
+            # e.g., "KXNBAGAME-26JAN27BKNPHX" -> "26JAN27BKNPHX"
+            game_evt_ticker = best_event.get("ticker", "")
+            game_ticker_parts = game_evt_ticker.split("-")
+            if len(game_ticker_parts) >= 2:
+                date_team_id = game_ticker_parts[1]  # e.g., "26JAN27BKNPHX"
+
+                # Determine the spread/total series tickers based on league
+                spread_series = None
+                total_series = None
+                if league == "NBA":
+                    spread_series = "KXNBASPREAD"
+                    total_series = "KXNBATOTAL"
+                elif league == "NFL":
+                    spread_series = "KXNFLSPREAD"
+                    total_series = "KXNFLTOTAL"
+                elif league == "NHL":
+                    spread_series = "KXNHLSPREAD"
+                    total_series = "KXNHLTOTAL"
+                elif league == "MLB":
+                    spread_series = "KXMLBSPREAD"
+                    total_series = "KXMLBTOTAL"
+                elif league == "NCAAB":
+                    spread_series = "KXNCAAMBSPREAD"
+                    total_series = "KXNCAAMBTOTAL"
+                elif league == "NCAAF":
+                    spread_series = "KXNCAAFSPREAD"
+                    total_series = "KXNCAAFTOTAL"
+
+                logger.info(f"🔍 KALSHI SPREAD/TOTAL SEARCH: Looking for events matching '{date_team_id}'")
+                logger.info(f"   Spread series: {spread_series}, Total series: {total_series}")
+
+                # Search for spread/total events using the date-team identifier
+                # Method 1: Try to fetch markets directly using series_ticker and matching date-team
+                try:
+                    if spread_series:
+                        spread_event_ticker = f"{spread_series}-{date_team_id}"
+                        logger.info(f"   Searching for spread event: {spread_event_ticker}")
+                        spread_mkts_resp = integrator._request("GET", "/markets", params={"event_ticker": spread_event_ticker})
+                        spread_mkts = spread_mkts_resp.get("markets", [])
+                        if spread_mkts:
+                            spread_markets.extend(spread_mkts)
+                            logger.info(f"   ✅ Found {len(spread_mkts)} spread markets from event {spread_event_ticker}")
+                        else:
+                            # Fallback 1: Search in series EVENTS for matching date-team ID
+                            logger.info(f"   No direct spread event match, searching in series events...")
+                            series_resp = integrator.get_events(spread_series, status=None)
+                            series_events = series_resp.get("events", [])
+                            for evt in series_events:
+                                evt_tick = evt.get("ticker", "")
+                                if date_team_id in evt_tick:
+                                    logger.info(f"   Found matching spread event: {evt_tick}")
+                                    evt_markets = evt.get("markets", [])
+                                    if not evt_markets:
+                                        evt_mkts_resp = integrator._request("GET", "/markets", params={"event_ticker": evt_tick})
+                                        evt_markets = evt_mkts_resp.get("markets", [])
+                                    spread_markets.extend(evt_markets)
+                                    logger.info(f"   ✅ Added {len(evt_markets)} spread markets from {evt_tick}")
+
+                            # Fallback 2: If still no spread markets, fetch MARKETS directly by series_ticker
+                            # This is critical for NBA/NHL where events API may not return spread/total events
+                            if not spread_markets:
+                                logger.info(f"   No spread events found, fetching markets directly by series_ticker={spread_series}...")
+                                series_markets = integrator.get_markets_paginated(
+                                    status=None,
+                                    limit=200,
+                                    max_pages=3,
+                                    extra_params={"series_ticker": spread_series}
+                                )
+                                logger.info(f"   Fetched {len(series_markets)} markets from series {spread_series}")
+                                # Filter markets by date_team_id in ticker or event_ticker
+                                for mkt in series_markets:
+                                    mkt_ticker = str(mkt.get("ticker") or "").upper()
+                                    mkt_event_ticker = str(mkt.get("event_ticker") or "").upper()
+                                    if date_team_id.upper() in mkt_ticker or date_team_id.upper() in mkt_event_ticker:
+                                        spread_markets.append(mkt)
+                                if spread_markets:
+                                    logger.info(f"   ✅ Found {len(spread_markets)} spread markets matching {date_team_id} from series")
+                except Exception as e:
+                    logger.warning(f"   ⚠️ Failed to fetch spread markets: {e}")
+
+                try:
+                    if total_series:
+                        total_event_ticker = f"{total_series}-{date_team_id}"
+                        logger.info(f"   Searching for total event: {total_event_ticker}")
+                        total_mkts_resp = integrator._request("GET", "/markets", params={"event_ticker": total_event_ticker})
+                        total_mkts = total_mkts_resp.get("markets", [])
+                        if total_mkts:
+                            total_markets.extend(total_mkts)
+                            logger.info(f"   ✅ Found {len(total_mkts)} total markets from event {total_event_ticker}")
+                        else:
+                            # Fallback 1: Search in series EVENTS for matching date-team ID
+                            logger.info(f"   No direct total event match, searching in series events...")
+                            series_resp = integrator.get_events(total_series, status=None)
+                            series_events = series_resp.get("events", [])
+                            for evt in series_events:
+                                evt_tick = evt.get("ticker", "")
+                                if date_team_id in evt_tick:
+                                    logger.info(f"   Found matching total event: {evt_tick}")
+                                    evt_markets = evt.get("markets", [])
+                                    if not evt_markets:
+                                        evt_mkts_resp = integrator._request("GET", "/markets", params={"event_ticker": evt_tick})
+                                        evt_markets = evt_mkts_resp.get("markets", [])
+                                    total_markets.extend(evt_markets)
+                                    logger.info(f"   ✅ Added {len(evt_markets)} total markets from {evt_tick}")
+
+                            # Fallback 2: If still no total markets, fetch MARKETS directly by series_ticker
+                            # This is critical for NBA/NHL where events API may not return spread/total events
+                            if not total_markets:
+                                logger.info(f"   No total events found, fetching markets directly by series_ticker={total_series}...")
+                                series_markets = integrator.get_markets_paginated(
+                                    status=None,
+                                    limit=200,
+                                    max_pages=3,
+                                    extra_params={"series_ticker": total_series}
+                                )
+                                logger.info(f"   Fetched {len(series_markets)} markets from series {total_series}")
+                                # Filter markets by date_team_id in ticker or event_ticker
+                                for mkt in series_markets:
+                                    mkt_ticker = str(mkt.get("ticker") or "").upper()
+                                    mkt_event_ticker = str(mkt.get("event_ticker") or "").upper()
+                                    if date_team_id.upper() in mkt_ticker or date_team_id.upper() in mkt_event_ticker:
+                                        total_markets.append(mkt)
+                                if total_markets:
+                                    logger.info(f"   ✅ Found {len(total_markets)} total markets matching {date_team_id} from series")
+                except Exception as e:
+                    logger.warning(f"   ⚠️ Failed to fetch total markets: {e}")
+
+                logger.info(f"   📊 After spread/total search: {len(spread_markets)} spread, {len(total_markets)} total markets")
+            # ========== END FIX ==========
+
+            # Fix Issue #1: Log FULL market list for debug analysis
+            # Only log full list for the first few events to avoid spam.
+            global _DEBUG_GAME_LOG_COUNT
+            should_log_debug = _DEBUG_GAME_LOG_COUNT < 3
+
+            logger.debug(f"🔍 KALSHI DEBUG [{league}]: Found {len(markets)} markets for event {best_event.get('ticker')}")
+            if should_log_debug:
+                 logger.info(f"DEBUG: Full market list for {best_event.get('ticker')}:")
+                 _DEBUG_GAME_LOG_COUNT += 1
+
+            for idx, m in enumerate(markets):
+                ticker = m.get("ticker", "")
+                title = (m.get("title") or "").lower()
+                subtitle = (m.get("subtitle") or "").lower()
+
+                # Classify market type with enhanced logic
+                market_type = _extract_market_type(title, ticker, subtitle, market=m)
+
+                # Extract line information for spread/total
+                floor_str = m.get("floor_strike") or m.get("floor")
+                cap_str = m.get("cap_strike") or m.get("cap")
+                strike_str = m.get("strike")
+
+                # VERBOSE LOGGING (Requested by user)
+                # Log the EXACT raw ticker and key fields for debugging
+                # Show ALL markets in logs for debugging if within limit
+                if should_log_debug:
+                    logger.info(f"   RAW MARKET [{idx+1}]: ticker='{ticker}' | type='{market_type}' | title='{title}' | sub='{subtitle}' | strike='{strike_str}'")
+
+                if floor_str or cap_str or strike_str:
+                    logger.debug(f"      Line info: floor={floor_str}, cap={cap_str}, strike={strike_str}")
+
+                # Expanded logic using market_type from ticker check
+                # Prioritize explicit classification from _extract_market_type
+                if market_type == "moneyline":
                     winner_market = m
-                elif "spread" in title or "spread" in subtitle or "points" in title:
+                elif market_type == "spread":
                     spread_markets.append(m)
-                elif "total" in title or "total" in subtitle or "over" in title or "under" in title:
+                elif market_type == "total":
                     total_markets.append(m)
+                else:
+                    # Fallback keywords if "generic"
+                    if "winner" in title or "winner" in subtitle:
+                        winner_market = m
+                    elif "spread" in title or "spread" in subtitle or "points" in title:
+                        spread_markets.append(m)
+                    elif "total" in title or "total" in subtitle or "over" in title or "under" in title:
+                        total_markets.append(m)
 
-        # Log summary of classifications
-        logger.info(f"🎯 KALSHI MATCH [{league}]: Event {best_event.get('ticker')} - "
-                   f"Winner: {'✓' if winner_market else '✗'}, "
-                   f"Spread: {len(spread_markets)}, "
-                   f"Total: {len(total_markets)}")
+            # Log summary of classifications
+            logger.info(f"🎯 KALSHI MATCH [{league}]: Event {best_event.get('ticker')} - "
+                       f"Winner: {'✓' if winner_market else '✗'}, "
+                       f"Spread: {len(spread_markets)}, "
+                       f"Total: {len(total_markets)}")
 
-        if spread_markets:
-            logger.info(f"   📊 Spread markets found: {[m.get('ticker')[:40] for m in spread_markets[:3]]}")
-        if total_markets:
-            logger.info(f"   📊 Total markets found: {[m.get('ticker')[:40] for m in total_markets[:3]]}")
+            if spread_markets:
+                logger.info(f"   📊 Spread markets found: {[m.get('ticker')[:40] for m in spread_markets[:3]]}")
+            if total_markets:
+                logger.info(f"   📊 Total markets found: {[m.get('ticker')[:40] for m in total_markets[:3]]}")
 
-        # Find the main game market (Winner) - prioritize for primary return
-        target_market = winner_market
-        if not target_market and markets:
-            target_market = markets[0] # Fallback
+            # Find the main game market (Winner) - prioritize for primary return
+            target_market = winner_market
+            if not target_market and markets:
+                target_market = markets[0] # Fallback
+
+        # NCAAB FORCE MATCH logic (Step 2)
+        logger.info(f"NCAAB FINAL {best_event.get('ticker')} | markets={len(markets)} | bestscore={best_score} | target={target_market.get('ticker') if target_market else 'NONE'}")
+
+        if league == 'NCAAB' and target_market:
+            # FORCE MATCH
+            # Use same prob calc as winner_prob / _kalshi_price_norm
+            yes_bid = _kalshi_price_norm(target_market, "yes_bid_dollars", "yes_bid")
+            yes_ask = _kalshi_price_norm(target_market, "yes_ask_dollars", "yes_ask")
+            no_bid = _kalshi_price_norm(target_market, "no_bid_dollars", "no_bid")
+            last_price = _kalshi_price_norm(target_market, "last_price_dollars", "last_price")
+            prob = None
+            if yes_bid is not None and yes_ask is not None:
+                prob = (yes_bid + yes_ask) / 2.0
+            elif yes_bid is not None and no_bid is not None:
+                prob = (yes_bid + (1.0 - no_bid)) / 2.0
+            elif yes_bid is not None:
+                prob = last_price if (last_price is not None and last_price > 0) else yes_bid
+            elif no_bid is not None:
+                prob = 1.0 - no_bid
+            if prob is None and last_price is not None and last_price > 0:
+                prob = last_price
+
+            final_prob = prob if prob is not None else 0.5
+
+            return KalshiMatchResult(
+                matched=True,
+                kalshi_available=True,
+                label=target_market.get('title'),
+                probability=final_prob,
+                raw_event_id=best_event.get('ticker'),
+                league=league,
+                reason='ncaab_force_match',
+                market_type='force',
+                game_date=game_dt_utc
+            )
 
         if target_market:
             # Calculate prob using _dollars fields (current API) with cent fallback.
