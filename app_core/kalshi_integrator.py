@@ -2041,7 +2041,7 @@ class KalshiIntegrator:
         # Clear stale events cache on initialization
         self._events_cache: Dict[str, Dict[str, Any]] = {}  # Cache for /events by series_ticker
         self._events_cache_ttl: int = 300
-        logger.info("Kalshi integrator initialized, events cache cleared")
+        logger.info("✅ Kalshi integrator initialized, events cache cleared")
         self.last_error: Optional[str] = None
         self._league_cache: Dict[str, Dict[str, Any]] = {}
         self._league_cache_ttl: int = 300
@@ -2355,24 +2355,52 @@ class KalshiIntegrator:
         try:
             resp = self._request("GET", "/events", params=params)
 
-            # VALIDATION: Check if events have valid tickers
+            # DIAGNOSTIC: Log raw response structure
             events = resp.get("events", [])
+            if events:
+                sample_event = events[0]
+                logger.info(f"🔍 KALSHI /events RAW RESPONSE SAMPLE:")
+                logger.info(f"   Keys in first event: {list(sample_event.keys())}")
+                logger.info(f"   Ticker value: {sample_event.get('ticker')}")
+                logger.info(f"   Ticker type: {type(sample_event.get('ticker'))}")
+
+                # Check for nested ticker
+                if 'event' in sample_event:
+                    logger.info(f"   Nested 'event' found: {list(sample_event['event'].keys())}")
+                    logger.info(f"   Nested ticker: {sample_event['event'].get('ticker')}")
+
+            # VALIDATION: Filter out events with null/invalid tickers
             valid_events = []
+            invalid_count = 0
             for evt in events:
                 ticker = evt.get("ticker")
-                if ticker and ticker != "None" and isinstance(ticker, str):
+
+                # Check if ticker is in nested 'event' object (API v2 structure)
+                if not ticker and isinstance(evt.get("event"), dict):
+                    ticker = evt["event"].get("ticker")
+                    if ticker:
+                        # Flatten: Copy ticker to top level
+                        evt["ticker"] = ticker
+
+                # Validate ticker
+                if ticker and ticker != "None" and isinstance(ticker, str) and len(ticker) > 5:
                     valid_events.append(evt)
                 else:
-                    logger.warning(f"Kalshi event missing ticker: {evt.get('id', 'unknown')}")
+                    invalid_count += 1
+                    if invalid_count <= 3:  # Log first 3 invalid for diagnosis
+                        logger.warning(f"⚠️ Invalid event ticker: {evt.get('id', 'unknown')} → ticker={ticker}")
 
-            # Replace events with validated list
+            # Replace with validated list
             if valid_events:
                 resp["events"] = valid_events
-            else:
-                logger.error(f"Kalshi get_events returned {len(events)} events but ALL had invalid tickers!")
+                logger.info(f"✅ Validated {len(valid_events)}/{len(events)} events (filtered {invalid_count} invalid)")
+            elif events:
+                logger.error(f"❌ ALL {len(events)} events had invalid tickers! Clearing cache.")
                 # Clear corrupted cache
                 if cache_key in self._events_cache:
                     del self._events_cache[cache_key]
+                # Return empty to avoid cascading failures
+                return {"events": [], "cursor": None}
 
         except Exception:
             # If rate limited or error, return cached if available
@@ -2386,6 +2414,13 @@ class KalshiIntegrator:
             self._events_cache[cache_key] = {"ts": now, "payload": resp}
 
         return resp
+
+    def clear_events_cache(self) -> Dict[str, Any]:
+        """Manually clear events cache (useful for debugging API changes)."""
+        count = len(self._events_cache)
+        self._events_cache.clear()
+        logger.info(f"🗑️ Cleared {count} cached event entries")
+        return {"cleared": count, "status": "ok"}
 
     def scan_and_verify_team_codes(self, league: str) -> Dict[str, Any]:
         """
