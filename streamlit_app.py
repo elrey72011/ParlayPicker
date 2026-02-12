@@ -7898,6 +7898,12 @@ enable_sentiment = True  # Forced enabled for Reddit fallback
 #     "Enable Sentiment", value=st.session_state.get("enable_sentiment", True)
 # )
 st.session_state["enable_sentiment"] = enable_sentiment
+
+# === KALSHI BLENDING DEBUG SECTION ===
+# Add to sidebar (after league selection but before "Run Analysis" button)
+if st.sidebar.checkbox("🔬 Debug Kalshi Blending", key="debug_kalshi_blend"):
+    st.sidebar.info("Shows detailed probability blending for Kalshi-matched games")
+
 if st.sidebar.button("Load Games", width="stretch"):
     st.cache_data.clear()  # Force a fresh API call
     # Invalidate master_df when loading new games
@@ -14049,6 +14055,96 @@ if should_display:
 
         # Initialize view frame immediately to avoid NameError
         df_master_view = df.copy()
+
+        if st.session_state.get("debug_kalshi_blend", False):
+            st.markdown("---")
+            st.markdown("### 🔬 Kalshi Blending Debug")
+
+            # Filter to games with Kalshi markets
+            master_df_debug = st.session_state.get("master_df", pd.DataFrame())
+
+            # Robust filtering handling missing Kalshi_Market column
+            kalshi_games = pd.DataFrame()
+            if not master_df_debug.empty:
+                if 'Kalshi_Market' in master_df_debug.columns:
+                    kalshi_games = master_df_debug[master_df_debug['Kalshi_Market'].notna()].copy()
+                elif 'HasKalshiMarket' in master_df_debug.columns:
+                    kalshi_games = master_df_debug[master_df_debug['HasKalshiMarket'] == True].copy()
+
+            if kalshi_games.empty:
+                st.warning("No games with Kalshi markets found in current results.")
+            else:
+                st.success(f"Found {len(kalshi_games)} games with Kalshi markets")
+
+                # Display first 5 games with detailed blending info
+                for idx, row in kalshi_games.head(5).iterrows():
+                    with st.expander(f"📊 {row.get('Home', 'Unknown')} vs {row.get('Away', 'Unknown')}"):
+                        col1, col2 = st.columns(2)
+
+                        with col1:
+                            st.markdown("**Kalshi Data:**")
+                            st.write(f"- Market: `{row.get('Kalshi_Market', row.get('Market', 'N/A'))}`")
+                            st.write(f"- Raw Yes Prob: `{row.get('kalshi_prob_yes', row.get('kalshi_prob', 'N/A'))}`")
+                            st.write(f"- Yes Side: `{row.get('kalshi_yes_side', 'N/A')}`")
+                            st.write(f"- Prob for Pick: `{row.get('kalshi_prob_for_pick', 'N/A')}`")
+                            st.write(f"- Kalshi Weight: `{row.get('kalshi_weight', 'N/A')}`")
+
+                        with col2:
+                            st.markdown("**Blended Result:**")
+                            st.write(f"- Market Prob: `{row.get('spread_prob_pick_market', row.get('Implied_Prob', 'N/A'))}`")
+                            st.write(f"- Final Prob: `{row.get('spread_prob_pick_final', row.get('final_probability', 'N/A'))}`")
+                            st.write(f"- Pick: `{row.get('Pick', 'N/A')}`")
+                            st.write(f"- Confidence: `{row.get('Pick_Confidence', 'N/A')}`")
+
+                        # Validation checks
+                        st.markdown("**Validation:**")
+                        kalshi_pick_prob = row.get('kalshi_prob_for_pick')
+                        final_prob = row.get('spread_prob_pick_final', row.get('final_probability'))
+
+                        checks = []
+
+                        # Check 1: Kalshi prob mapped correctly (>= 0.50 for pick)
+                        if kalshi_pick_prob is not None:
+                            try:
+                                kpp = float(kalshi_pick_prob)
+                                if kpp >= 0.50:
+                                    checks.append("✅ Kalshi prob >= 50% (correctly mapped)")
+                                else:
+                                    checks.append(f"❌ Kalshi prob < 50% ({kpp:.1%}) - MAPPING ERROR!")
+                            except:
+                                checks.append("⚠️ Kalshi prob invalid format")
+                        else:
+                            checks.append("⚠️ Kalshi prob missing")
+
+                        # Check 2: Final prob always >= 0.50
+                        if final_prob is not None:
+                            try:
+                                fp = float(final_prob)
+                                if fp >= 0.50:
+                                    checks.append("✅ Final prob >= 50% (valid pick)")
+                                else:
+                                    checks.append(f"❌ Final prob < 50% ({fp:.1%}) - SELECTION ERROR!")
+                            except:
+                                checks.append("⚠️ Final prob invalid format")
+                        else:
+                            checks.append("⚠️ Final prob missing")
+
+                        # Check 3: Kalshi influence visible
+                        market_prob = row.get('spread_prob_pick_market', row.get('Implied_Prob'))
+                        if kalshi_pick_prob is not None and market_prob is not None and final_prob is not None:
+                            try:
+                                fp = float(final_prob)
+                                mp = float(market_prob)
+                                kalshi_delta = abs(fp - mp)
+                                if kalshi_delta >= 0.02:
+                                    checks.append(f"✅ Kalshi influenced final prob (Δ = {kalshi_delta:.1%})")
+                                else:
+                                    checks.append(f"⚠️ Kalshi influence weak (Δ = {kalshi_delta:.1%})")
+                            except:
+                                pass
+
+                        for check in checks:
+                            st.write(check)
 
         # NOTE: Do NOT apply Kalshi match filter here - it must only affect UI display, not exports
         # The filter is applied later to df_master_view_display only (see line ~10613+)
