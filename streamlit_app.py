@@ -1036,76 +1036,104 @@ def implied_prob_for_pick(odds_home: Any, odds_away: Any, pick_side: Optional[st
 
 
 def map_kalshi_prob_for_pick(
-    kalshi_prob_yes: Optional[float],
-    kalshi_yes_side: Optional[str],
-    pick_side: Optional[str],
+    kalshi_yes_prob: Optional[float],
+    kalshi_yes_side: Optional[str],  # "home" or "away" or Team Name
+    pick_side: Optional[str],  # "home" or "away" - which side we're evaluating
+    pick_team: Optional[str] = None,  # actual team name
     home_team: Optional[str] = None,
     away_team: Optional[str] = None
 ) -> Optional[float]:
-    """Map a Kalshi yes-probability to the selected pick side.
-
-    Determines if the pick_side matches the kalshi_yes_side.
-    If match: returns prob.
-    If mismatch: returns 1.0 - prob.
     """
-    prob = safe_float(kalshi_prob_yes)
+    Map Kalshi yes probability to the correct pick side.
+
+    Args:
+        kalshi_yes_prob: Probability from Kalshi for the "yes" side (0.0 to 1.0)
+        kalshi_yes_side: Which side Kalshi's yes_prob represents ("home" or "away" or TeamName)
+        pick_side: Which side we're calculating probability for ("home" or "away")
+        pick_team: The actual team name we're evaluating
+        home_team: Home team name
+        away_team: Away team name
+
+    Returns:
+        float: Probability that the pick_side will cover the spread (0.0 to 1.0)
+    """
+    prob = safe_float(kalshi_yes_prob)
     if prob is None:
         return None
 
     # Defensive check for exactly 0.5 (neutral default)
     if abs(prob - 0.5) < 0.001:
-        logger.warning(f"⚠️ Kalshi neutral prob (0.50) for {pick_side} (Yes: {kalshi_yes_side}) - likely default")
+        # logger.warning(f"⚠️ Kalshi neutral prob (0.50) for {pick_team or pick_side} - likely default")
         return prob
 
-    if not pick_side or not kalshi_yes_side:
+    if not pick_side:
         return prob
 
-    # Normalize strings
-    pick_norm = TeamNameMatcher.normalize(pick_side)
-    yes_norm = TeamNameMatcher.normalize(kalshi_yes_side)
+    # Determine which team is which side
+    pick_is_home = False
+    if pick_side.lower() == "home":
+        pick_is_home = True
+    elif pick_side.lower() == "away":
+        pick_is_home = False
+    else:
+        # Fallback: check team names with normalization
+        if pick_team and home_team:
+            pick_is_home = TeamNameMatcher.normalize(pick_team) == TeamNameMatcher.normalize(home_team)
 
-    # 1. Direct Match
-    if pick_norm == yes_norm:
-        return prob
+    # Resolve Kalshi Yes Side to Home/Away
+    kalshi_yes_is_home = False
+    kalshi_yes_norm = TeamNameMatcher.normalize(kalshi_yes_side) if kalshi_yes_side else ""
 
-    # 2. Check Over/Under explicit
-    if "over" in pick_norm and "over" in yes_norm: return prob
-    if "under" in pick_norm and "under" in yes_norm: return prob
-    if "over" in pick_norm and "under" in yes_norm: return 1.0 - prob
-    if "under" in pick_norm and "over" in yes_norm: return 1.0 - prob
+    if kalshi_yes_norm == "HOME":
+        kalshi_yes_is_home = True
+    elif kalshi_yes_norm == "AWAY":
+        kalshi_yes_is_home = False
+    elif home_team and kalshi_yes_norm == TeamNameMatcher.normalize(home_team):
+        kalshi_yes_is_home = True
+    elif away_team and kalshi_yes_norm == TeamNameMatcher.normalize(away_team):
+        kalshi_yes_is_home = False
+    else:
+        # If we can't resolve Kalshi side, we assume it matches Home if ambiguous?
+        # Or we rely on it being Home by default for spread/ML usually?
+        # Let's assume Yes = Home if not specified as Away
+        # But logging is key here.
+        pass
 
-    # 3. Check "Home"/"Away" generic placeholders
-    # If Kalshi side is explicit "HOME" or "AWAY" (from infer_yes_side)
-    if yes_norm == "home":
-        if home_team and TeamNameMatcher.normalize(home_team) in pick_norm: return prob
-        if away_team and TeamNameMatcher.normalize(away_team) in pick_norm: return 1.0 - prob
-    if yes_norm == "away":
-        if away_team and TeamNameMatcher.normalize(away_team) in pick_norm: return prob
-        if home_team and TeamNameMatcher.normalize(home_team) in pick_norm: return 1.0 - prob
+    # Map Kalshi yes probability to pick
+    if kalshi_yes_is_home:
+        # Kalshi yes_prob is for home team
+        if pick_is_home:
+            result = prob  # Pick is home, Kalshi yes is home
+        else:
+            result = 1.0 - prob  # Pick is away, flip Kalshi prob
+    else:  # Kalshi yes is away
+        # Kalshi yes_prob is for away team
+        if pick_is_home:
+            result = 1.0 - prob  # Pick is home, flip Kalshi prob
+        else:
+            result = prob  # Pick is away, Kalshi yes is away
 
-    # 4. Check Team vs Team
-    if home_team and away_team:
-        home_norm = TeamNameMatcher.normalize(home_team)
-        away_norm = TeamNameMatcher.normalize(away_team)
+    return result
 
-        # If Yes is Home
-        if yes_norm == home_norm:
-            if pick_norm == away_norm: return 1.0 - prob
-            if pick_norm == home_norm: return prob
+def map_kalshi_prob_for_total(
+    kalshi_yes_prob: Optional[float],
+    kalshi_yes_side: Optional[str],  # "over" or "under"
+    pick_side: str  # "over" or "under"
+) -> Optional[float]:
+    prob = safe_float(kalshi_yes_prob)
+    if prob is None:
+        return None
 
-        # If Yes is Away
-        if yes_norm == away_norm:
-            if pick_norm == home_norm: return 1.0 - prob
-            if pick_norm == away_norm: return prob
+    yes_side = str(kalshi_yes_side or "").lower()
+    pick_side = str(pick_side).lower()
 
-    # If we reached here, mapping is ambiguous
-    # Check fuzzy?
-    if fuzz:
-        if fuzz.ratio(pick_norm, yes_norm) > 80:
-            return prob
+    if "over" in yes_side:
+        if "over" in pick_side: return prob
+        if "under" in pick_side: return 1.0 - prob
+    elif "under" in yes_side:
+        if "under" in pick_side: return prob
+        if "over" in pick_side: return 1.0 - prob
 
-    # Default to raw prob but log
-    logger.info(f"Kalshi mapping fallback: yes='{kalshi_yes_side}', pick='{pick_side}' -> using raw {prob}")
     return prob
 
 
@@ -1168,9 +1196,100 @@ def compute_final_probability(
     Returns (final_prob, base_prob, weights_used, driver, warnings, kalshi_prob_for_pick).
     """
     warnings: List[str] = []
-    kalshi_prob_for_pick = map_kalshi_prob_for_pick(
-        kalshi_prob_yes, kalshi_side_yes, pick_side, home_team, away_team
-    )
+
+    # ---------------------------------------------------------
+    # IMPROVED KALSHI MAPPING (v105)
+    # Validate both sides and ensure correct side mapping
+    # ---------------------------------------------------------
+    kalshi_prob_for_pick = None
+
+    if kalshi_prob_yes is not None:
+        pick_type_enum = None # "spread/ml", "total"
+        pick_side_enum = None # "home", "away", "over", "under"
+
+        # 1. Determine Pick Side Enum
+        if pick_side:
+            p_lower = str(pick_side).lower()
+            if "over" in p_lower:
+                pick_side_enum = "over"
+                pick_type_enum = "total"
+            elif "under" in p_lower:
+                pick_side_enum = "under"
+                pick_type_enum = "total"
+            elif home_team and away_team:
+                p_norm = TeamNameMatcher.normalize(pick_side)
+                h_norm = TeamNameMatcher.normalize(home_team)
+                a_norm = TeamNameMatcher.normalize(away_team)
+
+                if p_norm == h_norm or (h_norm and h_norm in p_norm):
+                    pick_side_enum = "home"
+                    pick_type_enum = "spread/ml"
+                elif p_norm == a_norm or (a_norm and a_norm in p_norm):
+                    pick_side_enum = "away"
+                    pick_type_enum = "spread/ml"
+
+        # 2. Calculate probabilities for both sides & Validate
+        if pick_type_enum == "spread/ml":
+            # Calculate for Home
+            p_home = map_kalshi_prob_for_pick(
+                kalshi_yes_prob=kalshi_prob_yes,
+                kalshi_yes_side=kalshi_side_yes,
+                pick_side="home",
+                pick_team=home_team,
+                home_team=home_team,
+                away_team=away_team
+            )
+            # Calculate for Away
+            p_away = map_kalshi_prob_for_pick(
+                kalshi_yes_prob=kalshi_prob_yes,
+                kalshi_yes_side=kalshi_side_yes,
+                pick_side="away",
+                pick_team=away_team,
+                home_team=home_team,
+                away_team=away_team
+            )
+
+            # Validation Logging
+            if p_home is not None and p_away is not None:
+                # Log strict check
+                logger.info(f"Kalshi Mapping Check: Home={home_team}, Away={away_team}, YesSide={kalshi_side_yes}, YesProb={kalshi_prob_yes:.3f}")
+                logger.info(f"  Home Pick Prob: {p_home:.3f}, Away Pick Prob: {p_away:.3f}")
+
+                # Assert Sum (Soft)
+                if abs(p_home + p_away - 1.0) > 0.02:
+                    logger.warning(f"⚠️ Kalshi Mapping Inconsistency: Home({p_home:.3f}) + Away({p_away:.3f}) != 1.0. YesSide={kalshi_side_yes}")
+
+            # Select correct prob
+            if pick_side_enum == "home":
+                kalshi_prob_for_pick = p_home
+            elif pick_side_enum == "away":
+                kalshi_prob_for_pick = p_away
+            else:
+                # Fallback to loose matching if enum determination failed
+                kalshi_prob_for_pick = map_kalshi_prob_for_pick(
+                    kalshi_prob_yes, kalshi_side_yes, pick_side, pick_side, home_team, away_team
+                )
+
+        elif pick_type_enum == "total":
+            p_over = map_kalshi_prob_for_total(kalshi_prob_yes, kalshi_side_yes, "over")
+            p_under = map_kalshi_prob_for_total(kalshi_prob_yes, kalshi_side_yes, "under")
+
+            if p_over is not None and p_under is not None:
+                if abs(p_over + p_under - 1.0) > 0.02:
+                    logger.warning(f"⚠️ Kalshi Total Inconsistency: Over({p_over:.3f}) + Under({p_under:.3f}) != 1.0")
+
+            if pick_side_enum == "over":
+                kalshi_prob_for_pick = p_over
+            elif pick_side_enum == "under":
+                kalshi_prob_for_pick = p_under
+            else:
+                kalshi_prob_for_pick = map_kalshi_prob_for_total(kalshi_prob_yes, kalshi_side_yes, pick_side)
+
+        else:
+            # Fallback for unknown types
+            kalshi_prob_for_pick = map_kalshi_prob_for_pick(
+                kalshi_prob_yes, kalshi_side_yes, pick_side, pick_side, home_team, away_team
+            )
 
     # Logging verification for P0 Bug (Blend Input Check)
     if kalshi_prob_yes is not None:
