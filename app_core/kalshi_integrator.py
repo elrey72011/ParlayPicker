@@ -1234,16 +1234,29 @@ def _match_via_events(
         return None
 
     if best_event and best_score >= MATCH_THRESHOLD: # High confidence match
-        # AGGRESSIVE MARKET FETCHING (Critical for NCAAB)
+        # CRITICAL: Verify this is the correct league before processing markets
+        # This prevents NCAAB-specific logic from corrupting NBA/NFL matches
+        event_ticker = best_event.get("ticker", "")
+        if league == "NCAAB" and "NCAAMB" not in event_ticker.upper():
+            logger.warning(f"   ❌ League mismatch: Expected NCAAB but event ticker is {event_ticker}")
+            return None
+        elif league == "NBA" and "NBA" not in event_ticker.upper():
+            logger.warning(f"   ❌ League mismatch: Expected NBA but event ticker is {event_ticker}")
+            return None
+        elif league == "NFL" and "NFL" not in event_ticker.upper():
+            logger.warning(f"   ❌ League mismatch: Expected NFL but event ticker is {event_ticker}")
+            return None
+
+        # Extract nested markets from the event object directly
         markets = best_event.get("markets", [])
         evt_ticker = best_event.get("ticker")
 
-        # Attempt 1: Use nested markets if present and non-empty
-        if markets:
-            logger.info(f"   Using {len(markets)} nested markets from event")
-        else:
-            # Attempt 2: Fetch directly by event_ticker
-            logger.info(f"   No nested markets, fetching for {evt_ticker}")
+        # If markets missing (e.g. from cache without nested), fetch them explicitly
+        # ONLY for leagues where we know this is necessary (NCAAB primarily)
+        if not markets and league in ["NCAAB"]:
+            logger.info(f"   NCAAB: Attempting aggressive market fetch for {evt_ticker}")
+
+            # Attempt 1: Fetch directly by event_ticker
             try:
                 markets_resp = integrator._request("GET", "/markets", params={"event_ticker": evt_ticker})
                 markets = markets_resp.get("markets", [])
@@ -1252,29 +1265,40 @@ def _match_via_events(
                 logger.warning(f"   Market fetch failed: {e}")
                 markets = []
 
-            # Attempt 3: If still empty, try series_ticker search (last resort)
-            if not markets and league in ["NCAAB", "NBA", "NFL"]:
-                logger.info(f"   Attempting series-wide market search for {evt_ticker}")
+            # Attempt 2: If still empty, try series_ticker search (last resort)
+            if not markets:
+                logger.info(f"   NCAAB: Attempting series-wide market search for {evt_ticker}")
                 try:
-                    # Get ALL markets for the series, then filter by event_ticker
-                    series_ticker_map = {
-                        "NCAAB": "KXNCAAMB",
-                        "NBA": "KXNBA",
-                        "NFL": "KXNFL"
-                    }
-                    series = series_ticker_map.get(league)
-                    if series:
-                        all_series_mkts = integrator.get_markets_paginated(
-                            status=None,
-                            limit=200,
-                            max_pages=5,
-                            extra_params={"series_ticker": series}
-                        )
-                        # Filter for this specific event
-                        markets = [m for m in all_series_mkts if m.get("event_ticker") == evt_ticker]
-                        logger.info(f"   Found {len(markets)} markets via series search")
+                    series = "KXNCAAMB"
+                    all_series_mkts = integrator.get_markets_paginated(
+                        status=None,
+                        limit=200,
+                        max_pages=5,
+                        extra_params={"series_ticker": series}
+                    )
+                    # Filter for this specific event
+                    markets = [m for m in all_series_mkts if m.get("event_ticker") == evt_ticker]
+                    logger.info(f"   Found {len(markets)} markets via series search")
                 except Exception as e:
                     logger.warning(f"   Series search failed: {e}")
+        elif not markets:
+            # For non-NCAAB leagues, try ONE direct fetch only (no expensive series search)
+            try:
+                markets_resp = integrator._request("GET", "/markets", params={"event_ticker": evt_ticker})
+                markets = markets_resp.get("markets", [])
+                if markets:
+                    logger.info(f"   Fetched {len(markets)} markets by event_ticker for {league}")
+            except Exception:
+                markets = []
+
+        # SAFETY CHECK: For non-NCAAB leagues, empty markets after fetch means no valid event
+        # For NCAAB, we allow proceeding to force match logic below
+        if not markets:
+            if league != 'NCAAB':
+                logger.warning(f"   ❌ No markets found for {best_event.get('ticker')} after aggressive fetch (league={league})")
+                return None
+            # NCAAB: Continue to force match logic below even if markets empty
+            logger.info(f"   NCAAB: No markets in nested/fetch, proceeding to force match for {best_event.get('ticker')}")
 
         # Allow flow to proceed even if markets are empty (NCAAB force match will handle it)
 
@@ -1499,9 +1523,9 @@ def _match_via_events(
         logger.info(f"NCAAB FINAL {best_event.get('ticker')} | markets={len(markets)} | bestscore={best_score} | target={target_market.get('ticker') if target_market else 'NONE'}")
 
         # NCAAB FORCE MATCH - Execute BEFORE target_market check
-        # NCAAB: Force match with lower threshold (50 = one team matched)
-        # This ensures ANY event match (even one team) gets a market assigned
-        if league == 'NCAAB' and best_event and best_score >= 50:
+        # NCAAB: Require BOTH teams to match (score 100) OR very high confidence (80+)
+        # Score 50 (one team only) creates too many false positives
+        if league == 'NCAAB' and best_event and best_score >= 80:
             logger.info(f"🎯 NCAAB FORCE MATCH: {best_event.get('ticker')} score={best_score}")
 
             # Try to get any market from the event
@@ -1509,6 +1533,7 @@ def _match_via_events(
             if markets:
                 force_market = markets[0]
             else:
+                logger.info("DEBUG: NCAAB force match - markets empty, trying fetch again")
                 # Fetch markets explicitly if not in event object
                 try:
                     mkts_resp = integrator._request("GET", "/markets", params={"event_ticker": best_event.get("ticker")})
@@ -1520,31 +1545,42 @@ def _match_via_events(
                     logger.warning(f"   Failed to fetch markets: {e}")
 
             if force_market:
-                # Calculate probability
-                yes_bid = _kalshi_price_norm(force_market, "yes_bid_dollars", "yes_bid")
-                yes_ask = _kalshi_price_norm(force_market, "yes_ask_dollars", "yes_ask")
-                no_bid = _kalshi_price_norm(force_market, "no_bid_dollars", "no_bid")
-                last_price = _kalshi_price_norm(force_market, "last_price_dollars", "last_price")
+                # Validate force_market has actual usable data
+                force_title = force_market.get('title', '')
+                if not force_title or len(force_title) < 5:
+                    logger.warning(f"   ⚠️ NCAAB force market has invalid title: {force_title}")
+                    # Don't return invalid match - let it fall through to None
+                else:
+                    # Calculate probability
+                    yes_bid = _kalshi_price_norm(force_market, "yes_bid_dollars", "yes_bid")
+                    yes_ask = _kalshi_price_norm(force_market, "yes_ask_dollars", "yes_ask")
+                    no_bid = _kalshi_price_norm(force_market, "no_bid_dollars", "no_bid")
+                    last_price = _kalshi_price_norm(force_market, "last_price_dollars", "last_price")
 
-                prob = None
-                if yes_bid is not None and yes_ask is not None:
-                    prob = (yes_bid + yes_ask) / 2.0
-                elif yes_bid is not None and no_bid is not None:
-                    prob = (yes_bid + (1.0 - no_bid)) / 2.0
-                elif last_price is not None and last_price > 0:
-                    prob = last_price
+                    prob = None
+                    if yes_bid is not None and yes_ask is not None:
+                        prob = (yes_bid + yes_ask) / 2.0
+                    elif yes_bid is not None and no_bid is not None:
+                        prob = (yes_bid + (1.0 - no_bid)) / 2.0
+                    elif last_price is not None and last_price > 0:
+                        prob = last_price
 
-                return KalshiMatchResult(
-                    matched=True,
-                    kalshi_available=True,
-                    label=force_market.get('title', 'NCAAB Market'),
-                    probability=prob if prob is not None else 0.5,
-                    raw_event_id=best_event.get('ticker'),
-                    league=league,
-                    reason='ncaab_force_match',
-                    market_type='force',
-                    game_date=game_dt_utc
-                )
+                    # ONLY return if we have valid probability data
+                    if prob is not None and 0.01 < prob < 0.99:
+                        logger.info(f"   ✅ NCAAB FORCE MATCH VALID: {force_market.get('ticker')} prob={prob:.3f}")
+                        return KalshiMatchResult(
+                            matched=True,
+                            kalshi_available=True,
+                            label=force_title,
+                            probability=prob,
+                            raw_event_id=best_event.get('ticker'),
+                            league=league,
+                            reason='ncaab_force_match',
+                            market_type='force',
+                            game_date=game_dt_utc
+                        )
+                    else:
+                        logger.warning(f"   ⚠️ NCAAB force match has invalid probability: {prob}")
             else:
                 logger.warning(f"   ⚠️ NCAAB force match: No markets available for {best_event.get('ticker')}")
 
