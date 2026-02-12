@@ -1039,6 +1039,12 @@ def fetch_nba_stats(season_year: int) -> List[Dict[str, Any]]:
 
             # Calculate metrics
             ppg = pts
+
+            # Check if plus_minus looks like total (e.g. > 30 or < -30 on average)
+            # Per game is usually -15 to +15. Cumulative can be hundreds.
+            if abs(plus_minus) > 30 and gp > 0:
+                 plus_minus /= gp
+
             # Opponent PTS approx: PTS - PLUS_MINUS = OPP_PTS (Plus Minus is also per game)
             oppg = (pts - plus_minus)
             avg_tov = tov
@@ -2114,15 +2120,26 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     # 5. Compute Differentials
     # Logic: Only calculate diff if BOTH teams have non-zero data
     def safe_diff(h, a):
-        # Convert to float to be safe
+        """
+        Calculate difference between home and away values.
+        Returns 0.0 only if both are zero/missing or if conversion fails.
+        Legitimate zero values (e.g., 0% win rate) are valid for calculation.
+        """
         try:
             h_val = float(h)
             a_val = float(a)
         except Exception:
             return 0.0
 
-        if abs(h_val) < 1e-6 or abs(a_val) < 1e-6:
+        # Check for NaN (pandas NA values)
+        if pd.isna(h_val) or pd.isna(a_val):
             return 0.0
+
+        # Only return 0.0 if BOTH are exactly zero (indicates missing data for both)
+        if h_val == 0.0 and a_val == 0.0:
+            return 0.0
+
+        # Otherwise calculate legitimate differential (includes cases where one is 0.0)
         return h_val - a_val
 
     # Helper to ensure we have iterables
