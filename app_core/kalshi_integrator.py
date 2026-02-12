@@ -1128,7 +1128,10 @@ def _match_via_events(
 
     # Time window for matching (hours)
     # Increased from 36 to 72 to be more generous with date matching
-    TIME_WINDOW_HOURS = 72
+    # League-specific time windows:
+    # - NCAAB: 72h (games bucket by date, not time)
+    # - NBA/NFL/NHL/MLB: 24h (games scheduled to the minute)
+    TIME_WINDOW_HOURS = 72 if league == 'NCAAB' else 24
 
     # Resolve our candidates once before loop (optimization + fix for UnboundLocalError)
     resolved_home = {resolve_team_code(c, league) for c in home_codes}
@@ -1268,17 +1271,7 @@ def _match_via_events(
             force_market = None
             if markets:
                 force_market = markets[0]
-            else:
-                logger.info("DEBUG: NCAAB force match - markets empty, trying fetch again")
-                try:
-                    mkts_resp = integrator._request("GET", "/markets", params={"event_ticker": evt_ticker})
-                    fetched_markets = mkts_resp.get("markets", [])
-                    if fetched_markets:
-                        force_market = fetched_markets[0]
-                        markets = fetched_markets  # Update for later use
-                        logger.info(f"   Fetched {len(fetched_markets)} markets for force match")
-                except Exception as e:
-                    logger.warning(f"   Failed to fetch markets: {e}")
+            # Markets already fetched above - if empty, no force match available
 
             if force_market:
                 # Validate force_market has actual usable data
@@ -1849,6 +1842,25 @@ class KalshiIntegrator:
         self._league_cache_ttl: int = 300
         self.last_fetch_meta: Dict[str, Any] = {}
         self.session = requests.Session()
+
+        # Add connection pooling for performance
+        from requests.adapters import HTTPAdapter
+        from urllib3.util.retry import Retry
+
+        retry_strategy = Retry(
+            total=3,
+            backoff_factor=0.5,
+            status_forcelist=[500, 502, 503, 504],
+            allowed_methods=["GET", "POST", "DELETE"]  # Don't retry PUT (not idempotent)
+        )
+        adapter = HTTPAdapter(
+            pool_connections=10,
+            pool_maxsize=20,
+            max_retries=retry_strategy
+        )
+        self.session.mount('https://', adapter)
+        self.session.mount('http://', adapter)
+
         self.last_error_info: Dict[str, Any] = {}
         self.last_status_code: Optional[int] = None
         self.last_response_text: Optional[str] = None
@@ -2380,13 +2392,9 @@ class KalshiIntegrator:
 
             pages = max(pages, min(max_pages, len(chunk) // 200 + 1))
             for m in chunk or []:
-                # FIX: Dedup by individual market `ticker`, NOT `event_ticker`.
-                # event_ticker is shared by all sub-markets in an event (e.g.
-                # Over 230 and Under 230 both have event_ticker KXNBATOTAL-...).
-                # Deduping by event_ticker collapsed all sub-markets into ONE,
-                # preventing line-proximity scoring from seeing the full set and
-                # producing stale/wrong kalshi_prob values for spread/total.
-                key = str(m.get("ticker") or m.get("event_ticker") or "").upper()
+                # FIX: Dedup by individual market ticker, NOT event_ticker
+                # event_ticker is shared by all markets in an event (Over/Under both have same event_ticker)
+                key = str(m.get("ticker") or "").upper()
                 if key and key not in collected:
                     collected[key] = m
 
@@ -2394,7 +2402,8 @@ class KalshiIntegrator:
         logger.info(f"Kalshi get_league_markets: {len(all_markets)} unique markets after ticker-level dedup")
 
         # --- DIAGNOSTIC: dump all unique team blocks from NCAAB tickers ---
-        if league_key in ("NCAAB", "NCAAF"):
+        # Only run if DEBUG logging is enabled (performance optimization)
+        if logger.isEnabledFor(logging.DEBUG) and league_key in ("NCAAB", "NCAAF"):
             _diag_blocks: set = set()
             _date_re = re.compile(r"\d{2}[A-Z]{3}\d{2}")
             for _m in all_markets:
