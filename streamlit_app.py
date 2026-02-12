@@ -391,6 +391,162 @@ def clamp_prob(p: Any, lo: float = 0.05, hi: float = 0.95) -> Optional[float]:
         return None
 
 
+def select_best_spread_pick(
+    home_team: str,
+    away_team: str,
+    spread_line: float,  # e.g. -8.5 for home
+    prob_home_covers: float,  # Probability home covers the spread
+    prob_away_covers: float,   # Probability away covers the spread
+) -> Dict:
+    """
+    Select the side with higher probability and format the pick.
+
+    ALWAYS picks the side with higher probability (should be >= 50%).
+
+    Args:
+        home_team: Home team name
+        away_team: Away team name
+        spread_line: Spread line from home team perspective (negative = home favored)
+        prob_home_covers: Final probability that home team covers the spread
+        prob_away_covers: Final probability that away team covers the spread
+
+    Returns:
+        Dictionary with pick information:
+        {
+            'pick_team': str,
+            'pick_label': str,  # e.g. "Illinois St -8.5"
+            'pick_prob': float,
+            'pick_side': str,  # "home" or "away"
+            'alt_team': str,
+            'alt_label': str,
+            'alt_prob': float,
+            'alt_side': str
+        }
+    """
+    # ALWAYS pick the higher probability
+    if prob_home_covers >= prob_away_covers:
+        # Home is better pick
+        pick_team = home_team
+        pick_line = spread_line  # e.g. -8.5
+        pick_prob = prob_home_covers
+        pick_side = "home"
+
+        alt_team = away_team
+        alt_line = -spread_line  # Flip sign: +8.5
+        alt_prob = prob_away_covers
+        alt_side = "away"
+    else:
+        # Away is better pick
+        pick_team = away_team
+        pick_line = -spread_line  # Flip sign: +8.5
+        pick_prob = prob_away_covers
+        pick_side = "away"
+
+        alt_team = home_team
+        alt_line = spread_line  # e.g. -8.5
+        alt_prob = prob_home_covers
+        alt_side = "home"
+
+    # Format labels with line
+    if pick_line > 0:
+        pick_label = f"{pick_team} +{abs(pick_line)}"
+    elif pick_line < 0:
+        pick_label = f"{pick_team} {pick_line}"
+    else:
+        pick_label = f"{pick_team} PK"  # Pick'em
+
+    if alt_line > 0:
+        alt_label = f"{alt_team} +{abs(alt_line)}"
+    elif alt_line < 0:
+        alt_label = f"{alt_team} {alt_line}"
+    else:
+        alt_label = f"{alt_team} PK"
+
+    # Validation - CRITICAL checks
+    # Use logger.warning instead of asserting to avoid crashing the app in production,
+    # but still flag the issue
+    if pick_prob < 0.50:
+        logger.warning(f"CRITICAL: Pick prob {pick_prob:.3f} < 50% for {pick_label} - should have picked {alt_label}!")
+
+    if alt_prob > 0.50:
+        logger.warning(f"CRITICAL: Alt prob {alt_prob:.3f} > 50% for {alt_label} - should be the pick!")
+
+    if abs((pick_prob + alt_prob) - 1.0) >= 0.01:
+        logger.warning(f"Probs don't sum to 1.0: {pick_prob:.3f} + {alt_prob:.3f} = {pick_prob + alt_prob:.3f}")
+
+    logger.info(f"✅ Pick Selection: {pick_label} ({pick_prob:.1%}) vs {alt_label} ({alt_prob:.1%})")
+
+    return {
+        'pick_team': pick_team,
+        'pick_label': pick_label,
+        'pick_prob': pick_prob,
+        'pick_side': pick_side,
+        'alt_team': alt_team,
+        'alt_label': alt_label,
+        'alt_prob': alt_prob,
+        'alt_side': alt_side
+    }
+
+
+def select_best_total_pick(
+    total_line: float,  # e.g. 148.5
+    prob_over: float,
+    prob_under: float
+) -> Dict:
+    """
+    Select Over or Under based on higher probability.
+
+    ALWAYS picks the side with higher probability (should be >= 50%).
+
+    Args:
+        total_line: Total points line
+        prob_over: Final probability of Over hitting
+        prob_under: Final probability of Under hitting
+
+    Returns:
+        Dictionary with pick information:
+        {
+            'pick_label': str,  # e.g. "Over 148.5"
+            'pick_prob': float,
+            'pick_side': str,  # "over" or "under"
+            'alt_label': str,
+            'alt_prob': float,
+            'alt_side': str
+        }
+    """
+    if prob_over >= prob_under:
+        pick_side = "Over"
+        pick_prob = prob_over
+        alt_side = "Under"
+        alt_prob = prob_under
+    else:
+        pick_side = "Under"
+        pick_prob = prob_under
+        alt_side = "Over"
+        alt_prob = prob_over
+
+    pick_label = f"{pick_side} {total_line}"
+    alt_label = f"{alt_side} {total_line}"
+
+    # Validation - CRITICAL checks
+    if pick_prob < 0.50:
+        logger.warning(f"CRITICAL: Total pick prob {pick_prob:.3f} < 50% for {pick_label} - should have picked {alt_label}!")
+
+    if abs((pick_prob + alt_prob) - 1.0) >= 0.01:
+        logger.warning(f"Total probs don't sum to 1.0: {pick_prob:.3f} + {alt_prob:.3f} = {pick_prob + alt_prob:.3f}")
+
+    logger.info(f"✅ Total Selection: {pick_label} ({pick_prob:.1%}) vs {alt_label} ({alt_prob:.1%})")
+
+    return {
+        'pick_label': pick_label,
+        'pick_prob': pick_prob,
+        'pick_side': pick_side,
+        'alt_label': alt_label,
+        'alt_prob': alt_prob,
+        'alt_side': alt_side
+    }
+
+
 def compute_sentiment_adj(sentiment_diff: Optional[float]) -> Optional[float]:
     """
     Compute sentiment adjustment for probability calculations.
@@ -10470,6 +10626,51 @@ with tab_master:
                     )
                     spread_prob_alt_market = spread_alt_market_prob
                     spread_alt_prob_final = blend_kalshi_market(spread_prob_alt_kalshi, spread_alt_market_prob)
+
+                    # NEW PICK SELECTION LOGIC (FORCE > 50%)
+                    if spread_pick_team == home:
+                        prob_home_covers = spread_prob_pick_final
+                        prob_away_covers = spread_alt_prob_final
+                    else:
+                        prob_home_covers = spread_alt_prob_final
+                        prob_away_covers = spread_prob_pick_final
+
+                    # Use home_spread_point as line reference
+                    # Note: home_spread_point is negative if home is favored
+                    # Use 0.0 if home_spread_point is None, but usually it should be set if we have a spread market
+                    _ref_line = home_spread_point if home_spread_point is not None else 0.0
+
+                    spread_pick_result = select_best_spread_pick(
+                        home_team=home,
+                        away_team=away,
+                        spread_line=_ref_line,
+                        prob_home_covers=prob_home_covers,
+                        prob_away_covers=prob_away_covers
+                    )
+
+                    # Update variables with the winning side
+                    spread_pick_team = spread_pick_result['pick_team']
+                    spread_pick_label = spread_pick_result['pick_label']
+                    spread_prob_final = spread_pick_result['pick_prob'] # This is 'prob'
+                    spread_prob_pick_final = spread_pick_result['pick_prob']
+                    spread_alt_prob_final = spread_pick_result['alt_prob']
+                    spread_alt_label = spread_pick_result['alt_label']
+
+                    # Update row dictionary directly
+                    row['Pick'] = spread_pick_label
+                    row['prob'] = spread_prob_pick_final
+                    row['Spread Pick'] = spread_pick_label
+                    row['Spread & Pick'] = spread_pick_label
+                    row['spreadprobpickfinal'] = spread_prob_pick_final
+                    row['spreadprobaltfinal'] = spread_alt_prob_final
+                    row['spreadpicklabel'] = spread_pick_label
+                    row['spreadaltlabel'] = spread_alt_label
+
+                    # Also update internal tracking
+                    spread_pick = spread_pick_result['pick_team']
+                    spread_line = _ref_line if spread_pick_result['pick_side'] == "home" else -_ref_line
+
+                    spread_decision_score_pick = spread_prob_pick_final
                     spread_decision_score_alt = spread_alt_prob_final
                     spread_prob_margin = compute_margin(spread_prob_final, spread_alt_prob_final)
                     spread_decision_score_margin = compute_margin(spread_decision_score_pick, spread_decision_score_alt)
@@ -10548,6 +10749,44 @@ with tab_master:
                     )
                     total_prob_alt_market = total_alt_market_prob
                     total_alt_prob_final = blend_kalshi_market(total_prob_alt_kalshi, total_alt_market_prob)
+
+                    # NEW PICK SELECTION LOGIC (FORCE > 50%)
+                    if total_pick_side == "Over":
+                        prob_over = total_prob_pick_final
+                        prob_under = total_alt_prob_final
+                    else:
+                        prob_over = total_alt_prob_final
+                        prob_under = total_prob_pick_final
+
+                    # Use total_line as line reference
+                    # Note: total_line is always positive (e.g. 148.5)
+                    _ref_total_line = total_line if total_line is not None else 0.0
+
+                    total_pick_result = select_best_total_pick(
+                        total_line=_ref_total_line,
+                        prob_over=prob_over,
+                        prob_under=prob_under
+                    )
+
+                    # Update variables with the winning side
+                    total_pick_label = total_pick_result['pick_label']
+                    total_prob_final = total_pick_result['pick_prob'] # This is 'prob'
+                    total_prob_pick_final = total_pick_result['pick_prob']
+                    total_alt_prob_final = total_pick_result['alt_prob']
+                    total_alt_label = total_pick_result['alt_label']
+
+                    # Update row dictionary directly
+                    row['Total Pick'] = total_pick_label
+                    row['totalprobpickfinal'] = total_prob_pick_final
+                    row['totalprobaltfinal'] = total_alt_prob_final
+                    row['totalpicklabel'] = total_pick_label
+                    row['totalaltlabel'] = total_alt_label
+                    row['Total & Pick'] = total_pick_label
+
+                    # Also update internal tracking
+                    total_pick_side = total_pick_result['pick_side']
+                    total_decision_score_pick = total_prob_pick_final
+
                     total_decision_score_alt = total_alt_prob_final
                     total_prob_margin = compute_margin(total_prob_final, total_alt_prob_final)
                     total_decision_score_margin = compute_margin(total_decision_score_pick, total_decision_score_alt)
@@ -10581,6 +10820,38 @@ with tab_master:
                     total_trace_json = json.dumps(total_trace, default=safe_str)
                 except Exception:
                     total_trace_json = "{}"
+
+                # --- UPDATE BEST OVERALL PICK (Force > 50%) ---
+                _s_prob = spread_prob_pick_final if spread_prob_pick_final is not None else -1.0
+                _t_prob = total_prob_pick_final if total_prob_pick_final is not None else -1.0
+
+                # Check for validity (ensure label exists and prob is reasonable)
+                _s_valid = _s_prob > 0 and spread_pick_label
+                _t_valid = _t_prob > 0 and total_pick_label
+
+                if _s_valid and _t_valid:
+                    if _s_prob >= _t_prob:
+                        row['Best Overall Pick'] = spread_pick_label
+                        row['Best Overall Prob'] = _s_prob
+                        row['bestpicktype'] = 'SPREAD'
+                    else:
+                        row['Best Overall Pick'] = total_pick_label
+                        row['Best Overall Prob'] = _t_prob
+                        row['bestpicktype'] = 'TOTAL'
+                elif _s_valid:
+                    row['Best Overall Pick'] = spread_pick_label
+                    row['Best Overall Prob'] = _s_prob
+                    row['bestpicktype'] = 'SPREAD'
+                elif _t_valid:
+                    row['Best Overall Pick'] = total_pick_label
+                    row['Best Overall Prob'] = _t_prob
+                    row['bestpicktype'] = 'TOTAL'
+
+                # Validation (User Request)
+                # Using safe get/comparison
+                _best_prob = row.get('Best Overall Prob')
+                if _best_prob is not None and isinstance(_best_prob, (int, float)) and _best_prob < 0.50:
+                     logger.warning(f"CRITICAL: Best overall prob {_best_prob:.3f} < 50% for {g.get('home_team')} vs {g.get('away_team')}")
 
                 decision_trace_version = "v1"
                 overall_engine_used = f"spread:{spread_engine_used}|total:{total_engine_used}"
