@@ -1,5 +1,3 @@
-    if "master_df" in st.session_state:
-        del st.session_state["master_df"]
     st.session_state["_last_selected_sports"] = selected_sports
 st.session_state["league"] = league
 kalshi_required_toggle = st.sidebar.checkbox(
