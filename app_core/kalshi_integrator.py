@@ -1124,10 +1124,15 @@ def _match_via_events(
     best_event = None
     best_score = 0.0
     best_details = None
+    all_candidates = []  # Track all potential candidates for debug (Fix #4)
 
     # Time window for matching (hours)
     # Increased from 36 to 72 to be more generous with date matching
     TIME_WINDOW_HOURS = 72
+
+    # Resolve our candidates once before loop (optimization + fix for UnboundLocalError)
+    resolved_home = {resolve_team_code(c, league) for c in home_codes}
+    resolved_away = {resolve_team_code(c, league) for c in away_codes}
 
     for evt in events:
         ticker = evt.get("ticker")
@@ -1137,10 +1142,6 @@ def _match_via_events(
 
         evt_away_code = resolve_team_code(parsed.get("away"), league)
         evt_home_code = resolve_team_code(parsed.get("home"), league)
-
-        # Resolve our candidates too
-        resolved_home = {resolve_team_code(c, league) for c in home_codes}
-        resolved_away = {resolve_team_code(c, league) for c in away_codes}
 
         # Check codes against our candidates
         score_1 = 0
@@ -1157,6 +1158,14 @@ def _match_via_events(
 
         match_score = max(score_1, score_2)
 
+        if match_score > 0:
+            all_candidates.append({
+                "ticker": ticker,
+                "away": evt_away_code,
+                "home": evt_home_code,
+                "score": match_score
+            })
+
         if match_score < 50:
             continue
 
@@ -1169,13 +1178,7 @@ def _match_via_events(
                 if dt.tzinfo is None: dt = pytz.utc.localize(dt)
 
                 time_diff_hours = abs((dt - game_dt_utc).total_seconds()) / 3600.0
-                if time_diff_hours > TIME_WINDOW_HOURS:
-                    # Penalty disabled - causes false negatives
-                    pass
-                    # if league != 'NCAAB':  # NO TIME PENALTY FOR NCAAB
-                    #     # Reduced penalty from -20 to -10 to allow matches with minor time differences
-                    #     # Perfect match (100) with penalty (100-10=90) still passes threshold (85)
-                    #     match_score -= 10 # Penalty for time mismatch
+                # Time penalty removed entirely (Fix #1)
             except:
                 pass
 
@@ -1211,29 +1214,31 @@ def _match_via_events(
             }
 
     # Log final result
-    # Lowered threshold from 85 to 80 to improve match rate (Fix #2)
+    # Lowered threshold from 80 to 70 to improve match rate (Fix #1)
     # This allows for minor time mismatches while still requiring both teams to match
-    MATCH_THRESHOLD = 80
+    MATCH_THRESHOLD = 70
 
     if best_event:
         logger.info(f"   Best Match Found: {best_details['ticker']}")
         logger.info(f"      Score: {best_score} (threshold: {MATCH_THRESHOLD})")
         logger.info(f"      Details: {best_details}")
         if best_score < MATCH_THRESHOLD:
-            # DIAGNOSTIC: Log why match failed
+            # DIAGNOSTIC: Log why match failed (Fix #4)
             logger.warning(f"   ❌ MATCH FAILED for {league}: score={best_score}/{MATCH_THRESHOLD}")
-            logger.warning(f"      Expected home: {list(resolved_home)[:3]}")
-            logger.warning(f"      Expected away: {list(resolved_away)[:3]}")
+            logger.warning(f"      Expected home: {list(resolved_home)[:5]}")
+            logger.warning(f"      Expected away: {list(resolved_away)[:5]}")
             logger.warning(f"      Best candidate: {best_event.get('ticker')} (score={best_score})")
             logger.warning(f"      Total events scanned: {len(events)}")
+            logger.warning(f"      All non-zero candidates: {all_candidates[:20]}")
             return None
         logger.info(f"   ✅ MATCH SUCCESSFUL")
     else:
         # DIAGNOSTIC: Log why match failed
         logger.warning(f"   ❌ MATCH FAILED for {league}: No candidate > 50 score")
-        logger.warning(f"      Expected home: {list(resolved_home)[:3]}")
-        logger.warning(f"      Expected away: {list(resolved_away)[:3]}")
+        logger.warning(f"      Expected home: {list(resolved_home)[:5]}")
+        logger.warning(f"      Expected away: {list(resolved_away)[:5]}")
         logger.warning(f"      Total events scanned: {len(events)}")
+        logger.warning(f"      All non-zero candidates: {all_candidates[:20]}")
         return None
 
     if best_event and best_score >= MATCH_THRESHOLD: # High confidence match
@@ -1392,10 +1397,15 @@ def _match_via_events(
                                 series_markets = integrator.get_markets_paginated(
                                     status=None,
                                     limit=200,
-                                    max_pages=10,  # Increased from 3 (Fix #3)
+                                    max_pages=20,  # Increased from 10 (Fix #2)
                                     extra_params={"series_ticker": spread_series}
                                 )
-                                logger.info(f"   📊 Spread market pagination: Fetched {len(series_markets)} markets from series {spread_series} (max_pages=10)")
+                                logger.info(f"   📊 Spread market pagination: Fetched {len(series_markets)} markets from series {spread_series} (max_pages=20)")
+                                # Add sample ticker logging (Fix #5)
+                                if series_markets:
+                                    sample_tickers = [m.get('ticker', '')[:50] for m in series_markets[:5]]
+                                    logger.info(f"      Sample spread tickers: {sample_tickers}")
+
                                 # Filter markets by date_team_id in ticker or event_ticker
                                 for mkt in series_markets:
                                     mkt_ticker = str(mkt.get("ticker") or "").upper()
@@ -1439,10 +1449,10 @@ def _match_via_events(
                                 series_markets = integrator.get_markets_paginated(
                                     status=None,
                                     limit=200,
-                                    max_pages=10,  # Increased from 3 (Fix #3)
+                                    max_pages=20,  # Increased from 10 (Fix #2)
                                     extra_params={"series_ticker": total_series}
                                 )
-                                logger.info(f"   📊 Total market pagination: Fetched {len(series_markets)} markets from series {total_series} (max_pages=10)")
+                                logger.info(f"   📊 Total market pagination: Fetched {len(series_markets)} markets from series {total_series} (max_pages=20)")
                                 # Filter markets by date_team_id in ticker or event_ticker
                                 for mkt in series_markets:
                                     mkt_ticker = str(mkt.get("ticker") or "").upper()
@@ -1529,63 +1539,69 @@ def _match_via_events(
         # NCAAB: Require BOTH teams to match (score 100) OR very high confidence (80+)
         # Score 50 (one team only) creates too many false positives
         if league == 'NCAAB' and best_event and best_score >= 80:
-            logger.info(f"🎯 NCAAB FORCE MATCH: {best_event.get('ticker')} score={best_score}")
-
-            # Try to get any market from the event
-            force_market = None
-            if markets:
-                force_market = markets[0]
+            # CRITICAL: Verify this is actually NCAAB before force matching (Fix #3)
+            event_ticker = best_event.get("ticker", "")
+            if "NCAAMB" not in event_ticker.upper():
+                logger.warning(f"   ❌ NCAAB force match rejected: Event {event_ticker} is not NCAAB")
+                # DO NOT return None here - let it fall through to normal logic
             else:
-                logger.info("DEBUG: NCAAB force match - markets empty, trying fetch again")
-                # Fetch markets explicitly if not in event object
-                try:
-                    mkts_resp = integrator._request("GET", "/markets", params={"event_ticker": best_event.get("ticker")})
-                    fetched_markets = mkts_resp.get("markets", [])
-                    if fetched_markets:
-                        force_market = fetched_markets[0]
-                        logger.info(f"   Fetched {len(fetched_markets)} markets for force match")
-                except Exception as e:
-                    logger.warning(f"   Failed to fetch markets: {e}")
+                logger.info(f"🎯 NCAAB FORCE MATCH: {best_event.get('ticker')} score={best_score}")
 
-            if force_market:
-                # Validate force_market has actual usable data
-                force_title = force_market.get('title', '')
-                if not force_title or len(force_title) < 5:
-                    logger.warning(f"   ⚠️ NCAAB force market has invalid title: {force_title}")
-                    # Don't return invalid match - let it fall through to None
+                # Try to get any market from the event
+                force_market = None
+                if markets:
+                    force_market = markets[0]
                 else:
-                    # Calculate probability
-                    yes_bid = _kalshi_price_norm(force_market, "yes_bid_dollars", "yes_bid")
-                    yes_ask = _kalshi_price_norm(force_market, "yes_ask_dollars", "yes_ask")
-                    no_bid = _kalshi_price_norm(force_market, "no_bid_dollars", "no_bid")
-                    last_price = _kalshi_price_norm(force_market, "last_price_dollars", "last_price")
+                    logger.info("DEBUG: NCAAB force match - markets empty, trying fetch again")
+                    # Fetch markets explicitly if not in event object
+                    try:
+                        mkts_resp = integrator._request("GET", "/markets", params={"event_ticker": best_event.get("ticker")})
+                        fetched_markets = mkts_resp.get("markets", [])
+                        if fetched_markets:
+                            force_market = fetched_markets[0]
+                            logger.info(f"   Fetched {len(fetched_markets)} markets for force match")
+                    except Exception as e:
+                        logger.warning(f"   Failed to fetch markets: {e}")
 
-                    prob = None
-                    if yes_bid is not None and yes_ask is not None:
-                        prob = (yes_bid + yes_ask) / 2.0
-                    elif yes_bid is not None and no_bid is not None:
-                        prob = (yes_bid + (1.0 - no_bid)) / 2.0
-                    elif last_price is not None and last_price > 0:
-                        prob = last_price
-
-                    # ONLY return if we have valid probability data
-                    if prob is not None and 0.01 < prob < 0.99:
-                        logger.info(f"   ✅ NCAAB FORCE MATCH VALID: {force_market.get('ticker')} prob={prob:.3f}")
-                        return KalshiMatchResult(
-                            matched=True,
-                            kalshi_available=True,
-                            label=force_title,
-                            probability=prob,
-                            raw_event_id=best_event.get('ticker'),
-                            league=league,
-                            reason='ncaab_force_match',
-                            market_type='force',
-                            game_date=game_dt_utc
-                        )
+                if force_market:
+                    # Validate force_market has actual usable data
+                    force_title = force_market.get('title', '')
+                    if not force_title or len(force_title) < 5:
+                        logger.warning(f"   ⚠️ NCAAB force market has invalid title: {force_title}")
+                        # Don't return invalid match - let it fall through to None
                     else:
-                        logger.warning(f"   ⚠️ NCAAB force match has invalid probability: {prob}")
-            else:
-                logger.warning(f"   ⚠️ NCAAB force match: No markets available for {best_event.get('ticker')}")
+                        # Calculate probability
+                        yes_bid = _kalshi_price_norm(force_market, "yes_bid_dollars", "yes_bid")
+                        yes_ask = _kalshi_price_norm(force_market, "yes_ask_dollars", "yes_ask")
+                        no_bid = _kalshi_price_norm(force_market, "no_bid_dollars", "no_bid")
+                        last_price = _kalshi_price_norm(force_market, "last_price_dollars", "last_price")
+
+                        prob = None
+                        if yes_bid is not None and yes_ask is not None:
+                            prob = (yes_bid + yes_ask) / 2.0
+                        elif yes_bid is not None and no_bid is not None:
+                            prob = (yes_bid + (1.0 - no_bid)) / 2.0
+                        elif last_price is not None and last_price > 0:
+                            prob = last_price
+
+                        # ONLY return if we have valid probability data
+                        if prob is not None and 0.01 < prob < 0.99:
+                            logger.info(f"   ✅ NCAAB FORCE MATCH VALID: {force_market.get('ticker')} prob={prob:.3f}")
+                            return KalshiMatchResult(
+                                matched=True,
+                                kalshi_available=True,
+                                label=force_title,
+                                probability=prob,
+                                raw_event_id=best_event.get('ticker'),
+                                league=league,
+                                reason='ncaab_force_match',
+                                market_type='force',
+                                game_date=game_dt_utc
+                            )
+                        else:
+                            logger.warning(f"   ⚠️ NCAAB force match has invalid probability: {prob}")
+                else:
+                    logger.warning(f"   ⚠️ NCAAB force match: No markets available for {best_event.get('ticker')}")
 
         if target_market:
             # Calculate prob using _dollars fields (current API) with cent fallback.
