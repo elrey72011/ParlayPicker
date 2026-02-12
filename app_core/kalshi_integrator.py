@@ -1053,7 +1053,8 @@ def _match_via_events(
     home_codes: List[str],
     away_codes: List[str],
     game_dt_utc: datetime,
-    status: Optional[str]
+    status: Optional[str],
+    requested_market_type: Optional[str] = None
 ) -> Optional[KalshiMatchResult]:
     """
     Attempt to match a game to an event by scanning the /events endpoint first.
@@ -1400,25 +1401,18 @@ def _match_via_events(
         spread_markets = []
         total_markets = []
         target_market = None
+        match_reason_detail = None
 
-        # NCAAB: AUTO-ACCEPT ANY MARKET WITH SPREAD/TOTAL (PERFECT FIX)
-        if league == 'NCAAB':
-            for m in markets:
-                title_lower = str(m.get('title', '')).lower()
-                if any(word in title_lower for word in ['spread', 'total', 'over', 'under', 'points']):
-                    target_market = m
-                    logger.info(f"NCAAB PERFECT MATCH: {m.get('ticker')} from {best_event.get('ticker')}")
-                    break
-            else:
-                target_market = markets[0] if markets else None  # Worst case
-        else:
-            # Existing complex classification logic for other leagues (NBA, etc.)
+        # Logic for existing complex classification logic for other leagues (NBA, etc.) AND NCAAB (now unified)
 
-            # ========== FIX: Search for spread/total events separately ==========
-            # Spread and total markets are in DIFFERENT event series (KXNBATOTAL, KXNBASPREAD)
-            # Extract the date-team identifier from the matched GAME event ticker
-            # e.g., "KXNBAGAME-26JAN27BKNPHX" -> "26JAN27BKNPHX"
-            game_evt_ticker = best_event.get("ticker", "")
+        # ========== FIX: Search for spread/total events separately ==========
+        # Spread and total markets are in DIFFERENT event series (KXNBATOTAL, KXNBASPREAD)
+        # Extract the date-team identifier from the matched GAME event ticker
+        # e.g., "KXNBAGAME-26JAN27BKNPHX" -> "26JAN27BKNPHX"
+        game_evt_ticker = best_event.get("ticker", "")
+        # Only perform search if not NCAAB or if NCAAB needs it (NCAAB usually has nested markets but let's allow it)
+        # Note: Previous code split logic here. We will apply search logic generally but keep NCAAB specific series inside loop.
+        if league != 'NCAAB':
             game_ticker_parts = game_evt_ticker.split("-")
             if len(game_ticker_parts) >= 2:
                 date_team_id = game_ticker_parts[1]  # e.g., "26JAN27BKNPHX"
@@ -1550,72 +1544,123 @@ def _match_via_events(
                     logger.warning(f"   ⚠️ Failed to fetch total markets: {e}")
 
                 logger.info(f"   📊 After spread/total search: {len(spread_markets)} spread, {len(total_markets)} total markets")
-            # ========== END FIX ==========
+        # ========== END FIX ==========
 
-            # Fix Issue #1: Log FULL market list for debug analysis
-            # Only log full list for the first few events to avoid spam.
-            global _DEBUG_GAME_LOG_COUNT
-            should_log_debug = _DEBUG_GAME_LOG_COUNT < 3
+        # Fix Issue #1: Log FULL market list for debug analysis
+        # Only log full list for the first few events to avoid spam.
+        global _DEBUG_GAME_LOG_COUNT
+        should_log_debug = _DEBUG_GAME_LOG_COUNT < 3
 
-            logger.debug(f"🔍 KALSHI DEBUG [{league}]: Found {len(markets)} markets for event {best_event.get('ticker')}")
+        logger.debug(f"🔍 KALSHI DEBUG [{league}]: Found {len(markets)} markets for event {best_event.get('ticker')}")
+        if should_log_debug:
+             logger.info(f"DEBUG: Full market list for {best_event.get('ticker')}:")
+             _DEBUG_GAME_LOG_COUNT += 1
+
+        for idx, m in enumerate(markets):
+            ticker = m.get("ticker", "")
+            title = (m.get("title") or "").lower()
+            subtitle = (m.get("subtitle") or "").lower()
+
+            # Classify market type with enhanced logic
+            market_type = _extract_market_type(title, ticker, subtitle, market=m)
+
+            # Extract line information for spread/total
+            floor_str = m.get("floor_strike") or m.get("floor")
+            cap_str = m.get("cap_strike") or m.get("cap")
+            strike_str = m.get("strike")
+
+            # VERBOSE LOGGING (Requested by user)
+            # Log the EXACT raw ticker and key fields for debugging
+            # Show ALL markets in logs for debugging if within limit
             if should_log_debug:
-                 logger.info(f"DEBUG: Full market list for {best_event.get('ticker')}:")
-                 _DEBUG_GAME_LOG_COUNT += 1
+                logger.info(f"   RAW MARKET [{idx+1}]: ticker='{ticker}' | type='{market_type}' | title='{title}' | sub='{subtitle}' | strike='{strike_str}'")
 
-            for idx, m in enumerate(markets):
-                ticker = m.get("ticker", "")
-                title = (m.get("title") or "").lower()
-                subtitle = (m.get("subtitle") or "").lower()
+            if floor_str or cap_str or strike_str:
+                logger.debug(f"      Line info: floor={floor_str}, cap={cap_str}, strike={strike_str}")
 
-                # Classify market type with enhanced logic
-                market_type = _extract_market_type(title, ticker, subtitle, market=m)
-
-                # Extract line information for spread/total
-                floor_str = m.get("floor_strike") or m.get("floor")
-                cap_str = m.get("cap_strike") or m.get("cap")
-                strike_str = m.get("strike")
-
-                # VERBOSE LOGGING (Requested by user)
-                # Log the EXACT raw ticker and key fields for debugging
-                # Show ALL markets in logs for debugging if within limit
-                if should_log_debug:
-                    logger.info(f"   RAW MARKET [{idx+1}]: ticker='{ticker}' | type='{market_type}' | title='{title}' | sub='{subtitle}' | strike='{strike_str}'")
-
-                if floor_str or cap_str or strike_str:
-                    logger.debug(f"      Line info: floor={floor_str}, cap={cap_str}, strike={strike_str}")
-
-                # Expanded logic using market_type from ticker check
-                # Prioritize explicit classification from _extract_market_type
-                if market_type == "moneyline":
+            # Expanded logic using market_type from ticker check
+            # Prioritize explicit classification from _extract_market_type
+            if market_type == "moneyline":
+                winner_market = m
+            elif market_type == "spread":
+                spread_markets.append(m)
+            elif market_type == "total":
+                total_markets.append(m)
+            else:
+                # Fallback keywords if "generic"
+                if "winner" in title or "winner" in subtitle:
                     winner_market = m
-                elif market_type == "spread":
+                elif "spread" in title or "spread" in subtitle or "points" in title:
                     spread_markets.append(m)
-                elif market_type == "total":
+                elif "total" in title or "total" in subtitle or "over" in title or "under" in title:
                     total_markets.append(m)
-                else:
-                    # Fallback keywords if "generic"
-                    if "winner" in title or "winner" in subtitle:
-                        winner_market = m
-                    elif "spread" in title or "spread" in subtitle or "points" in title:
-                        spread_markets.append(m)
-                    elif "total" in title or "total" in subtitle or "over" in title or "under" in title:
-                        total_markets.append(m)
 
-            # Log summary of classifications
-            logger.info(f"🎯 KALSHI MATCH [{league}]: Event {best_event.get('ticker')} - "
-                       f"Winner: {'✓' if winner_market else '✗'}, "
-                       f"Spread: {len(spread_markets)}, "
-                       f"Total: {len(total_markets)}")
+        # Log summary of classifications
+        logger.info(f"🎯 KALSHI MATCH [{league}]: Event {best_event.get('ticker')} - "
+                   f"Winner: {'✓' if winner_market else '✗'}, "
+                   f"Spread: {len(spread_markets)}, "
+                   f"Total: {len(total_markets)}")
 
-            if spread_markets:
-                logger.info(f"   📊 Spread markets found: {[m.get('ticker')[:40] for m in spread_markets[:3]]}")
-            if total_markets:
-                logger.info(f"   📊 Total markets found: {[m.get('ticker')[:40] for m in total_markets[:3]]}")
+        if spread_markets:
+            logger.info(f"   📊 Spread markets found: {[m.get('ticker')[:40] for m in spread_markets[:3]]}")
+        if total_markets:
+            logger.info(f"   📊 Total markets found: {[m.get('ticker')[:40] for m in total_markets[:3]]}")
 
-            # Find the main game market (Winner) - prioritize for primary return
-            target_market = winner_market
-            if not target_market and markets:
-                target_market = markets[0] # Fallback
+        # TARGET SELECTION LOGIC
+        # 1. Prefer requested type if available
+        # 2. Fallback to any available type (Spread/Total) if requested type missing
+        # 3. Fallback to Winner/Default
+
+        if requested_market_type:
+            req_upper = requested_market_type.upper()
+            logger.info(f"   🎯 Requested Market Type: {req_upper}")
+
+            if "SPREAD" in req_upper and spread_markets:
+                target_market = spread_markets[0]
+                match_reason_detail = "matched_spread"
+            elif "TOTAL" in req_upper and total_markets:
+                target_market = total_markets[0]
+                match_reason_detail = "matched_total"
+            # Fallback: Requested type missing, check if other type exists
+            elif spread_markets:
+                target_market = spread_markets[0]
+                match_reason_detail = "matched_spread_fallback"
+                logger.info(f"   ⚠️ Requested {req_upper} but found SPREAD. Using fallback.")
+            elif total_markets:
+                target_market = total_markets[0]
+                match_reason_detail = "matched_total_fallback"
+                logger.info(f"   ⚠️ Requested {req_upper} but found TOTAL. Using fallback.")
+
+        # If no target selected yet (or no request), use default logic
+        if not target_market:
+            # NCAAB: Prefer Spread/Total over Winner if not requested
+            if league == 'NCAAB':
+                if spread_markets:
+                    target_market = spread_markets[0]
+                    match_reason_detail = "matched_spread_default"
+                elif total_markets:
+                    target_market = total_markets[0]
+                    match_reason_detail = "matched_total_default"
+                elif winner_market:
+                    target_market = winner_market
+                    match_reason_detail = "matched_winner"
+                elif markets:
+                    target_market = markets[0]
+                    match_reason_detail = "matched_first_available"
+            else:
+                # Other leagues: Prefer Winner
+                if winner_market:
+                    target_market = winner_market
+                    match_reason_detail = "matched_winner"
+                elif spread_markets:
+                    target_market = spread_markets[0]
+                    match_reason_detail = "matched_spread_fallback"
+                elif total_markets:
+                    target_market = total_markets[0]
+                    match_reason_detail = "matched_total_fallback"
+                elif markets:
+                    target_market = markets[0]
+                    match_reason_detail = "matched_first_available"
 
 
         if target_market:
@@ -1661,7 +1706,10 @@ def _match_via_events(
                 "total_tickers": [m.get("ticker") for m in total_markets[:2]],
                 # Store full market objects for spread/total to be processed later
                 "spread_markets": spread_markets,
-                "total_markets": total_markets
+                "total_markets": total_markets,
+                "requested_market_type": requested_market_type,
+                "matched_market_type": match_reason_detail,
+                "is_fallback": "fallback" in (match_reason_detail or "")
             }
 
             return KalshiMatchResult(
@@ -1671,7 +1719,7 @@ def _match_via_events(
                 probability=prob if prob is not None else 0.5,
                 raw_event_id=best_event.get("ticker"),
                 league=league,
-                reason="matched_via_events_api",
+                reason=match_reason_detail or "matched_via_events_api",
                 market_type="winner",
                 game_date=game_dt_utc,
                 debug=debug_info
@@ -1679,7 +1727,7 @@ def _match_via_events(
 
     return None
 
-def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time: Optional[datetime], integrator: "KalshiIntegrator" = None, status: Optional[str] = None) -> KalshiMatchResult:
+def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time: Optional[datetime], integrator: "KalshiIntegrator" = None, status: Optional[str] = None, requested_market_type: Optional[str] = None) -> KalshiMatchResult:
     league_key = (league or "").upper()
     kalshi = integrator or KalshiIntegrator()
 
@@ -1733,7 +1781,8 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
             home_codes,
             away_codes,
             gt_utc,
-            status=status
+            status=status,
+            requested_market_type=requested_market_type
         )
         if event_match:
             return event_match
