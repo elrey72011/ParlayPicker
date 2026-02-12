@@ -1391,10 +1391,13 @@ def _match_via_events(
         markets = best_event.get("markets", [])
         evt_ticker = best_event.get("ticker")
 
+        # Initialize fallback
+        force_match_result = None
+
         # MOVE NCAAB FORCE MATCH HERE - AFTER league verification passes
         # This ensures we ONLY force match on verified NCAAB events
         if league == 'NCAAB' and best_score >= 80:
-            logger.info(f"🎯 NCAAB FORCE MATCH: {evt_ticker} score={best_score}")
+            logger.info(f"🎯 NCAAB POTENTIAL FORCE MATCH: {evt_ticker} score={best_score}")
 
             # Try to get any market from the event
             force_market = None
@@ -1426,7 +1429,8 @@ def _match_via_events(
                     # ONLY return if we have valid probability data
                     if prob is not None and 0.01 < prob < 0.99:
                         logger.info(f"   ✅ NCAAB FORCE MATCH VALID: {force_market.get('ticker')} prob={prob:.3f}")
-                        return KalshiMatchResult(
+                        # Store as fallback but allow spread/total search to proceed
+                        force_match_result = KalshiMatchResult(
                             matched=True,
                             kalshi_available=True,
                             label=force_title,
@@ -1511,7 +1515,8 @@ def _match_via_events(
         game_evt_ticker = best_event.get("ticker", "")
         # Only perform search if not NCAAB or if NCAAB needs it (NCAAB usually has nested markets but let's allow it)
         # Note: Previous code split logic here. We will apply search logic generally but keep NCAAB specific series inside loop.
-        if league != 'NCAAB':
+        # FIX: Allow spread/total search for all leagues including NCAAB
+        if True:
             game_ticker_parts = game_evt_ticker.split("-")
             if len(game_ticker_parts) >= 2:
                 date_team_id = game_ticker_parts[1]  # e.g., "26JAN27BKNPHX"
@@ -1740,6 +1745,8 @@ def _match_via_events(
                 elif total_markets:
                     target_market = total_markets[0]
                     match_reason_detail = "matched_total_default"
+                elif force_match_result:
+                    return force_match_result
                 elif winner_market:
                     target_market = winner_market
                     match_reason_detail = "matched_winner"
