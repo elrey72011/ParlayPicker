@@ -18,7 +18,8 @@ def verify_kalshi_counts_v2(csv_path="master_df_raw.csv"):
             return False
 
     def check_row_strict(row):
-        # Strict spread/total only
+        # Graceful Fallback: Include Moneyline if Spread/Total missing
+        # User Requirement: "ensure the counting script seamlessly routes the row to the check_row_inclusive processing methodology"
         matched = row.get("kalshi_matched")
         is_matched = matched == True or str(matched).lower() == "true"
         if is_matched:
@@ -26,7 +27,14 @@ def verify_kalshi_counts_v2(csv_path="master_df_raw.csv"):
             p2 = row.get("spread_prob_pick_kalshi")
             p3 = row.get("kalshi_prob_total")
             p4 = row.get("total_prob_pick_kalshi")
-            return _is_valid_prob(p1) or _is_valid_prob(p2) or _is_valid_prob(p3) or _is_valid_prob(p4)
+
+            # Fallback to Moneyline (inclusive logic) to salvage the matchup
+            p5 = row.get("kalshi_prob")
+            p6 = row.get("kalshi_prob_used")
+
+            return (_is_valid_prob(p1) or _is_valid_prob(p2) or
+                    _is_valid_prob(p3) or _is_valid_prob(p4) or
+                    _is_valid_prob(p5) or _is_valid_prob(p6))
         return False
 
     def check_row_inclusive(row):

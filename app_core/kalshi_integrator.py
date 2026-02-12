@@ -30,6 +30,8 @@ except ImportError:
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 
+from app_core.sportsdata import SportsDataNCAABClient
+
 logger = logging.getLogger(__name__)
 
 __all__ = [
@@ -125,14 +127,9 @@ def parse_event_ticker_codes(event_ticker: str) -> Dict[str, str]:
     if len(parts) < 2:
         return {}
 
-    # parts[0] is like KXNBAGAME or KXNCAAMBGAME
-    # parts[1] is like 26JAN09NYKPHX or 26JAN15MERVMI
-
     prefix = parts[0].upper()
     suffix = parts[-1]
 
-    # Regex to find date token at start of suffix
-    # Date token: 2 digits, 3 letters, 2 digits.
     match = re.match(r"^(\d{2}[A-Z]{3}\d{2})([A-Z0-9]+)$", suffix)
     if not match:
         logger.warning(f"Failed to parse event ticker suffix: {suffix} (full: {event_ticker})")
@@ -141,80 +138,96 @@ def parse_event_ticker_codes(event_ticker: str) -> Dict[str, str]:
     date_token = match.group(1)
     team_block = match.group(2)
 
-    # Determine league from prefix to get the right team code map
     league = None
-    if "NBA" in prefix:
-        league = "NBA"
-    elif "NFL" in prefix:
-        league = "NFL"
-    elif "NHL" in prefix:
-        league = "NHL"
-    elif "MLB" in prefix:
-        league = "MLB"
-    elif "NCAAF" in prefix:
-        league = "NCAAF"
-    elif "NCAAB" in prefix or "NCAA" in prefix:
-        league = "NCAAB"
+    if "NBA" in prefix: league = "NBA"
+    elif "NFL" in prefix: league = "NFL"
+    elif "NHL" in prefix: league = "NHL"
+    elif "MLB" in prefix: league = "MLB"
+    elif "NCAAF" in prefix: league = "NCAAF"
+    elif "NCAAB" in prefix or "NCAA" in prefix: league = "NCAAB"
 
     away = ""
     home = ""
 
-    # For NCAAB and other college sports, use map-based matching to handle variable-length codes
     if league in ["NCAAB", "NCAAF"]:
-        # Get the appropriate team code map
         code_map = NCAAB_TEAM_CODE_MAP if league == "NCAAB" else NCAAF_TEAM_CODE_MAP
-        # Convert to set for faster lookups
         all_codes = set(code_map.values())
 
-        # Try to find a valid split by matching against known codes
         best_split = None
         best_score = 0
 
-        # Try all possible split points (need at least 2 chars for each team)
-        # Extended range to handle very short codes (2 chars) or longer codes
-        min_len = max(2, len(team_block) - 5)  # Allow up to 5-char codes
+        # Try all possible split points
+        min_len = max(2, len(team_block) - 5)
         for i in range(min_len, len(team_block) - 1):
             potential_away = team_block[:i]
             potential_home = team_block[i:]
 
-            # Check if both codes exist in our map (with alias resolution)
             away_resolved = resolve_team_code(potential_away, league)
             home_resolved = resolve_team_code(potential_home, league)
 
-            # Check both the original and resolved codes
             away_match = away_resolved in all_codes or potential_away in all_codes
             home_match = home_resolved in all_codes or potential_home in all_codes
 
             if away_match and home_match:
-                # Perfect match - both codes are known
-                # Prefer the resolved codes if they match, otherwise use originals
                 away = away_resolved if away_resolved in all_codes else potential_away
                 home = home_resolved if home_resolved in all_codes else potential_home
                 logger.debug(f"NCAAB ticker parse: {event_ticker} -> away={away}, home={home} (perfect match at split {i})")
                 break
             elif away_match or home_match:
-                # Partial match - score it
                 score = (1 if away_match else 0) + (1 if home_match else 0)
                 if score > best_score:
                     best_score = score
                     best_split = (potential_away, potential_home)
 
-        # If we didn't find a perfect match, use best partial match or fallback
         if not away and not home:
-            if best_split:
+            # 1. Try Partial Match via Secondary API (Cross-Reference)
+            # This is slow, so only do it if we failed to match both sides
+            xref_result = cross_reference_unmapped_ticker(league, date_token, team_block)
+            if xref_result:
+                away = xref_result["away"]
+                home = xref_result["home"]
+                logger.info(f"API Cross-Ref Resolved: {team_block} -> {away} @ {home}")
+
+            # 2. Fallback to Best Partial Split from map logic
+            elif best_split:
                 away, home = best_split
+
+            # 3. Final Fallback: Heuristic Blind Bisection
             else:
-                # Fallback: try common lengths (3+3, 3+4, 4+3)
                 length = len(team_block)
+                # Intelligent length-based heuristics for NCAAB
                 if length == 6:
+                    # Most common: 3+3 (e.g. MERVMI)
                     away = team_block[:3]
                     home = team_block[3:]
                 elif length == 7:
-                    # Try 3+4 first for college (e.g., MER + VMIT might be truncated)
-                    away = team_block[:3]
-                    home = team_block[3:]
+                    # Ambiguous: could be 3+4 or 4+3
+                    # Check if suffix looks like common suffix (State, Tech, etc.)
+                    if team_block.endswith("ST") or team_block.endswith("TE"):
+                        # If ends with STATE (5 chars), implies 2+5? No, total 7.
+                        # If STATE is suffix, length 7 means XXSTATE (2+5).
+                        # If ST is suffix, length 7 means XXXXXST (5+2) or XXXXST (4+2)?
+                        # Wait, logic was:
+                        # away = team_block[:5] if team_block.endswith("STATE") else team_block[:3]
+                        # If ends with STATE: away = first 2 chars. home = STATE (5).
+                        # If ends with ST: away = first 5 chars? No, wait.
+
+                        # Let's simplify. Standard college code is 3 letters.
+                        # If 7 chars, likely 3+4 or 4+3.
+                        # If we have suffix ST (e.g. OSUST), it's likely OSU (3) + ST (2)? No length is 7.
+                        # OSUOKST (7) -> OSU (3) + OKST (4).
+
+                        # Default to 3+4 which seems most common for college (3-letter code + 4-letter code)
+                        away = team_block[:3]
+                        home = team_block[3:]
+                    else:
+                        away = team_block[:3]
+                        home = team_block[3:]
+                elif length == 8:
+                    # 4+4 or 3+5/5+3
+                    away = team_block[:4]
+                    home = team_block[4:]
                 elif length >= 4:
-                    # Default to split in half
                     mid = length // 2
                     away = team_block[:mid]
                     home = team_block[mid:]
@@ -635,6 +648,18 @@ NCAAB_TEAM_CODE_MAP: Dict[str, str] = {
     "IUPUI JAGUARS": "IUIN", "IU INDIANAPOLIS": "IUIN",
     "IU INDIANAPOLIS JAGUARS": "IUIN",
     "SAN JOSÉ ST": "SJSU", "SAN JOSÉ ST SPARTANS": "SJSU",
+    # Task 1: Lexical Tokenization Void Fixes
+    "FLORIDA INT'L": "FIU", "FLORIDA INTERNATIONAL": "FIU", "FIU PANTHERS": "FIU",
+    "ST. THOMAS (MN)": "UST", "ST THOMAS MN": "UST", "ST. THOMAS": "UST", "ST THOMAS": "UST",
+    "ST. FRANCIS (PA)": "SFP", "ST FRANCIS PA": "SFP", "SAINT FRANCIS (PA)": "SFP",
+    "CHARLESTON SO": "CSO", "CHARLESTON SOUTHERN": "CSO", "CHARLESTON SOUTHERN BUCCANEERS": "CSO",
+    "GARDNER-WEBB": "GW", "GARDNER WEBB": "GW", "GARDNER WEBB BULLDOGS": "GW",
+    "HIGH POINT": "HPU", "HIGH POINT PANTHERS": "HPU",
+    "PRESBYTERIAN": "PRE", "PRESBYTERIAN BLUE HOSE": "PRE",
+    "RADFORD": "RAD", "RADFORD HIGHLANDERS": "RAD",
+    "UNC ASHEVILLE": "UNCA", "UNC-ASHEVILLE": "UNCA", "UNC ASHEVILLE BULLDOGS": "UNCA",
+    "USC UPSTATE": "USCU", "SOUTH CAROLINA UPSTATE": "USCU", "USC UPSTATE SPARTANS": "USCU",
+    "WINTHROP": "WIN", "WINTHROP EAGLES": "WIN",
 }
 
 # Alias Maps: Kalshi Variant -> Canonical Internal Code
@@ -710,12 +735,85 @@ def resolve_team_code(code: str, league: str) -> str:
     c = code.upper().strip()
     l = (league or "").upper()
 
+    # Direct Lookup
     if l == "NCAAB":
-        return NCAAB_CODE_ALIASES.get(c, c)
+        if c in NCAAB_CODE_ALIASES:
+            return NCAAB_CODE_ALIASES[c]
     elif l == "NCAAF":
-        return NCAAF_CODE_ALIASES.get(c, c)
+        if c in NCAAF_CODE_ALIASES:
+            return NCAAF_CODE_ALIASES[c]
+
+    # Fuzzy Lookup (Task 1) - If direct lookup fails
+    # Only for NCAAB where variance is high
+    if l == "NCAAB" and rapidfuzz:
+        # Increase threshold for short codes to prevent false positives (e.g. VMI -> VIR)
+        threshold = 85 if len(c) <= 3 else 70
+
+        # Check against Alias Keys
+        alias_keys = list(NCAAB_CODE_ALIASES.keys())
+        match = rapidfuzz.process.extractOne(
+            c, alias_keys, scorer=fuzz.ratio, score_cutoff=threshold
+        )
+        if match:
+            # match is (key, score, index)
+            best_key = match[0]
+            logger.debug(f"Fuzzy Resolved Code: {c} -> {best_key} -> {NCAAB_CODE_ALIASES[best_key]} (score={match[1]})")
+            return NCAAB_CODE_ALIASES[best_key]
 
     return c
+
+def cross_reference_unmapped_ticker(league: str, date_token: str, team_block: str) -> Optional[Dict[str, str]]:
+    """
+    Uses SportsDataIO to find games on the date and match the team block.
+    """
+    if league != "NCAAB":
+        return None
+
+    try:
+        # Parse date token (YYMONDD -> Date)
+        # e.g. 26JAN15 -> 2026-01-15
+        dt = datetime.strptime(date_token, "%y%b%d").date()
+
+        # Initialize Client
+        client = SportsDataNCAABClient()
+        if not client.is_configured():
+            return None
+
+        # Fetch games
+        games = client.get_games_by_date(dt)
+        if not games:
+            return None
+
+        # Match logic: Try to find a game where Home/Away abbreviations combine to team_block
+        # or share significant overlap
+        for g in games:
+            home = str(g.get("HomeTeam") or "").upper()
+            away = str(g.get("AwayTeam") or "").upper()
+
+            # Simple check: Does team_block look like Away+Home?
+            # Remove non-alpha
+            combined = re.sub(r"[^A-Z]", "", away + home)
+
+            # If team_block is a substring of combined, or vice versa
+            # Or if team_block matches abbreviations
+            if team_block in combined or combined in team_block:
+                return {"away": away, "home": home}
+
+            # Check 3-letter codes if available
+            home_id = str(g.get("HomeTeamID") or "")
+            away_id = str(g.get("AwayTeamID") or "")
+
+            # Heuristic: First 3 chars of name
+            h_code = home[:3]
+            a_code = away[:3]
+
+            if (a_code + h_code) == team_block:
+                return {"away": away, "home": home}
+
+    except Exception as e:
+        logger.warning(f"Cross-reference failed: {e}")
+
+    return None
 
 
 def team_name_to_code(league: str, team_name: str) -> Optional[str]:

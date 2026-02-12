@@ -989,13 +989,13 @@ def prob_arrow(base: Any, adj: Any, threshold: float = 0.0075) -> str:
         return ""
 
 
-def market_prob_from_prices(yes_price: Any, no_price: Any) -> Optional[float]:
+def market_prob_from_prices(yes_bid: Any, no_bid: Any) -> Optional[float]:
     """
     Convert Kalshi yes/no prices (0-100) into a probability using midpoint normalization.
     """
     try:
-        y = safe_float(yes_price)
-        n = safe_float(no_price)
+        y = safe_float(yes_bid)
+        n = safe_float(no_bid)
         if y is None and n is None:
             return None
         if y is None:
@@ -1239,30 +1239,50 @@ def map_kalshi_prob_for_pick(
             pick_is_home = TeamNameMatcher.normalize(pick_team) == TeamNameMatcher.normalize(home_team)
 
     # Resolve Kalshi Yes Side to Home/Away
-    kalshi_yes_is_home = False
+    kalshi_yes_is_home = None # Change default to None to detect failure
     kalshi_yes_norm = TeamNameMatcher.normalize(kalshi_yes_side) if kalshi_yes_side else ""
 
-    # NEW LOGIC: Handle Over/Under phrasing in spread markets
+    # Pre-compute team norms
+    home_norm = TeamNameMatcher.normalize(home_team) if home_team else None
+    away_norm = TeamNameMatcher.normalize(away_team) if away_team else None
+    pick_norm = TeamNameMatcher.normalize(pick_team) if pick_team else None
+
+    # 1. Direct Pick Match (Strongest Signal)
+    # If the "Yes" side explicitly matches the Pick Team, return Prob.
+    if pick_norm and kalshi_yes_norm and pick_norm in kalshi_yes_norm:
+        return prob
+
+    # If "Yes" side matches the Opposing Team, return 1 - Prob.
+    # Check if pick is home/away to find opponent
+    opponent_norm = None
+    if pick_is_home and away_norm: opponent_norm = away_norm
+    elif not pick_is_home and home_norm: opponent_norm = home_norm
+
+    if opponent_norm and kalshi_yes_norm and opponent_norm in kalshi_yes_norm:
+        return 1.0 - prob
+
+    # 2. Side Inference (Home/Away/Over/Under)
     if "OVER" in kalshi_yes_norm:
-        # Over generally maps to Home in standard spread markets (Diff = Home - Away)
-        kalshi_yes_is_home = True
+        kalshi_yes_is_home = True # Over -> Home in spread
     elif "UNDER" in kalshi_yes_norm:
-        # Under generally maps to Away
         kalshi_yes_is_home = False
     elif kalshi_yes_norm == "HOME":
         kalshi_yes_is_home = True
     elif kalshi_yes_norm == "AWAY":
         kalshi_yes_is_home = False
-    elif home_team and kalshi_yes_norm == TeamNameMatcher.normalize(home_team):
+    elif home_norm and home_norm in kalshi_yes_norm:
         kalshi_yes_is_home = True
-    elif away_team and kalshi_yes_norm == TeamNameMatcher.normalize(away_team):
+    elif away_norm and away_norm in kalshi_yes_norm:
         kalshi_yes_is_home = False
-    else:
-        # If we can't resolve Kalshi side, we assume it matches Home if ambiguous?
-        # Or we rely on it being Home by default for spread/ML usually?
-        # Let's assume Yes = Home if not specified as Away
-        # But logging is key here.
-        pass
+
+    # Fallback: If we couldn't determine, assume Home if default (legacy behavior)
+    # But only if we have high confidence or no other option.
+    if kalshi_yes_is_home is None:
+        # If we can't match names, we can't be sure.
+        # But to match "legacy" behavior where we assumed Yes=Home, we might set True.
+        # However, to avoid 1.4 sum anomaly, we must be consistent.
+        # If we default to True here, we must ensure we don't accidentally default to False elsewhere.
+        kalshi_yes_is_home = True # Defaulting to Home
 
     # Map Kalshi yes probability to pick
     if kalshi_yes_is_home:
