@@ -1167,10 +1167,12 @@ def _match_via_events(
 
                 time_diff_hours = abs((dt - game_dt_utc).total_seconds()) / 3600.0
                 if time_diff_hours > TIME_WINDOW_HOURS:
-                    if league != 'NCAAB':  # NO TIME PENALTY FOR NCAAB
-                        # Reduced penalty from -20 to -10 to allow matches with minor time differences
-                        # Perfect match (100) with penalty (100-10=90) still passes threshold (85)
-                        match_score -= 10 # Penalty for time mismatch
+                    # Penalty disabled - causes false negatives
+                    pass
+                    # if league != 'NCAAB':  # NO TIME PENALTY FOR NCAAB
+                    #     # Reduced penalty from -20 to -10 to allow matches with minor time differences
+                    #     # Perfect match (100) with penalty (100-10=90) still passes threshold (85)
+                    #     match_score -= 10 # Penalty for time mismatch
             except:
                 pass
 
@@ -1215,28 +1217,66 @@ def _match_via_events(
         logger.info(f"      Score: {best_score} (threshold: {MATCH_THRESHOLD})")
         logger.info(f"      Details: {best_details}")
         if best_score < MATCH_THRESHOLD:
-            logger.warning(f"   ❌ Best score {best_score} < {MATCH_THRESHOLD} threshold - NO MATCH")
+            # DIAGNOSTIC: Log why match failed
+            logger.warning(f"   ❌ MATCH FAILED for {league}: score={best_score}/{MATCH_THRESHOLD}")
+            logger.warning(f"      Expected home: {list(resolved_home)[:3]}")
+            logger.warning(f"      Expected away: {list(resolved_away)[:3]}")
+            logger.warning(f"      Best candidate: {best_event.get('ticker')} (score={best_score})")
+            logger.warning(f"      Total events scanned: {len(events)}")
             return None
         logger.info(f"   ✅ MATCH SUCCESSFUL")
     else:
-        logger.warning(f"   ❌ NO MATCHES FOUND")
+        # DIAGNOSTIC: Log why match failed
+        logger.warning(f"   ❌ MATCH FAILED for {league}: No candidate > 50 score")
+        logger.warning(f"      Expected home: {list(resolved_home)[:3]}")
+        logger.warning(f"      Expected away: {list(resolved_away)[:3]}")
+        logger.warning(f"      Total events scanned: {len(events)}")
         return None
 
     if best_event and best_score >= MATCH_THRESHOLD: # High confidence match
-        # Extract nested markets from the event object directly
+        # AGGRESSIVE MARKET FETCHING (Critical for NCAAB)
         markets = best_event.get("markets", [])
+        evt_ticker = best_event.get("ticker")
 
-        # If markets missing (e.g. from cache without nested), fetch them explicitly
-        if not markets:
-             evt_ticker = best_event.get("ticker")
-             try:
+        # Attempt 1: Use nested markets if present and non-empty
+        if markets:
+            logger.info(f"   Using {len(markets)} nested markets from event")
+        else:
+            # Attempt 2: Fetch directly by event_ticker
+            logger.info(f"   No nested markets, fetching for {evt_ticker}")
+            try:
                 markets_resp = integrator._request("GET", "/markets", params={"event_ticker": evt_ticker})
                 markets = markets_resp.get("markets", [])
-             except Exception:
+                logger.info(f"   Fetched {len(markets)} markets by event_ticker")
+            except Exception as e:
+                logger.warning(f"   Market fetch failed: {e}")
                 markets = []
 
-        if not markets and league != 'NCAAB':
-            return None
+            # Attempt 3: If still empty, try series_ticker search (last resort)
+            if not markets and league in ["NCAAB", "NBA", "NFL"]:
+                logger.info(f"   Attempting series-wide market search for {evt_ticker}")
+                try:
+                    # Get ALL markets for the series, then filter by event_ticker
+                    series_ticker_map = {
+                        "NCAAB": "KXNCAAMB",
+                        "NBA": "KXNBA",
+                        "NFL": "KXNFL"
+                    }
+                    series = series_ticker_map.get(league)
+                    if series:
+                        all_series_mkts = integrator.get_markets_paginated(
+                            status=None,
+                            limit=200,
+                            max_pages=5,
+                            extra_params={"series_ticker": series}
+                        )
+                        # Filter for this specific event
+                        markets = [m for m in all_series_mkts if m.get("event_ticker") == evt_ticker]
+                        logger.info(f"   Found {len(markets)} markets via series search")
+                except Exception as e:
+                    logger.warning(f"   Series search failed: {e}")
+
+        # Allow flow to proceed even if markets are empty (NCAAB force match will handle it)
 
         # ENHANCED: Classify all markets as winner/spread/total
         winner_market = None
@@ -1459,7 +1499,9 @@ def _match_via_events(
         logger.info(f"NCAAB FINAL {best_event.get('ticker')} | markets={len(markets)} | bestscore={best_score} | target={target_market.get('ticker') if target_market else 'NONE'}")
 
         # NCAAB FORCE MATCH - Execute BEFORE target_market check
-        if league == 'NCAAB' and best_event and best_score >= 80:
+        # NCAAB: Force match with lower threshold (50 = one team matched)
+        # This ensures ANY event match (even one team) gets a market assigned
+        if league == 'NCAAB' and best_event and best_score >= 50:
             logger.info(f"🎯 NCAAB FORCE MATCH: {best_event.get('ticker')} score={best_score}")
 
             # Try to get any market from the event
