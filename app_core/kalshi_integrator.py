@@ -1223,32 +1223,55 @@ def _match_via_events(
             }
 
     # Log final result
+
+    # DIAGNOSTIC: Log ALL candidates regardless of score (Fix missing matches)
+    if not best_event:
+        logger.warning(f"   ❌ NO CANDIDATES FOUND for {league}")
+        logger.warning(f"      Total events scanned: {len(events)}")
+        logger.warning(f"      Expected home codes: {list(resolved_home)[:10]}")
+        logger.warning(f"      Expected away codes: {list(resolved_away)[:10]}")
+
+        # Sample first 10 events to show what's available
+        logger.warning(f"      Sample available events:")
+        for i, evt in enumerate(events[:10]):
+            ticker = evt.get("ticker", "")
+            parsed = parse_event_ticker_codes(ticker)
+            logger.warning(f"         [{i+1}] {ticker} → home={parsed.get('home')}, away={parsed.get('away')}")
+        return None
+
     # Lowered threshold from 80 to 70 to improve match rate (Fix #1)
     # This allows for minor time mismatches while still requiring both teams to match
-    MATCH_THRESHOLD = 70
+    # LOWERED TEMPORARILY for diagnosis (was 70)
+    # Will collect data on near-misses (score 50-69) to identify missing aliases
+    MATCH_THRESHOLD = 50
 
     if best_event:
         logger.info(f"   Best Match Found: {best_details['ticker']}")
         logger.info(f"      Score: {best_score} (threshold: {MATCH_THRESHOLD})")
         logger.info(f"      Details: {best_details}")
-        if best_score < MATCH_THRESHOLD:
-            # DIAGNOSTIC: Log why match failed (Fix #4)
-            logger.warning(f"   ❌ MATCH FAILED for {league}: score={best_score}/{MATCH_THRESHOLD}")
+        if best_score < 70:  # Was MATCH_THRESHOLD (50), but we want actual threshold of 70
+            logger.warning(f"   ❌ MATCH FAILED for {league}: score={best_score}/70")
             logger.warning(f"      Expected home: {list(resolved_home)[:5]}")
             logger.warning(f"      Expected away: {list(resolved_away)[:5]}")
             logger.warning(f"      Best candidate: {best_event.get('ticker')} (score={best_score})")
-            logger.warning(f"      Total events scanned: {len(events)}")
-            logger.warning(f"      All non-zero candidates: {all_candidates[:20]}")
-            return None
+
+            # ALIAS SUGGESTION: Show which codes were close
+            if best_details:
+                kalshi_home = best_details.get('resolved_home')
+                kalshi_away = best_details.get('resolved_away')
+
+                # Check if ONE side matched (50 points = one team correct)
+                if best_score == 50:
+                    if kalshi_home not in resolved_home and kalshi_away in resolved_away:
+                        logger.warning(f"      💡 ALIAS NEEDED: Add '{kalshi_home}' → one of {list(resolved_home)[:3]} to NCAAB_CODE_ALIASES")
+                    elif kalshi_away not in resolved_away and kalshi_home in resolved_home:
+                        logger.warning(f"      💡 ALIAS NEEDED: Add '{kalshi_away}' → one of {list(resolved_away)[:3]} to NCAAB_CODE_ALIASES")
+
+                logger.warning(f"      Kalshi codes: home={kalshi_home}, away={kalshi_away}")
+                logger.warning(f"      All non-zero candidates: {all_candidates[:10]}")
+
+            return None  # Match failed
         logger.info(f"   ✅ MATCH SUCCESSFUL")
-    else:
-        # DIAGNOSTIC: Log why match failed
-        logger.warning(f"   ❌ MATCH FAILED for {league}: No candidate > 50 score")
-        logger.warning(f"      Expected home: {list(resolved_home)[:5]}")
-        logger.warning(f"      Expected away: {list(resolved_away)[:5]}")
-        logger.warning(f"      Total events scanned: {len(events)}")
-        logger.warning(f"      All non-zero candidates: {all_candidates[:20]}")
-        return None
 
     if best_event and best_score >= MATCH_THRESHOLD: # High confidence match
         # CRITICAL: Verify this is the correct league before processing markets
@@ -2957,3 +2980,64 @@ if __name__ == "__main__":
         print(json.dumps(self_test(), indent=2))
     else:
         _sanity_check()
+
+def generate_missing_games_report(
+    games_attempted: List[Dict[str, Any]],
+    matched_tickers: List[str],
+    kalshi_events: List[Dict[str, Any]]
+) -> str:
+    """
+    Generate a report of games that failed to match with suggested aliases.
+
+    Args:
+        games_attempted: List of game dicts with 'home', 'away', 'league' keys
+        matched_tickers: List of event_tickers that matched successfully
+        kalshi_events: All Kalshi events fetched for comparison
+
+    Returns:
+        Markdown report string
+    """
+    report = ["# Kalshi Matching Diagnostic Report\n"]
+    report.append(f"**Games Attempted:** {len(games_attempted)}")
+    report.append(f"**Successful Matches:** {len(matched_tickers)}")
+    report.append(f"**Failed Matches:** {len(games_attempted) - len(matched_tickers)}\n")
+
+    report.append("## Failed Games (Needing Aliases)\n")
+
+    for game in games_attempted:
+        home = game.get('home', '')
+        away = game.get('away', '')
+        league = game.get('league', '')
+
+        # Check if this game matched
+        # (This requires you to pass in match status, which you'll add)
+        matched = game.get('kalshi_matched', False)
+
+        if not matched:
+            report.append(f"### {away} @ {home} ({league})")
+
+            # Show generated codes
+            home_codes = _build_team_codes(home)
+            away_codes = _build_team_codes(away)
+
+            report.append(f"- **Generated Home Codes:** {home_codes[:5]}")
+            report.append(f"- **Generated Away Codes:** {away_codes[:5]}")
+
+            # Find potential Kalshi events for this date
+            game_date = game.get('commence_time')
+            if game_date:
+                potential_events = [
+                    evt for evt in kalshi_events
+                    if league.upper() in evt.get('ticker', '').upper()
+                ]
+
+                if potential_events:
+                    report.append(f"- **Potential Kalshi Events ({len(potential_events)}):**")
+                    for evt in potential_events[:5]:
+                        ticker = evt.get('ticker', '')
+                        parsed = parse_event_ticker_codes(ticker)
+                        report.append(f"  - `{ticker}` → home={parsed.get('home')}, away={parsed.get('away')}")
+
+            report.append("")  # Blank line
+
+    return "\n".join(report)
