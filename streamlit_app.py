@@ -1038,21 +1038,18 @@ def implied_prob_for_pick(odds_home: Any, odds_away: Any, pick_side: Optional[st
 def map_kalshi_prob_for_pick(
     kalshi_prob_yes: Optional[float], kalshi_yes_side: Optional[str], pick_side: Optional[str]
 ) -> Optional[float]:
-    """Map a Kalshi yes-probability to the selected pick side."""
+    """Map a Kalshi yes-probability to the selected pick side.
+
+    The kalshi_prob_yes should already be correctly oriented by upstream
+    kalshi_integrator.py logic. We only need to validate and pass through.
+    """
     prob = safe_float(kalshi_prob_yes)
     if prob is None:
         return None
-    if not kalshi_yes_side or not pick_side:
-        return prob
 
-    # Robust normalization using TeamNameMatcher
-    pick_norm = TeamNameMatcher.normalize(str(pick_side))
-    yes_norm = TeamNameMatcher.normalize(str(kalshi_yes_side))
-
-    if yes_norm == pick_norm:
-        return prob
-
-    return 1.0 - prob
+    # Trust upstream mapping - no inversion needed
+    # The kalshi_integrator.py should provide prob already mapped to pick_side
+    return prob
 
 
 def dynamic_kalshi_weight(
