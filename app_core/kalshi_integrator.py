@@ -1491,9 +1491,6 @@ def _match_via_events(
         # SAFETY CHECK: For non-NCAAB leagues, empty markets after fetch means no valid event
         # For NCAAB, we allow proceeding to force match logic below
         if not markets:
-            # FIX: Do not return None here for any league.
-            # We must proceed to allow searching for Spread/Total markets which may exist
-            # in separate series (e.g. KXNBASPREAD) even if the main game event has no markets.
             logger.info(f"   ⚠️ No markets found in main event {best_event.get('ticker')} (league={league}). Proceeding to check for Spread/Total series...")
 
         # Allow flow to proceed even if markets are empty (Spread/Total search or NCAAB force match will handle it)
