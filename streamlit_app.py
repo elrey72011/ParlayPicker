@@ -5765,6 +5765,12 @@ def fetch_odds_games(sport_key: str, run_id: Optional[str] = None) -> List[Dict[
             else:
                 logger.info(f"🔍 Fetching odds from TheOddsAPI for sport: {sport_key} (run_id: {run_id or 'N/A'})")
 
+            # DIAGNOSTIC: Log request details (masking API key)
+            safe_params = dict(params)
+            if "apiKey" in safe_params:
+                safe_params["apiKey"] = "MASKED"
+            logger.info(f"THEODDS REQ: url={url}, params={safe_params}")
+
             resp = requests.get(url, params=params, timeout=15)
 
             # Log response metadata for debugging empty responses
@@ -6068,6 +6074,11 @@ def fetch_kalshi_markets(
 
     logger.info(f"KALSHI FETCH START - League: {league_upper}")
     logger.info(f"  Pagination: {_pages_needed} pages (expect ~{_pages_needed * 200} markets)")
+    # DIAGNOSTIC: Confirm league detection for pagination
+    if league_upper in ["NCAAB", "NCAAF"]:
+        logger.info(f"  ✅ High-volume league detected: {league_upper} -> {_pages_needed} pages")
+    else:
+        logger.info(f"  ℹ️ Standard league detected: {league_upper} -> {_pages_needed} pages")
 
     try:
         markets_raw = kalshi_integrator.get_league_markets(
