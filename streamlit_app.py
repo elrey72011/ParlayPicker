@@ -27,6 +27,7 @@ from app_core.kalshi_integrator import (
     resolve_team_code,
     NCAAB_CODE_ALIASES,
     NCAAF_CODE_ALIASES,
+    match_game_to_kalshi,
 )
 
 from app_core.llm_assistant import generate_confidence_explanation, initialize_gemini, generate_batch_confidence_explanation, generate_pick_rationale
@@ -7567,42 +7568,73 @@ def match_kalshi_market(
             "kalshi_title": None,
             "kalshi_yes_side": None,
             "sentiment_diff": 0.0,
-            "status": "Neutral"
+            "status": "Neutral",
+            "market_found": False
         }
 
     try:
-        # Check if helper exists in scope, otherwise define fallback or import
-        if '_match_kalshi_market_impl' not in globals():
-             # If impl is missing, return safe default immediately
+        # Use robust integrator function instead of internal implementation
+        if not kalshi_integrator:
              return {
-                "winner": base_result("impl_missing", "winner"),
-                "spread": base_result("impl_missing", "spread"),
-                "total": base_result("impl_missing", "total"),
+                "winner": base_result("no_integrator", "winner"),
+                "spread": base_result("no_integrator", "spread"),
+                "total": base_result("no_integrator", "total"),
             }, {}
 
-        # Use existing implementation logic if available
-        res, debug = _match_kalshi_market_impl(game, kalshi_markets, winner_reason_override)
+        league = (game.get("league") or game.get("sport_key") or "").upper()
+        home = game.get("home_team") or game.get("Home")
+        away = game.get("away_team") or game.get("Away")
+        commence_time = game.get("commence_time") or game.get("Commence (UTC)")
 
-        # Validation: Ensure result is a dictionary
-        if not isinstance(res, dict):
-             return {
-                "winner": base_result("invalid_return_type", "winner"),
-                "spread": base_result("invalid_return_type", "spread"),
-                "total": base_result("invalid_return_type", "total"),
-            }, {}
+        # Convert string time to datetime if needed
+        if isinstance(commence_time, str):
+            try:
+                commence_time = datetime.fromisoformat(str(commence_time).replace("Z", "+00:00"))
+            except:
+                pass
 
-        # Enforce defaults for keys if missing
-        for k in ["winner", "spread", "total"]:
-            if k not in res or not isinstance(res[k], dict):
-                res[k] = base_result(f"missing_{k}_key", k)
+        # 1. Winner Match
+        res_winner = match_game_to_kalshi(league, home, away, commence_time, kalshi_integrator, requested_market_type="WINNER")
 
-            # MANDATORY FIELDS FORCE
-            if "sentiment_diff" not in res[k] or res[k]["sentiment_diff"] is None:
-                res[k]["sentiment_diff"] = 0.0
-            if "status" not in res[k]:
-                res[k]["status"] = "Neutral"
-            if "market_found" not in res[k]: # Ensure boolean flag if downstream needs it (though usually implied by matched)
-                 res[k]["market_found"] = bool(res[k].get("kalshi_matched"))
+        # 2. Spread Match
+        res_spread = match_game_to_kalshi(league, home, away, commence_time, kalshi_integrator, requested_market_type="SPREAD")
+
+        # 3. Total Match
+        res_total = match_game_to_kalshi(league, home, away, commence_time, kalshi_integrator, requested_market_type="TOTAL")
+
+        def map_result(r, m_type):
+            if not r or not r.matched:
+                return base_result(r.reason if r else "no_match", m_type)
+
+            return {
+                "kalshi_available": True,
+                "kalshi_label": r.label,
+                "kalshi_event_ticker": r.raw_event_id,
+                "kalshi_reason": r.reason,
+                "kalshi_matched": True,
+                "kalshi_prob": r.probability,
+                "kalshi_market_type": m_type,
+                "kalshi_match_score": 100,
+                "kalshi_ticker": r.market_ticker or r.raw_event_id,
+                "kalshi_line": None,
+                "kalshi_title": r.label,
+                "kalshi_yes_side": r.label,
+                "sentiment_diff": 0.0,
+                "status": "Neutral",
+                "market_found": True
+            }
+
+        res = {
+            "winner": map_result(res_winner, "winner"),
+            "spread": map_result(res_spread, "spread"),
+            "total": map_result(res_total, "total"),
+        }
+
+        debug = {
+            "winner_meta": res_winner.debug if res_winner and res_winner.debug else {},
+            "spread_meta": res_spread.debug if res_spread and res_spread.debug else {},
+            "total_meta": res_total.debug if res_total and res_total.debug else {},
+        }
 
         return res, debug
 
