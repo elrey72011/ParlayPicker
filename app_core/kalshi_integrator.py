@@ -1174,13 +1174,22 @@ def _match_via_events(
             except:
                 pass
 
-        # Log potential matches (score >= 50)
-        logger.info(f"   Potential Match: {ticker}")
-        logger.info(f"      Parsed: away={parsed.get('away')}, home={parsed.get('home')}")
-        logger.info(f"      Resolved: away={evt_away_code}, home={evt_home_code}")
-        logger.info(f"      Score: {match_score} (direct={score_1}, swap={score_2})")
+        # Enhanced logging for EVERY potential match attempt (score >= 50) (Fix #5)
+        logger.info(f"   🎲 Evaluating: {ticker}")
+        logger.info(f"      Raw Codes: away={parsed.get('away')}, home={parsed.get('home')}")
+        logger.info(f"      Resolved Codes: away={evt_away_code}, home={evt_home_code}")
+        logger.info(f"      Expected Away Codes: {list(resolved_away)[:3]}")
+        logger.info(f"      Expected Home Codes: {list(resolved_home)[:3]}")
+        logger.info(f"      Score Calculation:")
+        logger.info(f"         - Away Match: {away_match_1} (+{50 if away_match_1 else 0})")
+        logger.info(f"         - Home Match: {home_match_1} (+{50 if home_match_1 else 0})")
+        logger.info(f"         - Direct Score: {score_1}")
+        logger.info(f"         - Swap Score: {score_2}")
+        logger.info(f"         - Best Score: {match_score}")
         if time_diff_hours is not None:
-            logger.info(f"      Time Diff: {time_diff_hours:.1f} hours")
+            penalty = 10 if time_diff_hours > TIME_WINDOW_HOURS and league != 'NCAAB' else 0
+            logger.info(f"      Time Check: {time_diff_hours:.1f}h diff (penalty: -{penalty})")
+        logger.info(f"      Result: {'✓ Potential' if match_score >= 50 else '✗ Rejected'} (score={match_score})")
 
         if match_score > best_score:
             best_score = match_score
@@ -1197,9 +1206,9 @@ def _match_via_events(
             }
 
     # Log final result
-    # Lowered threshold from 90 to 85 to improve match rate
+    # Lowered threshold from 85 to 80 to improve match rate (Fix #2)
     # This allows for minor time mismatches while still requiring both teams to match
-    MATCH_THRESHOLD = 85
+    MATCH_THRESHOLD = 80
 
     if best_event:
         logger.info(f"   Best Match Found: {best_details['ticker']}")
@@ -1316,10 +1325,10 @@ def _match_via_events(
                                 series_markets = integrator.get_markets_paginated(
                                     status=None,
                                     limit=200,
-                                    max_pages=3,
+                                    max_pages=10,  # Increased from 3 (Fix #3)
                                     extra_params={"series_ticker": spread_series}
                                 )
-                                logger.info(f"   Fetched {len(series_markets)} markets from series {spread_series}")
+                                logger.info(f"   📊 Spread market pagination: Fetched {len(series_markets)} markets from series {spread_series} (max_pages=10)")
                                 # Filter markets by date_team_id in ticker or event_ticker
                                 for mkt in series_markets:
                                     mkt_ticker = str(mkt.get("ticker") or "").upper()
@@ -1363,10 +1372,10 @@ def _match_via_events(
                                 series_markets = integrator.get_markets_paginated(
                                     status=None,
                                     limit=200,
-                                    max_pages=3,
+                                    max_pages=10,  # Increased from 3 (Fix #3)
                                     extra_params={"series_ticker": total_series}
                                 )
-                                logger.info(f"   Fetched {len(series_markets)} markets from series {total_series}")
+                                logger.info(f"   📊 Total market pagination: Fetched {len(series_markets)} markets from series {total_series} (max_pages=10)")
                                 # Filter markets by date_team_id in ticker or event_ticker
                                 for mkt in series_markets:
                                     mkt_ticker = str(mkt.get("ticker") or "").upper()
@@ -1449,40 +1458,40 @@ def _match_via_events(
         # NCAAB FORCE MATCH logic (Step 2)
         logger.info(f"NCAAB FINAL {best_event.get('ticker')} | markets={len(markets)} | bestscore={best_score} | target={target_market.get('ticker') if target_market else 'NONE'}")
 
-        if league == 'NCAAB' and target_market:
-            # FORCE MATCH
-            # Use same prob calc as winner_prob / _kalshi_price_norm
-            yes_bid = _kalshi_price_norm(target_market, "yes_bid_dollars", "yes_bid")
-            yes_ask = _kalshi_price_norm(target_market, "yes_ask_dollars", "yes_ask")
-            no_bid = _kalshi_price_norm(target_market, "no_bid_dollars", "no_bid")
-            last_price = _kalshi_price_norm(target_market, "last_price_dollars", "last_price")
-            prob = None
-            if yes_bid is not None and yes_ask is not None:
-                prob = (yes_bid + yes_ask) / 2.0
-            elif yes_bid is not None and no_bid is not None:
-                prob = (yes_bid + (1.0 - no_bid)) / 2.0
-            elif yes_bid is not None:
-                prob = last_price if (last_price is not None and last_price > 0) else yes_bid
-            elif no_bid is not None:
-                prob = 1.0 - no_bid
-            if prob is None and last_price is not None and last_price > 0:
-                prob = last_price
-
-            final_prob = prob if prob is not None else 0.5
-
-            return KalshiMatchResult(
-                matched=True,
-                kalshi_available=True,
-                label=target_market.get('title'),
-                probability=final_prob,
-                raw_event_id=best_event.get('ticker'),
-                league=league,
-                reason='ncaab_force_match',
-                market_type='force',
-                game_date=game_dt_utc
-            )
-
         if target_market:
+            # Fix #1: Repositioned NCAAB force match logic INSIDE target_market check
+            if league == 'NCAAB':
+                # FORCE MATCH
+                # Use same prob calc as winner_prob / _kalshi_price_norm
+                yes_bid = _kalshi_price_norm(target_market, "yes_bid_dollars", "yes_bid")
+                yes_ask = _kalshi_price_norm(target_market, "yes_ask_dollars", "yes_ask")
+                no_bid = _kalshi_price_norm(target_market, "no_bid_dollars", "no_bid")
+                last_price = _kalshi_price_norm(target_market, "last_price_dollars", "last_price")
+                prob = None
+                if yes_bid is not None and yes_ask is not None:
+                    prob = (yes_bid + yes_ask) / 2.0
+                elif yes_bid is not None and no_bid is not None:
+                    prob = (yes_bid + (1.0 - no_bid)) / 2.0
+                elif yes_bid is not None:
+                    prob = last_price if (last_price is not None and last_price > 0) else yes_bid
+                elif no_bid is not None:
+                    prob = 1.0 - no_bid
+                if prob is None and last_price is not None and last_price > 0:
+                    prob = last_price
+
+                final_prob = prob if prob is not None else 0.5
+
+                return KalshiMatchResult(
+                    matched=True,
+                    kalshi_available=True,
+                    label=target_market.get('title'),
+                    probability=final_prob,
+                    raw_event_id=best_event.get('ticker'),
+                    league=league,
+                    reason='ncaab_force_match',
+                    market_type='force',
+                    game_date=game_dt_utc
+                )
             # Calculate prob using _dollars fields (current API) with cent fallback.
             # Matches the same cascade as _kalshi_prices()/winner_prob() in streamlit_app.py.
             yes_bid = _kalshi_price_norm(target_market, "yes_bid_dollars", "yes_bid")
