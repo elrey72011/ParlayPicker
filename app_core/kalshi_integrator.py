@@ -964,6 +964,9 @@ def _parse_market_metadata(mkt: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if prob is None and _lp is not None and _lp > 0:
         prob = _lp
 
+    if prob is not None:
+        logger.info(f"Kalshi prob calc: market={ticker}, yes_side={title}, yes_bid={_yb}, yes_ask={_ya}, mid_prob={prob:.3f}")
+
     return {"title": title, "market_date": market_dt, "teams": teams, "probability": prob, "market_type": market_type}
 
 def _build_team_codes(team_name: str) -> List[str]:
