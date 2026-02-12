@@ -1834,6 +1834,14 @@ def _match_via_events(
 
     return None
 
+def _normalize_series_prefix(prefix: Any) -> Tuple[str, ...]:
+    """Convert league series prefix to tuple for startswith() matching."""
+    if isinstance(prefix, (list, tuple)):
+        return tuple(str(p) for p in prefix if p)
+    elif prefix:
+        return (str(prefix),)
+    return ()
+
 def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time: Optional[datetime], integrator: "KalshiIntegrator" = None, status: Optional[str] = None, requested_market_type: Optional[str] = None) -> KalshiMatchResult:
     league_key = (league or "").upper()
     kalshi = integrator or KalshiIntegrator()
@@ -1907,6 +1915,7 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
             game_dt_utc = game_time.astimezone(pytz.UTC)
 
     series_prefix = LEAGUE_SERIES_MAP.get(league_key)
+    series_prefix_tuple = _normalize_series_prefix(series_prefix)
     best_market = None
     best_score = 0.0
 
@@ -1927,7 +1936,7 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
             continue
 
         ticker = (m.get("ticker") or "").upper()
-        if series_prefix and not ticker.startswith(series_prefix):
+        if series_prefix_tuple and not ticker.startswith(series_prefix_tuple):
             continue
 
         markets_considered += 1
@@ -2029,8 +2038,10 @@ class KalshiIntegrator:
         self.cache_ttl_seconds: int = 120
         self._markets_cache_by_key: Dict[Tuple[str, str], Dict[str, Any]] = {}
         self._markets_cache_ttl_seconds: int = 600
+        # Clear stale events cache on initialization
         self._events_cache: Dict[str, Dict[str, Any]] = {}  # Cache for /events by series_ticker
         self._events_cache_ttl: int = 300
+        logger.info("Kalshi integrator initialized, events cache cleared")
         self.last_error: Optional[str] = None
         self._league_cache: Dict[str, Dict[str, Any]] = {}
         self._league_cache_ttl: int = 300
@@ -2343,6 +2354,26 @@ class KalshiIntegrator:
 
         try:
             resp = self._request("GET", "/events", params=params)
+
+            # VALIDATION: Check if events have valid tickers
+            events = resp.get("events", [])
+            valid_events = []
+            for evt in events:
+                ticker = evt.get("ticker")
+                if ticker and ticker != "None" and isinstance(ticker, str):
+                    valid_events.append(evt)
+                else:
+                    logger.warning(f"Kalshi event missing ticker: {evt.get('id', 'unknown')}")
+
+            # Replace events with validated list
+            if valid_events:
+                resp["events"] = valid_events
+            else:
+                logger.error(f"Kalshi get_events returned {len(events)} events but ALL had invalid tickers!")
+                # Clear corrupted cache
+                if cache_key in self._events_cache:
+                    del self._events_cache[cache_key]
+
         except Exception:
             # If rate limited or error, return cached if available
             cached = self._events_cache.get(cache_key)
@@ -2351,7 +2382,7 @@ class KalshiIntegrator:
                  return cached.get("payload", {})
             raise
 
-        if use_cache and not cursor and resp:
+        if use_cache and not cursor and resp and resp.get("events"):
             self._events_cache[cache_key] = {"ts": now, "payload": resp}
 
         return resp
