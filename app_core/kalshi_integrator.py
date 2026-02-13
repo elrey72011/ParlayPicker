@@ -530,8 +530,8 @@ NCAAB_TEAM_CODE_MAP: Dict[str, str] = {
     "TULANE": "TUL", "USF": "USF", "UCF": "UCF", "ECU": "ECU", "TULSA": "TUL",
     "DAYTON": "DAY", "VCU": "VCU", "SAINT LOUIS": "SLU", "ST. BONAVENTURE": "SBU",
     "RICHMOND": "RIC", "DAVIDSON": "DAV", "LOYOLA CHICAGO": "LOY", "SAN DIEGO STATE": "SDS",
-    "SAN DIEGO ST": "SDS", "NEVADA": "NEV", "UTAH STATE": "USU", "BOISE STATE UNIVERSITY": "BOI", "BOISE STATE", "BOI"
-    "BOISE ST": "BOI", "UNLV": "UNLV", "NEW MEXICO": "UNM", "COLORADO STATE": "CSU",
+    "SAN DIEGO ST": "SDS", "NEVADA": "NEV", "UTAH STATE": "USU", "BOISE STATE UNIVERSITY": "BSU", "BOISE STATE": "BSU",
+    "BOISE ST": "BSU", "UNLV": "UNLV", "NEW MEXICO": "UNM", "COLORADO STATE": "CSU",
     "SAINT MARY'S": "SMC", "ST MARYS": "SMC", "SAN FRANCISCO": "USF", "BYU": "BYU",
     "SANTA CLARA": "SCU", "PEPPERDINE": "PEP", "LMU": "LMU", "PACIFIC": "PAC",
     "PORTLAND": "POR", "SAN DIEGO": "USD", "TCU": "TCU", "IOWA STATE": "ISU",
@@ -949,6 +949,8 @@ NCAAB_CODE_ALIASES: Dict[str, str] = {
     "SPU": "SPC",      # St. Peter's: internal code update
     "MSM": "MSM",      # Mt St Mary's
     "MTST": "MSM",     # Mt St Mary's variant
+    "BOISE": "BSU",    # Boise State: Kalshi uses BOISE, we use BSU
+    "HAM": "HAMP",     # Hampton: Kalshi uses HAMP
 }
 
 NCAAF_CODE_ALIASES: Dict[str, str] = {
