@@ -2194,6 +2194,10 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
         # This prevents champion selection from comparing pre-flip sub-50% values
         if s_prob is not None and s_prob < 0.50:
             s_prob = 1.0 - s_prob
+            # FLIP PICK: If probability flips, pick must flip to the other side
+            alt_s = _safe_str("spread_alt_label")
+            if alt_s:
+                s_pick = alt_s
         s_edge = _safe("spread_edge") or 0.0
 
         # Total
@@ -2204,6 +2208,16 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
         # Ensure we use the winning-side probability (post-flip)
         if t_prob is not None and t_prob < 0.50:
             t_prob = 1.0 - t_prob
+            # FLIP PICK: If probability flips, pick must flip to the other side
+            alt_t = _safe_str("total_alt_label")
+            if alt_t:
+                t_pick = alt_t
+            else:
+                # Fallback simple flip for Total if alt label missing
+                if t_pick and "Over" in t_pick:
+                    t_pick = t_pick.replace("Over", "Under")
+                elif t_pick and "Under" in t_pick:
+                    t_pick = t_pick.replace("Under", "Over")
         t_edge = _safe("total_edge") or 0.0
 
         # Moneyline
@@ -6975,6 +6989,7 @@ def _match_kalshi_market_impl(
     kalshi_markets: List[Dict[str, Any]],
     winner_reason_override: Optional[str] = None,
 ) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, List[Dict[str, Any]]]]:
+    logger.info(f"🟢 _match_kalshi_market_impl: received {len(kalshi_markets)} markets")
     # Use fuzzy matching for team names
     if rapidfuzz is not None:
         fuzz_scorer = fuzz.token_set_ratio
@@ -7582,6 +7597,7 @@ def match_kalshi_market(
     Safely finds a Kalshi market match.
     Delegates to _match_kalshi_market_impl which does the actual fuzzy matching.
     """
+    logger.info(f"🔵 match_kalshi_market: {len(kalshi_markets)} markets for {game.get('away_team')} vs {game.get('home_team')}")
     return _match_kalshi_market_impl(game, kalshi_markets, winner_reason_override)
 
 
