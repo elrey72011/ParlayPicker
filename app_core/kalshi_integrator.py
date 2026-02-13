@@ -170,6 +170,9 @@ def parse_event_ticker_codes(event_ticker: str) -> Dict[str, str]:
             logger.debug(f"Parsing NCAAB ticker: {event_ticker} (block={team_block})")
 
         # Try all possible split points
+        # For 7-char strings (common in NCAAB), this explicitly iterates through:
+        # i=3 (3+4 split) AND i=4 (4+3 split)
+        # This allows matching both BSUUNLV (3+4) and UNLVBSU (4+3) as long as codes are in the map
         min_len = max(2, len(team_block) - 5)
         for i in range(min_len, len(team_block) - 1):
             potential_away = team_block[:i]
@@ -183,14 +186,7 @@ def parse_event_ticker_codes(event_ticker: str) -> Dict[str, str]:
             away_match = away_resolved in all_codes or potential_away in all_codes
             home_match = home_resolved in all_codes or potential_home in all_codes
 
-            # Bidirectional Check: What if the ticker is actually HOMEAWAY instead of AWAYHOME?
-            # Or what if we split differently?
-            # Wait, the ticker format is usually consistent (AWAY-HOME or HOME-AWAY depending on league but Kalshi is usually AWAY-HOME)
-            # But the split point is the variable.
-
-            # Additional check: If resolve_team_code returns something that IS in all_codes
-            # e.g. "DUKE" -> "DUK" (which is in all_codes)
-
+            # Score this split attempt
             score = 0
             if away_match: score += 1
             if home_match: score += 1
@@ -785,6 +781,7 @@ KALSHI_NCAAB_TEAM_CODES = {
     "Niagara": "NIAG",
     "Niagara Purple Eagles": "NIAG",
     "North Carolina A&T": "NCAT",
+    "North Carolina A T": "NCAT",
     "North Carolina AT Aggies": "NCAT",
     "North Texas": "UNT",
     "Northern Iowa": "UNI",
@@ -815,8 +812,8 @@ KALSHI_NCAAB_TEAM_CODES = {
     "Saint Peter's Peacocks": "SPC",
     "Saint Peters": "SPC",
     "San Diego": "USD",
-    "Siena": "SIEN",
-    "Siena Saints": "SIEN",
+    "Siena": "SIE",
+    "Siena Saints": "SIE",
     "South Carolina St.": "SCUS",
     "South Florida": "USF",
     "St. Bonaventure": "SBON",
