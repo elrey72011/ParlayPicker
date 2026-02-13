@@ -47,6 +47,8 @@ __all__ = [
     "parse_event_ticker_codes",
     "resolve_team_code",
     "NCAAB_CODE_ALIASES",
+    "KALSHI_NCAAB_TEAM_CODES",
+    "normalize_team_for_kalshi",
 ]
 
 # Timezone for NBA date buckets (games are bucketed by their US/Eastern date usually, or strict UTC date tokens)
@@ -673,6 +675,85 @@ NCAAB_TEAM_CODE_MAP: Dict[str, str] = {
     "UT ARLINGTON": "UTA", "TEXAS ARLINGTON": "UTA", "UT ARLINGTON MAVERICKS": "UTA",
 }
 
+# ADD THIS COMPREHENSIVE NCAAB TEAM NAME → KALSHI CODE MAPPING
+KALSHI_NCAAB_TEAM_CODES = {
+    # Ivy League
+    "Harvard": "HARV", "Harvard Crimson": "HARV",
+    "Brown": "BRWN", "Brown Bears": "BRWN",
+    "Yale": "YALE", "Yale Bulldogs": "YALE",
+    "Dartmouth": "DART", "Dartmouth Big Green": "DART",
+    "Princeton": "PRIN", "Princeton Tigers": "PRIN",
+    "Cornell": "CORN", "Cornell Big Red": "CORN",
+    "Pennsylvania": "PENN", "Pennsylvania Quakers": "PENN",
+    "Columbia": "CLMB", "Columbia Lions": "CLMB",
+
+    # MAC
+    "Miami (OH)": "MOH", "Miami OH RedHawks": "MOH",
+    "Ohio": "OHIO", "Ohio Bobcats": "OHIO",
+    "Akron": "AKRO", "Akron Zips": "AKRO",
+
+    # A-10
+    "George Mason": "GMU", "George Mason Patriots": "GMU",
+    "GW": "GW", "GW Revolutionaries": "GW",
+    "Saint Louis": "SLU", "Saint Louis Billikens": "SLU",
+    "Loyola (Chi)": "LCHI", "Loyola Chi Ramblers": "LCHI",
+
+    # MAAC
+    "Siena": "SIEN", "Siena Saints": "SIEN",
+    "Quinnipiac": "QUIN", "Quinnipiac Bobcats": "QUIN",
+    "Rider": "RIDR", "Rider Broncs": "RIDR",
+    "Manhattan": "MANH", "Manhattan Jaspers": "MANH",
+    "Niagara": "NIAG", "Niagara Purple Eagles": "NIAG",
+    "Canisius": "CAN", "Canisius Golden Griffins": "CAN",
+    "Iona": "IONA", "Iona Gaels": "IONA",
+    "Saint Peters": "SPU", "Saint Peter's Peacocks": "SPU",
+    "Sacred Heart": "SHU", "Sacred Heart Pioneers": "SHU",
+
+    # MEAC
+    "Hampton": "HAMP", "Hampton Pirates": "HAMP",
+    "North Carolina A&T": "NCAT", "North Carolina AT Aggies": "NCAT",
+
+    # Mountain West
+    "Boise State": "BOIS", "Boise State Broncos": "BOIS",
+    "UNLV": "UNLV", "UNLV Rebels": "UNLV",
+
+    # UMass
+    "Massachusetts": "MASS", "Massachusetts Minutemen": "MASS",
+
+    # Big Ten
+    "Wisconsin": "WISC", "Wisconsin Badgers": "WISC",
+    "Michigan St": "MSU", "Michigan St Spartans": "MSU",
+
+    # ACC/Other
+    "California": "CAL", "California Golden Bears": "CAL",
+    "Syracuse": "SYR", "Syracuse Orange": "SYR",
+    "Cincinnati": "CIN", "Cincinnati Bearcats": "CIN",
+    "Kansas St": "KSU", "Kansas State Wildcats": "KSU",
+    "Kansas City": "UMKC", "Kansas City Roos": "UMKC",
+    "Oral Roberts": "ORU", "Oral Roberts Golden Eagles": "ORU",
+    "Portland": "PORT", "Portland Pilots": "PORT",
+    "San Diego": "USD", "San Diego Toreros": "USD",
+    "Texas": "TEX", "Texas Longhorns": "TEX",
+    "Oklahoma": "OKLA", "Oklahoma Sooners": "OKLA",
+}
+
+def normalize_team_for_kalshi(team_name: str) -> str:
+    """Convert full team name to Kalshi 4-letter code"""
+    # Clean the name first
+    team_clean = team_name.strip()
+
+    # Direct lookup
+    if team_clean in KALSHI_NCAAB_TEAM_CODES:
+        return KALSHI_NCAAB_TEAM_CODES[team_clean]
+
+    # Try without mascot
+    base_name = team_clean.split()[0]  # "Harvard Crimson" → "Harvard"
+    if base_name in KALSHI_NCAAB_TEAM_CODES:
+        return KALSHI_NCAAB_TEAM_CODES[base_name]
+
+    # Fallback: take first 4 letters uppercase
+    return base_name[:4].upper()
+
 # Alias Maps: Kalshi Variant -> Canonical Internal Code
 NCAAB_CODE_ALIASES: Dict[str, str] = {
     "NCST": "NCS",
@@ -847,6 +928,21 @@ def team_name_to_code(league: str, team_name: str) -> Optional[str]:
     elif league_u == "NCAAF":
         map_to_use = NCAAF_TEAM_CODE_MAP
     elif league_u == "NCAAB":
+        # Check user-provided comprehensive mapping FIRST (Task: Team Name Normalization)
+        # Use logic from normalize_team_for_kalshi but integrated safely
+
+        # 1. Try direct/base lookup via KALSHI_NCAAB_TEAM_CODES
+        # Note: We use the raw team_name for this lookup as keys are mixed case
+        team_clean_raw = team_name.strip()
+        if team_clean_raw in KALSHI_NCAAB_TEAM_CODES:
+            return KALSHI_NCAAB_TEAM_CODES[team_clean_raw]
+
+        # 2. Try base name split
+        base_name = team_clean_raw.split()[0]
+        if base_name in KALSHI_NCAAB_TEAM_CODES:
+             return KALSHI_NCAAB_TEAM_CODES[base_name]
+
+        # Fallback to existing map
         map_to_use = NCAAB_TEAM_CODE_MAP
 
     if map_to_use:
