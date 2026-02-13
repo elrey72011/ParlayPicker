@@ -81,5 +81,36 @@ class TestPickLogic(unittest.TestCase):
         self.assertEqual(result['pick_prob'], 0.55)
         self.assertEqual(result['pick_side'], "Under")
 
+    def test_map_kalshi_prob_for_pick_matchup_string(self):
+        from streamlit_app import map_kalshi_prob_for_pick
+
+        # Scenario 1: Pick is Left Side (Yes)
+        # Yes Side = "Lakers vs Celtics" (Yes means Lakers win)
+        # Pick = "Lakers"
+        # Prob = 0.60
+        res = map_kalshi_prob_for_pick(0.60, "Lakers vs Celtics", "home", pick_team="Lakers", home_team="Lakers", away_team="Celtics")
+        self.assertEqual(res, 0.60)
+
+        # Scenario 2: Pick is Right Side (No)
+        # Yes Side = "Lakers vs Celtics" (Yes means Lakers win)
+        # Pick = "Celtics"
+        # Prob = 0.60 (Lakers win prob)
+        # Expected: 1 - 0.60 = 0.40
+        res = map_kalshi_prob_for_pick(0.60, "Lakers vs Celtics", "away", pick_team="Celtics", home_team="Lakers", away_team="Celtics")
+        self.assertEqual(res, 0.40)
+
+        # Scenario 3: Non-matchup string
+        # Yes Side = "Lakers"
+        # Pick = "Lakers"
+        res = map_kalshi_prob_for_pick(0.60, "Lakers", "home", pick_team="Lakers", home_team="Lakers", away_team="Celtics")
+        self.assertEqual(res, 0.60)
+
+        # Scenario 4: Matchup string with VS
+        res = map_kalshi_prob_for_pick(0.70, "Kansas VS Duke", "home", pick_team="Kansas", home_team="Kansas", away_team="Duke")
+        self.assertAlmostEqual(res, 0.70)
+
+        res = map_kalshi_prob_for_pick(0.70, "Kansas VS Duke", "away", pick_team="Duke", home_team="Kansas", away_team="Duke")
+        self.assertAlmostEqual(res, 0.30)
+
 if __name__ == '__main__':
     unittest.main()
