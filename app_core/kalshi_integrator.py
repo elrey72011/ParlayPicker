@@ -1288,8 +1288,10 @@ def _match_via_events(
         if match_score < 50:
             continue
 
-        # Time check
+        # Time check and scoring adjustment
         time_diff_hours = None
+        time_score = 0
+
         close_ts = evt.get("close_time") # ISO string
         if close_ts:
             try:
@@ -1297,9 +1299,22 @@ def _match_via_events(
                 if dt.tzinfo is None: dt = pytz.utc.localize(dt)
 
                 time_diff_hours = abs((dt - game_dt_utc).total_seconds()) / 3600.0
-                # Time penalty removed entirely (Fix #1)
+
+                # Time Scoring Logic (Bonus for tight match, penalty for wide miss)
+                is_pro = league in ["NBA", "NFL", "NHL", "MLB"]
+                # Tighter window for pros (exact schedule), looser for college (daily buckets)
+                tight_window = 12 if not is_pro else 6
+                wide_window = 36 if not is_pro else 24
+
+                if time_diff_hours <= tight_window:
+                    time_score = 25  # Bonus for date confirmation
+                elif time_diff_hours > wide_window:
+                    time_score = -25 # Penalty for wrong day
+
             except:
                 pass
+
+        final_score = match_score + time_score
 
         # Enhanced logging for EVERY potential match attempt (score >= 50) (Fix #5)
         logger.info(f"   🎲 Evaluating: {ticker}")
@@ -1312,14 +1327,13 @@ def _match_via_events(
         logger.info(f"         - Home Match: {home_match_1} (+{50 if home_match_1 else 0})")
         logger.info(f"         - Direct Score: {score_1}")
         logger.info(f"         - Swap Score: {score_2}")
-        logger.info(f"         - Best Score: {match_score}")
+        logger.info(f"         - Team Score: {match_score}")
         if time_diff_hours is not None:
-            penalty = 10 if time_diff_hours > TIME_WINDOW_HOURS and league != 'NCAAB' else 0
-            logger.info(f"      Time Check: {time_diff_hours:.1f}h diff (penalty: -{penalty})")
-        logger.info(f"      Result: {'✓ Potential' if match_score >= 50 else '✗ Rejected'} (score={match_score})")
+            logger.info(f"      Time Check: {time_diff_hours:.1f}h diff (Score Adj: {time_score:+})")
+        logger.info(f"      Final Score: {final_score} (Threshold: 70)")
 
-        if match_score > best_score:
-            best_score = match_score
+        if final_score > best_score:
+            best_score = final_score
             best_event = evt
             best_details = {
                 "ticker": ticker,
@@ -1329,7 +1343,8 @@ def _match_via_events(
                 "resolved_home": evt_home_code,
                 "score_1": score_1,
                 "score_2": score_2,
-                "time_diff_hours": time_diff_hours
+                "time_diff_hours": time_diff_hours,
+                "time_score": time_score
             }
 
     # Log final result
