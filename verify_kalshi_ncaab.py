@@ -6,6 +6,7 @@ import re
 import traceback
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
+import os
 
 # Mock external dependencies
 sys.modules['streamlit'] = MagicMock()
@@ -15,6 +16,11 @@ st.session_state = {}
 # Mocks for globals expected by fetch_kalshi_markets
 logger = logging.getLogger("test")
 logging.basicConfig(level=logging.INFO)
+
+# --- Import real function to test ---
+# Ensure app_core is in path
+sys.path.append(os.getcwd())
+from app_core.kalshi_integrator import parse_event_ticker_codes
 
 kalshi_integrator = MagicMock()
 # Setup basic mock behavior
@@ -137,6 +143,23 @@ class TestKalshiNCAAB(unittest.TestCase):
             print(f"✅ Safety guard passed: Pool size {len(pool)} despite date mismatch")
         else:
             self.fail("❌ Safety guard failed: Pool is empty")
+
+    def test_ticker_parsing(self):
+        print("\n--- Test 4: Ticker Parsing Logic ---")
+        cases = [
+            ("KXNCAAMBGAME-26FEB11USCOSU", "USC", "OSU"),
+            ("KXNCAAMBGAME-26FEB11MERVMI", "MER", "VMI"),
+            ("KXNCAAMBGAME-26FEB11DUKEUNC", "DUK", "UNC"),
+            ("KXNCAAMBGAME-26FEB11UNDCLEM", "UND", "CLE"),
+        ]
+        for ticker, exp_away, exp_home in cases:
+            parsed = parse_event_ticker_codes(ticker)
+            away = parsed.get("away")
+            home = parsed.get("home")
+            print(f"  {ticker} -> away={away}, home={home}")
+            self.assertEqual(away, exp_away, f"Away mismatch for {ticker}")
+            self.assertEqual(home, exp_home, f"Home mismatch for {ticker}")
+        print("✅ Ticker parsing passed")
 
 if __name__ == '__main__':
     unittest.main(argv=['first-arg-is-ignored'], exit=False)
