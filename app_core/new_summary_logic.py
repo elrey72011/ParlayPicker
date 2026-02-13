@@ -278,7 +278,9 @@ def build_game_summary_v2(df: pd.DataFrame) -> pd.DataFrame:
             # Set Spread Pick
             # Fix: Ensure we don't construct "Team 0" or similar invalid strings
             s_line = best_spread.get("Line")
-            if best_spread.get("Spread & Pick"):
+            if best_spread.get("spread_pick_label"):
+                spread_pick = best_spread.get("spread_pick_label")
+            elif best_spread.get("Spread & Pick"):
                 spread_pick = best_spread.get("Spread & Pick")
             elif best_spread.get("Pick"):
                 try:
@@ -309,6 +311,15 @@ def build_game_summary_v2(df: pd.DataFrame) -> pd.DataFrame:
 
             # --- CALCULATE SPREAD CONSENSUS ---
             spread_consensus_prob, spread_consensus_str = calculate_consensus_for_row(best_spread, "Spread")
+
+            # Validation (Requirement 1)
+            if spread_pick and spread_prob is not None:
+                try:
+                    sp_val = float(spread_prob)
+                    if sp_val < 0.50:
+                        logger.error(f"Invalid spread pick: {spread_pick} has prob {sp_val:.3f} < 50%")
+                except (ValueError, TypeError):
+                    pass
 
 
         summary["Spread Pick"] = spread_pick  # Changed from "Spread" to "Spread Pick" to match UI
@@ -342,7 +353,9 @@ def build_game_summary_v2(df: pd.DataFrame) -> pd.DataFrame:
             # Set Total Pick
             # Fix: Avoid "Under 0" and "Under 01" artifacts
             t_line = best_total.get("Line")
-            if best_total.get("Total & Pick"):
+            if best_total.get("total_pick_label"):
+                total_pick = best_total.get("total_pick_label")
+            elif best_total.get("Total & Pick"):
                 total_pick = best_total.get("Total & Pick")
             elif best_total.get("Pick"):
                 try:
@@ -372,6 +385,15 @@ def build_game_summary_v2(df: pd.DataFrame) -> pd.DataFrame:
 
             # --- CALCULATE TOTAL CONSENSUS ---
             total_consensus_prob, total_consensus_str = calculate_consensus_for_row(best_total, "Total")
+
+            # Validation
+            if total_pick and total_prob is not None:
+                try:
+                    tp_val = float(total_prob)
+                    if tp_val < 0.50:
+                        logger.error(f"Invalid total pick: {total_pick} has prob {tp_val:.3f} < 50%")
+                except (ValueError, TypeError):
+                    pass
 
         summary["Total Pick"] = total_pick  # Changed from "Total" to "Total Pick" to match UI
         summary["Total Prob"] = total_prob
