@@ -660,6 +660,16 @@ NCAAB_TEAM_CODE_MAP: Dict[str, str] = {
     "UNC ASHEVILLE": "UNCA", "UNC-ASHEVILLE": "UNCA", "UNC ASHEVILLE BULLDOGS": "UNCA",
     "USC UPSTATE": "USCU", "SOUTH CAROLINA UPSTATE": "USCU", "USC UPSTATE SPARTANS": "USCU",
     "WINTHROP": "WIN", "WINTHROP EAGLES": "WIN",
+    # --- WAC (Western Athletic Conference) ---
+    "UTAH VALLEY": "UVU", "UTAH VALLEY WOLVERINES": "UVU",
+    "UTAH TECH": "UTT", "UTAH TECH TRAILBLAZERS": "UTT",
+    "TARLETON ST": "TAR", "TARLETON STATE": "TAR", "TARLETON": "TAR", "TARLETON ST TEXANS": "TAR",
+    "GRAND CANYON": "GCU", "GRAND CANYON ANTELOPES": "GCU",
+    "CAL BAPTIST": "CBU", "CALIFORNIA BAPTIST": "CBU", "CAL BAPTIST LANCERS": "CBU",
+    "SEATTLE U": "SEA", "SEATTLE UNIVERSITY": "SEA", "SEATTLE REDHAWKS": "SEA",
+    "ABILENE CHRISTIAN": "ACU", "ABILENE CHRISTIAN WILDCATS": "ACU",
+    "SOUTHERN UTAH": "SUU", "SOUTHERN UTAH THUNDERBIRDS": "SUU",
+    "UT ARLINGTON": "UTA", "TEXAS ARLINGTON": "UTA", "UT ARLINGTON MAVERICKS": "UTA",
 }
 
 # Alias Maps: Kalshi Variant -> Canonical Internal Code
@@ -700,7 +710,7 @@ NCAAB_CODE_ALIASES: Dict[str, str] = {
     "OKST": "OSU",     # Oklahoma St (Kalshi likely uses OKST, we use OSU)
     # --- v96 reverse lookup aliases (old system codes → correct Kalshi codes) ---
     "VIR": "UVA",      # Virginia: was VIR, Kalshi uses UVA
-    "UTA": "UTAH",     # Utah: was UTA, Kalshi uses UTAH
+    # "UTA": "UTAH",   # REMOVED: UTA is UT Arlington. Utah Utes is UTAH.
     "SAN": "SJSU",     # San Jose St: heuristic generated SAN, Kalshi uses SJSU
     "AIR": "AFA",      # Air Force: heuristic generated AIR, Kalshi uses AFA
     "FRE": "FRES",     # Fresno St: heuristic generated FRE, Kalshi uses FRES

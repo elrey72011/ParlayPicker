@@ -12832,6 +12832,10 @@ with tab_master:
                     best_prob = []
                     best_type = []
 
+                    # Prepare lists for updated pick strings to ensure consistency
+                    spread_pick_updated = []
+                    total_pick_updated = []
+
                     for idx, row in temp.iterrows():
                         # Use consensus probabilities for comparison (what user sees)
                         s_final_prob = safe_float(row.get("SpreadConsensusProb")) or safe_float(row.get("spread_prob_pick_final")) or 0.0
@@ -12866,43 +12870,55 @@ with tab_master:
                         elif t_valid:
                             target_market = "TOTAL"
 
-                        # Construct the best pick string dynamically
-                        if target_market == "SPREAD":
-                            new_b_type = "SPREAD"
-                            # If prob > 0.5, use original. If < 0.5, flip.
+                        # REGENERATE PICK STRINGS (FIX: Ensure consistency with consensus prob)
+                        updated_s_str = row.get("Spread & Pick") # Default fallback
+                        updated_t_str = row.get("Total & Pick") # Default fallback
+
+                        if s_valid:
                             if s_final_prob > 0.5:
-                                new_b_pick = f"{s_team} {clean_line_str(s_line_val)} ({s_final_prob:.1%})"
-                                new_b_prob = s_final_prob
+                                updated_s_str = f"{s_team} {clean_line_str(s_line_val)} ({s_final_prob:.1%})"
                             else:
                                 # Flip to opposite
-                                new_b_prob = 1.0 - s_final_prob
+                                prob_flipped = 1.0 - s_final_prob
                                 home = row.get("Home")
                                 away = row.get("Away")
                                 opp_team = away if s_team == home else home
-                                # If s_team matches neither (unlikely), fallback to s_team? Or just use "Opponent"?
-                                # Assuming valid data:
                                 if opp_team is None: opp_team = s_team # Fallback
                                 opp_line = -1 * s_line_val if s_line_val is not None else 0.0
-                                new_b_pick = f"{opp_team} {clean_line_str(opp_line)} ({new_b_prob:.1%})"
+                                updated_s_str = f"{opp_team} {clean_line_str(opp_line)} ({prob_flipped:.1%})"
+
+                        if t_valid:
+                            if t_final_prob > 0.5:
+                                updated_t_str = f"{t_side} {clean_line_str(t_line_val)} ({t_final_prob:.1%})"
+                            else:
+                                # Flip
+                                prob_flipped = 1.0 - t_final_prob
+                                opp_side = "Under" if t_side == "Over" else "Over"
+                                updated_t_str = f"{opp_side} {clean_line_str(t_line_val)} ({prob_flipped:.1%})"
+
+                        # Construct the best pick string dynamically using updated strings
+                        if target_market == "SPREAD":
+                            new_b_type = "SPREAD"
+                            new_b_pick = updated_s_str
+                            new_b_prob = s_final_prob if s_final_prob > 0.5 else (1.0 - s_final_prob)
 
                         elif target_market == "TOTAL":
                             new_b_type = "TOTAL"
-                            if t_final_prob > 0.5:
-                                new_b_pick = f"{t_side} {clean_line_str(t_line_val)} ({t_final_prob:.1%})"
-                                new_b_prob = t_final_prob
-                            else:
-                                # Flip
-                                new_b_prob = 1.0 - t_final_prob
-                                opp_side = "Under" if t_side == "Over" else "Over"
-                                new_b_pick = f"{opp_side} {clean_line_str(t_line_val)} ({new_b_prob:.1%})"
+                            new_b_pick = updated_t_str
+                            new_b_prob = t_final_prob if t_final_prob > 0.5 else (1.0 - t_final_prob)
 
                         best_pick.append(new_b_pick)
                         best_prob.append(new_b_prob)
                         best_type.append(new_b_type)
+                        spread_pick_updated.append(updated_s_str)
+                        total_pick_updated.append(updated_t_str)
 
                     new_data["Best Overall Pick"] = best_pick
                     new_data["Best Overall Prob"] = best_prob
                     new_data["best_pick_type"] = best_type
+                    # Update source columns so downstream logic (calculate_best_pick_metrics) uses correct strings
+                    new_data["Spread & Pick"] = spread_pick_updated
+                    new_data["Total & Pick"] = total_pick_updated
 
                     return pd.concat([df, pd.DataFrame(new_data, index=df.index)], axis=1).copy()
 
