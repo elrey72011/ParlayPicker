@@ -159,6 +159,8 @@ def parse_event_ticker_codes(event_ticker: str) -> Dict[str, str]:
         # Add values from alias map to known codes to catch resolved aliases (e.g. "DUKE" -> "DUK")
         if league == "NCAAB":
             all_codes.update(NCAAB_CODE_ALIASES.values())
+            # FIX: Also add comprehensive team codes (Task: Ensure newly added codes like LCHI are recognized)
+            all_codes.update(KALSHI_NCAAB_TEAM_CODES.values())
 
         best_split = None
         best_score = 0
@@ -765,8 +767,8 @@ KALSHI_NCAAB_TEAM_CODES = {
     "Louisville": "LOU",
     "Loyola (Chi)": "LCHI",
     "Loyola Chi Ramblers": "LCHI",
-    "Manhattan": "MANH",
-    "Manhattan Jaspers": "MANH",
+    "Manhattan": "MAN",
+    "Manhattan Jaspers": "MAN",
     "Massachusetts": "MASS",
     "Massachusetts Minutemen": "MASS",
     "Mercer": "MER",
@@ -777,6 +779,8 @@ KALSHI_NCAAB_TEAM_CODES = {
     "Middle Tennessee": "MTU",
     "Mississippi (Ole Miss)": "MISS",
     "Morehead State": "MORE",
+    "Mt. St. Mary's": "MSM",
+    "Mt St Marys": "MSM",
     "Nevada": "NEV",
     "Niagara": "NIAG",
     "Niagara Purple Eagles": "NIAG",
@@ -801,14 +805,15 @@ KALSHI_NCAAB_TEAM_CODES = {
     "Quinnipiac Bobcats": "QUIN",
     "Rice": "RICE",
     "Richmond": "RICH",
-    "Rider": "RIDR",
-    "Rider Broncs": "RIDR",
+    "Rider": "RID",
+    "Rider Broncs": "RID",
     "Sacred Heart": "SHU",
     "Sacred Heart Pioneers": "SHU",
     "Saint Louis": "SLU",
     "Saint Louis Billikens": "SLU",
-    "Saint Peter's Peacocks": "SPU",
-    "Saint Peters": "SPU",
+    "Saint Peter's": "SPC",
+    "Saint Peter's Peacocks": "SPC",
+    "Saint Peters": "SPC",
     "San Diego": "USD",
     "Siena": "SIEN",
     "Siena Saints": "SIEN",
@@ -846,21 +851,48 @@ KALSHI_NCAAB_TEAM_CODES = {
 }
 
 def normalize_team_for_kalshi(team_name: str) -> str:
-    """Convert full team name to Kalshi 4-letter code"""
+    """Convert full team name to Kalshi 4-letter code with enhanced normalization"""
     # Clean the name first
     team_clean = team_name.strip()
 
-    # Direct lookup
+    # 1. Direct lookup
     if team_clean in KALSHI_NCAAB_TEAM_CODES:
         return KALSHI_NCAAB_TEAM_CODES[team_clean]
 
-    # Try without mascot
-    base_name = team_clean.split()[0]  # "Harvard Crimson" → "Harvard"
-    if base_name in KALSHI_NCAAB_TEAM_CODES:
-        return KALSHI_NCAAB_TEAM_CODES[base_name]
+    # 2. Try removing common suffixes/noise words (University, State, etc.)
+    # User Request: Strip "University", "State", and plural mascots.
 
-    # Fallback: take first 4 letters uppercase
-    return base_name[:4].upper()
+    # Try removing "University"
+    cleaned_uni = team_clean.replace("University", "").replace("Univ", "").strip()
+    if cleaned_uni in KALSHI_NCAAB_TEAM_CODES:
+        return KALSHI_NCAAB_TEAM_CODES[cleaned_uni]
+
+    parts = team_clean.split()
+
+    # Try removing last word (likely mascot)
+    if len(parts) > 1:
+        without_last = " ".join(parts[:-1])
+        if without_last in KALSHI_NCAAB_TEAM_CODES:
+            return KALSHI_NCAAB_TEAM_CODES[without_last]
+
+        # Try removing "State" if it was part of the name but not in map (risky, but requested)
+        without_state = without_last.replace("State", "").strip()
+        if without_state in KALSHI_NCAAB_TEAM_CODES:
+             return KALSHI_NCAAB_TEAM_CODES[without_state]
+
+    # Try stripping "State" from the full name
+    without_state_full = team_clean.replace("State", "").strip()
+    if without_state_full in KALSHI_NCAAB_TEAM_CODES:
+        return KALSHI_NCAAB_TEAM_CODES[without_state_full]
+
+    # Try base name (first word)
+    if parts:
+        base_name = parts[0]
+        if base_name in KALSHI_NCAAB_TEAM_CODES:
+            return KALSHI_NCAAB_TEAM_CODES[base_name]
+        return base_name[:4].upper()
+
+    return "UNK"
 
 # Alias Maps: Kalshi Variant -> Canonical Internal Code
 NCAAB_CODE_ALIASES: Dict[str, str] = {
@@ -915,6 +947,11 @@ NCAAB_CODE_ALIASES: Dict[str, str] = {
     "MIL": "MILW",     # Milwaukee: was MIL, Kalshi uses MILW
     "IUP": "IUIN",     # IUPUI: was IUP, Kalshi uses IUIN
     "COLM": "CLMB",    # Columbia: Kalshi variant fallback
+    "MANH": "MAN",     # Manhattan: internal code update
+    "RIDR": "RID",     # Rider: internal code update
+    "SPU": "SPC",      # St. Peter's: internal code update
+    "MSM": "MSM",      # Mt St Mary's
+    "MTST": "MSM",     # Mt St Mary's variant
 }
 
 NCAAF_CODE_ALIASES: Dict[str, str] = {
@@ -945,6 +982,10 @@ def resolve_team_code(code: str, league: str) -> str:
     if l == "NCAAB":
         if c in NCAAB_CODE_ALIASES:
             return NCAAB_CODE_ALIASES[c]
+        # FIX: Do NOT fuzzy match if the code is already a known canonical code
+        # This prevents valid codes (e.g. MASS) from being fuzzy-matched to aliases (e.g. MISS)
+        if c in KALSHI_NCAAB_TEAM_CODES.values():
+            return c
     elif l == "NCAAF":
         if c in NCAAF_CODE_ALIASES:
             return NCAAF_CODE_ALIASES[c]
