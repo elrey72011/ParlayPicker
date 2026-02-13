@@ -7593,12 +7593,11 @@ def match_kalshi_market(
     kalshi_markets: List[Dict[str, Any]],
     winner_reason_override: Optional[str] = None,
 ) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, List[Dict[str, Any]]]]:
-    """
-    Safely finds a Kalshi market match.
-    Delegates to _match_kalshi_market_impl which does the actual fuzzy matching.
-    """
-    logger.info(f"🔵 match_kalshi_market: {len(kalshi_markets)} markets for {game.get('away_team')} vs {game.get('home_team')}")
-    return _match_kalshi_market_impl(game, kalshi_markets, winner_reason_override)
+    """Delegates to _match_kalshi_market_impl for fuzzy matching."""
+    logger.info(f"🔵 match_kalshi_market called with {len(kalshi_markets)} markets")
+    result = _match_kalshi_market_impl(game, kalshi_markets, winner_reason_override)
+    logger.info(f"🟢 _match_kalshi_market_impl returned {len(result)} matches")
+    return result
 
 
 # -----------------
@@ -12830,74 +12829,64 @@ with tab_master:
                         s_final_prob = safe_float(row.get("SpreadConsensusProb")) or safe_float(row.get("spread_prob_pick_final")) or 0.0
                         t_final_prob = safe_float(row.get("TotalConsensusProb")) or safe_float(row.get("total_prob_pick_final")) or 0.0
 
-                        s_pick = row.get("Spread & Pick")
-                        t_pick = row.get("Total & Pick")
+                        # Determine validity based on raw data existence and valid float conversion
+                        s_team = row.get("spread_pick_team")
+                        s_line_val = safe_float(row.get("spread_pick_line"))
+                        s_valid = (s_team is not None) and (s_line_val is not None)
 
-                        # Handle None/NaN - also check for "nan" in pick string (e.g., "Over nan")
-                        s_pick_valid = (
-                            s_pick is not None and
-                            str(s_pick).lower() != "none" and
-                            str(s_pick).strip() != "" and
-                            "nan" not in str(s_pick).lower()
-                        )
-                        t_pick_valid = (
-                            t_pick is not None and
-                            str(t_pick).lower() != "none" and
-                            str(t_pick).strip() != "" and
-                            "nan" not in str(t_pick).lower()
-                        )
-
-                        # A pick is valid if it has a valid string and probability > 0.5
-                        s_valid = s_pick_valid and s_final_prob > 0.5
-                        t_valid = t_pick_valid and t_final_prob > 0.5
+                        t_side = row.get("total_pick_side")
+                        t_line_val = safe_float(row.get("total_pick_line"))
+                        t_valid = (t_side is not None) and (t_line_val is not None)
 
                         new_b_type = "NONE"
                         new_b_pick = None
                         new_b_prob = 0.0
 
+                        # Calculate strengths (distance from 0.5 or max prob)
+                        # We want the strongest edge, even if it requires flipping the pick
+                        s_strength = max(s_final_prob, 1.0 - s_final_prob) if s_valid else -1.0
+                        t_strength = max(t_final_prob, 1.0 - t_final_prob) if t_valid else -1.0
+
+                        target_market = "NONE"
                         if s_valid and t_valid:
-                            # FIX: Compare probabilities directly - highest probability wins
-                            if s_final_prob >= t_final_prob:
-                                new_b_type = "SPREAD"
-                                new_b_pick = s_pick
+                            if s_strength >= t_strength:
+                                target_market = "SPREAD"
+                            else:
+                                target_market = "TOTAL"
+                        elif s_valid:
+                            target_market = "SPREAD"
+                        elif t_valid:
+                            target_market = "TOTAL"
+
+                        # Construct the best pick string dynamically
+                        if target_market == "SPREAD":
+                            new_b_type = "SPREAD"
+                            # If prob > 0.5, use original. If < 0.5, flip.
+                            if s_final_prob > 0.5:
+                                new_b_pick = f"{s_team} {clean_line_str(s_line_val)} ({s_final_prob:.1%})"
                                 new_b_prob = s_final_prob
                             else:
-                                new_b_type = "TOTAL"
-                                new_b_pick = t_pick
-                                new_b_prob = t_final_prob
-                        elif s_valid:
-                            new_b_type = "SPREAD"
-                            new_b_pick = s_pick
-                            new_b_prob = s_final_prob
-                        elif t_valid:
+                                # Flip to opposite
+                                new_b_prob = 1.0 - s_final_prob
+                                home = row.get("Home")
+                                away = row.get("Away")
+                                opp_team = away if s_team == home else home
+                                # If s_team matches neither (unlikely), fallback to s_team? Or just use "Opponent"?
+                                # Assuming valid data:
+                                if opp_team is None: opp_team = s_team # Fallback
+                                opp_line = -1 * s_line_val if s_line_val is not None else 0.0
+                                new_b_pick = f"{opp_team} {clean_line_str(opp_line)} ({new_b_prob:.1%})"
+
+                        elif target_market == "TOTAL":
                             new_b_type = "TOTAL"
-                            new_b_pick = t_pick
-                            new_b_prob = t_final_prob
-                        else:
-                            # Fallback: Use spread or total pick even if prob <= 0.5, but NEVER use ML
-                            # Compare probabilities directly in fallback as well
-                            if s_pick_valid and t_pick_valid:
-                                if s_final_prob >= t_final_prob:
-                                    new_b_type = "SPREAD"
-                                    new_b_pick = s_pick
-                                    new_b_prob = s_final_prob if s_final_prob else 0.5
-                                else:
-                                    new_b_type = "TOTAL"
-                                    new_b_pick = t_pick
-                                    new_b_prob = t_final_prob if t_final_prob else 0.5
-                            elif s_pick_valid:
-                                new_b_type = "SPREAD"
-                                new_b_pick = s_pick
-                                new_b_prob = s_final_prob if s_final_prob else 0.5
-                            elif t_pick_valid:
-                                new_b_type = "TOTAL"
-                                new_b_pick = t_pick
-                                new_b_prob = t_final_prob if t_final_prob else 0.5
+                            if t_final_prob > 0.5:
+                                new_b_pick = f"{t_side} {clean_line_str(t_line_val)} ({t_final_prob:.1%})"
+                                new_b_prob = t_final_prob
                             else:
-                                # No valid spread or total pick available - leave as None
-                                new_b_type = "NONE"
-                                new_b_pick = None
-                                new_b_prob = None
+                                # Flip
+                                new_b_prob = 1.0 - t_final_prob
+                                opp_side = "Under" if t_side == "Over" else "Over"
+                                new_b_pick = f"{opp_side} {clean_line_str(t_line_val)} ({new_b_prob:.1%})"
 
                         best_pick.append(new_b_pick)
                         best_prob.append(new_b_prob)
