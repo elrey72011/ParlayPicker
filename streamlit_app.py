@@ -2256,6 +2256,41 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
             alt_s = _safe_str("spread_alt_label")
             if alt_s:
                 s_pick = alt_s
+            elif s_pick:
+                # Fallback: Try to parse and flip if alt label is missing
+                # e.g., "Lakers -5.5" -> "Warriors +5.5"
+                h_team = row.get("Home")
+                a_team = row.get("Away")
+                if h_team and a_team:
+                    new_team = None
+                    s_pick_str = str(s_pick)
+
+                    # 1. Try full name match
+                    if h_team in s_pick_str:
+                        new_team = a_team
+                    elif a_team in s_pick_str:
+                        new_team = h_team
+                    else:
+                        # 2. Fallback to token match (safely)
+                        pick_team_match = s_pick_str.split()[0]
+                        in_home = pick_team_match in h_team
+                        in_away = pick_team_match in a_team
+
+                        if in_home and not in_away:
+                            new_team = a_team
+                        elif in_away and not in_home:
+                            new_team = h_team
+
+                    if new_team:
+                        try:
+                            match = re.search(r'([+-]?\d+(\.\d+)?)', s_pick)
+                            if match:
+                                old_line = float(match.group(1))
+                                new_line = -old_line
+                                sign = "+" if new_line > 0 else ""
+                                s_pick = f"{new_team} {sign}{new_line:g}"
+                        except:
+                            pass
         s_edge = _safe("spread_edge") or 0.0
 
         # Total
