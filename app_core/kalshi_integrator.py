@@ -156,8 +156,16 @@ def parse_event_ticker_codes(event_ticker: str) -> Dict[str, str]:
         code_map = NCAAB_TEAM_CODE_MAP if league == "NCAAB" else NCAAF_TEAM_CODE_MAP
         all_codes = set(code_map.values())
 
+        # Add values from alias map to known codes to catch resolved aliases (e.g. "DUKE" -> "DUK")
+        if league == "NCAAB":
+            all_codes.update(NCAAB_CODE_ALIASES.values())
+
         best_split = None
         best_score = 0
+
+        # LOGGING: Show what we are parsing (Issue #3)
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f"Parsing NCAAB ticker: {event_ticker} (block={team_block})")
 
         # Try all possible split points
         min_len = max(2, len(team_block) - 5)
@@ -165,22 +173,40 @@ def parse_event_ticker_codes(event_ticker: str) -> Dict[str, str]:
             potential_away = team_block[:i]
             potential_home = team_block[i:]
 
+            # Try direct resolution first
             away_resolved = resolve_team_code(potential_away, league)
             home_resolved = resolve_team_code(potential_home, league)
 
+            # Check validity (Original Direction)
             away_match = away_resolved in all_codes or potential_away in all_codes
             home_match = home_resolved in all_codes or potential_home in all_codes
+
+            # Bidirectional Check: What if the ticker is actually HOMEAWAY instead of AWAYHOME?
+            # Or what if we split differently?
+            # Wait, the ticker format is usually consistent (AWAY-HOME or HOME-AWAY depending on league but Kalshi is usually AWAY-HOME)
+            # But the split point is the variable.
+
+            # Additional check: If resolve_team_code returns something that IS in all_codes
+            # e.g. "DUKE" -> "DUK" (which is in all_codes)
+
+            score = 0
+            if away_match: score += 1
+            if home_match: score += 1
 
             if away_match and home_match:
                 away = away_resolved if away_resolved in all_codes else potential_away
                 home = home_resolved if home_resolved in all_codes else potential_home
                 logger.debug(f"NCAAB ticker parse: {event_ticker} -> away={away}, home={home} (perfect match at split {i})")
+                best_split = (away, home)
+                best_score = 2
                 break
-            elif away_match or home_match:
-                score = (1 if away_match else 0) + (1 if home_match else 0)
-                if score > best_score:
-                    best_score = score
-                    best_split = (potential_away, potential_home)
+
+            elif score > best_score:
+                best_score = score
+                # Store the resolved versions if they matched, else raw
+                a_cand = away_resolved if away_match else potential_away
+                h_cand = home_resolved if home_match else potential_home
+                best_split = (a_cand, h_cand)
 
         if not away and not home:
             # 1. Try Partial Match via Secondary API (Cross-Reference)
@@ -194,6 +220,7 @@ def parse_event_ticker_codes(event_ticker: str) -> Dict[str, str]:
             # 2. Fallback to Best Partial Split from map logic
             elif best_split:
                 away, home = best_split
+                logger.debug(f"NCAAB ticker fallback: {event_ticker} -> best split {away}/{home} (score={best_score})")
 
             # 3. Final Fallback: Heuristic Blind Bisection
             else:
@@ -790,6 +817,11 @@ NCAAB_CODE_ALIASES: Dict[str, str] = {
     "ND": "UND",       # Notre Dame (Kalshi likely uses ND, we use UND)
     "NDAME": "UND",    # Notre Dame alternate
     "OKST": "OSU",     # Oklahoma St (Kalshi likely uses OKST, we use OSU)
+    "CLEM": "CLE",     # Clemson
+    "WASH": "WAS",     # Washington
+    "IOWA": "IOW",     # Iowa
+    "OHIO": "OHIO",    # Ohio Bobcats (Explicit keep)
+    "UTAH": "UTAH",    # Utah Utes (Explicit keep)
     # --- v96 reverse lookup aliases (old system codes → correct Kalshi codes) ---
     "VIR": "UVA",      # Virginia: was VIR, Kalshi uses UVA
     # "UTA": "UTAH",   # REMOVED: UTA is UT Arlington. Utah Utes is UTAH.
@@ -1578,60 +1610,6 @@ def _match_via_events(
         # Initialize fallback
         force_match_result = None
 
-        # MOVE NCAAB FORCE MATCH HERE - AFTER league verification passes
-        # This ensures we ONLY force match on verified NCAAB events
-        if league == 'NCAAB' and best_score >= 80:
-            logger.info(f"🎯 NCAAB POTENTIAL FORCE MATCH: {evt_ticker} score={best_score}")
-
-            # Try to get any market from the event
-            force_market = None
-            if markets:
-                force_market = markets[0]
-            # Markets already fetched above - if empty, no force match available
-
-            if force_market:
-                # Validate force_market has actual usable data
-                force_title = force_market.get('title', '')
-                if not force_title or len(force_title) < 5:
-                    logger.warning(f"   ⚠️ NCAAB force market has invalid title: {force_title}")
-                    # Don't return - let it fall through to normal logic below
-                else:
-                    # Calculate probability
-                    yes_bid = _kalshi_price_norm(force_market, "yes_bid_dollars", "yes_bid")
-                    yes_ask = _kalshi_price_norm(force_market, "yes_ask_dollars", "yes_ask")
-                    no_bid = _kalshi_price_norm(force_market, "no_bid_dollars", "no_bid")
-                    last_price = _kalshi_price_norm(force_market, "last_price_dollars", "last_price")
-
-                    prob = None
-                    if yes_bid is not None and yes_ask is not None:
-                        prob = (yes_bid + yes_ask) / 2.0
-                    elif yes_bid is not None and no_bid is not None:
-                        prob = (yes_bid + (1.0 - no_bid)) / 2.0
-                    elif last_price is not None and last_price > 0:
-                        prob = last_price
-
-                    # ONLY return if we have valid probability data
-                    if prob is not None and 0.01 < prob < 0.99:
-                        logger.info(f"   ✅ NCAAB FORCE MATCH VALID: {force_market.get('ticker')} prob={prob:.3f}")
-                        # Store as fallback but allow spread/total search to proceed
-                        force_match_result = KalshiMatchResult(
-                            matched=True,
-                            kalshi_available=True,
-                            label=force_title,
-                            probability=prob,
-                            raw_event_id=evt_ticker,
-                            league=league,
-                            reason='ncaab_force_match',
-                            market_type='force',
-                            game_date=game_dt_utc
-                        )
-                    else:
-                        logger.warning(f"   ⚠️ NCAAB force match has invalid probability: {prob}")
-            else:
-                logger.warning(f"   ⚠️ NCAAB force match: No markets available for {evt_ticker}")
-
-            # If force match didn't return, continue to normal logic below
-
         # If markets missing (e.g. from cache without nested), fetch them explicitly
         # ONLY for leagues where we know this is necessary (NCAAB primarily)
         if not markets and league in ["NCAAB"]:
@@ -1654,7 +1632,7 @@ def _match_via_events(
                     all_series_mkts = integrator.get_markets_paginated(
                         status=None,
                         limit=200,
-                        max_pages=5,
+                        max_pages=20,
                         extra_params={"series_ticker": series}
                     )
                     # Filter for this specific event
@@ -1925,12 +1903,48 @@ def _match_via_events(
                 elif total_markets:
                     target_market = total_markets[0]
                     match_reason_detail = "matched_total_default"
-                elif force_match_result:
-                    return force_match_result
                 elif winner_market:
                     target_market = winner_market
                     match_reason_detail = "matched_winner"
-                elif markets:
+
+                # Force Match Logic (moved here): If still no target, try to find ANY valid market
+                if not target_market and best_score >= 80:
+                    logger.info(f"🎯 NCAAB FORCE MATCH ATTEMPT: {evt_ticker} score={best_score}")
+                    # Iterate ALL markets to find one with valid probability
+                    for cand in markets:
+                        # Calculate probability
+                        yes_bid = _kalshi_price_norm(cand, "yes_bid_dollars", "yes_bid")
+                        yes_ask = _kalshi_price_norm(cand, "yes_ask_dollars", "yes_ask")
+                        no_bid = _kalshi_price_norm(cand, "no_bid_dollars", "no_bid")
+                        last_price = _kalshi_price_norm(cand, "last_price_dollars", "last_price")
+
+                        prob = None
+                        if yes_bid is not None and yes_ask is not None:
+                            prob = (yes_bid + yes_ask) / 2.0
+                        elif yes_bid is not None and no_bid is not None:
+                            prob = (yes_bid + (1.0 - no_bid)) / 2.0
+                        elif last_price is not None and last_price > 0:
+                            prob = last_price
+
+                        # Validate title length and probability
+                        cand_title = cand.get('title', '')
+                        if len(cand_title) > 5 and prob is not None and 0.01 < prob < 0.99:
+                            logger.info(f"   ✅ NCAAB FORCE MATCH SUCCESS: {cand.get('ticker')} prob={prob:.3f}")
+                            return KalshiMatchResult(
+                                matched=True,
+                                kalshi_available=True,
+                                label=cand_title,
+                                probability=prob,
+                                raw_event_id=evt_ticker,
+                                market_ticker=cand.get("ticker"),
+                                league=league,
+                                reason='ncaab_force_match',
+                                market_type='force',
+                                game_date=game_dt_utc
+                            )
+                    logger.warning(f"   ⚠️ NCAAB force match failed: No valid markets found in {len(markets)} candidates")
+
+                if not target_market and markets:
                     target_market = markets[0]
                     match_reason_detail = "matched_first_available"
             else:
