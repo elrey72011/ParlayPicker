@@ -7637,9 +7637,31 @@ def _match_kalshi_market_impl(
         "kalshi_wanted_tokens": allowed_date_tokens,
     }
 
+    total_res = simple_select(totals, "total")
+    spread_res = simple_select(spreads, "spread")
+
+    # Fallback Logic: If one missing, use the other (User Request: "Accept ANY Kalshi market")
+    if not spread_res["kalshi_matched"] and total_res["kalshi_matched"]:
+        logger.info(f"⚠️ SPREAD missing, falling back to TOTAL for {game.get('home_team')} vs {game.get('away_team')}")
+        spread_res = total_res.copy()
+        # Mark as fallback so we know it's not a real spread
+        spread_res["kalshi_label"] = "matched_total_fallback"
+        spread_res["kalshi_reason"] = "no_spread_market_used_total"
+        # Note: We keep kalshi_market_type as "total" to be honest about source
+
+    if not total_res["kalshi_matched"] and spread_res["kalshi_matched"]:
+        # If spread_res was just fallback-ed from total, don't fallback back!
+        # But here we check if total_res failed (it didn't if we just used it for spread)
+        # So this only fires if total failed initially AND spread succeeded initially
+        logger.info(f"⚠️ TOTAL missing, falling back to SPREAD for {game.get('home_team')} vs {game.get('away_team')}")
+        total_res = spread_res.copy()
+        # Mark as fallback
+        total_res["kalshi_label"] = "matched_spread_fallback"
+        total_res["kalshi_reason"] = "no_total_market_used_spread"
+
     return {
-        "total": simple_select(totals, "total"),
-        "spread": simple_select(spreads, "spread"),
+        "total": total_res,
+        "spread": spread_res,
         "winner": winner_result,
     }, candidate_debug
 
