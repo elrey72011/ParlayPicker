@@ -30,6 +30,8 @@ from app_core.kalshi_integrator import (
     match_game_to_kalshi,
 )
 
+from app_core.probability_utils import american_to_implied_prob, american_to_implied
+
 from app_core.llm_assistant import generate_confidence_explanation, initialize_gemini, generate_batch_confidence_explanation, generate_pick_rationale
 
 from app_core.reddit_sentiment import fetch_reddit_sentiment_map
