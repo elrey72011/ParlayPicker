@@ -1362,8 +1362,9 @@ def _match_via_events(
                 # Time Scoring Logic (Bonus for tight match, penalty for wide miss)
                 is_pro = league in ["NBA", "NFL", "NHL", "MLB"]
                 # Tighter window for pros (exact schedule), looser for college (daily buckets)
+                # v106: Relaxed wide_window for Pro from 24h to 36h to prevent penalties on timezone drifts
                 tight_window = 12 if not is_pro else 6
-                wide_window = 36 if not is_pro else 24
+                wide_window = 36  # Unified 36h window for all leagues
 
                 if time_diff_hours <= tight_window:
                     time_score = 25  # Bonus for date confirmation
@@ -1424,12 +1425,12 @@ def _match_via_events(
         return None
 
     # Dynamic Threshold (Task 1)
-    # Pro Leagues: 80 (Strict - prevent single-team matches)
-    # College: 70 (Lenient - allow for missing aliases/variance)
+    # Pro Leagues: 75 (Relaxed from 80 to allow 100-25 time penalty cases)
+    # College: 65 (Relaxed from 70)
     if league in ['NBA', 'NFL', 'NHL', 'MLB']:
-        MATCH_THRESHOLD = 80
+        MATCH_THRESHOLD = 75
     else:
-        MATCH_THRESHOLD = 70
+        MATCH_THRESHOLD = 65
 
     if best_event:
         logger.info(f"   Best Match Found: {best_details['ticker']}")
