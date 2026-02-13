@@ -2042,8 +2042,14 @@ def enrich_picks_with_roi_metrics(df: pd.DataFrame) -> pd.DataFrame:
     metrics_data['market_stability'] = df.apply(classify_stability, axis=1)
 
     # Concatenate the new metrics
-    df = pd.concat([df, pd.DataFrame(metrics_data, index=df.index)], axis=1)
-    df = df.copy()
+    new_metrics_df = pd.DataFrame(metrics_data, index=df.index)
+
+    # Drop existing columns if they exist
+    cols_to_drop = [c for c in new_metrics_df.columns if c in df.columns]
+    if cols_to_drop:
+        df = df.drop(columns=cols_to_drop)
+
+    df = pd.concat([df, new_metrics_df], axis=1).copy()
     
     # 3. Handle 'Market_Badge' Labeling - Vectorized
     if 'Market_Badge' in df.columns:
@@ -12920,7 +12926,15 @@ with tab_master:
                     new_data["Spread & Pick"] = spread_pick_updated
                     new_data["Total & Pick"] = total_pick_updated
 
-                    return pd.concat([df, pd.DataFrame(new_data, index=df.index)], axis=1).copy()
+                    # Create DataFrame from new data
+                    new_df = pd.DataFrame(new_data, index=df.index)
+
+                    # Drop existing columns to prevent duplication
+                    cols_to_drop = [c for c in new_df.columns if c in df.columns]
+                    if cols_to_drop:
+                        df = df.drop(columns=cols_to_drop)
+
+                    return pd.concat([df, new_df], axis=1).copy()
 
                 df = _enforce_consensus_and_best_pick_vectorized(df)
 
@@ -13141,6 +13155,11 @@ with tab_master:
 
                 # Fix for Fragmentation (Issue #4)
                 has_kalshi_series = _has_kalshi_market_vectorized(df)
+
+                # Check if column already exists
+                if "HasKalshiMarket" in df.columns:
+                    df = df.drop(columns=["HasKalshiMarket"])
+
                 new_hk_col = pd.DataFrame({"HasKalshiMarket": has_kalshi_series}, index=df.index)
                 df = pd.concat([df, new_hk_col], axis=1).copy()
 
