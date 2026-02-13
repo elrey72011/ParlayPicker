@@ -7,6 +7,7 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 import streamlit as st
+from streamlit.runtime.secrets import StreamlitSecretNotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +46,11 @@ def initialize_gemini():
 
     # Check secrets (prioritize GOOGLE_API_KEY if user migrated)
     if hasattr(st, "secrets"):
-        if "GOOGLE_API_KEY" in st.secrets: candidates.append(st.secrets["GOOGLE_API_KEY"])
-        if "GEMINI_API_KEY" in st.secrets: candidates.append(st.secrets["GEMINI_API_KEY"])
+        try:
+            if "GOOGLE_API_KEY" in st.secrets: candidates.append(st.secrets["GOOGLE_API_KEY"])
+            if "GEMINI_API_KEY" in st.secrets: candidates.append(st.secrets["GEMINI_API_KEY"])
+        except (FileNotFoundError, StreamlitSecretNotFoundError, KeyError):
+            pass  # Secrets not available
 
     # Check env vars
     if "GOOGLE_API_KEY" in os.environ: candidates.append(os.environ["GOOGLE_API_KEY"])

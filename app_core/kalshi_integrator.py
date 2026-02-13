@@ -936,10 +936,10 @@ def safe_float(x: Any) -> Optional[float]:
 def _kalshi_price_norm(mkt: Dict[str, Any], dollars_key: str, cents_key: str) -> Optional[float]:
     """Read a Kalshi price field, preferring *_dollars (0-1 string) over deprecated cent int."""
     d = safe_float(mkt.get(dollars_key))
-    if d is not None and d > 0:
+    if d is not None and d >= 0:
         return d
     c = safe_float(mkt.get(cents_key))
-    if c is not None and c > 0:
+    if c is not None and c >= 0:
         return c / 100.0
     return None
 
