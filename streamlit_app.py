@@ -99,6 +99,7 @@ from app_core.weights_config import (
 
 from app_core.consensus_ingest import enrich_with_consensus
 from app_core.odds_api import filter_games_today_only
+from app_core.probability_utils import american_to_implied_prob, american_to_implied
 
 
 try:
@@ -5124,45 +5125,6 @@ def canonical_league_key(raw: Optional[str]) -> str:
         "MLB": "MLB",
     }
     return mapping.get(val, val)
-
-def american_to_implied(odds: Any) -> Optional[float]:
-    """Convert American odds to implied probability; returns None on invalid/missing."""
-    try:
-        o = float(odds)
-        if o == 0:
-            return None
-        if o > 0:  # +120
-            return 100.0 / (o + 100.0)
-        return (-o) / ((-o) + 100.0)
-    except Exception:
-        return None
-
-def american_to_implied_prob(odds: Any) -> Optional[float]:
-    """
-    Convert American odds to implied probability with defensive caps for extreme values.
-
-    Extreme odds (|odds| > 900) are capped to prevent unrealistic probabilities (>0.90 or <0.10).
-    This helps NHL and other leagues with heavy favorites avoid probability collisions.
-    """
-    if odds is None:
-        return None
-    try:
-        o = float(odds)
-    except Exception:
-        return None
-
-    # Cap extreme odds to prevent unrealistic probabilities
-    # -900 converts to ~0.90, which is more reasonable than -990 -> 0.99
-    if o < -900:
-        o = -900
-    elif o > 900:
-        o = 900
-
-    if o > 0:
-        return 100.0 / (o + 100.0)
-    if o < 0:
-        return (-o) / ((-o) + 100.0)
-    return None
 
 def _normalize_point_for_market(point: Any, market: str) -> Optional[float]:
     val = safe_float(point)
