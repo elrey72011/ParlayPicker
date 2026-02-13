@@ -424,28 +424,32 @@ def select_best_spread_pick(
             'alt_side': str
         }
     """
+    # Fix: Handle None values gracefully
+    p_home = prob_home_covers if prob_home_covers is not None else 0.0
+    p_away = prob_away_covers if prob_away_covers is not None else 0.0
+
     # ALWAYS pick the higher probability
-    if prob_home_covers >= prob_away_covers:
+    if p_home >= p_away:
         # Home is better pick
         pick_team = home_team
         pick_line = spread_line  # e.g. -8.5
-        pick_prob = prob_home_covers
+        pick_prob = p_home
         pick_side = "home"
 
         alt_team = away_team
         alt_line = -spread_line  # Flip sign: +8.5
-        alt_prob = prob_away_covers
+        alt_prob = p_away
         alt_side = "away"
     else:
         # Away is better pick
         pick_team = away_team
         pick_line = -spread_line  # Flip sign: +8.5
-        pick_prob = prob_away_covers
+        pick_prob = p_away
         pick_side = "away"
 
         alt_team = home_team
         alt_line = spread_line  # e.g. -8.5
-        alt_prob = prob_home_covers
+        alt_prob = p_home
         alt_side = "home"
 
     # Format labels with line
@@ -515,16 +519,20 @@ def select_best_total_pick(
             'alt_side': str
         }
     """
-    if prob_over >= prob_under:
+    # Fix: Handle None values gracefully
+    p_over = prob_over if prob_over is not None else 0.0
+    p_under = prob_under if prob_under is not None else 0.0
+
+    if p_over >= p_under:
         pick_side = "Over"
-        pick_prob = prob_over
+        pick_prob = p_over
         alt_side = "Under"
-        alt_prob = prob_under
+        alt_prob = p_under
     else:
         pick_side = "Under"
-        pick_prob = prob_under
+        pick_prob = p_under
         alt_side = "Over"
-        alt_prob = prob_over
+        alt_prob = p_over
 
     pick_label = f"{pick_side} {total_line}"
     alt_label = f"{alt_side} {total_line}"
