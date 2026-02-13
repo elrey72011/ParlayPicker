@@ -632,6 +632,8 @@ NCAAB_TEAM_CODE_MAP: Dict[str, str] = {
     "TENNESSEE ST": "TNST", "TENNESSEE STATE": "TNST",
     "TENNESSEE TECH": "TNTH",
     "LINDENWOOD": "LIND",
+    "HAMPTON": "HAMP",
+    "NORTH CAROLINA A T": "NCAT",
     "LITTLE ROCK": "UALR", "ARKANSAS LITTLE ROCK": "UALR",
     "SOUTHERN MISS": "USM", "SOUTHERN MISSISSIPPI": "USM",
     # --- Feb 9 missing teams (discovered via Kalshi API) ---

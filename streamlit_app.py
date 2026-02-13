@@ -2469,14 +2469,22 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
             ml_eligible, ml_suppressed_reason, candidate_types_str,
             moneyline_disabled, moneyline_disabled_reason,
             glance_conf,
-            confidence_reason
+            confidence_reason,
+            s_pick,
+            t_pick,
+            s_prob,
+            t_prob
         ], index=[
             "best_pick_type", "best_pick", "final_prob", "Best_ST_Reason", "edge",
             "Bet_Confidence", "Bet_Lean", "Bet_Confidence_Score",
             "ml_eligible", "ml_suppressed_reason", "candidate_types_available",
             "moneyline_disabled", "moneyline_disabled_reason",
             "At_a_Glance_Confidence",
-            "confidence_reason"
+            "confidence_reason",
+            "Spread & Pick",
+            "Total & Pick",
+            "spread_prob_pick_final",
+            "total_prob_pick_final"
         ])
 
     # Batch apply
