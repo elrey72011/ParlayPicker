@@ -6840,10 +6840,10 @@ def filter_kalshi_game_markets(
                 # Use safe strings for teams
                 h_score = fuzz.partial_ratio(str(home_team).lower(), title)
                 a_score = fuzz.partial_ratio(str(away_team).lower(), title)
-                if h_score > 70 and a_score > 70:  # Team names in title
+                if h_score > 60 and a_score > 60:  # Team names in title (Lowered to 60)
                     fuzzy.append(m)
             matched = fuzzy[:20]  # Top 20 fuzzy
-            logger.info(f"NCAAB FUZZY MATCH {away_team}@{home_team}: {len(matched)} found")
+            logger.info(f"NCAAB FUZZY MATCH {away_team}@{home_team}: {len(matched)} found (thresh=60)")
             logger.info(f"{away_team}@{home_team}: exact=0, fuzzy={len(matched)}")
 
         if not matched and markets:
@@ -7463,9 +7463,10 @@ def _match_kalshi_market_impl(
     else:
         # LOG MATCH FAILURES (~line 8700 before return None)
         if not best_winner:
-            logger.warning(f"NCAAB NO MATCH: {game.get('away_team')}@{game.get('home_team')} | bestscore={best_score if 'best_score' in locals() else 0} | markets={len(kalshi_markets)}")
-            sample_titles = [m.get('title', '')[:50] for m in kalshi_markets[:3]]
-            logger.warning(f"Sample titles: {sample_titles}")
+            logger.warning(f"❌ NO MATCH for {game.get('home_team')} vs {game.get('away_team')}")
+            logger.warning(f"   Available market team names: {[m.get('ticker', m.get('title', '')) for m in kalshi_markets[:5]]}")
+            logger.warning(f"   Game teams: home='{normalize_team_name(game.get('home_team'))}' away='{normalize_team_name(game.get('away_team'))}'")
+            logger.warning(f"   Original failure log: {game.get('away_team')}@{game.get('home_team')} | bestscore={best_score if 'best_score' in locals() else 0} | markets={len(kalshi_markets)}")
 
         no_reason = winner_reason_override or best_reason or "no_winner_market_for_game"
         winner_result = base_result(no_reason, "winner")
@@ -9859,6 +9860,11 @@ with tab_master:
                 deduped = {m.get("ticker") or m.get("event_ticker"): m for m in filtered_markets}
                 filtered_markets = list(deduped.values())
                 filtered_counts.append(len(filtered_markets))
+
+                # USER REQUESTED LOGGING
+                logger.info(f"📥 Total Kalshi markets fetched: {len(league_markets)}")
+                logger.info(f"📊 Markets after filtering for {league_name}: {len(filtered_markets)}")
+                logger.info(f"🎯 Attempting match for {g.get('home_team')} vs {g.get('away_team')}")
 
                 # DIAGNOSTIC: Log filtered market count
                 if idx < 3:
