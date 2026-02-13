@@ -1264,16 +1264,44 @@ def _match_via_events(
 
         # Check codes against our candidates
         score_1 = 0
-        away_match_1 = evt_away_code in resolved_away
-        home_match_1 = evt_home_code in resolved_home
-        if away_match_1: score_1 += 50
-        if home_match_1: score_1 += 50
 
-        score_2 = 0
-        away_match_2 = evt_away_code in resolved_home
-        home_match_2 = evt_home_code in resolved_away
-        if away_match_2: score_2 += 50
-        if home_match_2: score_2 += 50
+        # Calculate scores with fuzzy support (Task 1)
+        # 50 = Exact match
+        # 40 = Strong fuzzy match (ratio >= 80)
+        # 30 = Medium fuzzy match (ratio >= 65, NCAAB/NCAAF only)
+
+        def _get_code_score(code: str, candidates: set, league: str) -> int:
+            if code in candidates:
+                return 50
+
+            # Fuzzy fallback
+            if rapidfuzz and code and len(code) >= 2:
+                best_r = 0
+                for cand in candidates:
+                    if not cand: continue
+                    r = fuzz.ratio(code, cand)
+                    if r > best_r:
+                        best_r = r
+
+                if best_r >= 80:
+                    return 40
+                if best_r >= 65 and league in ['NCAAB', 'NCAAF']:
+                    return 30
+            return 0
+
+        s_away_1 = _get_code_score(evt_away_code, resolved_away, league)
+        s_home_1 = _get_code_score(evt_home_code, resolved_home, league)
+        score_1 = s_away_1 + s_home_1
+
+        s_away_2 = _get_code_score(evt_away_code, resolved_home, league)
+        s_home_2 = _get_code_score(evt_home_code, resolved_away, league)
+        score_2 = s_away_2 + s_home_2
+
+        # Flags for logging
+        away_match_1 = s_away_1 > 0
+        home_match_1 = s_home_1 > 0
+        away_match_2 = s_away_2 > 0
+        home_match_2 = s_home_2 > 0
 
         match_score = max(score_1, score_2)
 
@@ -1323,8 +1351,8 @@ def _match_via_events(
         logger.info(f"      Expected Away Codes: {list(resolved_away)[:3]}")
         logger.info(f"      Expected Home Codes: {list(resolved_home)[:3]}")
         logger.info(f"      Score Calculation:")
-        logger.info(f"         - Away Match: {away_match_1} (+{50 if away_match_1 else 0})")
-        logger.info(f"         - Home Match: {home_match_1} (+{50 if home_match_1 else 0})")
+        logger.info(f"         - Away Match: {away_match_1} (score={s_away_1})")
+        logger.info(f"         - Home Match: {home_match_1} (score={s_home_1})")
         logger.info(f"         - Direct Score: {score_1}")
         logger.info(f"         - Swap Score: {score_2}")
         logger.info(f"         - Team Score: {match_score}")
@@ -1364,18 +1392,20 @@ def _match_via_events(
             logger.warning(f"         [{i+1}] {ticker} → home={parsed.get('home')}, away={parsed.get('away')}")
         return None
 
-    # Lowered threshold from 80 to 70 to improve match rate (Fix #1)
-    # This allows for minor time mismatches while still requiring both teams to match
-    # LOWERED TEMPORARILY for diagnosis (was 70)
-    # Will collect data on near-misses (score 50-69) to identify missing aliases
-    MATCH_THRESHOLD = 70
+    # Dynamic Threshold (Task 1)
+    # Pro Leagues: 80 (Strict - prevent single-team matches)
+    # College: 70 (Lenient - allow for missing aliases/variance)
+    if league in ['NBA', 'NFL', 'NHL', 'MLB']:
+        MATCH_THRESHOLD = 80
+    else:
+        MATCH_THRESHOLD = 70
 
     if best_event:
         logger.info(f"   Best Match Found: {best_details['ticker']}")
         logger.info(f"      Score: {best_score} (threshold: {MATCH_THRESHOLD})")
         logger.info(f"      Details: {best_details}")
-        if best_score < 70:  # Was MATCH_THRESHOLD (50), but we want actual threshold of 70
-            logger.warning(f"   ❌ MATCH FAILED for {league}: score={best_score}/70")
+        if best_score < MATCH_THRESHOLD:
+            logger.warning(f"   ❌ MATCH FAILED for {league}: score={best_score}/{MATCH_THRESHOLD}")
             logger.warning(f"      Expected home: {list(resolved_home)[:5]}")
             logger.warning(f"      Expected away: {list(resolved_away)[:5]}")
             logger.warning(f"      Best candidate: {best_event.get('ticker')} (score={best_score})")
