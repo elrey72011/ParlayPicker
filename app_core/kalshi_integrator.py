@@ -3027,10 +3027,10 @@ class KalshiIntegrator:
             if alt_game_candidates:
                 game_markets = alt_game_candidates
                 used_game_prefix = alt_prefix or game_prefix
-
+        
         if not all_markets:
             broad = self.get_markets_paginated(
-                status=normalized_status, limit=200, max_pages=max_pages
+                status=normalized_status, limit=200, max_pages=50  # ✅ INCREASED FROM 20
             )
             filtered_broad = self._filter_markets_for_league(broad, league_key)
             if filtered_broad:
@@ -3059,6 +3059,7 @@ class KalshiIntegrator:
                     if alt_candidates:
                         game_markets = alt_candidates
                         used_game_prefix = alt_prefix or game_prefix
+        
         futures_noise = [
             m
             for m in all_markets
@@ -3066,7 +3067,7 @@ class KalshiIntegrator:
             and str(m.get("event_ticker") or m.get("ticker") or "").upper().startswith(f"{series_base}-")
             and not str(m.get("event_ticker") or m.get("ticker") or "").upper().startswith(f"{game_prefix}-")
         ]
-
+        
         ticker_keys = [
             str(m.get("event_ticker") or m.get("ticker") or "").upper()
             for m in all_markets
@@ -3080,12 +3081,10 @@ class KalshiIntegrator:
         )
         game_hits = len(game_markets)
         futures_hits = len(futures_noise)
-
-        # FIX: Do NOT replace all_markets with game_markets here!
-        # This was discarding TOTAL and SPREAD markets for NBA/NHL.
-        # We need ALL market types (GAME, TOTAL, SPREAD) in the pool.
-        # The filtering for specific game types happens in streamlit_app.py's game_pool.
-
+        
+        # ✅ DO NOT FILTER - Keep all market types (GAME, SPREAD, TOTAL)
+        # The filtering happens later in _match_via_events() based on requested_market_type
+        
         self.last_fetch_meta = {
             "league": league_key,
             "status": normalized_status,
@@ -3096,7 +3095,7 @@ class KalshiIntegrator:
             "prefix": prefix,
             "futures_noise": len(futures_noise) if futures_noise else None,
             "game_hits": game_hits,
-            "includes_all_market_types": True,  # FIX: Now includes GAME, TOTAL, SPREAD
+            "includes_all_market_types": True,  # ✅ IMPORTANT FLAG
             "series_targets": series_targets,
             "game_prefix_used": used_game_prefix,
         }
@@ -3104,18 +3103,19 @@ class KalshiIntegrator:
             self.last_fetch_meta["warning"] = "game_markets_missing_or_futures_only"
         if not all_markets and not self.last_error_info:
             self.last_fetch_meta["note"] = "reachable_but_empty"
+        
         self._league_cache[cache_key] = {
             "ts": now,
-            "markets": all_markets,
+            "markets": all_markets,  # ✅ Keep ALL markets, not just game_markets
             "meta": self.last_fetch_meta,
         }
-
-        # FIX: Log market type breakdown to verify TOTAL/SPREAD are included
+        
+        # ✅ Log market type breakdown for debugging
         game_count = len([m for m in all_markets if "GAME" in str(m.get("ticker", "")).upper()])
         total_count = len([m for m in all_markets if "TOTAL" in str(m.get("ticker", "")).upper()])
         spread_count = len([m for m in all_markets if "SPREAD" in str(m.get("ticker", "")).upper()])
         logger.info(f"✅ get_league_markets returning {len(all_markets)} markets for {league_key}: GAME={game_count}, TOTAL={total_count}, SPREAD={spread_count}")
-
+        
         return all_markets
 
     def _filter_markets_for_league(self, markets: List[Dict[str, Any]], league: Optional[str]) -> List[Dict[str, Any]]:
