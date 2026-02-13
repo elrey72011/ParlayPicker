@@ -31,6 +31,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 
 from app_core.sportsdata import SportsDataNCAABClient
+from app_core.team_name_matcher import TeamNameMatcher
 
 logger = logging.getLogger(__name__)
 
@@ -1162,7 +1163,9 @@ def _match_via_events(
     away_codes: List[str],
     game_dt_utc: datetime,
     status: Optional[str],
-    requested_market_type: Optional[str] = None
+    requested_market_type: Optional[str] = None,
+    home_team_name: str = None,
+    away_team_name: str = None
 ) -> Optional[KalshiMatchResult]:
     """
     Attempt to match a game to an event by scanning the /events endpoint first.
@@ -1173,6 +1176,8 @@ def _match_via_events(
     logger.info(f"   Game Time (UTC): {game_dt_utc}")
     logger.info(f"   Home Codes: {home_codes}")
     logger.info(f"   Away Codes: {away_codes}")
+    logger.info(f"   Home Name: {home_team_name}")
+    logger.info(f"   Away Name: {away_team_name}")
     logger.info(f"   Status Filter: {status}")
 
     # 1. Determine series ticker
@@ -1312,6 +1317,32 @@ def _match_via_events(
                 "home": evt_home_code,
                 "score": match_score
             })
+
+        # Fallback: Try Name Matching on Event Title if code match failed
+        if match_score < 50 and home_team_name and away_team_name:
+            evt_title = evt.get("title", "")
+            if evt_title:
+                # Normalize everything using TeamNameMatcher
+                # Note: TeamNameMatcher.normalize handles upper casing and special chars
+                title_norm = TeamNameMatcher.normalize(evt_title)
+                h_norm = TeamNameMatcher.normalize(home_team_name)
+                a_norm = TeamNameMatcher.normalize(away_team_name)
+
+                # Check for containment of BOTH teams
+                # This is a very strong signal (e.g. "Lakers vs Celtics" contains "LAKERS" and "CELTICS")
+                if h_norm and a_norm and h_norm in title_norm and a_norm in title_norm:
+                    # High confidence match based on full names
+                    match_score = 90 # Treat as high confidence (overrides low code score)
+                    logger.info(f"   ✅ Name Fallback Match: '{home_team_name}' & '{away_team_name}' found in '{evt_title}'")
+
+                    # Add to candidates for debug
+                    all_candidates.append({
+                        "ticker": ticker,
+                        "away": "NAME_MATCH",
+                        "home": "NAME_MATCH",
+                        "score": match_score,
+                        "note": "fallback_name_match"
+                    })
 
         if match_score < 50:
             continue
@@ -1952,7 +1983,9 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
             away_codes,
             gt_utc,
             status=status,
-            requested_market_type=requested_market_type
+            requested_market_type=requested_market_type,
+            home_team_name=home_team,
+            away_team_name=away_team
         )
         if event_match:
             return event_match

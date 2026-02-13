@@ -1258,8 +1258,31 @@ def map_kalshi_prob_for_pick(
 
     # 1. Direct Pick Match (Strongest Signal)
     # If the "Yes" side explicitly matches the Pick Team, return Prob.
-    if pick_norm and kalshi_yes_norm and pick_norm in kalshi_yes_norm:
-        return prob
+    # FIX: Handle "Team A vs Team B" titles to prevent matching BOTH teams via containment.
+    is_matchup_str = " VS " in kalshi_yes_norm or " @ " in kalshi_yes_norm
+
+    if pick_norm and kalshi_yes_norm:
+        if is_matchup_str:
+            # Split by separator to correctly identify sides
+            # "LAKERS VS CELTICS" -> Left=Lakers (Yes), Right=Celtics (No)
+            parts = []
+            if " VS " in kalshi_yes_norm:
+                parts = kalshi_yes_norm.split(" VS ")
+            elif " @ " in kalshi_yes_norm:
+                parts = kalshi_yes_norm.split(" @ ")
+
+            if parts and len(parts) >= 1:
+                left_side = parts[0]
+                # If pick is in the Left Side (Yes Side), return prob
+                if pick_norm in left_side:
+                    return prob
+                # If pick is in the Right Side (No Side), return 1 - prob
+                # This handles "Lakers vs Celtics" where Pick="Celtics"
+                if len(parts) >= 2 and pick_norm in parts[1]:
+                    return 1.0 - prob
+
+        elif pick_norm in kalshi_yes_norm:
+            return prob
 
     # If "Yes" side matches the Opposing Team, return 1 - Prob.
     # Check if pick is home/away to find opponent
@@ -1267,8 +1290,26 @@ def map_kalshi_prob_for_pick(
     if pick_is_home and away_norm: opponent_norm = away_norm
     elif not pick_is_home and home_norm: opponent_norm = home_norm
 
-    if opponent_norm and kalshi_yes_norm and opponent_norm in kalshi_yes_norm:
-        return 1.0 - prob
+    if opponent_norm and kalshi_yes_norm:
+        if is_matchup_str:
+            # Split logic for Opponent check as well
+            parts = []
+            if " VS " in kalshi_yes_norm:
+                parts = kalshi_yes_norm.split(" VS ")
+            elif " @ " in kalshi_yes_norm:
+                parts = kalshi_yes_norm.split(" @ ")
+
+            if parts and len(parts) >= 1:
+                left_side = parts[0]
+                # If Opponent is in Left Side (Yes Side), then Pick is No Side -> 1 - prob
+                if opponent_norm in left_side:
+                    return 1.0 - prob
+                # If Opponent is in Right Side (No Side), then Pick is Yes Side -> prob
+                if len(parts) >= 2 and opponent_norm in parts[1]:
+                    return prob
+
+        elif opponent_norm in kalshi_yes_norm:
+            return 1.0 - prob
 
     # 2. Side Inference (Home/Away/Over/Under)
     if "OVER" in kalshi_yes_norm:
