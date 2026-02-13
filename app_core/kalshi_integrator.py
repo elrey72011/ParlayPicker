@@ -690,7 +690,7 @@ KALSHI_NCAAB_TEAM_CODES = {
     # MAC
     "Miami (OH)": "MOH", "Miami OH RedHawks": "MOH",
     "Ohio": "OHIO", "Ohio Bobcats": "OHIO",
-    "Akron": "AKRO", "Akron Zips": "AKRO",
+    "Akron": "AKR", "Akron Zips": "AKR",
 
     # A-10
     "George Mason": "GMU", "George Mason Patriots": "GMU",
@@ -714,7 +714,7 @@ KALSHI_NCAAB_TEAM_CODES = {
     "North Carolina A&T": "NCAT", "North Carolina AT Aggies": "NCAT",
 
     # Mountain West
-    "Boise State": "BOIS", "Boise State Broncos": "BOIS",
+    "Boise State": "BSU", "Boise State Broncos": "BSU",
     "UNLV": "UNLV", "UNLV Rebels": "UNLV",
 
     # UMass
@@ -801,6 +801,7 @@ NCAAB_CODE_ALIASES: Dict[str, str] = {
     "RHO": "URI",      # Rhode Island: heuristic generated RHO, Kalshi uses URI
     "MIL": "MILW",     # Milwaukee: was MIL, Kalshi uses MILW
     "IUP": "IUIN",     # IUPUI: was IUP, Kalshi uses IUIN
+    "COLM": "CLMB",    # Columbia: Kalshi variant fallback
 }
 
 NCAAF_CODE_ALIASES: Dict[str, str] = {
