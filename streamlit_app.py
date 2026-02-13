@@ -1596,7 +1596,7 @@ def compute_final_probability(
             # with book odds (e.g., Kalshi 0.76 vs book 0.35 → delta 0.41 → rejected).
             if delta > 0.55:  # 55% threshold - only reject truly extreme mismatches
                 # Extreme disagreement likely means wrong Kalshi line was matched
-                kalshi_validated = False
+                # kalshi_validated = False # RELAXED: User requested removal of aggressive filters
                 warnings.append(f"kalshi_validation_failed(delta={delta:.2f})")
 
         if kalshi_validated:
@@ -10347,6 +10347,12 @@ with tab_master:
                     league_name
                 )
 
+                # --- KALSHI FORCE & DEBUG (User Request) ---
+                if _spread_kalshi_matched:
+                    # FORCE Kalshi usage for testing/fix
+                    spread_weights["kalshi_weight"] = 0.55
+                    logger.info(f"💪 FORCE Kalshi SPREAD weight to 0.55 for {home} vs {away}")
+
                 # DEBUG: Log spread probability calculation inputs (v98: show pick-side Kalshi prob)
                 logger.info(f"SPREAD PROB CALC for {home} vs {away}: spread_pick_side={spread_pick_side_key}, spread_market={spread_prob_market:.4f}, spread_implied={spread_implied}, kalshi={kalshi_prob_spread_for_pick}")
 
@@ -10367,6 +10373,13 @@ with tab_master:
                     away_team=away,
                     kalshi_data=kalshi_spread if kalshi_spread.get("kalshi_matched") else None,
                 )
+
+                # --- KALSHI USAGE DEBUGGING ---
+                if _spread_kalshi_matched and spread_weights_used.get("w_kalshi", 0) == 0:
+                    logger.warning(f"⚠️ Kalshi SPREAD matched but NOT USED for {home} vs {away}")
+                    logger.warning(f"   Kalshi prob: {kalshi_prob_spread_for_pick}")
+                    logger.warning(f"   Market prob: {spread_prob_market}")
+                    logger.warning(f"   Warnings: {spread_warnings_new}")
 
                 # REMOVED: Misplaced sentiment debug capture code (lines 9130-9165)
                 # This code was trying to use undefined variable 'row' before row objects were created
@@ -10483,6 +10496,12 @@ with tab_master:
                     league_name
                 )
 
+                # --- KALSHI FORCE & DEBUG (User Request) ---
+                if _total_kalshi_matched:
+                    # FORCE Kalshi usage for testing/fix
+                    total_weights["kalshi_weight"] = 0.55
+                    logger.info(f"💪 FORCE Kalshi TOTAL weight to 0.55 for {home} vs {away}")
+
                 # DEBUG: Log total probability calculation inputs (v98: show pick-side Kalshi prob)
                 logger.info(f"TOTAL PROB CALC for {home} vs {away}: total_pick_side={total_pick_side_key}, total_market={total_prob_market:.4f}, total_implied={total_implied}, kalshi={kalshi_prob_total_for_pick}")
 
@@ -10501,6 +10520,13 @@ with tab_master:
                     away_team=away,
                     kalshi_data=kalshi_total if kalshi_total.get("kalshi_matched") else None,
                 )
+
+                # --- KALSHI USAGE DEBUGGING ---
+                if _total_kalshi_matched and total_weights_used.get("w_kalshi", 0) == 0:
+                    logger.warning(f"⚠️ Kalshi TOTAL matched but NOT USED for {home} vs {away}")
+                    logger.warning(f"   Kalshi prob: {kalshi_prob_total_for_pick}")
+                    logger.warning(f"   Market prob: {total_prob_market}")
+                    logger.warning(f"   Warnings: {total_warnings_new}")
 
                 # Calculate TheOver Impact (Invariant: delta = final - without)
                 if theover_prob_final_total is not None:
