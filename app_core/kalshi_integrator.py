@@ -575,6 +575,20 @@ NCAAB_TEAM_CODE_MAP: Dict[str, str] = {
     "DETROIT MERCY": "DET",
     "OAKLAND": "OAK",
     "CLEVELAND STATE": "CSU",
+    # v108 Updates
+    "CHARLOTTE": "CHAR",
+    "LOYOLA MD": "LMD",
+    "LOYOLA MARYLAND": "LMD",
+    "OMAHA": "NEOM",
+    "FLORIDA ATLANTIC": "FAU",
+    "TULANE": "TULN",
+    "UAB": "UAB",
+    "MARIST": "MRST",
+    "ILLINOIS STATE": "ILST",
+    "CAMPBELL": "CAMP",
+    "OREGON STATE": "ORST",
+    "SEATTLE": "SEA",
+    "CHARLESTON": "COFC",
     # --- SWAC (Southwestern Athletic Conference) ---
     "ALABAMA A&M": "AAMU", "ALABAMA A M": "AAMU", "ALABAMA A&M BULLDOGS": "AAMU",
     "GRAMBLING": "GRAM", "GRAMBLING ST": "GRAM", "GRAMBLING STATE": "GRAM",
@@ -702,11 +716,20 @@ NCAAB_TEAM_CODE_MAP: Dict[str, str] = {
     "UT ARLINGTON": "UTA", "TEXAS ARLINGTON": "UTA", "UT ARLINGTON MAVERICKS": "UTA",
     # Fix 4: Add Missing Team Code Aliases
     "HOLY CROSS": "HC", "HOLY CROSS CRUSADERS": "HC",
-    "LOYOLA MD": "LOYM", "LOYOLA MARYLAND": "LOYM",
+    "LOYOLA MD": "LMD", "LOYOLA MARYLAND": "LMD", "LOYOLA (MD)": "LMD",
     "UTSA": "UTSA", "UTSA ROADRUNNERS": "UTSA",
-    "CHARLOTTE": "CLT", "CHARLOTTE 49ERS": "CLT",
-    "OMAHA": "OMAH", "OMAHA MAVERICKS": "OMAH",
+    "CHARLOTTE": "CHAR", "CHARLOTTE 49ERS": "CHAR", "CHAR": "CHAR",
+    "OMAHA": "NEOM", "OMAHA MAVERICKS": "NEOM", "NEBRASKA OMAHA": "NEOM",
     "DENVER": "DEN", "DENVER PIONEERS": "DEN",
+    "FLORIDA ATLANTIC": "FAU", "FLORIDA ATLANTIC OWLS": "FAU", "FAU": "FAU",
+    "TULANE": "TULN", "TULANE GREEN WAVE": "TULN", "TULN": "TULN",
+    "UAB": "UAB", "UAB BLAZERS": "UAB",
+    "MARIST": "MRST", "MARIST RED FOXES": "MRST", "MRST": "MRST",
+    "ILLINOIS STATE": "ILST", "ILLINOIS ST": "ILST", "ILST": "ILST",
+    "CAMPBELL": "CAMP", "CAMPBELL FIGHTING CAMELS": "CAMP", "CAMP": "CAMP",
+    "OREGON STATE": "ORST", "OREGON ST": "ORST", "ORST": "ORST", "OSU": "ORST",
+    "SEATTLE": "SEA", "SEATTLE U": "SEA", "SEATTLE REDHAWKS": "SEA",
+    "CHARLESTON": "COFC", "COLLEGE OF CHARLESTON": "COFC", "COFC": "COFC",
 }
 
 # ADD THIS COMPREHENSIVE NCAAB TEAM NAME → KALSHI CODE MAPPING
@@ -856,6 +879,27 @@ KALSHI_NCAAB_TEAM_CODES = {
     "Xavier": "XAV",
     "Yale": "YALE",
     "Yale Bulldogs": "YALE",
+    # New Mappings for v108 (Feb 2026 Fixes)
+    "Campbell": "CAMP",
+    "Charleston": "COFC",
+    "College of Charleston": "COFC",
+    "Charlotte": "CHAR",
+    "Florida Atlantic": "FAU",
+    "Holy Cross": "HC",
+    "Illinois State": "ILST",
+    "IU Indianapolis": "IUIN",
+    "Loyola (MD)": "LMD",
+    "Loyola Maryland": "LMD",
+    "Marist": "MRST",
+    "Omaha": "NEOM",
+    "Nebraska Omaha": "NEOM",
+    "Oregon State": "ORST",
+    "Purdue Fort Wayne": "PFW",
+    "Seattle": "SEA",
+    "Seattle U": "SEA",
+    "Tulane": "TULN",
+    "UAB": "UAB",
+    "UTSA": "UTSA",
 }
 
 def normalize_team_for_kalshi(team_name: str) -> str:
@@ -1107,8 +1151,16 @@ def team_name_to_code(league: str, team_name: str) -> Optional[str]:
         if team_clean_raw in KALSHI_NCAAB_TEAM_CODES:
             return KALSHI_NCAAB_TEAM_CODES[team_clean_raw]
 
-        # 2. Try base name split
-        base_name = team_clean_raw.split()[0]
+        # 2. Try removing last word (likely mascot)
+        # This prevents "South Florida Bulls" -> "South" (wrong) but allows "South Florida" (correct)
+        parts = team_clean_raw.split()
+        if len(parts) > 1:
+            without_last = " ".join(parts[:-1])
+            if without_last in KALSHI_NCAAB_TEAM_CODES:
+                return KALSHI_NCAAB_TEAM_CODES[without_last]
+
+        # 3. Try base name split (fallback)
+        base_name = parts[0]
         if base_name in KALSHI_NCAAB_TEAM_CODES:
              return KALSHI_NCAAB_TEAM_CODES[base_name]
 
@@ -2113,7 +2165,8 @@ def _match_via_events(
                     match_reason_detail = "matched_winner"
 
                 # Force Match Logic (moved here): If still no target, try to find ANY valid market
-                if not target_market and best_score >= 80:
+                # Relaxed from 80 to MATCH_THRESHOLD (50) for NCAAB per user request
+                if not target_market and best_score >= MATCH_THRESHOLD:
                     logger.info(f"🎯 NCAAB FORCE MATCH ATTEMPT: {evt_ticker} score={best_score}")
                     # Iterate ALL markets to find one with valid probability
                     for cand in markets:
