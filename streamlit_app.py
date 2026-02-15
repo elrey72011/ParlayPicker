@@ -9945,7 +9945,18 @@ with tab_master:
                 per_game_kalshi_debug.append(candidate_debug)
                 # Dictionary Store: Use unique game key
                 # Robust against list index errors (User Request: "Eliminate IndexError")
-                _k_id = f"{league_name}::{home}::{away}::{commence_iso}"
+
+                # --- COLLISION FIX: Canonical Key Generation ---
+                # Normalize team names to prevent ordering/naming mismatches
+                _h_norm = TeamNameMatcher.normalize(home)
+                _a_norm = TeamNameMatcher.normalize(away)
+                # Sort teams alphabetically to ensure consistency (Home/Away vs Away/Home)
+                _teams_sorted = sorted([_h_norm, _a_norm])
+                # Use date only from commence_iso (YYYY-MM-DD) to avoid timezone/time mismatches
+                _date_only = str(commence_iso)[:10] if commence_iso and len(str(commence_iso)) >= 10 else "UNKNOWN_DATE"
+
+                _k_id = f"{league_name}::{_teams_sorted[0]}::{_teams_sorted[1]}::{_date_only}"
+
                 kalshi_match_results[_k_id] = {
                     "game": g, "matches": kalshi_matches, "candidate_debug": candidate_debug
                 }
@@ -9957,14 +9968,16 @@ with tab_master:
                     if _kticker and _km.get("kalshi_matched"):
                         if _kticker in _kalshi_ticker_owners:
                             _prev_owner = _kalshi_ticker_owners[_kticker]
-                            logger.warning(
-                                f"🚨 KALSHI TICKER COLLISION: {_kticker} ({_mtype}) "
-                                f"claimed by [{_k_id}] but already used by [{_prev_owner}]. "
-                                f"Rejecting duplicate — setting kalshi_matched=False."
-                            )
-                            _km["kalshi_matched"] = False
-                            _km["kalshi_reason"] = f"collision_with_{_prev_owner}"
-                            _km["kalshi_prob"] = None
+                            # Allow overwrite if the owner is the same canonical game (duplicate row processing)
+                            if _prev_owner != _k_id:
+                                logger.warning(
+                                    f"🚨 KALSHI TICKER COLLISION: {_kticker} ({_mtype}) "
+                                    f"claimed by [{_k_id}] but already used by [{_prev_owner}]. "
+                                    f"Rejecting duplicate — setting kalshi_matched=False."
+                                )
+                                _km["kalshi_matched"] = False
+                                _km["kalshi_reason"] = f"collision_with_{_prev_owner}"
+                                _km["kalshi_prob"] = None
                         else:
                             _kalshi_ticker_owners[_kticker] = _k_id
 
