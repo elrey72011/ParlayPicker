@@ -730,6 +730,21 @@ NCAAB_TEAM_CODE_MAP: Dict[str, str] = {
     "OREGON STATE": "ORST", "OREGON ST": "ORST", "ORST": "ORST", "OSU": "ORST",
     "SEATTLE": "SEA", "SEATTLE U": "SEA", "SEATTLE REDHAWKS": "SEA",
     "CHARLESTON": "COFC", "COLLEGE OF CHARLESTON": "COFC", "COFC": "COFC",
+    # Issue #2: Missing NCAAB Aliases
+    "LCHI": "LCHI", "LOYOLA CHICAGO": "LCHI",
+    "IUIN": "IUIN", "IU INDIANAPOLIS": "IUIN",
+    "MILW": "MILW", "MILWAUKEE": "MILW",
+    "PFW": "PFW", "PURDUE FORT WAYNE": "PFW",
+    "CHAR": "CHAR", "CHARLOTTE": "CHAR",
+    "NEOM": "NEOM", "NEBRASKA OMAHA": "NEOM",
+    "FAU": "FAU", "FLORIDA ATLANTIC": "FAU",
+    "TULN": "TULN", "TULANE": "TULN",
+    "UAB": "UAB",
+    "MRST": "MRST", "MARIST": "MRST",
+    "ILST": "ILST", "ILLINOIS STATE": "ILST",
+    "CAMP": "CAMP", "CAMPBELL": "CAMP",
+    "ORST": "ORST", "OREGON STATE": "ORST",
+    "SEA": "SEA", "SEATTLE": "SEA",
 }
 
 # ADD THIS COMPREHENSIVE NCAAB TEAM NAME → KALSHI CODE MAPPING
@@ -795,6 +810,8 @@ KALSHI_NCAAB_TEAM_CODES = {
     "Louisville": "LOU",
     "Loyola (Chi)": "LCHI",
     "Loyola Chi Ramblers": "LCHI",
+    "Loyola Chicago": "LCHI",
+    "Loyola (Chicago)": "LCHI",
     "Manhattan": "MAN",
     "Manhattan Jaspers": "MAN",
     "Massachusetts": "MASS",
@@ -804,6 +821,7 @@ KALSHI_NCAAB_TEAM_CODES = {
     "Miami OH RedHawks": "MOH",
     "Michigan": "MICH",
     "Michigan State": "MSU",
+    "Milwaukee": "MILW",
     "Middle Tennessee": "MTU",
     "Mississippi (Ole Miss)": "MISS",
     "Morehead State": "MORE",
@@ -827,6 +845,8 @@ KALSHI_NCAAB_TEAM_CODES = {
     "Pennsylvania Quakers": "PENN",
     "Portland": "PORT",
     "Portland Pilots": "PORT",
+    "Purdue Fort Wayne": "PFW",
+    "Fort Wayne": "PFW",
     "Princeton": "PRIN",
     "Princeton Tigers": "PRIN",
     "Providence": "PROV",
@@ -950,7 +970,6 @@ def normalize_team_for_kalshi(team_name: str) -> str:
         return base_name[:4].upper()
 
     return "UNK"
-
 # Alias Maps: Kalshi Variant -> Canonical Internal Code
 NCAAB_CODE_ALIASES: Dict[str, str] = {
     "NCST": "NCS",
@@ -1016,6 +1035,22 @@ NCAAB_CODE_ALIASES: Dict[str, str] = {
     "MTST": "MSM",     # Mt St Mary's variant
     "BOISE": "BSU",    # Boise State: Kalshi uses BOISE, we use BSU
     "HAM": "HAMP",     # Hampton: Kalshi uses HAMP
+    # Issue #2: Missing NCAAB Aliases
+    "LCHI": "LCHI", "LOYOLA CHICAGO": "LCHI",
+    "IUIN": "IUIN", "IU INDIANAPOLIS": "IUIN",
+    "MILW": "MILW", "MILWAUKEE": "MILW",
+    "PFW": "PFW", "PURDUE FORT WAYNE": "PFW",
+    "CHAR": "CHAR", "CHARLOTTE": "CHAR",
+    "NEOM": "NEOM", "NEBRASKA OMAHA": "NEOM",
+    "FAU": "FAU", "FLORIDA ATLANTIC": "FAU",
+    "TULN": "TULN", "TULANE": "TULN",
+    "UAB": "UAB",
+    "MRST": "MRST", "MARIST": "MRST",
+    "ILST": "ILST", "ILLINOIS STATE": "ILST",
+    "CAMP": "CAMP", "CAMPBELL": "CAMP",
+    "ORST": "ORST", "OREGON STATE": "ORST",
+    "SEA": "SEA", "SEATTLE": "SEA",
+    "COFC": "COFC",
 }
 
 NCAAF_CODE_ALIASES: Dict[str, str] = {
@@ -1058,7 +1093,7 @@ def resolve_team_code(code: str, league: str) -> str:
     # Only for NCAAB where variance is high
     if l == "NCAAB" and rapidfuzz:
         # Increase threshold for short codes to prevent false positives (e.g. VMI -> VIR)
-        threshold = 85 if len(c) <= 3 else 70
+        threshold = 90 if len(c) <= 3 else 75
 
         # Check against Alias Keys
         alias_keys = list(NCAAB_CODE_ALIASES.keys())
@@ -1287,9 +1322,9 @@ def _extract_market_type(title: str, ticker: str, subtitle: str = "", market: Di
     # Fix Issue #1: Aggressive suffix check for spread
     # Check if ticker ends with -TeamCode-Number (e.g. -PHX-6.5)
     # or contains negative/positive number
-    # Regex for spread-like suffix: -[A-Z]{2,4}-?[\d\.]+
+    # Regex for spread-like suffix: -[A-Z]{2,4}-[\d\.]+
     # EXCEPTION: Ensure "OVER" and "UNDER" are not mistaken for team codes
-    if re.search(r'-[A-Z]{2,4}-?[\d\.]+$', tick) and "OVER" not in tick and "UNDER" not in tick:
+    if re.search(r'-[A-Z]{2,4}-[\d\.]+$', tick) and "OVER" not in tick and "UNDER" not in tick:
          # If subtitle has "winner", it's a winner market. If it has numbers, likely spread.
          if "WINNER" not in sub and "TOTAL" not in sub:
              return "spread"
@@ -3056,7 +3091,7 @@ class KalshiIntegrator:
         self,
         status: Optional[str] = None,
         limit: int = 200,
-        max_pages: int = 5,
+        max_pages: int = 50,
         cursor: Optional[str] = None,
         extra_params: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
@@ -3606,14 +3641,14 @@ class KalshiIntegrator:
                 targeted = self.get_markets_paginated(
                     status=status,
                     limit=200,
-                    max_pages=5,
+                    max_pages=50,
                     extra_params={"event_ticker_prefix": targeted_prefix},
                 )
             except Exception:
                 targeted = []
             try:
                 extra = self.get_markets_paginated(
-                    status=status, limit=200, max_pages=5
+                    status=status, limit=200, max_pages=50
                 )
             except Exception:
                 extra = []
