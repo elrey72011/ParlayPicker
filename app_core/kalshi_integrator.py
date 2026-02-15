@@ -821,6 +821,8 @@ KALSHI_NCAAB_TEAM_CODES = {
     "Saint Peter's Peacocks": "SPC",
     "Saint Peters": "SPC",
     "San Diego": "USD",
+    "Seton Hall": "SET",
+    "Seton Hall Pirates": "SET",
     "Siena": "SIE",
     "Siena Saints": "SIE",
     "South Carolina St.": "SCUS",
@@ -919,7 +921,12 @@ NCAAB_CODE_ALIASES: Dict[str, str] = {
     "CREI": "CRE",
     "XAVI": "XAV",
     "BUTL": "BUT",
+    "BUTLER": "BUT", # Add full name just in case
+    "BUT": "BUT",    # Explicit keep
     "SETO": "SET",
+    "SETON": "SET",  # 5-char token
+    "HALL": "SET",   # Common split artifact
+    "SHU": "SET",    # Seton Hall University
     "GEOR": "GEO",
     "DEPA": "DEP",
     # Kalshi ticker variants discovered from Feb 9 events
@@ -1811,63 +1818,78 @@ def _match_via_events(
                 date_team_id = game_ticker_parts[1]  # e.g., "26JAN27BKNPHX"
 
                 # Determine the spread/total series tickers based on league
-                spread_series = None
-                total_series = None
+                spread_series_list = []
+                total_series_list = []
                 if league == "NBA":
-                    spread_series = "KXNBASPREAD"
-                    total_series = "KXNBATOTAL"
+                    spread_series_list = ["KXNBASPREAD"]
+                    total_series_list = ["KXNBATOTAL"]
                 elif league == "NFL":
-                    spread_series = "KXNFLSPREAD"
-                    total_series = "KXNFLTOTAL"
+                    spread_series_list = ["KXNFLSPREAD"]
+                    total_series_list = ["KXNFLTOTAL"]
                 elif league == "NHL":
-                    spread_series = "KXNHLSPREAD"
-                    total_series = "KXNHLTOTAL"
+                    spread_series_list = ["KXNHLSPREAD"]
+                    total_series_list = ["KXNHLTOTAL"]
                 elif league == "MLB":
-                    spread_series = "KXMLBSPREAD"
-                    total_series = "KXMLBTOTAL"
+                    spread_series_list = ["KXMLBSPREAD"]
+                    total_series_list = ["KXMLBTOTAL"]
                 elif league == "NCAAB":
-                    spread_series = "KXNCAAMBSPREAD"
-                    total_series = "KXNCAAMBTOTAL"
+                    # Try multiple variants for NCAAB to cover inconsistencies
+                    spread_series_list = ["KXNCAAMBSPREAD", "KXNCAABSPREAD"]
+                    total_series_list = ["KXNCAAMBTOTAL", "KXNCAABTOTAL"]
                 elif league == "NCAAF":
-                    spread_series = "KXNCAAFSPREAD"
-                    total_series = "KXNCAAFTOTAL"
+                    spread_series_list = ["KXNCAAFSPREAD"]
+                    total_series_list = ["KXNCAAFTOTAL"]
 
                 logger.info(f"🔍 KALSHI SPREAD/TOTAL SEARCH: Looking for events matching '{date_team_id}'")
-                logger.info(f"   Spread series: {spread_series}, Total series: {total_series}")
+                logger.info(f"   Spread series candidates: {spread_series_list}, Total series candidates: {total_series_list}")
+
+                # Use the first candidate as primary for fallbacks
+                primary_spread_series = spread_series_list[0] if spread_series_list else None
+                primary_total_series = total_series_list[0] if total_series_list else None
 
                 # Search for spread/total events using the date-team identifier
                 # Method 1: Try to fetch markets directly using series_ticker and matching date-team
                 try:
-                    if spread_series:
+                    spread_markets_found = False
+                    for spread_series in spread_series_list:
+                        if not spread_series: continue
+
                         spread_event_ticker = f"{spread_series}-{date_team_id}"
                         logger.info(f"   Searching for spread event: {spread_event_ticker}")
-                        spread_mkts_resp = integrator._request("GET", "/markets", params={"event_ticker": spread_event_ticker})
-                        spread_mkts = spread_mkts_resp.get("markets", [])
-                        if spread_mkts:
-                            spread_markets.extend(spread_mkts)
-                            logger.info(f"   ✅ Found {len(spread_mkts)} spread markets from event {spread_event_ticker}")
-                        else:
-                            # Fix 1: Fuzzy search fallback
-                            logger.info(f"   No direct spread event match, trying fuzzy match...")
-                            try:
-                                all_spread_events = integrator.get_events(spread_series, status=None)
-                                date_token = date_team_id[:7] if len(date_team_id) >= 7 else date_team_id
-                                for evt in all_spread_events.get("events", []):
-                                    evt_ticker = evt.get("ticker", "")
-                                    # Match by date token AND team codes (partial)
-                                    if date_token in evt_ticker:
-                                        parsed = parse_event_ticker_codes(evt_ticker)
-                                        evt_codes = {parsed.get("home"), parsed.get("away")}
-                                        our_codes = set(home_codes + away_codes)
-                                        if evt_codes & our_codes:  # Any overlap
-                                            logger.info(f"   Found fuzzy spread event match: {evt_ticker}")
-                                            spread_markets.extend(evt.get("markets", []))
-                            except Exception as e:
-                                logger.warning(f"   Fuzzy spread search failed: {e}")
+                        try:
+                            spread_mkts_resp = integrator._request("GET", "/markets", params={"event_ticker": spread_event_ticker})
+                            spread_mkts = spread_mkts_resp.get("markets", [])
+                            if spread_mkts:
+                                spread_markets.extend(spread_mkts)
+                                logger.info(f"   ✅ Found {len(spread_mkts)} spread markets from event {spread_event_ticker}")
+                                spread_markets_found = True
+                                break # Found valid series, stop looking
+                        except Exception:
+                            continue # Try next variant
 
-                            # Fallback 1: Search in series EVENTS for matching date-team ID
-                            logger.info(f"   Searching in series events for strict match...")
-                            series_resp = integrator.get_events(spread_series, status=None)
+                    if not spread_markets_found and primary_spread_series:
+                        # Fix 1: Fuzzy search fallback using primary series
+                        logger.info(f"   No direct spread event match, trying fuzzy match on {primary_spread_series}...")
+                        try:
+                            all_spread_events = integrator.get_events(primary_spread_series, status=None)
+                            date_token = date_team_id[:7] if len(date_team_id) >= 7 else date_team_id
+                            for evt in all_spread_events.get("events", []):
+                                evt_ticker = evt.get("ticker", "")
+                                # Match by date token AND team codes (partial)
+                                if date_token in evt_ticker:
+                                    parsed = parse_event_ticker_codes(evt_ticker)
+                                    evt_codes = {parsed.get("home"), parsed.get("away")}
+                                    our_codes = set(home_codes + away_codes)
+                                    if evt_codes & our_codes:  # Any overlap
+                                        logger.info(f"   Found fuzzy spread event match: {evt_ticker}")
+                                        spread_markets.extend(evt.get("markets", []))
+                        except Exception as e:
+                            logger.warning(f"   Fuzzy spread search failed: {e}")
+
+                        # Fallback 1: Search in series EVENTS for matching date-team ID
+                        logger.info(f"   Searching in series events for strict match...")
+                        try:
+                            series_resp = integrator.get_events(primary_spread_series, status=None)
                             series_events = series_resp.get("events", [])
                             for evt in series_events:
                                 evt_tick = evt.get("ticker", "")
@@ -1879,18 +1901,19 @@ def _match_via_events(
                                         evt_markets = evt_mkts_resp.get("markets", [])
                                     spread_markets.extend(evt_markets)
                                     logger.info(f"   ✅ Added {len(evt_markets)} spread markets from {evt_tick}")
+                        except Exception: pass
 
-                            # Fallback 2: If still no spread markets, fetch MARKETS directly by series_ticker
-                            # This is critical for NBA/NHL where events API may not return spread/total events
-                            if not spread_markets:
-                                logger.info(f"   No spread events found, fetching markets directly by series_ticker={spread_series}...")
+                        # Fallback 2: If still no spread markets, fetch MARKETS directly by series_ticker
+                        if not spread_markets:
+                            logger.info(f"   No spread events found, fetching markets directly by series_ticker={primary_spread_series}...")
+                            try:
                                 series_markets = integrator.get_markets_paginated(
                                     status=None,
                                     limit=200,
                                     max_pages=50,  # Fix 5: Ensure we fetch ALL spread/total markets
-                                    extra_params={"series_ticker": spread_series}
+                                    extra_params={"series_ticker": primary_spread_series}
                                 )
-                                logger.info(f"   📊 Spread market pagination: Fetched {len(series_markets)} markets from series {spread_series} (max_pages=50)")
+                                logger.info(f"   📊 Spread market pagination: Fetched {len(series_markets)} markets from series {primary_spread_series} (max_pages=50)")
                                 # Add sample ticker logging (Fix #5)
                                 if series_markets:
                                     sample_tickers = [m.get('ticker', '')[:50] for m in series_markets[:5]]
@@ -1904,40 +1927,52 @@ def _match_via_events(
                                         spread_markets.append(mkt)
                                 if spread_markets:
                                     logger.info(f"   ✅ Found {len(spread_markets)} spread markets matching {date_team_id} from series")
+                            except Exception as e:
+                                logger.warning(f"   Pagination fetch failed: {e}")
                 except Exception as e:
                     logger.warning(f"   ⚠️ Failed to fetch spread markets: {e}")
 
                 try:
-                    if total_series:
+                    total_markets_found = False
+                    for total_series in total_series_list:
+                        if not total_series: continue
+
                         total_event_ticker = f"{total_series}-{date_team_id}"
                         logger.info(f"   Searching for total event: {total_event_ticker}")
-                        total_mkts_resp = integrator._request("GET", "/markets", params={"event_ticker": total_event_ticker})
-                        total_mkts = total_mkts_resp.get("markets", [])
-                        if total_mkts:
-                            total_markets.extend(total_mkts)
-                            logger.info(f"   ✅ Found {len(total_mkts)} total markets from event {total_event_ticker}")
-                        else:
-                            # Fix 1: Fuzzy search fallback
-                            logger.info(f"   No direct total event match, trying fuzzy match...")
-                            try:
-                                all_total_events = integrator.get_events(total_series, status=None)
-                                date_token = date_team_id[:7] if len(date_team_id) >= 7 else date_team_id
-                                for evt in all_total_events.get("events", []):
-                                    evt_ticker = evt.get("ticker", "")
-                                    # Match by date token AND team codes (partial)
-                                    if date_token in evt_ticker:
-                                        parsed = parse_event_ticker_codes(evt_ticker)
-                                        evt_codes = {parsed.get("home"), parsed.get("away")}
-                                        our_codes = set(home_codes + away_codes)
-                                        if evt_codes & our_codes:  # Any overlap
-                                            logger.info(f"   Found fuzzy total event match: {evt_ticker}")
-                                            total_markets.extend(evt.get("markets", []))
-                            except Exception as e:
-                                logger.warning(f"   Fuzzy total search failed: {e}")
+                        try:
+                            total_mkts_resp = integrator._request("GET", "/markets", params={"event_ticker": total_event_ticker})
+                            total_mkts = total_mkts_resp.get("markets", [])
+                            if total_mkts:
+                                total_markets.extend(total_mkts)
+                                logger.info(f"   ✅ Found {len(total_mkts)} total markets from event {total_event_ticker}")
+                                total_markets_found = True
+                                break # Found valid series
+                        except Exception:
+                            continue
 
-                            # Fallback 1: Search in series EVENTS for matching date-team ID
-                            logger.info(f"   Searching in series events for strict match...")
-                            series_resp = integrator.get_events(total_series, status=None)
+                    if not total_markets_found and primary_total_series:
+                        # Fix 1: Fuzzy search fallback using primary series
+                        logger.info(f"   No direct total event match, trying fuzzy match on {primary_total_series}...")
+                        try:
+                            all_total_events = integrator.get_events(primary_total_series, status=None)
+                            date_token = date_team_id[:7] if len(date_team_id) >= 7 else date_team_id
+                            for evt in all_total_events.get("events", []):
+                                evt_ticker = evt.get("ticker", "")
+                                # Match by date token AND team codes (partial)
+                                if date_token in evt_ticker:
+                                    parsed = parse_event_ticker_codes(evt_ticker)
+                                    evt_codes = {parsed.get("home"), parsed.get("away")}
+                                    our_codes = set(home_codes + away_codes)
+                                    if evt_codes & our_codes:  # Any overlap
+                                        logger.info(f"   Found fuzzy total event match: {evt_ticker}")
+                                        total_markets.extend(evt.get("markets", []))
+                        except Exception as e:
+                            logger.warning(f"   Fuzzy total search failed: {e}")
+
+                        # Fallback 1: Search in series EVENTS for matching date-team ID
+                        logger.info(f"   Searching in series events for strict match...")
+                        try:
+                            series_resp = integrator.get_events(primary_total_series, status=None)
                             series_events = series_resp.get("events", [])
                             for evt in series_events:
                                 evt_tick = evt.get("ticker", "")
@@ -1949,18 +1984,19 @@ def _match_via_events(
                                         evt_markets = evt_mkts_resp.get("markets", [])
                                     total_markets.extend(evt_markets)
                                     logger.info(f"   ✅ Added {len(evt_markets)} total markets from {evt_tick}")
+                        except Exception: pass
 
-                            # Fallback 2: If still no total markets, fetch MARKETS directly by series_ticker
-                            # This is critical for NBA/NHL where events API may not return spread/total events
-                            if not total_markets:
-                                logger.info(f"   No total events found, fetching markets directly by series_ticker={total_series}...")
+                        # Fallback 2: If still no total markets, fetch MARKETS directly by series_ticker
+                        if not total_markets:
+                            logger.info(f"   No total events found, fetching markets directly by series_ticker={primary_total_series}...")
+                            try:
                                 series_markets = integrator.get_markets_paginated(
                                     status=None,
                                     limit=200,
                                     max_pages=50,  # Fix 5: Ensure we fetch ALL spread/total markets
-                                    extra_params={"series_ticker": total_series}
+                                    extra_params={"series_ticker": primary_total_series}
                                 )
-                                logger.info(f"   📊 Total market pagination: Fetched {len(series_markets)} markets from series {total_series} (max_pages=50)")
+                                logger.info(f"   📊 Total market pagination: Fetched {len(series_markets)} markets from series {primary_total_series} (max_pages=50)")
                                 # Filter markets by date_team_id in ticker or event_ticker
                                 for mkt in series_markets:
                                     mkt_ticker = str(mkt.get("ticker") or "").upper()
@@ -1969,6 +2005,8 @@ def _match_via_events(
                                         total_markets.append(mkt)
                                 if total_markets:
                                     logger.info(f"   ✅ Found {len(total_markets)} total markets matching {date_team_id} from series")
+                            except Exception as e:
+                                logger.warning(f"   Pagination fetch failed: {e}")
                 except Exception as e:
                     logger.warning(f"   ⚠️ Failed to fetch total markets: {e}")
 
