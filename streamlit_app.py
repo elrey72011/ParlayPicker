@@ -7812,7 +7812,7 @@ def load_games(selected_leagues: Union[str, List[str]], run_id: Optional[str] = 
             g.get("sport_key"),
             g.get("home_team"),
             g.get("away_team"),
-            g.get("commence_time_iso_utc"),
+            g.get("commence_time_iso_utc") or str(g.get("commence_time")),
         )
         if key not in deduped:
             deduped[key] = g
