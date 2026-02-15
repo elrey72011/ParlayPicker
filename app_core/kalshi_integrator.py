@@ -900,6 +900,11 @@ KALSHI_NCAAB_TEAM_CODES = {
     "Tulane": "TULN",
     "UAB": "UAB",
     "UTSA": "UTSA",
+    # Feb 15, 2026 Game Overrides
+    "IUPUI Jaguars": "IUIN",
+    "Fort Wayne Mastodons": "PFW",
+    "Illinois St Redbirds": "ILST",
+    "UIC Flames": "UIC",
 }
 
 def normalize_team_for_kalshi(team_name: str) -> str:
@@ -2301,6 +2306,79 @@ def _normalize_series_prefix(prefix: Any) -> Tuple[str, ...]:
 def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time: Optional[datetime], integrator: "KalshiIntegrator" = None, status: Optional[str] = None, requested_market_type: Optional[str] = None) -> KalshiMatchResult:
     league_key = (league or "").upper()
     kalshi = integrator or KalshiIntegrator()
+
+    # --- FEB 15, 2026 OVERRIDES ---
+    if game_time:
+        try:
+            g_date_str = game_time.strftime("%Y-%m-%d")
+            # User provided key: "Away@Home@Date" (e.g. "IUPUI Jaguars@Fort Wayne Mastodons@2026-02-15")
+            override_key = f"{away_team}@{home_team}@{g_date_str}"
+
+            GAME_OVERRIDES = {
+                "IUPUI Jaguars@Fort Wayne Mastodons@2026-02-15": "IUINPFW",
+                "Illinois St Redbirds@UIC Flames@2026-02-15": "ILSTUIC",
+            }
+
+            if override_key in GAME_OVERRIDES:
+                suffix = GAME_OVERRIDES[override_key]
+                logger.info(f"⚡ Applying KALSHI OVERRIDE for {override_key} -> {suffix}")
+
+                game_ticker = f"KXNCAAMBGAME-26FEB15{suffix}"
+                spread_ticker = f"KXNCAAMBSPREAD-26FEB15{suffix}"
+                total_ticker = f"KXNCAAMBTOTAL-26FEB15{suffix}"
+
+                # Fetch real data if possible
+                game_event = {}
+                spread_markets = []
+                total_markets = []
+
+                if kalshi and kalshi.api_key:
+                    try:
+                        # Fetch Game Event
+                        resp = kalshi._request("GET", "/events", params={"event_ticker": game_ticker, "with_nested_markets": True})
+                        events = resp.get("events", [])
+                        if events:
+                            game_event = events[0]
+
+                        # Fetch Spread Markets
+                        s_resp = kalshi._request("GET", "/markets", params={"event_ticker": spread_ticker})
+                        spread_markets = s_resp.get("markets", [])
+
+                        # Fetch Total Markets
+                        t_resp = kalshi._request("GET", "/markets", params={"event_ticker": total_ticker})
+                        total_markets = t_resp.get("markets", [])
+
+                        logger.info(f"   Override fetched: {len(spread_markets)} spread, {len(total_markets)} total markets")
+                    except Exception as e:
+                        logger.warning(f"   Override fetch failed: {e}")
+
+                # Construct Result
+                debug_info = {
+                    "score": 100,
+                    "event": game_ticker,
+                    "spread_markets": spread_markets,
+                    "total_markets": total_markets,
+                    "override_used": True
+                }
+
+                # Use game event title if available
+                label = game_event.get("title", f"{away_team} @ {home_team}")
+
+                return KalshiMatchResult(
+                    matched=True,
+                    kalshi_available=True,
+                    label=label,
+                    probability=0.5, # Default, downstream logic will pick from markets
+                    raw_event_id=game_ticker,
+                    market_ticker=game_event.get("markets", [{}])[0].get("ticker") if game_event.get("markets") else None,
+                    league="NCAAB",
+                    reason="manual_override",
+                    market_type="winner",
+                    game_date=game_time,
+                    debug=debug_info
+                )
+        except Exception as e:
+            logger.warning(f"Override check failed: {e}")
 
     if not kalshi or not kalshi.api_key:
         return KalshiMatchResult(matched=False, kalshi_available=False, label="", probability=None, raw_event_id=None, reason="no_integrator")
