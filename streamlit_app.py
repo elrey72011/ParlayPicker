@@ -12072,66 +12072,66 @@ with tab_master:
                     "At_a_Glance_Score": None,
                     "At_a_Glance_Reason": None,
                 }
-                # Append the total_row that was just created
-                total_row["consensus_prob"] = total_base_prob
-                total_row["consensus_prob_adj"] = total_prob_final
-                total_row["prob_reason"] = total_prob_reason
-                conf, reason_short, eligible = score_pick_confidence(total_row)
-                width_total = (total_max - total_min) if (total_max is not None and total_min is not None) else 0.0
-                # Downgrade based on market quality (not blanket downgrade)
-                if (width_total and width_total >= 4.5) and conf == "HIGH":
-                    conf = "MEDIUM"  # Wide market reduces confidence
-                if len(total_books_map) <= 1:
-                    # Thin market: cap at MEDIUM, or LOW if already low
-                    if conf == "HIGH":
-                        conf = "MEDIUM"
-                    elif conf == "MEDIUM":
-                        conf = "LOW"
-                    eligible = False
-                total_row["Pick_Confidence"] = conf
-                total_row["Pick_Reason_Short"] = reason_short
-                total_row["confidence_reason"] = reason_short
-                _dec_base_total = safe_float(total_row.get("final_probability"))
-                total_row["decisiveness"] = abs(_dec_base_total - 0.5) * 2 if _dec_base_total is not None else None
-                trace_short, trace_json, decision_trace_full = build_decision_trace(
-                    "total",
-                    total_row.get("Pick") or "",
-                    total_row.get("Implied_Prob"),
-                    total_row.get("kalshi_prob"),
-                    total_row.get("AI_Prob"),
-                    total_row.get("sentiment_adj"),
-                    total_weights_used,
-                    total_row.get("final_probability"),
-                    conf,
-                    league_name,
-                    bool(kalshi_total.get("kalshi_matched")),
-                    kalshi_total.get("kalshi_reason"),
-                    total_row.get("sentiment_score"),
-                    total_row.get("sentiment_label"),
-                    model_used_for_total,
-                    reason_short,
-                    warnings,
-                    kalshi_total.get("kalshi_yes_side") or "over",
-                    total_kalshi_prob_for_pick,
-                )
-                trace_json_str = trace_json if isinstance(trace_json, str) else json.dumps(trace_json)
-                total_row["decision_trace_short"] = trace_short
-                total_row["decision_trace_json"] = trace_json_str
-                total_row["decision_trace"] = decision_trace_full
-                store_decision_trace_sample(
-                    league_name,
-                    home,
-                    away,
-                    "total",
-                    total_row.get("Pick"),
-                    total_row.get("final_probability"),
-                    trace_json_str,
-                )
-                total_row["Eligible_Top_Picks"] = eligible
-                total_row = apply_sentiment_defaults(total_row, sentiment_defaults_base)
-                accumulated_rows.append(total_row)
-                total_row_created = True
-                master_stats["market_rows_out"] += 1
+                    # Append the total_row that was just created
+                    total_row["consensus_prob"] = total_base_prob
+                    total_row["consensus_prob_adj"] = total_prob_final
+                    total_row["prob_reason"] = total_prob_reason
+                    conf, reason_short, eligible = score_pick_confidence(total_row)
+                    width_total = (total_max - total_min) if (total_max is not None and total_min is not None) else 0.0
+                    # Downgrade based on market quality (not blanket downgrade)
+                    if (width_total and width_total >= 4.5) and conf == "HIGH":
+                        conf = "MEDIUM"  # Wide market reduces confidence
+                    if len(total_books_map) <= 1:
+                        # Thin market: cap at MEDIUM, or LOW if already low
+                        if conf == "HIGH":
+                            conf = "MEDIUM"
+                        elif conf == "MEDIUM":
+                            conf = "LOW"
+                        eligible = False
+                    total_row["Pick_Confidence"] = conf
+                    total_row["Pick_Reason_Short"] = reason_short
+                    total_row["confidence_reason"] = reason_short
+                    _dec_base_total = safe_float(total_row.get("final_probability"))
+                    total_row["decisiveness"] = abs(_dec_base_total - 0.5) * 2 if _dec_base_total is not None else None
+                    trace_short, trace_json, decision_trace_full = build_decision_trace(
+                        "total",
+                        total_row.get("Pick") or "",
+                        total_row.get("Implied_Prob"),
+                        total_row.get("kalshi_prob"),
+                        total_row.get("AI_Prob"),
+                        total_row.get("sentiment_adj"),
+                        total_weights_used,
+                        total_row.get("final_probability"),
+                        conf,
+                        league_name,
+                        bool(kalshi_total.get("kalshi_matched")),
+                        kalshi_total.get("kalshi_reason"),
+                        total_row.get("sentiment_score"),
+                        total_row.get("sentiment_label"),
+                        model_used_for_total,
+                        reason_short,
+                        warnings,
+                        kalshi_total.get("kalshi_yes_side") or "over",
+                        total_kalshi_prob_for_pick,
+                    )
+                    trace_json_str = trace_json if isinstance(trace_json, str) else json.dumps(trace_json)
+                    total_row["decision_trace_short"] = trace_short
+                    total_row["decision_trace_json"] = trace_json_str
+                    total_row["decision_trace"] = decision_trace_full
+                    store_decision_trace_sample(
+                        league_name,
+                        home,
+                        away,
+                        "total",
+                        total_row.get("Pick"),
+                        total_row.get("final_probability"),
+                        trace_json_str,
+                    )
+                    total_row["Eligible_Top_Picks"] = eligible
+                    total_row = apply_sentiment_defaults(total_row, sentiment_defaults_base)
+                    accumulated_rows.append(total_row)
+                    total_row_created = True
+                    master_stats["market_rows_out"] += 1
 
                 # --- 5. FALLBACK: "NONE" MARKET ROW ---
                 if not (g.get("home_ml_price") or g.get("home_spread_point") or g.get("total_point")):
