@@ -750,6 +750,10 @@ NCAAB_TEAM_CODE_MAP: Dict[str, str] = {
     "CAMP": "CAMP", "CAMPBELL": "CAMP",
     "ORST": "ORST", "OREGON STATE": "ORST",
     "SEA": "SEA", "SEATTLE": "SEA",
+    "WAGNER": "WAG", "WAGNER SEAHAWKS": "WAG",
+    "LIU": "LIU", "LIU SHARKS": "LIU", "LONG ISLAND": "LIU", "LONG ISLAND UNIVERSITY": "LIU",
+    "SOUTH ALABAMA": "SOAL", "SOUTH ALABAMA JAGUARS": "SOAL",
+    "MARSHALL": "MARS", "MARSHALL THUNDERING HERD": "MARS",
 }
 
 # ADD THIS COMPREHENSIVE NCAAB TEAM NAME → KALSHI CODE MAPPING
@@ -936,6 +940,15 @@ KALSHI_NCAAB_TEAM_CODES = {
     "Fort Wayne Mastodons": "PFW",
     "Illinois St Redbirds": "ILST",
     "UIC Flames": "UIC",
+    "Wagner": "WAG",
+    "Wagner Seahawks": "WAG",
+    "LIU": "LIU",
+    "LIU Sharks": "LIU",
+    "Long Island": "LIU",
+    "South Alabama": "SOAL",
+    "South Alabama Jaguars": "SOAL",
+    "Marshall": "MARS",
+    "Marshall Thundering Herd": "MARS",
 }
 
 def normalize_team_for_kalshi(team_name: str) -> str:
