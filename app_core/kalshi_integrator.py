@@ -11,6 +11,7 @@ import base64
 import random
 import json
 import re
+from functools import lru_cache
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
@@ -116,6 +117,7 @@ LEAGUE_SERIES_MAP: Dict[str, Any] = {
 }
 
 
+@lru_cache(maxsize=4096)
 def parse_event_ticker_codes(event_ticker: str) -> Dict[str, str]:
     """
     Extracts away/home codes from Kalshi's event_ticker using team code map matching.
@@ -1066,6 +1068,7 @@ NCAAF_CODE_ALIASES: Dict[str, str] = {
     "CINC": "CIN",
 }
 
+@lru_cache(maxsize=1024)
 def resolve_team_code(code: str, league: str) -> str:
     """
     Resolve a team code (from event ticker or map) to its canonical form
