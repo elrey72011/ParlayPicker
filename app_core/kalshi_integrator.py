@@ -805,6 +805,8 @@ KALSHI_NCAAB_TEAM_CODES = {
     "Idaho": "IDHO",
     "Illinois": "ILL",
     "Incarnate Word": "IW",
+    "Incarnate Word Cardinals": "IW",
+    "UIW": "IW",
     "Indiana State": "INST",
     "Iona": "IONA",
     "Iona Gaels": "IONA",
@@ -839,6 +841,9 @@ KALSHI_NCAAB_TEAM_CODES = {
     "Mt. St. Mary's": "MSM",
     "Mt St Marys": "MSM",
     "Nevada": "NEV",
+    "New Orleans": "UNO",
+    "New Orleans Privateers": "UNO",
+    "UNO": "UNO",
     "Niagara": "NIAG",
     "Niagara Purple Eagles": "NIAG",
     "North Carolina A&T": "NCAT",
@@ -1083,6 +1088,8 @@ NCAAB_CODE_ALIASES: Dict[str, str] = {
     "BELM": "BEL", "BELMT": "BEL",
     "SF": "USF", "SFC": "USF", "SFR": "USF",
     "SD": "USD", "SDG": "USD",
+    "UIW": "IW",
+    "UNO": "UNO",
 }
 
 NCAAF_CODE_ALIASES: Dict[str, str] = {
@@ -2361,63 +2368,77 @@ def _match_via_events(
                     yes_side = "over" # Default
             else:
                 # Spread or Winner - Team Mapping
-                # 1. Check Full Names (Strongest Signal)
+                # 1. Split Title to Isolate "Yes" Side (Left Side)
+                # "Incarnate Word vs New Orleans" -> Left="Incarnate Word" (Yes), Right="New Orleans" (No)
+                left_side_title = market_title
+                right_side_title = ""
+
+                # Split by separators
+                for sep in [" VS ", " @ ", " VS. ", " V "]:
+                    if sep in market_title:
+                        parts = market_title.split(sep)
+                        if len(parts) >= 1:
+                            left_side_title = parts[0].strip()
+                        if len(parts) >= 2:
+                            right_side_title = parts[1].strip()
+                        break
+
+                # 2. Check Full Names against Left Side (Strongest Signal)
                 if home_team_name and away_team_name:
-                    # Use clean_team_name for basic normalization (spaces, upper)
-                    # We avoid strict TeamNameMatcher.normalize stripping here to keep mascots if useful
                     h_clean = clean_team_name(home_team_name)
                     a_clean = clean_team_name(away_team_name)
-                    t_clean = clean_team_name(market_title)
+                    left_clean = clean_team_name(left_side_title)
+                    right_clean = clean_team_name(right_side_title)
 
-                    score_home = 0
-                    score_away = 0
+                    score_home_left = 0
+                    score_away_left = 0
 
                     if rapidfuzz:
-                        # token_set_ratio handles "New Orleans" in "New Orleans Privateers" (100%)
-                        score_home = fuzz.token_set_ratio(h_clean, t_clean)
-                        score_away = fuzz.token_set_ratio(a_clean, t_clean)
+                        score_home_left = fuzz.token_set_ratio(h_clean, left_clean)
+                        score_away_left = fuzz.token_set_ratio(a_clean, left_clean)
 
-                        # Rapidfuzz threshold
-                        if score_home > score_away and score_home > 80:
+                        # Also check Right side for negation (if Home is on Right, then Yes is Away)
+                        score_home_right = fuzz.token_set_ratio(h_clean, right_clean) if right_clean else 0
+                        score_away_right = fuzz.token_set_ratio(a_clean, right_clean) if right_clean else 0
+
+                        # Decision Logic with Left/Right awareness
+                        if score_home_left > 80 and score_home_left > score_away_left:
                             yes_side = "home"
-                        elif score_away > score_home and score_away > 80:
+                        elif score_away_left > 80 and score_away_left > score_home_left:
                             yes_side = "away"
+                        elif score_home_right > 80 and score_home_right > score_away_right:
+                            yes_side = "away" # Home is NO side -> Yes is Away
+                        elif score_away_right > 80 and score_away_right > score_home_right:
+                            yes_side = "home" # Away is NO side -> Yes is Home
                     else:
-                        # Fallback: Token Overlap % (when rapidfuzz missing)
-                        # Calculate % of TEAM tokens found in TITLE
-                        t_tok_set = set(t_clean.split())
-
-                        def _calc_score(team_str, title_set):
-                            parts = team_str.split()
+                        # Fallback Token Overlap
+                        left_toks = set(left_clean.split())
+                        def _tok_score(team, target_toks):
+                            parts = team.split()
                             if not parts: return 0
-                            matches = sum(1 for p in parts if p in title_set)
-                            return int((matches / len(parts)) * 100)
+                            return sum(1 for p in parts if p in target_toks) / len(parts)
 
-                        score_home = _calc_score(h_clean, t_tok_set)
-                        score_away = _calc_score(a_clean, t_tok_set)
+                        s_h = _tok_score(h_clean, left_toks)
+                        s_a = _tok_score(a_clean, left_toks)
 
-                        # Lower threshold for exact token overlap logic
-                        # e.g. "New Orleans Privateers" (3) vs "New Orleans" (2) -> 66% match
-                        if score_home > score_away and score_home >= 60:
-                            yes_side = "home"
-                        elif score_away > score_home and score_away >= 60:
-                            yes_side = "away"
+                        if s_h > 0.6 and s_h > s_a: yes_side = "home"
+                        elif s_a > 0.6 and s_a > s_h: yes_side = "away"
 
-                # 2. Check Codes (Fallback for abbreviations like "UNO")
+                # 3. Check Codes against Left Side (Fallback)
                 if not yes_side:
-                    # Check if any home code is in title
-                    # Splitting title prevents "A" code matching "AWAY"
-                    title_tokens = market_title.split()
+                    left_tokens = left_side_title.split()
 
+                    # Check Home Codes in Left Side
                     if home_codes:
                         for code in home_codes:
-                            if code and len(code) >= 2 and code in title_tokens:
+                            if code and len(code) >= 2 and code in left_tokens:
                                 yes_side = "home"
                                 break
 
+                    # Check Away Codes in Left Side
                     if not yes_side and away_codes:
                         for code in away_codes:
-                            if code and len(code) >= 2 and code in title_tokens:
+                            if code and len(code) >= 2 and code in left_tokens:
                                 yes_side = "away"
                                 break
 
