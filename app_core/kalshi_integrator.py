@@ -634,6 +634,9 @@ NCAAB_TEAM_CODE_MAP: Dict[str, str] = {
     "NORTHERN IOWA": "UNI", "NORTHERN IOWA PANTHERS": "UNI",
     "MURRAY ST": "MURS", "MURRAY STATE": "MURS", "MURRAY ST RACERS": "MURS",
     # --- Other missing teams ---
+    "MONMOUTH": "MON", "MONMOUTH HAWKS": "MON",
+    "TOWSON": "TOW", "TOWSON TIGERS": "TOW",
+    "SAN FRANSISCO": "USF", "SAN FRANCISCO": "USF", # Fix for typo
     "TEXAS A&M-CC": "AMCC", "TEXAS A&M CORPUS CHRISTI": "AMCC",
     "TEXAS A M CC": "AMCC", "TEXAS A M CORPUS CHRISTI": "AMCC",
     "ST FRANCIS PA": "SFP", "ST. FRANCIS PA": "SFP", "SAINT FRANCIS PA": "SFP",
@@ -818,6 +821,8 @@ KALSHI_NCAAB_TEAM_CODES = {
     "Manhattan Jaspers": "MAN",
     "Massachusetts": "MASS",
     "Massachusetts Minutemen": "MASS",
+    "Monmouth": "MON",
+    "Monmouth Hawks": "MON",
     "Mercer": "MER",
     "Miami (OH)": "MOH",
     "Miami OH RedHawks": "MOH",
@@ -881,6 +886,8 @@ KALSHI_NCAAB_TEAM_CODES = {
     "Texas": "TEX",
     "Texas Longhorns": "TEX",
     "Texas Tech": "TTU",
+    "Towson": "TOW",
+    "Towson Tigers": "TOW",
     "Tulsa": "TLSA",
     "UNCG": "UNCG",
     "UNLV": "UNLV",
@@ -1058,6 +1065,11 @@ NCAAB_CODE_ALIASES: Dict[str, str] = {
     "UO": "ORE", "ORG": "ORE", "OREG": "ORE",
     "STLU": "SLU",
     "WASH": "WAS",
+    # Fixes for Murray St/Belmont, San Diego/San Francisco, Monmouth/Towson
+    "MONM": "MON", "TOWS": "TOW",
+    "BELM": "BEL", "BELMT": "BEL",
+    "SF": "USF", "SFC": "USF", "SFR": "USF",
+    "SD": "USD", "SDG": "USD",
 }
 
 NCAAF_CODE_ALIASES: Dict[str, str] = {
