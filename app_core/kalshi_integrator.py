@@ -2347,6 +2347,88 @@ def _match_via_events(
             if "spread" in (match_reason_detail or ""): m_type = "spread"
             elif "total" in (match_reason_detail or ""): m_type = "total"
 
+            # NEW: Determine Yes Side by checking title against Real Team Names/Codes
+            # This fixes the "Incarnate Word vs New Orleans" inverted ticker issue (UNOIW)
+            market_title = (target_market.get("title") or "").upper()
+            yes_side = None # Start unknown
+
+            if m_type == "total":
+                if "UNDER" in market_title:
+                    yes_side = "under"
+                elif "OVER" in market_title:
+                    yes_side = "over"
+                else:
+                    yes_side = "over" # Default
+            else:
+                # Spread or Winner - Team Mapping
+                # 1. Check Full Names (Strongest Signal)
+                if home_team_name and away_team_name:
+                    # Use clean_team_name for basic normalization (spaces, upper)
+                    # We avoid strict TeamNameMatcher.normalize stripping here to keep mascots if useful
+                    h_clean = clean_team_name(home_team_name)
+                    a_clean = clean_team_name(away_team_name)
+                    t_clean = clean_team_name(market_title)
+
+                    score_home = 0
+                    score_away = 0
+
+                    if rapidfuzz:
+                        # token_set_ratio handles "New Orleans" in "New Orleans Privateers" (100%)
+                        score_home = fuzz.token_set_ratio(h_clean, t_clean)
+                        score_away = fuzz.token_set_ratio(a_clean, t_clean)
+
+                        # Rapidfuzz threshold
+                        if score_home > score_away and score_home > 80:
+                            yes_side = "home"
+                        elif score_away > score_home and score_away > 80:
+                            yes_side = "away"
+                    else:
+                        # Fallback: Token Overlap % (when rapidfuzz missing)
+                        # Calculate % of TEAM tokens found in TITLE
+                        t_tok_set = set(t_clean.split())
+
+                        def _calc_score(team_str, title_set):
+                            parts = team_str.split()
+                            if not parts: return 0
+                            matches = sum(1 for p in parts if p in title_set)
+                            return int((matches / len(parts)) * 100)
+
+                        score_home = _calc_score(h_clean, t_tok_set)
+                        score_away = _calc_score(a_clean, t_tok_set)
+
+                        # Lower threshold for exact token overlap logic
+                        # e.g. "New Orleans Privateers" (3) vs "New Orleans" (2) -> 66% match
+                        if score_home > score_away and score_home >= 60:
+                            yes_side = "home"
+                        elif score_away > score_home and score_away >= 60:
+                            yes_side = "away"
+
+                # 2. Check Codes (Fallback for abbreviations like "UNO")
+                if not yes_side:
+                    # Check if any home code is in title
+                    # Splitting title prevents "A" code matching "AWAY"
+                    title_tokens = market_title.split()
+
+                    if home_codes:
+                        for code in home_codes:
+                            if code and len(code) >= 2 and code in title_tokens:
+                                yes_side = "home"
+                                break
+
+                    if not yes_side and away_codes:
+                        for code in away_codes:
+                            if code and len(code) >= 2 and code in title_tokens:
+                                yes_side = "away"
+                                break
+
+                # 3. Default Fallback
+                if not yes_side:
+                    yes_side = "home" # Legacy default
+
+            # Add to debug info for downstream consumption (streamlit_app.py reads this)
+            debug_info["kalshi_yes_side"] = yes_side
+            debug_info["kalshi_title_check"] = market_title
+
             return KalshiMatchResult(
                 matched=True,
                 kalshi_available=True,
