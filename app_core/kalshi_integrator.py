@@ -915,10 +915,12 @@ KALSHI_NCAAB_TEAM_CODES = {
     "Marist": "MRST",
     "Omaha": "NEOM",
     "Nebraska Omaha": "NEOM",
+    "Oregon": "ORE",
     "Oregon State": "ORST",
     "Purdue Fort Wayne": "PFW",
     "Seattle": "SEA",
     "Seattle U": "SEA",
+    "Seattle University": "SEA",
     "Tulane": "TULN",
     "UAB": "UAB",
     "UTSA": "UTSA",
@@ -1051,8 +1053,11 @@ NCAAB_CODE_ALIASES: Dict[str, str] = {
     "ILST": "ILST", "ILLINOIS STATE": "ILST",
     "CAMP": "CAMP", "CAMPBELL": "CAMP",
     "ORST": "ORST", "OREGON STATE": "ORST",
-    "SEA": "SEA", "SEATTLE": "SEA",
+    "SEA": "SEA", "SEATTLE": "SEA", "SEAU": "SEA", "SEAT": "SEA",
     "COFC": "COFC",
+    "UO": "ORE", "ORG": "ORE", "OREG": "ORE",
+    "STLU": "SLU",
+    "WASH": "WAS",
 }
 
 NCAAF_CODE_ALIASES: Dict[str, str] = {
