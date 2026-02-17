@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import logging
+import re
 from app_core.weights_config import (
     KALSHI_WEIGHT,
     MARKET_WEIGHT,
@@ -196,6 +197,31 @@ def build_game_summary_v2(df: pd.DataFrame) -> pd.DataFrame:
         except:
             return False
 
+    # Issue 4: Helper to get canonical probability from multiple fallback columns
+    def _get_canonical_prob(row, market_type):
+        """
+        Consolidates probability extraction logic.
+        Priority:
+        1. spread_prob_pick_final (most processed)
+        2. spread_prob_adj (sentiment adjusted)
+        3. spread_prob (base)
+        4. spread_prob_market_based (fallback)
+        """
+        prefix = market_type.lower() # "spread" or "total"
+        # Try pick_final first (canonical)
+        p = row.get(f"{prefix}_prob_pick_final")
+        if p is not None: return p
+
+        # Fallbacks
+        p = row.get(f"{prefix}_prob_adj")
+        if p is not None: return p
+
+        p = row.get(f"{prefix}_prob")
+        if p is not None: return p
+
+        p = row.get(f"{prefix}_prob_market_based")
+        return p
+
     # Group by Game Key
     # We use 'league', 'Home', 'Away', 'Commence (UTC)' as the key
     # Ensure these columns exist
@@ -278,7 +304,9 @@ def build_game_summary_v2(df: pd.DataFrame) -> pd.DataFrame:
             # Set Spread Pick
             # Fix: Ensure we don't construct "Team 0" or similar invalid strings
             s_line = best_spread.get("Line")
-            if best_spread.get("Spread & Pick"):
+            if best_spread.get("spread_pick_label"):
+                spread_pick = best_spread.get("spread_pick_label")
+            elif best_spread.get("Spread & Pick"):
                 spread_pick = best_spread.get("Spread & Pick")
             elif best_spread.get("Pick"):
                 try:
@@ -293,11 +321,8 @@ def build_game_summary_v2(df: pd.DataFrame) -> pd.DataFrame:
             else:
                 spread_pick = None
 
-            # Set Spread Prob
-            spread_prob = (best_spread.get("spread_prob_pick_final")
-                           or best_spread.get("spread_prob_adj")
-                           or best_spread.get("spread_prob")
-                           or best_spread.get("spread_prob_market_based"))
+            # Set Spread Prob (Issue 4: Use helper)
+            spread_prob = _get_canonical_prob(best_spread, "Spread")
 
             # Get Kalshi Spread Probability
             kalshi_spread_prob = (best_spread.get("spread_prob_pick_kalshi")
@@ -310,6 +335,71 @@ def build_game_summary_v2(df: pd.DataFrame) -> pd.DataFrame:
             # --- CALCULATE SPREAD CONSENSUS ---
             spread_consensus_prob, spread_consensus_str = calculate_consensus_for_row(best_spread, "Spread")
 
+            # Validation (Requirement 1) & Auto-Correction (Issue 2)
+            if spread_pick and spread_prob is not None:
+                try:
+                    sp_val = float(spread_prob)
+                    if sp_val < 0.50:
+                        logger.error(f"⚠️ CRITICAL: Spread pick {spread_pick} has prob {sp_val:.3f} < 50%!")
+
+                        # FIX: Flip to the alt pick with higher probability
+                        alt_pick = best_spread.get("spread_alt_label")
+
+                        # If alt_label missing, try to construct it (basic flip logic)
+                        if not alt_pick:
+                            # Try simple parsing of pick string
+                            # Example: "Lakers -5.5" -> "Warriors +5.5" (needs opponent name)
+                            # We have Home/Away in best_spread
+                            h_team = best_spread.get("Home")
+                            a_team = best_spread.get("Away")
+
+                            if h_team and a_team:
+                                # Determine current pick team
+                                new_team = None
+                                s_pick_str = str(spread_pick)
+
+                                # 1. Try full name match
+                                if h_team in s_pick_str:
+                                    new_team = a_team
+                                elif a_team in s_pick_str:
+                                    new_team = h_team
+                                else:
+                                    # 2. Fallback to token match (safely)
+                                    pick_team_match = s_pick_str.split()[0]
+                                    # Only flip if token is unique to one team (avoids "New York" ambiguity)
+                                    in_home = pick_team_match in h_team
+                                    in_away = pick_team_match in a_team
+
+                                    if in_home and not in_away:
+                                        new_team = a_team
+                                    elif in_away and not in_home:
+                                        new_team = h_team
+
+                                if new_team:
+                                    # Flip line sign
+                                    try:
+                                        # Extract line number from string
+                                        # "Team -5.5" -> -5.5
+                                        # "Team +3" -> +3
+                                        match = re.search(r'([+-]?\d+(\.\d+)?)', str(spread_pick))
+                                        if match:
+                                            old_line = float(match.group(1))
+                                            new_line = -old_line
+                                            sign = "+" if new_line > 0 else ""
+                                            alt_pick = f"{new_team} {sign}{new_line:g}"
+                                    except:
+                                        pass
+
+                        if alt_pick:
+                            spread_pick = alt_pick
+                            spread_prob = 1.0 - sp_val  # Flip probability
+                            logger.info(f"✅ Auto-corrected to: {spread_pick} ({spread_prob:.1%})")
+                        else:
+                            logger.error(f"❌ Failed to auto-correct spread pick (no alt label)")
+
+                except (ValueError, TypeError):
+                    pass
+
 
         summary["Spread Pick"] = spread_pick  # Changed from "Spread" to "Spread Pick" to match UI
         summary["Spread Prob"] = spread_prob
@@ -317,13 +407,14 @@ def build_game_summary_v2(df: pd.DataFrame) -> pd.DataFrame:
         summary["SpreadConsensusProb"] = spread_consensus_prob
         summary["SpreadConsensus"] = spread_consensus_str
 
-        # Calculate Kalshi vs Market Delta for Spread
+        # Calculate Kalshi vs Market Delta for Spread (Issue 5: Added try-except)
         if kalshi_spread_prob is not None and spread_market_prob is not None:
             try:
                 delta = float(kalshi_spread_prob) - float(spread_market_prob)
                 summary["Kalshi Spread Δ"] = f"{delta:+.1%}" if abs(delta) > 0.001 else "0.0%"
-            except (ValueError, TypeError):
-                summary["Kalshi Spread Δ"] = None
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Failed to calculate Kalshi Spread Δ: {e}")
+                summary["Kalshi Spread Δ"] = "Error"
         else:
             summary["Kalshi Spread Δ"] = None
 
@@ -342,7 +433,9 @@ def build_game_summary_v2(df: pd.DataFrame) -> pd.DataFrame:
             # Set Total Pick
             # Fix: Avoid "Under 0" and "Under 01" artifacts
             t_line = best_total.get("Line")
-            if best_total.get("Total & Pick"):
+            if best_total.get("total_pick_label"):
+                total_pick = best_total.get("total_pick_label")
+            elif best_total.get("Total & Pick"):
                 total_pick = best_total.get("Total & Pick")
             elif best_total.get("Pick"):
                 try:
@@ -357,10 +450,8 @@ def build_game_summary_v2(df: pd.DataFrame) -> pd.DataFrame:
             else:
                 total_pick = None
 
-            total_prob = (best_total.get("total_prob_pick_final")
-                          or best_total.get("total_prob_adj")
-                          or best_total.get("total_prob")
-                          or best_total.get("total_prob_market_based"))
+            # Set Total Prob (Issue 4: Use helper)
+            total_prob = _get_canonical_prob(best_total, "Total")
 
             # Get Kalshi Total Probability
             kalshi_total_prob = (best_total.get("total_prob_pick_kalshi")
@@ -373,19 +464,47 @@ def build_game_summary_v2(df: pd.DataFrame) -> pd.DataFrame:
             # --- CALCULATE TOTAL CONSENSUS ---
             total_consensus_prob, total_consensus_str = calculate_consensus_for_row(best_total, "Total")
 
+            # Validation & Auto-Correction (Issue 2)
+            if total_pick and total_prob is not None:
+                try:
+                    tp_val = float(total_prob)
+                    if tp_val < 0.50:
+                        logger.error(f"⚠️ CRITICAL: Total pick {total_pick} has prob {tp_val:.3f} < 50%!")
+
+                        # FIX: Flip to the alt pick
+                        alt_pick = best_total.get("total_alt_label")
+
+                        if not alt_pick:
+                            # Try flip Over/Under
+                            if "Over" in str(total_pick):
+                                alt_pick = str(total_pick).replace("Over", "Under")
+                            elif "Under" in str(total_pick):
+                                alt_pick = str(total_pick).replace("Under", "Over")
+
+                        if alt_pick:
+                            total_pick = alt_pick
+                            total_prob = 1.0 - tp_val
+                            logger.info(f"✅ Auto-corrected to: {total_pick} ({total_prob:.1%})")
+                        else:
+                            logger.error(f"❌ Failed to auto-correct total pick")
+
+                except (ValueError, TypeError):
+                    pass
+
         summary["Total Pick"] = total_pick  # Changed from "Total" to "Total Pick" to match UI
         summary["Total Prob"] = total_prob
         summary["Kalshi Total Prob"] = kalshi_total_prob
         summary["TotalConsensusProb"] = total_consensus_prob
         summary["TotalConsensus"] = total_consensus_str
 
-        # Calculate Kalshi vs Market Delta for Total
+        # Calculate Kalshi vs Market Delta for Total (Issue 5: Added try-except)
         if kalshi_total_prob is not None and total_market_prob is not None:
             try:
                 delta = float(kalshi_total_prob) - float(total_market_prob)
                 summary["Kalshi Total Δ"] = f"{delta:+.1%}" if abs(delta) > 0.001 else "0.0%"
-            except (ValueError, TypeError):
-                summary["Kalshi Total Δ"] = None
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Failed to calculate Kalshi Total Δ: {e}")
+                summary["Kalshi Total Δ"] = "Error"
         else:
             summary["Kalshi Total Δ"] = None
 
@@ -441,17 +560,22 @@ def build_game_summary_v2(df: pd.DataFrame) -> pd.DataFrame:
             t_p = _get_prob(summary, "Total Prob")
             total_conf = _get_confidence(group, "Total")
 
-            # Add spread to eligible if valid
-            if (spread_pick and s_p is not None and
-                _is_valid_prob_range(s_p) and
-                spread_conf in ["MEDIUM", "HIGH"]):
-                eligible.append(("SPREAD", spread_pick, s_p))
+            # Issue 3: Explicit check for Spread prob validity (logging)
+            if spread_pick and s_p is not None:
+                if not _is_valid_prob_range(s_p):
+                    # Only log if it's significantly below 50 (e.g. not 49.9 due to float errors)
+                    if s_p < 0.499:
+                        logger.error(f"🚨 CRITICAL BUG: Spread pick {spread_pick} has prob {s_p:.1%} < 50%! Skipping eligibility.")
+                elif spread_conf in ["MEDIUM", "HIGH"]:
+                    eligible.append(("SPREAD", spread_pick, s_p))
 
-            # Add total to eligible if valid
-            if (total_pick and t_p is not None and
-                _is_valid_prob_range(t_p) and
-                total_conf in ["MEDIUM", "HIGH"]):
-                eligible.append(("TOTAL", total_pick, t_p))
+            # Issue 3: Explicit check for Total prob validity (logging)
+            if total_pick and t_p is not None:
+                if not _is_valid_prob_range(t_p):
+                    if t_p < 0.499:
+                        logger.error(f"🚨 CRITICAL BUG: Total pick {total_pick} has prob {t_p:.1%} < 50%! Skipping eligibility.")
+                elif total_conf in ["MEDIUM", "HIGH"]:
+                    eligible.append(("TOTAL", total_pick, t_p))
 
         # Select best pick from eligible list
         if eligible:

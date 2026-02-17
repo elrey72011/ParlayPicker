@@ -1,3 +1,5 @@
+from app_core.probability_utils import american_to_implied_prob
+
     if "master_df" in st.session_state:
             del st.session_state["master_df"]
     st.session_state["_last_selected_sports"] = selected_sports
@@ -191,11 +193,13 @@ with tab_games:
             spread_line = None
             home_spread_prob = american_to_implied_prob(r.get("home_spread_price"))
             away_spread_prob = american_to_implied_prob(r.get("away_spread_price"))
-            if r.get("home_spread_point") is not None:
-                spread_pick = r["Home"]
-                spread_pick_prob = home_spread_prob
-                spread_line = r.get("home_spread_point")
-                if away_spread_prob is not None and (away_spread_prob >= (home_spread_prob or 0)):
+
+            if home_spread_prob is not None and away_spread_prob is not None:
+                if home_spread_prob >= away_spread_prob:
+                    spread_pick = r["Home"]
+                    spread_pick_prob = home_spread_prob
+                    spread_line = r.get("home_spread_point")
+                else:
                     spread_pick = r["Away"]
                     spread_pick_prob = away_spread_prob
                     spread_line = r.get("away_spread_point")

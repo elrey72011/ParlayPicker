@@ -30,6 +30,8 @@ from app_core.kalshi_integrator import (
     match_game_to_kalshi,
 )
 
+from app_core.probability_utils import american_to_implied_prob, american_to_implied
+
 from app_core.llm_assistant import generate_confidence_explanation, initialize_gemini, generate_batch_confidence_explanation, generate_pick_rationale
 
 from app_core.reddit_sentiment import fetch_reddit_sentiment_map
@@ -99,6 +101,7 @@ from app_core.weights_config import (
 
 from app_core.consensus_ingest import enrich_with_consensus
 from app_core.odds_api import filter_games_today_only
+from app_core.probability_utils import american_to_implied_prob, american_to_implied
 
 
 try:
@@ -424,28 +427,32 @@ def select_best_spread_pick(
             'alt_side': str
         }
     """
+    # Fix: Handle None values gracefully
+    p_home = prob_home_covers if prob_home_covers is not None else 0.0
+    p_away = prob_away_covers if prob_away_covers is not None else 0.0
+
     # ALWAYS pick the higher probability
-    if prob_home_covers >= prob_away_covers:
+    if p_home >= p_away:
         # Home is better pick
         pick_team = home_team
         pick_line = spread_line  # e.g. -8.5
-        pick_prob = prob_home_covers
+        pick_prob = p_home
         pick_side = "home"
 
         alt_team = away_team
         alt_line = -spread_line  # Flip sign: +8.5
-        alt_prob = prob_away_covers
+        alt_prob = p_away
         alt_side = "away"
     else:
         # Away is better pick
         pick_team = away_team
         pick_line = -spread_line  # Flip sign: +8.5
-        pick_prob = prob_away_covers
+        pick_prob = p_away
         pick_side = "away"
 
         alt_team = home_team
         alt_line = spread_line  # e.g. -8.5
-        alt_prob = prob_home_covers
+        alt_prob = p_home
         alt_side = "home"
 
     # Format labels with line
@@ -515,16 +522,20 @@ def select_best_total_pick(
             'alt_side': str
         }
     """
-    if prob_over >= prob_under:
+    # Fix: Handle None values gracefully
+    p_over = prob_over if prob_over is not None else 0.0
+    p_under = prob_under if prob_under is not None else 0.0
+
+    if p_over >= p_under:
         pick_side = "Over"
-        pick_prob = prob_over
+        pick_prob = p_over
         alt_side = "Under"
-        alt_prob = prob_under
+        alt_prob = p_under
     else:
         pick_side = "Under"
-        pick_prob = prob_under
+        pick_prob = p_under
         alt_side = "Over"
-        alt_prob = prob_over
+        alt_prob = p_over
 
     pick_label = f"{pick_side} {total_line}"
     alt_label = f"{alt_side} {total_line}"
@@ -990,13 +1001,13 @@ def prob_arrow(base: Any, adj: Any, threshold: float = 0.0075) -> str:
         return ""
 
 
-def market_prob_from_prices(yes_price: Any, no_price: Any) -> Optional[float]:
+def market_prob_from_prices(yes_bid: Any, no_bid: Any) -> Optional[float]:
     """
     Convert Kalshi yes/no prices (0-100) into a probability using midpoint normalization.
     """
     try:
-        y = safe_float(yes_price)
-        n = safe_float(no_price)
+        y = safe_float(yes_bid)
+        n = safe_float(no_bid)
         if y is None and n is None:
             return None
         if y is None:
@@ -1228,6 +1239,25 @@ def map_kalshi_prob_for_pick(
     if not pick_side:
         return prob
 
+    # ---------------------------------------------------------
+    # PRIMARY CHECK: Strict Side Comparison
+    # Handles explicit "home"/"away" or "over"/"under" signals
+    # ---------------------------------------------------------
+    k_side = (kalshi_yes_side or "").lower().strip()
+    p_side = (pick_side or "").lower().strip()
+
+    # Spread/ML (Home/Away)
+    if k_side in ["home", "away"] and p_side in ["home", "away"]:
+        return prob if k_side == p_side else 1.0 - prob
+
+    # Totals (Over/Under)
+    if k_side in ["over", "under"] and p_side in ["over", "under"]:
+        return prob if k_side == p_side else 1.0 - prob
+
+    # ---------------------------------------------------------
+    # FALLBACK: Team Name Matching & Side Inference
+    # ---------------------------------------------------------
+
     # Determine which team is which side
     pick_is_home = False
     if pick_side.lower() == "home":
@@ -1240,30 +1270,91 @@ def map_kalshi_prob_for_pick(
             pick_is_home = TeamNameMatcher.normalize(pick_team) == TeamNameMatcher.normalize(home_team)
 
     # Resolve Kalshi Yes Side to Home/Away
-    kalshi_yes_is_home = False
+    kalshi_yes_is_home = None # Change default to None to detect failure
     kalshi_yes_norm = TeamNameMatcher.normalize(kalshi_yes_side) if kalshi_yes_side else ""
 
-    # NEW LOGIC: Handle Over/Under phrasing in spread markets
+    # Pre-compute team norms
+    home_norm = TeamNameMatcher.normalize(home_team) if home_team else None
+    away_norm = TeamNameMatcher.normalize(away_team) if away_team else None
+    pick_norm = TeamNameMatcher.normalize(pick_team) if pick_team else None
+
+    # 1. Direct Pick Match (Strongest Signal)
+    # If the "Yes" side explicitly matches the Pick Team, return Prob.
+    # FIX: Handle "Team A vs Team B" titles to prevent matching BOTH teams via containment.
+    is_matchup_str = " VS " in kalshi_yes_norm or " @ " in kalshi_yes_norm
+
+    if pick_norm and kalshi_yes_norm:
+        if is_matchup_str:
+            # Split by separator to correctly identify sides
+            # "LAKERS VS CELTICS" -> Left=Lakers (Yes), Right=Celtics (No)
+            parts = []
+            if " VS " in kalshi_yes_norm:
+                parts = kalshi_yes_norm.split(" VS ")
+            elif " @ " in kalshi_yes_norm:
+                parts = kalshi_yes_norm.split(" @ ")
+
+            if parts and len(parts) >= 1:
+                left_side = parts[0]
+                # If pick is in the Left Side (Yes Side), return prob
+                if pick_norm in left_side:
+                    return prob
+                # If pick is in the Right Side (No Side), return 1 - prob
+                # This handles "Lakers vs Celtics" where Pick="Celtics"
+                if len(parts) >= 2 and pick_norm in parts[1]:
+                    return 1.0 - prob
+
+        elif pick_norm in kalshi_yes_norm:
+            return prob
+
+    # If "Yes" side matches the Opposing Team, return 1 - Prob.
+    # Check if pick is home/away to find opponent
+    opponent_norm = None
+    if pick_is_home and away_norm: opponent_norm = away_norm
+    elif not pick_is_home and home_norm: opponent_norm = home_norm
+
+    if opponent_norm and kalshi_yes_norm:
+        if is_matchup_str:
+            # Split logic for Opponent check as well
+            parts = []
+            if " VS " in kalshi_yes_norm:
+                parts = kalshi_yes_norm.split(" VS ")
+            elif " @ " in kalshi_yes_norm:
+                parts = kalshi_yes_norm.split(" @ ")
+
+            if parts and len(parts) >= 1:
+                left_side = parts[0]
+                # If Opponent is in Left Side (Yes Side), then Pick is No Side -> 1 - prob
+                if opponent_norm in left_side:
+                    return 1.0 - prob
+                # If Opponent is in Right Side (No Side), then Pick is Yes Side -> prob
+                if len(parts) >= 2 and opponent_norm in parts[1]:
+                    return prob
+
+        elif opponent_norm in kalshi_yes_norm:
+            return 1.0 - prob
+
+    # 2. Side Inference (Home/Away/Over/Under)
     if "OVER" in kalshi_yes_norm:
-        # Over generally maps to Home in standard spread markets (Diff = Home - Away)
-        kalshi_yes_is_home = True
+        kalshi_yes_is_home = True # Over -> Home in spread
     elif "UNDER" in kalshi_yes_norm:
-        # Under generally maps to Away
         kalshi_yes_is_home = False
     elif kalshi_yes_norm == "HOME":
         kalshi_yes_is_home = True
     elif kalshi_yes_norm == "AWAY":
         kalshi_yes_is_home = False
-    elif home_team and kalshi_yes_norm == TeamNameMatcher.normalize(home_team):
+    elif home_norm and home_norm in kalshi_yes_norm:
         kalshi_yes_is_home = True
-    elif away_team and kalshi_yes_norm == TeamNameMatcher.normalize(away_team):
+    elif away_norm and away_norm in kalshi_yes_norm:
         kalshi_yes_is_home = False
-    else:
-        # If we can't resolve Kalshi side, we assume it matches Home if ambiguous?
-        # Or we rely on it being Home by default for spread/ML usually?
-        # Let's assume Yes = Home if not specified as Away
-        # But logging is key here.
-        pass
+
+    # Fallback: If we couldn't determine, assume Home if default (legacy behavior)
+    # But only if we have high confidence or no other option.
+    if kalshi_yes_is_home is None:
+        # If we can't match names, we can't be sure.
+        # But to match "legacy" behavior where we assumed Yes=Home, we might set True.
+        # However, to avoid 1.4 sum anomaly, we must be consistent.
+        # If we default to True here, we must ensure we don't accidentally default to False elsewhere.
+        kalshi_yes_is_home = True # Defaulting to Home
 
     # Map Kalshi yes probability to pick
     if kalshi_yes_is_home:
@@ -1527,7 +1618,7 @@ def compute_final_probability(
             # with book odds (e.g., Kalshi 0.76 vs book 0.35 → delta 0.41 → rejected).
             if delta > 0.55:  # 55% threshold - only reject truly extreme mismatches
                 # Extreme disagreement likely means wrong Kalshi line was matched
-                kalshi_validated = False
+                # kalshi_validated = False # RELAXED: User requested removal of aggressive filters
                 warnings.append(f"kalshi_validation_failed(delta={delta:.2f})")
 
         if kalshi_validated:
@@ -2014,8 +2105,14 @@ def enrich_picks_with_roi_metrics(df: pd.DataFrame) -> pd.DataFrame:
     metrics_data['market_stability'] = df.apply(classify_stability, axis=1)
 
     # Concatenate the new metrics
-    df = pd.concat([df, pd.DataFrame(metrics_data, index=df.index)], axis=1)
-    df = df.copy()
+    new_metrics_df = pd.DataFrame(metrics_data, index=df.index)
+
+    # Drop existing columns if they exist
+    cols_to_drop = [c for c in new_metrics_df.columns if c in df.columns]
+    if cols_to_drop:
+        df = df.drop(columns=cols_to_drop)
+
+    df = pd.concat([df, new_metrics_df], axis=1).copy()
     
     # 3. Handle 'Market_Badge' Labeling - Vectorized
     if 'Market_Badge' in df.columns:
@@ -2174,6 +2271,45 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
         # This prevents champion selection from comparing pre-flip sub-50% values
         if s_prob is not None and s_prob < 0.50:
             s_prob = 1.0 - s_prob
+            # FLIP PICK: If probability flips, pick must flip to the other side
+            alt_s = _safe_str("spread_alt_label")
+            if alt_s:
+                s_pick = alt_s
+            elif s_pick:
+                # Fallback: Try to parse and flip if alt label is missing
+                # e.g., "Lakers -5.5" -> "Warriors +5.5"
+                h_team = row.get("Home")
+                a_team = row.get("Away")
+                if h_team and a_team:
+                    new_team = None
+                    s_pick_str = str(s_pick)
+
+                    # 1. Try full name match
+                    if h_team in s_pick_str:
+                        new_team = a_team
+                    elif a_team in s_pick_str:
+                        new_team = h_team
+                    else:
+                        # 2. Fallback to token match (safely)
+                        pick_team_match = s_pick_str.split()[0]
+                        in_home = pick_team_match in h_team
+                        in_away = pick_team_match in a_team
+
+                        if in_home and not in_away:
+                            new_team = a_team
+                        elif in_away and not in_home:
+                            new_team = h_team
+
+                    if new_team:
+                        try:
+                            match = re.search(r'([+-]?\d+(\.\d+)?)', s_pick)
+                            if match:
+                                old_line = float(match.group(1))
+                                new_line = -old_line
+                                sign = "+" if new_line > 0 else ""
+                                s_pick = f"{new_team} {sign}{new_line:g}"
+                        except:
+                            pass
         s_edge = _safe("spread_edge") or 0.0
 
         # Total
@@ -2184,6 +2320,16 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
         # Ensure we use the winning-side probability (post-flip)
         if t_prob is not None and t_prob < 0.50:
             t_prob = 1.0 - t_prob
+            # FLIP PICK: If probability flips, pick must flip to the other side
+            alt_t = _safe_str("total_alt_label")
+            if alt_t:
+                t_pick = alt_t
+            else:
+                # Fallback simple flip for Total if alt label missing
+                if t_pick and "Over" in t_pick:
+                    t_pick = t_pick.replace("Over", "Under")
+                elif t_pick and "Under" in t_pick:
+                    t_pick = t_pick.replace("Under", "Over")
         t_edge = _safe("total_edge") or 0.0
 
         # Moneyline
@@ -2377,14 +2523,22 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
             ml_eligible, ml_suppressed_reason, candidate_types_str,
             moneyline_disabled, moneyline_disabled_reason,
             glance_conf,
-            confidence_reason
+            confidence_reason,
+            s_pick,
+            t_pick,
+            s_prob,
+            t_prob
         ], index=[
             "best_pick_type", "best_pick", "final_prob", "Best_ST_Reason", "edge",
             "Bet_Confidence", "Bet_Lean", "Bet_Confidence_Score",
             "ml_eligible", "ml_suppressed_reason", "candidate_types_available",
             "moneyline_disabled", "moneyline_disabled_reason",
             "At_a_Glance_Confidence",
-            "confidence_reason"
+            "confidence_reason",
+            "Spread & Pick",
+            "Total & Pick",
+            "spread_prob_pick_final",
+            "total_prob_pick_final"
         ])
 
     # Batch apply
@@ -5036,45 +5190,6 @@ def canonical_league_key(raw: Optional[str]) -> str:
     }
     return mapping.get(val, val)
 
-def american_to_implied(odds: Any) -> Optional[float]:
-    """Convert American odds to implied probability; returns None on invalid/missing."""
-    try:
-        o = float(odds)
-        if o == 0:
-            return None
-        if o > 0:  # +120
-            return 100.0 / (o + 100.0)
-        return (-o) / ((-o) + 100.0)
-    except Exception:
-        return None
-
-def american_to_implied_prob(odds: Any) -> Optional[float]:
-    """
-    Convert American odds to implied probability with defensive caps for extreme values.
-
-    Extreme odds (|odds| > 900) are capped to prevent unrealistic probabilities (>0.90 or <0.10).
-    This helps NHL and other leagues with heavy favorites avoid probability collisions.
-    """
-    if odds is None:
-        return None
-    try:
-        o = float(odds)
-    except Exception:
-        return None
-
-    # Cap extreme odds to prevent unrealistic probabilities
-    # -900 converts to ~0.90, which is more reasonable than -990 -> 0.99
-    if o < -900:
-        o = -900
-    elif o > 900:
-        o = 900
-
-    if o > 0:
-        return 100.0 / (o + 100.0)
-    if o < 0:
-        return (-o) / ((-o) + 100.0)
-    return None
-
 def _normalize_point_for_market(point: Any, market: str) -> Optional[float]:
     val = safe_float(point)
     if val is None:
@@ -5745,6 +5860,12 @@ def fetch_odds_games(sport_key: str, run_id: Optional[str] = None) -> List[Dict[
             else:
                 logger.info(f"🔍 Fetching odds from TheOddsAPI for sport: {sport_key} (run_id: {run_id or 'N/A'})")
 
+            # DIAGNOSTIC: Log request details (masking API key)
+            safe_params = dict(params)
+            if "apiKey" in safe_params:
+                safe_params["apiKey"] = "MASKED"
+            logger.info(f"THEODDS REQ: url={url}, params={safe_params}")
+
             resp = requests.get(url, params=params, timeout=15)
 
             # Log response metadata for debugging empty responses
@@ -6048,6 +6169,11 @@ def fetch_kalshi_markets(
 
     logger.info(f"KALSHI FETCH START - League: {league_upper}")
     logger.info(f"  Pagination: {_pages_needed} pages (expect ~{_pages_needed * 200} markets)")
+    # DIAGNOSTIC: Confirm league detection for pagination
+    if league_upper in ["NCAAB", "NCAAF"]:
+        logger.info(f"  ✅ High-volume league detected: {league_upper} -> {_pages_needed} pages")
+    else:
+        logger.info(f"  ℹ️ Standard league detected: {league_upper} -> {_pages_needed} pages")
 
     try:
         markets_raw = kalshi_integrator.get_league_markets(
@@ -6740,10 +6866,10 @@ def filter_kalshi_game_markets(
                 # Use safe strings for teams
                 h_score = fuzz.partial_ratio(str(home_team).lower(), title)
                 a_score = fuzz.partial_ratio(str(away_team).lower(), title)
-                if h_score > 70 and a_score > 70:  # Team names in title
+                if h_score > 60 and a_score > 60:  # Team names in title (Lowered to 60)
                     fuzzy.append(m)
             matched = fuzzy[:20]  # Top 20 fuzzy
-            logger.info(f"NCAAB FUZZY MATCH {away_team}@{home_team}: {len(matched)} found")
+            logger.info(f"NCAAB FUZZY MATCH {away_team}@{home_team}: {len(matched)} found (thresh=60)")
             logger.info(f"{away_team}@{home_team}: exact=0, fuzzy={len(matched)}")
 
         if not matched and markets:
@@ -6944,6 +7070,7 @@ def _match_kalshi_market_impl(
     kalshi_markets: List[Dict[str, Any]],
     winner_reason_override: Optional[str] = None,
 ) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, List[Dict[str, Any]]]]:
+    logger.info(f"🟢 _match_kalshi_market_impl: received {len(kalshi_markets)} markets")
     # Use fuzzy matching for team names
     if rapidfuzz is not None:
         fuzz_scorer = fuzz.token_set_ratio
@@ -7362,9 +7489,10 @@ def _match_kalshi_market_impl(
     else:
         # LOG MATCH FAILURES (~line 8700 before return None)
         if not best_winner:
-            logger.warning(f"NCAAB NO MATCH: {game.get('away_team')}@{game.get('home_team')} | bestscore={best_score if 'best_score' in locals() else 0} | markets={len(kalshi_markets)}")
-            sample_titles = [m.get('title', '')[:50] for m in kalshi_markets[:3]]
-            logger.warning(f"Sample titles: {sample_titles}")
+            logger.warning(f"❌ NO MATCH for {game.get('home_team')} vs {game.get('away_team')}")
+            logger.warning(f"   Available market team names: {[m.get('ticker', m.get('title', '')) for m in kalshi_markets[:5]]}")
+            logger.warning(f"   Game teams: home='{normalize_team_name(game.get('home_team'))}' away='{normalize_team_name(game.get('away_team'))}'")
+            logger.warning(f"   Original failure log: {game.get('away_team')}@{game.get('home_team')} | bestscore={best_score if 'best_score' in locals() else 0} | markets={len(kalshi_markets)}")
 
         no_reason = winner_reason_override or best_reason or "no_winner_market_for_game"
         winner_result = base_result(no_reason, "winner")
@@ -7535,9 +7663,31 @@ def _match_kalshi_market_impl(
         "kalshi_wanted_tokens": allowed_date_tokens,
     }
 
+    total_res = simple_select(totals, "total")
+    spread_res = simple_select(spreads, "spread")
+
+    # Fallback Logic: If one missing, use the other (User Request: "Accept ANY Kalshi market")
+    if not spread_res["kalshi_matched"] and total_res["kalshi_matched"]:
+        logger.info(f"⚠️ SPREAD missing, falling back to TOTAL for {game.get('home_team')} vs {game.get('away_team')}")
+        spread_res = total_res.copy()
+        # Mark as fallback so we know it's not a real spread
+        spread_res["kalshi_label"] = "matched_total_fallback"
+        spread_res["kalshi_reason"] = "no_spread_market_used_total"
+        # Note: We keep kalshi_market_type as "total" to be honest about source
+
+    if not total_res["kalshi_matched"] and spread_res["kalshi_matched"]:
+        # If spread_res was just fallback-ed from total, don't fallback back!
+        # But here we check if total_res failed (it didn't if we just used it for spread)
+        # So this only fires if total failed initially AND spread succeeded initially
+        logger.info(f"⚠️ TOTAL missing, falling back to SPREAD for {game.get('home_team')} vs {game.get('away_team')}")
+        total_res = spread_res.copy()
+        # Mark as fallback
+        total_res["kalshi_label"] = "matched_spread_fallback"
+        total_res["kalshi_reason"] = "no_total_market_used_spread"
+
     return {
-        "total": simple_select(totals, "total"),
-        "spread": simple_select(spreads, "spread"),
+        "total": total_res,
+        "spread": spread_res,
         "winner": winner_result,
     }, candidate_debug
 
@@ -7787,7 +7937,7 @@ def load_games(selected_leagues: Union[str, List[str]], run_id: Optional[str] = 
             g.get("sport_key"),
             g.get("home_team"),
             g.get("away_team"),
-            g.get("commence_time_iso_utc"),
+            g.get("commence_time_iso_utc") or str(g.get("commence_time")),
         )
         if key not in deduped:
             deduped[key] = g
@@ -8082,6 +8232,24 @@ if "theover_debug_log" in st.session_state and st.session_state["theover_debug_l
 # Master results export (available after analysis)
 if "master_results_df" in st.session_state:
     master_df = st.session_state["master_results_df"]
+
+    # FIX: Ensure export includes ALL picks, even if master_results_df was filtered by UI
+    # Check against full master_df in session state
+    if "master_df" in st.session_state:
+        full_master_df = st.session_state["master_df"]
+        if full_master_df is not None and not full_master_df.empty:
+            if len(full_master_df) > len(master_df):
+                logger.info(f"⚠️ Export Mismatch Detected: master_results_df has {len(master_df)} rows, but master_df has {len(full_master_df)}. Restoring missing rows for export.")
+
+                # Reconstruct master_results_df using the full dataset but keeping the correct columns
+                # This ensures we get all rows (including LOW confidence) while maintaining the export schema
+                export_cols = [c for c in master_df.columns if c in full_master_df.columns]
+
+                # If crucial columns are missing, we might have issues, but this is a fallback
+                if len(export_cols) > 0:
+                    master_df = full_master_df[export_cols].copy()
+                    logger.info(f"✅ Restored export dataframe to {len(master_df)} rows.")
+
     if master_df is not None and not master_df.empty:
         try:
             from datetime import datetime
@@ -9865,6 +10033,11 @@ with tab_master:
                 filtered_markets = list(deduped.values())
                 filtered_counts.append(len(filtered_markets))
 
+                # USER REQUESTED LOGGING
+                logger.info(f"📥 Total Kalshi markets fetched: {len(league_markets)}")
+                logger.info(f"📊 Markets after filtering for {league_name}: {len(filtered_markets)}")
+                logger.info(f"🎯 Attempting match for {g.get('home_team')} vs {g.get('away_team')}")
+
                 # DIAGNOSTIC: Log filtered market count
                 if idx < 3:
                     logger.info(f"🔍 KALSHI FILTERING: Game {idx+1} has {len(filtered_markets)} markets after filtering")
@@ -9915,7 +10088,18 @@ with tab_master:
                 per_game_kalshi_debug.append(candidate_debug)
                 # Dictionary Store: Use unique game key
                 # Robust against list index errors (User Request: "Eliminate IndexError")
-                _k_id = f"{league_name}::{home}::{away}::{commence_iso}"
+
+                # --- COLLISION FIX: Canonical Key Generation ---
+                # Normalize team names to prevent ordering/naming mismatches
+                _h_norm = TeamNameMatcher.normalize(home)
+                _a_norm = TeamNameMatcher.normalize(away)
+                # Sort teams alphabetically to ensure consistency (Home/Away vs Away/Home)
+                _teams_sorted = sorted([_h_norm, _a_norm])
+                # Use date only from commence_iso (YYYY-MM-DD) to avoid timezone/time mismatches
+                _date_only = str(commence_iso)[:10] if commence_iso and len(str(commence_iso)) >= 10 else "UNKNOWN_DATE"
+
+                _k_id = f"{league_name}::{_teams_sorted[0]}::{_teams_sorted[1]}::{_date_only}"
+
                 kalshi_match_results[_k_id] = {
                     "game": g, "matches": kalshi_matches, "candidate_debug": candidate_debug
                 }
@@ -9927,14 +10111,16 @@ with tab_master:
                     if _kticker and _km.get("kalshi_matched"):
                         if _kticker in _kalshi_ticker_owners:
                             _prev_owner = _kalshi_ticker_owners[_kticker]
-                            logger.warning(
-                                f"🚨 KALSHI TICKER COLLISION: {_kticker} ({_mtype}) "
-                                f"claimed by [{_k_id}] but already used by [{_prev_owner}]. "
-                                f"Rejecting duplicate — setting kalshi_matched=False."
-                            )
-                            _km["kalshi_matched"] = False
-                            _km["kalshi_reason"] = f"collision_with_{_prev_owner}"
-                            _km["kalshi_prob"] = None
+                            # Allow overwrite if the owner is the same canonical game (duplicate row processing)
+                            if _prev_owner != _k_id:
+                                logger.warning(
+                                    f"🚨 KALSHI TICKER COLLISION: {_kticker} ({_mtype}) "
+                                    f"claimed by [{_k_id}] but already used by [{_prev_owner}]. "
+                                    f"Rejecting duplicate — setting kalshi_matched=False."
+                                )
+                                _km["kalshi_matched"] = False
+                                _km["kalshi_reason"] = f"collision_with_{_prev_owner}"
+                                _km["kalshi_prob"] = None
                         else:
                             _kalshi_ticker_owners[_kticker] = _k_id
 
@@ -10346,6 +10532,12 @@ with tab_master:
                     league_name
                 )
 
+                # --- KALSHI FORCE & DEBUG (User Request) ---
+                if _spread_kalshi_matched:
+                    # FORCE Kalshi usage for testing/fix
+                    spread_weights["kalshi_weight"] = 0.55
+                    logger.info(f"💪 FORCE Kalshi SPREAD weight to 0.55 for {home} vs {away}")
+
                 # DEBUG: Log spread probability calculation inputs (v98: show pick-side Kalshi prob)
                 logger.info(f"SPREAD PROB CALC for {home} vs {away}: spread_pick_side={spread_pick_side_key}, spread_market={spread_prob_market:.4f}, spread_implied={spread_implied}, kalshi={kalshi_prob_spread_for_pick}")
 
@@ -10366,6 +10558,13 @@ with tab_master:
                     away_team=away,
                     kalshi_data=kalshi_spread if kalshi_spread.get("kalshi_matched") else None,
                 )
+
+                # --- KALSHI USAGE DEBUGGING ---
+                if _spread_kalshi_matched and spread_weights_used.get("w_kalshi", 0) == 0:
+                    logger.warning(f"⚠️ Kalshi SPREAD matched but NOT USED for {home} vs {away}")
+                    logger.warning(f"   Kalshi prob: {kalshi_prob_spread_for_pick}")
+                    logger.warning(f"   Market prob: {spread_prob_market}")
+                    logger.warning(f"   Warnings: {spread_warnings_new}")
 
                 # REMOVED: Misplaced sentiment debug capture code (lines 9130-9165)
                 # This code was trying to use undefined variable 'row' before row objects were created
@@ -10482,6 +10681,12 @@ with tab_master:
                     league_name
                 )
 
+                # --- KALSHI FORCE & DEBUG (User Request) ---
+                if _total_kalshi_matched:
+                    # FORCE Kalshi usage for testing/fix
+                    total_weights["kalshi_weight"] = 0.55
+                    logger.info(f"💪 FORCE Kalshi TOTAL weight to 0.55 for {home} vs {away}")
+
                 # DEBUG: Log total probability calculation inputs (v98: show pick-side Kalshi prob)
                 logger.info(f"TOTAL PROB CALC for {home} vs {away}: total_pick_side={total_pick_side_key}, total_market={total_prob_market:.4f}, total_implied={total_implied}, kalshi={kalshi_prob_total_for_pick}")
 
@@ -10500,6 +10705,13 @@ with tab_master:
                     away_team=away,
                     kalshi_data=kalshi_total if kalshi_total.get("kalshi_matched") else None,
                 )
+
+                # --- KALSHI USAGE DEBUGGING ---
+                if _total_kalshi_matched and total_weights_used.get("w_kalshi", 0) == 0:
+                    logger.warning(f"⚠️ Kalshi TOTAL matched but NOT USED for {home} vs {away}")
+                    logger.warning(f"   Kalshi prob: {kalshi_prob_total_for_pick}")
+                    logger.warning(f"   Market prob: {total_prob_market}")
+                    logger.warning(f"   Warnings: {total_warnings_new}")
 
                 # Calculate TheOver Impact (Invariant: delta = final - without)
                 if theover_prob_final_total is not None:
@@ -12003,66 +12215,66 @@ with tab_master:
                     "At_a_Glance_Score": None,
                     "At_a_Glance_Reason": None,
                 }
-                # Append the total_row that was just created
-                total_row["consensus_prob"] = total_base_prob
-                total_row["consensus_prob_adj"] = total_prob_final
-                total_row["prob_reason"] = total_prob_reason
-                conf, reason_short, eligible = score_pick_confidence(total_row)
-                width_total = (total_max - total_min) if (total_max is not None and total_min is not None) else 0.0
-                # Downgrade based on market quality (not blanket downgrade)
-                if (width_total and width_total >= 4.5) and conf == "HIGH":
-                    conf = "MEDIUM"  # Wide market reduces confidence
-                if len(total_books_map) <= 1:
-                    # Thin market: cap at MEDIUM, or LOW if already low
-                    if conf == "HIGH":
-                        conf = "MEDIUM"
-                    elif conf == "MEDIUM":
-                        conf = "LOW"
-                    eligible = False
-                total_row["Pick_Confidence"] = conf
-                total_row["Pick_Reason_Short"] = reason_short
-                total_row["confidence_reason"] = reason_short
-                _dec_base_total = safe_float(total_row.get("final_probability"))
-                total_row["decisiveness"] = abs(_dec_base_total - 0.5) * 2 if _dec_base_total is not None else None
-                trace_short, trace_json, decision_trace_full = build_decision_trace(
-                    "total",
-                    total_row.get("Pick") or "",
-                    total_row.get("Implied_Prob"),
-                    total_row.get("kalshi_prob"),
-                    total_row.get("AI_Prob"),
-                    total_row.get("sentiment_adj"),
-                    total_weights_used,
-                    total_row.get("final_probability"),
-                    conf,
-                    league_name,
-                    bool(kalshi_total.get("kalshi_matched")),
-                    kalshi_total.get("kalshi_reason"),
-                    total_row.get("sentiment_score"),
-                    total_row.get("sentiment_label"),
-                    model_used_for_total,
-                    reason_short,
-                    warnings,
-                    kalshi_total.get("kalshi_yes_side") or "over",
-                    total_kalshi_prob_for_pick,
-                )
-                trace_json_str = trace_json if isinstance(trace_json, str) else json.dumps(trace_json)
-                total_row["decision_trace_short"] = trace_short
-                total_row["decision_trace_json"] = trace_json_str
-                total_row["decision_trace"] = decision_trace_full
-                store_decision_trace_sample(
-                    league_name,
-                    home,
-                    away,
-                    "total",
-                    total_row.get("Pick"),
-                    total_row.get("final_probability"),
-                    trace_json_str,
-                )
-                total_row["Eligible_Top_Picks"] = eligible
-                total_row = apply_sentiment_defaults(total_row, sentiment_defaults_base)
-                accumulated_rows.append(total_row)
-                total_row_created = True
-                master_stats["market_rows_out"] += 1
+                    # Append the total_row that was just created
+                    total_row["consensus_prob"] = total_base_prob
+                    total_row["consensus_prob_adj"] = total_prob_final
+                    total_row["prob_reason"] = total_prob_reason
+                    conf, reason_short, eligible = score_pick_confidence(total_row)
+                    width_total = (total_max - total_min) if (total_max is not None and total_min is not None) else 0.0
+                    # Downgrade based on market quality (not blanket downgrade)
+                    if (width_total and width_total >= 4.5) and conf == "HIGH":
+                        conf = "MEDIUM"  # Wide market reduces confidence
+                    if len(total_books_map) <= 1:
+                        # Thin market: cap at MEDIUM, or LOW if already low
+                        if conf == "HIGH":
+                            conf = "MEDIUM"
+                        elif conf == "MEDIUM":
+                            conf = "LOW"
+                        eligible = False
+                    total_row["Pick_Confidence"] = conf
+                    total_row["Pick_Reason_Short"] = reason_short
+                    total_row["confidence_reason"] = reason_short
+                    _dec_base_total = safe_float(total_row.get("final_probability"))
+                    total_row["decisiveness"] = abs(_dec_base_total - 0.5) * 2 if _dec_base_total is not None else None
+                    trace_short, trace_json, decision_trace_full = build_decision_trace(
+                        "total",
+                        total_row.get("Pick") or "",
+                        total_row.get("Implied_Prob"),
+                        total_row.get("kalshi_prob"),
+                        total_row.get("AI_Prob"),
+                        total_row.get("sentiment_adj"),
+                        total_weights_used,
+                        total_row.get("final_probability"),
+                        conf,
+                        league_name,
+                        bool(kalshi_total.get("kalshi_matched")),
+                        kalshi_total.get("kalshi_reason"),
+                        total_row.get("sentiment_score"),
+                        total_row.get("sentiment_label"),
+                        model_used_for_total,
+                        reason_short,
+                        warnings,
+                        kalshi_total.get("kalshi_yes_side") or "over",
+                        total_kalshi_prob_for_pick,
+                    )
+                    trace_json_str = trace_json if isinstance(trace_json, str) else json.dumps(trace_json)
+                    total_row["decision_trace_short"] = trace_short
+                    total_row["decision_trace_json"] = trace_json_str
+                    total_row["decision_trace"] = decision_trace_full
+                    store_decision_trace_sample(
+                        league_name,
+                        home,
+                        away,
+                        "total",
+                        total_row.get("Pick"),
+                        total_row.get("final_probability"),
+                        trace_json_str,
+                    )
+                    total_row["Eligible_Top_Picks"] = eligible
+                    total_row = apply_sentiment_defaults(total_row, sentiment_defaults_base)
+                    accumulated_rows.append(total_row)
+                    total_row_created = True
+                    master_stats["market_rows_out"] += 1
 
                 # --- 5. FALLBACK: "NONE" MARKET ROW ---
                 if not (g.get("home_ml_price") or g.get("home_spread_point") or g.get("total_point")):
@@ -12884,89 +13096,103 @@ with tab_master:
                     best_prob = []
                     best_type = []
 
+                    # Prepare lists for updated pick strings to ensure consistency
+                    spread_pick_updated = []
+                    total_pick_updated = []
+
                     for idx, row in temp.iterrows():
                         # Use consensus probabilities for comparison (what user sees)
                         s_final_prob = safe_float(row.get("SpreadConsensusProb")) or safe_float(row.get("spread_prob_pick_final")) or 0.0
                         t_final_prob = safe_float(row.get("TotalConsensusProb")) or safe_float(row.get("total_prob_pick_final")) or 0.0
 
-                        s_pick = row.get("Spread & Pick")
-                        t_pick = row.get("Total & Pick")
+                        # Determine validity based on raw data existence and valid float conversion
+                        s_team = row.get("spread_pick_team")
+                        s_line_val = safe_float(row.get("spread_pick_line"))
+                        s_valid = (s_team is not None) and (s_line_val is not None)
 
-                        # Handle None/NaN - also check for "nan" in pick string (e.g., "Over nan")
-                        s_pick_valid = (
-                            s_pick is not None and
-                            str(s_pick).lower() != "none" and
-                            str(s_pick).strip() != "" and
-                            "nan" not in str(s_pick).lower()
-                        )
-                        t_pick_valid = (
-                            t_pick is not None and
-                            str(t_pick).lower() != "none" and
-                            str(t_pick).strip() != "" and
-                            "nan" not in str(t_pick).lower()
-                        )
-
-                        # A pick is valid if it has a valid string and probability > 0.5
-                        s_valid = s_pick_valid and s_final_prob > 0.5
-                        t_valid = t_pick_valid and t_final_prob > 0.5
+                        t_side = row.get("total_pick_side")
+                        t_line_val = safe_float(row.get("total_pick_line"))
+                        t_valid = (t_side is not None) and (t_line_val is not None)
 
                         new_b_type = "NONE"
                         new_b_pick = None
                         new_b_prob = 0.0
 
+                        # Calculate strengths (distance from 0.5 or max prob)
+                        # We want the strongest edge, even if it requires flipping the pick
+                        s_strength = max(s_final_prob, 1.0 - s_final_prob) if s_valid else -1.0
+                        t_strength = max(t_final_prob, 1.0 - t_final_prob) if t_valid else -1.0
+
+                        target_market = "NONE"
                         if s_valid and t_valid:
-                            # FIX: Compare probabilities directly - highest probability wins
-                            if s_final_prob >= t_final_prob:
-                                new_b_type = "SPREAD"
-                                new_b_pick = s_pick
-                                new_b_prob = s_final_prob
+                            if s_strength >= t_strength:
+                                target_market = "SPREAD"
                             else:
-                                new_b_type = "TOTAL"
-                                new_b_pick = t_pick
-                                new_b_prob = t_final_prob
+                                target_market = "TOTAL"
                         elif s_valid:
-                            new_b_type = "SPREAD"
-                            new_b_pick = s_pick
-                            new_b_prob = s_final_prob
+                            target_market = "SPREAD"
                         elif t_valid:
-                            new_b_type = "TOTAL"
-                            new_b_pick = t_pick
-                            new_b_prob = t_final_prob
-                        else:
-                            # Fallback: Use spread or total pick even if prob <= 0.5, but NEVER use ML
-                            # Compare probabilities directly in fallback as well
-                            if s_pick_valid and t_pick_valid:
-                                if s_final_prob >= t_final_prob:
-                                    new_b_type = "SPREAD"
-                                    new_b_pick = s_pick
-                                    new_b_prob = s_final_prob if s_final_prob else 0.5
-                                else:
-                                    new_b_type = "TOTAL"
-                                    new_b_pick = t_pick
-                                    new_b_prob = t_final_prob if t_final_prob else 0.5
-                            elif s_pick_valid:
-                                new_b_type = "SPREAD"
-                                new_b_pick = s_pick
-                                new_b_prob = s_final_prob if s_final_prob else 0.5
-                            elif t_pick_valid:
-                                new_b_type = "TOTAL"
-                                new_b_pick = t_pick
-                                new_b_prob = t_final_prob if t_final_prob else 0.5
+                            target_market = "TOTAL"
+
+                        # REGENERATE PICK STRINGS (FIX: Ensure consistency with consensus prob)
+                        updated_s_str = row.get("Spread & Pick") # Default fallback
+                        updated_t_str = row.get("Total & Pick") # Default fallback
+
+                        if s_valid:
+                            if s_final_prob > 0.5:
+                                updated_s_str = f"{s_team} {clean_line_str(s_line_val)} ({s_final_prob:.1%})"
                             else:
-                                # No valid spread or total pick available - leave as None
-                                new_b_type = "NONE"
-                                new_b_pick = None
-                                new_b_prob = None
+                                # Flip to opposite
+                                prob_flipped = 1.0 - s_final_prob
+                                home = row.get("Home")
+                                away = row.get("Away")
+                                opp_team = away if s_team == home else home
+                                if opp_team is None: opp_team = s_team # Fallback
+                                opp_line = -1 * s_line_val if s_line_val is not None else 0.0
+                                updated_s_str = f"{opp_team} {clean_line_str(opp_line)} ({prob_flipped:.1%})"
+
+                        if t_valid:
+                            if t_final_prob > 0.5:
+                                updated_t_str = f"{t_side} {clean_line_str(t_line_val)} ({t_final_prob:.1%})"
+                            else:
+                                # Flip
+                                prob_flipped = 1.0 - t_final_prob
+                                opp_side = "Under" if t_side == "Over" else "Over"
+                                updated_t_str = f"{opp_side} {clean_line_str(t_line_val)} ({prob_flipped:.1%})"
+
+                        # Construct the best pick string dynamically using updated strings
+                        if target_market == "SPREAD":
+                            new_b_type = "SPREAD"
+                            new_b_pick = updated_s_str
+                            new_b_prob = s_final_prob if s_final_prob > 0.5 else (1.0 - s_final_prob)
+
+                        elif target_market == "TOTAL":
+                            new_b_type = "TOTAL"
+                            new_b_pick = updated_t_str
+                            new_b_prob = t_final_prob if t_final_prob > 0.5 else (1.0 - t_final_prob)
 
                         best_pick.append(new_b_pick)
                         best_prob.append(new_b_prob)
                         best_type.append(new_b_type)
+                        spread_pick_updated.append(updated_s_str)
+                        total_pick_updated.append(updated_t_str)
 
                     new_data["Best Overall Pick"] = best_pick
                     new_data["Best Overall Prob"] = best_prob
                     new_data["best_pick_type"] = best_type
+                    # Update source columns so downstream logic (calculate_best_pick_metrics) uses correct strings
+                    new_data["Spread & Pick"] = spread_pick_updated
+                    new_data["Total & Pick"] = total_pick_updated
 
-                    return pd.concat([df, pd.DataFrame(new_data, index=df.index)], axis=1).copy()
+                    # Create DataFrame from new data
+                    new_df = pd.DataFrame(new_data, index=df.index)
+
+                    # Drop existing columns to prevent duplication
+                    cols_to_drop = [c for c in new_df.columns if c in df.columns]
+                    if cols_to_drop:
+                        df = df.drop(columns=cols_to_drop)
+
+                    return pd.concat([df, new_df], axis=1).copy()
 
                 df = _enforce_consensus_and_best_pick_vectorized(df)
 
@@ -13187,6 +13413,11 @@ with tab_master:
 
                 # Fix for Fragmentation (Issue #4)
                 has_kalshi_series = _has_kalshi_market_vectorized(df)
+
+                # Check if column already exists
+                if "HasKalshiMarket" in df.columns:
+                    df = df.drop(columns=["HasKalshiMarket"])
+
                 new_hk_col = pd.DataFrame({"HasKalshiMarket": has_kalshi_series}, index=df.index)
                 df = pd.concat([df, new_hk_col], axis=1).copy()
 
