@@ -332,6 +332,24 @@ def clean_team_name(name: str) -> str:
     # Collapse multiple spaces into one and strip
     return re.sub(r"\s+", " ", cleaned).strip()
 
+def strip_mascot(team_name: str) -> str:
+    """Remove common college mascots from team names for code lookup."""
+    # Common mascots to remove
+    mascots = ['Wildcats', 'Bulldogs', 'Bears', 'Eagles', 'Tigers', 'Cardinals',
+               'Warriors', 'Knights', 'Spartans', 'Huskies', 'Panthers', 'Cougars',
+               'Red Storm', 'Blue Devils', 'Tar Heels', 'Musketeers', 'Wolfpack']
+
+    for mascot in mascots:
+        if team_name.endswith(mascot):
+            return team_name[:-len(mascot)].strip()
+
+    # Fallback: Remove last word if team name has 2+ words
+    parts = team_name.split()
+    if len(parts) >= 2:
+        return ' '.join(parts[:-1])
+
+    return team_name
+
 
 def normalize_name(name: str) -> str:
     """Legacy normalize - strips everything non-alpha. Kept for back-compat but generally avoided now."""
@@ -1095,6 +1113,17 @@ NCAAB_CODE_ALIASES: Dict[str, str] = {
     "AFA": "AIR FORCE",
     "BC": "BOSTON COLLEGE",
     "FSU": "FLORIDA STATE",
+    # Fix 3: Additional Aliases
+    "UK": "KEN",          # Kentucky
+    "UNC": "UNC",         # North Carolina (keep as-is)
+    "KU": "KAN",          # Kansas
+    "UGA": "GEO",         # Georgia
+    "KSU": "KSU",         # Kansas State
+    "KSUV": "KSU",        # Kansas State variant
+    "KANS": "KSU",        # Kansas State
+    "NCST": "NCS",        # NC State
+    "SJSU": "SJSU",       # San Jose State
+    "SJ": "SJSU",
 }
 
 NCAAF_CODE_ALIASES: Dict[str, str] = {
@@ -1138,7 +1167,8 @@ def resolve_team_code(code: str, league: str) -> str:
     # Only for NCAAB where variance is high
     if l == "NCAAB" and rapidfuzz:
         # Increase threshold for short codes to prevent false positives (e.g. VMI -> VIR)
-        threshold = 90 if len(c) <= 3 else 75
+        # Fix 4: Relax threshold but add safeguards
+        threshold = 70 if len(c) <= 3 else 75  # Was 90/75
 
         # Check against Alias Keys
         alias_keys = list(NCAAB_CODE_ALIASES.keys())
@@ -1148,6 +1178,12 @@ def resolve_team_code(code: str, league: str) -> str:
         if match:
             # match is (key, score, index)
             best_key = match[0]
+
+            # Fix 4 Safeguard: Reject if first letter differs
+            if c and best_key and c[0] != best_key[0]:
+                 logger.debug(f"Fuzzy match rejected: {c} -> {best_key} (first letter mismatch)")
+                 return c
+
             logger.debug(f"Fuzzy Resolved Code: {c} -> {best_key} -> {NCAAB_CODE_ALIASES[best_key]} (score={match[1]})")
             return NCAAB_CODE_ALIASES[best_key]
 
@@ -1602,8 +1638,10 @@ def _match_via_events(
     # IMPORTANT: Try without status filter first to get all events
     # This significantly improves match rate as it doesn't filter out events in different statuses
     try:
+        # Fix 1: Force fresh data for college sports
+        use_fresh_events = league in ['NCAAB', 'NCAAF']
         # First try without status filter to get ALL events
-        events_resp = integrator.get_events(series_ticker, status=None)
+        events_resp = integrator.get_events(series_ticker, status=None, use_cache=not use_fresh_events)
         events = events_resp.get("events", [])
         logger.info(f"   Total Events Fetched (no status filter): {len(events)}")
 
@@ -2644,8 +2682,23 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
     logger.info(f"   Cleaned Names: {away_clean} @ {home_clean}")
 
     # Generate extended candidates including league-specific mappings
+    # --- Fix 2: Apply strip_mascot before generating codes ---
+    home_clean_base = strip_mascot(home_team)
+    away_clean_base = strip_mascot(away_team)
+
+    # Original generation for base + full
     home_codes = _build_team_codes(home_team)
     away_codes = _build_team_codes(away_team)
+
+    # Add codes from stripped version if different
+    if home_clean_base != home_team:
+        home_codes.extend(_build_team_codes(home_clean_base))
+    if away_clean_base != away_team:
+        away_codes.extend(_build_team_codes(away_clean_base))
+
+    # Deduplicate
+    home_codes = list(dict.fromkeys(home_codes))
+    away_codes = list(dict.fromkeys(away_codes))
 
     # Inject mapped codes if available
     mapped_home = team_code_for_league(league_key, home_team)
@@ -2659,6 +2712,20 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
     # DEBUG: Log generated codes
     logger.info(f"   Mapped Codes: away={mapped_away}, home={mapped_home}")
     logger.info(f"   Full Code Candidates: away={away_codes}, home={home_codes}")
+
+    # --- Fix 5: Diagnostic Logging for Empty Code Sets ---
+    if not home_codes or not away_codes:
+        logger.error(f"❌ CRITICAL: Empty code sets generated!")
+        logger.error(f"   Home team: '{home_team}' → codes={home_codes}")
+        logger.error(f"   Away team: '{away_team}' → codes={away_codes}")
+        logger.error(f"   Mapped home: {mapped_home}")
+        logger.error(f"   Mapped away: {mapped_away}")
+
+        # Fallback: Use 3-char prefix (Fix 5 updated to 3 chars)
+        if not home_codes:
+            home_codes = [clean_team_name(home_team)[:3].upper()]
+        if not away_codes:
+            away_codes = [clean_team_name(away_team)[:3].upper()]
 
     # Log searching blocks for NCAAB debug
     if league_key == "NCAAB":
@@ -3153,6 +3220,12 @@ class KalshiIntegrator:
 
             # DIAGNOSTIC: Log raw response structure
             events = resp.get("events", [])
+
+            # Fix 6: Log sample event tickers fetched
+            if events and len(events) > 0:
+                sample_tickers = [e.get('ticker') for e in events[:5]]
+                logger.info(f"   Sample event tickers fetched: {sample_tickers}")
+
             if events:
                 sample_event = events[0]
                 logger.info(f"🔍 KALSHI /events RAW RESPONSE SAMPLE:")
