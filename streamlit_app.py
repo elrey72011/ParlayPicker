@@ -14129,10 +14129,12 @@ with tab_master:
                  df = pd.concat([df, gem_df], axis=1)
 
         # Fix Issue 6 & 7: Column Availability
-        if 'kalshi_status' in df.columns:
-             df['kalshi_available'] = df['kalshi_status'].fillna('').astype(str).str.lower().isin(['matched', 'strictmatch', 'seriesmatch'])
-        else:
-             df['kalshi_available'] = False
+        # DISABLED OVERWRITE: This was clobbering the true API status (kalshi_available=True)
+        # with the match status. If status is NO_MATCH, we still want kalshi_available=True to indicate API is up.
+        # if 'kalshi_status' in df.columns:
+        #      df['kalshi_available'] = df['kalshi_status'].fillna('').astype(str).str.lower().isin(['matched', 'strictmatch', 'seriesmatch'])
+        # else:
+        #      df['kalshi_available'] = False
 
         if 'theover_prob_used' in df.columns:
             if 'theover_prob' not in df.columns:
