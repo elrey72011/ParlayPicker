@@ -1205,6 +1205,47 @@ def implied_prob_for_pick(odds_home: Any, odds_away: Any, pick_side: Optional[st
 
 def map_kalshi_prob_for_pick(
     kalshi_yes_prob: Optional[float],
+    kalshi_yes_side: Optional[str],
+    pick_side: Optional[str],
+    pick_team: Optional[str] = None,
+    home_team: Optional[str] = None,
+    away_team: Optional[str] = None,
+    spread_line: Optional[float] = None
+) -> Optional[float]:
+    """
+    Wrapper for probability mapping that enforces validation (Issue #1054).
+    """
+    # 1. Calculate probability using internal logic
+    result = _map_kalshi_prob_for_pick_impl(
+        kalshi_yes_prob, kalshi_yes_side, pick_side, pick_team, home_team, away_team, spread_line
+    )
+
+    # 2. Validation: Ensure probabilities sum to 1.0 (inverse logic check)
+    if result is not None and pick_side and home_team and away_team and (pick_side == "home" or pick_side == "away"):
+        try:
+            # Determine the "other" side
+            other_side = "away" if pick_side == "home" else "home"
+
+            # Calculate prob for the other side (using same input data)
+            other_result = _map_kalshi_prob_for_pick_impl(
+                kalshi_yes_prob, kalshi_yes_side, other_side,
+                pick_team if other_side == pick_side else (away_team if other_side == "away" else home_team), # Approximate pick_team for other side
+                home_team, away_team, spread_line
+            )
+
+            if other_result is not None:
+                sum_val = result + other_result
+                if abs(sum_val - 1.0) > 0.02:
+                    logger.error(f"❌ Issue #1054: Kalshi prob sum = {sum_val:.3f} (should be 1.0)")
+                    logger.error(f"   Pick ({pick_side}): {result:.3f}, Other ({other_side}): {other_result:.3f}")
+                    logger.error(f"   Context: YesSide={kalshi_yes_side}, YesProb={kalshi_yes_prob}")
+        except Exception as e:
+            logger.warning(f"Validation check failed: {e}")
+
+    return result
+
+def _map_kalshi_prob_for_pick_impl(
+    kalshi_yes_prob: Optional[float],
     kalshi_yes_side: Optional[str],  # "home" or "away" or Team Name
     pick_side: Optional[str],  # "home" or "away" - which side we're evaluating
     pick_team: Optional[str] = None,  # actual team name
@@ -1213,19 +1254,7 @@ def map_kalshi_prob_for_pick(
     spread_line: Optional[float] = None  # NEW
 ) -> Optional[float]:
     """
-    Map Kalshi yes probability to the correct pick side.
-
-    Args:
-        kalshi_yes_prob: Probability from Kalshi for the "yes" side (0.0 to 1.0)
-        kalshi_yes_side: Which side Kalshi's yes_prob represents ("home" or "away" or TeamName)
-        pick_side: Which side we're calculating probability for ("home" or "away")
-        pick_team: The actual team name we're evaluating
-        home_team: Home team name
-        away_team: Away team name
-        spread_line: Spread line value (optional) used for over/under spread logic
-
-    Returns:
-        float: Probability that the pick_side will cover the spread (0.0 to 1.0)
+    Internal implementation of Kalshi mapping logic.
     """
     prob = safe_float(kalshi_yes_prob)
     if prob is None:
@@ -1334,13 +1363,14 @@ def map_kalshi_prob_for_pick(
             return 1.0 - prob
 
     # 2. Side Inference (Home/Away/Over/Under)
-    if "OVER" in kalshi_yes_norm:
-        kalshi_yes_is_home = True # Over -> Home in spread
-    elif "UNDER" in kalshi_yes_norm:
-        kalshi_yes_is_home = False
-    elif kalshi_yes_norm == "HOME":
+    # Priority: Explicit Side > Team Name Match > Fallback
+    if kalshi_yes_norm == "HOME":
         kalshi_yes_is_home = True
     elif kalshi_yes_norm == "AWAY":
+        kalshi_yes_is_home = False
+    elif "OVER" in kalshi_yes_norm:
+        kalshi_yes_is_home = True # Over -> Home in spread
+    elif "UNDER" in kalshi_yes_norm:
         kalshi_yes_is_home = False
     elif home_norm and home_norm in kalshi_yes_norm:
         kalshi_yes_is_home = True
@@ -5806,17 +5836,25 @@ kalshi_integrator: Optional[KalshiIntegrator] = None
 try:
     if "kalshi_integrator" not in st.session_state:
         if kalshi_api_key and kalshi_api_secret:
-            st.session_state["kalshi_integrator"] = KalshiIntegrator(
-                kalshi_api_key,
-                kalshi_api_secret,
-                required=st.session_state.get("kalshi_required", True),
-            )
+            try:
+                st.session_state["kalshi_integrator"] = KalshiIntegrator(
+                    kalshi_api_key,
+                    kalshi_api_secret,
+                    required=st.session_state.get("kalshi_required", True),
+                )
+                logger.info("✅ KalshiIntegrator initialized successfully")
+            except Exception as e:
+                logger.error(f"❌ Failed to initialize KalshiIntegrator: {e}", exc_info=True)
+                st.session_state["kalshi_integrator"] = None
         else:
+            logger.warning("⚠️ Kalshi API credentials not found in secrets")
             st.session_state["kalshi_integrator"] = None
     kalshi_integrator = st.session_state.get("kalshi_integrator")
-except Exception:
+except Exception as e:
+    logger.error(f"❌ Error during KalshiIntegrator setup: {e}", exc_info=True)
     st.session_state["last_exception"] = traceback.format_exc()
     kalshi_integrator = None
+
 if kalshi_integrator:
     kalshi_integrator.required = st.session_state.get("kalshi_required", True)
 api_sports_clients, sportsdata_clients = init_data_clients()
@@ -7723,6 +7761,22 @@ def match_kalshi_market(
         }
 
     try:
+        # Lazy initialization fallback
+        global kalshi_integrator
+        if not kalshi_integrator:
+            try:
+                # Attempt to retrieve keys from secrets (using variable names from global scope or secrets directly)
+                k_key = st.secrets.get("KALSHI_API_KEY") or st.secrets.get("kalshi_api_key")
+                k_sec = st.secrets.get("KALSHI_API_SECRET") or st.secrets.get("kalshi_api_secret")
+
+                if k_key and k_sec:
+                    kalshi_integrator = KalshiIntegrator(k_key, k_sec)
+                    logger.info("✅ Late-initialized KalshiIntegrator successfully inside match_kalshi_market")
+                else:
+                    logger.warning("⚠️ Kalshi API keys missing from secrets during late init")
+            except Exception as e:
+                logger.error(f"❌ Failed to late-initialize KalshiIntegrator: {e}", exc_info=True)
+
         # Use robust integrator function instead of internal implementation
         if not kalshi_integrator:
              return {
