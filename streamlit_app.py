@@ -7797,14 +7797,23 @@ def match_kalshi_market(
             except:
                 pass
 
+        # ADD DEBUG LOGGING (ONCE)
+        logger.info(f"🔍 Kalshi Match Attempt: {home} vs {away}")
+        logger.info(f"   League: {league}, Commence: {commence_time}")
+        logger.info(f"   kalshi_integrator present: {kalshi_integrator is not None}")
+        logger.info(f"   Available kalshi_markets count: {len(kalshi_markets) if kalshi_markets else 0}")
+
         # 1. Winner Match
         res_winner = match_game_to_kalshi(league, home, away, commence_time, kalshi_integrator, requested_market_type="WINNER")
+        logger.info(f"   WINNER match status: {res_winner.debug.get('kalshi_status', 'UNKNOWN') if res_winner and res_winner.debug else (res_winner.reason if res_winner else 'None')}")
 
         # 2. Spread Match
         res_spread = match_game_to_kalshi(league, home, away, commence_time, kalshi_integrator, requested_market_type="SPREAD")
+        logger.info(f"   SPREAD match status: {res_spread.debug.get('kalshi_status', 'UNKNOWN') if res_spread and res_spread.debug else (res_spread.reason if res_spread else 'None')}")
 
         # 3. Total Match
         res_total = match_game_to_kalshi(league, home, away, commence_time, kalshi_integrator, requested_market_type="TOTAL")
+        logger.info(f"   TOTAL match status: {res_total.debug.get('kalshi_status', 'UNKNOWN') if res_total and res_total.debug else (res_total.reason if res_total else 'None')}")
 
         def map_result(r, m_type):
             if not r or not r.matched:
