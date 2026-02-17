@@ -1091,6 +1091,10 @@ NCAAB_CODE_ALIASES: Dict[str, str] = {
     "SD": "USD", "SDG": "USD",
     "UIW": "IW",
     "UNO": "UNO",
+    "UNM": "NEW MEXICO",
+    "AFA": "AIR FORCE",
+    "BC": "BOSTON COLLEGE",
+    "FSU": "FLORIDA STATE",
 }
 
 NCAAF_CODE_ALIASES: Dict[str, str] = {
@@ -1763,7 +1767,8 @@ def _match_via_events(
                 # Tighter window for pros (exact schedule), looser for college (daily buckets)
                 # v106: Relaxed wide_window for Pro from 24h to 36h to prevent penalties on timezone drifts
                 tight_window = 12 if not is_pro else 6
-                wide_window = 36  # Unified 36h window for all leagues
+                # Relaxed Date Penalty for College Sports (48h) to account for games spanning midnight UTC
+                wide_window = 48 if league in ["NCAAB", "NCAAF"] else 36
 
                 if time_diff_hours <= tight_window:
                     time_score = 25  # Bonus for date confirmation
@@ -2552,6 +2557,7 @@ def _normalize_series_prefix(prefix: Any) -> Tuple[str, ...]:
 def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time: Optional[datetime], integrator: "KalshiIntegrator" = None, status: Optional[str] = None, requested_market_type: Optional[str] = None) -> KalshiMatchResult:
     league_key = (league or "").upper()
     kalshi = integrator or KalshiIntegrator()
+    kalshi.clear_events_cache() # Force reload to ensure fresh data
 
     # --- FEB 15, 2026 OVERRIDES ---
     if game_time:
@@ -2705,8 +2711,8 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
     DATE_TOLERANCE_DAYS = 2
     # If using rapidfuzz (0-100 scale), threshold needs to be high.
     # We sum two scores (Home + Away), so max is 200.
-    # Accept if sum > 130 (avg 65 per team) to be safe but permissive.
-    TEAM_FUZZY_THRESHOLD = 130.0
+    # Accept if sum > 100 (one exact match + one strong fuzzy, or two decent fuzzy)
+    TEAM_FUZZY_THRESHOLD = 100.0
 
     # Coverage Debug
     markets_considered = 0
