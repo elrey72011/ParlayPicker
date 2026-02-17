@@ -1239,6 +1239,25 @@ def map_kalshi_prob_for_pick(
     if not pick_side:
         return prob
 
+    # ---------------------------------------------------------
+    # PRIMARY CHECK: Strict Side Comparison
+    # Handles explicit "home"/"away" or "over"/"under" signals
+    # ---------------------------------------------------------
+    k_side = (kalshi_yes_side or "").lower().strip()
+    p_side = (pick_side or "").lower().strip()
+
+    # Spread/ML (Home/Away)
+    if k_side in ["home", "away"] and p_side in ["home", "away"]:
+        return prob if k_side == p_side else 1.0 - prob
+
+    # Totals (Over/Under)
+    if k_side in ["over", "under"] and p_side in ["over", "under"]:
+        return prob if k_side == p_side else 1.0 - prob
+
+    # ---------------------------------------------------------
+    # FALLBACK: Team Name Matching & Side Inference
+    # ---------------------------------------------------------
+
     # Determine which team is which side
     pick_is_home = False
     if pick_side.lower() == "home":
