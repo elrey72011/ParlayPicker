@@ -2443,9 +2443,67 @@ def _match_via_events(
                                 yes_side = "away"
                                 break
 
-                # 3. Default Fallback
+                # 4. Check Right Side (Fallback - Fix for aliases like "Canes @ FSU")
+                # If Right Side matches Home, then Left (Yes) must be Away.
+                if not yes_side and right_side_title:
+                    right_tokens = right_side_title.split()
+
+                    # Check Home Codes in Right Side -> Yes is Away
+                    if home_codes:
+                        for code in home_codes:
+                            if code and len(code) >= 2 and code in right_tokens:
+                                yes_side = "away"
+                                break
+
+                    # Check Away Codes in Right Side -> Yes is Home
+                    if not yes_side and away_codes:
+                        for code in away_codes:
+                            if code and len(code) >= 2 and code in right_tokens:
+                                yes_side = "home"
+                                break
+
+                # 5. Check Matched Ticker Codes (Final Fallback - Uses the successful ticker match)
+                if not yes_side and best_details:
+                    # Retrieve the codes that ACTUALLY matched the ticker
+                    ticker_away_code = best_details.get("parsed_away")
+                    ticker_home_code = best_details.get("parsed_home")
+
+                    s1 = best_details.get("score_1", 0)
+                    s2 = best_details.get("score_2", 0)
+
+                    # Determine which team the ticker codes represent
+                    code_for_away = None
+                    code_for_home = None
+
+                    if s1 >= s2:
+                        # Direct: ticker_away is Away, ticker_home is Home
+                        code_for_away = ticker_away_code
+                        code_for_home = ticker_home_code
+                    else:
+                        # Swap: ticker_away is Home, ticker_home is Away
+                        code_for_away = ticker_home_code
+                        code_for_home = ticker_away_code
+
+                    # Check if these codes appear in the title (Left or Right)
+                    # Use robust checking (token or substring)
+                    def _code_in_text(code, text):
+                        if not code or not text: return False
+                        if code in text: return True # Substring match (e.g. MIA in MIAMI)
+                        return False
+
+                    if _code_in_text(code_for_home, left_side_title):
+                        yes_side = "home"
+                    elif _code_in_text(code_for_away, left_side_title):
+                        yes_side = "away"
+                    elif _code_in_text(code_for_home, right_side_title):
+                        yes_side = "away" # Home on right -> Yes is Away
+                    elif _code_in_text(code_for_away, right_side_title):
+                        yes_side = "home" # Away on right -> Yes is Home
+
+                # 6. Default Fallback
                 if not yes_side:
                     yes_side = "home" # Legacy default
+                    logger.warning(f"⚠️ Kalshi Yes Side ambiguous for {market_title}, defaulting to 'home'")
 
             # Add to debug info for downstream consumption (streamlit_app.py reads this)
             debug_info["kalshi_yes_side"] = yes_side
