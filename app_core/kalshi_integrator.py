@@ -324,6 +324,7 @@ def league_game_prefix(league: str) -> str:
     return f"{series}GAME"
 
 
+@lru_cache(maxsize=4096)
 def clean_team_name(name: str) -> str:
     """Robust cleaning preserving spaces for map lookup."""
     # Convert to uppercase, replace non-alphanumeric with space, collapse multiple spaces
