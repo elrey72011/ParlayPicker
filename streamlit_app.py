@@ -8107,6 +8107,24 @@ if "theover_debug_log" in st.session_state and st.session_state["theover_debug_l
 # Master results export (available after analysis)
 if "master_results_df" in st.session_state:
     master_df = st.session_state["master_results_df"]
+
+    # FIX: Ensure export includes ALL picks, even if master_results_df was filtered by UI
+    # Check against full master_df in session state
+    if "master_df" in st.session_state:
+        full_master_df = st.session_state["master_df"]
+        if full_master_df is not None and not full_master_df.empty:
+            if len(full_master_df) > len(master_df):
+                logger.info(f"⚠️ Export Mismatch Detected: master_results_df has {len(master_df)} rows, but master_df has {len(full_master_df)}. Restoring missing rows for export.")
+
+                # Reconstruct master_results_df using the full dataset but keeping the correct columns
+                # This ensures we get all rows (including LOW confidence) while maintaining the export schema
+                export_cols = [c for c in master_df.columns if c in full_master_df.columns]
+
+                # If crucial columns are missing, we might have issues, but this is a fallback
+                if len(export_cols) > 0:
+                    master_df = full_master_df[export_cols].copy()
+                    logger.info(f"✅ Restored export dataframe to {len(master_df)} rows.")
+
     if master_df is not None and not master_df.empty:
         try:
             from datetime import datetime
