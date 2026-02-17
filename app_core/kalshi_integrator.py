@@ -2233,8 +2233,24 @@ def _match_via_events(
 
         # If no target selected yet (or no request), use default logic
         if not target_market:
-            # NCAAB: Prefer Spread/Total over Winner if not requested
-            if league == 'NCAAB':
+            # FIX: When requested_market_type is None, prefer spread/total over winner for ALL leagues
+            # This preserves the pre-PR#1001 behavior where any market type was acceptable
+            if requested_market_type is None:
+                # No specific type requested - accept ANY market in priority order
+                if spread_markets:
+                    target_market = spread_markets[0]
+                    match_reason_detail = "matched_spread_default"
+                elif total_markets:
+                    target_market = total_markets[0]
+                    match_reason_detail = "matched_total_default"
+                elif winner_market:
+                    target_market = winner_market
+                    match_reason_detail = "matched_winner"
+                elif markets:
+                    target_market = markets[0]
+                    match_reason_detail = "matched_first_available"
+            # League-specific logic when no type matched
+            elif league == 'NCAAB':
                 if spread_markets:
                     target_market = spread_markets[0]
                     match_reason_detail = "matched_spread_default"
@@ -2287,7 +2303,7 @@ def _match_via_events(
                     target_market = markets[0]
                     match_reason_detail = "matched_first_available"
             else:
-                # Other leagues: Prefer Winner
+                # Other leagues: Prefer Winner when specifically no match
                 if winner_market:
                     target_market = winner_market
                     match_reason_detail = "matched_winner"
@@ -2515,7 +2531,7 @@ def _match_via_events(
                 label=target_market.get("title"),
                 probability=prob if prob is not None else 0.5,
                 raw_event_id=best_event.get("ticker"),
-                market_ticker=target_market.get("ticker"),
+                market_ticker=target_ticker,
                 league=league,
                 reason=match_reason_detail or "matched_via_events_api",
                 market_type=m_type,
