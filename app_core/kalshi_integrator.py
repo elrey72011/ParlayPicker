@@ -2805,6 +2805,14 @@ class KalshiIntegrator:
         self.api_key = api_key or st.secrets.get("KALSHI_API_KEY") or os.getenv("KALSHI_API_KEY")
         raw_secret = api_secret or st.secrets.get("KALSHI_API_SECRET") or os.getenv("KALSHI_API_SECRET")
         self.api_secret_pem = self._normalize_secret(raw_secret)
+
+        # DIAGNOSTIC LOGGING
+        if self.api_key:
+            masked = f"{self.api_key[:4]}...{self.api_key[-4:]}" if len(self.api_key) > 8 else "SHORT_KEY"
+            logger.info(f"KalshiIntegrator initialized with Key={masked}, Secret={'SET' if self.api_secret_pem else 'MISSING'}")
+        else:
+            logger.warning("KalshiIntegrator initialized WITHOUT API Key")
+
         self.api_url = "https://api.elections.kalshi.com/trade-api/v2"
         self.session = requests.Session()
         self.required = required
