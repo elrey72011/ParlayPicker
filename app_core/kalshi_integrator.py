@@ -176,37 +176,57 @@ def parse_event_ticker_codes(event_ticker: str) -> Dict[str, str]:
         # i=3 (3+4 split) AND i=4 (4+3 split)
         # This allows matching both BSUUNLV (3+4) and UNLVBSU (4+3) as long as codes are in the map
         min_len = max(2, len(team_block) - 5)
+        best_split_quality = 0  # Start at 0 to ignore garbage splits (quality=0)
+
         for i in range(min_len, len(team_block) - 1):
             potential_away = team_block[:i]
             potential_home = team_block[i:]
 
-            # Try direct resolution first
+            # 1. Exact Match Check (Raw Code in All Codes)
+            # This prioritizes exact code matches (e.g. UAB) over fuzzy matches (e.g. UA -> UAB)
+            away_exact = potential_away in all_codes
+            home_exact = potential_home in all_codes
+
+            # 2. Try Resolved Match (Fuzzy)
             away_resolved = resolve_team_code(potential_away, league)
             home_resolved = resolve_team_code(potential_home, league)
 
-            # Check validity (Original Direction)
-            away_match = away_resolved in all_codes or potential_away in all_codes
-            home_match = home_resolved in all_codes or potential_home in all_codes
+            # Check validity of resolved codes
+            away_valid = away_resolved in all_codes
+            home_valid = home_resolved in all_codes
 
-            # Score this split attempt
-            score = 0
-            if away_match: score += 1
-            if home_match: score += 1
+            # Calculate Quality Score
+            # Exact Match = 2 points
+            # Resolved/Fuzzy Match = 1 point
+            # Max possible = 4 (Both Exact)
+            quality = 0
+            if away_exact: quality += 2
+            elif away_valid: quality += 1
 
-            if away_match and home_match:
-                away = away_resolved if away_resolved in all_codes else potential_away
-                home = home_resolved if home_resolved in all_codes else potential_home
-                logger.debug(f"NCAAB ticker parse: {event_ticker} -> away={away}, home={home} (perfect match at split {i})")
-                best_split = (away, home)
-                best_score = 2
+            if home_exact: quality += 2
+            elif home_valid: quality += 1
+
+            # Log this attempt for debugging
+            # logger.debug(f"   Split {i}: {potential_away}/{potential_home} -> Q={quality} (AE={away_exact}, HE={home_exact}, AR={away_resolved}, HR={home_resolved})")
+
+            if quality > best_split_quality:
+                best_split_quality = quality
+                # Prefer resolved if valid, else raw
+                # Actually, if exact match, prefer raw (which is exact) unless we specifically want canonical
+                # But resolve_team_code returns canonical even for exact matches usually
+                # Let's use resolved if valid, as it maps aliases correctly
+
+                a_final = away_resolved if away_valid else potential_away
+                h_final = home_resolved if home_valid else potential_home
+                best_split = (a_final, h_final)
+                best_score = 2 # Legacy flag for "matched both"
+
+            # Optimization: If perfect match (4), we can break?
+            # ONLY break if quality is 4 (maximum possible)
+            # This prevents stopping early on a fuzzy match (quality 2) like UA/BTEM
+            if quality == 4:
+                logger.debug(f"NCAAB ticker parse: {event_ticker} -> away={best_split[0]}, home={best_split[1]} (perfect exact match at split {i})")
                 break
-
-            elif score > best_score:
-                best_score = score
-                # Store the resolved versions if they matched, else raw
-                a_cand = away_resolved if away_match else potential_away
-                h_cand = home_resolved if home_match else potential_home
-                best_split = (a_cand, h_cand)
 
         if not away and not home:
             # 1. Try Partial Match via Secondary API (Cross-Reference)
@@ -792,6 +812,9 @@ NCAAB_TEAM_CODE_MAP: Dict[str, str] = {
     "LAFAYETTE LEOPARDS": "LAF",
     "FORDHAM RAMS": "FOR",
     "LOYOLA CHI RAMBLERS": "LCHI",
+    "STETSON": "STET", "STETSON HATTERS": "STET",
+    "WESTERN CAROLINA": "WCU", "WESTERN CAROLINA CATAMOUNTS": "WCU",
+    "UNC GREENSBORO": "UNCG", "UNC GREENSBORO SPARTANS": "UNCG",
     # --- SWAC (Southwestern Athletic Conference) ---
     "ALABAMA A&M": "AAMU", "ALABAMA A M": "AAMU", "ALABAMA A&M BULLDOGS": "AAMU",
     "GRAMBLING": "GRAM", "GRAMBLING ST": "GRAM", "GRAMBLING STATE": "GRAM",
@@ -1132,6 +1155,10 @@ KALSHI_NCAAB_TEAM_CODES = {
     "Xavier": "XAV",
     "Yale": "YALE",
     "Yale Bulldogs": "YALE",
+    "Stetson": "STET",
+    "Stetson Hatters": "STET",
+    "Western Carolina": "WCU",
+    "UNC Greensboro": "UNCG",
     # New Mappings for v108 (Feb 2026 Fixes)
     "Campbell": "CAMP",
     "Charleston": "COFC",
@@ -1406,8 +1433,15 @@ def resolve_team_code(code: str, league: str) -> str:
                  logger.debug(f"Fuzzy match rejected: {c} -> {best_key} (first letter mismatch)")
                  return c
 
-            logger.debug(f"Fuzzy Resolved Code: {c} -> {best_key} -> {NCAAB_CODE_ALIASES[best_key]} (score={match[1]})")
-            return NCAAB_CODE_ALIASES[best_key]
+            # DEBUG: Log weird resolutions to diagnose issues (like TEM -> BEL)
+            # Only log if score is low or length difference is significant, suggesting a risky match
+            resolved_code = NCAAB_CODE_ALIASES[best_key]
+            if best_key != c and resolved_code != c:
+                 # Log if score < 85 OR length diff > 1 (e.g. UA -> UAB is fine, but BTEM -> BELM is risky)
+                 if match[1] < 85 or abs(len(c) - len(best_key)) > 1:
+                     logger.info(f"⚠️ Fuzzy Resolved Code: {c} -> {best_key} -> {resolved_code} (score={match[1]})")
+
+            return resolved_code
 
     return c
 
