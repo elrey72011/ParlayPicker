@@ -14162,6 +14162,17 @@ with tab_master:
 
         st.session_state["master_results_df"] = df[results_columns].copy()
 
+        # Validate exports have Kalshi data
+        try:
+            kalshi = KalshiIntegrator()
+            validation_data = st.session_state["master_results_df"].to_dict('records')
+            validation = kalshi.validate_exports(validation_data)
+            if not validation.get("valid"):
+                st.warning(f"⚠️ Export validation failed: {validation.get('reason')}")
+                st.json(validation)
+        except Exception as e:
+            logger.warning(f"Failed to validate exports: {e}")
+
         # Safety check for missing columns (User Request)
         missing_cols = [col for col in user_columns if col not in df.columns]
         if missing_cols and logger:

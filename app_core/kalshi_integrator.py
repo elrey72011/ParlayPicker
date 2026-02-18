@@ -2903,6 +2903,13 @@ class KalshiIntegrator:
         self._markets_cache_ttl_seconds: int = 600
         # Clear stale events cache on initialization
         self._events_cache: Dict[str, Dict[str, Any]] = {}  # Cache for /events by series_ticker
+
+        # Force clear any stale cache on initialization
+        self._events_cache.clear()
+        self._markets_cache = []
+        self._markets_cache_ts = 0.0
+        logger.info("🗑️ Kalshi caches cleared on init")
+
         self._events_cache_ttl: int = 300
         logger.info("✅ Kalshi integrator initialized, events cache cleared")
         self.last_error: Optional[str] = None
@@ -3218,6 +3225,14 @@ class KalshiIntegrator:
         try:
             resp = self._request("GET", "/events", params=params)
 
+            # DIAGNOSTIC: Log raw API response structure
+            logger.info(f"🔍 Kalshi /events API Response Keys: {list(resp.keys())}")
+            if 'events' in resp and resp['events']:
+                first_event = resp['events'][0]
+                logger.info(f"   First Event Keys: {list(first_event.keys())}")
+                logger.info(f"   First Event Ticker: {first_event.get('ticker')}")
+                logger.info(f"   First Event Status: {first_event.get('status')}")
+
             # DIAGNOSTIC: Log raw response structure
             events = resp.get("events", [])
 
@@ -3251,9 +3266,11 @@ class KalshiIntegrator:
                         # Flatten: Copy ticker to top level
                         evt["ticker"] = ticker
 
-                # Validate ticker
-                if ticker and ticker != "None" and isinstance(ticker, str) and len(ticker) > 5:
+                # RELAXED: Accept any non-empty string ticker
+                if ticker and isinstance(ticker, str) and len(ticker) >= 3:
                     valid_events.append(evt)
+                    if len(ticker) < 10:
+                        logger.warning(f"⚠️ Short ticker detected: {ticker} (len={len(ticker)})")
                 else:
                     invalid_count += 1
                     if invalid_count <= 3:  # Log first 3 invalid for diagnosis
@@ -4009,6 +4026,39 @@ class KalshiIntegrator:
     def assert_available(self) -> None:
         if not self.api_key or not self.api_secret_pem:
             raise RuntimeError("Kalshi keys missing from secrets.")
+
+    def validate_exports(self, export_data: List[Dict]) -> Dict[str, Any]:
+        """
+        Validate that export data contains Kalshi fields.
+        Returns diagnostic info about what's present/missing.
+        """
+        if not export_data:
+            return {"valid": False, "reason": "empty_export", "count": 0}
+
+        kalshi_fields = ["kalshi_available", "kalshi_prob", "kalshi_yes_side"]
+        sample = export_data[0] if export_data else {}
+
+        has_kalshi = any(k in sample for k in kalshi_fields)
+
+        if not has_kalshi:
+            logger.warning(f"❌ Export missing Kalshi fields. Available keys: {list(sample.keys())[:20]}")
+            return {
+                "valid": False,
+                "reason": "missing_kalshi_fields",
+                "count": len(export_data),
+                "sample_keys": list(sample.keys())
+            }
+
+        kalshi_count = sum(1 for row in export_data if row.get("kalshi_available") == True)
+
+        logger.info(f"✅ Export contains {kalshi_count}/{len(export_data)} games with Kalshi data")
+
+        return {
+            "valid": True,
+            "total_games": len(export_data),
+            "kalshi_matches": kalshi_count,
+            "match_rate": f"{100*kalshi_count/len(export_data):.1f}%" if export_data else "0%"
+        }
 
 
 def self_test() -> Dict[str, Any]:
