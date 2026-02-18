@@ -7753,14 +7753,14 @@ def match_kalshi_market(
     winner_reason_override: Optional[str] = None,
 ) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, List[Dict[str, Any]]]]:
     """
-    Safely finds a Kalshi market match.
+    Safely finds a Kalshi market match with robust error handling.
     Guarantees a dictionary return to prevent TypeError.
     MANDATORY RETURN: {"sentiment_diff": 0.0, "status": "Neutral"} on error.
     """
     # Helper to build a safe fallback dictionary
     def base_result(reason: str, market_type: str) -> Dict[str, Any]:
         return {
-            "kalshi_available": bool(kalshi_integrator),
+            "kalshi_available": False,
             "kalshi_label": None,
             "kalshi_event_ticker": None,
             "kalshi_reason": reason,
@@ -7794,13 +7794,20 @@ def match_kalshi_market(
             except Exception as e:
                 logger.error(f"❌ Failed to late-initialize KalshiIntegrator: {e}", exc_info=True)
 
-        # Use robust integrator function instead of internal implementation
+        # 1. Integrator Check
         if not kalshi_integrator:
+             logger.warning("No Kalshi integrator available - skipping matching")
              return {
                 "winner": base_result("no_integrator", "winner"),
                 "spread": base_result("no_integrator", "spread"),
                 "total": base_result("no_integrator", "total"),
             }, {}
+
+        # Update availability now that we know integrator exists
+        def available_base_result(reason: str, market_type: str) -> Dict[str, Any]:
+            res = base_result(reason, market_type)
+            res["kalshi_available"] = True
+            return res
 
         league = (game.get("league") or game.get("sport_key") or "").upper()
         home = game.get("home_team") or game.get("Home")
@@ -7818,7 +7825,6 @@ def match_kalshi_market(
         logger.info(f"🔍 Kalshi Match Attempt: {home} vs {away}")
         logger.info(f"   League: {league}, Commence: {commence_time}")
         logger.info(f"   kalshi_integrator present: {kalshi_integrator is not None}")
-        logger.info(f"   Available kalshi_markets count: {len(kalshi_markets) if kalshi_markets else 0}")
 
         # 1. Winner Match
         res_winner = match_game_to_kalshi(league, home, away, commence_time, kalshi_integrator, requested_market_type="WINNER")
@@ -7834,7 +7840,7 @@ def match_kalshi_market(
 
         def map_result(r, m_type):
             if not r or not r.matched:
-                return base_result(r.reason if r else "no_match", m_type)
+                return available_base_result(r.reason if r else "no_match", m_type)
 
             return {
                 "kalshi_available": True,
@@ -8198,6 +8204,30 @@ if st.sidebar.button("Load Games", width="stretch"):
 # --- SYSTEM TOOLS (Debug Export) ---
 st.sidebar.markdown("---")
 st.sidebar.header("System Tools")
+
+# --- START DIAGNOSTIC BLOCK ---
+if st.sidebar.checkbox("🔍 Kalshi Diagnostics"):
+    if st.session_state.get('kalshi_integrator'):
+        ki = st.session_state['kalshi_integrator']
+        st.sidebar.write("### Kalshi Debug Info")
+        st.sidebar.write(f"Kalshi object: {type(ki)}")
+        # KalshiIntegrator uses 'session' for requests
+        st.sidebar.write(f"Has session: {hasattr(ki, 'session')}")
+
+        # Try to fetch markets
+        try:
+            # Using get_markets with a small limit
+            markets = ki.get_markets(limit=5)
+            st.sidebar.write(f"Markets fetched: {len(markets)}")
+            if markets:
+                st.sidebar.json(markets[:1])
+            else:
+                st.sidebar.warning("No markets returned (empty list)")
+        except Exception as e:
+            st.sidebar.error(f"Market fetch error: {e}")
+    else:
+        st.sidebar.error("Kalshi integrator is None!")
+# --- END DIAGNOSTIC BLOCK ---
 
 if st.sidebar.button("Clear Debug Log"):
     st.session_state["debug_accumulator"] = []

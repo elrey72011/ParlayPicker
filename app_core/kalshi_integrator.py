@@ -1658,6 +1658,7 @@ def _match_via_events(
 
         if not events:
             logger.warning(f"⚠️ No events returned for {league} {series_ticker}")
+            logger.warning(f"   Raw response keys: {list(events_resp.keys()) if events_resp else 'None'}")
             logger.warning(f"   This means either: (1) No games on Kalshi, (2) API error, or (3) Wrong series ticker")
             return KalshiMatchResult(
                 matched=False,
