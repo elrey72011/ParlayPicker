@@ -61,19 +61,17 @@ NBA_TZ = pytz.timezone("US/Eastern")
 _DEBUG_GAME_LOG_COUNT = 0
 
 # Common words to penalize in matching (user request)
-COMMON_WORDS = {'STATE', 'ST', 'CAROLINA', 'CAR', 'CENTRAL', 'NORTH', 'SOUTH', 'EAST', 'WEST'}
+# Re-defined inside function for scope safety but kept here for reference
+COMMON_WORDS_GLOBAL = {'STATE', 'ST', 'CAROLINA', 'CAR', 'CENTRAL', 'NORTH', 'SOUTH', 'EAST', 'WEST'}
 
-def calculate_team_match_score(ticker_code: str, team_variants: List[str], allow_fuzzy: bool = True) -> float:
+def calculate_team_match_score(ticker_code: str, team_variants: List[str], team_name_for_logging: str = "") -> Tuple[float, Optional[str]]:
     """
-    Calculate match score for team matching
+    Calculate match score with strict preference for exact codes
+    """
+    COMMON_WORDS = {'STATE', 'ST', 'CAROLINA', 'CAR', 'CENTRAL', 'NORTH', 'SOUTH', 'EAST', 'WEST'}
 
-    Args:
-        ticker_code: The team portion of ticker (e.g., "MDNW")
-        team_variants: List of possible team codes (e.g., ['MD', 'MARYLAND', ...])
-        allow_fuzzy: If False, only accept exact substring matches
-    """
     if not ticker_code:
-        return 0.0
+        return 0.0, None
 
     ticker_code_upper = ticker_code.upper()
     best_score = 0.0
@@ -83,102 +81,111 @@ def calculate_team_match_score(ticker_code: str, team_variants: List[str], allow
     for variant in team_variants:
         variant_upper = variant.upper()
 
+        # Skip common words
+        if variant_upper in COMMON_WORDS:
+            continue
+
         # Check if variant is in ticker
         if variant_upper not in ticker_code_upper:
             continue
 
-        # EXACT CODE MATCH (2-4 chars, no common words)
-        if len(variant_upper) <= 4 and variant_upper not in COMMON_WORDS:
-            # This is likely a team code (MD, NW, SMC, etc.)
-            # Give full score if it matches
-            score = 100.0
-            match_type = 'exact_code'
+        # EXACT FULL MATCH (variant equals entire ticker code portion for this team)
+        # This should be the highest priority
 
-        # FULL NAME MATCH (5+ chars)
+        # HIGH PRIORITY: 3-4 char codes that are NOT substrings of longer words
+        if 3 <= len(variant_upper) <= 4:
+            # Check if this is a clean match (at start or end of ticker_code)
+            is_at_start = ticker_code_upper.startswith(variant_upper)
+            is_at_end = ticker_code_upper.endswith(variant_upper)
+
+            if is_at_start or is_at_end:
+                # Clean boundary match - high score
+                score = 100.0
+                match_type = 'exact_code_boundary'
+            else:
+                # Middle of ticker - still good if it's 4 chars
+                score = 90.0 if len(variant_upper) == 4 else 70.0
+                match_type = 'exact_code_middle'
+
+        # MEDIUM PRIORITY: 2 char codes (less reliable)
+        elif len(variant_upper) == 2:
+            is_at_start = ticker_code_upper.startswith(variant_upper)
+            is_at_end = ticker_code_upper.endswith(variant_upper)
+
+            if is_at_start or is_at_end:
+                score = 80.0
+                match_type = '2char_boundary'
+            else:
+                score = 50.0
+                match_type = '2char_middle'
+
+        # LOW PRIORITY: Full names (5+ chars)
         elif len(variant_upper) >= 5:
-            # Full team name match
             coverage = len(variant_upper) / len(ticker_code_upper)
-            score = 100.0 * coverage
+            score = 70.0 * coverage  # Max 70 for full name matches
             match_type = 'full_name'
 
-            # Apply penalties ONLY to fuzzy matches
-            if not allow_fuzzy:
-                # In strict mode, full names need high coverage
-                if coverage < 0.4:
-                    continue
-
-        # COMMON WORD ONLY (reject these)
-        elif variant_upper in COMMON_WORDS:
-            continue
-
-        # SHORT PARTIAL MATCH (< 3 chars, not a known code)
+        # VERY LOW: Single char (almost never use)
         else:
-            if not allow_fuzzy:
-                continue  # Skip in strict mode
-
-            score = 50.0  # Low score for partial matches
-            match_type = 'partial'
+            score = 20.0
+            match_type = 'single_char'
 
         if score > best_score:
             best_score = score
             best_variant = variant
 
     if best_score > 0 and logger.isEnabledFor(logging.DEBUG):
-        logger.debug(f"    Team match: '{best_variant}' in '{ticker_code}' = {best_score:.1f} ({match_type})")
+        logger.debug(f"    Team '{team_name_for_logging}': '{best_variant}' in '{ticker_code}' = {best_score:.1f} ({match_type})")
 
-    return best_score
+    return best_score, best_variant
 
-def calculate_game_match_score(ticker: str, away_variants: List[str], home_variants: List[str], allow_fuzzy: bool = True) -> Tuple[float, Dict[str, Any]]:
+def calculate_game_match_score(ticker: str, away_variants: List[str], home_variants: List[str], away_team_name: str = "", home_team_name: str = "") -> Tuple[float, Dict[str, Any]]:
     """
-    Calculate overall match score for a game
-
-    Returns:
-        score (float): 0-100
-        match_details (dict): Breakdown of match
+    Match a game to a ticker with detailed scoring
+    Replaces older logic with strict min_score check
     """
-    # Extract team code portion from ticker
-    # e.g., "KXNCAAMBGAME-26FEB18MDNW-MD" → "MDNW"
-    # UPDATED REGEX: Handle both market tickers (trailing dash) and event tickers (end of string)
+    # Extract team code portion
     match = re.search(r'-\d{2}[A-Z]{3}\d{2}([A-Z0-9]+)(?:-|$)', ticker)
     if not match:
         return 0.0, {}
 
     team_code = match.group(1)
 
-    # logger.debug(f"  Evaluating ticker team code: '{team_code}'")
+    # logger.debug(f"  Evaluating: {ticker} (team code: '{team_code}')")
 
-    # Calculate scores for both teams
-    away_score = calculate_team_match_score(team_code, away_variants, allow_fuzzy)
-    home_score = calculate_team_match_score(team_code, home_variants, allow_fuzzy)
+    # Score both teams
+    away_score, away_match = calculate_team_match_score(team_code, away_variants, away_team_name)
+    home_score, home_match = calculate_team_match_score(team_code, home_variants, home_team_name)
 
-    # logger.debug(f"    Away score: {away_score:.1f}, Home score: {home_score:.1f}")
+    # CRITICAL CHECK: Ensure matches don't overlap
+    # If both teams matched the same variant, reject!
+    if away_match and home_match and away_match == home_match:
+        logger.warning(f"  ❌ REJECTED: Both teams matched same variant '{away_match}' in {ticker}")
+        return 0.0, {'reason': 'duplicate_match'}
 
-    # STRICT MODE: Both teams must match well
-    if not allow_fuzzy:
-        # Require both teams to have good scores
-        if away_score < 80.0 or home_score < 80.0:
-            # logger.debug(f"    ❌ REJECTED: One or both scores too low in strict mode")
-            return 0.0, {'away_score': away_score, 'home_score': home_score, 'reason': 'low_score_strict'}
+    # CRITICAL CHECK: Both teams must match reasonably well
+    # Use MINIMUM score, not average, to ensure both teams are present
+    min_score = min(away_score, home_score)
+    avg_score = (away_score + home_score) / 2.0
 
-    # FUZZY MODE: Be more lenient
-    else:
-        # At least one team must match well
-        if away_score < 40.0 and home_score < 40.0:
-            # logger.debug(f"    ❌ REJECTED: Both scores too low")
-            return 0.0, {'away_score': away_score, 'home_score': home_score, 'reason': 'low_score_both'}
+    # If one team has very low score, reject
+    if min_score < 60.0:
+        # logger.debug(f"  ❌ REJECTED: Min score too low (away={away_score:.1f}, home={home_score:.1f})")
+        return 0.0, {'away_score': away_score, 'home_score': home_score, 'reason': 'min_score_low'}
 
-    # Calculate final score (average of both teams)
-    final_score = (away_score + home_score) / 2.0
+    # Final score favors the minimum (both teams must match well)
+    final_score = (min_score * 0.7) + (avg_score * 0.3)
 
-    match_details = {
+    # logger.info(f"  Match score: {final_score:.1f} (away={away_score:.1f}/{away_match}, home={home_score:.1f}/{home_match})")
+
+    return final_score, {
         'team_code': team_code,
         'away_score': away_score,
+        'away_match': away_match,
         'home_score': home_score,
+        'home_match': home_match,
         'final_score': final_score
     }
-
-    # logger.info(f"  ✅ Match score: {final_score:.1f} (away={away_score:.1f}, home={home_score:.1f})")
-    return final_score, match_details
 
 class KalshiAPIError(Exception):
     """Base error for Kalshi API issues."""
@@ -316,14 +323,14 @@ def parse_event_ticker_codes(event_ticker: str) -> Dict[str, str]:
             home_valid = home_resolved in all_codes
 
             # Calculate Quality Score
-            # Exact Match = 2 points
+            # Exact Match = 3 points (prioritize exact codes strongly)
             # Resolved/Fuzzy Match = 1 point
-            # Max possible = 4 (Both Exact)
+            # Max possible = 6 (Both Exact)
             quality = 0
-            if away_exact: quality += 2
+            if away_exact: quality += 3
             elif away_valid: quality += 1
 
-            if home_exact: quality += 2
+            if home_exact: quality += 3
             elif home_valid: quality += 1
 
             # Log this attempt for debugging
@@ -2005,7 +2012,7 @@ def _team_score(team_code: str, target_clean: str, target_codes: List[str]) -> f
     # calculate_team_match_score(ticker_code, team_variants)
     # We can pass [target_clean] + target_codes as variants
     variants = [target_clean] + target_codes
-    new_score = calculate_team_match_score(clean_code, variants)
+    new_score, _ = calculate_team_match_score(clean_code, variants)
     if new_score > 60.0:
         return new_score
 
@@ -2192,7 +2199,8 @@ def _match_via_events(
                 ticker,
                 away_codes, # Variants
                 home_codes, # Variants
-                allow_fuzzy=False # Strict
+                away_team_name=away_team_name,
+                home_team_name=home_team_name
             )
 
             if score >= 90.0:
@@ -2206,28 +2214,6 @@ def _match_via_events(
                 best_score = score
                 best_event = candidate
                 best_details = details
-
-        # Phase 2 Loop (if needed)
-        if best_score < 90.0:
-            logger.info(f"🔍 Phase 2: Fuzzy matching (allow partial matches)")
-            for candidate in events:
-                ticker = candidate.get("ticker", "")
-
-                # Date Check
-                if not _check_date_tolerance(ticker, game_dt_utc, league):
-                    continue
-
-                score, details = calculate_game_match_score(
-                    ticker,
-                    away_codes,
-                    home_codes,
-                    allow_fuzzy=True # Fuzzy
-                )
-
-                if score > best_score:
-                    best_score = score
-                    best_event = candidate
-                    best_details = details
 
         # Final Threshold Check
         # User requested 85.0 threshold
@@ -3128,9 +3114,8 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
     # Constants for fuzzy logic
     DATE_TOLERANCE_DAYS = 2
     # If using rapidfuzz (0-100 scale), threshold needs to be high.
-    # We sum two scores (Home + Away), so max is 200.
-    # Accept if sum > 100 (one exact match + one strong fuzzy, or two decent fuzzy)
-    TEAM_FUZZY_THRESHOLD = 100.0
+    # We use weighted average (max 100).
+    TEAM_FUZZY_THRESHOLD = 80.0
 
     # Coverage Debug
     markets_considered = 0
@@ -3160,8 +3145,14 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
         score_home_B = _team_score(teams[1], home_clean, home_codes)
         score_away_A = _team_score(teams[0], away_clean, away_codes)
 
-        score_direct = score_home_A + score_away_B
-        score_swap = score_home_B + score_away_A
+        # New Logic using min score weighting
+        min_direct = min(score_home_A, score_away_B)
+        score_direct = (min_direct * 0.7) + ((score_home_A + score_away_B) / 2 * 0.3)
+        if min_direct < 60: score_direct = 0
+
+        min_swap = min(score_home_B, score_away_A)
+        score_swap = (min_swap * 0.7) + ((score_home_B + score_away_A) / 2 * 0.3)
+        if min_swap < 60: score_swap = 0
 
         score = max(score_direct, score_swap)
 
@@ -3734,7 +3725,8 @@ class KalshiIntegrator:
         # Helper to score a match between a ticker code and team variants
         def _score_team_match(ticker_code: str, team_variants: List[str]) -> float:
             # Use the new strict scoring function
-            return calculate_team_match_score(ticker_code, team_variants)
+            s, _ = calculate_team_match_score(ticker_code, team_variants)
+            return s
 
         for market in kalshi_markets:
             ticker = market.get("ticker", "")
@@ -3789,8 +3781,13 @@ class KalshiIntegrator:
 
             # Calculate combined scores
             # Threshold: We need strong matches.
-            score1 = (score_away_1 + score_home_1) / 2
-            score2 = (score_away_2 + score_home_2) / 2
+            min1 = min(score_away_1, score_home_1)
+            score1 = (min1 * 0.7) + ((score_away_1 + score_home_1) / 2 * 0.3)
+            if min1 < 60: score1 = 0
+
+            min2 = min(score_away_2, score_home_2)
+            score2 = (min2 * 0.7) + ((score_away_2 + score_home_2) / 2 * 0.3)
+            if min2 < 60: score2 = 0
 
             match_score = 0
             is_match = False
@@ -4085,6 +4082,16 @@ class KalshiIntegrator:
 
         all_markets = list(collected.values())
         logger.info(f"Kalshi get_league_markets: {len(all_markets)} unique markets after ticker-level dedup")
+
+        # --- DEBUG SEARCH FOR MISSING TEAMS (Issue #3) ---
+        if logger.isEnabledFor(logging.INFO):
+            debug_codes = ['KENN', 'MOST', 'MIZZ', 'MIST']
+            for code in debug_codes:
+                found = [m for m in all_markets if code in str(m.get('event_ticker', ''))]
+                logger.info(f"🔍 Markets with '{code}': {len(found)}")
+                if found:
+                    for m in found[:5]:
+                         logger.info(f"     {m.get('event_ticker')}")
 
         # --- DIAGNOSTIC: dump all unique team blocks from NCAAB tickers ---
         # Only run if DEBUG logging is enabled (performance optimization)
