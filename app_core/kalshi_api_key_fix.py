@@ -24,7 +24,7 @@ def initialize_kalshi_with_api_key():
                 # Initialize with API key/secret instead of email/password
                 st.session_state['kalshi_integrator'] = KalshiIntegrator(
                     api_key=kalshi_api_key,
-                    secret_key=kalshi_secret_key
+                    api_secret=kalshi_secret_key
                 )
                 st.sidebar.success("✅ Kalshi: Connected (API Key)")
                 logger.info("✅ Kalshi integrator initialized with API key")
@@ -67,19 +67,11 @@ def initialize_all_integrations():
             if kalshi_api_key and kalshi_secret_key:
                 from app_core import KalshiIntegrator
                 
-                # Try both possible initialization methods
-                try:
-                    # Method 1: Direct API key/secret
-                    st.session_state['kalshi_integrator'] = KalshiIntegrator(
-                        api_key=kalshi_api_key,
-                        secret_key=kalshi_secret_key
-                    )
-                except TypeError:
-                    # Method 2: Maybe it expects 'api_secret' instead of 'secret_key'
-                    st.session_state['kalshi_integrator'] = KalshiIntegrator(
-                        api_key=kalshi_api_key,
-                        api_secret=kalshi_secret_key
-                    )
+                # Use correct API initialization
+                st.session_state['kalshi_integrator'] = KalshiIntegrator(
+                    api_key=kalshi_api_key,
+                    api_secret=kalshi_secret_key
+                )
                 
                 st.sidebar.success("✅ Kalshi: Connected (API Key)")
                 logger.info("✅ Kalshi integrator initialized with API key/secret")
