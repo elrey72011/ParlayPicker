@@ -527,24 +527,58 @@ def generate_comprehensive_team_variants(team_name: str, league: str = None) -> 
         if mapped and mapped != "UNK":
             variants.insert(0, mapped)
 
-    # Step 3: Extract tokens (words)
-    tokens = [t for t in cleaned.split() if t and len(t) >= 2]
+    # Step 3: Extract tokens (words), filtering out common words
+    # defined locally to ensure scope isolation
+    COMMON_WORDS_FILTER = {
+        # Common abbreviations
+        'ST', 'SAINT', 'STATE', 'UNIVERSITY', 'UNIV', 'COLLEGE',
+
+        # Directional words
+        'NORTH', 'SOUTH', 'EAST', 'WEST', 'NORTHERN', 'SOUTHERN', 'EASTERN', 'WESTERN',
+
+        # Generic words
+        'THE', 'OF', 'AND', '&', 'AT',
+
+        # Location types
+        'CITY', 'TECH', 'A&M', 'AM'
+    }
+
+    raw_tokens = [t for t in cleaned.split() if t]
+    tokens = []
+
+    for t in raw_tokens:
+        if t in COMMON_WORDS_FILTER:
+            continue
+        if len(t) >= 2:
+            tokens.append(t)
+
     variants.extend(tokens)
 
     # Step 4: Generate initials (e.g., GSW from Golden State Warriors)
-    if len(tokens) >= 2:
-        initials = "".join(t[0] for t in tokens)
+    # Use raw_tokens here to capture 'GSW' from 'Golden State Warriors' correctly
+    # even if 'State' is filtered out of variants list
+    if len(raw_tokens) >= 2:
+        initials = "".join(t[0] for t in raw_tokens)
         if len(initials) >= 2:
             variants.append(initials)
             if len(initials) >= 3:
                 variants.append(initials[:3])
             variants.append(initials[:2])
 
+        # Also try filtered initials (e.g. NC State -> NCS, but North Carolina -> NC)
+        filtered_initials = "".join(t[0] for t in tokens)
+        if len(filtered_initials) >= 2 and filtered_initials != initials:
+             variants.append(filtered_initials)
+
     # Step 5: Add prefixes of each token (2-4 chars)
+    # Only use filtered tokens to avoid generating 'ST', 'NOR', 'SOU'
     for token in tokens:
         for prefix_len in [4, 3, 2]:
             if len(token) >= prefix_len:
-                variants.append(token[:prefix_len])
+                # Extra check: Don't add short prefixes if they match common words
+                prefix = token[:prefix_len]
+                if prefix not in COMMON_WORDS_FILTER:
+                    variants.append(prefix)
 
     # Step 6: Check common abbreviations dictionary
     if cleaned in KALSHI_TEAM_ABBREVIATIONS:
@@ -557,7 +591,7 @@ def generate_comprehensive_team_variants(team_name: str, league: str = None) -> 
             stripped_clean = clean_team_name(stripped)
             if stripped_clean:
                 variants.append(stripped_clean)
-                stripped_tokens = [t for t in stripped_clean.split() if t and len(t) >= 2]
+                stripped_tokens = [t for t in stripped_clean.split() if t and len(t) >= 2 and t not in COMMON_WORDS_FILTER]
                 variants.extend(stripped_tokens)
 
     # Step 8: Try KALSHI_NCAAB_TEAM_CODES and NCAAB_TEAM_CODE_MAP mapping
@@ -1278,6 +1312,13 @@ KALSHI_NCAAB_TEAM_CODES = {
     "Stetson": "STET",
     "Stetson Hatters": "STET",
     "Western Carolina": "WCU",
+    "UNC Greensboro": "UNCG",
+    # Task Updates: Fix Team Codes & Variants
+    "Kennesaw St": "KENN",
+    "Missouri St": "MOST",
+    "Texas A&M": "TXAM",
+    "Texas A M": "TXAM",
+    "Ole Miss": "MISS",
     "UNC Greensboro": "UNCG",
     # New Mappings for v108 (Feb 2026 Fixes)
     "Campbell": "CAMP",
