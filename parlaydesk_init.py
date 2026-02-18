@@ -190,36 +190,45 @@ def init_vertex_from_secrets(logger: logging.Logger) -> Dict[str, Any]:
 
 def get_kalshi_integrator(logger: logging.Logger) -> Optional[Any]:
     """Initialize KalshiIntegrator once; returns None if not configured."""
+    if "kalshi_integrator" in st.session_state:
+        return st.session_state["kalshi_integrator"]
+
+    # Legacy fallback: check for old key
     if "kalshi_obj" in st.session_state:
-        return st.session_state["kalshi_obj"]
+        obj = st.session_state.pop("kalshi_obj")
+        if obj:
+            st.session_state["kalshi_integrator"] = obj
+            return obj
 
-    email = (
-        st.secrets.get("kalshi_email")
-        or st.secrets.get("KALSHI_EMAIL")
-        or (st.secrets.get("kalshi") or {}).get("email")
+    # Get API credentials (NOT email/password)
+    api_key = (
+        st.secrets.get("kalshi_api_key")
+        or st.secrets.get("KALSHI_API_KEY")
+        or (st.secrets.get("kalshi") or {}).get("api_key")
     )
-    password = (
-        st.secrets.get("kalshi_password")
-        or st.secrets.get("KALSHI_PASSWORD")
-        or (st.secrets.get("kalshi") or {}).get("password")
+    api_secret = (
+        st.secrets.get("kalshi_secret_key")
+        or st.secrets.get("kalshi_api_secret")
+        or st.secrets.get("KALSHI_API_SECRET")
+        or (st.secrets.get("kalshi") or {}).get("api_secret")
     )
 
-    if not email or not password or KalshiIntegrator is None:
+    if not api_key or not api_secret or KalshiIntegrator is None:
         st.session_state["kalshi_enabled"] = False
-        st.session_state["kalshi_obj"] = None
+        st.session_state["kalshi_integrator"] = None
         st.session_state["api_config"]["kalshi"] = False
         return None
 
     try:
-        integrator = KalshiIntegrator(email=email, password=password)
+        integrator = KalshiIntegrator(api_key=api_key, api_secret=api_secret)
         st.session_state["kalshi_enabled"] = True
-        st.session_state["kalshi_obj"] = integrator
+        st.session_state["kalshi_integrator"] = integrator
         st.session_state["api_config"]["kalshi"] = True
         return integrator
     except Exception as exc:  # pragma: no cover
         logger.warning(f"Kalshi init failed: {exc}")
         st.session_state["kalshi_enabled"] = False
-        st.session_state["kalshi_obj"] = None
+        st.session_state["kalshi_integrator"] = None
         st.session_state["api_config"]["kalshi"] = False
         return None
 
