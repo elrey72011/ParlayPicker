@@ -7859,7 +7859,8 @@ def match_kalshi_market(
                 home_team=home,
                 away_team=away,
                 game_date=kalshi_date_str,
-                kalshi_markets=all_league_markets
+                kalshi_markets=all_league_markets,
+                league=row.get('league')
             )
 
             # Helper to convert raw market to KalshiMatchResult

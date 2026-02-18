@@ -3600,7 +3600,8 @@ class KalshiIntegrator:
         home_team: str,
         away_team: str,
         game_date: str,
-        kalshi_markets: List[Dict]
+        kalshi_markets: List[Dict],
+        league: str = "NCAAB"
     ) -> Dict[str, Any]:
         """
         Match a game to Kalshi markets with enhanced logging and fuzzy matching.
@@ -3610,19 +3611,18 @@ class KalshiIntegrator:
             away_team: Away team name from TheOddsAPI
             game_date: Game date in format "26FEB19"
             kalshi_markets: List of Kalshi market dictionaries
+            league: League identifier (default "NCAAB")
 
         Returns:
             Dictionary with matched markets by type (GAME, SPREAD, TOTAL)
         """
-        from app_core.team_name_mapping import (
-            fuzzy_match_teams,
-            extract_team_abbreviations_from_ticker,
-            get_team_variants
-        )
+        # Generate comprehensive variants (includes codes, stripped mascots, etc.)
+        home_variants = generate_comprehensive_team_variants(home_team, league)
+        away_variants = generate_comprehensive_team_variants(away_team, league)
 
         logger.info(f"🔍 KALSHI_MATCH: Attempting to match {away_team} @ {home_team} on {game_date}")
-        logger.info(f"   Away team variants: {get_team_variants(away_team)}")
-        logger.info(f"   Home team variants: {get_team_variants(home_team)}")
+        logger.info(f"   Away team variants: {away_variants}")
+        logger.info(f"   Home team variants: {home_variants}")
 
         matched_markets = {
             "GAME": [],
@@ -3634,6 +3634,33 @@ class KalshiIntegrator:
         best_match_score = 0
         best_match_ticker = None
 
+        # Helper to score a match between a ticker code and team variants
+        def _score_team_match(ticker_code: str, team_variants: List[str]) -> float:
+            if not ticker_code:
+                return 0.0
+
+            ticker_upper = ticker_code.upper()
+
+            # 1. Exact Match in Variants (Highest)
+            if ticker_upper in team_variants:
+                return 100.0
+
+            # 2. Fuzzy Match against all variants
+            if rapidfuzz:
+                best_r = 0
+                for v in team_variants:
+                    r = fuzz.ratio(ticker_upper, v)
+                    if r > best_r:
+                        best_r = r
+                return float(best_r)
+
+            # Fallback simple containment
+            for v in team_variants:
+                if ticker_upper in v or v in ticker_upper:
+                    return 80.0
+
+            return 0.0
+
         for market in kalshi_markets:
             ticker = market.get("ticker", "")
 
@@ -3641,39 +3668,66 @@ class KalshiIntegrator:
             if game_date not in ticker:
                 continue
 
-            # Extract team abbreviations from ticker
-            kalshi_team1, kalshi_team2 = extract_team_abbreviations_from_ticker(ticker)
+            # Get event ticker for parsing codes (prefer event_ticker, fallback to stripping market suffix)
+            event_ticker = market.get("event_ticker")
+            if not event_ticker:
+                # Try to extract event ticker from market ticker
+                # KXNCAAMBGAME-26FEB18CLEVYSU-CLEV -> KXNCAAMBGAME-26FEB18CLEVYSU
+                if ticker.count('-') >= 2:
+                    event_ticker = ticker.rsplit('-', 1)[0]
+                else:
+                    event_ticker = ticker
+
+            # Extract team codes using robust parser (handles variable length NCAAB codes)
+            parsed = parse_event_ticker_codes(event_ticker)
+            if not parsed:
+                continue
+
+            kalshi_team1 = parsed.get("away") # Usually away team code
+            kalshi_team2 = parsed.get("home") # Usually home team code
 
             if not kalshi_team1 or not kalshi_team2:
                 continue
 
             candidates_found += 1
 
-            # Try matching both team orders
-            # Order 1: away=team1, home=team2
-            away_match1, away_score1 = fuzzy_match_teams(away_team, kalshi_team1)
-            home_match1, home_score1 = fuzzy_match_teams(home_team, kalshi_team2)
+            # Resolve aliases if needed (e.g. UNM -> NEW MEXICO -> variants match?)
+            k1_resolved = resolve_team_code(kalshi_team1, league)
+            k2_resolved = resolve_team_code(kalshi_team2, league)
 
-            # Order 2: away=team2, home=team1
-            away_match2, away_score2 = fuzzy_match_teams(away_team, kalshi_team2)
-            home_match2, home_score2 = fuzzy_match_teams(home_team, kalshi_team1)
+            # Try matching both team orders (Kalshi sometimes flips or we parsed wrong)
+            # Order 1: away=k1, home=k2 (Standard)
+            score_away_1 = _score_team_match(k1_resolved, away_variants)
+            score_home_1 = _score_team_match(k2_resolved, home_variants)
 
-            # Calculate combined scores for both orders
-            score1 = (away_score1 + home_score1) / 2
-            score2 = (away_score2 + home_score2) / 2
+            # Order 2: away=k2, home=k1 (Swap)
+            score_away_2 = _score_team_match(k2_resolved, away_variants)
+            score_home_2 = _score_team_match(k1_resolved, home_variants)
+
+            # Calculate combined scores
+            # Threshold: We need strong matches.
+            score1 = (score_away_1 + score_home_1) / 2
+            score2 = (score_away_2 + score_home_2) / 2
 
             match_score = 0
+            is_match = False
+
             # Use the better order
-            if score1 > score2 and away_match1 and home_match1:
+            if score1 >= 80 and score1 >= score2:
                 match_score = score1
+                is_match = True
                 logger.debug(f"   ✓ CANDIDATE: {ticker} (Score: {match_score:.1f}) "
-                            f"[{kalshi_team1}={away_team}:{away_score1}, {kalshi_team2}={home_team}:{home_score1}]")
-            elif score2 >= score1 and away_match2 and home_match2:
+                            f"[{k1_resolved}={away_team}:{score_away_1}, {k2_resolved}={home_team}:{score_home_1}]")
+            elif score2 >= 80 and score2 > score1:
                 match_score = score2
-                logger.debug(f"   ✓ CANDIDATE: {ticker} (Score: {match_score:.1f}) "
-                            f"[{kalshi_team2}={away_team}:{away_score2}, {kalshi_team1}={home_team}:{home_score2}]")
+                is_match = True
+                logger.debug(f"   ✓ CANDIDATE (SWAP): {ticker} (Score: {match_score:.1f}) "
+                            f"[{k2_resolved}={away_team}:{score_away_2}, {k1_resolved}={home_team}:{score_home_2}]")
             else:
                 # No match
+                continue
+
+            if not is_match:
                 continue
 
             # Track best match
