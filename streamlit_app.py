@@ -11059,15 +11059,6 @@ with tab_master:
                     spread_alt_prob_final = spread_pick_result['alt_prob']
                     spread_alt_label = spread_pick_result['alt_label']
 
-                    # Update row dictionary directly
-                    row['Pick'] = spread_pick_label
-                    row['prob'] = spread_prob_pick_final
-                    row['Spread Pick'] = spread_pick_label
-                    row['Spread & Pick'] = spread_pick_label
-                    row['spreadprobpickfinal'] = spread_prob_pick_final
-                    row['spreadprobaltfinal'] = spread_alt_prob_final
-                    row['spreadpicklabel'] = spread_pick_label
-                    row['spreadaltlabel'] = spread_alt_label
 
                     # Also update internal tracking
                     spread_pick = spread_pick_result['pick_team']
@@ -11178,13 +11169,6 @@ with tab_master:
                     total_alt_prob_final = total_pick_result['alt_prob']
                     total_alt_label = total_pick_result['alt_label']
 
-                    # Update row dictionary directly
-                    row['Total Pick'] = total_pick_label
-                    row['totalprobpickfinal'] = total_prob_pick_final
-                    row['totalprobaltfinal'] = total_alt_prob_final
-                    row['totalpicklabel'] = total_pick_label
-                    row['totalaltlabel'] = total_alt_label
-                    row['Total & Pick'] = total_pick_label
 
                     # Also update internal tracking
                     total_pick_side = total_pick_result['pick_side']
@@ -11232,27 +11216,31 @@ with tab_master:
                 _s_valid = _s_prob > 0 and spread_pick_label
                 _t_valid = _t_prob > 0 and total_pick_label
 
+                best_overall_pick = None
+                best_overall_prob = None
+                best_overall_pick_type = None
+
                 if _s_valid and _t_valid:
                     if _s_prob >= _t_prob:
-                        row['Best Overall Pick'] = spread_pick_label
-                        row['Best Overall Prob'] = _s_prob
-                        row['bestpicktype'] = 'SPREAD'
+                        best_overall_pick = spread_pick_label
+                        best_overall_prob = _s_prob
+                        best_overall_pick_type = 'SPREAD'
                     else:
-                        row['Best Overall Pick'] = total_pick_label
-                        row['Best Overall Prob'] = _t_prob
-                        row['bestpicktype'] = 'TOTAL'
+                        best_overall_pick = total_pick_label
+                        best_overall_prob = _t_prob
+                        best_overall_pick_type = 'TOTAL'
                 elif _s_valid:
-                    row['Best Overall Pick'] = spread_pick_label
-                    row['Best Overall Prob'] = _s_prob
-                    row['bestpicktype'] = 'SPREAD'
+                    best_overall_pick = spread_pick_label
+                    best_overall_prob = _s_prob
+                    best_overall_pick_type = 'SPREAD'
                 elif _t_valid:
-                    row['Best Overall Pick'] = total_pick_label
-                    row['Best Overall Prob'] = _t_prob
-                    row['bestpicktype'] = 'TOTAL'
+                    best_overall_pick = total_pick_label
+                    best_overall_prob = _t_prob
+                    best_overall_pick_type = 'TOTAL'
 
                 # Validation (User Request)
-                # Using safe get/comparison
-                _best_prob = row.get('Best Overall Prob')
+                # Using local variable
+                _best_prob = best_overall_prob
                 if _best_prob is not None and isinstance(_best_prob, (int, float)) and _best_prob < 0.50:
                      logger.warning(f"CRITICAL: Best overall prob {_best_prob:.3f} < 50% for {g.get('home_team')} vs {g.get('away_team')}")
 
@@ -11823,6 +11811,10 @@ with tab_master:
                         #         ml_row["Market"] = "Total"
                         #         ml_row["Pick"] = ml_row.get("Total & Pick")
 
+                        ml_row['Best Overall Pick'] = best_overall_pick
+                        ml_row['Best Overall Prob'] = best_overall_prob
+                        ml_row['bestpicktype'] = best_overall_pick_type
+                        ml_row['best_pick_type'] = best_overall_pick_type
                         accumulated_rows.append(ml_row)
                         ml_row_created = True
                         master_stats["h2h_found"] += 1
@@ -12157,6 +12149,10 @@ with tab_master:
                     )
                     spread_row["Eligible_Top_Picks"] = eligible
                     spread_row = apply_sentiment_defaults(spread_row, sentiment_defaults_base)
+                    spread_row['Best Overall Pick'] = best_overall_pick
+                    spread_row['Best Overall Prob'] = best_overall_prob
+                    spread_row['bestpicktype'] = best_overall_pick_type
+                    spread_row['best_pick_type'] = best_overall_pick_type
                     accumulated_rows.append(spread_row)
                     spread_row_created = True
                     master_stats["market_rows_out"] += 1
@@ -12474,6 +12470,10 @@ with tab_master:
                     )
                     total_row["Eligible_Top_Picks"] = eligible
                     total_row = apply_sentiment_defaults(total_row, sentiment_defaults_base)
+                    total_row['Best Overall Pick'] = best_overall_pick
+                    total_row['Best Overall Prob'] = best_overall_prob
+                    total_row['bestpicktype'] = best_overall_pick_type
+                    total_row['best_pick_type'] = best_overall_pick_type
                     accumulated_rows.append(total_row)
                     total_row_created = True
                     master_stats["market_rows_out"] += 1
