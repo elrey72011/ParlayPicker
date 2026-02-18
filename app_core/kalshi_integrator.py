@@ -785,6 +785,8 @@ NCAAB_TEAM_CODE_MAP: Dict[str, str] = {
     "LIU": "LIU", "LIU SHARKS": "LIU", "LONG ISLAND": "LIU", "LONG ISLAND UNIVERSITY": "LIU",
     "SOUTH ALABAMA": "SOAL", "SOUTH ALABAMA JAGUARS": "SOAL",
     "MARSHALL": "MARS", "MARSHALL THUNDERING HERD": "MARS",
+    "LAFAYETTE": "LAF", "LAFAYETTE LEOPARDS": "LAF",
+    "HOLY CROSS": "HC", "HOLY CROSS CRUSADERS": "HC",
 }
 
 # ADD THIS COMPREHENSIVE NCAAB TEAM NAME → KALSHI CODE MAPPING
@@ -1832,8 +1834,46 @@ def _match_via_events(
 
             # Time check and scoring adjustment
             time_diff_hours = None
+            date_diff_days = None
             time_score = 0
 
+            # --- DATE LOGIC ENHANCEMENT (Feb 2026 Fix) ---
+            # 1. Parse Ticker Date (e.g., 26FEB19)
+            ticker_date_valid = False
+            ticker_date_dt = None
+
+            # Extract date token from ticker parsed info
+            date_token = parsed.get("date_token") # e.g. "26FEB19"
+            if date_token:
+                try:
+                    # Parse YYMONDD -> Date
+                    # Handle uppercase month (FEB -> Feb) for strptime
+                    ticker_date_dt = datetime.strptime(date_token.title(), "%y%b%d").date()
+
+                    # 2. Convert Game Time to EST (US/Eastern) for date comparison
+                    # Games at 23:00 UTC are the next day in UTC but same day in EST
+                    game_dt_est = game_dt_utc.astimezone(pytz.timezone("US/Eastern"))
+                    game_date_est = game_dt_est.date()
+
+                    # 3. Calculate Date Difference (Days)
+                    date_diff_days = (ticker_date_dt - game_date_est).days
+
+                    # 4. Check Tolerance (±1 Day)
+                    # This handles games crossing midnight or timezone shifts
+                    if abs(date_diff_days) <= 1:
+                        ticker_date_valid = True
+
+                    # DIAGNOSTIC LOGGING
+                    logger.debug(f"   🕒 Date Check: {ticker} (Token: {date_token})")
+                    logger.debug(f"      Game UTC: {game_dt_utc}, EST: {game_dt_est}")
+                    logger.debug(f"      Compare: Game EST {game_date_est} vs Ticker {ticker_date_dt} (Diff: {date_diff_days} days)")
+                    logger.debug(f"      Valid: {ticker_date_valid}")
+
+                except Exception as e:
+                    logger.warning(f"   ⚠️ Date parsing failed for {date_token}: {e}")
+
+            # 5. Check Close Time (Market must not be expired if we care, but main use is validation)
+            market_open_or_valid = True
             close_ts = evt.get("close_time") # ISO string
             if close_ts:
                 try:
@@ -1842,21 +1882,34 @@ def _match_via_events(
 
                     time_diff_hours = abs((dt - game_dt_utc).total_seconds()) / 3600.0
 
-                    # Time Scoring Logic (Bonus for tight match, penalty for wide miss)
-                    is_pro = league in ["NBA", "NFL", "NHL", "MLB"]
-                    # Tighter window for pros (exact schedule), looser for college (daily buckets)
-                    # v106: Relaxed wide_window for Pro from 24h to 36h to prevent penalties on timezone drifts
-                    tight_window = 12 if not is_pro else 6
-                    # Relaxed Date Penalty for College Sports (48h) to account for games spanning midnight UTC
-                    wide_window = 48 if league in ["NCAAB", "NCAAF"] else 36
-
-                    if time_diff_hours <= tight_window:
-                        time_score = 25  # Bonus for date confirmation
-                    elif time_diff_hours > wide_window:
-                        time_score = -25 # Penalty for wrong day
+                    # Check if market is closed/expired
+                    # Use pytz.utc which is already imported
+                    now_utc = datetime.now(pytz.utc)
+                    if dt < now_utc:
+                        market_open_or_valid = False
+                        logger.warning(f"   ⚠️ Market {ticker} is CLOSED/EXPIRED (closed: {dt})")
 
                 except:
                     pass
+
+            # 6. Apply Scoring
+            if ticker_date_valid and market_open_or_valid:
+                # Primary date check passed AND market is open (Strong Bonus)
+                time_score = 25
+            elif ticker_date_valid:
+                 # Date matched but market closed - penalize heavily to avoid matching dead markets
+                 logger.warning(f"   ⚠️ Date matched but market closed for {ticker} - Skipping bonus")
+                 time_score = -50
+            elif time_diff_hours is not None:
+                # Fallback to legacy time window if ticker date missing
+                is_pro = league in ["NBA", "NFL", "NHL", "MLB"]
+                tight_window = 12 if not is_pro else 6
+                wide_window = 48 if league in ["NCAAB", "NCAAF"] else 36
+
+                if time_diff_hours <= tight_window:
+                    time_score = 25
+                elif time_diff_hours > wide_window:
+                    time_score = -25
 
             final_score = match_score + time_score
 
@@ -1874,6 +1927,8 @@ def _match_via_events(
             logger.info(f"         - Team Score: {match_score}")
             if time_diff_hours is not None:
                 logger.info(f"      Time Check: {time_diff_hours:.1f}h diff (Score Adj: {time_score:+})")
+            if date_diff_days is not None:
+                logger.info(f"      Date Check: {date_diff_days} days diff (Valid: {abs(date_diff_days) <= 1})")
             logger.info(f"      Final Score: {final_score} (Threshold: 70)")
 
             if final_score > best_score:
@@ -1888,6 +1943,7 @@ def _match_via_events(
                     "score_1": score_1,
                     "score_2": score_2,
                     "time_diff_hours": time_diff_hours,
+                    "date_diff_days": date_diff_days,
                     "time_score": time_score
                 }
 
@@ -2822,6 +2878,8 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
             away_team_name=away_team
         )
         if event_match:
+            # SUMMARY LOG: SUCCESS (Event-Based)
+            logger.info(f"🏁 MATCH SUMMARY: {away_team} @ {home_team} [{league_key}] -> ✅ MATCHED (Event-Based, Ticker: {event_match.market_ticker})")
             return event_match
 
     # GENERIC MATCHING (Non-NBA or Fallback)
@@ -2913,6 +2971,9 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
         if league_key in ["NBA", "NFL", "NCAAB"]: # Reduce spam
              logger.info(f"Kalshi Match Failed [{league_key}]: {home_clean} vs {away_clean}. Best Score: {best_score}")
 
+        # SUMMARY LOG: FAILED
+        logger.info(f"🏁 MATCH SUMMARY: {away_team} @ {home_team} [{league_key}] -> ❌ NO MATCH (Reason: Low Score {best_score:.1f}, Threshold: {TEAM_FUZZY_THRESHOLD})")
+
         return KalshiMatchResult(
             matched=False,
             kalshi_available=True,
@@ -2924,6 +2985,10 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
         )
 
     meta = best_market["__meta"]
+
+    # SUMMARY LOG: SUCCESS (Fuzzy)
+    logger.info(f"🏁 MATCH SUMMARY: {away_team} @ {home_team} [{league_key}] -> ✅ MATCHED (Fuzzy Score {best_score:.1f}, Ticker: {best_market.get('ticker')})")
+
     return KalshiMatchResult(
         matched=True,
         kalshi_available=True,
