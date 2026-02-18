@@ -5818,6 +5818,23 @@ location = read_secret("GCP_LOCATION", "us-central1")
 kalshi_api_key = read_secret("KALSHI_API_KEY") or read_secret("kalshi_api_key")
 kalshi_api_secret = read_secret("KALSHI_API_SECRET") or read_secret("kalshi_api_secret")
 
+# DIAGNOSTIC
+print(f"🔐 Kalshi Credentials Check:")
+print(f"   API Key exists: {bool(kalshi_api_key)}")
+print(f"   Private Key Path/Content exists: {bool(kalshi_api_secret)}")
+if kalshi_api_key:
+    masked_key = f"{kalshi_api_key[:4]}...{kalshi_api_key[-4:]}" if len(kalshi_api_key) > 8 else "SHORT_KEY"
+    print(f"   API Key preview: {masked_key}")
+if kalshi_api_secret:
+    if "-----BEGIN" in str(kalshi_api_secret):
+        print(f"   Private Key is PEM content")
+    else:
+        print(f"   Private Key Path: {kalshi_api_secret}")
+        try:
+            print(f"   Private Key File exists: {os.path.exists(kalshi_api_secret)}")
+        except Exception:
+            print(f"   Private Key File exists: check failed")
+
 # Initialize Gemini API Key if available
 # Don't fallback to config.GEMINI_API_KEY if it might be dummy/missing
 gemini_api_key = read_secret("GEMINI_API_KEY") or read_secret("GOOGLE_API_KEY")
