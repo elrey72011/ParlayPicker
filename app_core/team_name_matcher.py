@@ -5,6 +5,7 @@ This fixes the 15% → 95%+ match rate issue by properly normalizing team names
 """
 
 from difflib import SequenceMatcher
+from functools import lru_cache
 from typing import Optional, List, Tuple
 import re
 
@@ -336,6 +337,7 @@ class TeamNameMatcher:
     }
     
     @classmethod
+    @lru_cache(maxsize=4096)
     def normalize(cls, team: str, strip_mascots: bool = False) -> str:
         """
         Normalize team name for matching.
