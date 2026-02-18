@@ -1169,6 +1169,15 @@ KALSHI_NCAAB_TEAM_CODES = {
     "South Alabama Jaguars": "SOAL",
     "Marshall": "MARS",
     "Marshall Thundering Herd": "MARS",
+    # Feb 2026 - Ticker Fixes (Order/Code Mismatch)
+    "Georgetown": "GTWN",
+    "Army": "ARMY",
+    "Maryland": "MD",
+    "Northwestern": "NW",
+    "Saint Mary's": "SMC",
+    "Seattle": "SEA",
+    "UAB": "UAB",
+    "Temple": "TEM",
 }
 
 def normalize_team_for_kalshi(team_name: str) -> str:
@@ -1921,6 +1930,18 @@ def _match_via_events(
         resolved_home = {resolve_team_code(c, league) for c in home_codes}
         resolved_away = {resolve_team_code(c, league) for c in away_codes}
 
+        # --- NEW LOGIC: Pre-compute expected ticker blocks ---
+        # Task: Generate BOTH orders (Away+Home and Home+Away) to catch reversed tickers
+        expected_blocks = set()
+        if league in ["NCAAB", "NCAAF", "NBA", "NFL", "MLB", "NHL"]:
+             for hc in home_codes:
+                 for ac in away_codes:
+                     if hc and ac:
+                         # Generate BOTH orders
+                         expected_blocks.add(f"{ac}{hc}")
+                         expected_blocks.add(f"{hc}{ac}")
+        # ----------------------------------------------------
+
         for evt in events:
             ticker = evt.get("ticker")
             logger.info(f"Event ticker parsing: input='{ticker}' → parsed={parse_event_ticker_codes(ticker)}")
@@ -1972,14 +1993,26 @@ def _match_via_events(
             away_match_2 = s_away_2 > 0
             home_match_2 = s_home_2 > 0
 
-            match_score = max(score_1, score_2)
+            # Check for direct block match (Strongest Signal)
+            # This catches cases like BUTGTWN even if parsing logic fails or codes are unknown
+            block_match_score = 0
+            matched_block = None
+            for block in expected_blocks:
+                if block in ticker:
+                     block_match_score = 100
+                     matched_block = block
+                     # logger.info(f"   ✅ BLOCK MATCH: {ticker} contains {block}")
+                     break
+
+            match_score = max(score_1, score_2, block_match_score)
 
             if match_score > 0:
                 all_candidates.append({
                     "ticker": ticker,
                     "away": evt_away_code,
                     "home": evt_home_code,
-                    "score": match_score
+                    "score": match_score,
+                    "block_match": matched_block
                 })
 
             # Fallback: Try Name Matching on Event Title if code match failed
