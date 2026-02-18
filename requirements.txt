@@ -42,3 +42,4 @@ cfbd>=0.5.0
 nhl-api-py>=3.0.0
 CBBpy>=0.1.0
 rapidfuzz
+rapidfuzz>=3.0.0
