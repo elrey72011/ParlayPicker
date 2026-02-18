@@ -63,10 +63,14 @@ _DEBUG_GAME_LOG_COUNT = 0
 # Common words to penalize in matching (user request)
 COMMON_WORDS = {'STATE', 'ST', 'CAROLINA', 'CAR', 'CENTRAL', 'NORTH', 'SOUTH', 'EAST', 'WEST'}
 
-def calculate_team_match_score(ticker_code: str, team_variants: List[str]) -> float:
+def calculate_team_match_score(ticker_code: str, team_variants: List[str], allow_fuzzy: bool = True) -> float:
     """
-    Calculate match score with strict penalties for partial/common word matches.
-    Used to prevent false positive collisions (e.g. NC Central matching SMC due to 'C'/'Central').
+    Calculate match score for team matching
+
+    Args:
+        ticker_code: The team portion of ticker (e.g., "MDNW")
+        team_variants: List of possible team codes (e.g., ['MD', 'MARYLAND', ...])
+        allow_fuzzy: If False, only accept exact substring matches
     """
     if not ticker_code:
         return 0.0
@@ -74,65 +78,107 @@ def calculate_team_match_score(ticker_code: str, team_variants: List[str]) -> fl
     ticker_code_upper = ticker_code.upper()
     best_score = 0.0
     best_variant = None
+    match_type = None
 
     for variant in team_variants:
         variant_upper = variant.upper()
 
-        # Skip if variant is only a common word
-        if variant_upper in COMMON_WORDS:
+        # Check if variant is in ticker
+        if variant_upper not in ticker_code_upper:
             continue
 
-        # Check if variant is in ticker (substring)
-        if variant_upper in ticker_code_upper:
-            # Base score: how much of ticker does variant cover?
+        # EXACT CODE MATCH (2-4 chars, no common words)
+        if len(variant_upper) <= 4 and variant_upper not in COMMON_WORDS:
+            # This is likely a team code (MD, NW, SMC, etc.)
+            # Give full score if it matches
+            score = 100.0
+            match_type = 'exact_code'
+
+        # FULL NAME MATCH (5+ chars)
+        elif len(variant_upper) >= 5:
+            # Full team name match
             coverage = len(variant_upper) / len(ticker_code_upper)
-
-            # Penalty #1: Partial match penalty (not at start or end of ticker)
-            ticker_start = ticker_code_upper.startswith(variant_upper)
-            ticker_end = ticker_code_upper.endswith(variant_upper)
-
-            if not (ticker_start or ticker_end):
-                # Variant is in the middle - heavy penalty
-                coverage *= 0.5
-
-            # Penalty #2: Common word penalty
-            if any(word in variant_upper for word in COMMON_WORDS):
-                # Variant contains common words - moderate penalty
-                coverage *= 0.7
-
-            # Penalty #3: Short variant penalty (< 3 characters)
-            if len(variant_upper) < 3:
-                coverage *= 0.6
-
             score = 100.0 * coverage
+            match_type = 'full_name'
 
-            if score > best_score:
-                best_score = score
-                best_variant = variant
+            # Apply penalties ONLY to fuzzy matches
+            if not allow_fuzzy:
+                # In strict mode, full names need high coverage
+                if coverage < 0.4:
+                    continue
 
-        # Also allow Reverse Containment (Ticker Code inside Team Variant)
-        # e.g. Ticker="LOU" inside Variant="LOUISVILLE"
-        # This is essentially what _team_score was doing with "clean_code in target_clean"
-        elif ticker_code_upper in variant_upper:
-             # Calculate coverage of the ticker code relative to the variant
-             # This is a bit different, but ensures "LOU" matches "LOUISVILLE"
-             # Use a high base score for containment, but apply penalties if short
-             score = 90.0 # Base for valid containment
+        # COMMON WORD ONLY (reject these)
+        elif variant_upper in COMMON_WORDS:
+            continue
 
-             # Penalty for short ticker code
-             if len(ticker_code_upper) < 3:
-                 score *= 0.8
+        # SHORT PARTIAL MATCH (< 3 chars, not a known code)
+        else:
+            if not allow_fuzzy:
+                continue  # Skip in strict mode
 
-             # Penalty if ticker is just a common word
-             if ticker_code_upper in COMMON_WORDS:
-                 score *= 0.5
+            score = 50.0  # Low score for partial matches
+            match_type = 'partial'
 
-             if score > best_score:
-                 best_score = score
-                 best_variant = variant
+        if score > best_score:
+            best_score = score
+            best_variant = variant
 
-    # logger.debug(f"  Best team match: '{best_variant}' in '{ticker_code}' = {best_score:.1f}")
+    if best_score > 0 and logger.isEnabledFor(logging.DEBUG):
+        logger.debug(f"    Team match: '{best_variant}' in '{ticker_code}' = {best_score:.1f} ({match_type})")
+
     return best_score
+
+def calculate_game_match_score(ticker: str, away_variants: List[str], home_variants: List[str], allow_fuzzy: bool = True) -> Tuple[float, Dict[str, Any]]:
+    """
+    Calculate overall match score for a game
+
+    Returns:
+        score (float): 0-100
+        match_details (dict): Breakdown of match
+    """
+    # Extract team code portion from ticker
+    # e.g., "KXNCAAMBGAME-26FEB18MDNW-MD" → "MDNW"
+    # UPDATED REGEX: Handle both market tickers (trailing dash) and event tickers (end of string)
+    match = re.search(r'-\d{2}[A-Z]{3}\d{2}([A-Z0-9]+)(?:-|$)', ticker)
+    if not match:
+        return 0.0, {}
+
+    team_code = match.group(1)
+
+    # logger.debug(f"  Evaluating ticker team code: '{team_code}'")
+
+    # Calculate scores for both teams
+    away_score = calculate_team_match_score(team_code, away_variants, allow_fuzzy)
+    home_score = calculate_team_match_score(team_code, home_variants, allow_fuzzy)
+
+    # logger.debug(f"    Away score: {away_score:.1f}, Home score: {home_score:.1f}")
+
+    # STRICT MODE: Both teams must match well
+    if not allow_fuzzy:
+        # Require both teams to have good scores
+        if away_score < 80.0 or home_score < 80.0:
+            # logger.debug(f"    ❌ REJECTED: One or both scores too low in strict mode")
+            return 0.0, {'away_score': away_score, 'home_score': home_score, 'reason': 'low_score_strict'}
+
+    # FUZZY MODE: Be more lenient
+    else:
+        # At least one team must match well
+        if away_score < 40.0 and home_score < 40.0:
+            # logger.debug(f"    ❌ REJECTED: Both scores too low")
+            return 0.0, {'away_score': away_score, 'home_score': home_score, 'reason': 'low_score_both'}
+
+    # Calculate final score (average of both teams)
+    final_score = (away_score + home_score) / 2.0
+
+    match_details = {
+        'team_code': team_code,
+        'away_score': away_score,
+        'home_score': home_score,
+        'final_score': final_score
+    }
+
+    # logger.info(f"  ✅ Match score: {final_score:.1f} (away={away_score:.1f}, home={home_score:.1f})")
+    return final_score, match_details
 
 class KalshiAPIError(Exception):
     """Base error for Kalshi API issues."""
@@ -2055,303 +2101,117 @@ def _match_via_events(
         resolved_home = {resolve_team_code(c, league) for c in home_codes}
         resolved_away = {resolve_team_code(c, league) for c in away_codes}
 
-        # --- NEW LOGIC: Pre-compute expected ticker blocks ---
-        # Task: Generate BOTH orders (Away+Home and Home+Away) to catch reversed tickers
-        expected_blocks = set()
-        if league in ["NCAAB", "NCAAF", "NBA", "NFL", "MLB", "NHL"]:
-             for hc in home_codes:
-                 for ac in away_codes:
-                     if hc and ac:
-                         # Generate BOTH orders
-                         expected_blocks.add(f"{ac}{hc}")
-                         expected_blocks.add(f"{hc}{ac}")
-        # ----------------------------------------------------
+        # MATCHING LOGIC (Two-Phase: Strict then Fuzzy)
+        # 1. Phase 1: Strict (Exact Codes Only) - High confidence
+        # 2. Phase 2: Fuzzy (Partial Matches) - Fallback
 
-        for evt in events:
-            ticker = evt.get("ticker")
-            logger.info(f"Event ticker parsing: input='{ticker}' → parsed={parse_event_ticker_codes(ticker)}")
-            parsed = parse_event_ticker_codes(ticker)
-            if not parsed:
+        # Helper to check date tolerance
+        def _check_date_tolerance(ticker: str, game_dt_utc: datetime, league: str) -> bool:
+            # Extract date token from ticker using regex to be robust
+            # Ticker format: KX...-YYMONDD...
+            match = re.search(r'-(\d{2}[A-Z]{3}\d{2})', ticker)
+            if not match:
+                return False # Can't validate date, assume strict fail? Or lenient pass?
+                             # Better to be strict on date if we are being strict on teams.
+
+            date_token = match.group(1) # e.g. "26FEB19"
+            try:
+                # Parse YYMONDD -> Date
+                ticker_date_dt = datetime.strptime(date_token.title(), "%y%b%d").date()
+
+                # Convert Game Time to EST (US/Eastern) for date comparison
+                game_dt_est = game_dt_utc.astimezone(pytz.timezone("US/Eastern"))
+                game_date_est = game_dt_est.date()
+
+                # Calculate Date Difference
+                date_diff_days = (ticker_date_dt - game_date_est).days
+
+                # Check Tolerance
+                tolerance_days = 2 if league == 'NCAAB' else 1
+                return abs(date_diff_days) <= tolerance_days
+            except Exception:
+                return False
+
+        logger.info(f"🔍 Phase 1: Strict matching (exact codes only)")
+
+        # Track best match across phases
+        best_event = None
+        best_score = 0.0
+        best_details = None
+
+        # Phase 1 Loop
+        for candidate in events:
+            ticker = candidate.get("ticker", "")
+
+            # Date Check
+            if not _check_date_tolerance(ticker, game_dt_utc, league):
                 continue
 
-            evt_away_code = resolve_team_code(parsed.get("away"), league)
-            evt_home_code = resolve_team_code(parsed.get("home"), league)
+            score, details = calculate_game_match_score(
+                ticker,
+                away_codes, # Variants
+                home_codes, # Variants
+                allow_fuzzy=False # Strict
+            )
 
-            # Check codes against our candidates
-            score_1 = 0
+            if score >= 90.0:
+                logger.info(f"  ✅ EXACT MATCH: {ticker} (Score: {score:.1f})")
+                best_score = score
+                best_event = candidate
+                best_details = details
+                break # Stop immediately on exact match
 
-            # Calculate scores with fuzzy support (Task 1)
-            # 50 = Exact match
-            # 40 = Strong fuzzy match (ratio >= 80)
-            # 30 = Medium fuzzy match (ratio >= 65, NCAAB/NCAAF only)
+            if score > best_score:
+                best_score = score
+                best_event = candidate
+                best_details = details
 
-            def _get_code_score(code: str, candidates: set, league: str) -> float:
-                if not code: return 0.0
-                if code in candidates:
-                    return 50.0
+        # Phase 2 Loop (if needed)
+        if best_score < 90.0:
+            logger.info(f"🔍 Phase 2: Fuzzy matching (allow partial matches)")
+            for candidate in events:
+                ticker = candidate.get("ticker", "")
 
-                # Use strict match score for fuzzy/partial matches
-                # We need list of variants. 'candidates' is a set of resolved codes.
-                # Ideally we check against full name variants too, but here we only have codes.
-                # Let's convert set to list.
-                strict_score = calculate_team_match_score(code, list(candidates))
+                # Date Check
+                if not _check_date_tolerance(ticker, game_dt_utc, league):
+                    continue
 
-                # Scale strict_score (0-100) to our weight (max ~40 for fuzzy)
-                # If strict_score is high (e.g. 100), we give 40.
-                if strict_score > 90: return 40.0
-                if strict_score > 70: return 30.0
+                score, details = calculate_game_match_score(
+                    ticker,
+                    away_codes,
+                    home_codes,
+                    allow_fuzzy=True # Fuzzy
+                )
 
-                # Fuzzy fallback (Legacy)
-                if rapidfuzz and code and len(code) >= 2:
-                    best_r = 0
-                    for cand in candidates:
-                        if not cand: continue
-                        r = fuzz.ratio(code, cand)
-                        if r > best_r:
-                            best_r = r
+                if score > best_score:
+                    best_score = score
+                    best_event = candidate
+                    best_details = details
 
-                    if best_r >= 85: # Tightened from 80
-                        return 40.0
-                    if best_r >= 70 and league in ['NCAAB', 'NCAAF']: # Tightened from 65
-                        return 30.0
-                return 0.0
-
-            s_away_1 = _get_code_score(evt_away_code, resolved_away, league)
-            s_home_1 = _get_code_score(evt_home_code, resolved_home, league)
-            score_1 = s_away_1 + s_home_1
-
-            s_away_2 = _get_code_score(evt_away_code, resolved_home, league)
-            s_home_2 = _get_code_score(evt_home_code, resolved_away, league)
-            score_2 = s_away_2 + s_home_2
-
-            # Flags for logging
-            away_match_1 = s_away_1 > 0
-            home_match_1 = s_home_1 > 0
-            away_match_2 = s_away_2 > 0
-            home_match_2 = s_home_2 > 0
-
-            # Check for direct block match (Strongest Signal)
-            # This catches cases like BUTGTWN even if parsing logic fails or codes are unknown
-            block_match_score = 0
-            matched_block = None
-            for block in expected_blocks:
-                if block in ticker:
-                     block_match_score = 100
-                     matched_block = block
-                     # logger.info(f"   ✅ BLOCK MATCH: {ticker} contains {block}")
-                     break
-
-            match_score = max(score_1, score_2, block_match_score)
-
-            if match_score > 0:
-                all_candidates.append({
-                    "ticker": ticker,
-                    "away": evt_away_code,
-                    "home": evt_home_code,
-                    "score": match_score,
-                    "block_match": matched_block
-                })
-
-            # Fallback: Try Name Matching on Event Title if code match failed
-            if match_score < 50 and home_team_name and away_team_name:
-                evt_title = evt.get("title", "")
-                if evt_title:
-                    # Normalize everything using TeamNameMatcher
-                    # Note: TeamNameMatcher.normalize handles upper casing and special chars
-                    title_norm = TeamNameMatcher.normalize(evt_title)
-                    h_norm = TeamNameMatcher.normalize(home_team_name)
-                    a_norm = TeamNameMatcher.normalize(away_team_name)
-
-                    # Check for containment of BOTH teams
-                    # This is a very strong signal (e.g. "Lakers vs Celtics" contains "LAKERS" and "CELTICS")
-                    if h_norm and a_norm and h_norm in title_norm and a_norm in title_norm:
-                        # High confidence match based on full names
-                        match_score = 90 # Treat as high confidence (overrides low code score)
-                        logger.info(f"   ✅ Name Fallback Match: '{home_team_name}' & '{away_team_name}' found in '{evt_title}'")
-
-                        # Add to candidates for debug
-                        all_candidates.append({
-                            "ticker": ticker,
-                            "away": "NAME_MATCH",
-                            "home": "NAME_MATCH",
-                            "score": match_score,
-                            "note": "fallback_name_match"
-                        })
-
-            if match_score < 50:
-                continue
-
-            # Time check and scoring adjustment
-            time_diff_hours = None
-            date_diff_days = None
-            time_score = 0
-
-            # --- DATE LOGIC ENHANCEMENT (Feb 2026 Fix) ---
-            # 1. Parse Ticker Date (e.g., 26FEB19)
-            ticker_date_valid = False
-            ticker_date_dt = None
-
-            # Extract date token from ticker parsed info
-            date_token = parsed.get("date_token") # e.g. "26FEB19"
-            if date_token:
-                try:
-                    # Parse YYMONDD -> Date
-                    # Handle uppercase month (FEB -> Feb) for strptime
-                    ticker_date_dt = datetime.strptime(date_token.title(), "%y%b%d").date()
-
-                    # 2. Convert Game Time to EST (US/Eastern) for date comparison
-                    # Games at 23:00 UTC are the next day in UTC but same day in EST
-                    game_dt_est = game_dt_utc.astimezone(pytz.timezone("US/Eastern"))
-                    game_date_est = game_dt_est.date()
-
-                    # 3. Calculate Date Difference (Days)
-                    date_diff_days = (ticker_date_dt - game_date_est).days
-
-                    # 4. Check Tolerance (±1 Day for most leagues, ±2 for NCAAB)
-                    # NCAAB games bucket by EST date, but UTC timestamps can be off by >24h
-                    tolerance_days = 2 if league == 'NCAAB' else 1
-
-                    if abs(date_diff_days) <= tolerance_days:
-                        ticker_date_valid = True
-
-                    # DIAGNOSTIC LOGGING
-                    logger.debug(f"   🕒 Date Check: {ticker} (Token: {date_token})")
-                    logger.debug(f"      Game UTC: {game_dt_utc}, EST: {game_dt_est}")
-                    logger.debug(f"      Compare: Game EST {game_date_est} vs Ticker {ticker_date_dt} (Diff: {date_diff_days} days)")
-                    logger.debug(f"      Valid: {ticker_date_valid}")
-
-                except Exception as e:
-                    logger.warning(f"   ⚠️ Date parsing failed for {date_token}: {e}")
-
-            # 5. Check Close Time (Market must not be expired if we care, but main use is validation)
-            market_open_or_valid = True
-            close_ts = evt.get("close_time") # ISO string
-            if close_ts:
-                try:
-                    dt = datetime.fromisoformat(str(close_ts).replace("Z", "+00:00"))
-                    if dt.tzinfo is None: dt = pytz.utc.localize(dt)
-
-                    time_diff_hours = abs((dt - game_dt_utc).total_seconds()) / 3600.0
-
-                    # Check if market is closed/expired
-                    # Use pytz.utc which is already imported
-                    now_utc = datetime.now(pytz.utc)
-                    if dt < now_utc:
-                        market_open_or_valid = False
-                        logger.warning(f"   ⚠️ Market {ticker} is CLOSED/EXPIRED (closed: {dt})")
-
-                except:
-                    pass
-
-            # 6. Apply Scoring
-            if ticker_date_valid and market_open_or_valid:
-                # Primary date check passed AND market is open (Strong Bonus)
-                time_score = 25
-            elif ticker_date_valid:
-                 # Date matched but market closed - penalize heavily to avoid matching dead markets
-                 logger.warning(f"   ⚠️ Date matched but market closed for {ticker} - Skipping bonus")
-                 time_score = -50
-            elif time_diff_hours is not None:
-                # Fallback to legacy time window if ticker date missing
-                is_pro = league in ["NBA", "NFL", "NHL", "MLB"]
-                tight_window = 12 if not is_pro else 6
-                wide_window = 48 if league in ["NCAAB", "NCAAF"] else 36
-
-                if time_diff_hours <= tight_window:
-                    time_score = 25
-                elif time_diff_hours > wide_window:
-                    time_score = -25
-
-            final_score = match_score + time_score
-
-            # Enhanced logging for EVERY potential match attempt (score >= 50) (Fix #5)
-            logger.info(f"   🎲 Evaluating: {ticker}")
-            logger.info(f"      Raw Codes: away={parsed.get('away')}, home={parsed.get('home')}")
-            logger.info(f"      Resolved Codes: away={evt_away_code}, home={evt_home_code}")
-            logger.info(f"      Expected Away Codes: {list(resolved_away)[:3]}")
-            logger.info(f"      Expected Home Codes: {list(resolved_home)[:3]}")
-            logger.info(f"      Score Calculation:")
-            logger.info(f"         - Away Match: {away_match_1} (score={s_away_1})")
-            logger.info(f"         - Home Match: {home_match_1} (score={s_home_1})")
-            logger.info(f"         - Direct Score: {score_1}")
-            logger.info(f"         - Swap Score: {score_2}")
-            logger.info(f"         - Team Score: {match_score}")
-            if time_diff_hours is not None:
-                logger.info(f"      Time Check: {time_diff_hours:.1f}h diff (Score Adj: {time_score:+})")
-            if date_diff_days is not None:
-                tol = 2 if league == 'NCAAB' else 1
-                logger.info(f"      Date Check: {date_diff_days} days diff (Valid: {abs(date_diff_days) <= tol})")
-            logger.info(f"      Final Score: {final_score} (Threshold: 70)")
-
-            if final_score > best_score:
-                best_score = final_score
-                best_event = evt
-                best_details = {
-                    "ticker": ticker,
-                    "parsed_away": parsed.get("away"),
-                    "parsed_home": parsed.get("home"),
-                    "resolved_away": evt_away_code,
-                    "resolved_home": evt_home_code,
-                    "score_1": score_1,
-                    "score_2": score_2,
-                    "time_diff_hours": time_diff_hours,
-                    "date_diff_days": date_diff_days,
-                    "time_score": time_score
-                }
-
-        # Log final result
-
-        # DIAGNOSTIC: Log ALL candidates regardless of score (Fix missing matches)
-        if not best_event:
-            logger.warning(f"   ❌ NO CANDIDATES FOUND for {league}")
-            logger.warning(f"      Total events scanned: {len(events)}")
-            logger.warning(f"      Expected home codes: {list(resolved_home)[:10]}")
-            logger.warning(f"      Expected away codes: {list(resolved_away)[:10]}")
-
-            # Sample first 10 events to show what's available
-            logger.warning(f"      Sample available events:")
-            for i, evt in enumerate(events[:10]):
-                ticker = evt.get("ticker", "")
-                parsed = parse_event_ticker_codes(ticker)
-                logger.warning(f"         [{i+1}] {ticker} → home={parsed.get('home')}, away={parsed.get('away')}")
-            return None
-
-        # Dynamic Threshold (Task 1)
-        # Pro Leagues: 75 (Relaxed from 80 to allow 100-25 time penalty cases)
-        # College: 65 (Relaxed from 70)
-        # Fix 2: Further Relax Team Code Matching Threshold
-        if league in ['NBA', 'NFL', 'NHL', 'MLB']:
-            MATCH_THRESHOLD = 70  # Was 75
-        else:
-            MATCH_THRESHOLD = 30  # Was 50 (Lowered for Debugging)
+        # Final Threshold Check
+        # User requested 85.0 threshold
+        MATCH_THRESHOLD = 85.0
 
         if best_event:
-            logger.info(f"   Best Match Found: {best_details['ticker']}")
-            logger.info(f"      Score: {best_score} (threshold: {MATCH_THRESHOLD})")
+            logger.info(f"   Best Match Found: {best_event.get('ticker')}")
+            logger.info(f"      Score: {best_score:.1f} (threshold: {MATCH_THRESHOLD})")
             logger.info(f"      Details: {best_details}")
+
             if best_score < MATCH_THRESHOLD:
-                logger.warning(f"   ❌ MATCH FAILED for {league}: score={best_score}/{MATCH_THRESHOLD}")
-                logger.warning(f"      Expected home: {list(resolved_home)[:5]}")
-                logger.warning(f"      Expected away: {list(resolved_away)[:5]}")
-                logger.warning(f"      Best candidate: {best_event.get('ticker')} (score={best_score})")
+                logger.warning(f"   ❌ NO MATCH: Best score {best_score:.1f} too low (threshold: {MATCH_THRESHOLD})")
 
-                # ALIAS SUGGESTION: Show which codes were close
+                # Debug logging for failed matches
                 if best_details:
-                    kalshi_home = best_details.get('resolved_home')
-                    kalshi_away = best_details.get('resolved_away')
+                    logger.warning(f"      Match Details: {best_details}")
+                    logger.warning(f"      Expected home: {home_codes[:5]}")
+                    logger.warning(f"      Expected away: {away_codes[:5]}")
 
-                    # Check if ONE side matched (50 points = one team correct)
-                    if best_score == 50:
-                        if kalshi_home not in resolved_home and kalshi_away in resolved_away:
-                            logger.warning(f"      💡 ALIAS NEEDED: Add '{kalshi_home}' → one of {list(resolved_home)[:3]} to NCAAB_CODE_ALIASES")
-                        elif kalshi_away not in resolved_away and kalshi_home in resolved_home:
-                            logger.warning(f"      💡 ALIAS NEEDED: Add '{kalshi_away}' → one of {list(resolved_away)[:3]} to NCAAB_CODE_ALIASES")
-
-                    logger.warning(f"      Kalshi codes: home={kalshi_home}, away={kalshi_away}")
-                    logger.warning(f"      All non-zero candidates: {all_candidates[:10]}")
-
-                return None  # Match failed
-            logger.info(f"   ✅ MATCH SUCCESSFUL")
+                return None
+            else:
+                logger.info(f"   ✅ MATCH ACCEPTED")
+        else:
+            logger.warning(f"   ❌ NO MATCH: No valid candidates found (checked {len(events)} events)")
+            return None
 
         if best_event and best_score >= MATCH_THRESHOLD: # High confidence match
             # CRITICAL: Verify this is the correct league before processing markets
