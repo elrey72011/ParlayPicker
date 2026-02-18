@@ -1378,7 +1378,8 @@ def resolve_team_code(code: str, league: str) -> str:
             return NCAAB_CODE_ALIASES[c]
         # FIX: Do NOT fuzzy match if the code is already a known canonical code
         # This prevents valid codes (e.g. MASS) from being fuzzy-matched to aliases (e.g. MISS)
-        if c in KALSHI_NCAAB_TEAM_CODES.values():
+        # Check both comprehensive and legacy maps to catch all valid codes (e.g. DRKE)
+        if c in KALSHI_NCAAB_TEAM_CODES.values() or c in NCAAB_TEAM_CODE_MAP.values():
             return c
     elif l == "NCAAF":
         if c in NCAAF_CODE_ALIASES:
@@ -3653,7 +3654,33 @@ class KalshiIntegrator:
         home_variants = generate_comprehensive_team_variants(home_team, league)
         away_variants = generate_comprehensive_team_variants(away_team, league)
 
-        logger.info(f"🔍 KALSHI_MATCH: Attempting to match {away_team} @ {home_team} on {game_date}")
+        # --- DATE TOLERANCE FIX ---
+        # Generate a list of allowed date tokens (e.g. [26FEB18, 26FEB19, 26FEB20])
+        # This handles cases where game time UTC vs EST bucketing creates a mismatch
+        # or late games spill into next day buckets.
+        allowed_tokens = {game_date}
+        try:
+            # Parse input token "26FEB19" -> Date
+            # Use title() to handle "FEB" -> "Feb" for strptime
+            base_dt = datetime.strptime(game_date.title(), "%y%b%d").date()
+
+            # Determine tolerance (±2 days for College, ±1 for Pro)
+            tolerance_days = 2 if league in ["NCAAB", "NCAAF"] else 1
+
+            # Generate offsets
+            for offset in range(-tolerance_days, tolerance_days + 1):
+                if offset == 0: continue
+                # Add offset days
+                offset_dt = base_dt + timedelta(days=offset)
+                # Generate token (UPPERCASE)
+                token = offset_dt.strftime("%y%b%d").upper()
+                allowed_tokens.add(token)
+
+        except Exception as e:
+            logger.warning(f"Failed to generate tolerance tokens for {game_date}: {e}")
+            # Fallback to strict match (already in allowed_tokens)
+
+        logger.info(f"🔍 KALSHI_MATCH: Attempting to match {away_team} @ {home_team} on {game_date} (Allowed: {allowed_tokens})")
         logger.info(f"   Away team variants: {away_variants}")
         logger.info(f"   Home team variants: {home_variants}")
 
@@ -3697,8 +3724,16 @@ class KalshiIntegrator:
         for market in kalshi_markets:
             ticker = market.get("ticker", "")
 
-            # Check if date matches
-            if game_date not in ticker:
+            # Check if ANY allowed date token matches
+            # Optimization: Check if any token is a substring of ticker
+            # Tickers look like KXNCAAMBGAME-26FEB19...
+            date_match = False
+            for token in allowed_tokens:
+                if token in ticker:
+                    date_match = True
+                    break
+
+            if not date_match:
                 continue
 
             # Get event ticker for parsing codes (prefer event_ticker, fallback to stripping market suffix)
