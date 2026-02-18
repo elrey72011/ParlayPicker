@@ -610,6 +610,18 @@ NCAAB_TEAM_CODE_MAP: Dict[str, str] = {
     "OREGON STATE": "ORST",
     "SEATTLE": "SEA",
     "CHARLESTON": "COFC",
+    # Atlantic 10 - Missing Teams
+    "RHODE ISLAND": "URI",
+    "RHODE ISLAND RAMS": "URI",
+    "FORDHAM": "FOR",
+    "FORDHAM RAMS": "FOR",
+    "LA SALLE": "LAS",
+    "LA SALLE EXPLORERS": "LAS",
+    "LASALLE": "LAS",
+    "DUQUESNE": "DUQ",
+    "DUQUESNE DUKES": "DUQ",
+    "BOWLING GREEN": "BGSU",
+    "KENT STATE": "KENT",
     # --- SWAC (Southwestern Athletic Conference) ---
     "ALABAMA A&M": "AAMU", "ALABAMA A M": "AAMU", "ALABAMA A&M BULLDOGS": "AAMU",
     "GRAMBLING": "GRAM", "GRAMBLING ST": "GRAM", "GRAMBLING STATE": "GRAM",
@@ -788,6 +800,7 @@ KALSHI_NCAAB_TEAM_CODES = {
     "Boise State": "BSU",
     "Brown": "BRWN",
     "Brown Bears": "BRWN",
+    "Bowling Green": "BGSU",
     "Bucknell": "BUCK",
     "Butler": "BUT",
     "Cal State Fullerton": "CSF",
@@ -806,9 +819,13 @@ KALSHI_NCAAB_TEAM_CODES = {
     "Dartmouth": "DART",
     "Dartmouth Big Green": "DART",
     "DePaul": "DEP",
+    "Duquesne": "DUQ",
+    "Duquesne Dukes": "DUQ",
     "Duke": "DUKE",
     "East Tennessee St.": "ETSU",
     "Florida": "FLA",
+    "Fordham": "FOR",
+    "Fordham Rams": "FOR",
     "Fresno State": "FRES",
     "GW": "GW",
     "GW Revolutionaries": "GW",
@@ -834,7 +851,12 @@ KALSHI_NCAAB_TEAM_CODES = {
     "Kansas City Roos": "UMKC",
     "Kansas St": "KSU",
     "Kansas State Wildcats": "KSU",
+    "Kent State": "KENT",
+    "Kent State Golden Flashes": "KENT",
     "Kentucky": "UK",
+    "La Salle": "LAS",
+    "La Salle Explorers": "LAS",
+    "LaSalle": "LAS",
     "Liberty": "LIB",
     "Long Beach State": "LBSU",
     "Louisville": "LOU",
@@ -888,6 +910,8 @@ KALSHI_NCAAB_TEAM_CODES = {
     "Quinnipiac": "QUIN",
     "Quinnipiac Bobcats": "QUIN",
     "Rice": "RICE",
+    "Rhode Island": "URI",
+    "Rhode Island Rams": "URI",
     "Richmond": "RICH",
     "Rider": "RID",
     "Rider Broncs": "RID",
@@ -1124,6 +1148,15 @@ NCAAB_CODE_ALIASES: Dict[str, str] = {
     "NCST": "NCS",        # NC State
     "SJSU": "SJSU",       # San Jose State
     "SJ": "SJSU",
+    # Atlantic 10 - Code Corrections (Feb 2026)
+    "RIC": "RICH",      # Richmond
+    "SBU": "SBON",      # St. Bonaventure
+    "STBON": "SBON",    # St. Bonaventure variant
+    "RHOD": "URI",      # Rhode Island variant
+    "RHAM": "URI",      # Rhode Island variant
+    "FORD": "FOR",      # Fordham variant
+    "LASS": "LAS",      # La Salle variant
+    "DUQ": "DUQ",       # Duquesne
 }
 
 NCAAF_CODE_ALIASES: Dict[str, str] = {
@@ -1668,928 +1701,928 @@ def _match_via_events(
                 match_reason=f"Kalshi returned 0 events for {series_ticker}"
             )
 
-    # Log sample events for debugging
-            logger.info(f"   Sample Event Tickers (first 5):")
-            for i, evt in enumerate(events[:5]):
-                ticker = evt.get("ticker", "N/A")
-                close_time = evt.get("close_time", "N/A")
-                logger.info(f"      [{i+1}] {ticker} (closes: {close_time})")
+# Log sample events for debugging
+        logger.info(f"   Sample Event Tickers (first 5):")
+        for i, evt in enumerate(events[:5]):
+            ticker = evt.get("ticker", "N/A")
+            close_time = evt.get("close_time", "N/A")
+            logger.info(f"      [{i+1}] {ticker} (closes: {close_time})")
 
-            # Capture available blocks for debug
-            available_blocks = []
-            if league == "NCAAB":
-                for evt in events[:50]: # Sample first 50
-                    t = evt.get("ticker", "")
-                    # Pattern: KXNCAAMBGAME-DATE[BLOCK]
-                    if "-" in t:
-                        parts = t.split("-")
-                        if len(parts) > 1:
-                            suffix = parts[1] # 26FEB11USCOSU
-                            # Strip date (YYMONDD)
-                            match = re.match(r"^(\d{2}[A-Z]{3}\d{2})([A-Z0-9]+)$", suffix)
-                            if match:
-                                available_blocks.append(match.group(2))
-                logger.info(f"   Sample Available Blocks (NCAAB): {available_blocks[:15]}")
+        # Capture available blocks for debug
+        available_blocks = []
+        if league == "NCAAB":
+            for evt in events[:50]: # Sample first 50
+                t = evt.get("ticker", "")
+                # Pattern: KXNCAAMBGAME-DATE[BLOCK]
+                if "-" in t:
+                    parts = t.split("-")
+                    if len(parts) > 1:
+                        suffix = parts[1] # 26FEB11USCOSU
+                        # Strip date (YYMONDD)
+                        match = re.match(r"^(\d{2}[A-Z]{3}\d{2})([A-Z0-9]+)$", suffix)
+                        if match:
+                            available_blocks.append(match.group(2))
+            logger.info(f"   Sample Available Blocks (NCAAB): {available_blocks[:15]}")
 
-            best_event = None
-            best_score = 0.0
-            best_details = None
-            all_candidates = []  # Track all potential candidates for debug (Fix #4)
+        best_event = None
+        best_score = 0.0
+        best_details = None
+        all_candidates = []  # Track all potential candidates for debug (Fix #4)
 
-            # Time window for matching (hours)
-            # Increased from 36 to 72 to be more generous with date matching
-            # League-specific time windows:
-            # - NCAAB: 72h (games bucket by date, not time)
-            # - NBA/NFL/NHL/MLB: 24h (games scheduled to the minute)
-            TIME_WINDOW_HOURS = 72 if league == 'NCAAB' else 24
+        # Time window for matching (hours)
+        # Increased from 36 to 72 to be more generous with date matching
+        # League-specific time windows:
+        # - NCAAB: 72h (games bucket by date, not time)
+        # - NBA/NFL/NHL/MLB: 24h (games scheduled to the minute)
+        TIME_WINDOW_HOURS = 72 if league == 'NCAAB' else 24
 
-            # Resolve our candidates once before loop (optimization + fix for UnboundLocalError)
-            resolved_home = {resolve_team_code(c, league) for c in home_codes}
-            resolved_away = {resolve_team_code(c, league) for c in away_codes}
+        # Resolve our candidates once before loop (optimization + fix for UnboundLocalError)
+        resolved_home = {resolve_team_code(c, league) for c in home_codes}
+        resolved_away = {resolve_team_code(c, league) for c in away_codes}
 
-            for evt in events:
-                ticker = evt.get("ticker")
-                logger.info(f"Event ticker parsing: input='{ticker}' → parsed={parse_event_ticker_codes(ticker)}")
+        for evt in events:
+            ticker = evt.get("ticker")
+            logger.info(f"Event ticker parsing: input='{ticker}' → parsed={parse_event_ticker_codes(ticker)}")
+            parsed = parse_event_ticker_codes(ticker)
+            if not parsed:
+                continue
+
+            evt_away_code = resolve_team_code(parsed.get("away"), league)
+            evt_home_code = resolve_team_code(parsed.get("home"), league)
+
+            # Check codes against our candidates
+            score_1 = 0
+
+            # Calculate scores with fuzzy support (Task 1)
+            # 50 = Exact match
+            # 40 = Strong fuzzy match (ratio >= 80)
+            # 30 = Medium fuzzy match (ratio >= 65, NCAAB/NCAAF only)
+
+            def _get_code_score(code: str, candidates: set, league: str) -> int:
+                if code in candidates:
+                    return 50
+
+                # Fuzzy fallback
+                if rapidfuzz and code and len(code) >= 2:
+                    best_r = 0
+                    for cand in candidates:
+                        if not cand: continue
+                        r = fuzz.ratio(code, cand)
+                        if r > best_r:
+                            best_r = r
+
+                    if best_r >= 80:
+                        return 40
+                    if best_r >= 65 and league in ['NCAAB', 'NCAAF']:
+                        return 30
+                return 0
+
+            s_away_1 = _get_code_score(evt_away_code, resolved_away, league)
+            s_home_1 = _get_code_score(evt_home_code, resolved_home, league)
+            score_1 = s_away_1 + s_home_1
+
+            s_away_2 = _get_code_score(evt_away_code, resolved_home, league)
+            s_home_2 = _get_code_score(evt_home_code, resolved_away, league)
+            score_2 = s_away_2 + s_home_2
+
+            # Flags for logging
+            away_match_1 = s_away_1 > 0
+            home_match_1 = s_home_1 > 0
+            away_match_2 = s_away_2 > 0
+            home_match_2 = s_home_2 > 0
+
+            match_score = max(score_1, score_2)
+
+            if match_score > 0:
+                all_candidates.append({
+                    "ticker": ticker,
+                    "away": evt_away_code,
+                    "home": evt_home_code,
+                    "score": match_score
+                })
+
+            # Fallback: Try Name Matching on Event Title if code match failed
+            if match_score < 50 and home_team_name and away_team_name:
+                evt_title = evt.get("title", "")
+                if evt_title:
+                    # Normalize everything using TeamNameMatcher
+                    # Note: TeamNameMatcher.normalize handles upper casing and special chars
+                    title_norm = TeamNameMatcher.normalize(evt_title)
+                    h_norm = TeamNameMatcher.normalize(home_team_name)
+                    a_norm = TeamNameMatcher.normalize(away_team_name)
+
+                    # Check for containment of BOTH teams
+                    # This is a very strong signal (e.g. "Lakers vs Celtics" contains "LAKERS" and "CELTICS")
+                    if h_norm and a_norm and h_norm in title_norm and a_norm in title_norm:
+                        # High confidence match based on full names
+                        match_score = 90 # Treat as high confidence (overrides low code score)
+                        logger.info(f"   ✅ Name Fallback Match: '{home_team_name}' & '{away_team_name}' found in '{evt_title}'")
+
+                        # Add to candidates for debug
+                        all_candidates.append({
+                            "ticker": ticker,
+                            "away": "NAME_MATCH",
+                            "home": "NAME_MATCH",
+                            "score": match_score,
+                            "note": "fallback_name_match"
+                        })
+
+            if match_score < 50:
+                continue
+
+            # Time check and scoring adjustment
+            time_diff_hours = None
+            time_score = 0
+
+            close_ts = evt.get("close_time") # ISO string
+            if close_ts:
+                try:
+                    dt = datetime.fromisoformat(str(close_ts).replace("Z", "+00:00"))
+                    if dt.tzinfo is None: dt = pytz.utc.localize(dt)
+
+                    time_diff_hours = abs((dt - game_dt_utc).total_seconds()) / 3600.0
+
+                    # Time Scoring Logic (Bonus for tight match, penalty for wide miss)
+                    is_pro = league in ["NBA", "NFL", "NHL", "MLB"]
+                    # Tighter window for pros (exact schedule), looser for college (daily buckets)
+                    # v106: Relaxed wide_window for Pro from 24h to 36h to prevent penalties on timezone drifts
+                    tight_window = 12 if not is_pro else 6
+                    # Relaxed Date Penalty for College Sports (48h) to account for games spanning midnight UTC
+                    wide_window = 48 if league in ["NCAAB", "NCAAF"] else 36
+
+                    if time_diff_hours <= tight_window:
+                        time_score = 25  # Bonus for date confirmation
+                    elif time_diff_hours > wide_window:
+                        time_score = -25 # Penalty for wrong day
+
+                except:
+                    pass
+
+            final_score = match_score + time_score
+
+            # Enhanced logging for EVERY potential match attempt (score >= 50) (Fix #5)
+            logger.info(f"   🎲 Evaluating: {ticker}")
+            logger.info(f"      Raw Codes: away={parsed.get('away')}, home={parsed.get('home')}")
+            logger.info(f"      Resolved Codes: away={evt_away_code}, home={evt_home_code}")
+            logger.info(f"      Expected Away Codes: {list(resolved_away)[:3]}")
+            logger.info(f"      Expected Home Codes: {list(resolved_home)[:3]}")
+            logger.info(f"      Score Calculation:")
+            logger.info(f"         - Away Match: {away_match_1} (score={s_away_1})")
+            logger.info(f"         - Home Match: {home_match_1} (score={s_home_1})")
+            logger.info(f"         - Direct Score: {score_1}")
+            logger.info(f"         - Swap Score: {score_2}")
+            logger.info(f"         - Team Score: {match_score}")
+            if time_diff_hours is not None:
+                logger.info(f"      Time Check: {time_diff_hours:.1f}h diff (Score Adj: {time_score:+})")
+            logger.info(f"      Final Score: {final_score} (Threshold: 70)")
+
+            if final_score > best_score:
+                best_score = final_score
+                best_event = evt
+                best_details = {
+                    "ticker": ticker,
+                    "parsed_away": parsed.get("away"),
+                    "parsed_home": parsed.get("home"),
+                    "resolved_away": evt_away_code,
+                    "resolved_home": evt_home_code,
+                    "score_1": score_1,
+                    "score_2": score_2,
+                    "time_diff_hours": time_diff_hours,
+                    "time_score": time_score
+                }
+
+        # Log final result
+
+        # DIAGNOSTIC: Log ALL candidates regardless of score (Fix missing matches)
+        if not best_event:
+            logger.warning(f"   ❌ NO CANDIDATES FOUND for {league}")
+            logger.warning(f"      Total events scanned: {len(events)}")
+            logger.warning(f"      Expected home codes: {list(resolved_home)[:10]}")
+            logger.warning(f"      Expected away codes: {list(resolved_away)[:10]}")
+
+            # Sample first 10 events to show what's available
+            logger.warning(f"      Sample available events:")
+            for i, evt in enumerate(events[:10]):
+                ticker = evt.get("ticker", "")
                 parsed = parse_event_ticker_codes(ticker)
-                if not parsed:
-                    continue
+                logger.warning(f"         [{i+1}] {ticker} → home={parsed.get('home')}, away={parsed.get('away')}")
+            return None
 
-                evt_away_code = resolve_team_code(parsed.get("away"), league)
-                evt_home_code = resolve_team_code(parsed.get("home"), league)
+        # Dynamic Threshold (Task 1)
+        # Pro Leagues: 75 (Relaxed from 80 to allow 100-25 time penalty cases)
+        # College: 65 (Relaxed from 70)
+        # Fix 2: Further Relax Team Code Matching Threshold
+        if league in ['NBA', 'NFL', 'NHL', 'MLB']:
+            MATCH_THRESHOLD = 70  # Was 75
+        else:
+            MATCH_THRESHOLD = 30  # Was 50 (Lowered for Debugging)
 
-                # Check codes against our candidates
-                score_1 = 0
+        if best_event:
+            logger.info(f"   Best Match Found: {best_details['ticker']}")
+            logger.info(f"      Score: {best_score} (threshold: {MATCH_THRESHOLD})")
+            logger.info(f"      Details: {best_details}")
+            if best_score < MATCH_THRESHOLD:
+                logger.warning(f"   ❌ MATCH FAILED for {league}: score={best_score}/{MATCH_THRESHOLD}")
+                logger.warning(f"      Expected home: {list(resolved_home)[:5]}")
+                logger.warning(f"      Expected away: {list(resolved_away)[:5]}")
+                logger.warning(f"      Best candidate: {best_event.get('ticker')} (score={best_score})")
 
-                # Calculate scores with fuzzy support (Task 1)
-                # 50 = Exact match
-                # 40 = Strong fuzzy match (ratio >= 80)
-                # 30 = Medium fuzzy match (ratio >= 65, NCAAB/NCAAF only)
+                # ALIAS SUGGESTION: Show which codes were close
+                if best_details:
+                    kalshi_home = best_details.get('resolved_home')
+                    kalshi_away = best_details.get('resolved_away')
 
-                def _get_code_score(code: str, candidates: set, league: str) -> int:
-                    if code in candidates:
-                        return 50
+                    # Check if ONE side matched (50 points = one team correct)
+                    if best_score == 50:
+                        if kalshi_home not in resolved_home and kalshi_away in resolved_away:
+                            logger.warning(f"      💡 ALIAS NEEDED: Add '{kalshi_home}' → one of {list(resolved_home)[:3]} to NCAAB_CODE_ALIASES")
+                        elif kalshi_away not in resolved_away and kalshi_home in resolved_home:
+                            logger.warning(f"      💡 ALIAS NEEDED: Add '{kalshi_away}' → one of {list(resolved_away)[:3]} to NCAAB_CODE_ALIASES")
 
-                    # Fuzzy fallback
-                    if rapidfuzz and code and len(code) >= 2:
-                        best_r = 0
-                        for cand in candidates:
-                            if not cand: continue
-                            r = fuzz.ratio(code, cand)
-                            if r > best_r:
-                                best_r = r
+                    logger.warning(f"      Kalshi codes: home={kalshi_home}, away={kalshi_away}")
+                    logger.warning(f"      All non-zero candidates: {all_candidates[:10]}")
 
-                        if best_r >= 80:
-                            return 40
-                        if best_r >= 65 and league in ['NCAAB', 'NCAAF']:
-                            return 30
-                    return 0
+                return None  # Match failed
+            logger.info(f"   ✅ MATCH SUCCESSFUL")
 
-                s_away_1 = _get_code_score(evt_away_code, resolved_away, league)
-                s_home_1 = _get_code_score(evt_home_code, resolved_home, league)
-                score_1 = s_away_1 + s_home_1
-
-                s_away_2 = _get_code_score(evt_away_code, resolved_home, league)
-                s_home_2 = _get_code_score(evt_home_code, resolved_away, league)
-                score_2 = s_away_2 + s_home_2
-
-                # Flags for logging
-                away_match_1 = s_away_1 > 0
-                home_match_1 = s_home_1 > 0
-                away_match_2 = s_away_2 > 0
-                home_match_2 = s_home_2 > 0
-
-                match_score = max(score_1, score_2)
-
-                if match_score > 0:
-                    all_candidates.append({
-                        "ticker": ticker,
-                        "away": evt_away_code,
-                        "home": evt_home_code,
-                        "score": match_score
-                    })
-
-                # Fallback: Try Name Matching on Event Title if code match failed
-                if match_score < 50 and home_team_name and away_team_name:
-                    evt_title = evt.get("title", "")
-                    if evt_title:
-                        # Normalize everything using TeamNameMatcher
-                        # Note: TeamNameMatcher.normalize handles upper casing and special chars
-                        title_norm = TeamNameMatcher.normalize(evt_title)
-                        h_norm = TeamNameMatcher.normalize(home_team_name)
-                        a_norm = TeamNameMatcher.normalize(away_team_name)
-
-                        # Check for containment of BOTH teams
-                        # This is a very strong signal (e.g. "Lakers vs Celtics" contains "LAKERS" and "CELTICS")
-                        if h_norm and a_norm and h_norm in title_norm and a_norm in title_norm:
-                            # High confidence match based on full names
-                            match_score = 90 # Treat as high confidence (overrides low code score)
-                            logger.info(f"   ✅ Name Fallback Match: '{home_team_name}' & '{away_team_name}' found in '{evt_title}'")
-
-                            # Add to candidates for debug
-                            all_candidates.append({
-                                "ticker": ticker,
-                                "away": "NAME_MATCH",
-                                "home": "NAME_MATCH",
-                                "score": match_score,
-                                "note": "fallback_name_match"
-                            })
-
-                if match_score < 50:
-                    continue
-
-                # Time check and scoring adjustment
-                time_diff_hours = None
-                time_score = 0
-
-                close_ts = evt.get("close_time") # ISO string
-                if close_ts:
-                    try:
-                        dt = datetime.fromisoformat(str(close_ts).replace("Z", "+00:00"))
-                        if dt.tzinfo is None: dt = pytz.utc.localize(dt)
-
-                        time_diff_hours = abs((dt - game_dt_utc).total_seconds()) / 3600.0
-
-                        # Time Scoring Logic (Bonus for tight match, penalty for wide miss)
-                        is_pro = league in ["NBA", "NFL", "NHL", "MLB"]
-                        # Tighter window for pros (exact schedule), looser for college (daily buckets)
-                        # v106: Relaxed wide_window for Pro from 24h to 36h to prevent penalties on timezone drifts
-                        tight_window = 12 if not is_pro else 6
-                        # Relaxed Date Penalty for College Sports (48h) to account for games spanning midnight UTC
-                        wide_window = 48 if league in ["NCAAB", "NCAAF"] else 36
-
-                        if time_diff_hours <= tight_window:
-                            time_score = 25  # Bonus for date confirmation
-                        elif time_diff_hours > wide_window:
-                            time_score = -25 # Penalty for wrong day
-
-                    except:
-                        pass
-
-                final_score = match_score + time_score
-
-                # Enhanced logging for EVERY potential match attempt (score >= 50) (Fix #5)
-                logger.info(f"   🎲 Evaluating: {ticker}")
-                logger.info(f"      Raw Codes: away={parsed.get('away')}, home={parsed.get('home')}")
-                logger.info(f"      Resolved Codes: away={evt_away_code}, home={evt_home_code}")
-                logger.info(f"      Expected Away Codes: {list(resolved_away)[:3]}")
-                logger.info(f"      Expected Home Codes: {list(resolved_home)[:3]}")
-                logger.info(f"      Score Calculation:")
-                logger.info(f"         - Away Match: {away_match_1} (score={s_away_1})")
-                logger.info(f"         - Home Match: {home_match_1} (score={s_home_1})")
-                logger.info(f"         - Direct Score: {score_1}")
-                logger.info(f"         - Swap Score: {score_2}")
-                logger.info(f"         - Team Score: {match_score}")
-                if time_diff_hours is not None:
-                    logger.info(f"      Time Check: {time_diff_hours:.1f}h diff (Score Adj: {time_score:+})")
-                logger.info(f"      Final Score: {final_score} (Threshold: 70)")
-
-                if final_score > best_score:
-                    best_score = final_score
-                    best_event = evt
-                    best_details = {
-                        "ticker": ticker,
-                        "parsed_away": parsed.get("away"),
-                        "parsed_home": parsed.get("home"),
-                        "resolved_away": evt_away_code,
-                        "resolved_home": evt_home_code,
-                        "score_1": score_1,
-                        "score_2": score_2,
-                        "time_diff_hours": time_diff_hours,
-                        "time_score": time_score
-                    }
-
-            # Log final result
-
-            # DIAGNOSTIC: Log ALL candidates regardless of score (Fix missing matches)
-            if not best_event:
-                logger.warning(f"   ❌ NO CANDIDATES FOUND for {league}")
-                logger.warning(f"      Total events scanned: {len(events)}")
-                logger.warning(f"      Expected home codes: {list(resolved_home)[:10]}")
-                logger.warning(f"      Expected away codes: {list(resolved_away)[:10]}")
-
-                # Sample first 10 events to show what's available
-                logger.warning(f"      Sample available events:")
-                for i, evt in enumerate(events[:10]):
-                    ticker = evt.get("ticker", "")
-                    parsed = parse_event_ticker_codes(ticker)
-                    logger.warning(f"         [{i+1}] {ticker} → home={parsed.get('home')}, away={parsed.get('away')}")
+        if best_event and best_score >= MATCH_THRESHOLD: # High confidence match
+            # CRITICAL: Verify this is the correct league before processing markets
+            # This prevents NCAAB-specific logic from corrupting NBA/NFL matches
+            event_ticker = best_event.get("ticker", "")
+            if league == "NCAAB" and "NCAAMB" not in event_ticker.upper():
+                logger.warning(f"   ❌ League mismatch: Expected NCAAB but event ticker is {event_ticker}")
+                return None
+            elif league == "NBA" and "NBA" not in event_ticker.upper():
+                logger.warning(f"   ❌ League mismatch: Expected NBA but event ticker is {event_ticker}")
+                return None
+            elif league == "NFL" and "NFL" not in event_ticker.upper():
+                logger.warning(f"   ❌ League mismatch: Expected NFL but event ticker is {event_ticker}")
                 return None
 
-            # Dynamic Threshold (Task 1)
-            # Pro Leagues: 75 (Relaxed from 80 to allow 100-25 time penalty cases)
-            # College: 65 (Relaxed from 70)
-            # Fix 2: Further Relax Team Code Matching Threshold
-            if league in ['NBA', 'NFL', 'NHL', 'MLB']:
-                MATCH_THRESHOLD = 70  # Was 75
-            else:
-                MATCH_THRESHOLD = 30  # Was 50 (Lowered for Debugging)
+            # Extract nested markets from the event object directly
+            markets = best_event.get("markets", [])
+            evt_ticker = best_event.get("ticker")
 
-            if best_event:
-                logger.info(f"   Best Match Found: {best_details['ticker']}")
-                logger.info(f"      Score: {best_score} (threshold: {MATCH_THRESHOLD})")
-                logger.info(f"      Details: {best_details}")
-                if best_score < MATCH_THRESHOLD:
-                    logger.warning(f"   ❌ MATCH FAILED for {league}: score={best_score}/{MATCH_THRESHOLD}")
-                    logger.warning(f"      Expected home: {list(resolved_home)[:5]}")
-                    logger.warning(f"      Expected away: {list(resolved_away)[:5]}")
-                    logger.warning(f"      Best candidate: {best_event.get('ticker')} (score={best_score})")
+            # Initialize fallback
+            force_match_result = None
 
-                    # ALIAS SUGGESTION: Show which codes were close
-                    if best_details:
-                        kalshi_home = best_details.get('resolved_home')
-                        kalshi_away = best_details.get('resolved_away')
+            # If markets missing (e.g. from cache without nested), fetch them explicitly
+            # ONLY for leagues where we know this is necessary (NCAAB primarily)
+            if not markets and league in ["NCAAB"]:
+                logger.info(f"   NCAAB: Attempting aggressive market fetch for {evt_ticker}")
 
-                        # Check if ONE side matched (50 points = one team correct)
-                        if best_score == 50:
-                            if kalshi_home not in resolved_home and kalshi_away in resolved_away:
-                                logger.warning(f"      💡 ALIAS NEEDED: Add '{kalshi_home}' → one of {list(resolved_home)[:3]} to NCAAB_CODE_ALIASES")
-                            elif kalshi_away not in resolved_away and kalshi_home in resolved_home:
-                                logger.warning(f"      💡 ALIAS NEEDED: Add '{kalshi_away}' → one of {list(resolved_away)[:3]} to NCAAB_CODE_ALIASES")
+                # Attempt 1: Fetch directly by event_ticker
+                try:
+                    markets_resp = integrator._request("GET", "/markets", params={"event_ticker": evt_ticker})
+                    markets = markets_resp.get("markets", [])
+                    logger.info(f"   Fetched {len(markets)} markets by event_ticker")
+                except Exception as e:
+                    logger.warning(f"   Market fetch failed: {e}")
+                    markets = []
 
-                        logger.warning(f"      Kalshi codes: home={kalshi_home}, away={kalshi_away}")
-                        logger.warning(f"      All non-zero candidates: {all_candidates[:10]}")
-
-                    return None  # Match failed
-                logger.info(f"   ✅ MATCH SUCCESSFUL")
-
-            if best_event and best_score >= MATCH_THRESHOLD: # High confidence match
-                # CRITICAL: Verify this is the correct league before processing markets
-                # This prevents NCAAB-specific logic from corrupting NBA/NFL matches
-                event_ticker = best_event.get("ticker", "")
-                if league == "NCAAB" and "NCAAMB" not in event_ticker.upper():
-                    logger.warning(f"   ❌ League mismatch: Expected NCAAB but event ticker is {event_ticker}")
-                    return None
-                elif league == "NBA" and "NBA" not in event_ticker.upper():
-                    logger.warning(f"   ❌ League mismatch: Expected NBA but event ticker is {event_ticker}")
-                    return None
-                elif league == "NFL" and "NFL" not in event_ticker.upper():
-                    logger.warning(f"   ❌ League mismatch: Expected NFL but event ticker is {event_ticker}")
-                    return None
-
-                # Extract nested markets from the event object directly
-                markets = best_event.get("markets", [])
-                evt_ticker = best_event.get("ticker")
-
-                # Initialize fallback
-                force_match_result = None
-
-                # If markets missing (e.g. from cache without nested), fetch them explicitly
-                # ONLY for leagues where we know this is necessary (NCAAB primarily)
-                if not markets and league in ["NCAAB"]:
-                    logger.info(f"   NCAAB: Attempting aggressive market fetch for {evt_ticker}")
-
-                    # Attempt 1: Fetch directly by event_ticker
-                    try:
-                        markets_resp = integrator._request("GET", "/markets", params={"event_ticker": evt_ticker})
-                        markets = markets_resp.get("markets", [])
-                        logger.info(f"   Fetched {len(markets)} markets by event_ticker")
-                    except Exception as e:
-                        logger.warning(f"   Market fetch failed: {e}")
-                        markets = []
-
-                    # Attempt 2: If still empty, try series_ticker search (last resort)
-                    if not markets:
-                        logger.info(f"   NCAAB: Attempting series-wide market search for {evt_ticker}")
-                        try:
-                            series = "KXNCAAMB"
-                            all_series_mkts = integrator.get_markets_paginated(
-                                status=None,
-                                limit=200,
-                                max_pages=20,
-                                extra_params={"series_ticker": series}
-                            )
-                            # Filter for this specific event
-                            markets = [m for m in all_series_mkts if m.get("event_ticker") == evt_ticker]
-                            logger.info(f"   Found {len(markets)} markets via series search")
-                        except Exception as e:
-                            logger.warning(f"   Series search failed: {e}")
-                elif not markets:
-                    # For non-NCAAB leagues, try ONE direct fetch only (no expensive series search)
-                    try:
-                        markets_resp = integrator._request("GET", "/markets", params={"event_ticker": evt_ticker})
-                        markets = markets_resp.get("markets", [])
-                        if markets:
-                            logger.info(f"   Fetched {len(markets)} markets by event_ticker for {league}")
-                    except Exception:
-                        markets = []
-
-                # SAFETY CHECK: For non-NCAAB leagues, empty markets after fetch means no valid event
-                # For NCAAB, we allow proceeding to force match logic below
+                # Attempt 2: If still empty, try series_ticker search (last resort)
                 if not markets:
-                    logger.info(f"   ⚠️ No markets found in main event {best_event.get('ticker')} (league={league}). Proceeding to check for Spread/Total series...")
+                    logger.info(f"   NCAAB: Attempting series-wide market search for {evt_ticker}")
+                    try:
+                        series = "KXNCAAMB"
+                        all_series_mkts = integrator.get_markets_paginated(
+                            status=None,
+                            limit=200,
+                            max_pages=20,
+                            extra_params={"series_ticker": series}
+                        )
+                        # Filter for this specific event
+                        markets = [m for m in all_series_mkts if m.get("event_ticker") == evt_ticker]
+                        logger.info(f"   Found {len(markets)} markets via series search")
+                    except Exception as e:
+                        logger.warning(f"   Series search failed: {e}")
+            elif not markets:
+                # For non-NCAAB leagues, try ONE direct fetch only (no expensive series search)
+                try:
+                    markets_resp = integrator._request("GET", "/markets", params={"event_ticker": evt_ticker})
+                    markets = markets_resp.get("markets", [])
+                    if markets:
+                        logger.info(f"   Fetched {len(markets)} markets by event_ticker for {league}")
+                except Exception:
+                    markets = []
 
-                # Allow flow to proceed even if markets are empty (Spread/Total search or NCAAB force match will handle it)
+            # SAFETY CHECK: For non-NCAAB leagues, empty markets after fetch means no valid event
+            # For NCAAB, we allow proceeding to force match logic below
+            if not markets:
+                logger.info(f"   ⚠️ No markets found in main event {best_event.get('ticker')} (league={league}). Proceeding to check for Spread/Total series...")
 
-                # ENHANCED: Classify all markets as winner/spread/total
-                winner_market = None
-                spread_markets = []
-                total_markets = []
-                target_market = None
-                match_reason_detail = None
+            # Allow flow to proceed even if markets are empty (Spread/Total search or NCAAB force match will handle it)
 
-                # Logic for existing complex classification logic for other leagues (NBA, etc.) AND NCAAB (now unified)
+            # ENHANCED: Classify all markets as winner/spread/total
+            winner_market = None
+            spread_markets = []
+            total_markets = []
+            target_market = None
+            match_reason_detail = None
 
-                # ========== FIX: Search for spread/total events separately ==========
-                # Spread and total markets are in DIFFERENT event series (KXNBATOTAL, KXNBASPREAD)
-                # Extract the date-team identifier from the matched GAME event ticker
-                # e.g., "KXNBAGAME-26JAN27BKNPHX" -> "26JAN27BKNPHX"
-                game_evt_ticker = best_event.get("ticker", "")
-                # Only perform search if not NCAAB or if NCAAB needs it (NCAAB usually has nested markets but let's allow it)
-                # Note: Previous code split logic here. We will apply search logic generally but keep NCAAB specific series inside loop.
-                # FIX: Allow spread/total search for all leagues including NCAAB
-                if True:
-                    game_ticker_parts = game_evt_ticker.split("-")
-                    if len(game_ticker_parts) >= 2:
-                        date_team_id = game_ticker_parts[1]  # e.g., "26JAN27BKNPHX"
+            # Logic for existing complex classification logic for other leagues (NBA, etc.) AND NCAAB (now unified)
 
-                        # Determine the spread/total series tickers based on league
-                        spread_series_list = []
-                        total_series_list = []
-                        if league == "NBA":
-                            spread_series_list = ["KXNBASPREAD"]
-                            total_series_list = ["KXNBATOTAL"]
-                        elif league == "NFL":
-                            spread_series_list = ["KXNFLSPREAD"]
-                            total_series_list = ["KXNFLTOTAL"]
-                        elif league == "NHL":
-                            spread_series_list = ["KXNHLSPREAD"]
-                            total_series_list = ["KXNHLTOTAL"]
-                        elif league == "MLB":
-                            spread_series_list = ["KXMLBSPREAD"]
-                            total_series_list = ["KXMLBTOTAL"]
-                        elif league == "NCAAB":
-                            # Try multiple variants for NCAAB to cover inconsistencies
-                            spread_series_list = ["KXNCAAMBSPREAD", "KXNCAABSPREAD"]
-                            total_series_list = ["KXNCAAMBTOTAL", "KXNCAABTOTAL"]
-                        elif league == "NCAAF":
-                            spread_series_list = ["KXNCAAFSPREAD"]
-                            total_series_list = ["KXNCAAFTOTAL"]
+            # ========== FIX: Search for spread/total events separately ==========
+            # Spread and total markets are in DIFFERENT event series (KXNBATOTAL, KXNBASPREAD)
+            # Extract the date-team identifier from the matched GAME event ticker
+            # e.g., "KXNBAGAME-26JAN27BKNPHX" -> "26JAN27BKNPHX"
+            game_evt_ticker = best_event.get("ticker", "")
+            # Only perform search if not NCAAB or if NCAAB needs it (NCAAB usually has nested markets but let's allow it)
+            # Note: Previous code split logic here. We will apply search logic generally but keep NCAAB specific series inside loop.
+            # FIX: Allow spread/total search for all leagues including NCAAB
+            if True:
+                game_ticker_parts = game_evt_ticker.split("-")
+                if len(game_ticker_parts) >= 2:
+                    date_team_id = game_ticker_parts[1]  # e.g., "26JAN27BKNPHX"
 
-                        logger.info(f"🔍 KALSHI SPREAD/TOTAL SEARCH: Looking for events matching '{date_team_id}'")
-                        logger.info(f"   Spread series candidates: {spread_series_list}, Total series candidates: {total_series_list}")
+                    # Determine the spread/total series tickers based on league
+                    spread_series_list = []
+                    total_series_list = []
+                    if league == "NBA":
+                        spread_series_list = ["KXNBASPREAD"]
+                        total_series_list = ["KXNBATOTAL"]
+                    elif league == "NFL":
+                        spread_series_list = ["KXNFLSPREAD"]
+                        total_series_list = ["KXNFLTOTAL"]
+                    elif league == "NHL":
+                        spread_series_list = ["KXNHLSPREAD"]
+                        total_series_list = ["KXNHLTOTAL"]
+                    elif league == "MLB":
+                        spread_series_list = ["KXMLBSPREAD"]
+                        total_series_list = ["KXMLBTOTAL"]
+                    elif league == "NCAAB":
+                        # Try multiple variants for NCAAB to cover inconsistencies
+                        spread_series_list = ["KXNCAAMBSPREAD", "KXNCAABSPREAD"]
+                        total_series_list = ["KXNCAAMBTOTAL", "KXNCAABTOTAL"]
+                    elif league == "NCAAF":
+                        spread_series_list = ["KXNCAAFSPREAD"]
+                        total_series_list = ["KXNCAAFTOTAL"]
 
-                        # Use the first candidate as primary for fallbacks
-                        primary_spread_series = spread_series_list[0] if spread_series_list else None
-                        primary_total_series = total_series_list[0] if total_series_list else None
+                    logger.info(f"🔍 KALSHI SPREAD/TOTAL SEARCH: Looking for events matching '{date_team_id}'")
+                    logger.info(f"   Spread series candidates: {spread_series_list}, Total series candidates: {total_series_list}")
 
-                        # Search for spread/total events using the date-team identifier
-                        # Method 1: Try to fetch markets directly using series_ticker and matching date-team
-                        try:
-                            spread_markets_found = False
-                            for spread_series in spread_series_list:
-                                if not spread_series: continue
+                    # Use the first candidate as primary for fallbacks
+                    primary_spread_series = spread_series_list[0] if spread_series_list else None
+                    primary_total_series = total_series_list[0] if total_series_list else None
 
-                                spread_event_ticker = f"{spread_series}-{date_team_id}"
-                                logger.info(f"   Searching for spread event: {spread_event_ticker}")
+                    # Search for spread/total events using the date-team identifier
+                    # Method 1: Try to fetch markets directly using series_ticker and matching date-team
+                    try:
+                        spread_markets_found = False
+                        for spread_series in spread_series_list:
+                            if not spread_series: continue
+
+                            spread_event_ticker = f"{spread_series}-{date_team_id}"
+                            logger.info(f"   Searching for spread event: {spread_event_ticker}")
+                            try:
+                                spread_mkts_resp = integrator._request("GET", "/markets", params={"event_ticker": spread_event_ticker})
+                                spread_mkts = spread_mkts_resp.get("markets", [])
+                                if spread_mkts:
+                                    spread_markets.extend(spread_mkts)
+                                    logger.info(f"   ✅ Found {len(spread_mkts)} spread markets from event {spread_event_ticker}")
+                                    spread_markets_found = True
+                                    break # Found valid series, stop looking
+                            except Exception:
+                                continue # Try next variant
+
+                        if not spread_markets_found and primary_spread_series:
+                            # Fix 1: Fuzzy search fallback using primary series
+                            logger.info(f"   No direct spread event match, trying fuzzy match on {primary_spread_series}...")
+                            try:
+                                all_spread_events = integrator.get_events(primary_spread_series, status=None)
+                                date_token = date_team_id[:7] if len(date_team_id) >= 7 else date_team_id
+                                for evt in all_spread_events.get("events", []):
+                                    evt_ticker = evt.get("ticker", "")
+                                    # Match by date token AND team codes (partial)
+                                    if date_token in evt_ticker:
+                                        parsed = parse_event_ticker_codes(evt_ticker)
+                                        evt_codes = {parsed.get("home"), parsed.get("away")}
+                                        our_codes = set(home_codes + away_codes)
+                                        if evt_codes & our_codes:  # Any overlap
+                                            logger.info(f"   Found fuzzy spread event match: {evt_ticker}")
+                                            spread_markets.extend(evt.get("markets", []))
+                            except Exception as e:
+                                logger.warning(f"   Fuzzy spread search failed: {e}")
+
+                            # Fallback 1: Search in series EVENTS for matching date-team ID
+                            logger.info(f"   Searching in series events for strict match...")
+                            try:
+                                series_resp = integrator.get_events(primary_spread_series, status=None)
+                                series_events = series_resp.get("events", [])
+                                for evt in series_events:
+                                    evt_tick = evt.get("ticker", "")
+                                    if date_team_id in evt_tick:
+                                        logger.info(f"   Found matching spread event: {evt_tick}")
+                                        evt_markets = evt.get("markets", [])
+                                        if not evt_markets:
+                                            evt_mkts_resp = integrator._request("GET", "/markets", params={"event_ticker": evt_tick})
+                                            evt_markets = evt_mkts_resp.get("markets", [])
+                                        spread_markets.extend(evt_markets)
+                                        logger.info(f"   ✅ Added {len(evt_markets)} spread markets from {evt_tick}")
+                            except Exception: pass
+
+                            # Fallback 2: If still no spread markets, fetch MARKETS directly by series_ticker
+                            if not spread_markets:
+                                logger.info(f"   No spread events found, fetching markets directly by series_ticker={primary_spread_series}...")
                                 try:
-                                    spread_mkts_resp = integrator._request("GET", "/markets", params={"event_ticker": spread_event_ticker})
-                                    spread_mkts = spread_mkts_resp.get("markets", [])
-                                    if spread_mkts:
-                                        spread_markets.extend(spread_mkts)
-                                        logger.info(f"   ✅ Found {len(spread_mkts)} spread markets from event {spread_event_ticker}")
-                                        spread_markets_found = True
-                                        break # Found valid series, stop looking
-                                except Exception:
-                                    continue # Try next variant
+                                    series_markets = integrator.get_markets_paginated(
+                                        status=None,
+                                        limit=200,
+                                        max_pages=50,  # Fix 5: Ensure we fetch ALL spread/total markets
+                                        extra_params={"series_ticker": primary_spread_series}
+                                    )
+                                    logger.info(f"   📊 Spread market pagination: Fetched {len(series_markets)} markets from series {primary_spread_series} (max_pages=50)")
+                                    # Add sample ticker logging (Fix #5)
+                                    if series_markets:
+                                        sample_tickers = [m.get('ticker', '')[:50] for m in series_markets[:5]]
+                                        logger.info(f"      Sample spread tickers: {sample_tickers}")
 
-                            if not spread_markets_found and primary_spread_series:
-                                # Fix 1: Fuzzy search fallback using primary series
-                                logger.info(f"   No direct spread event match, trying fuzzy match on {primary_spread_series}...")
-                                try:
-                                    all_spread_events = integrator.get_events(primary_spread_series, status=None)
-                                    date_token = date_team_id[:7] if len(date_team_id) >= 7 else date_team_id
-                                    for evt in all_spread_events.get("events", []):
-                                        evt_ticker = evt.get("ticker", "")
-                                        # Match by date token AND team codes (partial)
-                                        if date_token in evt_ticker:
-                                            parsed = parse_event_ticker_codes(evt_ticker)
-                                            evt_codes = {parsed.get("home"), parsed.get("away")}
-                                            our_codes = set(home_codes + away_codes)
-                                            if evt_codes & our_codes:  # Any overlap
-                                                logger.info(f"   Found fuzzy spread event match: {evt_ticker}")
-                                                spread_markets.extend(evt.get("markets", []))
+                                    # Filter markets by date_team_id in ticker or event_ticker
+                                    for mkt in series_markets:
+                                        mkt_ticker = str(mkt.get("ticker") or "").upper()
+                                        mkt_event_ticker = str(mkt.get("event_ticker") or "").upper()
+                                        if date_team_id.upper() in mkt_ticker or date_team_id.upper() in mkt_event_ticker:
+                                            spread_markets.append(mkt)
+                                    if spread_markets:
+                                        logger.info(f"   ✅ Found {len(spread_markets)} spread markets matching {date_team_id} from series")
                                 except Exception as e:
-                                    logger.warning(f"   Fuzzy spread search failed: {e}")
+                                    logger.warning(f"   Pagination fetch failed: {e}")
+                    except Exception as e:
+                        logger.warning(f"   ⚠️ Failed to fetch spread markets: {e}")
 
-                                # Fallback 1: Search in series EVENTS for matching date-team ID
-                                logger.info(f"   Searching in series events for strict match...")
+                    try:
+                        total_markets_found = False
+                        for total_series in total_series_list:
+                            if not total_series: continue
+
+                            total_event_ticker = f"{total_series}-{date_team_id}"
+                            logger.info(f"   Searching for total event: {total_event_ticker}")
+                            try:
+                                total_mkts_resp = integrator._request("GET", "/markets", params={"event_ticker": total_event_ticker})
+                                total_mkts = total_mkts_resp.get("markets", [])
+                                if total_mkts:
+                                    total_markets.extend(total_mkts)
+                                    logger.info(f"   ✅ Found {len(total_mkts)} total markets from event {total_event_ticker}")
+                                    total_markets_found = True
+                                    break # Found valid series
+                            except Exception:
+                                continue
+
+                        if not total_markets_found and primary_total_series:
+                            # Fix 1: Fuzzy search fallback using primary series
+                            logger.info(f"   No direct total event match, trying fuzzy match on {primary_total_series}...")
+                            try:
+                                all_total_events = integrator.get_events(primary_total_series, status=None)
+                                date_token = date_team_id[:7] if len(date_team_id) >= 7 else date_team_id
+                                for evt in all_total_events.get("events", []):
+                                    evt_ticker = evt.get("ticker", "")
+                                    # Match by date token AND team codes (partial)
+                                    if date_token in evt_ticker:
+                                        parsed = parse_event_ticker_codes(evt_ticker)
+                                        evt_codes = {parsed.get("home"), parsed.get("away")}
+                                        our_codes = set(home_codes + away_codes)
+                                        if evt_codes & our_codes:  # Any overlap
+                                            logger.info(f"   Found fuzzy total event match: {evt_ticker}")
+                                            total_markets.extend(evt.get("markets", []))
+                            except Exception as e:
+                                logger.warning(f"   Fuzzy total search failed: {e}")
+
+                            # Fallback 1: Search in series EVENTS for matching date-team ID
+                            logger.info(f"   Searching in series events for strict match...")
+                            try:
+                                series_resp = integrator.get_events(primary_total_series, status=None)
+                                series_events = series_resp.get("events", [])
+                                for evt in series_events:
+                                    evt_tick = evt.get("ticker", "")
+                                    if date_team_id in evt_tick:
+                                        logger.info(f"   Found matching total event: {evt_tick}")
+                                        evt_markets = evt.get("markets", [])
+                                        if not evt_markets:
+                                            evt_mkts_resp = integrator._request("GET", "/markets", params={"event_ticker": evt_tick})
+                                            evt_markets = evt_mkts_resp.get("markets", [])
+                                        total_markets.extend(evt_markets)
+                                        logger.info(f"   ✅ Added {len(evt_markets)} total markets from {evt_tick}")
+                            except Exception: pass
+
+                            # Fallback 2: If still no total markets, fetch MARKETS directly by series_ticker
+                            if not total_markets:
+                                logger.info(f"   No total events found, fetching markets directly by series_ticker={primary_total_series}...")
                                 try:
-                                    series_resp = integrator.get_events(primary_spread_series, status=None)
-                                    series_events = series_resp.get("events", [])
-                                    for evt in series_events:
-                                        evt_tick = evt.get("ticker", "")
-                                        if date_team_id in evt_tick:
-                                            logger.info(f"   Found matching spread event: {evt_tick}")
-                                            evt_markets = evt.get("markets", [])
-                                            if not evt_markets:
-                                                evt_mkts_resp = integrator._request("GET", "/markets", params={"event_ticker": evt_tick})
-                                                evt_markets = evt_mkts_resp.get("markets", [])
-                                            spread_markets.extend(evt_markets)
-                                            logger.info(f"   ✅ Added {len(evt_markets)} spread markets from {evt_tick}")
-                                except Exception: pass
-
-                                # Fallback 2: If still no spread markets, fetch MARKETS directly by series_ticker
-                                if not spread_markets:
-                                    logger.info(f"   No spread events found, fetching markets directly by series_ticker={primary_spread_series}...")
-                                    try:
-                                        series_markets = integrator.get_markets_paginated(
-                                            status=None,
-                                            limit=200,
-                                            max_pages=50,  # Fix 5: Ensure we fetch ALL spread/total markets
-                                            extra_params={"series_ticker": primary_spread_series}
-                                        )
-                                        logger.info(f"   📊 Spread market pagination: Fetched {len(series_markets)} markets from series {primary_spread_series} (max_pages=50)")
-                                        # Add sample ticker logging (Fix #5)
-                                        if series_markets:
-                                            sample_tickers = [m.get('ticker', '')[:50] for m in series_markets[:5]]
-                                            logger.info(f"      Sample spread tickers: {sample_tickers}")
-
-                                        # Filter markets by date_team_id in ticker or event_ticker
-                                        for mkt in series_markets:
-                                            mkt_ticker = str(mkt.get("ticker") or "").upper()
-                                            mkt_event_ticker = str(mkt.get("event_ticker") or "").upper()
-                                            if date_team_id.upper() in mkt_ticker or date_team_id.upper() in mkt_event_ticker:
-                                                spread_markets.append(mkt)
-                                        if spread_markets:
-                                            logger.info(f"   ✅ Found {len(spread_markets)} spread markets matching {date_team_id} from series")
-                                    except Exception as e:
-                                        logger.warning(f"   Pagination fetch failed: {e}")
-                        except Exception as e:
-                            logger.warning(f"   ⚠️ Failed to fetch spread markets: {e}")
-
-                        try:
-                            total_markets_found = False
-                            for total_series in total_series_list:
-                                if not total_series: continue
-
-                                total_event_ticker = f"{total_series}-{date_team_id}"
-                                logger.info(f"   Searching for total event: {total_event_ticker}")
-                                try:
-                                    total_mkts_resp = integrator._request("GET", "/markets", params={"event_ticker": total_event_ticker})
-                                    total_mkts = total_mkts_resp.get("markets", [])
-                                    if total_mkts:
-                                        total_markets.extend(total_mkts)
-                                        logger.info(f"   ✅ Found {len(total_mkts)} total markets from event {total_event_ticker}")
-                                        total_markets_found = True
-                                        break # Found valid series
-                                except Exception:
-                                    continue
-
-                            if not total_markets_found and primary_total_series:
-                                # Fix 1: Fuzzy search fallback using primary series
-                                logger.info(f"   No direct total event match, trying fuzzy match on {primary_total_series}...")
-                                try:
-                                    all_total_events = integrator.get_events(primary_total_series, status=None)
-                                    date_token = date_team_id[:7] if len(date_team_id) >= 7 else date_team_id
-                                    for evt in all_total_events.get("events", []):
-                                        evt_ticker = evt.get("ticker", "")
-                                        # Match by date token AND team codes (partial)
-                                        if date_token in evt_ticker:
-                                            parsed = parse_event_ticker_codes(evt_ticker)
-                                            evt_codes = {parsed.get("home"), parsed.get("away")}
-                                            our_codes = set(home_codes + away_codes)
-                                            if evt_codes & our_codes:  # Any overlap
-                                                logger.info(f"   Found fuzzy total event match: {evt_ticker}")
-                                                total_markets.extend(evt.get("markets", []))
+                                    series_markets = integrator.get_markets_paginated(
+                                        status=None,
+                                        limit=200,
+                                        max_pages=50,  # Fix 5: Ensure we fetch ALL spread/total markets
+                                        extra_params={"series_ticker": primary_total_series}
+                                    )
+                                    logger.info(f"   📊 Total market pagination: Fetched {len(series_markets)} markets from series {primary_total_series} (max_pages=50)")
+                                    # Filter markets by date_team_id in ticker or event_ticker
+                                    for mkt in series_markets:
+                                        mkt_ticker = str(mkt.get("ticker") or "").upper()
+                                        mkt_event_ticker = str(mkt.get("event_ticker") or "").upper()
+                                        if date_team_id.upper() in mkt_ticker or date_team_id.upper() in mkt_event_ticker:
+                                            total_markets.append(mkt)
+                                    if total_markets:
+                                        logger.info(f"   ✅ Found {len(total_markets)} total markets matching {date_team_id} from series")
                                 except Exception as e:
-                                    logger.warning(f"   Fuzzy total search failed: {e}")
+                                    logger.warning(f"   Pagination fetch failed: {e}")
+                    except Exception as e:
+                        logger.warning(f"   ⚠️ Failed to fetch total markets: {e}")
 
-                                # Fallback 1: Search in series EVENTS for matching date-team ID
-                                logger.info(f"   Searching in series events for strict match...")
-                                try:
-                                    series_resp = integrator.get_events(primary_total_series, status=None)
-                                    series_events = series_resp.get("events", [])
-                                    for evt in series_events:
-                                        evt_tick = evt.get("ticker", "")
-                                        if date_team_id in evt_tick:
-                                            logger.info(f"   Found matching total event: {evt_tick}")
-                                            evt_markets = evt.get("markets", [])
-                                            if not evt_markets:
-                                                evt_mkts_resp = integrator._request("GET", "/markets", params={"event_ticker": evt_tick})
-                                                evt_markets = evt_mkts_resp.get("markets", [])
-                                            total_markets.extend(evt_markets)
-                                            logger.info(f"   ✅ Added {len(evt_markets)} total markets from {evt_tick}")
-                                except Exception: pass
+                    logger.info(f"   📊 After spread/total search: {len(spread_markets)} spread, {len(total_markets)} total markets")
+            # ========== END FIX ==========
 
-                                # Fallback 2: If still no total markets, fetch MARKETS directly by series_ticker
-                                if not total_markets:
-                                    logger.info(f"   No total events found, fetching markets directly by series_ticker={primary_total_series}...")
-                                    try:
-                                        series_markets = integrator.get_markets_paginated(
-                                            status=None,
-                                            limit=200,
-                                            max_pages=50,  # Fix 5: Ensure we fetch ALL spread/total markets
-                                            extra_params={"series_ticker": primary_total_series}
-                                        )
-                                        logger.info(f"   📊 Total market pagination: Fetched {len(series_markets)} markets from series {primary_total_series} (max_pages=50)")
-                                        # Filter markets by date_team_id in ticker or event_ticker
-                                        for mkt in series_markets:
-                                            mkt_ticker = str(mkt.get("ticker") or "").upper()
-                                            mkt_event_ticker = str(mkt.get("event_ticker") or "").upper()
-                                            if date_team_id.upper() in mkt_ticker or date_team_id.upper() in mkt_event_ticker:
-                                                total_markets.append(mkt)
-                                        if total_markets:
-                                            logger.info(f"   ✅ Found {len(total_markets)} total markets matching {date_team_id} from series")
-                                    except Exception as e:
-                                        logger.warning(f"   Pagination fetch failed: {e}")
-                        except Exception as e:
-                            logger.warning(f"   ⚠️ Failed to fetch total markets: {e}")
+            # Fix Issue #1: Log FULL market list for debug analysis
+            # Only log full list for the first few events to avoid spam.
+            global _DEBUG_GAME_LOG_COUNT
+            should_log_debug = _DEBUG_GAME_LOG_COUNT < 3
 
-                        logger.info(f"   📊 After spread/total search: {len(spread_markets)} spread, {len(total_markets)} total markets")
-                # ========== END FIX ==========
+            logger.debug(f"🔍 KALSHI DEBUG [{league}]: Found {len(markets)} markets for event {best_event.get('ticker')}")
+            if should_log_debug:
+                 logger.info(f"DEBUG: Full market list for {best_event.get('ticker')}:")
+                 _DEBUG_GAME_LOG_COUNT += 1
 
-                # Fix Issue #1: Log FULL market list for debug analysis
-                # Only log full list for the first few events to avoid spam.
-                global _DEBUG_GAME_LOG_COUNT
-                should_log_debug = _DEBUG_GAME_LOG_COUNT < 3
+            for idx, m in enumerate(markets):
+                ticker = m.get("ticker", "")
+                title = (m.get("title") or "").lower()
+                subtitle = (m.get("subtitle") or "").lower()
 
-                logger.debug(f"🔍 KALSHI DEBUG [{league}]: Found {len(markets)} markets for event {best_event.get('ticker')}")
+                # Classify market type with enhanced logic
+                market_type = _extract_market_type(title, ticker, subtitle, market=m)
+
+                # Extract line information for spread/total
+                floor_str = m.get("floor_strike") or m.get("floor")
+                cap_str = m.get("cap_strike") or m.get("cap")
+                strike_str = m.get("strike")
+
+                # VERBOSE LOGGING (Requested by user)
+                # Log the EXACT raw ticker and key fields for debugging
+                # Show ALL markets in logs for debugging if within limit
                 if should_log_debug:
-                     logger.info(f"DEBUG: Full market list for {best_event.get('ticker')}:")
-                     _DEBUG_GAME_LOG_COUNT += 1
+                    logger.info(f"   RAW MARKET [{idx+1}]: ticker='{ticker}' | type='{market_type}' | title='{title}' | sub='{subtitle}' | strike='{strike_str}'")
 
-                for idx, m in enumerate(markets):
-                    ticker = m.get("ticker", "")
-                    title = (m.get("title") or "").lower()
-                    subtitle = (m.get("subtitle") or "").lower()
+                if floor_str or cap_str or strike_str:
+                    logger.debug(f"      Line info: floor={floor_str}, cap={cap_str}, strike={strike_str}")
 
-                    # Classify market type with enhanced logic
-                    market_type = _extract_market_type(title, ticker, subtitle, market=m)
-
-                    # Extract line information for spread/total
-                    floor_str = m.get("floor_strike") or m.get("floor")
-                    cap_str = m.get("cap_strike") or m.get("cap")
-                    strike_str = m.get("strike")
-
-                    # VERBOSE LOGGING (Requested by user)
-                    # Log the EXACT raw ticker and key fields for debugging
-                    # Show ALL markets in logs for debugging if within limit
-                    if should_log_debug:
-                        logger.info(f"   RAW MARKET [{idx+1}]: ticker='{ticker}' | type='{market_type}' | title='{title}' | sub='{subtitle}' | strike='{strike_str}'")
-
-                    if floor_str or cap_str or strike_str:
-                        logger.debug(f"      Line info: floor={floor_str}, cap={cap_str}, strike={strike_str}")
-
-                    # Expanded logic using market_type from ticker check
-                    # Prioritize explicit classification from _extract_market_type
-                    if market_type == "moneyline":
+                # Expanded logic using market_type from ticker check
+                # Prioritize explicit classification from _extract_market_type
+                if market_type == "moneyline":
+                    winner_market = m
+                elif market_type == "spread":
+                    spread_markets.append(m)
+                elif market_type == "total":
+                    total_markets.append(m)
+                else:
+                    # Fallback keywords if "generic"
+                    if "winner" in title or "winner" in subtitle:
                         winner_market = m
-                    elif market_type == "spread":
+                    elif "spread" in title or "spread" in subtitle or "points" in title:
                         spread_markets.append(m)
-                    elif market_type == "total":
+                    elif "total" in title or "total" in subtitle or "over" in title or "under" in title:
                         total_markets.append(m)
-                    else:
-                        # Fallback keywords if "generic"
-                        if "winner" in title or "winner" in subtitle:
-                            winner_market = m
-                        elif "spread" in title or "spread" in subtitle or "points" in title:
-                            spread_markets.append(m)
-                        elif "total" in title or "total" in subtitle or "over" in title or "under" in title:
-                            total_markets.append(m)
 
-                # Log summary of classifications
-                logger.info(f"🎯 KALSHI MATCH [{league}]: Event {best_event.get('ticker')} - "
-                           f"Winner: {'✓' if winner_market else '✗'}, "
-                           f"Spread: {len(spread_markets)}, "
-                           f"Total: {len(total_markets)}")
+            # Log summary of classifications
+            logger.info(f"🎯 KALSHI MATCH [{league}]: Event {best_event.get('ticker')} - "
+                       f"Winner: {'✓' if winner_market else '✗'}, "
+                       f"Spread: {len(spread_markets)}, "
+                       f"Total: {len(total_markets)}")
 
-                if spread_markets:
-                    logger.info(f"   📊 Spread markets found: {[m.get('ticker')[:40] for m in spread_markets[:3]]}")
-                if total_markets:
-                    logger.info(f"   📊 Total markets found: {[m.get('ticker')[:40] for m in total_markets[:3]]}")
+            if spread_markets:
+                logger.info(f"   📊 Spread markets found: {[m.get('ticker')[:40] for m in spread_markets[:3]]}")
+            if total_markets:
+                logger.info(f"   📊 Total markets found: {[m.get('ticker')[:40] for m in total_markets[:3]]}")
 
-                # TARGET SELECTION LOGIC
-                # 1. Prefer requested type if available
-                # 2. Fallback to any available type (Spread/Total) if requested type missing
-                # 3. Fallback to Winner/Default
+            # TARGET SELECTION LOGIC
+            # 1. Prefer requested type if available
+            # 2. Fallback to any available type (Spread/Total) if requested type missing
+            # 3. Fallback to Winner/Default
 
-                if requested_market_type:
-                    req_upper = requested_market_type.upper()
-                    logger.info(f"   🎯 Requested Market Type: {req_upper}")
+            if requested_market_type:
+                req_upper = requested_market_type.upper()
+                logger.info(f"   🎯 Requested Market Type: {req_upper}")
 
-                    if "SPREAD" in req_upper and spread_markets:
+                if "SPREAD" in req_upper and spread_markets:
+                    target_market = spread_markets[0]
+                    match_reason_detail = "matched_spread"
+                elif "TOTAL" in req_upper and total_markets:
+                    target_market = total_markets[0]
+                    match_reason_detail = "matched_total"
+                # Fallback: Requested type missing, check if other type exists
+                elif spread_markets:
+                    target_market = spread_markets[0]
+                    match_reason_detail = "matched_spread_fallback"
+                    logger.info(f"   ⚠️ Requested {req_upper} but found SPREAD. Using fallback.")
+                elif total_markets:
+                    target_market = total_markets[0]
+                    match_reason_detail = "matched_total_fallback"
+                    logger.info(f"   ⚠️ Requested {req_upper} but found TOTAL. Using fallback.")
+
+            # If no target selected yet (or no request), use default logic
+            if not target_market:
+                # FIX: When requested_market_type is None, prefer spread/total over winner for ALL leagues
+                # This preserves the pre-PR#1001 behavior where any market type was acceptable
+                if requested_market_type is None:
+                    # No specific type requested - accept ANY market in priority order
+                    if spread_markets:
                         target_market = spread_markets[0]
-                        match_reason_detail = "matched_spread"
-                    elif "TOTAL" in req_upper and total_markets:
+                        match_reason_detail = "matched_spread_default"
+                    elif total_markets:
                         target_market = total_markets[0]
-                        match_reason_detail = "matched_total"
-                    # Fallback: Requested type missing, check if other type exists
+                        match_reason_detail = "matched_total_default"
+                    elif winner_market:
+                        target_market = winner_market
+                        match_reason_detail = "matched_winner"
+                    elif markets:
+                        target_market = markets[0]
+                        match_reason_detail = "matched_first_available"
+                # League-specific logic when no type matched
+                elif league == 'NCAAB':
+                    if spread_markets:
+                        target_market = spread_markets[0]
+                        match_reason_detail = "matched_spread_default"
+                    elif total_markets:
+                        target_market = total_markets[0]
+                        match_reason_detail = "matched_total_default"
+                    elif winner_market:
+                        target_market = winner_market
+                        match_reason_detail = "matched_winner"
+
+                    # Force Match Logic (moved here): If still no target, try to find ANY valid market
+                    # Relaxed from 80 to MATCH_THRESHOLD (50) for NCAAB per user request
+                    if not target_market and best_score >= MATCH_THRESHOLD:
+                        logger.info(f"🎯 NCAAB FORCE MATCH ATTEMPT: {evt_ticker} score={best_score}")
+                        # Iterate ALL markets to find one with valid probability
+                        for cand in markets:
+                            # Calculate probability
+                            yes_bid = _kalshi_price_norm(cand, "yes_bid_dollars", "yes_bid")
+                            yes_ask = _kalshi_price_norm(cand, "yes_ask_dollars", "yes_ask")
+                            no_bid = _kalshi_price_norm(cand, "no_bid_dollars", "no_bid")
+                            last_price = _kalshi_price_norm(cand, "last_price_dollars", "last_price")
+
+                            prob = None
+                            if yes_bid is not None and yes_ask is not None:
+                                prob = (yes_bid + yes_ask) / 2.0
+                            elif yes_bid is not None and no_bid is not None:
+                                prob = (yes_bid + (1.0 - no_bid)) / 2.0
+                            elif last_price is not None and last_price > 0:
+                                prob = last_price
+
+                            # Validate title length and probability
+                            cand_title = cand.get('title', '')
+                            if len(cand_title) > 5 and prob is not None and 0.01 < prob < 0.99:
+                                logger.info(f"   ✅ NCAAB FORCE MATCH SUCCESS: {cand.get('ticker')} prob={prob:.3f}")
+                                return KalshiMatchResult(
+                                    matched=True,
+                                    kalshi_available=True,
+                                    label=cand_title,
+                                    probability=prob,
+                                    raw_event_id=evt_ticker,
+                                    market_ticker=cand.get("ticker"),
+                                    league=league,
+                                    reason='ncaab_force_match',
+                                    market_type='force',
+                                    game_date=game_dt_utc
+                                )
+                        logger.warning(f"   ⚠️ NCAAB force match failed: No valid markets found in {len(markets)} candidates")
+
+                    if not target_market and markets:
+                        target_market = markets[0]
+                        match_reason_detail = "matched_first_available"
+                else:
+                    # Other leagues: Prefer Winner when specifically no match
+                    if winner_market:
+                        target_market = winner_market
+                        match_reason_detail = "matched_winner"
                     elif spread_markets:
                         target_market = spread_markets[0]
                         match_reason_detail = "matched_spread_fallback"
-                        logger.info(f"   ⚠️ Requested {req_upper} but found SPREAD. Using fallback.")
                     elif total_markets:
                         target_market = total_markets[0]
                         match_reason_detail = "matched_total_fallback"
-                        logger.info(f"   ⚠️ Requested {req_upper} but found TOTAL. Using fallback.")
+                    elif markets:
+                        target_market = markets[0]
+                        match_reason_detail = "matched_first_available"
 
-                # If no target selected yet (or no request), use default logic
-                if not target_market:
-                    # FIX: When requested_market_type is None, prefer spread/total over winner for ALL leagues
-                    # This preserves the pre-PR#1001 behavior where any market type was acceptable
-                    if requested_market_type is None:
-                        # No specific type requested - accept ANY market in priority order
-                        if spread_markets:
-                            target_market = spread_markets[0]
-                            match_reason_detail = "matched_spread_default"
-                        elif total_markets:
-                            target_market = total_markets[0]
-                            match_reason_detail = "matched_total_default"
-                        elif winner_market:
-                            target_market = winner_market
-                            match_reason_detail = "matched_winner"
-                        elif markets:
-                            target_market = markets[0]
-                            match_reason_detail = "matched_first_available"
-                    # League-specific logic when no type matched
-                    elif league == 'NCAAB':
-                        if spread_markets:
-                            target_market = spread_markets[0]
-                            match_reason_detail = "matched_spread_default"
-                        elif total_markets:
-                            target_market = total_markets[0]
-                            match_reason_detail = "matched_total_default"
-                        elif winner_market:
-                            target_market = winner_market
-                            match_reason_detail = "matched_winner"
 
-                        # Force Match Logic (moved here): If still no target, try to find ANY valid market
-                        # Relaxed from 80 to MATCH_THRESHOLD (50) for NCAAB per user request
-                        if not target_market and best_score >= MATCH_THRESHOLD:
-                            logger.info(f"🎯 NCAAB FORCE MATCH ATTEMPT: {evt_ticker} score={best_score}")
-                            # Iterate ALL markets to find one with valid probability
-                            for cand in markets:
-                                # Calculate probability
-                                yes_bid = _kalshi_price_norm(cand, "yes_bid_dollars", "yes_bid")
-                                yes_ask = _kalshi_price_norm(cand, "yes_ask_dollars", "yes_ask")
-                                no_bid = _kalshi_price_norm(cand, "no_bid_dollars", "no_bid")
-                                last_price = _kalshi_price_norm(cand, "last_price_dollars", "last_price")
+            if target_market:
+                # Calculate prob using _dollars fields (current API) with cent fallback.
+                # Matches the same cascade as _kalshi_prices()/winner_prob() in streamlit_app.py.
+                yes_bid = _kalshi_price_norm(target_market, "yes_bid_dollars", "yes_bid")
+                yes_ask = _kalshi_price_norm(target_market, "yes_ask_dollars", "yes_ask")
+                no_bid = _kalshi_price_norm(target_market, "no_bid_dollars", "no_bid")
+                last_price = _kalshi_price_norm(target_market, "last_price_dollars", "last_price")
+                prob = None
+                if yes_bid is not None and yes_ask is not None:
+                    prob = (yes_bid + yes_ask) / 2.0
+                elif yes_bid is not None and no_bid is not None:
+                    implied_yes_ask = 1.0 - no_bid
+                    prob = (yes_bid + implied_yes_ask) / 2.0
+                elif yes_bid is not None:
+                    # Prefer last_price (actual trade) over yes_bid (lowest buy offer)
+                    prob = last_price if (last_price is not None and last_price > 0) else yes_bid
+                elif no_bid is not None:
+                    prob = 1.0 - no_bid
+                # Final fallback to last_price
+                if prob is None and last_price is not None and last_price > 0:
+                    prob = last_price
 
-                                prob = None
-                                if yes_bid is not None and yes_ask is not None:
-                                    prob = (yes_bid + yes_ask) / 2.0
-                                elif yes_bid is not None and no_bid is not None:
-                                    prob = (yes_bid + (1.0 - no_bid)) / 2.0
-                                elif last_price is not None and last_price > 0:
-                                    prob = last_price
+                # Enhanced Match Logging (Task 1)
+                target_ticker = target_market.get("ticker")
+                target_title = target_market.get("title")
+                logger.info(f"🎯 Kalshi Match Selected: {target_ticker}")
+                logger.info(f"   Title (Yes Side): {target_title}")
+                logger.info(f"   Prob (Raw): {prob if prob is not None else 'None'}")
+                if prob is not None and abs(prob - 0.5) < 0.01:
+                    logger.warning(f"   ⚠️ Neutral probability (0.50) for {target_ticker} - likely default or no data")
 
-                                # Validate title length and probability
-                                cand_title = cand.get('title', '')
-                                if len(cand_title) > 5 and prob is not None and 0.01 < prob < 0.99:
-                                    logger.info(f"   ✅ NCAAB FORCE MATCH SUCCESS: {cand.get('ticker')} prob={prob:.3f}")
-                                    return KalshiMatchResult(
-                                        matched=True,
-                                        kalshi_available=True,
-                                        label=cand_title,
-                                        probability=prob,
-                                        raw_event_id=evt_ticker,
-                                        market_ticker=cand.get("ticker"),
-                                        league=league,
-                                        reason='ncaab_force_match',
-                                        market_type='force',
-                                        game_date=game_dt_utc
-                                    )
-                            logger.warning(f"   ⚠️ NCAAB force match failed: No valid markets found in {len(markets)} candidates")
+                # Enhanced debug info
+                debug_info = {
+                    "score": best_score,
+                    "event": best_event.get("ticker"),
+                    "total_markets": len(markets),
+                    "winner_found": bool(winner_market),
+                    "spread_count": len(spread_markets),
+                    "total_count": len(total_markets),
+                    "spread_tickers": [m.get("ticker") for m in spread_markets[:2]],
+                    "total_tickers": [m.get("ticker") for m in total_markets[:2]],
+                    # Store full market objects for spread/total to be processed later
+                    "spread_markets": spread_markets,
+                    "total_markets": total_markets,
+                    "requested_market_type": requested_market_type,
+                    "matched_market_type": match_reason_detail,
+                    "is_fallback": "fallback" in (match_reason_detail or "")
+                }
 
-                        if not target_market and markets:
-                            target_market = markets[0]
-                            match_reason_detail = "matched_first_available"
+                m_type = "winner"
+                if "spread" in (match_reason_detail or ""): m_type = "spread"
+                elif "total" in (match_reason_detail or ""): m_type = "total"
+
+                # NEW: Determine Yes Side by checking title against Real Team Names/Codes
+                # This fixes the "Incarnate Word vs New Orleans" inverted ticker issue (UNOIW)
+                market_title = (target_market.get("title") or "").upper()
+                yes_side = None # Start unknown
+
+                if m_type == "total":
+                    if "UNDER" in market_title:
+                        yes_side = "under"
+                    elif "OVER" in market_title:
+                        yes_side = "over"
                     else:
-                        # Other leagues: Prefer Winner when specifically no match
-                        if winner_market:
-                            target_market = winner_market
-                            match_reason_detail = "matched_winner"
-                        elif spread_markets:
-                            target_market = spread_markets[0]
-                            match_reason_detail = "matched_spread_fallback"
-                        elif total_markets:
-                            target_market = total_markets[0]
-                            match_reason_detail = "matched_total_fallback"
-                        elif markets:
-                            target_market = markets[0]
-                            match_reason_detail = "matched_first_available"
+                        yes_side = "over" # Default
+                else:
+                    # Spread or Winner - Team Mapping
+                    # 1. Split Title to Isolate "Yes" Side (Left Side)
+                    # "Incarnate Word vs New Orleans" -> Left="Incarnate Word" (Yes), Right="New Orleans" (No)
+                    left_side_title = market_title
+                    right_side_title = ""
 
+                    # Split by separators
+                    for sep in [" VS ", " @ ", " VS. ", " V "]:
+                        if sep in market_title:
+                            parts = market_title.split(sep)
+                            if len(parts) >= 1:
+                                left_side_title = parts[0].strip()
+                            if len(parts) >= 2:
+                                right_side_title = parts[1].strip()
+                            break
 
-                if target_market:
-                    # Calculate prob using _dollars fields (current API) with cent fallback.
-                    # Matches the same cascade as _kalshi_prices()/winner_prob() in streamlit_app.py.
-                    yes_bid = _kalshi_price_norm(target_market, "yes_bid_dollars", "yes_bid")
-                    yes_ask = _kalshi_price_norm(target_market, "yes_ask_dollars", "yes_ask")
-                    no_bid = _kalshi_price_norm(target_market, "no_bid_dollars", "no_bid")
-                    last_price = _kalshi_price_norm(target_market, "last_price_dollars", "last_price")
-                    prob = None
-                    if yes_bid is not None and yes_ask is not None:
-                        prob = (yes_bid + yes_ask) / 2.0
-                    elif yes_bid is not None and no_bid is not None:
-                        implied_yes_ask = 1.0 - no_bid
-                        prob = (yes_bid + implied_yes_ask) / 2.0
-                    elif yes_bid is not None:
-                        # Prefer last_price (actual trade) over yes_bid (lowest buy offer)
-                        prob = last_price if (last_price is not None and last_price > 0) else yes_bid
-                    elif no_bid is not None:
-                        prob = 1.0 - no_bid
-                    # Final fallback to last_price
-                    if prob is None and last_price is not None and last_price > 0:
-                        prob = last_price
+                    # 2. Check Full Names against Left Side (Strongest Signal)
+                    if home_team_name and away_team_name:
+                        h_clean = clean_team_name(home_team_name)
+                        a_clean = clean_team_name(away_team_name)
+                        left_clean = clean_team_name(left_side_title)
+                        right_clean = clean_team_name(right_side_title)
 
-                    # Enhanced Match Logging (Task 1)
-                    target_ticker = target_market.get("ticker")
-                    target_title = target_market.get("title")
-                    logger.info(f"🎯 Kalshi Match Selected: {target_ticker}")
-                    logger.info(f"   Title (Yes Side): {target_title}")
-                    logger.info(f"   Prob (Raw): {prob if prob is not None else 'None'}")
-                    if prob is not None and abs(prob - 0.5) < 0.01:
-                        logger.warning(f"   ⚠️ Neutral probability (0.50) for {target_ticker} - likely default or no data")
+                        score_home_left = 0
+                        score_away_left = 0
 
-                    # Enhanced debug info
-                    debug_info = {
-                        "score": best_score,
-                        "event": best_event.get("ticker"),
-                        "total_markets": len(markets),
-                        "winner_found": bool(winner_market),
-                        "spread_count": len(spread_markets),
-                        "total_count": len(total_markets),
-                        "spread_tickers": [m.get("ticker") for m in spread_markets[:2]],
-                        "total_tickers": [m.get("ticker") for m in total_markets[:2]],
-                        # Store full market objects for spread/total to be processed later
-                        "spread_markets": spread_markets,
-                        "total_markets": total_markets,
-                        "requested_market_type": requested_market_type,
-                        "matched_market_type": match_reason_detail,
-                        "is_fallback": "fallback" in (match_reason_detail or "")
-                    }
+                        if rapidfuzz:
+                            score_home_left = fuzz.token_set_ratio(h_clean, left_clean)
+                            score_away_left = fuzz.token_set_ratio(a_clean, left_clean)
 
-                    m_type = "winner"
-                    if "spread" in (match_reason_detail or ""): m_type = "spread"
-                    elif "total" in (match_reason_detail or ""): m_type = "total"
+                            # Also check Right side for negation (if Home is on Right, then Yes is Away)
+                            score_home_right = fuzz.token_set_ratio(h_clean, right_clean) if right_clean else 0
+                            score_away_right = fuzz.token_set_ratio(a_clean, right_clean) if right_clean else 0
 
-                    # NEW: Determine Yes Side by checking title against Real Team Names/Codes
-                    # This fixes the "Incarnate Word vs New Orleans" inverted ticker issue (UNOIW)
-                    market_title = (target_market.get("title") or "").upper()
-                    yes_side = None # Start unknown
-
-                    if m_type == "total":
-                        if "UNDER" in market_title:
-                            yes_side = "under"
-                        elif "OVER" in market_title:
-                            yes_side = "over"
-                        else:
-                            yes_side = "over" # Default
-                    else:
-                        # Spread or Winner - Team Mapping
-                        # 1. Split Title to Isolate "Yes" Side (Left Side)
-                        # "Incarnate Word vs New Orleans" -> Left="Incarnate Word" (Yes), Right="New Orleans" (No)
-                        left_side_title = market_title
-                        right_side_title = ""
-
-                        # Split by separators
-                        for sep in [" VS ", " @ ", " VS. ", " V "]:
-                            if sep in market_title:
-                                parts = market_title.split(sep)
-                                if len(parts) >= 1:
-                                    left_side_title = parts[0].strip()
-                                if len(parts) >= 2:
-                                    right_side_title = parts[1].strip()
-                                break
-
-                        # 2. Check Full Names against Left Side (Strongest Signal)
-                        if home_team_name and away_team_name:
-                            h_clean = clean_team_name(home_team_name)
-                            a_clean = clean_team_name(away_team_name)
-                            left_clean = clean_team_name(left_side_title)
-                            right_clean = clean_team_name(right_side_title)
-
-                            score_home_left = 0
-                            score_away_left = 0
-
-                            if rapidfuzz:
-                                score_home_left = fuzz.token_set_ratio(h_clean, left_clean)
-                                score_away_left = fuzz.token_set_ratio(a_clean, left_clean)
-
-                                # Also check Right side for negation (if Home is on Right, then Yes is Away)
-                                score_home_right = fuzz.token_set_ratio(h_clean, right_clean) if right_clean else 0
-                                score_away_right = fuzz.token_set_ratio(a_clean, right_clean) if right_clean else 0
-
-                                # Decision Logic with Left/Right awareness
-                                if score_home_left > 80 and score_home_left > score_away_left:
-                                    yes_side = "home"
-                                elif score_away_left > 80 and score_away_left > score_home_left:
-                                    yes_side = "away"
-                                elif score_home_right > 80 and score_home_right > score_away_right:
-                                    yes_side = "away" # Home is NO side -> Yes is Away
-                                elif score_away_right > 80 and score_away_right > score_home_right:
-                                    yes_side = "home" # Away is NO side -> Yes is Home
-                            else:
-                                # Fallback Token Overlap
-                                left_toks = set(left_clean.split())
-                                def _tok_score(team, target_toks):
-                                    parts = team.split()
-                                    if not parts: return 0
-                                    return sum(1 for p in parts if p in target_toks) / len(parts)
-
-                                s_h = _tok_score(h_clean, left_toks)
-                                s_a = _tok_score(a_clean, left_toks)
-
-                                if s_h > 0.6 and s_h > s_a: yes_side = "home"
-                                elif s_a > 0.6 and s_a > s_h: yes_side = "away"
-
-                        # 3. Check Codes against Left Side (Fallback)
-                        if not yes_side:
-                            left_tokens = left_side_title.split()
-
-                            # Check Home Codes in Left Side
-                            if home_codes:
-                                for code in home_codes:
-                                    if code and len(code) >= 2 and code in left_tokens:
-                                        yes_side = "home"
-                                        break
-
-                            # Check Away Codes in Left Side
-                            if not yes_side and away_codes:
-                                for code in away_codes:
-                                    if code and len(code) >= 2 and code in left_tokens:
-                                        yes_side = "away"
-                                        break
-
-                        # 4. Check Right Side (Fallback - Fix for aliases like "Canes @ FSU")
-                        # If Right Side matches Home, then Left (Yes) must be Away.
-                        if not yes_side and right_side_title:
-                            right_tokens = right_side_title.split()
-
-                            # Check Home Codes in Right Side -> Yes is Away
-                            if home_codes:
-                                for code in home_codes:
-                                    if code and len(code) >= 2 and code in right_tokens:
-                                        yes_side = "away"
-                                        break
-
-                            # Check Away Codes in Right Side -> Yes is Home
-                            if not yes_side and away_codes:
-                                for code in away_codes:
-                                    if code and len(code) >= 2 and code in right_tokens:
-                                        yes_side = "home"
-                                        break
-
-                        # 5. Check Matched Ticker Codes (Final Fallback - Uses the successful ticker match)
-                        if not yes_side and best_details:
-                            # Retrieve the codes that ACTUALLY matched the ticker
-                            ticker_away_code = best_details.get("parsed_away")
-                            ticker_home_code = best_details.get("parsed_home")
-
-                            s1 = best_details.get("score_1", 0)
-                            s2 = best_details.get("score_2", 0)
-
-                            # Determine which team the ticker codes represent
-                            code_for_away = None
-                            code_for_home = None
-
-                            if s1 >= s2:
-                                # Direct: ticker_away is Away, ticker_home is Home
-                                code_for_away = ticker_away_code
-                                code_for_home = ticker_home_code
-                            else:
-                                # Swap: ticker_away is Home, ticker_home is Away
-                                code_for_away = ticker_home_code
-                                code_for_home = ticker_away_code
-
-                            # Check if these codes appear in the title (Left or Right)
-                            # Use robust checking (token or substring)
-                            def _code_in_text(code, text):
-                                if not code or not text: return False
-                                if code in text: return True # Substring match (e.g. MIA in MIAMI)
-                                return False
-
-                            if _code_in_text(code_for_home, left_side_title):
+                            # Decision Logic with Left/Right awareness
+                            if score_home_left > 80 and score_home_left > score_away_left:
                                 yes_side = "home"
-                            elif _code_in_text(code_for_away, left_side_title):
+                            elif score_away_left > 80 and score_away_left > score_home_left:
                                 yes_side = "away"
-                            elif _code_in_text(code_for_home, right_side_title):
-                                yes_side = "away" # Home on right -> Yes is Away
-                            elif _code_in_text(code_for_away, right_side_title):
-                                yes_side = "home" # Away on right -> Yes is Home
+                            elif score_home_right > 80 and score_home_right > score_away_right:
+                                yes_side = "away" # Home is NO side -> Yes is Away
+                            elif score_away_right > 80 and score_away_right > score_home_right:
+                                yes_side = "home" # Away is NO side -> Yes is Home
+                        else:
+                            # Fallback Token Overlap
+                            left_toks = set(left_clean.split())
+                            def _tok_score(team, target_toks):
+                                parts = team.split()
+                                if not parts: return 0
+                                return sum(1 for p in parts if p in target_toks) / len(parts)
 
-                        # 6. Default Fallback
-                        if not yes_side:
-                            yes_side = "home" # Legacy default
-                            logger.warning(f"⚠️ Kalshi Yes Side ambiguous for {market_title}, defaulting to 'home'")
+                            s_h = _tok_score(h_clean, left_toks)
+                            s_a = _tok_score(a_clean, left_toks)
 
-                    # Add to debug info for downstream consumption (streamlit_app.py reads this)
-                    debug_info["kalshi_yes_side"] = yes_side
-                    debug_info["kalshi_title_check"] = market_title
+                            if s_h > 0.6 and s_h > s_a: yes_side = "home"
+                            elif s_a > 0.6 and s_a > s_h: yes_side = "away"
 
-                    return KalshiMatchResult(
-                        matched=True,
-                        kalshi_available=True,
-                        label=target_market.get("title"),
-                        probability=prob if prob is not None else 0.5,
-                        raw_event_id=best_event.get("ticker"),
-                        market_ticker=target_ticker,
-                        league=league,
-                        reason=match_reason_detail or "matched_via_events_api",
-                        market_type=m_type,
-                        game_date=game_dt_utc,
-                        debug=debug_info
-                    )
+                    # 3. Check Codes against Left Side (Fallback)
+                    if not yes_side:
+                        left_tokens = left_side_title.split()
+
+                        # Check Home Codes in Left Side
+                        if home_codes:
+                            for code in home_codes:
+                                if code and len(code) >= 2 and code in left_tokens:
+                                    yes_side = "home"
+                                    break
+
+                        # Check Away Codes in Left Side
+                        if not yes_side and away_codes:
+                            for code in away_codes:
+                                if code and len(code) >= 2 and code in left_tokens:
+                                    yes_side = "away"
+                                    break
+
+                    # 4. Check Right Side (Fallback - Fix for aliases like "Canes @ FSU")
+                    # If Right Side matches Home, then Left (Yes) must be Away.
+                    if not yes_side and right_side_title:
+                        right_tokens = right_side_title.split()
+
+                        # Check Home Codes in Right Side -> Yes is Away
+                        if home_codes:
+                            for code in home_codes:
+                                if code and len(code) >= 2 and code in right_tokens:
+                                    yes_side = "away"
+                                    break
+
+                        # Check Away Codes in Right Side -> Yes is Home
+                        if not yes_side and away_codes:
+                            for code in away_codes:
+                                if code and len(code) >= 2 and code in right_tokens:
+                                    yes_side = "home"
+                                    break
+
+                    # 5. Check Matched Ticker Codes (Final Fallback - Uses the successful ticker match)
+                    if not yes_side and best_details:
+                        # Retrieve the codes that ACTUALLY matched the ticker
+                        ticker_away_code = best_details.get("parsed_away")
+                        ticker_home_code = best_details.get("parsed_home")
+
+                        s1 = best_details.get("score_1", 0)
+                        s2 = best_details.get("score_2", 0)
+
+                        # Determine which team the ticker codes represent
+                        code_for_away = None
+                        code_for_home = None
+
+                        if s1 >= s2:
+                            # Direct: ticker_away is Away, ticker_home is Home
+                            code_for_away = ticker_away_code
+                            code_for_home = ticker_home_code
+                        else:
+                            # Swap: ticker_away is Home, ticker_home is Away
+                            code_for_away = ticker_home_code
+                            code_for_home = ticker_away_code
+
+                        # Check if these codes appear in the title (Left or Right)
+                        # Use robust checking (token or substring)
+                        def _code_in_text(code, text):
+                            if not code or not text: return False
+                            if code in text: return True # Substring match (e.g. MIA in MIAMI)
+                            return False
+
+                        if _code_in_text(code_for_home, left_side_title):
+                            yes_side = "home"
+                        elif _code_in_text(code_for_away, left_side_title):
+                            yes_side = "away"
+                        elif _code_in_text(code_for_home, right_side_title):
+                            yes_side = "away" # Home on right -> Yes is Away
+                        elif _code_in_text(code_for_away, right_side_title):
+                            yes_side = "home" # Away on right -> Yes is Home
+
+                    # 6. Default Fallback
+                    if not yes_side:
+                        yes_side = "home" # Legacy default
+                        logger.warning(f"⚠️ Kalshi Yes Side ambiguous for {market_title}, defaulting to 'home'")
+
+                # Add to debug info for downstream consumption (streamlit_app.py reads this)
+                debug_info["kalshi_yes_side"] = yes_side
+                debug_info["kalshi_title_check"] = market_title
+
+                return KalshiMatchResult(
+                    matched=True,
+                    kalshi_available=True,
+                    label=target_market.get("title"),
+                    probability=prob if prob is not None else 0.5,
+                    raw_event_id=best_event.get("ticker"),
+                    market_ticker=target_ticker,
+                    league=league,
+                    reason=match_reason_detail or "matched_via_events_api",
+                    market_type=m_type,
+                    game_date=game_dt_utc,
+                    debug=debug_info
+                )
 
     except Exception as e:
         logger.error(f"❌ EXCEPTION in _match_via_events: {type(e).__name__}: {str(e)}")
