@@ -7872,6 +7872,9 @@ def match_kalshi_market(
                 # Currently simple list, take first
                 target = market_list[0]
 
+                # Extract score if available (injected by match_game_to_kalshi_markets)
+                match_score = target.get("_match_score", 100)
+
                 # Use existing parser
                 meta = _parse_market_metadata(target) or {}
 
@@ -7887,7 +7890,11 @@ def match_kalshi_market(
                     reason="matched_new_logic",
                     market_type=m_type,
                     game_date=commence_time,
-                    debug={"kalshi_yes_side": meta.get("title"), "kalshi_status": "matched"} # minimal debug
+                    debug={
+                        "kalshi_yes_side": meta.get("title"),
+                        "kalshi_status": "matched",
+                        "match_score": match_score
+                    }
                 )
 
             res_winner = _convert_raw_to_result(raw_matches.get("GAME"), "WINNER")
@@ -7911,6 +7918,11 @@ def match_kalshi_market(
             if not r or not r.matched:
                 return available_base_result(r.reason if r else "no_match", m_type)
 
+            # Retrieve score from debug if available
+            score = 100
+            if r.debug and "match_score" in r.debug:
+                score = r.debug["match_score"]
+
             return {
                 "kalshi_available": True,
                 "kalshi_label": r.label,
@@ -7919,7 +7931,7 @@ def match_kalshi_market(
                 "kalshi_matched": True,
                 "kalshi_prob": r.probability,
                 "kalshi_market_type": m_type,
-                "kalshi_match_score": 100,
+                "kalshi_match_score": score,
                 "kalshi_ticker": r.market_ticker or r.raw_event_id,
                 "kalshi_line": None,
                 "kalshi_title": r.label,
@@ -10317,14 +10329,35 @@ with tab_master:
                             _prev_owner = _kalshi_ticker_owners[_kticker]
                             # Allow overwrite if the owner is the same canonical game (duplicate row processing)
                             if _prev_owner != _k_id:
+                                # Smart Eviction: Check if current match is stronger than previous match
+                                _prev_data = kalshi_match_results.get(_prev_owner, {})
+                                _prev_matches = _prev_data.get("matches", {})
+                                _prev_market = _prev_matches.get(_mtype, {})
+
+                                _curr_score = _km.get("kalshi_match_score", 0)
+                                _prev_score = _prev_market.get("kalshi_match_score", 0)
+
+                                # Log collision detail as requested
                                 logger.warning(
-                                    f"🚨 KALSHI TICKER COLLISION: {_kticker} ({_mtype}) "
-                                    f"claimed by [{_k_id}] but already used by [{_prev_owner}]. "
-                                    f"Rejecting duplicate — setting kalshi_matched=False."
+                                    f"🚨 KALSHI TICKER COLLISION: {_kticker} ({_mtype})\n"
+                                    f"   Current: [{_k_id}] Score: {_curr_score}\n"
+                                    f"   Previous: [{_prev_owner}] Score: {_prev_score}"
                                 )
-                                _km["kalshi_matched"] = False
-                                _km["kalshi_reason"] = f"collision_with_{_prev_owner}"
-                                _km["kalshi_prob"] = None
+
+                                if _curr_score > _prev_score:
+                                    logger.warning(f"   ⚡ EVICTING previous owner [{_prev_owner}] in favor of better match (Score {_curr_score} > {_prev_score})")
+                                    # Evict previous
+                                    if _prev_market:
+                                        _prev_market["kalshi_matched"] = False
+                                        _prev_market["kalshi_reason"] = f"evicted_by_better_match_{_k_id}"
+                                        _prev_market["kalshi_prob"] = None
+                                    # Claim ticker
+                                    _kalshi_ticker_owners[_kticker] = _k_id
+                                else:
+                                    logger.warning(f"   ⛔ Rejecting current match (Score {_curr_score} <= {_prev_score})")
+                                    _km["kalshi_matched"] = False
+                                    _km["kalshi_reason"] = f"collision_with_{_prev_owner}"
+                                    _km["kalshi_prob"] = None
                         else:
                             _kalshi_ticker_owners[_kticker] = _k_id
 
