@@ -1882,7 +1882,7 @@ def _match_via_events(
             if league in ['NBA', 'NFL', 'NHL', 'MLB']:
                 MATCH_THRESHOLD = 70  # Was 75
             else:
-                MATCH_THRESHOLD = 50  # Was 65 (More permissive for NCAAB)
+                MATCH_THRESHOLD = 30  # Was 50 (Lowered for Debugging)
 
             if best_event:
                 logger.info(f"   Best Match Found: {best_details['ticker']}")

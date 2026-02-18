@@ -8207,26 +8207,51 @@ st.sidebar.header("System Tools")
 
 # --- START DIAGNOSTIC BLOCK ---
 if st.sidebar.checkbox("🔍 Kalshi Diagnostics"):
-    if st.session_state.get('kalshi_integrator'):
-        ki = st.session_state['kalshi_integrator']
-        st.sidebar.write("### Kalshi Debug Info")
-        st.sidebar.write(f"Kalshi object: {type(ki)}")
-        # KalshiIntegrator uses 'session' for requests
-        st.sidebar.write(f"Has session: {hasattr(ki, 'session')}")
+    st.sidebar.markdown("### Kalshi System Status")
 
-        # Try to fetch markets
+    ki = st.session_state.get('kalshi_integrator')
+    if ki:
+        # Fix #1: Verify Credentials
+        key_status = "SET" if ki.api_key else "MISSING"
+        key_val = f"{ki.api_key[:8]}..." if ki.api_key else "None"
+        valid_flag = getattr(ki, '_credentials_valid', 'UNKNOWN')
+
+        st.sidebar.write(f"**API Key:** {key_status} ({key_val})")
+        st.sidebar.write(f"**Valid Flag:** {valid_flag}")
+
+        if ki.api_key == "your_key_here":
+            st.sidebar.error("❌ API Key is default placeholder!")
+
+        # Fix #2: Force Fresh Data & Check Events
+        if st.sidebar.button("🔄 Force Fresh Data Check"):
+            with st.sidebar.status("Refreshing Kalshi Data..."):
+                ki.clear_events_cache()
+                st.write("Cache cleared.")
+
+                try:
+                    # NBA Check
+                    series = "KXNBAGAME"
+                    st.write(f"Fetching {series}...")
+                    events_resp = ki.get_events(series, status=None, use_cache=False)
+                    events = events_resp.get('events', [])
+                    st.write(f"✅ Fetched {len(events)} events")
+                    if events:
+                        st.json(events[0])
+                    else:
+                        st.warning("No events found.")
+
+                except Exception as e:
+                    st.error(f"Fetch failed: {e}")
+
+        # General Health
         try:
-            # Using get_markets with a small limit
             markets = ki.get_markets(limit=5)
-            st.sidebar.write(f"Markets fetched: {len(markets)}")
-            if markets:
-                st.sidebar.json(markets[:1])
-            else:
-                st.sidebar.warning("No markets returned (empty list)")
+            st.sidebar.write(f"**General Market Check:** {len(markets)} fetched")
         except Exception as e:
-            st.sidebar.error(f"Market fetch error: {e}")
+            st.sidebar.error(f"General check failed: {e}")
+
     else:
-        st.sidebar.error("Kalshi integrator is None!")
+        st.sidebar.error("Kalshi integrator NOT initialized!")
 # --- END DIAGNOSTIC BLOCK ---
 
 if st.sidebar.button("Clear Debug Log"):
