@@ -7851,7 +7851,8 @@ def match_kalshi_market(
             # Format Date
             # TheOddsAPI ISO -> Kalshi YYMONDD (e.g. 26FEB19)
             # commence_time is a datetime object here
-            kalshi_date_str = commence_time.strftime("%y%b%d").upper()
+            # Fix: Use integrator method to ensure UTC date (prevents 23:00 -> Next Day issue)
+            kalshi_date_str = kalshi_integrator.date_to_kalshi_token(commence_time)
 
             # Call new matching method
             raw_matches = kalshi_integrator.match_game_to_kalshi_markets(

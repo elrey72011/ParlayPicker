@@ -4129,7 +4129,7 @@ class KalshiIntegrator:
             "other": other,
         }
 
-    def _date_to_kalshi_token(self, dt: datetime) -> str:
+    def date_to_kalshi_token(self, dt: datetime) -> str:
         """
         Convert datetime to Kalshi date token format (YYMONDD).
         e.g. 2025-01-26 -> 25JAN26
@@ -4176,8 +4176,8 @@ class KalshiIntegrator:
                     # Fix Issue #1077: Generate tokens for both current day AND next day
                     # This ensures we catch games that Kalshi buckets into the next day
                     # (common for late evening games after ~8 PM EST which cross 00:00 UTC)
-                    token_today = self._date_to_kalshi_token(dt)
-                    token_tomorrow = self._date_to_kalshi_token(dt + timedelta(days=1))
+                    token_today = self.date_to_kalshi_token(dt)
+                    token_tomorrow = self.date_to_kalshi_token(dt + timedelta(days=1))
 
                     unique_tokens.add(token_today)
                     unique_tokens.add(token_tomorrow)
