@@ -3803,6 +3803,9 @@ class KalshiIntegrator:
                 best_match_score = match_score
                 best_match_ticker = ticker
 
+            # Inject score into market object for downstream conflict resolution
+            market["_match_score"] = match_score
+
             # Categorize market by type
             if "GAME" in ticker:
                 matched_markets["GAME"].append(market)
