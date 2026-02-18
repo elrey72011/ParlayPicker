@@ -8875,6 +8875,33 @@ with tab_master:
             logger.error(f"CRITICAL: Cannot run Master Analysis - games list is empty (run_id: {analysis_run_id})")
             st.stop()
 
+        # --- DIAGNOSTIC: WCU Game Check (User Request) ---
+        try:
+            wcu_games = [g for g in games if 'Western Carolina' in str(g.get('away_team')) or 'Western Carolina' in str(g.get('home_team'))]
+            uncg_games = [g for g in games if 'Greensboro' in str(g.get('away_team')) or 'Greensboro' in str(g.get('home_team'))]
+
+            logger.info(f"🔍 Western Carolina games found: {len(wcu_games)}")
+            logger.info(f"🔍 UNC Greensboro games found: {len(uncg_games)}")
+
+            if wcu_games:
+                for g in wcu_games:
+                    logger.info(f"   WCU Game: {g.get('away_team')} @ {g.get('home_team')} at {g.get('commence_time')}")
+
+            if uncg_games:
+                for g in uncg_games:
+                    logger.info(f"   UNCG Game: {g.get('away_team')} @ {g.get('home_team')} at {g.get('commence_time')}")
+
+            # Step 2: Verify team code generation (User Request)
+            if wcu_games or uncg_games:
+                from app_core.kalshi_integrator import generate_comprehensive_team_variants
+                logger.info(f"   Diagnostic Code Generation:")
+                logger.info(f"      'UNC Greensboro Spartans': {generate_comprehensive_team_variants('UNC Greensboro Spartans', 'NCAAB')}")
+                logger.info(f"      'Western Carolina Catamounts': {generate_comprehensive_team_variants('Western Carolina Catamounts', 'NCAAB')}")
+
+        except Exception as e:
+            logger.warning(f"Diagnostic logging failed: {e}")
+        # -----------------------------------------------
+
         with st.spinner("🔄 Analyzing Markets..."):
             try:
                 # Task 1: Pre-process games to ensure commence_date_local is set for TheOver matching

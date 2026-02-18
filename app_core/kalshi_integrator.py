@@ -60,6 +60,80 @@ NBA_TZ = pytz.timezone("US/Eastern")
 # Global counter for debug logging limit
 _DEBUG_GAME_LOG_COUNT = 0
 
+# Common words to penalize in matching (user request)
+COMMON_WORDS = {'STATE', 'ST', 'CAROLINA', 'CAR', 'CENTRAL', 'NORTH', 'SOUTH', 'EAST', 'WEST'}
+
+def calculate_team_match_score(ticker_code: str, team_variants: List[str]) -> float:
+    """
+    Calculate match score with strict penalties for partial/common word matches.
+    Used to prevent false positive collisions (e.g. NC Central matching SMC due to 'C'/'Central').
+    """
+    if not ticker_code:
+        return 0.0
+
+    ticker_code_upper = ticker_code.upper()
+    best_score = 0.0
+    best_variant = None
+
+    for variant in team_variants:
+        variant_upper = variant.upper()
+
+        # Skip if variant is only a common word
+        if variant_upper in COMMON_WORDS:
+            continue
+
+        # Check if variant is in ticker (substring)
+        if variant_upper in ticker_code_upper:
+            # Base score: how much of ticker does variant cover?
+            coverage = len(variant_upper) / len(ticker_code_upper)
+
+            # Penalty #1: Partial match penalty (not at start or end of ticker)
+            ticker_start = ticker_code_upper.startswith(variant_upper)
+            ticker_end = ticker_code_upper.endswith(variant_upper)
+
+            if not (ticker_start or ticker_end):
+                # Variant is in the middle - heavy penalty
+                coverage *= 0.5
+
+            # Penalty #2: Common word penalty
+            if any(word in variant_upper for word in COMMON_WORDS):
+                # Variant contains common words - moderate penalty
+                coverage *= 0.7
+
+            # Penalty #3: Short variant penalty (< 3 characters)
+            if len(variant_upper) < 3:
+                coverage *= 0.6
+
+            score = 100.0 * coverage
+
+            if score > best_score:
+                best_score = score
+                best_variant = variant
+
+        # Also allow Reverse Containment (Ticker Code inside Team Variant)
+        # e.g. Ticker="LOU" inside Variant="LOUISVILLE"
+        # This is essentially what _team_score was doing with "clean_code in target_clean"
+        elif ticker_code_upper in variant_upper:
+             # Calculate coverage of the ticker code relative to the variant
+             # This is a bit different, but ensures "LOU" matches "LOUISVILLE"
+             # Use a high base score for containment, but apply penalties if short
+             score = 90.0 # Base for valid containment
+
+             # Penalty for short ticker code
+             if len(ticker_code_upper) < 3:
+                 score *= 0.8
+
+             # Penalty if ticker is just a common word
+             if ticker_code_upper in COMMON_WORDS:
+                 score *= 0.5
+
+             if score > best_score:
+                 best_score = score
+                 best_variant = variant
+
+    # logger.debug(f"  Best team match: '{best_variant}' in '{ticker_code}' = {best_score:.1f}")
+    return best_score
+
 class KalshiAPIError(Exception):
     """Base error for Kalshi API issues."""
     pass
@@ -1826,6 +1900,11 @@ def _build_team_codes(team_name: str) -> List[str]:
     return list(dict.fromkeys(codes))  # Dedup
 
 def _team_score(team_code: str, target_clean: str, target_codes: List[str]) -> float:
+    """
+    Score similarity between a team code (from Kalshi) and our internal target team.
+    Refactored to use calculate_team_match_score for consistency where possible,
+    but retains specific logic for target_clean matching.
+    """
     if not team_code: return 0.0
     clean_code = clean_team_name(team_code)
 
@@ -1833,7 +1912,18 @@ def _team_score(team_code: str, target_clean: str, target_codes: List[str]) -> f
     if clean_code in target_codes: return 100.0
     if clean_code == target_clean: return 100.0
 
-    # 2. Token overlap / Containment
+    # 2. Use new strict scoring if applicable
+    # Treat target_clean as the "variant" and team_code as the "ticker" (or vice versa depending on context)
+    # Here team_code is usually the short code (e.g. "LOU") and target_clean is full name ("LOUISVILLE")
+    # calculate_team_match_score(ticker_code, team_variants)
+    # We can pass [target_clean] + target_codes as variants
+    variants = [target_clean] + target_codes
+    new_score = calculate_team_match_score(clean_code, variants)
+    if new_score > 60.0:
+        return new_score
+
+    # 3. Fallback to old Logic for robustness if new score is low
+    # Token overlap / Containment
     words_code = set(clean_code.split())
     words_target = set(target_clean.split())
 
@@ -1844,7 +1934,7 @@ def _team_score(team_code: str, target_clean: str, target_codes: List[str]) -> f
     if words_code & words_target:
         return 80.0
 
-    # 3. Fuzzy Match (Fallback)
+    # 4. Fuzzy Match (Fallback)
     if rapidfuzz:
         # Simple ratio
         ratio = fuzz.ratio(clean_code, target_clean)
@@ -1995,11 +2085,23 @@ def _match_via_events(
             # 40 = Strong fuzzy match (ratio >= 80)
             # 30 = Medium fuzzy match (ratio >= 65, NCAAB/NCAAF only)
 
-            def _get_code_score(code: str, candidates: set, league: str) -> int:
+            def _get_code_score(code: str, candidates: set, league: str) -> float:
+                if not code: return 0.0
                 if code in candidates:
-                    return 50
+                    return 50.0
 
-                # Fuzzy fallback
+                # Use strict match score for fuzzy/partial matches
+                # We need list of variants. 'candidates' is a set of resolved codes.
+                # Ideally we check against full name variants too, but here we only have codes.
+                # Let's convert set to list.
+                strict_score = calculate_team_match_score(code, list(candidates))
+
+                # Scale strict_score (0-100) to our weight (max ~40 for fuzzy)
+                # If strict_score is high (e.g. 100), we give 40.
+                if strict_score > 90: return 40.0
+                if strict_score > 70: return 30.0
+
+                # Fuzzy fallback (Legacy)
                 if rapidfuzz and code and len(code) >= 2:
                     best_r = 0
                     for cand in candidates:
@@ -2008,11 +2110,11 @@ def _match_via_events(
                         if r > best_r:
                             best_r = r
 
-                    if best_r >= 80:
-                        return 40
-                    if best_r >= 65 and league in ['NCAAB', 'NCAAF']:
-                        return 30
-                return 0
+                    if best_r >= 85: # Tightened from 80
+                        return 40.0
+                    if best_r >= 70 and league in ['NCAAB', 'NCAAF']: # Tightened from 65
+                        return 30.0
+                return 0.0
 
             s_away_1 = _get_code_score(evt_away_code, resolved_away, league)
             s_home_1 = _get_code_score(evt_home_code, resolved_home, league)
@@ -3730,30 +3832,8 @@ class KalshiIntegrator:
 
         # Helper to score a match between a ticker code and team variants
         def _score_team_match(ticker_code: str, team_variants: List[str]) -> float:
-            if not ticker_code:
-                return 0.0
-
-            ticker_upper = ticker_code.upper()
-
-            # 1. Exact Match in Variants (Highest)
-            if ticker_upper in team_variants:
-                return 100.0
-
-            # 2. Fuzzy Match against all variants
-            if rapidfuzz:
-                best_r = 0
-                for v in team_variants:
-                    r = fuzz.ratio(ticker_upper, v)
-                    if r > best_r:
-                        best_r = r
-                return float(best_r)
-
-            # Fallback simple containment
-            for v in team_variants:
-                if ticker_upper in v or v in ticker_upper:
-                    return 80.0
-
-            return 0.0
+            # Use the new strict scoring function
+            return calculate_team_match_score(ticker_code, team_variants)
 
         for market in kalshi_markets:
             ticker = market.get("ticker", "")
