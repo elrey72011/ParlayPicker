@@ -4133,15 +4133,19 @@ class KalshiIntegrator:
         """
         Convert datetime to Kalshi date token format (YYMONDD).
         e.g. 2025-01-26 -> 25JAN26
+
+        Uses US/Eastern time for date bucketing as Kalshi sports markets
+        generally align with US daily schedules.
         """
-        # Ensure UTC
+        # Ensure timezone awareness
         if dt.tzinfo is None:
             dt = pytz.utc.localize(dt)
-        else:
-            dt = dt.astimezone(pytz.UTC)
+
+        # Convert to US/Eastern (Kalshi Daily Markets use ET dates)
+        dt_est = dt.astimezone(pytz.timezone("US/Eastern"))
 
         # Format: %y%b%d, but Month needs to be UPPERCASE
-        token = dt.strftime("%y%b%d").upper()
+        token = dt_est.strftime("%y%b%d").upper()
         return token
 
     def get_sports_markets(
