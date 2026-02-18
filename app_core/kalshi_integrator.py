@@ -1912,10 +1912,9 @@ def _match_via_events(
         all_candidates = []  # Track all potential candidates for debug (Fix #4)
 
         # Time window for matching (hours)
-        # Increased from 36 to 72 to be more generous with date matching
         # League-specific time windows:
-        # - NCAAB: 72h (games bucket by date, not time)
-        # - NBA/NFL/NHL/MLB: 24h (games scheduled to the minute)
+        # - NCAAB: 72h (games bucket by EST date, ±2 day tolerance)
+        # - NBA/NFL/NHL/MLB: 24h (games scheduled to the minute, ±1 day tolerance)
         TIME_WINDOW_HOURS = 72 if league == 'NCAAB' else 24
 
         # Resolve our candidates once before loop (optimization + fix for UnboundLocalError)
@@ -2038,9 +2037,11 @@ def _match_via_events(
                     # 3. Calculate Date Difference (Days)
                     date_diff_days = (ticker_date_dt - game_date_est).days
 
-                    # 4. Check Tolerance (±1 Day)
-                    # This handles games crossing midnight or timezone shifts
-                    if abs(date_diff_days) <= 1:
+                    # 4. Check Tolerance (±1 Day for most leagues, ±2 for NCAAB)
+                    # NCAAB games bucket by EST date, but UTC timestamps can be off by >24h
+                    tolerance_days = 2 if league == 'NCAAB' else 1
+
+                    if abs(date_diff_days) <= tolerance_days:
                         ticker_date_valid = True
 
                     # DIAGNOSTIC LOGGING
@@ -2108,7 +2109,8 @@ def _match_via_events(
             if time_diff_hours is not None:
                 logger.info(f"      Time Check: {time_diff_hours:.1f}h diff (Score Adj: {time_score:+})")
             if date_diff_days is not None:
-                logger.info(f"      Date Check: {date_diff_days} days diff (Valid: {abs(date_diff_days) <= 1})")
+                tol = 2 if league == 'NCAAB' else 1
+                logger.info(f"      Date Check: {date_diff_days} days diff (Valid: {abs(date_diff_days) <= tol})")
             logger.info(f"      Final Score: {final_score} (Threshold: 70)")
 
             if final_score > best_score:
