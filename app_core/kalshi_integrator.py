@@ -2645,6 +2645,9 @@ def _normalize_series_prefix(prefix: Any) -> Tuple[str, ...]:
         return (str(prefix),)
     return ()
 
+
+# DEPRECATED - Use match_game_to_kalshi_markets instead
+# TODO: Remove after testing new matching logic
 def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time: Optional[datetime], integrator: "KalshiIntegrator" = None, status: Optional[str] = None, requested_market_type: Optional[str] = None) -> KalshiMatchResult:
     league_key = (league or "").upper()
     kalshi = integrator or KalshiIntegrator()
@@ -3371,6 +3374,117 @@ class KalshiIntegrator:
         self._events_cache.clear()
         logger.info(f"🗑️ Cleared {count} cached event entries")
         return {"cleared": count, "status": "ok"}
+
+    def match_game_to_kalshi_markets(
+        self,
+        home_team: str,
+        away_team: str,
+        game_date: str,
+        kalshi_markets: List[Dict]
+    ) -> Dict[str, Any]:
+        """
+        Match a game to Kalshi markets with enhanced logging and fuzzy matching.
+
+        Args:
+            home_team: Home team name from TheOddsAPI
+            away_team: Away team name from TheOddsAPI
+            game_date: Game date in format "26FEB19"
+            kalshi_markets: List of Kalshi market dictionaries
+
+        Returns:
+            Dictionary with matched markets by type (GAME, SPREAD, TOTAL)
+        """
+        from app_core.team_name_mapping import (
+            fuzzy_match_teams,
+            extract_team_abbreviations_from_ticker,
+            get_team_variants
+        )
+
+        logger.info(f"🔍 KALSHI_MATCH: Attempting to match {away_team} @ {home_team} on {game_date}")
+        logger.info(f"   Away team variants: {get_team_variants(away_team)}")
+        logger.info(f"   Home team variants: {get_team_variants(home_team)}")
+
+        matched_markets = {
+            "GAME": [],
+            "SPREAD": [],
+            "TOTAL": []
+        }
+
+        candidates_found = 0
+        best_match_score = 0
+        best_match_ticker = None
+
+        for market in kalshi_markets:
+            ticker = market.get("ticker", "")
+
+            # Check if date matches
+            if game_date not in ticker:
+                continue
+
+            # Extract team abbreviations from ticker
+            kalshi_team1, kalshi_team2 = extract_team_abbreviations_from_ticker(ticker)
+
+            if not kalshi_team1 or not kalshi_team2:
+                continue
+
+            candidates_found += 1
+
+            # Try matching both team orders
+            # Order 1: away=team1, home=team2
+            away_match1, away_score1 = fuzzy_match_teams(away_team, kalshi_team1)
+            home_match1, home_score1 = fuzzy_match_teams(home_team, kalshi_team2)
+
+            # Order 2: away=team2, home=team1
+            away_match2, away_score2 = fuzzy_match_teams(away_team, kalshi_team2)
+            home_match2, home_score2 = fuzzy_match_teams(home_team, kalshi_team1)
+
+            # Calculate combined scores for both orders
+            score1 = (away_score1 + home_score1) / 2
+            score2 = (away_score2 + home_score2) / 2
+
+            match_score = 0
+            # Use the better order
+            if score1 > score2 and away_match1 and home_match1:
+                match_score = score1
+                logger.debug(f"   ✓ CANDIDATE: {ticker} (Score: {match_score:.1f}) "
+                            f"[{kalshi_team1}={away_team}:{away_score1}, {kalshi_team2}={home_team}:{home_score1}]")
+            elif score2 >= score1 and away_match2 and home_match2:
+                match_score = score2
+                logger.debug(f"   ✓ CANDIDATE: {ticker} (Score: {match_score:.1f}) "
+                            f"[{kalshi_team2}={away_team}:{away_score2}, {kalshi_team1}={home_team}:{home_score2}]")
+            else:
+                # No match
+                continue
+
+            # Track best match
+            if match_score > best_match_score:
+                best_match_score = match_score
+                best_match_ticker = ticker
+
+            # Categorize market by type
+            if "GAME" in ticker:
+                matched_markets["GAME"].append(market)
+            elif "SPREAD" in ticker:
+                matched_markets["SPREAD"].append(market)
+            elif "TOTAL" in ticker:
+                matched_markets["TOTAL"].append(market)
+
+        # Log results
+        total_matched = sum(len(markets) for markets in matched_markets.values())
+
+        if total_matched > 0:
+            logger.info(f"   ✅ MATCHED: Found {total_matched} markets (Best: {best_match_ticker}, Score: {best_match_score:.1f})")
+            logger.info(f"      GAME:{len(matched_markets['GAME'])}, SPREAD:{len(matched_markets['SPREAD'])}, TOTAL:{len(matched_markets['TOTAL'])}")
+        else:
+            logger.warning(f"   ❌ NO MATCH: {candidates_found} candidates found on date {game_date}, but no team matches")
+            logger.warning(f"      Best candidate: {best_match_ticker} (Score: {best_match_score:.1f})")
+
+            # Log some sample tickers from that date for debugging
+            date_tickers = [m.get("ticker") for m in kalshi_markets if game_date in m.get("ticker", "")][:5]
+            if date_tickers:
+                logger.warning(f"      Sample tickers on {game_date}: {', '.join(date_tickers)}")
+
+        return matched_markets
 
     def scan_and_verify_team_codes(self, league: str) -> Dict[str, Any]:
         """

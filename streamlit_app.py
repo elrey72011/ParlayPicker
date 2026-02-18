@@ -28,6 +28,8 @@ from app_core.kalshi_integrator import (
     NCAAB_CODE_ALIASES,
     NCAAF_CODE_ALIASES,
     match_game_to_kalshi,
+    KalshiMatchResult, # Needed for type construction
+    _parse_market_metadata, # Needed for result parsing
 )
 
 from app_core.probability_utils import american_to_implied_prob, american_to_implied
@@ -7826,16 +7828,81 @@ def match_kalshi_market(
         logger.info(f"   League: {league}, Commence: {commence_time}")
         logger.info(f"   kalshi_integrator present: {kalshi_integrator is not None}")
 
-        # 1. Winner Match
-        res_winner = match_game_to_kalshi(league, home, away, commence_time, kalshi_integrator, requested_market_type="WINNER")
+        # Use new batch matching logic if available and league is supported
+        # For now, targeting NCAAB explicitly as per request, but can be expanded
+        use_new_matching = league == "NCAAB" and kalshi_integrator
+
+        if use_new_matching:
+            # Lazy fetch of all markets for the league if not already in session state or local var
+            # Optimization: Fetch ONCE per run, but here we do simple check
+            # In a real loop, fetch outside. Here we assume we might need to fetch on demand if not passed in.
+            # However, prompt requested "fetch ALL markets once before game loop".
+            # Since this code block is INSIDE the loop, we should check if we have them.
+            # To avoid refactoring the entire loop structure, we'll fetch once and cache in session state or global.
+
+            cache_key = f"kalshi_markets_{league}"
+            if cache_key not in st.session_state:
+                logger.info(f"Fetching ALL Kalshi markets for {league} (New Logic)...")
+                # Using get_league_markets is cleaner than get_markets() which fetches EVERYTHING
+                st.session_state[cache_key] = kalshi_integrator.get_league_markets(league)
+
+            all_league_markets = st.session_state[cache_key]
+
+            # Format Date
+            # TheOddsAPI ISO -> Kalshi YYMONDD (e.g. 26FEB19)
+            # commence_time is a datetime object here
+            kalshi_date_str = commence_time.strftime("%y%b%d").upper()
+
+            # Call new matching method
+            raw_matches = kalshi_integrator.match_game_to_kalshi_markets(
+                home_team=home,
+                away_team=away,
+                game_date=kalshi_date_str,
+                kalshi_markets=all_league_markets
+            )
+
+            # Helper to convert raw market to KalshiMatchResult
+            def _convert_raw_to_result(market_list, m_type):
+                if not market_list:
+                    return KalshiMatchResult(matched=False, reason="no_match_new_logic", market_type=m_type)
+
+                # Pick the "best" market from the list?
+                # Currently simple list, take first
+                target = market_list[0]
+
+                # Use existing parser
+                meta = _parse_market_metadata(target) or {}
+
+                # Construct result
+                return KalshiMatchResult(
+                    matched=True,
+                    kalshi_available=True,
+                    label=meta.get("title", ""),
+                    probability=meta.get("probability"),
+                    raw_event_id=target.get("ticker"), # Use ticker as ID
+                    market_ticker=target.get("ticker"),
+                    league=league,
+                    reason="matched_new_logic",
+                    market_type=m_type,
+                    game_date=commence_time,
+                    debug={"kalshi_yes_side": meta.get("title"), "kalshi_status": "matched"} # minimal debug
+                )
+
+            res_winner = _convert_raw_to_result(raw_matches.get("GAME"), "WINNER")
+            res_spread = _convert_raw_to_result(raw_matches.get("SPREAD"), "SPREAD")
+            res_total = _convert_raw_to_result(raw_matches.get("TOTAL"), "TOTAL")
+
+        else:
+            # Fallback to old logic for other leagues
+            # 1. Winner Match
+            res_winner = match_game_to_kalshi(league, home, away, commence_time, kalshi_integrator, requested_market_type="WINNER")
+            # 2. Spread Match
+            res_spread = match_game_to_kalshi(league, home, away, commence_time, kalshi_integrator, requested_market_type="SPREAD")
+            # 3. Total Match
+            res_total = match_game_to_kalshi(league, home, away, commence_time, kalshi_integrator, requested_market_type="TOTAL")
+
         logger.info(f"   WINNER match status: {res_winner.debug.get('kalshi_status', 'UNKNOWN') if res_winner and res_winner.debug else (res_winner.reason if res_winner else 'None')}")
-
-        # 2. Spread Match
-        res_spread = match_game_to_kalshi(league, home, away, commence_time, kalshi_integrator, requested_market_type="SPREAD")
         logger.info(f"   SPREAD match status: {res_spread.debug.get('kalshi_status', 'UNKNOWN') if res_spread and res_spread.debug else (res_spread.reason if res_spread else 'None')}")
-
-        # 3. Total Match
-        res_total = match_game_to_kalshi(league, home, away, commence_time, kalshi_integrator, requested_market_type="TOTAL")
         logger.info(f"   TOTAL match status: {res_total.debug.get('kalshi_status', 'UNKNOWN') if res_total and res_total.debug else (res_total.reason if res_total else 'None')}")
 
         def map_result(r, m_type):
