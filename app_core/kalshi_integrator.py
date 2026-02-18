@@ -4173,8 +4173,16 @@ class KalshiIntegrator:
             unique_tokens = set()
             if commence_dt:
                 for dt in commence_dt:
-                    token = self._date_to_kalshi_token(dt)
-                    unique_tokens.add(token)
+                    # Fix Issue #1077: Generate tokens for both current day AND next day
+                    # This ensures we catch games that Kalshi buckets into the next day
+                    # (common for late evening games after ~8 PM EST which cross 00:00 UTC)
+                    token_today = self._date_to_kalshi_token(dt)
+                    token_tomorrow = self._date_to_kalshi_token(dt + timedelta(days=1))
+
+                    unique_tokens.add(token_today)
+                    unique_tokens.add(token_tomorrow)
+
+                    logger.debug(f"Date Tokens for {dt}: {token_today}, {token_tomorrow}")
 
             # 2. Fetch markets
             all_filtered_markets = []
