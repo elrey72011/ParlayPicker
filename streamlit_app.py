@@ -14735,17 +14735,26 @@ if should_display:
                 total = len(lg_df)
                 if total == 0: continue
 
-                full_stats = len(lg_df[lg_df["stats_quality"].isin(["REAL", "ESPN"])])
-                missing = total - full_stats
-                pct = (full_stats / total) * 100
+                # Fix: Use Kalshi matching for Coverage metric (requested by user)
+                # "NBA Coverage 0/10" fixed by checking HasKalshiMarket instead of stats_quality
+                if "HasKalshiMarket" in lg_df.columns:
+                    kalshi_matched_count = int(lg_df["HasKalshiMarket"].sum())
+                else:
+                    # Fallback robust check if column missing
+                    kalshi_matched_count = len(lg_df[
+                        (lg_df['kalshi_matched'] == True) |
+                        (lg_df['kalshi_matched'] == 'matched') |
+                        (lg_df['kalshi_matched'] == 1)
+                    ])
 
+                pct = (kalshi_matched_count / total) * 100 if total > 0 else 0
                 status_icon = "✅" if pct > 90 else "⚠️" if pct > 50 else "❌"
 
                 with quality_cols[i % 4]:
                     st.metric(
                         f"{lg} Coverage",
-                        f"{full_stats}/{total}",
-                        f"{pct:.0f}% Full Stats {status_icon}"
+                        f"{kalshi_matched_count}/{total}",
+                        f"{pct:.0f}% Kalshi Matches {status_icon}"
                     )
 
         # Check for missing stats
