@@ -255,7 +255,7 @@ class KalshiMatchResult:
     yes_ask: Optional[int] = None
     mid_prob: Optional[float] = None
     reason: Optional[str] = None
-    match_reason: Optional[str] = None  # Added field to fix TypeError
+    matchreason: Optional[str] = None  # Renamed from match_reason to matchreason (no underscore)
     market_type: Optional[str] = None
     game_date: Optional[datetime] = None
     kalshi_available: bool = True
@@ -572,15 +572,47 @@ def generate_comprehensive_team_variants(team_name: str, league: str = None) -> 
     variants = []
 
     # Step 1: Clean the base name
-    cleaned = clean_team_name(team_name)
+    # FIX: Pre-process common abbreviations before cleaning
+    pre_clean = team_name.upper()
+    if "INT'L" in pre_clean:
+        pre_clean = pre_clean.replace("INT'L", "INTERNATIONAL")
+    if "INTL" in pre_clean:
+        pre_clean = pre_clean.replace("INTL", "INTERNATIONAL")
+
+    # Handle "St" / "St." -> "State" expansion explicitly
+    # (Note: clean_team_name removes dots, so "ST." becomes "ST")
+    # But we want to ensure "St" becomes "State" for matching "Florida State" etc.
+    # Be careful not to replace "St" inside words (e.g. "West")
+    words = pre_clean.split()
+    expanded_words = []
+    for w in words:
+        if w in ["ST", "ST."]:
+            expanded_words.append("STATE")
+        else:
+            expanded_words.append(w)
+    pre_clean = " ".join(expanded_words)
+
+    # Handle "UC [City]" -> "UC" + City Abbreviation mapping logic if needed
+    # (Mappings like "UC Irvine" -> "UCI" are best handled in the map)
+
+    cleaned = clean_team_name(pre_clean)
     if cleaned:
         variants.append(cleaned)
 
     # Step 2: Try league-specific mapping first (highest priority)
     if league:
-        mapped = team_name_to_code(league, team_name)
+        # Use pre_clean (expanded abbreviations) for mapping lookup if available, else original
+        # This allows "Florida Int'l" -> "Florida International" -> "FIU"
+        lookup_name = pre_clean if 'pre_clean' in locals() else team_name
+        mapped = team_name_to_code(league, lookup_name)
         if mapped and mapped != "UNK":
             variants.insert(0, mapped)
+
+        # Also try original name if different
+        if lookup_name != team_name:
+            mapped_orig = team_name_to_code(league, team_name)
+            if mapped_orig and mapped_orig != "UNK" and mapped_orig != mapped:
+                variants.insert(0, mapped_orig)
 
     # Step 3: Extract tokens (words), filtering out common words
     # defined locally to ensure scope isolation
@@ -1368,6 +1400,17 @@ KALSHI_NCAAB_TEAM_CODES = {
     "Stetson Hatters": "STET",
     "Western Carolina": "WCU",
     "UNC Greensboro": "UNCG",
+    "Florida Int'l": "FIU",
+    "Florida International": "FIU",
+    "FLORIDA INTERNATIONAL": "FIU", # Uppercase for expanded lookup
+    "Florida Int L": "FIU", # Normalized
+    "UMass Lowell": "UMLO",
+    "UMASS LOWELL": "UMLO",
+    "UC Irvine": "UCI",
+    "UC IRVINE": "UCI",
+    "Long Beach State": "LBSU",
+    "Long Beach St": "LBSU",
+    "LONG BEACH STATE": "LBSU",
     # Task Updates: Fix Team Codes & Variants
     "Kennesaw St": "KENN",
     "Missouri St": "MOST",
@@ -2162,7 +2205,7 @@ def _match_via_events(
                 league=league,
                 kalshi_available=False,
                 reason="no_events_from_api",
-                match_reason=f"Kalshi returned 0 events for {series_ticker}"
+                matchreason=f"Kalshi returned 0 events for {series_ticker}"
             )
 
 # Log sample events for debugging
@@ -2243,7 +2286,8 @@ def _match_via_events(
 
         # Phase 1 Loop
         for candidate in events:
-            ticker = candidate.get("ticker", "")
+            # FIX 1: Robust Ticker Extraction (Support event_ticker if ticker is missing)
+            ticker = candidate.get("ticker") or candidate.get("event_ticker") or candidate.get("eventticker") or ""
 
             # Date Check
             if not _check_date_tolerance(ticker, game_dt_utc, league):
@@ -2270,8 +2314,8 @@ def _match_via_events(
                 best_details = details
 
         # Final Threshold Check
-        # User requested 85.0 threshold
-        MATCH_THRESHOLD = 85.0
+        # User requested 85.0 threshold, lowered to 70.0 to capture valid fuzzy matches
+        MATCH_THRESHOLD = 70.0
 
         if best_event:
             logger.info(f"   Best Match Found: {best_event.get('ticker')}")
@@ -2297,7 +2341,8 @@ def _match_via_events(
         if best_event and best_score >= MATCH_THRESHOLD: # High confidence match
             # CRITICAL: Verify this is the correct league before processing markets
             # This prevents NCAAB-specific logic from corrupting NBA/NFL matches
-            event_ticker = best_event.get("ticker", "")
+            # FIX 1: Robust extraction again
+            event_ticker = best_event.get("ticker") or best_event.get("event_ticker") or best_event.get("eventticker") or ""
             if league == "NCAAB" and "NCAAMB" not in event_ticker.upper():
                 logger.warning(f"   ❌ League mismatch: Expected NCAAB but event ticker is {event_ticker}")
                 return None
@@ -2310,7 +2355,7 @@ def _match_via_events(
 
             # Extract nested markets from the event object directly
             markets = best_event.get("markets", [])
-            evt_ticker = best_event.get("ticker")
+            evt_ticker = event_ticker # Use the robustly extracted ticker
 
             # Initialize fallback
             force_match_result = None
@@ -2375,11 +2420,11 @@ def _match_via_events(
             # Spread and total markets are in DIFFERENT event series (KXNBATOTAL, KXNBASPREAD)
             # Extract the date-team identifier from the matched GAME event ticker
             # e.g., "KXNBAGAME-26JAN27BKNPHX" -> "26JAN27BKNPHX"
-            game_evt_ticker = best_event.get("ticker", "")
+            game_evt_ticker = event_ticker # Use robustly extracted ticker
             # Only perform search if not NCAAB or if NCAAB needs it (NCAAB usually has nested markets but let's allow it)
             # Note: Previous code split logic here. We will apply search logic generally but keep NCAAB specific series inside loop.
             # FIX: Allow spread/total search for all leagues including NCAAB
-            if True:
+            if game_evt_ticker:
                 game_ticker_parts = game_evt_ticker.split("-")
                 if len(game_ticker_parts) >= 2:
                     date_team_id = game_ticker_parts[1]  # e.g., "26JAN27BKNPHX"
@@ -2982,7 +3027,7 @@ def _match_via_events(
             league=league,
             kalshi_available=False,
             reason=f"exception: {type(e).__name__}",
-            match_reason=f"Error during matching: {str(e)[:100]}"
+            matchreason=f"Error during matching: {str(e)[:100]}"
         )
     return None
 
@@ -3008,7 +3053,7 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
             matched=False,
             kalshi_available=False,
             reason="invalid_credentials",
-            match_reason="Kalshi API credentials not configured"
+            matchreason="Kalshi API credentials not configured"
         )
 
     kalshi.clear_events_cache() # Force reload to ensure fresh data
@@ -3202,11 +3247,13 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
         # New Logic using min score weighting
         min_direct = min(score_home_A, score_away_B)
         score_direct = (min_direct * 0.7) + ((score_home_A + score_away_B) / 2 * 0.3)
-        if min_direct < 60: score_direct = 0
+        # FIX: Lower threshold from 60 to 50 per user request
+        if min_direct < 50: score_direct = 0
 
         min_swap = min(score_home_B, score_away_A)
         score_swap = (min_swap * 0.7) + ((score_home_B + score_away_A) / 2 * 0.3)
-        if min_swap < 60: score_swap = 0
+        # FIX: Lower threshold from 60 to 50 per user request
+        if min_swap < 50: score_swap = 0
 
         score = max(score_direct, score_swap)
 
