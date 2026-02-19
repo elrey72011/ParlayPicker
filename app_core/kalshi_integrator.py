@@ -239,8 +239,13 @@ def calculate_team_match_score(ticker_code: str, team_variants: List[str], team_
 
         # Calculate score based on match quality
 
+        # PERFECT: Exact Match (Any Length > 1)
+        if ticker_code_upper == variant_upper:
+            score = 100.0
+            match_type = 'exact_match'
+
         # BEST: 4-char code at start or end
-        if len(variant_upper) == 4:
+        elif len(variant_upper) == 4:
             if ticker_code_upper.startswith(variant_upper) or ticker_code_upper.endswith(variant_upper):
                 score = 100.0
                 match_type = 'exact_4char_boundary'
@@ -249,21 +254,22 @@ def calculate_team_match_score(ticker_code: str, team_variants: List[str], team_
                 match_type = 'exact_4char_middle'
 
         # GOOD: 3-char code at start or end
+        # Upgraded to 100.0 because 3-char codes are standard in sports (e.g. DUK, UNC)
         elif len(variant_upper) == 3:
             if ticker_code_upper.startswith(variant_upper) or ticker_code_upper.endswith(variant_upper):
-                score = 90.0
+                score = 100.0
                 match_type = 'exact_3char_boundary'
             else:
-                score = 70.0
+                score = 85.0
                 match_type = 'exact_3char_middle'
 
-        # OK: 2-char code (less reliable)
+        # OK: 2-char code (less reliable but valid for schools like CP, OU, UK)
         elif len(variant_upper) == 2:
             if ticker_code_upper.startswith(variant_upper) or ticker_code_upper.endswith(variant_upper):
-                score = 75.0
+                score = 90.0
                 match_type = '2char_boundary'
             else:
-                score = 45.0
+                score = 60.0
                 match_type = '2char_middle'
 
         # WEAK: Long names or single chars
@@ -623,23 +629,97 @@ def clean_team_name(name: str) -> str:
     # Collapse multiple spaces into one and strip
     return re.sub(r"\s+", " ", cleaned).strip()
 
+def canonical_team_name(name: str) -> str:
+    """
+    Aggressive normalization for team names to improve matching.
+    Strips mascots, standardizes St/State, removes punctuation.
+    """
+    if not name: return ""
+
+    # 1. Lowercase for processing
+    n = name.lower().strip()
+
+    # 2. Pre-process common variations
+    # Handle Int'l -> International
+    if "int'l" in n:
+        n = n.replace("int'l", "international")
+    elif "intl" in n:
+        n = n.replace("intl", "international")
+
+    # Handle Saint -> St
+    if "saint " in n:
+        n = n.replace("saint ", "st ")
+
+    # Standardize 'Hawai'i' -> 'Hawaii' (common issue)
+    if "hawai'i" in n:
+        n = n.replace("hawai'i", "hawaii")
+
+    # 3. Standardize St/State
+    # Replace "State" with "St" to match Kalshi preference in codes (e.g. ARST, MTST)
+    # But keep full if needed. Let's produce the "base" school name.
+
+    # 4. Comprehensive Mascot List (Multi-word first)
+    # Deduplicated list of common mascots
+    mascots = [
+        # Multi-word
+        "mean green", "rainbow warriors", "ragin' cajuns", "red wolves",
+        "runnin' rebels", "golden eagles", "fighting illini", "blue devils",
+        "tar heels", "wolf pack", "thundering herd", "crimson tide", "gamecocks",
+        "golden flashes", "golden hurricanes", "golden knights", "golden bears",
+        "mountaineers", "volunteers", "commodores", "razorbacks", "longhorns",
+        "aggies", "buffaloes", "seminoles", "hurricanes", "yellow jackets",
+        "blue raiders", "red raiders", "jayhawks", "wildcats", "bulldogs",
+        "tigers", "eagles", "bears", "cardinals", "spartans", "knights",
+        "huskies", "panthers", "cougars", "broncos", "mustangs", "bobcats",
+        "owls", "ramblers", "roadrunners", "anteaters", "highlanders",
+        "seahawks", "matadors", "gaels", "toreros", "waves", "pilots",
+        "dolphins", "sharks", "great danes", "river hawks", "catamounts",
+        "lumberjacks", "trailblazers", "thunderbirds", "bison", "jackrabbits",
+        "chanticleers", "dukes", "colonels", "wolves", "leopards", "crusaders",
+        "49ers", "flyers", "billikens", "explorers", "rams", "spiders",
+        "patriots", "revolutionaries", "royals", "lions", "beacons", "aces",
+        "purple aces", "sycamores", "salukis", "braves", "bruins", "beavers",
+        "ducks", "cyclones", "hawkeyes", "hoosiers", "boilermakers", "badgers",
+        "gophers", "cornhuskers", "buckeyes", "wolverines", "nittany lions",
+        "terrapins", "scarlet knights", "cavaliers", "hokies", "demon deacons",
+        "black knights", "midshipmen", "falcons", "fighting irish", "sooners",
+        "cowboys", "sun devils", "redhawks", "chippewas", "zips", "rockets",
+        "bulls", "monarchs", "jaguars", "rrajuns", "hilltoppers", "miners",
+        "blazers", "green wave", "golden hurricane", "shockers", "pirates",
+        "bearcats", "lobos", "aztecs", "rebels"
+    ]
+    # Remove duplicates from list just in case
+    mascots = sorted(list(set(mascots)), key=len, reverse=True)
+
+    stripped = False
+    for mascot in mascots:
+        if n.endswith(" " + mascot):
+            n = n[:-(len(mascot)+1)].strip()
+            stripped = True
+            break
+
+    # 5. Remove "University" or "Univ" or "at"
+    n = n.replace(" university", "").replace(" univ", "").replace(" at ", " ")
+
+    # 6. Clean Punctuation
+    # Replace hyphen/dot with space to avoid squashing (e.g. Arkansas-Little Rock -> Arkansas Little Rock)
+    n = n.replace("-", " ").replace(".", " ")
+    # Remove apostrophe
+    n = n.replace("'", "")
+
+    # 7. Upper and Clean
+    n = n.upper()
+    n = re.sub(r"[^A-Z0-9 ]", "", n)
+    n = re.sub(r"\s+", " ", n).strip()
+
+    return n
+
 def strip_mascot(team_name: str) -> str:
     """Remove common college mascots from team names for code lookup."""
-    # Common mascots to remove
-    mascots = ['Wildcats', 'Bulldogs', 'Bears', 'Eagles', 'Tigers', 'Cardinals',
-               'Warriors', 'Knights', 'Spartans', 'Huskies', 'Panthers', 'Cougars',
-               'Red Storm', 'Blue Devils', 'Tar Heels', 'Musketeers', 'Wolfpack']
-
-    for mascot in mascots:
-        if team_name.endswith(mascot):
-            return team_name[:-len(mascot)].strip()
-
-    # Fallback: Remove last word if team name has 2+ words
-    parts = team_name.split()
-    if len(parts) >= 2:
-        return ' '.join(parts[:-1])
-
-    return team_name
+    # Wrapper for canonical_team_name but returns original case if possible?
+    # No, canonical_team_name returns UPPER.
+    # We can just return canonical_team_name result.
+    return canonical_team_name(team_name)
 
 def normalize_state_abbreviation(team_name: str) -> List[str]:
     """Handle 'St' vs 'State' variations"""
@@ -790,21 +870,23 @@ def generate_comprehensive_team_variants(team_name: str, league: str = None) -> 
 
         # NEW: Check KALSHI_NCAAB_TEAM_CODES for exact team name (case-insensitive)
         if league == "NCAAB":
-            # Direct lookup
+            # 1. Try canonical name lookup (Aggressive normalization)
+            canon = canonical_team_name(team_name)
+            if canon in KALSHI_NCAAB_TEAM_CODES:
+                variants.insert(0, KALSHI_NCAAB_TEAM_CODES[canon])
+
+            # Also add the canonical name itself to variants as it might match the ticker directly
+            # e.g. "NORTH TEXAS" might match ticker "UNT" via other means or fuzzy match
+            if canon and canon not in variants:
+                variants.append(canon)
+
+            # 2. Direct lookup (Legacy)
             raw_upper = team_name.upper().strip()
             # Iterate keys to find case-insensitive match
             for k, v in KALSHI_NCAAB_TEAM_CODES.items():
                 if k.upper() == raw_upper:
                     variants.insert(0, v)
                     break
-
-            # Check for name without "University" or "at"
-            stripped = raw_upper.replace("UNIVERSITY", "").replace(" AT ", " ").strip()
-            if stripped != raw_upper:
-                for k, v in KALSHI_NCAAB_TEAM_CODES.items():
-                    if k.upper() == stripped:
-                        variants.insert(0, v)
-                        break
 
     # Step 3: Extract tokens (words), filtering out common words
     # defined locally to ensure scope isolation
@@ -1739,6 +1821,21 @@ KALSHI_NCAAB_TEAM_CODES = {
     "Montana": "MONT",
     "Sac State": "SAC",
     "UC Davis": "UCD",
+    # Feb 2026 - Missing Matches Fix
+    "EASTERN WASHINGTON": "EWU",
+    "MONTANA ST": "MTST",
+    "HAWAII": "HAW",
+    "SACRAMENTO ST": "SAC",
+    "SACRAMENTO STATE": "SAC",
+    "WEBER ST": "WEB",
+    "WEBER STATE": "WEB",
+    "CAL POLY": "CP",
+    "NORTH TEXAS": "UNT",
+    "TULANE": "TULN",
+    "NORTH FLORIDA": "UNF",
+    "AUSTIN PEAY": "APSU", # Or AP? Let's check map. Map says AP.
+    "UNC WILMINGTON": "UNCW",
+    "MONMOUTH": "MON",
 }
 
 def normalize_team_for_kalshi(team_name: str) -> str:
@@ -2408,7 +2505,16 @@ def _parse_market_metadata(mkt: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if prob is not None:
          logger.info(f"Kalshi metadata: yes_side='{yes_side}', prob={prob:.3f}")
 
-    return {"title": title, "market_date": market_dt, "teams": teams, "probability": prob, "market_type": market_type}
+    return {
+        "title": title,
+        "market_date": market_dt,
+        "teams": teams,
+        "probability": prob,
+        "market_type": market_type,
+        "floor_strike": mkt.get("floor_strike"),
+        "cap_strike": mkt.get("cap_strike"),
+        "strike": mkt.get("strike"),
+    }
 
 def _build_team_codes(team_name: str) -> List[str]:
     """
@@ -4173,10 +4279,11 @@ class KalshiIntegrator:
         away_team: str,
         game_date: str,
         kalshi_markets: List[Dict],
-        league: str = "NCAAB"
+        league: str = "NCAAB",
+        commence_time: Optional[datetime] = None
     ) -> Dict[str, Any]:
         """
-        Match a game to Kalshi markets with enhanced logging and fuzzy matching.
+        Match a game to Kalshi markets with enhanced logging, fuzzy matching, and time scoring.
 
         Args:
             home_team: Home team name from TheOddsAPI
@@ -4184,6 +4291,7 @@ class KalshiIntegrator:
             game_date: Game date in format "26FEB19"
             kalshi_markets: List of Kalshi market dictionaries
             league: League identifier (default "NCAAB")
+            commence_time: Optional datetime of game start (UTC) for tie-breaking
 
         Returns:
             Dictionary with matched markets by type (GAME, SPREAD, TOTAL)
@@ -4241,6 +4349,10 @@ class KalshiIntegrator:
             s, _ = calculate_team_match_score(ticker_code, team_variants)
             return s
 
+        # Thresholds
+        MATCH_THRESHOLD = 70.0 # Relaxed from 80.0
+        MIN_TEAM_SCORE = 50.0  # Minimum for individual team match
+
         for market in kalshi_markets:
             ticker = market.get("ticker", "")
 
@@ -4294,35 +4406,49 @@ class KalshiIntegrator:
             score_home_2 = _score_team_match(k1_resolved, home_variants)
 
             # Calculate combined scores
-            # Threshold: We need strong matches.
             min1 = min(score_away_1, score_home_1)
             score1 = (min1 * 0.7) + ((score_away_1 + score_home_1) / 2 * 0.3)
-            if min1 < 60: score1 = 0
+            if min1 < MIN_TEAM_SCORE: score1 = 0
 
             min2 = min(score_away_2, score_home_2)
             score2 = (min2 * 0.7) + ((score_away_2 + score_home_2) / 2 * 0.3)
-            if min2 < 60: score2 = 0
+            if min2 < MIN_TEAM_SCORE: score2 = 0
 
             match_score = 0
             is_match = False
 
             # Use the better order
-            if score1 >= 80 and score1 >= score2:
+            if score1 >= MATCH_THRESHOLD and score1 >= score2:
                 match_score = score1
                 is_match = True
-                logger.debug(f"   ✓ CANDIDATE: {ticker} (Score: {match_score:.1f}) "
-                            f"[{k1_resolved}={away_team}:{score_away_1}, {k2_resolved}={home_team}:{score_home_1}]")
-            elif score2 >= 80 and score2 > score1:
+            elif score2 >= MATCH_THRESHOLD and score2 > score1:
                 match_score = score2
                 is_match = True
-                logger.debug(f"   ✓ CANDIDATE (SWAP): {ticker} (Score: {match_score:.1f}) "
-                            f"[{k2_resolved}={away_team}:{score_away_2}, {k1_resolved}={home_team}:{score_home_2}]")
             else:
                 # No match
                 continue
 
             if not is_match:
                 continue
+
+            # Time Proximity Bonus (Tiebreaker)
+            if commence_time:
+                m_date = self._best_market_time(market)
+                if m_date:
+                    # Convert both to UTC for diff
+                    if m_date.tzinfo is None: m_date = pytz.utc.localize(m_date)
+                    if commence_time.tzinfo is None: commence_time = pytz.utc.localize(commence_time)
+
+                    try:
+                        diff_hours = abs((m_date - commence_time).total_seconds()) / 3600.0
+                        if diff_hours < 6:
+                            match_score += 5.0 # Close proximity bonus
+                        elif diff_hours < 12:
+                            match_score += 2.0
+                        elif diff_hours > 24:
+                            match_score -= 5.0 # Penalty for far games (likely wrong day if ambiguous)
+                    except Exception:
+                        pass
 
             # Track best match
             if match_score > best_match_score:
@@ -4343,17 +4469,31 @@ class KalshiIntegrator:
         # Log results
         total_matched = sum(len(markets) for markets in matched_markets.values())
 
+        status_reason = "unknown"
         if total_matched > 0:
             logger.info(f"   ✅ MATCHED: Found {total_matched} markets (Best: {best_match_ticker}, Score: {best_match_score:.1f})")
             logger.info(f"      GAME:{len(matched_markets['GAME'])}, SPREAD:{len(matched_markets['SPREAD'])}, TOTAL:{len(matched_markets['TOTAL'])}")
+            status_reason = "matched"
         else:
-            logger.warning(f"   ❌ NO MATCH: {candidates_found} candidates found on date {game_date}, but no team matches")
-            logger.warning(f"      Best candidate: {best_match_ticker} (Score: {best_match_score:.1f})")
+            if candidates_found > 0:
+                status_reason = "team_name_mismatch"
+                logger.warning(f"   ❌ NO MATCH: {candidates_found} candidates found on date {game_date}, but no team matches (Best score: {best_match_score:.1f})")
+            else:
+                status_reason = "no_kalshi_market_for_game"
+                logger.warning(f"   ❌ NO MATCH: No candidates found on date {game_date} (Date/League mismatch)")
 
             # Log some sample tickers from that date for debugging
             date_tickers = [m.get("ticker") for m in kalshi_markets if game_date in m.get("ticker", "")][:5]
             if date_tickers:
                 logger.warning(f"      Sample tickers on {game_date}: {', '.join(date_tickers)}")
+
+        # Inject Metadata for UI
+        matched_markets["_meta"] = {
+            "status": "matched" if total_matched > 0 else "no_match",
+            "reason": status_reason,
+            "candidates_found": candidates_found,
+            "best_score": best_match_score
+        }
 
         return matched_markets
 

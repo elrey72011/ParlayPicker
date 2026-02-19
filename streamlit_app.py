@@ -7860,17 +7860,70 @@ def match_kalshi_market(
                 away_team=away,
                 game_date=kalshi_date_str,
                 kalshi_markets=all_league_markets,
-                league=league
+                league=league,
+                commence_time=commence_time
             )
 
-            # Helper to convert raw market to KalshiMatchResult
-            def _convert_raw_to_result(market_list, m_type):
-                if not market_list:
-                    return KalshiMatchResult(matched=False, reason="no_match_new_logic", market_type=m_type)
+            # Extract metadata from matching process (v2)
+            match_meta = raw_matches.get("_meta", {})
+            meta_status = match_meta.get("status", "unknown")
+            meta_reason = match_meta.get("reason", "no_match_found")
+            # meta_candidates = match_meta.get("candidates_found", 0)
 
-                # Pick the "best" market from the list?
-                # Currently simple list, take first
+            # Extract target lines for closest match
+            target_spread_line = safe_float(game.get("home_spread_point") or game.get("spread_point"))
+            target_total_line = safe_float(game.get("total_point"))
+
+            # Helper to convert raw market to KalshiMatchResult
+            def _convert_raw_to_result(market_list, m_type, target_line=None):
+                if not market_list:
+                    # If the game itself wasn't matched, propagate the root cause
+                    if meta_status != "matched":
+                        return KalshiMatchResult(matched=False, reason=meta_reason, market_type=m_type)
+                    else:
+                        # Game matched, but this specific market type is missing
+                        return KalshiMatchResult(matched=False, reason="market_type_missing", market_type=m_type)
+
+                # Pick the "best" market from the list
                 target = market_list[0]
+
+                # If multiple options and we have a target line, find closest match
+                if target_line is not None and len(market_list) > 1:
+                    best_diff = float('inf')
+                    for m in market_list:
+                        # Parse line from metadata (populated by integrator)
+                        # Note: we re-parse here because we need line info which might not be in 'm' directly
+                        m_meta = _parse_market_metadata(m) or {}
+
+                        # Try to find line value
+                        line_val = safe_float(m_meta.get("strike"))
+                        if line_val is None:
+                             line_val = safe_float(m_meta.get("cap_strike") or m_meta.get("floor_strike"))
+
+                        # If no metadata line, try parsing ticker suffix (e.g. -5.5)
+                        if line_val is None:
+                            try:
+                                ticker = m.get("ticker", "")
+                                match = re.search(r'[-]([\d\.]+)$', ticker)
+                                if match:
+                                    line_val = float(match.group(1))
+                            except: pass
+
+                        if line_val is not None:
+                            # For Spread: check absolute difference of magnitude?
+                            # Usually spreads are -5.5 vs 5.5.
+                            # If target is -5.5, Kalshi might be 5.5 (margin).
+                            # We should compare abs(line) vs abs(target) for margin?
+                            # Or strict difference?
+                            # Kalshi usually formats as "Team -X.5" or "Team by X".
+                            # Let's use simple difference first, but maybe abs() if signs differ.
+                            # Actually, Kalshi lines for spread are often "Winning Margin > X".
+
+                            # Simple approach: closest numerical value
+                            diff = abs(line_val - abs(target_line)) # compare magnitude
+                            if diff < best_diff:
+                                best_diff = diff
+                                target = m
 
                 # Extract score if available (injected by match_game_to_kalshi_markets)
                 match_score = target.get("_match_score", 100)
@@ -7898,8 +7951,8 @@ def match_kalshi_market(
                 )
 
             res_winner = _convert_raw_to_result(raw_matches.get("GAME"), "WINNER")
-            res_spread = _convert_raw_to_result(raw_matches.get("SPREAD"), "SPREAD")
-            res_total = _convert_raw_to_result(raw_matches.get("TOTAL"), "TOTAL")
+            res_spread = _convert_raw_to_result(raw_matches.get("SPREAD"), "SPREAD", target_spread_line)
+            res_total = _convert_raw_to_result(raw_matches.get("TOTAL"), "TOTAL", target_total_line)
 
         else:
             # Fallback to old logic for other leagues
