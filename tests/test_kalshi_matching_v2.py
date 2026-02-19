@@ -9,7 +9,8 @@ from app_core.kalshi_integrator import (
     generate_comprehensive_team_variants,
     canonical_team_name,
     calculate_game_match_score,
-    calculate_team_match_score
+    calculate_team_match_score,
+    validate_market_type_match
 )
 
 class TestKalshiMatchingV2(unittest.TestCase):
@@ -133,6 +134,41 @@ class TestKalshiMatchingV2(unittest.TestCase):
 
         # Close score should be higher
         self.assertGreater(score_close, score_far, f"Close score {score_close} should be > Far score {score_far}")
+
+    def test_csu_codes(self):
+        """Verify CSU school code generation (Fix 2)"""
+        # CSU Fullerton -> CSUF (NOT CSF)
+        fullerton_vars = generate_comprehensive_team_variants("CSU Fullerton", "NCAAB")
+        self.assertIn("CSUF", fullerton_vars)
+        self.assertNotIn("CSF", fullerton_vars) # Should be removed to prevent ambiguity
+
+        # CSU Northridge -> CSUN (NOT CSN)
+        northridge_vars = generate_comprehensive_team_variants("CSU Northridge", "NCAAB")
+        self.assertIn("CSUN", northridge_vars)
+        self.assertNotIn("CSN", northridge_vars)
+
+        # CSU Bakersfield -> CSUB AND CSB (Legacy support)
+        bakersfield_vars = generate_comprehensive_team_variants("CSU Bakersfield", "NCAAB")
+        self.assertIn("CSUB", bakersfield_vars)
+        self.assertIn("CSB", bakersfield_vars)
+
+    def test_market_type_validation(self):
+        """Verify market type validation (Fix 1)"""
+        # Test 1: SPREAD matching SPREAD
+        self.assertTrue(validate_market_type_match("Boston wins by 5+ points", "SPREAD"))
+        # self.assertTrue(validate_market_type_match("Boston -5.5", "SPREAD")) # Removed: Kalshi uses 'wins by' or 'spread'
+        self.assertTrue(validate_market_type_match("Winner of Boston vs GSW", "SPREAD") is False) # Winner is not spread
+
+        # Test 2: TOTAL matching TOTAL
+        self.assertTrue(validate_market_type_match("Total Points > 220.5", "TOTAL"))
+        self.assertTrue(validate_market_type_match("Over 220.5", "TOTAL"))
+
+        # Test 3: CROSS MATCH FAILURE (Critical Fix)
+        # SPREAD text should NOT match TOTAL request
+        self.assertFalse(validate_market_type_match("Boston wins by 5+ points", "TOTAL"))
+
+        # TOTAL text should NOT match SPREAD request
+        self.assertFalse(validate_market_type_match("Total Points > 220.5", "SPREAD"))
 
 if __name__ == '__main__':
     unittest.main()

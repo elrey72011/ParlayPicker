@@ -116,7 +116,7 @@ NCAA_TEAM_CODES = {
     "UCLA": ["UCLA"],
 
     # CSU System Schools
-    "CSU BAKERSFIELD": ["CSB", "CSUB"],
+    "CSU BAKERSFIELD": ["CSUB", "CSB"],
     # CSU System Schools - EXPLICIT MAPPINGS TO PREVENT CONFUSION
     "CSU FULLERTON": ["CSUF"],  # NOT CSB (that's Bakersfield)
     "CAL STATE FULLERTON": ["CSUF"],
@@ -797,21 +797,25 @@ def generate_compound_codes(team_name: str) -> List[str]:
             codes.append((words[0][:2] + words[1][:2]))
 
         # Special: UC/CSU schools - combine system + location
-        # CSU Bakersfield -> CSB
         if words[0] in ["UC", "CSU"]:
             location = words[1] if len(words) > 1 else ""
-            if location:
-                # Full location-based code (e.g., "CSUF" for Fullerton, "CSUN" for Northridge)
+            if location and len(location) >= 1:
+                # Use FULL 4-letter codes to avoid ambiguity
                 if words[0] == "CSU":
-                    # Use first 2 letters of location name for CSU schools
-                    if len(location) >= 2:
-                        codes.append("CSU" + location[:2].upper())  # CSUF, CSUN
-                    codes.append("CS" + location[0])  # CSB (only for Bakersfield)
+                    # CSU Fullerton -> CSUF (4 letters)
+                    # CSU Northridge -> CSUN (4 letters)
+                    # CSU Bakersfield -> CSUB (4 letters) - but map also says CSB
+                    full_code = "CSU" + location[0].upper()  # CSUF, CSUN, CSUB
+                    codes.append(full_code)
+
+                    # Also add legacy 3-letter variant IF it's in the official map
+                    if full_code == "CSUB":  # Only Bakersfield uses CSB as alias
+                        codes.append("CSB")
+
                 elif words[0] == "UC":
-                    # UC schools use first letter OR 2 letters
-                    codes.append("UC" + location[0])  # UCI, UCD
-                    if len(location) >= 2:
-                        codes.append("UC" + location[:2].upper())  # UCIR, UCDA
+                    # UC Irvine -> UCI (3 letters standard)
+                    # UC Davis -> UCD (3 letters standard)
+                    codes.append("UC" + location[0].upper())  # UCI, UCD, UCR, UCSB
 
     return codes
 
@@ -1544,7 +1548,10 @@ KALSHI_NCAAB_TEAM_CODES = {
     "Bowling Green": "BGSU",
     "Bucknell": "BUCK",
     "Butler": "BUT",
-    "Cal State Fullerton": "CSF",
+    "Cal State Fullerton": "CSUF",
+    "CSU Fullerton": "CSUF",
+    "CSU Bakersfield": "CSUB",
+    "Cal State Bakersfield": "CSUB",
     "California": "CAL",
     "California Golden Bears": "CAL",
     "Canisius": "CAN",
@@ -1792,8 +1799,8 @@ KALSHI_NCAAB_TEAM_CODES = {
     "UC Santa Barbara": "UCSB",
     "The Citadel": "CIT",
     "Citadel": "CIT",
-    "Cal State Fullerton": "CSF",
-    "CSU Fullerton": "CSF",
+    "Cal State Fullerton": "CSUF",
+    "CSU Fullerton": "CSUF",
     "South Florida": "USF",
     "Mercer": "MER",
     "Arkansas-Pine Bluff": "UAPB",
@@ -2647,6 +2654,38 @@ def _team_score(team_code: str, target_clean: str, target_codes: List[str]) -> f
 
     return 0.0
 
+def validate_market_type_match(kalshi_yes_side: str, requested_market_type: str) -> bool:
+    """
+    Validate that a Kalshi yes_side matches the requested market type.
+
+    Args:
+        kalshi_yes_side: The yes_side text from Kalshi (e.g., "Boston at Golden State: Total Points")
+        requested_market_type: Either "SPREAD" or "TOTAL"
+
+    Returns:
+        True if the Kalshi event matches the requested market type
+    """
+    if not requested_market_type or not kalshi_yes_side:
+        return True # Cannot validate
+
+    yes_side_upper = kalshi_yes_side.upper()
+    req_upper = requested_market_type.upper()
+
+    if "TOTAL" in req_upper:
+        # Total markets have "TOTAL POINTS" or just ": TOTAL" in yes_side or "OVER"/"UNDER"
+        # Check explicit Total keywords
+        is_total = ("TOTAL POINTS" in yes_side_upper) or (": TOTAL" in yes_side_upper) or ("OVER" in yes_side_upper) or ("UNDER" in yes_side_upper)
+        # Rejection criteria: If it says "WINS BY", it's a spread
+        is_spread = ("WINS BY" in yes_side_upper)
+        return is_total and not is_spread
+
+    elif "SPREAD" in req_upper:
+        # Spread markets have "WINS BY OVER" or "WINS BY UNDER" in yes_side
+        # Or just "WINS BY ... POINTS"
+        return ("WINS BY" in yes_side_upper) or ("SPREAD" in yes_side_upper)
+
+    return True
+
 def _match_via_events(
     integrator: KalshiIntegrator,
     league: str,
@@ -3206,21 +3245,47 @@ def _match_via_events(
                 req_upper = requested_market_type.upper()
                 logger.info(f"   🎯 Requested Market Type: {req_upper}")
 
+                # Helper to safely validate candidates
+                def _find_valid_market(candidates, req_type):
+                    for cand in candidates:
+                        yes_side = cand.get('yes_side') or cand.get('title') or ''
+                        if validate_market_type_match(yes_side, req_type):
+                            return cand
+                    return None
+
                 if "SPREAD" in req_upper and spread_markets:
-                    target_market = spread_markets[0]
-                    match_reason_detail = "matched_spread"
+                    target_market = _find_valid_market(spread_markets, "SPREAD")
+                    if target_market:
+                        match_reason_detail = "matched_spread"
                 elif "TOTAL" in req_upper and total_markets:
-                    target_market = total_markets[0]
-                    match_reason_detail = "matched_total"
-                # Fallback: Requested type missing, check if other type exists
-                elif spread_markets:
-                    target_market = spread_markets[0]
-                    match_reason_detail = "matched_spread_fallback"
-                    logger.info(f"   ⚠️ Requested {req_upper} but found SPREAD. Using fallback.")
-                elif total_markets:
-                    target_market = total_markets[0]
-                    match_reason_detail = "matched_total_fallback"
-                    logger.info(f"   ⚠️ Requested {req_upper} but found TOTAL. Using fallback.")
+                    target_market = _find_valid_market(total_markets, "TOTAL")
+                    if target_market:
+                        match_reason_detail = "matched_total"
+
+                # Fallback: Requested type missing from primary list, check if other type exists AND is valid
+                # This prevents "TOTAL" request matching a "SPREAD" market just because it was found
+                if not target_market:
+                    if spread_markets:
+                        candidate = spread_markets[0]
+                        yes_side = candidate.get('yes_side') or candidate.get('title') or ''
+                        # Only accept fallback if it PASSES validation for the REQUESTED type
+                        # (This basically disables fallback for mismatched types, which is the fix)
+                        if validate_market_type_match(yes_side, req_upper):
+                            target_market = candidate
+                            match_reason_detail = "matched_spread_fallback"
+                            logger.info(f"   ⚠️ Requested {req_upper} but found SPREAD (validated). Using fallback.")
+                        else:
+                            logger.info(f"   🚫 Rejected SPREAD fallback for {req_upper} request: {yes_side}")
+
+                    elif total_markets:
+                        candidate = total_markets[0]
+                        yes_side = candidate.get('yes_side') or candidate.get('title') or ''
+                        if validate_market_type_match(yes_side, req_upper):
+                            target_market = candidate
+                            match_reason_detail = "matched_total_fallback"
+                            logger.info(f"   ⚠️ Requested {req_upper} but found TOTAL (validated). Using fallback.")
+                        else:
+                            logger.info(f"   🚫 Rejected TOTAL fallback for {req_upper} request: {yes_side}")
 
             # If no target selected yet (or no request), use default logic
             if not target_market:
@@ -3796,6 +3861,12 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
                 "teams": teams,
                 "date_diff": diff if 'diff' in locals() else None
             })
+
+        # Validate Market Type if requested (Generic Fallback)
+        if requested_market_type:
+            yes_side = meta.get('title') or ""
+            if not validate_market_type_match(yes_side, requested_market_type):
+                continue
 
         if score > best_score:
             best_score = score
