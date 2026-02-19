@@ -513,13 +513,23 @@ class PredictionEngine:
             except:
                 return [0.52] * len(df)
 
+# Global singleton instance
+_SHARED_ENGINE = None
+
+def get_engine() -> PredictionEngine:
+    """Get or create the shared PredictionEngine instance."""
+    global _SHARED_ENGINE
+    if _SHARED_ENGINE is None:
+        _SHARED_ENGINE = PredictionEngine()
+    return _SHARED_ENGINE
+
 # Global singleton or helper for single-row prediction
 def get_prediction_prob(game_row: Dict[str, Any], sentiment_diff: float = 0.0) -> Tuple[Optional[float], Optional[str]]:
     """
     Wrapper for single-row prediction to match legacy interface.
     """
     try:
-        engine = PredictionEngine()
+        engine = get_engine()
         # Ensure features are extracted/formatted correctly
         features = build_model_feature_row_from_record(game_row)
 
