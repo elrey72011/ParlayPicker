@@ -7890,6 +7890,8 @@ def match_kalshi_market(
                 target = market_list[0]
 
                 # FIX: Use specialized matchers for NBA Spreads and NCAAB Totals
+                kalshi_prob_override = None
+
                 if m_type == 'SPREAD' and league == 'NBA' and target_line is not None:
                     # Construct mock row for match_nba_spread
                     # We target the HOME line (since target_line is home_spread_point)
@@ -7901,7 +7903,12 @@ def match_kalshi_market(
                     }
                     best_match = match_nba_spread(mock_row, market_list)
                     if best_match:
-                        target = best_match
+                        # Handle wrapper from match_nba_spread
+                        if best_match.get('is_wrapper'):
+                            target = best_match.get('market')
+                            kalshi_prob_override = best_match.get('kalshi_prob_for_pick')
+                        else:
+                            target = best_match
                 elif m_type == 'TOTAL' and league == 'NCAAB' and target_line is not None:
                     # Construct mock row for match_ncaab_total
                     mock_row = {
@@ -7956,12 +7963,17 @@ def match_kalshi_market(
                 # Use existing parser
                 meta = _parse_market_metadata(target) or {}
 
+                # Apply probability override if available
+                final_prob = meta.get("probability")
+                if kalshi_prob_override is not None:
+                    final_prob = kalshi_prob_override
+
                 # Construct result
                 return KalshiMatchResult(
                     matched=True,
                     kalshi_available=True,
                     label=meta.get("title", ""),
-                    probability=meta.get("probability"),
+                    probability=final_prob,
                     raw_event_id=target.get("ticker"), # Use ticker as ID
                     market_ticker=target.get("ticker"),
                     league=league,

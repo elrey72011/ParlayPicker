@@ -5425,7 +5425,11 @@ def match_nba_spread(row: Dict[str, Any], candidate_events: List[Dict[str, Any]]
     """
     Match NBA spread pick to correct Kalshi spread event.
 
-    CRITICAL: Must match the EXACT team that the book pick is for.
+    CRITICAL RULES:
+    1. FAVORITE pick (negative line, e.g., -6.5) -> Kalshi market where THIS team wins by over X
+    2. UNDERDOG pick (positive line, e.g., +16) -> Kalshi market where OPPONENT wins by over X
+
+    Returns a wrapper dict with 'market' and 'kalshi_prob_for_pick'.
     """
     spread_pick_team = str(row.get('spread_pick_team', ''))
     try:
@@ -5440,8 +5444,8 @@ def match_nba_spread(row: Dict[str, Any], candidate_events: List[Dict[str, Any]]
         return None
 
     # Determine if pick is favorite or underdog
-    # Negative line = favorite (e.g. -6.5), Positive line = underdog (e.g. +6.5)
     is_favorite = spread_pick_line < 0
+    is_underdog = spread_pick_line > 0
 
     # Canonicalize names
     pick_team_canonical = canonical_team_name(spread_pick_team)
@@ -5459,8 +5463,10 @@ def match_nba_spread(row: Dict[str, Any], candidate_events: List[Dict[str, Any]]
         elif pick_team_canonical in away_canonical or away_canonical in pick_team_canonical:
             opponent_canonical = home_canonical
 
-    best_match = None
-    min_line_diff = 100.0
+    best_match_wrapper = None
+    best_score = 0
+
+    target_margin = abs(spread_pick_line)
 
     for kalshi_event in candidate_events:
         yes_side = kalshi_event.get('yes_side', '') or kalshi_event.get('title', '')
@@ -5471,54 +5477,89 @@ def match_nba_spread(row: Dict[str, Any], candidate_events: List[Dict[str, Any]]
 
         # Extract which team the Kalshi market is FOR
         # Kalshi format: "TeamName wins by over X.X Points?"
-        kalshi_team_in_yes_side = yes_side.split(' wins by')[0].strip()
+        try:
+            kalshi_team_in_yes_side = yes_side.split(' wins by')[0].strip()
+        except:
+            continue
+
         kalshi_team_canonical = canonical_team_name(kalshi_team_in_yes_side)
-
-        # CRITICAL CHECK: Does Kalshi yes_side team match our pick team?
-        is_kalshi_for_pick_team = (kalshi_team_canonical == pick_team_canonical) or \
-                                  (pick_team_canonical in kalshi_team_canonical) or \
-                                  (kalshi_team_canonical in pick_team_canonical)
-
-        is_kalshi_for_opponent = (kalshi_team_canonical == opponent_canonical) or \
-                                 (opponent_canonical in kalshi_team_canonical) or \
-                                 (kalshi_team_canonical in opponent_canonical)
-
-        matched = False
         kalshi_margin = extract_margin_from_yes_side(yes_side)
-        target_margin = abs(spread_pick_line)
+
+        current_match_wrapper = None
+
+        # Check margin proximity first
+        margin_diff = abs(kalshi_margin - target_margin)
+
+        if margin_diff > 13.0:
+            continue
+
+        score = 100 - margin_diff
 
         if is_favorite:
             # Favorite pick (e.g., Toronto -6.5)
-            # Need Kalshi market where OUR TEAM wins by over X
-            # e.g., "Toronto wins by over 6.5"
+            # Need Kalshi market where OUR PICK TEAM wins by over X
+            is_kalshi_for_pick_team = (kalshi_team_canonical == pick_team_canonical) or \
+                                      (pick_team_canonical in kalshi_team_canonical) or \
+                                      (kalshi_team_canonical in pick_team_canonical)
+
             if is_kalshi_for_pick_team:
-                matched = True
-        else:
-            # Underdog pick (e.g., Brooklyn +15.5)
+                # YES side = Pick wins by > margin
+                current_match_wrapper = {
+                    'market': kalshi_event,
+                    'kalshi_prob_for_pick': kalshi_event.get('probability'),
+                    'match_reason': 'matched_spread_favorite',
+                    'yes_side': yes_side,
+                    'score': score,
+                    'is_wrapper': True,
+                    'invert_probability': False
+                }
+
+        elif is_underdog:
+            # Underdog pick (e.g., Brooklyn +16)
             # Need Kalshi market where OPPONENT wins by over X
-            # e.g., "Cleveland wins by over 15.5" -> If Cleveland matches this, Brooklyn loses by >15.5
-            # Wait, if we bet Brooklyn +15.5, we win if Brooklyn wins OR loses by < 15.5.
-            # Kalshi "Cleveland wins by over 15.5" means Cleveland wins by 16+.
-            # So "NO" on "Cleveland wins by over 15.5" is equivalent to "Brooklyn +15.5".
-            # BUT the prompt says: "Underdog picks... match to markets where OPPONENT wins by over X".
-            # This implies we want to find the relevant market, and later logic handles the Yes/No side mapping.
-            # Here we just want to find the *matching market event*.
+            is_kalshi_for_opponent = (kalshi_team_canonical == opponent_canonical) or \
+                                     (opponent_canonical in kalshi_team_canonical) or \
+                                     (kalshi_team_canonical in opponent_canonical)
+
             if is_kalshi_for_opponent:
-                matched = True
+                # YES side = Opponent wins by > margin.
+                # If YES wins (Opponent covers), Pick LOSES.
+                # We want NO side.
+                current_match_wrapper = {
+                    'market': kalshi_event,
+                    'kalshi_prob_for_pick': None, # Placeholder
+                    'match_reason': 'matched_spread_underdog',
+                    'yes_side': yes_side,
+                    'score': score,
+                    'is_wrapper': True,
+                    'invert_probability': True
+                }
 
-        if matched:
-            # Check line proximity
-            diff = abs(kalshi_margin - target_margin)
-            # Allow reasonable difference (e.g. within 13 points as per user request, but prioritize closest)
-            if diff <= 13.0:
-                if diff < min_line_diff:
-                    min_line_diff = diff
-                    best_match = kalshi_event
+        # Select best match
+        if current_match_wrapper:
+            if score > best_score:
+                best_score = score
+                best_match_wrapper = current_match_wrapper
 
-    if best_match:
-        logger.info(f"✓ NBA SPREAD MATCH: {spread_pick_team} {spread_pick_line} -> {best_match.get('yes_side')} (diff={min_line_diff:.1f})")
+    if best_match_wrapper and best_score >= 70: # Min score
+        m = best_match_wrapper['market']
+        # Calculate prob
+        raw_prob = m.get('probability')
+        if raw_prob is None:
+             # Fallback to last_price
+             raw_prob = safe_float(m.get('last_price'))
 
-    return best_match
+        if raw_prob is not None:
+            if best_match_wrapper.get('invert_probability'):
+                best_match_wrapper['kalshi_prob_for_pick'] = 1.0 - raw_prob
+            else:
+                best_match_wrapper['kalshi_prob_for_pick'] = raw_prob
+
+        logger.info(f"✓ NBA SPREAD MATCH: {spread_pick_team} {spread_pick_line:+.1f} -> {best_match_wrapper['yes_side']} (score={best_score:.1f}, prob={best_match_wrapper.get('kalshi_prob_for_pick')})")
+        return best_match_wrapper
+    else:
+        logger.warning(f"❌ NO SPREAD MATCH: {spread_pick_team} {spread_pick_line:+.1f} (best score: {best_score:.1f})")
+        return None
 
 def match_ncaab_total(row: Dict[str, Any], candidate_events: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     """
