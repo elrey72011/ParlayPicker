@@ -60,15 +60,66 @@ NBA_TZ = pytz.timezone("US/Eastern")
 # Global counter for debug logging limit
 _DEBUG_GAME_LOG_COUNT = 0
 
+def debug_search_teams(all_markets: List[Dict[str, Any]], home_team: str, away_team: str):
+    """Debug helper to find team codes in Kalshi markets"""
+
+    # Only run for specific teams to reduce noise
+    target_teams = ['Missouri St', 'Kennesaw St', 'UNC Greensboro', 'Western Carolina']
+    if not any(t in home_team or t in away_team for t in target_teams):
+        return
+
+    logger.info(f"🔍 DEBUG SEARCH: Checking markets for {away_team} @ {home_team}")
+
+    # Search for Missouri St variations
+    mizz_codes = ['MOST', 'MIZZ', 'MIST', 'MISS', 'MO', 'MSU']
+    # Search for Kennesaw St variations
+    kenn_codes = ['KENN', 'KSU', 'KSAW', 'KEN', 'KST']
+    # Search for UNCG variations
+    uncg_codes = ['UNCG', 'UNC', 'GREensboro']
+    # Search for WCU variations
+    wcu_codes = ['WCU', 'WCAR', 'WEST', 'CATAMOUNTS']
+
+    codes_to_check = []
+    if 'Missouri' in home_team or 'Missouri' in away_team: codes_to_check.extend(mizz_codes)
+    if 'Kennesaw' in home_team or 'Kennesaw' in away_team: codes_to_check.extend(kenn_codes)
+    if 'Greensboro' in home_team or 'Greensboro' in away_team: codes_to_check.extend(uncg_codes)
+    if 'Western Carolina' in home_team or 'Western Carolina' in away_team: codes_to_check.extend(wcu_codes)
+
+    found_markets = []
+
+    for market in all_markets:
+        ticker = str(market.get('event_ticker') or market.get('ticker') or '').upper()
+
+        # Check codes
+        for code in codes_to_check:
+            if code in ticker:
+                found_markets.append(ticker)
+                break
+
+    if found_markets:
+        logger.info(f"   🎯 Found {len(found_markets)} potential tickers: {list(set(found_markets))[:10]}")
+    else:
+        logger.info(f"   ❌ No tickers found matching codes: {codes_to_check}")
+
 # Common words to penalize in matching (user request)
 # Re-defined inside function for scope safety but kept here for reference
 COMMON_WORDS_GLOBAL = {'STATE', 'ST', 'CAROLINA', 'CAR', 'CENTRAL', 'NORTH', 'SOUTH', 'EAST', 'WEST'}
 
 def calculate_team_match_score(ticker_code: str, team_variants: List[str], team_name_for_logging: str = "") -> Tuple[float, Optional[str]]:
     """
-    Calculate match score with strict preference for exact codes
+    Calculate match score with strict hierarchy:
+    1. Full 4-char codes at boundaries = 100 points
+    2. Full 3-char codes at boundaries = 90 points
+    3. Partial matches = 50 points
+    4. Common words = REJECT (0 points)
     """
-    COMMON_WORDS = {'STATE', 'ST', 'CAROLINA', 'CAR', 'CENTRAL', 'NORTH', 'SOUTH', 'EAST', 'WEST'}
+    COMMON_WORDS = {'ST', 'STATE', 'NORTH', 'SOUTH', 'EAST', 'WEST',
+                    'CAROLINA', 'CAR', 'CENTRAL', 'TECH'}
+
+    # Special logic: Filter 'UNC' unless the team is explicitly North Carolina
+    # This prevents "UNC Greensboro" matching "UNC Asheville" via "UNC"
+    if "NORTH CAROLINA" not in team_name_for_logging.upper():
+        COMMON_WORDS.add('UNC')
 
     if not ticker_code:
         return 0.0, None
@@ -85,57 +136,51 @@ def calculate_team_match_score(ticker_code: str, team_variants: List[str], team_
         if variant_upper in COMMON_WORDS:
             continue
 
-        # Check if variant is in ticker
+        # Check if variant exists in ticker
         if variant_upper not in ticker_code_upper:
             continue
 
-        # EXACT FULL MATCH (variant equals entire ticker code portion for this team)
-        # This should be the highest priority
+        # Calculate score based on match quality
 
-        # HIGH PRIORITY: 3-4 char codes that are NOT substrings of longer words
-        if 3 <= len(variant_upper) <= 4:
-            # Check if this is a clean match (at start or end of ticker_code)
-            is_at_start = ticker_code_upper.startswith(variant_upper)
-            is_at_end = ticker_code_upper.endswith(variant_upper)
-
-            if is_at_start or is_at_end:
-                # Clean boundary match - high score
+        # BEST: 4-char code at start or end
+        if len(variant_upper) == 4:
+            if ticker_code_upper.startswith(variant_upper) or ticker_code_upper.endswith(variant_upper):
                 score = 100.0
-                match_type = 'exact_code_boundary'
+                match_type = 'exact_4char_boundary'
             else:
-                # Middle of ticker - still good if it's 4 chars
-                score = 90.0 if len(variant_upper) == 4 else 70.0
-                match_type = 'exact_code_middle'
+                score = 85.0
+                match_type = 'exact_4char_middle'
 
-        # MEDIUM PRIORITY: 2 char codes (less reliable)
+        # GOOD: 3-char code at start or end
+        elif len(variant_upper) == 3:
+            if ticker_code_upper.startswith(variant_upper) or ticker_code_upper.endswith(variant_upper):
+                score = 90.0
+                match_type = 'exact_3char_boundary'
+            else:
+                score = 70.0
+                match_type = 'exact_3char_middle'
+
+        # OK: 2-char code (less reliable)
         elif len(variant_upper) == 2:
-            is_at_start = ticker_code_upper.startswith(variant_upper)
-            is_at_end = ticker_code_upper.endswith(variant_upper)
-
-            if is_at_start or is_at_end:
-                score = 80.0
+            if ticker_code_upper.startswith(variant_upper) or ticker_code_upper.endswith(variant_upper):
+                score = 75.0
                 match_type = '2char_boundary'
             else:
-                score = 50.0
+                score = 45.0
                 match_type = '2char_middle'
 
-        # LOW PRIORITY: Full names (5+ chars)
-        elif len(variant_upper) >= 5:
-            coverage = len(variant_upper) / len(ticker_code_upper)
-            score = 70.0 * coverage  # Max 70 for full name matches
-            match_type = 'full_name'
-
-        # VERY LOW: Single char (almost never use)
+        # WEAK: Long names or single chars
         else:
-            score = 20.0
-            match_type = 'single_char'
+            coverage = len(variant_upper) / len(ticker_code_upper)
+            score = 60.0 * coverage
+            match_type = 'partial_name'
 
         if score > best_score:
             best_score = score
             best_variant = variant
 
     if best_score > 0 and logger.isEnabledFor(logging.DEBUG):
-        logger.debug(f"    Team '{team_name_for_logging}': '{best_variant}' in '{ticker_code}' = {best_score:.1f} ({match_type})")
+        logger.debug(f"    Team '{team_name_for_logging}': '{best_variant}' in '{ticker_code_upper}' = {best_score:.1f} ({match_type})")
 
     return best_score, best_variant
 
@@ -151,32 +196,33 @@ def calculate_game_match_score(ticker: str, away_variants: List[str], home_varia
 
     team_code = match.group(1)
 
-    # logger.debug(f"  Evaluating: {ticker} (team code: '{team_code}')")
-
     # Score both teams
     away_score, away_match = calculate_team_match_score(team_code, away_variants, away_team_name)
     home_score, home_match = calculate_team_match_score(team_code, home_variants, home_team_name)
 
-    # CRITICAL CHECK: Ensure matches don't overlap
-    # If both teams matched the same variant, reject!
-    if away_match and home_match and away_match == home_match:
-        logger.warning(f"  ❌ REJECTED: Both teams matched same variant '{away_match}' in {ticker}")
-        return 0.0, {'reason': 'duplicate_match'}
+    # CRITICAL: Reject if either team scores too low
+    MIN_REQUIRED_SCORE = 70.0  # At least a 3-char boundary match
 
-    # CRITICAL CHECK: Both teams must match reasonably well
-    # Use MINIMUM score, not average, to ensure both teams are present
+    if away_score < MIN_REQUIRED_SCORE or home_score < MIN_REQUIRED_SCORE:
+        # logger.debug(f"  ❌ Rejected: away={away_score:.1f}, home={home_score:.1f} (need {MIN_REQUIRED_SCORE}+)")
+        return 0.0, {'away_score': away_score, 'home_score': home_score, 'reason': 'min_score_requirement'}
+
+    # CRITICAL: Both teams must match different parts of the code
+    if away_match and home_match:
+        # Check for overlap
+        away_pos = team_code.find(away_match)
+        home_pos = team_code.find(home_match)
+
+        # If they start at the same position, it's definitely an overlap
+        # Or if one is inside the other
+        if away_pos == home_pos:
+            logger.warning(f"  ❌ REJECTED: Both teams matched same position in {ticker}")
+            return 0.0, {'reason': 'duplicate_match'}
+
+    # Final score emphasizes MINIMUM (both must match well)
     min_score = min(away_score, home_score)
     avg_score = (away_score + home_score) / 2.0
-
-    # If one team has very low score, reject
-    if min_score < 60.0:
-        # logger.debug(f"  ❌ REJECTED: Min score too low (away={away_score:.1f}, home={home_score:.1f})")
-        return 0.0, {'away_score': away_score, 'home_score': home_score, 'reason': 'min_score_low'}
-
-    # Final score favors the minimum (both teams must match well)
     final_score = (min_score * 0.7) + (avg_score * 0.3)
-
-    # logger.info(f"  Match score: {final_score:.1f} (away={away_score:.1f}/{away_match}, home={home_score:.1f}/{home_match})")
 
     return final_score, {
         'team_code': team_code,
@@ -1540,6 +1586,11 @@ NCAAB_CODE_ALIASES: Dict[str, str] = {
     "SAI": "JOES",      # Saint Joseph's
     "NAL": "UNA",       # North Alabama
     "QUE": "QUC",       # Queens University
+    # Missouri St / Kennesaw St Fixes
+    "MIST": "MOST",     # Missouri St variant
+    "MIZZ": "MOST",     # Missouri St variant
+    "KSAW": "KENN",     # Kennesaw St variant
+    "KST": "KENN",      # Kennesaw St variant
 }
 
 NCAAF_CODE_ALIASES: Dict[str, str] = {
@@ -3711,6 +3762,9 @@ class KalshiIntegrator:
         logger.info(f"🔍 KALSHI_MATCH: Attempting to match {away_team} @ {home_team} on {game_date} (Allowed: {allowed_tokens})")
         logger.info(f"   Away team variants: {away_variants}")
         logger.info(f"   Home team variants: {home_variants}")
+
+        # Debug Search (User Request)
+        debug_search_teams(kalshi_markets, home_team, away_team)
 
         matched_markets = {
             "GAME": [],
