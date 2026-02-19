@@ -7891,8 +7891,12 @@ def match_kalshi_market(
 
                 # FIX: Use specialized matchers for NBA Spreads and NCAAB Totals
                 kalshi_prob_override = None
+                matched_reason_override = None # Capture specific reason from specialized matcher
 
                 if m_type == 'SPREAD' and league == 'NBA' and target_line is not None:
+                    # Log attempt
+                    logger.info(f"🔍 NBA SPREAD: Passing {len(market_list)} candidates to match_nba_spread for {home} vs {away}")
+
                     # Construct mock row for match_nba_spread
                     # We target the HOME line (since target_line is home_spread_point)
                     mock_row = {
@@ -7907,9 +7911,14 @@ def match_kalshi_market(
                         if best_match.get('is_wrapper'):
                             target = best_match.get('market')
                             kalshi_prob_override = best_match.get('kalshi_prob_for_pick')
+                            matched_reason_override = best_match.get('match_reason')
                         else:
                             target = best_match
+                            matched_reason_override = "matched_nba_spread_direct"
                 elif m_type == 'TOTAL' and league == 'NCAAB' and target_line is not None:
+                    # Log attempt
+                    logger.info(f"🔍 NCAAB TOTAL: Passing {len(market_list)} candidates to match_ncaab_total for {home} vs {away}")
+
                     # Construct mock row for match_ncaab_total
                     mock_row = {
                         'Home': home,
@@ -7919,6 +7928,7 @@ def match_kalshi_market(
                     best_match = match_ncaab_total(mock_row, market_list)
                     if best_match:
                         target = best_match
+                        matched_reason_override = "matched_ncaab_total"
                 # Fallback: If multiple options and we have a target line, find closest match
                 elif target_line is not None and len(market_list) > 1:
                     best_diff = float('inf')
@@ -7968,6 +7978,11 @@ def match_kalshi_market(
                 if kalshi_prob_override is not None:
                     final_prob = kalshi_prob_override
 
+                # Determine final reason
+                final_reason = matched_reason_override if matched_reason_override else "matched_new_logic"
+                if meta.get("market_type"):
+                    final_reason += f"_{meta.get('market_type')}"
+
                 # Construct result
                 return KalshiMatchResult(
                     matched=True,
@@ -7977,13 +7992,16 @@ def match_kalshi_market(
                     raw_event_id=target.get("ticker"), # Use ticker as ID
                     market_ticker=target.get("ticker"),
                     league=league,
-                    reason="matched_new_logic",
+                    reason=final_reason,
                     market_type=m_type,
                     game_date=commence_time,
                     debug={
                         "kalshi_yes_side": meta.get("title"),
                         "kalshi_status": "matched",
-                        "match_score": match_score
+                        "match_score": match_score,
+                        "match_reason": final_reason,
+                        "candidates_found": len(market_list), # Explicitly pass candidate count
+                        "method": "event_direct" # Method is event-based since we are here
                     }
                 )
 
