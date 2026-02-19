@@ -106,6 +106,102 @@ def debug_search_teams(all_markets: List[Dict[str, Any]], home_team: str, away_t
 # Re-defined inside function for scope safety but kept here for reference
 COMMON_WORDS_GLOBAL = {'STATE', 'ST', 'CAROLINA', 'CAR', 'CENTRAL', 'NORTH', 'SOUTH', 'EAST', 'WEST'}
 
+# NCAA Official Team Code Mappings (Task 1)
+NCAA_TEAM_CODES = {
+    # UC System Schools
+    "UC IRVINE": ["UCI"],
+    "UC RIVERSIDE": ["UCRV"],
+    "UC SANTA BARBARA": ["UCSB"],
+    "UC DAVIS": ["UCD"],
+    "UCLA": ["UCLA"],
+
+    # CSU System Schools
+    "CSU BAKERSFIELD": ["CSB", "CSUB"],
+    "CSU FULLERTON": ["CSUF"],
+    "CSU NORTHRIDGE": ["CSUN"],
+    "LONG BEACH STATE": ["LBSU", "LBST"],
+
+    # UMass/UM Schools
+    "UMASS LOWELL": ["UMLO", "MLRI"],
+    "UMASS": ["UMASS"],
+    "UMBC": ["UMBC"],
+    "UMKC": ["UMKC"],
+
+    # State Schools with "St"
+    "ARKANSAS STATE": ["ARST", "ARKST"],
+    "ARKANSAS-LITTLE ROCK": ["UALR", "LR"],
+    "WRIGHT STATE": ["WSU", "WRIGHT"],
+    "MONTANA STATE": ["MTST", "MSU"],
+    "GEORGIA STATE": ["GSU", "GAST"],
+    "PORTLAND STATE": ["PSU", "PORT"],
+    "SACRAMENTO STATE": ["SAC", "SACST"],
+    "WEBER STATE": ["WEB"],
+    "CHICAGO STATE": ["CHST", "CSU"],
+    "CENTRAL CONNECTICUT STATE": ["CCSU"],
+    "APPALACHIAN STATE": ["APP", "APPST"],
+    "TENNESSEE-MARTIN": ["UTM", "TENN"],
+
+    # Special Cases
+    "FLORIDA INTERNATIONAL": ["FIU"],
+    "TEXAS-ARLINGTON": ["UTA"],
+    "NORTH FLORIDA": ["UNF", "NFLA"],
+    "SOUTH FLORIDA": ["USF"],
+    "AUSTIN PEAY": ["APSU", "AP"],
+    "EASTERN WASHINGTON": ["EWU"],
+    "SOUTHERN INDIANA": ["USI"],
+    "WESTERN ILLINOIS": ["WIU"],
+    "NORTHERN IOWA": ["UNI"],
+    "NEW HAMPSHIRE": ["UNH"],
+    "IUPUI": ["IUPUI"],
+    "HAWAI'I": ["HAW", "HAWAII"],
+    "LOUISIANA": ["ULL", "LAF"],
+    "THE CITADEL": ["CIT"],
+    "LE MOYNE": ["LEM"],
+    "SAMFORD": ["SAM"],
+    "WAGNER": ["WAG"],
+    "MERCYHURST": ["MERCH"],
+    "WILLIAM & MARY": ["WM"],
+    "CAMPBELL": ["CAMP"],
+    "NORTH TEXAS": ["UNT"],
+    "TULANE": ["TUL"],
+    "SIU-EDWARDSVILLE": ["SIUE"],
+    "TENNESSEE TECH": ["TTU", "TTECH"],
+    "STONEHILL": ["STON"],
+    "NEW HAVEN": ["NEWH"],
+    "MARSHALL": ["MRSH"],
+    "FAIRLEIGH DICKINSON": ["FDU"],
+    "CAL POLY": ["CP"],
+    "IDAHO": ["IDA"],
+    "IDAHO STATE": ["IDST"],
+    "MONTANA": ["MONT"],
+    "VERMONT": ["VT"],
+    "HIGH POINT": ["HPU"],
+    "UNC ASHEVILLE": ["UNCA"],
+    "DREXEL": ["DREX"],
+    "NORTHEASTERN": ["NEU"],
+}
+
+# Normalize team name before lookup
+def get_ncaa_code(team_name: str) -> List[str]:
+    """Get official NCAA code(s) for a team"""
+    normalized = team_name.upper().strip()
+    # Handle common variations
+    normalized = normalized.replace("STATE", "ST").replace("ST.", "ST")
+    normalized = normalized.replace("&", "AND")
+    normalized = normalized.replace("'", "")
+
+    # Direct lookup
+    if normalized in NCAA_TEAM_CODES:
+        return NCAA_TEAM_CODES[normalized]
+
+    # Try without "ST" suffix for State schools
+    if normalized.endswith(" ST"):
+        base = normalized[:-3]
+        if base + " STATE" in NCAA_TEAM_CODES:
+            return NCAA_TEAM_CODES[base + " STATE"]
+
+    return []
+
 def calculate_team_match_score(ticker_code: str, team_variants: List[str], team_name_for_logging: str = "") -> Tuple[float, Optional[str]]:
     """
     Calculate match score with strict hierarchy:
@@ -545,6 +641,81 @@ def strip_mascot(team_name: str) -> str:
 
     return team_name
 
+def normalize_state_abbreviation(team_name: str) -> List[str]:
+    """Handle 'St' vs 'State' variations"""
+    # Don't change St. in the middle of a name
+    if " St " in team_name and not team_name.endswith(" St"):
+        # It's likely "St Louis" or "St John's" - keep as is
+        return [team_name]
+
+    # If ends with "St", also generate "State" variant
+    variants = [team_name]
+    if team_name.endswith(" St"):
+        variants.append(team_name[:-3] + " State")
+    if team_name.endswith(" State"):
+        variants.append(team_name[:-6] + " St")
+
+    return variants
+
+def handle_hyphenated_teams(team_name: str) -> List[str]:
+    """Handle teams like Arkansas-Little Rock, SIU-Edwardsville"""
+    codes = []
+    if "-" in team_name:
+        parts = team_name.split("-")
+        # Use first part primary code
+        if len(parts[0]) >= 3:
+            codes.append(parts[0][:4].upper())
+        # Use second part secondary code
+        if len(parts[1]) >= 3:
+            codes.append(parts[1][:4].upper())
+        # Compound: first letter of each part
+        compound = ''.join([p[0] for p in parts if p]).upper()
+        if len(compound) >= 2:
+            codes.append(compound)
+
+        codes.append(team_name.replace("-", "").upper())
+
+        # Proper acronym: Arkansas-Little Rock -> ALR
+        acronym = ""
+        for p in parts:
+            acronym += p[0] if p else ""
+        if len(acronym) >= 2:
+            codes.append(acronym.upper())
+
+    return codes
+
+def generate_compound_codes(team_name: str) -> List[str]:
+    """Generate compound abbreviations from multi-word team names"""
+    words = team_name.upper().split()
+    codes = []
+
+    if len(words) >= 2:
+        # First letters of each word (up to 4 words)
+        first_letters = ''.join([w[0] for w in words[:4]])
+        codes.append(first_letters)
+
+        # First 2 letters of first 2 words
+        if len(words) >= 2:
+            codes.append((words[0][:2] + words[1][:2]))
+
+        # Special: UC/CSU schools - combine system + location
+        # CSU Bakersfield -> CSB
+        if words[0] in ["UC", "CSU"]:
+            location = words[1] if len(words) > 1 else ""
+            if location:
+                # CSU + B -> CSB
+                sys_code = words[0] # UC or CSU
+                if sys_code == "CSU": sys_code = "CS" # Kalshi uses CSB.
+
+                codes.append(sys_code + location[0])
+
+                if words[0] == "UC":
+                    codes.append("UC" + location[0]) # UCI
+                elif words[0] == "CSU":
+                    codes.append("CS" + location[0]) # CSB
+                    codes.append("CSU" + location[0]) # CSUB
+
+    return codes
 
 def generate_comprehensive_team_variants(team_name: str, league: str = None) -> List[str]:
     """
@@ -571,6 +742,11 @@ def generate_comprehensive_team_variants(team_name: str, league: str = None) -> 
 
     variants = []
 
+    # Step 0: NCAA Official Codes (Task 1)
+    if league == "NCAAB":
+        ncaa_codes = get_ncaa_code(team_name)
+        variants.extend(ncaa_codes)
+
     # Step 1: Clean the base name
     # FIX: Pre-process common abbreviations before cleaning
     pre_clean = team_name.upper()
@@ -579,36 +755,31 @@ def generate_comprehensive_team_variants(team_name: str, league: str = None) -> 
     if "INTL" in pre_clean:
         pre_clean = pre_clean.replace("INTL", "INTERNATIONAL")
 
-    # Handle "St" / "St." -> "State" expansion explicitly
-    # (Note: clean_team_name removes dots, so "ST." becomes "ST")
-    # But we want to ensure "St" becomes "State" for matching "Florida State" etc.
-    # Be careful not to replace "St" inside words (e.g. "West")
-    words = pre_clean.split()
-    expanded_words = []
-    for w in words:
-        if w in ["ST", "ST."]:
-            expanded_words.append("STATE")
-        else:
-            expanded_words.append(w)
-    pre_clean = " ".join(expanded_words)
+    # Handle "St" / "St." -> "State" expansion explicitly (Existing + Enhanced)
+    # Use helper
+    state_variants = normalize_state_abbreviation(pre_clean)
 
-    # Handle "UC [City]" -> "UC" + City Abbreviation mapping logic if needed
-    # (Mappings like "UC Irvine" -> "UCI" are best handled in the map)
+    # Process primary variant (usually the input or St->State expanded)
+    # We use the LAST variant from normalize_state_abbreviation as the "expanded" one if multiple
+    primary_name = state_variants[-1]
 
-    cleaned = clean_team_name(pre_clean)
+    cleaned = clean_team_name(primary_name)
     if cleaned:
         variants.append(cleaned)
 
+    # Add other state variants
+    for sv in state_variants[:-1]:
+        c = clean_team_name(sv)
+        if c and c != cleaned:
+            variants.append(c)
+
     # Step 2: Try league-specific mapping first (highest priority)
     if league:
-        # Use pre_clean (expanded abbreviations) for mapping lookup if available, else original
-        # This allows "Florida Int'l" -> "Florida International" -> "FIU"
-        lookup_name = pre_clean if 'pre_clean' in locals() else team_name
+        lookup_name = primary_name
         mapped = team_name_to_code(league, lookup_name)
         if mapped and mapped != "UNK":
             variants.insert(0, mapped)
 
-        # Also try original name if different
         if lookup_name != team_name:
             mapped_orig = team_name_to_code(league, team_name)
             if mapped_orig and mapped_orig != "UNK" and mapped_orig != mapped:
@@ -657,6 +828,14 @@ def generate_comprehensive_team_variants(team_name: str, league: str = None) -> 
         if len(filtered_initials) >= 2 and filtered_initials != initials:
              variants.append(filtered_initials)
 
+    # Step 4.5: Compound Codes (Task 3)
+    compound_codes = generate_compound_codes(primary_name)
+    variants.extend(compound_codes)
+
+    # Step 4.6: Hyphenated Teams (Task 5)
+    hyphen_codes = handle_hyphenated_teams(team_name) # Use original name for hyphen check
+    variants.extend(hyphen_codes)
+
     # Step 5: Add prefixes of each token (2-4 chars)
     # Only use filtered tokens to avoid generating 'ST', 'NOR', 'SOU'
     for token in tokens:
@@ -673,18 +852,21 @@ def generate_comprehensive_team_variants(team_name: str, league: str = None) -> 
 
     # Step 7: For college teams, try without mascot
     if league and league.upper() in ["NCAAB", "NCAAF"]:
-        stripped = strip_mascot(team_name)
-        if stripped != team_name:
+        stripped = strip_mascot(primary_name)
+        if stripped != primary_name:
             stripped_clean = clean_team_name(stripped)
             if stripped_clean:
                 variants.append(stripped_clean)
                 stripped_tokens = [t for t in stripped_clean.split() if t and len(t) >= 2 and t not in COMMON_WORDS_FILTER]
                 variants.extend(stripped_tokens)
 
+                # And compound codes from stripped name
+                variants.extend(generate_compound_codes(stripped))
+
     # Step 8: Try KALSHI_NCAAB_TEAM_CODES and NCAAB_TEAM_CODE_MAP mapping
     if league and league.upper() == "NCAAB":
         # Check original and uppercase variants in both maps
-        candidates_to_check = [team_name, team_name.upper()]
+        candidates_to_check = [team_name, team_name.upper(), primary_name]
 
         # Check both the comprehensive map and the legacy map (legacy has some keys with apostrophes)
         maps_to_check = [KALSHI_NCAAB_TEAM_CODES, NCAAB_TEAM_CODE_MAP]
@@ -1651,6 +1833,21 @@ NCAAF_CODE_ALIASES: Dict[str, str] = {
     "CINC": "CIN",
 }
 
+# Blacklist for ambiguous short codes that should NOT be fuzzy matched (Task 2)
+FUZZY_MATCH_BLACKLIST = {
+    "UM", "UC", "UMK", "SA", "FS", "SC", "HA", "AR", "OR",
+    "MI", "UI", "UW", "UG", "AF", "SE", "FR", "SP", "NA", "SH",
+    "BU", "CL", "RI", "VI", "DU", "QU", "PF"
+}
+
+def should_fuzzy_match(code: str) -> bool:
+    """Check if a code is safe to fuzzy match"""
+    if code in FUZZY_MATCH_BLACKLIST:
+        return False
+    if len(code) <= 2:  # Too short = too ambiguous
+        return False
+    return True
+
 @lru_cache(maxsize=1024)
 def resolve_team_code(code: str, league: str) -> str:
     """
@@ -1679,9 +1876,13 @@ def resolve_team_code(code: str, league: str) -> str:
     # Fuzzy Lookup (Task 1) - If direct lookup fails
     # Only for NCAAB where variance is high
     if l == "NCAAB" and rapidfuzz:
+        # Prevent dangerous fuzzy matching for blacklisted codes
+        if not should_fuzzy_match(c):
+            return c
+
         # Increase threshold for short codes to prevent false positives (e.g. VMI -> VIR)
-        # Fix 4: Relax threshold but add safeguards
-        threshold = 70 if len(c) <= 3 else 75  # Was 90/75
+        # Fix 4: Relax threshold but add safeguards. Raised to 85 per user request.
+        threshold = 85.0  # Was 70/75
 
         # Check against Alias Keys
         alias_keys = list(NCAAB_CODE_ALIASES.keys())
@@ -1701,8 +1902,8 @@ def resolve_team_code(code: str, league: str) -> str:
             # Only log if score is low or length difference is significant, suggesting a risky match
             resolved_code = NCAAB_CODE_ALIASES[best_key]
             if best_key != c and resolved_code != c:
-                 # Log if score < 85 OR length diff > 1 (e.g. UA -> UAB is fine, but BTEM -> BELM is risky)
-                 if match[1] < 85 or abs(len(c) - len(best_key)) > 1:
+                 # Log if score < 90 OR length diff > 1
+                 if match[1] < 90 or abs(len(c) - len(best_key)) > 1:
                      logger.info(f"⚠️ Fuzzy Resolved Code: {c} -> {best_key} -> {resolved_code} (score={match[1]})")
 
             return resolved_code
