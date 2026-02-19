@@ -9205,6 +9205,9 @@ with tab_master:
             theover_matched_count_sides = 0
             theover_matched_count_totals = 0
 
+            # Kalshi Reporting Data
+            kalshi_detailed_report_data = []
+
             for idx, g in enumerate(games_to_process):
                 # DIAGNOSTIC: Log start of processing
                 if idx < 5 or idx % 10 == 0:
@@ -9216,6 +9219,7 @@ with tab_master:
                 sentiment_diff = None  # Ensure initialized
                 total_sentiment_debug = None
                 spread_sentiment_debug = None
+                kalshi_debug_str = "N/A" # Ensure initialized
 
                 # DIAGNOSTIC: Track row creation for each game
                 ml_row_created = False
@@ -10301,6 +10305,51 @@ with tab_master:
                 kalshi_matches, candidate_debug = match_kalshi_market(
                     g, filtered_markets, winner_reason_override
                 )
+
+                # --- KALSHI REPORTING ---
+                # Extract detailed debug info for report
+                try:
+                    k_meta_list = [
+                        ('WINNER', candidate_debug.get('winner_meta', {})),
+                        ('SPREAD', candidate_debug.get('spread_meta', {})),
+                        ('TOTAL', candidate_debug.get('total_meta', {}))
+                    ]
+
+                    for m_type, m_debug in k_meta_list:
+                        # Only report if we attempted a match (score exists or candidates found)
+                        if m_debug:
+                            report_row = {
+                                "Game": f"{g.get('away_team')} @ {g.get('home_team')}",
+                                "Date": str(g.get('commence_time_iso'))[:10],
+                                "League": league_name,
+                                "Market Type": m_type,
+                                "Matched": "YES" if m_debug.get('kalshi_status') == 'matched' else "NO",
+                                "Score": m_debug.get('match_score', 0),
+                                "Method": m_debug.get('method', 'N/A'),
+                                "Candidates Found": m_debug.get('candidates_found', 0),
+                                "Best Ticker": m_debug.get('raw_event_id', 'N/A'),
+                                "Reason": m_debug.get('match_reason') or m_debug.get('reason', 'N/A'),
+                                "Searched Home": str(m_debug.get('searched_home', [])),
+                                "Searched Away": str(m_debug.get('searched_away', [])),
+                                "Close Candidates": str(m_debug.get('close_candidates', []))
+                            }
+                            kalshi_detailed_report_data.append(report_row)
+
+                    # Construct concise debug string for main DF
+                    # We pick the best score/info from the 3 markets
+                    best_m_debug = max(k_meta_list, key=lambda x: x[1].get('match_score', 0) if x[1] else 0)[1]
+                    if best_m_debug:
+                        k_score = best_m_debug.get('match_score', 0)
+                        k_method = best_m_debug.get('method', 'N/A')
+                        k_cands = best_m_debug.get('candidates_found', 0)
+                        k_reason = best_m_debug.get('match_reason') or best_m_debug.get('reason', 'N/A')
+                        kalshi_debug_str = f"Score:{k_score:.1f}|Meth:{k_method}|Cands:{k_cands}|Rsn:{k_reason}"
+                    else:
+                        kalshi_debug_str = "No Match Attempted"
+
+                except Exception as e:
+                    logger.warning(f"Failed to compile Kalshi report row: {e}")
+                    kalshi_debug_str = "Error"
 
                 # FORCE 50+ CANDIDATES MINIMUM (Before candidate_count assignment)
                 kalshi_candidate_count = len(filtered_markets)
@@ -11547,6 +11596,7 @@ with tab_master:
                         warnings_field = ";".join(warnings) if warnings else None
                         implied_prob_reason = "missing_or_placeholder_odds" if odds_placeholder or implied_pick is None else f"from_odds_home_{home_ml}_away_{away_ml}"
                         ml_row = {
+                            "kalshi_debug_info": kalshi_debug_str,
                             "league": league_name,
                             "Home": home,
                             "Away": away,
@@ -11933,6 +11983,7 @@ with tab_master:
                         warnings.append("spread_pick_none")
                     warnings_field = ";".join(warnings) if warnings else None
                     spread_row = {
+                        "kalshi_debug_info": kalshi_debug_str,
                         "league": league_name, "Home": home, "Away": away,
                         "Game": f"{away} @ {home}",
                         "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
@@ -12247,6 +12298,7 @@ with tab_master:
                         warnings.append("total_pick_none")
                     warnings_field = ";".join(warnings) if warnings else None
                     total_row = {
+                        "kalshi_debug_info": kalshi_debug_str,
                         "league": league_name, "Home": home, "Away": away,
                         "Game": f"{away} @ {home}",
                         "Commence (UTC)": commence_iso, "Commence (Local)": commence_local,
@@ -13889,6 +13941,7 @@ with tab_master:
             'best_spread_price', 'best_total_price', 'spread_pick_line', 'total_pick_line',
             'Home_Sentiment', 'Away_Sentiment', 'Sentiment_Diff',
             'kalshi_available', 'HasKalshiMarket', 'Kalshi_Mode',
+            'kalshi_debug_info',
             'theover_matched', 'theover_delta_final_prob',
             'spread_prob_market', 'total_prob_market', 'decisiveness',
             'confidence_reason', 'stats_quality',
@@ -14362,6 +14415,22 @@ with tab_master:
             logger.warning(f"FIX APPLIED: Removed {dup_count} duplicate column(s) from export to prevent CSV mismatch")
 
         st.session_state["master_results_df"] = df[results_columns].copy()
+
+        # --- SAVE DETAILED KALSHI REPORT (Task Request) ---
+        if kalshi_detailed_report_data:
+            try:
+                report_df = pd.DataFrame(kalshi_detailed_report_data)
+                timestamp_str = datetime.now().strftime("%Y-%m-%dT%H%M%S")
+                report_filename = f"app_exports/kalshi_matching_report - {timestamp_str}.csv"
+
+                # Ensure directory exists
+                os.makedirs("app_exports", exist_ok=True)
+
+                report_df.to_csv(report_filename, index=False)
+                logger.info(f"✅ Saved detailed Kalshi matching report to: {report_filename}")
+                st.session_state['last_kalshi_report'] = report_filename
+            except Exception as e:
+                logger.error(f"Failed to save Kalshi matching report: {e}")
 
         # Safety check for missing columns (User Request)
         missing_cols = [col for col in user_columns if col not in df.columns]
