@@ -88,7 +88,8 @@ def debug_search_teams(all_markets: List[Dict[str, Any]], home_team: str, away_t
     found_markets = []
 
     for market in all_markets:
-        ticker = str(market.get('event_ticker') or market.get('ticker') or '').upper()
+        # Check event_ticker, eventticker, and ticker (robust fallback)
+        ticker = str(market.get('event_ticker') or market.get('eventticker') or market.get('ticker') or '').upper()
 
         # Check codes
         for code in codes_to_check:
@@ -254,6 +255,7 @@ class KalshiMatchResult:
     yes_ask: Optional[int] = None
     mid_prob: Optional[float] = None
     reason: Optional[str] = None
+    match_reason: Optional[str] = None  # Added field to fix TypeError
     market_type: Optional[str] = None
     game_date: Optional[datetime] = None
     kalshi_available: bool = True
@@ -1938,7 +1940,8 @@ def _extract_teams_from_ticker(ticker: str) -> List[str]:
 def _parse_market_metadata(mkt: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     title = (mkt.get("title") or "").strip()
     if not title: return None
-    ticker = (mkt.get("ticker") or mkt.get("event_ticker") or "")
+    # Robust extraction of ticker/event_ticker
+    ticker = (mkt.get("ticker") or mkt.get("event_ticker") or mkt.get("eventticker") or "")
 
     market_dt: Optional[datetime] = None
     close_raw = (mkt.get("close_time") or mkt.get("expiration_time") or mkt.get("expected_expiration_time"))
@@ -3411,7 +3414,8 @@ class KalshiIntegrator:
             markets = markets or []
 
             def _ticker(m: Dict[str, Any]) -> str:
-                return str(m.get("event_ticker") or m.get("ticker") or "").upper()
+                # Robust extraction including 'eventticker'
+                return str(m.get("event_ticker") or m.get("eventticker") or m.get("ticker") or "").upper()
 
             has_game = any(_ticker(m).startswith(f"{game_prefix}-") for m in markets)
             has_futures = any(
@@ -3659,11 +3663,13 @@ class KalshiIntegrator:
             valid_events = []
             invalid_count = 0
             for evt in events:
-                ticker = evt.get("ticker")
+                # Robust ticker extraction: check ticker, event_ticker, eventticker
+                ticker = evt.get("ticker") or evt.get("event_ticker") or evt.get("eventticker")
 
                 # Check if ticker is in nested 'event' object (API v2 structure)
                 if not ticker and isinstance(evt.get("event"), dict):
-                    ticker = evt["event"].get("ticker")
+                    nested = evt.get("event")
+                    ticker = nested.get("ticker") or nested.get("event_ticker") or nested.get("eventticker")
                     if ticker:
                         # Flatten: Copy ticker to top level
                         evt["ticker"] = ticker
@@ -3798,7 +3804,8 @@ class KalshiIntegrator:
                 continue
 
             # Get event ticker for parsing codes (prefer event_ticker, fallback to stripping market suffix)
-            event_ticker = market.get("event_ticker")
+            # Check 'event_ticker' and 'eventticker'
+            event_ticker = market.get("event_ticker") or market.get("eventticker")
             if not event_ticker:
                 # Try to extract event ticker from market ticker
                 # KXNCAAMBGAME-26FEB18CLEVYSU-CLEV -> KXNCAAMBGAME-26FEB18CLEVYSU
@@ -3934,7 +3941,8 @@ class KalshiIntegrator:
         sample_unknowns = {}
 
         for evt in events:
-            ticker = evt.get("ticker")
+            # Robust ticker extraction
+            ticker = evt.get("ticker") or evt.get("event_ticker") or evt.get("eventticker")
             parsed = parse_event_ticker_codes(ticker)
             if not parsed:
                 continue
@@ -4234,7 +4242,7 @@ class KalshiIntegrator:
         ]
 
         ticker_keys = [
-            str(m.get("event_ticker") or m.get("ticker") or "").upper()
+            str(m.get("event_ticker") or m.get("eventticker") or m.get("ticker") or "").upper()
             for m in all_markets
         ]
         prefix_hits = len(
@@ -4528,7 +4536,8 @@ class KalshiIntegrator:
         game_prefix = league_game_prefix(league or "")
         bucket: List[Dict[str, Any]] = []
         for m in markets or []:
-            et_upper = str(m.get("event_ticker") or m.get("ticker") or "").upper()
+            # Robust extraction
+            et_upper = str(m.get("event_ticker") or m.get("eventticker") or m.get("ticker") or "").upper()
             if et_upper.startswith(f"{game_prefix}-{token_upper}"):
                 bucket.append(m)
         return bucket
@@ -4583,7 +4592,8 @@ class KalshiIntegrator:
 
         dedup: Dict[str, Dict[str, Any]] = {}
         for m in all_markets:
-            key = str(m.get("event_ticker") or m.get("ticker") or "")
+            # Robust key generation
+            key = str(m.get("event_ticker") or m.get("eventticker") or m.get("ticker") or "")
             if key and key not in dedup:
                 dedup[key] = m
         all_markets = list(dedup.values())
@@ -4600,7 +4610,7 @@ class KalshiIntegrator:
         # Final de-dupe for bucket by event_ticker
         final_bucket: Dict[str, Dict[str, Any]] = {}
         for m in bucket:
-            key = str(m.get("event_ticker") or m.get("ticker") or "")
+            key = str(m.get("event_ticker") or m.get("eventticker") or m.get("ticker") or "")
             if key and key not in final_bucket:
                 final_bucket[key] = m
 
@@ -4609,7 +4619,7 @@ class KalshiIntegrator:
         token_samples: Dict[str, List[str]] = {}
         prefix_token = f"{league_game_prefix(league_key)}-"
         for m in all_markets:
-            et = str(m.get("event_ticker") or m.get("ticker") or "").upper()
+            et = str(m.get("event_ticker") or m.get("eventticker") or m.get("ticker") or "").upper()
             if prefix_token in et:
                 try:
                     after = et.split(prefix_token)[1]
@@ -4746,15 +4756,16 @@ def generate_missing_games_report(
             # Find potential Kalshi events for this date
             game_date = game.get('commence_time')
             if game_date:
-                potential_events = [
-                    evt for evt in kalshi_events
-                    if league.upper() in evt.get('ticker', '').upper()
-                ]
+                potential_events = []
+                for evt in kalshi_events:
+                    t = evt.get('ticker') or evt.get('event_ticker') or evt.get('eventticker') or ''
+                    if league.upper() in t.upper():
+                        potential_events.append(evt)
 
                 if potential_events:
                     report.append(f"- **Potential Kalshi Events ({len(potential_events)}):**")
                     for evt in potential_events[:5]:
-                        ticker = evt.get('ticker', '')
+                        ticker = evt.get('ticker') or evt.get('event_ticker') or evt.get('eventticker') or ''
                         parsed = parse_event_ticker_codes(ticker)
                         report.append(f"  - `{ticker}` → home={parsed.get('home')}, away={parsed.get('away')}")
 
