@@ -50,6 +50,10 @@ __all__ = [
     "NCAAB_CODE_ALIASES",
     "KALSHI_NCAAB_TEAM_CODES",
     "normalize_team_for_kalshi",
+    "match_nba_spread",
+    "match_ncaab_total",
+    "extract_margin_from_yes_side",
+    "extract_total_from_ticker",
 ]
 
 # Timezone for NBA date buckets (games are bucketed by their US/Eastern date usually, or strict UTC date tokens)
@@ -666,6 +670,21 @@ def canonical_team_name(name: str) -> str:
     # 3. Standardize St/State
     # Replace "State" with "St" to match Kalshi preference in codes (e.g. ARST, MTST)
     # But keep full if needed. Let's produce the "base" school name.
+
+    # Special handling for CSU / Cal State schools (Fix 3)
+    # DO NOT collapse these to generic codes!
+    if 'csu ' in n or 'cal state ' in n or 'california state ' in n:
+        # Normalize variants but KEEP the location
+        n = n.replace('california state', 'cal state')
+        n = n.replace('csu ', 'cal state ')
+        # Keep full "cal state fullerton", "cal state northridge", etc.
+        return n.replace('  ', ' ').strip()
+
+    # UC schools - Normalize
+    if n.startswith('uc ') or n.startswith('university of california '):
+        n = n.replace('university of california', 'uc')
+        # Continue to strip mascot for UC schools usually, but keep base
+        # return n.replace('  ', ' ').strip()
 
     # 4. Comprehensive Mascot List (Multi-word first)
     # Deduplicated list of common mascots
@@ -5351,6 +5370,257 @@ class KalshiIntegrator:
     def assert_available(self) -> None:
         if not self.api_key or not self.api_secret_pem:
             raise RuntimeError("Kalshi keys missing from secrets.")
+
+def extract_margin_from_yes_side(yes_side: str) -> float:
+    """
+    Extract numeric margin from Kalshi yes_side like "Team wins by over 6.5 Points?"
+    """
+    import re
+    if not yes_side:
+        return 0.0
+    match = re.search(r'wins by over ([\d\.]+) Points', yes_side, re.IGNORECASE)
+    if match:
+        try:
+            return float(match.group(1))
+        except ValueError:
+            pass
+
+    # Try generic number extraction if pattern fails but it's a spread
+    if "wins by" in yes_side.lower():
+        nums = re.findall(r"[-+]?\d*\.\d+|\d+", yes_side)
+        if nums:
+            try:
+                return float(nums[-1])
+            except ValueError:
+                pass
+    return 0.0
+
+def extract_total_from_ticker(ticker: str) -> Optional[float]:
+    """
+    Extract total line from Kalshi ticker like "KXNCAAMBTOTAL-26FEB19CSBUCRV-156"
+    The last part after final hyphen is often the line.
+    """
+    import re
+    if not ticker:
+        return None
+    parts = ticker.split('-')
+    if len(parts) >= 3:
+        last_part = parts[-1]
+        # Try to parse as number
+        try:
+            return float(last_part)
+        except ValueError:
+            pass
+
+        # Sometimes ticker has suffix like -156.5
+        match = re.search(r'[-_]([\d\.]+)$', ticker)
+        if match:
+            try:
+                return float(match.group(1))
+            except ValueError:
+                pass
+    return None
+
+def match_nba_spread(row: Dict[str, Any], candidate_events: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """
+    Match NBA spread pick to correct Kalshi spread event.
+
+    CRITICAL: Must match the EXACT team that the book pick is for.
+    """
+    spread_pick_team = str(row.get('spread_pick_team', ''))
+    try:
+        spread_pick_line = float(row.get('spread_pick_line', 0))
+    except (ValueError, TypeError):
+        spread_pick_line = 0.0
+
+    home_team = str(row.get('Home', ''))
+    away_team = str(row.get('Away', ''))
+
+    if not spread_pick_team or not candidate_events:
+        return None
+
+    # Determine if pick is favorite or underdog
+    # Negative line = favorite (e.g. -6.5), Positive line = underdog (e.g. +6.5)
+    is_favorite = spread_pick_line < 0
+
+    # Canonicalize names
+    pick_team_canonical = canonical_team_name(spread_pick_team)
+    home_canonical = canonical_team_name(home_team)
+    away_canonical = canonical_team_name(away_team)
+
+    # Identify opponent
+    opponent_team = away_team if pick_team_canonical == home_canonical else home_team
+    opponent_canonical = canonical_team_name(opponent_team)
+
+    # Also handle case where pick_team_canonical matches neither home nor away exactly but one is substring
+    if pick_team_canonical != home_canonical and pick_team_canonical != away_canonical:
+        if pick_team_canonical in home_canonical or home_canonical in pick_team_canonical:
+            opponent_canonical = away_canonical
+        elif pick_team_canonical in away_canonical or away_canonical in pick_team_canonical:
+            opponent_canonical = home_canonical
+
+    best_match = None
+    min_line_diff = 100.0
+
+    for kalshi_event in candidate_events:
+        yes_side = kalshi_event.get('yes_side', '') or kalshi_event.get('title', '')
+
+        # MUST be a spread market
+        if 'wins by' not in yes_side.lower() and 'spread' not in yes_side.lower():
+            continue
+
+        # Extract which team the Kalshi market is FOR
+        # Kalshi format: "TeamName wins by over X.X Points?"
+        kalshi_team_in_yes_side = yes_side.split(' wins by')[0].strip()
+        kalshi_team_canonical = canonical_team_name(kalshi_team_in_yes_side)
+
+        # CRITICAL CHECK: Does Kalshi yes_side team match our pick team?
+        is_kalshi_for_pick_team = (kalshi_team_canonical == pick_team_canonical) or \
+                                  (pick_team_canonical in kalshi_team_canonical) or \
+                                  (kalshi_team_canonical in pick_team_canonical)
+
+        is_kalshi_for_opponent = (kalshi_team_canonical == opponent_canonical) or \
+                                 (opponent_canonical in kalshi_team_canonical) or \
+                                 (kalshi_team_canonical in opponent_canonical)
+
+        matched = False
+        kalshi_margin = extract_margin_from_yes_side(yes_side)
+        target_margin = abs(spread_pick_line)
+
+        if is_favorite:
+            # Favorite pick (e.g., Toronto -6.5)
+            # Need Kalshi market where OUR TEAM wins by over X
+            # e.g., "Toronto wins by over 6.5"
+            if is_kalshi_for_pick_team:
+                matched = True
+        else:
+            # Underdog pick (e.g., Brooklyn +15.5)
+            # Need Kalshi market where OPPONENT wins by over X
+            # e.g., "Cleveland wins by over 15.5" -> If Cleveland matches this, Brooklyn loses by >15.5
+            # Wait, if we bet Brooklyn +15.5, we win if Brooklyn wins OR loses by < 15.5.
+            # Kalshi "Cleveland wins by over 15.5" means Cleveland wins by 16+.
+            # So "NO" on "Cleveland wins by over 15.5" is equivalent to "Brooklyn +15.5".
+            # BUT the prompt says: "Underdog picks... match to markets where OPPONENT wins by over X".
+            # This implies we want to find the relevant market, and later logic handles the Yes/No side mapping.
+            # Here we just want to find the *matching market event*.
+            if is_kalshi_for_opponent:
+                matched = True
+
+        if matched:
+            # Check line proximity
+            diff = abs(kalshi_margin - target_margin)
+            # Allow reasonable difference (e.g. within 13 points as per user request, but prioritize closest)
+            if diff <= 13.0:
+                if diff < min_line_diff:
+                    min_line_diff = diff
+                    best_match = kalshi_event
+
+    if best_match:
+        logger.info(f"✓ NBA SPREAD MATCH: {spread_pick_team} {spread_pick_line} -> {best_match.get('yes_side')} (diff={min_line_diff:.1f})")
+
+    return best_match
+
+def match_ncaab_total(row: Dict[str, Any], candidate_events: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """
+    Match NCAAB total pick to correct Kalshi total event.
+    """
+    home_team = str(row.get('Home', ''))
+    away_team = str(row.get('Away', ''))
+    try:
+        total_pick_line = float(row.get('total_pick_line', 0) or row.get('total_point', 0))
+    except (ValueError, TypeError):
+        total_pick_line = 0.0
+
+    if not total_pick_line or not candidate_events:
+        return None
+
+    home_canonical = canonical_team_name(home_team)
+    away_canonical = canonical_team_name(away_team)
+
+    best_match = None
+    min_line_diff = 100.0
+
+    for kalshi_event in candidate_events:
+        yes_side = kalshi_event.get('yes_side', '') or kalshi_event.get('title', '')
+        ticker = kalshi_event.get('ticker', '')
+
+        # MUST be a total market
+        if ': Total Points' not in yes_side and 'Total Points' not in yes_side:
+            continue
+
+        # Extract both teams from Kalshi yes_side
+        # Format: "Away at Home: Total Points" or "Home vs Away: Total Points"
+        kalshi_teams_str = yes_side.split(': Total')[0].strip()
+
+        kalshi_home = ""
+        kalshi_away = ""
+
+        if ' at ' in kalshi_teams_str:
+            parts = kalshi_teams_str.split(' at ')
+            kalshi_away = parts[0].strip()
+            kalshi_home = parts[-1].strip()
+        elif ' vs ' in kalshi_teams_str.lower():
+            parts = re.split(r' vs\.? ', kalshi_teams_str, flags=re.IGNORECASE)
+            kalshi_home = parts[0].strip() # Usually Home vs Away? Or Away vs Home? Kalshi varies.
+            kalshi_away = parts[-1].strip()
+        else:
+            # Fallback: check containment
+            pass
+
+        k_home_canon = canonical_team_name(kalshi_home)
+        k_away_canon = canonical_team_name(kalshi_away)
+
+        # CRITICAL: Both teams must match (in either order)
+        match_score = 0
+
+        # Direct match
+        if (home_canonical == k_home_canon and away_canonical == k_away_canon) or \
+           (home_canonical == k_away_canon and away_canonical == k_home_canon):
+            match_score = 100
+        else:
+            # Fuzzy set match
+            our_set = {home_canonical, away_canonical}
+            kalshi_set = {k_home_canon, k_away_canon}
+            if our_set == kalshi_set:
+                match_score = 100
+            elif len(our_set.intersection(kalshi_set)) == 2:
+                match_score = 100
+            else:
+                # Substring check
+                matches = 0
+                for ot in our_set:
+                    for kt in kalshi_set:
+                        if ot in kt or kt in ot:
+                            matches += 1
+                            break
+                if matches >= 2:
+                    match_score = 90
+
+        if match_score >= 90:
+            # Both teams match - this is the right game!
+            # Now check total line proximity
+            kalshi_total = extract_total_from_ticker(ticker)
+
+            # If extraction failed, try title
+            if kalshi_total is None:
+                # "Over 145.5"
+                match = re.search(r'(?:Over|Under) ([\d\.]+)', yes_side)
+                if match:
+                    try:
+                        kalshi_total = float(match.group(1))
+                    except ValueError:
+                        pass
+
+            if kalshi_total:
+                diff = abs(kalshi_total - total_pick_line)
+                if diff <= 5.0 and diff < min_line_diff:
+                    min_line_diff = diff
+                    best_match = kalshi_event
+
+    if best_match:
+        logger.info(f"✓ NCAAB TOTAL MATCH: {away_team} @ {home_team} O/U {total_pick_line} -> {best_match.get('ticker')} (diff={min_line_diff:.1f})")
+
+    return best_match
 
 
 def self_test() -> Dict[str, Any]:

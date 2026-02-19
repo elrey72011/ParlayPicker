@@ -30,6 +30,8 @@ from app_core.kalshi_integrator import (
     match_game_to_kalshi,
     KalshiMatchResult, # Needed for type construction
     _parse_market_metadata, # Needed for result parsing
+    match_nba_spread,
+    match_ncaab_total,
 )
 
 from app_core.probability_utils import american_to_implied_prob, american_to_implied
@@ -7887,8 +7889,31 @@ def match_kalshi_market(
                 # Pick the "best" market from the list
                 target = market_list[0]
 
-                # If multiple options and we have a target line, find closest match
-                if target_line is not None and len(market_list) > 1:
+                # FIX: Use specialized matchers for NBA Spreads and NCAAB Totals
+                if m_type == 'SPREAD' and league == 'NBA' and target_line is not None:
+                    # Construct mock row for match_nba_spread
+                    # We target the HOME line (since target_line is home_spread_point)
+                    mock_row = {
+                        'Home': home,
+                        'Away': away,
+                        'spread_pick_team': home,
+                        'spread_pick_line': target_line
+                    }
+                    best_match = match_nba_spread(mock_row, market_list)
+                    if best_match:
+                        target = best_match
+                elif m_type == 'TOTAL' and league == 'NCAAB' and target_line is not None:
+                    # Construct mock row for match_ncaab_total
+                    mock_row = {
+                        'Home': home,
+                        'Away': away,
+                        'total_pick_line': target_line
+                    }
+                    best_match = match_ncaab_total(mock_row, market_list)
+                    if best_match:
+                        target = best_match
+                # Fallback: If multiple options and we have a target line, find closest match
+                elif target_line is not None and len(market_list) > 1:
                     best_diff = float('inf')
                     for m in market_list:
                         # Parse line from metadata (populated by integrator)
