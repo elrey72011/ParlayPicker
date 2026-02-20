@@ -1987,6 +1987,7 @@ KALSHI_NCAAB_TEAM_CODES = {
     "Mercyhurst Lakers": "MERC",
     "Merrimack": "MER",
     "Merrimack Warriors": "MER",
+    "MERRIMACK WARRIORS": "MER", # Explicit
     "Purdue": "PUR",
     "Purdue Boilermakers": "PUR",
     "PURDUE": "PUR",
@@ -2011,6 +2012,7 @@ KALSHI_NCAAB_TEAM_CODES = {
     "Merrimack Warriors": "MER",
     "Siena": "SIE",
     "Siena Saints": "SIE",
+    "SIENA SAINTS": "SIE", # Explicit
     "Saint Peter's": "SPC",
     "Saint Peter's Peacocks": "SPC",
     "Iona": "IONA",
@@ -5142,19 +5144,23 @@ class KalshiIntegrator:
 
         # --- DEBUG SEARCH FOR MISSING TEAMS (Issue #3) ---
         if logger.isEnabledFor(logging.INFO):
-            debug_codes = ['KENN', 'MOST', 'MIZZ', 'MIST', 'MER', 'SIE', 'MERR', 'SIEN', 'MERSI', 'SIEMER']
-            for code in debug_codes:
-                found = [m for m in all_markets if code in str(m.get('event_ticker', ''))]
-                logger.info(f"🔍 Markets with '{code}': {len(found)}")
-                if found:
-                    for m in found[:5]:
-                         logger.info(f"     {m.get('event_ticker')}")
+            # Step 3 Probe List (Updated Feb 2026 for Merrimack/Siena Diagnostic)
+            debug_codes = [
+                'MER', 'MERR', 'SIE', 'SIEN', 'SIEMER', 'SIENMERR', 'MERSI',
+                'MC', 'SC', 'MRMK', 'SNA', 'SAI', 'SAIN'  # Extended variants just in case
+            ]
 
-            # Temporary one-time debug log for NCAAB pool probes (Step 2)
-            if league_key == "NCAAB":
-                for probe in ["MER", "MERR", "SIE", "SIEN", "MERSI", "SIEMER"]:
-                    count = sum(1 for m in all_markets if probe in str(m.get("ticker", "")))
-                    logger.info(f"🔍 NCAAB pool probe '{probe}': {count} markets")
+            # Keep original useful probes if desired, but user focused on MER/SIE
+            debug_codes.extend(['KENN', 'MOST', 'MIZZ', 'MIST'])
+
+            for code in debug_codes:
+                # Check both ticker and event_ticker
+                found = [m for m in all_markets if code in str(m.get('event_ticker', '')) or code in str(m.get('ticker', ''))]
+                logger.info(f"🔍 NCAAB pool probe '{code}': {len(found)} markets")
+                if found:
+                    for m in found[:3]:
+                         t = m.get('event_ticker') or m.get('ticker')
+                         logger.info(f"     Sample: {t}")
 
         # --- DIAGNOSTIC: dump all unique team blocks from NCAAB tickers ---
         # Only run if DEBUG logging is enabled (performance optimization)
