@@ -32,6 +32,8 @@ from app_core.kalshi_integrator import (
     _parse_market_metadata, # Needed for result parsing
     match_nba_spread,
     match_ncaab_total,
+    extract_margin_from_yes_side,
+    canonical_team_name,
 )
 
 from app_core.probability_utils import american_to_implied_prob, american_to_implied
@@ -1207,6 +1209,118 @@ def implied_prob_for_pick(odds_home: Any, odds_away: Any, pick_side: Optional[st
     return None
 
 
+def calculate_spread_prob_for_pick(
+    pick_team,
+    pick_line,
+    kalshi_yes_side,
+    kalshi_prob,
+    home_team,
+    away_team
+):
+    """
+    Calculate the probability for our spread pick based on Kalshi's margin market.
+
+    Kalshi's "Team A wins by over X Points?" means:
+    - YES = Team A wins by MORE than X points
+    - NO = Team A wins by <=X points (or loses)
+    """
+    if kalshi_prob is None:
+        return None
+
+    # Extract which team is in the Kalshi yes_side
+    # e.g., "Bowling Green wins by over 7.5 Points?" -> kalshi_team = "Bowling Green"
+    try:
+        kalshi_team = kalshi_yes_side.split(' wins by')[0].strip()
+    except Exception:
+        # Fallback to team mapping if splitting fails
+        return None
+
+    # Extract the margin from Kalshi
+    # e.g., "wins by over 7.5 Points?" -> kalshi_margin = 7.5
+    kalshi_margin = extract_margin_from_yes_side(kalshi_yes_side)
+
+    # Determine if pick_team matches kalshi_team
+    # Use canonical names for matching
+    pick_team_canonical = canonical_team_name(pick_team)
+    kalshi_team_canonical = canonical_team_name(kalshi_team)
+    home_canonical = canonical_team_name(home_team)
+    away_canonical = canonical_team_name(away_team)
+
+    # Helper for robust matching
+    def _match(t1, t2):
+        return t1 == t2 or (t1 and t2 and (t1 in t2 or t2 in t1))
+
+    is_same_team = _match(pick_team_canonical, kalshi_team_canonical)
+
+    # If pick_team doesn't match Kalshi, check if Opponent matches Kalshi
+    opponent_canonical = away_canonical if _match(pick_team_canonical, home_canonical) else home_canonical
+    is_opponent = _match(kalshi_team_canonical, opponent_canonical)
+
+    if not is_same_team and not is_opponent:
+        # Could not map team - reject
+        return None
+
+    if is_same_team:
+        # Case 1: We're picking the SAME team that Kalshi's yes_side references
+        if pick_line > 0:
+            # Underdog with positive line
+            # e.g., Pick: Bowling Green +8, Kalshi: "BG wins by >7.5"
+            # Covering +8 (winning or losing by <8) is EASIER/DIFFERENT than winning by >7.5
+            # Wait, if pick is +8, we win if BG wins outright OR loses by < 8.
+            # Kalshi "BG wins by >7.5" is a much HARDER condition.
+            # If Kalshi prob is for winning big, it doesn't directly map to covering +8.
+            # BUT usually Kalshi markets for a game align with the spread.
+            # If the spread is BG +8, Kalshi might have "Opponent wins by > 7.5".
+            # If Kalshi has "BG wins by > 7.5", then BG is the Favorite in Kalshi's eyes?
+            # Or we are looking at an Alt line.
+
+            # If Pick is +Line (Underdog) and Kalshi is "Pick wins by > X", that's a huge mismatch in expectation
+            # unless it's a Moneyline proxy or Alt line.
+            # We assume standard spread mapping.
+            # If Pick +8, we expect Kalshi "Opponent wins by > 7.5".
+            # If we see "Pick wins by > 7.5", that implies Pick is actually Favorite -14.5 or something?
+            # Or we parsed wrong.
+
+            # Prompt logic: "BG covering +8 is EASIER than winning by >7.5. So prob_for_pick approx 1 - 0.075 = 92.5%"
+            # This logic assumes "BG wins by > 7.5" is the ONLY way they cover? No.
+            # If BG wins by > 7.5, they definitely cover +8.
+            # If BG loses, they might cover +8.
+            # "BG wins by > 7.5" = 7.5% chance.
+            # So BG covering +8 is NOT 1 - 7.5%. That would imply 92.5% chance to cover.
+            # This logic in the prompt seems specific to "Underdog matched to Favorite Market".
+            # Let's follow the prompt's logic:
+            # "Logic: BG covering +8 is EASIER than winning by >7.5. So prob_for_pick ~ 1 - 0.075 = 92.5%"
+            # This logic basically says: If event X is rare, and we bet NOT X (or something easier than X), we have high prob.
+            return 1.0 - kalshi_prob
+
+        else:
+            # Favorite with negative line
+            # e.g., Pick: Akron -14.5, Kalshi: "Akron wins by >13.5" = 53.5%
+            # For Akron to cover -14.5, they must win by >14.5
+            # Kalshi says Akron wins by >13.5 at 53.5%
+            # But -14.5 is HARDER than >13.5, so prob_for_pick < 53.5%
+
+            # Check if lines are close (within 2 points)
+            if abs(abs(pick_line) - kalshi_margin) <= 2.0:
+                # Lines are similar - use Kalshi prob as-is with small adjustment
+                # Since pick_line is more stringent, reduce by ~10-20%?
+                # Prompt says: "adjustment_factor = 0.85"
+                adjustment_factor = 0.85  # Conservative
+                prob_for_pick = kalshi_prob * adjustment_factor
+                return prob_for_pick
+            else:
+                # Lines are far apart - reject this match
+                return None  # Signal that this is not a valid match
+
+    else:
+        # Case 2: We're picking the OPPONENT of Kalshi's yes_side team (is_opponent=True)
+
+        # e.g., Pick: Indiana +11.5, Kalshi: "Purdue wins by >10.5" = 55.5%
+        # If Purdue wins by >10.5, Indiana does NOT cover +11.5 (Purdue covers -11.5)
+        # So Indiana covering +11.5 = 1 - 0.555 = 44.5%
+        prob_for_pick = 1.0 - kalshi_prob
+        return prob_for_pick
+
 def map_kalshi_prob_for_pick(
     kalshi_yes_prob: Optional[float],
     kalshi_yes_side: Optional[str],
@@ -1271,6 +1385,23 @@ def _map_kalshi_prob_for_pick_impl(
 
     if not pick_side:
         return prob
+
+    # NEW: If spread_line is present and "wins by" is in title, use dedicated Spread Logic
+    if spread_line is not None and "wins by" in (kalshi_yes_side or "").lower() and pick_team and home_team and away_team:
+        logger.info(f"Using new SPREAD logic for {pick_team} line={spread_line}")
+        spread_prob = calculate_spread_prob_for_pick(
+            pick_team=pick_team,
+            pick_line=spread_line,
+            kalshi_yes_side=kalshi_yes_side,
+            kalshi_prob=prob,
+            home_team=home_team,
+            away_team=away_team
+        )
+        if spread_prob is not None:
+            return spread_prob
+        # If None returned, it means rejected by spread logic (e.g. bad line match)
+        # Fallthrough to standard logic? No, strict rejection is better.
+        return None
 
     # ---------------------------------------------------------
     # PRIMARY CHECK: Strict Side Comparison
@@ -1416,6 +1547,13 @@ def map_kalshi_prob_for_total(
     kalshi_yes_side: Optional[str],  # "over" or "under"
     pick_side: str  # "over" or "under"
 ) -> Optional[float]:
+    """
+    For Total Points markets, Kalshi's probability represents Over.
+
+    Kalshi convention:
+    - YES = Total points > line
+    - NO = Total points <= line
+    """
     prob = safe_float(kalshi_yes_prob)
     if prob is None:
         return None
@@ -1423,14 +1561,30 @@ def map_kalshi_prob_for_total(
     yes_side = str(kalshi_yes_side or "").lower()
     pick_side = str(pick_side).lower()
 
-    # Issue #3 Fix: "Total Points" without direction usually implies OVER
-    # Check explicit Over/Under first
+    # STRICT VALIDATION: Reject Spread/Margin markets (Fix #1)
+    if 'wins by' in yes_side:
+        return None
+
+    # First, verify this is actually a Total Points market
+    if 'total points' not in yes_side and ': total' not in yes_side:
+        # Not a strict total market - rely on previous permissive check only if desperate?
+        # User requested Strict filtering: "TOTAL picks MUST match to 'Total Points' markets ONLY"
+        # So we reject if not explicit.
+        # But we check for Over/Under keywords too as they appear in ticker sometimes?
+        if not ('over' in yes_side or 'under' in yes_side):
+             return None
+
+    # Determine if Kalshi market is Over or Under
+    # Usually Kalshi Total markets are "Total Points > X" (Over)
+    # But sometimes they might be "Under"? Usually not for the main line.
+
+    # If explicit Over/Under in title
     is_over = "over" in yes_side
     is_under = "under" in yes_side
 
     if not is_over and not is_under:
-        # Fallback: if it says "total points" or "total", assume OVER
-        if "total" in yes_side:
+        # Fallback: "Total Points" usually implies Over in binary Yes/No
+        if "total points" in yes_side or ": total" in yes_side:
             is_over = True
 
     if is_over:
@@ -1440,7 +1594,7 @@ def map_kalshi_prob_for_total(
         if "under" in pick_side: return prob
         if "over" in pick_side: return 1.0 - prob
 
-    return prob
+    return None
 
 
 def dynamic_kalshi_weight(
@@ -1601,11 +1755,12 @@ def compute_final_probability(
             )
 
     # Issue #4: Reject Low Confidence Kalshi matches
-    # If we found a match but it contradicts our pick (<50%) substantially,
-    # it might be a mapping error OR a strong disagreement.
-    # We log a detailed warning as requested.
+    # If we found a match but it contradicts our pick (<50%), it means the Kalshi signal is AGAINST us.
+    # We must REJECT this match to avoid betting against our own signal.
     if kalshi_prob_for_pick is not None and kalshi_prob_for_pick < 0.50:
-         logger.warning(f"⚠️ LOW CONFIDENCE MATCH: Pick={pick_side}, Kalshi={kalshi_side_yes}, Prob={kalshi_prob_for_pick:.3f} ❌ (Potential Inversion/Disagreement)")
+         logger.warning(f"⚠️ REJECTING LOW CONFIDENCE MATCH: Pick={pick_side}, Kalshi={kalshi_side_yes}, Prob={kalshi_prob_for_pick:.3f} ❌")
+         warnings.append(f"low_confidence_rejected({kalshi_prob_for_pick:.3f})")
+         kalshi_prob_for_pick = None # Reject the match
 
     # Logging verification for P0 Bug (Blend Input Check)
     if kalshi_prob_yes is not None:
@@ -7908,28 +8063,45 @@ def match_kalshi_market(
                         # Game matched, but this specific market type is missing
                         return KalshiMatchResult(matched=False, reason="market_type_missing", market_type=m_type)
 
-                # Pick the "best" market from the list
-                target = market_list[0]
+                # ---------------------------------------------------------
+                # STEP 1: STRICT MARKET TYPE FILTERING (Fix #1)
+                # ---------------------------------------------------------
+                filtered_candidates = []
+                for cand in market_list:
+                    meta = _parse_market_metadata(cand) or {}
+                    yes_side = str(meta.get("title", "")).lower()
 
-                # FIX: Use specialized matchers for NBA Spreads and NCAAB Totals
+                    if m_type == 'SPREAD':
+                        # Must contain "wins by" (Margin market)
+                        # We reject "Winner" markets here if we specifically asked for SPREAD
+                        if "wins by" in yes_side:
+                            filtered_candidates.append(cand)
+                    elif m_type == 'TOTAL':
+                        # Must contain "Total Points"
+                        # We reject "wins by" markets here
+                        if "total points" in yes_side or ": total" in yes_side:
+                            filtered_candidates.append(cand)
+                    else:
+                        # Winner/Moneyline or other
+                        filtered_candidates.append(cand)
+
+                # If everything was filtered out, fail early
+                if not filtered_candidates:
+                    return KalshiMatchResult(matched=False, reason=f"strict_type_mismatch_{m_type}", market_type=m_type)
+
+                # ---------------------------------------------------------
+                # STEP 2: SELECT BEST MATCH (Specialized or Fallback)
+                # ---------------------------------------------------------
+                target = filtered_candidates[0] # Default
                 kalshi_prob_override = None
-                matched_reason_override = None # Capture specific reason from specialized matcher
+                matched_reason_override = None
 
                 if m_type == 'SPREAD' and league == 'NBA' and target_line is not None:
                     # Log attempt
-                    logger.info(f"🔍 NBA SPREAD: Passing {len(market_list)} candidates to match_nba_spread for {home} vs {away}")
-
-                    # Construct mock row for match_nba_spread
-                    # We target the HOME line (since target_line is home_spread_point)
-                    mock_row = {
-                        'Home': home,
-                        'Away': away,
-                        'spread_pick_team': home,
-                        'spread_pick_line': target_line
-                    }
-                    best_match = match_nba_spread(mock_row, market_list)
+                    logger.info(f"🔍 NBA SPREAD: Passing {len(filtered_candidates)} candidates to match_nba_spread for {home} vs {away}")
+                    mock_row = {'Home': home, 'Away': away, 'spread_pick_team': home, 'spread_pick_line': target_line}
+                    best_match = match_nba_spread(mock_row, filtered_candidates)
                     if best_match:
-                        # Handle wrapper from match_nba_spread
                         if best_match.get('is_wrapper'):
                             target = best_match.get('market')
                             kalshi_prob_override = best_match.get('kalshi_prob_for_pick')
@@ -7937,65 +8109,40 @@ def match_kalshi_market(
                         else:
                             target = best_match
                             matched_reason_override = "matched_nba_spread_direct"
+
                 elif m_type == 'TOTAL' and league == 'NCAAB' and target_line is not None:
                     # Log attempt
-                    logger.info(f"🔍 NCAAB TOTAL: Passing {len(market_list)} candidates to match_ncaab_total for {home} vs {away}")
-
-                    # Construct mock row for match_ncaab_total
-                    mock_row = {
-                        'Home': home,
-                        'Away': away,
-                        'total_pick_line': target_line
-                    }
-                    best_match = match_ncaab_total(mock_row, market_list)
+                    logger.info(f"🔍 NCAAB TOTAL: Passing {len(filtered_candidates)} candidates to match_ncaab_total for {home} vs {away}")
+                    mock_row = {'Home': home, 'Away': away, 'total_pick_line': target_line}
+                    best_match = match_ncaab_total(mock_row, filtered_candidates)
                     if best_match:
                         target = best_match
                         matched_reason_override = "matched_ncaab_total"
-                # Fallback: If multiple options and we have a target line, find closest match
-                elif target_line is not None and len(market_list) > 1:
-                    best_diff = float('inf')
-                    for m in market_list:
-                        # Parse line from metadata (populated by integrator)
-                        # Note: we re-parse here because we need line info which might not be in 'm' directly
-                        m_meta = _parse_market_metadata(m) or {}
 
-                        # Try to find line value
+                elif target_line is not None and len(filtered_candidates) > 1:
+                    best_diff = float('inf')
+                    for m in filtered_candidates:
+                        # Parse line from metadata
+                        m_meta = _parse_market_metadata(m) or {}
                         line_val = safe_float(m_meta.get("strike"))
                         if line_val is None:
                              line_val = safe_float(m_meta.get("cap_strike") or m_meta.get("floor_strike"))
-
-                        # If no metadata line, try parsing ticker suffix (e.g. -5.5)
                         if line_val is None:
                             try:
                                 ticker = m.get("ticker", "")
                                 match = re.search(r'[-]([\d\.]+)$', ticker)
-                                if match:
-                                    line_val = float(match.group(1))
+                                if match: line_val = float(match.group(1))
                             except: pass
 
                         if line_val is not None:
-                            # For Spread: check absolute difference of magnitude?
-                            # Usually spreads are -5.5 vs 5.5.
-                            # If target is -5.5, Kalshi might be 5.5 (margin).
-                            # We should compare abs(line) vs abs(target) for margin?
-                            # Or strict difference?
-                            # Kalshi usually formats as "Team -X.5" or "Team by X".
-                            # Let's use simple difference first, but maybe abs() if signs differ.
-                            # Actually, Kalshi lines for spread are often "Winning Margin > X".
-
-                            # Simple approach: closest numerical value
-                            diff = abs(line_val - abs(target_line)) # compare magnitude
+                            diff = abs(abs(line_val) - abs(target_line))
                             if diff < best_diff:
                                 best_diff = diff
                                 target = m
 
-                # Extract score if available (injected by match_game_to_kalshi_markets)
+                # Extract score
                 match_score = target.get("_match_score", 100)
-
-                # Use existing parser
                 meta = _parse_market_metadata(target) or {}
-
-                # Apply probability override if available
                 final_prob = meta.get("probability")
                 if kalshi_prob_override is not None:
                     final_prob = kalshi_prob_override
@@ -8004,6 +8151,14 @@ def match_kalshi_market(
                 final_reason = matched_reason_override if matched_reason_override else "matched_new_logic"
                 if meta.get("market_type"):
                     final_reason += f"_{meta.get('market_type')}"
+
+                # ---------------------------------------------------------
+                # STEP 3: REJECT LOW CONFIDENCE (User Request Rule #3)
+                # ---------------------------------------------------------
+                # Only apply rejection if we have a valid probability override (implying we checked the specific pick logic)
+                if kalshi_prob_override is not None:
+                    if kalshi_prob_override < 0.50:
+                        return KalshiMatchResult(matched=False, reason="low_confidence_rejected", market_type=m_type)
 
                 # Construct result
                 return KalshiMatchResult(
@@ -8022,8 +8177,8 @@ def match_kalshi_market(
                         "kalshi_status": "matched",
                         "match_score": match_score,
                         "match_reason": final_reason,
-                        "candidates_found": len(market_list), # Explicitly pass candidate count
-                        "method": "event_direct" # Method is event-based since we are here
+                        "candidates_found": len(filtered_candidates),
+                        "method": "event_direct"
                     }
                 )
 
