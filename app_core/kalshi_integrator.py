@@ -3410,73 +3410,25 @@ def _match_via_events(
                     elif markets:
                         target_market = markets[0]
                         match_reason_detail = "matched_first_available"
-                # League-specific logic when no type matched
-                elif league == 'NCAAB':
-                    if spread_markets:
-                        target_market = spread_markets[0]
-                        match_reason_detail = "matched_spread_default"
-                    elif total_markets:
-                        target_market = total_markets[0]
-                        match_reason_detail = "matched_total_default"
-                    elif winner_market:
-                        target_market = winner_market
-                        match_reason_detail = "matched_winner"
 
-                    # Force Match Logic (moved here): If still no target, try to find ANY valid market
-                    # Relaxed from 80 to MATCH_THRESHOLD (50) for NCAAB per user request
-                    if not target_market and best_score >= MATCH_THRESHOLD:
-                        logger.info(f"🎯 NCAAB FORCE MATCH ATTEMPT: {evt_ticker} score={best_score}")
-                        # Iterate ALL markets to find one with valid probability
-                        for cand in markets:
-                            # Calculate probability
-                            yes_bid = _kalshi_price_norm(cand, "yes_bid_dollars", "yes_bid")
-                            yes_ask = _kalshi_price_norm(cand, "yes_ask_dollars", "yes_ask")
-                            no_bid = _kalshi_price_norm(cand, "no_bid_dollars", "no_bid")
-                            last_price = _kalshi_price_norm(cand, "last_price_dollars", "last_price")
-
-                            prob = None
-                            if yes_bid is not None and yes_ask is not None:
-                                prob = (yes_bid + yes_ask) / 2.0
-                            elif yes_bid is not None and no_bid is not None:
-                                prob = (yes_bid + (1.0 - no_bid)) / 2.0
-                            elif last_price is not None and last_price > 0:
-                                prob = last_price
-
-                            # Validate title length and probability
-                            cand_title = cand.get('title', '')
-                            if len(cand_title) > 5 and prob is not None and 0.01 < prob < 0.99:
-                                logger.info(f"   ✅ NCAAB FORCE MATCH SUCCESS: {cand.get('ticker')} prob={prob:.3f}")
-                                return KalshiMatchResult(
-                                    matched=True,
-                                    kalshi_available=True,
-                                    label=cand_title,
-                                    probability=prob,
-                                    raw_event_id=evt_ticker,
-                                    market_ticker=cand.get("ticker"),
-                                    league=league,
-                                    reason='ncaab_force_match',
-                                    market_type='force',
-                                    game_date=game_dt_utc
-                                )
-                        logger.warning(f"   ⚠️ NCAAB force match failed: No valid markets found in {len(markets)} candidates")
-
-                    if not target_market and markets:
-                        target_market = markets[0]
-                        match_reason_detail = "matched_first_available"
+                # STRICT VALIDATION: If a specific type IS requested, DO NOT allow cross-contamination.
+                # The previous logic for NCAAB/Other allowed grabbing ANY market if the requested one wasn't found.
+                # This caused SPREAD picks to match TOTAL markets (Issue #1).
+                # We simply DO NOT set target_market if the requested type is missing.
                 else:
-                    # Other leagues: Prefer Winner when specifically no match
-                    if winner_market:
-                        target_market = winner_market
-                        match_reason_detail = "matched_winner"
-                    elif spread_markets:
-                        target_market = spread_markets[0]
-                        match_reason_detail = "matched_spread_fallback"
-                    elif total_markets:
-                        target_market = total_markets[0]
-                        match_reason_detail = "matched_total_fallback"
-                    elif markets:
-                        target_market = markets[0]
-                        match_reason_detail = "matched_first_available"
+                    req_upper = requested_market_type.upper()
+                    logger.warning(f"   ⚠️ Requested {req_upper} but no valid {req_upper} market found. Rejecting fallback to prevent cross-matching.")
+                    # Explicitly check if we have a partial match that was rejected
+                    if "SPREAD" in req_upper and total_markets:
+                         logger.debug(f"      (Ignored {len(total_markets)} TOTAL markets)")
+                    elif "TOTAL" in req_upper and spread_markets:
+                         logger.debug(f"      (Ignored {len(spread_markets)} SPREAD markets)")
+
+                    # NCAAB Force Match logic ONLY if NO specific type requested (already handled in `if requested_market_type is None`)
+                    # or if we want to allow "Winner" markets as fallback for Spread/Total requests?
+                    # The prompt says: "Reject any cross-contamination".
+                    # So we should return NO MATCH if requested SPREAD and only TOTAL exists.
+                    pass
 
 
             if target_market:
