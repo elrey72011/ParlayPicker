@@ -6022,16 +6022,43 @@ def match_ncaab_total(row: Dict[str, Any], candidate_events: List[Dict[str, Any]
 
             if kalshi_total:
                 diff = abs(kalshi_total - total_pick_line)
-                # Relaxed tolerance (was 5.0, now same but ensure logic picks best)
-                # Note: 5.0 is quite generous. We keep it but ensure we pick the *best* match.
-                if diff <= 5.0 and diff < min_line_diff:
+                # Relaxed tolerance (was 5.0, now increased to 25.0 to catch games with large line movement or data discrepancies)
+                # Note: If teams match 100%, it is almost certainly the right game.
+                if diff <= 25.0 and diff < min_line_diff:
                     min_line_diff = diff
                     best_match = kalshi_event
 
     if best_match:
         logger.info(f"✓ NCAAB TOTAL MATCH: {away_team} @ {home_team} O/U {total_pick_line} -> {best_match.get('ticker')} (diff={min_line_diff:.1f})")
 
-    return best_match
+        # NEW LOGIC: Calculate prob
+        # Extract pick side from "Total & Pick" (e.g. "Over 145.5")
+        pick_str = str(row.get('Total & Pick') or row.get('Pick') or "").lower()
+        is_under = "under" in pick_str
+        is_over = "over" in pick_str
+
+        # Kalshi Total Markets: Yes = Over
+        raw_prob = best_match.get('probability')
+        if raw_prob is None:
+            raw_prob = safe_float(best_match.get('last_price'))
+
+        prob_for_pick = None
+        if raw_prob is not None:
+            if is_over:
+                prob_for_pick = raw_prob
+            elif is_under:
+                prob_for_pick = 1.0 - raw_prob
+            # If neither (e.g. malformed pick string), prob_for_pick remains None
+
+        return {
+            'market': best_match,
+            'kalshi_prob_for_pick': prob_for_pick,
+            'match_reason': 'matched_ncaab_total_total',
+            'is_wrapper': True,
+            'yes_side': best_match.get('yes_side') or best_match.get('title')
+        }
+
+    return None
 
 
 def self_test() -> Dict[str, Any]:
