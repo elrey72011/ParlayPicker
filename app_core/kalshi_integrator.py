@@ -67,46 +67,8 @@ NBA_TZ = pytz.timezone("US/Eastern")
 _DEBUG_GAME_LOG_COUNT = 0
 
 def debug_search_teams(all_markets: List[Dict[str, Any]], home_team: str, away_team: str):
-    """Debug helper to find team codes in Kalshi markets"""
-
-    # Only run for specific teams to reduce noise
-    target_teams = ['Missouri St', 'Kennesaw St', 'UNC Greensboro', 'Western Carolina']
-    if not any(t in home_team or t in away_team for t in target_teams):
-        return
-
-    logger.info(f"🔍 DEBUG SEARCH: Checking markets for {away_team} @ {home_team}")
-
-    # Search for Missouri St variations
-    mizz_codes = ['MOST', 'MIZZ', 'MIST', 'MISS', 'MO', 'MSU']
-    # Search for Kennesaw St variations
-    kenn_codes = ['KENN', 'KSU', 'KSAW', 'KEN', 'KST']
-    # Search for UNCG variations
-    uncg_codes = ['UNCG', 'UNC', 'GREensboro']
-    # Search for WCU variations
-    wcu_codes = ['WCU', 'WCAR', 'WEST', 'CATAMOUNTS']
-
-    codes_to_check = []
-    if 'Missouri' in home_team or 'Missouri' in away_team: codes_to_check.extend(mizz_codes)
-    if 'Kennesaw' in home_team or 'Kennesaw' in away_team: codes_to_check.extend(kenn_codes)
-    if 'Greensboro' in home_team or 'Greensboro' in away_team: codes_to_check.extend(uncg_codes)
-    if 'Western Carolina' in home_team or 'Western Carolina' in away_team: codes_to_check.extend(wcu_codes)
-
-    found_markets = []
-
-    for market in all_markets:
-        # Check event_ticker, eventticker, and ticker (robust fallback)
-        ticker = str(market.get('event_ticker') or market.get('eventticker') or market.get('ticker') or '').upper()
-
-        # Check codes
-        for code in codes_to_check:
-            if code in ticker:
-                found_markets.append(ticker)
-                break
-
-    if found_markets:
-        logger.info(f"   🎯 Found {len(found_markets)} potential tickers: {list(set(found_markets))[:10]}")
-    else:
-        logger.info(f"   ❌ No tickers found matching codes: {codes_to_check}")
+    """Debug helper to find team codes in Kalshi markets (No-op after cleanup)"""
+    pass
 
 # Common words to penalize in matching (user request)
 # Re-defined inside function for scope safety but kept here for reference
@@ -1296,7 +1258,9 @@ NCAAB_TEAM_CODE_MAP: Dict[str, str] = {
     "GEORGETOWN": "GEO", "BUTLER": "BUT", "DEPAUL": "DEP", "MEMPHIS": "MEM",
     "CINCINNATI": "CIN", "SMU": "SMU", "WICHITA STATE": "WIC", "TEMPLE": "TEM",
     "TULANE": "TUL", "USF": "USF", "UCF": "UCF", "ECU": "ECU", "TULSA": "TUL",
-    "DAYTON": "DAY", "VCU": "VCU", "SAINT LOUIS": "SLU", "ST. BONAVENTURE": "SBU",
+    "DAYTON": "DAY", "VCU": "VCU", "VCU RAMS": "VCU",
+    "SAINT LOUIS": "SLU", "SAINT LOUIS BILLIKENS": "SLU", "ST. LOUIS": "SLU", "SLU": "SLU",
+    "ST. BONAVENTURE": "SBU",
     "RICHMOND": "RIC", "DAVIDSON": "DAV", "LOYOLA CHICAGO": "LOY", "SAN DIEGO STATE": "SDS",
     "SAN DIEGO ST": "SDS", "NEVADA": "NEV", "UTAH STATE": "USU", "BOISE STATE UNIVERSITY": "BSU", "BOISE STATE": "BSU",
     "BOISE ST": "BSU", "UNLV": "UNLV", "NEW MEXICO": "UNM", "COLORADO STATE": "CSU",
@@ -1991,8 +1955,19 @@ KALSHI_NCAAB_TEAM_CODES = {
     "Merrimack Warriors": "MER",
     "Purdue": "PUR",
     "Purdue Boilermakers": "PUR",
+    "PURDUE": "PUR",
+    "PURDUE BOILERMAKERS": "PUR",
     "Indiana": "IND",
     "Indiana Hoosiers": "IND",
+    "INDIANA": "IND",
+    "INDIANA HOOSIERS": "IND",
+    "VCU": "VCU",
+    "VCU Rams": "VCU",
+    "Saint Louis": "SLU",
+    "Saint Louis Billikens": "SLU",
+    "SAINT LOUIS": "SLU",
+    "SAINT LOUIS BILLIKENS": "SLU",
+    "St. Louis": "SLU",
 }
 
 def normalize_team_for_kalshi(team_name: str) -> str:
@@ -2237,6 +2212,10 @@ NCAAB_CODE_ALIASES: Dict[str, str] = {
     "NAU": "NAU",
     "MONT": "MONT",
     "UCD": "UCD",
+    # Identity mappings to prevent fuzzy matching errors (Problem 2)
+    "IND": "IND",
+    "PUR": "PUR",
+    "SLU": "SLU",
 }
 
 NCAAF_CODE_ALIASES: Dict[str, str] = {
@@ -2923,15 +2902,28 @@ def _match_via_events(
         try:
             # Fix 1: Force fresh data for college sports
             use_fresh_events = league in ['NCAAB', 'NCAAF']
+
+            # Pagination for NCAAB (Problem 1)
+            should_paginate = (league == 'NCAAB')
+
             # First try without status filter to get ALL events
-            events_resp = integrator.get_events(series_ticker, status=None, use_cache=not use_fresh_events)
+            events_resp = integrator.get_events(
+                series_ticker,
+                status=None,
+                use_cache=not use_fresh_events,
+                paginate=should_paginate
+            )
             events = events_resp.get("events", [])
             logger.info(f"   Total Events Fetched (no status filter): {len(events)}")
 
             # If no events found and status was specified, try with status filter
             if not events and status:
                 logger.info(f"   Retrying with status={status}...")
-                events_resp = integrator.get_events(series_ticker, status=status)
+                events_resp = integrator.get_events(
+                    series_ticker,
+                    status=status,
+                    paginate=should_paginate
+                )
                 events = events_resp.get("events", [])
                 logger.info(f"   Total Events Fetched (with status={status}): {len(events)}")
         except Exception as e:
@@ -4415,13 +4407,15 @@ class KalshiIntegrator:
         limit: int = 200,
         cursor: Optional[str] = None,
         use_cache: bool = True,
+        paginate: bool = False,
     ) -> Dict[str, Any]:
         """
         Fetch events for a series with optional caching.
         Enables with_nested_markets=True to get market data in one call.
+        If paginate=True, fetches all available pages (up to 15 pages / 3000 events).
         """
         # DIAGNOSTIC: Log what we're trying to fetch
-        logger.info(f"🔍 Kalshi API Call: get_events(series_ticker={series_ticker}, status={status})")
+        logger.info(f"🔍 Kalshi API Call: get_events(series_ticker={series_ticker}, status={status}, paginate={paginate})")
 
         # Check credentials before making request
         if hasattr(self, '_credentials_valid') and not self._credentials_valid:
@@ -4429,11 +4423,14 @@ class KalshiIntegrator:
             return {"events": [], "cursor": None}
 
         cache_key = f"{series_ticker}:{status}:{min_close_ts}"
+        if paginate:
+            cache_key += ":paginated"
         now = time.time()
 
         if use_cache and not cursor:
             cached = self._events_cache.get(cache_key)
             if cached and (now - cached.get("ts", 0)) < self._events_cache_ttl:
+                logger.info(f"   Using cached events for {cache_key} ({len(cached.get('payload', {}).get('events', []))} events)")
                 return cached.get("payload", {})
 
         params = {
@@ -4450,12 +4447,54 @@ class KalshiIntegrator:
         params = {k: v for k, v in params.items() if v is not None}
 
         try:
-            resp = self._request("GET", "/events", params=params)
+            # Pagination logic
+            all_events = []
+            max_pages = 15 if paginate else 1
+            page_count = 0
+            current_cursor = cursor
+
+            # Initial response holder
+            resp = {}
+
+            while page_count < max_pages:
+                if current_cursor:
+                    params["cursor"] = current_cursor
+
+                if page_count > 0:
+                    logger.info(f"   Fetching page {page_count+1} (cursor={str(current_cursor)[:10]}...)")
+
+                page_resp = self._request("GET", "/events", params=params)
+
+                # Capture metadata from first page
+                if page_count == 0:
+                    resp = page_resp
+
+                page_events = page_resp.get("events", [])
+                all_events.extend(page_events)
+
+                current_cursor = page_resp.get("cursor")
+
+                # Check next_cursor alias if cursor is missing (API variance)
+                if not current_cursor:
+                    current_cursor = page_resp.get("next_cursor")
+
+                page_count += 1
+
+                if not current_cursor:
+                    break
+
+                # Rate limit politeness
+                time.sleep(0.1)
+
+            # Update final response with accumulated events
+            resp["events"] = all_events
+            # If we paginated to the end, cursor is None. If we hit limit, it's the last cursor.
+            resp["cursor"] = current_cursor
 
             # DIAGNOSTIC: Log response summary
             events = resp.get("events", [])
             events_count = len(events)
-            logger.info(f"   📊 Kalshi API Response: {events_count} events returned")
+            logger.info(f"   📊 Kalshi API Response: {events_count} events returned (pages={page_count})")
             if events_count == 0:
                 logger.warning(f"   ⚠️ ZERO EVENTS from Kalshi API for series={series_ticker}")
                 logger.warning(f"   Request params: {params}")
@@ -4467,16 +4506,11 @@ class KalshiIntegrator:
 
             if events:
                 sample_event = events[0]
-                logger.info(f"🔍 KALSHI /events RAW RESPONSE SAMPLE:")
-                logger.info(f"   Keys in first event: {list(sample_event.keys())}")
-                logger.info(f"   Ticker value: {sample_event.get('ticker')}")
-                logger.info(f"   Event Ticker value: {sample_event.get('event_ticker')}")
-                logger.info(f"   Ticker type: {type(sample_event.get('ticker'))}")
-
-                # Check for nested ticker
-                if 'event' in sample_event:
-                    logger.info(f"   Nested 'event' found: {list(sample_event['event'].keys())}")
-                    logger.info(f"   Nested ticker: {sample_event['event'].get('ticker')}")
+                # Log only on first page to avoid spam
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(f"🔍 KALSHI /events RAW RESPONSE SAMPLE:")
+                    logger.debug(f"   Keys in first event: {list(sample_event.keys())}")
+                    logger.debug(f"   Ticker value: {sample_event.get('ticker')}")
 
             # VALIDATION: Filter out events with null/invalid tickers
             valid_events = []

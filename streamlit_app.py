@@ -9226,32 +9226,6 @@ with tab_master:
             logger.error(f"CRITICAL: Cannot run Master Analysis - games list is empty (run_id: {analysis_run_id})")
             st.stop()
 
-        # --- DIAGNOSTIC: WCU Game Check (User Request) ---
-        try:
-            wcu_games = [g for g in games if 'Western Carolina' in str(g.get('away_team')) or 'Western Carolina' in str(g.get('home_team'))]
-            uncg_games = [g for g in games if 'Greensboro' in str(g.get('away_team')) or 'Greensboro' in str(g.get('home_team'))]
-
-            logger.info(f"🔍 Western Carolina games found: {len(wcu_games)}")
-            logger.info(f"🔍 UNC Greensboro games found: {len(uncg_games)}")
-
-            if wcu_games:
-                for g in wcu_games:
-                    logger.info(f"   WCU Game: {g.get('away_team')} @ {g.get('home_team')} at {g.get('commence_time')}")
-
-            if uncg_games:
-                for g in uncg_games:
-                    logger.info(f"   UNCG Game: {g.get('away_team')} @ {g.get('home_team')} at {g.get('commence_time')}")
-
-            # Step 2: Verify team code generation (User Request)
-            if wcu_games or uncg_games:
-                from app_core.kalshi_integrator import generate_comprehensive_team_variants
-                logger.info(f"   Diagnostic Code Generation:")
-                logger.info(f"      'UNC Greensboro Spartans': {generate_comprehensive_team_variants('UNC Greensboro Spartans', 'NCAAB')}")
-                logger.info(f"      'Western Carolina Catamounts': {generate_comprehensive_team_variants('Western Carolina Catamounts', 'NCAAB')}")
-
-        except Exception as e:
-            logger.warning(f"Diagnostic logging failed: {e}")
-        # -----------------------------------------------
 
         with st.spinner("🔄 Analyzing Markets..."):
             try:
@@ -13351,6 +13325,26 @@ with tab_master:
             logger.info(f"Creating master_df from {len(accumulated_rows)} rows...")
 
             master_df = pd.DataFrame.from_records(accumulated_rows)
+
+            # TASK 4: Kalshi NCAAB Coverage Log (User Request)
+            try:
+                if not master_df.empty and "league" in master_df.columns:
+                    ncaab_mask = master_df["league"] == "NCAAB"
+                    if ncaab_mask.any():
+                        # Calculate required (either explicit column or implied by league presence)
+                        ncaab_required = master_df.loc[ncaab_mask, "Kalshi_Required"].sum() if "Kalshi_Required" in master_df.columns else ncaab_mask.sum()
+
+                        # Calculate matched
+                        # Note: kalshi_matched might be boolean or 1/0
+                        ncaab_matched = 0
+                        if "kalshi_matched" in master_df.columns:
+                            # Robust sum handling boolean or int
+                            ncaab_matched = master_df.loc[ncaab_mask, "kalshi_matched"].fillna(0).astype(int).sum()
+
+                        pct = (ncaab_matched / ncaab_required * 100) if ncaab_required > 0 else 0.0
+                        logger.info(f"KALSHI NCAAB COVERAGE: matched={ncaab_matched} / total={ncaab_required} ({pct:.0f}%)")
+            except Exception as e:
+                logger.warning(f"Failed to log NCAAB coverage: {e}")
 
 
             # DISABLED: Moneyline pivot logic
