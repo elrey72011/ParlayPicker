@@ -3791,15 +3791,23 @@ def _match_via_events(
                 debug_info["kalshi_yes_side"] = yes_side
                 debug_info["kalshi_title_check"] = market_title
 
+                final_reason = match_reason_detail or "matched_via_events_api"
+                final_prob = prob if prob is not None else 0.5
+
+                # Check for neutral zone (0.48-0.52)
+                if 0.48 <= final_prob <= 0.52:
+                    final_reason += ";matched_but_neutral"
+                    logger.info(f"   ⚠️ Neutral Kalshi prob ({final_prob:.3f}) flagged as matched_but_neutral")
+
                 return KalshiMatchResult(
                     matched=True,
                     kalshi_available=True,
                     label=target_market.get("title"),
-                    probability=prob if prob is not None else 0.5,
+                    probability=final_prob,
                     raw_event_id=best_event.get("ticker"),
                     market_ticker=target_ticker,
                     league=league,
-                    reason=match_reason_detail or "matched_via_events_api",
+                    reason=final_reason,
                     market_type=m_type,
                     game_date=game_dt_utc,
                     debug=debug_info
@@ -5919,9 +5927,18 @@ def match_nba_spread(row: Dict[str, Any], candidate_events: List[Dict[str, Any]]
 
         if raw_prob is not None:
             if best_match_wrapper.get('invert_probability'):
-                best_match_wrapper['kalshi_prob_for_pick'] = 1.0 - raw_prob
+                final_p = 1.0 - raw_prob
             else:
-                best_match_wrapper['kalshi_prob_for_pick'] = raw_prob
+                final_p = raw_prob
+
+            best_match_wrapper['kalshi_prob_for_pick'] = final_p
+
+            # Check for neutral zone (0.48-0.52)
+            if 0.48 <= final_p <= 0.52:
+                # Append matched_but_neutral to match_reason
+                existing_reason = best_match_wrapper.get('match_reason', '')
+                best_match_wrapper['match_reason'] = f"{existing_reason};matched_but_neutral".strip(';')
+                logger.info(f"   ⚠️ Neutral Kalshi prob ({final_p:.3f}) flagged as matched_but_neutral")
 
         logger.info(f"✓ NBA SPREAD MATCH: {spread_pick_team} {spread_pick_line:+.1f} -> {best_match_wrapper['yes_side']} (score={best_score:.1f}, prob={best_match_wrapper.get('kalshi_prob_for_pick')})")
         return best_match_wrapper
@@ -6043,6 +6060,8 @@ def match_ncaab_total(row: Dict[str, Any], candidate_events: List[Dict[str, Any]
             raw_prob = safe_float(best_match.get('last_price'))
 
         prob_for_pick = None
+        match_reason_str = 'matched_ncaab_total_total'
+
         if raw_prob is not None:
             if is_over:
                 prob_for_pick = raw_prob
@@ -6050,10 +6069,15 @@ def match_ncaab_total(row: Dict[str, Any], candidate_events: List[Dict[str, Any]
                 prob_for_pick = 1.0 - raw_prob
             # If neither (e.g. malformed pick string), prob_for_pick remains None
 
+            # Check for neutral zone (0.48-0.52)
+            if prob_for_pick is not None and 0.48 <= prob_for_pick <= 0.52:
+                match_reason_str += ";matched_but_neutral"
+                logger.info(f"   ⚠️ Neutral Kalshi prob ({prob_for_pick:.3f}) flagged as matched_but_neutral")
+
         return {
             'market': best_match,
             'kalshi_prob_for_pick': prob_for_pick,
-            'match_reason': 'matched_ncaab_total_total',
+            'match_reason': match_reason_str,
             'is_wrapper': True,
             'yes_side': best_match.get('yes_side') or best_match.get('title')
         }
