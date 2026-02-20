@@ -8009,6 +8009,19 @@ def match_kalshi_market(
             res_spread = _convert_raw_to_result(raw_matches.get("SPREAD"), "SPREAD", target_spread_line)
             res_total = _convert_raw_to_result(raw_matches.get("TOTAL"), "TOTAL", target_total_line)
 
+            # Option A: Document "Moneyline Only" if Spread/Total requested but missing
+            # Check if game matched generally (via Winner) but Spread failed
+            if res_winner.matched and not res_spread.matched and raw_matches.get("_meta", {}).get("status") == "matched":
+                # We have a game match, but no spread markets.
+                # Mark spread result as "no_kalshi_spread_market_available_only_moneyline"
+                # This ensures the user knows Kalshi DOES cover the game, just not this market.
+                res_spread.reason = "no_kalshi_spread_market_available_only_moneyline"
+                res_spread.kalshi_available = True # It IS available, just not for spread
+
+            if res_winner.matched and not res_total.matched and raw_matches.get("_meta", {}).get("status") == "matched":
+                res_total.reason = "no_kalshi_total_market_available_only_moneyline"
+                res_total.kalshi_available = True
+
         else:
             # Fallback to old logic for other leagues
             # 1. Winner Match
@@ -9317,9 +9330,15 @@ with tab_master:
             kalshi_detailed_report_data = []
 
             for idx, g in enumerate(games_to_process):
-                # DIAGNOSTIC: Log start of processing
-                if idx < 5 or idx % 10 == 0:
-                    logger.info(f"Processing game {idx+1}/{len(games_to_process)}: {g.get('home_team')} vs {g.get('away_team')}")
+                # DIAGNOSTIC: Log start of processing - FORCE LOG for debug targets
+                home_team_debug = g.get('home_team', 'Unknown')
+                away_team_debug = g.get('away_team', 'Unknown')
+                debug_targets = ["Drexel", "Georgia Southern", "Idaho", "New Hampshire", "SIU-Edwardsville", "Texas State", "Vermont", "Wagner", "IUPUI", "Stonehill"]
+                is_debug_target = any(t in home_team_debug or t in away_team_debug for t in debug_targets)
+
+                if idx < 5 or idx % 10 == 0 or is_debug_target:
+                    logger.info(f"Processing game {idx+1}/{len(games_to_process)}: {away_team_debug} @ {home_team_debug} (Debug Target: {is_debug_target})")
+
                 g = g.copy()
                 # Initialize loop-local variables to prevent NameError
                 model_prob_home = None
@@ -9367,249 +9386,263 @@ with tab_master:
 
                 # --- THEOVER MATCHING START ---
                 league_name = str(g.get("league") or "UNKNOWN").upper()
-                home_team = str(g.get("home_team") or "")
-                away_team = str(g.get("away_team") or "")
-                commence_utc = parse_commence_to_utc(g.get("commence_time"))
+                try:
+                    home_team = str(g.get("home_team") or "")
+                    away_team = str(g.get("away_team") or "")
+                    commence_utc = parse_commence_to_utc(g.get("commence_time"))
 
-                # Local Date for Matching (US/Eastern)
-                local_date_str = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d") # Default
-                if commence_utc:
-                    local_dt = commence_utc.astimezone(ZoneInfo("America/New_York"))
-                    local_date_str = local_dt.strftime("%Y-%m-%d")
+                    # Local Date for Matching (US/Eastern)
+                    local_date_str = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d") # Default
+                    if commence_utc:
+                        local_dt = commence_utc.astimezone(ZoneInfo("America/New_York"))
+                        local_date_str = local_dt.strftime("%Y-%m-%d")
 
-                # FIX: Use RAW team names for team code generation, NOT the
-                # cross-league TEAM_ALIAS_MAP which causes contamination (e.g.
-                # "New Orleans Pelicans" -> "New Orleans Saints" via NFL substring).
-                # The TheOver ingest uses raw game team names, so the main loop
-                # must also use raw names to produce matching canonical keys.
-                home_norm = home_team
-                away_norm = away_team
+                    # FIX: Use RAW team names for team code generation, NOT the
+                    # cross-league TEAM_ALIAS_MAP which causes contamination (e.g.
+                    # "New Orleans Pelicans" -> "New Orleans Saints" via NFL substring).
+                    # The TheOver ingest uses raw game team names, so the main loop
+                    # must also use raw names to produce matching canonical keys.
+                    home_norm = home_team
+                    away_norm = away_team
 
-                # 1. Resolve Team Codes using RAW team names (matches TheOver ingest behavior)
-                home_code = team_code_for_league(league_name, home_team)
-                away_code = team_code_for_league(league_name, away_team)
+                    # 1. Resolve Team Codes using RAW team names (matches TheOver ingest behavior)
+                    home_code = team_code_for_league(league_name, home_team)
+                    away_code = team_code_for_league(league_name, away_team)
 
-                # 2. Generate Master Key
-                # Normalize league to match ingestion (NBA, NFL, etc.)
-                norm_league_key = str(league_name).strip().upper()
-                if "NBA" in norm_league_key: norm_league_key = "NBA"
-                elif "NFL" in norm_league_key: norm_league_key = "NFL"
-                elif "NHL" in norm_league_key: norm_league_key = "NHL"
-                elif "MLB" in norm_league_key: norm_league_key = "MLB"
-                elif "NCAAB" in norm_league_key or "COLLEGE BASKETBALL" in norm_league_key: norm_league_key = "NCAAB"
-                elif "NCAAF" in norm_league_key or "COLLEGE FOOTBALL" in norm_league_key: norm_league_key = "NCAAF"
+                    # 2. Generate Master Key
+                    # Normalize league to match ingestion (NBA, NFL, etc.)
+                    norm_league_key = str(league_name).strip().upper()
+                    if "NBA" in norm_league_key: norm_league_key = "NBA"
+                    elif "NFL" in norm_league_key: norm_league_key = "NFL"
+                    elif "NHL" in norm_league_key: norm_league_key = "NHL"
+                    elif "MLB" in norm_league_key: norm_league_key = "MLB"
+                    elif "NCAAB" in norm_league_key or "COLLEGE BASKETBALL" in norm_league_key: norm_league_key = "NCAAB"
+                    elif "NCAAF" in norm_league_key or "COLLEGE FOOTBALL" in norm_league_key: norm_league_key = "NCAAF"
 
-                # Generate codes with normalized league and RAW team names
-                home_code_norm = team_code_for_league(norm_league_key, home_team)
-                away_code_norm = team_code_for_league(norm_league_key, away_team)
+                    # Generate codes with normalized league and RAW team names
+                    home_code_norm = team_code_for_league(norm_league_key, home_team)
+                    away_code_norm = team_code_for_league(norm_league_key, away_team)
 
-                # Generate canonical keys matching TheOver ingest format
-                master_key_exact = generate_canonical_key(norm_league_key, local_date_str, home_code_norm, away_code_norm)
-                master_key_teams = f"{norm_league_key}|{away_code_norm}|{home_code_norm}"
+                    # Generate canonical keys matching TheOver ingest format
+                    master_key_exact = generate_canonical_key(norm_league_key, local_date_str, home_code_norm, away_code_norm)
+                    master_key_teams = f"{norm_league_key}|{away_code_norm}|{home_code_norm}"
 
-                # DEBUG: Log first few games' TheOver keys for diagnosis
-                if idx < 3 and theover_lookup_exact:
-                    logger.info(f"🔍 THEOVER MATCH ATTEMPT [{idx}]: {away_team} @ {home_team}")
-                    logger.info(f"   exact_key={master_key_exact}")
-                    logger.info(f"   team_key={master_key_teams}")
-                    logger.info(f"   exact_hit={master_key_exact in theover_lookup_exact}")
-                    logger.info(f"   team_hit={master_key_teams in theover_lookup_teams}")
+                    # DEBUG: Log first few games' TheOver keys for diagnosis
+                    if idx < 3 and theover_lookup_exact:
+                        logger.info(f"🔍 THEOVER MATCH ATTEMPT [{idx}]: {away_team} @ {home_team}")
+                        logger.info(f"   exact_key={master_key_exact}")
+                        logger.info(f"   team_key={master_key_teams}")
+                        logger.info(f"   exact_hit={master_key_exact in theover_lookup_exact}")
+                        logger.info(f"   team_hit={master_key_teams in theover_lookup_teams}")
 
-                # 3. Match TheOver Data
-                matched_total_row = None
-                matched_side_row = None
-                theover_match_reason = None
-                theover_matched = False
+                    # 3. Match TheOver Data
+                    matched_total_row = None
+                    matched_side_row = None
+                    theover_match_reason = None
+                    theover_matched = False
 
-                # Helper to find best match in list
-                def find_best_date_match(candidates, target_date_str):
-                    # Prefer exact date match
-                    for c in candidates:
-                        if c.get("date_local") == target_date_str:
-                            return c
-                    # Fallback to first if available (fuzzy date)
-                    return candidates[0] if candidates else None
+                    # Helper to find best match in list
+                    def find_best_date_match(candidates, target_date_str):
+                        # Prefer exact date match
+                        for c in candidates:
+                            if c.get("date_local") == target_date_str:
+                                return c
+                        # Fallback to first if available (fuzzy date)
+                        return candidates[0] if candidates else None
 
-                # Also build a swapped key for robustness (in case home/away order differs)
-                master_key_exact_swap = generate_canonical_key(norm_league_key, local_date_str, away_code_norm, home_code_norm)
-                master_key_teams_swap = f"{norm_league_key}|{home_code_norm}|{away_code_norm}"
+                    # Also build a swapped key for robustness (in case home/away order differs)
+                    master_key_exact_swap = generate_canonical_key(norm_league_key, local_date_str, away_code_norm, home_code_norm)
+                    master_key_teams_swap = f"{norm_league_key}|{home_code_norm}|{away_code_norm}"
 
-                # Look for TOTAL match (Exact then Team, then swapped variants)
-                if master_key_exact in theover_lookup_exact:
-                    # Check for TOTAL type
-                    cands = [r for r in theover_lookup_exact[master_key_exact] if r["theover_market_type"] == "TOTAL"]
-                    if cands: matched_total_row = cands[0]
+                    # Look for TOTAL match (Exact then Team, then swapped variants)
+                    if master_key_exact in theover_lookup_exact:
+                        # Check for TOTAL type
+                        cands = [r for r in theover_lookup_exact[master_key_exact] if r["theover_market_type"] == "TOTAL"]
+                        if cands: matched_total_row = cands[0]
 
-                if not matched_total_row and master_key_exact_swap in theover_lookup_exact:
-                    cands = [r for r in theover_lookup_exact[master_key_exact_swap] if r["theover_market_type"] == "TOTAL"]
-                    if cands: matched_total_row = cands[0]
+                    if not matched_total_row and master_key_exact_swap in theover_lookup_exact:
+                        cands = [r for r in theover_lookup_exact[master_key_exact_swap] if r["theover_market_type"] == "TOTAL"]
+                        if cands: matched_total_row = cands[0]
 
-                if not matched_total_row and master_key_teams in theover_lookup_teams:
-                    cands = [c for c in theover_lookup_teams[master_key_teams] if c["theover_market_type"] == "TOTAL"]
-                    matched_total_row = find_best_date_match(cands, local_date_str)
+                    if not matched_total_row and master_key_teams in theover_lookup_teams:
+                        cands = [c for c in theover_lookup_teams[master_key_teams] if c["theover_market_type"] == "TOTAL"]
+                        matched_total_row = find_best_date_match(cands, local_date_str)
 
-                if not matched_total_row and master_key_teams_swap in theover_lookup_teams:
-                    cands = [c for c in theover_lookup_teams[master_key_teams_swap] if c["theover_market_type"] == "TOTAL"]
-                    matched_total_row = find_best_date_match(cands, local_date_str)
+                    if not matched_total_row and master_key_teams_swap in theover_lookup_teams:
+                        cands = [c for c in theover_lookup_teams[master_key_teams_swap] if c["theover_market_type"] == "TOTAL"]
+                        matched_total_row = find_best_date_match(cands, local_date_str)
 
-                # Look for SIDE match (Exact then Team, then swapped variants)
-                if master_key_exact in theover_lookup_exact:
-                    cands = [r for r in theover_lookup_exact[master_key_exact] if r["theover_market_type"] == "SIDE"]
-                    if cands: matched_side_row = cands[0]
+                    # Look for SIDE match (Exact then Team, then swapped variants)
+                    if master_key_exact in theover_lookup_exact:
+                        cands = [r for r in theover_lookup_exact[master_key_exact] if r["theover_market_type"] == "SIDE"]
+                        if cands: matched_side_row = cands[0]
 
-                if not matched_side_row and master_key_exact_swap in theover_lookup_exact:
-                    cands = [r for r in theover_lookup_exact[master_key_exact_swap] if r["theover_market_type"] == "SIDE"]
-                    if cands: matched_side_row = cands[0]
+                    if not matched_side_row and master_key_exact_swap in theover_lookup_exact:
+                        cands = [r for r in theover_lookup_exact[master_key_exact_swap] if r["theover_market_type"] == "SIDE"]
+                        if cands: matched_side_row = cands[0]
 
-                if not matched_side_row and master_key_teams in theover_lookup_teams:
-                    cands = [c for c in theover_lookup_teams[master_key_teams] if c["theover_market_type"] == "SIDE"]
-                    matched_side_row = find_best_date_match(cands, local_date_str)
+                    if not matched_side_row and master_key_teams in theover_lookup_teams:
+                        cands = [c for c in theover_lookup_teams[master_key_teams] if c["theover_market_type"] == "SIDE"]
+                        matched_side_row = find_best_date_match(cands, local_date_str)
 
-                if not matched_side_row and master_key_teams_swap in theover_lookup_teams:
-                    cands = [c for c in theover_lookup_teams[master_key_teams_swap] if c["theover_market_type"] == "SIDE"]
-                    matched_side_row = find_best_date_match(cands, local_date_str)
+                    if not matched_side_row and master_key_teams_swap in theover_lookup_teams:
+                        cands = [c for c in theover_lookup_teams[master_key_teams_swap] if c["theover_market_type"] == "SIDE"]
+                        matched_side_row = find_best_date_match(cands, local_date_str)
 
-                # FALLBACK: Raw team name matching when key-based lookup fails
-                # This handles cases where TheOver paste text uses short names (e.g. "Celtics")
-                # that generate different codes than OddsAPI full names (e.g. "Boston Celtics")
-                if (not matched_total_row or not matched_side_row) and theover_lookup_exact:
-                    home_norm_lower = home_team.lower().strip()
-                    away_norm_lower = away_team.lower().strip()
-                    # Extract last word of team name for matching (e.g., "Boston Celtics" -> "celtics")
-                    home_last = home_norm_lower.split()[-1] if home_norm_lower.split() else ""
-                    away_last = away_norm_lower.split()[-1] if away_norm_lower.split() else ""
-                    for _to_key, _to_rows in theover_lookup_exact.items():
-                        for _to_row in _to_rows:
-                            _to_home_raw = str(_to_row.get("home_team_raw") or "").lower().strip()
-                            _to_away_raw = str(_to_row.get("away_team_raw") or "").lower().strip()
-                            # Match if raw names are substrings or last-word matches
-                            home_hit = (
-                                home_norm_lower == _to_home_raw
-                                or home_last == _to_home_raw
-                                or _to_home_raw in home_norm_lower
-                                or home_norm_lower in _to_home_raw
-                            )
-                            away_hit = (
-                                away_norm_lower == _to_away_raw
-                                or away_last == _to_away_raw
-                                or _to_away_raw in away_norm_lower
-                                or away_norm_lower in _to_away_raw
-                            )
-                            if home_hit and away_hit:
-                                mtype = _to_row.get("theover_market_type")
-                                if mtype == "TOTAL" and not matched_total_row:
-                                    matched_total_row = _to_row
-                                    logger.info(f"✅ TheOver FALLBACK TOTAL: {away_team} @ {home_team} matched via raw names")
-                                elif mtype == "SIDE" and not matched_side_row:
-                                    matched_side_row = _to_row
-                                    logger.info(f"✅ TheOver FALLBACK SIDE: {away_team} @ {home_team} matched via raw names")
+                    # FALLBACK: Raw team name matching when key-based lookup fails
+                    # This handles cases where TheOver paste text uses short names (e.g. "Celtics")
+                    # that generate different codes than OddsAPI full names (e.g. "Boston Celtics")
+                    if (not matched_total_row or not matched_side_row) and theover_lookup_exact:
+                        home_norm_lower = home_team.lower().strip()
+                        away_norm_lower = away_team.lower().strip()
+                        # Extract last word of team name for matching (e.g., "Boston Celtics" -> "celtics")
+                        home_last = home_norm_lower.split()[-1] if home_norm_lower.split() else ""
+                        away_last = away_norm_lower.split()[-1] if away_norm_lower.split() else ""
+                        for _to_key, _to_rows in theover_lookup_exact.items():
+                            for _to_row in _to_rows:
+                                _to_home_raw = str(_to_row.get("home_team_raw") or "").lower().strip()
+                                _to_away_raw = str(_to_row.get("away_team_raw") or "").lower().strip()
+                                # Match if raw names are substrings or last-word matches
+                                home_hit = (
+                                    home_norm_lower == _to_home_raw
+                                    or home_last == _to_home_raw
+                                    or _to_home_raw in home_norm_lower
+                                    or home_norm_lower in _to_home_raw
+                                )
+                                away_hit = (
+                                    away_norm_lower == _to_away_raw
+                                    or away_last == _to_away_raw
+                                    or _to_away_raw in away_norm_lower
+                                    or away_norm_lower in _to_away_raw
+                                )
+                                if home_hit and away_hit:
+                                    mtype = _to_row.get("theover_market_type")
+                                    if mtype == "TOTAL" and not matched_total_row:
+                                        matched_total_row = _to_row
+                                        logger.info(f"✅ TheOver FALLBACK TOTAL: {away_team} @ {home_team} matched via raw names")
+                                    elif mtype == "SIDE" and not matched_side_row:
+                                        matched_side_row = _to_row
+                                        logger.info(f"✅ TheOver FALLBACK SIDE: {away_team} @ {home_team} matched via raw names")
+                                if matched_total_row and matched_side_row:
+                                    break
                             if matched_total_row and matched_side_row:
                                 break
-                        if matched_total_row and matched_side_row:
-                            break
 
-                # Diagnostic logging for TheOver matching
-                if not matched_total_row and not matched_side_row and theover_lookup_exact:
-                    logger.info(
-                        f"⚠️ TheOver NO MATCH: {away_team} @ {home_team} | "
-                        f"key_exact={master_key_exact} | key_teams={master_key_teams} | "
-                        f"codes=({away_code_norm}@{home_code_norm})"
-                    )
+                    # Diagnostic logging for TheOver matching
+                    if not matched_total_row and not matched_side_row and theover_lookup_exact:
+                        logger.info(
+                            f"⚠️ TheOver NO MATCH: {away_team} @ {home_team} | "
+                            f"key_exact={master_key_exact} | key_teams={master_key_teams} | "
+                            f"codes=({away_code_norm}@{home_code_norm})"
+                        )
 
-                # If matched, update counters
-                if matched_total_row: theover_matched_count_totals += 1
-                if matched_side_row: theover_matched_count_sides += 1
+                    # If matched, update counters
+                    if matched_total_row: theover_matched_count_totals += 1
+                    if matched_side_row: theover_matched_count_sides += 1
 
-                # Extract Signals for Downstream
-                theover_matched_total = matched_total_row
-                theover_matched_side = matched_side_row
+                    # Extract Signals for Downstream
+                    theover_matched_total = matched_total_row
+                    theover_matched_side = matched_side_row
 
-                # Probabilities (defaults to None if not matched)
-                theover_prob_total = None
-                if matched_total_row:
-                    hit_rate = safe_float(matched_total_row.get("theover_hit_rate"))
-                    theover_prob_total = hit_rate if (hit_rate and hit_rate > 0) else None
-                    if theover_prob_total is None:
-                        logger.warning("TheOver Totals: No valid hit_rate found - excluding")
+                    # Probabilities (defaults to None if not matched)
+                    theover_prob_total = None
+                    if matched_total_row:
+                        hit_rate = safe_float(matched_total_row.get("theover_hit_rate"))
+                        theover_prob_total = hit_rate if (hit_rate and hit_rate > 0) else None
+                        if theover_prob_total is None:
+                            logger.warning("TheOver Totals: No valid hit_rate found - excluding")
 
-                theover_prob_spread = None
-                theover_prob_ml = None
+                    theover_prob_spread = None
+                    theover_prob_ml = None
 
-                if matched_side_row:
-                    hit_rate = safe_float(matched_side_row.get("theover_hit_rate"))
-                    theover_line_val = safe_float(matched_side_row.get("theover_line"))
+                    if matched_side_row:
+                        hit_rate = safe_float(matched_side_row.get("theover_hit_rate"))
+                        theover_line_val = safe_float(matched_side_row.get("theover_line"))
 
-                    # Detect ML vs Spread based on line magnitude
-                    is_moneyline_side = theover_line_val is not None and abs(theover_line_val) >= 40
+                        # Detect ML vs Spread based on line magnitude
+                        is_moneyline_side = theover_line_val is not None and abs(theover_line_val) >= 40
 
-                    if is_moneyline_side:
-                        # MONEYLINE CALCULATION
-                        if hit_rate and hit_rate > 0:
-                             theover_prob_ml = hit_rate
-                        elif theover_line_val is not None:
-                            try:
-                                # Convert American Odds to Implied Probability
-                                if theover_line_val < 0:
-                                    raw_prob = (-theover_line_val) / (-theover_line_val + 100.0)
-                                else:
-                                    raw_prob = 100.0 / (theover_line_val + 100.0)
-                                # Boost slightly for being a "Pick" (0.07 edge assumption)
-                                theover_prob_ml = clamp(raw_prob + 0.07, 0.10, 0.95)
-                                logger.info(f"TheOver Moneyline: {theover_line_val} -> {theover_prob_ml:.3f}")
-                            except Exception as e:
-                                logger.warning(f"TheOver ML calc error: {e}")
-                                theover_prob_ml = None
-                    else:
-                        # SPREAD CALCULATION
-                        # Check if we have a valid hit rate from TheOver
-                        if hit_rate and hit_rate > 0:
-                            theover_prob_spread = hit_rate
-                            logger.info(f"TheOver Sides: Using provided hit_rate {hit_rate:.3f}")
-                        else:
-                            # TheOver.ai Sides export lacks WinProbability - calculate from spread line
-                            theover_pick_team = matched_side_row.get("theover_pick")
-
-                            if theover_line_val is not None and theover_pick_team:
+                        if is_moneyline_side:
+                            # MONEYLINE CALCULATION
+                            if hit_rate and hit_rate > 0:
+                                theover_prob_ml = hit_rate
+                            elif theover_line_val is not None:
                                 try:
-                                    # Treat as spread points (e.g. -5.5)
-                                    # Use logistic function to estimate win prob from line
-                                    # Assuming standard -110 odds baseline (52.4%) + line advantage
-                                    # Simplified model: 0.524 + (line * -0.02) ? No, that depends on direction.
-
-                                    # --- SPREAD POINTS CALCULATION ---
-                                    # Use the sigmoid logic from previous version
-                                    raw_prob = 1.0 / (1.0 + math.exp(-theover_line_val / 3.5))
-                                    adjusted_prob = raw_prob + 0.07
-                                    theover_prob_spread = max(0.10, min(0.95, adjusted_prob))
-                                    logger.info(f"TheOver Spread: {theover_line_val} -> {theover_prob_spread:.3f}")
-                                except Exception:
-                                    theover_prob_spread = None
+                                    # Convert American Odds to Implied Probability
+                                    if theover_line_val < 0:
+                                        raw_prob = (-theover_line_val) / (-theover_line_val + 100.0)
+                                    else:
+                                        raw_prob = 100.0 / (theover_line_val + 100.0)
+                                    # Boost slightly for being a "Pick" (0.07 edge assumption)
+                                    theover_prob_ml = clamp(raw_prob + 0.07, 0.10, 0.95)
+                                    logger.info(f"TheOver Moneyline: {theover_line_val} -> {theover_prob_ml:.3f}")
+                                except Exception as e:
+                                    logger.warning(f"TheOver ML calc error: {e}")
+                                    theover_prob_ml = None
+                        else:
+                            # SPREAD CALCULATION
+                            # Check if we have a valid hit rate from TheOver
+                            if hit_rate and hit_rate > 0:
+                                theover_prob_spread = hit_rate
+                                logger.info(f"TheOver Sides: Using provided hit_rate {hit_rate:.3f}")
                             else:
-                                # No line available - cannot calculate probability
-                                logger.info(f"TheOver Sides: No hit_rate or line available for calculation - excluding")
-                                theover_prob_spread = None
-                                # Only clear matched_side_row if it was SUPPOSED to be spread but failed
-                                if not is_moneyline_side:
-                                     matched_side_row = None
+                                # TheOver.ai Sides export lacks WinProbability - calculate from spread line
+                                theover_pick_team = matched_side_row.get("theover_pick")
 
-                # --- FIX: Use SIDE data for ML picks when ML-specific data unavailable ---
-                # If TheOver has a spread pick but no ML pick, derive ML probability from spread data
-                # A spread pick for a team suggests confidence in their performance, which partially
-                # informs moneyline probability (covering spread often correlates with winning outright)
-                theover_side_used_for_ml = False
-                if theover_prob_ml is None and theover_prob_spread is not None and matched_side_row:
-                    # Use the spread hit_rate as a weaker signal for ML
-                    # Apply a dampening factor since spread != moneyline
-                    # If hit_rate is 55% for spread, ML prob is closer to 50% but still favors that team
-                    spread_hit_rate = safe_float(matched_side_row.get("theover_hit_rate"))
-                    if spread_hit_rate and spread_hit_rate > 0:
-                        # Convert spread confidence to ML confidence
-                        # Formula: ML_prob = 0.50 + (spread_hit_rate - 0.50) * 0.7
-                        # This dampens the signal while preserving direction
-                        ml_from_spread = 0.50 + (spread_hit_rate - 0.50) * 0.7
-                        theover_prob_ml = clamp(ml_from_spread, 0.35, 0.65)
-                        theover_side_used_for_ml = True
-                        logger.info(f"TheOver: Using SIDE hit_rate {spread_hit_rate:.3f} for ML -> {theover_prob_ml:.3f}")
+                                if theover_line_val is not None and theover_pick_team:
+                                    try:
+                                        # Treat as spread points (e.g. -5.5)
+                                        # Use logistic function to estimate win prob from line
+                                        # Assuming standard -110 odds baseline (52.4%) + line advantage
+                                        # Simplified model: 0.524 + (line * -0.02) ? No, that depends on direction.
+
+                                        # --- SPREAD POINTS CALCULATION ---
+                                        # Use the sigmoid logic from previous version
+                                        raw_prob = 1.0 / (1.0 + math.exp(-theover_line_val / 3.5))
+                                        adjusted_prob = raw_prob + 0.07
+                                        theover_prob_spread = max(0.10, min(0.95, adjusted_prob))
+                                        logger.info(f"TheOver Spread: {theover_line_val} -> {theover_prob_spread:.3f}")
+                                    except Exception:
+                                        theover_prob_spread = None
+                                else:
+                                    # No line available - cannot calculate probability
+                                    logger.info(f"TheOver Sides: No hit_rate or line available for calculation - excluding")
+                                    theover_prob_spread = None
+                                    # Only clear matched_side_row if it was SUPPOSED to be spread but failed
+                                    if not is_moneyline_side:
+                                        matched_side_row = None
+
+                    # --- FIX: Use SIDE data for ML picks when ML-specific data unavailable ---
+                    # If TheOver has a spread pick but no ML pick, derive ML probability from spread data
+                    # A spread pick for a team suggests confidence in their performance, which partially
+                    # informs moneyline probability (covering spread often correlates with winning outright)
+                    theover_side_used_for_ml = False
+                    if theover_prob_ml is None and theover_prob_spread is not None and matched_side_row:
+                        # Use the spread hit_rate as a weaker signal for ML
+                        # Apply a dampening factor since spread != moneyline
+                        # If hit_rate is 55% for spread, ML prob is closer to 50% but still favors that team
+                        spread_hit_rate = safe_float(matched_side_row.get("theover_hit_rate"))
+                        if spread_hit_rate and spread_hit_rate > 0:
+                            # Convert spread confidence to ML confidence
+                            # Formula: ML_prob = 0.50 + (spread_hit_rate - 0.50) * 0.7
+                            # This dampens the signal while preserving direction
+                            ml_from_spread = 0.50 + (spread_hit_rate - 0.50) * 0.7
+                            theover_prob_ml = clamp(ml_from_spread, 0.35, 0.65)
+                            theover_side_used_for_ml = True
+                            logger.info(f"TheOver: Using SIDE hit_rate {spread_hit_rate:.3f} for ML -> {theover_prob_ml:.3f}")
+
+                except Exception as e_theover:
+                    logger.error(f"TheOver matching logic failed for game {idx}: {e_theover}", exc_info=True)
+                    # Non-fatal error - continue without TheOver data
+                    matched_total_row = None
+                    matched_side_row = None
+                    theover_prob_total = None
+                    theover_prob_spread = None
+                    theover_prob_ml = None
+                    theover_side_used_for_ml = False
+                    theover_matched = False
+                    theover_matched_total = None
+                    theover_matched_side = None
                 # --- THEOVER MATCHING END ---
 
                 # 1) Define Weights - Using values from weights_config.py
@@ -10409,6 +10442,14 @@ with tab_master:
                     _ = match_team_name(g.get("home_team"), [str(m.get("title")).lower() for m in filtered_markets], threshold=60.0)
                 except Exception:
                     pass
+
+                # DIAGNOSTIC: Log before calling match_kalshi_market for target games
+                home_team_debug = g.get('home_team', 'Unknown')
+                away_team_debug = g.get('away_team', 'Unknown')
+                debug_targets = ["Drexel", "Georgia Southern", "Idaho", "New Hampshire", "SIU-Edwardsville", "Texas State", "Vermont", "Wagner", "IUPUI", "Stonehill"]
+                is_debug_target = any(t in home_team_debug or t in away_team_debug for t in debug_targets)
+                if is_debug_target:
+                    logger.info(f"🟢 Calling match_kalshi_market for target: {away_team_debug} @ {home_team_debug} with {len(filtered_markets)} filtered markets")
 
                 kalshi_matches, candidate_debug = match_kalshi_market(
                     g, filtered_markets, winner_reason_override
