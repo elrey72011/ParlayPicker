@@ -1311,6 +1311,11 @@ def _map_kalshi_prob_for_pick_impl(
     away_norm = TeamNameMatcher.normalize(away_team) if away_team else None
     pick_norm = TeamNameMatcher.normalize(pick_team) if pick_team else None
 
+    # Helper for robust matching (substring in either direction)
+    def _is_match(team, text):
+        if not team or not text: return False
+        return team in text or text in team
+
     # 1. Direct Pick Match (Strongest Signal)
     # If the "Yes" side explicitly matches the Pick Team, return Prob.
     # FIX: Handle "Team A vs Team B" titles to prevent matching BOTH teams via containment.
@@ -1329,14 +1334,14 @@ def _map_kalshi_prob_for_pick_impl(
             if parts and len(parts) >= 1:
                 left_side = parts[0]
                 # If pick is in the Left Side (Yes Side), return prob
-                if pick_norm in left_side:
+                if _is_match(pick_norm, left_side):
                     return prob
                 # If pick is in the Right Side (No Side), return 1 - prob
                 # This handles "Lakers vs Celtics" where Pick="Celtics"
-                if len(parts) >= 2 and pick_norm in parts[1]:
+                if len(parts) >= 2 and _is_match(pick_norm, parts[1]):
                     return 1.0 - prob
 
-        elif pick_norm in kalshi_yes_norm:
+        elif _is_match(pick_norm, kalshi_yes_norm):
             return prob
 
     # If "Yes" side matches the Opposing Team, return 1 - Prob.
@@ -1357,13 +1362,13 @@ def _map_kalshi_prob_for_pick_impl(
             if parts and len(parts) >= 1:
                 left_side = parts[0]
                 # If Opponent is in Left Side (Yes Side), then Pick is No Side -> 1 - prob
-                if opponent_norm in left_side:
+                if _is_match(opponent_norm, left_side):
                     return 1.0 - prob
                 # If Opponent is in Right Side (No Side), then Pick is Yes Side -> prob
-                if len(parts) >= 2 and opponent_norm in parts[1]:
+                if len(parts) >= 2 and _is_match(opponent_norm, parts[1]):
                     return prob
 
-        elif opponent_norm in kalshi_yes_norm:
+        elif _is_match(opponent_norm, kalshi_yes_norm):
             return 1.0 - prob
 
     # 2. Side Inference (Home/Away/Over/Under)
@@ -1376,9 +1381,9 @@ def _map_kalshi_prob_for_pick_impl(
         kalshi_yes_is_home = True # Over -> Home in spread
     elif "UNDER" in kalshi_yes_norm:
         kalshi_yes_is_home = False
-    elif home_norm and home_norm in kalshi_yes_norm:
+    elif home_norm and _is_match(home_norm, kalshi_yes_norm):
         kalshi_yes_is_home = True
-    elif away_norm and away_norm in kalshi_yes_norm:
+    elif away_norm and _is_match(away_norm, kalshi_yes_norm):
         kalshi_yes_is_home = False
 
     # Fallback: If we couldn't determine, assume Home if default (legacy behavior)
@@ -1418,10 +1423,20 @@ def map_kalshi_prob_for_total(
     yes_side = str(kalshi_yes_side or "").lower()
     pick_side = str(pick_side).lower()
 
-    if "over" in yes_side:
+    # Issue #3 Fix: "Total Points" without direction usually implies OVER
+    # Check explicit Over/Under first
+    is_over = "over" in yes_side
+    is_under = "under" in yes_side
+
+    if not is_over and not is_under:
+        # Fallback: if it says "total points" or "total", assume OVER
+        if "total" in yes_side:
+            is_over = True
+
+    if is_over:
         if "over" in pick_side: return prob
         if "under" in pick_side: return 1.0 - prob
-    elif "under" in yes_side:
+    elif is_under:
         if "under" in pick_side: return prob
         if "over" in pick_side: return 1.0 - prob
 
@@ -1584,6 +1599,13 @@ def compute_final_probability(
                 kalshi_prob_yes, kalshi_side_yes, pick_side, pick_side, home_team, away_team,
                 spread_line=kalshi_data.get("spread_line") if kalshi_data else None  # NEW
             )
+
+    # Issue #4: Reject Low Confidence Kalshi matches
+    # If we found a match but it contradicts our pick (<50%) substantially,
+    # it might be a mapping error OR a strong disagreement.
+    # We log a detailed warning as requested.
+    if kalshi_prob_for_pick is not None and kalshi_prob_for_pick < 0.50:
+         logger.warning(f"⚠️ LOW CONFIDENCE MATCH: Pick={pick_side}, Kalshi={kalshi_side_yes}, Prob={kalshi_prob_for_pick:.3f} ❌ (Potential Inversion/Disagreement)")
 
     # Logging verification for P0 Bug (Blend Input Check)
     if kalshi_prob_yes is not None:
