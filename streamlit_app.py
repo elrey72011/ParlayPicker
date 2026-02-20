@@ -8063,7 +8063,20 @@ def match_kalshi_market(
                         return KalshiMatchResult(matched=False, reason=meta_reason, market_type=m_type)
                     else:
                         # Game matched, but this specific market type is missing
-                        return KalshiMatchResult(matched=False, reason="market_type_missing", market_type=m_type)
+                        # Step 2c: Infer market type availability from pick lines if needed
+                        # Ensure kalshi_available=True since game matched
+                        is_inferred = False
+                        if m_type == "SPREAD" and (has_valid_line(game.get("spread_pick_line")) or has_valid_line(game.get("spread_point"))):
+                            is_inferred = True
+                        elif m_type == "TOTAL" and (has_valid_line(game.get("total_pick_line")) or has_valid_line(game.get("total_point"))):
+                            is_inferred = True
+
+                        return KalshiMatchResult(
+                            matched=False,
+                            reason="market_type_missing",
+                            market_type=m_type,
+                            kalshi_available=True # Explicitly set True
+                        )
 
                 # ---------------------------------------------------------
                 # STEP 1: STRICT MARKET TYPE & TEAM FILTERING (Fix #1 & #3)

@@ -1987,6 +1987,12 @@ KALSHI_NCAAB_TEAM_CODES = {
     "Wagner Seahawks": "WAG",
     "Mercyhurst": "MERC",
     "Mercyhurst Lakers": "MERC",
+    "Merrimack": "MER",
+    "Merrimack Warriors": "MER",
+    "Purdue": "PUR",
+    "Purdue Boilermakers": "PUR",
+    "Indiana": "IND",
+    "Indiana Hoosiers": "IND",
 }
 
 def normalize_team_for_kalshi(team_name: str) -> str:
@@ -4789,6 +4795,15 @@ class KalshiIntegrator:
             date_tickers = [m.get("ticker") for m in kalshi_markets if game_date in m.get("ticker", "")][:5]
             if date_tickers:
                 logger.warning(f"      Sample tickers on {game_date}: {', '.join(date_tickers)}")
+
+            # GUARD RAIL LOGGING
+            logger.warning(
+                f"KALSHI NO_MATCH [{league}]: {away_team} @ {home_team} | "
+                f"reason={status_reason} | "
+                f"market_type=ALL | "
+                f"pool_size={len(kalshi_markets)} | "
+                f"tickers_sampled={[m.get('ticker') for m in kalshi_markets[:5]]}"
+            )
 
         # Inject Metadata for UI
         matched_markets["_meta"] = {
