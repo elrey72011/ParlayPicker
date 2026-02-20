@@ -11030,23 +11030,30 @@ with tab_master:
                             spread_offers, spread_pick_side_key, market_type="spread"
                         )
                         base_spread_prob = spread_market_prob if spread_market_prob is not None else spread_implied
-                        spread_prob_market_based, spread_prob_reason = market_based_prob(
-                            {
-                                "Market": "spread",
-                                "Implied_Prob": base_spread_prob,
-                                "Pick": spread_pick,
-                                "Home": home,
-                                "Away": away,
-                                "injuries_home_count": injuries_home_count,
-                                "injuries_away_count": injuries_away_count,
-                                "weather_summary": weather_summary,
-                                "spread_min": spread_min,
-                                "spread_max": spread_max,
-                            },
-                            market_override="spread",
-                            implied_prob_value=base_spread_prob,
-                            range_override=(spread_min, spread_max),
-                        )
+                        # Fix Issue 1: Override market_based calculation for direct KXNCAAMBSPREAD matches
+                        # When a direct SPREAD ticker is matched, the baseline should be 0.5 (neutral)
+                        # instead of estimated from book odds which triggers misleading warnings.
+                        if kalshi_matched_game and "KXNCAAMBSPREAD" in str(kalshi_event_ticker or "") and kalshi_match_reason == "matched_new_logic_spread":
+                            spread_prob_market_based = 0.5
+                            spread_prob_reason = "kalshi_spread_ticker_neutral"
+                        else:
+                            spread_prob_market_based, spread_prob_reason = market_based_prob(
+                                {
+                                    "Market": "spread",
+                                    "Implied_Prob": base_spread_prob,
+                                    "Pick": spread_pick,
+                                    "Home": home,
+                                    "Away": away,
+                                    "injuries_home_count": injuries_home_count,
+                                    "injuries_away_count": injuries_away_count,
+                                    "weather_summary": weather_summary,
+                                    "spread_min": spread_min,
+                                    "spread_max": spread_max,
+                                },
+                                market_override="spread",
+                                implied_prob_value=base_spread_prob,
+                                range_override=(spread_min, spread_max),
+                            )
                         if spread_prob_method == "missing" and spread_implied is not None:
                             spread_prob_method = "implied"
                         if spread_prob_market_based is None:
@@ -14467,6 +14474,14 @@ with tab_master:
         # This MUST run before Gemini so rationale matches the flipped pick
         logger.info("Applying Best Pick Metrics (Flip & Confidence) before Gemini...")
         df = calculate_best_pick_metrics(df)
+
+        # Fix Issue 2: Ensure Eligible_Top_Picks matches Pick_Confidence
+        # If Pick_Confidence is HIGH or MEDIUM, the pick should be eligible for Top Picks,
+        # overriding any previous internal filtering (e.g. low total confidence).
+        if "Eligible_Top_Picks" in df.columns and "Pick_Confidence" in df.columns:
+            mask_eligible = df["Pick_Confidence"].isin(["HIGH", "MEDIUM"])
+            if mask_eligible.any():
+                df.loc[mask_eligible, "Eligible_Top_Picks"] = True
 
         # v97 FIX: Sync final_probability and Best Overall columns with calculate_best_pick_metrics output.
         # calculate_best_pick_metrics outputs 'final_prob', 'best_pick', 'best_pick_type' which use
