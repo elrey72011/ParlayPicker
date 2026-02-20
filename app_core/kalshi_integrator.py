@@ -1292,6 +1292,8 @@ NCAAB_TEAM_CODE_MAP: Dict[str, str] = {
     "TULANE": "TUL", "USF": "USF", "UCF": "UCF", "ECU": "ECU", "TULSA": "TUL",
     "DAYTON": "DAY", "VCU": "VCU", "VCU RAMS": "VCU",
     "SAINT LOUIS": "SLU", "SAINT LOUIS BILLIKENS": "SLU", "ST. LOUIS": "SLU", "SLU": "SLU",
+    "MERRIMACK": "MER", "MERRIMACK WARRIORS": "MER",
+    "SIENA": "SIE", "SIENA SAINTS": "SIE",
     "ST. BONAVENTURE": "SBU",
     "RICHMOND": "RIC", "DAVIDSON": "DAV", "LOYOLA CHICAGO": "LOY", "SAN DIEGO STATE": "SDS",
     "SAN DIEGO ST": "SDS", "NEVADA": "NEV", "UTAH STATE": "USU", "BOISE STATE UNIVERSITY": "BSU", "BOISE STATE": "BSU",
@@ -5140,13 +5142,19 @@ class KalshiIntegrator:
 
         # --- DEBUG SEARCH FOR MISSING TEAMS (Issue #3) ---
         if logger.isEnabledFor(logging.INFO):
-            debug_codes = ['KENN', 'MOST', 'MIZZ', 'MIST']
+            debug_codes = ['KENN', 'MOST', 'MIZZ', 'MIST', 'MER', 'SIE', 'MERR', 'SIEN', 'MERSI', 'SIEMER']
             for code in debug_codes:
                 found = [m for m in all_markets if code in str(m.get('event_ticker', ''))]
                 logger.info(f"🔍 Markets with '{code}': {len(found)}")
                 if found:
                     for m in found[:5]:
                          logger.info(f"     {m.get('event_ticker')}")
+
+            # Temporary one-time debug log for NCAAB pool probes (Step 2)
+            if league_key == "NCAAB":
+                for probe in ["MER", "MERR", "SIE", "SIEN", "MERSI", "SIEMER"]:
+                    count = sum(1 for m in all_markets if probe in str(m.get("ticker", "")))
+                    logger.info(f"🔍 NCAAB pool probe '{probe}': {count} markets")
 
         # --- DIAGNOSTIC: dump all unique team blocks from NCAAB tickers ---
         # Only run if DEBUG logging is enabled (performance optimization)
