@@ -154,21 +154,30 @@ class TestKalshiMatchingV2(unittest.TestCase):
 
     def test_market_type_validation(self):
         """Verify market type validation (Fix 1)"""
+        # Note: validate_market_type_match returns (bool, str) tuple
+
         # Test 1: SPREAD matching SPREAD
-        self.assertTrue(validate_market_type_match("Boston wins by 5+ points", "SPREAD"))
-        # self.assertTrue(validate_market_type_match("Boston -5.5", "SPREAD")) # Removed: Kalshi uses 'wins by' or 'spread'
-        self.assertTrue(validate_market_type_match("Winner of Boston vs GSW", "SPREAD") is False) # Winner is not spread
+        is_valid, _ = validate_market_type_match("Boston wins by 5+ points", "SPREAD")
+        self.assertTrue(is_valid)
+
+        is_valid, _ = validate_market_type_match("Winner of Boston vs GSW", "SPREAD")
+        self.assertFalse(is_valid) # Winner is not spread
 
         # Test 2: TOTAL matching TOTAL
-        self.assertTrue(validate_market_type_match("Total Points > 220.5", "TOTAL"))
-        self.assertTrue(validate_market_type_match("Over 220.5", "TOTAL"))
+        is_valid, _ = validate_market_type_match("Total Points > 220.5", "TOTAL")
+        self.assertTrue(is_valid)
+
+        is_valid, _ = validate_market_type_match("Over 220.5", "TOTAL")
+        self.assertTrue(is_valid)
 
         # Test 3: CROSS MATCH FAILURE (Critical Fix)
         # SPREAD text should NOT match TOTAL request
-        self.assertFalse(validate_market_type_match("Boston wins by 5+ points", "TOTAL"))
+        is_valid, _ = validate_market_type_match("Boston wins by 5+ points", "TOTAL")
+        self.assertFalse(is_valid)
 
         # TOTAL text should NOT match SPREAD request
-        self.assertFalse(validate_market_type_match("Total Points > 220.5", "SPREAD"))
+        is_valid, _ = validate_market_type_match("Total Points > 220.5", "SPREAD")
+        self.assertFalse(is_valid)
 
 if __name__ == '__main__':
     unittest.main()
