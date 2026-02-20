@@ -1759,7 +1759,8 @@ def compute_final_probability(
     # Issue #4: Reject Low Confidence Kalshi matches
     # If we found a match but it contradicts our pick (<50%), it means the Kalshi signal is AGAINST us.
     # We must REJECT this match to avoid betting against our own signal.
-    if kalshi_prob_for_pick is not None and kalshi_prob_for_pick < 0.50:
+    # v106 FIX: Relax rejection to allow 0.48-0.50 (neutral-ish) to pass through for explicit "Neutral" labeling
+    if kalshi_prob_for_pick is not None and kalshi_prob_for_pick < 0.48:
          logger.warning(f"⚠️ REJECTING LOW CONFIDENCE MATCH: Pick={pick_side}, Kalshi={kalshi_side_yes}, Prob={kalshi_prob_for_pick:.3f} ❌")
          warnings.append(f"low_confidence_rejected({kalshi_prob_for_pick:.3f})")
          kalshi_prob_for_pick = None # Reject the match
@@ -1814,10 +1815,9 @@ def compute_final_probability(
         # Now we trust map_kalshi_prob_for_pick() and only reject on extreme delta.
         kalshi_validated = True
 
-        # User Requirement: Reject neutral Kalshi data (0.50 +/- 0.005)
-        # Tightened from 0.02 to 0.005 to only reject truly neutral values
-        # 49.5% is a valid 1% edge signal, not neutral
-        if abs(kalshi_prob_for_pick - 0.5) < 0.005:
+        # User Requirement: Reject neutral Kalshi data (0.50 +/- 0.02)
+        # Expanded to cover 0.48-0.52 range per new spec (v106)
+        if abs(kalshi_prob_for_pick - 0.5) < 0.02:
             kalshi_validated = False
             warnings.append("kalshi_rejected_neutral")
             logger.info(f"Rejecting neutral Kalshi data for {pick_side} (prob={kalshi_prob_for_pick:.3f})")
@@ -1959,9 +1959,24 @@ def compute_final_probability(
 
     final_prob = clamp(final_prob_val, 0.0, 1.0)
 
+    # Check for neutral Kalshi override
+    local_match_reason = str(kalshi_data.get("match_reason", "") if kalshi_data else "")
+    # Auto-detect neutral if not already flagged (covering generic cases)
+    if kalshi_prob_for_pick is not None and 0.48 <= kalshi_prob_for_pick <= 0.52:
+         if "matched_but_neutral" not in local_match_reason:
+             local_match_reason += ";matched_but_neutral"
+
+    is_kalshi_neutral = "matched_but_neutral" in local_match_reason
+
     # v98 FIX: Determine driver based on which source has highest effective weight
     if W_KALSHI > 0 and W_KALSHI >= max(W_MARKET, W_MODEL, W_THEOVER, W_SENTIMENT):
         driver = "kalshi"
+    elif is_kalshi_neutral and W_KALSHI == 0.0:
+        # Special handling for neutral Kalshi matches (zero weight)
+        if model_prob is not None:
+            driver = "Market+ML (Kalshi Neutral)"
+        else:
+            driver = "market_only"
     elif W_MARKET > 0 or W_MODEL > 0:
         driver = "Market+ML"
     else:
