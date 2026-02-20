@@ -2261,6 +2261,9 @@ NCAAB_CODE_ALIASES: Dict[str, str] = {
     "IND": "IND",
     "PUR": "PUR",
     "SLU": "SLU",
+    # Feb 20 2026 - Merrimack/Siena Fixes
+    "MERR": "MER",      # Merrimack (Kalshi likely uses MERR, we use MER)
+    "SIEN": "SIE",      # Siena (Kalshi likely uses SIEN, we use SIE)
 }
 
 NCAAF_CODE_ALIASES: Dict[str, str] = {
