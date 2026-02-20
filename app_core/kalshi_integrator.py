@@ -212,29 +212,23 @@ def get_ncaa_code(team_name: str) -> List[str]:
 
     return []
 
-def calculate_team_match_score(ticker_code: str, team_variants: List[str], team_name_for_logging: str = "") -> Tuple[float, Optional[str]]:
+def find_all_team_matches(ticker_code: str, team_variants: List[str], team_name_for_logging: str = "") -> List[Tuple[float, str, str]]:
     """
-    Calculate match score with strict hierarchy:
-    1. Full 4-char codes at boundaries = 100 points
-    2. Full 3-char codes at boundaries = 90 points
-    3. Partial matches = 50 points
-    4. Common words = REJECT (0 points)
+    Find all matches for a team in a ticker code.
+    Returns list of (score, variant, match_type) sorted by score descending.
     """
     COMMON_WORDS = {'ST', 'STATE', 'NORTH', 'SOUTH', 'EAST', 'WEST',
                     'CAROLINA', 'CAR', 'CENTRAL', 'TECH'}
 
     # Special logic: Filter 'UNC' unless the team is explicitly North Carolina
-    # This prevents "UNC Greensboro" matching "UNC Asheville" via "UNC"
     if "NORTH CAROLINA" not in team_name_for_logging.upper():
         COMMON_WORDS.add('UNC')
 
     if not ticker_code:
-        return 0.0, None
+        return []
 
     ticker_code_upper = ticker_code.upper()
-    best_score = 0.0
-    best_variant = None
-    match_type = None
+    matches = []
 
     for variant in team_variants:
         variant_upper = variant.upper()
@@ -248,6 +242,8 @@ def calculate_team_match_score(ticker_code: str, team_variants: List[str], team_
             continue
 
         # Calculate score based on match quality
+        score = 0.0
+        match_type = 'unknown'
 
         # PERFECT: Exact Match (Any Length > 1)
         if ticker_code_upper == variant_upper:
@@ -288,12 +284,29 @@ def calculate_team_match_score(ticker_code: str, team_variants: List[str], team_
             score = 60.0 * coverage
             match_type = 'partial_name'
 
-        if score > best_score:
-            best_score = score
-            best_variant = variant
+        if score > 0:
+            matches.append((score, variant, match_type))
+
+    # Sort matches: higher score first, then longer variant length (prefer longer match)
+    matches.sort(key=lambda x: (x[0], len(x[1])), reverse=True)
+    return matches
+
+def calculate_team_match_score(ticker_code: str, team_variants: List[str], team_name_for_logging: str = "") -> Tuple[float, Optional[str]]:
+    """
+    Calculate match score with strict hierarchy:
+    1. Full 4-char codes at boundaries = 100 points
+    2. Full 3-char codes at boundaries = 90 points
+    3. Partial matches = 50 points
+    4. Common words = REJECT (0 points)
+    """
+    matches = find_all_team_matches(ticker_code, team_variants, team_name_for_logging)
+    if not matches:
+        return 0.0, None
+
+    best_score, best_variant, match_type = matches[0]
 
     if best_score > 0 and logger.isEnabledFor(logging.DEBUG):
-        logger.debug(f"    Team '{team_name_for_logging}': '{best_variant}' in '{ticker_code_upper}' = {best_score:.1f} ({match_type})")
+        logger.debug(f"    Team '{team_name_for_logging}': '{best_variant}' in '{ticker_code.upper()}' = {best_score:.1f} ({match_type})")
 
     return best_score, best_variant
 
@@ -309,42 +322,78 @@ def calculate_game_match_score(ticker: str, away_variants: List[str], home_varia
 
     team_code = match.group(1)
 
-    # Score both teams
-    away_score, away_match = calculate_team_match_score(team_code, away_variants, away_team_name)
-    home_score, home_match = calculate_team_match_score(team_code, home_variants, home_team_name)
-
     # CRITICAL: Reject if either team scores too low
     MIN_REQUIRED_SCORE = 70.0  # At least a 3-char boundary match
 
-    if away_score < MIN_REQUIRED_SCORE or home_score < MIN_REQUIRED_SCORE:
-        # logger.debug(f"  ❌ Rejected: away={away_score:.1f}, home={home_score:.1f} (need {MIN_REQUIRED_SCORE}+)")
-        return 0.0, {'away_score': away_score, 'home_score': home_score, 'reason': 'min_score_requirement'}
+    # Get all potential matches for both teams
+    away_matches = find_all_team_matches(team_code, away_variants, away_team_name)
+    home_matches = find_all_team_matches(team_code, home_variants, home_team_name)
 
-    # CRITICAL: Both teams must match different parts of the code
-    if away_match and home_match:
-        # Check for overlap
-        away_pos = team_code.find(away_match)
-        home_pos = team_code.find(home_match)
+    # Filter by threshold early to reduce pairs
+    away_matches = [m for m in away_matches if m[0] >= MIN_REQUIRED_SCORE]
+    home_matches = [m for m in home_matches if m[0] >= MIN_REQUIRED_SCORE]
 
-        # If they start at the same position, it's definitely an overlap
-        # Or if one is inside the other
+    if not away_matches or not home_matches:
+        # Construct best effort scores for logging/debugging
+        best_away = away_matches[0][0] if away_matches else 0.0
+        best_home = home_matches[0][0] if home_matches else 0.0
+        return 0.0, {'away_score': best_away, 'home_score': best_home, 'reason': 'min_score_requirement'}
+
+    # Generate candidate pairs and sort by combined score
+    pairs = []
+    for a_score, a_match, _ in away_matches:
+        for h_score, h_match, _ in home_matches:
+            # Combined score heuristic
+            min_s = min(a_score, h_score)
+            avg_s = (a_score + h_score) / 2.0
+            final_s = (min_s * 0.7) + (avg_s * 0.3)
+            pairs.append({
+                'away_match': a_match, 'away_score': a_score,
+                'home_match': h_match, 'home_score': h_score,
+                'final_score': final_s
+            })
+
+    # Sort descending by final score
+    pairs.sort(key=lambda x: x['final_score'], reverse=True)
+
+    # Find first non-overlapping pair
+    best_pair = None
+    for p in pairs:
+        # Check overlap
+        # Note: .find() returns first occurrence. This assumes codes appear once or order doesn't matter much if consistent.
+        away_pos = team_code.find(p['away_match'])
+        home_pos = team_code.find(p['home_match'])
+
+        # Overlap Check 1: Start Position
         if away_pos == home_pos:
-            logger.warning(f"  ❌ REJECTED: Both teams matched same position in {ticker}")
-            return 0.0, {'reason': 'duplicate_match'}
+            continue
 
-    # Final score emphasizes MINIMUM (both must match well)
-    min_score = min(away_score, home_score)
-    avg_score = (away_score + home_score) / 2.0
-    final_score = (min_score * 0.7) + (avg_score * 0.3)
+        # Overlap Check 2: Range Intersection
+        # If one code is inside another (e.g. "GEO" inside "GEOR"), they overlap
+        a_start, a_end = away_pos, away_pos + len(p['away_match'])
+        h_start, h_end = home_pos, home_pos + len(p['home_match'])
 
-    return final_score, {
-        'team_code': team_code,
-        'away_score': away_score,
-        'away_match': away_match,
-        'home_score': home_score,
-        'home_match': home_match,
-        'final_score': final_score
-    }
+        if max(a_start, h_start) < min(a_end, h_end):
+            # Intersection detected
+            continue
+
+        # Found valid pair
+        best_pair = p
+        break
+
+    if best_pair:
+        return best_pair['final_score'], {
+            'team_code': team_code,
+            'away_score': best_pair['away_score'],
+            'away_match': best_pair['away_match'],
+            'home_score': best_pair['home_score'],
+            'home_match': best_pair['home_match'],
+            'final_score': best_pair['final_score']
+        }
+
+    # If all pairs overlapped
+    logger.warning(f"  ❌ REJECTED: All {len(pairs)} candidate pairs overlapped in {ticker}")
+    return 0.0, {'reason': 'duplicate_match_overlap'}
 
 class KalshiAPIError(Exception):
     """Base error for Kalshi API issues."""
@@ -1696,6 +1745,7 @@ KALSHI_NCAAB_TEAM_CODES = {
     "Siena Saints": "SIE",
     "South Carolina St.": "SCUS",
     "South Florida": "USF",
+    "Southern Utah": "SUU",
     "St. Bonaventure": "SBON",
     "St. John's": "SJU",
     "Syracuse": "SYR",
@@ -1773,6 +1823,7 @@ KALSHI_NCAAB_TEAM_CODES = {
     "UAB": "UAB",
     "UTSA": "UTSA",
     # Feb 15, 2026 Game Overrides
+    "IUPUI": "IUPUI",
     "IUPUI Jaguars": "IUIN",
     "Fort Wayne Mastodons": "PFW",
     "Illinois St Redbirds": "ILST",
@@ -1801,7 +1852,8 @@ KALSHI_NCAAB_TEAM_CODES = {
     "SIU-Edwardsville": "SIUE",
     "SIU Edwardsville": "SIUE",
     "Western Illinois": "WIU",
-    "Tarleton State": "TAR",
+    "Tarleton State": "TARL",
+    "Tarleton St": "TARL",
     "Utah Tech": "UTT",
     "North Carolina A&T": "NCAT",
     "NC A&T": "NCAT",
@@ -1847,7 +1899,8 @@ KALSHI_NCAAB_TEAM_CODES = {
     "UMBC": "UMBC",
     "Appalachian State": "APP",
     "App State": "APP",
-    "Wright State": "WSU",
+    "Wright State": "WRIT",
+    "Wright St": "WRIT",
     "High Point": "HPU",
     "Northeastern": "NEU",
     "Mercyhurst": "MERC",
@@ -2890,7 +2943,7 @@ def _match_via_events(
         # Phase 1 Loop
         for candidate in events:
             # FIX 1: Robust Ticker Extraction (Support event_ticker if ticker is missing)
-            ticker = candidate.get("ticker") or candidate.get("event_ticker") or candidate.get("eventticker") or ""
+            ticker = candidate.get("event_ticker") or candidate.get("ticker") or candidate.get("eventticker") or ""
 
             # Date Check
             if not _check_date_tolerance(ticker, game_dt_utc, league):
@@ -2945,7 +2998,7 @@ def _match_via_events(
             # CRITICAL: Verify this is the correct league before processing markets
             # This prevents NCAAB-specific logic from corrupting NBA/NFL matches
             # FIX 1: Robust extraction again
-            event_ticker = best_event.get("ticker") or best_event.get("event_ticker") or best_event.get("eventticker") or ""
+            event_ticker = best_event.get("event_ticker") or best_event.get("ticker") or best_event.get("eventticker") or ""
             if league == "NCAAB" and "NCAAMB" not in event_ticker.upper():
                 logger.warning(f"   ❌ League mismatch: Expected NCAAB but event ticker is {event_ticker}")
                 return None
@@ -4375,6 +4428,7 @@ class KalshiIntegrator:
                 logger.info(f"🔍 KALSHI /events RAW RESPONSE SAMPLE:")
                 logger.info(f"   Keys in first event: {list(sample_event.keys())}")
                 logger.info(f"   Ticker value: {sample_event.get('ticker')}")
+                logger.info(f"   Event Ticker value: {sample_event.get('event_ticker')}")
                 logger.info(f"   Ticker type: {type(sample_event.get('ticker'))}")
 
                 # Check for nested ticker
@@ -4386,19 +4440,22 @@ class KalshiIntegrator:
             valid_events = []
             invalid_count = 0
             for evt in events:
-                # Robust ticker extraction: check ticker, event_ticker, eventticker
-                ticker = evt.get("ticker") or evt.get("event_ticker") or evt.get("eventticker")
+                # Robust ticker extraction: Prioritize event_ticker as per API v2 spec
+                ticker = evt.get("event_ticker") or evt.get("ticker") or evt.get("eventticker")
 
                 # Check if ticker is in nested 'event' object (API v2 structure)
                 if not ticker and isinstance(evt.get("event"), dict):
                     nested = evt.get("event")
-                    ticker = nested.get("ticker") or nested.get("event_ticker") or nested.get("eventticker")
+                    ticker = nested.get("event_ticker") or nested.get("ticker") or nested.get("eventticker")
                     if ticker:
                         # Flatten: Copy ticker to top level
                         evt["ticker"] = ticker
 
                 # Validate ticker
                 if ticker and ticker != "None" and isinstance(ticker, str) and len(ticker) > 5:
+                    # FIX: Ensure 'ticker' key is ALWAYS populated in the event object
+                    # This ensures downstream code that expects 'ticker' key works correctly
+                    evt["ticker"] = ticker
                     valid_events.append(evt)
                 else:
                     invalid_count += 1
