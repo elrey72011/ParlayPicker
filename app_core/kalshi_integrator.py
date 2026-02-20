@@ -322,28 +322,53 @@ def calculate_game_match_score(ticker: str, away_variants: List[str], home_varia
 
     # Find first non-overlapping pair
     best_pair = None
-    for p in pairs:
-        # Check overlap
-        # Note: .find() returns first occurrence. This assumes codes appear once or order doesn't matter much if consistent.
+
+    # Overlap check only applies when we have multiple candidates competing for the same game.
+    # If there's only 1 candidate, skip overlap rejection and treat as single-match case.
+    if len(pairs) == 1:
+        p = pairs[0]
+        best_pair = p
+        logger.info(f"  Single candidate pair found for {ticker}: {p['away_match']}/{p['home_match']} (Score: {p['final_score']:.1f}) - skipping overlap rejection")
+
+        # Optional: Check if it actually overlaps for logging purposes (diagnostic)
         away_pos = team_code.find(p['away_match'])
         home_pos = team_code.find(p['home_match'])
+        a_end = away_pos + len(p['away_match'])
+        h_end = home_pos + len(p['home_match'])
 
-        # Overlap Check 1: Start Position
+        is_overlapping = False
         if away_pos == home_pos:
-            continue
+            is_overlapping = True
+        elif max(away_pos, home_pos) < min(a_end, h_end):
+            is_overlapping = True
 
-        # Overlap Check 2: Range Intersection
-        # If one code is inside another (e.g. "GEO" inside "GEOR"), they overlap
-        a_start, a_end = away_pos, away_pos + len(p['away_match'])
-        h_start, h_end = home_pos, home_pos + len(p['home_match'])
+        if is_overlapping:
+            logger.warning(f"  ⚠️ CONFLICT: Single candidate pair {p['away_match']}/{p['home_match']} has internal overlap in {ticker} but accepted as only option.")
 
-        if max(a_start, h_start) < min(a_end, h_end):
-            # Intersection detected
-            continue
+    else:
+        # Standard overlap check for multiple candidates
+        for p in pairs:
+            # Check overlap
+            # Note: .find() returns first occurrence. This assumes codes appear once or order doesn't matter much if consistent.
+            away_pos = team_code.find(p['away_match'])
+            home_pos = team_code.find(p['home_match'])
 
-        # Found valid pair
-        best_pair = p
-        break
+            # Overlap Check 1: Start Position
+            if away_pos == home_pos:
+                continue
+
+            # Overlap Check 2: Range Intersection
+            # If one code is inside another (e.g. "GEO" inside "GEOR"), they overlap
+            a_start, a_end = away_pos, away_pos + len(p['away_match'])
+            h_start, h_end = home_pos, home_pos + len(p['home_match'])
+
+            if max(a_start, h_start) < min(a_end, h_end):
+                # Intersection detected
+                continue
+
+            # Found valid pair
+            best_pair = p
+            break
 
     if best_pair:
         return best_pair['final_score'], {
