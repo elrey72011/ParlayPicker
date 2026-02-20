@@ -176,7 +176,7 @@ def get_ncaa_code(team_name: str) -> List[str]:
 
     return []
 
-def find_all_team_matches(ticker_code: str, team_variants: List[str], team_name_for_logging: str = "") -> List[Tuple[float, str, str]]:
+def find_all_team_matches(ticker_code: str, team_variants: List[str], team_name_for_logging: str = "", league: Optional[str] = None) -> List[Tuple[float, str, str]]:
     """
     Find all matches for a team in a ticker code.
     Returns list of (score, variant, match_type) sorted by score descending.
@@ -235,18 +235,25 @@ def find_all_team_matches(ticker_code: str, team_variants: List[str], team_name_
 
         # OK: 2-char code (less reliable but valid for schools like CP, OU, UK)
         elif len(variant_upper) == 2:
-            if ticker_code_upper.startswith(variant_upper) or ticker_code_upper.endswith(variant_upper):
-                score = 90.0
-                match_type = '2char_boundary'
+            # For NCAAB, 2-char codes are too ambiguous — reject boundary matches
+            # EXCEPTION: Allow known short codes that are explicit in KALSHI_NCAAB_TEAM_CODES values
+            KNOWN_SHORT_NCAAB_CODES = {"GB", "IW", "HC", "BC", "GW", "CP"}
+            if league == "NCAAB" and variant_upper not in KNOWN_SHORT_NCAAB_CODES:
+                score = 0.0
+                match_type = '2char_rejected_ncaab'
             else:
-                # STRICTER: Reject 2-char matches in the middle to prevent "GR" matching "GRAMBLING"
-                # Unless it's a very short ticker (e.g. 4-5 chars total) where boundary is ambiguous
-                if len(ticker_code_upper) <= 5:
-                    score = 60.0
-                    match_type = '2char_middle_short_ticker'
+                if ticker_code_upper.startswith(variant_upper) or ticker_code_upper.endswith(variant_upper):
+                    score = 90.0
+                    match_type = '2char_boundary'
                 else:
-                    score = 0.0
-                    match_type = '2char_middle_rejected'
+                    # STRICTER: Reject 2-char matches in the middle to prevent "GR" matching "GRAMBLING"
+                    # Unless it's a very short ticker (e.g. 4-5 chars total) where boundary is ambiguous
+                    if len(ticker_code_upper) <= 5:
+                        score = 60.0
+                        match_type = '2char_middle_short_ticker'
+                    else:
+                        score = 0.0
+                        match_type = '2char_middle_rejected'
 
         # WEAK: Long names or single chars
         else:
@@ -261,7 +268,7 @@ def find_all_team_matches(ticker_code: str, team_variants: List[str], team_name_
     matches.sort(key=lambda x: (x[0], len(x[1])), reverse=True)
     return matches
 
-def calculate_team_match_score(ticker_code: str, team_variants: List[str], team_name_for_logging: str = "") -> Tuple[float, Optional[str]]:
+def calculate_team_match_score(ticker_code: str, team_variants: List[str], team_name_for_logging: str = "", league: Optional[str] = None) -> Tuple[float, Optional[str]]:
     """
     Calculate match score with strict hierarchy:
     1. Full 4-char codes at boundaries = 100 points
@@ -269,7 +276,7 @@ def calculate_team_match_score(ticker_code: str, team_variants: List[str], team_
     3. Partial matches = 50 points
     4. Common words = REJECT (0 points)
     """
-    matches = find_all_team_matches(ticker_code, team_variants, team_name_for_logging)
+    matches = find_all_team_matches(ticker_code, team_variants, team_name_for_logging, league=league)
     if not matches:
         return 0.0, None
 
@@ -280,7 +287,7 @@ def calculate_team_match_score(ticker_code: str, team_variants: List[str], team_
 
     return best_score, best_variant
 
-def calculate_game_match_score(ticker: str, away_variants: List[str], home_variants: List[str], away_team_name: str = "", home_team_name: str = "") -> Tuple[float, Dict[str, Any]]:
+def calculate_game_match_score(ticker: str, away_variants: List[str], home_variants: List[str], away_team_name: str = "", home_team_name: str = "", league: Optional[str] = None) -> Tuple[float, Dict[str, Any]]:
     """
     Match a game to a ticker with detailed scoring
     Replaces older logic with strict min_score check
@@ -296,8 +303,8 @@ def calculate_game_match_score(ticker: str, away_variants: List[str], home_varia
     MIN_REQUIRED_SCORE = 70.0  # At least a 3-char boundary match
 
     # Get all potential matches for both teams
-    away_matches = find_all_team_matches(team_code, away_variants, away_team_name)
-    home_matches = find_all_team_matches(team_code, home_variants, home_team_name)
+    away_matches = find_all_team_matches(team_code, away_variants, away_team_name, league=league)
+    home_matches = find_all_team_matches(team_code, home_variants, home_team_name, league=league)
 
     # Filter by threshold early to reduce pairs
     away_matches = [m for m in away_matches if m[0] >= MIN_REQUIRED_SCORE]
@@ -1991,9 +1998,10 @@ KALSHI_NCAAB_TEAM_CODES = {
     "Wagner Seahawks": "WAG",
     "Mercyhurst": "MERC",
     "Mercyhurst Lakers": "MERC",
-    "Merrimack": "MER",
-    "Merrimack Warriors": "MER",
-    "MERRIMACK WARRIORS": "MER", # Explicit
+    "Merrimack": "MRMK",
+    "Merrimack Warriors": "MRMK",
+    "MERRIMACK": "MRMK",
+    "MERRIMACK WARRIORS": "MRMK", # Explicit
     "Purdue": "PUR",
     "Purdue Boilermakers": "PUR",
     "PURDUE": "PUR",
@@ -2014,8 +2022,8 @@ KALSHI_NCAAB_TEAM_CODES = {
     "Green Bay Phoenix": "GB",
     "Oakland": "OAK",
     "Oakland Golden Grizzlies": "OAK",
-    "Merrimack": "MER",
-    "Merrimack Warriors": "MER",
+    "Merrimack": "MRMK",
+    "Merrimack Warriors": "MRMK",
     "Siena": "SIE",
     "Siena Saints": "SIE",
     "SIENA SAINTS": "SIE", # Explicit
@@ -2274,6 +2282,7 @@ NCAAB_CODE_ALIASES: Dict[str, str] = {
     # Feb 20 2026 - Merrimack/Siena Fixes
     "MERR": "MER",      # Merrimack (Kalshi likely uses MERR, we use MER)
     "SIEN": "SIE",      # Siena (Kalshi likely uses SIEN, we use SIE)
+    "MRMK": "MRMK",     # Merrimack identity
 }
 
 NCAAF_CODE_ALIASES: Dict[str, str] = {
@@ -3090,7 +3099,8 @@ def _match_via_events(
                 away_codes, # Variants
                 home_codes, # Variants
                 away_team_name=away_team_name,
-                home_team_name=home_team_name
+                home_team_name=home_team_name,
+                league=league
             )
 
             if score >= 90.0:
@@ -4817,7 +4827,7 @@ class KalshiIntegrator:
         # Helper to score a match between a ticker code and team variants
         def _score_team_match(ticker_code: str, team_variants: List[str]) -> float:
             # Use the new strict scoring function
-            s, _ = calculate_team_match_score(ticker_code, team_variants)
+            s, _ = calculate_team_match_score(ticker_code, team_variants, league=league)
             return s
 
         # Thresholds
