@@ -8357,26 +8357,37 @@ with st.sidebar.expander("TheOver.ai Data (Optional)", expanded=False):
 sport_options = [ALL_SPORTS_LABEL] + list(SPORT_KEYS.keys())
 default_sports = st.session_state.get("selected_sports") or [st.session_state.get("league", "NBA")]
 valid_defaults = [s for s in default_sports if s in sport_options]
+
+def update_sports():
+    """Callback to ensure immediate state update"""
+    pass  # State update happens automatically via key binding
+
 selected_sports = st.sidebar.multiselect(
     "Select sports",
     sport_options,
     default=valid_defaults or [ALL_SPORTS_LABEL],
+    key="selected_sports",
+    on_change=update_sports
 )
-if not selected_sports:
-    selected_sports = [ALL_SPORTS_LABEL]
-if ALL_SPORTS_LABEL in selected_sports:
-    selected_sports = [s for s in sport_options if s != ALL_SPORTS_LABEL]
-st.session_state["selected_sports"] = selected_sports
+
+# Handle empty selection
+if not st.session_state.selected_sports:
+    st.session_state.selected_sports = [ALL_SPORTS_LABEL]
+
+# Handle "All Sports" expansion
+if ALL_SPORTS_LABEL in st.session_state.selected_sports:
+    st.session_state.selected_sports = [s for s in sport_options if s != ALL_SPORTS_LABEL]
+
 # Safe access for league selection
 _all_keys = list(SPORT_KEYS.keys())
-league = selected_sports[0] if selected_sports else (_all_keys[0] if _all_keys else "NBA")
+league = st.session_state.selected_sports[0] if st.session_state.selected_sports else (_all_keys[0] if _all_keys else "NBA")
 
 # Detect if selection changed to invalidate cache
 last_selection = st.session_state.get("_last_selected_sports")
 
 # Sort both lists for reliable comparison (multiselect order can vary)
 _last_sorted = sorted(last_selection) if last_selection else []
-_curr_sorted = sorted(selected_sports) if selected_sports else []
+_curr_sorted = sorted(st.session_state.selected_sports) if st.session_state.selected_sports else []
 
 if _last_sorted != _curr_sorted:
     logger.info(f"Sport selection changed: {last_selection} -> {selected_sports}")
@@ -8419,7 +8430,7 @@ if st.sidebar.button("Load Games", width="stretch"):
     new_run_id = str(uuid.uuid4())[:8]
     st.session_state["run_id"] = new_run_id
     logger.info(f"🆕 Generated new run_id: {new_run_id}")
-    load_games(selected_sports or [league], run_id=new_run_id)
+    load_games(st.session_state.selected_sports or [league], run_id=new_run_id)
 
 # --- SYSTEM TOOLS (Debug Export) ---
 st.sidebar.markdown("---")
