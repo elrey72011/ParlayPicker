@@ -8018,9 +8018,27 @@ def match_kalshi_market(
                 res_spread.reason = "no_kalshi_spread_market_available_only_moneyline"
                 res_spread.kalshi_available = True # It IS available, just not for spread
 
+                # BUG 2 FIX: Accept winner match as fallback for Spread
+                res_spread.matched = True
+                res_spread.probability = res_winner.probability
+                res_spread.label = res_winner.label
+                res_spread.market_ticker = res_winner.market_ticker
+                if res_winner.debug:
+                    res_spread.debug = res_winner.debug.copy()
+                    res_spread.debug["fallback_from_winner"] = True
+
             if res_winner.matched and not res_total.matched and raw_matches.get("_meta", {}).get("status") == "matched":
                 res_total.reason = "no_kalshi_total_market_available_only_moneyline"
                 res_total.kalshi_available = True
+
+                # BUG 2 FIX: Accept winner match as fallback for Total
+                res_total.matched = True
+                res_total.probability = res_winner.probability
+                res_total.label = res_winner.label
+                res_total.market_ticker = res_winner.market_ticker
+                if res_winner.debug:
+                    res_total.debug = res_winner.debug.copy()
+                    res_total.debug["fallback_from_winner"] = True
 
         else:
             # Fallback to old logic for other leagues

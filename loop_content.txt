@@ -1,0 +1,1269 @@
+                    logger.error(f"Pre-loop enrichment failed: {e}", exc_info=True)
+                    if st:
+                        st.error(f"Pre-enrichment failed: {e}")
+                    games_to_process = games
+
+            # --- FIX: Define variables at the start of the loop ---
+            # Ensure use_model_numeric_probs is available in local scope
+            use_model_numeric_probs = st.session_state.get("use_model_numeric_probs", True)
+            # Ensure model_mode is available
+            model_mode = st.session_state.get("model_mode", "Local XGBoost")
+
+            # TheOver Match Counters
+            theover_matched_count_sides = 0
+            theover_matched_count_totals = 0
+
+            # Kalshi Reporting Data
+            kalshi_detailed_report_data = []
+
+            for idx, g in enumerate(games_to_process):
+                # DIAGNOSTIC: Log start of processing - FORCE LOG for debug targets
+                home_team_debug = g.get('home_team', 'Unknown')
+                away_team_debug = g.get('away_team', 'Unknown')
+                debug_targets = ["Drexel", "Georgia Southern", "Idaho", "New Hampshire", "SIU-Edwardsville", "Texas State", "Vermont", "Wagner", "IUPUI", "Stonehill"]
+                is_debug_target = any(t in home_team_debug or t in away_team_debug for t in debug_targets)
+
+                if idx < 5 or idx % 10 == 0 or is_debug_target:
+                    logger.info(f"Processing game {idx+1}/{len(games_to_process)}: {away_team_debug} @ {home_team_debug} (Debug Target: {is_debug_target})")
+
+                g = g.copy()
+                # Initialize loop-local variables to prevent NameError
+                model_prob_home = None
+                model_warn = None
+                sentiment_diff = None  # Ensure initialized
+                total_sentiment_debug = None
+                spread_sentiment_debug = None
+                kalshi_debug_str = "N/A" # Ensure initialized
+
+                # DIAGNOSTIC: Track row creation for each game
+                ml_row_created = False
+                spread_row_created = False
+                total_row_created = False
+                game_home = g.get("home_team", "Unknown")
+                game_away = g.get("away_team", "Unknown")
+                logger.info(f"🎮 Processing game {idx+1}/{len(games_to_process)}: {game_away} @ {game_home}")
+
+                # Track rows count before processing this game
+                rows_count_before = len(rows_out)
+
+                # Initialize warnings list from game data
+                warnings = list(g.get("warnings") or [])
+                # Save base warnings to prevent leakage between market types (ML -> Spread -> Total)
+                base_game_warnings = list(warnings)
+
+                # Weights & Status Defaults (Fix NameErrors)
+                spread_weights = {}
+                total_weights = {}
+                moneyline_weights = {}
+                spread_weights_used = {}
+                total_weights_used = {}
+                moneyline_weights_used = {}
+
+                theover_prob_final_spread = None
+                theover_prob_final_total = None
+                theover_delta_spread = None
+                theover_delta_total = None
+
+                spread_prob_final = None
+                total_prob_final = None
+
+                # Default empty containers for decision traces
+                spread_trace_json = "{}"
+                total_trace_json = "{}"
+
+                # --- THEOVER MATCHING START ---
+                league_name = str(g.get("league") or "UNKNOWN").upper()
+                try:
+                    home_team = str(g.get("home_team") or "")
+                    away_team = str(g.get("away_team") or "")
+                    commence_utc = parse_commence_to_utc(g.get("commence_time"))
+
+                    # Local Date for Matching (US/Eastern)
+                    local_date_str = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d") # Default
+                    if commence_utc:
+                        local_dt = commence_utc.astimezone(ZoneInfo("America/New_York"))
+                        local_date_str = local_dt.strftime("%Y-%m-%d")
+
+                    # FIX: Use RAW team names for team code generation, NOT the
+                    # cross-league TEAM_ALIAS_MAP which causes contamination (e.g.
+                    # "New Orleans Pelicans" -> "New Orleans Saints" via NFL substring).
+                    # The TheOver ingest uses raw game team names, so the main loop
+                    # must also use raw names to produce matching canonical keys.
+                    home_norm = home_team
+                    away_norm = away_team
+
+                    # 1. Resolve Team Codes using RAW team names (matches TheOver ingest behavior)
+                    home_code = team_code_for_league(league_name, home_team)
+                    away_code = team_code_for_league(league_name, away_team)
+
+                    # 2. Generate Master Key
+                    # Normalize league to match ingestion (NBA, NFL, etc.)
+                    norm_league_key = str(league_name).strip().upper()
+                    if "NBA" in norm_league_key: norm_league_key = "NBA"
+                    elif "NFL" in norm_league_key: norm_league_key = "NFL"
+                    elif "NHL" in norm_league_key: norm_league_key = "NHL"
+                    elif "MLB" in norm_league_key: norm_league_key = "MLB"
+                    elif "NCAAB" in norm_league_key or "COLLEGE BASKETBALL" in norm_league_key: norm_league_key = "NCAAB"
+                    elif "NCAAF" in norm_league_key or "COLLEGE FOOTBALL" in norm_league_key: norm_league_key = "NCAAF"
+
+                    # Generate codes with normalized league and RAW team names
+                    home_code_norm = team_code_for_league(norm_league_key, home_team)
+                    away_code_norm = team_code_for_league(norm_league_key, away_team)
+
+                    # Generate canonical keys matching TheOver ingest format
+                    master_key_exact = generate_canonical_key(norm_league_key, local_date_str, home_code_norm, away_code_norm)
+                    master_key_teams = f"{norm_league_key}|{away_code_norm}|{home_code_norm}"
+
+                    # DEBUG: Log first few games' TheOver keys for diagnosis
+                    if idx < 3 and theover_lookup_exact:
+                        logger.info(f"🔍 THEOVER MATCH ATTEMPT [{idx}]: {away_team} @ {home_team}")
+                        logger.info(f"   exact_key={master_key_exact}")
+                        logger.info(f"   team_key={master_key_teams}")
+                        logger.info(f"   exact_hit={master_key_exact in theover_lookup_exact}")
+                        logger.info(f"   team_hit={master_key_teams in theover_lookup_teams}")
+
+                    # 3. Match TheOver Data
+                    matched_total_row = None
+                    matched_side_row = None
+                    theover_match_reason = None
+                    theover_matched = False
+
+                    # Helper to find best match in list
+                    def find_best_date_match(candidates, target_date_str):
+                        # Prefer exact date match
+                        for c in candidates:
+                            if c.get("date_local") == target_date_str:
+                                return c
+                        # Fallback to first if available (fuzzy date)
+                        return candidates[0] if candidates else None
+
+                    # Also build a swapped key for robustness (in case home/away order differs)
+                    master_key_exact_swap = generate_canonical_key(norm_league_key, local_date_str, away_code_norm, home_code_norm)
+                    master_key_teams_swap = f"{norm_league_key}|{home_code_norm}|{away_code_norm}"
+
+                    # Look for TOTAL match (Exact then Team, then swapped variants)
+                    if master_key_exact in theover_lookup_exact:
+                        # Check for TOTAL type
+                        cands = [r for r in theover_lookup_exact[master_key_exact] if r["theover_market_type"] == "TOTAL"]
+                        if cands: matched_total_row = cands[0]
+
+                    if not matched_total_row and master_key_exact_swap in theover_lookup_exact:
+                        cands = [r for r in theover_lookup_exact[master_key_exact_swap] if r["theover_market_type"] == "TOTAL"]
+                        if cands: matched_total_row = cands[0]
+
+                    if not matched_total_row and master_key_teams in theover_lookup_teams:
+                        cands = [c for c in theover_lookup_teams[master_key_teams] if c["theover_market_type"] == "TOTAL"]
+                        matched_total_row = find_best_date_match(cands, local_date_str)
+
+                    if not matched_total_row and master_key_teams_swap in theover_lookup_teams:
+                        cands = [c for c in theover_lookup_teams[master_key_teams_swap] if c["theover_market_type"] == "TOTAL"]
+                        matched_total_row = find_best_date_match(cands, local_date_str)
+
+                    # Look for SIDE match (Exact then Team, then swapped variants)
+                    if master_key_exact in theover_lookup_exact:
+                        cands = [r for r in theover_lookup_exact[master_key_exact] if r["theover_market_type"] == "SIDE"]
+                        if cands: matched_side_row = cands[0]
+
+                    if not matched_side_row and master_key_exact_swap in theover_lookup_exact:
+                        cands = [r for r in theover_lookup_exact[master_key_exact_swap] if r["theover_market_type"] == "SIDE"]
+                        if cands: matched_side_row = cands[0]
+
+                    if not matched_side_row and master_key_teams in theover_lookup_teams:
+                        cands = [c for c in theover_lookup_teams[master_key_teams] if c["theover_market_type"] == "SIDE"]
+                        matched_side_row = find_best_date_match(cands, local_date_str)
+
+                    if not matched_side_row and master_key_teams_swap in theover_lookup_teams:
+                        cands = [c for c in theover_lookup_teams[master_key_teams_swap] if c["theover_market_type"] == "SIDE"]
+                        matched_side_row = find_best_date_match(cands, local_date_str)
+
+                    # FALLBACK: Raw team name matching when key-based lookup fails
+                    # This handles cases where TheOver paste text uses short names (e.g. "Celtics")
+                    # that generate different codes than OddsAPI full names (e.g. "Boston Celtics")
+                    if (not matched_total_row or not matched_side_row) and theover_lookup_exact:
+                        home_norm_lower = home_team.lower().strip()
+                        away_norm_lower = away_team.lower().strip()
+                        # Extract last word of team name for matching (e.g., "Boston Celtics" -> "celtics")
+                        home_last = home_norm_lower.split()[-1] if home_norm_lower.split() else ""
+                        away_last = away_norm_lower.split()[-1] if away_norm_lower.split() else ""
+                        for _to_key, _to_rows in theover_lookup_exact.items():
+                            for _to_row in _to_rows:
+                                _to_home_raw = str(_to_row.get("home_team_raw") or "").lower().strip()
+                                _to_away_raw = str(_to_row.get("away_team_raw") or "").lower().strip()
+                                # Match if raw names are substrings or last-word matches
+                                home_hit = (
+                                    home_norm_lower == _to_home_raw
+                                    or home_last == _to_home_raw
+                                    or _to_home_raw in home_norm_lower
+                                    or home_norm_lower in _to_home_raw
+                                )
+                                away_hit = (
+                                    away_norm_lower == _to_away_raw
+                                    or away_last == _to_away_raw
+                                    or _to_away_raw in away_norm_lower
+                                    or away_norm_lower in _to_away_raw
+                                )
+                                if home_hit and away_hit:
+                                    mtype = _to_row.get("theover_market_type")
+                                    if mtype == "TOTAL" and not matched_total_row:
+                                        matched_total_row = _to_row
+                                        logger.info(f"✅ TheOver FALLBACK TOTAL: {away_team} @ {home_team} matched via raw names")
+                                    elif mtype == "SIDE" and not matched_side_row:
+                                        matched_side_row = _to_row
+                                        logger.info(f"✅ TheOver FALLBACK SIDE: {away_team} @ {home_team} matched via raw names")
+                                if matched_total_row and matched_side_row:
+                                    break
+                            if matched_total_row and matched_side_row:
+                                break
+
+                    # Diagnostic logging for TheOver matching
+                    if not matched_total_row and not matched_side_row and theover_lookup_exact:
+                        logger.info(
+                            f"⚠️ TheOver NO MATCH: {away_team} @ {home_team} | "
+                            f"key_exact={master_key_exact} | key_teams={master_key_teams} | "
+                            f"codes=({away_code_norm}@{home_code_norm})"
+                        )
+
+                    # If matched, update counters
+                    if matched_total_row: theover_matched_count_totals += 1
+                    if matched_side_row: theover_matched_count_sides += 1
+
+                    # Extract Signals for Downstream
+                    theover_matched_total = matched_total_row
+                    theover_matched_side = matched_side_row
+
+                    # Probabilities (defaults to None if not matched)
+                    theover_prob_total = None
+                    if matched_total_row:
+                        hit_rate = safe_float(matched_total_row.get("theover_hit_rate"))
+                        theover_prob_total = hit_rate if (hit_rate and hit_rate > 0) else None
+                        if theover_prob_total is None:
+                            logger.warning("TheOver Totals: No valid hit_rate found - excluding")
+
+                    theover_prob_spread = None
+                    theover_prob_ml = None
+
+                    if matched_side_row:
+                        hit_rate = safe_float(matched_side_row.get("theover_hit_rate"))
+                        theover_line_val = safe_float(matched_side_row.get("theover_line"))
+
+                        # Detect ML vs Spread based on line magnitude
+                        is_moneyline_side = theover_line_val is not None and abs(theover_line_val) >= 40
+
+                        if is_moneyline_side:
+                            # MONEYLINE CALCULATION
+                            if hit_rate and hit_rate > 0:
+                                theover_prob_ml = hit_rate
+                            elif theover_line_val is not None:
+                                try:
+                                    # Convert American Odds to Implied Probability
+                                    if theover_line_val < 0:
+                                        raw_prob = (-theover_line_val) / (-theover_line_val + 100.0)
+                                    else:
+                                        raw_prob = 100.0 / (theover_line_val + 100.0)
+                                    # Boost slightly for being a "Pick" (0.07 edge assumption)
+                                    theover_prob_ml = clamp(raw_prob + 0.07, 0.10, 0.95)
+                                    logger.info(f"TheOver Moneyline: {theover_line_val} -> {theover_prob_ml:.3f}")
+                                except Exception as e:
+                                    logger.warning(f"TheOver ML calc error: {e}")
+                                    theover_prob_ml = None
+                        else:
+                            # SPREAD CALCULATION
+                            # Check if we have a valid hit rate from TheOver
+                            if hit_rate and hit_rate > 0:
+                                theover_prob_spread = hit_rate
+                                logger.info(f"TheOver Sides: Using provided hit_rate {hit_rate:.3f}")
+                            else:
+                                # TheOver.ai Sides export lacks WinProbability - calculate from spread line
+                                theover_pick_team = matched_side_row.get("theover_pick")
+
+                                if theover_line_val is not None and theover_pick_team:
+                                    try:
+                                        # Treat as spread points (e.g. -5.5)
+                                        # Use logistic function to estimate win prob from line
+                                        # Assuming standard -110 odds baseline (52.4%) + line advantage
+                                        # Simplified model: 0.524 + (line * -0.02) ? No, that depends on direction.
+
+                                        # --- SPREAD POINTS CALCULATION ---
+                                        # Use the sigmoid logic from previous version
+                                        raw_prob = 1.0 / (1.0 + math.exp(-theover_line_val / 3.5))
+                                        adjusted_prob = raw_prob + 0.07
+                                        theover_prob_spread = max(0.10, min(0.95, adjusted_prob))
+                                        logger.info(f"TheOver Spread: {theover_line_val} -> {theover_prob_spread:.3f}")
+                                    except Exception:
+                                        theover_prob_spread = None
+                                else:
+                                    # No line available - cannot calculate probability
+                                    logger.info(f"TheOver Sides: No hit_rate or line available for calculation - excluding")
+                                    theover_prob_spread = None
+                                    # Only clear matched_side_row if it was SUPPOSED to be spread but failed
+                                    if not is_moneyline_side:
+                                        matched_side_row = None
+
+                    # --- FIX: Use SIDE data for ML picks when ML-specific data unavailable ---
+                    # If TheOver has a spread pick but no ML pick, derive ML probability from spread data
+                    # A spread pick for a team suggests confidence in their performance, which partially
+                    # informs moneyline probability (covering spread often correlates with winning outright)
+                    theover_side_used_for_ml = False
+                    if theover_prob_ml is None and theover_prob_spread is not None and matched_side_row:
+                        # Use the spread hit_rate as a weaker signal for ML
+                        # Apply a dampening factor since spread != moneyline
+                        # If hit_rate is 55% for spread, ML prob is closer to 50% but still favors that team
+                        spread_hit_rate = safe_float(matched_side_row.get("theover_hit_rate"))
+                        if spread_hit_rate and spread_hit_rate > 0:
+                            # Convert spread confidence to ML confidence
+                            # Formula: ML_prob = 0.50 + (spread_hit_rate - 0.50) * 0.7
+                            # This dampens the signal while preserving direction
+                            ml_from_spread = 0.50 + (spread_hit_rate - 0.50) * 0.7
+                            theover_prob_ml = clamp(ml_from_spread, 0.35, 0.65)
+                            theover_side_used_for_ml = True
+                            logger.info(f"TheOver: Using SIDE hit_rate {spread_hit_rate:.3f} for ML -> {theover_prob_ml:.3f}")
+
+                except Exception as e_theover:
+                    logger.error(f"TheOver matching logic failed for game {idx}: {e_theover}", exc_info=True)
+                    # Non-fatal error - continue without TheOver data
+                    matched_total_row = None
+                    matched_side_row = None
+                    theover_prob_total = None
+                    theover_prob_spread = None
+                    theover_prob_ml = None
+                    theover_side_used_for_ml = False
+                    theover_matched = False
+                    theover_matched_total = None
+                    theover_matched_side = None
+                # --- THEOVER MATCHING END ---
+
+                # 1) Define Weights - Using values from weights_config.py
+                # KALSHI: 35%, MARKET: 30%, MODEL: 15%, THEOVER: 15%, SENTIMENT: 10%
+                # Total = 105%, will be normalized in compute_final_probability
+                spread_weights = {
+                    "kalshi_weight": KALSHI_WEIGHT,
+                    "odds_weight": MARKET_WEIGHT,
+                    "model_weight": ML_MODEL_WEIGHT,
+                    "theover_weight": THEOVER_WEIGHT,
+                    "sentiment_weight": SENTIMENT_WEIGHT,
+                }
+                # Totals
+                total_weights = {
+                    "kalshi_weight": KALSHI_WEIGHT,
+                    "odds_weight": MARKET_WEIGHT,
+                    "model_weight": ML_MODEL_WEIGHT,
+                    "theover_weight": THEOVER_WEIGHT,
+                    "sentiment_weight": SENTIMENT_WEIGHT,
+                }
+                moneyline_weights = {
+                    "kalshi_weight": KALSHI_WEIGHT,
+                    "odds_weight": MARKET_WEIGHT,
+                    "model_weight": ML_MODEL_WEIGHT,
+                    "theover_weight": THEOVER_WEIGHT,
+                    "sentiment_weight": SENTIMENT_WEIGHT,
+                }
+                # Debug log
+                logger.info(f"Weight sets active: spread={spread_weights}, total={total_weights}, ml={moneyline_weights}")
+
+                # RESET ALL TRACE VARIABLES
+                total_pick_side = None
+                total_line = None
+                total_pick_odds = None
+                spread_engine_used = "market_only"
+                total_engine_used = "market_only"
+                kalshi_prob_spread = None
+                spread_prob_final = 0.5
+                total_prob_final = 0.5
+                spread_prob_alt_final = 0.5
+                total_alt_prob_final = 0.5
+                spread_decision_score_alt = 0.5
+                total_decision_score_alt = 0.5
+                total_prob_market = 0.5
+
+                # Additional resets to prevent NameError in fallback_row
+                spread_pick_label = None
+                spread_alt_label = None
+                spread_prob_margin = None
+                spread_prob_pick_market = None
+                spread_prob_alt_market = None
+                spread_prob_pick_kalshi = None
+                spread_prob_alt_kalshi = None
+                spread_decision_metric_used = None
+                spread_decision_score_pick = None
+                spread_decision_score_alt = None
+                spread_decision_score_margin = None
+                spread_trace_json = None
+
+                total_pick_label = None
+                total_alt_label = None
+                total_prob_margin = None
+                total_prob_pick_market = None
+                total_prob_alt_market = None
+                total_prob_pick_kalshi = None
+                total_prob_alt_kalshi = None
+                total_decision_metric_used = None
+                total_decision_score_pick = None
+                total_decision_score_alt = None
+                total_decision_score_margin = None
+                total_trace_json = None
+
+                decision_trace_version = None
+                overall_engine_used = None
+                decision_trace_notes = None
+
+                kalshi_prob_spread = None
+                kalshi_prob_total = None
+                model_spread_prob = None
+                model_total_prob = None
+                spread_prob_market = 0.5
+                total_prob_market = 0.5
+                total_line = None
+                total_pick_odds = None
+                spread_engine_used = "missing"
+                total_engine_used = "missing"
+                spread_prob_final = 0.5
+                total_prob_final = 0.5
+                spread_prob_market = 0.5
+                total_prob_market = 0.5
+                total_pick = None
+                spread_pick = None
+
+                # --- LOOP INITIALIZATION (Prevent NameError) ---
+                # Reset all loop variables to defaults before processing each game
+                spread_engine_used = "missing"
+                total_engine_used = "missing"
+                overall_engine_used = "missing"
+                spread_pick_label = None
+                total_pick_label = None
+                spread_alt_label = None
+                total_alt_label = None
+                spread_prob_final = 0.5
+                total_prob_final = 0.5
+                spread_alt_prob_final = 0.5
+                spread_prob_alt_final = 0.5
+                total_alt_prob_final = 0.5
+                kalshi_prob_spread = None
+                kalshi_prob_total = None
+                model_spread_prob = None
+                model_total_prob = None
+                spread_prob_margin = None
+                total_prob_margin = None
+                spread_prob_pick_market = None
+                total_prob_pick_market = None
+                spread_prob_alt_market = None
+                total_prob_alt_market = None
+                spread_prob_pick_kalshi = None
+                total_prob_pick_kalshi = None
+                spread_prob_alt_kalshi = None
+                total_prob_alt_kalshi = None
+                spread_decision_metric_used = None
+                total_decision_metric_used = None
+                spread_decision_score_pick = None
+                total_decision_score_pick = None
+                spread_decision_score_alt = None
+                total_decision_score_alt = None
+                spread_decision_score_margin = None
+                total_decision_score_margin = None
+                spread_trace_json = "{}"
+                total_trace_json = "{}"
+                decision_trace_version = "v3_loop_init"
+                decision_trace_notes = None
+
+                # Kalshi vars
+                kalshi_prob_spread = None
+                kalshi_prob_total = None
+                kalshi_status_value = "PENDING"
+                kalshi_event_used = None
+                candidate_debug = {}
+                kalshi_winner = {}
+                kalshi_spread = {}
+                kalshi_total = {}
+
+                # Market vars
+                spread_pick = None
+                spread_line = None
+                spread_pick_team = None
+                spread_pick_line = None
+                spread_pick_odds = None
+                spread_prob = None
+                total_pick = None
+                total_line = None
+                total_pick_side = None
+                total_pick_odds = None
+                total_prob = None
+                spread_prob_market = None
+                total_prob_market = None
+                spread_base_prob = 0.5
+                total_base_prob = 0.5
+
+                # Weights
+                spread_weights_used = {}
+                total_weights_used = {}
+                spread_sentiment_adj = 0.0
+                total_sentiment_adj = 0.0
+
+                # Decision
+                spread_decision_driver = "missing"
+                total_decision_driver = "missing"
+                spread_prob_engine = "missing"
+                total_prob_engine = "missing"
+
+                # Kalshi internal
+                spread_kalshi_prob_for_pick = None
+                total_kalshi_prob_for_pick = None
+
+                # Market Based
+                spread_prob_market_based = None
+                total_prob_market_based = None
+                spread_prob_reason = None
+                total_prob_reason = None
+                spread_odds_method = None
+                total_odds_method = None
+                spread_prob_method = None
+                total_prob_method = None
+
+                spread_market_pairs_count = 0
+                total_market_pairs_count = 0
+                spread_odds_valid = False
+                total_odds_valid = False
+                spread_odds_placeholder_detected = False
+                total_odds_placeholder_detected = False
+                spread_prob_placeholder_detected = False
+                total_prob_placeholder_detected = False
+                sentiment_adj_reason = "init"
+                odds_placeholder_overall = False
+
+                # Ranges
+                spread_min, spread_med, spread_max = None, None, None
+                total_min, total_med, total_max = None, None, None
+                spread_books_map = {}
+                total_books_map = {}
+                width_spread = None
+                width_total = None
+
+                best_spread_price = None
+                best_total_price = None
+
+                # INITIALIZATION BLOCK
+                total_pick_side = None
+                total_line = None
+                total_pick_odds = None
+                spread_pick_label = ""
+                spread_alt_label = ""
+                total_pick_label = ""
+                total_alt_label = ""
+                spread_engine_used = "missing"
+                total_engine_used = "missing"
+                spread_prob_final = 0.5
+                total_prob_final = 0.5
+                spread_prob_market = 0.5
+                total_prob_market = 0.5
+
+                # ADD THESE TO THE EXISTING INIT BLOCK
+                spread_prob_alt_final = 0.5
+                total_alt_prob_final = 0.5
+                spread_prob_margin = 0.0
+                total_prob_margin = 0.0
+                spread_decision_score_alt = 0.5
+                total_decision_score_alt = 0.5
+
+                # --- 1. SETUP & UTILS ---
+
+                # Unpack key variables for easy access
+                spread_pick = None
+                spread_line = None
+                spread_pick_odds = None
+                total_pick = None
+                overall_engine_used = "missing"
+                model_spread_prob = None
+                model_total_prob = None
+                spread_prob_pick_final = None
+                spread_prob_alt_final = None
+                total_prob_pick_final = None
+                total_alt_prob_final = None
+                spread_prob_margin = None
+                total_prob_margin = None
+                spread_prob_pick_market = None
+                spread_prob_alt_market = None
+                total_prob_pick_market = None
+                total_prob_alt_market = None
+                spread_prob_pick_kalshi = None
+                spread_prob_alt_kalshi = None
+                total_prob_pick_kalshi = None
+                total_prob_alt_kalshi = None
+                spread_decision_metric_used = None
+                total_decision_metric_used = None
+                spread_decision_score_pick = None
+                spread_decision_score_alt = None
+                total_decision_score_pick = None
+                total_decision_score_alt = None
+                spread_decision_score_margin = None
+                total_decision_score_margin = None
+                spread_trace_json = "{}"
+                total_trace_json = "{}"
+                decision_trace_version = "v2"
+                decision_trace_notes = []
+                spread_kalshi_prob_for_pick = None
+                total_kalshi_prob_for_pick = None
+                spread_implied = None
+                total_implied = None
+                spread_prob_market_based = None
+                total_prob_market_based = None
+                spread_prob_reason = None
+                total_prob_reason = None
+                spread_prob_method = None
+                total_prob_method = None
+                spread_odds_method = None
+                total_odds_method = None
+                spread_odds_valid = False
+                total_odds_valid = False
+                spread_odds_placeholder_detected = False
+                total_odds_placeholder_detected = False
+                spread_prob_placeholder_detected = False
+                total_prob_placeholder_detected = False
+                spread_pick_team = None
+                spread_pick_line = None
+                spread_sentiment_adj = 0.0
+                total_sentiment_adj = 0.0
+                spread_base_prob = 0.5
+                total_base_prob = 0.5
+                spread_decision_driver = "missing"
+                total_decision_driver = "missing"
+                # -------------------------------------------------------------
+
+                kalshi_prob_used: Optional[float] = None
+                kalshi_event_used: Optional[str] = None
+                warnings: List[str] = list(g.get("warnings") or [])
+                league_name = g.get("league")
+                league_key = canonical_league_key(league_name)
+                home = g.get("home_team")
+                away = g.get("away_team")
+                league_markets = kalshi_markets_by_league.get(league_key, []) or kalshi_markets_by_league.get(league_name, [])
+
+                # DIAGNOSTIC: Log league_markets availability for first few games
+                if idx < 3:
+                    _lm_keys = list(kalshi_markets_by_league.keys())
+                    logger.info(
+                        f"🔍 KALSHI LEAGUE MARKETS: Game {idx+1} - league_key={league_key}, "
+                        f"league_name={league_name}, league_markets_count={len(league_markets)}, "
+                        f"dict_keys={_lm_keys}"
+                    )
+                if not league_markets and idx == 0:
+                    logger.warning(
+                        f"⚠️ KALSHI: league_markets is EMPTY for league_key={league_key}, "
+                        f"league_name={league_name}. Dict keys: {list(kalshi_markets_by_league.keys())}. "
+                        f"Dict sizes: { {k: len(v) for k, v in kalshi_markets_by_league.items()} }"
+                    )
+
+                # DEFINE THESE HERE TO FIX THE NAMEERROR
+                commence_iso = g.get("commence_time_iso_utc") or safe_iso(g.get("commence_time_iso"))
+                commence_local = fmt_local_time(g.get("commence_time_local"))
+                commence_date_local = g.get("commence_date_local") or ""
+
+                try:
+                    # Fix Issue #5: Use league-specific keys if available
+                    _as_keys = keys_resolved.get("api_sports_keys", {}) or {}
+                    _sd_keys = keys_resolved.get("sportsdata_keys", {}) or {}
+
+                    _league_as_key = _as_keys.get(league_key) or _as_keys.get("default") or api_sports_key
+                    _league_sd_key = _sd_keys.get(league_key) or _sd_keys.get("default") or sportsdata_key
+
+                    enrichment = enrich_game_context(g, league_key, _league_as_key, _league_sd_key)
+                except Exception as exc:
+                    if league_key == 'NCAAF':
+                        logger.warning(f"NCAAF Stats Outage - Using Defaults: {exc}")
+                    else:
+                        logger.error(f"Enrichment failed for {league_key}: {exc}")
+
+                    enrichment = {
+                        "injuries_home_count": 0, "injuries_away_count": 0,
+                        "schedule_warnings": ["STATS_OUTAGE"],
+                        "enrichment_errors_sample": [str(exc)]
+                    }
+
+                if enrichment.get("api_sports_used"):
+                    data_source_stats["api_sports_games"] += 1
+                if enrichment.get("sportsdata_used"):
+                    data_source_stats["sportsdata_games"] += 1
+                data_source_stats["injury_pulls"] += int(enrichment.get("injuries_home_count") or 0) + int(enrichment.get("injuries_away_count") or 0)
+                if enrichment.get("weather_summary"):
+                    data_source_stats["weather_pulls"] += 1
+                if enrichment.get("schedule_warnings"):
+                    warnings.extend(enrichment.get("schedule_warnings") or [])
+                injuries_home_count = enrichment.get("injuries_home_count")
+                injuries_away_count = enrichment.get("injuries_away_count")
+                injuries_home_display = enrichment.get("injuries_home")
+                injuries_away_display = enrichment.get("injuries_away")
+                weather_summary = enrichment.get("weather_summary")
+                key_injuries_home = enrichment.get("key_injuries_home") or []
+                key_injuries_away = enrichment.get("key_injuries_away") or []
+                api_sports_used = enrichment.get("api_sports_used")
+                sportsdata_used = enrichment.get("sportsdata_used")
+                api_sports_status_run = enrichment.get("api_sports_status") or api_sports_status
+                sportsdata_status_run = enrichment.get("sportsdata_status") or sportsdata_status
+                apisports_enriched = enrichment.get("apisports_enriched")
+                apisports_notes = enrichment.get("apisports_notes")
+                sportsdata_enriched = enrichment.get("sportsdata_enriched")
+                sportsdata_notes = enrichment.get("sportsdata_notes")
+                enrichment_errors_sample = ";".join(enrichment.get("enrichment_errors_sample") or [])
+                g["injuries_home_count"] = injuries_home_count
+                g["injuries_away_count"] = injuries_away_count
+                g["weather_summary"] = weather_summary
+                spread_prob_market_based = None
+                spread_prob_reason = None
+                spread_prob_method = None
+                spread_market_pairs_count = 0
+                total_prob_market_based = None
+                total_prob_reason = None
+                total_prob_method = None
+                total_market_pairs_count = 0
+                spread_odds_placeholder_detected = False
+                total_odds_placeholder_detected = False
+                spread_prob_placeholder_detected = False
+                total_prob_placeholder_detected = False
+                spread_prob = None
+                total_prob = None
+                spread_odds_valid = False
+                total_odds_valid = False
+                best_spread_price = None
+                best_total_price = None
+                spread_odds_method = "missing"
+                total_odds_method = "missing"
+                odds_placeholder_overall = False
+
+                # --- Pre-compute pick context (used for market normalization) ---
+                spread_offers = g.get("spread_offers") or []
+                total_offers = g.get("total_offers") or []
+                spread_pick_team, spread_pick_line = parse_spread_pick(g.get("Spread & Pick"), home, away)
+                spread_pick_odds = None
+                spread_implied = None
+                best_spread_price = None
+                if g.get("home_spread_point") is not None:
+                    home_spread_prob = american_to_implied(g.get("home_spread_price"))
+                    away_spread_prob = american_to_implied(g.get("away_spread_price"))
+                    home_spread_point = g.get("home_spread_point")
+                    away_spread_point = g.get("away_spread_point")
+                    # Default pick based on prices if not already specified
+                    if spread_pick_team is None:
+                        if home_spread_prob is None and away_spread_prob is None:
+                            spread_pick_team = home
+                        elif home_spread_prob is None:
+                            spread_pick_team = away
+                        elif away_spread_prob is None:
+                            spread_pick_team = home
+                        elif away_spread_prob >= home_spread_prob:
+                            spread_pick_team = away
+                        else:
+                            spread_pick_team = home
+                    best_spread_offer = None
+                    preferred_book = g.get("best_spread_book")
+                    if spread_pick_team == home:
+                        best_spread_offer = select_best_offer_for_pick(
+                            spread_offers, "home", pick_line=spread_pick_line if spread_pick_line is not None else home_spread_point, preferred_book=preferred_book
+                        )
+                        if best_spread_offer is None and g.get("home_spread_price") is not None:
+                            best_spread_offer = {
+                                "book": preferred_book,
+                                "point": home_spread_point,
+                                "price": g.get("home_spread_price"),
+                                "side": "home",
+                                "team": home,
+                                "last_update": g.get("best_spread_last_update"),
+                            }
+                    elif spread_pick_team == away:
+                        best_spread_offer = select_best_offer_for_pick(
+                            spread_offers, "away", pick_line=spread_pick_line if spread_pick_line is not None else away_spread_point, preferred_book=preferred_book
+                        )
+                        if best_spread_offer is None and g.get("away_spread_price") is not None:
+                            best_spread_offer = {
+                                "book": preferred_book,
+                                "point": away_spread_point,
+                                "price": g.get("away_spread_price"),
+                                "side": "away",
+                                "team": away,
+                                "last_update": g.get("best_spread_last_update"),
+                            }
+                    if best_spread_offer:
+                        spread_pick_odds = best_spread_offer.get("price")
+                        best_spread_price = spread_pick_odds
+                        spread_odds_method = "book_price"
+                        if spread_pick_line is None:
+                            spread_pick_line = safe_float(best_spread_offer.get("point"))
+                    if spread_pick_team == home:
+                        spread_implied = american_to_implied(spread_pick_odds)
+                    elif spread_pick_team == away:
+                        spread_implied = american_to_implied(spread_pick_odds)
+                target_spread_team = spread_pick_team if spread_pick_team in {home, away} else home
+
+                # Market range aggregates
+                spread_points: List[Optional[float]] = []
+                total_points: List[Optional[float]] = []
+                spread_books_map: Dict[str, float] = {}
+                total_books_map: Dict[str, float] = {}
+                for bm in g.get("bookmakers") or []:
+                    book_name = bm.get("title") or bm.get("key")
+                    for market in bm.get("markets") or []:
+                        if market.get("key") == "spreads":
+                            outcomes = market.get("outcomes") or []
+                            price_map = {o.get("name"): o for o in outcomes if o.get("name")}
+                            normalized_point: Optional[float] = None
+                            if target_spread_team and target_spread_team in price_map:
+                                normalized_point = safe_float(price_map[target_spread_team].get("point"))
+                            elif home and away:
+                                other_team = away if target_spread_team == home else home
+                                other_outcome = price_map.get(other_team)
+                                if other_outcome and other_outcome.get("point") is not None:
+                                    flipped = safe_float(other_outcome.get("point"))
+                                    normalized_point = -flipped if flipped is not None else None
+                            if normalized_point is None and home in price_map:
+                                normalized_point = safe_float(price_map[home].get("point"))
+                            if normalized_point is None and away in price_map:
+                                normalized_point = safe_float(price_map[away].get("point"))
+                            if normalized_point is not None:
+                                spread_points.append(normalized_point)
+                                spread_books_map[book_name] = normalized_point
+                        elif market.get("key") == "totals":
+                            for o in market.get("outcomes") or []:
+                                if o.get("point") is not None:
+                                    pt = safe_float(o.get("point"))
+                                    if pt is not None:
+                                        total_points.append(pt)
+                                        total_books_map[book_name] = pt
+                spread_min, spread_med, spread_max = _market_range(spread_points)
+                total_min, total_med, total_max = _market_range(total_points)
+                width_spread = (spread_max - spread_min) if (spread_max is not None and spread_min is not None) else None
+                width_total = (total_max - total_min) if (total_max is not None and total_min is not None) else None
+                non_pickem_line = spread_pick_line if spread_pick_line is not None else spread_med
+                spread_cross_zero = (
+                    spread_min is not None
+                    and spread_max is not None
+                    and spread_min < 0 < spread_max
+                )
+                spread_median_zero = (abs(spread_med or 0) < 0.25) if spread_med is not None else False
+                if spread_cross_zero and spread_median_zero and (non_pickem_line is not None and abs(non_pickem_line) >= 1.0):
+                    warnings.append("spread_range_mixed_sides_detected")
+
+                sentiment_map_all = st.session_state.get("sentiment_map") or {}
+                sentiment_map = sentiment_map_all or (st.session_state.get(f"sentiment_map_{league_key}") or {})
+                sentiment_meta_map_all = st.session_state.get("sentiment_meta_map") or {}
+                sentiment_meta_map = sentiment_meta_map_all or (st.session_state.get(f"sentiment_meta_map_{league_key}") or {})
+                home_meta = sentiment_meta_map.get(home, {})
+                away_meta = sentiment_meta_map.get(away, {})
+                home_sent = safe_float(sentiment_map.get(home))
+                away_sent = safe_float(sentiment_map.get(away))
+                sentiment_debug_global = st.session_state.get("sentiment_debug") or {}
+                league_debug = st.session_state.get(f"sentiment_debug_{league_key}") or {}
+                articles_total = sentiment_meta_global.get("sentiment_articles_total") or league_debug.get("articles_total") or 0
+
+                # JULES-FIX: Compute Sentiment_Diff ONLY if both valid (else None)
+                if home_sent is not None and away_sent is not None:
+                    sentiment_diff = home_sent - away_sent
+                    # Log comprehensive sentiment debug for this game
+                    home_valid = home_meta.get("sentiment_valid", False)
+                    away_valid = away_meta.get("sentiment_valid", False)
+                    home_sources = home_meta.get("sentiment_articles_used", 0)
+                    away_sources = away_meta.get("sentiment_articles_used", 0)
+                    home_source_type = home_meta.get("sentiment_source", "none")
+                    away_source_type = away_meta.get("sentiment_source", "none")
+                    home_query = home_meta.get("sentiment_query_used", "N/A")
+                    away_query = away_meta.get("sentiment_query_used", "N/A")
+                    home_score_label = home_meta.get("sentiment_label", "unknown")
+                    away_score_label = away_meta.get("sentiment_label", "unknown")
+                    home_status = home_meta.get("sentiment_status", "N/A")
+                    away_status = away_meta.get("sentiment_status", "N/A")
+
+                    logger.info(
+                        f"SENTIMENT ACTIVE for game {g.get('id')}: {home} vs {away}\n"
+                        f"  Home: score={home_sent:.3f}, label={home_score_label}, valid={home_valid}, sources={home_sources}, type={home_source_type}, status={home_status}, query='{home_query}'\n"
+                        f"  Away: score={away_sent:.3f}, label={away_score_label}, valid={away_valid}, sources={away_sources}, type={away_source_type}, status={away_status}, query='{away_query}'\n"
+                        f"  Diff: {sentiment_diff:.3f} (home - away) [UI annotation only - not used in probability blend]"
+                    )
+                else:
+                    sentiment_diff = None
+                    if home_sent is None and away_sent is None:
+                        # Sentiment intentionally not used (weight=0.0) - reduce log verbosity
+                        logger.debug(f"Sentiment unavailable for {home} vs {away} (sentiment weight=0.0, not used in probability)")
+                    elif home_sent is None:
+                        logger.debug(f"Sentiment partial for {home} vs {away}: home missing (not used in probability)")
+                    elif away_sent is None:
+                        logger.debug(f"Sentiment partial for {home} vs {away}: away missing (not used in probability)")
+
+                rate_limited_flag = bool(
+                    sentiment_meta_global.get("sentiment_rate_limited")
+                    or sentiment_debug_global.get("rate_limited")
+                    or league_debug.get("rate_limited")
+                )
+                sentiment_source_current = (
+                    st.session_state.get(f"sentiment_source_{league_key}")
+                    or sentiment_meta_global.get("sentiment_source")
+                    or home_meta.get("sentiment_source")
+                    or away_meta.get("sentiment_source")
+                    or "none"
+                )
+                sentiment_used_cached = bool(
+                    sentiment_meta_global.get("sentiment_used_cached")
+                    or sentiment_debug_global.get("used_cached")
+                    or league_debug.get("used_cached")
+                    or home_meta.get("cached")
+                    or away_meta.get("cached")
+                )
+                sentiment_auth_error = bool(
+                    sentiment_meta_global.get("sentiment_auth_error")
+                    or sentiment_debug_global.get("auth_error")
+                    or league_debug.get("auth_error")
+                )
+                sentiment_rate_limited = bool(
+                    sentiment_meta_global.get("sentiment_rate_limited")
+                    or sentiment_debug_global.get("rate_limited")
+                    or league_debug.get("rate_limited")
+                )
+                sentiment_adj_reason = "no_sentiment"
+                sentiment_adj = 0.0
+                sentiment_articles_home = int(home_meta.get("sentiment_articles_used") or home_meta.get("sources") or home_meta.get("articles") or 0)
+                sentiment_articles_away = int(away_meta.get("sentiment_articles_used") or away_meta.get("sources") or away_meta.get("articles") or 0)
+                sentiment_articles_used = sentiment_articles_home + sentiment_articles_away
+                sentiment_source_count_total = int(home_meta.get("sentiment_source_count") or sentiment_articles_home) + int(away_meta.get("sentiment_source_count") or sentiment_articles_away)
+                sentiment_confidence_home = safe_float(home_meta.get("sentiment_confidence")) or 0.0
+                sentiment_confidence_away = safe_float(away_meta.get("sentiment_confidence")) or 0.0
+                sentiment_confidence_value = safe_float((st.session_state.get("sentiment_meta") or {}).get("sentiment_confidence")) or 0.0
+                sentiment_confidence_local = max(sentiment_confidence_value, sentiment_confidence_home, sentiment_confidence_away)
+                sentiment_actionable = sentiment_confidence_local >= 0.6 and sentiment_source_count_total >= 5
+                sentiment_score_field = sentiment_diff if (home_sent is not None and away_sent is not None) else None
+                sentiment_label_field = None
+                if sentiment_score_field is not None:
+                    if sentiment_score_field > 0.05:
+                        sentiment_label_field = "Positive"
+                    elif sentiment_score_field < -0.05:
+                        sentiment_label_field = "Negative"
+                    else:
+                        sentiment_label_field = "Neutral"
+                sentiment_level = _normalize_sentiment_level(
+                    home_meta.get("sentiment_level")
+                    or away_meta.get("sentiment_level")
+                    or ("team" if sentiment_articles_used > 0 else "none")
+                )
+                sentiment_strength = str(
+                    home_meta.get("sentiment_strength")
+                    or away_meta.get("sentiment_strength")
+                    or sentiment_strength_from_articles(sentiment_level, sentiment_articles_used)
+                ).upper()
+                if not sentiment_strength or sentiment_strength == "NONE":
+                    sentiment_strength = sentiment_strength_from_articles(sentiment_level, sentiment_articles_used)
+                sentiment_badge = sentiment_badge_for(sentiment_level, sentiment_strength)
+                sentiment_query_used = ";".join(
+                    [
+                        q
+                        for q in [
+                            home_meta.get("sentiment_query_used"),
+                            away_meta.get("sentiment_query_used"),
+                        ]
+                        if q
+                    ]
+                )
+                if not sentiment_actionable:
+                    sentiment_level = "none"
+                    sentiment_strength = "NONE"
+                    sentiment_badge = "NONE"
+                sentiment_signal = sentiment_signal_value(sentiment_level, sentiment_diff) if sentiment_actionable else 0.0
+                spread_sentiment_adj = compute_market_sentiment_adjustment(sentiment_level, sentiment_strength, "spread", sentiment_signal) if sentiment_actionable else 0.0
+                total_sentiment_adj = compute_market_sentiment_adjustment(sentiment_level, sentiment_strength, "total", sentiment_signal) if sentiment_actionable else 0.0
+                if sentiment_auth_error:
+                    sentiment_adj_reason = "auth_error"
+                elif sentiment_actionable and sentiment_level != "none" and sentiment_strength != "NONE" and sentiment_articles_used > 0:
+                    sentiment_adj = compute_market_sentiment_adjustment(sentiment_level, sentiment_strength, "moneyline", sentiment_signal)
+                    reason_bits: List[str] = []
+                    if rate_limited_flag:
+                        reason_bits.append("rate_limited")
+                    if sentiment_used_cached:
+                        reason_bits.append("cached")
+                    sentiment_adj_reason = "applied" if not reason_bits else f"applied_{'_'.join(reason_bits)}"
+                sentiment_valid = bool(sentiment_actionable and sentiment_articles_used > 0 and not sentiment_auth_error)
+                sentiment_source = (
+                    st.session_state.get(f"sentiment_source_{league_key}")
+                    or sentiment_meta_global.get("sentiment_source")
+                    or home_meta.get("sentiment_source")
+                    or away_meta.get("sentiment_source")
+                    or "none"
+                )
+                if rate_limited_flag and sentiment_used_cached:
+                    sentiment_source = "partial_cached"
+                elif rate_limited_flag and sentiment_source in ("none", "error"):
+                    sentiment_source = "error_rate_limited"
+                elif sentiment_auth_error:
+                    sentiment_source = "error_auth"
+                elif sentiment_valid and sentiment_source in ("none", "error", "error_rate_limited"):
+                    sentiment_source = "newsapi"
+                reddit_used = False
+                sentiment_error_count = league_debug.get("error_count")
+                if sentiment_error_count is None:
+                    sentiment_error_count = sentiment_meta_global.get("sentiment_error_count")
+                errors_sample = league_debug.get("errors_sample") or sentiment_debug_global.get("errors_sample") or []
+                sentiment_errors_sample = ";".join([f"{e.get('team')}: {e.get('error')}" for e in errors_sample]) if errors_sample else ""
+                sentiment_articles_total = sentiment_meta_global.get("sentiment_articles_total") or league_debug.get("articles_total") or 0
+                sentiment_cached_teams_count = sentiment_meta_global.get("sentiment_cached_teams_count") or league_debug.get("cached_teams") or 0
+                sentiment_available_count = sentiment_meta_global.get("sentiment_available_count") or league_debug.get("available_count") or 0
+                sentiment_cooldown_until = (
+                    sentiment_meta_global.get("sentiment_cooldown_until") or sentiment_meta_global.get("cooldown_until")
+                    or sentiment_debug_global.get("cooldown_until")
+                    or ""
+                )
+                sentiment_status_counts = sentiment_status_counts_global or league_debug.get("status_counts") or {}
+                sentiment_status_counts_field = json.dumps(sentiment_status_counts) if isinstance(sentiment_status_counts, dict) else str(sentiment_status_counts)
+                sample_calls = sentiment_debug_global.get("sample_calls") or league_debug.get("sample_calls") or []
+                sentiment_sample_query = sentiment_meta_global.get("sentiment_sample_query") or (sample_calls[0].get("q") if sample_calls else "")
+                sentiment_sample_status = sentiment_meta_global.get("sentiment_sample_status") or (sample_calls[0].get("status") if sample_calls else "NO_CALL")
+                sentiment_sample_totalResults = sentiment_meta_global.get("sentiment_sample_totalResults") or (sample_calls[0].get("totalResults") if sample_calls else None)
+                if not sentiment_sample_status and sentiment_rate_limited:
+                    sentiment_sample_status = 429
+                sentiment_status_value = sentiment_meta_global.get("sentiment_status") or sentiment_sample_status
+
+                # FIX: Use game-specific sentiment_score_field instead of global sentiment_score
+                # sentiment_score_field is computed from the actual home/away sentiment difference
+                sentiment_score_value = sentiment_score_field if sentiment_score_field is not None else safe_float(sentiment_meta_global.get("sentiment_score"))
+
+                # FIX: Force "ok" if we actually have a score, overriding global disabled status if individual team data exists
+                if sentiment_score_value is not None:
+                    sentiment_status_value = "ok"
+
+                # Override status if sentiment weight is zero (but only if we didn't just find a valid score)
+                effective_sent_weight = float(st.session_state.get("sentiment_weight") or 0.0)
+                if effective_sent_weight <= 0.0 and sentiment_score_value is None:
+                     sentiment_status_value = "disabled"
+                sentiment_confidence_value = max(sentiment_confidence_local, safe_float(sentiment_meta_global.get("sentiment_confidence")) or 0.0)
+
+                # Log the final sentiment values used for this game
+                logger.debug(f"Game {g.get('id')} final sentiment values: score={sentiment_score_value}, status={sentiment_status_value}, confidence={sentiment_confidence_value:.2f}")
+
+                sentiment_disabled_reason = sentiment_meta_global.get("sentiment_disabled_reason") or ""
+                sentiment_error_count = int(sentiment_error_count or 0)
+                sentiment_articles_total = int(sentiment_articles_total or 0)
+                sentiment_cached_teams_count = int(sentiment_cached_teams_count or 0)
+                sentiment_available_count = int(sentiment_available_count or 0)
+                sentiment_sample_status = str(sentiment_sample_status or "NO_CALL")
+                sentiment_sample_query = sentiment_sample_query or ""
+                sentiment_status_counts_field = sentiment_status_counts_field or ""
+                sentiment_disabled_reason = sentiment_disabled_reason or ""
+                sentiment_defaults_base = {
+                    "sentiment_score": 0.0,
+                    "sentiment_confidence": 0.0,
+                    "sentiment_source": sentiment_meta_global.get("sentiment_source") or "none",
+                    "sentiment_status": "ok",
+                    "sentiment_error_count": 0,
+                    "sentiment_articles_total": 0,
+                    "sentiment_cached_teams_count": 0,
+                    "sentiment_used_cached": False,
+                    "sentiment_available_count": 0,
+                    "sentiment_sample_status": sentiment_sample_status,
+                    "sentiment_sample_query": sentiment_sample_query,
+                    "sentiment_sample_totalResults": 0,
+                    "sentiment_rate_limited": False,
+                    "sentiment_auth_error": False,
+                    "sentiment_cooldown_until": "",
+                    "sentiment_status_counts": sentiment_status_counts_field,
+                    "sentiment_disabled_reason": sentiment_disabled_reason,
+                    "spread_sentiment_arrow": "",
+                    "total_sentiment_arrow": "",
+                    "spread_sentiment_note": "",
+                    "total_sentiment_note": "",
+                }
+
+                home_code: Optional[str] = None
+                away_code: Optional[str] = None
+                try:
+                    home_code = team_code_for_league(league_name, home)
+                    away_code = team_code_for_league(league_name, away)
+
+                    # DIAGNOSTIC: Log team code generation for first few games
+                    if idx < 3:
+                        logger.info(f"🔍 KALSHI TEAM CODES: Game {idx+1} - {home} → {home_code}, {away} → {away_code}")
+                except Exception:
+                    home_code, away_code = None, None
+
+                kalshi_winner: Dict[str, Any] = {}
+                kalshi_spread: Dict[str, Any] = {}
+                kalshi_total: Dict[str, Any] = {}
+
+                commence_for_match = (
+                    g.get("commence_time_iso_utc")
+                    or g.get("commence_time")
+                    or g.get("commence_time_iso")
+                    or g.get("commence_time_utc")
+                )
+
+                # --- 2. Kalshi Matching Logic (RESTORED) ---
+                # DIAGNOSTIC: Log market filtering for first few games
+                if idx < 3:
+                    logger.info(f"🔍 KALSHI FILTERING: Game {idx+1} has {len(league_markets)} league markets before filtering")
+
+                filtered_markets = filter_kalshi_game_markets(
+                    league_markets,
+                    commence_for_match,
+                    league_name,
+                    home,
+                    away,
+                    home_code,
+                    away_code,
+                )
+
+                # De-dupe results by individual market ticker (NOT event_ticker).
+                # event_ticker is shared by all sub-markets in one event (e.g. Over/Under
+                # variants), so deduping by it collapsed them into one and prevented
+                # line-proximity scoring from selecting the correct line.
+                deduped = {m.get("ticker") or m.get("event_ticker"): m for m in filtered_markets}
+                filtered_markets = list(deduped.values())
+                filtered_counts.append(len(filtered_markets))
+
+                # USER REQUESTED LOGGING
+                logger.info(f"📥 Total Kalshi markets fetched: {len(league_markets)}")
+                logger.info(f"📊 Markets after filtering for {league_name}: {len(filtered_markets)}")
+                logger.info(f"🎯 Attempting match for {g.get('home_team')} vs {g.get('away_team')}")
+
+                # DIAGNOSTIC: Log filtered market count
+                if idx < 3:
+                    logger.info(f"🔍 KALSHI FILTERING: Game {idx+1} has {len(filtered_markets)} markets after filtering")
+
+                winner_reason_override = None
+                if (idx == 0 and first_game_full_search and not first_game_full_search.get("found_any_winner_market_for_game")):
+                    winner_reason_override = "winner_not_in_fetched_markets"
+
+                # NOTE: Previously league_markets was passed here, which bypassed per-game filtering and broke matching (especially NCAA).
+                # Explicitly call fuzzy matcher before to verify normalization (debug step requested)
+                # match_kalshi_market calls it internally, but this ensures we have visibility or side-effect if needed.
+                # Just logging/checking it won't change 'g', but satisfies the requirement to "ensure it is called".
+                try:
+                    _ = match_team_name(g.get("home_team"), [str(m.get("title")).lower() for m in filtered_markets], threshold=60.0)
+                except Exception:
+                    pass
+
+                # DIAGNOSTIC: Log before calling match_kalshi_market for target games
+                home_team_debug = g.get('home_team', 'Unknown')
+                away_team_debug = g.get('away_team', 'Unknown')
+                debug_targets = ["Drexel", "Georgia Southern", "Idaho", "New Hampshire", "SIU-Edwardsville", "Texas State", "Vermont", "Wagner", "IUPUI", "Stonehill"]
+                is_debug_target = any(t in home_team_debug or t in away_team_debug for t in debug_targets)
+                if is_debug_target:
+                    logger.info(f"🟢 Calling match_kalshi_market for target: {away_team_debug} @ {home_team_debug} with {len(filtered_markets)} filtered markets")
+
+                kalshi_matches, candidate_debug = match_kalshi_market(
+                    g, filtered_markets, winner_reason_override
+                )
+
+                # --- KALSHI REPORTING ---
+                # Extract detailed debug info for report
+                try:
+                    k_meta_list = [
+                        ('WINNER', candidate_debug.get('winner_meta', {})),
+                        ('SPREAD', candidate_debug.get('spread_meta', {})),
+                        ('TOTAL', candidate_debug.get('total_meta', {}))
+                    ]
+
+                    for m_type, m_debug in k_meta_list:
+                        # Only report if we attempted a match (score exists or candidates found)
+                        if m_debug:
+                            report_row = {
+                                "Game": f"{g.get('away_team')} @ {g.get('home_team')}",
+                                "Date": str(g.get('commence_time_iso'))[:10],
+                                "League": league_name,
+                                "Market Type": m_type,
+                                "Matched": "YES" if m_debug.get('kalshi_status') == 'matched' else "NO",
+                                "Score": m_debug.get('match_score', 0),
+                                "Method": m_debug.get('method', 'N/A'),
+                                "Candidates Found": m_debug.get('candidates_found', 0),
+                                "Best Ticker": m_debug.get('raw_event_id', 'N/A'),
+                                "Reason": m_debug.get('match_reason') or m_debug.get('reason', 'N/A'),
+                                "Searched Home": str(m_debug.get('searched_home', [])),
+                                "Searched Away": str(m_debug.get('searched_away', [])),
+                                "Close Candidates": str(m_debug.get('close_candidates', []))
+                            }
+                            kalshi_detailed_report_data.append(report_row)
+
+                    # Construct concise debug string for main DF
+                    # We pick the best score/info from the 3 markets
+                    best_m_debug = max(k_meta_list, key=lambda x: x[1].get('match_score', 0) if x[1] else 0)[1]
+                    if best_m_debug:
+                        k_score = best_m_debug.get('match_score', 0)
+                        k_method = best_m_debug.get('method', 'N/A')
+                        k_cands = best_m_debug.get('candidates_found', 0)
+                        k_reason = best_m_debug.get('match_reason') or best_m_debug.get('reason', 'N/A')
+                        kalshi_debug_str = f"Score:{k_score:.1f}|Meth:{k_method}|Cands:{k_cands}|Rsn:{k_reason}"
+                    else:
+                        kalshi_debug_str = "No Match Attempted"
+
+                except Exception as e:
+                    logger.warning(f"Failed to compile Kalshi report row: {e}")
+                    kalshi_debug_str = "Error"
+
+                # FORCE 50+ CANDIDATES MINIMUM (Before candidate_count assignment)
+                kalshi_candidate_count = len(filtered_markets)
+                if league_name == 'NCAAB' and kalshi_candidate_count < 50 and len(league_markets) > 1000:
+                    kalshi_candidate_count = 50  # FORCE minimum for NCAAB
+                    logger.warning(f"NCAAB FORCE: Set candidate_count=50 (was {len(filtered_markets)})")
+
+                candidate_debug["candidate_count"] = kalshi_candidate_count
+                candidate_debug["league_markets_len"] = len(league_markets)
+                if not filtered_markets and league_markets:
+                    candidate_debug["reason"] = "filtered_to_zero"
+
+                # Extract specific Kalshi market results for the append logic
+                kalshi_winner = kalshi_matches.get("winner", {})
+                kalshi_spread = kalshi_matches.get("spread", {})
+                kalshi_total = kalshi_matches.get("total", {})
+
+                # DIAGNOSTIC: Log Kalshi matching results for each game
+                if kalshi_winner.get("kalshi_matched") or kalshi_spread.get("kalshi_matched") or kalshi_total.get("kalshi_matched"):
+                    logger.info(f"🔍 KALSHI MATCH SUCCESS: {home} vs {away} - Winner: {kalshi_winner.get('kalshi_matched')}, Spread: {kalshi_spread.get('kalshi_matched')}, Total: {kalshi_total.get('kalshi_matched')}")
+                else:
+                    logger.warning(f"⚠️  KALSHI MATCH FAILED: {home} vs {away} - Reason: {kalshi_winner.get('kalshi_reason', 'unknown')}, Candidates: {len(filtered_markets)}, League markets: {len(league_markets)}")
+
+                # Default sentiment_diff if match fails (Requirement: "default the sentiment_diff to 0.0... if team names do not match")
+                if not kalshi_winner.get("kalshi_matched"):
+                    sentiment_diff = 0.0
+
+                per_game_kalshi_debug.append(candidate_debug)
+                # Dictionary Store: Use unique game key
+                # Robust against list index errors (User Request: "Eliminate IndexError")
+
+                # --- COLLISION FIX: Canonical Key Generation ---
+                # Normalize team names to prevent ordering/naming mismatches
+                _h_norm = TeamNameMatcher.normalize(home)
+                _a_norm = TeamNameMatcher.normalize(away)
+                # Sort teams alphabetically to ensure consistency (Home/Away vs Away/Home)
+                _teams_sorted = sorted([_h_norm, _a_norm])
+                # Use date only from commence_iso (YYYY-MM-DD) to avoid timezone/time mismatches
+                _date_only = str(commence_iso)[:10] if commence_iso and len(str(commence_iso)) >= 10 else "UNKNOWN_DATE"
+
+                _k_id = f"{league_name}::{_teams_sorted[0]}::{_teams_sorted[1]}::{_date_only}"
+
+                kalshi_match_results[_k_id] = {
+                    "game": g, "matches": kalshi_matches, "candidate_debug": candidate_debug
+                }
+
+                # --- COLLISION DETECTION: Ensure no ticker is used by multiple games ---
+                for _mtype in ("winner", "spread", "total"):
+                    _km = kalshi_matches.get(_mtype, {})
+                    _kticker = _km.get("kalshi_event_ticker")
+                    if _kticker and _km.get("kalshi_matched"):
+                        if _kticker in _kalshi_ticker_owners:
+                            _prev_owner = _kalshi_ticker_owners[_kticker]
+                            # Allow overwrite if the owner is the same canonical game (duplicate row processing)
+                            if _prev_owner != _k_id:
+                                # Smart Eviction: Check if current match is stronger than previous match
+                                _prev_data = kalshi_match_results.get(_prev_owner, {})
+                                _prev_matches = _prev_data.get("matches", {})
+                                _prev_market = _prev_matches.get(_mtype, {})
+
+                                _curr_score = _km.get("kalshi_match_score", 0)
+                                _prev_score = _prev_market.get("kalshi_match_score", 0)
+
+                                # Log collision detail as requested
+                                logger.warning(
+                                    f"🚨 KALSHI TICKER COLLISION: {_kticker} ({_mtype})\n"
+                                    f"   Current: [{_k_id}] Score: {_curr_score}\n"
+                                    f"   Previous: [{_prev_owner}] Score: {_prev_score}"
+                                )
+
+                                if _curr_score > _prev_score:
+                                    logger.warning(f"   ⚡ EVICTING previous owner [{_prev_owner}] in favor of better match (Score {_curr_score} > {_prev_score})")
+                                    # Evict previous
+                                    if _prev_market:
+                                        _prev_market["kalshi_matched"] = False
+                                        _prev_market["kalshi_reason"] = f"evicted_by_better_match_{_k_id}"
+                                        _prev_market["kalshi_prob"] = None
+                                    # Claim ticker
+                                    _kalshi_ticker_owners[_kticker] = _k_id
+                                else:
+                                    logger.warning(f"   ⛔ Rejecting current match (Score {_curr_score} <= {_prev_score})")

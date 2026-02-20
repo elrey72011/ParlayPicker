@@ -1899,6 +1899,39 @@ KALSHI_NCAAB_TEAM_CODES = {
     "AUSTIN PEAY": "APSU", # Or AP? Let's check map. Map says AP.
     "UNC WILMINGTON": "UNCW",
     "MONMOUTH": "MON",
+    # Feb 24 2026 - Missing Games Fix
+    "Drexel": "DREX",
+    "Drexel Dragons": "DREX",
+    "Northeastern": "NEU",
+    "Northeastern Huskies": "NEU",
+    "Georgia Southern": "GASO",
+    "Georgia Southern Eagles": "GASO",
+    "Georgia State": "GSU",
+    "Georgia St Panthers": "GSU",
+    "Idaho": "IDA",
+    "Idaho Vandals": "IDA",
+    "Portland State": "PSU",
+    "Portland St Vikings": "PSU",
+    "New Hampshire": "UNH",
+    "New Hampshire Wildcats": "UNH",
+    "UMass Lowell": "UMLO",
+    "UMass Lowell River Hawks": "UMLO",
+    "SIU-Edwardsville": "SIUE",
+    "SIU-Edwardsville Cougars": "SIUE",
+    "Tennessee Tech": "TNTH",
+    "Tennessee Tech Golden Eagles": "TNTH",
+    "Texas State": "TXST",
+    "Texas State Bobcats": "TXST",
+    "South Alabama": "SOAL",
+    "South Alabama Jaguars": "SOAL",
+    "Vermont": "VT",
+    "Vermont Catamounts": "VT",
+    "UMBC": "UMBC",
+    "UMBC Retrievers": "UMBC",
+    "Wagner": "WAG",
+    "Wagner Seahawks": "WAG",
+    "Mercyhurst": "MERC",
+    "Mercyhurst Lakers": "MERC",
 }
 
 def normalize_team_for_kalshi(team_name: str) -> str:
@@ -3433,6 +3466,7 @@ def _match_via_events(
                     "raw_event_id": best_event.get("ticker"), # Alias
                     "total_markets": len(markets),
                     "winner_found": bool(winner_market),
+                    "winner_market": winner_market, # Store full object for retrieval
                     "spread_count": len(spread_markets),
                     "total_count": len(total_markets),
                     "spread_tickers": [m.get("ticker") for m in spread_markets[:2]],
@@ -4429,6 +4463,52 @@ class KalshiIntegrator:
         # Generate comprehensive variants (includes codes, stripped mascots, etc.)
         home_variants = generate_comprehensive_team_variants(home_team, league)
         away_variants = generate_comprehensive_team_variants(away_team, league)
+
+        # --- NEW: Try Event-Based Matching First (Ported from match_game_to_kalshi) ---
+        if commence_time and league in ["NBA", "NFL", "NCAAB", "NCAAF", "MLB", "NHL"]:
+            if commence_time.tzinfo is None:
+                gt_utc = pytz.utc.localize(commence_time)
+            else:
+                gt_utc = commence_time.astimezone(pytz.UTC)
+
+            # Try matching via events endpoint
+            # We use None for requested_market_type to get the best general match
+            event_match = _match_via_events(
+                self,
+                league,
+                home_variants, # variants list is treated as codes list in _match_via_events
+                away_variants,
+                gt_utc,
+                status=None,
+                requested_market_type=None,
+                home_team_name=home_team,
+                away_team_name=away_team
+            )
+
+            if event_match and event_match.matched:
+                # Convert KalshiMatchResult to the dictionary format expected by streamlit_app.py
+                debug = event_match.debug or {}
+
+                # Extract markets from debug info
+                winner_mkt = debug.get("winner_market")
+                spread_mkts = debug.get("spread_markets") or []
+                total_mkts = debug.get("total_markets") or []
+
+                # Construct result dict
+                result = {
+                    "GAME": [winner_mkt] if winner_mkt else [],
+                    "SPREAD": spread_mkts,
+                    "TOTAL": total_mkts,
+                    "_meta": {
+                        "status": "matched",
+                        "reason": event_match.reason,
+                        "candidates_found": debug.get("total_markets", 0),
+                        "best_score": debug.get("match_score", 100.0)
+                    }
+                }
+
+                logger.info(f"✅ match_game_to_kalshi_markets: Returned event-based match for {home_team} vs {away_team}")
+                return result
 
         # --- DATE TOLERANCE FIX ---
         # Generate a list of allowed date tokens (e.g. [26FEB18, 26FEB19, 26FEB20])
