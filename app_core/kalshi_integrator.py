@@ -2776,18 +2776,18 @@ def validate_market_type_match(kalshi_yes_side: str, requested_market_type: str)
     yes_side_upper = kalshi_yes_side.upper()
     req_upper = requested_market_type.upper()
 
-    if "TOTAL" in req_upper:
-        # Total markets have "TOTAL POINTS" or just ": TOTAL" in yes_side or "OVER"/"UNDER"
-        # Check explicit Total keywords
-        is_total = ("TOTAL POINTS" in yes_side_upper) or (": TOTAL" in yes_side_upper) or ("OVER" in yes_side_upper) or ("UNDER" in yes_side_upper)
-        # Rejection criteria: If it says "WINS BY", it's a spread
-        is_spread = ("WINS BY" in yes_side_upper)
-        return is_total and not is_spread
+    if "SPREAD" in req_upper:
+        # SPREAD picks MUST match to "wins by over X Points?" markets
+        # These represent margin markets.
+        # "Spread" might appear in generic titles, but "wins by" is the key indicator for margin/spread logic.
+        return ('WINS BY OVER' in yes_side_upper) and ('POINTS' in yes_side_upper)
 
-    elif "SPREAD" in req_upper:
-        # Spread markets have "WINS BY OVER" or "WINS BY UNDER" in yes_side
-        # Or just "WINS BY ... POINTS"
-        return ("WINS BY" in yes_side_upper) or ("SPREAD" in yes_side_upper)
+    elif "TOTAL" in req_upper:
+        # TOTAL picks MUST match to "Total Points" markets ONLY
+        # NOT to "wins by over" markets
+        if 'WINS BY' in yes_side_upper:
+            return False
+        return ('TOTAL POINTS' in yes_side_upper) or (': TOTAL' in yes_side_upper)
 
     return True
 
