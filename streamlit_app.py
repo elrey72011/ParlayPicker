@@ -8359,8 +8359,20 @@ default_sports = st.session_state.get("selected_sports") or [st.session_state.ge
 valid_defaults = [s for s in default_sports if s in sport_options]
 
 def update_sports():
-    """Callback to ensure immediate state update"""
-    pass  # State update happens automatically via key binding
+    """Callback to ensure immediate state update and enforce selection rules"""
+    # Enforce selection rules immediately upon change
+    current = st.session_state.selected_sports
+
+    # Handle empty selection -> Default to All Sports
+    if not current:
+        st.session_state.selected_sports = [ALL_SPORTS_LABEL]
+        return
+
+    # Handle "All Sports" expansion -> Select all individual sports
+    if ALL_SPORTS_LABEL in current:
+        # Reconstruct options list to ensure scope access
+        all_options = [ALL_SPORTS_LABEL] + list(SPORT_KEYS.keys())
+        st.session_state.selected_sports = [s for s in all_options if s != ALL_SPORTS_LABEL]
 
 selected_sports = st.sidebar.multiselect(
     "Select sports",
@@ -8369,14 +8381,6 @@ selected_sports = st.sidebar.multiselect(
     key="selected_sports",
     on_change=update_sports
 )
-
-# Handle empty selection
-if not st.session_state.selected_sports:
-    st.session_state.selected_sports = [ALL_SPORTS_LABEL]
-
-# Handle "All Sports" expansion
-if ALL_SPORTS_LABEL in st.session_state.selected_sports:
-    st.session_state.selected_sports = [s for s in sport_options if s != ALL_SPORTS_LABEL]
 
 # Safe access for league selection
 _all_keys = list(SPORT_KEYS.keys())
