@@ -239,8 +239,14 @@ def find_all_team_matches(ticker_code: str, team_variants: List[str], team_name_
                 score = 90.0
                 match_type = '2char_boundary'
             else:
-                score = 60.0
-                match_type = '2char_middle'
+                # STRICTER: Reject 2-char matches in the middle to prevent "GR" matching "GRAMBLING"
+                # Unless it's a very short ticker (e.g. 4-5 chars total) where boundary is ambiguous
+                if len(ticker_code_upper) <= 5:
+                    score = 60.0
+                    match_type = '2char_middle_short_ticker'
+                else:
+                    score = 0.0
+                    match_type = '2char_middle_rejected'
 
         # WEAK: Long names or single chars
         else:
@@ -1020,10 +1026,11 @@ def generate_comprehensive_team_variants(team_name: str, league: str = None) -> 
     hyphen_codes = handle_hyphenated_teams(team_name) # Use original name for hyphen check
     variants.extend(hyphen_codes)
 
-    # Step 5: Add prefixes of each token (2-4 chars)
+    # Step 5: Add prefixes of each token (3-4 chars)
     # Only use filtered tokens to avoid generating 'ST', 'NOR', 'SOU'
+    # FIX: Removed 2-char prefix generation to prevent false positives (e.g. "GR" from "Green" matching "GRAM")
     for token in tokens:
-        for prefix_len in [4, 3, 2]:
+        for prefix_len in [4, 3]:
             if len(token) >= prefix_len:
                 # Extra check: Don't add short prefixes if they match common words
                 prefix = token[:prefix_len]
@@ -1993,6 +2000,19 @@ KALSHI_NCAAB_TEAM_CODES = {
     "SAINT LOUIS": "SLU",
     "SAINT LOUIS BILLIKENS": "SLU",
     "St. Louis": "SLU",
+    # Missing Games Fix (Feb 20 2026)
+    "Green Bay": "GB",
+    "Green Bay Phoenix": "GB",
+    "Oakland": "OAK",
+    "Oakland Golden Grizzlies": "OAK",
+    "Merrimack": "MER",
+    "Merrimack Warriors": "MER",
+    "Siena": "SIE",
+    "Siena Saints": "SIE",
+    "Saint Peter's": "SPC",
+    "Saint Peter's Peacocks": "SPC",
+    "Iona": "IONA",
+    "Iona Gaels": "IONA",
 }
 
 def normalize_team_for_kalshi(team_name: str) -> str:
@@ -5901,6 +5921,8 @@ def match_ncaab_total(row: Dict[str, Any], candidate_events: List[Dict[str, Any]
 
             if kalshi_total:
                 diff = abs(kalshi_total - total_pick_line)
+                # Relaxed tolerance (was 5.0, now same but ensure logic picks best)
+                # Note: 5.0 is quite generous. We keep it but ensure we pick the *best* match.
                 if diff <= 5.0 and diff < min_line_diff:
                     min_line_diff = diff
                     best_match = kalshi_event
