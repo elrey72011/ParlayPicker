@@ -9962,8 +9962,11 @@ with tab_master:
                 warnings: List[str] = list(g.get("warnings") or [])
                 league_name = g.get("league")
                 league_key = canonical_league_key(league_name)
-                home = g.get("home_team")
-                away = g.get("away_team")
+                home = g.get("home_team") or g.get("Home")
+                away = g.get("away_team") or g.get("Away")
+
+                if not home or not away:
+                    continue
                 league_markets = kalshi_markets_by_league.get(league_key, []) or kalshi_markets_by_league.get(league_name, [])
 
                 # DIAGNOSTIC: Log league_markets availability for first few games
