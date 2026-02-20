@@ -54,6 +54,8 @@ __all__ = [
     "match_ncaab_total",
     "extract_margin_from_yes_side",
     "extract_total_from_ticker",
+    "validate_market_type_match",
+    "validate_teams_match",
 ]
 
 # Timezone for NBA date buckets (games are bucketed by their US/Eastern date usually, or strict UTC date tokens)
@@ -2532,7 +2534,10 @@ def _extract_market_type(title: str, ticker: str, subtitle: str = "", market: Di
     # 1. Spread detection
     # "Winning Margin" is often used for spreads in some contexts, but usually "Point Spread"
     if "SPREAD" in tick or "KXNBASPREAD" in tick or "KXNFLSPREAD" in tick: return "spread"
-    if "SPREAD" in t or "POINT SPREAD" in t or "POINTS" in t: return "spread"
+    if "SPREAD" in t or "POINT SPREAD" in t: return "spread"
+    # STRICT FIX: "wins by over X Points" is definitely a spread/margin market
+    if "WINS BY" in t: return "spread"
+    if "POINTS" in t and "TOTAL" not in t: return "spread"
     if "SPREAD" in sub or "POINT SPREAD" in sub or "WINNING MARGIN" in sub: return "spread"
 
     # Fix Issue #1: Aggressive suffix check for spread
@@ -2759,37 +2764,112 @@ def _team_score(team_code: str, target_clean: str, target_codes: List[str]) -> f
 
     return 0.0
 
-def validate_market_type_match(kalshi_yes_side: str, requested_market_type: str) -> bool:
+def validate_market_type_match(kalshi_yes_side: str, requested_market_type: str) -> Tuple[bool, str]:
     """
     Validate that a Kalshi yes_side matches the requested market type.
+    Updated to return (is_valid, reason) tuple.
 
     Args:
         kalshi_yes_side: The yes_side text from Kalshi (e.g., "Boston at Golden State: Total Points")
         requested_market_type: Either "SPREAD" or "TOTAL"
 
     Returns:
-        True if the Kalshi event matches the requested market type
+        tuple: (is_valid, reason)
     """
     if not requested_market_type or not kalshi_yes_side:
-        return True # Cannot validate
+        return True, "no_validation_context"
 
     yes_side_upper = kalshi_yes_side.upper()
     req_upper = requested_market_type.upper()
 
+    # Define what constitutes each market type
+    # Fix: Allow "Point Spread" or "wins by over"
+    is_kalshi_spread = ('WINS BY' in yes_side_upper and 'POINTS' in yes_side_upper) or \
+                       ('SPREAD' in yes_side_upper)
+
+    is_kalshi_total = ('TOTAL POINTS' in yes_side_upper) or \
+                      (': TOTAL' in yes_side_upper) or \
+                      ('OVER/UNDER' in yes_side_upper) or \
+                      (re.search(r'(OVER|UNDER) [\d\.]+', yes_side_upper) is not None)
+
+    is_kalshi_moneyline = ('WINNER' in yes_side_upper) or ('MONEYLINE' in yes_side_upper)
+
     if "SPREAD" in req_upper:
-        # SPREAD picks MUST match to "wins by over X Points?" markets
-        # These represent margin markets.
-        # "Spread" might appear in generic titles, but "wins by" is the key indicator for margin/spread logic.
-        return ('WINS BY OVER' in yes_side_upper) and ('POINTS' in yes_side_upper)
+        # SPREAD picks can ONLY match to spread markets
+        if is_kalshi_spread:
+            return True, "valid_spread_match"
+        elif is_kalshi_total:
+            return False, "rejected_spread_to_total_mismatch"
+        elif is_kalshi_moneyline:
+            return False, "rejected_spread_to_moneyline_mismatch"
+        else:
+            # If generic, be cautious. "wins by" check above covers most spreads.
+            return False, "rejected_unknown_market_type_for_spread"
 
     elif "TOTAL" in req_upper:
-        # TOTAL picks MUST match to "Total Points" markets ONLY
-        # NOT to "wins by over" markets
-        if 'WINS BY' in yes_side_upper:
-            return False
-        return ('TOTAL POINTS' in yes_side_upper) or (': TOTAL' in yes_side_upper)
+        # TOTAL picks can ONLY match to total markets
+        # FIX: Check for spread patterns FIRST. "Wins by over X" matches "Over X" regex but is a spread.
+        if is_kalshi_spread:
+            return False, "rejected_total_to_spread_mismatch"
+        elif is_kalshi_total:
+            return True, "valid_total_match"
+        elif is_kalshi_moneyline:
+            return False, "rejected_total_to_moneyline_mismatch"
+        else:
+            return False, "rejected_unknown_market_type_for_total"
 
-    return True
+    return True, "no_validation_required"
+
+def validate_teams_match(home_team: str, away_team: str, kalshi_yes_side: str) -> bool:
+    """
+    Check if the Kalshi event is for the correct game.
+    Prevents matches like "Saint Peter's @ Iona" -> "Georgia Southern..."
+
+    Returns:
+        bool: True if teams appear to match
+    """
+    if not home_team or not away_team or not kalshi_yes_side:
+        return True # Cannot validate
+
+    yes_side_lower = kalshi_yes_side.lower()
+
+    # Clean the input title slightly
+    yes_side_clean = yes_side_lower.replace('.', '').replace("'", "")
+
+    # Extract first significant word from each team (usually school/city name)
+    def extract_key_words(team_name):
+        if not team_name: return []
+        # Remove common words and get meaningful parts
+        # Normalize first
+        tn = team_name.lower().replace('.', '').replace("'", "")
+        words = tn.split()
+
+        # Filter out mascots, "college", "university", etc.
+        # Add common suffixes to ignore
+        ignore_list = ['college', 'university', 'state', 'univ', 'tech', 'a&m', 'and']
+
+        significant_words = [w for w in words if len(w) > 2 and w not in ignore_list]
+
+        # If we filtered everything (e.g. "Ohio State"), keep original words except generic generic ones
+        if not significant_words:
+            significant_words = [w for w in words if w not in ['college', 'university']]
+
+        return significant_words
+
+    home_words = extract_key_words(home_team)
+    away_words = extract_key_words(away_team)
+
+    # Check if at least one team appears in the Kalshi yes_side
+    # Strict check: At least ONE word from either Home OR Away team must be present
+    # We don't require both because titles like "Charlotte wins by..." only have one team
+
+    home_match = any(word in yes_side_clean for word in home_words)
+    away_match = any(word in yes_side_clean for word in away_words)
+
+    # If using codes (e.g. "CLT wins"), we might miss it with full name check.
+    # But this is a safety guardrail. If NEITHER matches, it's likely wrong game.
+
+    return home_match or away_match
 
 def _match_via_events(
     integrator: KalshiIntegrator,
@@ -3354,7 +3434,8 @@ def _match_via_events(
                 def _find_valid_market(candidates, req_type):
                     for cand in candidates:
                         yes_side = cand.get('yes_side') or cand.get('title') or ''
-                        if validate_market_type_match(yes_side, req_type):
+                        is_valid, reason = validate_market_type_match(yes_side, req_type)
+                        if is_valid:
                             return cand
                     return None
 
@@ -3375,22 +3456,24 @@ def _match_via_events(
                         yes_side = candidate.get('yes_side') or candidate.get('title') or ''
                         # Only accept fallback if it PASSES validation for the REQUESTED type
                         # (This basically disables fallback for mismatched types, which is the fix)
-                        if validate_market_type_match(yes_side, req_upper):
+                        is_valid, reason = validate_market_type_match(yes_side, req_upper)
+                        if is_valid:
                             target_market = candidate
                             match_reason_detail = "matched_spread_fallback"
                             logger.info(f"   ⚠️ Requested {req_upper} but found SPREAD (validated). Using fallback.")
                         else:
-                            logger.info(f"   🚫 Rejected SPREAD fallback for {req_upper} request: {yes_side}")
+                            logger.info(f"   🚫 Rejected SPREAD fallback for {req_upper} request: {yes_side} ({reason})")
 
                     elif total_markets:
                         candidate = total_markets[0]
                         yes_side = candidate.get('yes_side') or candidate.get('title') or ''
-                        if validate_market_type_match(yes_side, req_upper):
+                        is_valid, reason = validate_market_type_match(yes_side, req_upper)
+                        if is_valid:
                             target_market = candidate
                             match_reason_detail = "matched_total_fallback"
                             logger.info(f"   ⚠️ Requested {req_upper} but found TOTAL (validated). Using fallback.")
                         else:
-                            logger.info(f"   🚫 Rejected TOTAL fallback for {req_upper} request: {yes_side}")
+                            logger.info(f"   🚫 Rejected TOTAL fallback for {req_upper} request: {yes_side} ({reason})")
 
             # If no target selected yet (or no request), use default logic
             if not target_market:
@@ -3923,7 +4006,8 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
         # Validate Market Type if requested (Generic Fallback)
         if requested_market_type:
             yes_side = meta.get('title') or ""
-            if not validate_market_type_match(yes_side, requested_market_type):
+            is_valid, reason = validate_market_type_match(yes_side, requested_market_type)
+            if not is_valid:
                 continue
 
         if score > best_score:

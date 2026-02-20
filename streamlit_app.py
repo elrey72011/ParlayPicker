@@ -34,6 +34,8 @@ from app_core.kalshi_integrator import (
     match_ncaab_total,
     extract_margin_from_yes_side,
     canonical_team_name,
+    validate_market_type_match,
+    validate_teams_match,
 )
 
 from app_core.probability_utils import american_to_implied_prob, american_to_implied
@@ -8064,29 +8066,34 @@ def match_kalshi_market(
                         return KalshiMatchResult(matched=False, reason="market_type_missing", market_type=m_type)
 
                 # ---------------------------------------------------------
-                # STEP 1: STRICT MARKET TYPE FILTERING (Fix #1)
+                # STEP 1: STRICT MARKET TYPE & TEAM FILTERING (Fix #1 & #3)
                 # ---------------------------------------------------------
                 filtered_candidates = []
                 for cand in market_list:
                     meta = _parse_market_metadata(cand) or {}
-                    yes_side = str(meta.get("title", "")).lower()
+                    yes_side = str(meta.get("title", "")).strip()
 
-                    if m_type == 'SPREAD':
-                        # Must contain "wins by" (Margin market)
-                        # We reject "Winner" markets here if we specifically asked for SPREAD
-                        if "wins by" in yes_side:
-                            filtered_candidates.append(cand)
-                    elif m_type == 'TOTAL':
-                        # Must contain "Total Points"
-                        # We reject "wins by" markets here
-                        if "total points" in yes_side or ": total" in yes_side:
-                            filtered_candidates.append(cand)
-                    else:
-                        # Winner/Moneyline or other
-                        filtered_candidates.append(cand)
+                    # 1. Market Type Validation (Strict)
+                    # Returns (bool, reason)
+                    is_type_valid, type_reason = validate_market_type_match(yes_side, m_type)
+
+                    if not is_type_valid:
+                        # logger.debug(f"Rejected candidate {yes_side} for {m_type}: {type_reason}")
+                        continue
+
+                    # 2. Team Name Validation (Fix #3)
+                    # Prevents wrong game matching (e.g. Saint Peter's vs Georgia Southern)
+                    if not validate_teams_match(home, away, yes_side):
+                        # logger.warning(f"Rejected candidate {yes_side} for {home} vs {away}: Team mismatch")
+                        continue
+
+                    filtered_candidates.append(cand)
 
                 # If everything was filtered out, fail early
                 if not filtered_candidates:
+                    # If we had candidates but filtered them all, log it
+                    if market_list:
+                        logger.info(f"   ⚠️ All {len(market_list)} candidates filtered for {m_type} (Strict Validation) for {home} vs {away}")
                     return KalshiMatchResult(matched=False, reason=f"strict_type_mismatch_{m_type}", market_type=m_type)
 
                 # ---------------------------------------------------------
