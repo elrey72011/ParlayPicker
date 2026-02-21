@@ -13569,7 +13569,7 @@ with tab_master:
                             # But since this block is inside the prediction loop, we log features here.
 
                             cols_to_keep = ['Home', 'Away', 'league', 'Commence (UTC)']
-                            for c in ['Pick_Confidence', 'Market', 'Pick', 'best_pick_type', 'final_probability', 'kalshi_prob_for_pick', 'Implied_Prob']:
+                            for c in ['Pick_Confidence', 'Market', 'Pick', 'best_pick_type', 'final_probability', 'kalshi_prob_for_pick', 'Implied_Prob', 'HasKalshiMarket', 'kalshi_matched']:
                                 if c in master_df.columns:
                                     cols_to_keep.append(c)
 
@@ -13602,7 +13602,7 @@ with tab_master:
                             # Filter and clean debug rows (Fixes #1, #2, #3)
                             valid_debug_rows = []
                             for row in debug_combined.to_dict('records'):
-                                # FIX 1: Guard - Suppress sub-50% picks
+                                # Guard - Suppress sub-50% picks
                                 # Prob might be missing on first run, effectively skipping rows until final_prob is calculated
                                 pick_prob = row.get("prob") or row.get("final_probability") or 0.0
                                 if float(pick_prob) <= 0.50:
@@ -13614,27 +13614,31 @@ with tab_master:
                                 if "kalshi_prob" in row:
                                     del row["kalshi_prob"]
 
-                                # FIX 2 & 3: Sanitize kalshi_prob_for_pick
-                                # Ensure it is set, not None, and not < 0.50
-                                kp = row.get("kalshi_prob_for_pick")
+                                # FIX 1: Strict Null Check for Unmatched - Prevent fallback echoes
+                                matched = row.get("kalshi_matched") or row.get("HasKalshiMarket")
+                                if not matched:
+                                    kp = None
+                                else:
+                                    # Ensure it is set, not None
+                                    kp = row.get("kalshi_prob_for_pick")
 
-                                # RECOVERY: If kp looks like final_prob (echoing bug) or is missing,
-                                # try to recover the raw value from decision_trace_json source_probs
-                                if row.get("decision_trace_json"):
-                                    try:
-                                        dt = json.loads(row["decision_trace_json"])
-                                        if "source_probs" in dt and "kalshi_prob_for_pick" in dt["source_probs"]:
-                                            trace_kp = dt["source_probs"]["kalshi_prob_for_pick"]
-                                            # Only use trace value if valid
-                                            if trace_kp is not None:
-                                                kp = trace_kp
-                                    except:
-                                        pass
+                                    # RECOVERY: If kp looks like final_prob (echoing bug) or is missing,
+                                    # try to recover the raw value from decision_trace_json source_probs
+                                    if row.get("decision_trace_json"):
+                                        try:
+                                            dt = json.loads(row["decision_trace_json"])
+                                            if "source_probs" in dt and "kalshi_prob_for_pick" in dt["source_probs"]:
+                                                trace_kp = dt["source_probs"]["kalshi_prob_for_pick"]
+                                                # Only use trace value if valid
+                                                if trace_kp is not None:
+                                                    kp = trace_kp
+                                        except:
+                                            pass
 
-                                # FIX 1: Strict Null Check - Prevent fallback echoes
-                                # If kp is invalid, NaN, or < 0.50, force to None
+                                # FIX 2: Sanitize kalshi_prob_for_pick
+                                # If kp is invalid, NaN, or <= 0.50 (neutral), force to None
                                 fkp = safe_float(kp)
-                                if fkp is None or fkp < 0.50:
+                                if fkp is None or fkp <= 0.50:
                                     kp = None
                                 else:
                                     kp = fkp
@@ -13646,6 +13650,21 @@ with tab_master:
                                 if "implied_home_prob" in row:
                                     del row["implied_home_prob"]
                                 # implied_pick_prob is already present from debug_base rename
+
+                                # FIX 4: Divergence Guard (New)
+                                implied = safe_float(row.get("implied_pick_prob")) or 0.5
+                                final_p = safe_float(row.get("prob")) or 0.0
+
+                                # If model is very confident but market strongly disagrees, cap and warn
+                                if final_p >= 0.95 and implied < 0.50:
+                                    divergence = final_p - implied
+                                    logger.warning(
+                                        f"Overconfidence detected: {row.get('Home')} vs {row.get('Away')} "
+                                        f"prob={final_p:.3f} but market_implied={implied:.3f} "
+                                        f"(divergence={divergence:.1%}) — capping to 0.80"
+                                    )
+                                    row["prob"] = 0.80  # cap; do not suppress so it still shows in debug
+                                    row["confidence"] = "MEDIUM"  # downgrade confidence
 
                                 valid_debug_rows.append(row)
 
