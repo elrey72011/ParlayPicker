@@ -13599,7 +13599,7 @@ with tab_master:
                             # Combine with feature vector
                             debug_combined = pd.concat([debug_base, inference_df], axis=1).copy()
 
-                            # Filter and clean debug rows (Fixes #1, #2, #3)
+                            # Filter and clean debug rows (Fixes #1, #2, #3, #4)
                             valid_debug_rows = []
                             for row in debug_combined.to_dict('records'):
                                 # Guard - Suppress sub-50% picks
