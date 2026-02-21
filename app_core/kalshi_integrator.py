@@ -3566,12 +3566,19 @@ def _match_via_events(
                 # We simply DO NOT set target_market if the requested type is missing.
                 else:
                     req_upper = requested_market_type.upper()
-                    logger.warning(f"   ⚠️ Requested {req_upper} but no valid {req_upper} market found. Rejecting fallback to prevent cross-matching.")
-                    # Explicitly check if we have a partial match that was rejected
-                    if "SPREAD" in req_upper and total_markets:
-                         logger.debug(f"      (Ignored {len(total_markets)} TOTAL markets)")
-                    elif "TOTAL" in req_upper and spread_markets:
-                         logger.debug(f"      (Ignored {len(spread_markets)} SPREAD markets)")
+
+                    # Fix 3: CRITICAL - Stop WINNER market falling back to SPREAD
+                    if "WINNER" in req_upper or "MONEYLINE" in req_upper:
+                        logger.warning(f"No WINNER market found for {best_event.get('ticker')}. Returning None — will not use spread/total as fallback.")
+                        # Do NOT set target_market
+                        pass
+                    else:
+                        logger.warning(f"   ⚠️ Requested {req_upper} but no valid {req_upper} market found. Rejecting fallback to prevent cross-matching.")
+                        # Explicitly check if we have a partial match that was rejected
+                        if "SPREAD" in req_upper and total_markets:
+                             logger.debug(f"      (Ignored {len(total_markets)} TOTAL markets)")
+                        elif "TOTAL" in req_upper and spread_markets:
+                             logger.debug(f"      (Ignored {len(spread_markets)} SPREAD markets)")
 
                     # NCAAB Force Match logic ONLY if NO specific type requested (already handled in `if requested_market_type is None`)
                     # or if we want to allow "Winner" markets as fallback for Spread/Total requests?
@@ -5845,6 +5852,19 @@ def match_nba_spread(row: Dict[str, Any], candidate_events: List[Dict[str, Any]]
     target_margin = abs(spread_pick_line)
 
     for kalshi_event in candidate_events:
+        # Fix 1: Filter out stale markets inside loop
+        _m_prob = kalshi_event.get('probability')
+        if _m_prob is None:
+             _yb = _kalshi_price_norm(kalshi_event, "yes_bid_dollars", "yes_bid")
+             _nb = _kalshi_price_norm(kalshi_event, "no_bid_dollars", "no_bid")
+             _lp = _kalshi_price_norm(kalshi_event, "last_price_dollars", "last_price")
+             if _yb is not None: _m_prob = _yb
+             elif _nb is not None: _m_prob = 1.0 - _nb
+             elif _lp is not None: _m_prob = _lp
+
+        if _m_prob is not None and (_m_prob > 0.90 or _m_prob < 0.10):
+             continue
+
         yes_side = kalshi_event.get('yes_side', '') or kalshi_event.get('title', '')
 
         # MUST be a spread market
@@ -5923,7 +5943,13 @@ def match_nba_spread(row: Dict[str, Any], candidate_events: List[Dict[str, Any]]
         raw_prob = m.get('probability')
         if raw_prob is None:
              # Fallback to last_price
-             raw_prob = safe_float(m.get('last_price'))
+             # Use normalized helpers
+             _yb = _kalshi_price_norm(m, "yes_bid_dollars", "yes_bid")
+             _nb = _kalshi_price_norm(m, "no_bid_dollars", "no_bid")
+             _lp = _kalshi_price_norm(m, "last_price_dollars", "last_price")
+             if _yb is not None: raw_prob = _yb
+             elif _nb is not None: raw_prob = 1.0 - _nb
+             elif _lp is not None: raw_prob = _lp
 
         if raw_prob is not None:
             if best_match_wrapper.get('invert_probability'):
@@ -6038,6 +6064,19 @@ def match_ncaab_total(row: Dict[str, Any], candidate_events: List[Dict[str, Any]
                         pass
 
             if kalshi_total:
+                # Fix 1: Check probability to filter stale/settled markets (prob > 0.90 or < 0.10)
+                _yb = _kalshi_price_norm(kalshi_event, "yes_bid_dollars", "yes_bid")
+                _nb = _kalshi_price_norm(kalshi_event, "no_bid_dollars", "no_bid")
+                _lp = _kalshi_price_norm(kalshi_event, "last_price_dollars", "last_price")
+
+                _p = None
+                if _yb is not None: _p = _yb
+                elif _nb is not None: _p = 1.0 - _nb
+                elif _lp is not None: _p = _lp
+
+                if _p is not None and (_p > 0.90 or _p < 0.10):
+                    continue # Skip stale market
+
                 diff = abs(kalshi_total - total_pick_line)
                 # Relaxed tolerance (was 5.0, now increased to 25.0 to catch games with large line movement or data discrepancies)
                 # Note: If teams match 100%, it is almost certainly the right game.

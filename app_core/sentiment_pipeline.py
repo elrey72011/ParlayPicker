@@ -17,7 +17,12 @@ from app_core.sentiment_cache import (
     save_persistent_cooldown,
     is_cooldown_active,
     get_cooldown_remaining_seconds,
+    get_memory_cache,
+    set_memory_cache,
 )
+
+# Global flag for rate limit (per run)
+_rate_limited_global = False
 
 # Configure logger for sentiment pipeline
 logger = logging.getLogger(__name__)
@@ -237,12 +242,21 @@ def fetch_team_newsapi_cached(
 @st.cache_data(ttl=21600)
 def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Optional[str] = None, *, max_retries: int = 3, retry_delay: float = 0.75, date_bucket: Optional[str] = None) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """Fetch recent articles for a team; returns (articles, info) where info contains status/error."""
+    global _rate_limited_global
+    if _rate_limited_global:
+        return [], {
+            "error": "rate_limited_global",
+            "status": 429,
+            "rate_limited": True
+        }
+
     date_bucket = date_bucket or datetime.now(timezone.utc).date().isoformat()
 
     # Check if cooldown is active before making any request
     cooldown_active, cooldown_msg = _check_and_enforce_cooldown()
     if cooldown_active:
         logger.info(f"Skipping NewsAPI for {team}: {cooldown_msg}")
+        _rate_limited_global = True
         return [], {
             "error": "cooldown_active",
             "status": None,
@@ -357,6 +371,19 @@ def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Opt
             # Log the fetch result
             logger.info(f"Sentiment fetch for {team} ({league}): query='{q}', status={status}, articles={len(articles)}, totalResults={total_results}")
 
+            # Fix 4: Check for 403/429 explicitly and stop
+            if status == 403 or status == 429:
+                logger.warning(f"NewsAPI Rate Limit/Auth ({status}) for {team}. Stopping all future calls.")
+                _rate_limited_global = True
+                return [], {
+                    "error": "rate_limited_strict",
+                    "status": status,
+                    "status_code": status,
+                    "rate_limited": True,
+                    "auth_error": True,
+                    "q": q
+                }
+
             if status != 200:
                 error_key = "rate_limited" if rate_limited else ("bad_key" if auth_error else "http_error")
                 if rate_limited:
@@ -373,6 +400,7 @@ def fetch_team_news(news_api_key: str, team: str, league: str, league_query: Opt
                         except Exception:
                             pass
                         logger.warning(f"Max retries exceeded. Setting {COOLDOWN_HOURS}h cooldown until {cooldown_until.isoformat()}")
+                        _rate_limited_global = True # Stop future calls
                     elif not articles:
                         time.sleep(backoff_delay)
                         last_error = error_key
@@ -449,6 +477,11 @@ def fetch_team_sentiment_cached(
     retry_delay: float = 0.75,
 ) -> Dict[str, Any]:
     """Cached wrapper around NewsAPI fetch + simple scoring."""
+    # Fix 4 Part A: Check memory cache first
+    mem = get_memory_cache(team)
+    if mem:
+        return mem
+
     date_bucket = date_bucket or datetime.now(timezone.utc).date().isoformat()
     articles, info = fetch_team_news(
         news_api_key,
@@ -466,7 +499,8 @@ def fetch_team_sentiment_cached(
         status_int = int(status_val) if status_val is not None else None
     except Exception:
         status_int = None
-    return {
+
+    result = {
         "team": team,
         "league": league,
         "q": info.get("q"),
@@ -479,6 +513,10 @@ def fetch_team_sentiment_cached(
         "auth_error": bool(info.get("auth_error")),
         "date_bucket": date_bucket,
     }
+
+    # Fix 4 Part A: Set memory cache
+    set_memory_cache(team, result)
+    return result
 
 
 def team_sentiment_from_articles(articles: List[Dict[str, Any]]) -> float:
@@ -680,6 +718,10 @@ def build_team_sentiment_map(
         norm_key = _normalize_team_key(team)
         prev_meta = existing_meta_norm.get(norm_key) or {}
         prev_score = existing_map_norm.get(norm_key)
+
+        # Fix 4: Check global rate limit flag
+        if _rate_limited_global:
+            stop_fetching = True
 
         if stop_fetching or debug["calls_made"] >= max_calls or not news_api_key:
             debug["calls_capped"] = debug["calls_capped"] or debug["calls_made"] >= max_calls or stop_fetching

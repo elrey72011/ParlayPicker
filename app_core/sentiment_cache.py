@@ -21,6 +21,18 @@ logger = logging.getLogger(__name__)
 # Persistent cooldown file path
 COOLDOWN_FILE = ".sentiment_cooldown.json"
 
+# Global in-memory cache for per-run deduplication (Fix 4 - Part A)
+_sentiment_memory_cache: Dict[str, Dict[str, Any]] = {}
+
+def get_memory_cache(team_name: str) -> Optional[Dict[str, Any]]:
+    """Get from in-memory per-run cache."""
+    return _sentiment_memory_cache.get(team_name)
+
+def set_memory_cache(team_name: str, data: Dict[str, Any]) -> None:
+    """Set in-memory per-run cache."""
+    if team_name:
+        _sentiment_memory_cache[team_name] = data
+
 
 class SentimentCache:
     """
