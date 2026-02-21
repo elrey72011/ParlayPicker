@@ -13594,7 +13594,8 @@ with tab_master:
                                 # FIX 1: Guard - Suppress sub-50% picks
                                 # Prob might be missing on first run, effectively skipping rows until final_prob is calculated
                                 pick_prob = row.get("prob") or row.get("final_probability") or 0.0
-                                if float(pick_prob) < 0.50:
+                                if float(pick_prob) <= 0.50:
+                                    logger.warning(f"Suppressing <=50% pick: {row.get('Home')} vs {row.get('Away')} (prob={pick_prob:.4f})")
                                     continue
 
                                 # FIX 2: Use Pick-Side Kalshi Prob (rename kalshi_prob -> kalshi_prob_for_pick)
@@ -13602,9 +13603,32 @@ with tab_master:
                                 if "kalshi_prob" in row:
                                     del row["kalshi_prob"]
 
-                                # Ensure kalshi_prob_for_pick is set (or None)
+                                # FIX 2 & 3: Sanitize kalshi_prob_for_pick
+                                # Ensure it is set, not None, and not < 0.50
                                 kp = row.get("kalshi_prob_for_pick")
-                                row["kalshi_prob_for_pick"] = kp if kp is not None else None
+
+                                # RECOVERY: If kp looks like final_prob (echoing bug) or is missing,
+                                # try to recover the raw value from decision_trace_json source_probs
+                                if row.get("decision_trace_json"):
+                                    try:
+                                        dt = json.loads(row["decision_trace_json"])
+                                        if "source_probs" in dt and "kalshi_prob_for_pick" in dt["source_probs"]:
+                                            trace_kp = dt["source_probs"]["kalshi_prob_for_pick"]
+                                            # Only use trace value if valid
+                                            if trace_kp is not None:
+                                                kp = trace_kp
+                                    except:
+                                        pass
+
+                                # Sanitize: If < 0.50, it means neutral/wrong-side, so suppress from export
+                                if kp is not None:
+                                    try:
+                                        if float(kp) < 0.50:
+                                            kp = None
+                                    except:
+                                        kp = None
+
+                                row["kalshi_prob_for_pick"] = kp
 
                                 # FIX 3: Rename implied_home_prob -> implied_pick_prob
                                 # Remove feature-level implied_home_prob (semantically confusing for totals)
