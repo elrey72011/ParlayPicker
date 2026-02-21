@@ -8241,7 +8241,7 @@ def match_kalshi_market(
             if not r or not r.matched:
                 return available_base_result(r.reason if r else "no_match", m_type)
 
-            # FIX 2: Strict Validation
+            # FIX 2: Strict Validation (Updated)
             import math
             _kp_raw = None
             try:
@@ -8249,11 +8249,17 @@ def match_kalshi_market(
             except (TypeError, ValueError):
                 _kp_raw = None
 
-            # Valid if not None, not NaN, and > 0.50
-            is_valid = _kp_raw is not None and not math.isnan(_kp_raw) and _kp_raw > 0.50
-
-            if not is_valid:
+            # Strict Validation Logic
+            # 1. Must be a valid float
+            if _kp_raw is None or math.isnan(_kp_raw):
                  return available_base_result("prob_invalid_or_low", m_type)
+
+            # 2. Status determination
+            # "matchedbutneutral" if 0.47 <= prob <= 0.53
+            # "matched" otherwise (allows < 0.47 and > 0.53)
+            match_status = "matched"
+            if 0.47 <= _kp_raw <= 0.53:
+                match_status = "matchedbutneutral"
 
             # Retrieve score from debug if available
             score = 100
@@ -8265,7 +8271,7 @@ def match_kalshi_market(
                 "kalshi_label": r.label,
                 "kalshi_event_ticker": r.raw_event_id,
                 "kalshi_reason": r.reason,
-                "kalshi_matched": True,
+                "kalshi_matched": True, # Always True if we have a valid prob (even if neutral)
                 "kalshi_prob": _kp_raw,
                 "kalshi_market_type": m_type,
                 "kalshi_match_score": score,
@@ -8274,7 +8280,7 @@ def match_kalshi_market(
                 "kalshi_title": r.label,
                 "kalshi_yes_side": r.label,
                 "sentiment_diff": 0.0,
-                "status": "Neutral",
+                "status": match_status, # "matched" or "matchedbutneutral"
                 "market_found": True
             }
 

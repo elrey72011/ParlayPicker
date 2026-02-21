@@ -68,7 +68,9 @@ _DEBUG_GAME_LOG_COUNT = 0
 
 # Module-level events cache (Task: Optimize NCAAB Fetching)
 _EVENTS_CACHE: dict = {}  # {series_ticker: response_dict}
-_SPREAD_TOTAL_MARKET_CACHE: dict = {}  # {event_ticker: [list of markets]} - Problem 1 Fix
+_ST_CACHE: dict = {}  # {event_ticker: [list of markets]} - Problem 1 Fix
+_NCAAB_MARKET_POOL_CACHE: list = []
+_NCAAB_POOL_LOADED: bool = False
 
 def debug_search_teams(all_markets: List[Dict[str, Any]], home_team: str, away_team: str):
     """Debug helper to find team codes in Kalshi markets (No-op after cleanup)"""
@@ -3278,12 +3280,12 @@ def _match_via_events(
                             logger.info(f"   Searching for spread event: {spread_event_ticker}")
                             try:
                                 # Problem 1 Fix: Check cache first
-                                if spread_event_ticker in _SPREAD_TOTAL_MARKET_CACHE:
-                                    spread_mkts = _SPREAD_TOTAL_MARKET_CACHE[spread_event_ticker]
+                                if spread_event_ticker in _ST_CACHE:
+                                    spread_mkts = _ST_CACHE[spread_event_ticker]
                                 else:
                                     spread_mkts_resp = integrator._request("GET", "/markets", params={"event_ticker": spread_event_ticker})
                                     spread_mkts = spread_mkts_resp.get("markets", [])
-                                    _SPREAD_TOTAL_MARKET_CACHE[spread_event_ticker] = spread_mkts
+                                    _ST_CACHE[spread_event_ticker] = spread_mkts
 
                                 if spread_mkts:
                                     spread_markets.extend(spread_mkts)
@@ -3367,12 +3369,12 @@ def _match_via_events(
                             logger.info(f"   Searching for total event: {total_event_ticker}")
                             try:
                                 # Problem 1 Fix: Check cache first
-                                if total_event_ticker in _SPREAD_TOTAL_MARKET_CACHE:
-                                    total_mkts = _SPREAD_TOTAL_MARKET_CACHE[total_event_ticker]
+                                if total_event_ticker in _ST_CACHE:
+                                    total_mkts = _ST_CACHE[total_event_ticker]
                                 else:
                                     total_mkts_resp = integrator._request("GET", "/markets", params={"event_ticker": total_event_ticker})
                                     total_mkts = total_mkts_resp.get("markets", [])
-                                    _SPREAD_TOTAL_MARKET_CACHE[total_event_ticker] = total_mkts
+                                    _ST_CACHE[total_event_ticker] = total_mkts
 
                                 if total_mkts:
                                     total_markets.extend(total_mkts)
@@ -4232,9 +4234,12 @@ class KalshiIntegrator:
         self._events_cache_ttl: int = 300
 
         # Clear module-level cache as well (Task: optimize NCAAB fetching)
-        global _EVENTS_CACHE
+        global _EVENTS_CACHE, _ST_CACHE, _NCAAB_MARKET_POOL_CACHE, _NCAAB_POOL_LOADED
         if _EVENTS_CACHE:
             _EVENTS_CACHE.clear()
+        _ST_CACHE.clear()
+        _NCAAB_MARKET_POOL_CACHE.clear()
+        _NCAAB_POOL_LOADED = False
 
         logger.info("✅ Kalshi integrator initialized, events cache cleared")
         self.last_error: Optional[str] = None
@@ -4693,7 +4698,15 @@ class KalshiIntegrator:
         """Manually clear events cache (useful for debugging API changes)."""
         count = len(self._events_cache)
         self._events_cache.clear()
-        logger.info(f"🗑️ Cleared {count} cached event entries")
+
+        global _ST_CACHE, _NCAAB_MARKET_POOL_CACHE, _NCAAB_POOL_LOADED, _EVENTS_CACHE
+        _ST_CACHE.clear()
+        _NCAAB_MARKET_POOL_CACHE.clear()
+        _NCAAB_POOL_LOADED = False
+        if _EVENTS_CACHE:
+            _EVENTS_CACHE.clear()
+
+        logger.info(f"🗑️ Cleared {count} cached event entries and reset NCAAB/ST caches")
         return {"cleared": count, "status": "ok"}
 
     def match_game_to_kalshi_markets(
@@ -5188,6 +5201,15 @@ class KalshiIntegrator:
         league_key = (league or "").upper()
         prefix = LEAGUE_SERIES_MAP.get(league_key)
         normalized_status = normalize_status(status)
+
+        # --- NCAAB POOL CACHE LOGIC ---
+        if league_key == "NCAAB":
+            global _NCAAB_MARKET_POOL_CACHE, _NCAAB_POOL_LOADED
+            if _NCAAB_POOL_LOADED:
+                logger.info(f"⚡ Using MODULE-LEVEL CACHE for NCAAB Pool ({len(_NCAAB_MARKET_POOL_CACHE)} markets)")
+                return _NCAAB_MARKET_POOL_CACHE
+        # -------------------------------
+
         cache_key = f"{league_key}:{normalized_status or 'any'}:{max_pages}"
         now = time.time()
         cached = self._league_cache.get(cache_key)
@@ -5409,6 +5431,13 @@ class KalshiIntegrator:
         total_count = len([m for m in all_markets if "TOTAL" in str(m.get("ticker", "")).upper()])
         spread_count = len([m for m in all_markets if "SPREAD" in str(m.get("ticker", "")).upper()])
         logger.info(f"✅ get_league_markets returning {len(all_markets)} markets for {league_key}: GAME={game_count}, TOTAL={total_count}, SPREAD={spread_count}")
+
+        # --- NCAAB POOL POPULATE ---
+        if league_key == "NCAAB" and not _NCAAB_POOL_LOADED:
+            _NCAAB_MARKET_POOL_CACHE[:] = all_markets
+            _NCAAB_POOL_LOADED = True
+            logger.info(f"💾 Cached {len(all_markets)} markets in _NCAAB_MARKET_POOL_CACHE")
+        # ---------------------------
 
         return all_markets
 
