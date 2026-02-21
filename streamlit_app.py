@@ -406,12 +406,8 @@ def clamp_prob(p: Any, lo: float = 0.05, hi: float = 0.95) -> Optional[float]:
 def assign_confidence(prob: float) -> str:
     """
     Deterministic confidence assignment based solely on probability.
-
-    Args:
-        prob: The final probability (0.0 to 1.0)
-
-    Returns:
-        "HIGH", "MEDIUM", or "LOW"
+    Fix 5: Strict single source of truth.
+    HIGH >= 0.85, MEDIUM >= 0.70, else LOW.
     """
     if prob is None:
         return "LOW"
@@ -1990,7 +1986,8 @@ def compute_final_probability(
     final_prob_val = prob_no_to + clamped_delta
     sentiment_data["theover_delta_clamped"] = clamped_delta
 
-    final_prob = clamp(final_prob_val, 0.0, 1.0)
+    # Fix 2: Hard ceiling of 0.95 on final_prob
+    final_prob = min(clamp(final_prob_val, 0.0, 1.0), 0.95)
 
     # Check for neutral Kalshi override
     local_match_reason = str(kalshi_data.get("match_reason", "") if kalshi_data else "")
@@ -14717,11 +14714,12 @@ with tab_master:
                  # Force LOW confidence on flipped picks
                  df.loc[mask_below_50, 'Pick_Confidence'] = 'LOW'
 
-             # Recalculate Confidence LAST
+             # Recalculate Confidence LAST (Fix 5: Ensure single source of truth)
              logger.info("Recalculating Confidence on final probabilities...")
-             # Fix 5: Deterministic confidence wrapper
              def _assign_conf_wrapper(row):
-                 return assign_confidence(row.get("final_probability") or row.get("Best Overall Prob"))
+                 # Ensure we use the capped probability if available
+                 p = row.get("final_probability") or row.get("Best Overall Prob")
+                 return assign_confidence(p)
              df['Pick_Confidence'] = df.apply(_assign_conf_wrapper, axis=1)
 
              # Generate Reasoning LAST (to ensure it sees final state)
