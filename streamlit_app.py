@@ -1785,15 +1785,6 @@ def compute_final_probability(
                 spread_line=kalshi_data.get("spread_line") if kalshi_data else None  # NEW
             )
 
-    # Issue #4: Reject Low Confidence Kalshi matches
-    # If we found a match but it contradicts our pick (<50%), it means the Kalshi signal is AGAINST us.
-    # We must REJECT this match to avoid betting against our own signal.
-    # v106 FIX: Relax rejection to allow 0.48-0.50 (neutral-ish) to pass through for explicit "Neutral" labeling
-    if kalshi_prob_for_pick is not None and kalshi_prob_for_pick < 0.48:
-         logger.warning(f"⚠️ REJECTING LOW CONFIDENCE MATCH: Pick={pick_side}, Kalshi={kalshi_side_yes}, Prob={kalshi_prob_for_pick:.3f} ❌")
-         warnings.append(f"low_confidence_rejected({kalshi_prob_for_pick:.3f})")
-         kalshi_prob_for_pick = None # Reject the match
-
     # Logging verification for P0 Bug (Blend Input Check)
     if kalshi_prob_yes is not None:
         try:
@@ -8033,6 +8024,18 @@ def match_kalshi_market(
                 target_total=target_total_line
             )
 
+            logger.info(f"RAW RESULT KEYS: {list(raw_matches.keys()) if isinstance(raw_matches, dict) else type(raw_matches)}")
+
+            def _get_key(d, key):
+                for k, v in d.items():
+                    if k.upper() == key.upper():
+                        return v
+                return []
+
+            game_list   = _get_key(raw_matches, "GAME")
+            spread_list = _get_key(raw_matches, "SPREAD")
+            total_list  = _get_key(raw_matches, "TOTAL")
+
             # Extract metadata from matching process (v2)
             match_meta = raw_matches.get("_meta", {})
             meta_status = match_meta.get("status", "unknown")
@@ -8171,7 +8174,7 @@ def match_kalshi_market(
                 if final_prob is not None:
                     try:
                         fp = float(final_prob)
-                        if not math.isnan(fp) and fp > 0.50:
+                        if not math.isnan(fp):
                             is_valid_prob = True
                             final_prob = fp
                     except:
@@ -8202,9 +8205,9 @@ def match_kalshi_market(
                     }
                 )
 
-            res_winner = _convert_raw_to_result(raw_matches.get("GAME"), "WINNER")
-            res_spread = _convert_raw_to_result(raw_matches.get("SPREAD"), "SPREAD", target_spread_line)
-            res_total = _convert_raw_to_result(raw_matches.get("TOTAL"), "TOTAL", target_total_line)
+            res_winner = _convert_raw_to_result(game_list, "WINNER")
+            res_spread = _convert_raw_to_result(spread_list, "SPREAD", target_spread_line)
+            res_total = _convert_raw_to_result(total_list, "TOTAL", target_total_line)
 
             # Option A: Document "Moneyline Only" if Spread/Total requested but missing
             # Check if game matched generally (via Winner) but Spread failed
