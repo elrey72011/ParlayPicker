@@ -11246,7 +11246,21 @@ with tab_master:
                     )
 
                     # Update Kalshi weight dynamically
-                    _spread_kalshi_matched = bool(kalshi_spread.get("kalshi_matched"))
+                    # Fix 2: Validate prob before confirming match
+                    _raw_spread_k = kalshi_spread.get("kalshi_prob_for_pick")
+                    _spread_kalshi_matched = (
+                        bool(kalshi_spread.get("kalshi_matched"))
+                        and _raw_spread_k is not None
+                        and not math.isnan(float(_raw_spread_k))
+                        and float(_raw_spread_k) > 0.50
+                    )
+
+                    if bool(kalshi_spread.get("kalshi_matched")) and not _spread_kalshi_matched:
+                        logger.warning(
+                            f"Kalshi match failed prob validation for {home} vs {away} (Spread): "
+                            f"raw_prob={_raw_spread_k}"
+                        )
+
                     spread_weights["kalshi_weight"] = dynamic_kalshi_weight(
                         kalshi_prob_spread_for_pick,
                         spread_prob_market,
@@ -11395,7 +11409,21 @@ with tab_master:
                     )
 
                     # Update Kalshi weight dynamically
-                    _total_kalshi_matched = bool(kalshi_total.get("kalshi_matched"))
+                    # Fix 2: Validate prob before confirming match
+                    _raw_total_k = kalshi_total.get("kalshi_prob_for_pick")
+                    _total_kalshi_matched = (
+                        bool(kalshi_total.get("kalshi_matched"))
+                        and _raw_total_k is not None
+                        and not math.isnan(float(_raw_total_k))
+                        and float(_raw_total_k) > 0.50
+                    )
+
+                    if bool(kalshi_total.get("kalshi_matched")) and not _total_kalshi_matched:
+                        logger.warning(
+                            f"Kalshi match failed prob validation for {home} vs {away} (Total): "
+                            f"raw_prob={_raw_total_k}"
+                        )
+
                     total_weights["kalshi_weight"] = dynamic_kalshi_weight(
                         kalshi_prob_total_for_pick,
                         total_prob_market,
@@ -11905,7 +11933,21 @@ with tab_master:
                             kalshi_yes_side = kalshi_winner.get("kalshi_yes_side")
 
                             # v98 FIX (Bug B): Pre-compute pick-side Kalshi prob for moneyline
-                            _ml_kalshi_matched = bool(kalshi_winner.get("kalshi_matched"))
+                            # Fix 2: Validate prob before confirming match
+                            _raw_ml_k = kalshi_prob_used
+                            _ml_kalshi_matched = (
+                                bool(kalshi_winner.get("kalshi_matched"))
+                                and _raw_ml_k is not None
+                                and not math.isnan(float(_raw_ml_k))
+                                and float(_raw_ml_k) > 0.50
+                            )
+
+                            if bool(kalshi_winner.get("kalshi_matched")) and not _ml_kalshi_matched:
+                                logger.warning(
+                                    f"Kalshi match failed prob validation for {home} vs {away} (ML): "
+                                    f"raw_prob={_raw_ml_k}"
+                                )
+
                             kalshi_prob_ml_for_pick = map_kalshi_prob_for_pick(
                                 kalshi_prob_used if _ml_kalshi_matched else None,
                                 kalshi_yes_side,
@@ -12147,7 +12189,12 @@ with tab_master:
                                 "kalshi_prob": kalshi_prob_used,
                                 "kalshi_prob_used": kalshi_prob_used,
                                 "kalshi_prob_for_pick": kalshi_prob_for_pick,
-                                "kalshi_prob_debug": kalshi_prob_for_pick,
+                                # Fix 3: Use raw API value for debug (kalshi_prob_used is raw from loop logic)
+                                "kalshi_prob_debug": kalshi_winner.get("market", {}).get("probability") if kalshi_winner.get("market") else kalshi_prob_used,
+                                # Fix 4: Log blend weight
+                                "kalshi_blend_weight": consensus_weights.get("w_kalshi"),
+                                # Fix 5: No external signal flag
+                                "no_external_signal": bool((implied_pick == 0.5 or implied_pick is None) and not _ml_kalshi_matched),
                                 "kalshi_yes_side": kalshi_yes_side,
                                 "kalshi_event_ticker": kalshi_event_used,
                                 "kalshi_event_ticker_used": kalshi_event_used,
@@ -12467,7 +12514,12 @@ with tab_master:
                             "total_prob_market": total_prob_market,
                             "spread_engine_used": spread_engine_used,
                             "kalshi_prob_for_pick": spread_kalshi_prob_for_pick,
-                            "kalshi_prob_debug": spread_kalshi_prob_for_pick,
+                            # Fix 3: Use raw API value for debug
+                            "kalshi_prob_debug": kalshi_spread.get("market", {}).get("probability") if kalshi_spread.get("market") else spread_kalshi_prob_for_pick,
+                            # Fix 4: Log blend weight
+                            "kalshi_blend_weight": spread_weights_used.get("w_kalshi") if 'spread_weights_used' in locals() else None,
+                            # Fix 5: No external signal flag
+                            "no_external_signal": bool((spread_prob_market == 0.5 or spread_prob_market is None) and not _spread_kalshi_matched),
                             "kalshi_yes_side": kalshi_spread.get("kalshi_yes_side") or "home",
                             "spread_pick_label": safe_str(spread_pick_label),
                             "spread_alt_label": safe_str(spread_alt_label),
@@ -12757,7 +12809,12 @@ with tab_master:
                             "total_prob_market": total_prob_market,
                             "spread_engine_used": spread_engine_used,
                             "kalshi_prob_for_pick": total_kalshi_prob_for_pick,
-                            "kalshi_prob_debug": total_kalshi_prob_for_pick,
+                            # Fix 3: Use raw API value for debug
+                            "kalshi_prob_debug": kalshi_total.get("market", {}).get("probability") if kalshi_total.get("market") else total_kalshi_prob_for_pick,
+                            # Fix 4: Log blend weight
+                            "kalshi_blend_weight": total_weights_used.get("w_kalshi") if 'total_weights_used' in locals() else None,
+                            # Fix 5: No external signal flag
+                            "no_external_signal": bool((total_prob_market == 0.5 or total_prob_market is None) and not _total_kalshi_matched),
                             "kalshi_yes_side": kalshi_total.get("kalshi_yes_side") or "over",
                             "spread_pick_label": safe_str(spread_pick_label),
                             "spread_alt_label": safe_str(spread_alt_label),
@@ -13712,9 +13769,10 @@ with tab_master:
                                     logger.warning(
                                         f"Market divergence: {row.get('Home')} vs {row.get('Away')} "
                                         f"prob={final_p:.3f} implied={implied:.3f} gap={divergence:.1%} "
-                                        f"— capping prob to 0.82 and downgrading to MEDIUM"
+                                        f"— downgrading to MEDIUM (Cap Removed)"
                                     )
-                                    row["prob"] = 0.82
+                                    # Cap removed per user request (Fix 1)
+                                    # row["prob"] = 0.82
                                     row["confidence"] = "MEDIUM"
 
                                 valid_debug_rows.append(row)
