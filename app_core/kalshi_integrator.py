@@ -66,6 +66,9 @@ NBA_TZ = pytz.timezone("US/Eastern")
 # Global counter for debug logging limit
 _DEBUG_GAME_LOG_COUNT = 0
 
+# Module-level events cache (Task: Optimize NCAAB Fetching)
+_EVENTS_CACHE: dict = {}  # {series_ticker: response_dict}
+
 def debug_search_teams(all_markets: List[Dict[str, Any]], home_team: str, away_team: str):
     """Debug helper to find team codes in Kalshi markets (No-op after cleanup)"""
     pass
@@ -4214,6 +4217,12 @@ class KalshiIntegrator:
         # Clear stale events cache on initialization
         self._events_cache: Dict[str, Dict[str, Any]] = {}  # Cache for /events by series_ticker
         self._events_cache_ttl: int = 300
+
+        # Clear module-level cache as well (Task: optimize NCAAB fetching)
+        global _EVENTS_CACHE
+        if _EVENTS_CACHE:
+            _EVENTS_CACHE.clear()
+
         logger.info("✅ Kalshi integrator initialized, events cache cleared")
         self.last_error: Optional[str] = None
         self._league_cache: Dict[str, Dict[str, Any]] = {}
@@ -4515,6 +4524,12 @@ class KalshiIntegrator:
             logger.error("❌ Cannot fetch events - credentials invalid")
             return {"events": [], "cursor": None}
 
+        # MODULE-LEVEL CACHE CHECK (Task: Optimize NCAAB Fetching)
+        # Only use this cache if NOT paginating cursor (first page request)
+        if not cursor and series_ticker in _EVENTS_CACHE:
+            logger.info(f"⚡ Using MODULE-LEVEL CACHE for {series_ticker} ({len(_EVENTS_CACHE[series_ticker].get('events', []))} events)")
+            return _EVENTS_CACHE[series_ticker]
+
         cache_key = f"{series_ticker}:{status}:{min_close_ts}"
         if paginate:
             cache_key += ":paginated"
@@ -4653,6 +4668,11 @@ class KalshiIntegrator:
 
         if use_cache and not cursor and resp and resp.get("events"):
             self._events_cache[cache_key] = {"ts": now, "payload": resp}
+
+        # Populate MODULE-LEVEL CACHE (Task: Optimize NCAAB Fetching)
+        # Store result keyed by series_ticker
+        if not cursor and resp and resp.get("events"):
+            _EVENTS_CACHE[series_ticker] = resp
 
         return resp
 
