@@ -508,7 +508,7 @@ def select_best_total_pick(
     total_line: float,  # e.g. 148.5
     prob_over: float,
     prob_under: float
-) -> Dict:
+) -> Optional[Dict]:
     """
     Select Over or Under based on higher probability.
 
@@ -520,7 +520,7 @@ def select_best_total_pick(
         prob_under: Final probability of Under hitting
 
     Returns:
-        Dictionary with pick information:
+        Dictionary with pick information, or None if margin is too narrow.
         {
             'pick_label': str,  # e.g. "Over 148.5"
             'pick_prob': float,
@@ -533,6 +533,13 @@ def select_best_total_pick(
     # Fix: Handle None values gracefully
     p_over = prob_over if prob_over is not None else 0.0
     p_under = prob_under if prob_under is not None else 0.0
+
+    # FIX 2: Stability guard for near-neutral totals (Fix #2)
+    margin = abs(p_over - p_under)
+    if margin < 0.06:
+        # Too close to call — suppress this total pick entirely
+        logger.info(f"Suppressing near-neutral total: margin={margin:.4f} for {total_line}")
+        return None  # caller should skip this pick
 
     if p_over >= p_under:
         pick_side = "Over"
@@ -11645,21 +11652,25 @@ with tab_master:
                             prob_under=prob_under
                         )
 
-                        # Update variables with the winning side
-                        total_pick_label = total_pick_result['pick_label']
-                        total_prob_final = total_pick_result['pick_prob'] # This is 'prob'
-                        total_prob_pick_final = total_pick_result['pick_prob']
-                        total_alt_prob_final = total_pick_result['alt_prob']
-                        total_alt_label = total_pick_result['alt_label']
+                        if total_pick_result is None:
+                            logger.info("Total pick suppressed — near-neutral margin")
+                            total_pick_label = None
+                        else:
+                            # Update variables with the winning side
+                            total_pick_label = total_pick_result['pick_label']
+                            total_prob_final = total_pick_result['pick_prob'] # This is 'prob'
+                            total_prob_pick_final = total_pick_result['pick_prob']
+                            total_alt_prob_final = total_pick_result['alt_prob']
+                            total_alt_label = total_pick_result['alt_label']
 
 
-                        # Also update internal tracking
-                        total_pick_side = total_pick_result['pick_side']
-                        total_decision_score_pick = total_prob_pick_final
+                            # Also update internal tracking
+                            total_pick_side = total_pick_result['pick_side']
+                            total_decision_score_pick = total_prob_pick_final
 
-                        total_decision_score_alt = total_alt_prob_final
-                        total_prob_margin = compute_margin(total_prob_final, total_alt_prob_final)
-                        total_decision_score_margin = compute_margin(total_decision_score_pick, total_decision_score_alt)
+                            total_decision_score_alt = total_alt_prob_final
+                            total_prob_margin = compute_margin(total_prob_final, total_alt_prob_final)
+                            total_decision_score_margin = compute_margin(total_decision_score_pick, total_decision_score_alt)
                     total_engine_used = engine_label(bool(total_prob_pick_kalshi), bool(total_prob_pick_market is not None or total_prob_alt_market is not None))
                     total_trace = {
                         "pick": {
@@ -13620,13 +13631,13 @@ with tab_master:
                                     except:
                                         pass
 
-                                # Sanitize: If < 0.50, it means neutral/wrong-side, so suppress from export
-                                if kp is not None:
-                                    try:
-                                        if float(kp) < 0.50:
-                                            kp = None
-                                    except:
-                                        kp = None
+                                # FIX 1: Strict Null Check - Prevent fallback echoes
+                                # If kp is invalid, NaN, or < 0.50, force to None
+                                fkp = safe_float(kp)
+                                if fkp is None or fkp < 0.50:
+                                    kp = None
+                                else:
+                                    kp = fkp
 
                                 row["kalshi_prob_for_pick"] = kp
 
