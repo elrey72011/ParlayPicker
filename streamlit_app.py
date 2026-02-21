@@ -13558,7 +13558,7 @@ with tab_master:
                             # But since this block is inside the prediction loop, we log features here.
 
                             cols_to_keep = ['Home', 'Away', 'league', 'Commence (UTC)']
-                            for c in ['Pick_Confidence', 'Market', 'Pick', 'best_pick_type', 'final_probability']:
+                            for c in ['Pick_Confidence', 'Market', 'Pick', 'best_pick_type', 'final_probability', 'kalshi_prob_for_pick', 'Implied_Prob']:
                                 if c in master_df.columns:
                                     cols_to_keep.append(c)
 
@@ -13572,6 +13572,8 @@ with tab_master:
                                 rename_map['best_pick_type'] = 'type'
                             if 'final_probability' in debug_base.columns:
                                 rename_map['final_probability'] = 'prob'
+                            if 'Implied_Prob' in debug_base.columns:
+                                rename_map['Implied_Prob'] = 'implied_pick_prob'
 
                             if rename_map:
                                 debug_base = debug_base.rename(columns=rename_map)
@@ -13585,8 +13587,35 @@ with tab_master:
 
                             # Combine with feature vector
                             debug_combined = pd.concat([debug_base, inference_df], axis=1).copy()
+
+                            # Filter and clean debug rows (Fixes #1, #2, #3)
+                            valid_debug_rows = []
+                            for row in debug_combined.to_dict('records'):
+                                # FIX 1: Guard - Suppress sub-50% picks
+                                # Prob might be missing on first run, effectively skipping rows until final_prob is calculated
+                                pick_prob = row.get("prob") or row.get("final_probability") or 0.0
+                                if float(pick_prob) < 0.50:
+                                    continue
+
+                                # FIX 2: Use Pick-Side Kalshi Prob (rename kalshi_prob -> kalshi_prob_for_pick)
+                                # Remove raw YES-side prob to avoid confusion
+                                if "kalshi_prob" in row:
+                                    del row["kalshi_prob"]
+
+                                # Ensure kalshi_prob_for_pick is set (or None)
+                                kp = row.get("kalshi_prob_for_pick")
+                                row["kalshi_prob_for_pick"] = kp if kp is not None else None
+
+                                # FIX 3: Rename implied_home_prob -> implied_pick_prob
+                                # Remove feature-level implied_home_prob (semantically confusing for totals)
+                                if "implied_home_prob" in row:
+                                    del row["implied_home_prob"]
+                                # implied_pick_prob is already present from debug_base rename
+
+                                valid_debug_rows.append(row)
+
                             # Append to session state accumulator
-                            st.session_state["debug_log_history"].extend(debug_combined.to_dict('records'))
+                            st.session_state["debug_log_history"].extend(valid_debug_rows)
                         except Exception as e:
                             logger.warning(f"Failed to accumulate debug data: {e}")
 
