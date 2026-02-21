@@ -2289,6 +2289,152 @@ NCAAB_CODE_ALIASES: Dict[str, str] = {
     "MERR": "MER",      # Merrimack (Kalshi likely uses MERR, we use MER)
     "SIEN": "SIE",      # Siena (Kalshi likely uses SIEN, we use SIE)
     "MRMK": "MRMK",     # Merrimack identity
+    # Mid-major and common miss schools
+    "APP STATE": "APPST",
+    "APPALACHIAN STATE": "APPST",
+    "ABILENE CHRISTIAN": "ACU",
+    "BELLARMINE": "BELL",
+    "BETHUNE-COOKMAN": "BCK",
+    "BOISE STATE": "BSU",
+    "CAL POLY": "CALP",
+    "CAMPBELL": "CAM",
+    "CENTRAL ARKANSAS": "UCA",
+    "CENTRAL CONNECTICUT": "CCSU",
+    "CHARLESTON SOUTHERN": "CHSO",
+    "CHICAGO STATE": "CHIST",
+    "COASTAL CAROLINA": "CCU",
+    "EAST TENNESSEE STATE": "ETSU",
+    "EASTERN ILLINOIS": "EIU",
+    "EASTERN KENTUCKY": "EKU",
+    "EASTERN MICHIGAN": "EMU",
+    "EASTERN WASHINGTON": "EWU",
+    "FLORIDA A&M": "FAMU",
+    "FLORIDA ATLANTIC": "FAU",
+    "FLORIDA GULF COAST": "FGCU",
+    "FLORIDA INTERNATIONAL": "FIU",
+    "FORT WAYNE": "IPFW",
+    "GRAMBLING": "GRAM",
+    "GRAMBLING STATE": "GRAM",
+    "GREEN BAY": "GB",
+    "HIGH POINT": "HPU",
+    "IDAHO STATE": "IDST",
+    "INCARNATE WORD": "UIW",
+    "IUPUI": "IUPUI",
+    "JACKSON STATE": "JKST",
+    "JACKSONVILLE": "JAX",
+    "JACKSONVILLE STATE": "JKST",
+    "KENNESAW STATE": "KENN",
+    "LAMAR": "LAM",
+    "LE MOYNE": "LEM",
+    "LEHIGH": "LEH",
+    "LIPSCOMB": "LIP",
+    "LITTLE ROCK": "UALR",
+    "LONGWOOD": "LONG",
+    "LOUISIANA TECH": "LT",
+    "LOYOLA CHICAGO": "LCHI",
+    "LOYOLA MARYLAND": "LOYA",
+    "MAINE": "ME",
+    "MANHATTAN": "MAN",
+    "MARIST": "MARI",
+    "MCNEESE": "MCN",
+    "MCNEESE STATE": "MCN",
+    "MERRIMACK": "MER",
+    "MIAMI OHIO": "MIOH",
+    "MIAMI (OH)": "MIOH",
+    "MIDDLE TENNESSEE": "MTSU",
+    "MISSISSIPPI VALLEY STATE": "MVST",
+    "MONMOUTH": "MON",
+    "MOREHEAD STATE": "MORE",
+    "MORGAN STATE": "MORG",
+    "MOUNT ST. MARY'S": "MSM",
+    "MURRAY STATE": "MUR",
+    "NC A&T": "NCAT",
+    "NC CENTRAL": "NCCU",
+    "NEW HAMPSHIRE": "UNH",
+    "NEW ORLEANS": "UNO",
+    "NIAGARA": "NIA",
+    "NICHOLLS": "NICH",
+    "NICHOLLS STATE": "NICH",
+    "NORFOLK STATE": "NORF",
+    "NORTH ALABAMA": "UNA",
+    "NORTH CAROLINA A&T": "NCAT",
+    "NORTH CAROLINA CENTRAL": "NCCU",
+    "NORTH DAKOTA": "UND",
+    "NORTH DAKOTA STATE": "NDSU",
+    "NORTHEASTERN": "NE",
+    "NORTHERN ARIZONA": "NAU",
+    "NORTHERN COLORADO": "UNCO",
+    "NORTHERN ILLINOIS": "NIU",
+    "NORTHERN IOWA": "UNI",
+    "NORTHWESTERN STATE": "NWST",
+    "OMAHA": "UNO",
+    "ORAL ROBERTS": "ORU",
+    "PRESBYTERIAN": "PRES",
+    "PRAIRIE VIEW A&M": "PVAM",
+    "PURDUE FORT WAYNE": "IPFW",
+    "QUEENS": "QU",
+    "RADFORD": "RAD",
+    "ROBERT MORRIS": "RMU",
+    "SACRAMENTO STATE": "SACST",
+    "SAM HOUSTON": "SHSU",
+    "SAM HOUSTON STATE": "SHSU",
+    "SAVANNAH STATE": "SVST",
+    "SE LOUISIANA": "SELA",
+    "SEATTLE U": "SEA",
+    "SEATTLE": "SEA",
+    "SIU EDWARDSVILLE": "SIUE",
+    "SIUE": "SIUE",
+    "SOUTH CAROLINA STATE": "SCST",
+    "SOUTH DAKOTA": "USD",
+    "SOUTH DAKOTA STATE": "SDST",
+    "SE MISSOURI STATE": "SEMO",
+    "SOUTHEAST MISSOURI": "SEMO",
+    "SOUTHEASTERN LOUISIANA": "SELA",
+    "SOUTHERN": "SOU",
+    "SOUTHERN ILLINOIS": "SIU",
+    "SOUTHERN INDIANA": "USI",
+    "SOUTHERN MISS": "USM",
+    "SOUTHERN MISSISSIPPI": "USM",
+    "SOUTHERN UTAH": "SUU",
+    "ST. BONAVENTURE": "SBU",
+    "ST. FRANCIS (PA)": "SFU",
+    "ST. PETER'S": "SPU",
+    "STEPHEN F. AUSTIN": "SFA",
+    "SFA": "SFA",
+    "STONY BROOK": "STON",
+    "TARLETON": "TART",
+    "TARLETON STATE": "TART",
+    "TENNESSEE MARTIN": "UTMT",
+    "TENNESSEE STATE": "TNST",
+    "TENNESSEE TECH": "TTU",
+    "TEXAS A&M-CORPUS CHRISTI": "TAMC",
+    "TEXAS RIO GRANDE VALLEY": "UTRGV",
+    "TEXAS SOUTHERN": "TXSO",
+    "UC DAVIS": "UCD",
+    "UC IRVINE": "UCI",
+    "UC RIVERSIDE": "UCR",
+    "UC SAN DIEGO": "UCSD",
+    "UC SANTA BARBARA": "UCSB",
+    "UMBC": "UMBC",
+    "UMES": "UMES",
+    "UMKC": "UMKC",
+    "UNC ASHEVILLE": "UNCA",
+    "UNC GREENSBORO": "UNCG",
+    "UNC WILMINGTON": "UNCW",
+    "UT ARLINGTON": "UTA",
+    "UTAH TECH": "UTCH",
+    "UTAH VALLEY": "UVU",
+    "VMI": "VMI",
+    "WAGNER": "WAG",
+    "WESTERN CAROLINA": "WCU",
+    "WESTERN ILLINOIS": "WIU",
+    "WESTERN KENTUCKY": "WKU",
+    "WESTERN MICHIGAN": "WMU",
+    "WINTHROP": "WIN",
+    "WISCONSIN-GREEN BAY": "GB",
+    "WISCONSIN-MILWAUKEE": "UWM",
+    "WRIGHT STATE": "WRST",
+    "YOUNGSTOWN STATE": "YOST",
 }
 
 NCAAF_CODE_ALIASES: Dict[str, str] = {
@@ -2356,10 +2502,16 @@ def resolve_team_code(code: str, league: str) -> str:
 
         # Increase threshold for short codes to prevent false positives (e.g. VMI -> VIR)
         # Fix 4: Relax threshold but add safeguards. Raised to 85 per user request.
-        threshold = 85.0  # Was 70/75
+        # Task 2: Lowered to 78.0 to improve match rate for partial variants
+        threshold = 78.0  # Was 85.0
 
         # Check against Alias Keys
         alias_keys = list(NCAAB_CODE_ALIASES.keys())
+
+        # Apply normalization to input code if needed, though codes are usually short.
+        # For resolve_team_code, we are matching a short code against alias keys.
+        # Direct matching is best, but if we fuzz, we use the raw code against keys.
+
         match = rapidfuzz.process.extractOne(
             c, alias_keys, scorer=fuzz.ratio, score_cutoff=threshold
         )
@@ -2777,6 +2929,16 @@ def _build_team_codes(team_name: str) -> List[str]:
 
     return list(dict.fromkeys(codes))  # Dedup
 
+def _normalize_ncaab_name(name: str) -> str:
+    """Normalize NCAAB team names for fuzzy matching."""
+    name = name.lower().strip()
+    name = name.replace("saint ", "st. ").replace("st ", "st. ")
+    name = name.replace("&", "and")
+    name = name.replace("-", " ")
+    name = name.replace("(", "").replace(")", "")
+    name = name.replace("university", "").replace("college", "").strip()
+    return name
+
 def _team_score(team_code: str, target_clean: str, target_codes: List[str]) -> float:
     """
     Score similarity between a team code (from Kalshi) and our internal target team.
@@ -2814,11 +2976,19 @@ def _team_score(team_code: str, target_clean: str, target_codes: List[str]) -> f
 
     # 4. Fuzzy Match (Fallback)
     if rapidfuzz:
+        # Task 2: Apply normalization before fuzzy match
+        norm_code = _normalize_ncaab_name(clean_code)
+        norm_target = _normalize_ncaab_name(target_clean)
+
         # Simple ratio
-        ratio = fuzz.ratio(clean_code, target_clean)
+        ratio = fuzz.ratio(norm_code, norm_target)
         # Partial ratio (good for "Lakers" vs "LA Lakers")
-        partial = fuzz.partial_ratio(clean_code, target_clean)
-        return max(ratio, partial)
+        partial = fuzz.partial_ratio(norm_code, norm_target)
+
+        # Token sort ratio (robust to word reordering)
+        token_sort = fuzz.token_sort_ratio(norm_code, norm_target)
+
+        return max(ratio, partial, token_sort)
 
     return 0.0
 
@@ -4044,7 +4214,8 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
     # Constants for fuzzy logic
     DATE_TOLERANCE_DAYS = 2
     # Enhanced Fuzzy Thresholds
-    TEAM_FUZZY_THRESHOLD_STRICT = 85.0 # Auto-match
+    # Task 2: Lowered to 78.0 for NCAAB to improve match rate
+    TEAM_FUZZY_THRESHOLD_STRICT = 78.0 if league == "NCAAB" else 85.0 # Auto-match
     TEAM_FUZZY_THRESHOLD_RELAXED = 70.0 # Close match / warning
 
     # Coverage Debug
@@ -4152,6 +4323,11 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
 
         # SUMMARY LOG: FAILED
         logger.info(f"🏁 MATCH SUMMARY: {away_team} @ {home_team} [{league_key}] -> ❌ NO MATCH (Reason: Low Score {best_score:.1f}, Threshold: {TEAM_FUZZY_THRESHOLD_RELAXED})")
+
+        # Task 3: Miss Logging for Unmatched NCAAB Games
+        if league_key == "NCAAB":
+            tried_codes = home_codes + away_codes
+            logger.warning(f"NCAAB KALSHI MISS: home={home_team}, away={away_team}, tried_codes={tried_codes}")
 
         return KalshiMatchResult(
             matched=False,
