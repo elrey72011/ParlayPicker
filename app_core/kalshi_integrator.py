@@ -2932,7 +2932,9 @@ def _match_via_events(
     status: Optional[str],
     requested_market_type: Optional[str] = None,
     home_team_name: str = None,
-    away_team_name: str = None
+    away_team_name: str = None,
+    target_spread: Optional[float] = None,
+    target_total: Optional[float] = None
 ) -> Optional[KalshiMatchResult]:
     """
     Attempt to match a game to an event by scanning the /events endpoint first.
@@ -3496,50 +3498,30 @@ def _match_via_events(
                 req_upper = requested_market_type.upper()
                 logger.info(f"   🎯 Requested Market Type: {req_upper}")
 
-                # Helper to safely validate candidates
-                def _find_valid_market(candidates, req_type):
-                    for cand in candidates:
-                        yes_side = cand.get('yes_side') or cand.get('title') or ''
-                        is_valid, reason = validate_market_type_match(yes_side, req_type)
-                        if is_valid:
-                            return cand
-                    return None
-
-                if "SPREAD" in req_upper and spread_markets:
-                    target_market = _find_valid_market(spread_markets, "SPREAD")
+                # Use helper selectors for Spread/Total to find best line match
+                if "SPREAD" in req_upper:
+                    # Use new selector logic (Fix 2)
+                    target_market = _select_closest_spread(spread_markets, target_spread)
                     if target_market:
                         match_reason_detail = "matched_spread"
-                elif "TOTAL" in req_upper and total_markets:
-                    target_market = _find_valid_market(total_markets, "TOTAL")
+
+                elif "TOTAL" in req_upper:
+                    # Use new selector logic (Fix 2)
+                    target_market = _select_closest_total(total_markets, target_total)
                     if target_market:
                         match_reason_detail = "matched_total"
 
-                # Fallback: Requested type missing from primary list, check if other type exists AND is valid
-                # This prevents "TOTAL" request matching a "SPREAD" market just because it was found
-                if not target_market:
-                    if spread_markets:
-                        candidate = spread_markets[0]
-                        yes_side = candidate.get('yes_side') or candidate.get('title') or ''
-                        # Only accept fallback if it PASSES validation for the REQUESTED type
-                        # (This basically disables fallback for mismatched types, which is the fix)
-                        is_valid, reason = validate_market_type_match(yes_side, req_upper)
-                        if is_valid:
-                            target_market = candidate
-                            match_reason_detail = "matched_spread_fallback"
-                            logger.info(f"   ⚠️ Requested {req_upper} but found SPREAD (validated). Using fallback.")
-                        else:
-                            logger.info(f"   🚫 Rejected SPREAD fallback for {req_upper} request: {yes_side} ({reason})")
-
-                    elif total_markets:
-                        candidate = total_markets[0]
-                        yes_side = candidate.get('yes_side') or candidate.get('title') or ''
-                        is_valid, reason = validate_market_type_match(yes_side, req_upper)
-                        if is_valid:
-                            target_market = candidate
-                            match_reason_detail = "matched_total_fallback"
-                            logger.info(f"   ⚠️ Requested {req_upper} but found TOTAL (validated). Using fallback.")
-                        else:
-                            logger.info(f"   🚫 Rejected TOTAL fallback for {req_upper} request: {yes_side} ({reason})")
+                elif "WINNER" in req_upper or "MONEYLINE" in req_upper:
+                    # Fix 1: Strict Winner Check
+                    if winner_market:
+                        target_market = winner_market
+                        match_reason_detail = "matched_winner"
+                    else:
+                        logger.warning(
+                            f"No WINNER market found for {best_event.get('ticker')}. "
+                            f"Returning None — refusing to substitute spread market."
+                        )
+                        return None # Explicit rejection
 
             # If no target selected yet (or no request), use default logic
             if not target_market:
@@ -3548,10 +3530,10 @@ def _match_via_events(
                 if requested_market_type is None:
                     # No specific type requested - accept ANY market in priority order
                     if spread_markets:
-                        target_market = spread_markets[0]
+                        target_market = _select_closest_spread(spread_markets, target_spread)
                         match_reason_detail = "matched_spread_default"
                     elif total_markets:
-                        target_market = total_markets[0]
+                        target_market = _select_closest_total(total_markets, target_total)
                         match_reason_detail = "matched_total_default"
                     elif winner_market:
                         target_market = winner_market
@@ -3560,25 +3542,18 @@ def _match_via_events(
                         target_market = markets[0]
                         match_reason_detail = "matched_first_available"
 
-                # STRICT VALIDATION: If a specific type IS requested, DO NOT allow cross-contamination.
-                # The previous logic for NCAAB/Other allowed grabbing ANY market if the requested one wasn't found.
-                # This caused SPREAD picks to match TOTAL markets (Issue #1).
-                # We simply DO NOT set target_market if the requested type is missing.
+                # STRICT VALIDATION: If a specific type IS requested but not found above
                 else:
                     req_upper = requested_market_type.upper()
+                    # If we fell through here with a specific request, it means we failed to match
+                    # Do not attempt fallbacks that cross market types
+                    logger.warning(f"   ⚠️ Requested {req_upper} but no valid {req_upper} market found.")
 
-                    # Fix 3: CRITICAL - Stop WINNER market falling back to SPREAD
-                    if "WINNER" in req_upper or "MONEYLINE" in req_upper:
-                        logger.warning(f"No WINNER market found for {best_event.get('ticker')}. Returning None — will not use spread/total as fallback.")
-                        # Do NOT set target_market
-                        pass
-                    else:
-                        logger.warning(f"   ⚠️ Requested {req_upper} but no valid {req_upper} market found. Rejecting fallback to prevent cross-matching.")
-                        # Explicitly check if we have a partial match that was rejected
-                        if "SPREAD" in req_upper and total_markets:
-                             logger.debug(f"      (Ignored {len(total_markets)} TOTAL markets)")
-                        elif "TOTAL" in req_upper and spread_markets:
-                             logger.debug(f"      (Ignored {len(spread_markets)} SPREAD markets)")
+                    # Explicitly check if we have a partial match that was rejected
+                    if "SPREAD" in req_upper and total_markets:
+                         logger.debug(f"      (Ignored {len(total_markets)} TOTAL markets)")
+                    elif "TOTAL" in req_upper and spread_markets:
+                         logger.debug(f"      (Ignored {len(spread_markets)} SPREAD markets)")
 
                     # NCAAB Force Match logic ONLY if NO specific type requested (already handled in `if requested_market_type is None`)
                     # or if we want to allow "Winner" markets as fallback for Spread/Total requests?
@@ -4695,7 +4670,9 @@ class KalshiIntegrator:
         game_date: str,
         kalshi_markets: List[Dict],
         league: str = "NCAAB",
-        commence_time: Optional[datetime] = None
+        commence_time: Optional[datetime] = None,
+        target_spread: Optional[float] = None,
+        target_total: Optional[float] = None
     ) -> Dict[str, Any]:
         """
         Match a game to Kalshi markets with enhanced logging, fuzzy matching, and time scoring.
@@ -4707,6 +4684,8 @@ class KalshiIntegrator:
             kalshi_markets: List of Kalshi market dictionaries
             league: League identifier (default "NCAAB")
             commence_time: Optional datetime of game start (UTC) for tie-breaking
+            target_spread: Sportsbook spread line (for closest match)
+            target_total: Sportsbook total line (for closest match)
 
         Returns:
             Dictionary with matched markets by type (GAME, SPREAD, TOTAL)
@@ -4768,7 +4747,9 @@ class KalshiIntegrator:
                 status=None,
                 requested_market_type=None,
                 home_team_name=home_team,
-                away_team_name=away_team
+                away_team_name=away_team,
+                target_spread=target_spread,
+                target_total=target_total
             )
 
             if event_match and event_match.matched:
@@ -5753,6 +5734,74 @@ class KalshiIntegrator:
     def assert_available(self) -> None:
         if not self.api_key or not self.api_secret_pem:
             raise RuntimeError("Kalshi keys missing from secrets.")
+
+def _select_closest_spread(spread_markets: List[Dict[str, Any]], target_spread: Optional[float]) -> Optional[Dict[str, Any]]:
+    """Pick the spread market closest to the sportsbook line."""
+    if not spread_markets:
+        return None
+    if target_spread is None:
+        return spread_markets[0]
+
+    best = None
+    best_dist = float("inf")
+
+    for m in spread_markets:
+        ticker = m.get("ticker", "")
+        # Try to get strike from market data first
+        strike = m.get("strike") or m.get("floor_strike")
+        if strike is None:
+            # Fall back to parsing the ticker suffix number
+            nums = re.findall(r'\d+\.?\d*$', ticker)
+            strike = float(nums[-1]) if nums else None
+
+        if strike is None:
+            continue
+
+        try:
+            # Kalshi spreads are "wins by > X" (positive). Sportsbook spread is -X for favorite.
+            # We compare absolute values.
+            dist = abs(float(strike) - abs(float(target_spread)))
+            if dist < best_dist:
+                best_dist = dist
+                best = m
+        except (TypeError, ValueError):
+            continue
+
+    return best or spread_markets[0]
+
+def _select_closest_total(total_markets: List[Dict[str, Any]], target_total: Optional[float]) -> Optional[Dict[str, Any]]:
+    """Pick the total market closest to the sportsbook line."""
+    if not total_markets:
+        return None
+    if target_total is None:
+        return total_markets[0]
+
+    best = None
+    best_dist = float("inf")
+
+    for m in total_markets:
+        ticker = m.get("ticker", "")
+        # Try to get strike from market data first
+        strike = m.get("strike") or m.get("floor_strike")
+        if strike is None:
+            # Fall back to parsing the ticker suffix number
+            # e.g. KXNCAAMBTOTAL-26FEB19CSBUCRV-156 -> 156
+            # e.g. -156.5 -> 156.5
+            nums = re.findall(r'\d+\.?\d*$', ticker)
+            strike = float(nums[-1]) if nums else None
+
+        if strike is None:
+            continue
+
+        try:
+            dist = abs(float(strike) - float(target_total))
+            if dist < best_dist:
+                best_dist = dist
+                best = m
+        except (TypeError, ValueError):
+            continue
+
+    return best or total_markets[0]
 
 def extract_margin_from_yes_side(yes_side: str) -> float:
     """

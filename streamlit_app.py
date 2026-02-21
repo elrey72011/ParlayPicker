@@ -8010,6 +8010,10 @@ def match_kalshi_market(
             # Fix: Use integrator method to ensure UTC date (prevents 23:00 -> Next Day issue)
             kalshi_date_str = kalshi_integrator.date_to_kalshi_token(commence_time)
 
+            # Extract target lines for closest match (moved up for Fix 2)
+            target_spread_line = safe_float(game.get("home_spread_point") or game.get("spread_point"))
+            target_total_line = safe_float(game.get("total_point"))
+
             # Call new matching method
             raw_matches = kalshi_integrator.match_game_to_kalshi_markets(
                 home_team=home,
@@ -8017,7 +8021,9 @@ def match_kalshi_market(
                 game_date=kalshi_date_str,
                 kalshi_markets=all_league_markets,
                 league=league,
-                commence_time=commence_time
+                commence_time=commence_time,
+                target_spread=target_spread_line,
+                target_total=target_total_line
             )
 
             # Extract metadata from matching process (v2)
@@ -8025,9 +8031,6 @@ def match_kalshi_market(
             meta_status = match_meta.get("status", "unknown")
             meta_reason = match_meta.get("reason", "no_match_found")
             # meta_candidates = match_meta.get("candidates_found", 0)
-
-            # Extract target lines for closest match
-            target_spread_line = safe_float(game.get("home_spread_point") or game.get("spread_point"))
             target_total_line = safe_float(game.get("total_point"))
 
             # Helper to convert raw market to KalshiMatchResult
