@@ -100,7 +100,22 @@ class RealSentimentAnalyzer:
 
     def get_team_sentiment(self, team_name: str, sport: str) -> Dict[str, float]:
         """Return a sentiment payload for the requested team."""
-        global _rate_limit_logged
+        global _rate_limit_logged, _SENTIMENT_RATE_LIMITED
+
+        # ── FAST EXIT: if ANY prior call got a 403/rate-limit this run,
+        #    skip ALL further network activity and return neutral instantly.
+        if _SENTIMENT_RATE_LIMITED:
+            if not _rate_limit_logged:
+                logger.warning(
+                    "NewsAPI rate limit already hit this run. "
+                    "Skipping sentiment for all remaining teams (sentiment_weight=0)."
+                )
+                _rate_limit_logged = True
+            return {
+                **self._fallback_neutral(),
+                "method": "Rate Limited (session)",
+                "fetch_info": {"rate_limited": True, "skipped": True},
+            }
 
         persistent_cache = get_cache()
 
