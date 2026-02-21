@@ -4502,86 +4502,21 @@ def slate_key_from_games(games: List[Dict[str, Any]]) -> str:
 
 def score_pick_confidence(row: Dict[str, Any]) -> Tuple[str, str, bool]:
     """
-    Returns (confidence, reason_short, eligible_for_top_picks).
-    confidence in {"HIGH", "MEDIUM", "LOW"}.
-
-    Rule-based confidence using edge and data quality:
-    - If no valid spread or total: LOW
-    - If actual edge < 0 (model_prob < implied_prob): LOW (NEVER HIGH for negative edge)
-    - If edge >= 0.08 AND Kalshi available AND decision_driver is Kalshi AND positive actual edge: HIGH
-    - If edge >= 0.03 AND positive actual edge: MEDIUM
-    - Otherwise: LOW
-
-    Best Overall picks can only come from MEDIUM/HIGH confidence rows, never LOW.
+    Simplified confidence scoring based purely on probability (Single Source of Truth).
+    Wraps assign_confidence().
     """
-    market = (row.get("Market") or "").lower()
     final_prob = safe_float(row.get("final_probability") or row.get("consensus_prob_adj") or row.get("AI_Prob"))
-    warnings_text = str(row.get("Warnings") or "")
 
-    if final_prob is None:
-        return "UNKNOWN", "UNKNOWN: missing final probability", False
+    # Use single source of truth for tiering (Fix 5)
+    tier = assign_confidence(final_prob)
 
-    # Calculate decisiveness edge (distance from 0.5)
-    decisiveness_edge = abs(final_prob - 0.5)
-
-    # FIX: Calculate ACTUAL edge (model_prob - implied_prob/consensus)
-    # This determines if we have positive value vs the market
-    actual_edge = None
-    if "spread" in market:
-        # Use spread edge if available
-        actual_edge = safe_float(row.get("spread_edge"))
-        if actual_edge is None:
-            implied = safe_float(row.get("spread_implied_prob") or row.get("SpreadConsensusProb"))
-            model_prob = safe_float(row.get("spread_prob_pick_final") or row.get("spread_prob_adj"))
-            if implied is not None and model_prob is not None:
-                actual_edge = model_prob - implied
-    elif "total" in market:
-        # Use total edge if available
-        actual_edge = safe_float(row.get("total_edge"))
-        if actual_edge is None:
-            implied = safe_float(row.get("total_implied_prob") or row.get("TotalConsensusProb"))
-            model_prob = safe_float(row.get("total_prob_pick_final") or row.get("total_prob_adj"))
-            if implied is not None and model_prob is not None:
-                actual_edge = model_prob - implied
-
-    # Fallback: if actual_edge still None, estimate from Edge column (string like "+5.2%")
-    if actual_edge is None:
-        edge_str = str(row.get("Edge") or row.get("edge") or "")
-        if edge_str and '%' in edge_str:
-            try:
-                actual_edge = float(edge_str.replace('%', '').strip()) / 100.0
-            except (ValueError, TypeError):
-                pass
-
-    # Final fallback: use 0 if we can't determine actual edge
-    if actual_edge is None:
-        actual_edge = 0.0
-
-    # Check if there are no valid spread or total lines
-    if "no_valid_spread_or_total" in warnings_text:
-        tier = "LOW"
-        reason = "no_valid_spread_or_total"
-    # FIX: CRITICAL - Negative edge ALWAYS results in LOW confidence
-    elif actual_edge < 0:
-        tier = "LOW"
-        reason = f"negative_edge={actual_edge:.3f} (<0, no value vs market)"
-    else:
-        # Probability-based confidence (final_prob already blends all sources)
-        if final_prob >= 0.60:
-            tier = "HIGH"
-            reason = f"high_probability ({final_prob:.1%}), decisiveness={decisiveness_edge:.3f}, edge={actual_edge:.3f}"
-        elif decisiveness_edge >= 0.03 and actual_edge >= 0:
-            tier = "MEDIUM"
-            reason = f"medium_signal, decisiveness={decisiveness_edge:.3f}, edge={actual_edge:.3f}"
-        else:
-            tier = "LOW"
-            reason = f"insufficient_metrics, decisiveness={decisiveness_edge:.3f}, edge={actual_edge:.3f}"
-
+    # Construct basic reasoning
+    reason = f"prob={final_prob:.3f}" if final_prob is not None else "missing_prob"
     sentiment_dir = row.get("sentiment_direction") or "neutral"
     confidence_reason = f"{tier}: {reason} | driver={row.get('decision_driver') or 'unknown'} | sentiment={sentiment_dir}"
 
-    # Only MEDIUM and HIGH confidence rows are eligible for top picks
-    eligible = tier != "LOW"
+    # Eligibility based on tier
+    eligible = tier in ["HIGH", "MEDIUM"]
 
     return tier, confidence_reason, eligible
 
@@ -8299,6 +8234,20 @@ def match_kalshi_market(
             if not r or not r.matched:
                 return available_base_result(r.reason if r else "no_match", m_type)
 
+            # FIX 2: Strict Validation
+            import math
+            _kp_raw = None
+            try:
+                _kp_raw = float(r.probability)
+            except (TypeError, ValueError):
+                _kp_raw = None
+
+            # Valid if not None, not NaN, and > 0.50
+            is_valid = _kp_raw is not None and not math.isnan(_kp_raw) and _kp_raw > 0.50
+
+            if not is_valid:
+                 return available_base_result("prob_invalid_or_low", m_type)
+
             # Retrieve score from debug if available
             score = 100
             if r.debug and "match_score" in r.debug:
@@ -8310,7 +8259,7 @@ def match_kalshi_market(
                 "kalshi_event_ticker": r.raw_event_id,
                 "kalshi_reason": r.reason,
                 "kalshi_matched": True,
-                "kalshi_prob": r.probability,
+                "kalshi_prob": _kp_raw,
                 "kalshi_market_type": m_type,
                 "kalshi_match_score": score,
                 "kalshi_ticker": r.market_ticker or r.raw_event_id,
@@ -11295,6 +11244,10 @@ with tab_master:
                         kalshi_data=kalshi_spread if kalshi_spread.get("kalshi_matched") else None,
                     )
 
+                    # CORRECT ceiling (Fix 1): Cap at 0.95 to prevent runaways
+                    if spread_prob_final is not None:
+                        spread_prob_final = min(spread_prob_final, 0.95)
+
                     # --- KALSHI USAGE DEBUGGING ---
                     if _spread_kalshi_matched and spread_weights_used.get("w_kalshi", 0) == 0:
                         logger.warning(f"⚠️ Kalshi SPREAD matched but NOT USED for {home} vs {away}")
@@ -11455,6 +11408,10 @@ with tab_master:
                         away_team=away,
                         kalshi_data=kalshi_total if kalshi_total.get("kalshi_matched") else None,
                     )
+
+                    # CORRECT ceiling (Fix 1): Cap at 0.95 to prevent runaways
+                    if total_prob_final is not None:
+                        total_prob_final = min(total_prob_final, 0.95)
 
                     # --- KALSHI USAGE DEBUGGING ---
                     if _total_kalshi_matched and total_weights_used.get("w_kalshi", 0) == 0:
@@ -12514,8 +12471,8 @@ with tab_master:
                             "total_prob_market": total_prob_market,
                             "spread_engine_used": spread_engine_used,
                             "kalshi_prob_for_pick": spread_kalshi_prob_for_pick,
-                            # Fix 3: Use raw API value for debug
-                            "kalshi_prob_debug": kalshi_spread.get("market", {}).get("probability") if kalshi_spread.get("market") else spread_kalshi_prob_for_pick,
+                            # Fix 3: Use raw API value for debug (validated raw value)
+                            "kalshi_prob_debug": kalshi_prob_spread,
                             # Fix 4: Log blend weight
                             "kalshi_blend_weight": spread_weights_used.get("w_kalshi") if 'spread_weights_used' in locals() else None,
                             # Fix 5: No external signal flag
@@ -12809,8 +12766,8 @@ with tab_master:
                             "total_prob_market": total_prob_market,
                             "spread_engine_used": spread_engine_used,
                             "kalshi_prob_for_pick": total_kalshi_prob_for_pick,
-                            # Fix 3: Use raw API value for debug
-                            "kalshi_prob_debug": kalshi_total.get("market", {}).get("probability") if kalshi_total.get("market") else total_kalshi_prob_for_pick,
+                            # Fix 3: Use raw API value for debug (validated raw value)
+                            "kalshi_prob_debug": kalshi_prob_total,
                             # Fix 4: Log blend weight
                             "kalshi_blend_weight": total_weights_used.get("w_kalshi") if 'total_weights_used' in locals() else None,
                             # Fix 5: No external signal flag
@@ -13594,7 +13551,9 @@ with tab_master:
 
             def _update_sentiment_score(row):
                 social_diff = row.get("Sentiment_Diff")
-                if social_diff is None: social_diff = 0.0
+                # Fix 6: Preserve None if social sentiment is missing to ensure visibility
+                if social_diff is None:
+                    return None
 
                 sharpness = row.get("sharpness_delta")
                 if sharpness is None: sharpness = 0.0
