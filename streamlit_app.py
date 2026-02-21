@@ -403,6 +403,32 @@ def clamp_prob(p: Any, lo: float = 0.05, hi: float = 0.95) -> Optional[float]:
         return None
 
 
+def assign_confidence(prob: float) -> str:
+    """
+    Deterministic confidence assignment based solely on probability.
+
+    Args:
+        prob: The final probability (0.0 to 1.0)
+
+    Returns:
+        "HIGH", "MEDIUM", or "LOW"
+    """
+    if prob is None:
+        return "LOW"
+
+    try:
+        p = float(prob)
+    except:
+        return "LOW"
+
+    if p >= 0.85:
+        return "HIGH"
+    elif p >= 0.70:
+        return "MEDIUM"
+    else:
+        return "LOW"
+
+
 def select_best_spread_pick(
     home_team: str,
     away_team: str,
@@ -2710,13 +2736,8 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
         stats_quality = row.get("stats_quality", "REAL")
 
         # Use shared calculation logic
-        # Force simple probability-based confidence (matching the core logic)
-        if p_val >= 0.60:
-            conf_label = "HIGH"
-        elif p_val >= 0.55:
-            conf_label = "MEDIUM"
-        else:
-            conf_label = "LOW"
+        # Fix 5: Deterministic confidence based on probability (0.85/0.70)
+        conf_label = assign_confidence(p_val)
 
         # Force LOW if ML was suppressed (extreme odds)
         if best_type == "ML" and ml_suppressed_reason == "extreme_odds_warning":
@@ -8203,10 +8224,19 @@ def match_kalshi_market(
                 # ---------------------------------------------------------
                 # STEP 3: REJECT LOW CONFIDENCE (User Request Rule #3)
                 # ---------------------------------------------------------
-                # Only apply rejection if we have a valid probability override (implying we checked the specific pick logic)
-                if kalshi_prob_override is not None:
-                    if kalshi_prob_override < 0.50:
-                        return KalshiMatchResult(matched=False, reason="low_confidence_rejected", market_type=m_type)
+                # Fix 2: Strict Validation - Only match if prob > 0.50
+                is_valid_prob = False
+                if final_prob is not None:
+                    try:
+                        fp = float(final_prob)
+                        if not math.isnan(fp) and fp > 0.50:
+                            is_valid_prob = True
+                            final_prob = fp
+                    except:
+                        pass
+
+                if not is_valid_prob:
+                    return KalshiMatchResult(matched=False, reason="prob_invalid_or_low", market_type=m_type)
 
                 # Construct result
                 return KalshiMatchResult(
@@ -12117,6 +12147,7 @@ with tab_master:
                                 "kalshi_prob": kalshi_prob_used,
                                 "kalshi_prob_used": kalshi_prob_used,
                                 "kalshi_prob_for_pick": kalshi_prob_for_pick,
+                                "kalshi_prob_debug": kalshi_prob_for_pick,
                                 "kalshi_yes_side": kalshi_yes_side,
                                 "kalshi_event_ticker": kalshi_event_used,
                                 "kalshi_event_ticker_used": kalshi_event_used,
@@ -12436,6 +12467,7 @@ with tab_master:
                             "total_prob_market": total_prob_market,
                             "spread_engine_used": spread_engine_used,
                             "kalshi_prob_for_pick": spread_kalshi_prob_for_pick,
+                            "kalshi_prob_debug": spread_kalshi_prob_for_pick,
                             "kalshi_yes_side": kalshi_spread.get("kalshi_yes_side") or "home",
                             "spread_pick_label": safe_str(spread_pick_label),
                             "spread_alt_label": safe_str(spread_alt_label),
@@ -12725,6 +12757,7 @@ with tab_master:
                             "total_prob_market": total_prob_market,
                             "spread_engine_used": spread_engine_used,
                             "kalshi_prob_for_pick": total_kalshi_prob_for_pick,
+                            "kalshi_prob_debug": total_kalshi_prob_for_pick,
                             "kalshi_yes_side": kalshi_total.get("kalshi_yes_side") or "over",
                             "spread_pick_label": safe_str(spread_pick_label),
                             "spread_alt_label": safe_str(spread_alt_label),
@@ -13569,7 +13602,7 @@ with tab_master:
                             # But since this block is inside the prediction loop, we log features here.
 
                             cols_to_keep = ['Home', 'Away', 'league', 'Commence (UTC)']
-                            for c in ['Pick_Confidence', 'Market', 'Pick', 'best_pick_type', 'final_probability', 'kalshi_prob_for_pick', 'Implied_Prob', 'HasKalshiMarket', 'kalshi_matched']:
+                            for c in ['Pick_Confidence', 'Market', 'Pick', 'best_pick_type', 'final_probability', 'kalshi_prob_for_pick', 'kalshi_prob_debug', 'Implied_Prob', 'HasKalshiMarket', 'kalshi_matched']:
                                 if c in master_df.columns:
                                     cols_to_keep.append(c)
 
@@ -13619,8 +13652,10 @@ with tab_master:
                                 if not matched:
                                     kp = None
                                 else:
-                                    # Ensure it is set, not None
-                                    kp = row.get("kalshi_prob_for_pick")
+                                    # FIX 3: Prefer raw debug column if available (Fix Echo Bug)
+                                    kp = row.get("kalshi_prob_debug")
+                                    if kp is None:
+                                        kp = row.get("kalshi_prob_for_pick")
 
                                     # RECOVERY: If kp looks like final_prob (echoing bug) or is missing,
                                     # try to recover the raw value from decision_trace_json source_probs
@@ -13645,6 +13680,22 @@ with tab_master:
 
                                 row["kalshi_prob_for_pick"] = kp
 
+                                # Regression Guard: Echo Detection
+                                if matched and row.get("kalshi_prob_for_pick") and row.get("prob"):
+                                    try:
+                                        k_val = float(row["kalshi_prob_for_pick"])
+                                        p_val = float(row["prob"])
+                                        # Check exact equality (echo)
+                                        if k_val == p_val:
+                                            # Allow if it's a genuine coincidence or single source?
+                                            # User requested strict check.
+                                            logger.warning(
+                                                f"Echo detected: kalshi_prob_for_pick == prob ({k_val}) for "
+                                                f"{row.get('Home')} vs {row.get('Away')}. Check debug row builder."
+                                            )
+                                    except:
+                                        pass
+
                                 # FIX 3: Rename implied_home_prob -> implied_pick_prob
                                 # Remove feature-level implied_home_prob (semantically confusing for totals)
                                 if "implied_home_prob" in row:
@@ -13655,16 +13706,16 @@ with tab_master:
                                 implied = safe_float(row.get("implied_pick_prob")) or 0.5
                                 final_p = safe_float(row.get("prob")) or 0.0
 
-                                # If model is very confident but market strongly disagrees, cap and warn
-                                if final_p >= 0.95 and implied < 0.50:
+                                # FIX 4: Overconfidence Guard (prob>=0.90 but implied<0.50)
+                                if final_p >= 0.90 and implied < 0.50:
                                     divergence = final_p - implied
                                     logger.warning(
-                                        f"Overconfidence detected: {row.get('Home')} vs {row.get('Away')} "
-                                        f"prob={final_p:.3f} but market_implied={implied:.3f} "
-                                        f"(divergence={divergence:.1%}) — capping to 0.80"
+                                        f"Market divergence: {row.get('Home')} vs {row.get('Away')} "
+                                        f"prob={final_p:.3f} implied={implied:.3f} gap={divergence:.1%} "
+                                        f"— capping prob to 0.82 and downgrading to MEDIUM"
                                     )
-                                    row["prob"] = 0.80  # cap; do not suppress so it still shows in debug
-                                    row["confidence"] = "MEDIUM"  # downgrade confidence
+                                    row["prob"] = 0.82
+                                    row["confidence"] = "MEDIUM"
 
                                 valid_debug_rows.append(row)
 
@@ -14651,7 +14702,10 @@ with tab_master:
 
              # Recalculate Confidence LAST
              logger.info("Recalculating Confidence on final probabilities...")
-             df['Pick_Confidence'] = df.apply(calculate_confidence, axis=1)
+             # Fix 5: Deterministic confidence wrapper
+             def _assign_conf_wrapper(row):
+                 return assign_confidence(row.get("final_probability") or row.get("Best Overall Prob"))
+             df['Pick_Confidence'] = df.apply(_assign_conf_wrapper, axis=1)
 
              # Generate Reasoning LAST (to ensure it sees final state)
              df['Pick_Reason_Short'] = df.apply(generate_reasoning, axis=1)
