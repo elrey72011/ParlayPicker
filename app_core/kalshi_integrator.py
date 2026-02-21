@@ -68,6 +68,7 @@ _DEBUG_GAME_LOG_COUNT = 0
 
 # Module-level events cache (Task: Optimize NCAAB Fetching)
 _EVENTS_CACHE: dict = {}  # {series_ticker: response_dict}
+_SPREAD_TOTAL_MARKET_CACHE: dict = {}  # {event_ticker: [list of markets]} - Problem 1 Fix
 
 def debug_search_teams(all_markets: List[Dict[str, Any]], home_team: str, away_team: str):
     """Debug helper to find team codes in Kalshi markets (No-op after cleanup)"""
@@ -3276,8 +3277,14 @@ def _match_via_events(
                             spread_event_ticker = f"{spread_series}-{date_team_id}"
                             logger.info(f"   Searching for spread event: {spread_event_ticker}")
                             try:
-                                spread_mkts_resp = integrator._request("GET", "/markets", params={"event_ticker": spread_event_ticker})
-                                spread_mkts = spread_mkts_resp.get("markets", [])
+                                # Problem 1 Fix: Check cache first
+                                if spread_event_ticker in _SPREAD_TOTAL_MARKET_CACHE:
+                                    spread_mkts = _SPREAD_TOTAL_MARKET_CACHE[spread_event_ticker]
+                                else:
+                                    spread_mkts_resp = integrator._request("GET", "/markets", params={"event_ticker": spread_event_ticker})
+                                    spread_mkts = spread_mkts_resp.get("markets", [])
+                                    _SPREAD_TOTAL_MARKET_CACHE[spread_event_ticker] = spread_mkts
+
                                 if spread_mkts:
                                     spread_markets.extend(spread_mkts)
                                     logger.info(f"   ✅ Found {len(spread_mkts)} spread markets from event {spread_event_ticker}")
@@ -3359,8 +3366,14 @@ def _match_via_events(
                             total_event_ticker = f"{total_series}-{date_team_id}"
                             logger.info(f"   Searching for total event: {total_event_ticker}")
                             try:
-                                total_mkts_resp = integrator._request("GET", "/markets", params={"event_ticker": total_event_ticker})
-                                total_mkts = total_mkts_resp.get("markets", [])
+                                # Problem 1 Fix: Check cache first
+                                if total_event_ticker in _SPREAD_TOTAL_MARKET_CACHE:
+                                    total_mkts = _SPREAD_TOTAL_MARKET_CACHE[total_event_ticker]
+                                else:
+                                    total_mkts_resp = integrator._request("GET", "/markets", params={"event_ticker": total_event_ticker})
+                                    total_mkts = total_mkts_resp.get("markets", [])
+                                    _SPREAD_TOTAL_MARKET_CACHE[total_event_ticker] = total_mkts
+
                                 if total_mkts:
                                     total_markets.extend(total_mkts)
                                     logger.info(f"   ✅ Found {len(total_mkts)} total markets from event {total_event_ticker}")

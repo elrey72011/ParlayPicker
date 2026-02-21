@@ -7049,6 +7049,13 @@ def filter_kalshi_game_markets(
         for m in markets or []:
             t = str(m.get("event_ticker") or m.get("ticker") or "").upper()
 
+            # Problem 2 Fix: Strict League Filter
+            # Ensure we only process markets matching the expected league prefix
+            if league == "NCAAB" and not t.startswith("KXNCAAMB"):
+                continue
+            if league == "NBA" and not t.startswith("KXNBA"):
+                continue
+
             suffix_match = _TICKER_SUFFIX_RE.search(t)
             if not suffix_match:
                 _regex_fail_count += 1
