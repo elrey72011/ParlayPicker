@@ -65,6 +65,7 @@ from app_core.prediction_engine import (
     PredictionEngine,
     get_prediction_prob,
     match_team_name,
+    get_engine,
 )
 
 from app_core.apisports import (
@@ -9515,6 +9516,37 @@ with tab_master:
                         _client_map = {league: api_sports_clients.get(league)} if api_sports_clients else {}
                         _df_enriched = enrich_with_model_features(_df_pre, _client_map)
 
+                        # 3b. Inject Sentiment & Run Batch Prediction (Performance Optimization)
+                        # We calculate sentiment_diff here so the model has access to it for batch inference
+                        if "sentiment_map" in st.session_state:
+                            s_map = st.session_state["sentiment_map"] or {}
+
+                            def _get_sent_diff(row):
+                                h = row.get("home_team") or row.get("Home") or row.get("home_team_text")
+                                a = row.get("away_team") or row.get("Away") or row.get("away_team_text")
+                                # Use raw names from the dataframe
+                                hs = s_map.get(h)
+                                as_ = s_map.get(a)
+                                if hs is not None and as_ is not None:
+                                    try:
+                                        return float(hs) - float(as_)
+                                    except:
+                                        return 0.0
+                                return 0.0
+
+                            # Overwrite the default 0.0 from enrichment with actual sentiment data
+                            _df_enriched["sentiment_diff"] = _df_enriched.apply(_get_sent_diff, axis=1)
+
+                        # Run XGBoost Batch Prediction
+                        try:
+                            engine = get_engine()
+                            batch_probs = engine.predict_batch(_df_enriched)
+                            if batch_probs and len(batch_probs) == len(_df_enriched):
+                                _df_enriched["batch_model_prob_home"] = batch_probs
+                                logger.info(f"⚡ Batch prediction completed for {len(batch_probs)} games")
+                        except Exception as bp_err:
+                            logger.error(f"Batch prediction failed: {bp_err}")
+
                         # 4. Convert back to list of dicts for the loop
                         # Force numeric conversion where possible to avoid NaN issues
                         games_to_process = _df_enriched.to_dict('records')
@@ -10835,7 +10867,16 @@ with tab_master:
 
                     if use_model_numeric_probs:
                         if model_available:
-                            model_prob_home, model_warn = get_prediction_prob(g, sentiment_diff)
+                            # ⚡ Bolt Optimization: Use batched prediction if available
+                            if "batch_model_prob_home" in g and g["batch_model_prob_home"] is not None:
+                                try:
+                                    model_prob_home = float(g["batch_model_prob_home"])
+                                    model_warn = "Batch (Optimized)"
+                                except (ValueError, TypeError):
+                                    model_prob_home, model_warn = get_prediction_prob(g, sentiment_diff)
+                            else:
+                                model_prob_home, model_warn = get_prediction_prob(g, sentiment_diff)
+
                             model_mode = "enabled" if model_prob_home is not None else "error"
                             # Add specific warning for placeholder-based fallbacks
                             if model_warn and "Placeholder" in model_warn:
