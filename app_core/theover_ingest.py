@@ -560,7 +560,7 @@ def load_theover_file(uploaded_file):
     # 1. Try Excel (openpyxl)
     try:
         return pd.read_excel(uploaded_file, engine="openpyxl")
-    except Exception:
+    except Exception as e_excel:
         # 2. Try CSV
         try:
             if hasattr(uploaded_file, "seek"):
@@ -568,7 +568,8 @@ def load_theover_file(uploaded_file):
             # Ensure messy files are handled with skip_blank_lines and on_bad_lines
             # Enforce utf-8-sig to handle BOM if present (Task 1: Constraint met)
             return pd.read_csv(uploaded_file, on_bad_lines='skip', skip_blank_lines=True, encoding='utf-8-sig')
-        except Exception:
+        except Exception as e_csv:
+            logger.error(f"TheOver file load failed (Excel: {e_excel}, CSV: {e_csv})")
             return pd.DataFrame()
 
 def _parse_block_layout(df: pd.DataFrame) -> pd.DataFrame:
@@ -1577,6 +1578,7 @@ def process_theover_inputs(
         try:
             df = parse_theover_csv(totals_file)
             stats["raw_totals_rows"] = len(df)
+            logger.info(f"THEOVER RAW FETCH (Totals): {len(df)} rows before transform")
             if not df.empty:
                 processed = _transform_theover_df(df, "TOTAL", games, matching_logs)
                 if not processed.empty:
@@ -1589,6 +1591,7 @@ def process_theover_inputs(
         try:
             df = parse_theover_csv(sides_file)
             stats["raw_sides_rows"] = len(df)
+            logger.info(f"THEOVER RAW FETCH (Sides): {len(df)} rows before transform")
             if not df.empty:
                 processed = _transform_theover_df(df, "SIDE", games, matching_logs)
                 if not processed.empty:

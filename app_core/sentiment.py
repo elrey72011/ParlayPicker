@@ -21,6 +21,9 @@ logger = logging.getLogger(__name__)
 # Track if we've already logged the rate limit message this session
 _rate_limit_logged = False
 
+# Module-level dedup cache (Fix 4)
+_SENTIMENT_CACHE = {}   # {team_name_lower: result_dict}
+_SENTIMENT_RATE_LIMITED = False
 
 class RealSentimentAnalyzer:
     """Provide sentiment signals using NewsAPI articles or a neutral fallback."""
@@ -203,6 +206,15 @@ class RealSentimentAnalyzer:
 
     def _analyze_with_newsapi(self, team_name: str, sport: str) -> Dict:
         """Analyze sentiment using NewsAPI.org articles and capture HTTP details."""
+        global _SENTIMENT_RATE_LIMITED
+
+        # Check in-memory dedup cache first (Fix 4)
+        cache_key = team_name.lower().strip()
+        if cache_key in _SENTIMENT_CACHE:
+            return _SENTIMENT_CACHE[cache_key]
+
+        if _SENTIMENT_RATE_LIMITED:
+            return {"score": None, "status": "rate_limited", "sources": 0}
 
         from_date = (datetime.now() - timedelta(days=3)).strftime("%Y-%m-%d")
         to_date = datetime.now().strftime("%Y-%m-%d")
@@ -252,11 +264,19 @@ class RealSentimentAnalyzer:
                     # Partial success even while rate limited
                     response = None  # skip additional parsing
                 else:
-                    return {
+                    if fetch_info["rate_limited"]:
+                        _SENTIMENT_RATE_LIMITED = True
+                        result = {"score": None, "status": "rate_limited", "sources": 0}
+                        _SENTIMENT_CACHE[cache_key] = result
+                        return result
+
+                    result = {
                         **self._fallback_neutral(),
                         "method": "newsapi_error",
                         "fetch_info": fetch_info,
                     }
+                    _SENTIMENT_CACHE[cache_key] = result
+                    return result
 
             data = response.json() if response is not None else data_err if "data_err" in locals() else {}
             articles = data.get("articles", []) if isinstance(data, dict) else []
@@ -284,7 +304,7 @@ class RealSentimentAnalyzer:
 
                 trend = "positive" if avg_score > 0.15 else ("negative" if avg_score < -0.15 else "neutral")
 
-                return {
+                result = {
                     "score": avg_score,
                     "confidence": confidence,
                     "sources": len(sentiment_scores),
@@ -292,20 +312,33 @@ class RealSentimentAnalyzer:
                     "method": "NewsAPI + NLP",
                     "fetch_info": fetch_info,
                 }
+                _SENTIMENT_CACHE[cache_key] = result
+                return result
 
             fetch_info["error"] = fetch_info.get("error") or "no_articles"
-            return {
+            result = {
                 **self._fallback_neutral(),
                 "method": "newsapi_empty",
                 "fetch_info": fetch_info,
             }
+            _SENTIMENT_CACHE[cache_key] = result
+            return result
+
         except Exception as exc:
             fetch_info["error"] = str(exc)
-            return {
+            if "429" in str(exc) or "403" in str(exc):
+                _SENTIMENT_RATE_LIMITED = True
+                result = {"score": None, "status": "rate_limited", "sources": 0}
+                _SENTIMENT_CACHE[cache_key] = result
+                return result
+
+            result = {
                 **self._fallback_neutral(),
                 "method": "newsapi_exception",
                 "fetch_info": fetch_info,
             }
+            _SENTIMENT_CACHE[cache_key] = result
+            return result
 
     def _calculate_text_sentiment(self, text: str) -> float:
         """Calculate a normalized sentiment score using keyword counts."""
