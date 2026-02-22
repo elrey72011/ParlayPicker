@@ -14179,31 +14179,13 @@ with tab_master:
                 def calculate_edge(df):
                     edge_formatted = []
                     for idx, row in df.iterrows():
-                        market_val = str(row.get('Market', ''))
-                        consensus = None
+                        # FIX: Use pre-computed numeric edge directly (Bug 1)
+                        edge_numeric = row.get("edge", 0.0)
+                        if pd.isna(edge_numeric):
+                            edge_numeric = 0.0
 
-                        if 'Spread' in market_val:
-                            consensus = row.get('SpreadConsensusProb')
-                        elif 'Total' in market_val:
-                            consensus = row.get('TotalConsensusProb')
-                        elif 'Moneyline' in market_val or 'ML' in market_val:
-                            consensus = row.get('consensus_prob_adj') or row.get('Implied_Prob')
-
-                        # Check for valid consensus
-                        # "If consensus is missing/NaN, set Edge = 0.0."
-                        if pd.isna(consensus) or consensus is None:
-                            edge_val = 0.0
-                        else:
-                            try:
-                                c_val = float(consensus)
-                                m_val = float(row.get('Best Overall Prob', 0.5) or 0.5)
-                                edge_val = m_val - c_val
-                            except Exception:
-                                edge_val = 0.0
-
-                        edge_pct = edge_val * 100
-                        # Format as string "X.X%" for readability with sign
-                        edge_formatted.append(f"{edge_pct:+.1f}%")
+                        sign = "+" if edge_numeric >= 0 else ""
+                        edge_formatted.append(f"{sign}{edge_numeric * 100:.1f}%")
                     return edge_formatted
 
                 # Insert Edge column immediately after 'Best Overall Prob'

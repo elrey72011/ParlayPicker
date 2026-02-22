@@ -29,13 +29,6 @@ def american_to_implied_prob(odds: Any) -> Optional[float]:
     if o == 0:
         return None  # Invalid odds
 
-    # Cap extreme odds to prevent unrealistic probabilities
-    # -900 converts to ~0.90, which is more reasonable than -990 -> 0.99
-    if o < -900:
-        o = -900
-    elif o > 900:
-        o = 900
-
     if o > 0:
         # Positive odds (underdog)
         return 100.0 / (o + 100.0)

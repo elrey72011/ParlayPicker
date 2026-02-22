@@ -31,7 +31,7 @@ class RealSentimentAnalyzer:
     def __init__(self, news_api_key: Optional[str] = None) -> None:
         self.news_api_key = news_api_key or os.environ.get("NEWS_API_KEY")
         self.sentiment_cache: Dict[str, Dict] = {}
-        self.cache_duration = 1800  # 30 minutes
+        self.cache_duration = 3600  # 60 minutes
 
         self.positive_words = {
             "win",
