@@ -8046,6 +8046,22 @@ def match_kalshi_market(
             # Helper to convert raw market to KalshiMatchResult
             def _convert_raw_to_result(market_list, m_type, target_line=None):
                 if not market_list:
+                    # PROXY LOGIC: If NCAAB Spread missing but Total exists, use Total as proxy
+                    if m_type == "SPREAD" and league == "NCAAB" and meta_status == "matched":
+                        # Check if total list is available in the parent scope
+                        if total_list:
+                            best_total = total_list[0] # Just grab the first one as proxy anchor
+                            proxy_ticker = best_total.get("ticker", "UNKNOWN_TOTAL_PROXY")
+                            return KalshiMatchResult(
+                                matched=True,
+                                reason="total_proxy",
+                                market_type="SPREAD",
+                                kalshi_available=True,
+                                probability=None, # Important: Raw prob is None, 0.50 injected in blend
+                                market_ticker=proxy_ticker,
+                                debug={"match_reason": "total_proxy", "kalshi_status": "matched"}
+                            )
+
                     # If the game itself wasn't matched, propagate the root cause
                     if meta_status != "matched":
                         return KalshiMatchResult(matched=False, reason=meta_reason, market_type=m_type)
@@ -11233,8 +11249,27 @@ with tab_master:
                         league_name
                     )
 
+                    # --- KALSHI PROXY LOGIC (NCAAB Spread Missing but Total Exists) ---
+                    # Logic: If proxy matched, force weight to 0.20 and use neutral prob 0.50
+                    if kalshi_spread.get("kalshi_reason") == "total_proxy" and league_name == "NCAAB":
+                        spread_weights["kalshi_weight"] = 0.20
+                        kalshi_prob_spread_for_pick = 0.50 # Inject neutral prob for blend
+                        # Ensure matched flag is true so compute_final_probability uses it
+                        _spread_kalshi_matched = True
+
+                        # Log WARNING as requested
+                        proxy_ticker = kalshi_spread.get("kalshi_ticker", "UNKNOWN")
+                        logger.warning(
+                            f"WARNING parlaypicker NCAAB SPREAD KALSHI PROXY: {away} @ {home} — "
+                            f"no spread market found, using total market {proxy_ticker} as proxy at 20% weight"
+                        )
+                        # Mark source for row export
+                        kalshi_spread["kalshi_spread_source"] = "total_proxy"
+                    else:
+                        kalshi_spread["kalshi_spread_source"] = "direct" if _spread_kalshi_matched else "none"
+
                     # --- KALSHI FORCE & DEBUG (User Request) ---
-                    if _spread_kalshi_matched:
+                    if _spread_kalshi_matched and kalshi_spread.get("kalshi_spread_source") != "total_proxy":
                         # FORCE Kalshi usage for testing/fix
                         spread_weights["kalshi_weight"] = 0.55
                         logger.info(f"💪 FORCE Kalshi SPREAD weight to 0.55 for {home} vs {away}")
@@ -12534,6 +12569,7 @@ with tab_master:
                             "kalshi_candidate_count": candidate_debug.get("candidate_count"),
                             "kalshi_best_score": candidate_debug.get("best_score"),
                             "kalshi_match_reason": kalshi_spread.get("kalshi_reason") or kalshi_winner.get("kalshi_reason"),
+                            "kalshi_spread_source": kalshi_spread.get("kalshi_spread_source"),
                             "kalshi_game_prefix_used": (candidate_debug.get("winner_meta") or {}).get("winner_prefix") or candidate_debug.get("kalshi_game_prefix_used"),
                             "kalshi_wanted_tokens": (candidate_debug.get("winner_meta") or {}).get("allowed_date_tokens") or candidate_debug.get("kalshi_wanted_tokens"),
                             "Sentiment_Diff": sentiment_diff,
