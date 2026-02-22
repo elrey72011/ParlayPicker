@@ -787,6 +787,7 @@ def build_team_sentiment_map(
                 debug["missing_teams"].append(team)
             continue
 
+        time.sleep(0.5)
         try:
             query_label = league_label(league)
             result_payload: Dict[str, Any] = {}
