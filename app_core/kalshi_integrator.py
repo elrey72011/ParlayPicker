@@ -1073,7 +1073,9 @@ def generate_comprehensive_team_variants(team_name: str, league: str = None) -> 
         candidates_to_check = [team_name, team_name.upper(), primary_name]
 
         # Check both the comprehensive map and the legacy map (legacy has some keys with apostrophes)
-        maps_to_check = [KALSHI_NCAAB_TEAM_CODES, NCAAB_TEAM_CODE_MAP]
+        # Order matters: Last map checked gets priority via insert(0).
+        # We want KALSHI_NCAAB_TEAM_CODES to win, so it should be checked LAST.
+        maps_to_check = [NCAAB_TEAM_CODE_MAP, KALSHI_NCAAB_TEAM_CODES]
 
         for cand in candidates_to_check:
             for map_obj in maps_to_check:
@@ -1090,6 +1092,16 @@ def generate_comprehensive_team_variants(team_name: str, league: str = None) -> 
             for map_obj in maps_to_check:
                 if without_last in map_obj:
                     variants.insert(0, map_obj[without_last])
+
+    # Explicit override: Michigan State must resolve to MSU as homecode0
+    # (Placed before deduplication to ensure priority)
+    upper_name = team_name.upper()
+    if "MICHIGAN ST" in upper_name or "MICHIGAN STATE" in upper_name:
+        if "MSU" in variants:
+            variants.remove("MSU")
+            variants.insert(0, "MSU")
+        else:
+            variants.insert(0, "MSU")
 
     # Step 9: Deduplicate while preserving order
     seen = set()
@@ -1593,7 +1605,7 @@ NCAAB_TEAM_CODE_MAP: Dict[str, str] = {
     "MARIST": "MRST", "MARIST RED FOXES": "MRST", "MRST": "MRST",
     "ILLINOIS STATE": "ILST", "ILLINOIS ST": "ILST", "ILST": "ILST",
     "CAMPBELL": "CAMP", "CAMPBELL FIGHTING CAMELS": "CAMP", "CAMP": "CAMP",
-    "OREGON STATE": "ORST", "OREGON ST": "ORST", "ORST": "ORST", "OSU": "ORST",
+    "OREGON STATE": "ORST", "OREGON ST": "ORST", "ORST": "ORST",
     "SEATTLE": "SEA", "SEATTLE U": "SEA", "SEATTLE REDHAWKS": "SEA",
     "CHARLESTON": "COFC", "COLLEGE OF CHARLESTON": "COFC", "COFC": "COFC",
     # Issue #2: Missing NCAAB Aliases
@@ -1709,6 +1721,8 @@ KALSHI_NCAAB_TEAM_CODES = {
     "Miami (OH)": "MOH",
     "Miami OH RedHawks": "MOH",
     "Michigan": "MICH",
+    "MICHIGAN": "MICH",
+    "MICHIGAN WOLVERINES": "MICH",
     "Michigan State": "MSU",
     "Milwaukee": "MILW",
     "Middle Tennessee": "MTU",
@@ -1834,6 +1848,19 @@ KALSHI_NCAAB_TEAM_CODES = {
     "Nebraska Omaha": "NEOM",
     "Oregon": "ORE",
     "Oregon State": "ORST",
+    "Michigan St": "MSU",
+    "Michigan St Spartans": "MSU",
+    "MICHIGAN ST": "MSU",
+    "MICHIGAN ST SPARTANS": "MSU",
+    "Ohio St": "OSU",
+    "Ohio State Buckeyes": "OSU",
+    "Ohio St Buckeyes": "OSU",
+    "OHIO STATE": "OSU",
+    "OHIO ST": "OSU",
+    "Penn St": "PSU",
+    "Penn St Nittany Lions": "PSU",
+    "PENN ST": "PSU",
+    "PENN ST NITTANY LIONS": "PSU",
     "Purdue Fort Wayne": "PFW",
     "Seattle": "SEA",
     "Seattle U": "SEA",
