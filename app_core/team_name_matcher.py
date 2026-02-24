@@ -5,6 +5,7 @@ This fixes the 15% → 95%+ match rate issue by properly normalizing team names
 """
 
 from difflib import SequenceMatcher
+from functools import lru_cache
 from typing import Optional, List, Tuple
 import re
 
@@ -21,6 +22,10 @@ TEAM_FUZZY_THRESHOLD = 0.80
 class TeamNameMatcher:
     """Handles fuzzy matching between TheOver.ai CSV names and app team names"""
     
+    # Pre-compiled regex for normalization
+    _re_alphanumeric = re.compile(r"[^A-Z0-9 ]")
+    _re_spaces = re.compile(r"\s+")
+
     # Special case full replacements
     # KEYS MUST BE NORMALIZED (UPPERCASE, no punctuation, single spaced)
     FULL_REPLACEMENTS = {
@@ -336,6 +341,7 @@ class TeamNameMatcher:
     }
     
     @classmethod
+    @lru_cache(maxsize=4096)
     def normalize(cls, team: str, strip_mascots: bool = False) -> str:
         """
         Normalize team name for matching.
@@ -356,8 +362,8 @@ class TeamNameMatcher:
         team = team.replace("-", " ")
 
         # 3. Regex: Keep Alphanumeric and Spaces
-        team = re.sub(r"[^A-Z0-9 ]", "", team)
-        team = re.sub(r"\s+", " ", team).strip()
+        team = cls._re_alphanumeric.sub("", team)
+        team = cls._re_spaces.sub(" ", team).strip()
 
         # 4. Apply Full Replacements
         if team in cls.FULL_REPLACEMENTS:
