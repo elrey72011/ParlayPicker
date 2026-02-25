@@ -121,7 +121,7 @@ def test_validation_function():
         ("Buffalo", "NCAAB", "Buffalo"),  # No alias in map -> returns original
         ("Toronto", "NBA", "Toronto Raptors"),
         ("Toronto", "NHL", "Toronto Maple Leafs"),
-        ("New Orleans", "NBA", "New Orleans"),  # Might not have alias
+        ("New Orleans", "NBA", "New Orleans Pelicans"),
         ("New Orleans", "NCAAB", "New Orleans Privateers"),
     ]
 

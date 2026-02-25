@@ -417,9 +417,9 @@ def assign_confidence(prob: float) -> str:
     except:
         return "LOW"
 
-    if p >= 0.85:
+    if p >= 0.70:
         return "HIGH"
-    elif p >= 0.70:
+    elif p >= 0.60:
         return "MEDIUM"
     else:
         return "LOW"
@@ -1869,10 +1869,11 @@ def compute_final_probability(
         W_MODEL = 0.0
 
     # 4. TheOver
-    # If missing, use neutral 0.5
-    p_theover = 0.5
-    if theover_prob is not None:
-        raw_to = clamp_prob(theover_prob, 0.05, 0.95) or 0.5
+    p_theover = 0.0
+    # Use clamp_prob to handle None/NaN consistently. No default fallback.
+    raw_to = clamp_prob(theover_prob, 0.05, 0.95)
+
+    if raw_to is not None:
         # RESCALE logic: [0.55, 0.75] band
         if raw_to > 0.5:
              p_theover = 0.5 + (raw_to - 0.5) * 0.555
@@ -1880,6 +1881,9 @@ def compute_final_probability(
              p_theover = 0.5 - (0.5 - raw_to) * 0.555
         else:
              p_theover = 0.5
+    else:
+        # If missing (None or NaN), zero the weight (Fix 4: Prevent dilution)
+        W_THEOVER = 0.0
 
     # 5. Sentiment
     # If missing or rate limited, zero weight
@@ -2728,9 +2732,6 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
         conf_label = assign_confidence(p_val)
 
         # Force LOW if ML was suppressed (extreme odds)
-        if best_type == "ML" and ml_suppressed_reason == "extreme_odds_warning":
-            conf_label = "LOW"
-            reason += " [Extreme Odds]"
 
         # Force LOW if ML was truly ineligible (e.g. missing odds)
         if best_type == "ML" and not ml_eligible and ml_suppressed_reason != "extreme_odds_warning":
@@ -2886,8 +2887,10 @@ def confidence_from_market(
     w_val = safe_float(width)
     if w_val is not None:
         threshold = 2.0 if market_kind == "spread" else 3.0
-        if w_val >= threshold and conf == "HIGH":
-            conf = "MEDIUM"
+        # REMOVED: Wide market confidence downgrade.
+        # Confidence should be determined solely by probability.
+        # if w_val >= threshold and conf == "HIGH":
+        #    conf = "MEDIUM"
         if w_val >= threshold:
             reasons.append(f"wide_market({w_val:.1f})")
     return conf, ";".join(reasons)
@@ -12686,17 +12689,7 @@ with tab_master:
                         spread_row["consensus_prob_adj"] = spread_prob_final
                         spread_row["prob_reason"] = spread_prob_reason
                         conf, reason_short, eligible = score_pick_confidence(spread_row)
-                        width_spread = (spread_max - spread_min) if (spread_max is not None and spread_min is not None) else 0.0
-                        # Downgrade based on market quality (not blanket downgrade)
-                        if (width_spread and width_spread >= 2.5) and conf == "HIGH":
-                            conf = "MEDIUM"  # Wide market reduces confidence
-                        if len(spread_books_map) <= 1:
-                            # Thin market: cap at MEDIUM, or LOW if already low
-                            if conf == "HIGH":
-                                conf = "MEDIUM"
-                            elif conf == "MEDIUM":
-                                conf = "LOW"
-                            eligible = False
+                        # Confidence determined solely by final_prob, no downgrades.
                         spread_row["Pick_Confidence"] = conf
                         spread_row["Pick_Reason_Short"] = reason_short
                         spread_row["confidence_reason"] = reason_short
@@ -13014,17 +13007,7 @@ with tab_master:
                         total_row["consensus_prob_adj"] = total_prob_final
                         total_row["prob_reason"] = total_prob_reason
                         conf, reason_short, eligible = score_pick_confidence(total_row)
-                        width_total = (total_max - total_min) if (total_max is not None and total_min is not None) else 0.0
-                        # Downgrade based on market quality (not blanket downgrade)
-                        if (width_total and width_total >= 4.5) and conf == "HIGH":
-                            conf = "MEDIUM"  # Wide market reduces confidence
-                        if len(total_books_map) <= 1:
-                            # Thin market: cap at MEDIUM, or LOW if already low
-                            if conf == "HIGH":
-                                conf = "MEDIUM"
-                            elif conf == "MEDIUM":
-                                conf = "LOW"
-                            eligible = False
+                        # Confidence determined solely by final_prob, no downgrades.
                         total_row["Pick_Confidence"] = conf
                         total_row["Pick_Reason_Short"] = reason_short
                         total_row["confidence_reason"] = reason_short

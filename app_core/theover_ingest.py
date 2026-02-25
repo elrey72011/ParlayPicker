@@ -178,6 +178,7 @@ TEAM_ALIAS_MAP_BY_LEAGUE = {
         "BOS": "Boston Celtics", "CHI": "Chicago Bulls",
         "CLE": "Cleveland Cavaliers", "MIA": "Miami Heat",
         "ORL": "Orlando Magic", "TOR": "Toronto Raptors",
+        "Boston": "Boston Celtics", "Toronto": "Toronto Raptors",
         # Issue 3: Explicit City -> Full Name mappings for TheOdds API mismatches
         "Denver": "Denver Nuggets",
         "Chicago": "Chicago Bulls",
@@ -228,6 +229,7 @@ TEAM_ALIAS_MAP_BY_LEAGUE = {
         "South Carolina": "South Carolina Gamecocks", "Arkansas": "Arkansas Razorbacks",
         "Pittsburgh": "Pittsburgh Panthers", "Georgia Tech": "Georgia Tech Yellow Jackets",
         "Missouri": "Missouri Tigers", "Ole Miss": "Ole Miss Rebels",
+        "Indiana": "Indiana Hoosiers",
         "Mississippi St": "Mississippi State Bulldogs", "Vanderbilt": "Vanderbilt Commodores",
         "LSU": "LSU Tigers", "Kansas": "Kansas Jayhawks", "Kansas St": "Kansas State Wildcats",
         "Illinois": "Illinois Fighting Illini", "Ohio St": "Ohio State Buckeyes",
@@ -468,6 +470,46 @@ def generate_canonical_key(league: str, date_str: str, home_code: str, away_code
 
 
 # Context-aware disambiguation rules
+# City Aliases for TheOver (City -> Canonical Team)
+# Added to handle cases like "Boston" -> "Boston Celtics", "Toronto" -> "Toronto Raptors"
+THEOVER_CITY_ALIASES = {
+    # NBA
+    "BOSTON": "Boston Celtics",
+    "TORONTO": "Toronto Raptors",
+    "NEW ORLEANS": "New Orleans Pelicans",
+    "GOLDEN STATE": "Golden State Warriors",
+    "OKLAHOMA CITY": "Oklahoma City Thunder",
+    "PORTLAND": "Portland Trail Blazers",
+    "BROOKLYN": "Brooklyn Nets",
+    "NEW YORK": "New York Knicks",
+    "UTAH": "Utah Jazz",
+    "MEMPHIS": "Memphis Grizzlies",
+    "MIAMI": "Miami Heat",
+    "ORLANDO": "Orlando Magic",
+    "CHARLOTTE": "Charlotte Hornets",
+    "ATLANTA": "Atlanta Hawks",
+    "WASHINGTON": "Washington Wizards",
+    "CLEVELAND": "Cleveland Cavaliers",
+    "DETROIT": "Detroit Pistons",
+    "INDIANA": "Indiana Pacers",
+    "CHICAGO": "Chicago Bulls",
+    "MILWAUKEE": "Milwaukee Bucks",
+    "MINNESOTA": "Minnesota Timberwolves",
+    "DENVER": "Denver Nuggets",
+    "PHOENIX": "Phoenix Suns",
+    "SACRAMENTO": "Sacramento Kings",
+    "DALLAS": "Dallas Mavericks",
+    "HOUSTON": "Houston Rockets",
+    "SAN ANTONIO": "San Antonio Spurs",
+}
+
+def resolve_team_name(raw_name, league=None):
+    """Resolve city alias to full team name for NBA."""
+    normalized = raw_name.strip().upper()
+    if league == "NBA" and normalized in THEOVER_CITY_ALIASES:
+        return THEOVER_CITY_ALIASES[normalized]
+    return raw_name  # fall through to existing logic
+
 # Maps (team_short_name, opponent_indicator) -> full_team_name
 DISAMBIGUATION_RULES: Dict[str, Dict[str, str]] = {
     # When "Georgia" plays a major SEC/CFP team, it's Georgia Bulldogs, not Georgia State
@@ -894,6 +936,10 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
         # Extract Team Names
         csv_home = str(row.get("HOMETEAM", "")).strip()
         csv_away = str(row.get("AWAYTEAM", "")).strip()
+
+        # Fix: Resolve city aliases immediately after extraction (before disambiguation)
+        csv_home = resolve_team_name(csv_home, league)
+        csv_away = resolve_team_name(csv_away, league)
 
         # Apply Context-Aware Disambiguation BEFORE alias resolution
         # This helps resolve "Georgia" vs "Georgia State" based on opponent
@@ -1445,6 +1491,11 @@ def parse_theover_public_betting_text(raw_text: str, pick_type_hint: str = "UNKN
             if len(parts) >= 2:
                 current_away = parts[0].strip()
                 current_home = parts[1].strip()
+
+                # Fix: Resolve city aliases immediately after extraction
+                current_away = resolve_team_name(current_away, current_league)
+                current_home = resolve_team_name(current_home, current_league)
+
                 # Resolve pasted names to canonical OddsAPI names using games lookup
                 if _game_name_lookup and current_league != "UNKNOWN":
                     for raw_name, attr in [("current_home", current_home), ("current_away", current_away)]:
