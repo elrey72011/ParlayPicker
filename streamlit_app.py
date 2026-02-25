@@ -3017,6 +3017,48 @@ def try_float(x):
     except:
         return 0.0
 
+
+def _index_markets_by_date(markets: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+    """
+    Index a list of Kalshi markets by their date token (YYMONDD).
+    Used to optimize matching performance by avoiding full list scans.
+    """
+    index = {}
+    # Regex for date token: 2 digits, 3 UPPER letters, 2 digits (e.g. 26FEB19)
+    # This is the standard Kalshi format in tickers like KXNCAAMBGAME-26FEB19...
+    date_token_pattern = re.compile(r'(\d{2}[A-Z]{3}\d{2})')
+
+    for m in markets:
+        if not isinstance(m, dict):
+            continue
+
+        # Try ticker first, then event_ticker
+        ticker = str(m.get("ticker") or "").upper()
+        match = date_token_pattern.search(ticker)
+
+        token = None
+        if match:
+            token = match.group(1)
+        else:
+            # Fallback to event_ticker
+            event_ticker = str(m.get("event_ticker") or "").upper()
+            match = date_token_pattern.search(event_ticker)
+            if match:
+                token = match.group(1)
+
+        if token:
+            if token not in index:
+                index[token] = []
+            index[token].append(m)
+        else:
+            # If no token found, put in a 'misc' bucket (though usually ignored by date matchers)
+            if 'misc' not in index:
+                index['misc'] = []
+            index['misc'].append(m)
+
+    return index
+
+
 def add_spread_total_confidence(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
         return df
@@ -8002,6 +8044,14 @@ def match_kalshi_market(
 
             all_league_markets = st.session_state[cache_key]
 
+            # OPTIMIZATION: Index markets by date token to avoid O(N) scan per game
+            # This makes the loop O(1) instead of O(N) where N is market count (5000+)
+            index_cache_key = f"{cache_key}_date_index"
+            if index_cache_key not in st.session_state:
+                st.session_state[index_cache_key] = _index_markets_by_date(all_league_markets)
+
+            kalshi_markets_index = st.session_state[index_cache_key]
+
             # Format Date
             # TheOddsAPI ISO -> Kalshi YYMONDD (e.g. 26FEB19)
             # commence_time is a datetime object here
@@ -8012,12 +8062,32 @@ def match_kalshi_market(
             target_spread_line = safe_float(game.get("home_spread_point") or game.get("spread_point"))
             target_total_line = safe_float(game.get("total_point"))
 
+            # OPTIMIZATION: Select only relevant markets for this game date (with tolerance)
+            # Replicates date tolerance logic from match_game_to_kalshi_markets but efficiently
+            tolerance_days = 2 if league in ["NCAAB", "NCAAF"] else 1
+            allowed_tokens = {kalshi_date_str}
+            try:
+                base_dt = datetime.strptime(kalshi_date_str, "%y%b%d")
+                for offset in range(-tolerance_days, tolerance_days + 1):
+                    if offset == 0: continue
+                    odt = base_dt + timedelta(days=offset)
+                    allowed_tokens.add(odt.strftime("%y%b%d").upper())
+            except Exception:
+                pass
+
+            subset_markets = []
+            for token in allowed_tokens:
+                subset_markets.extend(kalshi_markets_index.get(token, []))
+
+            # Always include misc bucket for safety
+            subset_markets.extend(kalshi_markets_index.get("misc", []))
+
             # Call new matching method
             raw_matches = kalshi_integrator.match_game_to_kalshi_markets(
                 home_team=home,
                 away_team=away,
                 game_date=kalshi_date_str,
-                kalshi_markets=all_league_markets,
+                kalshi_markets=subset_markets,
                 league=league,
                 commence_time=commence_time,
                 target_spread=target_spread_line,
