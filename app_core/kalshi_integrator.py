@@ -66,6 +66,22 @@ NBA_TZ = pytz.timezone("US/Eastern")
 # Global counter for debug logging limit
 _DEBUG_GAME_LOG_COUNT = 0
 
+# Compiled Regex Patterns for Performance
+_RE_TICKER_SUFFIX = re.compile(r"^(\d{2}[A-Z]{3}\d{2})([A-Z0-9]+)$")
+_RE_TEAM_CODE_EXTRACT = re.compile(r'-\d{2}[A-Z]{3}\d{2}([A-Z0-9]+)(?:-|$)')
+_RE_NON_ALPHANUMERIC_SPACE = re.compile(r"[^A-Z0-9 ]")
+_RE_MULTIPLE_SPACES = re.compile(r"\s+")
+_RE_NON_ALPHA = re.compile(r"[^A-Z]")
+_RE_SPREAD_SUFFIX = re.compile(r'-[A-Z]{2,4}-[\d\.]+$')
+_RE_TOTAL_POINTS_OU = re.compile(r'(OVER|UNDER) [\d\.]+')
+_RE_DATE_TOKEN = re.compile(r"\d{2}[A-Z]{3}\d{2}")
+_RE_DECIMAL_SUFFIX = re.compile(r'\d+\.?\d*$')
+_RE_WINS_BY_OVER = re.compile(r'wins by over ([\d\.]+) Points', re.IGNORECASE)
+_RE_NUMS_FINDALL = re.compile(r"[-+]?\d*\.\d+|\d+")
+_RE_TOTAL_SUFFIX = re.compile(r'[-_]([\d\.]+)$')
+_RE_VS_SPLIT = re.compile(r' vs\.? ', re.IGNORECASE)
+_RE_OU_VAL = re.compile(r'(?:Over|Under) ([\d\.]+)')
+
 # Module-level events cache (Task: Optimize NCAAB Fetching)
 _EVENTS_CACHE: dict = {}  # {series_ticker: response_dict}
 _ST_CACHE: dict = {}  # {event_ticker: [list of markets]} - Problem 1 Fix
@@ -299,7 +315,7 @@ def calculate_game_match_score(ticker: str, away_variants: List[str], home_varia
     Replaces older logic with strict min_score check
     """
     # Extract team code portion
-    match = re.search(r'-\d{2}[A-Z]{3}\d{2}([A-Z0-9]+)(?:-|$)', ticker)
+    match = _RE_TEAM_CODE_EXTRACT.search(ticker)
     if not match:
         return 0.0, {}
 
@@ -461,6 +477,15 @@ LEAGUE_SERIES_MAP: Dict[str, Any] = {
 }
 
 
+@lru_cache(maxsize=1)
+def _get_ncaab_all_codes_cached() -> frozenset:
+    """Cache the full set of NCAAB team codes to avoid rebuilding per ticker call."""
+    codes = set(NCAAB_TEAM_CODE_MAP.values())
+    codes.update(NCAAB_CODE_ALIASES.values())
+    codes.update(KALSHI_NCAAB_TEAM_CODES.values())
+    return frozenset(codes)
+
+
 @lru_cache(maxsize=4096)
 def parse_event_ticker_codes(event_ticker: str) -> Dict[str, str]:
     """
@@ -479,7 +504,7 @@ def parse_event_ticker_codes(event_ticker: str) -> Dict[str, str]:
     prefix = parts[0].upper()
     suffix = parts[-1]
 
-    match = re.match(r"^(\d{2}[A-Z]{3}\d{2})([A-Z0-9]+)$", suffix)
+    match = _RE_TICKER_SUFFIX.match(suffix)
     if not match:
         logger.warning(f"Failed to parse event ticker suffix: {suffix} (full: {event_ticker})")
         return {}
@@ -499,14 +524,10 @@ def parse_event_ticker_codes(event_ticker: str) -> Dict[str, str]:
     home = ""
 
     if league in ["NCAAB", "NCAAF"]:
-        code_map = NCAAB_TEAM_CODE_MAP if league == "NCAAB" else NCAAF_TEAM_CODE_MAP
-        all_codes = set(code_map.values())
-
-        # Add values from alias map to known codes to catch resolved aliases (e.g. "DUKE" -> "DUK")
         if league == "NCAAB":
-            all_codes.update(NCAAB_CODE_ALIASES.values())
-            # FIX: Also add comprehensive team codes (Task: Ensure newly added codes like LCHI are recognized)
-            all_codes.update(KALSHI_NCAAB_TEAM_CODES.values())
+            all_codes = _get_ncaab_all_codes_cached()
+        else:
+            all_codes = set(NCAAF_TEAM_CODE_MAP.values())
 
         best_split = None
         best_score = 0
@@ -692,9 +713,9 @@ def league_game_prefix(league: str) -> str:
 def clean_team_name(name: str) -> str:
     """Robust cleaning preserving spaces for map lookup."""
     # Convert to uppercase, replace non-alphanumeric with space, collapse multiple spaces
-    cleaned = re.sub(r"[^A-Z0-9 ]", " ", str(name or "").upper())
+    cleaned = _RE_NON_ALPHANUMERIC_SPACE.sub(" ", str(name or "").upper())
     # Collapse multiple spaces into one and strip
-    return re.sub(r"\s+", " ", cleaned).strip()
+    return _RE_MULTIPLE_SPACES.sub(" ", cleaned).strip()
 
 def canonical_team_name(name: str) -> str:
     """
@@ -794,8 +815,8 @@ def canonical_team_name(name: str) -> str:
 
     # 7. Upper and Clean
     n = n.upper()
-    n = re.sub(r"[^A-Z0-9 ]", "", n)
-    n = re.sub(r"\s+", " ", n).strip()
+    n = _RE_NON_ALPHANUMERIC_SPACE.sub("", n)
+    n = _RE_MULTIPLE_SPACES.sub(" ", n).strip()
 
     return n
 
@@ -1125,7 +1146,7 @@ def generate_comprehensive_team_variants(team_name: str, league: str = None) -> 
 
 def normalize_name(name: str) -> str:
     """Legacy normalize - strips everything non-alpha. Kept for back-compat but generally avoided now."""
-    return re.sub(r"[^A-Z]", "", (name or "").upper())
+    return _RE_NON_ALPHA.sub("", (name or "").upper())
 
 
 # Extensive abbreviation list
@@ -2797,7 +2818,7 @@ def cross_reference_unmapped_ticker(league: str, date_token: str, team_block: st
 
             # Simple check: Does team_block look like Away+Home?
             # Remove non-alpha
-            combined = re.sub(r"[^A-Z]", "", away + home)
+            combined = _RE_NON_ALPHA.sub("", away + home)
 
             # If team_block is a substring of combined, or vice versa
             # Or if team_block matches abbreviations
@@ -2911,7 +2932,7 @@ def team_code_for_league(league: str, team_name: str) -> str:
 
     # 3. Heuristic generation
     # Keep only letters for fallback
-    letters = re.sub(r"[^A-Z]", "", cleaned)
+    letters = _RE_NON_ALPHA.sub("", cleaned)
     if letters:
         return letters[:3]
 
