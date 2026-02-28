@@ -6,6 +6,7 @@ This fixes the 15% → 95%+ match rate issue by properly normalizing team names
 
 from difflib import SequenceMatcher
 from typing import Optional, List, Tuple
+from functools import lru_cache
 import re
 
 try:
@@ -334,8 +335,15 @@ class TeamNameMatcher:
         'CAL': 'CALIFORNIA GOLDEN BEARS',
         'CALIFORNIA': 'CALIFORNIA GOLDEN BEARS',
     }
+
+    # Pre-compiled regular expressions for performance
+    _re_alphanumeric = re.compile(r"[^A-Z0-9 ]")
+    _re_spaces = re.compile(r"\s+")
     
     @classmethod
+    # Memoize team name normalization to prevent redundant regex string operations
+    # maxsize 4096 is well beyond the typical number of teams per slate but bounded to prevent memory issues
+    @lru_cache(maxsize=4096)
     def normalize(cls, team: str, strip_mascots: bool = False) -> str:
         """
         Normalize team name for matching.
@@ -356,8 +364,8 @@ class TeamNameMatcher:
         team = team.replace("-", " ")
 
         # 3. Regex: Keep Alphanumeric and Spaces
-        team = re.sub(r"[^A-Z0-9 ]", "", team)
-        team = re.sub(r"\s+", " ", team).strip()
+        team = cls._re_alphanumeric.sub("", team)
+        team = cls._re_spaces.sub(" ", team).strip()
 
         # 4. Apply Full Replacements
         if team in cls.FULL_REPLACEMENTS:
