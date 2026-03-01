@@ -2978,47 +2978,28 @@ def build_clean_glance(conf: Any, prob: Any, books: Any, width: Any, market_type
     return f"{conf_norm} | {fmt_prob(prob)} | {depth_label(books)} | {market_width_label(width, market_type)}"
 
 
-def detect_placeholder_odds(row: pd.Series) -> pd.Series:
-    """
-    Detects if odds are placeholders (-110/-110 with 0 line).
-    Logic: Trigger flag if both Home and Away ML are exactly -110 AND the spread_point is 0.0 or None.
-    """
-    # Check ML (Implied) -110
-    # We check if implied prob is close to 0.5238 (which is -110)
-    # Actually, simpler to check raw odds if available, or implied prob.
-    # Let's use implied prob ~ 0.5238 (+/- small epsilon) on BOTH sides?
-    # Or just check if implied prob is exactly -110 derived.
-
-    # Better: check columns if they exist.
-    # We need spread odds home/away usually.
-
-    s_home_odds = row.get("spread_odds_home")
-    s_away_odds = row.get("spread_odds_away")
-    s_line = row.get("spread_point") # Or spread_line
-
-    is_placeholder = False
-
-    # Helper to check -110
-    def is_minus_110(val):
-        try:
-            f = float(val)
-            return abs(f + 110.0) < 0.1
-        except:
-            return False
-
-    # Check strict condition
-    if is_minus_110(s_home_odds) and is_minus_110(s_away_odds):
-        # Check line
-        if s_line is None or (try_float(s_line) == 0.0):
-            is_placeholder = True
-
-    return is_placeholder
-
 def try_float(x):
     try:
         return float(x)
     except:
         return 0.0
+
+def is_placeholder_odds_v2(home_odds, away_odds, line):
+    """
+    Optimized placeholder check avoiding pd.Series creation.
+    """
+    try:
+        # Fast path for common case
+        if abs(float(home_odds) + 110.0) < 0.1 and abs(float(away_odds) + 110.0) < 0.1:
+            if line is None:
+                return True
+            try:
+                return float(line) == 0.0
+            except:
+                return True
+        return False
+    except:
+        return False
 
 def add_spread_total_confidence(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
@@ -3048,13 +3029,8 @@ def add_spread_total_confidence(df: pd.DataFrame) -> pd.DataFrame:
         s_away = row.get("spread_odds_away")
         s_line = row.get("spread_point")
 
-        # Create temp row for helper
-        s_row = pd.Series({
-            "spread_odds_home": s_home,
-            "spread_odds_away": s_away,
-            "spread_point": s_line
-        })
-        is_spread_placeholder = detect_placeholder_odds(s_row)
+        # Optimized check avoiding Series creation
+        is_spread_placeholder = is_placeholder_odds_v2(s_home, s_away, s_line)
 
         if spread_odds_valid is None:
             spread_odds_valid = safe_float(row.get("spread_implied_prob")) is not None and not is_spread_placeholder
@@ -3068,12 +3044,8 @@ def add_spread_total_confidence(df: pd.DataFrame) -> pd.DataFrame:
         t_under = row.get("total_odds_under")
         t_line = row.get("total_point")
 
-        t_row = pd.Series({
-            "spread_odds_home": t_over,
-            "spread_odds_away": t_under,
-            "spread_point": t_line
-        })
-        is_total_placeholder = detect_placeholder_odds(t_row)
+        # Optimized check avoiding Series creation
+        is_total_placeholder = is_placeholder_odds_v2(t_over, t_under, t_line)
 
         if total_odds_valid is None:
             total_odds_valid = safe_float(row.get("total_implied_prob")) is not None and not is_total_placeholder
