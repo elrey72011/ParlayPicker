@@ -72,6 +72,13 @@ _ST_CACHE: dict = {}  # {event_ticker: [list of markets]} - Problem 1 Fix
 _NCAAB_MARKET_POOL_CACHE: list = []
 _NCAAB_POOL_LOADED: bool = False
 
+# Pre-compiled sorted keys for team_name_to_code optimization
+_SORTED_KEYS_CACHE: Dict[str, List[str]] = {}
+
+# Pre-compiled regexes for team name cleaning optimization
+_RE_NON_ALPHANUM = re.compile(r"[^A-Z0-9 ]")
+_RE_MULTI_SPACE = re.compile(r"\s+")
+
 def debug_search_teams(all_markets: List[Dict[str, Any]], home_team: str, away_team: str):
     """Debug helper to find team codes in Kalshi markets (No-op after cleanup)"""
     pass
@@ -692,9 +699,9 @@ def league_game_prefix(league: str) -> str:
 def clean_team_name(name: str) -> str:
     """Robust cleaning preserving spaces for map lookup."""
     # Convert to uppercase, replace non-alphanumeric with space, collapse multiple spaces
-    cleaned = re.sub(r"[^A-Z0-9 ]", " ", str(name or "").upper())
+    cleaned = _RE_NON_ALPHANUM.sub(" ", str(name or "").upper())
     # Collapse multiple spaces into one and strip
-    return re.sub(r"\s+", " ", cleaned).strip()
+    return _RE_MULTI_SPACE.sub(" ", cleaned).strip()
 
 def canonical_team_name(name: str) -> str:
     """
@@ -2874,7 +2881,14 @@ def team_name_to_code(league: str, team_name: str) -> Optional[str]:
         # 2. Fuzzy / Subset lookup
         # Iterate keys sorted by length descending to match longest specific keys first
         # (e.g. match "IOWA STATE" before "IOWA")
-        sorted_keys = sorted(map_to_use.keys(), key=len, reverse=True)
+        cache_key = league_u
+        if map_to_use is NCAAB_TEAM_CODE_MAP:
+             cache_key = "NCAAB_LEGACY"
+
+        if cache_key not in _SORTED_KEYS_CACHE:
+             _SORTED_KEYS_CACHE[cache_key] = sorted(map_to_use.keys(), key=len, reverse=True)
+
+        sorted_keys = _SORTED_KEYS_CACHE[cache_key]
         for key in sorted_keys:
             # Check if map key is substring of input OR input is substring of map key
             if key in team_clean or team_clean in key:
