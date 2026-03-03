@@ -895,7 +895,8 @@ def generate_compound_codes(team_name: str) -> List[str]:
 
     return codes
 
-def generate_comprehensive_team_variants(team_name: str, league: str = None) -> List[str]:
+@lru_cache(maxsize=2048)
+def generate_comprehensive_team_variants(team_name: str, league: str = None) -> Tuple[str, ...]:
     """
     Generate comprehensive team name variants for Kalshi matching.
 
@@ -913,10 +914,11 @@ def generate_comprehensive_team_variants(team_name: str, league: str = None) -> 
         league: Optional league identifier for specialized mapping
 
     Returns:
-        List of unique variant strings, prioritized by likelihood
+        Tuple of unique variant strings, prioritized by likelihood
+        (Returned as tuple for caching; callers must cast to list if modification needed)
     """
     if not team_name:
-        return []
+        return ()
 
     variants = []
 
@@ -1120,7 +1122,7 @@ def generate_comprehensive_team_variants(team_name: str, league: str = None) -> 
 
     logger.debug(f"Generated {len(unique_variants)} variants for '{team_name}': {unique_variants[:10]}...")
 
-    return unique_variants
+    return tuple(unique_variants)
 
 
 def normalize_name(name: str) -> str:
@@ -4339,8 +4341,8 @@ def match_game_to_kalshi(league: str, home_team: str, away_team: str, game_time:
     logger.info(f"   Cleaned Names: {away_clean} @ {home_clean}")
 
     # Generate comprehensive variants with league awareness
-    home_codes = generate_comprehensive_team_variants(home_team, league_key)
-    away_codes = generate_comprehensive_team_variants(away_team, league_key)
+    home_codes = list(generate_comprehensive_team_variants(home_team, league_key))
+    away_codes = list(generate_comprehensive_team_variants(away_team, league_key))
 
     # DEBUG LOGGING (User Request Step 2)
     logger.info(f"🔍 KALSHI PRE-FLIGHT (Legacy) [{league}] {away_team} @ {home_team}")
@@ -5144,8 +5146,8 @@ class KalshiIntegrator:
             Dictionary with matched markets by type (GAME, SPREAD, TOTAL)
         """
         # Generate comprehensive variants (includes codes, stripped mascots, etc.)
-        home_variants = generate_comprehensive_team_variants(home_team, league)
-        away_variants = generate_comprehensive_team_variants(away_team, league)
+        home_variants = list(generate_comprehensive_team_variants(home_team, league))
+        away_variants = list(generate_comprehensive_team_variants(away_team, league))
 
         # DEBUG LOGGING (User Request Step 2)
         logger.info(f"🔍 KALSHI PRE-FLIGHT [{league}] {away_team} @ {home_team}")
@@ -5274,9 +5276,9 @@ class KalshiIntegrator:
         best_match_ticker = None
 
         # Helper to score a match between a ticker code and team variants
-        def _score_team_match(ticker_code: str, team_variants: List[str]) -> float:
+        def _score_team_match(ticker_code: str, team_variants: List[str], team_name: str) -> float:
             # Use the new strict scoring function
-            s, _ = calculate_team_match_score(ticker_code, team_variants, league=league)
+            s, _ = calculate_team_match_score(ticker_code, team_variants, team_name_for_logging=team_name, league=league)
             return s
 
         # Thresholds
@@ -5328,12 +5330,12 @@ class KalshiIntegrator:
 
             # Try matching both team orders (Kalshi sometimes flips or we parsed wrong)
             # Order 1: away=k1, home=k2 (Standard)
-            score_away_1 = _score_team_match(k1_resolved, away_variants)
-            score_home_1 = _score_team_match(k2_resolved, home_variants)
+            score_away_1 = _score_team_match(k1_resolved, away_variants, away_team)
+            score_home_1 = _score_team_match(k2_resolved, home_variants, home_team)
 
             # Order 2: away=k2, home=k1 (Swap)
-            score_away_2 = _score_team_match(k2_resolved, away_variants)
-            score_home_2 = _score_team_match(k1_resolved, home_variants)
+            score_away_2 = _score_team_match(k2_resolved, away_variants, away_team)
+            score_home_2 = _score_team_match(k1_resolved, home_variants, home_team)
 
             # Calculate combined scores
             min1 = min(score_away_1, score_home_1)
@@ -6740,8 +6742,8 @@ def generate_missing_games_report(
             report.append(f"### {away} @ {home} ({league})")
 
             # Show generated codes
-            home_codes = generate_comprehensive_team_variants(home, league)
-            away_codes = generate_comprehensive_team_variants(away, league)
+            home_codes = list(generate_comprehensive_team_variants(home, league))
+            away_codes = list(generate_comprehensive_team_variants(away, league))
 
             report.append(f"- **Generated Home Codes:** {home_codes[:5]}")
             report.append(f"- **Generated Away Codes:** {away_codes[:5]}")
