@@ -19,6 +19,8 @@ import os
 import requests
 import time
 import argparse
+
+import asyncio
 from typing import Dict, List, Optional, Any
 
 # ============================================================
@@ -337,13 +339,26 @@ def collect_sport_data(sport: str, start_date: datetime, end_date: datetime,
     
     print(f"  📅 Seasons: {sorted(seasons)}")
     
+    async def fetch_season_data(season: str, sem: asyncio.Semaphore):
+        async with sem:
+            standings = await asyncio.to_thread(client.get_standings, sport, season, league_id)
+            games = await asyncio.to_thread(client.get_games_by_season, sport, season, league_id)
+            return season, standings, games
+
+    async def fetch_all_seasons():
+        sem = asyncio.Semaphore(5)
+        tasks = [fetch_season_data(s, sem) for s in sorted(seasons)]
+        return await asyncio.gather(*tasks)
+
+    season_data_results = asyncio.run(fetch_all_seasons())
+    season_data_map = {season: (standings, games) for season, standings, games in season_data_results}
+
     for season in sorted(seasons):
         print(f"  🏀 Loading {sport} {season}...")
         
-        standings = client.get_standings(sport, season, league_id)
+        standings, games = season_data_map[season]
         print(f"    {len(standings)} teams in standings")
         
-        games = client.get_games_by_season(sport, season, league_id)
         if not games:
             print(f"    No games found")
             continue
