@@ -7,7 +7,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import numpy as np
 import pandas as pd
-from app_core.feature_processing import _parse_streak, _parse_form, safefloat
+from app_core.feature_processing import _parse_streak, _parse_form, safefloat, normalize_team
 
 class TestFeatureProcessing(unittest.TestCase):
 
@@ -138,6 +138,29 @@ class TestFeatureProcessing(unittest.TestCase):
         # Non-standard characters (ignored as losses if they aren't 'W')
         self.assertEqual(_parse_form("WWXYZ"), 0.4) # 2 wins out of 5 chars
         self.assertEqual(_parse_form("   "), 0.0) # 0 wins out of 3 chars
+
+    def test_normalize_team_happy_paths(self):
+        self.assertEqual(normalize_team("St. Bonaventure Bonnies"), "ST BONAVENTURE BONNIES")
+        self.assertEqual(normalize_team("Texas A&M"), "TEXAS A M")
+        self.assertEqual(normalize_team("St. John's!!!"), "ST JOHNS")
+        self.assertEqual(normalize_team("Miami-OH"), "MIAMI OH")
+        self.assertEqual(normalize_team("Blue Jays 🏀"), "BLUE JAYS")
+
+    def test_normalize_team_empty_and_invalid(self):
+        self.assertEqual(normalize_team(None), "")
+        self.assertEqual(normalize_team(""), "")
+        self.assertEqual(normalize_team(" "), "")
+        self.assertEqual(normalize_team([]), "")
+        self.assertEqual(normalize_team({}), "")
+
+    def test_normalize_team_multiple_spaces(self):
+        self.assertEqual(normalize_team("A  B  C"), "A B C")
+
+    def test_normalize_team_non_string_types(self):
+        self.assertEqual(normalize_team(123), "123")
+        self.assertEqual(normalize_team(42), "42")
+        self.assertEqual(normalize_team(True), "TRUE")
+
 
 if __name__ == '__main__':
     unittest.main()
