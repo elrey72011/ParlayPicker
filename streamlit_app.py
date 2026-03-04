@@ -305,7 +305,7 @@ first_game_full_search = {} # Fixed: Initialize as dict, not boolean, to support
 # -----------------
 
 def clean_line_str(val: Any) -> Optional[str]:
-    """Format betting line to strip leading zeros (e.g. '01' -> '1', '1.5' -> '1.5').
+    """Format betting line to strip leading zeros (e.g. '01' -> '1', '1.5' -> '+1.5').
 
     Returns None for NaN values to prevent 'Over nan' in pick strings.
     """
@@ -316,6 +316,8 @@ def clean_line_str(val: Any) -> Optional[str]:
         # Handle NaN - return None instead of 'nan' string
         if pd.isna(f) or (isinstance(f, float) and f != f):  # NaN check
             return None
+        if f > 0:
+            return f"+{f:g}"
         return f"{f:g}"
     except Exception:
         return str(val)
@@ -2171,7 +2173,8 @@ def parse_spread_pick(raw_val: Any, home: Optional[str], away: Optional[str]) ->
     if not raw_val:
         return None, None
     text = str(raw_val).strip()
-    match = re.match(r"(.+?)\s+(-?\d+(?:\.\d+)?)$", text)
+    # Match strings like "Team Name -1.5" or "Team Name +1.5 (71.6%)"
+    match = re.match(r"(.+?)\s+([+-]?\d+(?:\.\d+)?)(?:\s*\(.*?\))?$", text)
     if not match:
         return None, None
     team = match.group(1).strip()
@@ -2187,7 +2190,7 @@ def parse_total_pick(raw_val: Any) -> Tuple[Optional[str], Optional[float]]:
     if not raw_val:
         return None, None
     text = str(raw_val).strip()
-    match = re.match(r"(Over|Under)\s+(-?\d+(?:\.\d+)?)", text, flags=re.IGNORECASE)
+    match = re.match(r"(Over|Under)\s+([+-]?\d+(?:\.\d+)?)(?:\s*\(.*?\))?$", text, flags=re.IGNORECASE)
     if not match:
         return None, None
     side = match.group(1).title()
@@ -10067,6 +10070,7 @@ with tab_master:
                     spread_market_pairs_count = 0
                     total_market_pairs_count = 0
                     spread_odds_valid = False
+                    spread_line_mismatch = False
                     total_odds_valid = False
                     spread_odds_placeholder_detected = False
                     total_odds_placeholder_detected = False
@@ -10158,6 +10162,7 @@ with tab_master:
                     spread_odds_method = None
                     total_odds_method = None
                     spread_odds_valid = False
+                    spread_line_mismatch = False
                     total_odds_valid = False
                     spread_odds_placeholder_detected = False
                     total_odds_placeholder_detected = False
@@ -11623,6 +11628,22 @@ with tab_master:
                         spread_pick = spread_pick_result['pick_team']
                         spread_line = _ref_line if spread_pick_result['pick_side'] == "home" else -_ref_line
 
+                        # GUARDRAIL: Verify spread_line matches the expected book line
+                        spread_line_mismatch = False
+                        if spread_line is not None:
+                            expected_line = None
+                            if spread_pick == home and home_spread_point is not None:
+                                expected_line = home_spread_point
+                            elif spread_pick == away and away_spread_point is not None:
+                                expected_line = away_spread_point
+
+                            if expected_line is not None and abs(spread_line - expected_line) > 1e-4:
+                                logger.warning(f"CRITICAL MISMATCH: Game {home} vs {away}, Pick={spread_pick}, Internal Line={spread_line}, Book Expected={expected_line}")
+                                spread_line_mismatch = True
+                                spread_odds_valid = False
+                                if "spread_line_mismatch" not in spread_warnings_new:
+                                    spread_warnings_new.append("spread_line_mismatch")
+
                         spread_decision_score_pick = spread_prob_pick_final
                         spread_decision_score_alt = spread_alt_prob_final
                         spread_prob_margin = compute_margin(spread_prob_final, spread_alt_prob_final)
@@ -12576,6 +12597,7 @@ with tab_master:
                             "kalshi_game_prefix_used": (candidate_debug.get("winner_meta") or {}).get("winner_prefix") or candidate_debug.get("kalshi_game_prefix_used"),
                             "kalshi_wanted_tokens": (candidate_debug.get("winner_meta") or {}).get("allowed_date_tokens") or candidate_debug.get("kalshi_wanted_tokens"),
                             "Sentiment_Diff": sentiment_diff,
+                            "spread_line_mismatch": spread_line_mismatch,
                             "Spread & Pick": f"{spread_pick} {clean_line_str(spread_line)} ({spread_prob_final*100:.1f}%)" if (spread_pick is not None and spread_prob_final is not None) else (f"{spread_pick} {clean_line_str(spread_line)}" if spread_pick is not None else None),
                             "spread_pick_team": spread_pick_team,
                             "spread_pick_line": spread_pick_line,
