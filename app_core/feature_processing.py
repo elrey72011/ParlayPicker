@@ -10,6 +10,7 @@ import concurrent.futures
 import re
 import time
 import requests
+import math
 
 # -------------------------------------------------------------------------
 # Library Imports with Fail-Safe Wrappers
@@ -2344,6 +2345,7 @@ def safefloat(val: Any) -> float:
     try:
         f = float(val)
         if f != f: return 0.0 # NaN
+        if math.isinf(f): return 0.0 # Handle inf/-inf
         return f
     except (ValueError, TypeError):
         return 0.0
