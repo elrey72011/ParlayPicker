@@ -114,11 +114,11 @@ def normalize_team(name: str) -> str:
         return ""
     name = str(name).upper()
 
-    # Replace hyphens with spaces BEFORE removing special chars
-    # This handles "AR-Pine Bluff" -> "AR PINE BLUFF"
-    name = name.replace("-", " ")
+    # Replace apostrophes and dots with nothing
+    name = name.replace("'", "").replace(".", "")
 
-    name = re.sub(r"[^A-Z0-9 ]", "", name)
+    # Replace all non-alphanumeric characters with a space BEFORE collapsing spaces
+    name = re.sub(r"[^A-Z0-9 ]", " ", name)
     name = re.sub(r"\s+", " ", name).strip()
     return name
 
