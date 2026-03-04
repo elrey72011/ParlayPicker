@@ -5,9 +5,65 @@ import os
 # Add root directory to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from app_core.feature_processing import _parse_streak, _parse_form
+import numpy as np
+import pandas as pd
+from app_core.feature_processing import _parse_streak, _parse_form, safefloat
 
 class TestFeatureProcessing(unittest.TestCase):
+
+    def test_safefloat_happy_paths(self):
+        # Strings representing numbers
+        self.assertEqual(safefloat("123.45"), 123.45)
+        # Integers
+        self.assertEqual(safefloat(42), 42.0)
+        # Floats
+        self.assertEqual(safefloat(3.14), 3.14)
+
+    def test_safefloat_explicit_none_empty(self):
+        # Explicit None
+        self.assertEqual(safefloat(None), 0.0)
+        # Empty string
+        self.assertEqual(safefloat(""), 0.0)
+        # String with spaces
+        self.assertEqual(safefloat(" "), 0.0)
+
+    def test_safefloat_string_conversion_failures(self):
+        # Alphabetic string
+        self.assertEqual(safefloat("abc"), 0.0)
+        # "nan" string
+        self.assertEqual(safefloat("nan"), 0.0)
+        # "inf" string
+        self.assertEqual(safefloat("inf"), 0.0)
+        self.assertEqual(safefloat("-inf"), 0.0)
+        # "true" string
+        self.assertEqual(safefloat("true"), 0.0)
+        # Multiple decimal points
+        self.assertEqual(safefloat("1.2.3"), 0.0)
+
+    def test_safefloat_weird_types(self):
+        # Lists and dicts
+        self.assertEqual(safefloat([]), 0.0)
+        self.assertEqual(safefloat({}), 0.0)
+        # Booleans
+        self.assertEqual(safefloat(True), 1.0)
+        self.assertEqual(safefloat(False), 0.0)
+
+    def test_safefloat_pandas_numpy_edge_cases(self):
+        # np.nan
+        self.assertEqual(safefloat(np.nan), 0.0)
+        # pd.NaT
+        self.assertEqual(safefloat(pd.NaT), 0.0)
+        # pd.NA
+        self.assertEqual(safefloat(pd.NA), 0.0)
+
+    def test_safefloat_overflow_edge_case(self):
+        # Overflow/Extreme floats
+        self.assertEqual(safefloat(1e308), 1e308)
+        self.assertEqual(safefloat("1e308"), 1e308)
+
+        # Beyond float limits becomes inf, which safefloat catches and returns 0.0
+        self.assertEqual(safefloat(1e309), 0.0)
+        self.assertEqual(safefloat("1e309"), 0.0)
 
     def test_parse_streak_happy_paths(self):
         # Normal win streaks
