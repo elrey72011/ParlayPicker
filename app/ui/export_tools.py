@@ -2,10 +2,18 @@ import pandas as pd
 import streamlit as st
 
 
-def render_exports(df: pd.DataFrame, filename: str = "analysis_export.csv") -> None:
+def render_exports(df: pd.DataFrame, parlays: pd.DataFrame | None = None) -> None:
+    if parlays is None:
+        parlays = pd.DataFrame()
+
     st.download_button(
-        "Export Analysis CSV",
+        "Export Analysis",
         df.to_csv(index=False),
-        file_name=filename,
-        mime="text/csv",
+        "analysis_export.csv",
+    )
+
+    st.download_button(
+        "Export Parlays",
+        parlays.to_csv(index=False),
+        "parlays_export.csv",
     )

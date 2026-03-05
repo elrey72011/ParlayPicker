@@ -1,14 +1,14 @@
 from core.models.prediction_models import Prediction
 
 
-def calculate_ev(probability, american_odds):
+def calculate_ev(probability, odds):
     if probability is None:
         probability = 0.5
 
-    if american_odds > 0:
-        payout = american_odds / 100
+    if odds > 0:
+        payout = odds / 100
     else:
-        payout = 100 / abs(american_odds)
+        payout = 100 / abs(odds)
 
     ev = probability * payout - (1 - probability)
 
