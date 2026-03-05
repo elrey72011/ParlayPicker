@@ -1,21 +1,29 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import streamlit as st
-import pandas as pd
+import polars as pl
 
 try:
     from parlaypicker.models.model_loader import load_model
 except ModuleNotFoundError:  # pragma: no cover
     import sys
-    from pathlib import Path
-    sys.path.append(str(Path(__file__).resolve().parents[2]))
+    from pathlib import Path as _Path
+
+    sys.path.append(str(_Path(__file__).resolve().parents[2]))
     from parlaypicker.models.model_loader import load_model
 from parlaypicker.data_pipeline.sports_data_pipeline import run_pipeline
 from parlaypicker.app.dashboard_components import render_top_bets
 
 
+LATEST_ODDS_PATH = Path("data/parquet/latest_odds.parquet")
+
+
 @st.cache_data(ttl=300)
-def load_data(sport: str, date_key: str) -> pd.DataFrame:
+def load_data(sport: str, date_key: str) -> pl.DataFrame:
+    if LATEST_ODDS_PATH.exists():
+        return pl.read_parquet(LATEST_ODDS_PATH)
     return run_pipeline(sport, date_key)
 
 

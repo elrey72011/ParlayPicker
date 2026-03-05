@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import streamlit as st
-import pandas as pd
+import polars as pl
 
 
-def render_top_bets(df: pd.DataFrame):
+def render_top_bets(df: pl.DataFrame):
     st.subheader("Top Bets")
-    st.dataframe(df.head(20), width="stretch")
+    st.dataframe(df.head(20).to_pandas(), width="stretch")
