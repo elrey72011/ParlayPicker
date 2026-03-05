@@ -169,6 +169,11 @@ MIN_FINAL_PROB = 0.55
 MIN_EDGE = 0.02
 MAX_TOTAL_PROB = 0.68
 
+# Odds API and Novig Configuration
+DEBUG_EXPORT_RAW_ODDS = True
+ODDS_PRIORITY = ['novig', 'fanduel', 'draftkings', 'betmgm']
+NOVIG_SPREAD_CAP = 0.68  # For totals cap logic
+
 # Correlation Config
 SAME_GAME_DISALLOWED = True
 SAME_LEAGUE_CORR_FACTOR = 0.95
