@@ -10,6 +10,7 @@ import logging
 
 from core.probability_utils import ensure_probability_column
 from core.schema.schema_validator import validate_schema
+from core.schema.schema_utils import ensure_column
 
 logger = logging.getLogger(__name__)
 
@@ -394,37 +395,42 @@ def run_master_analysis(
     Combine all analyzer results into master analysis
     """
     master = vertex_results.copy()
+    master.columns = master.columns.str.strip().str.lower()
     master = ensure_probability_column(master, "ai_probability")
+    master = ensure_column(master, "ml_probability", 0.5)
     master = validate_schema(master, "master_analysis")
 
     logger.info(f"Master columns: {list(master.columns)}")
 
     if ml_results is not None:
         ml_results = ml_results.copy()
+        ml_results.columns = ml_results.columns.str.strip().str.lower()
         ml_results = ensure_probability_column(ml_results, "ml_probability")
         logger.info(f"ML result columns: {list(ml_results.columns)}")
 
-        if 'game_id' in master.columns and 'game_id' in ml_results.columns:
+        if (
+            "ml_probability" in ml_results.columns
+            and "game_id" in master.columns
+            and "game_id" in ml_results.columns
+        ):
             master = master.merge(
-                ml_results[['game_id', 'ml_probability']],
-                on='game_id',
-                how='left'
+                ml_results[["game_id", "ml_probability"]],
+                on="game_id",
+                how="left"
             )
-        else:
-            if len(master) == len(ml_results):
-                master['ml_probability'] = ml_results['ml_probability'].values
-            else:
-                master['ml_probability'] = 0.5
-
-        master['ml_probability'] = master['ml_probability'].fillna(0.5)
+        elif "ml_probability" in ml_results.columns and len(master) == len(ml_results):
+            master["ml_probability"] = ml_results["ml_probability"].values
     else:
         logger.info("ML result columns: []")
-        master['ml_probability'] = 0.5
 
-    required_cols = ["ai_probability", "ml_probability"]
-    for col in required_cols:
-        if col not in master.columns:
-            raise ValueError(f"Missing required column: {col}")
+    master = ensure_column(master, "ai_probability", 0.5)
+    master = ensure_column(master, "ml_probability", 0.5)
+    master = ensure_column(master, "market_probability", 0.5)
+
+    if "ml_probability" not in master.columns:
+        master["ml_probability"] = 0.5
+
+    master["ml_probability"] = master["ml_probability"].fillna(0.5)
 
     master["combined_probability"] = (
         master["ai_probability"] + master["ml_probability"]
