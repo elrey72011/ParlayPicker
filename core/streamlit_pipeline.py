@@ -39,7 +39,13 @@ def detect_league_column(df: pd.DataFrame) -> str | None:
 
 
 @st.cache_data(ttl=180)
-def run_analysis_pipeline(sports: Iterable[str], max_rows: int) -> pd.DataFrame:
+def run_analysis_pipeline(
+    sports: Iterable[str],
+    max_rows: int,
+    use_ml: bool = True,
+    spreads_df: pd.DataFrame | None = None,
+    totals_df: pd.DataFrame | None = None,
+) -> pd.DataFrame:
     base_df = load_base_data()
     base_df.columns = base_df.columns.str.strip().str.lower()
 
@@ -61,7 +67,19 @@ def run_analysis_pipeline(sports: Iterable[str], max_rows: int) -> pd.DataFrame:
 
     filtered = filtered.head(max_rows)
 
-    if run_ml_predictions and run_master_analysis and not filtered.empty:
+    if spreads_df is not None:
+        filtered["theover_spreads_uploaded"] = True
+        filtered["theover_spreads_rows"] = len(spreads_df)
+    else:
+        filtered["theover_spreads_uploaded"] = False
+
+    if totals_df is not None:
+        filtered["theover_totals_uploaded"] = True
+        filtered["theover_totals_rows"] = len(totals_df)
+    else:
+        filtered["theover_totals_uploaded"] = False
+
+    if use_ml and run_ml_predictions and run_master_analysis and not filtered.empty:
         ml_df = run_ml_predictions(filtered)
         return run_master_analysis(filtered, ml_df, filtered)
     return filtered
