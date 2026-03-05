@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 from typing import Iterable
 
 import pandas as pd
 import streamlit as st
+
+logger = logging.getLogger(__name__)
 
 try:
     from complete_workflow_implementation import (
@@ -25,10 +28,37 @@ def load_base_data() -> pd.DataFrame:
     return df
 
 
+def detect_league_column(df: pd.DataFrame) -> str | None:
+    possible_names = ["league", "sport", "sport_key", "league_name", "league_id"]
+
+    for col in possible_names:
+        if col in df.columns:
+            return col
+
+    return None
+
+
 @st.cache_data(ttl=180)
 def run_analysis_pipeline(sports: Iterable[str], max_rows: int) -> pd.DataFrame:
     base_df = load_base_data()
-    filtered = base_df[base_df["league"].isin(list(sports))].copy() if sports else base_df.copy()
+    base_df.columns = base_df.columns.str.strip().str.lower()
+
+    required_columns = ["home_team", "away_team"]
+    for col in required_columns:
+        if col not in base_df.columns:
+            raise ValueError(f"Required column missing: {col}")
+
+    league_col = detect_league_column(base_df)
+    logger.info("Available columns: %s", list(base_df.columns))
+    logger.info("Detected league column: %s", league_col)
+
+    if sports and league_col:
+        filtered = base_df[base_df[league_col].isin(list(sports))].copy()
+    else:
+        if sports and not league_col:
+            logger.warning("League column not found. Skipping sports filter.")
+        filtered = base_df.copy()
+
     filtered = filtered.head(max_rows)
 
     if run_ml_predictions and run_master_analysis and not filtered.empty:
