@@ -18,3 +18,10 @@ def normalize_columns(df):
 
     df.columns = normalized
     return df
+
+
+def ensure_column(df, column_name, default_value=None):
+    """Ensure a dataframe contains a column, creating it with a default when missing."""
+    if column_name not in df.columns:
+        df[column_name] = default_value
+    return df
