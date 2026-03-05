@@ -292,7 +292,7 @@ class ParlayOptimizer:
     
     def calculate_parlay_probability(self, legs: List[Dict]) -> float:
         """
-        Calculate parlay win probability (assuming independence)
+        Calculate parlay win probability handling basic correlations.
         
         Args:
             legs: List of bet dictionaries
@@ -301,8 +301,33 @@ class ParlayOptimizer:
             Combined probability
         """
         prob = 1.0
+        leagues_present = set()
+
         for leg in legs:
-            prob *= leg['ModelProb']
+            # Handle different keys for probability based on caller
+            leg_prob = leg.get('ModelProb') or leg.get('prob')
+            if leg_prob is not None:
+                prob *= leg_prob
+
+            # Track leagues for correlation discount
+            league = leg.get('league') or leg.get('League')
+            if not league and 'market' in leg:
+                # Basic fallback if league is somehow buried
+                pass
+            elif league:
+                leagues_present.add(league)
+
+        # Apply correlation discount if multiple legs from same league
+        # as per configuration (e.g. 0.95 factor applied once)
+        try:
+            from config import SAME_LEAGUE_CORR_FACTOR
+            corr_factor = SAME_LEAGUE_CORR_FACTOR
+        except ImportError:
+            corr_factor = 0.95
+
+        if len(leagues_present) == 1 and len(legs) > 1:
+             prob *= corr_factor
+
         return prob
     
     def calculate_parlay_odds(self, legs: List[Dict]) -> float:
@@ -388,6 +413,12 @@ class ParlayOptimizer:
         """
         logger.info(f"Generating {parlay_size}-leg parlays")
         
+        try:
+            from config import SAME_GAME_DISALLOWED
+            same_game_disallowed = SAME_GAME_DISALLOWED
+        except ImportError:
+            same_game_disallowed = True
+
         # Filter to high-confidence bets
         high_value_bets = bets_df[bets_df['ExpectedValue'] > self.min_edge].to_dict('records')
         
@@ -413,6 +444,12 @@ class ParlayOptimizer:
                         break
                 
                 if has_correlation:
+                    continue
+
+            # Explicitly disallow same game legs based on config
+            if same_game_disallowed:
+                games_in_parlay = [str(leg.get('GameID') or leg.get('game') or leg.get('game_id', '')) for leg in legs]
+                if len(set(games_in_parlay)) < len(games_in_parlay):
                     continue
             
             # Calculate parlay metrics
@@ -708,21 +745,32 @@ class ParlayOptimizer:
 
         # Generate all 2-leg combinations
         parlay_candidates = []
+
+        try:
+            from config import SAME_GAME_DISALLOWED
+            same_game_disallowed = SAME_GAME_DISALLOWED
+        except ImportError:
+            same_game_disallowed = True
+
         for i, row1 in playable.iterrows():
             for j, row2 in playable.iterrows():
                 if i >= j:  # Avoid duplicates and self-pairing
                     continue
 
-                # Avoid same-game parlays (correlated)
+                # Avoid same-game parlays (correlated) based on config
                 game1 = row1.get("Game") or row1.get("game_id") or row1.get("id") or ""
                 game2 = row2.get("Game") or row2.get("game_id") or row2.get("id") or ""
-                if game1 and game2 and str(game1) == str(game2):
+                if same_game_disallowed and game1 and game2 and str(game1) == str(game2):
                     continue
 
-                # Calculate parlay metrics
+                # Calculate parlay metrics using logic from calculate_parlay_probability
+                # to include correlation discounts properly
+                leg1_dict = {"prob": row1["AI_Prob"], "league": row1.get("league") or row1.get("League")}
+                leg2_dict = {"prob": row2["AI_Prob"], "league": row2.get("league") or row2.get("League")}
+                parlay_prob = self.calculate_parlay_probability([leg1_dict, leg2_dict])
+
                 prob1 = row1["AI_Prob"]
                 prob2 = row2["AI_Prob"]
-                parlay_prob = prob1 * prob2  # Assume independence
 
                 # Get odds
                 odds1 = row1.get("odds") or row1.get("spread_pick_odds") or row1.get("total_pick_odds") or -110

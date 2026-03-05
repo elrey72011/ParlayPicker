@@ -164,6 +164,15 @@ THEOVER_CONFIG = {
     ]
 }
 
+# Edge and Filtering Config
+MIN_FINAL_PROB = 0.55
+MIN_EDGE = 0.02
+MAX_TOTAL_PROB = 0.68
+
+# Correlation Config
+SAME_GAME_DISALLOWED = True
+SAME_LEAGUE_CORR_FACTOR = 0.95
+
 # Output Configuration
 OUTPUT_CONFIG = {
     'betting_card_file': OUTPUT_DIR / 'betting_card_{date}.csv',
