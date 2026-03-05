@@ -11,6 +11,8 @@ from itertools import combinations
 import pickle
 from pathlib import Path
 import logging
+from parlaypicker.core.probability_engine import american_to_prob
+from parlaypicker.core.ev_engine import expected_value
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -75,10 +77,7 @@ class ParlayOptimizer:
         Returns:
             Implied probability (0-1)
         """
-        if odds > 0:
-            return 100 / (odds + 100)
-        else:
-            return abs(odds) / (abs(odds) + 100)
+        return float(american_to_prob(odds))
     
     def american_to_decimal(self, odds: float) -> float:
         """
@@ -112,11 +111,7 @@ class ParlayOptimizer:
         Returns:
             Expected value
         """
-        decimal_odds = self.american_to_decimal(odds)
-        potential_profit = stake * (decimal_odds - 1)
-        expected_return = (model_prob * potential_profit) - ((1 - model_prob) * stake)
-        
-        return expected_return / stake  # Return as percentage
+        return expected_value(model_prob, odds)
     
     def predict_game(
         self,
