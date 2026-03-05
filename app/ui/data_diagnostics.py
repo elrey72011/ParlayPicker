@@ -13,7 +13,7 @@ def show_data_diagnostics(
     kalshi_df,
     gemini_df,
 ):
-    st.subheader("Data Source Diagnostics")
+    st.subheader("Data Diagnostics")
 
     st.write("TheOdds rows:", _safe_len(odds_df))
     st.write("TheOver rows:", _safe_len(theover_df))
