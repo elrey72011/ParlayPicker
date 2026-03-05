@@ -6,7 +6,9 @@ from typing import Iterable
 import pandas as pd
 import streamlit as st
 
-from core.probability_engine import american_odds_to_prob
+from core.ev_engine import calculate_ev
+from core.probability_engine import american_odds_to_probability
+from core.schema.base_schema import ensure_base_schema
 from core.team_normalizer import normalize_team
 
 logger = logging.getLogger(__name__)
@@ -30,7 +32,7 @@ except Exception:  # pragma: no cover
 def _normalize_teams(df: pd.DataFrame) -> pd.DataFrame:
     for col in ["home_team", "away_team"]:
         if col in df.columns:
-            df[col] = df[col].apply(normalize_team)
+            df.loc[:, col] = df[col].apply(normalize_team)
     return df
 
 
@@ -48,25 +50,19 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return df
 
-    if "ai_probability" not in df.columns:
-        df["ai_probability"] = 0.5
-    if "ml_probability" not in df.columns:
-        df["ml_probability"] = 0.5
+    df = ensure_base_schema(df)
+
+    df["ai_probability"] = pd.to_numeric(df["ai_probability"], errors="coerce").fillna(0.5)
+    df["ml_probability"] = pd.to_numeric(df["ml_probability"], errors="coerce").fillna(0.5)
 
     df["odds_american"] = df.apply(_resolve_american_odds, axis=1)
-    df["market_probability"] = df["odds_american"].apply(american_odds_to_prob)
+    df["market_probability"] = df["odds_american"].apply(american_odds_to_probability)
 
     df["consensus_prob"] = (
-        df["ai_probability"] + df["ml_probability"] + df["market_probability"]
+        df["ai_probability"].fillna(0.5)
+        + df["ml_probability"].fillna(0.5)
+        + df["market_probability"].fillna(0.5)
     ) / 3
-
-    def calculate_ev(prob, odds):
-        if odds > 0:
-            payout = odds / 100
-        else:
-            payout = 100 / abs(odds)
-
-        return prob * payout - (1 - prob)
 
     df["expected_value"] = df.apply(
         lambda row: calculate_ev(float(row["consensus_prob"]), float(row["odds_american"])),
@@ -79,8 +75,8 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
         df["total_edge"] = 0.0
 
     def determine_best_pick(row):
-        if row["spread_edge"] > row["total_edge"]:
-            return f"{row['away_team']} spread"
+        if row["expected_value"] <= 0:
+            return "No Edge"
 
         return f"{row['away_team']} vs {row['home_team']}"
 
@@ -147,6 +143,18 @@ def run_analysis_pipeline(
     if use_ml and run_ml_predictions and run_master_analysis and not filtered.empty:
         ml_df = run_ml_predictions(filtered)
         analyzed = run_master_analysis(filtered, ml_df, filtered)
+        if analyzed is None or analyzed.empty:
+            return _apply_analysis_calculations(filtered)
+
+        if "ml_probability_x" in analyzed.columns:
+            analyzed["ml_probability"] = analyzed["ml_probability_x"]
+        if "ml_probability_y" in analyzed.columns:
+            analyzed["ml_probability"] = analyzed["ml_probability_y"]
+        analyzed.drop(
+            columns=["ml_probability_x", "ml_probability_y"],
+            errors="ignore",
+            inplace=True,
+        )
         return _apply_analysis_calculations(_normalize_teams(analyzed))
     return _apply_analysis_calculations(filtered)
 

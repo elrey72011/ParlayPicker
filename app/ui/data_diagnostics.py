@@ -1,6 +1,12 @@
 import streamlit as st
 
 
+def _safe_len(df):
+    if df is not None and not df.empty:
+        return len(df)
+    return 0
+
+
 def show_data_diagnostics(
     odds_df,
     theover_df,
@@ -8,6 +14,11 @@ def show_data_diagnostics(
     gemini_df,
 ):
     st.subheader("Data Source Diagnostics")
+
+    st.write("TheOdds rows:", _safe_len(odds_df))
+    st.write("TheOver rows:", _safe_len(theover_df))
+    st.write("Kalshi rows:", _safe_len(kalshi_df))
+    st.write("Gemini rows:", _safe_len(gemini_df))
 
     data = {
         "Source": [
@@ -17,10 +28,10 @@ def show_data_diagnostics(
             "Gemini",
         ],
         "Rows": [
-            len(odds_df),
-            len(theover_df),
-            len(kalshi_df),
-            len(gemini_df),
+            _safe_len(odds_df),
+            _safe_len(theover_df),
+            _safe_len(kalshi_df),
+            _safe_len(gemini_df),
         ],
     }
 
