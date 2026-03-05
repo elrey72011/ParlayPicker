@@ -107,10 +107,12 @@ from app_core.weights_config import (
     SENTIMENT_WEIGHT,
 )
 
+from app_core.meta_model import load_meta_model, predict_meta_model
+
 from app_core.consensus_ingest import enrich_with_consensus
 from app_core.odds_api import filter_games_today_only
 from app_core.probability_utils import american_to_implied_prob, american_to_implied
-
+from config import MIN_FINAL_PROB, MIN_EDGE, MAX_TOTAL_PROB
 
 try:
     from app_core.sentiment import RealSentimentAnalyzer
@@ -1670,6 +1672,9 @@ def dynamic_kalshi_weight(
         return max_w  # strong divergence -> strong sentiment weight
 
 
+# Load meta model once
+META_MODEL = load_meta_model()
+
 def compute_final_probability(
     pick_side: Optional[str],
     implied_prob: Optional[float],
@@ -1683,9 +1688,10 @@ def compute_final_probability(
     home_team: Optional[str] = None,
     away_team: Optional[str] = None,
     kalshi_data: Optional[Dict[str, Any]] = None,
+    row_data: Optional[Dict[str, Any]] = None,
 ) -> Tuple[Optional[float], Optional[float], Dict[str, float], str, List[str], Optional[float]]:
     """
-    Blend available probabilities using STATIC weights without renormalization.
+    Blend available probabilities using meta-model (if available) or STATIC weights.
     Returns (final_prob, base_prob, weights_used, driver, warnings, kalshi_prob_for_pick).
     """
     warnings: List[str] = []
@@ -1994,6 +2000,19 @@ def compute_final_probability(
              local_match_reason += ";matched_but_neutral"
 
     is_kalshi_neutral = "matched_but_neutral" in local_match_reason
+
+    # Try meta-model first if row_data is provided
+    if META_MODEL is not None and row_data is not None:
+        # Update row_data with what we've mapped so far
+        temp_row = row_data.copy()
+        if kalshi_prob_for_pick is not None:
+            temp_row['kalshi_prob_for_pick'] = kalshi_prob_for_pick
+
+        meta_prob = predict_meta_model(temp_row, META_MODEL)
+        if meta_prob is not None:
+            final_prob = clamp(meta_prob, 0.0, 0.95)
+            driver = "meta_model"
+            return final_prob, prob_no_to, weights_used, driver, warnings, kalshi_prob_for_pick, sentiment_data
 
     # v98 FIX: Determine driver based on which source has highest effective weight
     if W_KALSHI > 0 and W_KALSHI >= max(W_MARKET, W_MODEL, W_THEOVER, W_SENTIMENT):
@@ -2765,8 +2784,43 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
         driver = str(row.get("decision_driver") or "unknown")
         confidence_reason = f"{conf_label}: {reason} | driver={driver}"
 
+        # Edge Calculation & Thresholds: mark as eligible_for_parlay based on MIN_FINAL_PROB and MIN_EDGE
+        market_prob = None
+        if best_type == "SPREAD":
+            market_prob = _safe("spread_implied_prob")
+        elif best_type == "TOTAL":
+            market_prob = _safe("total_implied_prob")
+
+        calc_edge = e_val
+        if market_prob is not None and p_val is not None:
+             calc_edge = p_val - market_prob
+
+        # Guardrails check
+        guardrails_pass = True
+        warnings_str = str(row.get("Warnings", "")).lower()
+        if "placeholderdetected" in warnings_str or "mismatch" in warnings_str:
+            guardrails_pass = False
+
+        if best_type == "SPREAD" and not row.get("spread_odds_valid", True):
+            guardrails_pass = False
+        if best_type == "TOTAL" and not row.get("total_odds_valid", True):
+            guardrails_pass = False
+
+        eligible_for_parlay = False
+        if p_val is not None and calc_edge is not None:
+            if p_val >= MIN_FINAL_PROB and calc_edge >= MIN_EDGE and guardrails_pass:
+                 eligible_for_parlay = True
+
+        # Totals cap (Step 5)
+        if best_type == "TOTAL" and p_val is not None:
+            if p_val > MAX_TOTAL_PROB:
+                p_val = MAX_TOTAL_PROB
+                # Re-calculate score/edge since prob changed
+                calc_edge = p_val - market_prob if market_prob is not None else calc_edge
+                conf_score = (p_val - 0.5) + calc_edge
+
         return pd.Series([
-            best_type, best_pick, p_val, reason, e_val,
+            best_type, best_pick, p_val, reason, calc_edge,
             conf_label, bet_lean, conf_score,
             ml_eligible, ml_suppressed_reason, candidate_types_str,
             moneyline_disabled, moneyline_disabled_reason,
@@ -2775,7 +2829,8 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
             s_pick,
             t_pick,
             s_prob,
-            t_prob
+            t_prob,
+            eligible_for_parlay
         ], index=[
             "best_pick_type", "best_pick", "final_prob", "Best_ST_Reason", "edge",
             "Bet_Confidence", "Bet_Lean", "Bet_Confidence_Score",
@@ -2786,7 +2841,8 @@ def calculate_best_pick_metrics(df: pd.DataFrame) -> pd.DataFrame:
             "Spread & Pick",
             "Total & Pick",
             "spread_prob_pick_final",
-            "total_prob_pick_final"
+            "total_prob_pick_final",
+            "eligible_for_parlay"
         ])
 
     # Batch apply
@@ -14543,7 +14599,7 @@ with tab_master:
         user_columns = [
             'league', 'Home', 'Away', 'Commence (UTC)', 'Commence (Local)', 'Local Date',
             'Market', 'Pick', 'final_probability', 'Pick_Confidence',
-            'Best Overall Pick', 'Best Overall Prob', 'Edge',
+            'Best Overall Pick', 'Best Overall Prob', 'Edge', 'eligible_for_parlay',
             'wsentiment_used', 'sentiment_adj', 'sentiment_prob',
             'Best Overall Market',
             'Spread & Pick', 'spread_prob_pick_final', 'SpreadConsensusProb', 'SpreadConsensus',
@@ -16020,7 +16076,7 @@ if should_display:
             'Overall Pick', 'Overall Prob', 'Spread', 'Spread Prob', 'Total', 'Total Prob', 'ML', 'ML Prob',
             'SpreadConsensusProb', 'SpreadConsensus', 'TotalConsensusProb', 'TotalConsensus',
             'Best Overall Pick', 'Best Overall Prob',
-            'best_pick', 'final_prob', 'edge', 'best_pick_type',
+            'best_pick', 'final_prob', 'edge', 'best_pick_type', 'eligible_for_parlay',
             'Bet_Confidence', 'Bet_Lean',
             'Quality_Badge', 'Quality_Details',
             'Spread & Pick', 'Spread Win %', 'Spread_Consensus',
