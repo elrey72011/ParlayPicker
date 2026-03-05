@@ -521,10 +521,12 @@ def select_best_spread_pick(
     return {
         'pick_team': pick_team,
         'pick_label': pick_label,
+        'pick_line': pick_line,
         'pick_prob': pick_prob,
         'pick_side': pick_side,
         'alt_team': alt_team,
         'alt_label': alt_label,
+        'alt_line': alt_line,
         'alt_prob': alt_prob,
         'alt_side': alt_side
     }
@@ -11682,7 +11684,7 @@ with tab_master:
 
                         # Also update internal tracking
                         spread_pick = spread_pick_result['pick_team']
-                        spread_line = _ref_line if spread_pick_result['pick_side'] == "home" else -_ref_line
+                        spread_line = spread_pick_result['pick_line']
 
                         # GUARDRAIL: Verify spread_line matches the expected book line
                         spread_line_mismatch = False
