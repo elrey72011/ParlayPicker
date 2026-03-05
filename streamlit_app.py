@@ -6162,6 +6162,14 @@ def fetch_odds_games(sport_key: str, run_id: Optional[str] = None) -> List[Dict[
                     continue
                 return []
 
+            # Export raw odds api if debug flag is set
+            if getattr(config, 'DEBUG_EXPORT_RAW_ODDS', False):
+                try:
+                    from app_core.odds_api import export_raw_odds_api
+                    export_raw_odds_api(data)
+                except Exception as ex:
+                    logger.error(f"Failed to export raw odds: {ex}")
+
             # DIAGNOSTIC: Log first game sample if available
             if games and len(games) > 0:
                 first_game = games[0]
@@ -8511,6 +8519,14 @@ def load_games(selected_leagues: Union[str, List[str]], run_id: Optional[str] = 
                 warnings = list(best.pop("warnings", []))
                 merged_warnings = list(dict.fromkeys((g.get("warnings") or []) + warnings))
                 g.update(best)
+
+                # Apply Novig overrides directly on the game dict
+                try:
+                    from app_core.odds_api import process_odds_with_novig_priority
+                    g = process_odds_with_novig_priority(g)
+                except Exception as ex:
+                    logger.error(f"Failed to process novig priority: {ex}")
+
                 g["warnings"] = merged_warnings
                 if g.get("best_ml_book") is not None:
                     moneyline_count += 1
@@ -10349,8 +10365,11 @@ with tab_master:
                     if g.get("home_spread_point") is not None:
                         home_spread_prob = american_to_implied(g.get("home_spread_price"))
                         away_spread_prob = american_to_implied(g.get("away_spread_price"))
-                        home_spread_point = g.get("home_spread_point")
-                        away_spread_point = g.get("away_spread_point")
+
+                        # Use reference lines if available, fallback to default
+                        home_spread_point = g.get("reference_spread_point") if g.get("reference_spread_point") is not None else g.get("home_spread_point")
+                        away_spread_point = -home_spread_point if home_spread_point is not None else g.get("away_spread_point")
+
                         # Default pick based on prices if not already specified
                         if spread_pick_team is None:
                             if home_spread_prob is None and away_spread_prob is None:
@@ -10946,7 +10965,10 @@ with tab_master:
 
                     total_pick = None
                     total_implied = None
-                    total_line = g.get("total_point")
+
+                    # Use reference lines if available, fallback to default
+                    total_line = g.get("reference_total_point") if g.get("reference_total_point") is not None else g.get("total_point")
+
                     total_pick_side = None
                     total_pick_odds = None
                     best_total_price = None
