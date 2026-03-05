@@ -6,6 +6,9 @@ from typing import Iterable
 import pandas as pd
 import streamlit as st
 
+from core.probability_engine import american_odds_to_prob
+from core.team_normalizer import normalize_team
+
 logger = logging.getLogger(__name__)
 
 try:
@@ -22,10 +25,72 @@ except Exception:  # pragma: no cover
     run_ml_predictions = None
 
 
+
+
+def _normalize_teams(df: pd.DataFrame) -> pd.DataFrame:
+    for col in ["home_team", "away_team"]:
+        if col in df.columns:
+            df[col] = df[col].apply(normalize_team)
+    return df
+
+
+def _resolve_american_odds(row: pd.Series) -> float:
+    for col in ["odds_american", "home_odds", "odds"]:
+        if col in row.index and pd.notna(row[col]):
+            try:
+                return float(row[col])
+            except (TypeError, ValueError):
+                continue
+    return -110.0
+
+
+def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+
+    if "ai_probability" not in df.columns:
+        df["ai_probability"] = 0.5
+    if "ml_probability" not in df.columns:
+        df["ml_probability"] = 0.5
+
+    df["odds_american"] = df.apply(_resolve_american_odds, axis=1)
+    df["market_probability"] = df["odds_american"].apply(american_odds_to_prob)
+
+    df["consensus_prob"] = (
+        df["ai_probability"] + df["ml_probability"] + df["market_probability"]
+    ) / 3
+
+    def calculate_ev(prob, odds):
+        if odds > 0:
+            payout = odds / 100
+        else:
+            payout = 100 / abs(odds)
+
+        return prob * payout - (1 - prob)
+
+    df["expected_value"] = df.apply(
+        lambda row: calculate_ev(float(row["consensus_prob"]), float(row["odds_american"])),
+        axis=1,
+    )
+
+    if "spread_edge" not in df.columns:
+        df["spread_edge"] = 0.0
+    if "total_edge" not in df.columns:
+        df["total_edge"] = 0.0
+
+    def determine_best_pick(row):
+        if row["spread_edge"] > row["total_edge"]:
+            return f"{row['away_team']} spread"
+
+        return f"{row['away_team']} vs {row['home_team']}"
+
+    df["best_pick"] = df.apply(determine_best_pick, axis=1)
+    return df
+
 @st.cache_data(ttl=300)
 def load_base_data() -> pd.DataFrame:
     df = pd.read_csv("data/master_all_sports.csv")
-    return df
+    return _normalize_teams(df)
 
 
 def detect_league_column(df: pd.DataFrame) -> str | None:
@@ -65,7 +130,7 @@ def run_analysis_pipeline(
             logger.warning("League column not found. Skipping sports filter.")
         filtered = base_df.copy()
 
-    filtered = filtered.head(max_rows)
+    filtered = _normalize_teams(filtered.head(max_rows))
 
     if spreads_df is not None:
         filtered["theover_spreads_uploaded"] = True
@@ -81,8 +146,9 @@ def run_analysis_pipeline(
 
     if use_ml and run_ml_predictions and run_master_analysis and not filtered.empty:
         ml_df = run_ml_predictions(filtered)
-        return run_master_analysis(filtered, ml_df, filtered)
-    return filtered
+        analyzed = run_master_analysis(filtered, ml_df, filtered)
+        return _apply_analysis_calculations(_normalize_teams(analyzed))
+    return _apply_analysis_calculations(filtered)
 
 
 def generate_parlays_table(analysis_df: pd.DataFrame) -> pd.DataFrame:
@@ -94,7 +160,7 @@ def generate_parlays_table(analysis_df: pd.DataFrame) -> pd.DataFrame:
         return parlay_candidates
 
     if "expected_value" in analysis_df.columns:
-        parlay_candidates = analysis_df[analysis_df["expected_value"] > 0.03].copy()
+        parlay_candidates = analysis_df[analysis_df["expected_value"] > 0.02].copy()
         if not parlay_candidates.empty:
             parlay_candidates.sort_values("expected_value", ascending=False, inplace=True)
             return parlay_candidates
