@@ -9,6 +9,7 @@ from typing import Dict, List, Optional
 import logging
 
 from core.probability_utils import ensure_probability_column
+from core.schema.schema_validator import validate_schema
 
 logger = logging.getLogger(__name__)
 
@@ -394,6 +395,7 @@ def run_master_analysis(
     """
     master = vertex_results.copy()
     master = ensure_probability_column(master, "ai_probability")
+    master = validate_schema(master, "master_analysis")
 
     logger.info(f"Master columns: {list(master.columns)}")
 

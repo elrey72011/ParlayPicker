@@ -6,6 +6,11 @@ from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
 
+import pandas as pd
+
+from core.schema.schema_utils import normalize_columns
+from core.schema.schema_validator import validate_schema
+
 
 CACHE_DIR = Path("data/cache")
 CACHE_TTL = timedelta(minutes=15)
@@ -51,3 +56,10 @@ def fetch_odds(sport: str, date_key: str) -> dict:
     data = {"sport": sport, "date": date_key, "games": []}
     _write_cache(cache_file, data)
     return data
+
+
+
+def prepare_raw_odds_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    """Normalize and validate raw odds dataframe schema."""
+    df = normalize_columns(df.copy())
+    return validate_schema(df, "raw_odds")
