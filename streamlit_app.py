@@ -407,6 +407,31 @@ def clamp_prob(p: Any, lo: float = 0.05, hi: float = 0.95) -> Optional[float]:
         return None
 
 
+def american_to_prob(odds: Any) -> Optional[float]:
+    """Convert American odds to implied probability."""
+    if odds is None or pd.isna(odds):
+        return None
+    try:
+        odds_val = float(odds)
+    except (TypeError, ValueError):
+        return None
+    if odds_val == 0:
+        return None
+    if odds_val > 0:
+        return 100.0 / (odds_val + 100.0)
+    return abs(odds_val) / (abs(odds_val) + 100.0)
+
+
+def remove_vig(prob_a: Optional[float], prob_b: Optional[float]) -> Tuple[Optional[float], Optional[float]]:
+    """Remove vig by normalizing two-sided implied probabilities."""
+    if prob_a is None or prob_b is None:
+        return None, None
+    total = prob_a + prob_b
+    if total <= 0:
+        return None, None
+    return prob_a / total, prob_b / total
+
+
 def build_independent_signal_columns(row: Dict[str, Any]) -> Dict[str, Optional[float]]:
     """
     Group correlated probability inputs into independent signal classes.
@@ -417,8 +442,20 @@ def build_independent_signal_columns(row: Dict[str, Any]) -> Dict[str, Optional[
     - Prediction market signal: Kalshi probabilities
     - External model signal: TheOver probability
     """
+    pick_side = str(row.get("pick_side") or "").lower()
+    prob_home = american_to_prob(row.get("home_price") or row.get("Home_ML") or row.get("home_ml_price"))
+    prob_away = american_to_prob(row.get("away_price") or row.get("Away_ML") or row.get("away_ml_price"))
+    devig_home, devig_away = remove_vig(prob_home, prob_away)
+
+    derived_devig_probability = None
+    if pick_side in {"home", "over"}:
+        derived_devig_probability = devig_home
+    elif pick_side in {"away", "under"}:
+        derived_devig_probability = devig_away
+
     market_prob = clamp_prob(
         row.get("devig_implied_prob")
+        or derived_devig_probability
         or row.get("spread_prob_market")
         or row.get("total_prob_market")
         or row.get("implied_prob")
@@ -455,48 +492,23 @@ def build_independent_signal_columns(row: Dict[str, Any]) -> Dict[str, Optional[
 
 def ensemble_probability(row: Dict[str, Any]) -> Optional[float]:
     market = clamp_prob(row.get("market_prob"), 0.01, 0.99)
-    model = clamp_prob(row.get("model_prob"), 0.01, 0.99)
+    ai_model_prob = clamp_prob(row.get("model_prob"), 0.01, 0.99)
     kalshi = clamp_prob(row.get("kalshi_prob"), 0.01, 0.99)
     theover = clamp_prob(row.get("theover_prob"), 0.01, 0.99)
 
-    weights = {
-        "market": 0.40,
-        "model": 0.30,
-        "kalshi": 0.20,
-        "theover": 0.10,
-    }
+    market_anchor = market if market is not None else 0.5
+    model_component = ai_model_prob if ai_model_prob is not None else market_anchor
+    kalshi_component = kalshi if kalshi is not None else market_anchor
+    theover_component = theover if theover is not None else market_anchor
 
-    probs: List[float] = []
-    w: List[float] = []
+    final_probability = (
+        0.50 * market_anchor
+        + 0.25 * model_component
+        + 0.15 * kalshi_component
+        + 0.10 * theover_component
+    )
 
-    if market is not None:
-        probs.append(market)
-        w.append(weights["market"])
-
-    if model is not None:
-        probs.append(model)
-        w.append(weights["model"])
-
-    if kalshi is not None:
-        probs.append(kalshi)
-        w.append(weights["kalshi"])
-
-    if theover is not None:
-        probs.append(theover)
-        w.append(weights["theover"])
-
-    if not probs:
-        return None
-
-    weighted_prob = sum(p * weight for p, weight in zip(probs, w)) / sum(w)
-
-    print("Market:", market)
-    print("Model:", model)
-    print("Kalshi:", kalshi)
-    print("TheOver:", theover)
-    print("Final:", weighted_prob)
-
-    return clamp_prob(weighted_prob, 0.01, 0.99)
+    return clamp_prob(final_probability, 0.01, 0.99)
 
 
 def expected_value(prob: Optional[float], odds: Optional[float]) -> Optional[float]:
