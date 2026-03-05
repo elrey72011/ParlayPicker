@@ -39,6 +39,13 @@ from app_core.kalshi_integrator import (
 )
 
 from app_core.probability_utils import american_to_implied_prob, american_to_implied
+from app_core.sharp_engine.probability_engine import (
+    american_to_prob as sharp_american_to_prob,
+    remove_vig as sharp_remove_vig,
+    ensemble_probability as sharp_ensemble_probability,
+)
+from app_core.sharp_engine.ev_engine import expected_value as sharp_expected_value, bet_signal as sharp_bet_signal
+from app_core.sharp_engine.bankroll_manager import kelly_fraction as sharp_kelly_fraction
 
 from app_core.llm_assistant import generate_confidence_explanation, initialize_gemini, generate_batch_confidence_explanation, generate_pick_rationale
 
@@ -112,6 +119,13 @@ from app_core.meta_model import load_meta_model, predict_meta_model
 from app_core.consensus_ingest import enrich_with_consensus
 from app_core.odds_api import filter_games_today_only
 from app_core.probability_utils import american_to_implied_prob, american_to_implied
+from app_core.sharp_engine.probability_engine import (
+    american_to_prob as sharp_american_to_prob,
+    remove_vig as sharp_remove_vig,
+    ensemble_probability as sharp_ensemble_probability,
+)
+from app_core.sharp_engine.ev_engine import expected_value as sharp_expected_value, bet_signal as sharp_bet_signal
+from app_core.sharp_engine.bankroll_manager import kelly_fraction as sharp_kelly_fraction
 from config import MIN_FINAL_PROB, MIN_EDGE, MAX_TOTAL_PROB
 
 try:
@@ -417,19 +431,16 @@ def american_to_prob(odds: Any) -> Optional[float]:
         return None
     if odds_val == 0:
         return None
-    if odds_val > 0:
-        return 100.0 / (odds_val + 100.0)
-    return abs(odds_val) / (abs(odds_val) + 100.0)
+    return sharp_american_to_prob(odds_val)
 
 
 def remove_vig(prob_a: Optional[float], prob_b: Optional[float]) -> Tuple[Optional[float], Optional[float]]:
     """Remove vig by normalizing two-sided implied probabilities."""
     if prob_a is None or prob_b is None:
         return None, None
-    total = prob_a + prob_b
-    if total <= 0:
+    if (prob_a + prob_b) <= 0:
         return None, None
-    return prob_a / total, prob_b / total
+    return sharp_remove_vig(prob_a, prob_b)
 
 
 def build_independent_signal_columns(row: Dict[str, Any]) -> Dict[str, Optional[float]]:
@@ -491,37 +502,21 @@ def build_independent_signal_columns(row: Dict[str, Any]) -> Dict[str, Optional[
 
 
 def ensemble_probability(row: Dict[str, Any]) -> Optional[float]:
-    market = clamp_prob(row.get("market_prob"), 0.01, 0.99)
-    ai_model_prob = clamp_prob(row.get("model_prob"), 0.01, 0.99)
-    kalshi = clamp_prob(row.get("kalshi_prob"), 0.01, 0.99)
-    theover = clamp_prob(row.get("theover_prob"), 0.01, 0.99)
-
-    market_anchor = market if market is not None else 0.5
-    model_component = ai_model_prob if ai_model_prob is not None else market_anchor
-    kalshi_component = kalshi if kalshi is not None else market_anchor
-    theover_component = theover if theover is not None else market_anchor
-
-    final_probability = (
-        0.50 * market_anchor
-        + 0.25 * model_component
-        + 0.15 * kalshi_component
-        + 0.10 * theover_component
-    )
-
-    return clamp_prob(final_probability, 0.01, 0.99)
+    payload = {
+        "market_prob": clamp_prob(row.get("market_prob"), 0.01, 0.99) or 0.0,
+        "ml_prob": clamp_prob(row.get("model_prob") or row.get("ml_prob"), 0.01, 0.99) or 0.0,
+        "kalshi_prob": clamp_prob(row.get("kalshi_prob"), 0.01, 0.99) or 0.0,
+        "theover_prob": clamp_prob(row.get("theover_prob"), 0.01, 0.99) or 0.0,
+        "sentiment_prob": clamp_prob(row.get("sentiment_prob"), 0.01, 0.99) or 0.0,
+    }
+    return clamp_prob(sharp_ensemble_probability(payload), 0.01, 0.99)
 
 
 def expected_value(prob: Optional[float], odds: Optional[float]) -> Optional[float]:
     if prob is None or odds is None:
         return None
     try:
-        odds_f = float(odds)
-        p = float(prob)
-        if odds_f > 0:
-            payout = odds_f / 100.0
-        else:
-            payout = 100.0 / abs(odds_f)
-        return p * payout - (1.0 - p)
+        return sharp_expected_value(float(prob), float(odds))
     except Exception:
         return None
 
@@ -530,14 +525,7 @@ def kelly_fraction(prob: Optional[float], odds: Optional[float]) -> float:
     if prob is None or odds is None:
         return 0.0
     try:
-        odds_f = float(odds)
-        p = float(prob)
-        if odds_f > 0:
-            b = odds_f / 100.0
-        else:
-            b = 100.0 / abs(odds_f)
-        q = 1.0 - p
-        return max((b * p - q) / b, 0.0)
+        return float(sharp_kelly_fraction(float(prob), float(odds)))
     except Exception:
         return 0.0
 
@@ -14757,7 +14745,7 @@ with tab_master:
         # (Pick_Confidence, theover_matched, theover_delta_final_prob were listed multiple times)
         user_columns = [
             'league', 'Home', 'Away', 'Commence (UTC)', 'Commence (Local)', 'Local Date',
-            'Market', 'Pick', 'final_probability', 'Pick_Confidence',
+            'Market', 'Pick', 'final_probability', 'ensemble_probability', 'True Probability', 'Pick_Confidence',
             'Best Overall Pick', 'Best Overall Prob', 'Edge', 'eligible_for_parlay',
             'wsentiment_used', 'sentiment_adj', 'sentiment_prob',
             'Best Overall Market',
@@ -14782,7 +14770,9 @@ with tab_master:
             # Probability weights for transparency
             'kalshi_weight', 'odds_weight', 'ml_weight', 'sentiment_weight',
             # Decision trace info
-            'decision_driver', 'prob_engine', 'model_mode', 'Warnings'
+            'decision_driver', 'prob_engine', 'model_mode', 'Warnings',
+            'market_prob', 'ml_prob', 'expected_value', 'Expected Value', 'kelly_fraction',
+            'Kelly Bet Size', 'bet_signal', 'Bet Signal'
         ]
         # Task 3.1: Calculate Data Quality Score before export
         def calculate_data_quality_score(row) -> int:
@@ -15118,6 +15108,7 @@ with tab_master:
         for c in ["market_prob", "model_prob", "kalshi_prob", "theover_prob"]:
             df[c] = pd.to_numeric(signal_series.get(c), errors='coerce')
             df[c] = df[c].apply(lambda x: clamp_prob(x, 0.01, 0.99))
+        df["ml_prob"] = df["model_prob"]
 
         ensemble_prob_series = df.apply(lambda r: ensemble_probability(r.to_dict()), axis=1)
         df["final_probability"] = pd.to_numeric(ensemble_prob_series, errors='coerce')
@@ -15142,7 +15133,16 @@ with tab_master:
             lambda r: kelly_fraction(clamp_prob(r.get("final_probability"), 0.01, 0.99), r.get("price")),
             axis=1,
         )
-        df["bet_signal"] = df["expected_value"].fillna(-1.0) > 0.03
+        df["bet_signal"] = df.apply(
+            lambda r: sharp_bet_signal({"expected_value": r.get("expected_value")}, min_edge=0.03)
+            if pd.notna(r.get("expected_value")) else False,
+            axis=1,
+        )
+        df["ensemble_probability"] = df["final_probability"]
+        df["True Probability"] = df["ensemble_probability"]
+        df["Expected Value"] = df["expected_value"]
+        df["Kelly Bet Size"] = df["kelly_fraction"]
+        df["Bet Signal"] = df["bet_signal"]
 
         # Log market distribution after final sync
         if not df.empty and 'Market' in df.columns:
@@ -15474,10 +15474,13 @@ if should_display:
         st.subheader("Master Analysis Results")
 
         df = st.session_state["master_results_df"]
+        display_df = df.copy()
+        if "expected_value" in display_df.columns:
+            display_df = display_df[display_df["expected_value"].fillna(-1.0) > 0.03]
 
-        st.dataframe(df, use_container_width=True)
+        st.dataframe(display_df, use_container_width=True)
 
-        st.write(f"Games analyzed: {len(df)}")
+        st.write(f"Games analyzed: {len(df)} | Bets with EV > 0.03: {len(display_df)}")
 
         # Fix #1: Stats Coverage Dashboard & Warnings
 
