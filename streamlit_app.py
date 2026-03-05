@@ -15,12 +15,20 @@ from app.ui.parlay_dashboard import render_parlays
 from app.ui.portfolio_dashboard import render_portfolio
 from app.ui.sidebar_controls import render_sidebar
 from core.streamlit_pipeline import (
-    generate_parlays_table,
+    generate_parlays,
     optimize_portfolio_allocation,
     run_analysis_pipeline,
 )
 from core.team_normalizer import normalize_team
 from core.theover_loader import load_theover_csv
+
+
+if hasattr(st, "session_state"):
+    if "analysis_df" not in st.session_state:
+        st.session_state.analysis_df = None
+
+    if "parlays_df" not in st.session_state:
+        st.session_state.parlays_df = None
 
 
 def _legacy_module():
@@ -85,6 +93,8 @@ def main() -> None:
             totals_df=totals_df,
         )
 
+        st.session_state.analysis_df = analysis_df
+
         if analysis_df.empty:
             st.warning("No rows found for the selected sports.")
             st.session_state["analysis_df"] = None
@@ -110,7 +120,8 @@ def main() -> None:
         if "gemini_analysis" not in analysis_df.columns:
             analysis_df["gemini_analysis"] = ""
 
-        parlays_df = generate_parlays_table(analysis_df)
+        parlays_df = generate_parlays(analysis_df)
+        st.session_state.parlays_df = parlays_df
         portfolio_df = optimize_portfolio_allocation(analysis_df)
 
         odds_df = analysis_df.copy()
@@ -161,7 +172,8 @@ def main() -> None:
         render_odds_table(analysis_df)
 
     with tab2:
-        render_analysis(analysis_df)
+        if st.session_state.analysis_df is not None:
+            render_analysis(st.session_state.analysis_df)
         if st.session_state["analysis_df"] is not None:
             analysis_csv = st.session_state["analysis_df"].to_csv(index=False)
             st.download_button(

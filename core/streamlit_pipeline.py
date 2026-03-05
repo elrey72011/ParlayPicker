@@ -74,14 +74,15 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
     if "total_edge" not in df.columns:
         df["total_edge"] = 0.0
 
-    def determine_best_pick(row):
-        if row["expected_value"] <= 0:
-            return "No Edge"
-
-        return f"{row['away_team']} vs {row['home_team']}"
-
     df["best_pick"] = df.apply(determine_best_pick, axis=1)
     return df
+
+
+def determine_best_pick(row: pd.Series) -> str:
+    if row["expected_value"] <= 0:
+        return "No Edge"
+
+    return f"{row['away_team']} vs {row['home_team']}"
 
 @st.cache_data(ttl=300)
 def load_base_data() -> pd.DataFrame:
@@ -159,7 +160,7 @@ def run_analysis_pipeline(
     return _apply_analysis_calculations(filtered)
 
 
-def generate_parlays_table(analysis_df: pd.DataFrame) -> pd.DataFrame:
+def generate_parlays(analysis_df: pd.DataFrame) -> pd.DataFrame:
     if analysis_df.empty:
         return pd.DataFrame()
 
@@ -190,6 +191,10 @@ def generate_parlays_table(analysis_df: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame(rows)
 
     return analysis_df.head(10)
+
+
+# Backward compatible alias
+generate_parlays_table = generate_parlays
 
 
 def build_realtime_edges(analysis_df: pd.DataFrame) -> pd.DataFrame:
