@@ -407,6 +407,129 @@ def clamp_prob(p: Any, lo: float = 0.05, hi: float = 0.95) -> Optional[float]:
         return None
 
 
+def build_independent_signal_columns(row: Dict[str, Any]) -> Dict[str, Optional[float]]:
+    """
+    Group correlated probability inputs into independent signal classes.
+
+    Signal classes:
+    - Market signal: devig / market implied probability
+    - Model signal: internal ML probabilities (ai/model spread/model total)
+    - Prediction market signal: Kalshi probabilities
+    - External model signal: TheOver probability
+    """
+    market_prob = clamp_prob(
+        row.get("devig_implied_prob")
+        or row.get("spread_prob_market")
+        or row.get("total_prob_market")
+        or row.get("implied_prob")
+        or row.get("consensus_prob")
+        or row.get("consensus_prob_adj"),
+        0.01,
+        0.99,
+    )
+
+    model_candidates = [
+        clamp_prob(row.get("ai_prob_adj"), 0.01, 0.99),
+        clamp_prob(row.get("model_spread_prob"), 0.01, 0.99),
+        clamp_prob(row.get("model_total_prob"), 0.01, 0.99),
+    ]
+    model_vals = [p for p in model_candidates if p is not None]
+    model_prob = sum(model_vals) / len(model_vals) if model_vals else None
+
+    kalshi_candidates = [
+        clamp_prob(row.get("kalshi_prob_spread"), 0.01, 0.99),
+        clamp_prob(row.get("kalshi_prob_total"), 0.01, 0.99),
+    ]
+    kalshi_vals = [p for p in kalshi_candidates if p is not None]
+    kalshi_prob = sum(kalshi_vals) / len(kalshi_vals) if kalshi_vals else None
+
+    theover_prob = clamp_prob(row.get("theover_prob"), 0.01, 0.99)
+
+    return {
+        "market_prob": market_prob,
+        "model_prob": model_prob,
+        "kalshi_prob": kalshi_prob,
+        "theover_prob": theover_prob,
+    }
+
+
+def ensemble_probability(row: Dict[str, Any]) -> Optional[float]:
+    market = clamp_prob(row.get("market_prob"), 0.01, 0.99)
+    model = clamp_prob(row.get("model_prob"), 0.01, 0.99)
+    kalshi = clamp_prob(row.get("kalshi_prob"), 0.01, 0.99)
+    theover = clamp_prob(row.get("theover_prob"), 0.01, 0.99)
+
+    weights = {
+        "market": 0.40,
+        "model": 0.30,
+        "kalshi": 0.20,
+        "theover": 0.10,
+    }
+
+    probs: List[float] = []
+    w: List[float] = []
+
+    if market is not None:
+        probs.append(market)
+        w.append(weights["market"])
+
+    if model is not None:
+        probs.append(model)
+        w.append(weights["model"])
+
+    if kalshi is not None:
+        probs.append(kalshi)
+        w.append(weights["kalshi"])
+
+    if theover is not None:
+        probs.append(theover)
+        w.append(weights["theover"])
+
+    if not probs:
+        return None
+
+    weighted_prob = sum(p * weight for p, weight in zip(probs, w)) / sum(w)
+
+    print("Market:", market)
+    print("Model:", model)
+    print("Kalshi:", kalshi)
+    print("TheOver:", theover)
+    print("Final:", weighted_prob)
+
+    return clamp_prob(weighted_prob, 0.01, 0.99)
+
+
+def expected_value(prob: Optional[float], odds: Optional[float]) -> Optional[float]:
+    if prob is None or odds is None:
+        return None
+    try:
+        odds_f = float(odds)
+        p = float(prob)
+        if odds_f > 0:
+            payout = odds_f / 100.0
+        else:
+            payout = 100.0 / abs(odds_f)
+        return p * payout - (1.0 - p)
+    except Exception:
+        return None
+
+
+def kelly_fraction(prob: Optional[float], odds: Optional[float]) -> float:
+    if prob is None or odds is None:
+        return 0.0
+    try:
+        odds_f = float(odds)
+        p = float(prob)
+        if odds_f > 0:
+            b = odds_f / 100.0
+        else:
+            b = 100.0 / abs(odds_f)
+        q = 1.0 - p
+        return max((b * p - q) / b, 0.0)
+    except Exception:
+        return 0.0
+
+
 def assign_confidence(prob: float) -> str:
     """
     Deterministic confidence assignment based solely on probability.
@@ -14978,6 +15101,37 @@ with tab_master:
 
         df = _final_market_pick_sync(df)
 
+        # Rebuild probability aggregation using independent ensemble signal groups
+        signal_series = df.apply(lambda r: pd.Series(build_independent_signal_columns(r.to_dict())), axis=1)
+        for c in ["market_prob", "model_prob", "kalshi_prob", "theover_prob"]:
+            df[c] = pd.to_numeric(signal_series.get(c), errors='coerce')
+            df[c] = df[c].apply(lambda x: clamp_prob(x, 0.01, 0.99))
+
+        ensemble_prob_series = df.apply(lambda r: ensemble_probability(r.to_dict()), axis=1)
+        df["final_probability"] = pd.to_numeric(ensemble_prob_series, errors='coerce')
+
+        def _row_odds_for_ev(row: pd.Series) -> Optional[float]:
+            for c in ["price", "Best Price", "best_price", "spread_pick_odds", "total_pick_odds", "Home_ML", "Away_ML"]:
+                v = row.get(c)
+                if v is None or pd.isna(v):
+                    continue
+                try:
+                    return float(v)
+                except Exception:
+                    continue
+            return None
+
+        df["price"] = df.apply(_row_odds_for_ev, axis=1)
+        df["expected_value"] = df.apply(
+            lambda r: expected_value(clamp_prob(r.get("final_probability"), 0.01, 0.99), r.get("price")),
+            axis=1,
+        )
+        df["kelly_fraction"] = df.apply(
+            lambda r: kelly_fraction(clamp_prob(r.get("final_probability"), 0.01, 0.99), r.get("price")),
+            axis=1,
+        )
+        df["bet_signal"] = df["expected_value"].fillna(-1.0) > 0.03
+
         # Log market distribution after final sync
         if not df.empty and 'Market' in df.columns:
             market_dist = df['Market'].value_counts()
@@ -15559,8 +15713,15 @@ if should_display:
             "decision_trace_notes",
             "kalshi_prob_spread",
             "kalshi_prob_total",
+            "market_prob",
+            "model_prob",
+            "kalshi_prob",
+            "theover_prob",
             "spread_prob_market",
             "total_prob_market",
+            "expected_value",
+            "kelly_fraction",
+            "bet_signal",
             "kalshi_candidate_count",
             "kalshi_best_score",
             "kalshi_match_reason",
