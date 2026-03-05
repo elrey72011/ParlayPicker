@@ -36,8 +36,9 @@ def main():
     st.title("ParlayPicker")
     sport = st.selectbox("Sport", ["NBA", "NFL", "NHL", "NCAAB", "NCAAF"])
     date_key = st.text_input("Date", "2026-01-01")
+    bankroll = st.number_input("Bankroll", min_value=100.0, value=1000.0, step=50.0)
     df = load_data(sport, date_key)
-    render_top_bets(df)
+    render_top_bets(df, bankroll=float(bankroll))
 
 
 if __name__ == "__main__":
