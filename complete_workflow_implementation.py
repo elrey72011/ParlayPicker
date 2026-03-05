@@ -15,6 +15,7 @@ from core.probability_utils import ensure_probability_column
 from core.schema.schema_validator import validate_schema
 from core.schema.schema_utils import ensure_column
 from core.odds_normalizer import normalize_odds
+from core.ev_engine import calculate_ev
 
 logger = logging.getLogger(__name__)
 
@@ -440,6 +441,11 @@ def run_master_analysis(
     master = ensure_column(master, "ml_probability", 0.5)
     master = ensure_column(master, "market_probability", 0.5)
 
+    required_game_cols = ["home_team", "away_team", "league"]
+    for col in required_game_cols:
+        if col not in master.columns:
+            master[col] = None
+
     # Convert DataFrame rows to typed models to enforce schema and defaults.
     games = df_to_games(master)
     game_lookup = {game.game_id: game for game in games}
@@ -483,8 +489,11 @@ def run_master_analysis(
     master["ai_probability"] = master["ai_probability"].fillna(0.5)
     master["ml_probability"] = master["ml_probability"].fillna(0.5)
 
-    master["combined_probability"] = (master["ai_probability"] + master["ml_probability"]) / 2
-    master['consensus_prob'] = master['combined_probability']
+    master["consensus_prob"] = (
+        master.get("ai_probability", 0.5)
+        + master.get("ml_probability", 0.5)
+        + master.get("market_probability", 0.5)
+    ) / 3
 
     # Recalculate confidence levels
     master['edge'] = abs(master['consensus_prob'] - 0.5)
@@ -502,33 +511,33 @@ def run_master_analysis(
 
     print("Columns available:", master.columns)
 
-    # Fill any missing expected value rows with legacy odds-aware EV.
-    if "expected_value" not in master.columns:
-        master["expected_value"] = 0.0
-
-    master['expected_value'] = master.apply(
-        lambda row: row.get("expected_value")
-        if pd.notna(row.get("expected_value"))
-        else calculate_ev(row.get('consensus_prob', 0.5), row.get('odds_american', -110)),
+    master["expected_value"] = master.apply(
+        lambda r: calculate_ev(
+            r.get("consensus_prob", 0.5),
+            r.get("odds_american", -110)
+        ),
         axis=1
     )
 
+    master["best_pick"] = master.apply(
+        lambda r: f"{r['away_team']} vs {r['home_team']}",
+        axis=1
+    )
+
+    master["edge"] = master["expected_value"]
+
+    parlay_candidates = master[
+        master["expected_value"] > 0.03
+    ].copy()
+
+    parlay_candidates.sort_values(
+        "expected_value",
+        ascending=False,
+        inplace=True
+    )
+    master.attrs["parlay_candidates"] = parlay_candidates
+
     return master
-
-
-def calculate_ev(probability: float, american_odds: float) -> float:
-    """Calculate expected value from probability and American odds."""
-    if probability is None:
-        probability = 0.5
-
-    if american_odds > 0:
-        payout = american_odds / 100
-    else:
-        payout = 100 / abs(american_odds)
-
-    ev = probability * payout - (1 - probability)
-
-    return ev
 
 
 def compute_ev(prediction: Prediction) -> float:

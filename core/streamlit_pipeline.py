@@ -89,6 +89,16 @@ def generate_parlays_table(analysis_df: pd.DataFrame) -> pd.DataFrame:
     if analysis_df.empty:
         return pd.DataFrame()
 
+    parlay_candidates = analysis_df.attrs.get("parlay_candidates")
+    if isinstance(parlay_candidates, pd.DataFrame) and not parlay_candidates.empty:
+        return parlay_candidates
+
+    if "expected_value" in analysis_df.columns:
+        parlay_candidates = analysis_df[analysis_df["expected_value"] > 0.03].copy()
+        if not parlay_candidates.empty:
+            parlay_candidates.sort_values("expected_value", ascending=False, inplace=True)
+            return parlay_candidates
+
     if compute_best_bets and build_optimal_parlays:
         best_bets = compute_best_bets(analysis_df)
         parlays = build_optimal_parlays(best_bets, parlay_sizes=[2, 3], max_per_size=8, check_correlation=True)

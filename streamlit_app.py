@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
+import pandas as pd
 import streamlit as st
 
 from app.ui.analysis_dashboard import render_analysis
-from app.ui.debug_panel import render_debug_panel
+from app.ui.debug_panel import render_debug, render_debug_panel
+from app.ui.export_tools import render_exports
 from app.ui.kalshi_diagnostics import render_kalshi_diagnostics
 from app.ui.layout import setup_page
 from app.ui.odds_dashboard import render_odds_table
@@ -83,6 +85,25 @@ def main() -> None:
     parlays_df = generate_parlays_table(analysis_df)
     portfolio_df = optimize_portfolio_allocation(analysis_df)
 
+    odds_df = analysis_df.copy()
+    theover_df = (
+        load_theover_csv(controls["theover_spreads"])
+        if controls["theover_spreads"]
+        else None
+    )
+    if controls["theover_totals"]:
+        totals_loaded = load_theover_csv(controls["theover_totals"])
+        theover_df = pd.concat([theover_df, totals_loaded], ignore_index=True) if theover_df is not None else totals_loaded
+
+    kalshi_cols = [c for c in analysis_df.columns if "kalshi" in c.lower()]
+    kalshi_df = analysis_df[kalshi_cols].dropna(how="all") if kalshi_cols else analysis_df.iloc[0:0]
+
+    gemini_df = (
+        analysis_df[analysis_df.get("gemini_analysis", "").astype(str).str.len() > 0]
+        if "gemini_analysis" in analysis_df.columns
+        else analysis_df.iloc[0:0]
+    )
+
     tab1, tab2, tab3, tab4, tab5 = st.tabs(["Odds", "Analysis", "Parlays", "Portfolio", "Debug"])
 
     with tab1:
@@ -90,15 +111,25 @@ def main() -> None:
 
     with tab2:
         render_analysis(analysis_df)
+        render_exports(analysis_df, filename="analysis_export.csv")
 
     with tab3:
+        st.subheader("Recommended Parlays")
         render_parlays(parlays_df)
+        render_exports(parlays_df, filename="parlays_export.csv")
 
     with tab4:
         render_portfolio(portfolio_df)
 
     with tab5:
+        st.subheader("Data Source Status")
+        st.write("TheOdds rows:", len(odds_df))
+        st.write("TheOver rows:", len(theover_df) if theover_df is not None else 0)
+        st.write("Kalshi rows:", len(kalshi_df))
+        st.write("Gemini rows:", len(gemini_df))
+
         if controls["show_debug"]:
+            render_debug(analysis_df)
             render_debug_panel(analysis_df)
         else:
             st.info("Enable 'Display Debug Information' in the sidebar to inspect debug data.")

@@ -3,5 +3,4 @@ import streamlit as st
 
 
 def render_parlays(parlays: pd.DataFrame) -> None:
-    st.subheader("Recommended Parlays")
     st.dataframe(parlays, use_container_width=True)
