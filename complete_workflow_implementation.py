@@ -11,6 +11,7 @@ import logging
 from core.probability_utils import ensure_probability_column
 from core.schema.schema_validator import validate_schema
 from core.schema.schema_utils import ensure_column
+from core.odds_normalizer import normalize_odds
 
 logger = logging.getLogger(__name__)
 
@@ -443,21 +444,41 @@ def run_master_analysis(
         lambda x: 'High' if x > 0.15 else ('Medium' if x > 0.08 else 'Low')
     )
 
+    required_cols = ["consensus_prob"]
+
+    for col in required_cols:
+        if col not in master.columns:
+            master[col] = 0.5
+
+    master = normalize_odds(master)
+
+    print("Columns available:", master.columns)
+
     # Recalculate expected value
     master['expected_value'] = master.apply(
-        lambda row: calculate_ev(row['consensus_prob'], row['line']),
+        lambda row: calculate_ev(
+            row.get('consensus_prob', 0.5),
+            row.get('odds_american', -110)
+        ),
         axis=1
     )
 
     return master
 
 
-def calculate_ev(probability: float, line: float) -> float:
-    """Calculate expected value"""
-    bet_to_win = 100
-    bet_to_risk = 110
-    ev = (probability * bet_to_win) - ((1 - probability) * bet_to_risk)
-    return (ev / bet_to_risk) * 100
+def calculate_ev(probability: float, american_odds: float) -> float:
+    """Calculate expected value from probability and American odds."""
+    if probability is None:
+        probability = 0.5
+
+    if american_odds > 0:
+        payout = american_odds / 100
+    else:
+        payout = 100 / abs(american_odds)
+
+    ev = probability * payout - (1 - probability)
+
+    return ev
 
 
 def compute_best_bets(
