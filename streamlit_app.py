@@ -53,8 +53,11 @@ def main() -> None:
         st.info("Configure filters in the sidebar and click **Run Master Analysis**.")
         return
 
-    spreads_df = load_theover_csv(controls["theover_spreads"])
-    totals_df = load_theover_csv(controls["theover_totals"])
+    spreads_df = load_theover_csv(controls.get("theover_spreads"))
+    totals_df = load_theover_csv(controls.get("theover_totals"))
+
+    st.write("TheOver spreads rows:", len(spreads_df))
+    st.write("TheOver totals rows:", len(totals_df))
 
     analysis_df = run_analysis_pipeline(
         sports=controls["sports"],
