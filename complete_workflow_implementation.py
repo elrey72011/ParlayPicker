@@ -8,6 +8,8 @@ import pandas as pd
 from typing import Dict, List, Optional
 import logging
 
+from core.probability_utils import ensure_probability_column
+
 logger = logging.getLogger(__name__)
 
 
@@ -391,29 +393,54 @@ def run_master_analysis(
     Combine all analyzer results into master analysis
     """
     master = vertex_results.copy()
-    
-    # Add consensus probability
+    master = ensure_probability_column(master, "ai_probability")
+
+    logger.info(f"Master columns: {list(master.columns)}")
+
     if ml_results is not None:
-        # Average Vertex AI and ML predictions
-        master['consensus_prob'] = (
-            master['ai_probability'] + ml_results['ml_probability']
-        ) / 2
+        ml_results = ml_results.copy()
+        ml_results = ensure_probability_column(ml_results, "ml_probability")
+        logger.info(f"ML result columns: {list(ml_results.columns)}")
+
+        if 'game_id' in master.columns and 'game_id' in ml_results.columns:
+            master = master.merge(
+                ml_results[['game_id', 'ml_probability']],
+                on='game_id',
+                how='left'
+            )
+        else:
+            if len(master) == len(ml_results):
+                master['ml_probability'] = ml_results['ml_probability'].values
+            else:
+                master['ml_probability'] = 0.5
+
+        master['ml_probability'] = master['ml_probability'].fillna(0.5)
     else:
-        # Just use Vertex AI
-        master['consensus_prob'] = master['ai_probability']
-    
+        logger.info("ML result columns: []")
+        master['ml_probability'] = 0.5
+
+    required_cols = ["ai_probability", "ml_probability"]
+    for col in required_cols:
+        if col not in master.columns:
+            raise ValueError(f"Missing required column: {col}")
+
+    master["combined_probability"] = (
+        master["ai_probability"] + master["ml_probability"]
+    ) / 2
+    master['consensus_prob'] = master['combined_probability']
+
     # Recalculate confidence levels
     master['edge'] = abs(master['consensus_prob'] - 0.5)
     master['confidence_level'] = master['edge'].apply(
         lambda x: 'High' if x > 0.15 else ('Medium' if x > 0.08 else 'Low')
     )
-    
+
     # Recalculate expected value
     master['expected_value'] = master.apply(
         lambda row: calculate_ev(row['consensus_prob'], row['line']),
         axis=1
     )
-    
+
     return master
 
 
