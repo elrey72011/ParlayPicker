@@ -7,6 +7,7 @@ ANALYSIS_COLUMNS = [
     "away_team",
     "home_team",
     "consensus_prob",
+    "market_probability",
     "expected_value",
     "best_pick",
 ]
