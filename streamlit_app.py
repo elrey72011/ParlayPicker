@@ -219,11 +219,11 @@ if not logger.handlers:
     logging.basicConfig(level=logging.INFO)
 
 # Preserve session state across reruns
-if "master_results_df" not in st.session_state:
-    st.session_state["master_results_df"] = pd.DataFrame()
-
 if "master_df" not in st.session_state:
-    st.session_state["master_df"] = pd.DataFrame()
+    st.session_state["master_df"] = None
+
+if "master_results_df" not in st.session_state:
+    st.session_state["master_results_df"] = None
 
 if "analysis_complete" not in st.session_state:
     st.session_state["analysis_complete"] = False
@@ -8701,8 +8701,8 @@ if _last_sorted != _curr_sorted:
     # Only invalidate if we actually have a change
     if "master_df" in st.session_state:
         # Don't delete key, just empty it to avoid KeyErrors
-        st.session_state["master_df"] = pd.DataFrame()
-        st.session_state["master_results_df"] = pd.DataFrame()
+        st.session_state["master_df"] = None
+        st.session_state["master_results_df"] = None
         st.session_state["analysis_complete"] = False
     st.session_state["_last_selected_sports"] = selected_sports
 st.session_state["league"] = league
@@ -8728,8 +8728,8 @@ if st.sidebar.button("Load Games", width="stretch"):
     # Invalidate master_df when loading new games
     if "master_df" in st.session_state:
         # Don't delete key, just reset
-        st.session_state["master_df"] = pd.DataFrame()
-        st.session_state["master_results_df"] = pd.DataFrame()
+        st.session_state["master_df"] = None
+        st.session_state["master_results_df"] = None
         st.session_state["analysis_complete"] = False
 
     # Generate new run_id for this load
@@ -9319,7 +9319,7 @@ with tab_master:
     if "master_results_df" not in st.session_state:
         st.session_state["master_results_df"] = None
 
-    if st.button("🚀 Run Master Analysis"):
+    if st.button("🧠 Run Vertex AI Master Analysis"):
         # Generate new run_id for this analysis run
         import uuid
         analysis_run_id = str(uuid.uuid4())[:8]
@@ -15207,7 +15207,7 @@ with tab_master:
         # Show success message and rerun to display results immediately
         num_games = len(st.session_state.get('games', []))
         num_rows = len(st.session_state['master_results_df'])
-        st.success(f"Produced {num_rows} rows from {num_games} games")
+        st.success(f"Master analysis completed for {num_rows} games")
         st.rerun()
 
     if "model_last_error" in st.session_state:
@@ -15289,45 +15289,29 @@ elif analysis_was_attempted:
 
 logger.info(f"{'='*80}")
 
-# FIXED: Improved condition logic to properly check for analysis results
-# Check if we have analysis results to display
-has_results = False
-if "master_results_df" in st.session_state:
-    df_results = st.session_state["master_results_df"]
-    has_results = df_results is not None and not df_results.empty
+# ----------------------------------------------------
+# DISPLAY RESULTS
+# ----------------------------------------------------
 
-# Display section if we have results OR analysis just completed
-should_display = st.session_state.get("analysis_complete", False) or has_results
+should_display = (
+    st.session_state.get("analysis_complete", False)
+    and st.session_state.get("master_results_df") is not None
+)
 
 logger.info(f"🎯 Master Analysis Tab Display Logic:")
 logger.info(f"   - analysis_complete: {st.session_state.get('analysis_complete', False)}")
-logger.info(f"   - has_results: {has_results}")
+logger.info(f"   - master_results_df Rows: {0 if st.session_state.get('master_results_df') is None else len(st.session_state.get('master_results_df'))}")
 logger.info(f"   - should_display: {should_display}")
 
 if should_display:
     with tab_master:
-        if not has_results:
-            # Analysis completed but no results generated
-            st.warning("📊 Analysis complete but no picks generated")
+        st.subheader("Master Analysis Results")
 
-            # Show diagnostic info
-            with st.expander("🔍 Diagnostic Information"):
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.write("**Session State Check:**")
-                    st.write(f"- master_results_df exists: {'master_results_df' in st.session_state}")
-                    st.write(f"- analysis_complete: {st.session_state.get('analysis_complete', False)}")
-                    st.write(f"- games loaded: {len(st.session_state.get('games', []))}")
-                with col2:
-                    st.write("**Data Pipeline Status:**")
-                    st.write(f"- master_df rows: {len(st.session_state.get('master_df', pd.DataFrame()))}")
-                    st.write(f"- master_results_df rows: {len(st.session_state.get('master_results_df', pd.DataFrame()))}")
-
-            st.info("💡 Check the sidebar for debug logs and error information")
-            st.stop()
-
-        # We have results - proceed with display
         df = st.session_state["master_results_df"]
+
+        st.dataframe(df, use_container_width=True)
+
+        st.write(f"Games analyzed: {len(df)}")
 
         # Fix #1: Stats Coverage Dashboard & Warnings
 
