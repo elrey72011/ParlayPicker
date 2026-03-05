@@ -8,6 +8,9 @@ import pandas as pd
 from typing import Dict, List, Optional
 import logging
 
+from core.models.analysis_models import BettingAnalysis
+from core.models.model_converter import analyses_to_df, df_to_games
+from core.models.prediction_models import Prediction
 from core.probability_utils import ensure_probability_column
 from core.schema.schema_validator import validate_schema
 from core.schema.schema_utils import ensure_column
@@ -383,8 +386,17 @@ def run_ml_predictions(spreads_df: pd.DataFrame) -> pd.DataFrame:
     """Run ML predictions on spreads"""
     # Placeholder - implement your ML predictor
     results = spreads_df.copy()
-    results['ml_probability'] = 0.55  # Placeholder
-    return results
+    rows = []
+
+    for row in results.to_dict(orient='records'):
+        game_id = row.get("game_id") or f"{row.get('away_team', '')}@{row.get('home_team', '')}"
+        pred = Prediction(
+            game_id=str(game_id),
+            ml_probability=row.get("ml_probability", 0.55)
+        )
+        rows.append(pred.model_dump())
+
+    return pd.DataFrame(rows)
 
 
 def run_master_analysis(
@@ -428,14 +440,50 @@ def run_master_analysis(
     master = ensure_column(master, "ml_probability", 0.5)
     master = ensure_column(master, "market_probability", 0.5)
 
-    if "ml_probability" not in master.columns:
-        master["ml_probability"] = 0.5
+    # Convert DataFrame rows to typed models to enforce schema and defaults.
+    games = df_to_games(master)
+    game_lookup = {game.game_id: game for game in games}
+    analyses: List[BettingAnalysis] = []
 
+    for row in master.to_dict(orient="records"):
+        game_id = row.get("game_id")
+        if not game_id:
+            home_team = row.get("home_team", "")
+            away_team = row.get("away_team", "")
+            game_id = f"{away_team}@{home_team}"
+
+        if str(game_id) not in game_lookup:
+            continue
+
+        prediction = Prediction(
+            game_id=str(game_id),
+            ai_probability=row.get("ai_probability", 0.5),
+            ml_probability=row.get("ml_probability", 0.5),
+            market_probability=row.get("market_probability", 0.5),
+        )
+
+        analyses.append(
+            BettingAnalysis(
+                game_id=prediction.game_id,
+                ai_probability=prediction.ai_probability,
+                ml_probability=prediction.ml_probability,
+                market_probability=prediction.market_probability,
+                expected_value=compute_ev(prediction),
+                bet_signal=False,
+            )
+        )
+
+    analysis_df = analyses_to_df(analyses)
+    if not analysis_df.empty:
+        master = master.drop(columns=[
+            col for col in ["ai_probability", "ml_probability", "market_probability", "expected_value"]
+            if col in master.columns
+        ]).merge(analysis_df, on="game_id", how="left")
+
+    master["ai_probability"] = master["ai_probability"].fillna(0.5)
     master["ml_probability"] = master["ml_probability"].fillna(0.5)
 
-    master["combined_probability"] = (
-        master["ai_probability"] + master["ml_probability"]
-    ) / 2
+    master["combined_probability"] = (master["ai_probability"] + master["ml_probability"]) / 2
     master['consensus_prob'] = master['combined_probability']
 
     # Recalculate confidence levels
@@ -454,12 +502,14 @@ def run_master_analysis(
 
     print("Columns available:", master.columns)
 
-    # Recalculate expected value
+    # Fill any missing expected value rows with legacy odds-aware EV.
+    if "expected_value" not in master.columns:
+        master["expected_value"] = 0.0
+
     master['expected_value'] = master.apply(
-        lambda row: calculate_ev(
-            row.get('consensus_prob', 0.5),
-            row.get('odds_american', -110)
-        ),
+        lambda row: row.get("expected_value")
+        if pd.notna(row.get("expected_value"))
+        else calculate_ev(row.get('consensus_prob', 0.5), row.get('odds_american', -110)),
         axis=1
     )
 
@@ -479,6 +529,12 @@ def calculate_ev(probability: float, american_odds: float) -> float:
     ev = probability * payout - (1 - probability)
 
     return ev
+
+
+def compute_ev(prediction: Prediction) -> float:
+    """Model-based EV estimate using combined AI/ML probabilities."""
+    prob = (prediction.ai_probability + prediction.ml_probability) / 2
+    return prob - (1 - prob)
 
 
 def compute_best_bets(
