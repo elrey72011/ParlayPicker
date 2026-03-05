@@ -8,6 +8,8 @@ import logging
 import re
 from typing import Optional
 
+import pandas as pd
+
 import streamlit as st
 import vertexai
 from google.oauth2 import service_account
@@ -210,6 +212,50 @@ def show_vertex_ai_prediction_section(home_team: str, away_team: str, league: st
             st.info("🤝 AI agrees with market pricing")
     else:
         st.error("❌ AI prediction failed")
+
+
+from app_core.sharp_engine.probability_engine import ensemble_probability
+from app_core.sharp_engine.ev_engine import expected_value, bet_signal
+from app_core.sharp_engine.bankroll_manager import kelly_fraction
+
+
+def enrich_predictions_dataframe(df: pd.DataFrame, min_edge: float = 0.03) -> pd.DataFrame:
+    """Add sharp-engine betting columns to prediction output without breaking existing schema."""
+    if df is None or df.empty:
+        return df
+
+    out = df.copy()
+
+    if "ml_probability" in out.columns and "ml_prob" not in out.columns:
+        out["ml_prob"] = pd.to_numeric(out["ml_probability"], errors="coerce")
+    elif "ml_prob" not in out.columns:
+        out["ml_prob"] = pd.to_numeric(out.get("final_probability"), errors="coerce")
+
+    if "market_probability" in out.columns and "market_prob" not in out.columns:
+        out["market_prob"] = pd.to_numeric(out["market_probability"], errors="coerce")
+    elif "market_prob" not in out.columns:
+        out["market_prob"] = pd.to_numeric(out.get("Implied_Prob"), errors="coerce")
+
+    for c in ["kalshi_prob", "theover_prob", "sentiment_prob", "ml_prob", "market_prob"]:
+        if c not in out.columns:
+            out[c] = 0.0
+
+    out["ensemble_probability"] = out.apply(lambda r: ensemble_probability(r.to_dict()), axis=1)
+
+    odds_col = "Odds" if "Odds" in out.columns else "price"
+    out["expected_value"] = out.apply(
+        lambda r: expected_value(float(r["ensemble_probability"]), float(r[odds_col]))
+        if pd.notna(r.get(odds_col)) else None,
+        axis=1,
+    )
+    out["kelly_fraction"] = out.apply(
+        lambda r: kelly_fraction(float(r["ensemble_probability"]), float(r[odds_col]))
+        if pd.notna(r.get(odds_col)) else 0.0,
+        axis=1,
+    )
+    out["bet_signal"] = out.apply(lambda r: bet_signal(r, min_edge=min_edge) if pd.notna(r.get("expected_value")) else False, axis=1)
+
+    return out
 
 
 def get_credential_source() -> str:

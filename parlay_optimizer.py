@@ -16,6 +16,14 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+def parlay_probability(probabilities: List[float]) -> float:
+    """Compute joint parlay probability from independent leg probabilities."""
+    p = 1.0
+    for prob in probabilities:
+        p *= prob
+    return p
+
+
 class ParlayOptimizer:
     """Optimize parlay selection based on ML predictions and betting strategy"""
     
@@ -300,14 +308,14 @@ class ParlayOptimizer:
         Returns:
             Combined probability
         """
-        prob = 1.0
+        leg_probs = []
         leagues_present = set()
 
         for leg in legs:
             # Handle different keys for probability based on caller
             leg_prob = leg.get('ModelProb') or leg.get('prob')
             if leg_prob is not None:
-                prob *= leg_prob
+                leg_probs.append(leg_prob)
 
             # Track leagues for correlation discount
             league = leg.get('league') or leg.get('League')
@@ -319,6 +327,8 @@ class ParlayOptimizer:
 
         # Apply correlation discount if multiple legs from same league
         # as per configuration (e.g. 0.95 factor applied once)
+        prob = parlay_probability(leg_probs)
+
         try:
             from config import SAME_LEAGUE_CORR_FACTOR
             corr_factor = SAME_LEAGUE_CORR_FACTOR
