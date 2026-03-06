@@ -7,6 +7,11 @@ import pandas as pd
 import streamlit as st
 
 from core.ev_engine import calculate_ev
+
+try:
+    from ml_model import get_model
+except Exception:  # pragma: no cover
+    get_model = None
 from core.parlay_engine import generate_parlays as generate_parlay_candidates
 from core.probability_engine import american_to_prob, normalize_probability_components, remove_vig
 from core.schema.base_schema import ensure_base_schema
@@ -79,21 +84,50 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
 
     df["odds_american"] = df.apply(_resolve_american_odds, axis=1)
 
-    df["market_prob"] = df["odds_american"].apply(american_to_prob)
+    # 1) Market probability from each row's odds
+    df["market_prob"] = pd.to_numeric(df["odds_american"], errors="coerce").apply(american_to_prob)
+
+    # 2) Remove vig when both sides are available
     if {"home_odds", "away_odds"}.issubset(df.columns):
         home_prob = pd.to_numeric(df["home_odds"], errors="coerce").apply(lambda x: american_to_prob(x) if pd.notna(x) else pd.NA)
         away_prob = pd.to_numeric(df["away_odds"], errors="coerce").apply(lambda x: american_to_prob(x) if pd.notna(x) else pd.NA)
-        no_vig = pd.DataFrame([remove_vig(h, a) if pd.notna(h) and pd.notna(a) else (pd.NA, pd.NA) for h, a in zip(home_prob, away_prob)])
-        df["market_prob"] = no_vig[0].fillna(df["market_prob"])
+        no_vig = pd.DataFrame(
+            [remove_vig(h, a) if pd.notna(h) and pd.notna(a) else (pd.NA, pd.NA) for h, a in zip(home_prob, away_prob)]
+        )
 
-    df["ml_prob"] = pd.to_numeric(df.get("ml_probability", 0.5), errors="coerce")
-    df["ai_prob"] = pd.to_numeric(df.get("ai_probability", 0.5), errors="coerce")
-    df["kalshi_prob"] = pd.to_numeric(df.get("kalshi_probability", pd.NA), errors="coerce")
+        if "is_home_pick" in df.columns:
+            is_home_pick = df["is_home_pick"].fillna(False).astype(bool)
+            df["market_prob"] = no_vig[1].where(is_home_pick, no_vig[0]).fillna(df["market_prob"])
+        elif "team" in df.columns and {"home_team", "away_team"}.issubset(df.columns):
+            is_home_pick = df["team"].astype(str).str.lower() == df["home_team"].astype(str).str.lower()
+            df["market_prob"] = no_vig[1].where(is_home_pick, no_vig[0]).fillna(df["market_prob"])
+        else:
+            df["market_prob"] = no_vig[0].fillna(df["market_prob"])
 
+    # 3) ML probability: use real model predictions when available, fallback to market
+    ml_prob = pd.to_numeric(df.get("ml_probability", pd.NA), errors="coerce")
+    if get_model is not None:
+        try:
+            model, feature_names = get_model()
+            if all(f in df.columns for f in feature_names):
+                features = df[feature_names].apply(pd.to_numeric, errors="coerce").fillna(0.0)
+                predictions = model.predict_proba(features)[:, 1]
+                ml_prob = pd.Series(predictions, index=df.index, dtype="float64")
+        except Exception as exc:
+            logger.warning("ML model unavailable for predict_proba; falling back to market_probability: %s", exc)
+
+    df["ml_prob"] = ml_prob.fillna(df["market_prob"])
+    df["ai_prob"] = pd.to_numeric(df.get("ai_probability", pd.NA), errors="coerce")
+
+    # 4) Weighted consensus probability
     df = normalize_probability_components(df)
-    df["market_probability"] = df["market_prob"]
+    df["market_probability"] = df["market_prob"].clip(lower=0.0, upper=1.0)
+    df["ml_probability"] = df["ml_prob"].clip(lower=0.0, upper=1.0)
+    df["ai_probability"] = df["ai_prob"].clip(lower=0.0, upper=1.0)
 
+    # 5) EV calculation and 6) edge
     df["expected_value"] = calculate_ev(df["consensus_prob"], df["odds_american"])
+    df["edge"] = df["consensus_prob"] - df["market_probability"]
 
     if "team" not in df.columns:
         df["team"] = df.get("away_team", "")
@@ -102,6 +136,22 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
         lambda r: f"{r['away_team']} vs {r['home_team']}" if r["expected_value"] > 0 else "No Edge",
         axis=1,
     )
+
+    # 9) Debug output for verification in logs
+    debug_cols = [
+        "home_team",
+        "away_team",
+        "odds_american",
+        "market_probability",
+        "ml_probability",
+        "consensus_prob",
+        "expected_value",
+        "edge",
+    ]
+    available_debug_cols = [c for c in debug_cols if c in df.columns]
+    if available_debug_cols:
+        logger.info("Analysis probability debug sample:\n%s", df[available_debug_cols].head(25).to_string(index=False))
+
     return df
 
 
