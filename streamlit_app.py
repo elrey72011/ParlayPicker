@@ -186,6 +186,20 @@ def main() -> None:
             portfolio_source_df,
             bankroll=float(controls["bankroll"]),
         )
+        if isinstance(portfolio_df, pd.DataFrame) and not portfolio_df.empty:
+            if "best_pick" not in portfolio_df.columns:
+                portfolio_df["best_pick"] = pd.NA
+            if "best_pick" in portfolio_source_df.columns:
+                empty_best_pick = portfolio_df["best_pick"].isna() | portfolio_df["best_pick"].astype(str).str.strip().eq("")
+                join_keys = [
+                    c
+                    for c in ["league", "home_team", "away_team", "game_date"]
+                    if c in portfolio_df.columns and c in portfolio_source_df.columns
+                ]
+                if join_keys:
+                    best_lookup = portfolio_source_df[join_keys + ["best_pick"]].drop_duplicates()
+                    recovered = portfolio_df.loc[empty_best_pick, join_keys].merge(best_lookup, on=join_keys, how="left")
+                    portfolio_df.loc[empty_best_pick, "best_pick"] = recovered["best_pick"].values
         if portfolio_df is not None and not portfolio_df.empty:
             simulation_results = run_bankroll_simulation(portfolio_df, bankroll=float(controls["bankroll"]))
         else:
@@ -249,8 +263,15 @@ def main() -> None:
     spreads_games = int(diagnostics.get("theover_spreads_games", 0))
     totals_bet_games = int(diagnostics.get("theover_totals_bet_games", 0))
     spreads_bet_games = int(diagnostics.get("theover_spreads_bet_games", 0))
+    date_fill_attempted = int(diagnostics.get("date_fill_attempted", 0))
+    date_fill_filled = int(diagnostics.get("date_fill_filled", 0))
+    date_fill_rate = float(diagnostics.get("date_fill_rate", 0.0))
+    date_fill_spread_attempted = int(diagnostics.get("date_fill_spread_attempted", 0))
+    date_fill_spread_filled = int(diagnostics.get("date_fill_spread_filled", 0))
+    date_fill_total_attempted = int(diagnostics.get("date_fill_total_attempted", 0))
+    date_fill_total_filled = int(diagnostics.get("date_fill_total_filled", 0))
     with st.container():
-        m1, m2, m3, m4, m5, m6, m7 = st.columns(7)
+        m1, m2, m3, m4, m5, m6, m7, m8, m9, m10 = st.columns(10)
         m1.metric("Total games", games_count)
         m2.metric("Bet rows", bet_rows)
         m3.metric("Best picks", best_rows)
@@ -258,6 +279,9 @@ def main() -> None:
         m5.metric("Match rate", f"{match_rate:.0%}")
         m6.metric("TheOver totals games", f"{totals_bet_games}/{totals_games}")
         m7.metric("TheOver spreads games", f"{spreads_bet_games}/{spreads_games}")
+        m8.metric("Date fill success", f"{date_fill_filled}/{date_fill_attempted} ({date_fill_rate:.0%})")
+        m9.metric("Date fill totals", f"{date_fill_total_filled}/{date_fill_total_attempted}")
+        m10.metric("Date fill spreads", f"{date_fill_spread_filled}/{date_fill_spread_attempted}")
         st.progress(max(0.0, min(1.0, match_rate)), text=f"Kalshi match rate: {match_rate:.0%}")
         st.caption(f"Merge keys used: {diagnostics.get('merge_keys_used', [])}")
         if diagnostics.get("base_stale") and diagnostics.get("has_normalized_bet_rows", False):
