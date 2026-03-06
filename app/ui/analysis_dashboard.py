@@ -17,6 +17,6 @@ def render_analysis(df: pd.DataFrame) -> None:
     st.subheader("Model Analysis")
     available_cols = [col for col in ANALYSIS_COLUMNS if col in df.columns]
     if available_cols:
-        st.dataframe(df[available_cols], use_container_width=True)
+        st.dataframe(df[available_cols], width="stretch")
     else:
-        st.dataframe(df, use_container_width=True)
+        st.dataframe(df, width="stretch")

@@ -7,21 +7,27 @@ def generate_parlays(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty or "expected_value" not in df.columns:
         return pd.DataFrame()
 
-    df = df[df["expected_value"] > 0.02].copy()
+    df = df[df["expected_value"] > 0.02]
     df = df.sort_values("expected_value", ascending=False)
 
-    # Correlation guard: avoid duplicate team exposure.
-    if "team" in df.columns:
-        df = df.drop_duplicates(subset=["team"], keep="first")
-    elif {"away_team", "home_team"}.issubset(df.columns):
-        used = set()
-        kept_rows = []
-        for idx, row in df.iterrows():
-            teams = {row["away_team"], row["home_team"]}
-            if used.intersection(teams):
-                continue
-            used.update(teams)
-            kept_rows.append(idx)
-        df = df.loc[kept_rows]
+    picks = []
+    used_teams = set()
 
-    return df.head(20)
+    for _, row in df.iterrows():
+        team = row["team"] if "team" in row.index else row.get("away_team")
+        if team in used_teams:
+            continue
+
+        if {"home_team", "away_team"}.issubset(df.columns):
+            if row["home_team"] in used_teams or row["away_team"] in used_teams:
+                continue
+            used_teams.add(row["home_team"])
+            used_teams.add(row["away_team"])
+        else:
+            used_teams.add(team)
+
+        picks.append(row)
+        if len(picks) == 5:
+            break
+
+    return pd.DataFrame(picks)
