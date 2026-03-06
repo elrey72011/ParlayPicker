@@ -28,7 +28,7 @@ except Exception:  # pragma: no cover
 
 MERGE_KEYS = ["league", "home_team", "away_team", "game_date"]
 MODEL_PATH = "models/sports_model_latest.joblib"
-LEAGUE_ALIASES = {
+SPORT_ALIASES = {
     "NBA": "NBA",
     "NHL": "NHL",
     "NCAAM": "NCAAB",
@@ -224,7 +224,7 @@ def _normalize_league_value(value: str | object) -> str:
     if pd.isna(value):
         return ""
     normalized = str(value).strip().upper()
-    return LEAGUE_ALIASES.get(normalized, normalized)
+    return SPORT_ALIASES.get(normalized, normalized)
 
 
 def _normalize_sports_filter(sports: Iterable[str] | None) -> list[str]:
@@ -405,6 +405,9 @@ def run_analysis_pipeline(
     totals_df: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     base_df = load_base_data().copy()
+    if "league" in base_df.columns:
+        base_df["league"] = base_df["league"].apply(_normalize_league_value)
+
     selected_sports = _normalize_sports_filter(sports)
 
     available_base_leagues = sorted(base_df["league"].dropna().astype(str).str.upper().unique().tolist()) if "league" in base_df.columns else []
@@ -438,8 +441,12 @@ def run_analysis_pipeline(
     merged_theover = None
     if spreads_df is not None and not spreads_df.empty:
         merged_theover = _normalize_key_columns(spreads_df)
+        if "league" in merged_theover.columns:
+            merged_theover["league"] = merged_theover["league"].apply(_normalize_league_value)
     if totals_df is not None and not totals_df.empty:
         totals_norm = _normalize_key_columns(totals_df)
+        if "league" in totals_norm.columns:
+            totals_norm["league"] = totals_norm["league"].apply(_normalize_league_value)
         merged_theover = pd.concat([merged_theover, totals_norm], ignore_index=True) if merged_theover is not None else totals_norm
 
     if filtered.empty and has_theover_data and merged_theover is not None and not merged_theover.empty:
