@@ -28,6 +28,126 @@ except Exception:  # pragma: no cover
 
 MERGE_KEYS = ["league", "home_team", "away_team", "game_date"]
 MODEL_PATH = "models/sports_model_latest.joblib"
+BEST_PICK_COLUMNS = [
+    "league",
+    "home_team",
+    "away_team",
+    "best_pick",
+    "market_type",
+    "expected_value",
+    "model_probability",
+    "decimal_odds",
+]
+
+
+def _infer_market_type(row: pd.Series) -> str:
+    allowed_market_types = {
+        "spread_home",
+        "spread_away",
+        "total_over",
+        "total_under",
+        "moneyline_home",
+        "moneyline_away",
+    }
+
+    existing_market_type = str(row.get("market_type") or "").strip().lower()
+    if existing_market_type in allowed_market_types:
+        return existing_market_type
+
+    market_hint = " ".join(
+        [
+            str(row.get("market") or ""),
+            str(row.get("bet_type") or ""),
+            str(row.get("wager_type") or ""),
+            str(row.get("pick_type") or ""),
+            str(row.get("selection") or ""),
+        ]
+    ).lower()
+
+    spread_val = pd.to_numeric(row.get("spread"), errors="coerce")
+    total_val = pd.to_numeric(row.get("total"), errors="coerce")
+
+    if "spread" in market_hint or pd.notna(spread_val):
+        is_home_pick = bool(row.get("is_home_pick", False))
+        pick_team = str(row.get("team") or "").strip().lower()
+        home_team = str(row.get("home_team") or "").strip().lower()
+        if pick_team and home_team:
+            is_home_pick = pick_team == home_team
+        return "spread_home" if is_home_pick else "spread_away"
+
+    if "over" in market_hint:
+        return "total_over"
+    if "under" in market_hint:
+        return "total_under"
+    if "total" in market_hint or pd.notna(total_val):
+        # Default total side when not explicitly tagged.
+        return "total_over"
+
+    is_home_pick = bool(row.get("is_home_pick", False))
+    pick_team = str(row.get("team") or "").strip().lower()
+    home_team = str(row.get("home_team") or "").strip().lower()
+    if pick_team and home_team:
+        is_home_pick = pick_team == home_team
+    return "moneyline_home" if is_home_pick else "moneyline_away"
+
+
+def format_pick(row: pd.Series) -> str:
+    if row["market_type"] == "spread_home":
+        return f"{row['home_team']} {row['spread']}"
+
+    if row["market_type"] == "spread_away":
+        return f"{row['away_team']} {abs(row['spread'])}"
+
+    if row["market_type"] == "total_over":
+        return f"Over {row['total']}"
+
+    if row["market_type"] == "total_under":
+        return f"Under {row['total']}"
+
+    if row["market_type"] == "moneyline_home":
+        return f"{row['home_team']} ML"
+
+    if row["market_type"] == "moneyline_away":
+        return f"{row['away_team']} ML"
+
+    return ""
+
+
+def _build_best_picks(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    if "market_type" not in df.columns:
+        df["market_type"] = ""
+
+    if "spread" not in df.columns:
+        df["spread"] = pd.to_numeric(df.get("spread_line"), errors="coerce")
+    else:
+        df["spread"] = pd.to_numeric(df["spread"], errors="coerce")
+
+    if "total" not in df.columns:
+        df["total"] = pd.to_numeric(df.get("total_line"), errors="coerce")
+    else:
+        df["total"] = pd.to_numeric(df["total"], errors="coerce")
+
+    df["market_type"] = df.apply(_infer_market_type, axis=1)
+
+    group_keys = ["league", "home_team", "away_team", "game_date"]
+    available_group_keys = [k for k in group_keys if k in df.columns]
+    if not available_group_keys:
+        available_group_keys = ["home_team", "away_team"]
+
+    best_picks = (
+        df.sort_values("expected_value", ascending=False)
+        .groupby(available_group_keys)
+        .first()
+        .reset_index()
+    )
+    best_picks["best_pick"] = best_picks.apply(format_pick, axis=1)
+
+    for col in BEST_PICK_COLUMNS:
+        if col not in best_picks.columns:
+            best_picks[col] = pd.NA
+
+    return best_picks[BEST_PICK_COLUMNS]
 
 
 def normalize_merge_keys(df: pd.DataFrame | None) -> pd.DataFrame | None:
@@ -212,11 +332,7 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
         df["team"] = df.get("away_team", "")
 
     df = df.sort_values("edge", ascending=False).reset_index(drop=True)
-
-    df["best_pick"] = df.apply(
-        lambda r: f"{r['away_team']} vs {r['home_team']}" if r["expected_value"] > 0 else "No Edge",
-        axis=1,
-    )
+    df = _build_best_picks(df)
 
     # 9) Debug output for verification in logs
     debug_cols = [
