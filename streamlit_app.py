@@ -189,7 +189,24 @@ def main() -> None:
         if st.session_state.analysis_df is not None:
             render_analysis(st.session_state.analysis_df)
         if st.session_state["analysis_df"] is not None:
-            analysis_csv = st.session_state["analysis_df"].to_csv(index=False)
+            analysis_export_df = st.session_state["analysis_df"].copy()
+            if "best_pick" in analysis_export_df.columns:
+                export_priority = [
+                    "league",
+                    "away_team",
+                    "home_team",
+                    "best_pick",
+                    "market_type",
+                    "expected_value",
+                    "edge",
+                    "market_probability",
+                    "calibrated_probability",
+                    "decimal_odds",
+                ]
+                ordered_cols = [c for c in export_priority if c in analysis_export_df.columns]
+                trailing_cols = [c for c in analysis_export_df.columns if c not in ordered_cols]
+                analysis_export_df = analysis_export_df[ordered_cols + trailing_cols]
+            analysis_csv = analysis_export_df.to_csv(index=False)
             st.download_button(
                 "Export Analysis",
                 analysis_csv,
