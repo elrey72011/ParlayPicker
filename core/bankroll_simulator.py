@@ -40,9 +40,16 @@ def simulate_bankroll(
     if portfolio_df is None or portfolio_df.empty:
         return _default_simulation_payload(starting_bankroll)
 
-    probs = _numeric_series(portfolio_df, "calibrated_probability", 0.5).clip(0.0, 1.0)
-    odds = _numeric_series(portfolio_df, "decimal_odds", 2.0)
-    stakes = _numeric_series(portfolio_df, "recommended_bet", 0.0).clip(lower=0.0)
+    source = portfolio_df.copy()
+    if "best_pick" in source.columns:
+        best_pick = source["best_pick"].fillna("").astype(str).str.strip()
+        source = source[best_pick.str.len() > 0].copy()
+    if source.empty:
+        return _default_simulation_payload(starting_bankroll)
+
+    probs = _numeric_series(source, "calibrated_probability", 0.5).clip(0.0, 1.0)
+    odds = _numeric_series(source, "decimal_odds", 2.0)
+    stakes = _numeric_series(source, "recommended_bet", 0.0).clip(lower=0.0)
 
     if stakes.empty or float(stakes.sum()) <= 0:
         return _default_simulation_payload(starting_bankroll)
