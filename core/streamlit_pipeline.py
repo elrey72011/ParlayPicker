@@ -71,28 +71,49 @@ def _infer_market_type(row: pd.Series) -> str:
             str(row.get("bet_type") or ""),
             str(row.get("wager_type") or ""),
             str(row.get("pick_type") or ""),
+            str(row.get("pick") or ""),
+            str(row.get("side") or ""),
+            str(row.get("over_under") or ""),
             str(row.get("selection") or ""),
         ]
     ).lower()
 
-    spread_val = pd.to_numeric(row.get("spread"), errors="coerce")
-    total_val = pd.to_numeric(row.get("total"), errors="coerce")
+    spread_candidates = [row.get("spread"), row.get("spread_line"), row.get("line")]
+    total_candidates = [row.get("total"), row.get("total_line"), row.get("total_points"), row.get("points")]
+    spread_val = pd.Series(spread_candidates).apply(pd.to_numeric, errors="coerce").dropna()
+    total_val = pd.Series(total_candidates).apply(pd.to_numeric, errors="coerce").dropna()
+    spread_num = spread_val.iloc[0] if not spread_val.empty else np.nan
+    total_num = total_val.iloc[0] if not total_val.empty else np.nan
 
-    if "spread" in market_hint or pd.notna(spread_val):
-        is_home_pick = bool(row.get("is_home_pick", False))
-        pick_team = str(row.get("team") or "").strip().lower()
-        home_team = str(row.get("home_team") or "").strip().lower()
-        if pick_team and home_team:
-            is_home_pick = pick_team == home_team
+    pick_team = str(row.get("team") or row.get("selection") or row.get("pick") or "").strip().lower()
+    home_team = str(row.get("home_team") or "").strip().lower()
+    away_team = str(row.get("away_team") or "").strip().lower()
+    is_home_pick = bool(row.get("is_home_pick", False))
+    if pick_team and home_team:
+        is_home_pick = pick_team == home_team
+    elif pick_team and away_team:
+        is_home_pick = pick_team != away_team
+
+    has_over_under_text = any(token in market_hint for token in ["over", "under", "o/u", "ou"])
+    has_total_text = any(token in market_hint for token in ["total", "over", "under", "o/u", "points"])
+    has_spread_text = any(token in market_hint for token in ["spread", "ats", "handicap"])
+
+    if "under" in market_hint and (has_total_text or pd.notna(total_num)):
+        return "total_under"
+    if "over" in market_hint and (has_total_text or pd.notna(total_num)):
+        return "total_over"
+
+    if has_spread_text or (pd.notna(spread_num) and not has_over_under_text):
         return "spread_home" if is_home_pick else "spread_away"
 
-    if "over" in market_hint:
+    if pd.notna(total_num) and has_over_under_text:
+        return "total_under" if "under" in market_hint else "total_over"
+
+    if has_total_text or pd.notna(total_num):
         return "total_over"
-    if "under" in market_hint:
-        return "total_under"
-    if "total" in market_hint or pd.notna(total_val):
-        # Default total side when not explicitly tagged.
-        return "total_over"
+
+    if pd.notna(spread_num):
+        return "spread_home" if is_home_pick else "spread_away"
 
     return "unknown"
 
@@ -144,7 +165,21 @@ def _build_best_picks(df: pd.DataFrame) -> pd.DataFrame:
     else:
         df["total"] = pd.to_numeric(df["total"], errors="coerce")
 
-    df["market_type"] = df.apply(_infer_market_type, axis=1)
+    df["inferred_market_type"] = df.apply(_infer_market_type, axis=1)
+    df["market_type"] = df["inferred_market_type"]
+    df["source_has_spread"] = df[[c for c in ["spread", "spread_line", "line"] if c in df.columns]].apply(
+        lambda row: row.apply(pd.to_numeric, errors="coerce").notna().any(), axis=1
+    ) if any(c in df.columns for c in ["spread", "spread_line", "line"]) else False
+    df["source_has_total"] = df[[c for c in ["total", "total_line", "total_points", "points"] if c in df.columns]].apply(
+        lambda row: row.apply(pd.to_numeric, errors="coerce").notna().any(), axis=1
+    ) if any(c in df.columns for c in ["total", "total_line", "total_points", "points"]) else False
+
+    logger.info(
+        "Best-pick inference debug: inferred_market_type_counts=%s source_has_spread=%s source_has_total=%s",
+        df["inferred_market_type"].value_counts(dropna=False).to_dict(),
+        int(pd.to_numeric(df["source_has_spread"], errors="coerce").fillna(False).astype(bool).sum()),
+        int(pd.to_numeric(df["source_has_total"], errors="coerce").fillna(False).astype(bool).sum()),
+    )
 
     allowed_market_types = {"spread_home", "spread_away", "total_over", "total_under"}
     df = df[df["market_type"].isin(allowed_market_types)].copy()
@@ -252,6 +287,51 @@ def _normalize_key_columns(df: pd.DataFrame) -> pd.DataFrame:
         df["league"] = ""
     df["league"] = df["league"].apply(_normalize_league_value)
     return _normalize_teams(df)
+
+
+def _infer_uploaded_league_row(row: pd.Series, selected_sports: list[str] | None = None) -> str:
+    current = _normalize_league_value(row.get("league"))
+    if current:
+        return current
+
+    selected_set = set(selected_sports or [])
+    context_text = " ".join(
+        [
+            str(row.get("market") or ""),
+            str(row.get("bet_type") or ""),
+            str(row.get("wager_type") or ""),
+            str(row.get("pick_type") or ""),
+            str(row.get("source") or ""),
+            str(row.get("source_file") or ""),
+            str(row.get("filename") or ""),
+        ]
+    ).upper()
+
+    if "NHL" in context_text and (not selected_set or "NHL" in selected_set):
+        return "NHL"
+    if any(token in context_text for token in ["NCAAB", "NCAAM", "COLLEGE BASKETBALL", "NCAA"]) and (
+        not selected_set or "NCAAB" in selected_set
+    ):
+        return "NCAAB"
+    if "NBA" in context_text and (not selected_set or "NBA" in selected_set):
+        return "NBA"
+
+    if len(selected_set) == 1:
+        return next(iter(selected_set))
+
+    return ""
+
+
+def _enrich_uploaded_league(df: pd.DataFrame, selected_sports: list[str] | None = None) -> pd.DataFrame:
+    if df is None or df.empty:
+        return df
+
+    enriched = df.copy()
+    if "league" not in enriched.columns:
+        enriched["league"] = ""
+    enriched["league"] = enriched.apply(lambda row: _infer_uploaded_league_row(row, selected_sports), axis=1)
+    enriched["league"] = enriched["league"].apply(_normalize_league_value)
+    return enriched
 
 
 def _resolve_american_odds(row: pd.Series) -> float:
@@ -440,19 +520,32 @@ def run_analysis_pipeline(
 
     merged_theover = None
     if spreads_df is not None and not spreads_df.empty:
-        merged_theover = _normalize_key_columns(spreads_df)
-        if "league" in merged_theover.columns:
-            merged_theover["league"] = merged_theover["league"].apply(_normalize_league_value)
+        logger.info("Uploaded spreads_df columns: %s", spreads_df.columns.tolist())
+        merged_theover = _enrich_uploaded_league(_normalize_key_columns(spreads_df), selected_sports)
     if totals_df is not None and not totals_df.empty:
+        logger.info("Uploaded totals_df columns: %s", totals_df.columns.tolist())
         totals_norm = _normalize_key_columns(totals_df)
-        if "league" in totals_norm.columns:
-            totals_norm["league"] = totals_norm["league"].apply(_normalize_league_value)
+        totals_norm = _enrich_uploaded_league(totals_norm, selected_sports)
         merged_theover = pd.concat([merged_theover, totals_norm], ignore_index=True) if merged_theover is not None else totals_norm
+
+    if merged_theover is not None and not merged_theover.empty:
+        logger.info("Merged TheOver columns: %s", merged_theover.columns.tolist())
+        unique_leagues = sorted(merged_theover["league"].fillna("").astype(str).unique().tolist()) if "league" in merged_theover.columns else []
+        logger.info("Unique merged TheOver league values: %s", unique_leagues)
 
     if filtered.empty and has_theover_data and merged_theover is not None and not merged_theover.empty:
         fallback_df = merged_theover.copy()
+        logger.info("Fallback row count before sports filtering: %s", len(fallback_df))
         if selected_sports and "league" in fallback_df.columns:
-            fallback_df = fallback_df[fallback_df["league"].isin(selected_sports)].copy()
+            non_blank_leagues = fallback_df["league"].fillna("").astype(str).str.strip()
+            if non_blank_leagues.ne("").any():
+                fallback_df = fallback_df[fallback_df["league"].isin(selected_sports)].copy()
+            else:
+                logger.info(
+                    "Skipping fallback sports filter: uploaded TheOver data had no usable league labels. selected=%s",
+                    selected_sports,
+                )
+        logger.info("Fallback row count after sports filtering: %s", len(fallback_df))
         filtered = fallback_df.head(max_rows)
         logger.info(
             "Fallback activated: using uploaded TheOver data as base. fallback_rows=%s selected=%s",
@@ -463,10 +556,18 @@ def run_analysis_pipeline(
     filtered = _safe_merge(filtered, merged_theover, "_theover")
 
     analyzed = _apply_analysis_calculations(filtered)
+    logger.info("Analyzed row count: %s", len(analyzed))
     if analyzed.empty:
         return analyzed
 
     best_picks = _build_best_picks(analyzed)
+    logger.info("Best picks row count: %s", len(best_picks))
+    if not analyzed.empty and best_picks.empty:
+        logger.warning(
+            "Analysis rows exist (%s) but no eligible spread/total best picks were built. Returning analyzed rows for debugging.",
+            len(analyzed),
+        )
+        return analyzed
     return best_picks
 
 
