@@ -332,7 +332,6 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
         df["team"] = df.get("away_team", "")
 
     df = df.sort_values("edge", ascending=False).reset_index(drop=True)
-    df = _build_best_picks(df)
 
     # 9) Debug output for verification in logs
     debug_cols = [
@@ -407,9 +406,27 @@ def build_realtime_edges(analysis_df: pd.DataFrame) -> pd.DataFrame:
     if analysis_df.empty:
         return pd.DataFrame()
 
-    edge_cols = [c for c in ["league", "home_team", "away_team", "calibrated_probability", "market_probability", "decimal_odds", "expected_value", "edge"] if c in analysis_df.columns]
+    edge_cols = [
+        c
+        for c in [
+            "league",
+            "home_team",
+            "away_team",
+            "calibrated_probability",
+            "market_probability",
+            "decimal_odds",
+            "expected_value",
+            "edge",
+        ]
+        if c in analysis_df.columns
+    ]
     if edge_cols:
-        return analysis_df[edge_cols].sort_values("edge", ascending=False).head(25)
+        edges_df = analysis_df[edge_cols]
+        if "edge" in edges_df.columns:
+            return edges_df.sort_values("edge", ascending=False).head(25)
+        if "expected_value" in edges_df.columns:
+            return edges_df.sort_values("expected_value", ascending=False).head(25)
+        return edges_df.head(25)
 
     return analysis_df.head(25)
 
