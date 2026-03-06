@@ -9,7 +9,10 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+from core.bankroll_simulator import simulate_bankroll
+from core.kelly_optimizer import add_kelly_bet_sizing
 from core.parlay_engine import generate_parlays as generate_parlay_candidates
+from core.probability_calibration import calibrate_probabilities
 from core.probability_engine import american_to_prob, normalize_probability_components, remove_vig
 from core.schema.base_schema import ensure_base_schema
 from core.team_mapper import normalize_team_name
@@ -193,18 +196,22 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
     df["ml_probability"] = df["ml_prob"].clip(lower=0.0, upper=1.0)
     df["ai_probability"] = df["ai_prob"].clip(lower=0.0, upper=1.0)
 
-    # 5) EV calculation and 6) edge
+    # 5) Probability calibration, EV calculation, and edge
     df["decimal_odds"] = pd.to_numeric(df["odds_american"], errors="coerce").apply(american_to_decimal)
+    df = calibrate_probabilities(df)
+    prob_for_ev = pd.to_numeric(df.get("calibrated_probability"), errors="coerce").fillna(df["model_probability"])
     df["expected_value"] = (
-        df["model_probability"] * (df["decimal_odds"] - 1)
-        - (1 - df["model_probability"])
+        prob_for_ev * (df["decimal_odds"] - 1)
+        - (1 - prob_for_ev)
     )
-    df["edge"] = df["consensus_prob"] - df["market_probability"]
+    df["edge"] = prob_for_ev - df["market_probability"]
     df["debug_merge_keys"] = ", ".join([k for k in MERGE_KEYS if k in df.columns])
     df["debug_model_loaded"] = bool(model_loaded)
 
     if "team" not in df.columns:
         df["team"] = df.get("away_team", "")
+
+    df = df.sort_values("edge", ascending=False).reset_index(drop=True)
 
     df["best_pick"] = df.apply(
         lambda r: f"{r['away_team']} vs {r['home_team']}" if r["expected_value"] > 0 else "No Edge",
@@ -218,6 +225,7 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
         "odds_american",
         "market_probability",
         "ml_probability",
+        "calibrated_probability",
         "consensus_prob",
         "expected_value",
         "edge",
@@ -272,8 +280,9 @@ def generate_parlays(analysis_df: pd.DataFrame) -> pd.DataFrame:
     if analysis_df.empty:
         return pd.DataFrame()
     parlays_df = generate_parlay_candidates(analysis_df)
-    print("Total bets:", len(analysis_df))
+    print("Total games:", len(analysis_df))
     print("Positive EV bets:", len(analysis_df[analysis_df["expected_value"] > 0]) if "expected_value" in analysis_df.columns else 0)
+    print("Top edge:", analysis_df["edge"].max() if "edge" in analysis_df.columns else 0)
     print("Parlays generated:", len(parlays_df))
     return parlays_df
 
@@ -282,19 +291,26 @@ def build_realtime_edges(analysis_df: pd.DataFrame) -> pd.DataFrame:
     if analysis_df.empty:
         return pd.DataFrame()
 
-    edge_cols = [c for c in ["league", "home_team", "away_team", "consensus_prob", "expected_value"] if c in analysis_df.columns]
+    edge_cols = [c for c in ["league", "home_team", "away_team", "calibrated_probability", "market_probability", "decimal_odds", "expected_value", "edge"] if c in analysis_df.columns]
     if edge_cols:
-        return analysis_df[edge_cols].sort_values("expected_value", ascending=False).head(25)
+        return analysis_df[edge_cols].sort_values("edge", ascending=False).head(25)
 
     return analysis_df.head(25)
 
 
-def optimize_portfolio_allocation(analysis_df: pd.DataFrame) -> pd.DataFrame:
+def optimize_portfolio_allocation(analysis_df: pd.DataFrame, bankroll: float = 1000.0) -> pd.DataFrame:
     edges = build_realtime_edges(analysis_df)
     if edges.empty:
         return edges
 
-    portfolio = edges.copy()
-    ev_abs = portfolio["expected_value"].abs().replace(0, 1)
-    portfolio["allocation_pct"] = ((ev_abs / ev_abs.sum()) * 100).round(2)
-    return portfolio
+    portfolio = add_kelly_bet_sizing(edges, bankroll=bankroll, fraction=0.25)
+    recommended_total = portfolio["recommended_bet"].sum() if "recommended_bet" in portfolio.columns else 0.0
+    if recommended_total > 0:
+        portfolio["allocation_pct"] = ((portfolio["recommended_bet"] / recommended_total) * 100).round(2)
+    else:
+        portfolio["allocation_pct"] = 0.0
+    return portfolio.sort_values("edge", ascending=False).reset_index(drop=True)
+
+
+def run_bankroll_simulation(portfolio_df: pd.DataFrame, bankroll: float) -> dict[str, float | list[list[float]]]:
+    return simulate_bankroll(portfolio_df=portfolio_df, starting_bankroll=bankroll, days=1000, simulations=1000)

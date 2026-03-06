@@ -10,6 +10,7 @@ def render_sidebar():
     sports = st.sidebar.multiselect("Select Sports", DEFAULT_SPORTS)
 
     max_rows = st.sidebar.slider("Max Games", min_value=10, max_value=500, value=150)
+    bankroll = st.sidebar.number_input("Bankroll", min_value=100.0, value=1000.0, step=50.0)
 
     st.sidebar.subheader("Analysis Engines")
 
@@ -31,6 +32,7 @@ def render_sidebar():
     return {
         "sports": sports,
         "max_rows": max_rows,
+        "bankroll": bankroll,
         "use_ml": use_ml,
         "use_vertex": use_vertex,
         "use_gemini": use_gemini,
