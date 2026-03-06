@@ -127,11 +127,6 @@ def main() -> None:
             st.session_state["best_picks_df"] = None
             return
 
-        if controls["use_vertex"]:
-            from core.vertex_master_analyzer import VertexMasterAnalyzer
-
-            analyzer = VertexMasterAnalyzer()
-            analysis_df = analyzer.run_master_analysis(analysis_df)
 
         if controls["use_gemini"]:
             from integrations.gemini_client import run_gemini_analysis
@@ -305,11 +300,17 @@ def main() -> None:
             if analysis_df is not None and "kalshi_match_status" in analysis_df.columns
             else 0
         )
+        kalshi_miss_rows = (
+            int(analysis_df["kalshi_match_status"].astype(str).str.lower().eq("miss").sum())
+            if analysis_df is not None and "kalshi_match_status" in analysis_df.columns
+            else 0
+        )
 
         st.markdown("### Kalshi Merge Diagnostics")
         st.write("analysis_df total rows:", total_analysis_rows)
         st.write("rows with non-null kalshi_probability:", kalshi_non_null_rows)
         st.write('rows with kalshi_match_status == "matched":', kalshi_matched_rows)
+        st.write('rows with kalshi_match_status == "miss":', kalshi_miss_rows)
 
         if controls["show_debug"]:
             parlay_count = len(parlays_df) if parlays_df is not None else 0

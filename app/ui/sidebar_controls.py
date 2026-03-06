@@ -15,7 +15,6 @@ def render_sidebar():
     st.sidebar.subheader("Analysis Engines")
 
     use_ml = st.sidebar.checkbox("Enable ML Predictions", True)
-    use_vertex = st.sidebar.checkbox("Enable Vertex AI")
     use_gemini = st.sidebar.checkbox("Enable Gemini Analysis")
 
     st.sidebar.subheader("Diagnostics")
@@ -34,7 +33,6 @@ def render_sidebar():
         "max_rows": max_rows,
         "bankroll": bankroll,
         "use_ml": use_ml,
-        "use_vertex": use_vertex,
         "use_gemini": use_gemini,
         "show_debug": show_debug,
         "show_kalshi_diagnostics": show_kalshi_diagnostics,
