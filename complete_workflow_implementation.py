@@ -15,6 +15,7 @@ from core.probability_utils import ensure_probability_column
 from core.schema.schema_validator import validate_schema
 from core.schema.schema_utils import ensure_column
 from core.odds_normalizer import normalize_odds
+from core.probability_engine import american_odds_to_probability
 from core.ev_engine import calculate_ev
 
 logger = logging.getLogger(__name__)
@@ -239,6 +240,13 @@ def show_complete_analysis_workflow():
                         logger.error(f"Master analysis error: {e}", exc_info=True)
         
         if master_status is not None:
+            st.write("Games analyzed:", len(master_status))
+            st.write("Games with market_probability:", master_status["market_probability"].notna().sum() if "market_probability" in master_status.columns else 0)
+            st.write("Games with expected_value:", master_status["expected_value"].notna().sum() if "expected_value" in master_status.columns else 0)
+            st.write("EV > 2% picks:", (master_status["expected_value"] > 0.02).sum() if "expected_value" in master_status.columns else 0)
+            st.write("EV calculated:", master_status["expected_value"].notna().sum() if "expected_value" in master_status.columns else 0)
+            st.write("Positive EV picks:", (master_status["expected_value"] > 0).sum() if "expected_value" in master_status.columns else 0)
+
             with st.expander("📊 Preview Master Analysis Results"):
                 preview_cols = ['home_team', 'away_team', 'consensus_prob', 'confidence_level', 'expected_value']
                 available_cols = [col for col in preview_cols if col in master_status.columns]
@@ -412,7 +420,6 @@ def run_master_analysis(
     master.columns = master.columns.str.strip().str.lower()
     master = ensure_probability_column(master, "ai_probability")
     master = ensure_column(master, "ml_probability", 0.5)
-    master = validate_schema(master, "master_analysis")
 
     logger.info(f"Master columns: {list(master.columns)}")
 
@@ -439,7 +446,12 @@ def run_master_analysis(
 
     master = ensure_column(master, "ai_probability", 0.5)
     master = ensure_column(master, "ml_probability", 0.5)
-    master = ensure_column(master, "market_probability", 0.5)
+
+    if "ml_probability" not in master.columns:
+        master["ml_probability"] = 0.5
+
+    if "ai_probability" not in master.columns:
+        master["ai_probability"] = 0.5
 
     required_game_cols = ["home_team", "away_team", "league"]
     for col in required_game_cols:
@@ -509,15 +521,36 @@ def run_master_analysis(
 
     master = normalize_odds(master)
 
-    print("Columns available:", master.columns)
+    # Force probability and EV engines to run before schema validation.
+    master["market_probability"] = master["odds_american"].apply(
+        american_odds_to_probability
+    )
+
+    if "ml_probability" not in master.columns:
+        master["ml_probability"] = 0.5
+
+    if "ai_probability" not in master.columns:
+        master["ai_probability"] = 0.5
+
+    master["consensus_prob"] = (
+        master["market_probability"]
+        + master["ml_probability"].fillna(0.5)
+        + master["ai_probability"].fillna(0.5)
+    ) / 3
 
     master["expected_value"] = master.apply(
         lambda r: calculate_ev(
-            r.get("consensus_prob", 0.5),
-            r.get("odds_american", -110)
+            r["consensus_prob"],
+            r["odds_american"]
         ),
         axis=1
     )
+
+    print("Columns available:", master.columns)
+    print("EV rows computed:", master["expected_value"].notna().sum())
+
+    # Validate schema only after computed probability fields are populated.
+    master = validate_schema(master, "master_analysis")
 
     master["best_pick"] = master.apply(
         lambda r: f"{r['away_team']} vs {r['home_team']}",
@@ -526,16 +559,22 @@ def run_master_analysis(
 
     master["edge"] = master["expected_value"]
 
-    parlay_candidates = master[
-        master["expected_value"] > 0.03
-    ].copy()
+    parlays = master[master["expected_value"] > 0.02].copy()
 
-    parlay_candidates.sort_values(
+    parlays.sort_values(
         "expected_value",
         ascending=False,
         inplace=True
     )
-    master.attrs["parlay_candidates"] = parlay_candidates
+
+    if parlays.empty:
+        print("No EV >2% picks, showing top 10 edges")
+        parlays = master.sort_values(
+            "expected_value",
+            ascending=False
+        ).head(10)
+
+    master.attrs["parlay_candidates"] = parlays
 
     return master
 
