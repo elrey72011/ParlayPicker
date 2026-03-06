@@ -43,13 +43,12 @@ BEST_PICK_COLUMNS = [
     "away_team",
     "game_date",
     "best_pick",
-    "market_type",
+    "calibrated_probability",
     "expected_value",
     "edge",
+    "odds_american",
     "market_probability",
-    "calibrated_probability",
-    "model_probability",
-    "decimal_odds",
+    "ml_probability",
 ]
 
 
@@ -207,6 +206,13 @@ def _build_best_picks(df: pd.DataFrame) -> pd.DataFrame:
             best_picks[col] = pd.NA
 
     return best_picks[BEST_PICK_COLUMNS]
+
+
+def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
+    """Build one spread/total best-pick row per game from a raw analysis dataframe."""
+    if analysis_df is None or analysis_df.empty:
+        return pd.DataFrame(columns=BEST_PICK_COLUMNS)
+    return _build_best_picks(analysis_df)
 
 
 def normalize_merge_keys(df: pd.DataFrame | None) -> pd.DataFrame | None:
@@ -560,15 +566,7 @@ def run_analysis_pipeline(
     if analyzed.empty:
         return analyzed
 
-    best_picks = _build_best_picks(analyzed)
-    logger.info("Best picks row count: %s", len(best_picks))
-    if not analyzed.empty and best_picks.empty:
-        logger.warning(
-            "Analysis rows exist (%s) but no eligible spread/total best picks were built. Returning analyzed rows for debugging.",
-            len(analyzed),
-        )
-        return analyzed
-    return best_picks
+    return analyzed
 
 
 def generate_parlays(analysis_df: pd.DataFrame) -> pd.DataFrame:
