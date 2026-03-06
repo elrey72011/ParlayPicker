@@ -210,16 +210,11 @@ def main() -> None:
             analysis_export_df = st.session_state["analysis_df"].copy()
             if "best_pick" in analysis_export_df.columns:
                 export_priority = [
-                    "league",
-                    "away_team",
-                    "home_team",
-                    "best_pick",
-                    "market_type",
-                    "expected_value",
-                    "edge",
-                    "market_probability",
-                    "calibrated_probability",
-                    "decimal_odds",
+                    "league", "home_team", "away_team", "game_date", "matchup",
+                    "market", "pick", "pickteam", "line", "winprobability", "theover_probability",
+                    "market_type", "spread_line", "total_line",
+                    "expected_value", "edge", "calibrated_probability",
+                    "kalshi_probability", "kalshi_market_title", "kalshi_market_ticker", "kalshi_event_ticker", "kalshi_line",
                 ]
                 ordered_cols = [c for c in export_priority if c in analysis_export_df.columns]
                 trailing_cols = [c for c in analysis_export_df.columns if c not in ordered_cols]
@@ -238,7 +233,8 @@ def main() -> None:
             st.info("No eligible spread/total best picks found.")
         else:
             if "league" in best_picks_df.columns:
-                ordered = ["league"] + [c for c in best_picks_df.columns if c != "league"]
+                best_picks_df = best_picks_df.rename(columns={"league": "League"})
+                ordered = ["League"] + [c for c in best_picks_df.columns if c != "League"]
                 best_picks_df = best_picks_df[ordered]
             st.dataframe(best_picks_df, width="stretch")
             best_picks_csv = best_picks_df.to_csv(index=False)

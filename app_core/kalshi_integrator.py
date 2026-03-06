@@ -2323,6 +2323,7 @@ TEAM_CODE_ALIASES: Dict[str, str] = {
     "washington state": "WSU",
     "seton hall": "HALL",
     "st johns": "SJU",
+    "st john's": "SJU",
     "st john": "SJU",
     "saint johns": "SJU",
     "idaho st": "IDST",
@@ -2414,11 +2415,13 @@ def _kalshi_series_for_market_type(market_type: str) -> Optional[str]:
 
 
 def _kalshi_market_probability(market: Dict[str, Any]) -> Optional[float]:
-    for key in ("yes_price", "yes_bid", "yes_ask"):
+    dollar_fields = ("yes_price_dollars", "yes_bid_dollars", "yes_ask_dollars")
+    cent_fields = ("yes_price", "yes_bid", "yes_ask")
+    for key in dollar_fields + cent_fields:
         value = pd.to_numeric(market.get(key), errors="coerce")
         if pd.notna(value):
             numeric = float(value)
-            if numeric > 1:
+            if key in cent_fields and numeric > 1:
                 numeric = numeric / 100.0
             return max(0.0, min(1.0, numeric))
     return None
@@ -2455,38 +2458,53 @@ def _market_contains_teams(market: Dict[str, Any], away_norm: str, home_norm: st
     return False
 
 
-def match_kalshi_markets(rows_df: pd.DataFrame) -> pd.DataFrame:
-    """Deterministic NCAAB spread/total Kalshi matcher.
-
-    ```mermaid
-    flowchart TD
-        A[Normalize teams + build code pairs] --> B[Direct /markets tickers lookup]
-        B -->|single hit| C[Matched]
-        B -->|0 or multi hit| D[Fallback /markets series scan]
-        D -->|team/title/ticker match| C
-        D -->|no match| E[Miss + diagnostics]
-    ```
+def _build_candidate_tickers(series: str, date_code: str, away_codes: List[str], home_codes: List[str]) -> List[str]:
+    """Build candidate tickers for direct /markets lookup.
 
     Examples:
-        >>> normalize_team_for_kalshi("Manhattan")
-        'manhattan'
-        >>> _candidate_team_codes("Manhattan")
-        ['MAN']
-        >>> _candidate_team_codes("Wagner")
-        ['WAG']
+        >>> any(t.endswith("MANFAIR") for t in _build_candidate_tickers("KXNCAAMBSPREAD", "26MAR05", ["MAN"], ["FAIR"]))
+        True
+        >>> any(t.endswith("HALLSJU") for t in _build_candidate_tickers("KXNCAAMBSPREAD", "26MAR05", ["HALL"], ["SJU"]))
+        True
         >>> _candidate_team_codes("Princeton")
         ['PRIN']
         >>> _candidate_team_codes("Vermont")
         ['UVM']
         >>> _candidate_team_codes("Washington St")
         ['WSU']
-        >>> _candidate_team_codes("Seton Hall")
-        ['HALL']
-        >>> _candidate_team_codes("Idaho State")
-        ['IDST']
         >>> _candidate_team_codes("Sam Houston")
         ['SHSU']
+        >>> _candidate_team_codes("Florida Gulf Coast")
+        ['FGCU']
+        >>> _candidate_team_codes("Kennesaw St")
+        ['KENN']
+        >>> _candidate_team_codes("SE Louisiana")
+        ['SELA']
+        >>> _candidate_team_codes("Louisiana Tech")
+        ['LT']
+        >>> _candidate_team_codes("Indiana State")
+        ['INST']
+        >>> _candidate_team_codes("Temple")
+        ['TEM']
+        >>> _candidate_team_codes("Rhode Island")
+        ['URI']
+        >>> _candidate_team_codes("Wichita St")
+        ['WICH']
+        >>> _candidate_team_codes("Memphis")
+        ['MEM']
+        >>> _candidate_team_codes("Southern Illinois")
+        ['SIU']
     """
+    tickers: List[str] = []
+    for ac in away_codes:
+        for hc in home_codes:
+            tickers.append(f"{series}-{date_code}{ac}{hc}")
+            tickers.append(f"{series}-{date_code}{hc}{ac}")
+    return sorted(set(tickers))
+
+
+def match_kalshi_markets(rows_df: pd.DataFrame) -> pd.DataFrame:
+    """Deterministic NCAAB spread/total Kalshi matcher on bet rows."""
     out_rows: List[Dict[str, Any]] = []
     if rows_df is None or rows_df.empty:
         return pd.DataFrame(out_rows)
@@ -2508,6 +2526,7 @@ def match_kalshi_markets(rows_df: pd.DataFrame) -> pd.DataFrame:
             "home_team": home_team,
             "away_team": away_team,
             "game_date": game_date,
+            "market_type": market_type,
             "kalshi_probability": pd.NA,
             "kalshi_market_title": pd.NA,
             "kalshi_market_subtitle": pd.NA,
@@ -2533,68 +2552,50 @@ def match_kalshi_markets(rows_df: pd.DataFrame) -> pd.DataFrame:
             out_rows.append(base)
             continue
 
-        away_norm = normalize_team_for_kalshi(away_team)
-        home_norm = normalize_team_for_kalshi(home_team)
         away_codes = _candidate_team_codes(away_team)
         home_codes = _candidate_team_codes(home_team)
-        tried_codes = {"away": away_codes, "home": home_codes}
-        base["kalshi_tried_codes"] = json.dumps(tried_codes)
-
+        base["kalshi_tried_codes"] = json.dumps({"away": away_codes, "home": home_codes})
         if not away_codes or not home_codes:
             base["kalshi_match_reason"] = "missing_team_code"
             out_rows.append(base)
             continue
 
-        date_code = build_kalshi_date_code(game_date)
-        candidates: List[str] = []
-        for ac in away_codes:
-            for hc in home_codes:
-                candidates.append(f"{series}-{date_code}{ac}{hc}")
-                candidates.append(f"{series}-{date_code}{hc}{ac}")
-        candidates = sorted(set(candidates))
-        base["kalshi_tried_tickers"] = json.dumps(candidates)
+        date_code = build_kalshi_date_code(game_date if pd.notna(game_date) else pd.Timestamp.utcnow())
+        tickers = _build_candidate_tickers(series, date_code, away_codes, home_codes)
+        base["kalshi_tried_tickers"] = json.dumps(tickers)
 
         selected_market: Optional[Dict[str, Any]] = None
-
         try:
-            direct = integrator._request("GET", "/markets", params={"tickers": ",".join(candidates)})
+            direct = integrator._request("GET", "/markets", params={"tickers": ",".join(tickers)})
             direct_markets = direct.get("markets", []) if isinstance(direct, dict) else []
-            if len(direct_markets) == 1:
+            if direct_markets:
                 selected_market = direct_markets[0]
-            elif len(direct_markets) == 0:
-                base["kalshi_match_reason"] = "no_market_for_tickers"
             else:
-                base["kalshi_match_reason"] = "multiple_markets_for_tickers"
+                base["kalshi_match_reason"] = "no_market_for_tickers"
         except Exception:
-            base["kalshi_match_status"] = "error"
             base["kalshi_match_reason"] = "api_error"
             out_rows.append(base)
             continue
 
         if selected_market is None:
             try:
-                fallback_markets = integrator.get_markets_paginated(
-                    status="open",
-                    limit=200,
-                    max_pages=20,
-                    extra_params={"series_ticker": series},
-                )
-                if pd.notna(game_date):
-                    min_ts = int((game_date - timedelta(days=1)).timestamp())
-                    max_ts = int((game_date + timedelta(days=2)).timestamp())
-                    fallback_markets = [
-                        m for m in fallback_markets
-                        if min_ts <= int(pd.to_numeric(m.get("close_time"), errors="coerce") or 0) <= max_ts
-                        or not m.get("close_time")
-                    ]
-                for m in fallback_markets:
-                    if _market_contains_teams(m, away_norm, home_norm, away_codes, home_codes):
-                        selected_market = m
+                min_ts = int((game_date - timedelta(days=2)).timestamp()) if pd.notna(game_date) else None
+                max_ts = int((game_date + timedelta(days=2)).timestamp()) if pd.notna(game_date) else None
+                extra = {"series_ticker": series}
+                if min_ts is not None:
+                    extra["min_close_ts"] = min_ts
+                if max_ts is not None:
+                    extra["max_close_ts"] = max_ts
+                fallback_markets = integrator.get_markets_paginated(status="open", limit=200, max_pages=10, extra_params=extra)
+                away_norm = normalize_team_for_kalshi(away_team)
+                home_norm = normalize_team_for_kalshi(home_team)
+                for market in fallback_markets:
+                    if _market_contains_teams(market, away_norm, home_norm, away_codes, home_codes):
+                        selected_market = market
                         break
-                if selected_market is None and base["kalshi_match_reason"] in {"no_market_for_tickers", "multiple_markets_for_tickers"}:
-                    base["kalshi_match_reason"] = "fallback_no_title_match"
+                if selected_market is None:
+                    base["kalshi_match_reason"] = "no_series_match"
             except Exception:
-                base["kalshi_match_status"] = "error"
                 base["kalshi_match_reason"] = "api_error"
                 out_rows.append(base)
                 continue
@@ -2603,18 +2604,16 @@ def match_kalshi_markets(rows_df: pd.DataFrame) -> pd.DataFrame:
             out_rows.append(base)
             continue
 
-        base.update(
-            {
-                "kalshi_probability": _kalshi_market_probability(selected_market),
-                "kalshi_market_title": selected_market.get("title"),
-                "kalshi_market_subtitle": selected_market.get("subtitle"),
-                "kalshi_market_ticker": selected_market.get("ticker"),
-                "kalshi_event_ticker": selected_market.get("event_ticker"),
-                "kalshi_line": _extract_market_line(selected_market),
-                "kalshi_match_status": "matched",
-                "kalshi_match_reason": "",
-            }
-        )
+        base.update({
+            "kalshi_probability": _kalshi_market_probability(selected_market),
+            "kalshi_market_title": selected_market.get("title"),
+            "kalshi_market_subtitle": selected_market.get("subtitle"),
+            "kalshi_market_ticker": selected_market.get("ticker"),
+            "kalshi_event_ticker": selected_market.get("event_ticker"),
+            "kalshi_line": _extract_market_line(selected_market),
+            "kalshi_match_status": "matched",
+            "kalshi_match_reason": "",
+        })
         out_rows.append(base)
 
     return pd.DataFrame(out_rows)
