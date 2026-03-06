@@ -136,12 +136,15 @@ def infer_market_type_and_lines(row: pd.Series) -> pd.Series:
     return pd.Series({"market_type": market_type, "spread_line": spread_line, "total_line": total_line})
 
 
-def _infer_market_type(row: pd.Series) -> str:
+def infer_market_type_from_row(row: pd.Series) -> str:
+    """Infer canonical market type for an analysis row."""
     allowed_market_types = {
         "spread_home",
         "spread_away",
         "total_over",
         "total_under",
+        "moneyline_home",
+        "moneyline_away",
     }
 
     existing_market_type = str(row.get("market_type") or "").strip().lower()
@@ -158,6 +161,8 @@ def _infer_market_type(row: pd.Series) -> str:
             str(row.get("side") or ""),
             str(row.get("over_under") or ""),
             str(row.get("selection") or ""),
+            str(row.get("best_pick") or ""),
+            str(row.get("team") or ""),
         ]
     ).lower()
 
@@ -168,16 +173,17 @@ def _infer_market_type(row: pd.Series) -> str:
     spread_num = spread_val.iloc[0] if not spread_val.empty else np.nan
     total_num = total_val.iloc[0] if not total_val.empty else np.nan
 
-    pick_team = str(row.get("team") or row.get("selection") or row.get("pick") or "").strip().lower()
-    home_team = str(row.get("home_team") or "").strip().lower()
-    away_team = str(row.get("away_team") or "").strip().lower()
-    is_home_pick = bool(row.get("is_home_pick", False))
-    if pick_team and home_team:
-        is_home_pick = pick_team == home_team
-    elif pick_team and away_team:
-        is_home_pick = pick_team != away_team
+    pick_team = normalize_team_name(row.get("team") or row.get("selection") or row.get("pick") or row.get("pickteam"))
+    home_team = normalize_team_name(row.get("home_team"))
+    away_team = normalize_team_name(row.get("away_team"))
 
-    has_over_under_text = any(token in market_hint for token in ["over", "under", "o/u", "ou"])
+    is_home_pick = bool(row.get("is_home_pick", False))
+    if pick_team and home_team and pick_team == home_team:
+        is_home_pick = True
+    elif pick_team and away_team and pick_team == away_team:
+        is_home_pick = False
+
+    has_moneyline_text = any(token in market_hint for token in ["moneyline", "ml", "to win", "winner"])
     has_total_text = any(token in market_hint for token in ["total", "over", "under", "o/u", "points"])
     has_spread_text = any(token in market_hint for token in ["spread", "ats", "handicap"])
 
@@ -186,19 +192,21 @@ def _infer_market_type(row: pd.Series) -> str:
     if "over" in market_hint and (has_total_text or pd.notna(total_num)):
         return "total_over"
 
-    if has_spread_text or (pd.notna(spread_num) and not has_over_under_text):
+    if has_spread_text or pd.notna(spread_num):
         return "spread_home" if is_home_pick else "spread_away"
 
-    if pd.notna(total_num) and has_over_under_text:
-        return "total_under" if "under" in market_hint else "total_over"
+    if has_moneyline_text:
+        return "moneyline_home" if is_home_pick else "moneyline_away"
 
-    if has_total_text or pd.notna(total_num):
-        return "total_over"
-
-    if pd.notna(spread_num):
-        return "spread_home" if is_home_pick else "spread_away"
+    # Fallback when team is explicit but market family is not.
+    if pick_team and (pick_team == home_team or pick_team == away_team):
+        return "moneyline_home" if pick_team == home_team else "moneyline_away"
 
     return "unknown"
+
+
+def _infer_market_type(row: pd.Series) -> str:
+    return infer_market_type_from_row(row)
 
 
 def format_pick(row: pd.Series) -> str:
@@ -1150,7 +1158,8 @@ def run_analysis_pipeline(  # type: ignore[override]
     totals_games_df = _with_game_key(_normalize_key_columns(totals_norm.copy())) if not totals_norm.empty else pd.DataFrame(columns=["game_key"])
 
     bet_rows_df = build_theover_bet_rows(spreads_df, totals_df, selected_sports)
-    base_stale = is_stale_schedule(base_df, bet_rows_df, now_utc)
+    has_normalized_bet_rows = not bet_rows_df.empty
+    base_stale = is_stale_schedule(base_df, bet_rows_df, now_utc) if has_normalized_bet_rows else False
     base_dates = pd.to_datetime(_string_series(base_df, "game_date"), errors="coerce", utc=True)
     upload_dates = pd.to_datetime(_string_series(bet_rows_df, "game_date"), errors="coerce", utc=True)
     base_max_date = base_dates.max() if base_dates.notna().any() else pd.NaT
@@ -1169,6 +1178,16 @@ def run_analysis_pipeline(  # type: ignore[override]
         analysis_input = base_df.head(max_rows).copy()
 
     analyzed = _apply_analysis_calculations(analysis_input)
+
+    if not analyzed.empty:
+        if "market_type" not in analyzed.columns:
+            analyzed["market_type"] = analyzed.apply(infer_market_type_from_row, axis=1)
+        else:
+            mt = _string_series(analyzed, "market_type", "").str.lower().str.strip()
+            missing_mt = mt.eq("") | mt.eq("nan")
+            if missing_mt.any():
+                analyzed.loc[missing_mt, "market_type"] = analyzed.loc[missing_mt].apply(infer_market_type_from_row, axis=1)
+
     if analyzed.empty:
         empty = _empty_best_picks_df()
         di = {
@@ -1190,6 +1209,8 @@ def run_analysis_pipeline(  # type: ignore[override]
             "best_pick_nonempty_rows": 0,
             "now_utc": None if pd.isna(now_utc) else str(now_utc),
             "base_stale": bool(base_stale),
+            "has_normalized_bet_rows": bool(has_normalized_bet_rows),
+            "analysis_source": "uploads" if has_normalized_bet_rows else "base_schedule",
             "merge_keys_used": merge_keys_used,
             "kalshi_matches": 0,
             "kalshi_match_rate": 0.0,
@@ -1259,6 +1280,8 @@ def run_analysis_pipeline(  # type: ignore[override]
         "best_pick_nonempty_rows": best_pick_nonempty_rows,
         "now_utc": None if pd.isna(now_utc) else str(now_utc),
         "base_stale": bool(base_stale),
+        "has_normalized_bet_rows": bool(has_normalized_bet_rows),
+        "analysis_source": "uploads" if has_normalized_bet_rows else "base_schedule",
         "merge_keys_used": merge_keys_used,
         "kalshi_matches": int(_string_series(analyzed, "kalshi_match_status", "").str.lower().eq("matched").sum()),
         "kalshi_match_rate": float(_string_series(analyzed, "kalshi_match_status", "").str.lower().eq("matched").sum() / max(len(analyzed), 1)),
