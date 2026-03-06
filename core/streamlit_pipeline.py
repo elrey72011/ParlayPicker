@@ -82,7 +82,13 @@ def determine_best_pick(row: pd.Series) -> str:
     if row["expected_value"] <= 0:
         return "No Edge"
 
-    return f"{row['away_team']} vs {row['home_team']}"
+    spread_edge = float(row.get("spread_edge", 0) or 0)
+    total_edge = float(row.get("total_edge", 0) or 0)
+
+    if spread_edge >= total_edge:
+        return f"{row['away_team']} spread"
+
+    return f"{row['away_team']} total"
 
 @st.cache_data(ttl=300)
 def load_base_data() -> pd.DataFrame:

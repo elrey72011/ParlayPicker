@@ -30,11 +30,18 @@ def validate_schema(df, schema_name: str):
         logger.warning("No schema registered for '%s'; skipping validation", schema_name)
         return df
 
+    computed_columns = {"market_probability", "expected_value", "consensus_prob"}
     missing_columns: list[str] = []
     for col in required_columns:
         if col not in df.columns:
             missing_columns.append(col)
             logger.warning("Missing column '%s' for schema '%s'", col, schema_name)
+            if col in computed_columns:
+                logger.info(
+                    "Skipping placeholder for computed column '%s'; it must be calculated upstream",
+                    col,
+                )
+                continue
             df[col] = _default_for_column(col)
 
     if STRICT_SCHEMA and missing_columns:
