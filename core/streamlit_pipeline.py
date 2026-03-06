@@ -29,9 +29,12 @@ except Exception:  # pragma: no cover
 MERGE_KEYS = ["league", "home_team", "away_team", "game_date"]
 MODEL_PATH = "models/sports_model_latest.joblib"
 LEAGUE_ALIASES = {
+    "NBA": "NBA",
+    "NHL": "NHL",
     "NCAAM": "NCAAB",
     "NCAA MEN'S BASKETBALL": "NCAAB",
     "NCAA MENS BASKETBALL": "NCAAB",
+    "NCAA BASKETBALL": "NCAAB",
     "COLLEGE BASKETBALL": "NCAAB",
 }
 BEST_PICK_COLUMNS = [
