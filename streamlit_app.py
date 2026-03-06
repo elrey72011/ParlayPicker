@@ -261,6 +261,7 @@ def main() -> None:
         m6.metric("TheOver totals games", f"{totals_bet_games}/{totals_games}")
         m7.metric("TheOver spreads games", f"{spreads_bet_games}/{spreads_games}")
         st.progress(max(0.0, min(1.0, match_rate)), text=f"Kalshi match rate: {match_rate:.0%}")
+        st.caption(f"Merge keys used: {diagnostics.get('merge_keys_used', [])}")
         if diagnostics.get("base_stale") or bet_rows == 0:
             st.warning("Pipeline warning: stale base schedule and/or no normalized bet rows found.")
 
@@ -422,7 +423,7 @@ def main() -> None:
             else 0
         )
         kalshi_miss_rows = (
-            int(analysis_df["kalshi_match_status"].astype(str).str.lower().eq("miss").sum())
+            int(analysis_df["kalshi_match_status"].astype(str).str.lower().eq("no_match").sum())
             if analysis_df is not None and "kalshi_match_status" in analysis_df.columns
             else 0
         )
@@ -431,7 +432,7 @@ def main() -> None:
         st.write("analysis_df total rows:", total_analysis_rows)
         st.write("rows with non-null kalshi_probability:", kalshi_non_null_rows)
         st.write('rows with kalshi_match_status == "matched":', kalshi_matched_rows)
-        st.write('rows with kalshi_match_status == "miss":', kalshi_miss_rows)
+        st.write('rows with kalshi_match_status == "no_match":', kalshi_miss_rows)
 
         if controls["show_debug"]:
             parlay_count = len(parlays_df) if parlays_df is not None else 0

@@ -2540,12 +2540,13 @@ def match_kalshi_markets(rows_df: pd.DataFrame) -> pd.DataFrame:
             "game_date": game_date,
             "market_type": market_type,
             "kalshi_probability": pd.NA,
+        "kalshi_line": pd.NA,
             "kalshi_market_title": pd.NA,
             "kalshi_market_subtitle": pd.NA,
             "kalshi_market_ticker": pd.NA,
             "kalshi_event_ticker": pd.NA,
             "kalshi_line": pd.NA,
-            "kalshi_match_status": "miss",
+            "kalshi_match_status": "no_match",
             "kalshi_match_reason": "unsupported_market_or_league",
             "kalshi_tried_codes": json.dumps([]),
             "kalshi_tried_tickers": json.dumps([]),
@@ -7183,7 +7184,7 @@ KALSHI_SERIES_BY_LEAGUE_MARKET = {
 NCAAB_ALIAS_CODES = {
     "manhattan": "MAN", "wagner": "WAG", "princeton": "PRIN", "vermont": "UVM",
     "washington state": "WSU", "seton hall": "HALL", "st johns": "SJU", "saint johns": "SJU",
-    "idaho state": "IDST", "sam houston": "SHSU", "sam houston state": "SHSU",
+    "idaho state": "IDST", "idaho st": "IDST", "sam houston": "SHSU", "sam houston state": "SHSU",
     "florida gulf coast": "FGCU", "kennesaw state": "KENN", "fairfield": "FAIR", "columbia": "CLMB",
     "pepperdine": "PEPP", "unc wilmington": "UNCW", "se louisiana": "SELA", "southeastern louisiana": "SELA",
     "louisiana tech": "LT", "indiana state": "INST", "temple": "TEM", "rhode island": "URI",
@@ -7245,7 +7246,11 @@ def _fetch_markets_public(params: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 
 def _kalshi_prob_dollars(market: Dict[str, Any]) -> Optional[float]:
-    for fld in ("yes_ask_dollars", "last_price_dollars", "yes_bid_dollars"):
+    bid = pd.to_numeric(market.get("yes_bid_dollars"), errors="coerce")
+    ask = pd.to_numeric(market.get("yes_ask_dollars"), errors="coerce")
+    if pd.notna(bid) and pd.notna(ask):
+        return float(max(0.0, min(1.0, (bid + ask) / 2.0)))
+    for fld in ("last_price_dollars", "yes_bid_dollars", "yes_ask_dollars"):
         val = pd.to_numeric(market.get(fld), errors="coerce")
         if pd.notna(val):
             return float(max(0.0, min(1.0, val)))
@@ -7265,12 +7270,13 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:  # 
 
     out = best_picks_df.copy()
     defaults = {
-        "kalshi_match_status": "miss",
+        "kalshi_match_status": "no_match",
         "kalshi_market_ticker": pd.NA,
         "kalshi_event_ticker": pd.NA,
         "kalshi_market_title": pd.NA,
         "kalshi_market_subtitle": pd.NA,
         "kalshi_probability": pd.NA,
+        "kalshi_line": pd.NA,
         "kalshi_match_reason": pd.NA,
         "kalshi_tried_tickers": "[]",
     }
@@ -7299,7 +7305,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:  # 
         t1 = build_kalshi_ticker(series, game_date, away_code, home_code)
         t2 = build_kalshi_ticker(series, game_date, home_code, away_code)
         tried = [t1] if t1 == t2 else [t1, t2]
-        out.at[idx, "kalshi_tried_tickers"] = json.dumps(tried)
+        out.at[idx, "kalshi_tried_tickers"] = ",".join(tried)
         lookup_rows.append((idx, series, game_date, away_code, home_code, tried))
         all_tickers.extend(tried)
 
@@ -7318,10 +7324,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:  # 
         market = next((found_by_ticker[t] for t in tried if t in found_by_ticker), None)
         if market is None:
             try:
-                params: Dict[str, Any] = {"series_ticker": series}
-                if pd.notna(game_date):
-                    params["min_close_ts"] = int((game_date - timedelta(days=2)).timestamp())
-                    params["max_close_ts"] = int((game_date + timedelta(days=2)).timestamp())
+                params: Dict[str, Any] = {"series_ticker": series, "status": "open", "limit": 1000}
                 candidates = _fetch_markets_public(params)
                 code_matches = [
                     m for m in candidates
@@ -7341,11 +7344,12 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:  # 
                     else:
                         out.at[idx, "kalshi_match_reason"] = "no_market_for_tickers"
             except Exception:
-                out.at[idx, "kalshi_match_status"] = "error"
+                out.at[idx, "kalshi_match_status"] = "api_error"
                 out.at[idx, "kalshi_match_reason"] = "api_error"
                 continue
 
         if market is None:
+            out.at[idx, "kalshi_match_status"] = "no_match"
             if pd.isna(out.at[idx, "kalshi_match_reason"]):
                 out.at[idx, "kalshi_match_reason"] = "no_market_for_tickers"
             continue
@@ -7357,5 +7361,6 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:  # 
         out.at[idx, "kalshi_market_title"] = market.get("title")
         out.at[idx, "kalshi_market_subtitle"] = market.get("subtitle")
         out.at[idx, "kalshi_probability"] = _kalshi_prob_dollars(market)
+        out.at[idx, "kalshi_line"] = market.get("strike_dollars") or market.get("floor_strike_dollars")
 
     return out

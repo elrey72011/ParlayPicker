@@ -16,6 +16,7 @@ from core.probability_calibration import calibrate_probabilities
 from core.probability_engine import american_to_prob, normalize_probability_components, remove_vig
 from core.schema.base_schema import ensure_base_schema
 from core.team_mapper import normalize_team_name
+from app_core.kalshi_integrator import enrich_with_kalshi_markets
 
 logger = logging.getLogger(__name__)
 
@@ -38,25 +39,16 @@ SPORT_ALIASES = {
 }
 BEST_PICK_COLUMNS = [
     "league",
-    "away_team",
     "home_team",
+    "away_team",
     "game_date",
     "best_pick",
     "calibrated_probability",
     "expected_value",
     "edge",
     "odds_american",
-    "decimal_odds",
-    "market_type",
     "market_probability",
     "ml_probability",
-    "theover_probability",
-    "ai_probability",
-    "kalshi_probability",
-    "kalshi_match_status",
-    "kalshi_match_reason",
-    "kalshi_market_ticker",
-    "kalshi_event_ticker",
 ]
 
 THEOVER_COLUMN_ALIASES = {
@@ -229,8 +221,7 @@ def format_pick(row: pd.Series) -> str:
         return f"{row['home_team']} {spread_display}".strip()
 
     if row["market_type"] == "spread_away":
-        spread = pd.to_numeric(row.get("spread_line", row.get("spread")), errors="coerce")
-        spread_display = f"+{abs(spread):.1f}" if pd.notna(spread) else ""
+        spread_display = _format_signed_spread(row.get("spread_line", row.get("spread")))
         return f"{row['away_team']} {spread_display}".strip()
 
     if row["market_type"] == "total_over":
@@ -961,8 +952,6 @@ BEST_PICK_COLUMNS = [
     "odds_american",
     "market_probability",
     "ml_probability",
-    "market_type",
-    "decimal_odds",
 ]
 
 
@@ -1051,7 +1040,7 @@ def build_theover_bet_rows(spreads_df: pd.DataFrame | None, totals_df: pd.DataFr
         out["pickteam"] = _string_series(out, "pickteam")
         out["game_date"] = pd.to_datetime(_string_series(out, "game_date"), errors="coerce", utc=True)
         wp = _numeric_series(out, "winprobability")
-        out["theover_probability"] = wp.fillna(0.5).clip(0.0, 1.0)
+        out["theover_probability"] = wp.clip(0.0, 1.0)
         out["odds_american"] = _numeric_series(out, "odds_american", -110.0)
         return out
 
@@ -1167,10 +1156,12 @@ def run_analysis_pipeline(  # type: ignore[override]
     base_max_date = base_dates.max() if base_dates.notna().any() else pd.NaT
     theover_max_date = upload_dates.max() if upload_dates.notna().any() else pd.NaT
 
+    merge_keys_used: list[str] = []
     if not bet_rows_df.empty:
         analysis_input = bet_rows_df.head(max_rows).copy()
         if (not base_stale) and (not base_df.empty):
             merge_keys = choose_merge_keys(analysis_input, base_df)
+            merge_keys_used = list(merge_keys)
             enrich_cols = [c for c in base_df.columns if c not in analysis_input.columns and c not in merge_keys]
             if merge_keys and enrich_cols:
                 analysis_input = analysis_input.merge(base_df[merge_keys + enrich_cols], on=merge_keys, how="left")
@@ -1199,6 +1190,9 @@ def run_analysis_pipeline(  # type: ignore[override]
             "best_pick_nonempty_rows": 0,
             "now_utc": None if pd.isna(now_utc) else str(now_utc),
             "base_stale": bool(base_stale),
+            "merge_keys_used": merge_keys_used,
+            "kalshi_matches": 0,
+            "kalshi_match_rate": 0.0,
         }
         return analyzed, empty, di
 
@@ -1212,6 +1206,23 @@ def run_analysis_pipeline(  # type: ignore[override]
     analyzed["decimal_odds"] = analyzed["odds_american"].apply(american_to_decimal)
     analyzed["expected_value"] = analyzed["calibrated_probability"] * (analyzed["decimal_odds"] - 1) - (1 - analyzed["calibrated_probability"])
     analyzed["edge"] = analyzed["calibrated_probability"] - analyzed["market_probability"]
+
+    try:
+        analyzed = enrich_with_kalshi_markets(analyzed)
+    except Exception as exc:
+        logger.warning("Kalshi enrichment failed in pipeline: %s", exc)
+        for c, d in {
+            "kalshi_probability": pd.NA,
+            "kalshi_market_title": pd.NA,
+            "kalshi_event_ticker": pd.NA,
+            "kalshi_market_ticker": pd.NA,
+            "kalshi_line": pd.NA,
+            "kalshi_match_status": "api_error",
+            "kalshi_match_reason": "pipeline_exception",
+            "kalshi_tried_tickers": "",
+        }.items():
+            if c not in analyzed.columns:
+                analyzed[c] = d
 
     best_picks_df = build_best_picks_df(analyzed)
 
@@ -1248,5 +1259,8 @@ def run_analysis_pipeline(  # type: ignore[override]
         "best_pick_nonempty_rows": best_pick_nonempty_rows,
         "now_utc": None if pd.isna(now_utc) else str(now_utc),
         "base_stale": bool(base_stale),
+        "merge_keys_used": merge_keys_used,
+        "kalshi_matches": int(_string_series(analyzed, "kalshi_match_status", "").str.lower().eq("matched").sum()),
+        "kalshi_match_rate": float(_string_series(analyzed, "kalshi_match_status", "").str.lower().eq("matched").sum() / max(len(analyzed), 1)),
     }
     return analyzed, best_picks_df, di

@@ -65,7 +65,8 @@ def load_theover_csv(uploaded_file):
         if df.empty:
             st.warning("Uploaded TheOver CSV is empty.")
             return pd.DataFrame()
-        return normalize_theover_df(df)
+        # Keep loader permissive; downstream pipeline normalization handles schema mapping.
+        return df
     except pd.errors.EmptyDataError:
         st.warning("Uploaded CSV contains no readable data.")
         return pd.DataFrame()
