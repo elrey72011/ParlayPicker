@@ -50,8 +50,6 @@ def _infer_market_type(row: pd.Series) -> str:
         "spread_away",
         "total_over",
         "total_under",
-        "moneyline_home",
-        "moneyline_away",
     }
 
     existing_market_type = str(row.get("market_type") or "").strip().lower()
@@ -87,12 +85,7 @@ def _infer_market_type(row: pd.Series) -> str:
         # Default total side when not explicitly tagged.
         return "total_over"
 
-    is_home_pick = bool(row.get("is_home_pick", False))
-    pick_team = str(row.get("team") or "").strip().lower()
-    home_team = str(row.get("home_team") or "").strip().lower()
-    if pick_team and home_team:
-        is_home_pick = pick_team == home_team
-    return "moneyline_home" if is_home_pick else "moneyline_away"
+    return "unknown"
 
 
 def format_pick(row: pd.Series) -> str:
@@ -124,12 +117,6 @@ def format_pick(row: pd.Series) -> str:
     if row["market_type"] == "total_under":
         return f"Under {_format_total(row.get('total'))}".strip()
 
-    if row["market_type"] == "moneyline_home":
-        return f"{row['home_team']} ML"
-
-    if row["market_type"] == "moneyline_away":
-        return f"{row['away_team']} ML"
-
     return ""
 
 
@@ -150,6 +137,12 @@ def _build_best_picks(df: pd.DataFrame) -> pd.DataFrame:
 
     df["market_type"] = df.apply(_infer_market_type, axis=1)
 
+    allowed_market_types = {"spread_home", "spread_away", "total_over", "total_under"}
+    df = df[df["market_type"].isin(allowed_market_types)].copy()
+    if df.empty:
+        best_picks = pd.DataFrame(columns=BEST_PICK_COLUMNS)
+        return best_picks
+
     group_keys = ["league", "home_team", "away_team", "game_date"]
     available_group_keys = [k for k in group_keys if k in df.columns]
     if not available_group_keys:
@@ -163,6 +156,7 @@ def _build_best_picks(df: pd.DataFrame) -> pd.DataFrame:
         .reset_index()
     )
     best_picks["best_pick"] = best_picks.apply(format_pick, axis=1)
+    best_picks = best_picks[best_picks["best_pick"].astype(str).str.len() > 0].copy()
 
     for col in BEST_PICK_COLUMNS:
         if col not in best_picks.columns:
