@@ -1,13 +1,22 @@
 from __future__ import annotations
 
 import logging
-import os
 from itertools import combinations
 from typing import Any
 
 import pandas as pd
+try:
+    import streamlit as st
+except Exception:  # pragma: no cover
+    class _StreamlitShim:
+        @staticmethod
+        def cache_data(*_args: Any, **_kwargs: Any):
+            def _decorator(func):
+                return func
 
-from app_core.kalshi_integrator import enrich_with_kalshi_markets
+            return _decorator
+
+    st = _StreamlitShim()
 from core.bankroll_simulator import simulate_bankroll
 from core.kelly_optimizer import add_kelly_bet_sizing
 from core.probability_engine import american_to_prob
@@ -120,35 +129,28 @@ def _mk_game_key(df: pd.DataFrame) -> pd.Series:
     )
 
 
+def _normalize_key_columns(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame(columns=["league", "home_team", "away_team", "game_date", "game_key"])
+    out = df.copy()
+    out.columns = [str(c).strip().lower() for c in out.columns]
+    out["league"] = _string_series(out, "league").str.upper().replace(LEAGUE_ALIASES)
+    out["home_team"] = _string_series(out, "home_team").map(normalize_team_name)
+    out["away_team"] = _string_series(out, "away_team").map(normalize_team_name)
+    out["game_date"] = _to_game_date(out)
+    out["game_key"] = _mk_game_key(out)
+    return out
+
+
+@st.cache_data(ttl=300)
 def load_base_data() -> pd.DataFrame:
-    candidate_paths = [
-        os.environ.get("PARLAYPICKER_BASE_DATA_PATH"),
-        "master_df_raw.csv",
-        "data/master_df_raw.csv",
-        "data/base_data.csv",
-        "data/analysis_base.csv",
-    ]
-    base_df = pd.DataFrame()
-    loaded_from = None
-    for path in candidate_paths:
-        if path and os.path.exists(path):
-            try:
-                base_df = pd.read_csv(path)
-                loaded_from = path
-                break
-            except Exception as exc:  # pragma: no cover
-                logger.warning("Base load failed for %s: %s", path, exc)
-    if base_df.empty:
-        base_df = pd.DataFrame(columns=["league", "home_team", "away_team", "game_date"])
+    try:
+        base_df = pd.read_csv("data/master_all_sports.csv")
+    except Exception:
+        return pd.DataFrame()
     base_df = ensure_base_schema(base_df)
-    base_df.columns = [str(c).strip().lower() for c in base_df.columns]
-    base_df["league"] = _string_series(base_df, "league").str.upper().replace(LEAGUE_ALIASES)
-    base_df["home_team"] = _string_series(base_df, "home_team").map(normalize_team_name)
-    base_df["away_team"] = _string_series(base_df, "away_team").map(normalize_team_name)
-    base_df["game_date"] = _to_game_date(base_df)
-    base_df["game_key"] = _mk_game_key(base_df)
-    if loaded_from:
-        base_df.attrs["loaded_from"] = loaded_from
+    base_df = _normalize_key_columns(base_df)
+    base_df.attrs["loaded_from"] = "data/master_all_sports.csv"
     return base_df
 
 
@@ -271,6 +273,16 @@ def _fill_missing_game_dates_from_base(bet_rows_df: pd.DataFrame, base_df: pd.Da
         "date_fill_success_rows": filled,
         "date_fill_success_rate": float(filled / max(fill_total, 1)),
     }
+
+
+def is_stale_schedule(base_df: pd.DataFrame, bet_rows_df: pd.DataFrame) -> bool:
+    if base_df is None or base_df.empty or bet_rows_df is None or bet_rows_df.empty:
+        return False
+    base_dates = pd.to_datetime(base_df.get("game_date"), errors="coerce", utc=True)
+    bet_dates = pd.to_datetime(bet_rows_df.get("game_date"), errors="coerce", utc=True)
+    if base_dates.notna().sum() == 0 or bet_dates.notna().sum() == 0:
+        return False
+    return bool(base_dates.max() < bet_dates.max())
 
 
 def american_to_decimal(odds: Any) -> float:
@@ -405,32 +417,19 @@ def run_analysis_pipeline(
     analyzed = analyzed.head(max_rows).copy()
     best_picks_df = build_best_picks_df(analyzed)
 
-    if not best_picks_df.empty:
-        miss_date = pd.to_datetime(best_picks_df["game_date"], errors="coerce", utc=True).isna()
-        best_picks_df = enrich_with_kalshi_markets(best_picks_df)
-        if miss_date.any():
-            best_picks_df.loc[miss_date, "kalshi_match_reason"] = "missing_date"
-
-    analyzed = analyzed.merge(
-        best_picks_df[[c for c in ["league", "home_team", "away_team", "game_date", "kalshi_probability", "kalshi_market_title", "kalshi_event_ticker", "kalshi_match_status", "kalshi_match_reason", "kalshi_tried_tickers"] if c in best_picks_df.columns]],
-        on=["league", "home_team", "away_team", "game_date"],
-        how="left",
-    ) if not best_picks_df.empty else analyzed
-
     total_games = int(analyzed[["league", "home_team", "away_team"]].drop_duplicates().shape[0]) if not analyzed.empty else 0
     spread_games = int(analyzed[_string_series(analyzed, "market_type").str.startswith("spread")]["game_key"].nunique()) if not analyzed.empty else 0
     totals_games = int(analyzed[_string_series(analyzed, "market_type").str.startswith("total")]["game_key"].nunique()) if not analyzed.empty else 0
-    kalshi_matches = int(_string_series(best_picks_df, "kalshi_match_status").str.lower().eq("matched").sum()) if not best_picks_df.empty else 0
+    kalshi_matches = 0
     positive_ev = int((_numeric_series(best_picks_df, "expected_value", 0.0) > 0).sum()) if not best_picks_df.empty else 0
 
-    stale_status = True
-    if not base_df.empty and not analyzed.empty:
-        stale_status = bool(base_df["game_date"].max() < analyzed["game_date"].max())
+    stale_status = is_stale_schedule(base_df, analyzed)
 
     diagnostics = {
         "total_games": total_games,
         "bet_rows": int(len(analyzed)),
         "best_picks": int(len(best_picks_df)),
+        "kalshi_attempted": 0,
         "kalshi_matches": kalshi_matches,
         "kalshi_match_rate": float(kalshi_matches / max(len(best_picks_df), 1)),
         "match_rate": float(kalshi_matches / max(len(best_picks_df), 1)),
