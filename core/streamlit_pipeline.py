@@ -355,6 +355,8 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
 def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     if analysis_df is None or analysis_df.empty:
         return pd.DataFrame(columns=BEST_PICK_COLUMNS)
+    if "market_type" not in analysis_df.columns:
+        raise ValueError("analysis_df missing market_type before best-pick construction")
     df = analysis_df.copy()
     df = df[_string_series(df, "market_type").isin(VALID_MARKETS)].copy()
     if df.empty:
@@ -390,12 +392,17 @@ def run_analysis_pipeline(
     spreads_df: pd.DataFrame | None = None,
     totals_df: pd.DataFrame | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]:
+    # a) load base odds/schedule
     base_df = load_base_data()
-    base_loaded = bool(base_df.attrs.get("loaded_from"))
+    odds_schedule_loaded = bool(base_df.attrs.get("loaded_from")) and not base_df.empty
 
+    # b/c) normalize TheOver uploads and build canonical spread/total bet rows
     bet_rows_df = build_theover_bet_rows(spreads_df, totals_df, sports)
+
+    # d) fill game_date deterministically
     bet_rows_df, date_stats = _fill_missing_game_dates_from_base(bet_rows_df, base_df)
 
+    # e) merge odds/base fields
     merge_keys = ["league", "home_team", "away_team"]
     merge_cols = merge_keys + [c for c in ["game_date", "odds_american", "market_probability", "decimal_odds", "ml_probability"] if c in base_df.columns]
     enriched = bet_rows_df.merge(base_df[merge_cols].drop_duplicates(merge_keys), on=merge_keys, how="left", suffixes=("", "_base"))
@@ -413,9 +420,21 @@ def run_analysis_pipeline(
                 enriched[col] = left.where(left.notna(), right)
             enriched = enriched.drop(columns=[base_col])
 
+    # f) compute probabilities / EV / edge
     analyzed = _apply_analysis_calculations(enriched)
     analyzed = analyzed.head(max_rows).copy()
+
+    # g) build best_picks_df from spread/total rows only
     best_picks_df = build_best_picks_df(analyzed)
+
+    market_type_counts = (
+        _string_series(analyzed, "market_type").value_counts(dropna=False).to_dict()
+        if not analyzed.empty
+        else {}
+    )
+    allowed_market_rows = int(_string_series(analyzed, "market_type").isin(VALID_MARKETS).sum()) if not analyzed.empty else 0
+    positive_ev_rows = int((_numeric_series(analyzed, "expected_value", 0.0) > 0).sum()) if not analyzed.empty else 0
+    best_pick_nonempty_rows = int(_string_series(best_picks_df, "best_pick").str.strip().str.len().gt(0).sum()) if not best_picks_df.empty else 0
 
     total_games = int(analyzed[["league", "home_team", "away_team"]].drop_duplicates().shape[0]) if not analyzed.empty else 0
     spread_games = int(analyzed[_string_series(analyzed, "market_type").str.startswith("spread")]["game_key"].nunique()) if not analyzed.empty else 0
@@ -439,11 +458,17 @@ def run_analysis_pipeline(
         "date_fill_success_rows": int(date_stats["date_fill_success_rows"]),
         "date_fill_success_rate": float(date_stats["date_fill_success_rate"]),
         "positive_ev_picks": positive_ev,
+        "market_type_counts": market_type_counts,
+        "allowed_market_type_rows": allowed_market_rows,
+        "positive_ev_rows": positive_ev_rows,
+        "best_pick_nonempty_rows": best_pick_nonempty_rows,
         "merge_keys_used": merge_keys,
         "base_stale": stale_status,
-        "odds_base_loaded": base_loaded,
+        "odds_schedule_loaded": odds_schedule_loaded,
+        "base_rows_loaded": int(len(base_df)),
         "has_normalized_bet_rows": not analyzed.empty,
     }
+    # h) return analysis_df, best_picks_df, diagnostics
     return analyzed, best_picks_df, diagnostics
 
 

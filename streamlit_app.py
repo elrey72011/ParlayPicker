@@ -172,15 +172,42 @@ def main() -> None:
         analysis_df, best_picks_df, diagnostics = pipeline_result
 
         if isinstance(best_picks_df, pd.DataFrame) and not best_picks_df.empty:
-            game_dt = pd.to_datetime(best_picks_df.get("game_date"), errors="coerce", utc=True)
-            if game_dt.notna().any():
-                best_picks_df = enrich_with_kalshi_markets(best_picks_df)
+            best_picks_df = best_picks_df.copy()
+            best_picks_df["game_date"] = pd.to_datetime(best_picks_df.get("game_date"), errors="coerce", utc=True)
+            if best_picks_df["game_date"].isna().all() and not analysis_df.empty:
+                date_lookup = (
+                    analysis_df[["league", "home_team", "away_team", "game_date"]]
+                    .copy()
+                    .assign(game_date=lambda df: pd.to_datetime(df["game_date"], errors="coerce", utc=True))
+                    .dropna(subset=["game_date"])
+                    .drop_duplicates(["league", "home_team", "away_team"], keep="last")
+                )
+                best_picks_df = best_picks_df.merge(
+                    date_lookup,
+                    on=["league", "home_team", "away_team"],
+                    how="left",
+                    suffixes=("", "_analysis"),
+                )
+                best_picks_df["game_date"] = best_picks_df["game_date"].where(
+                    best_picks_df["game_date"].notna(),
+                    best_picks_df["game_date_analysis"],
+                )
+                best_picks_df = best_picks_df.drop(columns=["game_date_analysis"])
+
+            if best_picks_df["game_date"].isna().all():
+                raise ValueError("best_picks_df game_date missing prior to Kalshi enrichment")
+
+            best_picks_df = enrich_with_kalshi_markets(best_picks_df)
 
         attempted = int(len(best_picks_df)) if isinstance(best_picks_df, pd.DataFrame) else 0
         matched = int(best_picks_df["kalshi_match_status"].astype(str).str.lower().eq("matched").sum()) if attempted and "kalshi_match_status" in best_picks_df.columns else int(diagnostics.get("kalshi_matches", 0))
         diagnostics["kalshi_attempted"] = attempted
         diagnostics["kalshi_matches"] = matched
-        diagnostics["match_rate"] = float(matched / max(attempted, 1))
+        diagnostics["kalshi_match_rate"] = float(matched / max(attempted, 1))
+        diagnostics["match_rate"] = diagnostics["kalshi_match_rate"]
+        diagnostics["kalshi_missing_date_rows"] = int(best_picks_df["kalshi_match_reason"].astype(str).eq("missing_date").sum()) if attempted and "kalshi_match_reason" in best_picks_df.columns else 0
+        diagnostics["kalshi_missing_team_code_rows"] = int(best_picks_df["kalshi_match_reason"].astype(str).eq("missing_team_code").sum()) if attempted and "kalshi_match_reason" in best_picks_df.columns else 0
+        diagnostics["kalshi_no_market_rows"] = int(best_picks_df["kalshi_match_reason"].astype(str).eq("no_market_for_tickers").sum()) if attempted and "kalshi_match_reason" in best_picks_df.columns else 0
 
         st.session_state.analysis_df = analysis_df
         st.session_state["diagnostics"] = diagnostics
@@ -305,7 +332,7 @@ def main() -> None:
     date_fill_filled = int(diagnostics.get("date_fill_success_rows", 0))
     date_fill_rate = float(diagnostics.get("date_fill_success_rate", 0.0))
     positive_ev_picks = int(diagnostics.get("positive_ev_picks", 0))
-    odds_base_loaded = bool(diagnostics.get("odds_base_loaded", False))
+    odds_base_loaded = bool(diagnostics.get("odds_schedule_loaded", False))
     with st.container():
         m1, m2, m3, m4, m5, m6, m7, m8, m9 = st.columns(9)
         m1.metric("Total games", games_count)
@@ -313,8 +340,8 @@ def main() -> None:
         m3.metric("Best picks", best_rows)
         m4.metric("Kalshi matches", kalshi_matches)
         m5.metric("Match rate", f"{match_rate:.0%}")
-        m6.metric("TheOver totals games", f"{totals_bet_games}/{totals_games}")
-        m7.metric("TheOver spreads games", f"{spreads_bet_games}/{spreads_games}")
+        m6.metric("TheOver totals games", f"{totals_bet_games}/{games_count}")
+        m7.metric("TheOver spreads games", f"{spreads_bet_games}/{games_count}")
         m8.metric("Date fill success", f"{date_fill_filled}/{date_fill_attempted} ({date_fill_rate:.0%})")
         m9.metric("Positive EV picks", positive_ev_picks)
         st.progress(max(0.0, min(1.0, match_rate)), text=f"Kalshi match rate: {match_rate:.0%}")
