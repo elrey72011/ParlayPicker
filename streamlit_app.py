@@ -34,6 +34,12 @@ from core.streamlit_pipeline import (
 from core.team_normalizer import normalize_team
 from core.theover_loader import load_theover_csv
 
+try:
+    from app_core.kalshi_integrator import enrich_with_kalshi_markets
+except Exception:  # pragma: no cover
+    def enrich_with_kalshi_markets(df: pd.DataFrame) -> pd.DataFrame:
+        return df
+
 
 if hasattr(st, "session_state"):
     if "analysis_df" not in st.session_state:
@@ -50,20 +56,44 @@ def _legacy_module():
     return legacy
 
 
-def select_best_spread_pick(*args: Any, **kwargs: Any):
-    return _legacy_module().select_best_spread_pick(*args, **kwargs)
+def select_best_spread_pick(*, home_team: str, away_team: str, spread_line: float, prob_home_covers: float, prob_away_covers: float):
+    """Return spread pick labels using home-perspective spread lines."""
+    home_line = float(pd.to_numeric(spread_line, errors="coerce"))
+    away_line = -home_line
+    pick_home = float(prob_home_covers) >= float(prob_away_covers)
+    pick_team = home_team if pick_home else away_team
+    pick_line = home_line if pick_home else away_line
+    alt_team = away_team if pick_home else home_team
+    alt_line = away_line if pick_home else home_line
+    return {
+        "pick_team": pick_team,
+        "pick_line": pick_line,
+        "pick_label": f"{pick_team} {pick_line:+.1f}",
+        "alt_team": alt_team,
+        "alt_line": alt_line,
+        "alt_label": f"{alt_team} {alt_line:+.1f}",
+    }
 
 
 def select_best_total_pick(*args: Any, **kwargs: Any):
-    return _legacy_module().select_best_total_pick(*args, **kwargs)
+    try:
+        return _legacy_module().select_best_total_pick(*args, **kwargs)
+    except Exception:
+        return {}
 
 
 def map_kalshi_prob_for_pick(*args: Any, **kwargs: Any):
-    return _legacy_module().map_kalshi_prob_for_pick(*args, **kwargs)
+    try:
+        return _legacy_module().map_kalshi_prob_for_pick(*args, **kwargs)
+    except Exception:
+        return None
 
 
 def calculate_best_pick_metrics(*args: Any, **kwargs: Any):
-    return _legacy_module().calculate_best_pick_metrics(*args, **kwargs)
+    try:
+        return _legacy_module().calculate_best_pick_metrics(*args, **kwargs)
+    except Exception:
+        return {}
 
 
 def _safe_str_series(df: pd.DataFrame, col: str, default: str = "") -> pd.Series:
@@ -127,13 +157,25 @@ def main() -> None:
         st.write("TheOver spreads rows:", len(spreads_df))
         st.write("TheOver totals rows:", len(totals_df))
 
-        analysis_df, best_picks_df, diagnostics = run_analysis_pipeline(
+        pipeline_result = run_analysis_pipeline(
             sports=controls["sports"],
             max_rows=int(controls["max_rows"]),
             use_ml=bool(controls["use_ml"]),
             spreads_df=spreads_df,
             totals_df=totals_df,
         )
+        if not isinstance(pipeline_result, tuple) or len(pipeline_result) != 3:
+            raise ValueError(
+                "run_analysis_pipeline must return a tuple of length 3: "
+                "(analysis_df, best_picks_df, diagnostics)."
+            )
+        analysis_df, best_picks_df, diagnostics = pipeline_result
+
+        if isinstance(best_picks_df, pd.DataFrame) and not best_picks_df.empty:
+            game_dt = pd.to_datetime(best_picks_df.get("game_date"), errors="coerce", utc=True)
+            if game_dt.notna().any():
+                best_picks_df = enrich_with_kalshi_markets(best_picks_df)
+
         attempted = int(len(best_picks_df)) if isinstance(best_picks_df, pd.DataFrame) else 0
         matched = int(best_picks_df["kalshi_match_status"].astype(str).str.lower().eq("matched").sum()) if attempted and "kalshi_match_status" in best_picks_df.columns else int(diagnostics.get("kalshi_matches", 0))
         diagnostics["kalshi_attempted"] = attempted
