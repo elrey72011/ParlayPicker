@@ -49,53 +49,6 @@ if hasattr(st, "session_state"):
         st.session_state.parlays_df = None
 
 
-def _legacy_module():
-    """Lazy import to preserve backward compatibility for utility function imports."""
-    import app.legacy_streamlit_app as legacy
-
-    return legacy
-
-
-def select_best_spread_pick(*, home_team: str, away_team: str, spread_line: float, prob_home_covers: float, prob_away_covers: float):
-    """Return spread pick labels using home-perspective spread lines."""
-    home_line = float(pd.to_numeric(spread_line, errors="coerce"))
-    away_line = -home_line
-    pick_home = float(prob_home_covers) >= float(prob_away_covers)
-    pick_team = home_team if pick_home else away_team
-    pick_line = home_line if pick_home else away_line
-    alt_team = away_team if pick_home else home_team
-    alt_line = away_line if pick_home else home_line
-    return {
-        "pick_team": pick_team,
-        "pick_line": pick_line,
-        "pick_label": f"{pick_team} {pick_line:+.1f}",
-        "alt_team": alt_team,
-        "alt_line": alt_line,
-        "alt_label": f"{alt_team} {alt_line:+.1f}",
-    }
-
-
-def select_best_total_pick(*args: Any, **kwargs: Any):
-    try:
-        return _legacy_module().select_best_total_pick(*args, **kwargs)
-    except Exception:
-        return {}
-
-
-def map_kalshi_prob_for_pick(*args: Any, **kwargs: Any):
-    try:
-        return _legacy_module().map_kalshi_prob_for_pick(*args, **kwargs)
-    except Exception:
-        return None
-
-
-def calculate_best_pick_metrics(*args: Any, **kwargs: Any):
-    try:
-        return _legacy_module().calculate_best_pick_metrics(*args, **kwargs)
-    except Exception:
-        return {}
-
-
 def _safe_str_series(df: pd.DataFrame, col: str, default: str = "") -> pd.Series:
     if df is None or df.empty:
         return pd.Series(dtype="string")
@@ -172,32 +125,24 @@ def main() -> None:
         analysis_df, best_picks_df, diagnostics = pipeline_result
 
         if isinstance(best_picks_df, pd.DataFrame) and not best_picks_df.empty:
-            best_picks_df = best_picks_df.copy()
-            best_picks_df["game_date"] = pd.to_datetime(best_picks_df.get("game_date"), errors="coerce", utc=True)
-            if best_picks_df["game_date"].isna().all() and not analysis_df.empty:
-                date_lookup = (
-                    analysis_df[["league", "home_team", "away_team", "game_date"]]
-                    .copy()
-                    .assign(game_date=lambda df: pd.to_datetime(df["game_date"], errors="coerce", utc=True))
-                    .dropna(subset=["game_date"])
-                    .drop_duplicates(["league", "home_team", "away_team"], keep="last")
-                )
-                best_picks_df = best_picks_df.merge(
-                    date_lookup,
-                    on=["league", "home_team", "away_team"],
-                    how="left",
-                    suffixes=("", "_analysis"),
-                )
-                best_picks_df["game_date"] = best_picks_df["game_date"].where(
-                    best_picks_df["game_date"].notna(),
-                    best_picks_df["game_date_analysis"],
-                )
-                best_picks_df = best_picks_df.drop(columns=["game_date_analysis"])
-
-            if best_picks_df["game_date"].isna().all():
-                raise ValueError("best_picks_df game_date missing prior to Kalshi enrichment")
-
+            if "game_date" not in best_picks_df.columns:
+                raise ValueError("best_picks_df missing game_date before Kalshi enrichment")
             best_picks_df = enrich_with_kalshi_markets(best_picks_df)
+
+            with_date = best_picks_df["game_date"].notna()
+            tried_empty = (
+                best_picks_df["kalshi_tried_tickers"].astype(str).str.strip().isin(["", "[]", "null", "None"])
+                if "kalshi_tried_tickers" in best_picks_df.columns
+                else pd.Series([True] * len(best_picks_df), index=best_picks_df.index)
+            )
+            if bool((with_date & tried_empty).any()):
+                diagnostics["kalshi_ticker_warning"] = "kalshi_tried_tickers empty for rows with non-null game_date"
+
+        if not analysis_df.empty and "market_type" not in analysis_df.columns:
+            raise ValueError("analysis_df missing market_type before best-pick construction")
+        allowed_rows = int(diagnostics.get("allowed_market_type_rows", 0))
+        if not analysis_df.empty and allowed_rows > 0 and (best_picks_df is None or best_picks_df.empty):
+            diagnostics["best_picks_warning"] = "best_picks_df empty while analysis_df has valid spread/total rows"
 
         attempted = int(len(best_picks_df)) if isinstance(best_picks_df, pd.DataFrame) else 0
         matched = int(best_picks_df["kalshi_match_status"].astype(str).str.lower().eq("matched").sum()) if attempted and "kalshi_match_status" in best_picks_df.columns else int(diagnostics.get("kalshi_matches", 0))
@@ -347,8 +292,8 @@ def main() -> None:
         st.progress(max(0.0, min(1.0, match_rate)), text=f"Kalshi match rate: {match_rate:.0%}")
         st.caption(f"Merge keys used: {diagnostics.get('merge_keys_used', [])}")
         st.caption(f"Odds/base schedule loaded: {odds_base_loaded}")
-        st.caption(f"Stale base schedule: {bool(diagnostics.get('base_stale', False))}")
-        if diagnostics.get("base_stale") and diagnostics.get("has_normalized_bet_rows", False):
+        st.caption(f"Stale base schedule: {bool(diagnostics.get('stale_base_schedule', False))}")
+        if diagnostics.get("stale_base_schedule") and diagnostics.get("has_normalized_bet_rows", False):
             st.warning("Pipeline warning: stale base schedule relative to uploaded bet rows.")
 
     tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["Odds", "Analysis", "Best Picks", "Parlays", "Portfolio", "Debug", "Strategy Lab"])

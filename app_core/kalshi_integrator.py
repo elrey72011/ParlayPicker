@@ -18,7 +18,7 @@ LEAGUE_SERIES_MAP = {
     "NHL": {"spread": "KXNHLSPREAD", "total": "KXNHLTOTAL"},
 }
 
-NCAAB_CODE_ALIASES = {
+TEAM_CODE_ALIASES = {
     "manhattan": "MAN",
     "wagner": "WAG",
     "princeton": "PRIN",
@@ -29,14 +29,24 @@ NCAAB_CODE_ALIASES = {
     "st johns": "SJU",
     "saint johns": "SJU",
     "idaho state": "IDST",
-    "idaho st": "IDST",
     "sam houston": "SHSU",
     "sam houston state": "SHSU",
-    "sam houston st": "SHSU",
     "florida gulf coast": "FGCU",
-    "fgcu": "FGCU",
     "kennesaw state": "KENN",
-    "kennesaw st": "KENN",
+    "fairfield": "FAIR",
+    "columbia": "COL",
+    "pepperdine": "PEPP",
+    "unc wilmington": "UNCW",
+    "se louisiana": "SELA",
+    "louisiana tech": "LT",
+    "indiana state": "INST",
+    "temple": "TEM",
+    "rhode island": "URI",
+    "saint marys": "SMC",
+    "st marys": "SMC",
+    "wichita state": "WICH",
+    "memphis": "MEM",
+    "southern illinois": "SIU",
 }
 
 MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
@@ -60,13 +70,17 @@ class KalshiAPIError(RuntimeError):
 
 def _normalize_team_token(name: str) -> str:
     s = str(name or "").lower().strip()
-    s = s.replace("&", " and ").replace("'", "")
-    s = s.replace("-", " ").replace(".", " ")
+    s = s.replace("’", "'").replace("&", " and ")
+    s = s.replace("-", " ").replace(".", " ").replace("'", "")
     s = re.sub(r"\bst\b", "state", s)
     s = re.sub(r"\bsaint\b", "st", s)
+    s = re.sub(r"\bsoutheastern\b", "se", s)
+    s = re.sub(r"\bnorthwestern\b", "nw", s)
+    s = re.sub(r"\bnortheastern\b", "ne", s)
+    s = re.sub(r"\bsouthwestern\b", "sw", s)
+    s = re.sub(r"\bunc\b", "unc", s)
     s = re.sub(r"[^a-z0-9\s]", " ", s)
-    s = re.sub(r"\s+", " ", s).strip()
-    return s
+    return re.sub(r"\s+", " ", s).strip()
 
 
 def normalize_team_for_kalshi(team_name: str) -> str:
@@ -80,43 +94,42 @@ def build_kalshi_date_code(game_date: Any) -> str:
     return f"{dt.year % 100:02d}{MONTHS[dt.month - 1]}{dt.day:02d}"
 
 
-def _market_family(best_pick: str) -> str | None:
-    p = str(best_pick or "").strip().lower()
-    if p.startswith("over") or p.startswith("under"):
+def _market_family(row: pd.Series) -> str | None:
+    market_type = str(row.get("market_type") or "").strip().lower()
+    if market_type.startswith("spread"):
+        return "spread"
+    if market_type.startswith("total"):
         return "total"
-    if p:
+    best_pick = str(row.get("best_pick") or "").strip().lower()
+    if best_pick.startswith("over") or best_pick.startswith("under"):
+        return "total"
+    if best_pick:
         return "spread"
     return None
 
 
 def _guess_code(team: str) -> str | None:
     token = _normalize_team_token(team)
-    if token in NCAAB_CODE_ALIASES:
-        return NCAAB_CODE_ALIASES[token]
+    if token in TEAM_CODE_ALIASES:
+        return TEAM_CODE_ALIASES[token]
     words = [w for w in token.split() if w not in {"the", "of", "and", "university", "college", "state"}]
     if not words:
         return None
     if len(words) == 1:
         return words[0][:4].upper()
-    return "".join(w[:2] for w in words)[:4].upper()
-
-
-def _det_team_code(league: str, team_name: str) -> str | None:
-    lg = str(league or "").upper()
-    token = _normalize_team_token(team_name)
-    if lg == "NCAAB" and token in NCAAB_CODE_ALIASES:
-        return NCAAB_CODE_ALIASES[token]
-    return _guess_code(token)
+    return "".join(w[0] for w in words)[:4].upper()
 
 
 def _get_markets(params: dict[str, Any]) -> list[dict[str, Any]]:
     try:
-        resp = requests.get(f"{API_BASE}/markets", params=params, timeout=10)
-        resp.raise_for_status()
-        payload = resp.json()
-        return payload.get("markets", []) if isinstance(payload, dict) else []
+        response = requests.get(f"{API_BASE}/markets", params=params, timeout=10)
+        response.raise_for_status()
+        payload = response.json()
     except Exception as exc:
         raise KalshiAPIError(str(exc)) from exc
+    if not isinstance(payload, dict):
+        return []
+    return payload.get("markets", [])
 
 
 def _select_probability(market: dict[str, Any]) -> float | None:
@@ -124,7 +137,12 @@ def _select_probability(market: dict[str, Any]) -> float | None:
     ask = pd.to_numeric(market.get("yes_ask_dollars"), errors="coerce")
     if pd.notna(bid) and pd.notna(ask):
         return float((bid + ask) / 2.0)
-    for key in ("last_price_dollars", "yes_bid_dollars", "yes_ask_dollars"):
+
+    last = pd.to_numeric(market.get("last_price_dollars"), errors="coerce")
+    if pd.notna(last):
+        return float(last)
+
+    for key in ("yes_bid_dollars", "yes_ask_dollars"):
         val = pd.to_numeric(market.get(key), errors="coerce")
         if pd.notna(val):
             return float(val)
@@ -133,19 +151,29 @@ def _select_probability(market: dict[str, Any]) -> float | None:
 
 def _deterministic_tickers(row: pd.Series) -> tuple[list[str], str | None, str | None, str | None, str]:
     league = str(row.get("league") or "").upper()
-    family = _market_family(str(row.get("best_pick") or ""))
+    family = _market_family(row)
     series = LEAGUE_SERIES_MAP.get(league, {}).get(family or "")
-    away = _det_team_code(league, str(row.get("away_team") or ""))
-    home = _det_team_code(league, str(row.get("home_team") or ""))
+    away_code = _guess_code(str(row.get("away_team") or ""))
+    home_code = _guess_code(str(row.get("home_team") or ""))
     date_code = build_kalshi_date_code(row.get("game_date"))
-    if not series or not away or not home or not date_code:
-        return [], series, away, home, date_code
+
+    if not series or not date_code:
+        return [], series, away_code, home_code, date_code
+    if not away_code or not home_code:
+        return [], series, away_code, home_code, date_code
+
     prefix = f"{series}-{date_code}"
-    return [f"{prefix}{away}{home}", f"{prefix}{home}{away}"], series, away, home, date_code
+    candidates = [f"{prefix}{away_code}{home_code}", f"{prefix}{home_code}{away_code}"]
+    return candidates, series, away_code, home_code, date_code
 
 
-def _fallback_series_lookup(series: str, away_code: str, home_code: str) -> dict[str, Any] | None:
+def _fallback_series_lookup(series: str, candidate_tickers: list[str], away_code: str, home_code: str) -> dict[str, Any] | None:
     markets = _get_markets({"series_ticker": series, "status": "open", "limit": 1000})
+    by_ticker = {str(m.get("ticker") or ""): m for m in markets}
+    for ticker in candidate_tickers:
+        if ticker in by_ticker:
+            return by_ticker[ticker]
+
     for market in markets:
         ticker = str(market.get("ticker") or "")
         title = f"{market.get('title', '')} {market.get('subtitle', '')}".upper()
@@ -158,14 +186,20 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
     if best_picks_df is None or best_picks_df.empty:
         return best_picks_df.copy() if isinstance(best_picks_df, pd.DataFrame) else pd.DataFrame()
 
+    if "game_date" not in best_picks_df.columns:
+        raise ValueError("best_picks_df missing game_date before Kalshi enrichment")
+
     out = best_picks_df.copy()
     out["game_date"] = pd.to_datetime(out.get("game_date"), errors="coerce", utc=True)
-    if out["game_date"].isna().all():
-        raise ValueError("best_picks_df game_date is fully null before Kalshi enrichment")
-    out["kalshi_probability"] = pd.NA
-    out["kalshi_market_title"] = pd.NA
-    out["kalshi_event_ticker"] = pd.NA
-    out["kalshi_market_ticker"] = pd.NA
+
+    for col in [
+        "kalshi_probability",
+        "kalshi_market_title",
+        "kalshi_event_ticker",
+        "kalshi_market_ticker",
+    ]:
+        if col not in out.columns:
+            out[col] = pd.NA
     out["kalshi_match_status"] = "miss"
     out["kalshi_match_reason"] = "no_valid_candidates"
     out["kalshi_tried_tickers"] = "[]"
@@ -188,9 +222,9 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         try:
             exact = _get_markets({"tickers": ",".join(tried)})
             by_ticker = {str(m.get("ticker") or ""): m for m in exact}
-            for t in tried:
-                if t in by_ticker:
-                    market = by_ticker[t]
+            for ticker in tried:
+                if ticker in by_ticker:
+                    market = by_ticker[ticker]
                     break
         except KalshiAPIError:
             out.at[idx, "kalshi_match_reason"] = "no_market_for_tickers"
@@ -198,7 +232,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
         if market is None and series:
             try:
-                market = _fallback_series_lookup(series, away_code, home_code)
+                market = _fallback_series_lookup(series, tried, away_code, home_code)
             except KalshiAPIError:
                 out.at[idx, "kalshi_match_reason"] = "no_market_for_tickers"
                 continue
@@ -217,43 +251,6 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-NCAAF_CODE_ALIASES: dict[str, str] = {}
-TEAM_CODE_ALIASES = {"NCAAB": NCAAB_CODE_ALIASES}
-KALSHI_NCAAB_TEAM_CODES = NCAAB_CODE_ALIASES
-
-
 class KalshiIntegrator:
     def enrich(self, df: pd.DataFrame) -> pd.DataFrame:
         return enrich_with_kalshi_markets(df)
-
-
-def match_game_to_kalshi(*args, **kwargs):
-    return None
-
-
-def _parse_market_metadata(*args, **kwargs):
-    return {}
-
-
-def match_nba_spread(*args, **kwargs):
-    return None
-
-
-def match_ncaab_total(*args, **kwargs):
-    return None
-
-
-def extract_margin_from_yes_side(*args, **kwargs):
-    return None
-
-
-def extract_total_from_ticker(*args, **kwargs):
-    return None
-
-
-def validate_market_type_match(*args, **kwargs):
-    return True
-
-
-def validate_teams_match(*args, **kwargs):
-    return True
