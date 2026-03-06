@@ -55,6 +55,89 @@ BEST_PICK_COLUMNS = [
     "kalshi_event_ticker",
 ]
 
+THEOVER_COLUMN_ALIASES = {
+    "league": ["league"],
+    "home_team": ["home_team", "hometeam", "home", "home team", "team_home"],
+    "away_team": ["away_team", "awayteam", "away", "away team", "team_away"],
+    "game_date": ["game_date", "date", "commence_time", "time", "start_time"],
+    "market": ["market", "bet_type", "market_type", "wager_type", "pick_type"],
+    "pick": ["pick", "selection", "side", "o/u", "over_under"],
+    "pickteam": ["pickteam", "pick_team", "team", "selection_team"],
+    "line": ["line", "spread", "spread_line", "total", "total_line", "points", "number"],
+    "winprobability": ["winprobability", "probability", "win_prob", "win_probability"],
+}
+
+
+def normalize_theover_df(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame()
+
+    normalized = df.copy()
+    normalized.columns = normalized.columns.str.strip().str.lower()
+
+    rename_map: dict[str, str] = {}
+    for canonical, aliases in THEOVER_COLUMN_ALIASES.items():
+        for alias in aliases:
+            key = alias.strip().lower()
+            if key in normalized.columns and canonical not in normalized.columns:
+                rename_map[key] = canonical
+                break
+    if rename_map:
+        normalized = normalized.rename(columns=rename_map)
+
+    if "game_date" in normalized.columns:
+        normalized["game_date"] = pd.to_datetime(normalized["game_date"], errors="coerce")
+    if "line" in normalized.columns:
+        normalized["line"] = pd.to_numeric(normalized["line"], errors="coerce")
+    if "winprobability" in normalized.columns:
+        normalized["winprobability"] = pd.to_numeric(normalized["winprobability"], errors="coerce")
+
+    return _normalize_key_columns(normalized)
+
+
+def choose_merge_keys(left: pd.DataFrame, right: pd.DataFrame) -> list[str]:
+    base_keys = [k for k in ["league", "home_team", "away_team"] if k in left.columns and k in right.columns]
+    if "game_date" not in left.columns or "game_date" not in right.columns:
+        return base_keys
+
+    left_dates = pd.to_datetime(left["game_date"], errors="coerce")
+    right_dates = pd.to_datetime(right["game_date"], errors="coerce")
+    left_coverage = left_dates.notna().mean() if len(left_dates) else 0.0
+    right_coverage = right_dates.notna().mean() if len(right_dates) else 0.0
+
+    if left_coverage < 0.5 or right_coverage < 0.5:
+        return base_keys
+
+    overlap = set(left_dates.dropna().dt.date.unique()) & set(right_dates.dropna().dt.date.unique())
+    if not overlap:
+        return base_keys
+
+    return base_keys + ["game_date"]
+
+
+def infer_market_type_and_lines(row: pd.Series) -> pd.Series:
+    pick = str(row.get("pick") or "").lower()
+    market = str(row.get("market") or "").lower()
+    line = pd.to_numeric(row.get("line"), errors="coerce")
+    pickteam = normalize_team_name(row.get("pickteam"))
+    home_team = normalize_team_name(row.get("home_team"))
+
+    market_type = ""
+    spread_line = pd.NA
+    total_line = pd.NA
+
+    if "over" in pick or "over" in market:
+        market_type = "total_over"
+        total_line = line
+    elif "under" in pick or "under" in market:
+        market_type = "total_under"
+        total_line = line
+    else:
+        market_type = "spread_home" if pickteam and pickteam == home_team else "spread_away"
+        spread_line = line
+
+    return pd.Series({"market_type": market_type, "spread_line": spread_line, "total_line": total_line})
+
 
 def _infer_market_type(row: pd.Series) -> str:
     allowed_market_types = {
@@ -137,18 +220,18 @@ def format_pick(row: pd.Series) -> str:
         return f"{numeric:.1f}"
 
     if row["market_type"] == "spread_home":
-        spread_display = _format_signed_spread(row.get("spread"))
+        spread_display = _format_signed_spread(row.get("spread_line", row.get("spread")))
         return f"{row['home_team']} {spread_display}".strip()
 
     if row["market_type"] == "spread_away":
-        spread_display = _format_signed_spread(row.get("spread"), invert_sign=True)
+        spread_display = _format_signed_spread(row.get("spread_line", row.get("spread")), invert_sign=True)
         return f"{row['away_team']} {spread_display}".strip()
 
     if row["market_type"] == "total_over":
-        return f"Over {_format_total(row.get('total'))}".strip()
+        return f"Over {_format_total(row.get('total_line', row.get('total')))}".strip()
 
     if row["market_type"] == "total_under":
-        return f"Under {_format_total(row.get('total'))}".strip()
+        return f"Under {_format_total(row.get('total_line', row.get('total')))}".strip()
 
     return ""
 
@@ -230,12 +313,14 @@ def _build_kalshi_df(base_df: pd.DataFrame) -> pd.DataFrame | None:
     if base_df is None or base_df.empty:
         return None
 
-    keys = [k for k in MERGE_KEYS if k in base_df.columns]
-    if len(keys) < 4:
+    keys = [k for k in ["league", "home_team", "away_team"] if k in base_df.columns]
+    if len(keys) < 3:
         logger.info("Kalshi skipped: missing merge keys. available=%s", keys)
         return None
+    if "game_date" in base_df.columns:
+        keys = keys + ["game_date"]
 
-    games = normalize_merge_keys(_normalize_key_columns(base_df[keys + ["market_type"] if "market_type" in base_df.columns else keys].drop_duplicates().copy()))
+    games = normalize_merge_keys(_normalize_key_columns(base_df[keys + ["market_type", "spread_line", "total_line"] if "market_type" in base_df.columns else keys].drop_duplicates().copy()))
     if games is None or games.empty:
         return None
 
@@ -370,6 +455,37 @@ def _enrich_uploaded_league(df: pd.DataFrame, selected_sports: list[str] | None 
     return enriched
 
 
+
+
+def _is_stale_base_data(base_df: pd.DataFrame, theover_df: pd.DataFrame) -> bool:
+    if "game_date" not in base_df.columns or "game_date" not in theover_df.columns:
+        return False
+    base_dates = pd.to_datetime(base_df["game_date"], errors="coerce").dropna()
+    over_dates = pd.to_datetime(theover_df["game_date"], errors="coerce").dropna()
+    if base_dates.empty or over_dates.empty:
+        return False
+    delta_days = abs((base_dates.median() - over_dates.median()).days)
+    return delta_days > 14
+
+
+def build_theover_bet_rows(spreads_df: pd.DataFrame | None, totals_df: pd.DataFrame | None, selected_sports: list[str]) -> pd.DataFrame:
+    frames: list[pd.DataFrame] = []
+    for src in (spreads_df, totals_df):
+        if src is not None and not src.empty:
+            norm = normalize_theover_df(src)
+            norm = _enrich_uploaded_league(norm, selected_sports)
+            frames.append(norm)
+
+    if not frames:
+        return pd.DataFrame()
+
+    bets = pd.concat(frames, ignore_index=True)
+    inferred = bets.apply(infer_market_type_and_lines, axis=1)
+    bets = pd.concat([bets, inferred], axis=1)
+    bets["theover_probability"] = pd.to_numeric(bets.get("winprobability"), errors="coerce").clip(lower=0.0, upper=1.0)
+    bets["matchup"] = bets.get("away_team", "").astype(str) + " @ " + bets.get("home_team", "").astype(str)
+    return bets
+
 def _resolve_american_odds(row: pd.Series) -> float:
     for col in ["odds_american", "home_odds", "odds"]:
         if col in row.index and pd.notna(row[col]):
@@ -387,7 +503,7 @@ def _safe_merge(left: pd.DataFrame, right: pd.DataFrame | None, suffix: str) -> 
     left = normalize_merge_keys(_normalize_key_columns(left))
     right = normalize_merge_keys(_normalize_key_columns(right))
 
-    keys = [k for k in MERGE_KEYS if k in left.columns and k in right.columns]
+    keys = choose_merge_keys(left, right)
     if not keys:
         return left
 
@@ -400,6 +516,7 @@ def _safe_merge(left: pd.DataFrame, right: pd.DataFrame | None, suffix: str) -> 
         suffixes=("", suffix),
     )
 
+    merged["debug_merge_keys"] = ", ".join(keys)
     return merged
 
 
@@ -434,7 +551,7 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
     # 3) ML probability: use model when available, fallback to market probability + noise
     model = load_model()
     model_loaded = model is not None
-    df["model_probability"] = pd.to_numeric(df["market_prob"], errors="coerce")
+    df["model_probability"] = pd.to_numeric(df.get("theover_probability", df["market_prob"]), errors="coerce").fillna(pd.to_numeric(df["market_prob"], errors="coerce"))
     if model is not None:
         try:
             if isinstance(model, dict) and {"model", "feature_names"}.issubset(model):
@@ -458,8 +575,8 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
             logger.warning("ML model unavailable for predict_proba; falling back to market_probability: %s", exc)
 
     if not model_loaded:
-        market_prob = pd.to_numeric(df["market_prob"], errors="coerce").fillna(0.5)
-        df["model_probability"] = (market_prob + np.random.normal(0, 0.015, size=len(df))).clip(0.01, 0.99)
+        market_prob = pd.to_numeric(df["market_prob"], errors="coerce").fillna(0.5238)
+        df["model_probability"] = pd.to_numeric(df.get("theover_probability"), errors="coerce").fillna(market_prob).clip(0.01, 0.99)
 
     df["ml_prob"] = pd.to_numeric(df["model_probability"], errors="coerce").fillna(df["market_prob"])
     df["ai_prob"] = pd.to_numeric(df.get("ai_probability", pd.NA), errors="coerce")
@@ -479,7 +596,8 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
         - (1 - prob_for_ev)
     )
     df["edge"] = prob_for_ev - df["market_probability"]
-    df["debug_merge_keys"] = ", ".join([k for k in MERGE_KEYS if k in df.columns])
+    if "debug_merge_keys" not in df.columns:
+        df["debug_merge_keys"] = ", ".join([k for k in MERGE_KEYS if k in df.columns])
     df["debug_model_loaded"] = bool(model_loaded)
 
     if "team" not in df.columns:
@@ -525,84 +643,35 @@ def run_analysis_pipeline(
         base_df["league"] = base_df["league"].apply(_normalize_league_value)
 
     selected_sports = _normalize_sports_filter(sports)
-
-    available_base_leagues = sorted(base_df["league"].dropna().astype(str).str.upper().unique().tolist()) if "league" in base_df.columns else []
-    logger.info("Selected sports (normalized): %s", selected_sports)
-    logger.info("Available base leagues (normalized): %s", available_base_leagues)
-
-    has_theover_data = (spreads_df is not None and not spreads_df.empty) or (totals_df is not None and not totals_df.empty)
-
     if selected_sports and "league" in base_df.columns:
-        filtered = base_df[base_df["league"].isin(selected_sports)].copy()
+        base_df = base_df[base_df["league"].isin(selected_sports)].copy()
+
+    theover_bets_df = build_theover_bet_rows(spreads_df, totals_df, selected_sports)
+    if selected_sports and "league" in theover_bets_df.columns:
+        theover_bets_df = theover_bets_df[theover_bets_df["league"].isin(selected_sports)].copy()
+
+    use_theover_as_base = theover_bets_df is not None and not theover_bets_df.empty
+    if use_theover_as_base:
+        filtered = theover_bets_df.head(max_rows).copy()
     else:
-        filtered = base_df.copy()
+        filtered = base_df.head(max_rows).copy()
 
-    logger.info("Rows after sports filter: %s", len(filtered))
-    if filtered.empty:
-        if selected_sports and "league" in base_df.columns:
-            logger.warning(
-                "No base rows matched selected leagues. Possible league label mismatch. selected=%s available=%s",
-                selected_sports,
-                available_base_leagues,
-            )
-        else:
-            logger.warning("No base rows available before merge stage.")
+    if use_theover_as_base and not base_df.empty:
+        if _is_stale_base_data(base_df, theover_bets_df) and "game_date" in base_df.columns:
+            base_df = base_df.copy()
+            base_df["game_date"] = pd.NaT
+        filtered = _safe_merge(filtered, base_df, "_base")
 
-    filtered = filtered.head(max_rows)
-
-    if use_ml and run_ml_predictions and not filtered.empty:
+    if use_ml and run_ml_predictions and not filtered.empty and not use_theover_as_base:
         ml_df = _normalize_key_columns(run_ml_predictions(filtered))
         filtered = _safe_merge(filtered, ml_df, "_ml")
 
-    merged_theover = None
-    if spreads_df is not None and not spreads_df.empty:
-        logger.info("Uploaded spreads_df columns: %s", spreads_df.columns.tolist())
-        merged_theover = _enrich_uploaded_league(_normalize_key_columns(spreads_df), selected_sports)
-    if totals_df is not None and not totals_df.empty:
-        logger.info("Uploaded totals_df columns: %s", totals_df.columns.tolist())
-        totals_norm = _normalize_key_columns(totals_df)
-        totals_norm = _enrich_uploaded_league(totals_norm, selected_sports)
-        merged_theover = pd.concat([merged_theover, totals_norm], ignore_index=True) if merged_theover is not None else totals_norm
-
-    if merged_theover is not None and not merged_theover.empty:
-        logger.info("Merged TheOver columns: %s", merged_theover.columns.tolist())
-        unique_leagues = sorted(merged_theover["league"].fillna("").astype(str).unique().tolist()) if "league" in merged_theover.columns else []
-        logger.info("Unique merged TheOver league values: %s", unique_leagues)
-
-    if filtered.empty and has_theover_data and merged_theover is not None and not merged_theover.empty:
-        fallback_df = merged_theover.copy()
-        logger.info("Fallback row count before sports filtering: %s", len(fallback_df))
-        if selected_sports and "league" in fallback_df.columns:
-            non_blank_leagues = fallback_df["league"].fillna("").astype(str).str.strip()
-            if non_blank_leagues.ne("").any():
-                fallback_df = fallback_df[fallback_df["league"].isin(selected_sports)].copy()
-            else:
-                logger.info(
-                    "Skipping fallback sports filter: uploaded TheOver data had no usable league labels. selected=%s",
-                    selected_sports,
-                )
-        logger.info("Fallback row count after sports filtering: %s", len(fallback_df))
-        filtered = fallback_df.head(max_rows)
-        logger.info(
-            "Fallback activated: using uploaded TheOver data as base. fallback_rows=%s selected=%s",
-            len(filtered),
-            selected_sports,
-        )
-
-    filtered = _safe_merge(filtered, merged_theover, "_theover")
-
     kalshi_df = _build_kalshi_df(filtered)
-    if kalshi_df is not None and not kalshi_df.empty:
-        logger.info("Kalshi merge available rows: %s", len(kalshi_df))
-    else:
-        logger.info("Kalshi merge skipped or no rows available.")
     filtered = _safe_merge(filtered, kalshi_df, "_kalshi")
 
     analyzed = _apply_analysis_calculations(filtered)
-    logger.info("Analyzed row count: %s", len(analyzed))
     if analyzed.empty:
         return analyzed
-
     return analyzed
 
 
