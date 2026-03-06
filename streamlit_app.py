@@ -6,7 +6,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-sys.path.append(str(ROOT))
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 import pandas as pd
 import streamlit as st
@@ -173,7 +174,10 @@ def main() -> None:
             portfolio_source_df,
             bankroll=float(controls["bankroll"]),
         )
-        simulation_results = run_bankroll_simulation(portfolio_df, bankroll=float(controls["bankroll"]))
+        if portfolio_df is not None and not portfolio_df.empty:
+            simulation_results = run_bankroll_simulation(portfolio_df, bankroll=float(controls["bankroll"]))
+        else:
+            simulation_results = {}
 
         odds_df = analysis_df.copy()
         theover_df = (
@@ -351,9 +355,7 @@ def main() -> None:
 
             league_s = _safe_str_series(portfolio_display, "league").str.upper()
             pick_s = _safe_str_series(portfolio_display, "best_pick")
-            bet_s = pd.to_numeric(
-                portfolio_display["recommended_bet"], errors="coerce"
-            ).fillna(0.0) if "recommended_bet" in portfolio_display.columns else pd.Series([0.0] * len(portfolio_display), index=portfolio_display.index)
+            bet_s = pd.to_numeric(_safe_str_series(portfolio_display, "recommended_bet", "0"), errors="coerce").fillna(0.0)
 
             portfolio_display["allocation_label"] = (
                 league_s + " | " + pick_s + " | $" + bet_s.map(lambda x: f"{x:,.2f}")

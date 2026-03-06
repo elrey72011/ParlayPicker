@@ -873,8 +873,46 @@ def optimize_portfolio_allocation(analysis_df: pd.DataFrame, bankroll: float = 1
     if edges.empty:
         return edges
 
+    if "decimal_odds" not in edges.columns:
+        if "odds_american" in edges.columns:
+            edges["decimal_odds"] = pd.to_numeric(edges["odds_american"], errors="coerce").apply(american_to_decimal)
+        else:
+            edges["decimal_odds"] = 1.9091
+    else:
+        decimal_odds = pd.to_numeric(edges["decimal_odds"], errors="coerce")
+        if "odds_american" in edges.columns:
+            fallback_odds = pd.to_numeric(edges["odds_american"], errors="coerce").apply(american_to_decimal)
+            edges["decimal_odds"] = decimal_odds.fillna(fallback_odds).fillna(1.9091)
+        else:
+            edges["decimal_odds"] = decimal_odds.fillna(1.9091)
+
     portfolio = add_kelly_bet_sizing(edges, bankroll=bankroll, fraction=0.25)
     portfolio = _ensure_best_pick_column(portfolio)
+
+    if "decimal_odds" not in portfolio.columns:
+        portfolio["decimal_odds"] = pd.to_numeric(portfolio.get("odds_american"), errors="coerce").apply(american_to_decimal) if "odds_american" in portfolio.columns else 1.9091
+    else:
+        decimal_odds = pd.to_numeric(portfolio["decimal_odds"], errors="coerce")
+        if "odds_american" in portfolio.columns:
+            fallback_odds = pd.to_numeric(portfolio["odds_american"], errors="coerce").apply(american_to_decimal)
+            portfolio["decimal_odds"] = decimal_odds.fillna(fallback_odds).fillna(1.9091)
+        else:
+            portfolio["decimal_odds"] = decimal_odds.fillna(1.9091)
+
+    required_columns = [
+        "league",
+        "away_team",
+        "home_team",
+        "best_pick",
+        "calibrated_probability",
+        "expected_value",
+        "edge",
+        "decimal_odds",
+        "recommended_bet",
+    ]
+    for col in required_columns:
+        if col not in portfolio.columns:
+            portfolio[col] = pd.NA
 
     portfolio_columns = [
         "league",
@@ -921,6 +959,7 @@ BEST_PICK_COLUMNS = [
     "expected_value",
     "edge",
     "odds_american",
+    "decimal_odds",
     "market_probability",
     "ml_probability",
 ]
@@ -1094,6 +1133,17 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:  # type: ign
     df = analysis_df[market_type_series.isin(allowed)].copy()
     if df.empty:
         return pd.DataFrame(columns=BEST_PICK_COLUMNS)
+
+    if "decimal_odds" in df.columns:
+        decimal_odds = pd.to_numeric(df["decimal_odds"], errors="coerce")
+    else:
+        decimal_odds = pd.Series([pd.NA] * len(df), index=df.index, dtype="Float64")
+    if "odds_american" in df.columns:
+        fallback_odds = pd.to_numeric(df["odds_american"], errors="coerce").apply(american_to_decimal)
+        df["decimal_odds"] = decimal_odds.fillna(fallback_odds).fillna(1.9091)
+    else:
+        df["decimal_odds"] = decimal_odds.fillna(1.9091)
+
     df["expected_value"] = pd.to_numeric(df["expected_value"], errors="coerce") if "expected_value" in df.columns else pd.Series([pd.NA] * len(df), index=df.index, dtype="Float64")
     df["edge"] = pd.to_numeric(df["edge"], errors="coerce") if "edge" in df.columns else pd.Series([pd.NA] * len(df), index=df.index, dtype="Float64")
     df = df.sort_values(["expected_value", "edge"], ascending=[False, False])
