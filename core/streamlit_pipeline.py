@@ -16,7 +16,6 @@ from core.probability_calibration import calibrate_probabilities
 from core.probability_engine import american_to_prob, normalize_probability_components, remove_vig
 from core.schema.base_schema import ensure_base_schema
 from core.team_mapper import normalize_team_name
-from app_core.kalshi_integrator import enrich_with_kalshi_markets
 
 logger = logging.getLogger(__name__)
 
@@ -43,11 +42,12 @@ BEST_PICK_COLUMNS = [
     "home_team",
     "game_date",
     "best_pick",
-    "market_type",
     "calibrated_probability",
     "expected_value",
     "edge",
     "odds_american",
+    "decimal_odds",
+    "market_type",
     "market_probability",
     "ml_probability",
     "theover_probability",
@@ -229,7 +229,8 @@ def format_pick(row: pd.Series) -> str:
         return f"{row['home_team']} {spread_display}".strip()
 
     if row["market_type"] == "spread_away":
-        spread_display = _format_signed_spread(row.get("spread_line", row.get("spread")), invert_sign=True)
+        spread = pd.to_numeric(row.get("spread_line", row.get("spread")), errors="coerce")
+        spread_display = f"+{abs(spread):.1f}" if pd.notna(spread) else ""
         return f"{row['away_team']} {spread_display}".strip()
 
     if row["market_type"] == "total_over":
@@ -480,47 +481,77 @@ def _enrich_uploaded_league(df: pd.DataFrame, selected_sports: list[str] | None 
 
 
 
-def _is_stale_base_data(base_df: pd.DataFrame, theover_df: pd.DataFrame) -> bool:
-    if "game_date" not in base_df.columns or "game_date" not in theover_df.columns:
+def is_stale_schedule(df: pd.DataFrame, now_utc: pd.Timestamp, max_age_days: int = 14) -> bool:
+    if df is None or df.empty or "game_date" not in df.columns:
         return False
-    base_dates = pd.to_datetime(base_df["game_date"], errors="coerce").dropna()
-    over_dates = pd.to_datetime(theover_df["game_date"], errors="coerce").dropna()
-    if base_dates.empty or over_dates.empty:
+    max_game_date = pd.to_datetime(df["game_date"], errors="coerce", utc=True).dropna()
+    if max_game_date.empty:
         return False
-    delta_days = abs((base_dates.median() - over_dates.median()).days)
-    return delta_days > 14
+    return max_game_date.max() < (now_utc - pd.Timedelta(days=max_age_days))
 
 
 def build_theover_bet_rows(spreads_df: pd.DataFrame | None, totals_df: pd.DataFrame | None, selected_sports: list[str]) -> pd.DataFrame:
+    required_cols = [
+        "league", "game_date", "home_team", "away_team", "market_type", "spread_line", "total_line",
+        "theover_probability", "odds_american", "market", "pick", "pickteam", "line",
+    ]
+
     def _prep(df: pd.DataFrame | None, default_market: str) -> pd.DataFrame:
         if df is None or df.empty:
-            return pd.DataFrame()
+            return pd.DataFrame(columns=required_cols)
         out = normalize_theover_df(df)
         out = _enrich_uploaded_league(out, selected_sports)
-        if "market" not in out.columns:
+        if "market" in out.columns:
+            out["market"] = out["market"].fillna(default_market)
+        else:
             out["market"] = default_market
-        out["market"] = out["market"].fillna(default_market)
-        out["pick"] = out.get("pick", "")
-        out["pickteam"] = out.get("pickteam", "")
-        inferred = out.apply(infer_market_type_and_lines, axis=1)
-        return pd.concat([out, inferred], axis=1)
+        out["pick"] = out["pick"] if "pick" in out.columns else ""
+        out["pickteam"] = out["pickteam"] if "pickteam" in out.columns else ""
+        out["line"] = pd.to_numeric(out["line"] if "line" in out.columns else pd.Series([pd.NA] * len(out), index=out.index), errors="coerce")
+        out["winprobability"] = pd.to_numeric(out.get("winprobability"), errors="coerce")
+        if out["winprobability"].dropna().gt(1.0).mean() > 0.8:
+            out["winprobability"] = out["winprobability"] / 100.0
+        out["theover_probability"] = out["winprobability"].clip(0.0, 1.0)
+        odds_series = out["odds_american"] if "odds_american" in out.columns else pd.Series([-110.0] * len(out), index=out.index)
+        out["odds_american"] = pd.to_numeric(odds_series, errors="coerce").fillna(-110.0)
+        out["spread_line"] = pd.NA
+        out["total_line"] = pd.NA
+        out["market_type"] = ""
+
+        if default_market == "spread":
+            pickteam_norm = out["pickteam"].apply(normalize_team_name)
+            home_norm = out["home_team"].apply(normalize_team_name)
+            away_norm = out["away_team"].apply(normalize_team_name)
+            home_pick = pickteam_norm.eq(home_norm)
+            away_pick = pickteam_norm.eq(away_norm)
+            out.loc[home_pick, "spread_line"] = out.loc[home_pick, "line"]
+            out.loc[away_pick, "spread_line"] = -out.loc[away_pick, "line"]
+            spread_num = pd.to_numeric(out["spread_line"], errors="coerce")
+            out.loc[spread_num < 0, "market_type"] = "spread_home"
+            out.loc[spread_num > 0, "market_type"] = "spread_away"
+        else:
+            pick_s = out["pick"].astype(str).str.lower()
+            out["total_line"] = out["line"]
+            out.loc[pick_s.str.contains("over"), "market_type"] = "total_over"
+            out.loc[pick_s.str.contains("under"), "market_type"] = "total_under"
+
+        for col in required_cols:
+            if col not in out.columns:
+                out[col] = pd.NA
+        return out[required_cols]
 
     spread_rows = _prep(spreads_df, "spread")
     total_rows = _prep(totals_df, "total")
-    if spread_rows.empty and total_rows.empty:
-        return pd.DataFrame()
-
     bets = pd.concat([spread_rows, total_rows], ignore_index=True)
+    if bets.empty:
+        return bets
     bets = _normalize_key_columns(bets)
     if selected_sports and "league" in bets.columns:
         bets = bets[bets["league"].isin(selected_sports)].copy()
-
-    bets["line"] = pd.to_numeric(bets.get("line"), errors="coerce")
-    bets["winprobability"] = pd.to_numeric(bets.get("winprobability"), errors="coerce").fillna(0.5).clip(0.0, 1.0)
-    bets["theover_probability"] = bets["winprobability"]
-    bets["ai_probability"] = bets["winprobability"]
-    bets["matchup"] = bets.get("away_team", "").astype(str) + " @ " + bets.get("home_team", "").astype(str)
+    bets = bets[bets["market_type"].isin({"spread_home", "spread_away", "total_over", "total_under"})].copy()
+    bets["matchup"] = bets["away_team"].astype(str) + " @ " + bets["home_team"].astype(str)
     return bets
+
 
 def _resolve_american_odds(row: pd.Series) -> float:
     for col in ["odds_american", "home_odds", "odds"]:
@@ -673,7 +704,8 @@ def run_analysis_pipeline(
     use_ml: bool = True,
     spreads_df: pd.DataFrame | None = None,
     totals_df: pd.DataFrame | None = None,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, float | int | str | None]]:
+    now_utc = pd.Timestamp.utcnow()
     base_df = load_base_data().copy()
     if "league" in base_df.columns:
         base_df["league"] = base_df["league"].apply(_normalize_league_value)
@@ -683,35 +715,60 @@ def run_analysis_pipeline(
         base_df = base_df[base_df["league"].isin(selected_sports)].copy()
 
     theover_bets_df = build_theover_bet_rows(spreads_df, totals_df, selected_sports)
-    if selected_sports and "league" in theover_bets_df.columns:
-        theover_bets_df = theover_bets_df[theover_bets_df["league"].isin(selected_sports)].copy()
+    base_stale = is_stale_schedule(base_df, now_utc)
 
-    use_theover_as_base = base_df.empty or (not theover_bets_df.empty and _is_stale_base_data(base_df, theover_bets_df))
-    if use_theover_as_base:
+    if not theover_bets_df.empty:
         filtered = theover_bets_df.head(max_rows).copy()
+        if not base_df.empty and not base_stale:
+            enrich_cols = [c for c in base_df.columns if c not in filtered.columns]
+            if enrich_cols:
+                filtered = _safe_merge(filtered, base_df[[*choose_merge_keys(filtered, base_df), *enrich_cols]], "_base")
     else:
         filtered = base_df.head(max_rows).copy()
-        if not theover_bets_df.empty:
-            merged = _safe_merge(filtered, theover_bets_df, "_theover")
-            for col in ["market", "pick", "pickteam", "line", "winprobability", "theover_probability", "ai_probability", "market_type", "spread_line", "total_line"]:
-                suff = f"{col}_theover"
-                if suff in merged.columns:
-                    if col not in merged.columns:
-                        merged[col] = pd.NA
-                    merged[col] = merged[col].where(merged[col].notna(), merged[suff])
-            filtered = merged
 
-    if use_ml and run_ml_predictions and not filtered.empty and not use_theover_as_base:
+    if use_ml and run_ml_predictions and not filtered.empty and theover_bets_df.empty:
         ml_df = _normalize_key_columns(run_ml_predictions(filtered))
         filtered = _safe_merge(filtered, ml_df, "_ml")
 
     analyzed = _apply_analysis_calculations(filtered)
     if analyzed.empty:
-        return analyzed, pd.DataFrame(columns=BEST_PICK_COLUMNS)
+        diagnostics = {
+            "total_rows": 0,
+            "bet_rows": 0,
+            "best_picks_rows": 0,
+            "base_max_date": None,
+            "theover_max_date": None,
+            "kalshi_attempted": 0,
+            "kalshi_matched": 0,
+            "bet_row_coverage": 0.0,
+            "base_schedule_stale": base_stale,
+        }
+        return analyzed, pd.DataFrame(columns=BEST_PICK_COLUMNS), diagnostics
+
+    market_types = analyzed["market_type"].astype(str) if "market_type" in analyzed.columns else pd.Series(["" for _ in range(len(analyzed))], index=analyzed.index)
+    analyzed = analyzed[market_types.isin({"spread_home", "spread_away", "total_over", "total_under"})].copy()
+    prob_priority = pd.to_numeric(analyzed.get("theover_probability"), errors="coerce")
+    prob_priority = prob_priority.fillna(pd.to_numeric(analyzed.get("model_probability"), errors="coerce"))
+    prob_priority = prob_priority.fillna(pd.to_numeric(analyzed.get("market_probability"), errors="coerce"))
+    analyzed["calibrated_probability"] = prob_priority.clip(0.0, 1.0)
+    analyzed["odds_american"] = pd.to_numeric(analyzed.get("odds_american"), errors="coerce").fillna(-110.0)
+    analyzed["decimal_odds"] = analyzed["odds_american"].apply(american_to_decimal)
+    analyzed["expected_value"] = analyzed["calibrated_probability"] * (analyzed["decimal_odds"] - 1) - (1 - analyzed["calibrated_probability"])
+    analyzed["edge"] = analyzed["calibrated_probability"] - pd.to_numeric(analyzed.get("market_probability"), errors="coerce").fillna(0.5)
 
     best_picks_df = _build_best_picks(analyzed)
-    best_picks_df = enrich_with_kalshi_markets(best_picks_df)
-    return analyzed, best_picks_df
+    diagnostics = {
+        "total_rows": int(len(filtered)),
+        "bet_rows": int(len(analyzed)),
+        "best_picks_rows": int(len(best_picks_df)),
+        "base_max_date": pd.to_datetime(base_df.get("game_date"), errors="coerce", utc=True).max() if not base_df.empty else None,
+        "theover_max_date": pd.to_datetime(theover_bets_df.get("game_date"), errors="coerce", utc=True).max() if not theover_bets_df.empty else None,
+        "kalshi_attempted": 0,
+        "kalshi_matched": 0,
+        "bet_row_coverage": float(len(analyzed) / max(len(filtered), 1)),
+        "base_schedule_stale": base_stale,
+    }
+    return analyzed, best_picks_df, diagnostics
 
 
 def generate_parlays(analysis_df: pd.DataFrame) -> pd.DataFrame:
