@@ -2,6 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent
+sys.path.append(str(ROOT))
+
 import pandas as pd
 import streamlit as st
 
@@ -211,8 +217,9 @@ def main() -> None:
         kalshi_matches = len(kalshi_df) if kalshi_df is not None else 0
 
         if controls["show_debug"]:
-            render_debug(analysis_df, odds_matches, theover_matches, kalshi_matches)
-            render_debug_panel(analysis_df, odds_matches, theover_matches, kalshi_matches)
+            parlay_count = len(parlays_df) if parlays_df is not None else 0
+            render_debug(analysis_df, odds_matches, theover_matches, kalshi_matches, parlay_count)
+            render_debug_panel(analysis_df, odds_matches, theover_matches, kalshi_matches, parlay_count)
         else:
             st.info("Enable 'Display Debug Information' in the sidebar to inspect debug data.")
 
