@@ -930,19 +930,43 @@ def normalize_theover_df(df: pd.DataFrame) -> pd.DataFrame:  # type: ignore[over
     return loader_normalize_theover_df(df)
 
 
-def is_stale_schedule(base_df: pd.DataFrame, theover_df: pd.DataFrame, now: pd.Timestamp, max_age_days: int = 14) -> bool:  # type: ignore[override]
-    base_dates = pd.to_datetime(base_df.get("game_date"), errors="coerce") if isinstance(base_df, pd.DataFrame) else pd.Series(dtype="datetime64[ns]")
-    if base_dates.dropna().empty:
-        return True
-    base_max = base_dates.max()
-    now = pd.to_datetime(now, errors="coerce")
-    stale_by_now = pd.notna(now) and (base_max < (now - pd.Timedelta(days=max_age_days)))
+def _coerce_utc_ts(value) -> pd.Timestamp:
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return pd.NaT
+    return pd.to_datetime(value, errors="coerce", utc=True)
 
-    theover_dates = pd.to_datetime(theover_df.get("game_date"), errors="coerce") if isinstance(theover_df, pd.DataFrame) else pd.Series(dtype="datetime64[ns]")
-    stale_vs_theover = False
-    if not theover_dates.dropna().empty:
-        stale_vs_theover = base_max < (theover_dates.max() - pd.Timedelta(days=max_age_days))
-    return bool(stale_by_now or stale_vs_theover)
+
+def _max_utc_from_columns(df: pd.DataFrame | None, candidates: list[str]) -> pd.Timestamp:
+    if df is None or df.empty:
+        return pd.NaT
+    for col in candidates:
+        if col in df.columns:
+            series = pd.to_datetime(df[col], errors="coerce", utc=True)
+            if series.notna().any():
+                return series.max()
+    return pd.NaT
+
+
+def is_stale_schedule(base_df: pd.DataFrame, theover_df: pd.DataFrame, now: pd.Timestamp, max_age_days: int = 14) -> bool:  # type: ignore[override]
+    now_ts = _coerce_utc_ts(now)
+    date_candidates = ["game_date", "commence_time", "start_time", "time", "date"]
+
+    base_max = _max_utc_from_columns(base_df, date_candidates)
+    bet_max = _max_utc_from_columns(theover_df, date_candidates)
+
+    stale_by_now = False
+    stale_vs_upload = False
+
+    if pd.notna(base_max) and pd.notna(now_ts):
+        stale_by_now = base_max < (now_ts - pd.Timedelta(days=max_age_days))
+
+    if pd.notna(base_max) and pd.notna(bet_max):
+        stale_vs_upload = base_max < (bet_max - pd.Timedelta(days=1))
+
+    if pd.isna(base_max) and pd.notna(bet_max):
+        return True
+
+    return bool(stale_by_now or stale_vs_upload)
 
 
 def build_theover_bet_rows(spreads_df: pd.DataFrame | None, totals_df: pd.DataFrame | None, selected_sports: list[str]) -> pd.DataFrame:  # type: ignore[override]
@@ -1091,14 +1115,20 @@ def run_analysis_pipeline(  # type: ignore[override]
     spreads_df: pd.DataFrame | None = None,
     totals_df: pd.DataFrame | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, float | int | str | None]]:
-    now_utc = pd.Timestamp.utcnow()
+    now_utc = _coerce_utc_ts(pd.Timestamp.utcnow())
     selected_sports = _normalize_sports_filter(sports)
     base_df = load_base_data().copy()
+    if "game_date" in base_df.columns:
+        base_df["game_date"] = pd.to_datetime(base_df["game_date"], errors="coerce", utc=True)
     if selected_sports and "league" in base_df.columns:
         base_df = base_df[base_df["league"].isin(selected_sports)].copy()
 
     bet_rows_df = build_theover_bet_rows(spreads_df, totals_df, selected_sports)
+    if "game_date" in bet_rows_df.columns:
+        bet_rows_df["game_date"] = pd.to_datetime(bet_rows_df["game_date"], errors="coerce", utc=True)
     base_stale = is_stale_schedule(base_df, bet_rows_df, now_utc)
+    base_max_date = _max_utc_from_columns(base_df, ["game_date", "commence_time", "start_time", "time", "date"])
+    bet_rows_max_date = _max_utc_from_columns(bet_rows_df, ["game_date", "commence_time", "start_time", "time", "date"])
 
     if not bet_rows_df.empty:
         analysis_input = bet_rows_df.head(max_rows).copy()
@@ -1111,8 +1141,18 @@ def run_analysis_pipeline(  # type: ignore[override]
         analysis_input = base_df.head(max_rows).copy()
 
     analyzed = _apply_analysis_calculations(analysis_input)
+    if "game_date" in analyzed.columns:
+        analyzed["game_date"] = pd.to_datetime(analyzed["game_date"], errors="coerce", utc=True)
     if analyzed.empty:
-        di = {"total_games": 0, "bet_rows": 0, "best_picks": 0, "base_stale": base_stale}
+        di = {
+            "total_games": 0,
+            "bet_rows": 0,
+            "best_picks": 0,
+            "base_stale": bool(base_stale),
+            "base_max_date": None if pd.isna(base_max_date) else str(base_max_date),
+            "bet_rows_max_date": None if pd.isna(bet_rows_max_date) else str(bet_rows_max_date),
+            "now_utc": None if pd.isna(now_utc) else str(now_utc),
+        }
         return analyzed, pd.DataFrame(columns=BEST_PICK_COLUMNS), di
 
     theover_prob = pd.to_numeric(analyzed["theover_probability"], errors="coerce") if "theover_probability" in analyzed.columns else pd.Series([pd.NA] * len(analyzed), index=analyzed.index, dtype="Float64")
@@ -1136,5 +1176,8 @@ def run_analysis_pipeline(  # type: ignore[override]
         "bet_rows": int(len(analyzed)),
         "best_picks": int(len(best_picks_df)),
         "base_stale": bool(base_stale),
+        "base_max_date": None if pd.isna(base_max_date) else str(base_max_date),
+        "bet_rows_max_date": None if pd.isna(bet_rows_max_date) else str(bet_rows_max_date),
+        "now_utc": None if pd.isna(now_utc) else str(now_utc),
     }
     return analyzed, best_picks_df, di
