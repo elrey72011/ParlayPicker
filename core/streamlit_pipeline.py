@@ -8,33 +8,47 @@ import streamlit as st
 
 from core.ev_engine import calculate_ev
 from core.parlay_engine import generate_parlays as generate_parlay_candidates
-from core.probability_engine import american_to_prob, remove_vig
+from core.probability_engine import american_to_prob, normalize_probability_components, remove_vig
 from core.schema.base_schema import ensure_base_schema
-from core.team_normalizer import normalize_team
+from core.team_mapper import normalize_team_name
 
 logger = logging.getLogger(__name__)
 
+
 try:
-    from complete_workflow_implementation import (
-        build_optimal_parlays,
-        compute_best_bets,
-        run_master_analysis,
-        run_ml_predictions,
-    )
+    from complete_workflow_implementation import run_ml_predictions
 except Exception:  # pragma: no cover
-    build_optimal_parlays = None
-    compute_best_bets = None
-    run_master_analysis = None
     run_ml_predictions = None
 
 
+MERGE_KEYS = ["league", "home_team", "away_team", "game_date"]
 
 
 def _normalize_teams(df: pd.DataFrame) -> pd.DataFrame:
-    for col in ["home_team", "away_team"]:
+    for col in ["home_team", "away_team", "team"]:
         if col in df.columns:
-            df.loc[:, col] = df[col].apply(normalize_team)
+            df.loc[:, col] = df[col].apply(normalize_team_name)
     return df
+
+
+def _normalize_key_columns(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return df
+
+    df = df.copy()
+    df.columns = df.columns.str.strip().str.lower()
+    rename_map = {"sport": "league", "date": "game_date", "commence_time": "game_date"}
+    for src, dst in rename_map.items():
+        if src in df.columns and dst not in df.columns:
+            df = df.rename(columns={src: dst})
+
+    if "game_date" not in df.columns:
+        df["game_date"] = pd.NaT
+
+    df["game_date"] = pd.to_datetime(df["game_date"], errors="coerce").dt.date
+    if "league" not in df.columns:
+        df["league"] = ""
+    return _normalize_teams(df)
 
 
 def _resolve_american_odds(row: pd.Series) -> float:
@@ -47,50 +61,42 @@ def _resolve_american_odds(row: pd.Series) -> float:
     return -110.0
 
 
+def _safe_merge(left: pd.DataFrame, right: pd.DataFrame | None, suffix: str) -> pd.DataFrame:
+    if right is None or right.empty:
+        return left
+    right = _normalize_key_columns(right)
+    shared_keys = [k for k in MERGE_KEYS if k in left.columns and k in right.columns]
+    if not shared_keys:
+        return left
+    return left.merge(right, on=shared_keys, how="left", suffixes=("", suffix))
+
+
 def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return df
 
     df = ensure_base_schema(df)
 
-    df["ai_probability"] = pd.to_numeric(df["ai_probability"], errors="coerce").fillna(0.5)
-    df["ml_probability"] = pd.to_numeric(df["ml_probability"], errors="coerce").fillna(0.5)
-
     df["odds_american"] = df.apply(_resolve_american_odds, axis=1)
-    df["market_probability"] = df["odds_american"].apply(american_to_prob)
 
+    df["market_prob"] = df["odds_american"].apply(american_to_prob)
     if {"home_odds", "away_odds"}.issubset(df.columns):
-        pair_probs = df[["home_odds", "away_odds"]].apply(
-            lambda r: remove_vig([american_to_prob(float(r["home_odds"])), american_to_prob(float(r["away_odds"]))])
-            if pd.notna(r["home_odds"]) and pd.notna(r["away_odds"])
-            else [df.at[r.name, "market_probability"], 1 - df.at[r.name, "market_probability"]],
-            axis=1,
-            result_type="expand",
-        )
-        df["market_probability"] = pair_probs[0]
+        home_prob = pd.to_numeric(df["home_odds"], errors="coerce").apply(lambda x: american_to_prob(x) if pd.notna(x) else pd.NA)
+        away_prob = pd.to_numeric(df["away_odds"], errors="coerce").apply(lambda x: american_to_prob(x) if pd.notna(x) else pd.NA)
+        no_vig = pd.DataFrame([remove_vig(h, a) if pd.notna(h) and pd.notna(a) else (pd.NA, pd.NA) for h, a in zip(home_prob, away_prob)])
+        df["market_prob"] = no_vig[0].fillna(df["market_prob"])
 
-    has_kalshi = "kalshi_probability" in df.columns and df["kalshi_probability"].notna().any()
-    if has_kalshi:
-        df["kalshi_probability"] = pd.to_numeric(df["kalshi_probability"], errors="coerce").fillna(0.5)
-        df["consensus_prob"] = (
-            0.35 * df["market_probability"]
-            + 0.35 * df["ml_probability"]
-            + 0.20 * df["ai_probability"]
-            + 0.10 * df["kalshi_probability"]
-        )
-    else:
-        df["consensus_prob"] = (
-            df["market_probability"]
-            + df["ml_probability"]
-            + df["ai_probability"]
-        ) / 3
+    df["ml_prob"] = pd.to_numeric(df.get("ml_probability", 0.5), errors="coerce")
+    df["ai_prob"] = pd.to_numeric(df.get("ai_probability", 0.5), errors="coerce")
+    df["kalshi_prob"] = pd.to_numeric(df.get("kalshi_probability", pd.NA), errors="coerce")
+
+    df = normalize_probability_components(df)
+    df["market_probability"] = df["market_prob"]
 
     df["expected_value"] = calculate_ev(df["consensus_prob"], df["odds_american"])
 
-    if "spread_edge" not in df.columns:
-        df["spread_edge"] = 0.0
-    if "total_edge" not in df.columns:
-        df["total_edge"] = 0.0
+    if "team" not in df.columns:
+        df["team"] = df.get("away_team", "")
 
     df["best_pick"] = df.apply(
         lambda r: f"{r['away_team']} vs {r['home_team']}" if r["expected_value"] > 0 else "No Edge",
@@ -99,32 +105,10 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def determine_best_pick(row: pd.Series) -> str:
-    if row["expected_value"] <= 0:
-        return "No Edge"
-
-    spread_edge = float(row.get("spread_edge", 0) or 0)
-    total_edge = float(row.get("total_edge", 0) or 0)
-
-    if spread_edge >= total_edge:
-        return f"{row['away_team']} spread"
-
-    return f"{row['away_team']} total"
-
 @st.cache_data(ttl=300)
 def load_base_data() -> pd.DataFrame:
     df = pd.read_csv("data/master_all_sports.csv")
-    return _normalize_teams(df)
-
-
-def detect_league_column(df: pd.DataFrame) -> str | None:
-    possible_names = ["league", "sport", "sport_key", "league_name", "league_id"]
-
-    for col in possible_names:
-        if col in df.columns:
-            return col
-
-    return None
+    return _normalize_key_columns(df)
 
 
 @st.cache_data(ttl=180)
@@ -135,100 +119,44 @@ def run_analysis_pipeline(
     spreads_df: pd.DataFrame | None = None,
     totals_df: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
-    base_df = load_base_data()
-    base_df.columns = base_df.columns.str.strip().str.lower()
+    base_df = load_base_data().copy()
 
-    required_columns = ["home_team", "away_team"]
-    for col in required_columns:
-        if col not in base_df.columns:
-            raise ValueError(f"Required column missing: {col}")
-
-    league_col = detect_league_column(base_df)
-    logger.info("Available columns: %s", list(base_df.columns))
-    logger.info("Detected league column: %s", league_col)
-
-    if sports and league_col:
-        filtered = base_df[base_df[league_col].isin(list(sports))].copy()
+    if sports and "league" in base_df.columns:
+        filtered = base_df[base_df["league"].isin(list(sports))].copy()
     else:
-        if sports and not league_col:
-            logger.warning("League column not found. Skipping sports filter.")
         filtered = base_df.copy()
 
-    filtered = _normalize_teams(filtered.head(max_rows))
+    filtered = filtered.head(max_rows)
 
-    if spreads_df is not None:
-        filtered["theover_spreads_uploaded"] = True
-        filtered["theover_spreads_rows"] = len(spreads_df)
-    else:
-        filtered["theover_spreads_uploaded"] = False
+    if use_ml and run_ml_predictions and not filtered.empty:
+        ml_df = _normalize_key_columns(run_ml_predictions(filtered))
+        filtered = _safe_merge(filtered, ml_df, "_ml")
 
-    if totals_df is not None:
-        filtered["theover_totals_uploaded"] = True
-        filtered["theover_totals_rows"] = len(totals_df)
-    else:
-        filtered["theover_totals_uploaded"] = False
+    merged_theover = None
+    if spreads_df is not None and not spreads_df.empty:
+        merged_theover = _normalize_key_columns(spreads_df)
+    if totals_df is not None and not totals_df.empty:
+        totals_norm = _normalize_key_columns(totals_df)
+        merged_theover = pd.concat([merged_theover, totals_norm], ignore_index=True) if merged_theover is not None else totals_norm
 
-    if use_ml and run_ml_predictions and run_master_analysis and not filtered.empty:
-        ml_df = run_ml_predictions(filtered)
-        analyzed = run_master_analysis(filtered, ml_df, filtered)
-        if analyzed is None or analyzed.empty:
-            return _apply_analysis_calculations(filtered)
+    filtered = _safe_merge(filtered, merged_theover, "_theover")
 
-        if "ml_probability_x" in analyzed.columns:
-            analyzed["ml_probability"] = analyzed["ml_probability_x"]
-        if "ml_probability_y" in analyzed.columns:
-            analyzed["ml_probability"] = analyzed["ml_probability_y"]
-        analyzed.drop(
-            columns=["ml_probability_x", "ml_probability_y"],
-            errors="ignore",
-            inplace=True,
-        )
-        return _apply_analysis_calculations(_normalize_teams(analyzed))
     return _apply_analysis_calculations(filtered)
 
 
 def generate_parlays(analysis_df: pd.DataFrame) -> pd.DataFrame:
     if analysis_df.empty:
         return pd.DataFrame()
-
-    parlay_candidates = analysis_df.attrs.get("parlay_candidates")
-    if isinstance(parlay_candidates, pd.DataFrame) and not parlay_candidates.empty:
-        return parlay_candidates
-
-    generated = generate_parlay_candidates(analysis_df)
-    if not generated.empty:
-        return generated
-
-    if compute_best_bets and build_optimal_parlays:
-        best_bets = compute_best_bets(analysis_df)
-        parlays = build_optimal_parlays(best_bets, parlay_sizes=[2, 3], max_per_size=8, check_correlation=True)
-        rows = []
-        for size, entries in parlays.items():
-            for entry in entries:
-                rows.append(
-                    {
-                        "parlay_size": size,
-                        "probability": entry.get("probability"),
-                        "odds": entry.get("odds"),
-                        "expected_value": entry.get("expected_value"),
-                    }
-                )
-        return pd.DataFrame(rows)
-
-    return analysis_df.head(10)
-
-
-# Backward compatible alias
-generate_parlays_table = generate_parlays
+    return generate_parlay_candidates(analysis_df)
 
 
 def build_realtime_edges(analysis_df: pd.DataFrame) -> pd.DataFrame:
     if analysis_df.empty:
         return pd.DataFrame()
 
-    edge_cols = [c for c in ["league", "Home", "Away", "consensus_prob", "expected_value"] if c in analysis_df.columns]
+    edge_cols = [c for c in ["league", "home_team", "away_team", "consensus_prob", "expected_value"] if c in analysis_df.columns]
     if edge_cols:
-        return analysis_df[edge_cols].sort_values(edge_cols[-1], ascending=False).head(25)
+        return analysis_df[edge_cols].sort_values("expected_value", ascending=False).head(25)
 
     return analysis_df.head(25)
 
@@ -239,9 +167,6 @@ def optimize_portfolio_allocation(analysis_df: pd.DataFrame) -> pd.DataFrame:
         return edges
 
     portfolio = edges.copy()
-    if "expected_value" in portfolio.columns:
-        ev_abs = portfolio["expected_value"].abs().replace(0, 1)
-        portfolio["allocation_pct"] = ((ev_abs / ev_abs.sum()) * 100).round(2)
-    else:
-        portfolio["allocation_pct"] = round(100 / max(len(portfolio), 1), 2)
+    ev_abs = portfolio["expected_value"].abs().replace(0, 1)
+    portfolio["allocation_pct"] = ((ev_abs / ev_abs.sum()) * 100).round(2)
     return portfolio
