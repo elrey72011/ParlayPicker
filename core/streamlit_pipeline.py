@@ -29,6 +29,27 @@ except Exception:  # pragma: no cover
 MERGE_KEYS = ["league", "home_team", "away_team", "game_date"]
 
 
+def normalize_keys(df: pd.DataFrame | None) -> pd.DataFrame | None:
+    if df is None or df.empty:
+        return df
+
+    df = df.copy()
+
+    if "league" in df.columns:
+        df["league"] = df["league"].astype(str)
+
+    if "home_team" in df.columns:
+        df["home_team"] = df["home_team"].astype(str).str.strip().str.lower()
+
+    if "away_team" in df.columns:
+        df["away_team"] = df["away_team"].astype(str).str.strip().str.lower()
+
+    if "game_date" in df.columns:
+        df["game_date"] = pd.to_datetime(df["game_date"], errors="coerce")
+
+    return df
+
+
 def _normalize_teams(df: pd.DataFrame) -> pd.DataFrame:
     for col in ["home_team", "away_team", "team"]:
         if col in df.columns:
@@ -69,11 +90,29 @@ def _resolve_american_odds(row: pd.Series) -> float:
 def _safe_merge(left: pd.DataFrame, right: pd.DataFrame | None, suffix: str) -> pd.DataFrame:
     if right is None or right.empty:
         return left
-    right = _normalize_key_columns(right)
-    shared_keys = [k for k in MERGE_KEYS if k in left.columns and k in right.columns]
-    if not shared_keys:
+
+    left = normalize_keys(_normalize_key_columns(left))
+    right = normalize_keys(_normalize_key_columns(right))
+
+    merge_keys = [k for k in MERGE_KEYS if k in left.columns and k in right.columns]
+
+    print("Merge keys:", merge_keys)
+    print("Left rows:", len(left))
+    print("Right rows:", len(right))
+
+    if not merge_keys:
         return left
-    return left.merge(right, on=shared_keys, how="left", suffixes=("", suffix))
+
+    right = right.drop_duplicates(subset=merge_keys)
+
+    merged = left.merge(
+        right,
+        on=merge_keys,
+        how="left",
+        suffixes=("", suffix),
+    )
+
+    return merged
 
 
 def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
