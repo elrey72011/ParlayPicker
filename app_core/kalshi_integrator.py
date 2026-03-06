@@ -32,8 +32,6 @@ except ImportError:
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 
-from app_core.sportsdata import SportsDataNCAABClient
-from app_core.team_name_matcher import TeamNameMatcher
 
 logger = logging.getLogger(__name__)
 
@@ -3116,7 +3114,9 @@ def cross_reference_unmapped_ticker(league: str, date_token: str, team_block: st
         # e.g. 26JAN15 -> 2026-01-15
         dt = datetime.strptime(date_token, "%y%b%d").date()
 
-        # Initialize Client
+        # Initialize Client lazily to avoid import-time optional dependency failures
+        from app_core.sportsdata import SportsDataNCAABClient
+
         client = SportsDataNCAABClient()
         if not client.is_configured():
             return None
