@@ -12,7 +12,11 @@ import pandas as pd
 import streamlit as st
 
 from app.ui.analysis_dashboard import render_analysis
-from app.ui.data_diagnostics import show_data_diagnostics
+try:
+    from app.ui.data_diagnostics import show_data_diagnostics
+except Exception:  # pragma: no cover
+    def show_data_diagnostics(**_: Any) -> None:
+        st.info("Data diagnostics module unavailable in this environment.")
 from app.ui.debug_panel import render_debug, render_debug_panel
 from app.ui.kalshi_diagnostics import render_kalshi_diagnostics
 from app.ui.layout import setup_page
@@ -119,7 +123,8 @@ def main() -> None:
         if best_picks_df is not None and not best_picks_df.empty:
             best_picks_df = enrich_with_kalshi_markets(best_picks_df)
             diagnostics["kalshi_attempted"] = int(len(best_picks_df))
-            diagnostics["kalshi_matches"] = int(best_picks_df.get("kalshi_match_status", pd.Series(dtype=str)).astype(str).str.lower().eq("matched").sum())
+            kalshi_status = _safe_str_series(best_picks_df, "kalshi_match_status").str.lower()
+            diagnostics["kalshi_matches"] = int(kalshi_status.eq("matched").sum())
             diagnostics["match_rate"] = float(diagnostics["kalshi_matches"] / max(1, len(best_picks_df)))
 
         st.session_state.analysis_df = analysis_df
