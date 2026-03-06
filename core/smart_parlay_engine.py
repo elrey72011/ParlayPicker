@@ -20,7 +20,7 @@ def generate_smart_parlays(df: pd.DataFrame) -> pd.DataFrame:
     if candidate_bets.empty:
         return pd.DataFrame(columns=columns)
 
-    label_cols = [c for c in ["team", "away_team", "home_team"] if c in candidate_bets.columns]
+    label_cols = [c for c in ["best_pick", "team", "away_team", "home_team"] if c in candidate_bets.columns]
     records: list[dict[str, object]] = []
 
     for leg_count in (2, 3, 4):
@@ -38,7 +38,9 @@ def generate_smart_parlays(df: pd.DataFrame) -> pd.DataFrame:
 
             labels: list[str] = []
             for _, row in legs.iterrows():
-                if "team" in label_cols and pd.notna(row.get("team")):
+                if "best_pick" in label_cols and pd.notna(row.get("best_pick")) and str(row.get("best_pick")).strip():
+                    labels.append(str(row["best_pick"]))
+                elif "team" in label_cols and pd.notna(row.get("team")):
                     labels.append(str(row["team"]))
                 elif {"away_team", "home_team"}.issubset(label_cols):
                     labels.append(f"{row['away_team']} vs {row['home_team']}")

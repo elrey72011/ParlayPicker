@@ -21,7 +21,9 @@ def _fallback_parlays(df: pd.DataFrame) -> pd.DataFrame:
         if str(left.get("away_team", "")).lower() == str(right.get("away_team", "")).lower():
             continue
 
-        labels = f"{left.get('away_team', 'leg')} vs {left.get('home_team', 'leg')} | {right.get('away_team', 'leg')} vs {right.get('home_team', 'leg')}"
+        left_label = left.get("best_pick") if pd.notna(left.get("best_pick")) and str(left.get("best_pick")).strip() else f"{left.get('away_team', 'leg')} vs {left.get('home_team', 'leg')}"
+        right_label = right.get("best_pick") if pd.notna(right.get("best_pick")) and str(right.get("best_pick")).strip() else f"{right.get('away_team', 'leg')} vs {right.get('home_team', 'leg')}"
+        labels = f"{left_label} | {right_label}"
         records.append(
             {
                 "parlay_legs": labels,

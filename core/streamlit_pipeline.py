@@ -32,9 +32,13 @@ BEST_PICK_COLUMNS = [
     "league",
     "home_team",
     "away_team",
+    "game_date",
     "best_pick",
     "market_type",
     "expected_value",
+    "edge",
+    "market_probability",
+    "calibrated_probability",
     "model_probability",
     "decimal_odds",
 ]
@@ -92,17 +96,33 @@ def _infer_market_type(row: pd.Series) -> str:
 
 
 def format_pick(row: pd.Series) -> str:
+    def _format_signed_spread(value: float, invert_sign: bool = False) -> str:
+        numeric = pd.to_numeric(value, errors="coerce")
+        if pd.isna(numeric):
+            return ""
+        if invert_sign:
+            numeric = -numeric
+        return f"{numeric:+.1f}"
+
+    def _format_total(value: float) -> str:
+        numeric = pd.to_numeric(value, errors="coerce")
+        if pd.isna(numeric):
+            return ""
+        return f"{numeric:.1f}"
+
     if row["market_type"] == "spread_home":
-        return f"{row['home_team']} {row['spread']}"
+        spread_display = _format_signed_spread(row.get("spread"))
+        return f"{row['home_team']} {spread_display}".strip()
 
     if row["market_type"] == "spread_away":
-        return f"{row['away_team']} {abs(row['spread'])}"
+        spread_display = _format_signed_spread(row.get("spread"), invert_sign=True)
+        return f"{row['away_team']} {spread_display}".strip()
 
     if row["market_type"] == "total_over":
-        return f"Over {row['total']}"
+        return f"Over {_format_total(row.get('total'))}".strip()
 
     if row["market_type"] == "total_under":
-        return f"Under {row['total']}"
+        return f"Under {_format_total(row.get('total'))}".strip()
 
     if row["market_type"] == "moneyline_home":
         return f"{row['home_team']} ML"
@@ -135,8 +155,9 @@ def _build_best_picks(df: pd.DataFrame) -> pd.DataFrame:
     if not available_group_keys:
         available_group_keys = ["home_team", "away_team"]
 
+    sort_col = "expected_value" if "expected_value" in df.columns else "edge"
     best_picks = (
-        df.sort_values("expected_value", ascending=False)
+        df.sort_values(sort_col, ascending=False)
         .groupby(available_group_keys)
         .first()
         .reset_index()
@@ -388,7 +409,12 @@ def run_analysis_pipeline(
 
     filtered = _safe_merge(filtered, merged_theover, "_theover")
 
-    return _apply_analysis_calculations(filtered)
+    analyzed = _apply_analysis_calculations(filtered)
+    if analyzed.empty:
+        return analyzed
+
+    best_picks = _build_best_picks(analyzed)
+    return best_picks
 
 
 def generate_parlays(analysis_df: pd.DataFrame) -> pd.DataFrame:
