@@ -60,6 +60,7 @@ __all__ = [
     "extract_total_from_ticker",
     "validate_market_type_match",
     "validate_teams_match",
+    "enrich_with_kalshi_markets",
 ]
 
 # Timezone for NBA date buckets (games are bucketed by their US/Eastern date usually, or strict UTC date tokens)
@@ -2314,7 +2315,7 @@ KALSHI_NCAAB_TEAM_CODES = {
 }
 
 
-TEAM_CODE_ALIASES: Dict[str, str] = {
+NCAAB_TEAM_CODE_ALIASES: Dict[str, str] = {
     "manhattan": "MAN",
     "wagner": "WAG",
     "princeton": "PRIN",
@@ -2351,7 +2352,15 @@ TEAM_CODE_ALIASES: Dict[str, str] = {
     "wichita state": "WICH",
     "memphis": "MEM",
     "southern illinois": "SIU",
+    "washington st.": "WSU",
+    "st john’s": "SJU",
+    "uncw": "UNCW",
+    "saint mary's": "SMC",
+    "saint mary’s": "SMC",
 }
+
+
+TEAM_CODE_ALIASES = NCAAB_TEAM_CODE_ALIASES
 
 
 def _normalize_kalshi_team_name(team_name: str) -> str:
@@ -2415,13 +2424,17 @@ def _kalshi_series_for_market_type(market_type: str) -> Optional[str]:
 
 
 def _kalshi_market_probability(market: Dict[str, Any]) -> Optional[float]:
-    dollar_fields = ("yes_price_dollars", "yes_bid_dollars", "yes_ask_dollars")
-    cent_fields = ("yes_price", "yes_bid", "yes_ask")
-    for key in dollar_fields + cent_fields:
+    dollar_fields = ("yes_ask_dollars", "yes_bid_dollars", "last_price_dollars", "yes_price_dollars")
+    cent_fields = ("yes_ask", "yes_bid", "last_price", "yes_price")
+    for key in dollar_fields:
+        value = pd.to_numeric(market.get(key), errors="coerce")
+        if pd.notna(value):
+            return max(0.0, min(1.0, float(value)))
+    for key in cent_fields:
         value = pd.to_numeric(market.get(key), errors="coerce")
         if pd.notna(value):
             numeric = float(value)
-            if key in cent_fields and numeric > 1:
+            if numeric > 1:
                 numeric = numeric / 100.0
             return max(0.0, min(1.0, numeric))
     return None
@@ -7153,3 +7166,144 @@ def generate_missing_games_report(
             report.append("")  # Blank line
 
     return "\n".join(report)
+
+
+def _chunks(values: List[str], size: int = 50) -> List[List[str]]:
+    return [values[i:i + size] for i in range(0, len(values), size)]
+
+
+def _title_token_match(market: Dict[str, Any], away_team: str, home_team: str) -> bool:
+    blob = f"{market.get('title', '')} {market.get('subtitle', '')}".lower()
+    away = normalize_team_for_kalshi(away_team)
+    home = normalize_team_for_kalshi(home_team)
+    return (away and away in blob) and (home and home in blob)
+
+
+def enrich_with_kalshi_markets(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame() if df is None else df
+
+    out = df.copy()
+    defaults = {
+        "kalshi_probability": pd.NA,
+        "kalshi_match_status": "miss",
+        "kalshi_match_reason": "no_attempt",
+        "kalshi_tried_codes": "[]",
+        "kalshi_tried_tickers": "[]",
+        "kalshi_market_ticker": pd.NA,
+        "kalshi_event_ticker": pd.NA,
+    }
+    for k, v in defaults.items():
+        if k not in out.columns:
+            out[k] = v
+
+    try:
+        integrator = KalshiIntegrator()
+        if not getattr(integrator, "_credentials_valid", False):
+            out["kalshi_match_reason"] = "api_unavailable"
+            return out
+    except Exception:
+        out["kalshi_match_reason"] = "api_unavailable"
+        return out
+
+    for idx, row in out.iterrows():
+        league = str(row.get("league") or "").upper()
+        market_type = str(row.get("market_type") or "").lower()
+        if market_type not in {"spread_home", "spread_away", "total_over", "total_under"}:
+            out.at[idx, "kalshi_match_reason"] = "unsupported_market_type"
+            continue
+
+        home_team = str(row.get("home_team") or "")
+        away_team = str(row.get("away_team") or "")
+        game_date = pd.to_datetime(row.get("game_date"), errors="coerce")
+
+        if league == "NCAAB":
+            series = "KXNCAAMBSPREAD" if "spread" in market_type else "KXNCAAMBTOTAL"
+            date_code = build_kalshi_date_code(game_date if pd.notna(game_date) else pd.Timestamp.utcnow())
+            away_codes = _candidate_team_codes(away_team)
+            home_codes = _candidate_team_codes(home_team)
+            out.at[idx, "kalshi_tried_codes"] = json.dumps({"away": away_codes, "home": home_codes})
+            tickers = _build_candidate_tickers(series, date_code, away_codes, home_codes)
+            out.at[idx, "kalshi_tried_tickers"] = json.dumps(tickers)
+            if not tickers:
+                out.at[idx, "kalshi_match_reason"] = "missing_team_codes"
+                continue
+
+            selected = None
+            for batch in _chunks(tickers, 50):
+                try:
+                    resp = integrator._request("GET", "/markets", params={"tickers": ",".join(batch)})
+                    markets = resp.get("markets", []) if isinstance(resp, dict) else []
+                    if markets:
+                        selected = markets[0]
+                        break
+                except Exception:
+                    out.at[idx, "kalshi_match_reason"] = "api_error"
+                    selected = None
+                    break
+
+            if selected is None:
+                out.at[idx, "kalshi_match_reason"] = out.at[idx, "kalshi_match_reason"] if out.at[idx, "kalshi_match_reason"] != "no_attempt" else "no_market_for_tickers"
+                continue
+
+            out.at[idx, "kalshi_probability"] = _kalshi_market_probability(selected)
+            out.at[idx, "kalshi_market_ticker"] = selected.get("ticker")
+            out.at[idx, "kalshi_event_ticker"] = selected.get("event_ticker")
+            out.at[idx, "kalshi_match_status"] = "matched"
+            out.at[idx, "kalshi_match_reason"] = ""
+            continue
+
+        if league in {"NBA", "NHL"}:
+            series = "KXNBASPREAD" if league == "NBA" and "spread" in market_type else "KXNBATOTAL" if league == "NBA" else "KXNHLSPREAD" if "spread" in market_type else "KXNHLTOTAL"
+            if pd.notna(game_date):
+                min_ts = int((game_date - timedelta(days=2)).timestamp())
+                max_ts = int((game_date + timedelta(days=2)).timestamp())
+            else:
+                min_ts = None
+                max_ts = None
+            params = {"series_ticker": series}
+            if min_ts is not None:
+                params["min_close_ts"] = min_ts
+                params["max_close_ts"] = max_ts
+            try:
+                markets = integrator.get_markets_paginated(status="open", limit=200, max_pages=5, extra_params=params)
+            except Exception:
+                out.at[idx, "kalshi_match_reason"] = "api_error"
+                continue
+            matched = next((m for m in markets if _title_token_match(m, away_team, home_team)), None)
+            if matched is None:
+                out.at[idx, "kalshi_match_reason"] = "no_series_token_match"
+                continue
+            out.at[idx, "kalshi_probability"] = _kalshi_market_probability(matched)
+            out.at[idx, "kalshi_market_ticker"] = matched.get("ticker")
+            out.at[idx, "kalshi_event_ticker"] = matched.get("event_ticker")
+            out.at[idx, "kalshi_match_status"] = "matched"
+            out.at[idx, "kalshi_match_reason"] = ""
+            out.at[idx, "kalshi_tried_tickers"] = json.dumps([series])
+            continue
+
+        out.at[idx, "kalshi_match_reason"] = "unsupported_league"
+
+    return out
+
+
+def _example_ncaab_ticker_pairs() -> Dict[str, str]:
+    examples = {
+        "Manhattan-Wagner": _build_candidate_tickers("KXNCAAMBSPREAD", "26MAR05", _candidate_team_codes("Manhattan"), _candidate_team_codes("Wagner"))[0],
+        "Princeton-Vermont": _build_candidate_tickers("KXNCAAMBSPREAD", "26MAR05", _candidate_team_codes("Princeton"), _candidate_team_codes("Vermont"))[0],
+        "Washington St-Seton Hall": _build_candidate_tickers("KXNCAAMBSPREAD", "26MAR05", _candidate_team_codes("Washington St"), _candidate_team_codes("Seton Hall"))[0],
+        "Idaho St-Sam Houston St": _build_candidate_tickers("KXNCAAMBSPREAD", "26MAR05", _candidate_team_codes("Idaho St"), _candidate_team_codes("Sam Houston St"))[0],
+        "FGCU-Kennesaw St": _build_candidate_tickers("KXNCAAMBSPREAD", "26MAR05", _candidate_team_codes("Florida Gulf Coast"), _candidate_team_codes("Kennesaw St"))[0],
+    }
+    return examples
+
+
+def _verify_example_ncaab_ticker_pairs() -> bool:
+    """Unit-test style sanity checks for deterministic ticker construction."""
+    examples = _example_ncaab_ticker_pairs()
+    assert "MANWAG" in examples["Manhattan-Wagner"], examples
+    assert "PRINUVM" in examples["Princeton-Vermont"], examples
+    assert any(code in examples["Washington St-Seton Hall"] for code in ["WSUHALL", "HALLWSU"]), examples
+    assert "IDSTSHSU" in examples["Idaho St-Sam Houston St"], examples
+    assert "FGCUKENN" in examples["FGCU-Kennesaw St"], examples
+    return True

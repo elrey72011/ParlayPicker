@@ -16,7 +16,7 @@ from core.probability_calibration import calibrate_probabilities
 from core.probability_engine import american_to_prob, normalize_probability_components, remove_vig
 from core.schema.base_schema import ensure_base_schema
 from core.team_mapper import normalize_team_name
-from app_core.kalshi_integrator import match_kalshi_markets
+from app_core.kalshi_integrator import enrich_with_kalshi_markets
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,6 @@ except Exception:  # pragma: no cover
     run_ml_predictions = None
 
 
-MERGE_KEYS = ["league", "home_team", "away_team", "game_date"]
 MODEL_PATH = "models/sports_model_latest.joblib"
 SPORT_ALIASES = {
     "NBA": "NBA",
@@ -40,18 +39,23 @@ SPORT_ALIASES = {
 }
 BEST_PICK_COLUMNS = [
     "league",
-    "home_team",
     "away_team",
+    "home_team",
     "game_date",
     "best_pick",
+    "market_type",
     "calibrated_probability",
     "expected_value",
     "edge",
     "odds_american",
     "market_probability",
     "ml_probability",
+    "theover_probability",
+    "ai_probability",
     "kalshi_probability",
     "kalshi_match_status",
+    "kalshi_match_reason",
+    "kalshi_market_ticker",
     "kalshi_event_ticker",
 ]
 
@@ -133,8 +137,9 @@ def infer_market_type_and_lines(row: pd.Series) -> pd.Series:
         market_type = "total_under"
         total_line = line
     else:
-        market_type = "spread_home" if pickteam and pickteam == home_team else "spread_away"
-        spread_line = line
+        is_home_pick = bool(pickteam and home_team and pickteam == home_team)
+        market_type = "spread_home" if is_home_pick else "spread_away"
+        spread_line = line if is_home_pick else (-line if pd.notna(line) else pd.NA)
 
     return pd.Series({"market_type": market_type, "spread_line": spread_line, "total_line": total_line})
 
@@ -309,26 +314,6 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     return _build_best_picks(analysis_df)
 
 
-def _build_kalshi_df(base_df: pd.DataFrame) -> pd.DataFrame | None:
-    if base_df is None or base_df.empty:
-        return None
-
-    keys = [k for k in ["league", "home_team", "away_team"] if k in base_df.columns]
-    if len(keys) < 3:
-        logger.info("Kalshi skipped: missing merge keys. available=%s", keys)
-        return None
-    if "game_date" in base_df.columns:
-        keys = keys + ["game_date"]
-
-    games = normalize_merge_keys(_normalize_key_columns(base_df[keys + ["market_type", "spread_line", "total_line"] if "market_type" in base_df.columns else keys].drop_duplicates().copy()))
-    if games is None or games.empty:
-        return None
-
-    kalshi_df = match_kalshi_markets(games)
-    if kalshi_df is None or kalshi_df.empty:
-        return None
-    return normalize_merge_keys(_normalize_key_columns(kalshi_df))
-
 
 def normalize_merge_keys(df: pd.DataFrame | None) -> pd.DataFrame | None:
     if df is None or df.empty:
@@ -469,20 +454,33 @@ def _is_stale_base_data(base_df: pd.DataFrame, theover_df: pd.DataFrame) -> bool
 
 
 def build_theover_bet_rows(spreads_df: pd.DataFrame | None, totals_df: pd.DataFrame | None, selected_sports: list[str]) -> pd.DataFrame:
-    frames: list[pd.DataFrame] = []
-    for src in (spreads_df, totals_df):
-        if src is not None and not src.empty:
-            norm = normalize_theover_df(src)
-            norm = _enrich_uploaded_league(norm, selected_sports)
-            frames.append(norm)
+    def _prep(df: pd.DataFrame | None, default_market: str) -> pd.DataFrame:
+        if df is None or df.empty:
+            return pd.DataFrame()
+        out = normalize_theover_df(df)
+        out = _enrich_uploaded_league(out, selected_sports)
+        if "market" not in out.columns:
+            out["market"] = default_market
+        out["market"] = out["market"].fillna(default_market)
+        out["pick"] = out.get("pick", "")
+        out["pickteam"] = out.get("pickteam", "")
+        inferred = out.apply(infer_market_type_and_lines, axis=1)
+        return pd.concat([out, inferred], axis=1)
 
-    if not frames:
+    spread_rows = _prep(spreads_df, "spread")
+    total_rows = _prep(totals_df, "total")
+    if spread_rows.empty and total_rows.empty:
         return pd.DataFrame()
 
-    bets = pd.concat(frames, ignore_index=True)
-    inferred = bets.apply(infer_market_type_and_lines, axis=1)
-    bets = pd.concat([bets, inferred], axis=1)
-    bets["theover_probability"] = pd.to_numeric(bets.get("winprobability"), errors="coerce").clip(lower=0.0, upper=1.0)
+    bets = pd.concat([spread_rows, total_rows], ignore_index=True)
+    bets = _normalize_key_columns(bets)
+    if selected_sports and "league" in bets.columns:
+        bets = bets[bets["league"].isin(selected_sports)].copy()
+
+    bets["line"] = pd.to_numeric(bets.get("line"), errors="coerce")
+    bets["winprobability"] = pd.to_numeric(bets.get("winprobability"), errors="coerce").fillna(0.5).clip(0.0, 1.0)
+    bets["theover_probability"] = bets["winprobability"]
+    bets["ai_probability"] = bets["winprobability"]
     bets["matchup"] = bets.get("away_team", "").astype(str) + " @ " + bets.get("home_team", "").astype(str)
     return bets
 
@@ -597,7 +595,7 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
     )
     df["edge"] = prob_for_ev - df["market_probability"]
     if "debug_merge_keys" not in df.columns:
-        df["debug_merge_keys"] = ", ".join([k for k in MERGE_KEYS if k in df.columns])
+        df["debug_merge_keys"] = ", ".join([k for k in ["league", "home_team", "away_team", "game_date"] if k in df.columns])
     df["debug_model_loaded"] = bool(model_loaded)
 
     if "team" not in df.columns:
@@ -637,7 +635,7 @@ def run_analysis_pipeline(
     use_ml: bool = True,
     spreads_df: pd.DataFrame | None = None,
     totals_df: pd.DataFrame | None = None,
-) -> pd.DataFrame:
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     base_df = load_base_data().copy()
     if "league" in base_df.columns:
         base_df["league"] = base_df["league"].apply(_normalize_league_value)
@@ -650,29 +648,32 @@ def run_analysis_pipeline(
     if selected_sports and "league" in theover_bets_df.columns:
         theover_bets_df = theover_bets_df[theover_bets_df["league"].isin(selected_sports)].copy()
 
-    use_theover_as_base = theover_bets_df is not None and not theover_bets_df.empty
+    use_theover_as_base = base_df.empty or (not theover_bets_df.empty and _is_stale_base_data(base_df, theover_bets_df))
     if use_theover_as_base:
         filtered = theover_bets_df.head(max_rows).copy()
     else:
         filtered = base_df.head(max_rows).copy()
-
-    if use_theover_as_base and not base_df.empty:
-        if _is_stale_base_data(base_df, theover_bets_df) and "game_date" in base_df.columns:
-            base_df = base_df.copy()
-            base_df["game_date"] = pd.NaT
-        filtered = _safe_merge(filtered, base_df, "_base")
+        if not theover_bets_df.empty:
+            merged = _safe_merge(filtered, theover_bets_df, "_theover")
+            for col in ["market", "pick", "pickteam", "line", "winprobability", "theover_probability", "ai_probability", "market_type", "spread_line", "total_line"]:
+                suff = f"{col}_theover"
+                if suff in merged.columns:
+                    if col not in merged.columns:
+                        merged[col] = pd.NA
+                    merged[col] = merged[col].where(merged[col].notna(), merged[suff])
+            filtered = merged
 
     if use_ml and run_ml_predictions and not filtered.empty and not use_theover_as_base:
         ml_df = _normalize_key_columns(run_ml_predictions(filtered))
         filtered = _safe_merge(filtered, ml_df, "_ml")
 
-    kalshi_df = _build_kalshi_df(filtered)
-    filtered = _safe_merge(filtered, kalshi_df, "_kalshi")
-
     analyzed = _apply_analysis_calculations(filtered)
     if analyzed.empty:
-        return analyzed
-    return analyzed
+        return analyzed, pd.DataFrame(columns=BEST_PICK_COLUMNS)
+
+    best_picks_df = _build_best_picks(analyzed)
+    best_picks_df = enrich_with_kalshi_markets(best_picks_df)
+    return analyzed, best_picks_df
 
 
 def generate_parlays(analysis_df: pd.DataFrame) -> pd.DataFrame:
@@ -685,6 +686,8 @@ def generate_parlays(analysis_df: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame(columns=columns)
 
     candidate_bets = analysis_df.copy()
+    if "best_pick" in candidate_bets.columns:
+        candidate_bets["team"] = candidate_bets["best_pick"]
     if "market_type" in candidate_bets.columns:
         candidate_bets = candidate_bets[
             candidate_bets["market_type"].isin({"spread_home", "spread_away", "total_over", "total_under"})
@@ -746,6 +749,8 @@ def build_realtime_edges(analysis_df: pd.DataFrame) -> pd.DataFrame:
             "league",
             "home_team",
             "away_team",
+            "best_pick",
+            "market_type",
             "calibrated_probability",
             "market_probability",
             "decimal_odds",

@@ -18,11 +18,9 @@ from app.ui.kalshi_diagnostics import render_kalshi_diagnostics
 from app.ui.layout import setup_page
 from app.ui.odds_dashboard import render_odds_table
 from app.ui.parlay_dashboard import render_parlays
-from app.ui.portfolio_dashboard import render_portfolio
 from app.ui.sidebar_controls import render_sidebar
 from app.ui.strategy_lab_dashboard import render_strategy_lab
 from core.streamlit_pipeline import (
-    build_best_picks_df,
     generate_parlays,
     optimize_portfolio_allocation,
     run_analysis_pipeline,
@@ -102,7 +100,7 @@ def main() -> None:
         st.write("TheOver spreads rows:", len(spreads_df))
         st.write("TheOver totals rows:", len(totals_df))
 
-        analysis_df = run_analysis_pipeline(
+        analysis_df, best_picks_df = run_analysis_pipeline(
             sports=controls["sports"],
             max_rows=int(controls["max_rows"]),
             use_ml=bool(controls["use_ml"]),
@@ -136,7 +134,6 @@ def main() -> None:
         if "gemini_analysis" not in analysis_df.columns:
             analysis_df["gemini_analysis"] = ""
 
-        best_picks_df = build_best_picks_df(analysis_df)
         parlays_df = generate_parlays(best_picks_df)
         st.session_state.parlays_df = parlays_df
         parlay_columns = ["parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "legs"]
@@ -232,14 +229,26 @@ def main() -> None:
         if best_picks_df is None or best_picks_df.empty:
             st.info("No eligible spread/total best picks found.")
         else:
-            if "league" in best_picks_df.columns:
-                best_picks_df = best_picks_df.rename(columns={"league": "League"})
-                ordered = ["League"] + [c for c in best_picks_df.columns if c != "League"]
-                best_picks_df = best_picks_df[ordered]
-            st.dataframe(best_picks_df, width="stretch")
-            best_picks_csv = best_picks_df.to_csv(index=False)
+            display_df = best_picks_df.copy()
+            rename_map = {
+                "league": "League",
+                "away_team": "Away Team",
+                "home_team": "Home Team",
+                "game_date": "Game Date",
+                "best_pick": "Best Pick",
+                "calibrated_probability": "Prob",
+                "expected_value": "EV",
+                "edge": "Edge",
+                "kalshi_match_status": "Kalshi Status",
+            }
+            display_df = display_df.rename(columns=rename_map)
+            preferred = ["League", "Away Team", "Home Team", "Game Date", "Best Pick", "Prob", "EV", "Edge", "Kalshi Status"]
+            ordered = [c for c in preferred if c in display_df.columns] + [c for c in display_df.columns if c not in preferred]
+            display_df = display_df[ordered]
+            st.dataframe(display_df, width="stretch")
+            best_picks_csv = display_df.to_csv(index=False)
             st.download_button(
-                "Download Best Picks CSV",
+                "Export Best Picks",
                 best_picks_csv,
                 "best_picks_export.csv",
                 mime="text/csv",
@@ -271,7 +280,25 @@ def main() -> None:
                 )
 
     with tab5:
-        render_portfolio(portfolio_df)
+        st.subheader("Portfolio Allocation")
+        portfolio_display = portfolio_df.copy() if portfolio_df is not None else pd.DataFrame()
+        if not portfolio_display.empty:
+            portfolio_display["recommended_bet"] = pd.to_numeric(portfolio_display.get("recommended_bet"), errors="coerce").fillna(0.0)
+            portfolio_display["allocation_label"] = (
+                portfolio_display.get("league", "").astype(str).str.upper()
+                + " | "
+                + portfolio_display.get("best_pick", "").astype(str)
+                + " | $"
+                + portfolio_display["recommended_bet"].map(lambda x: f"{x:.2f}")
+            )
+        st.dataframe(portfolio_display, use_container_width=True)
+        st.download_button(
+            "Export Portfolio",
+            portfolio_display.to_csv(index=False),
+            "portfolio_export.csv",
+            mime="text/csv",
+            key="export_portfolio_csv",
+        )
 
     with tab6:
         show_data_diagnostics(
