@@ -17,6 +17,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 import pytz
+import pandas as pd
 import requests
 import streamlit as st
 
@@ -49,6 +50,9 @@ __all__ = [
     "resolve_team_code",
     "NCAAB_CODE_ALIASES",
     "KALSHI_NCAAB_TEAM_CODES",
+    "TEAM_CODE_ALIASES",
+    "build_kalshi_date_code",
+    "match_kalshi_markets",
     "normalize_team_for_kalshi",
     "match_nba_spread",
     "match_ncaab_total",
@@ -2309,53 +2313,312 @@ KALSHI_NCAAB_TEAM_CODES = {
     "St. Mary's": "SMC",
 }
 
+
+TEAM_CODE_ALIASES: Dict[str, str] = {
+    "manhattan": "MAN",
+    "wagner": "WAG",
+    "princeton": "PRIN",
+    "vermont": "UVM",
+    "washington st": "WSU",
+    "washington state": "WSU",
+    "seton hall": "HALL",
+    "st johns": "SJU",
+    "st john": "SJU",
+    "saint johns": "SJU",
+    "idaho st": "IDST",
+    "idaho state": "IDST",
+    "sam houston": "SHSU",
+    "sam houston st": "SHSU",
+    "sam houston state": "SHSU",
+    "florida gulf coast": "FGCU",
+    "kennesaw st": "KENN",
+    "kennesaw state": "KENN",
+    "fairfield": "FAIR",
+    "columbia": "CLMB",
+    "pepperdine": "PEPP",
+    "unc wilmington": "UNCW",
+    "southeastern louisiana": "SELA",
+    "se louisiana": "SELA",
+    "louisiana tech": "LT",
+    "indiana st": "INST",
+    "indiana state": "INST",
+    "temple": "TEM",
+    "rhode island": "URI",
+    "saint marys": "SMC",
+    "st marys": "SMC",
+    "wichita st": "WICH",
+    "wichita state": "WICH",
+    "memphis": "MEM",
+    "southern illinois": "SIU",
+}
+
+
 def _normalize_kalshi_team_name(team_name: str) -> str:
-    normalized = str(team_name or "").upper().strip()
+    normalized = str(team_name or "").lower().strip()
     if not normalized:
         return ""
-    normalized = normalized.replace("'", "").replace("’", "")
-    normalized = normalized.replace("-", " ").replace("&", " AND ")
-    normalized = re.sub(r"\bSAINT\b", "ST", normalized)
-    normalized = re.sub(r"\bST\.\b", "ST", normalized)
-    normalized = re.sub(r"\bNORTH\b", "N", normalized)
-    normalized = re.sub(r"\bSOUTH\b", "S", normalized)
-    normalized = re.sub(r"\bEAST\b", "E", normalized)
-    normalized = re.sub(r"\bWEST\b", "W", normalized)
-    normalized = re.sub(r"\bSOUTHEAST\b", "SE", normalized)
-    normalized = re.sub(r"\bSOUTHWEST\b", "SW", normalized)
-    normalized = re.sub(r"\bNORTHEAST\b", "NE", normalized)
-    normalized = re.sub(r"\bNORTHWEST\b", "NW", normalized)
-    normalized = re.sub(r"\bSTATE\b", "ST", normalized)
-    normalized = re.sub(r"\bUNIVERSITY\b", "", normalized)
+    normalized = normalized.replace("’", "'")
+    normalized = re.sub(r"[^a-z0-9\s]", " ", normalized)
+    normalized = re.sub(r"\bsaint\b", "st", normalized)
+    normalized = re.sub(r"\bst\.?\b", "st", normalized)
+    normalized = re.sub(r"\bsoutheast(ern)?\b", "se", normalized)
+    normalized = re.sub(r"\bsouthwest(ern)?\b", "sw", normalized)
+    normalized = re.sub(r"\bnortheast(ern)?\b", "ne", normalized)
+    normalized = re.sub(r"\bnorthwest(ern)?\b", "nw", normalized)
+    normalized = re.sub(r"\bnorth\b", "n", normalized)
+    normalized = re.sub(r"\bsouth\b", "s", normalized)
+    normalized = re.sub(r"\beast\b", "e", normalized)
+    normalized = re.sub(r"\bwest\b", "w", normalized)
     normalized = re.sub(r"\s+", " ", normalized).strip()
     return normalized
 
 
 def normalize_team_for_kalshi(team_name: str) -> str:
-    """Convert full team name to Kalshi code with normalized string fallback matching."""
-    team_clean = str(team_name or "").strip()
-    if not team_clean:
-        return "UNK"
+    """Return a normalized lookup token for Kalshi team matching."""
+    return _normalize_kalshi_team_name(team_name)
 
-    if team_clean in KALSHI_NCAAB_TEAM_CODES:
-        return KALSHI_NCAAB_TEAM_CODES[team_clean]
 
-    normalized_target = _normalize_kalshi_team_name(team_clean)
-    if normalized_target in NCAAB_CODE_ALIASES:
-        return NCAAB_CODE_ALIASES[normalized_target]
+def build_kalshi_date_code(dt: Any) -> str:
+    """Format datetime-like input to Kalshi YYMONDD token (e.g. 26MAR05)."""
+    parsed = pd.to_datetime(dt, errors="coerce")
+    if pd.isna(parsed):
+        return ""
+    return parsed.strftime("%y%b%d").upper()
 
-    for name, code in KALSHI_NCAAB_TEAM_CODES.items():
-        if _normalize_kalshi_team_name(name) == normalized_target:
-            return code
 
-    parts = normalized_target.split()
-    if len(parts) > 1:
-        without_last = " ".join(parts[:-1]).strip()
-        for name, code in KALSHI_NCAAB_TEAM_CODES.items():
-            if _normalize_kalshi_team_name(name) == without_last:
-                return code
+def _candidate_team_codes(team_name: str) -> List[str]:
+    normalized = normalize_team_for_kalshi(team_name)
+    candidates: List[str] = []
+    if normalized in TEAM_CODE_ALIASES:
+        candidates.append(TEAM_CODE_ALIASES[normalized])
+    for key, value in TEAM_CODE_ALIASES.items():
+        if key == normalized:
+            continue
+        if normalized and (normalized in key or key in normalized):
+            candidates.append(value)
+    # Backward compatibility with larger alias map / code resolver.
+    if normalized:
+        resolved = resolve_team_code(normalized.upper(), "NCAAB")
+        if resolved and resolved != normalized.upper():
+            candidates.append(resolved)
+    return sorted({c for c in candidates if c})
 
-    return (parts[0][:4] if parts else team_clean[:4]).upper()
+
+def _kalshi_series_for_market_type(market_type: str) -> Optional[str]:
+    lower = str(market_type or "").lower()
+    if "spread" in lower:
+        return "KXNCAAMBSPREAD"
+    if "total" in lower:
+        return "KXNCAAMBTOTAL"
+    return None
+
+
+def _kalshi_market_probability(market: Dict[str, Any]) -> Optional[float]:
+    for key in ("yes_price", "yes_bid", "yes_ask"):
+        value = pd.to_numeric(market.get(key), errors="coerce")
+        if pd.notna(value):
+            numeric = float(value)
+            if numeric > 1:
+                numeric = numeric / 100.0
+            return max(0.0, min(1.0, numeric))
+    return None
+
+
+def _extract_market_line(market: Dict[str, Any]) -> Optional[float]:
+    for key in ("floor_strike", "cap_strike", "strike", "line"):
+        value = pd.to_numeric(market.get(key), errors="coerce")
+        if pd.notna(value):
+            return float(value)
+    for key in ("subtitle", "title", "rules_primary"):
+        text = str(market.get(key) or "")
+        found = re.search(r"([-+]?\d+(?:\.\d+)?)", text)
+        if found:
+            return float(found.group(1))
+    return None
+
+
+def _market_contains_teams(market: Dict[str, Any], away_norm: str, home_norm: str, away_codes: List[str], home_codes: List[str]) -> bool:
+    blob = " ".join(
+        [
+            str(market.get("title") or "").lower(),
+            str(market.get("subtitle") or "").lower(),
+            str(market.get("ticker") or "").upper(),
+        ]
+    )
+    if away_norm and home_norm and away_norm in blob and home_norm in blob:
+        return True
+    ticker = str(market.get("ticker") or "").upper()
+    for ac in away_codes:
+        for hc in home_codes:
+            if ac in ticker and hc in ticker:
+                return True
+    return False
+
+
+def match_kalshi_markets(rows_df: pd.DataFrame) -> pd.DataFrame:
+    """Deterministic NCAAB spread/total Kalshi matcher.
+
+    ```mermaid
+    flowchart TD
+        A[Normalize teams + build code pairs] --> B[Direct /markets tickers lookup]
+        B -->|single hit| C[Matched]
+        B -->|0 or multi hit| D[Fallback /markets series scan]
+        D -->|team/title/ticker match| C
+        D -->|no match| E[Miss + diagnostics]
+    ```
+
+    Examples:
+        >>> normalize_team_for_kalshi("Manhattan")
+        'manhattan'
+        >>> _candidate_team_codes("Manhattan")
+        ['MAN']
+        >>> _candidate_team_codes("Wagner")
+        ['WAG']
+        >>> _candidate_team_codes("Princeton")
+        ['PRIN']
+        >>> _candidate_team_codes("Vermont")
+        ['UVM']
+        >>> _candidate_team_codes("Washington St")
+        ['WSU']
+        >>> _candidate_team_codes("Seton Hall")
+        ['HALL']
+        >>> _candidate_team_codes("Idaho State")
+        ['IDST']
+        >>> _candidate_team_codes("Sam Houston")
+        ['SHSU']
+    """
+    out_rows: List[Dict[str, Any]] = []
+    if rows_df is None or rows_df.empty:
+        return pd.DataFrame(out_rows)
+
+    try:
+        integrator = KalshiIntegrator()
+    except Exception:
+        integrator = None
+
+    for _, row in rows_df.iterrows():
+        league = str(row.get("league") or "").upper().strip()
+        home_team = str(row.get("home_team") or "")
+        away_team = str(row.get("away_team") or "")
+        market_type = str(row.get("market_type") or "")
+        game_date = pd.to_datetime(row.get("game_date"), errors="coerce")
+
+        base = {
+            "league": league,
+            "home_team": home_team,
+            "away_team": away_team,
+            "game_date": game_date,
+            "kalshi_probability": pd.NA,
+            "kalshi_market_title": pd.NA,
+            "kalshi_market_subtitle": pd.NA,
+            "kalshi_market_ticker": pd.NA,
+            "kalshi_event_ticker": pd.NA,
+            "kalshi_line": pd.NA,
+            "kalshi_match_status": "miss",
+            "kalshi_match_reason": "unsupported_market_or_league",
+            "kalshi_tried_codes": json.dumps([]),
+            "kalshi_tried_tickers": json.dumps([]),
+        }
+
+        if league != "NCAAB":
+            out_rows.append(base)
+            continue
+        if integrator is None or not getattr(integrator, "_credentials_valid", False):
+            base["kalshi_match_reason"] = "api_error"
+            out_rows.append(base)
+            continue
+
+        series = _kalshi_series_for_market_type(market_type)
+        if not series:
+            out_rows.append(base)
+            continue
+
+        away_norm = normalize_team_for_kalshi(away_team)
+        home_norm = normalize_team_for_kalshi(home_team)
+        away_codes = _candidate_team_codes(away_team)
+        home_codes = _candidate_team_codes(home_team)
+        tried_codes = {"away": away_codes, "home": home_codes}
+        base["kalshi_tried_codes"] = json.dumps(tried_codes)
+
+        if not away_codes or not home_codes:
+            base["kalshi_match_reason"] = "missing_team_code"
+            out_rows.append(base)
+            continue
+
+        date_code = build_kalshi_date_code(game_date)
+        candidates: List[str] = []
+        for ac in away_codes:
+            for hc in home_codes:
+                candidates.append(f"{series}-{date_code}{ac}{hc}")
+                candidates.append(f"{series}-{date_code}{hc}{ac}")
+        candidates = sorted(set(candidates))
+        base["kalshi_tried_tickers"] = json.dumps(candidates)
+
+        selected_market: Optional[Dict[str, Any]] = None
+
+        try:
+            direct = integrator._request("GET", "/markets", params={"tickers": ",".join(candidates)})
+            direct_markets = direct.get("markets", []) if isinstance(direct, dict) else []
+            if len(direct_markets) == 1:
+                selected_market = direct_markets[0]
+            elif len(direct_markets) == 0:
+                base["kalshi_match_reason"] = "no_market_for_tickers"
+            else:
+                base["kalshi_match_reason"] = "multiple_markets_for_tickers"
+        except Exception:
+            base["kalshi_match_status"] = "error"
+            base["kalshi_match_reason"] = "api_error"
+            out_rows.append(base)
+            continue
+
+        if selected_market is None:
+            try:
+                fallback_markets = integrator.get_markets_paginated(
+                    status="open",
+                    limit=200,
+                    max_pages=20,
+                    extra_params={"series_ticker": series},
+                )
+                if pd.notna(game_date):
+                    min_ts = int((game_date - timedelta(days=1)).timestamp())
+                    max_ts = int((game_date + timedelta(days=2)).timestamp())
+                    fallback_markets = [
+                        m for m in fallback_markets
+                        if min_ts <= int(pd.to_numeric(m.get("close_time"), errors="coerce") or 0) <= max_ts
+                        or not m.get("close_time")
+                    ]
+                for m in fallback_markets:
+                    if _market_contains_teams(m, away_norm, home_norm, away_codes, home_codes):
+                        selected_market = m
+                        break
+                if selected_market is None and base["kalshi_match_reason"] in {"no_market_for_tickers", "multiple_markets_for_tickers"}:
+                    base["kalshi_match_reason"] = "fallback_no_title_match"
+            except Exception:
+                base["kalshi_match_status"] = "error"
+                base["kalshi_match_reason"] = "api_error"
+                out_rows.append(base)
+                continue
+
+        if selected_market is None:
+            out_rows.append(base)
+            continue
+
+        base.update(
+            {
+                "kalshi_probability": _kalshi_market_probability(selected_market),
+                "kalshi_market_title": selected_market.get("title"),
+                "kalshi_market_subtitle": selected_market.get("subtitle"),
+                "kalshi_market_ticker": selected_market.get("ticker"),
+                "kalshi_event_ticker": selected_market.get("event_ticker"),
+                "kalshi_line": _extract_market_line(selected_market),
+                "kalshi_match_status": "matched",
+                "kalshi_match_reason": "",
+            }
+        )
+        out_rows.append(base)
+
+    return pd.DataFrame(out_rows)
+
 # Alias Maps: Kalshi Variant -> Canonical Internal Code
 NCAAB_CODE_ALIASES: Dict[str, str] = {
     "NCST": "NCS",
