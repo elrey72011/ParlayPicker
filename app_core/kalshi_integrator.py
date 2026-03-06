@@ -227,9 +227,13 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
     out["kalshi_tried_tickers"] = "[]"
 
     for idx, row in out.iterrows():
+        date_code = build_kalshi_date_code(row.get("game_date"))
         tried, series, away_code, home_code = _deterministic_tickers(row)
         out.at[idx, "kalshi_tried_tickers"] = json.dumps(tried)
 
+        if not date_code:
+            out.at[idx, "kalshi_match_reason"] = "missing_date"
+            continue
         if not away_code or not home_code:
             out.at[idx, "kalshi_match_reason"] = "missing_team_code"
             continue

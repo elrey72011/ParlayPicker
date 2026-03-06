@@ -1009,11 +1009,82 @@ def choose_merge_keys(left: pd.DataFrame, right: pd.DataFrame) -> list[str]:  # 
         return base_keys
     l = pd.to_datetime(_string_series(left, 'game_date'), errors='coerce', utc=True)
     r = pd.to_datetime(_string_series(right, 'game_date'), errors='coerce', utc=True)
+    # Prefer keying without date when the left frame has missing dates so schedule
+    # date backfill can succeed via base key joins.
+    if l.isna().any():
+        return base_keys
     if l.notna().sum() == 0 or r.notna().sum() == 0:
         return base_keys
     if l.min() <= r.max() and r.min() <= l.max():
         return base_keys + ['game_date']
     return base_keys
+
+
+def _fill_missing_game_dates_from_base(
+    bet_rows_df: pd.DataFrame,
+    base_df: pd.DataFrame,
+) -> tuple[pd.DataFrame, dict[str, float | int]]:
+    stats: dict[str, float | int] = {
+        'date_fill_attempted': 0,
+        'date_fill_filled': 0,
+        'date_fill_rate': 0.0,
+        'date_fill_spread_attempted': 0,
+        'date_fill_spread_filled': 0,
+        'date_fill_spread_rate': 0.0,
+        'date_fill_total_attempted': 0,
+        'date_fill_total_filled': 0,
+        'date_fill_total_rate': 0.0,
+    }
+    if bet_rows_df.empty or base_df.empty or 'game_date' not in bet_rows_df.columns:
+        return bet_rows_df, stats
+
+    out = bet_rows_df.copy()
+    row_dates = pd.to_datetime(_string_series(out, 'game_date'), errors='coerce', utc=True)
+    missing_mask = row_dates.isna()
+    attempted = int(missing_mask.sum())
+    stats['date_fill_attempted'] = attempted
+    if attempted == 0:
+        return out, stats
+
+    base_merge_keys = [k for k in ['league', 'home_team', 'away_team'] if k in out.columns and k in base_df.columns]
+    if not base_merge_keys:
+        return out, stats
+
+    schedule_lookup = base_df[base_merge_keys + ['game_date']].copy()
+    schedule_lookup['game_date'] = pd.to_datetime(_string_series(schedule_lookup, 'game_date'), errors='coerce', utc=True)
+    schedule_lookup = (
+        schedule_lookup.dropna(subset=['game_date'])
+        .drop_duplicates(subset=base_merge_keys, keep='first')
+        .rename(columns={'game_date': 'schedule_game_date'})
+    )
+    if schedule_lookup.empty:
+        return out, stats
+
+    merged = out.merge(schedule_lookup, on=base_merge_keys, how='left')
+    schedule_dates = pd.to_datetime(_string_series(merged, 'schedule_game_date'), errors='coerce', utc=True)
+    can_fill = missing_mask & schedule_dates.notna()
+    merged.loc[can_fill, 'game_date'] = schedule_dates.loc[can_fill]
+    merged = merged.drop(columns=['schedule_game_date'])
+
+    filled = int(can_fill.sum())
+    stats['date_fill_filled'] = filled
+    stats['date_fill_rate'] = float(filled / max(attempted, 1))
+
+    market_type = _string_series(out, 'market_type').str.lower().str.strip()
+    spread_attempted_mask = missing_mask & market_type.str.startswith('spread', na=False)
+    total_attempted_mask = missing_mask & market_type.str.startswith('total', na=False)
+    spread_attempted = int(spread_attempted_mask.sum())
+    total_attempted = int(total_attempted_mask.sum())
+    spread_filled = int((can_fill & market_type.str.startswith('spread', na=False)).sum())
+    total_filled = int((can_fill & market_type.str.startswith('total', na=False)).sum())
+    stats['date_fill_spread_attempted'] = spread_attempted
+    stats['date_fill_spread_filled'] = spread_filled
+    stats['date_fill_spread_rate'] = float(spread_filled / max(spread_attempted, 1))
+    stats['date_fill_total_attempted'] = total_attempted
+    stats['date_fill_total_filled'] = total_filled
+    stats['date_fill_total_rate'] = float(total_filled / max(total_attempted, 1))
+
+    return merged, stats
 
 
 def build_theover_bet_rows(spreads_df: pd.DataFrame | None, totals_df: pd.DataFrame | None, selected_sports: list[str]) -> pd.DataFrame:  # type: ignore[override]
@@ -1132,6 +1203,7 @@ def run_analysis_pipeline(  # type: ignore[override]
 
     bet_rows_df = build_theover_bet_rows(spreads_df, totals_df, selected_sports)
     base_stale = is_stale_schedule(base_df, bet_rows_df, now_utc)
+    bet_rows_df, date_fill_stats = _fill_missing_game_dates_from_base(bet_rows_df, base_df)
 
     if not bet_rows_df.empty:
         analysis_input = bet_rows_df.head(max_rows).copy()
@@ -1160,6 +1232,7 @@ def run_analysis_pipeline(  # type: ignore[override]
             'market_type_counts': {}, 'merge_keys_used': merge_keys_used, 'base_stale': bool(base_stale),
             'base_max_date': None, 'theover_max_date': None, 'bet_rows_max_date': None, 'now_utc': None if pd.isna(now_utc) else str(now_utc),
             'kalshi_matches': 0, 'kalshi_match_rate': 0.0,
+            **date_fill_stats,
         }
         return analyzed, _empty_best_picks_df(), di
 
@@ -1205,5 +1278,6 @@ def run_analysis_pipeline(  # type: ignore[override]
         'now_utc': None if pd.isna(now_utc) else str(now_utc),
         'kalshi_matches': kalshi_matches,
         'kalshi_match_rate': float(kalshi_matches / max(len(best_picks_df), 1)),
+        **date_fill_stats,
     }
     return analyzed, best_picks_df, di
