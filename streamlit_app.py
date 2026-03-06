@@ -134,9 +134,11 @@ def main() -> None:
             spreads_df=spreads_df,
             totals_df=totals_df,
         )
-        if best_picks_df is not None and not best_picks_df.empty:
-            diagnostics["kalshi_attempted"] = int(len(best_picks_df))
-            diagnostics["match_rate"] = float(diagnostics.get("kalshi_match_rate", 0.0))
+        attempted = int(len(best_picks_df)) if isinstance(best_picks_df, pd.DataFrame) else 0
+        matched = int(best_picks_df["kalshi_match_status"].astype(str).str.lower().eq("matched").sum()) if attempted and "kalshi_match_status" in best_picks_df.columns else int(diagnostics.get("kalshi_matches", 0))
+        diagnostics["kalshi_attempted"] = attempted
+        diagnostics["kalshi_matches"] = matched
+        diagnostics["match_rate"] = float(matched / max(attempted, 1))
 
         st.session_state.analysis_df = analysis_df
         st.session_state["diagnostics"] = diagnostics
@@ -242,7 +244,7 @@ def main() -> None:
     bet_rows = int(diagnostics.get("bet_rows", len(analysis_df)))
     best_rows = int(diagnostics.get("best_picks", len(best_picks_df) if isinstance(best_picks_df, pd.DataFrame) else 0))
     kalshi_matches = int(diagnostics.get("kalshi_matches", 0))
-    match_rate = float(diagnostics.get("kalshi_match_rate", diagnostics.get("match_rate", kalshi_matches / max(1, best_rows))))
+    match_rate = float(diagnostics.get("match_rate", diagnostics.get("kalshi_match_rate", kalshi_matches / max(1, best_rows))))
     totals_games = int(diagnostics.get("theover_totals_games", 0))
     spreads_games = int(diagnostics.get("theover_spreads_games", 0))
     totals_bet_games = int(diagnostics.get("theover_totals_bet_games", 0))
@@ -316,7 +318,7 @@ def main() -> None:
                 "kalshi_match_status": "Kalshi Status",
             }
             display_df = display_df.rename(columns=rename_map)
-            preferred = ["League", "Away Team", "Home Team", "Game Date", "Best Pick", "Prob", "EV", "Edge", "Kalshi Status"]
+            preferred = ["League", "Home Team", "Away Team", "Game Date", "Best Pick", "Prob", "EV", "Edge", "Kalshi Status"]
             ordered = [c for c in preferred if c in display_df.columns] + [c for c in display_df.columns if c not in preferred]
             display_df = display_df[ordered]
             st.dataframe(display_df, width="stretch")
