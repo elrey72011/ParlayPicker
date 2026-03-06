@@ -1,42 +1,6 @@
-"""Core modules shared between the Streamlit app and auxiliary scripts."""
+"""Core modules shared between the Streamlit app and auxiliary scripts.
 
-from .apisports import (
-    APISportsBasketballClient,
-    APISportsFootballClient,
-    APISportsHockeyClient,
-    GameSummary,
-    TeamSummary,
-)
-from .sportsdata import (
-    SportsDataGameInsight,
-    SportsDataNCAABClient,
-    SportsDataNCAAFClient,
-    SportsDataNBAClient,
-    SportsDataNFLClient,
-    SportsDataNHLClient,
-    SportsDataTeamInsight,
-)
-from .ml import HistoricalDataBuilder, HistoricalMLPredictor, MLPredictor
-from .kalshi_integrator import KalshiIntegrator, KalshiMatchResult
-from .sentiment import RealSentimentAnalyzer, SentimentAnalyzer
-from .odds_api import TheOddsAPIClient
+Keep package init lightweight to avoid reload/import-order failures in Streamlit.
+"""
 
-__all__ = [
-    "APISportsBasketballClient",
-    "APISportsFootballClient",
-    "APISportsHockeyClient",
-    "GameSummary",
-    "TeamSummary",
-    "SportsDataNFLClient",
-    "SportsDataNBAClient",
-    "SportsDataNHLClient",
-    "SportsDataNCAAFClient",
-    "SportsDataNCAABClient",
-    "SportsDataGameInsight",
-    "SportsDataTeamInsight",
-    "KalshiIntegrator",
-    "KalshiMatchResult",
-    "TheOddsAPIClient",
-    "RealSentimentAnalyzer",
-    "SentimentAnalyzer",
-]
+__all__: list[str] = []
