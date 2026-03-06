@@ -1613,6 +1613,24 @@ NCAAB_TEAM_CODE_MAP: Dict[str, str] = {
     "IUIN": "IUIN", "IU INDIANAPOLIS": "IUIN",
     "MILW": "MILW", "MILWAUKEE": "MILW",
     "PFW": "PFW", "PURDUE FORT WAYNE": "PFW",
+    "FAIR": "FAIR", "FAIRFIELD": "FAIR",
+    "CLMB": "CLMB", "COLUMBIA": "CLMB",
+    "PEPP": "PEPP", "PEPPERDINE": "PEPP",
+    "SELA": "SELA", "SE LOUISIANA": "SELA", "SOUTHEASTERN LOUISIANA": "SELA",
+    "LTCH": "LTCH", "LOUISIANA TECH": "LTCH",
+    "INST": "INST", "INDIANA STATE": "INST",
+    "TEM": "TEM", "TEMPLE": "TEM",
+    "URI": "URI", "RHODE ISLAND": "URI",
+    "SMC": "SMC", "SAINT MARYS": "SMC", "ST MARYS": "SMC",
+    "WICH": "WICH", "WICHITA STATE": "WICH",
+    "AUB": "AUB", "AUBURN": "AUB",
+    "MEM": "MEM", "MEMPHIS": "MEM",
+    "SIU": "SIU", "SOUTHERN ILLINOIS": "SIU",
+    "KENN": "KENN", "KENNESAW STATE": "KENN",
+    "PRIN": "PRIN", "PRINCETON": "PRIN",
+    "SET": "SET", "SETON HALL": "SET",
+    "SHSU": "SHSU", "SAM HOUSTON STATE": "SHSU",
+    "MAN": "MAN", "MANHATTAN": "MAN",
     "CHAR": "CHAR", "CHARLOTTE": "CHAR",
     "NEOM": "NEOM", "NEBRASKA OMAHA": "NEOM",
     "FAU": "FAU", "FLORIDA ATLANTIC": "FAU",
@@ -2268,51 +2286,76 @@ KALSHI_NCAAB_TEAM_CODES = {
     "Idaho": "IDA",
     "IDAHO": "IDA",
     "Idaho Vandals": "IDA",
+    "Fairfield": "FAIR",
+    "Fairfield Stags": "FAIR",
+    "Pepperdine": "PEPP",
+    "Pepperdine Waves": "PEPP",
+    "SE Louisiana": "SELA",
+    "Southeastern Louisiana": "SELA",
+    "Louisiana Tech": "LTCH",
+    "Louisiana Tech Bulldogs": "LTCH",
+    "Wichita State": "WICH",
+    "Wichita St": "WICH",
+    "Memphis": "MEM",
+    "Memphis Tigers": "MEM",
+    "Southern Illinois": "SIU",
+    "Southern Illinois Salukis": "SIU",
+    "Kennesaw State": "KENN",
+    "Kennesaw St": "KENN",
+    "Sam Houston State": "SHSU",
+    "Sam Houston": "SHSU",
+    "Saint Marys": "SMC",
+    "St Marys": "SMC",
+    "St. Mary's": "SMC",
 }
 
-def normalize_team_for_kalshi(team_name: str) -> str:
-    """Convert full team name to Kalshi 4-letter code with enhanced normalization"""
-    # Clean the name first
-    team_clean = team_name.strip()
+def _normalize_kalshi_team_name(team_name: str) -> str:
+    normalized = str(team_name or "").upper().strip()
+    if not normalized:
+        return ""
+    normalized = normalized.replace("'", "").replace("’", "")
+    normalized = normalized.replace("-", " ").replace("&", " AND ")
+    normalized = re.sub(r"\bSAINT\b", "ST", normalized)
+    normalized = re.sub(r"\bST\.\b", "ST", normalized)
+    normalized = re.sub(r"\bNORTH\b", "N", normalized)
+    normalized = re.sub(r"\bSOUTH\b", "S", normalized)
+    normalized = re.sub(r"\bEAST\b", "E", normalized)
+    normalized = re.sub(r"\bWEST\b", "W", normalized)
+    normalized = re.sub(r"\bSOUTHEAST\b", "SE", normalized)
+    normalized = re.sub(r"\bSOUTHWEST\b", "SW", normalized)
+    normalized = re.sub(r"\bNORTHEAST\b", "NE", normalized)
+    normalized = re.sub(r"\bNORTHWEST\b", "NW", normalized)
+    normalized = re.sub(r"\bSTATE\b", "ST", normalized)
+    normalized = re.sub(r"\bUNIVERSITY\b", "", normalized)
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    return normalized
 
-    # 1. Direct lookup
+
+def normalize_team_for_kalshi(team_name: str) -> str:
+    """Convert full team name to Kalshi code with normalized string fallback matching."""
+    team_clean = str(team_name or "").strip()
+    if not team_clean:
+        return "UNK"
+
     if team_clean in KALSHI_NCAAB_TEAM_CODES:
         return KALSHI_NCAAB_TEAM_CODES[team_clean]
 
-    # 2. Try removing common suffixes/noise words (University, State, etc.)
-    # User Request: Strip "University", "State", and plural mascots.
+    normalized_target = _normalize_kalshi_team_name(team_clean)
+    if normalized_target in NCAAB_CODE_ALIASES:
+        return NCAAB_CODE_ALIASES[normalized_target]
 
-    # Try removing "University"
-    cleaned_uni = team_clean.replace("University", "").replace("Univ", "").strip()
-    if cleaned_uni in KALSHI_NCAAB_TEAM_CODES:
-        return KALSHI_NCAAB_TEAM_CODES[cleaned_uni]
+    for name, code in KALSHI_NCAAB_TEAM_CODES.items():
+        if _normalize_kalshi_team_name(name) == normalized_target:
+            return code
 
-    parts = team_clean.split()
-
-    # Try removing last word (likely mascot)
+    parts = normalized_target.split()
     if len(parts) > 1:
-        without_last = " ".join(parts[:-1])
-        if without_last in KALSHI_NCAAB_TEAM_CODES:
-            return KALSHI_NCAAB_TEAM_CODES[without_last]
+        without_last = " ".join(parts[:-1]).strip()
+        for name, code in KALSHI_NCAAB_TEAM_CODES.items():
+            if _normalize_kalshi_team_name(name) == without_last:
+                return code
 
-        # Try removing "State" if it was part of the name but not in map (risky, but requested)
-        without_state = without_last.replace("State", "").strip()
-        if without_state in KALSHI_NCAAB_TEAM_CODES:
-             return KALSHI_NCAAB_TEAM_CODES[without_state]
-
-    # Try stripping "State" from the full name
-    without_state_full = team_clean.replace("State", "").strip()
-    if without_state_full in KALSHI_NCAAB_TEAM_CODES:
-        return KALSHI_NCAAB_TEAM_CODES[without_state_full]
-
-    # Try base name (first word)
-    if parts:
-        base_name = parts[0]
-        if base_name in KALSHI_NCAAB_TEAM_CODES:
-            return KALSHI_NCAAB_TEAM_CODES[base_name]
-        return base_name[:4].upper()
-
-    return "UNK"
+    return (parts[0][:4] if parts else team_clean[:4]).upper()
 # Alias Maps: Kalshi Variant -> Canonical Internal Code
 NCAAB_CODE_ALIASES: Dict[str, str] = {
     "NCST": "NCS",
@@ -2383,6 +2426,24 @@ NCAAB_CODE_ALIASES: Dict[str, str] = {
     "IUIN": "IUIN", "IU INDIANAPOLIS": "IUIN",
     "MILW": "MILW", "MILWAUKEE": "MILW",
     "PFW": "PFW", "PURDUE FORT WAYNE": "PFW",
+    "FAIR": "FAIR", "FAIRFIELD": "FAIR",
+    "CLMB": "CLMB", "COLUMBIA": "CLMB",
+    "PEPP": "PEPP", "PEPPERDINE": "PEPP",
+    "SELA": "SELA", "SE LOUISIANA": "SELA", "SOUTHEASTERN LOUISIANA": "SELA",
+    "LTCH": "LTCH", "LOUISIANA TECH": "LTCH",
+    "INST": "INST", "INDIANA STATE": "INST",
+    "TEM": "TEM", "TEMPLE": "TEM",
+    "URI": "URI", "RHODE ISLAND": "URI",
+    "SMC": "SMC", "SAINT MARYS": "SMC", "ST MARYS": "SMC",
+    "WICH": "WICH", "WICHITA STATE": "WICH",
+    "AUB": "AUB", "AUBURN": "AUB",
+    "MEM": "MEM", "MEMPHIS": "MEM",
+    "SIU": "SIU", "SOUTHERN ILLINOIS": "SIU",
+    "KENN": "KENN", "KENNESAW STATE": "KENN",
+    "PRIN": "PRIN", "PRINCETON": "PRIN",
+    "SET": "SET", "SETON HALL": "SET",
+    "SHSU": "SHSU", "SAM HOUSTON STATE": "SHSU",
+    "MAN": "MAN", "MANHATTAN": "MAN",
     "CHAR": "CHAR", "CHARLOTTE": "CHAR",
     "NEOM": "NEOM", "NEBRASKA OMAHA": "NEOM",
     "FAU": "FAU", "FLORIDA ATLANTIC": "FAU",
@@ -3330,6 +3391,60 @@ def validate_teams_match(home_team: str, away_team: str, kalshi_yes_side: str) -
 
     return home_match or away_match
 
+def _extract_event_teams_for_exact_match(event_obj: Dict[str, Any]) -> tuple[str, str]:
+    title = str(event_obj.get("title") or event_obj.get("subtitle") or "")
+    cleaned = _normalize_kalshi_team_name(title)
+    for sep in [" @ ", " AT ", " VS ", " V "]:
+        if sep in cleaned:
+            away, home = cleaned.split(sep, 1)
+            return away.strip(), home.strip()
+    return "", ""
+
+
+def _match_event_by_exact_normalized_pair(
+    events: List[Dict[str, Any]],
+    league: str,
+    home_team_name: str,
+    away_team_name: str,
+    game_dt_utc: datetime,
+) -> tuple[Optional[Dict[str, Any]], Optional[str]]:
+    if not events:
+        return None, "no_events"
+
+    target_home = _normalize_kalshi_team_name(home_team_name)
+    target_away = _normalize_kalshi_team_name(away_team_name)
+    if not target_home or not target_away:
+        return None, "team_code_resolution_failed"
+
+    for candidate in events:
+        ticker = str(candidate.get("event_ticker") or candidate.get("ticker") or "")
+        if league and league.upper() not in ticker.upper() and "NCAAMB" not in ticker.upper():
+            continue
+
+        match = re.search(r"-(\d{2}[A-Z]{3}\d{2})", ticker)
+        if not match:
+            continue
+
+        try:
+            ticker_date = datetime.strptime(match.group(1).title(), "%y%b%d").date()
+            game_date_est = game_dt_utc.astimezone(pytz.timezone("US/Eastern")).date()
+            if ticker_date != game_date_est:
+                continue
+        except Exception:
+            continue
+
+        away_title, home_title = _extract_event_teams_for_exact_match(candidate)
+        if not away_title or not home_title:
+            continue
+
+        if away_title == target_away and home_title == target_home:
+            return candidate, None
+        if away_title == target_home and home_title == target_away:
+            return candidate, None
+
+    return None, "no_valid_candidates"
+
+
 def _match_via_events(
     integrator: KalshiIntegrator,
     league: str,
@@ -3446,6 +3561,19 @@ def _match_via_events(
         best_details = None
         all_candidates = []  # Track all potential candidates for debug (Fix #4)
 
+        exact_event, exact_reason = _match_event_by_exact_normalized_pair(
+            events=events,
+            league=league,
+            home_team_name=home_team_name or "",
+            away_team_name=away_team_name or "",
+            game_dt_utc=game_dt_utc,
+        )
+        if exact_event is not None:
+            best_event = exact_event
+            best_score = 100.0
+            best_details = {"method": "normalized_team_pair_exact"}
+            logger.info("   ✅ Exact normalized team-pair event match: %s", exact_event.get("ticker") or exact_event.get("event_ticker"))
+
         # Time window for matching (hours)
         # League-specific time windows:
         # - NCAAB: 72h (games bucket by EST date, ±2 day tolerance)
@@ -3490,39 +3618,37 @@ def _match_via_events(
         logger.info(f"🔍 Phase 1: Strict matching (exact codes only)")
 
         # Track best match across phases
-        best_event = None
-        best_score = 0.0
-        best_details = None
 
         # Phase 1 Loop
-        for candidate in events:
-            # FIX 1: Robust Ticker Extraction (Support event_ticker if ticker is missing)
-            ticker = candidate.get("event_ticker") or candidate.get("ticker") or candidate.get("eventticker") or ""
+        if best_event is None:
+            for candidate in events:
+                # FIX 1: Robust Ticker Extraction (Support event_ticker if ticker is missing)
+                ticker = candidate.get("event_ticker") or candidate.get("ticker") or candidate.get("eventticker") or ""
 
-            # Date Check
-            if not _check_date_tolerance(ticker, game_dt_utc, league):
-                continue
+                # Date Check
+                if not _check_date_tolerance(ticker, game_dt_utc, league):
+                    continue
 
-            score, details = calculate_game_match_score(
-                ticker,
-                away_codes, # Variants
-                home_codes, # Variants
-                away_team_name=away_team_name,
-                home_team_name=home_team_name,
-                league=league
-            )
+                score, details = calculate_game_match_score(
+                    ticker,
+                    away_codes, # Variants
+                    home_codes, # Variants
+                    away_team_name=away_team_name,
+                    home_team_name=home_team_name,
+                    league=league
+                )
 
-            if score >= 90.0:
-                logger.info(f"  ✅ EXACT MATCH: {ticker} (Score: {score:.1f})")
-                best_score = score
-                best_event = candidate
-                best_details = details
-                break # Stop immediately on exact match
+                if score >= 90.0:
+                    logger.info(f"  ✅ EXACT MATCH: {ticker} (Score: {score:.1f})")
+                    best_score = score
+                    best_event = candidate
+                    best_details = details
+                    break # Stop immediately on exact match
 
-            if score > best_score:
-                best_score = score
-                best_event = candidate
-                best_details = details
+                if score > best_score:
+                    best_score = score
+                    best_event = candidate
+                    best_details = details
 
         # Final Threshold Check
         # User requested 85.0 threshold, lowered to 70.0 to capture valid fuzzy matches
