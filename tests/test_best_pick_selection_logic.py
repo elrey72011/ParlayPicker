@@ -1,6 +1,6 @@
 import pandas as pd
 
-from core.streamlit_pipeline import _build_best_picks
+from core.streamlit_pipeline import build_best_picks_df
 
 
 def test_build_best_picks_selects_highest_ev_market_per_game_and_formats_pick():
@@ -41,22 +41,23 @@ def test_build_best_picks_selects_highest_ev_market_per_game_and_formats_pick():
         ]
     )
 
-    out = _build_best_picks(df)
+    out = build_best_picks_df(df)
 
     assert list(out.columns) == [
         "league",
         "home_team",
         "away_team",
+        "game_date",
         "best_pick",
-        "market_type",
+        "calibrated_probability",
         "expected_value",
-        "model_probability",
-        "decimal_odds",
+        "edge",
+        "odds_american",
+        "market_probability",
+        "ml_probability",
     ]
 
     game_one = out[(out["home_team"] == "Celtics") & (out["away_team"] == "Warriors")].iloc[0]
-    assert game_one["market_type"] == "total_over"
     assert game_one["best_pick"] == "Over 221.5"
 
-    game_two = out[(out["home_team"] == "Lakers") & (out["away_team"] == "Suns")].iloc[0]
-    assert game_two["best_pick"] == "Lakers ML"
+    assert out[(out["home_team"] == "Lakers") & (out["away_team"] == "Suns")].empty
