@@ -61,6 +61,12 @@ def calculate_best_pick_metrics(*args: Any, **kwargs: Any):
     return _legacy_module().calculate_best_pick_metrics(*args, **kwargs)
 
 
+def _safe_str_series(df: pd.DataFrame, col: str, default: str = "") -> pd.Series:
+    if col in df.columns:
+        return df[col].fillna(default).astype(str)
+    return pd.Series([default] * len(df), index=df.index, dtype="string")
+
+
 def main() -> None:
     setup_page()
     controls = render_sidebar()
@@ -144,7 +150,15 @@ def main() -> None:
             else:
                 parlay_slice = pd.DataFrame(columns=parlay_columns)
             st.session_state[f"parlays_{leg_count}_df"] = parlay_slice
-        portfolio_df = optimize_portfolio_allocation(analysis_df, bankroll=float(controls["bankroll"]))
+        portfolio_source_df = (
+            best_picks_df
+            if best_picks_df is not None and not best_picks_df.empty
+            else analysis_df
+        )
+        portfolio_df = optimize_portfolio_allocation(
+            portfolio_source_df,
+            bankroll=float(controls["bankroll"]),
+        )
         simulation_results = run_bankroll_simulation(portfolio_df, bankroll=float(controls["bankroll"]))
 
         odds_df = analysis_df.copy()
@@ -283,14 +297,37 @@ def main() -> None:
         st.subheader("Portfolio Allocation")
         portfolio_display = portfolio_df.copy() if portfolio_df is not None else pd.DataFrame()
         if not portfolio_display.empty:
-            portfolio_display["recommended_bet"] = pd.to_numeric(portfolio_display.get("recommended_bet"), errors="coerce").fillna(0.0)
+            if "best_pick" not in portfolio_display.columns:
+                portfolio_display["best_pick"] = ""
+            portfolio_display["best_pick"] = _safe_str_series(portfolio_display, "best_pick").str.strip()
+
+            if portfolio_display["best_pick"].str.len().eq(0).all():
+                st.warning("Portfolio built, but best_pick strings are missing upstream.")
+
+            display_first_columns = [
+                "league",
+                "away_team",
+                "home_team",
+                "best_pick",
+                "calibrated_probability",
+                "expected_value",
+                "edge",
+                "recommended_bet",
+            ]
+            ordered_columns = [c for c in display_first_columns if c in portfolio_display.columns]
+            trailing_columns = [c for c in portfolio_display.columns if c not in ordered_columns]
+            portfolio_display = portfolio_display[ordered_columns + trailing_columns]
+
+            league_s = _safe_str_series(portfolio_display, "league").str.upper()
+            pick_s = _safe_str_series(portfolio_display, "best_pick")
+            bet_s = pd.to_numeric(
+                portfolio_display["recommended_bet"], errors="coerce"
+            ).fillna(0.0) if "recommended_bet" in portfolio_display.columns else pd.Series([0.0] * len(portfolio_display), index=portfolio_display.index)
+
             portfolio_display["allocation_label"] = (
-                portfolio_display.get("league", "").astype(str).str.upper()
-                + " | "
-                + portfolio_display.get("best_pick", "").astype(str)
-                + " | $"
-                + portfolio_display["recommended_bet"].map(lambda x: f"{x:.2f}")
+                league_s + " | " + pick_s + " | $" + bet_s.map(lambda x: f"{x:,.2f}")
             )
+
         st.dataframe(portfolio_display, use_container_width=True)
         st.download_button(
             "Export Portfolio",

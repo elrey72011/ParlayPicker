@@ -241,6 +241,44 @@ def format_pick(row: pd.Series) -> str:
     return ""
 
 
+def _ensure_best_pick_column(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return df
+
+    resolved = df.copy()
+    if "market_type" not in resolved.columns:
+        resolved["market_type"] = resolved.apply(_infer_market_type, axis=1)
+    else:
+        market_type_series = resolved["market_type"].astype(str).str.strip().str.lower()
+        missing_market_type = market_type_series.eq("") | market_type_series.eq("nan")
+        if missing_market_type.any():
+            resolved.loc[missing_market_type, "market_type"] = resolved.loc[missing_market_type].apply(_infer_market_type, axis=1)
+
+    if "spread_line" not in resolved.columns:
+        resolved["spread_line"] = pd.to_numeric(resolved.get("spread"), errors="coerce")
+    else:
+        resolved["spread_line"] = pd.to_numeric(resolved["spread_line"], errors="coerce")
+        fallback_spread = pd.to_numeric(resolved.get("spread"), errors="coerce")
+        resolved["spread_line"] = resolved["spread_line"].where(resolved["spread_line"].notna(), fallback_spread)
+
+    if "total_line" not in resolved.columns:
+        resolved["total_line"] = pd.to_numeric(resolved.get("total"), errors="coerce")
+    else:
+        resolved["total_line"] = pd.to_numeric(resolved["total_line"], errors="coerce")
+        fallback_total = pd.to_numeric(resolved.get("total"), errors="coerce")
+        resolved["total_line"] = resolved["total_line"].where(resolved["total_line"].notna(), fallback_total)
+
+    generated_best_pick = resolved.apply(format_pick, axis=1)
+    if "best_pick" in resolved.columns:
+        best_pick_series = resolved["best_pick"].fillna("").astype(str).str.strip()
+        resolved["best_pick"] = best_pick_series.where(best_pick_series.str.len() > 0, generated_best_pick)
+    else:
+        resolved["best_pick"] = generated_best_pick
+
+    resolved["best_pick"] = resolved["best_pick"].fillna("").astype(str).str.strip()
+    return resolved
+
+
 def _build_best_picks(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     if "market_type" not in df.columns:
@@ -743,6 +781,8 @@ def build_realtime_edges(analysis_df: pd.DataFrame) -> pd.DataFrame:
     if analysis_df.empty:
         return pd.DataFrame()
 
+    analysis_df = _ensure_best_pick_column(analysis_df)
+
     edge_cols = [
         c
         for c in [
@@ -771,11 +811,35 @@ def build_realtime_edges(analysis_df: pd.DataFrame) -> pd.DataFrame:
 
 
 def optimize_portfolio_allocation(analysis_df: pd.DataFrame, bankroll: float = 1000.0) -> pd.DataFrame:
+    analysis_df = _ensure_best_pick_column(analysis_df)
     edges = build_realtime_edges(analysis_df)
     if edges.empty:
         return edges
 
     portfolio = add_kelly_bet_sizing(edges, bankroll=bankroll, fraction=0.25)
+    portfolio = _ensure_best_pick_column(portfolio)
+
+    portfolio_columns = [
+        "league",
+        "away_team",
+        "home_team",
+        "best_pick",
+        "market_type",
+        "calibrated_probability",
+        "expected_value",
+        "edge",
+        "decimal_odds",
+        "market_probability",
+        "ml_probability",
+        "recommended_bet",
+    ]
+    available_columns = [c for c in portfolio_columns if c in portfolio.columns]
+    trailing_columns = [c for c in portfolio.columns if c not in available_columns]
+    portfolio = portfolio[available_columns + trailing_columns]
+
+    if "best_pick" in portfolio.columns:
+        portfolio = portfolio[portfolio["best_pick"].astype(str).str.strip().str.len() > 0].copy()
+
     recommended_total = portfolio["recommended_bet"].sum() if "recommended_bet" in portfolio.columns else 0.0
     if recommended_total > 0:
         portfolio["allocation_pct"] = ((portfolio["recommended_bet"] / recommended_total) * 100).round(2)
