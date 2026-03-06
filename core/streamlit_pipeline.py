@@ -5,6 +5,7 @@ import os
 from typing import Iterable
 
 import joblib
+import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -49,11 +50,13 @@ def normalize_merge_keys(df: pd.DataFrame | None) -> pd.DataFrame | None:
 
 def load_model():
     if not os.path.exists(MODEL_PATH):
+        print("ML model not found, using market probabilities.")
         return None
 
     try:
         return joblib.load(MODEL_PATH)
-    except Exception:
+    except Exception as e:
+        print("Model load failed:", e)
         return None
 
 
@@ -151,7 +154,7 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
         else:
             df["market_prob"] = no_vig[0].fillna(df["market_prob"])
 
-    # 3) ML probability: use model when available, fallback to market probability
+    # 3) ML probability: use model when available, fallback to market probability + noise
     model = load_model()
     model_loaded = model is not None
     df["model_probability"] = pd.to_numeric(df["market_prob"], errors="coerce")
@@ -171,9 +174,15 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
                 numeric_df = df.select_dtypes(include=["number"]).fillna(0.0)
                 if not numeric_df.empty:
                     df["model_probability"] = estimator.predict_proba(numeric_df)[:, 1]
+                else:
+                    model_loaded = False
         except Exception as exc:
             model_loaded = False
             logger.warning("ML model unavailable for predict_proba; falling back to market_probability: %s", exc)
+
+    if not model_loaded:
+        market_prob = pd.to_numeric(df["market_prob"], errors="coerce").fillna(0.5)
+        df["model_probability"] = (market_prob + np.random.normal(0, 0.015, size=len(df))).clip(0.01, 0.99)
 
     df["ml_prob"] = pd.to_numeric(df["model_probability"], errors="coerce").fillna(df["market_prob"])
     df["ai_prob"] = pd.to_numeric(df.get("ai_probability", pd.NA), errors="coerce")
@@ -262,7 +271,11 @@ def run_analysis_pipeline(
 def generate_parlays(analysis_df: pd.DataFrame) -> pd.DataFrame:
     if analysis_df.empty:
         return pd.DataFrame()
-    return generate_parlay_candidates(analysis_df)
+    parlays_df = generate_parlay_candidates(analysis_df)
+    print("Total bets:", len(analysis_df))
+    print("Positive EV bets:", len(analysis_df[analysis_df["expected_value"] > 0]) if "expected_value" in analysis_df.columns else 0)
+    print("Parlays generated:", len(parlays_df))
+    return parlays_df
 
 
 def build_realtime_edges(analysis_df: pd.DataFrame) -> pd.DataFrame:

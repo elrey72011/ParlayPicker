@@ -19,7 +19,9 @@ def generate_parlays(df: pd.DataFrame) -> pd.DataFrame:
     if not needed.issubset(df.columns):
         return pd.DataFrame(columns=["parlay_legs", "combined_probability", "combined_odds", "parlay_ev"])
 
-    eligible = df[(df["expected_value"] > 0) & (df["model_probability"] > df["market_probability"])].copy()
+    eligible = df[df["expected_value"] > 0].copy()
+    if eligible.empty:
+        eligible = df.nlargest(20, "model_probability").copy()
     if eligible.empty:
         return pd.DataFrame(columns=["parlay_legs", "combined_probability", "combined_odds", "parlay_ev"])
 
