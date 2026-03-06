@@ -119,7 +119,8 @@ def main() -> None:
         if best_picks_df is not None and not best_picks_df.empty:
             best_picks_df = enrich_with_kalshi_markets(best_picks_df)
             diagnostics["kalshi_attempted"] = int(len(best_picks_df))
-            diagnostics["kalshi_matched"] = int(best_picks_df.get("kalshi_match_status", pd.Series(dtype=str)).astype(str).str.lower().eq("matched").sum())
+            diagnostics["kalshi_matches"] = int(best_picks_df.get("kalshi_match_status", pd.Series(dtype=str)).astype(str).str.lower().eq("matched").sum())
+            diagnostics["match_rate"] = float(diagnostics["kalshi_matches"] / max(1, len(best_picks_df)))
 
         st.session_state.analysis_df = analysis_df
         st.session_state["diagnostics"] = diagnostics
@@ -218,23 +219,21 @@ def main() -> None:
         st.info("Configure filters in the sidebar and click **Run Master Analysis**.")
         return
 
-    games_count = int(best_picks_df[["league", "home_team", "away_team", "game_date"]].drop_duplicates().shape[0]) if isinstance(best_picks_df, pd.DataFrame) and not best_picks_df.empty else 0
+    games_count = int(diagnostics.get("total_games", 0))
     bet_rows = int(diagnostics.get("bet_rows", len(analysis_df)))
-    best_rows = int(diagnostics.get("best_picks_rows", len(best_picks_df) if isinstance(best_picks_df, pd.DataFrame) else 0))
-    kalshi_matches = int(diagnostics.get("kalshi_matched", 0))
-    kalshi_attempted = max(int(diagnostics.get("kalshi_attempted", best_rows)), 1)
-    match_rate = kalshi_matches / kalshi_attempted
-    bet_row_coverage = float(diagnostics.get("bet_row_coverage", 0.0))
-    health_score = max(0.0, min(1.0, (0.5 * bet_row_coverage) + (0.5 * match_rate)))
-    st.progress(health_score, text=f"Pipeline health: {health_score*100:.0f}% | Kalshi match rate: {match_rate:.0%}")
-    m1, m2, m3, m4, m5 = st.columns(5)
-    m1.metric("Games", games_count)
-    m2.metric("Bet rows", bet_rows)
-    m3.metric("Best picks", best_rows)
-    m4.metric("Kalshi matches", kalshi_matches)
-    m5.metric("Match rate", f"{match_rate:.0%}")
-    if diagnostics.get("base_schedule_stale") or bet_row_coverage < 0.5:
-        st.warning("Pipeline warning: stale base schedule and/or low bet-row coverage detected.")
+    best_rows = int(diagnostics.get("best_picks", len(best_picks_df) if isinstance(best_picks_df, pd.DataFrame) else 0))
+    kalshi_matches = int(diagnostics.get("kalshi_matches", 0))
+    match_rate = float(diagnostics.get("match_rate", kalshi_matches / max(1, best_rows)))
+    with st.container():
+        m1, m2, m3, m4, m5 = st.columns(5)
+        m1.metric("Total games", games_count)
+        m2.metric("Bet rows", bet_rows)
+        m3.metric("Best picks", best_rows)
+        m4.metric("Kalshi matches", kalshi_matches)
+        m5.metric("Match rate", f"{match_rate:.0%}")
+        st.progress(max(0.0, min(1.0, match_rate)), text=f"Kalshi match rate: {match_rate:.0%}")
+        if diagnostics.get("base_stale") or bet_rows == 0:
+            st.warning("Pipeline warning: stale base schedule and/or no normalized bet rows found.")
 
     tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["Odds", "Analysis", "Best Picks", "Parlays", "Portfolio", "Debug", "Strategy Lab"])
 
