@@ -64,6 +64,39 @@ THEOVER_COLUMN_ALIASES = {
 }
 
 
+def load_base_data() -> pd.DataFrame:
+    """Load baseline analysis data if available, otherwise return an empty schema-safe frame."""
+    candidate_paths = [
+        os.environ.get("PARLAYPICKER_BASE_DATA_PATH"),
+        "master_df_raw.csv",
+        "data/master_df_raw.csv",
+        "data/base_data.csv",
+        "data/analysis_base.csv",
+    ]
+
+    base_df = pd.DataFrame()
+    for path in candidate_paths:
+        if not path:
+            continue
+        if not os.path.exists(path):
+            continue
+        try:
+            base_df = pd.read_csv(path)
+            logger.info("Loaded base data from %s (%s rows)", path, len(base_df))
+            break
+        except Exception as exc:
+            logger.warning("Failed loading base data from %s: %s", path, exc)
+
+    if base_df.empty:
+        base_df = pd.DataFrame(columns=["league", "home_team", "away_team", "game_date"])
+
+    base_df = ensure_base_schema(base_df)
+    for required in ["league", "home_team", "away_team", "game_date"]:
+        if required not in base_df.columns:
+            base_df[required] = pd.NA
+    return base_df
+
+
 def normalize_theover_df(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
         return pd.DataFrame()
@@ -626,6 +659,67 @@ def build_bet_rows(spreads_df: pd.DataFrame | None, totals_df: pd.DataFrame | No
 
 def build_theover_bet_rows(spreads_df: pd.DataFrame | None, totals_df: pd.DataFrame | None, selected_sports: list[str]) -> pd.DataFrame:  # type: ignore[override]
     return build_bet_rows(spreads_df, totals_df, selected_sports)
+
+
+def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
+    """Apply core probability/EV calculations with resilient defaults."""
+    if df is None or df.empty:
+        return pd.DataFrame(columns=["market_probability", "consensus_prob", "expected_value", "best_pick"])
+
+    out = ensure_base_schema(df.copy())
+    out["odds_american"] = _numeric_series(out, "odds_american", -110.0).fillna(-110.0)
+    out["market_probability"] = _numeric_series(out, "market_probability")
+    out["market_probability"] = out["market_probability"].where(
+        out["market_probability"].notna(), out["odds_american"].apply(american_to_prob)
+    )
+
+    out["ai_probability"] = _numeric_series(out, "ai_probability")
+    out["ml_probability"] = _numeric_series(out, "ml_probability")
+    fallback_prob = _numeric_series(out, "theover_probability").where(
+        _numeric_series(out, "theover_probability").notna(), 0.5
+    )
+    model_prob = out["ai_probability"].where(out["ai_probability"].notna(), out["ml_probability"])
+    model_prob = model_prob.where(model_prob.notna(), fallback_prob).fillna(0.5).clip(0.01, 0.99)
+
+    out["consensus_prob"] = pd.concat(
+        [out["ai_probability"], out["ml_probability"], _numeric_series(out, "kalshi_probability")], axis=1
+    ).mean(axis=1, skipna=True)
+    out["consensus_prob"] = out["consensus_prob"].where(out["consensus_prob"].notna(), model_prob).clip(0.01, 0.99)
+
+    out["decimal_odds"] = out["odds_american"].apply(american_to_decimal)
+    out["expected_value"] = out["consensus_prob"] * (out["decimal_odds"] - 1) - (1 - out["consensus_prob"])
+    out["edge"] = out["consensus_prob"] - out["market_probability"]
+
+    if "market_type" not in out.columns:
+        spread_edge = _numeric_series(out, "spread_edge").fillna(float("-inf"))
+        total_edge = _numeric_series(out, "total_edge").fillna(float("-inf"))
+        out["market_type"] = np.where(spread_edge >= total_edge, "spread_away", "total_over")
+
+    out = _ensure_best_pick_column(out)
+    pick_is_empty = _string_series(out, "best_pick").str.len().eq(0)
+    away = _string_series(out, "away_team")
+    out.loc[pick_is_empty & _string_series(out, "market_type").eq("spread_away"), "best_pick"] = away + " spread"
+    out.loc[pick_is_empty & _string_series(out, "market_type").eq("spread_home"), "best_pick"] = _string_series(out, "home_team") + " spread"
+    out.loc[pick_is_empty & _string_series(out, "market_type").eq("total_over"), "best_pick"] = "Over total"
+    out.loc[pick_is_empty & _string_series(out, "market_type").eq("total_under"), "best_pick"] = "Under total"
+
+    spread_line_missing = _numeric_series(out, "spread_line").isna() & _numeric_series(out, "spread").isna()
+    out.loc[spread_line_missing & _string_series(out, "market_type").eq("spread_away"), "best_pick"] = away + " spread"
+    out.loc[spread_line_missing & _string_series(out, "market_type").eq("spread_home"), "best_pick"] = _string_series(out, "home_team") + " spread"
+    return out
+
+
+def generate_parlays_table(analysis_df: pd.DataFrame, min_ev: float = 0.02) -> pd.DataFrame:
+    if analysis_df is None or analysis_df.empty:
+        return pd.DataFrame()
+    out = analysis_df.copy()
+    out["expected_value"] = _numeric_series(out, "expected_value")
+    out = out[out["expected_value"] >= float(min_ev)].copy()
+    if out.empty:
+        return pd.DataFrame(columns=analysis_df.columns)
+    return out.sort_values("expected_value", ascending=False).reset_index(drop=True)
+
+
 def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:  # type: ignore[override]
     if analysis_df is None or analysis_df.empty:
         return _empty_best_picks_df()
@@ -682,7 +776,7 @@ def run_analysis_pipeline(  # type: ignore[override]
     spreads_games = _with_game_key(_normalize_key_columns(spreads_norm.copy())) if not spreads_norm.empty else pd.DataFrame(columns=['game_key'])
     totals_games = _with_game_key(_normalize_key_columns(totals_norm.copy())) if not totals_norm.empty else pd.DataFrame(columns=['game_key'])
 
-    bet_rows_df = build_bet_rows(spreads_df, totals_df, selected_sports)
+    bet_rows_df = build_theover_bet_rows(spreads_df, totals_df, selected_sports)
     base_stale = is_stale_schedule(base_df, bet_rows_df, now_utc)
     bet_rows_df, date_fill_stats = _fill_missing_game_dates_from_base(bet_rows_df, base_df)
 
