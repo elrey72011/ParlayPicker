@@ -22,6 +22,7 @@ from app.ui.portfolio_dashboard import render_portfolio
 from app.ui.sidebar_controls import render_sidebar
 from app.ui.strategy_lab_dashboard import render_strategy_lab
 from core.streamlit_pipeline import (
+    build_best_picks_df,
     generate_parlays,
     optimize_portfolio_allocation,
     run_analysis_pipeline,
@@ -82,6 +83,8 @@ def main() -> None:
         st.session_state["gemini_df"] = None
     if "simulation_results" not in st.session_state:
         st.session_state["simulation_results"] = None
+    if "best_picks_df" not in st.session_state:
+        st.session_state["best_picks_df"] = None
 
     if controls["run_analysis"]:
         spreads_df = load_theover_csv(controls.get("theover_spreads"))
@@ -115,6 +118,7 @@ def main() -> None:
             st.session_state["kalshi_df"] = None
             st.session_state["gemini_df"] = None
             st.session_state["simulation_results"] = None
+            st.session_state["best_picks_df"] = None
             return
 
         if controls["use_vertex"]:
@@ -131,6 +135,7 @@ def main() -> None:
         if "gemini_analysis" not in analysis_df.columns:
             analysis_df["gemini_analysis"] = ""
 
+        best_picks_df = build_best_picks_df(analysis_df)
         parlays_df = generate_parlays(analysis_df)
         st.session_state.parlays_df = parlays_df
         portfolio_df = optimize_portfolio_allocation(analysis_df, bankroll=float(controls["bankroll"]))
@@ -167,6 +172,7 @@ def main() -> None:
         st.session_state["kalshi_df"] = kalshi_df
         st.session_state["gemini_df"] = gemini_df
         st.session_state["simulation_results"] = simulation_results
+        st.session_state["best_picks_df"] = best_picks_df
     analysis_df = st.session_state["analysis_df"]
     parlays_df = st.session_state["parlays_df"]
     portfolio_df = st.session_state["portfolio_df"]
@@ -175,12 +181,13 @@ def main() -> None:
     kalshi_df = st.session_state["kalshi_df"]
     gemini_df = st.session_state["gemini_df"]
     simulation_results = st.session_state["simulation_results"]
+    best_picks_df = st.session_state["best_picks_df"]
 
     if analysis_df is None:
         st.info("Configure filters in the sidebar and click **Run Master Analysis**.")
         return
 
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Odds", "Analysis", "Parlays", "Portfolio", "Debug", "Strategy Lab"])
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["Odds", "Analysis", "Best Picks", "Parlays", "Portfolio", "Debug", "Strategy Lab"])
 
     with tab1:
         render_odds_table(analysis_df)
@@ -215,6 +222,20 @@ def main() -> None:
             )
 
     with tab3:
+        st.subheader("Best Picks")
+        if best_picks_df is None or best_picks_df.empty:
+            st.info("No eligible spread/total best picks found.")
+        else:
+            st.dataframe(best_picks_df, width="stretch")
+            best_picks_csv = best_picks_df.to_csv(index=False)
+            st.download_button(
+                "Download Best Picks CSV",
+                best_picks_csv,
+                "best_picks_export.csv",
+                mime="text/csv",
+            )
+
+    with tab4:
         st.subheader("Top EV picks")
         render_parlays(parlays_df)
         if st.session_state["parlays_df"] is not None:
@@ -226,10 +247,10 @@ def main() -> None:
                 mime="text/csv",
             )
 
-    with tab4:
+    with tab5:
         render_portfolio(portfolio_df)
 
-    with tab5:
+    with tab6:
         show_data_diagnostics(
             odds_df=odds_df,
             theover_df=theover_df if theover_df is not None else analysis_df.iloc[0:0],
@@ -251,7 +272,7 @@ def main() -> None:
         if controls["show_kalshi_diagnostics"]:
             render_kalshi_diagnostics(analysis_df)
 
-    with tab6:
+    with tab7:
         render_strategy_lab(
             analysis_df=analysis_df,
             portfolio_df=portfolio_df if portfolio_df is not None else analysis_df.iloc[0:0],
