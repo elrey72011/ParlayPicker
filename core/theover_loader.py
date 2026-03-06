@@ -55,6 +55,33 @@ def normalize_theover_df(df: pd.DataFrame | None) -> pd.DataFrame:
     return normalized
 
 
+def _ensure_required_theover_columns(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+    for date_col in ["commence_time", "start_time", "date"]:
+        if date_col not in out.columns:
+            out[date_col] = out.get("game_date", pd.NaT)
+        out[f"{date_col}_as_game_date"] = pd.to_datetime(out[date_col], errors="coerce", utc=True)
+
+    if "spread_line" not in out.columns:
+        out["spread_line"] = pd.to_numeric(out.get("line"), errors="coerce")
+    if "total_line" not in out.columns:
+        out["total_line"] = pd.to_numeric(out.get("line"), errors="coerce")
+
+    prob = pd.to_numeric(out.get("winprobability"), errors="coerce")
+    out["theover_probability_spread"] = pd.to_numeric(out.get("theover_probability_spread", prob), errors="coerce")
+    out["theover_probability_total"] = pd.to_numeric(out.get("theover_probability_total", prob), errors="coerce")
+
+    required = [
+        "league", "home_team", "away_team", "spread_line", "total_line",
+        "commence_time_as_game_date", "start_time_as_game_date", "date_as_game_date",
+        "theover_probability_spread", "theover_probability_total",
+    ]
+    for col in required:
+        if col not in out.columns:
+            out[col] = pd.NA
+    return out
+
+
 def load_theover_csv(uploaded_file):
     if uploaded_file is None:
         return pd.DataFrame()
@@ -65,8 +92,8 @@ def load_theover_csv(uploaded_file):
         if df.empty:
             st.warning("Uploaded TheOver CSV is empty.")
             return pd.DataFrame()
-        # Keep loader permissive; downstream pipeline normalization handles schema mapping.
-        return df
+        normalized = normalize_theover_df(df)
+        return _ensure_required_theover_columns(normalized)
     except pd.errors.EmptyDataError:
         st.warning("Uploaded CSV contains no readable data.")
         return pd.DataFrame()

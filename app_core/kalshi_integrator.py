@@ -47,6 +47,11 @@ NCAAB_CODE_ALIASES = {
     "wichita state": "WICH",
     "memphis": "MEM",
     "southern illinois": "SIU",
+    "idaho st": "IDST",
+    "sam houston st": "SHSU",
+    "fgcu": "FGCU",
+    "kennesaw st": "KENN",
+    "washington st": "WSU",
 }
 TEAM_CODE_ALIASES = {"NCAAB": NCAAB_CODE_ALIASES}
 KALSHI_NCAAB_TEAM_CODES = NCAAB_CODE_ALIASES
@@ -76,7 +81,7 @@ def _normalize_team_token(name: str) -> str:
     s = str(name or "").lower().strip()
     s = s.replace("&", " and ")
     s = s.replace("'", "")
-    s = re.sub(r"[\.-]", " ", s)
+    s = re.sub(r"[^a-z0-9\s]", " ", s)
     s = re.sub(r"\s+", " ", s).strip()
     s = re.sub(r"^st\s+", "saint ", s)
     s = re.sub(r"\bst$", "state", s)
@@ -137,7 +142,7 @@ def team_code_for_league(team_name: str, league: str) -> str | None:
     return _det_team_code(league, team_name)
 
 
-def league_series_ticker(league: str, family: str) -> str | None:
+def league_series_ticker(league: str, family: str = "spread") -> str | None:
     return LEAGUE_SERIES_MAP.get(str(league or "").upper(), {}).get(family)
 
 
@@ -162,7 +167,11 @@ def resolve_team_code(team_name: str, league: str = "NCAAB") -> str | None:
 
 
 def _select_probability(market: dict[str, Any]) -> float | None:
-    for field in ("yes_ask_dollars", "last_price_dollars", "yes_bid_dollars"):
+    yes_bid = pd.to_numeric(market.get("yes_bid_dollars"), errors="coerce")
+    yes_ask = pd.to_numeric(market.get("yes_ask_dollars"), errors="coerce")
+    if pd.notna(yes_bid) and pd.notna(yes_ask):
+        return float((yes_bid + yes_ask) / 2.0)
+    for field in ("last_price_dollars", "yes_bid_dollars", "yes_ask_dollars"):
         val = pd.to_numeric(market.get(field), errors="coerce")
         if pd.notna(val):
             return float(val)
@@ -180,11 +189,7 @@ def _get_markets(params: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _fallback_match(series: str, row: pd.Series, away_code: str, home_code: str) -> dict[str, Any] | None:
-    game_ts = pd.to_datetime(row.get("game_date"), errors="coerce", utc=True)
-    params: dict[str, Any] = {"series_ticker": series}
-    if pd.notna(game_ts):
-        params["min_close_ts"] = int((game_ts - timedelta(days=1)).timestamp())
-        params["max_close_ts"] = int((game_ts + timedelta(days=2)).timestamp())
+    params: dict[str, Any] = {"series_ticker": series, "status": "open", "limit": 1000}
     markets = _get_markets(params)
     candidates = []
     for m in markets:
@@ -248,12 +253,13 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             out.at[idx, "kalshi_match_reason"] = "api_error"
             continue
 
-        market = deterministic[0] if deterministic else None
+        ticker_lookup = {str(m.get("ticker") or ""): m for m in deterministic}
+        market = next((ticker_lookup[t] for t in tried if t in ticker_lookup), None)
         reason = "no_market_for_tickers"
         if market is None and series:
             try:
                 market = _fallback_match(series, row, away_code, home_code)
-                reason = "fallback_no_match" if market is None else "matched"
+                reason = "no_market_for_tickers" if market is None else "matched"
             except KalshiAPIError:
                 out.at[idx, "kalshi_match_status"] = "error"
                 out.at[idx, "kalshi_match_reason"] = "api_error"

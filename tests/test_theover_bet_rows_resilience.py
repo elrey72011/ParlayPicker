@@ -76,10 +76,10 @@ def test_build_theover_bet_rows_only_totals_upload():
 
     out = build_theover_bet_rows(None, totals_df, ["NBA"])
 
-    assert len(out) == 1
-    assert out.loc[0, "market_type"] == "total_over"
-    assert out.loc[0, "total_line"] == 220.5
-    assert out.loc[0, "odds_american"] == -105
+    assert len(out) == 2
+    assert set(out["market_type"].tolist()) == {"total_over", "total_under"}
+    assert out["total_line"].iloc[0] == 220.5
+    assert out["odds_american"].iloc[0] == -105
 
 
 def test_build_theover_bet_rows_only_spreads_upload():
@@ -96,9 +96,9 @@ def test_build_theover_bet_rows_only_spreads_upload():
 
     out = build_theover_bet_rows(spreads_df, None, ["NBA"])
 
-    assert len(out) == 1
-    assert out.loc[0, "market_type"] == "spread_home"
-    assert out.loc[0, "spread_line"] == -3.5
+    assert len(out) == 2
+    assert set(out["market_type"].tolist()) == {"spread_home", "spread_away"}
+    assert sorted(out["spread_line"].tolist()) == [-3.5, 3.5]
 
 
 def test_build_theover_bet_rows_empty_uploads_returns_stable_schema():

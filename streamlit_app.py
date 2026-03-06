@@ -167,7 +167,7 @@ def main() -> None:
         if "gemini_analysis" not in analysis_df.columns:
             analysis_df["gemini_analysis"] = ""
 
-        parlays_df = generate_parlays(best_picks_df)
+        parlays_df = generate_parlays(best_picks_df) if best_picks_df is not None and not best_picks_df.empty else pd.DataFrame(columns=["parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "legs"])
         st.session_state.parlays_df = parlays_df
         parlay_columns = ["parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "legs"]
         for leg_count in (2, 3, 4, 5):
@@ -177,15 +177,11 @@ def main() -> None:
             else:
                 parlay_slice = pd.DataFrame(columns=parlay_columns)
             st.session_state[f"parlays_{leg_count}_df"] = parlay_slice
-        portfolio_source_df = (
-            best_picks_df
-            if best_picks_df is not None and not best_picks_df.empty
-            else analysis_df
-        )
+        portfolio_source_df = best_picks_df if best_picks_df is not None and not best_picks_df.empty else pd.DataFrame()
         portfolio_df = optimize_portfolio_allocation(
             portfolio_source_df,
             bankroll=float(controls["bankroll"]),
-        )
+        ) if not portfolio_source_df.empty else pd.DataFrame()
         if isinstance(portfolio_df, pd.DataFrame) and not portfolio_df.empty:
             if "best_pick" not in portfolio_df.columns:
                 portfolio_df["best_pick"] = pd.NA
@@ -346,7 +342,9 @@ def main() -> None:
             ordered = [c for c in preferred if c in display_df.columns] + [c for c in display_df.columns if c not in preferred]
             display_df = display_df[ordered]
             st.dataframe(display_df, width="stretch")
-            best_picks_csv = display_df.to_csv(index=False)
+            export_cols = [c for c in ["league", "home_team", "away_team", "game_date", "best_pick", "calibrated_probability", "expected_value", "edge", "odds_american", "market_probability", "ml_probability"] if c in best_picks_df.columns]
+            best_picks_export = best_picks_df[export_cols] if export_cols else best_picks_df
+            best_picks_csv = best_picks_export.to_csv(index=False)
             st.download_button(
                 "Export Best Picks",
                 best_picks_csv,
