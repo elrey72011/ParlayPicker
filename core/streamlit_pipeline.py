@@ -7,7 +7,8 @@ import pandas as pd
 import streamlit as st
 
 from core.ev_engine import calculate_ev
-from core.probability_engine import american_odds_to_probability
+from core.parlay_engine import generate_parlays as generate_parlay_candidates
+from core.probability_engine import american_to_prob, remove_vig
 from core.schema.base_schema import ensure_base_schema
 from core.team_normalizer import normalize_team
 
@@ -56,25 +57,45 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
     df["ml_probability"] = pd.to_numeric(df["ml_probability"], errors="coerce").fillna(0.5)
 
     df["odds_american"] = df.apply(_resolve_american_odds, axis=1)
-    df["market_probability"] = df["odds_american"].apply(american_odds_to_probability)
+    df["market_probability"] = df["odds_american"].apply(american_to_prob)
 
-    df["consensus_prob"] = (
-        df["ai_probability"].fillna(0.5)
-        + df["ml_probability"].fillna(0.5)
-        + df["market_probability"].fillna(0.5)
-    ) / 3
+    if {"home_odds", "away_odds"}.issubset(df.columns):
+        pair_probs = df[["home_odds", "away_odds"]].apply(
+            lambda r: remove_vig([american_to_prob(float(r["home_odds"])), american_to_prob(float(r["away_odds"]))])
+            if pd.notna(r["home_odds"]) and pd.notna(r["away_odds"])
+            else [df.at[r.name, "market_probability"], 1 - df.at[r.name, "market_probability"]],
+            axis=1,
+            result_type="expand",
+        )
+        df["market_probability"] = pair_probs[0]
 
-    df["expected_value"] = df.apply(
-        lambda row: calculate_ev(float(row["consensus_prob"]), float(row["odds_american"])),
-        axis=1,
-    )
+    has_kalshi = "kalshi_probability" in df.columns and df["kalshi_probability"].notna().any()
+    if has_kalshi:
+        df["kalshi_probability"] = pd.to_numeric(df["kalshi_probability"], errors="coerce").fillna(0.5)
+        df["consensus_prob"] = (
+            0.35 * df["market_probability"]
+            + 0.35 * df["ml_probability"]
+            + 0.20 * df["ai_probability"]
+            + 0.10 * df["kalshi_probability"]
+        )
+    else:
+        df["consensus_prob"] = (
+            df["market_probability"]
+            + df["ml_probability"]
+            + df["ai_probability"]
+        ) / 3
+
+    df["expected_value"] = calculate_ev(df["consensus_prob"], df["odds_american"])
 
     if "spread_edge" not in df.columns:
         df["spread_edge"] = 0.0
     if "total_edge" not in df.columns:
         df["total_edge"] = 0.0
 
-    df["best_pick"] = df.apply(determine_best_pick, axis=1)
+    df["best_pick"] = df.apply(
+        lambda r: f"{r['away_team']} vs {r['home_team']}" if r["expected_value"] > 0 else "No Edge",
+        axis=1,
+    )
     return df
 
 
@@ -174,11 +195,9 @@ def generate_parlays(analysis_df: pd.DataFrame) -> pd.DataFrame:
     if isinstance(parlay_candidates, pd.DataFrame) and not parlay_candidates.empty:
         return parlay_candidates
 
-    if "expected_value" in analysis_df.columns:
-        parlay_candidates = analysis_df[analysis_df["expected_value"] > 0.02].copy()
-        if not parlay_candidates.empty:
-            parlay_candidates.sort_values("expected_value", ascending=False, inplace=True)
-            return parlay_candidates
+    generated = generate_parlay_candidates(analysis_df)
+    if not generated.empty:
+        return generated
 
     if compute_best_bets and build_optimal_parlays:
         best_bets = compute_best_bets(analysis_df)

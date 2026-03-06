@@ -1,10 +1,9 @@
-TEAM_REMAP = {
-    "LA Clippers": "Los Angeles Clippers",
+TEAM_MAP = {
     "LA Lakers": "Los Angeles Lakers",
-    "GS Warriors": "Golden State Warriors",
-    "NY Knicks": "New York Knicks",
+    "LAL": "Los Angeles Lakers",
+    "BOS": "Boston Celtics",
 }
 
 
 def normalize_team(name):
-    return TEAM_REMAP.get(name, name)
+    return TEAM_MAP.get(name, name)
