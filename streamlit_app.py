@@ -71,6 +71,10 @@ def main() -> None:
         st.session_state["analysis_df"] = None
     if "parlays_df" not in st.session_state:
         st.session_state["parlays_df"] = None
+    for leg_count in (2, 3, 4, 5):
+        key = f"parlays_{leg_count}_df"
+        if key not in st.session_state:
+            st.session_state[key] = None
     if "portfolio_df" not in st.session_state:
         st.session_state["portfolio_df"] = None
     if "odds_df" not in st.session_state:
@@ -113,6 +117,8 @@ def main() -> None:
             st.session_state["analysis_df"] = None
             st.session_state["parlays_df"] = None
             st.session_state["portfolio_df"] = None
+            for leg_count in (2, 3, 4, 5):
+                st.session_state[f"parlays_{leg_count}_df"] = None
             st.session_state["odds_df"] = None
             st.session_state["theover_df"] = None
             st.session_state["kalshi_df"] = None
@@ -138,6 +144,14 @@ def main() -> None:
         best_picks_df = build_best_picks_df(analysis_df)
         parlays_df = generate_parlays(analysis_df)
         st.session_state.parlays_df = parlays_df
+        parlay_columns = ["parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "legs"]
+        for leg_count in (2, 3, 4, 5):
+            parlay_slice = parlays_df[parlays_df.get("legs", pd.Series(dtype=int)) == leg_count].copy()
+            if not parlay_slice.empty:
+                parlay_slice = parlay_slice[parlay_columns]
+            else:
+                parlay_slice = pd.DataFrame(columns=parlay_columns)
+            st.session_state[f"parlays_{leg_count}_df"] = parlay_slice
         portfolio_df = optimize_portfolio_allocation(analysis_df, bankroll=float(controls["bankroll"]))
         simulation_results = run_bankroll_simulation(portfolio_df, bankroll=float(controls["bankroll"]))
 
@@ -236,16 +250,29 @@ def main() -> None:
             )
 
     with tab4:
-        st.subheader("Top EV picks")
-        render_parlays(parlays_df)
-        if st.session_state["parlays_df"] is not None:
-            parlays_csv = st.session_state["parlays_df"].to_csv(index=False)
-            st.download_button(
-                "Export Parlays",
-                parlays_csv,
-                "parlays_export.csv",
-                mime="text/csv",
-            )
+        st.subheader("Best Parlays")
+        parlay_columns = ["parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "legs"]
+        base_parlays_df = parlays_df if parlays_df is not None else pd.DataFrame(columns=parlay_columns)
+        tabs_2, tabs_3, tabs_4, tabs_5 = st.tabs(["2-Leg Parlays", "3-Leg Parlays", "4-Leg Parlays", "5-Leg Parlays"])
+
+        for leg_count, parlay_tab in zip((2, 3, 4, 5), (tabs_2, tabs_3, tabs_4, tabs_5)):
+            with parlay_tab:
+                filtered = base_parlays_df[base_parlays_df.get("legs", pd.Series(dtype=int)) == leg_count].copy()
+                filtered = filtered[parlay_columns] if not filtered.empty else pd.DataFrame(columns=parlay_columns)
+                st.session_state[f"parlays_{leg_count}_df"] = filtered
+                if filtered.empty:
+                    st.info(f"Not enough eligible spread/total picks to build {leg_count}-leg parlays yet.")
+                    continue
+
+                render_parlays(filtered)
+                parlay_csv = filtered.to_csv(index=False)
+                st.download_button(
+                    f"Download {leg_count}-Leg Parlays CSV",
+                    parlay_csv,
+                    f"parlays_{leg_count}_leg_export.csv",
+                    mime="text/csv",
+                    key=f"download_{leg_count}_leg_parlays",
+                )
 
     with tab5:
         render_portfolio(portfolio_df)

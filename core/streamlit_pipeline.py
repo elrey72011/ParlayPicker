@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from itertools import combinations
 import os
 from typing import Iterable
 
@@ -11,7 +12,6 @@ import streamlit as st
 
 from core.bankroll_simulator import simulate_bankroll
 from core.kelly_optimizer import add_kelly_bet_sizing
-from core.parlay_engine import generate_parlays as generate_parlay_candidates
 from core.probability_calibration import calibrate_probabilities
 from core.probability_engine import american_to_prob, normalize_probability_components, remove_vig
 from core.schema.base_schema import ensure_base_schema
@@ -49,6 +49,8 @@ BEST_PICK_COLUMNS = [
     "odds_american",
     "market_probability",
     "ml_probability",
+    "decimal_odds",
+    "market_type",
 ]
 
 
@@ -570,14 +572,64 @@ def run_analysis_pipeline(
 
 
 def generate_parlays(analysis_df: pd.DataFrame) -> pd.DataFrame:
-    if analysis_df.empty:
-        return pd.DataFrame()
-    parlays_df = generate_parlay_candidates(analysis_df)
-    print("Total games:", len(analysis_df))
-    print("Positive EV bets:", len(analysis_df[analysis_df["expected_value"] > 0]) if "expected_value" in analysis_df.columns else 0)
-    print("Top edge:", analysis_df["edge"].max() if "edge" in analysis_df.columns else 0)
-    print("Parlays generated:", len(parlays_df))
-    return parlays_df
+    columns = ["parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "legs"]
+    if analysis_df is None or analysis_df.empty:
+        return pd.DataFrame(columns=columns)
+
+    required = {"best_pick", "calibrated_probability", "expected_value"}
+    if not required.issubset(analysis_df.columns):
+        return pd.DataFrame(columns=columns)
+
+    candidate_bets = analysis_df.copy()
+    if "market_type" in candidate_bets.columns:
+        candidate_bets = candidate_bets[
+            candidate_bets["market_type"].isin({"spread_home", "spread_away", "total_over", "total_under"})
+        ]
+
+    candidate_bets = candidate_bets[candidate_bets["best_pick"].astype(str).str.strip().str.len() > 0].copy()
+    candidate_bets["calibrated_probability"] = pd.to_numeric(candidate_bets["calibrated_probability"], errors="coerce")
+    candidate_bets["expected_value"] = pd.to_numeric(candidate_bets["expected_value"], errors="coerce")
+    if "decimal_odds" in candidate_bets.columns:
+        candidate_bets["decimal_odds"] = pd.to_numeric(candidate_bets["decimal_odds"], errors="coerce")
+    else:
+        candidate_bets["decimal_odds"] = pd.to_numeric(candidate_bets.get("odds_american"), errors="coerce").apply(
+            lambda x: american_to_decimal(x) if pd.notna(x) else pd.NA
+        )
+
+    rank_column = "edge" if "edge" in candidate_bets.columns else "expected_value"
+    candidate_bets[rank_column] = pd.to_numeric(candidate_bets[rank_column], errors="coerce")
+    candidate_bets = candidate_bets.dropna(subset=["calibrated_probability", "decimal_odds", "expected_value", rank_column])
+    candidate_bets = candidate_bets[candidate_bets["expected_value"] > 0]
+    candidate_bets = candidate_bets.nlargest(20, rank_column)
+
+    records: list[dict[str, float | int | str]] = []
+    for leg_count in (2, 3, 4, 5):
+        if len(candidate_bets) < leg_count:
+            continue
+
+        for combo in combinations(candidate_bets.index, leg_count):
+            legs = candidate_bets.loc[list(combo)]
+            combined_probability = float(legs["calibrated_probability"].prod())
+            combined_decimal_odds = float(legs["decimal_odds"].prod())
+            parlay_ev = (combined_probability * (combined_decimal_odds - 1)) - (1 - combined_probability)
+            if parlay_ev <= 0:
+                continue
+
+            leg_labels = [str(row["best_pick"]).strip() for _, row in legs.iterrows()]
+            records.append(
+                {
+                    "parlay_legs": " | ".join(leg_labels),
+                    "combined_probability": combined_probability,
+                    "combined_decimal_odds": combined_decimal_odds,
+                    "parlay_ev": parlay_ev,
+                    "legs": leg_count,
+                }
+            )
+
+    if not records:
+        return pd.DataFrame(columns=columns)
+
+    return pd.DataFrame(records)[columns].sort_values("parlay_ev", ascending=False).reset_index(drop=True)
 
 
 def build_realtime_edges(analysis_df: pd.DataFrame) -> pd.DataFrame:
