@@ -5,6 +5,9 @@ import pandas as pd
 
 def run_gemini_analysis(df: pd.DataFrame) -> pd.DataFrame:
     """Best-effort Gemini annotation that preserves UI behavior when Gemini is unavailable."""
+    if df is None or df.empty:
+        return pd.DataFrame() if df is None else df.copy()
+
     result = df.copy()
 
     try:

@@ -26,28 +26,18 @@ def remove_vig(home_prob, away_prob=None):
 
 
 def normalize_probability_components(df: pd.DataFrame) -> pd.DataFrame:
-    """Normalize probability inputs and calculate weighted consensus with optional sources."""
-    weight_map = {
-        "market_prob": 0.4,
-        "ml_prob": 0.3,
-        "ai_prob": 0.2,
-        "kalshi_prob": 0.1,
-    }
-
-    for col in weight_map:
+    """Normalize probability inputs and calculate weighted consensus probability."""
+    for col in ["market_prob", "ml_prob", "ai_prob"]:
         if col not in df.columns:
             df[col] = pd.NA
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    def _row_consensus(row):
-        available = {k: v for k, v in weight_map.items() if pd.notna(row[k])}
-        if not available:
-            return 0.5
-
-        total_weight = sum(available.values())
-        return sum((available[k] / total_weight) * float(row[k]) for k in available)
-
-    df["consensus_prob"] = df.apply(_row_consensus, axis=1).clip(lower=0.0, upper=1.0)
+    ai_fallback = df["ai_prob"].fillna(df["market_prob"])
+    df["consensus_prob"] = (
+        df["market_prob"] * 0.4
+        + df["ml_prob"] * 0.4
+        + ai_fallback * 0.2
+    ).clip(lower=0.0, upper=1.0)
     return df
 
 
