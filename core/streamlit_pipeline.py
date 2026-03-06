@@ -959,7 +959,6 @@ BEST_PICK_COLUMNS = [
     "expected_value",
     "edge",
     "odds_american",
-    "decimal_odds",
     "market_probability",
     "ml_probability",
 ]
@@ -969,191 +968,138 @@ def normalize_theover_df(df: pd.DataFrame) -> pd.DataFrame:  # type: ignore[over
     return loader_normalize_theover_df(df)
 
 
+def _numeric_series(df: pd.DataFrame, col: str, default: float | int | None = None) -> pd.Series:
+    if col in df.columns:
+        s = pd.to_numeric(df[col], errors="coerce")
+    else:
+        s = pd.Series([pd.NA] * len(df), index=df.index, dtype="Float64")
+    if default is not None:
+        s = s.fillna(default)
+    return s
+
+
+def _string_series(df: pd.DataFrame, col: str, default: str = "") -> pd.Series:
+    if col in df.columns:
+        return df[col].fillna(default).astype(str)
+    return pd.Series([default] * len(df), index=df.index, dtype="string")
+
+
 def _coerce_utc_ts(value) -> pd.Timestamp:
-    if value is None or (isinstance(value, float) and pd.isna(value)):
-        return pd.NaT
     return pd.to_datetime(value, errors="coerce", utc=True)
 
 
-def _max_utc_from_columns(df: pd.DataFrame | None, candidates: list[str]) -> pd.Timestamp:
-    if df is None or df.empty:
-        return pd.NaT
-    for col in candidates:
-        if col in df.columns:
-            series = pd.to_datetime(df[col], errors="coerce", utc=True)
-            if series.notna().any():
-                return series.max()
-    return pd.NaT
+def _with_game_key(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        df["game_key"] = pd.Series(dtype="string")
+        return df
+    out = df.copy()
+    date_s = pd.to_datetime(out.get("game_date"), errors="coerce", utc=True)
+    date_token = date_s.dt.strftime("%Y-%m-%d").fillna("")
+    league = _string_series(out, "league").str.upper().str.strip()
+    away = _string_series(out, "away_team").str.lower().str.strip()
+    home = _string_series(out, "home_team").str.lower().str.strip()
+    out["game_key"] = np.where(
+        date_token != "",
+        league + "|" + date_token + "|" + away + "|" + home,
+        league + "|" + away + "|" + home,
+    )
+    return out
 
 
 def is_stale_schedule(base_df: pd.DataFrame, theover_df: pd.DataFrame, now: pd.Timestamp, max_age_days: int = 14) -> bool:  # type: ignore[override]
     now_ts = _coerce_utc_ts(now)
-    date_candidates = ["game_date", "commence_time", "start_time", "time", "date"]
+    if pd.isna(now_ts):
+        return False
 
-    base_max = _max_utc_from_columns(base_df, date_candidates)
-    bet_max = _max_utc_from_columns(theover_df, date_candidates)
+    base_dates = pd.to_datetime(base_df.get("game_date"), errors="coerce", utc=True)
+    theover_dates = pd.to_datetime(theover_df.get("game_date"), errors="coerce", utc=True)
+    base_max = base_dates.max() if isinstance(base_dates, pd.Series) and base_dates.notna().any() else pd.NaT
+    upload_max = theover_dates.max() if isinstance(theover_dates, pd.Series) and theover_dates.notna().any() else pd.NaT
 
-    stale_by_now = False
-    stale_vs_upload = False
-
-    if pd.notna(base_max) and pd.notna(now_ts):
-        stale_by_now = base_max < (now_ts - pd.Timedelta(days=max_age_days))
-
-    if pd.notna(base_max) and pd.notna(bet_max):
-        stale_vs_upload = base_max < (bet_max - pd.Timedelta(days=1))
-
-    if pd.isna(base_max) and pd.notna(bet_max):
-        return True
-
-    return bool(stale_by_now or stale_vs_upload)
+    stale_by_age = pd.notna(base_max) and base_max < (now_ts - pd.Timedelta(days=max_age_days))
+    stale_vs_upload = pd.notna(base_max) and pd.notna(upload_max) and base_max < (upload_max - pd.Timedelta(days=1))
+    missing_base = pd.isna(base_max) and pd.notna(upload_max)
+    return bool(stale_by_age or stale_vs_upload or missing_base)
 
 
 def build_theover_bet_rows(spreads_df: pd.DataFrame | None, totals_df: pd.DataFrame | None, selected_sports: list[str]) -> pd.DataFrame:  # type: ignore[override]
-    stable_columns = [
-        "league",
-        "home_team",
-        "away_team",
-        "game_date",
-        "market_type",
-        "spread_line",
-        "total_line",
-        "theover_probability",
-        "odds_american",
-        "market_probability",
-        "expected_value",
-        "edge",
-        "best_pick",
-        "winprobability",
-        "line",
-        "pick",
-        "pickteam",
+    cols = [
+        "league", "home_team", "away_team", "game_date", "game_key", "market_type", "spread_line", "total_line",
+        "theover_probability", "odds_american", "market_probability", "expected_value", "edge", "best_pick", "line", "pick", "pickteam",
     ]
     selected_norm = {_normalize_league_value(s) for s in (selected_sports or [])}
 
-    def _numeric_series(df: pd.DataFrame, col: str, default: float | int | None = None) -> pd.Series:
-        if col in df.columns:
-            s = pd.to_numeric(df[col], errors="coerce")
-        else:
-            s = pd.Series([pd.NA] * len(df), index=df.index, dtype="Float64")
-        if default is not None:
-            s = s.fillna(default)
-        return s
-
-    def _string_series(df: pd.DataFrame, col: str, default: str = "") -> pd.Series:
-        if col in df.columns:
-            return df[col].fillna(default).astype(str)
-        return pd.Series([default] * len(df), index=df.index, dtype="string")
-
-    def _first_present(df: pd.DataFrame, names: list[str]) -> pd.Series:
-        out = pd.Series([pd.NA] * len(df), index=df.index, dtype="object")
-        for name in names:
-            if name in df.columns:
-                out = out.where(out.notna(), df[name])
-        return out
-
-    def _normalize_uploaded(df: pd.DataFrame | None) -> pd.DataFrame:
-        src = normalize_theover_df(df)
-        if src.empty:
+    def _prep_common(df: pd.DataFrame | None) -> pd.DataFrame:
+        norm = normalize_theover_df(df)
+        if norm.empty:
             return pd.DataFrame()
-        src = src.copy()
-        src["odds_american"] = _first_present(src, ["odds_american", "odds", "american_odds"])
-        src["winprobability"] = _first_present(src, ["winprobability", "win_probability", "probability", "win_prob"])
-        src["line"] = _first_present(src, ["line", "spread", "spread_line", "total", "total_line", "points"])
-        src["pick"] = _first_present(src, ["pick", "selection", "side", "over_under"])
-        src["pickteam"] = _first_present(src, ["pickteam", "pick_team", "team"])
-        return src
-
-    def _market_prob_from_odds(odds: pd.Series) -> pd.Series:
-        vals = pd.to_numeric(odds, errors="coerce").fillna(-110)
-        return vals.apply(american_to_prob)
-
-    def _prep_totals(df: pd.DataFrame | None) -> pd.DataFrame:
-        src = _normalize_uploaded(df)
-        if src.empty:
-            return pd.DataFrame()
-        src = _enrich_uploaded_league(_normalize_key_columns(src), list(selected_norm))
-        pick = _string_series(src, "pick").str.lower()
-        out = src[pick.str.contains("over|under", regex=True, na=False)].copy()
-        out["market_type"] = np.where(pick.str.contains("over", na=False), "total_over", "total_under")
+        out = _normalize_key_columns(norm.copy())
+        out = _enrich_uploaded_league(out, list(selected_norm))
+        out["league"] = _string_series(out, "league").apply(_normalize_league_value)
         out["line"] = _numeric_series(out, "line")
-        out["total_line"] = out["line"]
-        out["spread_line"] = pd.NA
+        out["pick"] = _string_series(out, "pick")
+        out["pickteam"] = _string_series(out, "pickteam")
+        out["game_date"] = pd.to_datetime(out.get("game_date"), errors="coerce", utc=True)
+        wp = _numeric_series(out, "winprobability")
+        out["theover_probability"] = wp.fillna(0.5).clip(0.0, 1.0)
+        out["odds_american"] = _numeric_series(out, "odds_american", -110.0)
         return out
 
-    def _prep_spreads(df: pd.DataFrame | None) -> pd.DataFrame:
-        src = _normalize_uploaded(df)
-        if src.empty:
-            return pd.DataFrame()
-        src = _enrich_uploaded_league(_normalize_key_columns(src), list(selected_norm))
-        src["line"] = _numeric_series(src, "line")
-        src = src[src["line"].notna()].copy()
-        src["pickteam"] = _string_series(src, "pickteam").apply(normalize_team_name)
-        src = src[src["pickteam"].astype(str).str.len() > 0].copy()
-        home = _string_series(src, "home_team").apply(normalize_team_name)
-        away = _string_series(src, "away_team").apply(normalize_team_name)
-        is_home = src["pickteam"] == home
-        is_away = src["pickteam"] == away
-        src = src[is_home | is_away].copy()
-        src["spread_line"] = np.where(is_home.loc[src.index], src["line"], -src["line"])
-        src["total_line"] = pd.NA
-        src["market_type"] = np.where(src["spread_line"] < 0, "spread_home", "spread_away")
-        return src
+    spreads = _prep_common(spreads_df)
+    if not spreads.empty:
+        pickteam_norm = spreads["pickteam"].apply(normalize_team_name)
+        home_norm = _string_series(spreads, "home_team").apply(normalize_team_name)
+        away_norm = _string_series(spreads, "away_team").apply(normalize_team_name)
+        is_home = pickteam_norm.eq(home_norm)
+        is_away = pickteam_norm.eq(away_norm)
+        spreads = spreads[spreads["line"].notna() & (is_home | is_away)].copy()
+        spreads["spread_line"] = np.where(is_home.loc[spreads.index], spreads["line"], -spreads["line"])
+        spreads["market_type"] = np.where(spreads["spread_line"] < 0, "spread_home", "spread_away")
+        spreads["total_line"] = pd.NA
 
-    rows = pd.concat([_prep_spreads(spreads_df), _prep_totals(totals_df)], ignore_index=True)
-    if rows.empty:
-        return pd.DataFrame(columns=stable_columns)
+    totals = _prep_common(totals_df)
+    if not totals.empty:
+        pick_s = totals["pick"].str.lower()
+        totals = totals[totals["line"].notna() & pick_s.str.contains("over|under", regex=True, na=False)].copy()
+        pick_s = totals["pick"].str.lower()
+        totals["market_type"] = np.where(pick_s.str.contains("over", na=False), "total_over", "total_under")
+        totals["total_line"] = totals["line"]
+        totals["spread_line"] = pd.NA
 
-    rows["league"] = _string_series(rows, "league").apply(_normalize_league_value)
+    bets = pd.concat([spreads, totals], ignore_index=True)
+    if bets.empty:
+        return pd.DataFrame(columns=cols)
+    bets = _with_game_key(bets)
     if selected_norm:
-        rows = rows[rows["league"].isin(selected_norm)].copy()
-        if rows.empty:
-            return pd.DataFrame(columns=stable_columns)
-
-    rows["winprobability"] = _numeric_series(rows, "winprobability")
-    probability_as_pct = rows["winprobability"].dropna().gt(1.0).mean() > 0.8
-    if probability_as_pct:
-        rows["winprobability"] = rows["winprobability"] / 100.0
-    rows["theover_probability"] = rows["winprobability"].clip(0.0, 1.0)
-    rows["odds_american"] = _numeric_series(rows, "odds_american", -110.0)
-    rows["market_probability"] = _market_prob_from_odds(rows["odds_american"])
-    rows["expected_value"] = _numeric_series(rows, "expected_value")
-    rows["edge"] = _numeric_series(rows, "edge")
-    rows["best_pick"] = _string_series(rows, "best_pick")
-    for col in stable_columns:
-        if col not in rows.columns:
-            rows[col] = pd.NA
-    return rows[stable_columns]
+        bets = bets[bets["league"].isin(selected_norm)].copy()
+    bets["market_probability"] = pd.to_numeric(bets["odds_american"], errors="coerce").fillna(-110).apply(american_to_prob)
+    bets["expected_value"] = _numeric_series(bets, "expected_value")
+    bets["edge"] = _numeric_series(bets, "edge")
+    bets["best_pick"] = ""
+    for c in cols:
+        if c not in bets.columns:
+            bets[c] = pd.NA
+    return bets[cols]
 
 
 def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:  # type: ignore[override]
     if analysis_df is None or analysis_df.empty:
         return pd.DataFrame(columns=BEST_PICK_COLUMNS)
     allowed = {"spread_home", "spread_away", "total_over", "total_under"}
-    market_type_series = analysis_df["market_type"] if "market_type" in analysis_df.columns else pd.Series([""] * len(analysis_df), index=analysis_df.index, dtype="string")
-    df = analysis_df[market_type_series.isin(allowed)].copy()
+    df = analysis_df[analysis_df.get("market_type", "").isin(allowed)].copy()
     if df.empty:
         return pd.DataFrame(columns=BEST_PICK_COLUMNS)
 
-    if "decimal_odds" in df.columns:
-        decimal_odds = pd.to_numeric(df["decimal_odds"], errors="coerce")
-    else:
-        decimal_odds = pd.Series([pd.NA] * len(df), index=df.index, dtype="Float64")
-    if "odds_american" in df.columns:
-        fallback_odds = pd.to_numeric(df["odds_american"], errors="coerce").apply(american_to_decimal)
-        df["decimal_odds"] = decimal_odds.fillna(fallback_odds).fillna(1.9091)
-    else:
-        df["decimal_odds"] = decimal_odds.fillna(1.9091)
-
-    df["expected_value"] = pd.to_numeric(df["expected_value"], errors="coerce") if "expected_value" in df.columns else pd.Series([pd.NA] * len(df), index=df.index, dtype="Float64")
-    df["edge"] = pd.to_numeric(df["edge"], errors="coerce") if "edge" in df.columns else pd.Series([pd.NA] * len(df), index=df.index, dtype="Float64")
+    df["expected_value"] = _numeric_series(df, "expected_value")
+    df["edge"] = _numeric_series(df, "edge")
     df = df.sort_values(["expected_value", "edge"], ascending=[False, False])
     grp = ["league", "home_team", "away_team", "game_date"]
     best = df.groupby(grp, dropna=False).first().reset_index()
     best["best_pick"] = best.apply(format_pick, axis=1)
     best = best[best["best_pick"].astype(str).str.len() > 0].copy()
-    for col in BEST_PICK_COLUMNS:
-        if col not in best.columns:
-            best[col] = pd.NA
+    for c in BEST_PICK_COLUMNS:
+        if c not in best.columns:
+            best[c] = pd.NA
     return best[BEST_PICK_COLUMNS]
 
 
@@ -1173,12 +1119,13 @@ def run_analysis_pipeline(  # type: ignore[override]
     if selected_sports and "league" in base_df.columns:
         base_df = base_df[base_df["league"].isin(selected_sports)].copy()
 
+    spreads_norm = normalize_theover_df(spreads_df)
+    totals_norm = normalize_theover_df(totals_df)
+    spreads_games_df = _with_game_key(_normalize_key_columns(spreads_norm.copy())) if not spreads_norm.empty else pd.DataFrame(columns=["game_key"])
+    totals_games_df = _with_game_key(_normalize_key_columns(totals_norm.copy())) if not totals_norm.empty else pd.DataFrame(columns=["game_key"])
+
     bet_rows_df = build_theover_bet_rows(spreads_df, totals_df, selected_sports)
-    if "game_date" in bet_rows_df.columns:
-        bet_rows_df["game_date"] = pd.to_datetime(bet_rows_df["game_date"], errors="coerce", utc=True)
     base_stale = is_stale_schedule(base_df, bet_rows_df, now_utc)
-    base_max_date = _max_utc_from_columns(base_df, ["game_date", "commence_time", "start_time", "time", "date"])
-    bet_rows_max_date = _max_utc_from_columns(bet_rows_df, ["game_date", "commence_time", "start_time", "time", "date"])
 
     if not bet_rows_df.empty:
         analysis_input = bet_rows_df.head(max_rows).copy()
@@ -1191,43 +1138,52 @@ def run_analysis_pipeline(  # type: ignore[override]
         analysis_input = base_df.head(max_rows).copy()
 
     analyzed = _apply_analysis_calculations(analysis_input)
-    if "game_date" in analyzed.columns:
-        analyzed["game_date"] = pd.to_datetime(analyzed["game_date"], errors="coerce", utc=True)
     if analyzed.empty:
+        empty = pd.DataFrame(columns=BEST_PICK_COLUMNS)
         di = {
             "total_games": 0,
             "bet_rows": 0,
             "best_picks": 0,
+            "theover_spreads_rows": int(len(spreads_norm)),
+            "theover_totals_rows": int(len(totals_norm)),
+            "theover_spreads_games": int(spreads_games_df["game_key"].nunique() if "game_key" in spreads_games_df else 0),
+            "theover_totals_games": int(totals_games_df["game_key"].nunique() if "game_key" in totals_games_df else 0),
+            "theover_spreads_bet_games": 0,
+            "theover_totals_bet_games": 0,
+            "market_type_counts": {},
             "base_stale": bool(base_stale),
-            "base_max_date": None if pd.isna(base_max_date) else str(base_max_date),
-            "bet_rows_max_date": None if pd.isna(bet_rows_max_date) else str(bet_rows_max_date),
-            "now_utc": None if pd.isna(now_utc) else str(now_utc),
         }
-        return analyzed, pd.DataFrame(columns=BEST_PICK_COLUMNS), di
+        return analyzed, empty, di
 
-    theover_prob = pd.to_numeric(analyzed["theover_probability"], errors="coerce") if "theover_probability" in analyzed.columns else pd.Series([pd.NA] * len(analyzed), index=analyzed.index, dtype="Float64")
-    model_prob = pd.to_numeric(analyzed["model_probability"], errors="coerce") if "model_probability" in analyzed.columns else pd.Series([pd.NA] * len(analyzed), index=analyzed.index, dtype="Float64")
-    market_prob = pd.to_numeric(analyzed["market_probability"], errors="coerce") if "market_probability" in analyzed.columns else pd.Series([pd.NA] * len(analyzed), index=analyzed.index, dtype="Float64")
-    analyzed["model_probability"] = theover_prob.fillna(model_prob).fillna(market_prob).clip(0.01, 0.99)
+    analyzed["model_probability"] = _numeric_series(analyzed, "theover_probability").fillna(
+        _numeric_series(analyzed, "model_probability")
+    ).fillna(_numeric_series(analyzed, "market_probability")).fillna(0.5).clip(0.01, 0.99)
     analyzed = calibrate_probabilities(analyzed)
-    calibrated = pd.to_numeric(analyzed["calibrated_probability"], errors="coerce") if "calibrated_probability" in analyzed.columns else pd.Series([pd.NA] * len(analyzed), index=analyzed.index, dtype="Float64")
-    analyzed["calibrated_probability"] = calibrated.fillna(analyzed["model_probability"]).clip(0.01, 0.99)
-    odds_american = pd.to_numeric(analyzed["odds_american"], errors="coerce") if "odds_american" in analyzed.columns else pd.Series([pd.NA] * len(analyzed), index=analyzed.index, dtype="Float64")
-    analyzed["odds_american"] = odds_american.fillna(-110)
-    analyzed["market_probability"] = market_prob.fillna(analyzed["odds_american"].apply(american_to_prob))
+    analyzed["calibrated_probability"] = _numeric_series(analyzed, "calibrated_probability").fillna(analyzed["model_probability"]).clip(0.01, 0.99)
+    analyzed["odds_american"] = _numeric_series(analyzed, "odds_american", -110.0)
+    analyzed["market_probability"] = _numeric_series(analyzed, "market_probability").fillna(analyzed["odds_american"].apply(american_to_prob))
     analyzed["decimal_odds"] = analyzed["odds_american"].apply(american_to_decimal)
     analyzed["expected_value"] = analyzed["calibrated_probability"] * (analyzed["decimal_odds"] - 1) - (1 - analyzed["calibrated_probability"])
     analyzed["edge"] = analyzed["calibrated_probability"] - analyzed["market_probability"]
 
     best_picks_df = build_best_picks_df(analyzed)
-    total_games = int(analyzed[["league", "home_team", "away_team", "game_date"]].drop_duplicates().shape[0]) if set(["league","home_team","away_team","game_date"]).issubset(analyzed.columns) else int(len(analyzed))
+    spread_games = 0
+    total_games = 0
+    if not bet_rows_df.empty and "game_key" in bet_rows_df.columns:
+        spread_games = int(bet_rows_df[bet_rows_df["market_type"].str.startswith("spread", na=False)]["game_key"].nunique())
+        total_games = int(bet_rows_df[bet_rows_df["market_type"].str.startswith("total", na=False)]["game_key"].nunique())
+
     di = {
-        "total_games": total_games,
+        "total_games": int(analyzed[["league", "home_team", "away_team", "game_date"]].drop_duplicates().shape[0]) if set(["league", "home_team", "away_team", "game_date"]).issubset(analyzed.columns) else int(len(analyzed)),
         "bet_rows": int(len(analyzed)),
         "best_picks": int(len(best_picks_df)),
+        "theover_spreads_rows": int(len(spreads_norm)),
+        "theover_totals_rows": int(len(totals_norm)),
+        "theover_spreads_games": int(spreads_games_df["game_key"].nunique() if "game_key" in spreads_games_df else 0),
+        "theover_totals_games": int(totals_games_df["game_key"].nunique() if "game_key" in totals_games_df else 0),
+        "theover_spreads_bet_games": spread_games,
+        "theover_totals_bet_games": total_games,
+        "market_type_counts": analyzed["market_type"].value_counts(dropna=False).to_dict() if "market_type" in analyzed.columns else {},
         "base_stale": bool(base_stale),
-        "base_max_date": None if pd.isna(base_max_date) else str(base_max_date),
-        "bet_rows_max_date": None if pd.isna(bet_rows_max_date) else str(bet_rows_max_date),
-        "now_utc": None if pd.isna(now_utc) else str(now_utc),
     }
     return analyzed, best_picks_df, di

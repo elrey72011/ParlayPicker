@@ -233,13 +233,19 @@ def main() -> None:
     best_rows = int(diagnostics.get("best_picks", len(best_picks_df) if isinstance(best_picks_df, pd.DataFrame) else 0))
     kalshi_matches = int(diagnostics.get("kalshi_matches", 0))
     match_rate = float(diagnostics.get("match_rate", kalshi_matches / max(1, best_rows)))
+    totals_games = int(diagnostics.get("theover_totals_games", 0))
+    spreads_games = int(diagnostics.get("theover_spreads_games", 0))
+    totals_bet_games = int(diagnostics.get("theover_totals_bet_games", 0))
+    spreads_bet_games = int(diagnostics.get("theover_spreads_bet_games", 0))
     with st.container():
-        m1, m2, m3, m4, m5 = st.columns(5)
+        m1, m2, m3, m4, m5, m6, m7 = st.columns(7)
         m1.metric("Total games", games_count)
         m2.metric("Bet rows", bet_rows)
         m3.metric("Best picks", best_rows)
         m4.metric("Kalshi matches", kalshi_matches)
         m5.metric("Match rate", f"{match_rate:.0%}")
+        m6.metric("TheOver totals games", f"{totals_bet_games}/{totals_games}")
+        m7.metric("TheOver spreads games", f"{spreads_bet_games}/{spreads_games}")
         st.progress(max(0.0, min(1.0, match_rate)), text=f"Kalshi match rate: {match_rate:.0%}")
         if diagnostics.get("base_stale") or bet_rows == 0:
             st.warning("Pipeline warning: stale base schedule and/or no normalized bet rows found.")
@@ -277,6 +283,10 @@ def main() -> None:
         st.subheader("Best Picks")
         if best_picks_df is None or best_picks_df.empty:
             st.info("No eligible spread/total best picks found.")
+            st.json({
+                "market_type_counts": diagnostics.get("market_type_counts", {}),
+                "bet_rows": diagnostics.get("bet_rows", 0),
+            })
         else:
             display_df = best_picks_df.copy()
             rename_map = {
