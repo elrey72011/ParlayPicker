@@ -159,6 +159,9 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         return best_picks_df.copy() if isinstance(best_picks_df, pd.DataFrame) else pd.DataFrame()
 
     out = best_picks_df.copy()
+    out["game_date"] = pd.to_datetime(out.get("game_date"), errors="coerce", utc=True)
+    if out["game_date"].isna().all():
+        raise ValueError("best_picks_df game_date is fully null before Kalshi enrichment")
     out["kalshi_probability"] = pd.NA
     out["kalshi_market_title"] = pd.NA
     out["kalshi_event_ticker"] = pd.NA
