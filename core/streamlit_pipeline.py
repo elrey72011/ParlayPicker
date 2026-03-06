@@ -28,6 +28,12 @@ except Exception:  # pragma: no cover
 
 MERGE_KEYS = ["league", "home_team", "away_team", "game_date"]
 MODEL_PATH = "models/sports_model_latest.joblib"
+LEAGUE_ALIASES = {
+    "NCAAM": "NCAAB",
+    "NCAA MEN'S BASKETBALL": "NCAAB",
+    "NCAA MENS BASKETBALL": "NCAAB",
+    "COLLEGE BASKETBALL": "NCAAB",
+}
 BEST_PICK_COLUMNS = [
     "league",
     "home_team",
@@ -211,6 +217,19 @@ def _normalize_teams(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def _normalize_league_value(value: str | object) -> str:
+    if pd.isna(value):
+        return ""
+    normalized = str(value).strip().upper()
+    return LEAGUE_ALIASES.get(normalized, normalized)
+
+
+def _normalize_sports_filter(sports: Iterable[str] | None) -> list[str]:
+    if not sports:
+        return []
+    return [_normalize_league_value(sport) for sport in sports]
+
+
 def _normalize_key_columns(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
         return df
@@ -228,6 +247,7 @@ def _normalize_key_columns(df: pd.DataFrame) -> pd.DataFrame:
     df["game_date"] = pd.to_datetime(df["game_date"], errors="coerce").dt.date
     if "league" not in df.columns:
         df["league"] = ""
+    df["league"] = df["league"].apply(_normalize_league_value)
     return _normalize_teams(df)
 
 
@@ -382,11 +402,29 @@ def run_analysis_pipeline(
     totals_df: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     base_df = load_base_data().copy()
+    selected_sports = _normalize_sports_filter(sports)
 
-    if sports and "league" in base_df.columns:
-        filtered = base_df[base_df["league"].isin(list(sports))].copy()
+    available_base_leagues = sorted(base_df["league"].dropna().astype(str).str.upper().unique().tolist()) if "league" in base_df.columns else []
+    logger.info("Selected sports (normalized): %s", selected_sports)
+    logger.info("Available base leagues (normalized): %s", available_base_leagues)
+
+    has_theover_data = (spreads_df is not None and not spreads_df.empty) or (totals_df is not None and not totals_df.empty)
+
+    if selected_sports and "league" in base_df.columns:
+        filtered = base_df[base_df["league"].isin(selected_sports)].copy()
     else:
         filtered = base_df.copy()
+
+    logger.info("Rows after sports filter: %s", len(filtered))
+    if filtered.empty:
+        if selected_sports and "league" in base_df.columns:
+            logger.warning(
+                "No base rows matched selected leagues. Possible league label mismatch. selected=%s available=%s",
+                selected_sports,
+                available_base_leagues,
+            )
+        else:
+            logger.warning("No base rows available before merge stage.")
 
     filtered = filtered.head(max_rows)
 
@@ -400,6 +438,17 @@ def run_analysis_pipeline(
     if totals_df is not None and not totals_df.empty:
         totals_norm = _normalize_key_columns(totals_df)
         merged_theover = pd.concat([merged_theover, totals_norm], ignore_index=True) if merged_theover is not None else totals_norm
+
+    if filtered.empty and has_theover_data and merged_theover is not None and not merged_theover.empty:
+        fallback_df = merged_theover.copy()
+        if selected_sports and "league" in fallback_df.columns:
+            fallback_df = fallback_df[fallback_df["league"].isin(selected_sports)].copy()
+        filtered = fallback_df.head(max_rows)
+        logger.info(
+            "Fallback activated: using uploaded TheOver data as base. fallback_rows=%s selected=%s",
+            len(filtered),
+            selected_sports,
+        )
 
     filtered = _safe_merge(filtered, merged_theover, "_theover")
 
