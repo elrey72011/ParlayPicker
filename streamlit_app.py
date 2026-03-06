@@ -142,7 +142,7 @@ def main() -> None:
             analysis_df["gemini_analysis"] = ""
 
         best_picks_df = build_best_picks_df(analysis_df)
-        parlays_df = generate_parlays(analysis_df)
+        parlays_df = generate_parlays(best_picks_df)
         st.session_state.parlays_df = parlays_df
         parlay_columns = ["parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "legs"]
         for leg_count in (2, 3, 4, 5):
@@ -169,8 +169,10 @@ def main() -> None:
                 else totals_loaded
             )
 
-        kalshi_cols = [c for c in analysis_df.columns if "kalshi" in c.lower()]
-        kalshi_df = analysis_df[kalshi_cols].dropna(how="all") if kalshi_cols else analysis_df.iloc[0:0]
+        if "kalshi_probability" in analysis_df.columns:
+            kalshi_df = analysis_df[analysis_df["kalshi_probability"].notna()].copy()
+        else:
+            kalshi_df = analysis_df.iloc[0:0]
 
         gemini_df = (
             analysis_df[analysis_df.get("gemini_analysis", "").astype(str).str.len() > 0]
@@ -240,6 +242,9 @@ def main() -> None:
         if best_picks_df is None or best_picks_df.empty:
             st.info("No eligible spread/total best picks found.")
         else:
+            if "league" in best_picks_df.columns:
+                ordered = ["league"] + [c for c in best_picks_df.columns if c != "league"]
+                best_picks_df = best_picks_df[ordered]
             st.dataframe(best_picks_df, width="stretch")
             best_picks_csv = best_picks_df.to_csv(index=False)
             st.download_button(
@@ -288,6 +293,23 @@ def main() -> None:
         odds_matches = len(odds_df) if odds_df is not None else 0
         theover_matches = len(theover_df) if theover_df is not None else 0
         kalshi_matches = len(kalshi_df) if kalshi_df is not None else 0
+
+        total_analysis_rows = len(analysis_df) if analysis_df is not None else 0
+        kalshi_non_null_rows = (
+            int(analysis_df["kalshi_probability"].notna().sum())
+            if analysis_df is not None and "kalshi_probability" in analysis_df.columns
+            else 0
+        )
+        kalshi_matched_rows = (
+            int(analysis_df["kalshi_match_status"].astype(str).str.lower().eq("matched").sum())
+            if analysis_df is not None and "kalshi_match_status" in analysis_df.columns
+            else 0
+        )
+
+        st.markdown("### Kalshi Merge Diagnostics")
+        st.write("analysis_df total rows:", total_analysis_rows)
+        st.write("rows with non-null kalshi_probability:", kalshi_non_null_rows)
+        st.write('rows with kalshi_match_status == "matched":', kalshi_matched_rows)
 
         if controls["show_debug"]:
             parlay_count = len(parlays_df) if parlays_df is not None else 0

@@ -16,6 +16,7 @@ from core.probability_calibration import calibrate_probabilities
 from core.probability_engine import american_to_prob, normalize_probability_components, remove_vig
 from core.schema.base_schema import ensure_base_schema
 from core.team_mapper import normalize_team_name
+from app_core.kalshi_integrator import KalshiIntegrator, match_game_to_kalshi
 
 logger = logging.getLogger(__name__)
 
@@ -49,8 +50,9 @@ BEST_PICK_COLUMNS = [
     "odds_american",
     "market_probability",
     "ml_probability",
-    "decimal_odds",
-    "market_type",
+    "kalshi_probability",
+    "kalshi_match_status",
+    "kalshi_event_ticker",
 ]
 
 
@@ -193,9 +195,16 @@ def _build_best_picks(df: pd.DataFrame) -> pd.DataFrame:
     if not available_group_keys:
         available_group_keys = ["home_team", "away_team"]
 
-    sort_col = "expected_value" if "expected_value" in df.columns else "edge"
+    if "expected_value" not in df.columns:
+        df["expected_value"] = pd.NA
+    if "edge" not in df.columns:
+        df["edge"] = pd.NA
+
+    df["expected_value"] = pd.to_numeric(df["expected_value"], errors="coerce")
+    df["edge"] = pd.to_numeric(df["edge"], errors="coerce")
+
     best_picks = (
-        df.sort_values(sort_col, ascending=False)
+        df.sort_values(["expected_value", "edge"], ascending=[False, False])
         .groupby(available_group_keys)
         .first()
         .reset_index()
@@ -215,6 +224,117 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     if analysis_df is None or analysis_df.empty:
         return pd.DataFrame(columns=BEST_PICK_COLUMNS)
     return _build_best_picks(analysis_df)
+
+
+def _extract_kalshi_line(kalshi_debug: dict | None) -> float | None:
+    if not isinstance(kalshi_debug, dict):
+        return None
+    candidate_market = kalshi_debug.get("winner_market")
+    if not candidate_market and kalshi_debug.get("spread_markets"):
+        candidate_market = kalshi_debug["spread_markets"][0]
+    if not candidate_market and kalshi_debug.get("total_markets"):
+        candidate_market = kalshi_debug["total_markets"][0]
+    if not isinstance(candidate_market, dict):
+        return None
+
+    for key in ["line", "strike", "subtitle"]:
+        if key not in candidate_market:
+            continue
+        raw_val = candidate_market.get(key)
+        if key == "subtitle":
+            extracted = pd.to_numeric(pd.Series([raw_val]).astype(str).str.extract(r"([-+]?\d+(?:\.\d+)?)")[0], errors="coerce")
+            if not extracted.empty and pd.notna(extracted.iloc[0]):
+                return float(extracted.iloc[0])
+        else:
+            numeric = pd.to_numeric(raw_val, errors="coerce")
+            if pd.notna(numeric):
+                return float(numeric)
+    return None
+
+
+def _build_kalshi_df(base_df: pd.DataFrame) -> pd.DataFrame | None:
+    if base_df is None or base_df.empty:
+        return None
+
+    try:
+        kalshi = KalshiIntegrator()
+    except Exception as exc:
+        logger.info("Kalshi skipped: unable to initialize integrator (%s)", exc)
+        return None
+
+    if not getattr(kalshi, "_credentials_valid", False):
+        logger.info("Kalshi skipped: missing/invalid credentials.")
+        return None
+
+    keys = [k for k in MERGE_KEYS if k in base_df.columns]
+    if len(keys) < 4:
+        logger.info("Kalshi skipped: missing merge keys. available=%s", keys)
+        return None
+
+    games = normalize_merge_keys(_normalize_key_columns(base_df[keys].drop_duplicates().copy()))
+    if games is None or games.empty:
+        return None
+
+    kalshi_rows: list[dict[str, object]] = []
+    for _, game in games.iterrows():
+        game_date = pd.to_datetime(game.get("game_date"), errors="coerce")
+        if pd.isna(game_date):
+            kalshi_rows.append({
+                "league": game.get("league"),
+                "home_team": game.get("home_team"),
+                "away_team": game.get("away_team"),
+                "game_date": pd.NaT,
+                "kalshi_match_status": "date_missing",
+            })
+            continue
+
+        try:
+            match = match_game_to_kalshi(
+                league=str(game.get("league") or ""),
+                home_team=str(game.get("home_team") or ""),
+                away_team=str(game.get("away_team") or ""),
+                game_time=game_date.to_pydatetime(),
+                integrator=kalshi,
+            )
+            debug = match.debug if isinstance(match.debug, dict) else {}
+            kalshi_rows.append(
+                {
+                    "league": game.get("league"),
+                    "home_team": game.get("home_team"),
+                    "away_team": game.get("away_team"),
+                    "game_date": game_date,
+                    "kalshi_probability": match.probability if match.probability is not None else match.mid_prob,
+                    "kalshi_market_title": match.title or match.label,
+                    "kalshi_event_ticker": match.event_ticker or match.raw_event_id,
+                    "kalshi_line": _extract_kalshi_line(debug),
+                    "kalshi_match_status": "matched" if match.matched else (match.reason or "unmatched"),
+                    "kalshi_yes_ask": match.yes_ask,
+                    "kalshi_yes_bid": match.yes_bid,
+                }
+            )
+        except Exception as exc:
+            logger.info(
+                "Kalshi matching skipped for %s @ %s (%s): %s",
+                game.get("away_team"),
+                game.get("home_team"),
+                game.get("league"),
+                exc,
+            )
+            kalshi_rows.append(
+                {
+                    "league": game.get("league"),
+                    "home_team": game.get("home_team"),
+                    "away_team": game.get("away_team"),
+                    "game_date": game_date,
+                    "kalshi_match_status": "error",
+                }
+            )
+
+    if not kalshi_rows:
+        return None
+
+    kalshi_df = pd.DataFrame(kalshi_rows)
+    return normalize_merge_keys(_normalize_key_columns(kalshi_df))
 
 
 def normalize_merge_keys(df: pd.DataFrame | None) -> pd.DataFrame | None:
@@ -562,6 +682,13 @@ def run_analysis_pipeline(
         )
 
     filtered = _safe_merge(filtered, merged_theover, "_theover")
+
+    kalshi_df = _build_kalshi_df(filtered)
+    if kalshi_df is not None and not kalshi_df.empty:
+        logger.info("Kalshi merge available rows: %s", len(kalshi_df))
+    else:
+        logger.info("Kalshi merge skipped or no rows available.")
+    filtered = _safe_merge(filtered, kalshi_df, "_kalshi")
 
     analyzed = _apply_analysis_calculations(filtered)
     logger.info("Analyzed row count: %s", len(analyzed))
