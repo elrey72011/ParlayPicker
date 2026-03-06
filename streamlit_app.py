@@ -68,9 +68,23 @@ def calculate_best_pick_metrics(*args: Any, **kwargs: Any):
 
 
 def _safe_str_series(df: pd.DataFrame, col: str, default: str = "") -> pd.Series:
+    if df is None or df.empty:
+        return pd.Series(dtype="string")
     if col in df.columns:
-        return df[col].fillna(default).astype(str)
+        return df[col].fillna(default).astype("string")
     return pd.Series([default] * len(df), index=df.index, dtype="string")
+
+
+def _safe_numeric_series(df: pd.DataFrame, col: str, default: float | int | None = None) -> pd.Series:
+    if df is None or df.empty:
+        return pd.Series(dtype="float64")
+    if col in df.columns:
+        s = pd.to_numeric(df[col], errors="coerce")
+    else:
+        s = pd.Series([pd.NA] * len(df), index=df.index, dtype="Float64")
+    if default is not None:
+        s = s.fillna(default)
+    return s
 
 
 def main() -> None:
@@ -159,7 +173,7 @@ def main() -> None:
         st.session_state.parlays_df = parlays_df
         parlay_columns = ["parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "legs"]
         for leg_count in (2, 3, 4, 5):
-            parlay_slice = parlays_df[parlays_df.get("legs", pd.Series(dtype=int)) == leg_count].copy()
+            parlay_slice = parlays_df[_safe_numeric_series(parlays_df, "legs").eq(leg_count)].copy()
             if not parlay_slice.empty:
                 parlay_slice = parlay_slice[parlay_columns]
             else:
@@ -283,10 +297,14 @@ def main() -> None:
         st.subheader("Best Picks")
         if best_picks_df is None or best_picks_df.empty:
             st.info("No eligible spread/total best picks found.")
-            st.json({
-                "market_type_counts": diagnostics.get("market_type_counts", {}),
-                "bet_rows": diagnostics.get("bet_rows", 0),
-            })
+            with st.expander("Best Picks Debug Diagnostics", expanded=True):
+                st.json({
+                    "market_type_counts": diagnostics.get("market_type_counts", {}),
+                    "allowed_market_type_rows": diagnostics.get("allowed_market_type_rows", 0),
+                    "positive_ev_rows": diagnostics.get("positive_ev_rows", 0),
+                    "best_pick_nonempty_rows": diagnostics.get("best_pick_nonempty_rows", 0),
+                    "bet_rows": diagnostics.get("bet_rows", 0),
+                })
         else:
             display_df = best_picks_df.copy()
             rename_map = {
@@ -321,7 +339,7 @@ def main() -> None:
 
         for leg_count, parlay_tab in zip((2, 3, 4, 5), (tabs_2, tabs_3, tabs_4, tabs_5)):
             with parlay_tab:
-                filtered = base_parlays_df[base_parlays_df.get("legs", pd.Series(dtype=int)) == leg_count].copy()
+                filtered = base_parlays_df[_safe_numeric_series(base_parlays_df, "legs").eq(leg_count)].copy()
                 filtered = filtered[parlay_columns] if not filtered.empty else pd.DataFrame(columns=parlay_columns)
                 st.session_state[f"parlays_{leg_count}_df"] = filtered
                 if filtered.empty:
@@ -371,7 +389,7 @@ def main() -> None:
                 league_s + " | " + pick_s + " | $" + bet_s.map(lambda x: f"{x:,.2f}")
             )
 
-        st.dataframe(portfolio_display, use_container_width=True)
+        st.dataframe(portfolio_display, width="stretch")
         st.download_button(
             "Export Portfolio",
             portfolio_display.to_csv(index=False),

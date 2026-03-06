@@ -4,14 +4,16 @@ import numpy as np
 import pandas as pd
 
 
-def _numeric_series(df: pd.DataFrame, col: str, default: float) -> pd.Series:
+def _numeric_series(df: pd.DataFrame, col: str, default: float | int | None = None) -> pd.Series:
     if df is None or df.empty:
         return pd.Series(dtype="float64")
     if col in df.columns:
         s = pd.to_numeric(df[col], errors="coerce")
     else:
-        s = pd.Series([default] * len(df), index=df.index, dtype="float64")
-    return s.fillna(default)
+        s = pd.Series([pd.NA] * len(df), index=df.index, dtype="Float64")
+    if default is not None:
+        s = s.fillna(default)
+    return s
 
 
 def _default_simulation_payload(starting_bankroll: float) -> dict[str, float | list[list[float]] | int]:
