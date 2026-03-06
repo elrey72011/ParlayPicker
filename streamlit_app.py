@@ -206,9 +206,13 @@ def main() -> None:
             gemini_df=gemini_df,
         )
 
+        odds_matches = len(odds_df) if odds_df is not None else 0
+        theover_matches = len(theover_df) if theover_df is not None else 0
+        kalshi_matches = len(kalshi_df) if kalshi_df is not None else 0
+
         if controls["show_debug"]:
-            render_debug(analysis_df)
-            render_debug_panel(analysis_df)
+            render_debug(analysis_df, odds_matches, theover_matches, kalshi_matches)
+            render_debug_panel(analysis_df, odds_matches, theover_matches, kalshi_matches)
         else:
             st.info("Enable 'Display Debug Information' in the sidebar to inspect debug data.")
 
