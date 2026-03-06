@@ -2,22 +2,58 @@ import pandas as pd
 import streamlit as st
 
 
-KALSHI_COLUMNS = [
-    "haskalshimarket",
-    "kalshi_status",
-    "kalshi_prob_for_pick",
-    "kalshi_yes_side",
-    "kalshi_ticker",
-]
-
-
 def render_kalshi_diagnostics(df: pd.DataFrame) -> None:
     st.subheader("Kalshi Diagnostics")
-    normalized = {c.lower(): c for c in df.columns}
-    selected = [normalized[c] for c in KALSHI_COLUMNS if c in normalized]
-
-    if not selected:
-        st.info("No Kalshi diagnostic columns found in analysis output.")
+    if df is None or df.empty or "kalshi_match_status" not in df.columns:
+        st.info("No Kalshi diagnostic rows found in analysis output.")
         return
 
-    st.dataframe(df[selected].head(50), use_container_width=True)
+    status = df["kalshi_match_status"].astype(str).str.lower()
+    matched = df[status.eq("matched")].copy()
+    misses = df[status.ne("matched")].copy()
+
+    st.write("Matched rows:", len(matched))
+    st.write("Miss/error rows:", len(misses))
+
+    match_cols = [
+        c for c in [
+            "league",
+            "away_team",
+            "home_team",
+            "game_date",
+            "kalshi_market_ticker",
+            "kalshi_market_title",
+            "kalshi_probability",
+            "kalshi_line",
+            "kalshi_match_status",
+        ]
+        if c in df.columns
+    ]
+    if not matched.empty and match_cols:
+        st.dataframe(matched[match_cols].head(50), use_container_width=True)
+
+    if "kalshi_match_reason" in df.columns:
+        st.markdown("#### Miss reasons")
+        reason_counts = (
+            misses["kalshi_match_reason"].fillna("unknown").astype(str).value_counts().rename_axis("reason").reset_index(name="rows")
+            if not misses.empty
+            else pd.DataFrame(columns=["reason", "rows"])
+        )
+        st.dataframe(reason_counts, use_container_width=True)
+
+    miss_cols = [
+        c for c in [
+            "league",
+            "away_team",
+            "home_team",
+            "game_date",
+            "kalshi_match_status",
+            "kalshi_match_reason",
+            "kalshi_tried_codes",
+            "kalshi_tried_tickers",
+        ]
+        if c in df.columns
+    ]
+    if not misses.empty and miss_cols:
+        st.markdown("#### Miss details")
+        st.dataframe(misses[miss_cols].head(100), use_container_width=True)

@@ -16,7 +16,7 @@ from core.probability_calibration import calibrate_probabilities
 from core.probability_engine import american_to_prob, normalize_probability_components, remove_vig
 from core.schema.base_schema import ensure_base_schema
 from core.team_mapper import normalize_team_name
-from app_core.kalshi_integrator import KalshiIntegrator, match_game_to_kalshi
+from app_core.kalshi_integrator import match_kalshi_markets
 
 logger = logging.getLogger(__name__)
 
@@ -226,61 +226,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     return _build_best_picks(analysis_df)
 
 
-def _extract_kalshi_line(kalshi_debug: dict | None) -> float | None:
-    if not isinstance(kalshi_debug, dict):
-        return None
-    candidate_market = kalshi_debug.get("winner_market")
-    if not candidate_market and kalshi_debug.get("spread_markets"):
-        candidate_market = kalshi_debug["spread_markets"][0]
-    if not candidate_market and kalshi_debug.get("total_markets"):
-        candidate_market = kalshi_debug["total_markets"][0]
-    if not isinstance(candidate_market, dict):
-        return None
-
-    for key in ["line", "strike", "subtitle"]:
-        if key not in candidate_market:
-            continue
-        raw_val = candidate_market.get(key)
-        if key == "subtitle":
-            extracted = pd.to_numeric(pd.Series([raw_val]).astype(str).str.extract(r"([-+]?\d+(?:\.\d+)?)")[0], errors="coerce")
-            if not extracted.empty and pd.notna(extracted.iloc[0]):
-                return float(extracted.iloc[0])
-        else:
-            numeric = pd.to_numeric(raw_val, errors="coerce")
-            if pd.notna(numeric):
-                return float(numeric)
-    return None
-
-
-def _kalshi_status_reason(match_reason: str | None) -> tuple[str, str]:
-    reason = str(match_reason or "").strip().lower()
-    if not reason:
-        return "miss", "no_valid_candidates"
-    if "no_events" in reason:
-        return "miss", "no_events"
-    if "date" in reason:
-        return "miss", "date_mismatch"
-    if "market" in reason and "mismatch" in reason:
-        return "miss", "market_type_mismatch"
-    if "code" in reason or "resolve" in reason:
-        return "miss", "team_code_resolution_failed"
-    if "candidate" in reason or "low_score" in reason or "unmatched" in reason:
-        return "miss", "no_valid_candidates"
-    return "miss", reason
-
-
 def _build_kalshi_df(base_df: pd.DataFrame) -> pd.DataFrame | None:
     if base_df is None or base_df.empty:
-        return None
-
-    try:
-        kalshi = KalshiIntegrator()
-    except Exception as exc:
-        logger.info("Kalshi skipped: unable to initialize integrator (%s)", exc)
-        return None
-
-    if not getattr(kalshi, "_credentials_valid", False):
-        logger.info("Kalshi skipped: missing/invalid credentials.")
         return None
 
     keys = [k for k in MERGE_KEYS if k in base_df.columns]
@@ -288,87 +235,13 @@ def _build_kalshi_df(base_df: pd.DataFrame) -> pd.DataFrame | None:
         logger.info("Kalshi skipped: missing merge keys. available=%s", keys)
         return None
 
-    games = normalize_merge_keys(_normalize_key_columns(base_df[keys].drop_duplicates().copy()))
+    games = normalize_merge_keys(_normalize_key_columns(base_df[keys + ["market_type"] if "market_type" in base_df.columns else keys].drop_duplicates().copy()))
     if games is None or games.empty:
         return None
 
-    kalshi_rows: list[dict[str, object]] = []
-    for _, game in games.iterrows():
-        game_date = pd.to_datetime(game.get("game_date"), errors="coerce")
-        base_row = {
-            "league": game.get("league"),
-            "home_team": game.get("home_team"),
-            "away_team": game.get("away_team"),
-            "game_date": game_date,
-            "kalshi_probability": pd.NA,
-            "kalshi_market_title": pd.NA,
-            "kalshi_event_ticker": pd.NA,
-            "kalshi_line": pd.NA,
-            "kalshi_yes_ask": pd.NA,
-            "kalshi_yes_bid": pd.NA,
-        }
-
-        if pd.isna(game_date):
-            kalshi_rows.append({
-                **base_row,
-                "game_date": pd.NaT,
-                "kalshi_match_status": "miss",
-                "kalshi_match_reason": "date_mismatch",
-            })
-            continue
-
-        try:
-            match = match_game_to_kalshi(
-                league=str(game.get("league") or ""),
-                home_team=str(game.get("home_team") or ""),
-                away_team=str(game.get("away_team") or ""),
-                game_time=game_date.to_pydatetime(),
-                integrator=kalshi,
-            )
-            debug = match.debug if isinstance(match.debug, dict) else {}
-            if match.matched:
-                kalshi_rows.append(
-                    {
-                        **base_row,
-                        "kalshi_probability": match.probability if match.probability is not None else match.mid_prob,
-                        "kalshi_market_title": match.title or match.label,
-                        "kalshi_event_ticker": match.event_ticker or match.raw_event_id,
-                        "kalshi_line": _extract_kalshi_line(debug),
-                        "kalshi_match_status": "matched",
-                        "kalshi_match_reason": "",
-                        "kalshi_yes_ask": match.yes_ask,
-                        "kalshi_yes_bid": match.yes_bid,
-                    }
-                )
-            else:
-                miss_status, miss_reason = _kalshi_status_reason(match.reason)
-                kalshi_rows.append(
-                    {
-                        **base_row,
-                        "kalshi_match_status": miss_status,
-                        "kalshi_match_reason": miss_reason,
-                    }
-                )
-        except Exception as exc:
-            logger.info(
-                "Kalshi matching skipped for %s @ %s (%s): %s",
-                game.get("away_team"),
-                game.get("home_team"),
-                game.get("league"),
-                exc,
-            )
-            kalshi_rows.append(
-                {
-                    **base_row,
-                    "kalshi_match_status": "miss",
-                    "kalshi_match_reason": "no_valid_candidates",
-                }
-            )
-
-    if not kalshi_rows:
+    kalshi_df = match_kalshi_markets(games)
+    if kalshi_df is None or kalshi_df.empty:
         return None
-
-    kalshi_df = pd.DataFrame(kalshi_rows)
     return normalize_merge_keys(_normalize_key_columns(kalshi_df))
 
 
