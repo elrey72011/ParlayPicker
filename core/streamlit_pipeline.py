@@ -1,17 +1,13 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import Iterable
 
+import joblib
 import pandas as pd
 import streamlit as st
 
-from core.ev_engine import calculate_ev
-
-try:
-    from ml_model import get_model
-except Exception:  # pragma: no cover
-    get_model = None
 from core.parlay_engine import generate_parlays as generate_parlay_candidates
 from core.probability_engine import american_to_prob, normalize_probability_components, remove_vig
 from core.schema.base_schema import ensure_base_schema
@@ -27,9 +23,10 @@ except Exception:  # pragma: no cover
 
 
 MERGE_KEYS = ["league", "home_team", "away_team", "game_date"]
+MODEL_PATH = "models/sports_model_latest.joblib"
 
 
-def normalize_keys(df: pd.DataFrame | None) -> pd.DataFrame | None:
+def normalize_merge_keys(df: pd.DataFrame | None) -> pd.DataFrame | None:
     if df is None or df.empty:
         return df
 
@@ -48,6 +45,22 @@ def normalize_keys(df: pd.DataFrame | None) -> pd.DataFrame | None:
         df["game_date"] = pd.to_datetime(df["game_date"], errors="coerce")
 
     return df
+
+
+def load_model():
+    if not os.path.exists(MODEL_PATH):
+        return None
+
+    try:
+        return joblib.load(MODEL_PATH)
+    except Exception:
+        return None
+
+
+def american_to_decimal(odds: float) -> float:
+    if odds > 0:
+        return (odds / 100) + 1
+    return (100 / abs(odds)) + 1
 
 
 def _normalize_teams(df: pd.DataFrame) -> pd.DataFrame:
@@ -91,23 +104,18 @@ def _safe_merge(left: pd.DataFrame, right: pd.DataFrame | None, suffix: str) -> 
     if right is None or right.empty:
         return left
 
-    left = normalize_keys(_normalize_key_columns(left))
-    right = normalize_keys(_normalize_key_columns(right))
+    left = normalize_merge_keys(_normalize_key_columns(left))
+    right = normalize_merge_keys(_normalize_key_columns(right))
 
-    merge_keys = [k for k in MERGE_KEYS if k in left.columns and k in right.columns]
-
-    print("Merge keys:", merge_keys)
-    print("Left rows:", len(left))
-    print("Right rows:", len(right))
-
-    if not merge_keys:
+    keys = [k for k in MERGE_KEYS if k in left.columns and k in right.columns]
+    if not keys:
         return left
 
-    right = right.drop_duplicates(subset=merge_keys)
+    right = right.drop_duplicates(subset=keys)
 
     merged = left.merge(
         right,
-        on=merge_keys,
+        on=keys,
         how="left",
         suffixes=("", suffix),
     )
@@ -143,19 +151,31 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
         else:
             df["market_prob"] = no_vig[0].fillna(df["market_prob"])
 
-    # 3) ML probability: use real model predictions when available, fallback to market
-    ml_prob = pd.to_numeric(df.get("ml_probability", pd.NA), errors="coerce")
-    if get_model is not None:
+    # 3) ML probability: use model when available, fallback to market probability
+    model = load_model()
+    model_loaded = model is not None
+    df["model_probability"] = pd.to_numeric(df["market_prob"], errors="coerce")
+    if model is not None:
         try:
-            model, feature_names = get_model()
-            if all(f in df.columns for f in feature_names):
-                features = df[feature_names].apply(pd.to_numeric, errors="coerce").fillna(0.0)
-                predictions = model.predict_proba(features)[:, 1]
-                ml_prob = pd.Series(predictions, index=df.index, dtype="float64")
+            if isinstance(model, dict) and {"model", "feature_names"}.issubset(model):
+                estimator = model["model"]
+                feature_names = model["feature_names"]
+            else:
+                estimator = model
+                feature_names = []
+
+            if feature_names and all(f in df.columns for f in feature_names):
+                X = df[feature_names].apply(pd.to_numeric, errors="coerce").fillna(0.0)
+                df["model_probability"] = estimator.predict_proba(X)[:, 1]
+            elif hasattr(estimator, "predict_proba"):
+                numeric_df = df.select_dtypes(include=["number"]).fillna(0.0)
+                if not numeric_df.empty:
+                    df["model_probability"] = estimator.predict_proba(numeric_df)[:, 1]
         except Exception as exc:
+            model_loaded = False
             logger.warning("ML model unavailable for predict_proba; falling back to market_probability: %s", exc)
 
-    df["ml_prob"] = ml_prob.fillna(df["market_prob"])
+    df["ml_prob"] = pd.to_numeric(df["model_probability"], errors="coerce").fillna(df["market_prob"])
     df["ai_prob"] = pd.to_numeric(df.get("ai_probability", pd.NA), errors="coerce")
 
     # 4) Weighted consensus probability
@@ -165,8 +185,14 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
     df["ai_probability"] = df["ai_prob"].clip(lower=0.0, upper=1.0)
 
     # 5) EV calculation and 6) edge
-    df["expected_value"] = calculate_ev(df["consensus_prob"], df["odds_american"])
+    df["decimal_odds"] = pd.to_numeric(df["odds_american"], errors="coerce").apply(american_to_decimal)
+    df["expected_value"] = (
+        df["model_probability"] * (df["decimal_odds"] - 1)
+        - (1 - df["model_probability"])
+    )
     df["edge"] = df["consensus_prob"] - df["market_probability"]
+    df["debug_merge_keys"] = ", ".join([k for k in MERGE_KEYS if k in df.columns])
+    df["debug_model_loaded"] = bool(model_loaded)
 
     if "team" not in df.columns:
         df["team"] = df.get("away_team", "")

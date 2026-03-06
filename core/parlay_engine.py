@@ -1,33 +1,75 @@
 from __future__ import annotations
 
+from itertools import combinations
+
 import pandas as pd
 
 
+def _american_to_decimal(odds: float) -> float:
+    if odds > 0:
+        return (odds / 100) + 1
+    return (100 / abs(odds)) + 1
+
+
 def generate_parlays(df: pd.DataFrame) -> pd.DataFrame:
-    if df is None or df.empty or "expected_value" not in df.columns:
-        return pd.DataFrame()
+    if df is None or df.empty:
+        return pd.DataFrame(columns=["parlay_legs", "combined_probability", "combined_odds", "parlay_ev"])
 
-    df = df[df["expected_value"] > 0.02]
-    df = df.sort_values("expected_value", ascending=False)
+    needed = {"expected_value", "model_probability", "market_probability"}
+    if not needed.issubset(df.columns):
+        return pd.DataFrame(columns=["parlay_legs", "combined_probability", "combined_odds", "parlay_ev"])
 
-    picks = []
-    used_teams = set()
+    eligible = df[(df["expected_value"] > 0) & (df["model_probability"] > df["market_probability"])].copy()
+    if eligible.empty:
+        return pd.DataFrame(columns=["parlay_legs", "combined_probability", "combined_odds", "parlay_ev"])
 
-    for _, row in df.iterrows():
-        team = row["team"] if "team" in row.index else row.get("away_team")
-        if team in used_teams:
+    if "odds_american" in eligible.columns:
+        odds_col = "odds_american"
+    elif "odds" in eligible.columns:
+        odds_col = "odds"
+    else:
+        return pd.DataFrame(columns=["parlay_legs", "combined_probability", "combined_odds", "parlay_ev"])
+
+    eligible["decimal_odds"] = pd.to_numeric(eligible[odds_col], errors="coerce").apply(_american_to_decimal)
+    eligible = eligible.dropna(subset=["decimal_odds", "model_probability"])
+    if eligible.empty:
+        return pd.DataFrame(columns=["parlay_legs", "combined_probability", "combined_odds", "parlay_ev"])
+
+    label_cols = [c for c in ["team", "away_team", "home_team"] if c in eligible.columns]
+
+    records = []
+    idxs = list(eligible.index)
+    for leg_count in (2, 3, 4):
+        if len(idxs) < leg_count:
             continue
+        for combo in combinations(idxs, leg_count):
+            legs = eligible.loc[list(combo)]
+            combined_probability = float(legs["model_probability"].prod())
+            combined_odds = float(legs["decimal_odds"].prod())
+            parlay_ev = (combined_probability * (combined_odds - 1)) - (1 - combined_probability)
 
-        if {"home_team", "away_team"}.issubset(df.columns):
-            if row["home_team"] in used_teams or row["away_team"] in used_teams:
-                continue
-            used_teams.add(row["home_team"])
-            used_teams.add(row["away_team"])
-        else:
-            used_teams.add(team)
+            labels = []
+            for _, row in legs.iterrows():
+                if "team" in label_cols and pd.notna(row.get("team")):
+                    labels.append(str(row["team"]))
+                elif {"away_team", "home_team"}.issubset(label_cols):
+                    labels.append(f"{row['away_team']} vs {row['home_team']}")
+                elif "away_team" in label_cols:
+                    labels.append(str(row["away_team"]))
+                else:
+                    labels.append("leg")
 
-        picks.append(row)
-        if len(picks) == 5:
-            break
+            records.append(
+                {
+                    "parlay_legs": " | ".join(labels),
+                    "combined_probability": combined_probability,
+                    "combined_odds": combined_odds,
+                    "parlay_ev": parlay_ev,
+                }
+            )
 
-    return pd.DataFrame(picks)
+    if not records:
+        return pd.DataFrame(columns=["parlay_legs", "combined_probability", "combined_odds", "parlay_ev"])
+
+    out = pd.DataFrame(records).sort_values("parlay_ev", ascending=False).reset_index(drop=True)
+    return out
