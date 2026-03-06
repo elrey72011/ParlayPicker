@@ -7205,15 +7205,27 @@ def normalize_team_for_kalshi(name: str) -> str:
 
 
 def _market_family_from_pick(best_pick: str, market_type: str) -> str:
-    mt = (market_type or "").lower()
+    mt = (market_type or "").lower().strip()
     bp = (best_pick or "").lower()
-    if "spread" in mt or ("over" not in bp and "under" not in bp):
+
+    if mt.startswith("spread"):
         return "spread"
-    return "total"
+    if mt.startswith("total"):
+        return "total"
+    if mt.startswith("moneyline"):
+        return ""
+
+    if "over" in bp or "under" in bp:
+        return "total"
+    if bp:
+        return "spread"
+    return ""
 
 
 def _series_for_pick(league: str, best_pick: str, market_type: str) -> str:
     fam = _market_family_from_pick(best_pick, market_type)
+    if fam not in {"spread", "total"}:
+        return ""
     return KALSHI_SERIES_BY_LEAGUE_MARKET.get((league or "").upper(), {}).get(fam, "")
 
 
@@ -7292,7 +7304,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:  # 
         best_pick = str(row.get("best_pick") or "")
         series = _series_for_pick(league, best_pick, market_type)
         if not series:
-            out.at[idx, "kalshi_match_reason"] = "missing_series"
+            out.at[idx, "kalshi_match_reason"] = "unsupported_market_type" if market_type.lower().startswith("moneyline") else "missing_series"
             continue
 
         away_code = _det_team_code(league, str(row.get("away_team") or ""))

@@ -24,7 +24,6 @@ from app.ui.layout import setup_page
 from app.ui.odds_dashboard import render_odds_table
 from app.ui.parlay_dashboard import render_parlays
 from app.ui.sidebar_controls import render_sidebar
-from app_core.kalshi_integrator import enrich_with_kalshi_markets
 from app.ui.strategy_lab_dashboard import render_strategy_lab
 from core.streamlit_pipeline import (
     generate_parlays,
@@ -136,11 +135,8 @@ def main() -> None:
             totals_df=totals_df,
         )
         if best_picks_df is not None and not best_picks_df.empty:
-            best_picks_df = enrich_with_kalshi_markets(best_picks_df)
             diagnostics["kalshi_attempted"] = int(len(best_picks_df))
-            kalshi_status = _safe_str_series(best_picks_df, "kalshi_match_status").str.lower()
-            diagnostics["kalshi_matches"] = int(kalshi_status.eq("matched").sum())
-            diagnostics["match_rate"] = float(diagnostics["kalshi_matches"] / max(1, len(best_picks_df)))
+            diagnostics["match_rate"] = float(diagnostics.get("kalshi_match_rate", 0.0))
 
         st.session_state.analysis_df = analysis_df
         st.session_state["diagnostics"] = diagnostics
@@ -246,7 +242,7 @@ def main() -> None:
     bet_rows = int(diagnostics.get("bet_rows", len(analysis_df)))
     best_rows = int(diagnostics.get("best_picks", len(best_picks_df) if isinstance(best_picks_df, pd.DataFrame) else 0))
     kalshi_matches = int(diagnostics.get("kalshi_matches", 0))
-    match_rate = float(diagnostics.get("match_rate", kalshi_matches / max(1, best_rows)))
+    match_rate = float(diagnostics.get("kalshi_match_rate", diagnostics.get("match_rate", kalshi_matches / max(1, best_rows))))
     totals_games = int(diagnostics.get("theover_totals_games", 0))
     spreads_games = int(diagnostics.get("theover_spreads_games", 0))
     totals_bet_games = int(diagnostics.get("theover_totals_bet_games", 0))
@@ -262,8 +258,8 @@ def main() -> None:
         m7.metric("TheOver spreads games", f"{spreads_bet_games}/{spreads_games}")
         st.progress(max(0.0, min(1.0, match_rate)), text=f"Kalshi match rate: {match_rate:.0%}")
         st.caption(f"Merge keys used: {diagnostics.get('merge_keys_used', [])}")
-        if diagnostics.get("base_stale") or bet_rows == 0:
-            st.warning("Pipeline warning: stale base schedule and/or no normalized bet rows found.")
+        if diagnostics.get("base_stale") and diagnostics.get("has_normalized_bet_rows", False):
+            st.warning("Pipeline warning: stale base schedule relative to uploaded bet rows.")
 
     tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["Odds", "Analysis", "Best Picks", "Parlays", "Portfolio", "Debug", "Strategy Lab"])
 
