@@ -43,23 +43,30 @@ except Exception:  # pragma: no cover
     _enrich_kalshi_raw = None  # type: ignore[assignment]
 
 
+KALSHI_ENRICH_TIMEOUT_SECONDS = 60
+
+
 def _enrich_with_kalshi_safe(df: pd.DataFrame) -> tuple[pd.DataFrame, str | None]:
-    """Run Kalshi enrichment with a hard 60-second timeout.
+    """Run Kalshi enrichment with a hard timeout.
     Returns (enriched_df, error_message_or_None).
     """
     if _enrich_kalshi_raw is None:
         return df, None
 
     import concurrent.futures
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-        future = ex.submit(_enrich_kalshi_raw, df)
-        try:
-            result = future.result(timeout=60)
-            return result, None
-        except concurrent.futures.TimeoutError:
-            return df, "Kalshi enrichment timed out (>60s) — skipped."
-        except Exception as e:
-            return df, f"Kalshi enrichment failed: {e}"
+
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(_enrich_kalshi_raw, df)
+    try:
+        result = future.result(timeout=KALSHI_ENRICH_TIMEOUT_SECONDS)
+        return result, None
+    except concurrent.futures.TimeoutError:
+        future.cancel()
+        return df, f"Kalshi enrichment timed out (>{KALSHI_ENRICH_TIMEOUT_SECONDS}s) — skipped."
+    except Exception as e:
+        return df, f"Kalshi enrichment failed: {e}"
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
 
 
 def _safe_str_series(df: pd.DataFrame, col: str, default: str = "") -> pd.Series:
