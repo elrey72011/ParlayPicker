@@ -255,11 +255,31 @@ def build_theover_bet_rows(
         total_under["odds_american"] = total_odds
         pieces.extend([total_over, total_under])
 
-    if not pieces:
+    valid_pieces: list[pd.DataFrame] = []
+    for p in pieces:
+        if p is None:
+            continue
+        if not isinstance(p, pd.DataFrame):
+            continue
+        if p.empty:
+            continue
+        if p.dropna(how="all").empty:
+            continue
+        valid_pieces.append(p)
+
+    if not valid_pieces:
         return pd.DataFrame(columns=CANONICAL_BET_COLUMNS)
 
-    out = pd.concat(pieces, ignore_index=True)
+    out = pd.concat(valid_pieces, ignore_index=True)
     out["league"] = _string_series(out, "league").str.upper().replace(LEAGUE_ALIASES)
+    out["home_team"] = _string_series(out, "home_team").map(normalize_team_name)
+    out["away_team"] = _string_series(out, "away_team").map(normalize_team_name)
+    out["market_type"] = _string_series(out, "market_type")
+    out["game_date"] = _game_dates(out)
+    out["spread_line"] = pd.to_numeric(out.get("spread_line"), errors="coerce")
+    out["total_line"] = pd.to_numeric(out.get("total_line"), errors="coerce")
+    out["theover_probability"] = pd.to_numeric(out.get("theover_probability"), errors="coerce")
+    out["odds_american"] = pd.to_numeric(out.get("odds_american"), errors="coerce")
     if selected_sports:
         selected = {str(s).upper() for s in selected_sports}
         out = out[_string_series(out, "league").isin(selected)].copy()
