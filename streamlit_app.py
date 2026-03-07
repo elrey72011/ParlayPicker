@@ -366,7 +366,7 @@ def main() -> None:
             analysis_export_df = analysis_df.copy()
             if "best_pick" in analysis_export_df.columns:
                 export_priority = [
-                    "league", "home_team", "away_team", "game_date", "matchup",
+                    "league", "home_team", "away_team", "game_date", "game_time_est", "matchup",
                     "market", "pick", "pickteam", "line", "winprobability", "theover_probability",
                     "market_type", "spread_line", "total_line",
                     "expected_value", "edge", "calibrated_probability",
@@ -402,6 +402,7 @@ def main() -> None:
                 "away_team": "Away Team",
                 "home_team": "Home Team",
                 "game_date": "Game Date",
+                "game_time_est": "Game Time (ET)",
                 "best_pick": "Best Pick",
                 "calibrated_probability": "Prob",
                 "expected_value": "EV",
@@ -410,11 +411,11 @@ def main() -> None:
                 "kalshi_match_status": "Kalshi Status",
             }
             display_df = display_df.rename(columns=rename_map)
-            preferred = ["parlay_rank", "League", "Home Team", "Away Team", "Game Date", "Best Pick", "Prob", "EV", "Edge", "Consensus", "Kalshi Status"]
+            preferred = ["parlay_rank", "League", "Home Team", "Away Team", "Game Date", "Game Time (ET)", "Best Pick", "Prob", "EV", "Edge", "Consensus", "Kalshi Status"]
             ordered = [c for c in preferred if c in display_df.columns] + [c for c in display_df.columns if c not in preferred]
             display_df = display_df[ordered]
-            st.dataframe(display_df, use_container_width=True)
-            export_cols = [c for c in ["parlay_rank", "league", "home_team", "away_team", "game_date", "best_pick", "calibrated_probability", "expected_value", "edge", "consensus_agreement", "odds_american", "market_probability", "ml_probability"] if c in best_picks_df.columns]
+            st.dataframe(display_df, width="stretch")
+            export_cols = [c for c in ["parlay_rank", "league", "home_team", "away_team", "game_date", "game_time_est", "best_pick", "calibrated_probability", "expected_value", "edge", "consensus_agreement", "odds_american", "market_probability", "ml_probability"] if c in best_picks_df.columns]
             best_picks_export = best_picks_df[export_cols] if export_cols else best_picks_df
             best_picks_csv = best_picks_export.to_csv(index=False)
             st.download_button(
@@ -472,7 +473,7 @@ def main() -> None:
             if portfolio_display["best_pick"].str.len().eq(0).all():
                 st.warning("Portfolio built, but best_pick strings are missing upstream.")
             display_first_columns = [
-                "league", "away_team", "home_team", "best_pick",
+                "league", "away_team", "home_team", "game_time_est", "best_pick",
                 "calibrated_probability", "expected_value", "edge", "recommended_bet",
             ]
             ordered_columns = [c for c in display_first_columns if c in portfolio_display.columns]
@@ -484,7 +485,7 @@ def main() -> None:
             portfolio_display["allocation_label"] = (
                 league_s + " | " + pick_s + " | $" + bet_s.map(lambda x: f"{x:,.2f}")
             )
-        st.dataframe(portfolio_display, use_container_width=True)
+        st.dataframe(portfolio_display, width="stretch")
         st.download_button(
             "Export Portfolio",
             portfolio_display.to_csv(index=False),
@@ -547,7 +548,7 @@ def main() -> None:
                     if failures_df.empty or not visible_cols:
                         st.info("No unmatched Kalshi rows found.")
                     else:
-                        st.dataframe(failures_df[visible_cols], use_container_width=True)
+                        st.dataframe(failures_df[visible_cols], width="stretch")
 
     with tab7:
         render_strategy_lab(

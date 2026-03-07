@@ -48,10 +48,10 @@ def render_strategy_lab(
 
     st.markdown("**Top +EV bets**")
     if "expected_value" in analysis_df.columns:
-        st.dataframe(analysis_df.nlargest(15, "expected_value"), use_container_width=True)
+        st.dataframe(analysis_df.nlargest(15, "expected_value"), width="stretch")
 
     st.markdown("**Best parlays**")
     if parlays_df is not None and not parlays_df.empty:
-        st.dataframe(parlays_df.head(15), use_container_width=True)
+        st.dataframe(parlays_df.head(15), width="stretch")
     else:
         st.write("No positive EV parlays generated.")
