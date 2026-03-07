@@ -66,7 +66,34 @@ _UPLOAD_COLUMN_ALIASES = {
     "gamedate": "game_date",
     "game time": "game_time_est",
     "game time (et)": "game_time_est",
+    "team 1": "team_1",
+    "team1": "team_1",
+    "team_1": "team_1",
+    "team 2": "team_2",
+    "team2": "team_2",
+    "team_2": "team_2",
 }
+
+
+def _first_nonempty_text(df: pd.DataFrame, candidates: list[str]) -> pd.Series:
+    out = pd.Series([""] * len(df), index=df.index, dtype="string")
+    for col in candidates:
+        if col in df.columns:
+            candidate = _string_series(df, col).str.strip()
+            out = out.where(out.str.len().gt(0), candidate)
+    return out
+
+
+def _coerce_identity_columns(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+    # Some TheOver exports include Team 1/Team 2 while Home/Away may be blank.
+    home_fallback = _first_nonempty_text(out, ["home_team", "team_1", "home"])
+    away_fallback = _first_nonempty_text(out, ["away_team", "team_2", "away"])
+    league_fallback = _first_nonempty_text(out, ["league", "sport"])
+    out["league"] = league_fallback.str.upper().replace(LEAGUE_ALIASES)
+    out["home_team"] = home_fallback.map(normalize_team_name)
+    out["away_team"] = away_fallback.map(normalize_team_name)
+    return out
 
 
 def _string_series(df: pd.DataFrame, col: str, default: str = "") -> pd.Series:
@@ -166,9 +193,7 @@ def _normalize_upload(df: pd.DataFrame | None) -> pd.DataFrame:
     for src, dst in _UPLOAD_COLUMN_ALIASES.items():
         if src in out.columns and dst not in out.columns:
             out = out.rename(columns={src: dst})
-    out["league"] = _string_series(out, "league").str.upper().replace(LEAGUE_ALIASES)
-    out["home_team"] = _string_series(out, "home_team").map(normalize_team_name)
-    out["away_team"] = _string_series(out, "away_team").map(normalize_team_name)
+    out = _coerce_identity_columns(out)
     out["game_date"] = _game_dates(out)
     if out["game_date"].isna().all():
         # No date column in upload — use today UTC (server clock is UTC;
@@ -190,9 +215,7 @@ def _coerce_export_to_canonical(df: pd.DataFrame, selected_sports: list[str] | N
     for src, dst in _UPLOAD_COLUMN_ALIASES.items():
         if src in out.columns and dst not in out.columns:
             out = out.rename(columns={src: dst})
-    out["league"] = _string_series(out, "league").str.upper().replace(LEAGUE_ALIASES)
-    out["home_team"] = _string_series(out, "home_team").map(normalize_team_name)
-    out["away_team"] = _string_series(out, "away_team").map(normalize_team_name)
+    out = _coerce_identity_columns(out)
     out["game_date"] = _game_dates(out)
     if out["game_date"].isna().all():
         out["game_date"] = _game_date_fallback()
