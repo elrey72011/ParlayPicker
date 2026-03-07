@@ -157,9 +157,11 @@ def _deterministic_tickers(row: pd.Series) -> tuple[list[str], str | None, str |
     home_code = _guess_code(str(row.get("home_team") or ""))
     date_code = build_kalshi_date_code(row.get("game_date"))
 
-    if not series or not date_code:
+    if not date_code:
         return [], series, away_code, home_code, date_code
     if not away_code or not home_code:
+        return [], series, away_code, home_code, date_code
+    if not series:
         return [], series, away_code, home_code, date_code
 
     prefix = f"{series}-{date_code}"
@@ -206,21 +208,28 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
     for idx, row in out.iterrows():
         tried, series, away_code, home_code, date_code = _deterministic_tickers(row)
-        out.at[idx, "kalshi_tried_tickers"] = json.dumps(tried)
 
         if not date_code:
+            out.at[idx, "kalshi_tried_tickers"] = "[]"
             out.at[idx, "kalshi_match_reason"] = "missing_date"
             continue
         if not away_code or not home_code:
+            out.at[idx, "kalshi_tried_tickers"] = "[]"
             out.at[idx, "kalshi_match_reason"] = "missing_team_code"
             continue
+        if not series:
+            out.at[idx, "kalshi_tried_tickers"] = "[]"
+            out.at[idx, "kalshi_match_reason"] = "no_valid_candidates"
+            continue
+
+        out.at[idx, "kalshi_tried_tickers"] = json.dumps(tried)
         if not tried:
             out.at[idx, "kalshi_match_reason"] = "no_valid_candidates"
             continue
 
         market = None
         try:
-            exact = _get_markets({"tickers": ",".join(tried)})
+            exact = _get_markets({"tickers": ",".join(tried), "status": "open"})
             by_ticker = {str(m.get("ticker") or ""): m for m in exact}
             for ticker in tried:
                 if ticker in by_ticker:
@@ -230,7 +239,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             out.at[idx, "kalshi_match_reason"] = "no_market_for_tickers"
             continue
 
-        if market is None and series:
+        if market is None:
             try:
                 market = _fallback_series_lookup(series, tried, away_code, home_code)
             except KalshiAPIError:

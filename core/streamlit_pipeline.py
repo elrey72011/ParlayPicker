@@ -381,6 +381,8 @@ def run_analysis_pipeline(
             )
             merged = merged.drop(columns=["ml_probability_base"])
 
+    merged["game_date"] = _game_dates(merged)
+
     analysis_df = _apply_analysis_calculations(merged).head(max_rows).copy()
     if not analysis_df.empty and "market_type" not in analysis_df.columns:
         raise ValueError("analysis_df missing market_type before best-pick construction")
@@ -394,6 +396,8 @@ def run_analysis_pipeline(
     base_coverage = float(pd.to_datetime(base_df.get("game_date"), errors="coerce", utc=True).notna().mean()) if not base_df.empty else 0.0
 
     diagnostics = {
+        "total_rows": int(len(analysis_df)),
+        "rows_with_game_date": int(pd.to_datetime(analysis_df.get("game_date"), errors="coerce", utc=True).notna().sum()) if not analysis_df.empty else 0,
         "total_games": int(analysis_df[["league", "home_team", "away_team"]].drop_duplicates().shape[0]) if not analysis_df.empty else 0,
         "bet_rows": int(len(analysis_df)),
         "best_picks": int(len(best_picks_df)),
