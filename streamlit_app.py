@@ -94,8 +94,13 @@ def _merge_kalshi_into_analysis(analysis_df: pd.DataFrame, best_picks_df: pd.Dat
     return merged
 
 
-def _run_pipeline(controls: dict) -> None:
-    """Run the full analysis pipeline and write results to session_state in one atomic batch."""
+def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
+    """Run the full analysis pipeline. Returns (state_updates, warnings, errors).
+    
+    Deliberately contains NO st.* calls — all UI feedback is returned to the
+    caller so it can be emitted after session_state is fully written, preventing
+    mid-pipeline Streamlit reruns.
+    """
     deferred_warnings: list[str] = []
     deferred_errors: list[str] = []
 
@@ -107,7 +112,6 @@ def _run_pipeline(controls: dict) -> None:
     if err:
         deferred_warnings.append(err)
 
-    # Normalize team names on non-empty DataFrames
     for upload_df in (spreads_df, totals_df):
         if upload_df is None or upload_df.empty:
             continue
@@ -115,7 +119,6 @@ def _run_pipeline(controls: dict) -> None:
             if team_col in upload_df.columns:
                 upload_df[team_col] = upload_df[team_col].apply(normalize_team)
 
-    # Always route through run_analysis_pipeline — it detects export vs raw internally
     analysis_df, best_picks_df, diagnostics = run_analysis_pipeline(
         sports=controls["sports"],
         max_rows=int(controls["max_rows"]),
@@ -124,7 +127,8 @@ def _run_pipeline(controls: dict) -> None:
         totals_df=totals_df,
     )
 
-    empty_state = {
+    parlay_columns = ["parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "legs"]
+    empty_state: dict = {
         "analysis_df": pd.DataFrame(),
         "parlays_df": pd.DataFrame(),
         "portfolio_df": pd.DataFrame(),
@@ -136,16 +140,14 @@ def _run_pipeline(controls: dict) -> None:
         "best_picks_df": pd.DataFrame(),
         "diagnostics": diagnostics,
         "pipeline_status": "idle",
+        "pipeline_running": False,
     }
-    for leg_count in (2, 3, 4, 5):
-        empty_state[f"parlays_{leg_count}_df"] = pd.DataFrame()
+    for lc in (2, 3, 4, 5):
+        empty_state[f"parlays_{lc}_df"] = pd.DataFrame(columns=parlay_columns)
 
     if analysis_df is None or analysis_df.empty:
-        st.session_state.update(empty_state)
-        for msg in deferred_warnings:
-            st.warning(msg)
-        st.warning("No rows found for the selected sports.")
-        return
+        deferred_warnings.append("No rows found for the selected sports.")
+        return empty_state, deferred_warnings, deferred_errors
 
     if diagnostics.get("best_pick_nonempty_rows", 0) > 0 and (best_picks_df is None or best_picks_df.empty):
         best_picks_df = build_best_picks_df(analysis_df)
@@ -159,8 +161,11 @@ def _run_pipeline(controls: dict) -> None:
     analysis_df = _merge_kalshi_into_analysis(analysis_df, best_picks_df)
 
     if controls["use_gemini"]:
-        from integrations.gemini_client import run_gemini_analysis
-        analysis_df = run_gemini_analysis(analysis_df)
+        try:
+            from integrations.gemini_client import run_gemini_analysis
+            analysis_df = run_gemini_analysis(analysis_df)
+        except Exception as e:
+            deferred_warnings.append(f"Gemini analysis failed: {e}")
 
     if "gemini_analysis" not in analysis_df.columns:
         analysis_df["gemini_analysis"] = ""
@@ -182,10 +187,10 @@ def _run_pipeline(controls: dict) -> None:
     diagnostics["positive_ev_rows"] = int((_safe_numeric_series(analysis_df, "expected_value", 0.0) > 0).sum()) if not analysis_df.empty else 0
 
     parlays_df = generate_parlays(best_picks_df)
-    parlay_columns = ["parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "legs"]
-    for leg_count in (2, 3, 4, 5):
-        parlay_slice = parlays_df[_safe_numeric_series(parlays_df, "legs").eq(leg_count)].copy()
-        empty_state[f"parlays_{leg_count}_df"] = parlay_slice[parlay_columns] if not parlay_slice.empty else pd.DataFrame(columns=parlay_columns)
+    per_leg: dict = {}
+    for lc in (2, 3, 4, 5):
+        parlay_slice = parlays_df[_safe_numeric_series(parlays_df, "legs").eq(lc)].copy()
+        per_leg[f"parlays_{lc}_df"] = parlay_slice[parlay_columns] if not parlay_slice.empty else pd.DataFrame(columns=parlay_columns)
 
     portfolio_df = optimize_portfolio_allocation(best_picks_df, bankroll=float(controls["bankroll"]))
 
@@ -214,9 +219,9 @@ def _run_pipeline(controls: dict) -> None:
         else analysis_df.iloc[0:0]
     )
 
-    # Atomic single update
-    st.session_state.update({
+    state_updates = {
         "pipeline_status": "using stored results",
+        "pipeline_running": False,
         "analysis_df": analysis_df,
         "parlays_df": parlays_df,
         "portfolio_df": portfolio_df,
@@ -227,13 +232,9 @@ def _run_pipeline(controls: dict) -> None:
         "simulation_results": simulation_results,
         "diagnostics": diagnostics,
         "best_picks_df": best_picks_df,
-        **{f"parlays_{lc}_df": empty_state[f"parlays_{lc}_df"] for lc in (2, 3, 4, 5)},
-    })
-
-    for msg in deferred_warnings:
-        st.warning(msg)
-    for msg in deferred_errors:
-        st.error(msg)
+        **per_leg,
+    }
+    return state_updates, deferred_warnings, deferred_errors
 
 
 def main() -> None:
@@ -251,6 +252,7 @@ def main() -> None:
         "gemini_df": pd.DataFrame(),
         "simulation_results": {},
         "pipeline_status": "idle",
+        "pipeline_running": False,
     }
     for key, default in stable_defaults.items():
         st.session_state.setdefault(key, default)
@@ -260,8 +262,18 @@ def main() -> None:
     controls = render_sidebar()
     run_clicked = bool(controls["run_analysis"])
 
-    if run_clicked:
-        _run_pipeline(controls)
+    # Gate: only run pipeline on the first rerun after button click,
+    # not on every subsequent rerun caused by session_state writes.
+    if run_clicked and not st.session_state.get("pipeline_running", False):
+        st.session_state["pipeline_running"] = True
+        with st.spinner("Running analysis..."):
+            state_updates, pipe_warnings, pipe_errors = _run_pipeline(controls)
+        # Single atomic write — no st.* calls inside pipeline
+        st.session_state.update(state_updates)
+        for msg in pipe_warnings:
+            st.warning(msg)
+        for msg in pipe_errors:
+            st.error(msg)
 
     analysis_df = st.session_state["analysis_df"]
     parlays_df = st.session_state["parlays_df"]
