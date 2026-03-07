@@ -82,6 +82,26 @@ def _safe_numeric_series(df: pd.DataFrame, col: str, default: float | int | None
     return s
 
 
+
+
+def _recompute_consensus_from_kalshi(df: pd.DataFrame) -> pd.DataFrame:
+    """Set consensus based on Kalshi availability and probability gap."""
+    if df is None or df.empty:
+        return df
+    out = df.copy()
+    status = _safe_str_series(out, "kalshi_match_status").str.lower()
+    kalshi_prob = _safe_numeric_series(out, "kalshi_probability")
+    model_prob = _safe_numeric_series(out, "calibrated_probability")
+
+    out["consensus_agreement"] = "⚪ No Kalshi"
+    matched = status.eq("matched") & kalshi_prob.notna()
+    gap = model_prob - kalshi_prob
+
+    out.loc[matched, "consensus_agreement"] = "⚖️ Neutral"
+    out.loc[matched & gap.ge(0.03), "consensus_agreement"] = "✅ Agrees"
+    out.loc[matched & gap.le(-0.03), "consensus_agreement"] = "❌ Disagrees"
+    return out
+
 def _merge_kalshi_into_analysis(analysis_df: pd.DataFrame, best_picks_df: pd.DataFrame) -> pd.DataFrame:
     if analysis_df is None or analysis_df.empty or best_picks_df is None or best_picks_df.empty:
         return analysis_df
@@ -101,8 +121,14 @@ def _merge_kalshi_into_analysis(analysis_df: pd.DataFrame, best_picks_df: pd.Dat
     if "best_pick" in analysis_df.columns and "best_pick" in best_picks_df.columns:
         merge_keys.append("best_pick")
 
-    right = best_picks_df[merge_keys + available_cols].drop_duplicates()
-    merged = analysis_df.merge(right, on=merge_keys, how="left", suffixes=("", "_best"))
+    left = analysis_df.copy()
+    right = best_picks_df[merge_keys + available_cols].drop_duplicates().copy()
+
+    if "game_date" in merge_keys:
+        left["game_date"] = pd.to_datetime(left["game_date"], errors="coerce", utc=True)
+        right["game_date"] = pd.to_datetime(right["game_date"], errors="coerce", utc=True)
+
+    merged = left.merge(right, on=merge_keys, how="left", suffixes=("", "_best"))
     for col in available_cols:
         best_col = f"{col}_best"
         if best_col in merged.columns:
@@ -173,7 +199,9 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
             if kalshi_err:
                 deferred_warnings.append(kalshi_err)
 
+    best_picks_df = _recompute_consensus_from_kalshi(best_picks_df)
     analysis_df = _merge_kalshi_into_analysis(analysis_df, best_picks_df)
+    analysis_df = _recompute_consensus_from_kalshi(analysis_df)
 
     if "gemini_analysis" not in analysis_df.columns:
         analysis_df["gemini_analysis"] = ""
