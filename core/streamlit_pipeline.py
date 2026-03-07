@@ -29,6 +29,7 @@ DATE_ALIASES = ["game_date", "commence_time", "start_time", "time", "date", "eve
 LEAGUE_ALIASES = {"NCAAM": "NCAAB", "NCAA MEN'S BASKETBALL": "NCAAB", "NCAA MENS BASKETBALL": "NCAAB"}
 
 BEST_PICK_COLUMNS = [
+    "parlay_rank",
     "league", "home_team", "away_team", "game_date", "best_pick",
     "calibrated_probability", "expected_value", "edge", "consensus_agreement",
     "odds_american", "market_probability", "ml_probability",
@@ -437,6 +438,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         .reset_index(drop=True)
     )
 
+    pick_df = pick_df.sort_values(["calibrated_probability", "expected_value"], ascending=[False, False]).reset_index(drop=True)
+    pick_df["parlay_rank"] = range(1, len(pick_df) + 1)
+
     for col in BEST_PICK_COLUMNS:
         if col not in pick_df.columns:
             pick_df[col] = pd.NA
@@ -533,7 +537,8 @@ def run_analysis_pipeline(
 
 
 def generate_parlays(best_picks_df: pd.DataFrame, max_legs: int = 5) -> pd.DataFrame:
-    cols = ["parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "legs"]
+    leg_game_cols = [f"leg{i}_game" for i in range(1, max_legs + 1)]
+    cols = ["parlay_type", "parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "legs", *leg_game_cols]
     if best_picks_df is None or best_picks_df.empty:
         return pd.DataFrame(columns=cols)
     df = best_picks_df.copy()
@@ -546,32 +551,94 @@ def generate_parlays(best_picks_df: pd.DataFrame, max_legs: int = 5) -> pd.DataF
         _numeric_series(df, "odds_american", -110.0).apply(american_to_decimal)
     )
 
-    # Sort by EV descending and cap input rows to limit combinatorial explosion
-    df = df.sort_values("expected_value", ascending=False).head(15).reset_index(drop=True)
+    df = df.sort_values(["calibrated_probability", "expected_value"], ascending=[False, False]).head(15).reset_index(drop=True)
+    df["league"] = _string_series(df, "league")
+    df["home_team"] = _string_series(df, "home_team")
+    df["away_team"] = _string_series(df, "away_team")
+    df["game_key_tuple"] = list(zip(df["league"], df["home_team"], df["away_team"]))
+    df["game_label"] = df["home_team"] + " vs " + df["away_team"]
+    df["leg_context"] = df["league"] + " " + df["game_label"] + " — " + _string_series(df, "best_pick")
+
+    def _record_from_legs(legs_df: pd.DataFrame, parlay_type: str) -> dict[str, Any] | None:
+        if legs_df.empty:
+            return None
+        if legs_df["game_key_tuple"].duplicated().any():
+            return None
+        prob = float(legs_df["calibrated_probability"].prod())
+        odds = float(legs_df["decimal_odds"].prod())
+        ev = prob * (odds - 1) - (1 - prob)
+        record: dict[str, Any] = {
+            "parlay_type": parlay_type,
+            "parlay_legs": " | ".join(legs_df["leg_context"].astype(str).tolist()),
+            "combined_probability": prob,
+            "combined_decimal_odds": odds,
+            "parlay_ev": ev,
+            "legs": int(len(legs_df)),
+        }
+        for leg_idx in range(1, max_legs + 1):
+            record[f"leg{leg_idx}_game"] = pd.NA
+        for leg_idx, game in enumerate(legs_df["game_label"].tolist(), start=1):
+            record[f"leg{leg_idx}_game"] = game
+        if record.get("leg1_game") == record.get("leg2_game"):
+            return None
+        return record
 
     records: list[dict[str, Any]] = []
+    seen_combo_keys: set[tuple[int, frozenset[tuple[str, str, str]]]] = set()
+
+    # ranked parlays: sequential, non-overlapping by game key
+    for leg_count in range(2, min(max_legs, len(df)) + 1):
+        used_games: set[tuple[str, str, str]] = set()
+        remaining = df[~df["game_key_tuple"].isin(used_games)].copy()
+        start = 0
+        while start + leg_count <= len(remaining):
+            legs_df = remaining.iloc[start:start + leg_count]
+            if len(legs_df) < leg_count:
+                break
+            game_key_set = frozenset(legs_df["game_key_tuple"].tolist())
+            rec = _record_from_legs(legs_df, "ranked")
+            if rec is not None:
+                records.append(rec)
+                used_games.update(legs_df["game_key_tuple"].tolist())
+                seen_combo_keys.add((leg_count, game_key_set))
+            remaining = df[~df["game_key_tuple"].isin(used_games)].copy()
+            start = 0
+
+    # top combinations: enforce one pick per game + dedupe by game set
+    top_combo_records: list[dict[str, Any]] = []
     for leg_count in range(2, min(max_legs, len(df)) + 1):
         count = 0
         for combo in combinations(df.index.tolist(), leg_count):
             if count >= _MAX_PARLAY_COMBOS_PER_LEG:
                 break
             legs_df = df.loc[list(combo)]
-            prob = float(legs_df["calibrated_probability"].prod())
-            odds = float(legs_df["decimal_odds"].prod())
-            ev = prob * (odds - 1) - (1 - prob)
-            legs_str = " | ".join(legs_df["best_pick"].astype(str).tolist())
-            records.append({
-                "parlay_legs": legs_str,
-                "combined_probability": prob,
-                "combined_decimal_odds": odds,
-                "parlay_ev": ev,
-                "legs": leg_count,
-            })
+            if legs_df["game_key_tuple"].duplicated().any():
+                continue
+            game_key_set = frozenset(legs_df["game_key_tuple"].tolist())
+            dedup_key = (leg_count, game_key_set)
+            if dedup_key in seen_combo_keys:
+                continue
+            rec = _record_from_legs(legs_df, "top_combo")
+            if rec is None:
+                continue
+            top_combo_records.append(rec)
+            seen_combo_keys.add(dedup_key)
             count += 1
+
+    if top_combo_records:
+        top_combo_df = pd.DataFrame(top_combo_records).sort_values("parlay_ev", ascending=False).head(10)
+        records.extend(top_combo_df.to_dict(orient="records"))
 
     if not records:
         return pd.DataFrame(columns=cols)
-    return pd.DataFrame(records)[cols].sort_values("parlay_ev", ascending=False).reset_index(drop=True)
+
+    out = pd.DataFrame(records)
+    out = out[out["leg1_game"].ne(out["leg2_game"])].copy()
+    out = out.sort_values(["parlay_type", "parlay_ev"], ascending=[True, False]).reset_index(drop=True)
+    for col in cols:
+        if col not in out.columns:
+            out[col] = pd.NA
+    return out[cols]
 
 
 def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float = 1000.0) -> pd.DataFrame:
