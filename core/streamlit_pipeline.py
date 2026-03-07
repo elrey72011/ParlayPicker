@@ -20,6 +20,9 @@ from core.probability_engine import american_to_prob
 from core.schema.base_schema import ensure_base_schema
 from core.team_mapper import normalize_team_name
 
+# Suppress pandas FutureWarning about empty/all-NA columns in concat at module level
+warnings.filterwarnings("ignore", category=FutureWarning, module="pandas")
+
 logger = logging.getLogger(__name__)
 
 VALID_MARKETS = {"spread_home", "spread_away", "total_over", "total_under"}
@@ -109,27 +112,17 @@ def _normalize_upload(df: pd.DataFrame | None) -> pd.DataFrame:
 
 
 def _concat_valid_bet_frames(frames: list[pd.DataFrame], expected_columns: list[str]) -> pd.DataFrame:
-    valid_frames: list[pd.DataFrame] = []
-    for frame in frames:
-        if frame is None:
-            continue
-        if not isinstance(frame, pd.DataFrame):
-            continue
-        if frame.empty:
-            continue
-        if frame.dropna(how="all").empty:
-            continue
-        # Cast NA-only columns to float64 before concat to avoid FutureWarning
-        frame = frame.copy()
-        for col in frame.columns:
-            if frame[col].isna().all():
-                frame[col] = frame[col].astype("float64")
-        valid_frames.append(frame)
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", FutureWarning)
-        out = pd.concat(valid_frames, ignore_index=True) if valid_frames else pd.DataFrame(columns=expected_columns)
-    return out
+    valid_frames: list[pd.DataFrame] = [
+        frame.copy()
+        for frame in frames
+        if frame is not None
+        and isinstance(frame, pd.DataFrame)
+        and not frame.empty
+        and not frame.dropna(how="all").empty
+    ]
+    if not valid_frames:
+        return pd.DataFrame(columns=expected_columns)
+    return pd.concat(valid_frames, ignore_index=True)
 
 
 def _mk_game_key(df: pd.DataFrame) -> pd.Series:
