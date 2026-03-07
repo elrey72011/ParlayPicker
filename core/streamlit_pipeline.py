@@ -495,8 +495,13 @@ def run_analysis_pipeline(
         base_schedule["away_team"] = _string_series(base_schedule, "away_team").map(normalize_team_name)
         base_schedule["date"] = _game_dates(base_schedule)
 
+        base_merge_columns = merge_keys + [
+            col for col in ["date", "game_time_est", "odds_american", "ml_probability"]
+            if col in base_schedule.columns
+        ]
+
         merged = merged.merge(
-            base_schedule[merge_keys + ["date", "game_time_est", "odds_american", "ml_probability"]].drop_duplicates(merge_keys),
+            base_schedule[base_merge_columns].drop_duplicates(merge_keys),
             on=merge_keys,
             how="left",
             suffixes=("", "_base"),
@@ -543,6 +548,8 @@ def run_analysis_pipeline(
     merged["best_pick"] = merged.apply(_format_best_pick, axis=1)
 
     analysis_df = merged.head(max_rows).copy()
+    if "game_key" not in analysis_df.columns:
+        analysis_df["game_key"] = _mk_game_key(analysis_df)
     if not analysis_df.empty and "market_type" not in analysis_df.columns:
         raise ValueError("analysis_df missing market_type before best-pick construction")
 
