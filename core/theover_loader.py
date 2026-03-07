@@ -1,5 +1,6 @@
+from __future__ import annotations
+
 import pandas as pd
-import streamlit as st
 
 THEOVER_COLUMN_ALIASES = {
     "league": ["league", "sport", "competition"],
@@ -82,21 +83,24 @@ def _ensure_required_theover_columns(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def load_theover_csv(uploaded_file):
+def load_theover_csv(uploaded_file) -> tuple[pd.DataFrame, str | None]:
+    """Load and normalize a TheOver CSV upload.
+
+    Returns (dataframe, error_message). error_message is None on success.
+    Intentionally has NO st.* calls so it is safe to call before any
+    Streamlit delta is emitted (avoids triggering spurious reruns).
+    """
     if uploaded_file is None:
-        return pd.DataFrame()
+        return pd.DataFrame(), None
 
     try:
         uploaded_file.seek(0)
         df = pd.read_csv(uploaded_file)
         if df.empty:
-            st.warning("Uploaded TheOver CSV is empty.")
-            return pd.DataFrame()
+            return pd.DataFrame(), "Uploaded TheOver CSV is empty."
         normalized = normalize_theover_df(df)
-        return _ensure_required_theover_columns(normalized)
+        return _ensure_required_theover_columns(normalized), None
     except pd.errors.EmptyDataError:
-        st.warning("Uploaded CSV contains no readable data.")
-        return pd.DataFrame()
-    except Exception as e:
-        st.error(f"CSV loading error: {e}")
-        return pd.DataFrame()
+        return pd.DataFrame(), "Uploaded CSV contains no readable data."
+    except Exception as e:  # pragma: no cover
+        return pd.DataFrame(), f"CSV loading error: {e}"
