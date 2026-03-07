@@ -24,7 +24,6 @@ from app.ui.debug_panel import render_debug, render_debug_panel
 from app.ui.kalshi_diagnostics import render_kalshi_diagnostics
 from app.ui.layout import setup_page
 from app.ui.odds_dashboard import render_odds_table
-from app.ui.parlay_dashboard import render_parlays
 from app.ui.sidebar_controls import render_sidebar
 from app.ui.strategy_lab_dashboard import render_strategy_lab
 from core.streamlit_pipeline import (
@@ -143,7 +142,7 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
         totals_df=totals_df,
     )
 
-    parlay_columns = ["parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "legs"]
+    parlay_columns = ["parlay_type", "parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "legs", "leg1_game", "leg2_game", "leg3_game", "leg4_game", "leg5_game"]
     empty_per_leg = {f"parlays_{lc}_df": pd.DataFrame(columns=parlay_columns) for lc in (2, 3, 4, 5)}
 
     empty_state: dict = {
@@ -411,11 +410,11 @@ def main() -> None:
                 "kalshi_match_status": "Kalshi Status",
             }
             display_df = display_df.rename(columns=rename_map)
-            preferred = ["League", "Home Team", "Away Team", "Game Date", "Best Pick", "Prob", "EV", "Edge", "Consensus", "Kalshi Status"]
+            preferred = ["parlay_rank", "League", "Home Team", "Away Team", "Game Date", "Best Pick", "Prob", "EV", "Edge", "Consensus", "Kalshi Status"]
             ordered = [c for c in preferred if c in display_df.columns] + [c for c in display_df.columns if c not in preferred]
             display_df = display_df[ordered]
             st.dataframe(display_df, use_container_width=True)
-            export_cols = [c for c in ["league", "home_team", "away_team", "game_date", "best_pick", "calibrated_probability", "expected_value", "edge", "consensus_agreement", "odds_american", "market_probability", "ml_probability"] if c in best_picks_df.columns]
+            export_cols = [c for c in ["parlay_rank", "league", "home_team", "away_team", "game_date", "best_pick", "calibrated_probability", "expected_value", "edge", "consensus_agreement", "odds_american", "market_probability", "ml_probability"] if c in best_picks_df.columns]
             best_picks_export = best_picks_df[export_cols] if export_cols else best_picks_df
             best_picks_csv = best_picks_export.to_csv(index=False)
             st.download_button(
@@ -427,26 +426,41 @@ def main() -> None:
 
     with tab4:
         st.subheader("Best Parlays")
-        parlay_columns = ["parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "legs"]
+        parlay_columns = ["parlay_type", "parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "legs", "leg1_game", "leg2_game", "leg3_game", "leg4_game", "leg5_game"]
         base_parlays_df = parlays_df if parlays_df is not None else pd.DataFrame(columns=parlay_columns)
-        tabs_2, tabs_3, tabs_4, tabs_5 = st.tabs(["2-Leg Parlays", "3-Leg Parlays", "4-Leg Parlays", "5-Leg Parlays"])
 
-        for leg_count, parlay_tab in zip((2, 3, 4, 5), (tabs_2, tabs_3, tabs_4, tabs_5)):
-            with parlay_tab:
-                filtered = base_parlays_df[_safe_numeric_series(base_parlays_df, "legs").eq(leg_count)].copy()
-                filtered = filtered[parlay_columns] if not filtered.empty else pd.DataFrame(columns=parlay_columns)
-                if filtered.empty:
-                    st.info(f"Not enough eligible spread/total picks to build {leg_count}-leg parlays yet.")
-                    continue
-                render_parlays(filtered)
-                parlay_csv = filtered.to_csv(index=False)
-                st.download_button(
-                    f"Download {leg_count}-Leg Parlays CSV",
-                    parlay_csv,
-                    f"parlays_{leg_count}_leg_export.csv",
-                    mime="text/csv",
-                    key=f"download_{leg_count}_leg_parlays",
-                )
+        view_mode = st.radio("Parlay View", ["Ranked Parlays", "Top Combinations"], horizontal=True)
+        selected_type = "ranked" if view_mode == "Ranked Parlays" else "top_combo"
+        filtered = base_parlays_df[_safe_str_series(base_parlays_df, "parlay_type").eq(selected_type)].copy()
+
+        if filtered.empty:
+            st.info("No parlays available for this view yet.")
+        elif selected_type == "ranked":
+            ranked = filtered.sort_values("parlay_ev", ascending=False).reset_index(drop=True)
+            for idx, row in ranked.iterrows():
+                st.markdown(f"### Parlay #{idx + 1} ({int(row.get('legs', 0))}-Leg)")
+                st.markdown(f"- **Combined Probability:** {float(row.get('combined_probability', 0.0)):.2%}")
+                st.markdown(f"- **Combined Decimal Odds:** {float(row.get('combined_decimal_odds', 0.0)):.3f}")
+                st.markdown(f"- **Parlay EV:** {float(row.get('parlay_ev', 0.0)):.3f}")
+                legs = [leg.strip() for leg in str(row.get("parlay_legs", "")).split("|") if leg.strip()]
+                for leg in legs:
+                    st.markdown(f"- {leg}")
+                st.divider()
+        else:
+            top_combo = filtered.sort_values("parlay_ev", ascending=False).head(10).reset_index(drop=True)
+            table_df = top_combo[["combined_probability", "combined_decimal_odds", "parlay_ev", "legs"]].copy()
+            table_df["Parlay"] = ["<br>".join([leg.strip() for leg in str(v).split("|") if leg.strip()]) for v in top_combo["parlay_legs"]]
+            table_df = table_df[["Parlay", "combined_probability", "combined_decimal_odds", "parlay_ev", "legs"]]
+            st.write(table_df.to_html(escape=False, index=False), unsafe_allow_html=True)
+
+        parlay_csv = base_parlays_df.to_csv(index=False)
+        st.download_button(
+            "Download Parlays CSV",
+            parlay_csv,
+            "parlays_export.csv",
+            mime="text/csv",
+            key="download_parlays_csv",
+        )
 
     with tab5:
         st.subheader("Portfolio Allocation")
