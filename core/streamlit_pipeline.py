@@ -842,8 +842,12 @@ def generate_parlays(best_picks_df: pd.DataFrame, max_legs: int = 5) -> pd.DataF
                 records.append(rec)
                 used_games.update(legs_df["game_key_tuple"].tolist())
                 seen_combo_keys.add((leg_count, game_key_set))
-            remaining = df[~df["game_key_tuple"].isin(used_games)].copy()
-            start = 0
+                remaining = df[~df["game_key_tuple"].isin(used_games)].copy()
+                start = 0
+            else:
+                # IMPORTANT: advance window when first slice is invalid (e.g., duplicate game keys)
+                # to avoid an infinite loop on unchanged `remaining`.
+                start += 1
 
     # top combinations: enforce one pick per game + dedupe by game set
     top_combo_records: list[dict[str, Any]] = []
