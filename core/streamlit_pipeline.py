@@ -8,6 +8,7 @@ from itertools import combinations
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -365,6 +366,9 @@ def build_theover_bet_rows(
     if out.empty:
         return pd.DataFrame(columns=CANONICAL_BET_COLUMNS)
 
+    out["spread"] = pd.to_numeric(out.get("spread_line"), errors="coerce")
+    out["total"] = pd.to_numeric(out.get("total_line"), errors="coerce")
+
     if "game_key" not in out.columns:
         out["league"] = _string_series(out, "league").str.upper().replace(LEAGUE_ALIASES)
         out["home_team"] = _string_series(out, "home_team").map(normalize_team_name)
@@ -373,6 +377,8 @@ def build_theover_bet_rows(
         out["game_date"] = _game_dates(out)
         out["spread_line"] = pd.to_numeric(out.get("spread_line"), errors="coerce")
         out["total_line"] = pd.to_numeric(out.get("total_line"), errors="coerce")
+        out["spread"] = pd.to_numeric(out.get("spread_line"), errors="coerce")
+        out["total"] = pd.to_numeric(out.get("total_line"), errors="coerce")
         out["theover_probability"] = pd.to_numeric(out.get("theover_probability"), errors="coerce")
         out["odds_american"] = pd.to_numeric(out.get("odds_american"), errors="coerce")
         if selected_sports:
@@ -453,7 +459,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     pool["best_pick"] = pool.apply(_format_best_pick, axis=1)
 
     best = (
-        pool.sort_values(["expected_value", "edge"], ascending=[False, False])
+        pool.sort_values("expected_value", ascending=False)
         .groupby(["league", "home_team", "away_team", "game_date"], dropna=False)
         .first()
         .reset_index()
@@ -547,10 +553,20 @@ def run_analysis_pipeline(
     merged["decimal_odds"] = merged["odds_american"].apply(american_to_decimal)
     merged["market_probability"] = (1.0 / merged["decimal_odds"]).clip(0.01, 0.99)
 
+    merged["spread"] = pd.to_numeric(merged.get("spread_line"), errors="coerce")
+    merged["total"] = pd.to_numeric(merged.get("total_line"), errors="coerce")
+
     theover_probability = _numeric_series(merged, "theover_probability")
     theover_probability = theover_probability.where(theover_probability <= 1, theover_probability / 100.0)
     ml_probability = _numeric_series(merged, "ml_probability")
-    calibrated_probability = theover_probability.where(theover_probability.notna(), ml_probability)
+
+    market_type = _string_series(merged, "market_type").str.lower()
+    calibrated_probability = np.where(
+        market_type.str.startswith("spread"),
+        ml_probability,
+        theover_probability,
+    )
+    calibrated_probability = pd.Series(calibrated_probability, index=merged.index, dtype="float64")
     calibrated_probability = calibrated_probability.where(calibrated_probability.notna(), merged["market_probability"]).clip(0.01, 0.99)
 
     merged["theover_probability"] = theover_probability
