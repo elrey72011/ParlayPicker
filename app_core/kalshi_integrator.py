@@ -401,8 +401,8 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
     for idx, row in out.iterrows():
         league = str(row.get("league") or "").upper()
-        fam = str(row.get("market_type") or "").lower()
-        family = "spread" if "spread" in fam else "total"
+        family_guess = _market_family(row)
+        family = "spread" if family_guess == "spread" else "total"
         series = league_series_ticker(league, family)
 
         game_date = pd.to_datetime(row.get("game_date"), errors="coerce", utc=True)

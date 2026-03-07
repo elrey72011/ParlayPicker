@@ -31,7 +31,7 @@ LEAGUE_ALIASES = {"NCAAM": "NCAAB", "NCAA MEN'S BASKETBALL": "NCAAB", "NCAA MENS
 
 BEST_PICK_COLUMNS = [
     "parlay_rank",
-    "league", "home_team", "away_team", "game_date", "game_time_est", "best_pick",
+    "league", "home_team", "away_team", "game_date", "game_time_est", "market_type", "best_pick",
     "calibrated_probability", "expected_value", "edge", "consensus_agreement",
     "odds_american", "market_probability", "ml_probability",
     "kalshi_probability", "kalshi_match_status", "kalshi_match_reason",
@@ -481,6 +481,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         .reset_index()
     )
 
+    best["calibrated_probability"] = _numeric_series(best, "calibrated_probability", 0.5)
     probs = _numeric_series(best, "calibrated_probability", 0.5)
     best["consensus_agreement"] = "⚖️ Neutral"
     best.loc[probs > 0.52, "consensus_agreement"] = "✅ Agrees"
