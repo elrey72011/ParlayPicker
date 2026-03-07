@@ -49,7 +49,7 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
     theover_spreads = st.sidebar.file_uploader("Upload TheOver Spreads CSV", type=["csv"], key="theover_spreads")
     theover_totals = st.sidebar.file_uploader("Upload TheOver Totals CSV", type=["csv"], key="theover_totals")
 
-    run_analysis = st.sidebar.button("Run Master Analysis", type="primary")
+    run_clicked = st.sidebar.button("Run Master Analysis", type="primary")
 
     return {
         "sports": sports,
@@ -61,5 +61,5 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
         "show_kalshi_diagnostics": show_kalshi_diagnostics,
         "theover_spreads": theover_spreads,
         "theover_totals": theover_totals,
-        "run_analysis": run_analysis,
+        "run_analysis": run_clicked,
     }
