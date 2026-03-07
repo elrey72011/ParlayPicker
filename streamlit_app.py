@@ -65,18 +65,15 @@ def _safe_numeric_series(df: pd.DataFrame, col: str, default: float | int | None
 def main() -> None:
     setup_page()
 
-    if "analysis_df" not in st.session_state:
-        st.session_state["analysis_df"] = pd.DataFrame()
-    if "best_picks_df" not in st.session_state:
-        st.session_state["best_picks_df"] = pd.DataFrame()
-    if "diagnostics" not in st.session_state:
-        st.session_state["diagnostics"] = {}
-    if "parlays_df" not in st.session_state:
-        st.session_state["parlays_df"] = pd.DataFrame()
-    if "portfolio_df" not in st.session_state:
-        st.session_state["portfolio_df"] = pd.DataFrame()
-    if "controls_initialized" not in st.session_state:
-        st.session_state["controls_initialized"] = True
+    stable_defaults = {
+        "analysis_df": pd.DataFrame(),
+        "best_picks_df": pd.DataFrame(),
+        "diagnostics": {},
+        "parlays_df": pd.DataFrame(),
+        "portfolio_df": pd.DataFrame(),
+    }
+    for key, default in stable_defaults.items():
+        st.session_state.setdefault(key, default)
 
     for leg_count in (2, 3, 4, 5):
         key = f"parlays_{leg_count}_df"
@@ -118,13 +115,12 @@ def main() -> None:
             spreads_df=spreads_df,
             totals_df=totals_df,
         )
-        if not isinstance(pipeline_result, tuple) or len(pipeline_result) != 3:
-            raise ValueError(
-                "run_analysis_pipeline must return a tuple of length 3: "
-                "(analysis_df, best_picks_df, diagnostics)"
-            )
-
-        analysis_df, best_picks_df, diagnostics = pipeline_result
+        if isinstance(pipeline_result, tuple) and len(pipeline_result) == 3:
+            analysis_df, best_picks_df, diagnostics = pipeline_result
+        else:
+            analysis_df = pipeline_result if isinstance(pipeline_result, pd.DataFrame) else pd.DataFrame()
+            best_picks_df = pd.DataFrame()
+            diagnostics = {}
 
         if isinstance(best_picks_df, pd.DataFrame) and not best_picks_df.empty:
             if "game_date" not in best_picks_df.columns:
