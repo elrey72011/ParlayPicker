@@ -18,6 +18,85 @@ LEAGUE_SERIES_MAP = {
     "NHL": {"spread": "KXNHLSPREAD", "total": "KXNHLTOTAL"},
 }
 
+KALSHI_TEAM_CODES = {
+    # NBA
+    "Atlanta Hawks": "ATL", "Atlanta": "ATL",
+    "Boston Celtics": "BOS", "Boston": "BOS",
+    "Brooklyn Nets": "BKN", "Brooklyn": "BKN",
+    "Charlotte Hornets": "CHA", "Charlotte": "CHA",
+    "Chicago Bulls": "CHI", "Chicago": "CHI",
+    "Cleveland Cavaliers": "CLE", "Cleveland": "CLE",
+    "Dallas Mavericks": "DAL", "Dallas": "DAL",
+    "Denver Nuggets": "DEN", "Denver": "DEN",
+    "Detroit Pistons": "DET", "Detroit": "DET",
+    "Golden State Warriors": "GSW", "Golden State": "GSW",
+    "Houston Rockets": "HOU", "Houston": "HOU",
+    "Indiana Pacers": "IND", "Indiana": "IND",
+    "LA Clippers": "LAC", "Los Angeles Clippers": "LAC", "L.A. Clippers": "LAC",
+    "LA Lakers": "LAL", "Los Angeles Lakers": "LAL", "L.A. Lakers": "LAL",
+    "Memphis Grizzlies": "MEM", "Memphis": "MEM",
+    "Miami Heat": "MIA", "Miami": "MIA",
+    "Milwaukee Bucks": "MIL", "Milwaukee": "MIL",
+    "Minnesota Timberwolves": "MIN", "Minnesota": "MIN",
+    "New Orleans Pelicans": "NOP", "New Orleans": "NOP",
+    "New York Knicks": "NYK", "New York": "NYK",
+    "Oklahoma City Thunder": "OKC", "Oklahoma City": "OKC",
+    "Orlando Magic": "ORL", "Orlando": "ORL",
+    "Philadelphia 76ers": "PHI", "Philadelphia": "PHI",
+    "Phoenix Suns": "PHX", "Phoenix": "PHX",
+    "Portland Trail Blazers": "POR", "Portland": "POR",
+    "Sacramento Kings": "SAC", "Sacramento": "SAC",
+    "San Antonio Spurs": "SAS", "San Antonio": "SAS",
+    "Toronto Raptors": "TOR", "Toronto": "TOR",
+    "Utah Jazz": "UTA", "Utah": "UTA",
+    "Washington Wizards": "WAS", "Washington": "WAS",
+    # NHL
+    "Anaheim Ducks": "ANA", "Anaheim": "ANA",
+    "Arizona Coyotes": "ARI",
+    "Boston Bruins": "BOS",
+    "Buffalo Sabres": "BUF", "Buffalo": "BUF",
+    "Calgary Flames": "CGY", "Calgary": "CGY",
+    "Carolina Hurricanes": "CAR", "Carolina": "CAR",
+    "Chicago Blackhawks": "CHI",
+    "Colorado Avalanche": "COL",
+    "Columbus Blue Jackets": "CBJ", "Columbus": "CBJ",
+    "Dallas Stars": "DAL",
+    "Detroit Red Wings": "DET",
+    "Edmonton Oilers": "EDM", "Edmonton": "EDM",
+    "Florida Panthers": "FLA", "Florida": "FLA",
+    "Los Angeles Kings": "LAK", "Los Angeles": "LAK",
+    "Minnesota Wild": "MIN",
+    "Montreal Canadiens": "MTL", "Montreal": "MTL",
+    "Nashville Predators": "NSH", "Nashville": "NSH",
+    "New Jersey Devils": "NJD", "New Jersey": "NJD",
+    "New York Islanders": "NYI", "NY Islanders": "NYI",
+    "New York Rangers": "NYR", "NY Rangers": "NYR",
+    "Ottawa Senators": "OTT", "Ottawa": "OTT",
+    "Philadelphia Flyers": "PHI",
+    "Pittsburgh Penguins": "PIT", "Pittsburgh": "PIT",
+    "San Jose Sharks": "SJS", "San Jose": "SJS",
+    "Seattle Kraken": "SEA", "Seattle": "SEA",
+    "St. Louis Blues": "STL", "St. Louis": "STL",
+    "Tampa Bay Lightning": "TBL", "Tampa Bay": "TBL",
+    "Toronto Maple Leafs": "TOR",
+    "Utah Hockey Club": "UTA",
+    "Vancouver Canucks": "VAN", "Vancouver": "VAN",
+    "Vegas Golden Knights": "VGK", "Vegas": "VGK",
+    "Washington Capitals": "WSH",
+    "Winnipeg Jets": "WPG", "Winnipeg": "WPG",
+}
+
+_KALSHI_TEAM_CODES_NORMALIZED = {
+    re.sub(r"\s+", " ", k.lower().strip().replace(".", "")): v
+    for k, v in KALSHI_TEAM_CODES.items()
+}
+
+
+
+KALSHI_NCAAB_TEAM_CODES = {
+    "Merrimack": "MRMK",
+}
+
 TEAM_CODE_ALIASES = {
     "manhattan": "MAN",
     "wagner": "WAG",
@@ -108,7 +187,20 @@ def _market_family(row: pd.Series) -> str | None:
     return None
 
 
+def _lookup_kalshi_team_code(team: str) -> str | None:
+    raw = str(team or "").strip()
+    if raw in KALSHI_TEAM_CODES:
+        return KALSHI_TEAM_CODES[raw]
+    normalized = re.sub(r"\s+", " ", raw.lower().replace(".", "").strip())
+    return _KALSHI_TEAM_CODES_NORMALIZED.get(normalized)
+
+
 def _guess_code(team: str) -> str | None:
+    mapped = _lookup_kalshi_team_code(team)
+    if mapped:
+        return mapped
+    if str(team or "").strip() in KALSHI_NCAAB_TEAM_CODES:
+        return KALSHI_NCAAB_TEAM_CODES[str(team).strip()]
     token = _normalize_team_token(team)
     if token in TEAM_CODE_ALIASES:
         return TEAM_CODE_ALIASES[token]
@@ -119,6 +211,62 @@ def _guess_code(team: str) -> str | None:
         return words[0][:4].upper()
     return "".join(w[0] for w in words)[:4].upper()
 
+
+def _kalshi_search_fallback(league: str, home_team: str, away_team: str, game_date: str) -> dict[str, Any] | None:
+    """Query Kalshi series for a date/team match when deterministic ticker guesses fail."""
+    import os
+
+    kalshi_api_key = os.environ.get("KALSHI_API_KEY", "")
+    if not kalshi_api_key:
+        return None
+    date_obj = pd.to_datetime(game_date, errors="coerce")
+    if pd.isna(date_obj):
+        return None
+    date_str = date_obj.strftime("%y%b%d").upper()
+
+    series_map = {
+        "NBA": ["KXNBATOTAL", "KXNBASPREAD"],
+        "NCAAB": ["KXNCAAMBTOTAL", "KXNCAAMBSPREAD"],
+        "NHL": ["KXNHLTOTAL", "KXNHLSPREAD"],
+    }
+    series_list = series_map.get(str(league or "").upper(), [])
+
+    home_code = _lookup_kalshi_team_code(home_team) or ""
+    away_code = _lookup_kalshi_team_code(away_team) or ""
+
+    headers = {"Authorization": f"Bearer {kalshi_api_key}"}
+    for series in series_list:
+        try:
+            url = f"{API_BASE}/markets?series_ticker={series}&limit=100"
+            resp = requests.get(url, headers=headers, timeout=5)
+            if resp.status_code != 200:
+                continue
+            markets = resp.json().get("markets", [])
+            for market in markets:
+                ticker = str(market.get("ticker") or "")
+                if date_str not in ticker:
+                    continue
+                if home_code and away_code and home_code in ticker and away_code in ticker:
+                    return market
+                title = str(market.get("title") or "").lower()
+                if str(home_team or "").lower() in title or str(away_team or "").lower() in title:
+                    return market
+        except Exception:
+            continue
+    return None
+
+
+
+
+def _det_team_code(league: str, team: str) -> str | None:
+    """Deterministic team-code resolver used by tests and ingestion code."""
+    _ = league
+    return _guess_code(team)
+
+
+def team_code_for_league(league: str, team: str) -> str:
+    code = _det_team_code(league, team)
+    return str(code or "")
 
 def _get_markets(params: dict[str, Any]) -> list[dict[str, Any]]:
     try:
@@ -259,6 +407,20 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
         if market is None:
             out.at[idx, "kalshi_match_reason"] = "no_market_for_tickers"
+            search_market = _kalshi_search_fallback(
+                league=str(row.get("league") or ""),
+                home_team=str(row.get("home_team") or ""),
+                away_team=str(row.get("away_team") or ""),
+                game_date=str(row.get("game_date") or ""),
+            )
+            if search_market is None:
+                continue
+
+            out.at[idx, "kalshi_probability"] = _select_probability(search_market)
+            out.at[idx, "kalshi_market_title"] = search_market.get("title")
+            out.at[idx, "kalshi_event_ticker"] = search_market.get("event_ticker")
+            out.at[idx, "kalshi_match_status"] = "matched_via_search"
+            out.at[idx, "kalshi_match_reason"] = "matched_via_search"
             continue
 
         out.at[idx, "kalshi_probability"] = _select_probability(market)
@@ -270,6 +432,51 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
     return out
 
+
+
+
+def canonical_team_name(team: str) -> str:
+    return str(team or "").strip()
+
+
+def match_nba_spread(row: dict[str, Any], markets: list[dict[str, Any]]) -> dict[str, Any] | None:
+    pick_team = canonical_team_name(str(row.get("spread_pick_team") or ""))
+    pick_line = pd.to_numeric(row.get("spread_pick_line"), errors="coerce")
+    home_team = canonical_team_name(str(row.get("Home") or row.get("home_team") or ""))
+    away_team = canonical_team_name(str(row.get("Away") or row.get("away_team") or ""))
+    if pd.isna(pick_line) or not pick_team:
+        return None
+
+    is_favorite_pick = float(pick_line) < 0
+    target_team = pick_team if is_favorite_pick else (away_team if pick_team == home_team else home_team)
+    target_line = abs(float(pick_line)) - 0.5
+
+    best_market = None
+    best_delta = float("inf")
+    for market in markets or []:
+        yes_side = str(market.get("yes_side") or "")
+        m = re.search(r"^(.+?)\s+wins\s+by\s+over\s+([0-9]+(?:\.[0-9]+)?)", yes_side, re.IGNORECASE)
+        if not m:
+            continue
+        market_team = canonical_team_name(m.group(1))
+        market_line = float(m.group(2))
+        if market_team != target_team:
+            continue
+        delta = abs(market_line - target_line)
+        if delta < best_delta:
+            best_delta = delta
+            best_market = market
+
+    if best_market is None:
+        return None
+
+    prob = pd.to_numeric(best_market.get("probability"), errors="coerce")
+    if pd.isna(prob):
+        prob = pd.to_numeric(best_market.get("yes_bid_dollars"), errors="coerce")
+    if pd.isna(prob):
+        return None
+    pick_prob = float(prob) if is_favorite_pick else float(1.0 - float(prob))
+    return {"market": best_market, "kalshi_prob_for_pick": pick_prob}
 
 class KalshiIntegrator:
     def enrich(self, df: pd.DataFrame) -> pd.DataFrame:

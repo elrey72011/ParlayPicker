@@ -15478,7 +15478,7 @@ if should_display:
         if "expected_value" in display_df.columns:
             display_df = display_df[display_df["expected_value"].fillna(-1.0) > 0.03]
 
-        st.dataframe(display_df, use_container_width=True)
+        st.dataframe(display_df, width="stretch")
 
         st.write(f"Games analyzed: {len(df)} | Bets with EV > 0.03: {len(display_df)}")
 

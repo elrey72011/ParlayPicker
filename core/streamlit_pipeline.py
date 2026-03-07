@@ -30,14 +30,14 @@ LEAGUE_ALIASES = {"NCAAM": "NCAAB", "NCAA MEN'S BASKETBALL": "NCAAB", "NCAA MENS
 
 BEST_PICK_COLUMNS = [
     "parlay_rank",
-    "league", "home_team", "away_team", "game_date", "best_pick",
+    "league", "home_team", "away_team", "game_date", "game_time_est", "best_pick",
     "calibrated_probability", "expected_value", "edge", "consensus_agreement",
     "odds_american", "market_probability", "ml_probability",
     "kalshi_probability", "kalshi_match_status", "kalshi_match_reason",
 ]
 
 CANONICAL_BET_COLUMNS = [
-    "league", "home_team", "away_team", "game_date", "game_key",
+    "league", "home_team", "away_team", "game_date", "game_time_est", "game_key",
     "market_type", "spread_line", "total_line",
     "theover_probability", "odds_american", "market_probability",
     "ml_probability", "calibrated_probability", "expected_value", "edge", "best_pick",
@@ -250,7 +250,8 @@ def _build_spread_rows(normalized: pd.DataFrame) -> list[pd.DataFrame]:
     spread_prob = _first_existing_numeric(normalized, ["theover_probability", "winprobability", "win_probability", "probability"])
     spread_odds = _first_existing_numeric(normalized, ["odds_american", "american_odds", "odds"], default=-110.0)
 
-    base = normalized[["league", "home_team", "away_team", "game_date"]].copy()
+    base_cols = [c for c in ["league", "home_team", "away_team", "game_date", "game_time_est"] if c in normalized.columns]
+    base = normalized[base_cols].copy()
 
     spread_home = base.copy()
     spread_home["market_type"] = "spread_home"
@@ -275,7 +276,8 @@ def _build_total_rows(normalized: pd.DataFrame) -> list[pd.DataFrame]:
     total_prob = _first_existing_numeric(normalized, ["theover_probability", "winprobability", "win_probability", "probability"])
     total_odds = _first_existing_numeric(normalized, ["odds_american", "american_odds", "odds"], default=-110.0)
 
-    base = normalized[["league", "home_team", "away_team", "game_date"]].copy()
+    base_cols = [c for c in ["league", "home_team", "away_team", "game_date", "game_time_est"] if c in normalized.columns]
+    base = normalized[base_cols].copy()
 
     total_over = base.copy()
     total_over["market_type"] = "total_over"
@@ -376,7 +378,7 @@ def _fill_missing_game_dates_from_base(bet_rows_df: pd.DataFrame, base_df: pd.Da
         schedule = (
             base.sort_values("game_date")
             .drop_duplicates(["league", "home_team", "away_team"], keep="last")
-            [["league", "home_team", "away_team", "game_date"]]
+            [[c for c in ["league", "home_team", "away_team", "game_date", "game_time_est"] if c in base.columns]]
         )
 
         direct = schedule.rename(columns={"game_date": "game_date_base"})
@@ -463,7 +465,7 @@ def run_analysis_pipeline(
     merge_keys = ["league", "home_team", "away_team"]
     merged = bet_rows.copy()
     if not base_df.empty:
-        base_merge_cols = merge_keys + [c for c in ["game_date", "odds_american", "ml_probability"] if c in base_df.columns]
+        base_merge_cols = merge_keys + [c for c in ["game_date", "game_time_est", "odds_american", "ml_probability"] if c in base_df.columns]
         merged = merged.merge(base_df[base_merge_cols].drop_duplicates(merge_keys), on=merge_keys, how="left", suffixes=("", "_base"))
         if "game_date_base" in merged.columns:
             merged["game_date"] = pd.to_datetime(merged["game_date"], errors="coerce", utc=True)
@@ -471,6 +473,12 @@ def run_analysis_pipeline(
             # Only fill missing game_date from base — do NOT overwrite dates already set
             merged["game_date"] = merged["game_date"].where(merged["game_date"].notna(), merged["game_date_base"])
             merged = merged.drop(columns=["game_date_base"])
+        if "game_time_est_base" in merged.columns:
+            merged["game_time_est"] = _string_series(merged, "game_time_est").where(
+                _string_series(merged, "game_time_est").str.len().gt(0),
+                _string_series(merged, "game_time_est_base"),
+            )
+            merged = merged.drop(columns=["game_time_est_base"])
         if "odds_american_base" in merged.columns:
             merged["odds_american"] = _numeric_series(merged, "odds_american").where(
                 _numeric_series(merged, "odds_american").notna(),

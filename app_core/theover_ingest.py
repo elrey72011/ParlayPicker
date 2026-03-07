@@ -11,6 +11,7 @@ import logging
 from typing import Tuple, Optional, Dict, List, Any, Union
 from datetime import datetime
 from zoneinfo import ZoneInfo
+import pytz
 from app_core.feature_processing import robust_normalize_team
 from app_core.kalshi_integrator import team_code_for_league
 from app_core.team_name_matcher import TeamNameMatcher
@@ -667,7 +668,7 @@ def _parse_block_layout(df: pd.DataFrame) -> pd.DataFrame:
                             "LEAGUE": "UNKNOWN"
                         })
                         found_pick = True
-                        break # Found the total for this game
+                        break  # Found the total for this game
 
         i += 1
 
@@ -1418,6 +1419,27 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
                         )
                         logger.warning(f"TheOver pick validation: {pick_validation_warning}")
 
+
+        game_time_est = ""
+        time_columns = ["TIME", "GAME_TIME", "START_TIME", "COMMENCE_TIME"]
+        time_value = None
+        for time_col in time_columns:
+            if time_col in df.columns:
+                candidate = row.get(time_col)
+                if candidate is not None and pd.notna(candidate) and str(candidate).strip().lower() != "nan":
+                    time_value = str(candidate).strip()
+                    break
+        if time_value:
+            game_dt = pd.to_datetime(date_val, errors="coerce", utc=True)
+            parsed_time = pd.to_datetime(time_value, errors="coerce")
+            if pd.notna(game_dt) and pd.notna(parsed_time):
+                if parsed_time.tzinfo is not None:
+                    time_utc = parsed_time.tz_convert("UTC")
+                else:
+                    combined = datetime.combine(game_dt.date(), parsed_time.time())
+                    time_utc = pd.Timestamp(combined, tz="UTC")
+                game_time_est = time_utc.tz_convert(pytz.timezone("US/Eastern")).strftime("%-I:%M %p ET")
+
         records.append({
             "theover_key": canon_key,
             "league": league,
@@ -1433,7 +1455,8 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
             "away_team_raw": csv_away,
             "home_team_raw": csv_home,
             "pick_validation_status": pick_validation_status,
-            "pick_validation_warning": pick_validation_warning
+            "pick_validation_warning": pick_validation_warning,
+            "game_time_est": game_time_est
         })
 
     return pd.DataFrame(records)

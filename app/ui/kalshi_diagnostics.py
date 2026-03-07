@@ -30,7 +30,7 @@ def render_kalshi_diagnostics(df: pd.DataFrame) -> None:
         if c in df.columns
     ]
     if not matched.empty and match_cols:
-        st.dataframe(matched[match_cols].head(50), use_container_width=True)
+        st.dataframe(matched[match_cols].head(50), width="stretch")
 
     if "kalshi_match_reason" in df.columns:
         st.markdown("#### Miss reasons")
@@ -39,7 +39,7 @@ def render_kalshi_diagnostics(df: pd.DataFrame) -> None:
             if not misses.empty
             else pd.DataFrame(columns=["reason", "rows"])
         )
-        st.dataframe(reason_counts, use_container_width=True)
+        st.dataframe(reason_counts, width="stretch")
 
     miss_cols = [
         c for c in [
@@ -56,4 +56,4 @@ def render_kalshi_diagnostics(df: pd.DataFrame) -> None:
     ]
     if not misses.empty and miss_cols:
         st.markdown("#### Miss details")
-        st.dataframe(misses[miss_cols].head(100), use_container_width=True)
+        st.dataframe(misses[miss_cols].head(100), width="stretch")
