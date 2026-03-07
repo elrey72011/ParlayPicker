@@ -265,12 +265,14 @@ def build_theover_bet_rows(
             continue
         if p.dropna(how="all").empty:
             continue
-        valid_pieces.append(p)
+        cleaned_piece = p.dropna(axis=1, how="all")
+        if cleaned_piece.empty:
+            continue
+        valid_pieces.append(cleaned_piece)
 
-    if not valid_pieces:
+    out = pd.concat(valid_pieces, ignore_index=True) if valid_pieces else pd.DataFrame(columns=CANONICAL_BET_COLUMNS)
+    if out.empty:
         return pd.DataFrame(columns=CANONICAL_BET_COLUMNS)
-
-    out = pd.concat(valid_pieces, ignore_index=True)
     out["league"] = _string_series(out, "league").str.upper().replace(LEAGUE_ALIASES)
     out["home_team"] = _string_series(out, "home_team").map(normalize_team_name)
     out["away_team"] = _string_series(out, "away_team").map(normalize_team_name)

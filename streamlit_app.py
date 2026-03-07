@@ -41,13 +41,6 @@ except Exception:  # pragma: no cover
         return df
 
 
-if hasattr(st, "session_state"):
-    if "analysis_df" not in st.session_state:
-        st.session_state.analysis_df = pd.DataFrame()
-
-    if "parlays_df" not in st.session_state:
-        st.session_state.parlays_df = pd.DataFrame()
-
 
 def _safe_str_series(df: pd.DataFrame, col: str, default: str = "") -> pd.Series:
     if df is None or df.empty:
@@ -71,18 +64,24 @@ def _safe_numeric_series(df: pd.DataFrame, col: str, default: float | int | None
 
 def main() -> None:
     setup_page()
-    controls = render_sidebar()
 
     if "analysis_df" not in st.session_state:
         st.session_state["analysis_df"] = pd.DataFrame()
+    if "best_picks_df" not in st.session_state:
+        st.session_state["best_picks_df"] = pd.DataFrame()
+    if "diagnostics" not in st.session_state:
+        st.session_state["diagnostics"] = {}
     if "parlays_df" not in st.session_state:
         st.session_state["parlays_df"] = pd.DataFrame()
+    if "portfolio_df" not in st.session_state:
+        st.session_state["portfolio_df"] = pd.DataFrame()
+    if "controls_initialized" not in st.session_state:
+        st.session_state["controls_initialized"] = True
+
     for leg_count in (2, 3, 4, 5):
         key = f"parlays_{leg_count}_df"
         if key not in st.session_state:
             st.session_state[key] = pd.DataFrame()
-    if "portfolio_df" not in st.session_state:
-        st.session_state["portfolio_df"] = pd.DataFrame()
     if "odds_df" not in st.session_state:
         st.session_state["odds_df"] = pd.DataFrame()
     if "theover_df" not in st.session_state:
@@ -93,17 +92,14 @@ def main() -> None:
         st.session_state["gemini_df"] = pd.DataFrame()
     if "simulation_results" not in st.session_state:
         st.session_state["simulation_results"] = {}
-    if "best_picks_df" not in st.session_state:
-        st.session_state["best_picks_df"] = pd.DataFrame()
-    if "diagnostics" not in st.session_state:
-        st.session_state["diagnostics"] = {}
     if "pipeline_status" not in st.session_state:
-        st.session_state["pipeline_status"] = "session"
+        st.session_state["pipeline_status"] = "idle"
 
+    controls = render_sidebar()
     run_clicked = bool(controls["run_analysis"])
-    st.session_state["pipeline_status"] = "rerun" if run_clicked else "session"
 
     if run_clicked:
+        st.session_state["pipeline_status"] = "using stored results"
         spreads_df = load_theover_csv(controls.get("theover_spreads"))
         totals_df = load_theover_csv(controls.get("theover_totals"))
 
@@ -268,9 +264,11 @@ def main() -> None:
     best_picks_df = st.session_state["best_picks_df"]
     diagnostics = st.session_state.get("diagnostics", {})
 
+    pipeline_status = st.session_state.get("pipeline_status", "idle")
+    st.caption(f"Pipeline status: {pipeline_status}")
+
     if analysis_df is None or analysis_df.empty:
         st.info("Configure filters in the sidebar and click **Run Master Analysis**.")
-        st.caption("Pipeline status: session cache (no fresh run in this render).")
         return
 
     games_count = int(diagnostics.get("total_games", 0))
@@ -304,7 +302,6 @@ def main() -> None:
         st.caption(f"Stale base schedule: {bool(diagnostics.get('stale_base_schedule', False))}")
         if diagnostics.get("stale_base_schedule") and diagnostics.get("has_normalized_bet_rows", False):
             st.warning("Pipeline warning: stale base schedule relative to uploaded bet rows.")
-        st.caption(f"Pipeline status: {'re-running now' if st.session_state.get('pipeline_status') == 'rerun' else 'session cache'}")
 
     tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["Odds", "Analysis", "Best Picks", "Parlays", "Portfolio", "Debug", "Strategy Lab"])
 
