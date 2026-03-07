@@ -1,30 +1,47 @@
 import streamlit as st
 
 
-DEFAULT_SPORTS = ["NBA", "NFL", "NHL", "MLB", "NCAAB"]
+FALLBACK_SPORTS = ["NBA", "NHL", "NCAAB", "NFL", "MLB"]
 
 
-def render_sidebar():
+def _resolve_sports_options(dynamic_sports: list[str] | None = None) -> list[str]:
+    if dynamic_sports:
+        cleaned = [str(s).strip().upper() for s in dynamic_sports if str(s).strip()]
+        if cleaned:
+            return sorted(set(cleaned))
+    return FALLBACK_SPORTS.copy()
+
+
+def render_sidebar(dynamic_sports: list[str] | None = None):
     st.sidebar.header("ParlayPicker Controls")
 
-    sports = st.sidebar.multiselect("Select Sports", DEFAULT_SPORTS)
+    sports_options = _resolve_sports_options(dynamic_sports)
+    st.session_state.setdefault("selected_sports", sports_options.copy())
+    selected_defaults = [s for s in st.session_state["selected_sports"] if s in sports_options] or sports_options.copy()
 
-    max_rows = st.sidebar.slider("Max Games", min_value=10, max_value=500, value=150)
-    bankroll = st.sidebar.number_input("Bankroll", min_value=100.0, value=1000.0, step=50.0)
+    sports = st.sidebar.multiselect(
+        "Select Sports",
+        sports_options,
+        default=selected_defaults,
+        key="selected_sports",
+    )
+
+    max_rows = st.sidebar.slider("Max Games", min_value=10, max_value=500, value=150, key="max_rows")
+    bankroll = st.sidebar.number_input("Bankroll", min_value=100.0, value=1000.0, step=50.0, key="bankroll")
 
     st.sidebar.subheader("Analysis Engines")
 
-    use_ml = st.sidebar.checkbox("Enable ML Predictions", True)
-    use_gemini = st.sidebar.checkbox("Enable Gemini Analysis")
+    use_ml = st.sidebar.checkbox("Enable ML Predictions", True, key="use_ml")
+    use_gemini = st.sidebar.checkbox("Enable Gemini Analysis", key="use_gemini")
 
     st.sidebar.subheader("Diagnostics")
-    show_debug = st.sidebar.checkbox("Display Debug Information", value=False)
-    show_kalshi_diagnostics = st.sidebar.checkbox("Show Kalshi Diagnostics", value=False)
+    show_debug = st.sidebar.checkbox("Display Debug Information", value=False, key="show_debug")
+    show_kalshi_diagnostics = st.sidebar.checkbox("Show Kalshi Diagnostics", value=False, key="show_kalshi_diagnostics")
 
     st.sidebar.subheader("Data Uploads")
 
-    theover_spreads = st.sidebar.file_uploader("Upload TheOver Spreads CSV", type=["csv"])
-    theover_totals = st.sidebar.file_uploader("Upload TheOver Totals CSV", type=["csv"])
+    theover_spreads = st.sidebar.file_uploader("Upload TheOver Spreads CSV", type=["csv"], key="theover_spreads")
+    theover_totals = st.sidebar.file_uploader("Upload TheOver Totals CSV", type=["csv"], key="theover_totals")
 
     run_analysis = st.sidebar.button("Run Master Analysis", type="primary")
 
