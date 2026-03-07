@@ -96,7 +96,6 @@ def main() -> None:
     run_clicked = bool(controls["run_analysis"])
 
     if run_clicked:
-        st.session_state["pipeline_status"] = "using stored results"
         spreads_df = load_theover_csv(controls.get("theover_spreads"))
         totals_df = load_theover_csv(controls.get("theover_totals"))
 
@@ -108,19 +107,13 @@ def main() -> None:
         st.write("TheOver spreads rows:", len(spreads_df))
         st.write("TheOver totals rows:", len(totals_df))
 
-        pipeline_result = run_analysis_pipeline(
+        analysis_df, best_picks_df, diagnostics = run_analysis_pipeline(
             sports=controls["sports"],
             max_rows=int(controls["max_rows"]),
             use_ml=bool(controls["use_ml"]),
             spreads_df=spreads_df,
             totals_df=totals_df,
         )
-        if isinstance(pipeline_result, tuple) and len(pipeline_result) == 3:
-            analysis_df, best_picks_df, diagnostics = pipeline_result
-        else:
-            analysis_df = pipeline_result if isinstance(pipeline_result, pd.DataFrame) else pd.DataFrame()
-            best_picks_df = pd.DataFrame()
-            diagnostics = {}
 
         if isinstance(best_picks_df, pd.DataFrame) and not best_picks_df.empty:
             if "game_date" not in best_picks_df.columns:
@@ -216,18 +209,24 @@ def main() -> None:
             simulation_results = {}
 
         odds_df = analysis_df.copy()
-        theover_df = (
-            load_theover_csv(controls["theover_spreads"])
-            if controls["theover_spreads"]
-            else None
-        )
+        theover_frames = []
+        if controls["theover_spreads"]:
+            theover_frames.append(load_theover_csv(controls["theover_spreads"]))
         if controls["theover_totals"]:
-            totals_loaded = load_theover_csv(controls["theover_totals"])
-            theover_df = (
-                pd.concat([theover_df, totals_loaded], ignore_index=True)
-                if theover_df is not None
-                else totals_loaded
-            )
+            theover_frames.append(load_theover_csv(controls["theover_totals"]))
+
+        valid_theover_frames = []
+        for frame in theover_frames:
+            if frame is None:
+                continue
+            if not isinstance(frame, pd.DataFrame):
+                continue
+            if frame.empty:
+                continue
+            if frame.dropna(how="all").empty:
+                continue
+            valid_theover_frames.append(frame)
+        theover_df = pd.concat(valid_theover_frames, ignore_index=True) if valid_theover_frames else pd.DataFrame()
 
         if "kalshi_probability" in analysis_df.columns:
             kalshi_df = analysis_df[analysis_df["kalshi_probability"].notna()].copy()
@@ -240,6 +239,7 @@ def main() -> None:
             else analysis_df.iloc[0:0]
         )
 
+        st.session_state["pipeline_status"] = "using stored results"
         st.session_state["analysis_df"] = analysis_df
         st.session_state["parlays_df"] = parlays_df
         st.session_state["portfolio_df"] = portfolio_df

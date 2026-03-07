@@ -120,7 +120,9 @@ def _normalize_upload(df: pd.DataFrame | None) -> pd.DataFrame:
 def _concat_valid_bet_frames(frames: list[pd.DataFrame], expected_columns: list[str]) -> pd.DataFrame:
     valid_frames: list[pd.DataFrame] = []
     for frame in frames:
-        if frame is None or not isinstance(frame, pd.DataFrame):
+        if frame is None:
+            continue
+        if not isinstance(frame, pd.DataFrame):
             continue
         if frame.empty:
             continue
@@ -128,10 +130,8 @@ def _concat_valid_bet_frames(frames: list[pd.DataFrame], expected_columns: list[
             continue
         valid_frames.append(frame.copy())
 
-    if not valid_frames:
-        return pd.DataFrame(columns=expected_columns)
-
-    return pd.concat(valid_frames, ignore_index=True)
+    out = pd.concat(valid_frames, ignore_index=True) if valid_frames else pd.DataFrame(columns=expected_columns)
+    return out
 
 
 def _mk_game_key(df: pd.DataFrame) -> pd.Series:
