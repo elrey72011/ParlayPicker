@@ -3,6 +3,8 @@ BASE_GAME_COLUMNS = [
     "league",
     "home_team",
     "away_team",
+    "game_date",
+    "game_time_est",
     "odds_american",
     "ai_probability",
     "ml_probability",
