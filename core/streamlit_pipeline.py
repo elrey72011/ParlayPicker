@@ -444,40 +444,33 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     if "market_type" not in analysis_df.columns:
         raise ValueError("analysis_df missing market_type before best-pick construction")
 
-    df = analysis_df[_string_series(analysis_df, "market_type").isin(VALID_MARKETS)].copy()
-    if df.empty:
+    pool = analysis_df[_string_series(analysis_df, "market_type").isin(list(VALID_MARKETS))].copy()
+    if pool.empty:
         return pd.DataFrame(columns=BEST_PICK_COLUMNS)
 
-    df["expected_value"] = _numeric_series(df, "expected_value", 0.0)
-    df["edge"] = _numeric_series(df, "edge", 0.0)
-    df["best_pick"] = df.apply(_format_best_pick, axis=1)
-    probs = _numeric_series(df, "calibrated_probability", 0.5)
-    df["consensus_agreement"] = "⚖️ Neutral"
-    agrees = probs > 0.52
-    disagrees = probs < 0.48
-    df.loc[agrees, "consensus_agreement"] = "✅ Agrees"
-    df.loc[disagrees, "consensus_agreement"] = "❌ Disagrees"
-    df = df.sort_values(["expected_value", "edge"], ascending=[False, False])
+    pool["expected_value"] = _numeric_series(pool, "expected_value", 0.0)
+    pool["edge"] = _numeric_series(pool, "edge", 0.0)
+    pool["best_pick"] = pool.apply(_format_best_pick, axis=1)
 
-    spread_picks = (
-        df[df["market_type"].str.startswith("spread")]
-        .groupby(["league", "home_team", "away_team", "game_date"], dropna=False, as_index=False)
-        .head(1)
+    best = (
+        pool.sort_values(["expected_value", "edge"], ascending=[False, False])
+        .groupby(["league", "home_team", "away_team", "game_date"], dropna=False)
+        .first()
+        .reset_index()
     )
-    total_picks = (
-        df[df["market_type"].str.startswith("total")]
-        .groupby(["league", "home_team", "away_team", "game_date"], dropna=False, as_index=False)
-        .head(1)
-    )
-    pick_df = pd.concat([spread_picks, total_picks], ignore_index=True).reset_index(drop=True)
 
-    pick_df = pick_df.sort_values(["calibrated_probability", "expected_value"], ascending=[False, False]).reset_index(drop=True)
-    pick_df["parlay_rank"] = range(1, len(pick_df) + 1)
+    probs = _numeric_series(best, "calibrated_probability", 0.5)
+    best["consensus_agreement"] = "⚖️ Neutral"
+    best.loc[probs > 0.52, "consensus_agreement"] = "✅ Agrees"
+    best.loc[probs < 0.48, "consensus_agreement"] = "❌ Disagrees"
+
+    best = best.sort_values(["calibrated_probability", "expected_value"], ascending=[False, False]).reset_index(drop=True)
+    best["parlay_rank"] = range(1, len(best) + 1)
 
     for col in BEST_PICK_COLUMNS:
-        if col not in pick_df.columns:
-            pick_df[col] = pd.NA
-    return pick_df[BEST_PICK_COLUMNS]
+        if col not in best.columns:
+            best[col] = pd.NA
+    return best[BEST_PICK_COLUMNS]
 
 
 def run_analysis_pipeline(
@@ -496,26 +489,35 @@ def run_analysis_pipeline(
     merge_keys = ["league", "home_team", "away_team"]
     merged = bet_rows.copy()
     if not base_df.empty:
-        base_merge_cols = merge_keys + [c for c in ["game_date", "game_time_est", "odds_american", "ml_probability"] if c in base_df.columns]
-        merged = merged.merge(base_df[base_merge_cols].drop_duplicates(merge_keys), on=merge_keys, how="left", suffixes=("", "_base"))
-        if "game_date_base" in merged.columns:
-            merged["game_date"] = pd.to_datetime(merged["game_date"], errors="coerce", utc=True)
-            merged["game_date_base"] = pd.to_datetime(merged["game_date_base"], errors="coerce", utc=True)
-            # Only fill missing game_date from base — do NOT overwrite dates already set
-            merged["game_date"] = merged["game_date"].where(merged["game_date"].notna(), merged["game_date_base"])
-            merged = merged.drop(columns=["game_date_base"])
+        base_schedule = base_df.copy()
+        base_schedule["league"] = _string_series(base_schedule, "league").str.upper().replace(LEAGUE_ALIASES)
+        base_schedule["home_team"] = _string_series(base_schedule, "home_team").map(normalize_team_name)
+        base_schedule["away_team"] = _string_series(base_schedule, "away_team").map(normalize_team_name)
+        base_schedule["date"] = _game_dates(base_schedule)
+
+        merged = merged.merge(
+            base_schedule[merge_keys + ["date", "game_time_est", "odds_american", "ml_probability"]].drop_duplicates(merge_keys),
+            on=merge_keys,
+            how="left",
+            suffixes=("", "_base"),
+        )
+        merged["game_date"] = _game_dates(merged)
+        merged["game_date"] = merged["game_date"].fillna(merged["date"])
+
         if "game_time_est_base" in merged.columns:
             merged["game_time_est"] = _string_series(merged, "game_time_est").where(
                 _string_series(merged, "game_time_est").str.len().gt(0),
                 _string_series(merged, "game_time_est_base"),
             )
             merged = merged.drop(columns=["game_time_est_base"])
+
         if "odds_american_base" in merged.columns:
             merged["odds_american"] = _numeric_series(merged, "odds_american").where(
                 _numeric_series(merged, "odds_american").notna(),
                 _numeric_series(merged, "odds_american_base"),
-            ).fillna(-110.0)
+            )
             merged = merged.drop(columns=["odds_american_base"])
+
         if "ml_probability_base" in merged.columns:
             merged["ml_probability"] = _numeric_series(merged, "ml_probability").where(
                 _numeric_series(merged, "ml_probability").notna(),
@@ -524,8 +526,23 @@ def run_analysis_pipeline(
             merged = merged.drop(columns=["ml_probability_base"])
 
     merged["game_date"] = _game_dates(merged)
+    merged["odds_american"] = _numeric_series(merged, "odds_american", -110.0)
+    merged["decimal_odds"] = merged["odds_american"].apply(american_to_decimal)
+    merged["market_probability"] = (1.0 / merged["decimal_odds"]).clip(0.01, 0.99)
 
-    analysis_df = _apply_analysis_calculations(merged).head(max_rows).copy()
+    theover_probability = _numeric_series(merged, "theover_probability")
+    theover_probability = theover_probability.where(theover_probability <= 1, theover_probability / 100.0)
+    ml_probability = _numeric_series(merged, "ml_probability")
+    calibrated_probability = theover_probability.where(theover_probability.notna(), ml_probability)
+    calibrated_probability = calibrated_probability.where(calibrated_probability.notna(), merged["market_probability"]).clip(0.01, 0.99)
+
+    merged["theover_probability"] = theover_probability
+    merged["calibrated_probability"] = calibrated_probability
+    merged["expected_value"] = calibrated_probability * (merged["decimal_odds"] - 1) - (1 - calibrated_probability)
+    merged["edge"] = calibrated_probability - merged["market_probability"]
+    merged["best_pick"] = merged.apply(_format_best_pick, axis=1)
+
+    analysis_df = merged.head(max_rows).copy()
     if not analysis_df.empty and "market_type" not in analysis_df.columns:
         raise ValueError("analysis_df missing market_type before best-pick construction")
 

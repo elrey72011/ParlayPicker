@@ -11,6 +11,7 @@ import requests
 
 logger = logging.getLogger(__name__)
 API_BASE = "https://api.elections.kalshi.com/trade-api/v2"
+API_URL = API_BASE
 
 LEAGUE_SERIES_MAP = {
     "NCAAB": {"spread": "KXNCAAMBSPREAD", "total": "KXNCAAMBTOTAL"},
@@ -264,6 +265,18 @@ def _det_team_code(league: str, team: str) -> str | None:
     return _guess_code(team)
 
 
+def league_series_ticker(league: str, family: str) -> str:
+    return str(LEAGUE_SERIES_MAP.get(str(league or "").upper(), {}).get(str(family or "").lower(), ""))
+
+
+def team_code_map(league: str, team: str) -> str:
+    _ = league
+    token = _normalize_team_token(team)
+    if token in TEAM_CODE_ALIASES:
+        return TEAM_CODE_ALIASES[token]
+    return str(_guess_code(team) or "")
+
+
 def team_code_for_league(league: str, team: str) -> str:
     code = _det_team_code(league, team)
     return str(code or "")
@@ -343,103 +356,70 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
     if best_picks_df is None or best_picks_df.empty:
         return best_picks_df.copy() if isinstance(best_picks_df, pd.DataFrame) else pd.DataFrame()
 
-    if "game_date" not in best_picks_df.columns:
-        raise ValueError("best_picks_df missing game_date before Kalshi enrichment")
-
     out = best_picks_df.copy()
     out["game_date"] = pd.to_datetime(out.get("game_date"), errors="coerce", utc=True)
 
-    for col in [
-        "kalshi_probability",
-        "kalshi_market_title",
-        "kalshi_event_ticker",
-        "kalshi_market_ticker",
-    ]:
+    for col in ["kalshi_probability", "kalshi_market_title", "kalshi_event_ticker", "kalshi_market_ticker"]:
         if col not in out.columns:
             out[col] = pd.NA
-    out["kalshi_match_status"] = "no_match"
-    out["kalshi_match_reason"] = "no_valid_candidates"
-    out["kalshi_tried_tickers"] = "[]"
+    out["kalshi_match_status"] = "miss"
+    out["kalshi_match_reason"] = "no_market_for_tickers"
 
-    # --- BATCH STEP: determine all needed series upfront, fetch once per series ---
-    needed_series: set[str] = set()
-    row_meta: dict[Any, tuple[list[str], str | None, str | None, str | None, str, str | None]] = {}
     for idx, row in out.iterrows():
-        tried, series, away_code, home_code, date_code, family = _deterministic_tickers(row)
-        row_meta[idx] = (tried, series, away_code, home_code, date_code, family)
-        if series and date_code and away_code and home_code:
-            needed_series.add(series)
+        league = str(row.get("league") or "").upper()
+        market_type = str(row.get("market_type") or "").lower()
+        family = "spread" if "spread" in market_type else "total"
+        series = league_series_ticker(league, family)
 
-    date_codes: set[str] = set()
-    for idx, row in out.iterrows():
-        dc = build_kalshi_date_code(row.get("game_date"))
-        if dc:
-            date_codes.add(dc)
-
-    # Single API call per unique series (e.g. KXNCAAMBSPREAD, KXNCAAMBTOTAL)
-    series_cache = _fetch_series_cache(needed_series, date_codes=date_codes)
-    logger.info("Kalshi series cache loaded: %d markets across %d series", len(series_cache), len(needed_series))
-
-    # --- MATCH STEP: lookup from cache, no per-row API calls ---
-    for idx, row in out.iterrows():
-        tried, series, away_code, home_code, date_code, family = row_meta[idx]
+        game_date = pd.to_datetime(row.get("game_date"), errors="coerce", utc=True)
+        date_code = game_date.strftime("%y%b%d").upper() if pd.notna(game_date) else ""
+        away_code = team_code_map(league, str(row.get("away_team") or ""))
+        home_code = team_code_map(league, str(row.get("home_team") or ""))
 
         if not date_code:
+            out.at[idx, "kalshi_match_status"] = "miss"
             out.at[idx, "kalshi_match_reason"] = "missing_date"
             continue
-        if not away_code or not home_code:
-            out.at[idx, "kalshi_match_reason"] = "missing_team_code"
-            continue
-        if not series or family not in {"spread", "total"}:
-            out.at[idx, "kalshi_match_reason"] = "no_valid_candidates"
+        if not series:
+            out.at[idx, "kalshi_match_status"] = "miss"
+            out.at[idx, "kalshi_match_reason"] = "missing_series"
             continue
 
-        out.at[idx, "kalshi_tried_tickers"] = json.dumps(tried)
-        if not tried:
-            out.at[idx, "kalshi_match_reason"] = "no_valid_candidates"
-            continue
+        base = f"{series}-{date_code}"
+        candidates = [f"{base}{away_code}{home_code}", f"{base}{home_code}{away_code}"] if away_code and home_code else []
+        market: dict[str, Any] | None = None
 
-        # Direct ticker lookup from cache
-        market = None
-        for ticker in tried:
-            if ticker in series_cache:
-                market = series_cache[ticker]
-                break
+        if candidates:
+            resp = requests.get(f"{API_URL}/markets", params={"tickers": ",".join(candidates)}, timeout=8)
+            payload = resp.json() if resp.ok else {}
+            markets = payload.get("data") or payload.get("markets") or []
+            if markets:
+                market = markets[0]
 
-        # Fuzzy fallback: scan cache for matching team codes in ticker or title
         if market is None:
-            for ticker, m in series_cache.items():
-                if not (series and ticker.startswith(series)):
-                    continue
-                title = f"{m.get('title', '')} {m.get('subtitle', '')}".upper()
-                if (away_code in ticker and home_code in ticker) or (away_code in title and home_code in title):
+            resp = requests.get(f"{API_URL}/markets", params={"series_ticker": series, "status": "open"}, timeout=8)
+            payload = resp.json() if resp.ok else {}
+            markets = payload.get("data") or payload.get("markets") or []
+            home = str(row.get("home_team") or "").lower()
+            away = str(row.get("away_team") or "").lower()
+            for m in markets:
+                hay = " ".join([str(m.get("event_ticker") or ""), str(m.get("title") or ""), str(m.get("subtitle") or "")]).lower()
+                if home in hay and away in hay and date_code in str(m.get("ticker") or ""):
                     market = m
                     break
 
-        if market is None:
+        if market is not None:
+            yes_bid = float(pd.to_numeric(market.get("yes_bid_dollars"), errors="coerce") or 0.0)
+            yes_ask = float(pd.to_numeric(market.get("yes_ask_dollars"), errors="coerce") or 0.0)
+            out.at[idx, "kalshi_probability"] = (yes_bid + yes_ask) / 200.0
+            out.at[idx, "kalshi_market_title"] = market.get("title")
+            out.at[idx, "kalshi_event_ticker"] = market.get("event_ticker")
+            out.at[idx, "kalshi_market_ticker"] = market.get("ticker")
+            out.at[idx, "kalshi_match_status"] = "matched"
+            out.at[idx, "kalshi_match_reason"] = ""
+        else:
+            out.at[idx, "kalshi_match_status"] = "miss"
             out.at[idx, "kalshi_match_reason"] = "no_market_for_tickers"
-            search_market = _kalshi_search_fallback(
-                league=str(row.get("league") or ""),
-                home_team=str(row.get("home_team") or ""),
-                away_team=str(row.get("away_team") or ""),
-                game_date=str(row.get("game_date") or ""),
-            )
-            if search_market is None:
-                continue
-
-            out.at[idx, "kalshi_probability"] = _select_probability(search_market)
-            out.at[idx, "kalshi_market_title"] = search_market.get("title")
-            out.at[idx, "kalshi_event_ticker"] = search_market.get("event_ticker")
-            out.at[idx, "kalshi_match_status"] = "matched_via_search"
-            out.at[idx, "kalshi_match_reason"] = "matched_via_search"
-            continue
-
-        out.at[idx, "kalshi_probability"] = _select_probability(market)
-        out.at[idx, "kalshi_market_title"] = market.get("title")
-        out.at[idx, "kalshi_event_ticker"] = market.get("event_ticker")
-        out.at[idx, "kalshi_market_ticker"] = market.get("ticker")
-        out.at[idx, "kalshi_match_status"] = "matched"
-        out.at[idx, "kalshi_match_reason"] = "matched"
 
     return out
 

@@ -27,7 +27,6 @@ from app.ui.odds_dashboard import render_odds_table
 from app.ui.sidebar_controls import render_sidebar
 from app.ui.strategy_lab_dashboard import render_strategy_lab
 from core.streamlit_pipeline import (
-    build_best_picks_df,
     generate_parlays,
     optimize_portfolio_allocation,
     run_analysis_pipeline,
@@ -165,9 +164,6 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
         deferred_warnings.append("No rows found for the selected sports.")
         return empty_state, deferred_warnings, deferred_errors
 
-    if diagnostics.get("best_pick_nonempty_rows", 0) > 0 and (best_picks_df is None or best_picks_df.empty):
-        best_picks_df = build_best_picks_df(analysis_df)
-
     # Kalshi enrichment with hard timeout
     if isinstance(best_picks_df, pd.DataFrame) and not best_picks_df.empty:
         if "game_date" not in best_picks_df.columns or best_picks_df["game_date"].isna().all():
@@ -178,13 +174,6 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
                 deferred_warnings.append(kalshi_err)
 
     analysis_df = _merge_kalshi_into_analysis(analysis_df, best_picks_df)
-
-    if controls["use_gemini"]:
-        try:
-            from integrations.gemini_client import run_gemini_analysis
-            analysis_df = run_gemini_analysis(analysis_df)
-        except Exception as e:
-            deferred_warnings.append(f"Gemini analysis failed: {e}")
 
     if "gemini_analysis" not in analysis_df.columns:
         analysis_df["gemini_analysis"] = ""
