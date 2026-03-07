@@ -1,51 +1,34 @@
-# ParlayDesk Requirements for Streamlit Cloud
-# This file tells Streamlit Cloud which packages to install
+# ParlayPicker - Streamlit Cloud Requirements
+# Pinned tight to avoid pulling in snowflake, sports SDKs, and other heavy transitive deps
 
 # Core Streamlit
-streamlit>=1.28.0
-streamlit-extras>=0.3.0
+streamlit>=1.28.0,<2.0.0
 
 # Data Processing
-pandas>=2.0.0
-numpy>=1.24.0
-duckdb>=1.0.0
-polars>=1.0.0
+pandas>=2.0.0,<3.0.0
+numpy>=1.24.0,<3.0.0
 pyarrow>=16.0.0
 
-
-# Data Models
-pydantic>=2.0.0
-# HTTP Requests
+# Data Models & HTTP
+pydantic>=2.0.0,<3.0.0
 requests>=2.31.0
 
-# Crypto for Kalshi auth
+# Kalshi auth
 cryptography>=42.0.0
 
-# Sentiment fallback
-vaderSentiment>=3.3.2
-
-# Date/Time
-pytz>=2023.3
-
-# ========================================
-# AI/LLM
-# ========================================
-google-genai
-
-# ========================================
-# Optional: ML/Data Science
-# ========================================
+# ML
 scikit-learn>=1.3.0
 xgboost>=2.0.0
 
-# Development/Testing (usually not needed on Streamlit Cloud)
-# pytest>=7.4.0
-# black>=23.7.0
-# flake8>=6.1.0
-nba_api>=1.2.0
-nfl_data_py>=0.3.0
-cfbd>=0.5.0
-nhl-api-py>=3.0.0
-CBBpy>=0.1.0
-rapidfuzz
+# AI
+google-genai
+
+# Sentiment
+vaderSentiment>=3.3.2
+
+# Utils
 rapidfuzz>=3.0.0
+pytz>=2023.3
+
+# Visualization
+plotly>=5.0.0
