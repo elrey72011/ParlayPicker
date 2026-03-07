@@ -101,26 +101,19 @@ def main() -> None:
         "diagnostics": {},
         "parlays_df": pd.DataFrame(),
         "portfolio_df": pd.DataFrame(),
+        "odds_df": pd.DataFrame(),
+        "theover_df": pd.DataFrame(),
+        "kalshi_df": pd.DataFrame(),
+        "gemini_df": pd.DataFrame(),
+        "simulation_results": {},
+        "pipeline_status": "idle",
     }
     for key, default in stable_defaults.items():
         st.session_state.setdefault(key, default)
 
     for leg_count in (2, 3, 4, 5):
         key = f"parlays_{leg_count}_df"
-        if key not in st.session_state:
-            st.session_state[key] = pd.DataFrame()
-    if "odds_df" not in st.session_state:
-        st.session_state["odds_df"] = pd.DataFrame()
-    if "theover_df" not in st.session_state:
-        st.session_state["theover_df"] = pd.DataFrame()
-    if "kalshi_df" not in st.session_state:
-        st.session_state["kalshi_df"] = pd.DataFrame()
-    if "gemini_df" not in st.session_state:
-        st.session_state["gemini_df"] = pd.DataFrame()
-    if "simulation_results" not in st.session_state:
-        st.session_state["simulation_results"] = {}
-    if "pipeline_status" not in st.session_state:
-        st.session_state["pipeline_status"] = "idle"
+        st.session_state.setdefault(key, pd.DataFrame())
 
     controls = render_sidebar()
     run_clicked = bool(controls["run_analysis"])
@@ -214,11 +207,7 @@ def main() -> None:
             simulation_results = {}
 
         odds_df = analysis_df.copy()
-        theover_frames = []
-        if controls["theover_spreads"]:
-            theover_frames.append(load_theover_csv(controls["theover_spreads"]))
-        if controls["theover_totals"]:
-            theover_frames.append(load_theover_csv(controls["theover_totals"]))
+        theover_frames = [spreads_df, totals_df]
 
         valid_theover_frames = []
         for frame in theover_frames:
@@ -330,9 +319,6 @@ def main() -> None:
 
     with tab3:
         st.subheader("Best Picks")
-        if (best_picks_df is None or best_picks_df.empty) and diagnostics.get("best_pick_nonempty_rows", 0) > 0:
-            best_picks_df = build_best_picks_df(analysis_df)
-            st.session_state["best_picks_df"] = best_picks_df
 
         if best_picks_df is None or best_picks_df.empty:
             st.info("No eligible spread/total best picks found.")
