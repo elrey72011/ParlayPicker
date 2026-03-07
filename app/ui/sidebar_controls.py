@@ -1,8 +1,15 @@
+from typing import MutableMapping
+
 import streamlit as st
 
 
 FALLBACK_SPORTS = ["NBA", "NHL", "NCAAB", "NFL", "MLB"]
 
+
+
+
+def _request_run_analysis(state: MutableMapping[str, object]) -> None:
+    state["run_analysis_requested"] = True
 
 def _resolve_sports_options(dynamic_sports: list[str] | None = None) -> list[str]:
     if dynamic_sports:
@@ -50,7 +57,14 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
     theover_spreads = st.sidebar.file_uploader("Upload TheOver Spreads CSV", type=["csv"], key="theover_spreads")
     theover_totals = st.sidebar.file_uploader("Upload TheOver Totals CSV", type=["csv"], key="theover_totals")
 
-    run_clicked = st.sidebar.button("Run Master Analysis", type="primary")
+    st.sidebar.button(
+        "Run Master Analysis",
+        type="primary",
+        on_click=_request_run_analysis,
+        args=(st.session_state,),
+    )
+
+    run_clicked = bool(st.session_state.pop("run_analysis_requested", False))
 
     return {
         "sports": sports,
