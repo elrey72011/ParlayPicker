@@ -210,6 +210,19 @@ def _concat_valid_bet_frames(frames: list[pd.DataFrame], expected_columns: list[
         return pd.concat(valid_frames, ignore_index=True)
 
 
+
+
+def _canonical_matchup_key(df: pd.DataFrame) -> pd.Series:
+    """Orientation-insensitive game key (league + sorted teams + date)."""
+    league = _string_series(df, "league").str.upper()
+    home = _string_series(df, "home_team").str.upper()
+    away = _string_series(df, "away_team").str.upper()
+    team_a = home.where(home <= away, away)
+    team_b = away.where(home <= away, home)
+    date = _game_dates(df).dt.strftime("%Y-%m-%d").fillna("")
+    return league + "|" + team_a + "|" + team_b + "|" + date
+
+
 def _mk_game_key(df: pd.DataFrame) -> pd.Series:
     return (
         _string_series(df, "league").str.upper()
@@ -517,11 +530,14 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     pool["edge"] = _numeric_series(pool, "edge", 0.0)
     pool["best_pick"] = pool.apply(_format_best_pick, axis=1)
 
+    pool["has_signal_probability"] = _numeric_series(pool, "model_probability").notna() | _numeric_series(pool, "theover_probability").notna() | _numeric_series(pool, "ml_probability").notna()
+    pool["matchup_key"] = _canonical_matchup_key(pool)
+
     best = (
-        pool.sort_values("expected_value", ascending=False)
-        .groupby(["league", "home_team", "away_team", "game_date"], dropna=False)
+        pool.sort_values(["has_signal_probability", "expected_value", "edge"], ascending=[False, False, False])
+        .groupby(["matchup_key"], dropna=False)
         .first()
-        .reset_index()
+        .reset_index(drop=True)
     )
 
     best["calibrated_probability"] = _numeric_series(best, "calibrated_probability", 0.5)
@@ -666,18 +682,22 @@ def run_analysis_pipeline(
     ml_probability = _numeric_series(merged, "ml_probability")
 
     market_type = _string_series(merged, "market_type").str.lower()
-    calibrated_probability = np.where(
-        market_type.str.startswith("spread"),
-        ml_probability,
-        theover_probability,
+    spread_model = ml_probability.where(ml_probability.notna(), theover_probability)
+    total_model = theover_probability.where(theover_probability.notna(), ml_probability)
+    model_probability = pd.Series(
+        np.where(market_type.str.startswith("spread"), spread_model, total_model),
+        index=merged.index,
+        dtype="float64",
     )
-    calibrated_probability = pd.Series(calibrated_probability, index=merged.index, dtype="float64")
-    calibrated_probability = calibrated_probability.where(calibrated_probability.notna(), merged["market_probability"])
+
+    calibrated_probability = model_probability.where(model_probability.notna(), merged["market_probability"])
     model_weight = pd.Series(0.35, index=merged.index, dtype="float64")
     model_weight = model_weight.where(_string_series(merged, "odds_source").ne("fallback_-110"), 0.20)
+    model_weight = model_weight.where(model_probability.notna(), 0.0)
     calibrated_probability = _shrink_to_market(calibrated_probability, merged["market_probability"], model_weight=model_weight)
 
     merged["theover_probability"] = theover_probability
+    merged["model_probability"] = model_probability
     merged["calibrated_probability"] = calibrated_probability
     merged["expected_value"] = calibrated_probability * (merged["decimal_odds"] - 1) - (1 - calibrated_probability)
     merged["edge"] = calibrated_probability - merged["market_probability"]
@@ -733,6 +753,7 @@ def run_analysis_pipeline(
         "market_type_counts": _string_series(analysis_df, "market_type").value_counts(dropna=False).to_dict() if not analysis_df.empty else {},
         "allowed_market_type_rows": int(_string_series(analysis_df, "market_type").isin(VALID_MARKETS).sum()) if not analysis_df.empty else 0,
         "positive_ev_rows": int((_numeric_series(analysis_df, "expected_value", 0.0) > 0).sum()) if not analysis_df.empty else 0,
+        "spread_rows_missing_model_prob": int(((_string_series(analysis_df, "market_type").str.startswith("spread")) & (_numeric_series(analysis_df, "model_probability").isna())).sum()) if not analysis_df.empty else 0,
         "best_pick_nonempty_rows": int(_string_series(best_picks_df, "best_pick").str.strip().str.len().gt(0).sum()) if not best_picks_df.empty else 0,
         "best_picks_count": int(len(best_picks_df)),
         "odds_schedule_loaded": odds_schedule_loaded,
