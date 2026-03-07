@@ -110,19 +110,13 @@ def main() -> None:
         st.write("TheOver spreads rows:", len(spreads_df))
         st.write("TheOver totals rows:", len(totals_df))
 
-        pipeline_result = run_analysis_pipeline(
+        analysis_df, best_picks_df, diagnostics = run_analysis_pipeline(
             sports=controls["sports"],
             max_rows=int(controls["max_rows"]),
             use_ml=bool(controls["use_ml"]),
             spreads_df=spreads_df,
             totals_df=totals_df,
         )
-        if not isinstance(pipeline_result, tuple) or len(pipeline_result) != 3:
-            raise ValueError(
-                "run_analysis_pipeline must return a tuple of length 3: "
-                "(analysis_df, best_picks_df, diagnostics)."
-            )
-        analysis_df, best_picks_df, diagnostics = pipeline_result
 
         if isinstance(best_picks_df, pd.DataFrame) and not best_picks_df.empty:
             if "game_date" not in best_picks_df.columns:
@@ -210,9 +204,11 @@ def main() -> None:
                     best_lookup = portfolio_source_df[join_keys + ["best_pick"]].drop_duplicates()
                     recovered = portfolio_df.loc[empty_best_pick, join_keys].merge(best_lookup, on=join_keys, how="left")
                     portfolio_df.loc[empty_best_pick, "best_pick"] = recovered["best_pick"].values
-        if portfolio_df is not None and not portfolio_df.empty:
+        required_portfolio_cols = {"calibrated_probability", "decimal_odds", "recommended_bet"}
+        if portfolio_df is not None and not portfolio_df.empty and required_portfolio_cols.issubset(set(portfolio_df.columns)):
             simulation_results = run_bankroll_simulation(portfolio_df, bankroll=float(controls["bankroll"]))
         else:
+            diagnostics["bankroll_simulation_skipped"] = True
             simulation_results = {}
 
         odds_df = analysis_df.copy()
