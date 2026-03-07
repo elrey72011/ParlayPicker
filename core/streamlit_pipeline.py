@@ -114,6 +114,8 @@ def _normalize_upload(df: pd.DataFrame | None) -> pd.DataFrame:
     out["home_team"] = _string_series(out, "home_team").map(normalize_team_name)
     out["away_team"] = _string_series(out, "away_team").map(normalize_team_name)
     out["game_date"] = _game_dates(out)
+    if out["game_date"].isna().all():
+        out["game_date"] = pd.Timestamp.now(tz="UTC").normalize()
     return out
 
 
