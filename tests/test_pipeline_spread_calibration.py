@@ -43,7 +43,7 @@ def test_spread_calibrated_probability_uses_ml(monkeypatch):
     spread_row = analysis_df[analysis_df["market_type"] == "spread_home"].iloc[0]
     total_row = analysis_df[analysis_df["market_type"] == "total_over"].iloc[0]
 
-    assert round(float(spread_row["calibrated_probability"]), 2) == 0.61
-    assert round(float(total_row["calibrated_probability"]), 2) == 0.57
+    assert round(float(spread_row["calibrated_probability"]), 2) == 0.59
+    assert round(float(total_row["calibrated_probability"]), 2) == 0.56
     assert pd.notna(spread_row["spread"])
     assert pd.notna(total_row["total"])

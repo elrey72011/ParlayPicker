@@ -70,6 +70,16 @@ def _numeric_series(df: pd.DataFrame, col: str, default: float | int | None = No
     return out
 
 
+def _shrink_to_market(model_prob: pd.Series, market_prob: pd.Series, model_weight: float = 0.65) -> pd.Series:
+    """Shrink model probabilities toward market-implied probability to reduce overconfidence."""
+    mw = float(model_weight)
+    mk = 1.0 - mw
+    model = pd.to_numeric(model_prob, errors="coerce")
+    market = pd.to_numeric(market_prob, errors="coerce")
+    shrunk = model * mw + market * mk
+    return shrunk.clip(0.02, 0.98)
+
+
 def _game_dates(df: pd.DataFrame) -> pd.Series:
     if df is None or df.empty:
         return pd.Series(dtype="datetime64[ns, UTC]")
@@ -482,10 +492,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     )
 
     best["calibrated_probability"] = _numeric_series(best, "calibrated_probability", 0.5)
-    probs = _numeric_series(best, "calibrated_probability", 0.5)
+    edge_for_consensus = _numeric_series(best, "edge", 0.0)
     best["consensus_agreement"] = "⚖️ Neutral"
-    best.loc[probs > 0.52, "consensus_agreement"] = "✅ Agrees"
-    best.loc[probs < 0.48, "consensus_agreement"] = "❌ Disagrees"
+    best.loc[edge_for_consensus >= 0.03, "consensus_agreement"] = "✅ Agrees"
+    best.loc[edge_for_consensus <= -0.03, "consensus_agreement"] = "❌ Disagrees"
 
     best = best.sort_values(["calibrated_probability", "expected_value"], ascending=[False, False]).reset_index(drop=True)
     best["parlay_rank"] = range(1, len(best) + 1)
@@ -584,7 +594,8 @@ def run_analysis_pipeline(
         theover_probability,
     )
     calibrated_probability = pd.Series(calibrated_probability, index=merged.index, dtype="float64")
-    calibrated_probability = calibrated_probability.where(calibrated_probability.notna(), merged["market_probability"]).clip(0.01, 0.99)
+    calibrated_probability = calibrated_probability.where(calibrated_probability.notna(), merged["market_probability"])
+    calibrated_probability = _shrink_to_market(calibrated_probability, merged["market_probability"], model_weight=0.65)
 
     merged["theover_probability"] = theover_probability
     merged["calibrated_probability"] = calibrated_probability
