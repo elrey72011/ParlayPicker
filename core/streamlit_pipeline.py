@@ -221,7 +221,7 @@ def _format_best_pick(row: pd.Series) -> str:
         return f"{row.get('home_team', '')} {line:+.1f}" if pd.notna(line) else str(row.get("home_team") or "")
     if market == "spread_away":
         line = pd.to_numeric(row.get("spread_line"), errors="coerce")
-        return f"{row.get('away_team', '')} {line:+.1f}" if pd.notna(line) else str(row.get("away_team") or "")
+        return f"{row.get('away_team', '')} {abs(line):+.1f}" if pd.notna(line) else str(row.get("away_team") or "")
     if market == "total_over":
         line = pd.to_numeric(row.get("total_line"), errors="coerce")
         return f"Over {line:.1f}" if pd.notna(line) else "Over"
@@ -527,9 +527,11 @@ def run_analysis_pipeline(
             merged = merged.drop(columns=["game_time_est_base"])
 
         if "odds_american_base" in merged.columns:
-            merged["odds_american"] = _numeric_series(merged, "odds_american").where(
-                _numeric_series(merged, "odds_american").notna(),
-                _numeric_series(merged, "odds_american_base"),
+            odds_current = _numeric_series(merged, "odds_american")
+            odds_base = _numeric_series(merged, "odds_american_base")
+            merged["odds_american"] = odds_current.where(
+                odds_current.notna() & (odds_current != -110),
+                odds_base,
             )
             merged = merged.drop(columns=["odds_american_base"])
 
@@ -558,6 +560,22 @@ def run_analysis_pipeline(
     merged["best_pick"] = merged.apply(_format_best_pick, axis=1)
 
     analysis_df = merged.head(max_rows).copy()
+    if not analysis_df.empty and not base_df.empty:
+        base_dates = base_df.copy()
+        base_dates["league"] = _string_series(base_dates, "league").str.upper().replace(LEAGUE_ALIASES)
+        base_dates["home_team"] = _string_series(base_dates, "home_team").map(normalize_team_name)
+        base_dates["away_team"] = _string_series(base_dates, "away_team").map(normalize_team_name)
+        base_dates["date"] = _game_dates(base_dates)
+        date_fill = analysis_df.merge(
+            base_dates[["league", "home_team", "away_team", "date"]],
+            on=["league", "home_team", "away_team"],
+            how="left",
+            suffixes=("", "_basefill"),
+        )
+        date_fill_series = _game_dates(date_fill)
+        if "date_basefill" in date_fill.columns:
+            date_fill_series = date_fill_series.where(date_fill_series.notna(), pd.to_datetime(date_fill["date_basefill"], errors="coerce", utc=True))
+        analysis_df["game_date"] = _game_dates(analysis_df).fillna(date_fill_series)
     if "game_key" not in analysis_df.columns:
         analysis_df["game_key"] = _mk_game_key(analysis_df)
     if not analysis_df.empty and "market_type" not in analysis_df.columns:

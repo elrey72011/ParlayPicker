@@ -107,6 +107,7 @@ TEAM_CODE_ALIASES = {
     "washington st": "WSU",
     "seton hall": "HALL",
     "st johns": "SJU",
+    "state johns": "SJU",
     "saint johns": "SJU",
     "idaho state": "IDST",
     "sam houston": "SHSU",
@@ -114,7 +115,7 @@ TEAM_CODE_ALIASES = {
     "florida gulf coast": "FGCU",
     "kennesaw state": "KENN",
     "fairfield": "FAIR",
-    "columbia": "COL",
+    "columbia": "CLMB",
     "pepperdine": "PEPP",
     "unc wilmington": "UNCW",
     "se louisiana": "SELA",
@@ -123,7 +124,10 @@ TEAM_CODE_ALIASES = {
     "temple": "TEM",
     "rhode island": "URI",
     "saint marys": "SMC",
+    "saint mary's": "SMC",
     "st marys": "SMC",
+    "state marys": "SMC",
+    "st mary's": "SMC",
     "wichita state": "WICH",
     "memphis": "MEM",
     "southern illinois": "SIU",
@@ -293,9 +297,28 @@ def _get_markets(params: dict[str, Any]) -> list[dict[str, Any]]:
     return payload.get("markets", [])
 
 
-def api_get_markets(**params: Any) -> list[dict[str, Any]]:
+def api_get_markets(**params: Any) -> dict[str, Any]:
     """Compatibility wrapper for Kalshi market lookups."""
-    return _get_markets(dict(params))
+    try:
+        response = requests.get(f"{API_BASE}/markets", params=params, timeout=8)
+        response.raise_for_status()
+        payload = response.json()
+    except Exception as exc:
+        raise KalshiAPIError(str(exc)) from exc
+    return payload if isinstance(payload, dict) else {}
+
+
+def _extract_markets(response: Any) -> list[dict[str, Any]]:
+    if isinstance(response, list):
+        return response
+    if isinstance(response, dict):
+        markets = response.get("data")
+        if isinstance(markets, list):
+            return markets
+        markets = response.get("markets")
+        if isinstance(markets, list):
+            return markets
+    return []
 
 
 def _select_probability(market: dict[str, Any]) -> float | None:
@@ -403,15 +426,17 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         base = f"{series}-{date_code}"
         candidates = [f"{base}{away_code}{home_code}", f"{base}{home_code}{away_code}"]
 
-        markets = []
+        markets: list[dict[str, Any]] = []
         try:
-            markets = api_get_markets(tickers=",".join(candidates))
+            direct_resp = api_get_markets(tickers=",".join(candidates))
+            markets = _extract_markets(direct_resp)
         except Exception:
             markets = []
 
         if not markets:
             try:
-                series_markets = api_get_markets(series_ticker=series, status="open")
+                series_resp = api_get_markets(series_ticker=series, status="open")
+                series_markets = _extract_markets(series_resp)
             except Exception:
                 series_markets = []
             markets = [
