@@ -380,6 +380,24 @@ def _fetch_series_cache(series_set: set[str], date_codes: set[str] | None = None
     return cache
 
 
+def _markets_by_team_text(series_markets: list[dict[str, Any]], home_team: str, away_team: str, date_code: str) -> list[dict[str, Any]]:
+    """Fallback matcher when event_ticker team codes differ from local aliases."""
+    home_token = _normalize_team_token(home_team)
+    away_token = _normalize_team_token(away_team)
+    candidates: list[dict[str, Any]] = []
+    for m in series_markets or []:
+        ticker = str(m.get("ticker") or "").upper()
+        event_ticker = str(m.get("event_ticker") or "").upper()
+        title = _normalize_team_token(str(m.get("title") or ""))
+        subtitle = _normalize_team_token(str(m.get("subtitle") or ""))
+        hay = " ".join([title, subtitle, event_ticker.lower()])
+        if date_code and date_code not in ticker and date_code not in event_ticker:
+            continue
+        if home_token and away_token and home_token in hay and away_token in hay:
+            candidates.append(m)
+    return candidates
+
+
 def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
     if best_picks_df is None or best_picks_df.empty:
         return best_picks_df.copy() if isinstance(best_picks_df, pd.DataFrame) else pd.DataFrame()
@@ -443,6 +461,13 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 m for m in series_markets
                 if away_code in str(m.get("event_ticker") or "") and home_code in str(m.get("event_ticker") or "")
             ]
+            if not markets:
+                markets = _markets_by_team_text(
+                    series_markets,
+                    str(row.get("home_team") or ""),
+                    str(row.get("away_team") or ""),
+                    date_code,
+                )
 
         if markets:
             mkt = markets[0]

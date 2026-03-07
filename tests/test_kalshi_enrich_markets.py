@@ -57,3 +57,36 @@ def test_enrich_with_kalshi_markets_missing_team_code_reason(monkeypatch):
 
     assert out.loc[0, "kalshi_match_status"] == "miss"
     assert out.loc[0, "kalshi_match_reason"] == "missing_team_code"
+
+
+def test_enrich_with_kalshi_markets_title_fallback_when_event_ticker_codes_differ(monkeypatch):
+    df = pd.DataFrame(
+        {
+            "league": ["NCAAB"],
+            "market_type": ["total_over"],
+            "home_team": ["Saint Mary's"],
+            "away_team": ["Pepperdine"],
+            "game_date": ["2026-03-10T00:00:00Z"],
+        }
+    )
+
+    def fake_api_get_markets(**params):
+        if "tickers" in params:
+            return {"data": []}
+        return {
+            "data": [
+                {
+                    "ticker": "KXNCAAMBTOTAL-26MAR10XXXX",
+                    "event_ticker": "KXNCAAMBTOTAL-26MAR10ABCD",
+                    "title": "Saint Mary's vs Pepperdine",
+                    "yes_bid_dollars": 49,
+                    "yes_ask_dollars": 51,
+                }
+            ]
+        }
+
+    monkeypatch.setattr(ki, "api_get_markets", fake_api_get_markets)
+    out = ki.enrich_with_kalshi_markets(df)
+
+    assert out.loc[0, "kalshi_match_status"] == "matched"
+    assert float(out.loc[0, "kalshi_probability"]) == 0.50
