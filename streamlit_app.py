@@ -294,8 +294,10 @@ def main() -> None:
             for msg in pipe_errors:
                 st.error(msg)
         except Exception:
-            st.session_state["pipeline_running"] = False
             st.error(f"Pipeline crashed:\n```\n{traceback.format_exc()}\n```")
+        finally:
+            # CRITICAL: Always release the pipeline lock so future runs are not blocked
+            st.session_state["pipeline_running"] = False
 
     analysis_df = st.session_state["analysis_df"]
     parlays_df = st.session_state["parlays_df"]
