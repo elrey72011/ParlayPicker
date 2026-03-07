@@ -33,8 +33,8 @@ def _default_simulation_payload(starting_bankroll: float) -> dict[str, float | l
 def simulate_bankroll(
     portfolio_df: pd.DataFrame,
     starting_bankroll: float,
-    days: int = 1000,
-    simulations: int = 1000,
+    days: int = 30,        # reduced from 1000 — daily betting horizon
+    simulations: int = 200,  # reduced from 1000 — fast but statistically meaningful
 ) -> dict[str, float | list[list[float]]]:
     """Monte Carlo simulation of bankroll using recommended single bets."""
     if portfolio_df is None or portfolio_df.empty:

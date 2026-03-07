@@ -44,6 +44,9 @@ CANONICAL_BET_COLUMNS = [
 
 _EXPORT_SIGNAL_COLS = {"market_type", "calibrated_probability", "expected_value", "edge"}
 
+# Cap combos per leg count to prevent combinatorial explosion
+_MAX_PARLAY_COMBOS_PER_LEG = 500
+
 
 def _string_series(df: pd.DataFrame, col: str, default: str = "") -> pd.Series:
     if df is None or df.empty:
@@ -283,12 +286,6 @@ def build_theover_bet_rows(
     totals_df: pd.DataFrame | None,
     selected_sports: list[str] | None,
 ) -> pd.DataFrame:
-    """Build canonical bet rows from uploaded CSVs.
-
-    Each upload is tagged by its slot (spreads vs totals), so the row-expansion
-    logic is driven by the uploader label — not by guessing from column names.
-    Pipeline export CSVs (already fully processed) are passed through directly.
-    """
     pieces: list[pd.DataFrame] = []
 
     uploads: list[tuple[pd.DataFrame | None, str]] = [
@@ -305,7 +302,6 @@ def build_theover_bet_rows(
             pieces.append(_coerce_export_to_canonical(upload_df, selected_sports))
             continue
 
-        # Raw upload — expand rows based on which uploader slot it came from
         normalized = _normalize_upload(upload_df)
         if normalized.empty:
             continue
@@ -315,7 +311,6 @@ def build_theover_bet_rows(
         elif file_type == "totals":
             pieces.extend(_build_total_rows(normalized))
         else:
-            # Fallback: try to infer (should not normally be reached)
             has_spread_data = "spread_line" in normalized.columns and normalized["spread_line"].notna().any()
             has_total_data = "total_line" in normalized.columns and normalized["total_line"].notna().any()
             if has_spread_data:
@@ -528,11 +523,19 @@ def generate_parlays(best_picks_df: pd.DataFrame, max_legs: int = 5) -> pd.DataF
         return pd.DataFrame(columns=cols)
 
     df["calibrated_probability"] = _numeric_series(df, "calibrated_probability", 0.5).clip(0.01, 0.99)
-    df["decimal_odds"] = _numeric_series(df, "decimal_odds").fillna(_numeric_series(df, "odds_american", -110.0).apply(american_to_decimal))
+    df["decimal_odds"] = _numeric_series(df, "decimal_odds").fillna(
+        _numeric_series(df, "odds_american", -110.0).apply(american_to_decimal)
+    )
+
+    # Sort by EV descending and cap input rows to limit combinatorial explosion
+    df = df.sort_values("expected_value", ascending=False).head(15).reset_index(drop=True)
 
     records: list[dict[str, Any]] = []
     for leg_count in range(2, min(max_legs, len(df)) + 1):
+        count = 0
         for combo in combinations(df.index.tolist(), leg_count):
+            if count >= _MAX_PARLAY_COMBOS_PER_LEG:
+                break
             legs_df = df.loc[list(combo)]
             prob = float(legs_df["calibrated_probability"].prod())
             odds = float(legs_df["decimal_odds"].prod())
@@ -545,6 +548,7 @@ def generate_parlays(best_picks_df: pd.DataFrame, max_legs: int = 5) -> pd.DataF
                 "parlay_ev": ev,
                 "legs": leg_count,
             })
+            count += 1
 
     if not records:
         return pd.DataFrame(columns=cols)
@@ -560,7 +564,9 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
     if portfolio.empty:
         return pd.DataFrame()
 
-    portfolio["decimal_odds"] = _numeric_series(portfolio, "decimal_odds").fillna(_numeric_series(portfolio, "odds_american", -110.0).apply(american_to_decimal))
+    portfolio["decimal_odds"] = _numeric_series(portfolio, "decimal_odds").fillna(
+        _numeric_series(portfolio, "odds_american", -110.0).apply(american_to_decimal)
+    )
     portfolio = add_kelly_bet_sizing(portfolio, bankroll=bankroll, fraction=0.25)
     if "recommended_bet" not in portfolio.columns:
         portfolio["recommended_bet"] = 0.0
@@ -577,4 +583,4 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
 
 
 def run_bankroll_simulation(portfolio_df: pd.DataFrame, bankroll: float) -> dict[str, float | list[list[float]]]:
-    return simulate_bankroll(portfolio_df=portfolio_df, starting_bankroll=bankroll, days=1000, simulations=1000)
+    return simulate_bankroll(portfolio_df=portfolio_df, starting_bankroll=bankroll, days=30, simulations=200)
