@@ -48,7 +48,7 @@ def simulate_bankroll(
         return _default_simulation_payload(starting_bankroll)
 
     probs = _numeric_series(source, "calibrated_probability", 0.5).clip(0.0, 1.0)
-    odds = _numeric_series(source, "decimal_odds", 2.0)
+    odds = pd.to_numeric(source["decimal_odds"], errors="coerce").fillna(2.0) if "decimal_odds" in source.columns else pd.Series([2.0] * len(source), index=source.index, dtype="float64")
     stakes = _numeric_series(source, "recommended_bet", 0.0).clip(lower=0.0)
 
     if stakes.empty or float(stakes.sum()) <= 0:

@@ -39,8 +39,11 @@ def normalize_theover_df(df: pd.DataFrame | None) -> pd.DataFrame:
     if rename_map:
         normalized = normalized.rename(columns=rename_map)
 
-    if "game_date" in normalized.columns:
-        normalized["game_date"] = pd.to_datetime(normalized["game_date"], errors="coerce", utc=True)
+    for col in ["game_date", "date", "time", "commence_time", "start_time", "event_date"]:
+        if col in normalized.columns:
+            normalized["game_date"] = pd.to_datetime(normalized[col], errors="coerce", utc=True)
+            if normalized["game_date"].notna().any():
+                break
 
     if "line" in normalized.columns:
         normalized["line"] = pd.to_numeric(normalized["line"], errors="coerce")
