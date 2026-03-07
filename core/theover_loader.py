@@ -6,7 +6,7 @@ THEOVER_COLUMN_ALIASES = {
     "league": ["league", "sport", "competition"],
     "home_team": ["home_team", "hometeam", "home", "home team"],
     "away_team": ["away_team", "awayteam", "away", "away team"],
-    "game_date": ["game_date", "commence_time", "start_time", "time", "date"],
+    "game_date": ["game_date", "commence_time", "start_time", "time", "date", "event_date"],
     "market": ["market", "bet_type", "wager_type", "pick_type", "market_type"],
     "pick": ["pick", "selection", "side", "over_under", "ou"],
     "pickteam": ["pickteam", "pick_team", "team", "selection_team"],
