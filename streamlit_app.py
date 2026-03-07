@@ -26,6 +26,7 @@ from app.ui.parlay_dashboard import render_parlays
 from app.ui.sidebar_controls import render_sidebar
 from app.ui.strategy_lab_dashboard import render_strategy_lab
 from core.streamlit_pipeline import (
+    build_best_picks_df,
     generate_parlays,
     optimize_portfolio_allocation,
     run_analysis_pipeline,
@@ -60,6 +61,35 @@ def _safe_numeric_series(df: pd.DataFrame, col: str, default: float | int | None
     if default is not None:
         s = s.fillna(default)
     return s
+
+
+def _merge_kalshi_into_analysis(analysis_df: pd.DataFrame, best_picks_df: pd.DataFrame) -> pd.DataFrame:
+    if analysis_df is None or analysis_df.empty or best_picks_df is None or best_picks_df.empty:
+        return analysis_df
+    kalshi_cols = [
+        "kalshi_probability",
+        "kalshi_market_title",
+        "kalshi_event_ticker",
+        "kalshi_match_status",
+        "kalshi_match_reason",
+        "kalshi_tried_tickers",
+    ]
+    available_cols = [c for c in kalshi_cols if c in best_picks_df.columns]
+    if not available_cols:
+        return analysis_df
+
+    merge_keys = ["league", "home_team", "away_team", "game_date"]
+    if "best_pick" in analysis_df.columns and "best_pick" in best_picks_df.columns:
+        merge_keys.append("best_pick")
+
+    right = best_picks_df[merge_keys + available_cols].drop_duplicates()
+    merged = analysis_df.merge(right, on=merge_keys, how="left", suffixes=("", "_best"))
+    for col in available_cols:
+        best_col = f"{col}_best"
+        if best_col in merged.columns:
+            merged[col] = merged[col].where(merged[col].notna(), merged[best_col]) if col in merged.columns else merged[best_col]
+            merged = merged.drop(columns=[best_col])
+    return merged
 
 
 def main() -> None:
@@ -115,39 +145,6 @@ def main() -> None:
             totals_df=totals_df,
         )
 
-        if isinstance(best_picks_df, pd.DataFrame) and not best_picks_df.empty:
-            if "game_date" not in best_picks_df.columns:
-                raise ValueError("best_picks_df missing game_date before Kalshi enrichment")
-            best_picks_df = enrich_with_kalshi_markets(best_picks_df)
-
-            with_date = best_picks_df["game_date"].notna()
-            tried_empty = (
-                best_picks_df["kalshi_tried_tickers"].astype(str).str.strip().isin(["", "[]", "null", "None"])
-                if "kalshi_tried_tickers" in best_picks_df.columns
-                else pd.Series([True] * len(best_picks_df), index=best_picks_df.index)
-            )
-            if bool((with_date & tried_empty).any()):
-                diagnostics["kalshi_ticker_warning"] = "kalshi_tried_tickers empty for rows with non-null game_date"
-
-        if not analysis_df.empty and "market_type" not in analysis_df.columns:
-            raise ValueError("analysis_df missing market_type before best-pick construction")
-        allowed_rows = int(diagnostics.get("allowed_market_type_rows", 0))
-        if not analysis_df.empty and allowed_rows > 0 and (best_picks_df is None or best_picks_df.empty):
-            diagnostics["best_picks_warning"] = "best_picks_df empty while analysis_df has valid spread/total rows"
-
-        attempted = int(len(best_picks_df)) if isinstance(best_picks_df, pd.DataFrame) else 0
-        matched = int(best_picks_df["kalshi_match_status"].astype(str).str.lower().eq("matched").sum()) if attempted and "kalshi_match_status" in best_picks_df.columns else int(diagnostics.get("kalshi_matches", 0))
-        diagnostics["kalshi_attempted"] = attempted
-        diagnostics["kalshi_matches"] = matched
-        diagnostics["kalshi_match_rate"] = float(matched / max(attempted, 1))
-        diagnostics["match_rate"] = diagnostics["kalshi_match_rate"]
-        diagnostics["kalshi_missing_date_rows"] = int(best_picks_df["kalshi_match_reason"].astype(str).eq("missing_date").sum()) if attempted and "kalshi_match_reason" in best_picks_df.columns else 0
-        diagnostics["kalshi_missing_team_code_rows"] = int(best_picks_df["kalshi_match_reason"].astype(str).eq("missing_team_code").sum()) if attempted and "kalshi_match_reason" in best_picks_df.columns else 0
-        diagnostics["kalshi_no_market_rows"] = int(best_picks_df["kalshi_match_reason"].astype(str).eq("no_market_for_tickers").sum()) if attempted and "kalshi_match_reason" in best_picks_df.columns else 0
-
-        st.session_state.analysis_df = analysis_df
-        st.session_state["diagnostics"] = diagnostics
-
         if analysis_df.empty:
             st.warning("No rows found for the selected sports.")
             st.session_state["analysis_df"] = pd.DataFrame()
@@ -161,8 +158,21 @@ def main() -> None:
             st.session_state["gemini_df"] = pd.DataFrame()
             st.session_state["simulation_results"] = {}
             st.session_state["best_picks_df"] = pd.DataFrame()
+            st.session_state["diagnostics"] = diagnostics
             return
 
+        if diagnostics.get("best_pick_nonempty_rows", 0) > 0 and (best_picks_df is None or best_picks_df.empty):
+            best_picks_df = build_best_picks_df(analysis_df)
+
+        if diagnostics.get("best_pick_nonempty_rows", 0) > 0 and (best_picks_df is None or best_picks_df.empty):
+            raise ValueError("best_picks_df is empty despite computed best-pick rows; state mismatch in pipeline/app wiring")
+
+        if isinstance(best_picks_df, pd.DataFrame) and not best_picks_df.empty:
+            if "game_date" not in best_picks_df.columns:
+                raise ValueError("best_picks_df missing game_date before Kalshi enrichment")
+            best_picks_df = enrich_with_kalshi_markets(best_picks_df)
+
+        analysis_df = _merge_kalshi_into_analysis(analysis_df, best_picks_df)
 
         if controls["use_gemini"]:
             from integrations.gemini_client import run_gemini_analysis
@@ -172,35 +182,30 @@ def main() -> None:
         if "gemini_analysis" not in analysis_df.columns:
             analysis_df["gemini_analysis"] = ""
 
-        parlays_df = generate_parlays(best_picks_df) if best_picks_df is not None and not best_picks_df.empty else pd.DataFrame(columns=["parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "legs"])
-        st.session_state.parlays_df = parlays_df
+        attempted = int(len(best_picks_df)) if isinstance(best_picks_df, pd.DataFrame) else 0
+        matched = (
+            int(best_picks_df["kalshi_match_status"].astype(str).str.lower().eq("matched").sum())
+            if attempted and "kalshi_match_status" in best_picks_df.columns
+            else int(analysis_df.get("kalshi_match_status", pd.Series(dtype="string")).astype(str).str.lower().eq("matched").sum())
+        )
+        diagnostics["kalshi_attempted"] = attempted
+        diagnostics["kalshi_matches"] = matched
+        diagnostics["kalshi_match_rate"] = float(matched / max(attempted, 1))
+        diagnostics["match_rate"] = diagnostics["kalshi_match_rate"]
+        diagnostics["kalshi_missing_date_rows"] = int(best_picks_df["kalshi_match_reason"].astype(str).eq("missing_date").sum()) if attempted and "kalshi_match_reason" in best_picks_df.columns else 0
+        diagnostics["kalshi_missing_team_code_rows"] = int(best_picks_df["kalshi_match_reason"].astype(str).eq("missing_team_code").sum()) if attempted and "kalshi_match_reason" in best_picks_df.columns else 0
+        diagnostics["kalshi_no_market_rows"] = int(best_picks_df["kalshi_match_reason"].astype(str).eq("no_market_for_tickers").sum()) if attempted and "kalshi_match_reason" in best_picks_df.columns else 0
+        diagnostics["best_picks"] = int(len(best_picks_df)) if isinstance(best_picks_df, pd.DataFrame) else 0
+        diagnostics["positive_ev_rows"] = int((_safe_numeric_series(analysis_df, "expected_value", 0.0) > 0).sum()) if not analysis_df.empty else 0
+
+        parlays_df = generate_parlays(best_picks_df)
         parlay_columns = ["parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "legs"]
         for leg_count in (2, 3, 4, 5):
             parlay_slice = parlays_df[_safe_numeric_series(parlays_df, "legs").eq(leg_count)].copy()
-            if not parlay_slice.empty:
-                parlay_slice = parlay_slice[parlay_columns]
-            else:
-                parlay_slice = pd.DataFrame(columns=parlay_columns)
-            st.session_state[f"parlays_{leg_count}_df"] = parlay_slice
-        portfolio_source_df = best_picks_df if best_picks_df is not None and not best_picks_df.empty else pd.DataFrame()
-        portfolio_df = optimize_portfolio_allocation(
-            portfolio_source_df,
-            bankroll=float(controls["bankroll"]),
-        ) if not portfolio_source_df.empty else pd.DataFrame()
-        if isinstance(portfolio_df, pd.DataFrame) and not portfolio_df.empty:
-            if "best_pick" not in portfolio_df.columns:
-                portfolio_df["best_pick"] = pd.NA
-            if "best_pick" in portfolio_source_df.columns:
-                empty_best_pick = portfolio_df["best_pick"].isna() | portfolio_df["best_pick"].astype(str).str.strip().eq("")
-                join_keys = [
-                    c
-                    for c in ["league", "home_team", "away_team", "game_date"]
-                    if c in portfolio_df.columns and c in portfolio_source_df.columns
-                ]
-                if join_keys:
-                    best_lookup = portfolio_source_df[join_keys + ["best_pick"]].drop_duplicates()
-                    recovered = portfolio_df.loc[empty_best_pick, join_keys].merge(best_lookup, on=join_keys, how="left")
-                    portfolio_df.loc[empty_best_pick, "best_pick"] = recovered["best_pick"].values
+            st.session_state[f"parlays_{leg_count}_df"] = parlay_slice[parlay_columns] if not parlay_slice.empty else pd.DataFrame(columns=parlay_columns)
+
+        portfolio_df = optimize_portfolio_allocation(best_picks_df, bankroll=float(controls["bankroll"]))
+
         required_portfolio_cols = {"calibrated_probability", "decimal_odds", "recommended_bet"}
         if portfolio_df is not None and not portfolio_df.empty and required_portfolio_cols.issubset(set(portfolio_df.columns)):
             simulation_results = run_bankroll_simulation(portfolio_df, bankroll=float(controls["bankroll"]))
@@ -217,13 +222,7 @@ def main() -> None:
 
         valid_theover_frames = []
         for frame in theover_frames:
-            if frame is None:
-                continue
-            if not isinstance(frame, pd.DataFrame):
-                continue
-            if frame.empty:
-                continue
-            if frame.dropna(how="all").empty:
+            if frame is None or not isinstance(frame, pd.DataFrame) or frame.empty or frame.dropna(how="all").empty:
                 continue
             valid_theover_frames.append(frame)
         theover_df = pd.concat(valid_theover_frames, ignore_index=True) if valid_theover_frames else pd.DataFrame()
@@ -248,6 +247,7 @@ def main() -> None:
         st.session_state["kalshi_df"] = kalshi_df
         st.session_state["gemini_df"] = gemini_df
         st.session_state["simulation_results"] = simulation_results
+        st.session_state["diagnostics"] = diagnostics
         st.session_state["best_picks_df"] = best_picks_df
     analysis_df = st.session_state["analysis_df"]
     parlays_df = st.session_state["parlays_df"]
@@ -279,7 +279,7 @@ def main() -> None:
     date_fill_attempted = int(diagnostics.get("date_fill_total_rows", 0))
     date_fill_filled = int(diagnostics.get("date_fill_success_rows", 0))
     date_fill_rate = float(diagnostics.get("date_fill_success_rate", 0.0))
-    positive_ev_picks = int(diagnostics.get("positive_ev_picks", 0))
+    positive_ev_rows = int(diagnostics.get("positive_ev_rows", 0))
     odds_base_loaded = bool(diagnostics.get("odds_schedule_loaded", False))
     with st.container():
         m1, m2, m3, m4, m5, m6, m7, m8, m9 = st.columns(9)
@@ -291,7 +291,7 @@ def main() -> None:
         m6.metric("TheOver totals games", f"{totals_bet_games}/{games_count}")
         m7.metric("TheOver spreads games", f"{spreads_bet_games}/{games_count}")
         m8.metric("Date fill success", f"{date_fill_filled}/{date_fill_attempted} ({date_fill_rate:.0%})")
-        m9.metric("Positive EV picks", positive_ev_picks)
+        m9.metric("Positive EV rows", positive_ev_rows)
         st.progress(max(0.0, min(1.0, match_rate)), text=f"Kalshi match rate: {match_rate:.0%}")
         st.caption(f"Merge keys used: {diagnostics.get('merge_keys_used', [])}")
         st.caption(f"Odds/base schedule loaded: {odds_base_loaded}")
@@ -330,6 +330,10 @@ def main() -> None:
 
     with tab3:
         st.subheader("Best Picks")
+        if (best_picks_df is None or best_picks_df.empty) and diagnostics.get("best_pick_nonempty_rows", 0) > 0:
+            best_picks_df = build_best_picks_df(analysis_df)
+            st.session_state["best_picks_df"] = best_picks_df
+
         if best_picks_df is None or best_picks_df.empty:
             st.info("No eligible spread/total best picks found.")
             with st.expander("Best Picks Debug Diagnostics", expanded=True):
