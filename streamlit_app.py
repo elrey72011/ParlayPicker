@@ -117,8 +117,10 @@ def main() -> None:
 
     controls = render_sidebar()
     run_clicked = bool(controls["run_analysis"])
-
     if run_clicked:
+        st.session_state["_pipeline_triggered"] = True
+
+    if st.session_state.pop("_pipeline_triggered", False):
         spreads_df = load_theover_csv(controls.get("theover_spreads"))
         totals_df = load_theover_csv(controls.get("theover_totals"))
 
@@ -163,6 +165,9 @@ def main() -> None:
         if isinstance(best_picks_df, pd.DataFrame) and not best_picks_df.empty:
             if "game_date" not in best_picks_df.columns:
                 raise ValueError("best_picks_df missing game_date before Kalshi enrichment")
+            # Assertion: every row must have a non-null game_date before enrich_with_kalshi_markets() is called.
+            if best_picks_df["game_date"].isna().any():
+                raise ValueError("best_picks_df has null game_date values before Kalshi enrichment")
             best_picks_df = enrich_with_kalshi_markets(best_picks_df)
 
         analysis_df = _merge_kalshi_into_analysis(analysis_df, best_picks_df)
