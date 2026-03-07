@@ -33,7 +33,7 @@ BEST_PICK_COLUMNS = [
     "parlay_rank",
     "league", "home_team", "away_team", "game_date", "game_time_est", "market_type", "best_pick",
     "calibrated_probability", "expected_value", "edge", "consensus_agreement",
-    "odds_american", "market_probability", "ml_probability",
+    "odds_american", "odds_source", "market_probability", "ml_probability",
     "kalshi_probability", "kalshi_match_status", "kalshi_match_reason",
 ]
 
@@ -70,12 +70,15 @@ def _numeric_series(df: pd.DataFrame, col: str, default: float | int | None = No
     return out
 
 
-def _shrink_to_market(model_prob: pd.Series, market_prob: pd.Series, model_weight: float = 0.35) -> pd.Series:
+def _shrink_to_market(model_prob: pd.Series, market_prob: pd.Series, model_weight: float | pd.Series = 0.35) -> pd.Series:
     """Shrink model probabilities toward market-implied probability to reduce overconfidence."""
-    mw = float(model_weight)
-    mk = 1.0 - mw
     model = pd.to_numeric(model_prob, errors="coerce")
     market = pd.to_numeric(market_prob, errors="coerce")
+    if isinstance(model_weight, pd.Series):
+        mw = pd.to_numeric(model_weight, errors="coerce").reindex(model.index).fillna(0.35).clip(0.05, 0.95)
+    else:
+        mw = pd.Series(float(model_weight), index=model.index, dtype="float64").clip(0.05, 0.95)
+    mk = 1.0 - mw
     shrunk = model * mw + market * mk
     return shrunk.clip(0.02, 0.98)
 
@@ -531,6 +534,9 @@ def run_analysis_pipeline(
 
     merge_keys = ["league", "home_team", "away_team"]
     merged = bet_rows.copy()
+    merged["odds_source"] = "fallback_-110"
+    uploaded_odds = _numeric_series(merged, "odds_american")
+    merged.loc[uploaded_odds.notna() & (uploaded_odds != -110), "odds_source"] = "uploaded"
     if not base_df.empty:
         base_schedule = base_df.copy()
         base_schedule["league"] = _string_series(base_schedule, "league").str.upper().replace(LEAGUE_ALIASES)
@@ -562,10 +568,9 @@ def run_analysis_pipeline(
         if "odds_american_base" in merged.columns:
             odds_current = _numeric_series(merged, "odds_american")
             odds_base = _numeric_series(merged, "odds_american_base")
-            merged["odds_american"] = odds_current.where(
-                odds_current.notna() & (odds_current != -110),
-                odds_base,
-            )
+            use_base = ~(odds_current.notna() & (odds_current != -110)) & odds_base.notna()
+            merged["odds_american"] = odds_current.where(~use_base, odds_base)
+            merged.loc[use_base, "odds_source"] = "base_direct"
             merged = merged.drop(columns=["odds_american_base"])
 
         if "ml_probability_base" in merged.columns:
@@ -593,10 +598,9 @@ def run_analysis_pipeline(
         if "odds_american_rev" in merged.columns:
             odds_current = _numeric_series(merged, "odds_american")
             odds_rev = _numeric_series(merged, "odds_american_rev")
-            merged["odds_american"] = odds_current.where(
-                odds_current.notna() & (odds_current != -110),
-                odds_rev,
-            )
+            use_rev = ~(odds_current.notna() & (odds_current != -110)) & odds_rev.notna()
+            merged["odds_american"] = odds_current.where(~use_rev, odds_rev)
+            merged.loc[use_rev, "odds_source"] = "base_reverse"
             merged = merged.drop(columns=["odds_american_rev"])
 
         if "ml_probability_rev" in merged.columns:
@@ -619,6 +623,7 @@ def run_analysis_pipeline(
 
     merged["game_date"] = _game_dates(merged)
     merged["odds_american"] = _numeric_series(merged, "odds_american", -110.0)
+    merged.loc[_numeric_series(merged, "odds_american", -110.0).eq(-110) & _string_series(merged, "odds_source").str.len().eq(0), "odds_source"] = "fallback_-110"
     merged["decimal_odds"] = merged["odds_american"].apply(american_to_decimal)
     merged["market_probability"] = (1.0 / merged["decimal_odds"]).clip(0.01, 0.99)
 
@@ -637,7 +642,9 @@ def run_analysis_pipeline(
     )
     calibrated_probability = pd.Series(calibrated_probability, index=merged.index, dtype="float64")
     calibrated_probability = calibrated_probability.where(calibrated_probability.notna(), merged["market_probability"])
-    calibrated_probability = _shrink_to_market(calibrated_probability, merged["market_probability"], model_weight=0.35)
+    model_weight = pd.Series(0.35, index=merged.index, dtype="float64")
+    model_weight = model_weight.where(_string_series(merged, "odds_source").ne("fallback_-110"), 0.20)
+    calibrated_probability = _shrink_to_market(calibrated_probability, merged["market_probability"], model_weight=model_weight)
 
     merged["theover_probability"] = theover_probability
     merged["calibrated_probability"] = calibrated_probability
@@ -698,6 +705,7 @@ def run_analysis_pipeline(
         "best_pick_nonempty_rows": int(_string_series(best_picks_df, "best_pick").str.strip().str.len().gt(0).sum()) if not best_picks_df.empty else 0,
         "best_picks_count": int(len(best_picks_df)),
         "odds_schedule_loaded": odds_schedule_loaded,
+        "odds_source_counts": _string_series(analysis_df, "odds_source").value_counts(dropna=False).to_dict() if not analysis_df.empty else {},
         "base_rows_loaded": int(len(base_df)),
         "merge_keys_used": merge_keys,
         "stale_base_schedule": stale,

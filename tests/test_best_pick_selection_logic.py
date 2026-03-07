@@ -57,6 +57,7 @@ def test_build_best_picks_selects_highest_ev_market_per_game_and_formats_pick():
         "edge",
         "consensus_agreement",
         "odds_american",
+        "odds_source",
         "market_probability",
         "ml_probability",
         "kalshi_probability",
