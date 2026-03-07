@@ -49,6 +49,25 @@ _EXPORT_SIGNAL_COLS = {"market_type", "calibrated_probability", "expected_value"
 # Cap combos per leg count to prevent combinatorial explosion
 _MAX_PARLAY_COMBOS_PER_LEG = 500
 
+_UPLOAD_COLUMN_ALIASES = {
+    "hometeam": "home_team",
+    "home team": "home_team",
+    "home": "home_team",
+    "awayteam": "away_team",
+    "away team": "away_team",
+    "away": "away_team",
+    "pickteam": "pick_team",
+    "pick team": "pick_team",
+    "winprobability": "theover_probability",
+    "win probability": "theover_probability",
+    "league": "league",
+    "sport": "league",
+    "game date": "game_date",
+    "gamedate": "game_date",
+    "game time": "game_time_est",
+    "game time (et)": "game_time_est",
+}
+
 
 def _string_series(df: pd.DataFrame, col: str, default: str = "") -> pd.Series:
     if df is None or df.empty:
@@ -144,15 +163,9 @@ def _normalize_upload(df: pd.DataFrame | None) -> pd.DataFrame:
         return pd.DataFrame()
     out = df.copy()
     out.columns = [str(c).strip().lower() for c in out.columns]
-    # TheOver export uses HomeTeam/AwayTeam (camelCase) — normalize to home_team/away_team
-    if "hometeam" in out.columns and "home_team" not in out.columns:
-        out = out.rename(columns={"hometeam": "home_team"})
-    if "awayteam" in out.columns and "away_team" not in out.columns:
-        out = out.rename(columns={"awayteam": "away_team"})
-    if "winprobability" in out.columns and "theover_probability" not in out.columns:
-        out = out.rename(columns={"winprobability": "theover_probability"})
-    if "pickteam" in out.columns and "pick_team" not in out.columns:
-        out = out.rename(columns={"pickteam": "pick_team"})
+    for src, dst in _UPLOAD_COLUMN_ALIASES.items():
+        if src in out.columns and dst not in out.columns:
+            out = out.rename(columns={src: dst})
     out["league"] = _string_series(out, "league").str.upper().replace(LEAGUE_ALIASES)
     out["home_team"] = _string_series(out, "home_team").map(normalize_team_name)
     out["away_team"] = _string_series(out, "away_team").map(normalize_team_name)
@@ -174,6 +187,9 @@ def _is_pipeline_export(df: pd.DataFrame | None) -> bool:
 def _coerce_export_to_canonical(df: pd.DataFrame, selected_sports: list[str] | None) -> pd.DataFrame:
     out = df.copy()
     out.columns = [str(c).strip().lower() for c in out.columns]
+    for src, dst in _UPLOAD_COLUMN_ALIASES.items():
+        if src in out.columns and dst not in out.columns:
+            out = out.rename(columns={src: dst})
     out["league"] = _string_series(out, "league").str.upper().replace(LEAGUE_ALIASES)
     out["home_team"] = _string_series(out, "home_team").map(normalize_team_name)
     out["away_team"] = _string_series(out, "away_team").map(normalize_team_name)
@@ -672,6 +688,8 @@ def run_analysis_pipeline(
             merged = merged.drop(columns=["game_time_est_rev"])
 
     merged["game_date"] = _game_dates(merged)
+    if merged["game_date"].isna().all():
+        merged["game_date"] = _game_date_fallback()
     merged["game_time_est"] = _format_game_time_est(merged)
     merged["odds_american"] = _numeric_series(merged, "odds_american", -110.0)
     merged.loc[_numeric_series(merged, "odds_american", -110.0).eq(-110) & _string_series(merged, "odds_source").str.len().eq(0), "odds_source"] = "fallback_-110"
