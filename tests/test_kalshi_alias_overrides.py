@@ -34,3 +34,8 @@ def test_ncaab_alias_matchup_examples_map_to_expected_codes():
 
     assert _det_team_code("NCAAB", "FGCU") == "FGCU"
     assert _det_team_code("NCAAB", "Kennesaw St") == "KENN"
+
+
+def test_ncaab_alias_additional_mappings():
+    assert _det_team_code("NCAAB", "Columbia") == "CLMB"
+    assert _det_team_code("NCAAB", "Saint Mary's") == "SMC"
