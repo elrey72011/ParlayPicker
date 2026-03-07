@@ -79,13 +79,15 @@ def _safe_str_series(df: pd.DataFrame, col: str, default: str = "") -> pd.Series
 
 
 
-def _consume_run_click(state: dict[str, Any], run_clicked: bool) -> bool:
-    """Edge-trigger run button events so sticky truthy values can't retrigger endlessly."""
-    latch_key = "run_analysis_click_latch"
-    latched = bool(state.get(latch_key, False))
-    should_run = bool(run_clicked and not latched)
-    state[latch_key] = bool(run_clicked)
-    return should_run
+
+
+def _should_run_pipeline(state: dict[str, Any], run_counter: int) -> bool:
+    """Run once per monotonically increasing sidebar run counter."""
+    last_processed = int(state.get("last_processed_run_counter", 0))
+    if run_counter <= last_processed:
+        return False
+    state["last_processed_run_counter"] = run_counter
+    return True
 
 def _safe_numeric_series(df: pd.DataFrame, col: str, default: float | int | None = None) -> pd.Series:
     if df is None or df.empty:
@@ -313,8 +315,8 @@ def main() -> None:
         st.session_state.setdefault(f"parlays_{leg_count}_df", pd.DataFrame())
 
     controls = render_sidebar()
-    run_clicked = bool(controls["run_analysis"])
-    should_run = _consume_run_click(st.session_state, run_clicked)
+    run_counter = int(controls.get("run_analysis_counter", 0))
+    should_run = _should_run_pipeline(st.session_state, run_counter)
 
     # Only run pipeline once per button click; always reset flag on completion or crash
     if should_run and not st.session_state.get("pipeline_running", False):
