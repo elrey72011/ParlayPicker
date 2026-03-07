@@ -95,6 +95,15 @@ def _normalize_upload(df: pd.DataFrame | None) -> pd.DataFrame:
         return pd.DataFrame()
     out = df.copy()
     out.columns = [str(c).strip().lower() for c in out.columns]
+    # TheOver export uses HomeTeam/AwayTeam (camelCase) — normalize to home_team/away_team
+    if "hometeam" in out.columns and "home_team" not in out.columns:
+        out = out.rename(columns={"hometeam": "home_team"})
+    if "awayteam" in out.columns and "away_team" not in out.columns:
+        out = out.rename(columns={"awayteam": "away_team"})
+    if "winprobability" in out.columns and "theover_probability" not in out.columns:
+        out = out.rename(columns={"winprobability": "theover_probability"})
+    if "pickteam" in out.columns and "pick_team" not in out.columns:
+        out = out.rename(columns={"pickteam": "pick_team"})
     out["league"] = _string_series(out, "league").str.upper().replace(LEAGUE_ALIASES)
     out["home_team"] = _string_series(out, "home_team").map(normalize_team_name)
     out["away_team"] = _string_series(out, "away_team").map(normalize_team_name)
@@ -245,27 +254,38 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _build_spread_rows(normalized: pd.DataFrame) -> list[pd.DataFrame]:
-    """Expand a raw spreads upload into spread_home + spread_away rows."""
-    spread_line = _first_existing_numeric(normalized, ["spread_line", "spread", "line", "points"])
-    spread_prob = _first_existing_numeric(normalized, ["theover_probability", "winprobability", "win_probability", "probability"])
-    spread_odds = _first_existing_numeric(normalized, ["odds_american", "american_odds", "odds"], default=-110.0)
+    """Build spread_home and spread_away rows from TheOver export.
+    TheOver's 'Line' is the PickTeam's spread line (already signed correctly for them).
+    The opposing team gets the negated line.
+    """
+    line = _first_existing_numeric(normalized, ["line", "spread_line", "spread", "points"])
+    prob = _first_existing_numeric(normalized, ["theover_probability", "winprobability", "win_probability", "probability"])
+    odds = _first_existing_numeric(normalized, ["odds_american", "american_odds", "odds"], default=-110.0)
 
     base_cols = [c for c in ["league", "home_team", "away_team", "game_date", "game_time_est"] if c in normalized.columns]
     base = normalized[base_cols].copy()
 
+    # Determine which team is the pick team
+    pick_team = _string_series(normalized, "pick_team")
+    home_team = _string_series(normalized, "home_team")
+    away_team = _string_series(normalized, "away_team")
+
+    # pick_is_home: True when PickTeam matches HomeTeam
+    pick_is_home = pick_team.str.strip().str.lower() == home_team.str.strip().str.lower()
+
     spread_home = base.copy()
     spread_home["market_type"] = "spread_home"
-    spread_home["spread_line"] = spread_line
+    spread_home["spread_line"] = line.where(pick_is_home, -line)
     spread_home["total_line"] = pd.NA
-    spread_home["theover_probability"] = spread_prob
-    spread_home["odds_american"] = spread_odds
+    spread_home["theover_probability"] = prob.where(pick_is_home, (1 - prob).where(prob.notna(), pd.NA))
+    spread_home["odds_american"] = odds
 
     spread_away = base.copy()
     spread_away["market_type"] = "spread_away"
-    spread_away["spread_line"] = -spread_line
+    spread_away["spread_line"] = -line.where(pick_is_home, -line)  # negated from home
     spread_away["total_line"] = pd.NA
-    spread_away["theover_probability"] = (1 - spread_prob).where(spread_prob.notna(), pd.NA)
-    spread_away["odds_american"] = spread_odds
+    spread_away["theover_probability"] = (1 - prob).where(pick_is_home & prob.notna(), prob.where(prob.notna(), pd.NA))
+    spread_away["odds_american"] = odds
 
     return [spread_home, spread_away]
 
@@ -318,6 +338,11 @@ def build_theover_bet_rows(
             continue
 
         normalized = _normalize_upload(upload_df)
+        # Drop moneyline rows from spreads file — TheOver exports NHL moneylines in the sides CSV
+        if file_type == "spreads" and "market" in normalized.columns:
+            normalized = normalized[
+                normalized["market"].str.lower().str.strip().ne("moneyline")
+            ].copy()
         if normalized.empty:
             continue
 
@@ -434,11 +459,17 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     df.loc[disagrees, "consensus_agreement"] = "❌ Disagrees"
     df = df.sort_values(["expected_value", "edge"], ascending=[False, False])
 
-    pick_df = (
-        df.groupby(["league", "home_team", "away_team", "game_date"], dropna=False, as_index=False)
+    spread_picks = (
+        df[df["market_type"].str.startswith("spread")]
+        .groupby(["league", "home_team", "away_team", "game_date"], dropna=False, as_index=False)
         .head(1)
-        .reset_index(drop=True)
     )
+    total_picks = (
+        df[df["market_type"].str.startswith("total")]
+        .groupby(["league", "home_team", "away_team", "game_date"], dropna=False, as_index=False)
+        .head(1)
+    )
+    pick_df = pd.concat([spread_picks, total_picks], ignore_index=True).reset_index(drop=True)
 
     pick_df = pick_df.sort_values(["calibrated_probability", "expected_value"], ascending=[False, False]).reset_index(drop=True)
     pick_df["parlay_rank"] = range(1, len(pick_df) + 1)
