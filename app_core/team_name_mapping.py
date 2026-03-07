@@ -259,7 +259,7 @@ def get_team_variants(team_name: str) -> List[str]:
 
     return unique_variants
 
-def fuzzy_match_teams(team1: str, team2: str, threshold: int = 85) -> Tuple[bool, int]:
+def fuzzy_match_teams(team1: str, team2: str, threshold: int = 80) -> Tuple[bool, int]:
     """
     Perform fuzzy matching between two team names.
 

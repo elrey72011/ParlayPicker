@@ -137,7 +137,7 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
 
     analysis_df, best_picks_df, diagnostics = run_analysis_pipeline(
         sports=controls["sports"],
-        max_rows=int(controls["max_rows"]),
+        max_rows=10_000,
         use_ml=bool(controls["use_ml"]),
         spreads_df=spreads_df,
         totals_df=totals_df,
@@ -329,10 +329,15 @@ def main() -> None:
     date_fill_filled = int(diagnostics.get("date_fill_success_rows", 0))
     date_fill_rate = float(diagnostics.get("date_fill_success_rate", 0.0))
     positive_ev_rows = int(diagnostics.get("positive_ev_rows", 0))
+    consensus_agrees = (
+        int(best_picks_df["consensus_agreement"].astype(str).eq("✅ Agrees").sum())
+        if isinstance(best_picks_df, pd.DataFrame) and "consensus_agreement" in best_picks_df.columns
+        else 0
+    )
     odds_base_loaded = bool(diagnostics.get("odds_schedule_loaded", False))
 
     with st.container():
-        m1, m2, m3, m4, m5, m6, m7, m8, m9 = st.columns(9)
+        m1, m2, m3, m4, m5, m6, m7, m8, m9, m10 = st.columns(10)
         m1.metric("Total games", games_count)
         m2.metric("Bet rows", bet_rows)
         m3.metric("Best picks", best_rows)
@@ -342,6 +347,7 @@ def main() -> None:
         m7.metric("TheOver spreads games", f"{spreads_games}/{games_count}")
         m8.metric("Date fill success", f"{date_fill_filled}/{date_fill_attempted} ({date_fill_rate:.0%})")
         m9.metric("Positive EV rows", positive_ev_rows)
+        m10.metric("Consensus ✅", consensus_agrees)
         st.progress(max(0.0, min(1.0, match_rate)), text=f"Kalshi match rate: {match_rate:.0%}")
         st.caption(f"Merge keys used: {diagnostics.get('merge_keys_used', [])}")
         st.caption(f"Odds/base schedule loaded: {odds_base_loaded}")
@@ -401,14 +407,15 @@ def main() -> None:
                 "calibrated_probability": "Prob",
                 "expected_value": "EV",
                 "edge": "Edge",
+                "consensus_agreement": "Consensus",
                 "kalshi_match_status": "Kalshi Status",
             }
             display_df = display_df.rename(columns=rename_map)
-            preferred = ["League", "Home Team", "Away Team", "Game Date", "Best Pick", "Prob", "EV", "Edge", "Kalshi Status"]
+            preferred = ["League", "Home Team", "Away Team", "Game Date", "Best Pick", "Prob", "EV", "Edge", "Consensus", "Kalshi Status"]
             ordered = [c for c in preferred if c in display_df.columns] + [c for c in display_df.columns if c not in preferred]
             display_df = display_df[ordered]
             st.dataframe(display_df, use_container_width=True)
-            export_cols = [c for c in ["league", "home_team", "away_team", "game_date", "best_pick", "calibrated_probability", "expected_value", "edge", "odds_american", "market_probability", "ml_probability"] if c in best_picks_df.columns]
+            export_cols = [c for c in ["league", "home_team", "away_team", "game_date", "best_pick", "calibrated_probability", "expected_value", "edge", "consensus_agreement", "odds_american", "market_probability", "ml_probability"] if c in best_picks_df.columns]
             best_picks_export = best_picks_df[export_cols] if export_cols else best_picks_df
             best_picks_csv = best_picks_export.to_csv(index=False)
             st.download_button(
@@ -510,6 +517,23 @@ def main() -> None:
             st.info("Enable 'Display Debug Information' in the sidebar to inspect debug data.")
         if controls["show_kalshi_diagnostics"]:
             render_kalshi_diagnostics(analysis_df)
+            if analysis_df is not None and not analysis_df.empty and "kalshi_match_status" in analysis_df.columns:
+                failures_df = analysis_df[
+                    analysis_df["kalshi_match_status"].astype(str).str.lower().ne("matched")
+                ].copy()
+                failure_cols = [
+                    "league",
+                    "home_team",
+                    "away_team",
+                    "kalshi_match_status",
+                    "kalshi_match_reason",
+                ]
+                visible_cols = [c for c in failure_cols if c in failures_df.columns]
+                with st.expander("Kalshi Match Failures", expanded=False):
+                    if failures_df.empty or not visible_cols:
+                        st.info("No unmatched Kalshi rows found.")
+                    else:
+                        st.dataframe(failures_df[visible_cols], use_container_width=True)
 
     with tab7:
         render_strategy_lab(
