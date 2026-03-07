@@ -117,10 +117,8 @@ def main() -> None:
 
     controls = render_sidebar()
     run_clicked = bool(controls["run_analysis"])
-    if run_clicked:
-        st.session_state["_pipeline_triggered"] = True
 
-    if st.session_state.pop("_pipeline_triggered", False):
+    if run_clicked:
         spreads_df = load_theover_csv(controls.get("theover_spreads"))
         totals_df = load_theover_csv(controls.get("theover_totals"))
 
@@ -240,7 +238,6 @@ def main() -> None:
         st.session_state["simulation_results"] = simulation_results
         st.session_state["diagnostics"] = diagnostics
         st.session_state["best_picks_df"] = best_picks_df
-        st.rerun()
     analysis_df = st.session_state["analysis_df"]
     parlays_df = st.session_state["parlays_df"]
     portfolio_df = st.session_state["portfolio_df"]
@@ -253,7 +250,7 @@ def main() -> None:
     diagnostics = st.session_state.get("diagnostics", {})
 
     pipeline_status = st.session_state.get("pipeline_status", "idle")
-    if not analysis_df.empty:
+    if st.session_state.get("analysis_df") is not None and not st.session_state["analysis_df"].empty:
         st.caption(f"Pipeline status: {pipeline_status}")
 
     if analysis_df is None or analysis_df.empty:
