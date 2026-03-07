@@ -121,8 +121,14 @@ def _merge_kalshi_into_analysis(analysis_df: pd.DataFrame, best_picks_df: pd.Dat
     if "best_pick" in analysis_df.columns and "best_pick" in best_picks_df.columns:
         merge_keys.append("best_pick")
 
-    right = best_picks_df[merge_keys + available_cols].drop_duplicates()
-    merged = analysis_df.merge(right, on=merge_keys, how="left", suffixes=("", "_best"))
+    left = analysis_df.copy()
+    right = best_picks_df[merge_keys + available_cols].drop_duplicates().copy()
+
+    if "game_date" in merge_keys:
+        left["game_date"] = pd.to_datetime(left["game_date"], errors="coerce", utc=True)
+        right["game_date"] = pd.to_datetime(right["game_date"], errors="coerce", utc=True)
+
+    merged = left.merge(right, on=merge_keys, how="left", suffixes=("", "_best"))
     for col in available_cols:
         best_col = f"{col}_best"
         if best_col in merged.columns:
