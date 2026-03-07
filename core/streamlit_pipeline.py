@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import logging
 import sys
 from itertools import combinations
@@ -11,19 +12,6 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-
-try:
-    import streamlit as st
-except Exception:  # pragma: no cover
-    class _StreamlitShim:
-        @staticmethod
-        def cache_data(*_args: Any, **_kwargs: Any):
-            def _decorator(func):
-                return func
-
-            return _decorator
-
-    st = _StreamlitShim()
 
 from core.bankroll_simulator import simulate_bankroll
 from core.kelly_optimizer import add_kelly_bet_sizing
@@ -146,8 +134,13 @@ def _mk_game_key(df: pd.DataFrame) -> pd.Series:
     )
 
 
-@st.cache_data(ttl=300)
+@functools.lru_cache(maxsize=1)
 def load_base_data() -> pd.DataFrame:
+    """Load the master schedule CSV once per process lifetime.
+
+    Uses functools.lru_cache instead of st.cache_data to avoid
+    Streamlit's cache watcher triggering spurious script reruns.
+    """
     try:
         base_df = pd.read_csv("data/master_all_sports.csv")
     except Exception:
@@ -460,8 +453,7 @@ def run_analysis_pipeline(
     if diagnostics["odds_fallback_only"] and not analysis_df.empty:
         diagnostics["diagnostic_warning"] = "odds_american mostly fallback -110"
 
-    result = (analysis_df, best_picks_df, diagnostics)
-    return result
+    return (analysis_df, best_picks_df, diagnostics)
 
 
 def generate_parlays(best_picks_df: pd.DataFrame, max_legs: int = 5) -> pd.DataFrame:
