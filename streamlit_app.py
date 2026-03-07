@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import traceback
 import warnings
 from typing import Any
 
@@ -39,10 +40,28 @@ from core.team_normalizer import normalize_team
 from core.theover_loader import load_theover_csv
 
 try:
-    from app_core.kalshi_integrator import enrich_with_kalshi_markets
+    from app_core.kalshi_integrator import enrich_with_kalshi_markets as _enrich_kalshi_raw
 except Exception:  # pragma: no cover
-    def enrich_with_kalshi_markets(df: pd.DataFrame) -> pd.DataFrame:
-        return df
+    _enrich_kalshi_raw = None  # type: ignore[assignment]
+
+
+def _enrich_with_kalshi_safe(df: pd.DataFrame) -> tuple[pd.DataFrame, str | None]:
+    """Run Kalshi enrichment with a hard 15-second timeout.
+    Returns (enriched_df, error_message_or_None).
+    """
+    if _enrich_kalshi_raw is None:
+        return df, None
+
+    import concurrent.futures
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+        future = ex.submit(_enrich_kalshi_raw, df)
+        try:
+            result = future.result(timeout=15)
+            return result, None
+        except concurrent.futures.TimeoutError:
+            return df, "Kalshi enrichment timed out (>15s) — skipped."
+        except Exception as e:
+            return df, f"Kalshi enrichment failed: {e}"
 
 
 def _safe_str_series(df: pd.DataFrame, col: str, default: str = "") -> pd.Series:
@@ -96,10 +115,7 @@ def _merge_kalshi_into_analysis(analysis_df: pd.DataFrame, best_picks_df: pd.Dat
 
 def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
     """Run the full analysis pipeline. Returns (state_updates, warnings, errors).
-    
-    Deliberately contains NO st.* calls — all UI feedback is returned to the
-    caller so it can be emitted after session_state is fully written, preventing
-    mid-pipeline Streamlit reruns.
+    Contains NO st.* calls.
     """
     deferred_warnings: list[str] = []
     deferred_errors: list[str] = []
@@ -128,6 +144,8 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
     )
 
     parlay_columns = ["parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "legs"]
+    empty_per_leg = {f"parlays_{lc}_df": pd.DataFrame(columns=parlay_columns) for lc in (2, 3, 4, 5)}
+
     empty_state: dict = {
         "analysis_df": pd.DataFrame(),
         "parlays_df": pd.DataFrame(),
@@ -141,9 +159,8 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
         "diagnostics": diagnostics,
         "pipeline_status": "idle",
         "pipeline_running": False,
+        **empty_per_leg,
     }
-    for lc in (2, 3, 4, 5):
-        empty_state[f"parlays_{lc}_df"] = pd.DataFrame(columns=parlay_columns)
 
     if analysis_df is None or analysis_df.empty:
         deferred_warnings.append("No rows found for the selected sports.")
@@ -152,11 +169,14 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
     if diagnostics.get("best_pick_nonempty_rows", 0) > 0 and (best_picks_df is None or best_picks_df.empty):
         best_picks_df = build_best_picks_df(analysis_df)
 
+    # Kalshi enrichment with hard timeout
     if isinstance(best_picks_df, pd.DataFrame) and not best_picks_df.empty:
         if "game_date" not in best_picks_df.columns or best_picks_df["game_date"].isna().all():
             deferred_warnings.append("game_date missing from best_picks_df — Kalshi matching skipped.")
         else:
-            best_picks_df = enrich_with_kalshi_markets(best_picks_df)
+            best_picks_df, kalshi_err = _enrich_with_kalshi_safe(best_picks_df)
+            if kalshi_err:
+                deferred_warnings.append(kalshi_err)
 
     analysis_df = _merge_kalshi_into_analysis(analysis_df, best_picks_df)
 
@@ -262,18 +282,20 @@ def main() -> None:
     controls = render_sidebar()
     run_clicked = bool(controls["run_analysis"])
 
-    # Gate: only run pipeline on the first rerun after button click,
-    # not on every subsequent rerun caused by session_state writes.
+    # Only run pipeline once per button click; always reset flag on completion or crash
     if run_clicked and not st.session_state.get("pipeline_running", False):
         st.session_state["pipeline_running"] = True
-        with st.spinner("Running analysis..."):
-            state_updates, pipe_warnings, pipe_errors = _run_pipeline(controls)
-        # Single atomic write — no st.* calls inside pipeline
-        st.session_state.update(state_updates)
-        for msg in pipe_warnings:
-            st.warning(msg)
-        for msg in pipe_errors:
-            st.error(msg)
+        try:
+            with st.spinner("Running analysis..."):
+                state_updates, pipe_warnings, pipe_errors = _run_pipeline(controls)
+            st.session_state.update(state_updates)
+            for msg in pipe_warnings:
+                st.warning(msg)
+            for msg in pipe_errors:
+                st.error(msg)
+        except Exception:
+            st.session_state["pipeline_running"] = False
+            st.error(f"Pipeline crashed:\n```\n{traceback.format_exc()}\n```")
 
     analysis_df = st.session_state["analysis_df"]
     parlays_df = st.session_state["parlays_df"]
