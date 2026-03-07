@@ -431,7 +431,7 @@ def _fill_missing_game_dates_from_base(bet_rows_df: pd.DataFrame, base_df: pd.Da
 def is_stale_schedule(base_df: pd.DataFrame, bet_rows_df: pd.DataFrame) -> bool:
     if base_df is None or base_df.empty or bet_rows_df is None or bet_rows_df.empty:
         return False
-    base_dates = pd.to_datetime(base_df.get("game_date"), errors="coerce", utc=True)
+    base_dates = _game_dates(base_df)
     bet_dates = pd.to_datetime(bet_rows_df.get("game_date"), errors="coerce", utc=True)
     if base_dates.notna().sum() == 0 or bet_dates.notna().sum() == 0:
         return False
@@ -484,6 +484,16 @@ def run_analysis_pipeline(
     odds_schedule_loaded = not base_df.empty
 
     bet_rows = build_theover_bet_rows(spreads_df, totals_df, sports)
+    bet_rows["game_date"] = _game_dates(bet_rows)
+    if not bet_rows.empty and not base_df.empty:
+        base_dates = base_df.copy()
+        base_dates["league"] = _string_series(base_dates, "league").str.upper().replace(LEAGUE_ALIASES)
+        base_dates["home_team"] = _string_series(base_dates, "home_team").map(normalize_team_name)
+        base_dates["away_team"] = _string_series(base_dates, "away_team").map(normalize_team_name)
+        base_dates["date"] = _game_dates(base_dates)
+        date_lookup = base_dates[["league", "home_team", "away_team", "date"]].drop_duplicates(["league", "home_team", "away_team"])
+        merged_dates = bet_rows.merge(date_lookup, on=["league", "home_team", "away_team"], how="left")
+        bet_rows["game_date"] = bet_rows["game_date"].fillna(merged_dates["date"])
     bet_rows, date_stats = _fill_missing_game_dates_from_base(bet_rows, base_df)
 
     merge_keys = ["league", "home_team", "away_team"]
@@ -559,7 +569,7 @@ def run_analysis_pipeline(
         logger.warning("best_picks_df empty while analysis_df has spread/total rows")
 
     stale = is_stale_schedule(base_df, analysis_df)
-    base_coverage = float(pd.to_datetime(base_df.get("game_date"), errors="coerce", utc=True).notna().mean()) if not base_df.empty else 0.0
+    base_coverage = float(_game_dates(base_df).notna().mean()) if not base_df.empty else 0.0
 
     diagnostics = {
         "total_rows": int(len(analysis_df)),
