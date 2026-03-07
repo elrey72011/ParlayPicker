@@ -59,7 +59,7 @@ class KalshiMatchResult:
     market_title: str | None = None
     market_subtitle: str | None = None
     probability: float | None = None
-    status: str = "miss"
+    status: str = "no_match"
     reason: str = "no_market_for_tickers"
     tried_tickers: list[str] | None = None
 
@@ -200,7 +200,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
     ]:
         if col not in out.columns:
             out[col] = pd.NA
-    out["kalshi_match_status"] = "miss"
+    out["kalshi_match_status"] = "no_match"
     out["kalshi_match_reason"] = "no_valid_candidates"
     out["kalshi_tried_tickers"] = "[]"
 

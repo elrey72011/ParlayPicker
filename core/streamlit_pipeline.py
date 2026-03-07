@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 import logging
+import sys
 from itertools import combinations
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
+
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 try:
     import streamlit as st
@@ -267,34 +273,30 @@ def build_theover_bet_rows(
 
 def _fill_missing_game_dates_from_base(bet_rows_df: pd.DataFrame, base_df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, float]]:
     out = bet_rows_df.copy()
-    out["game_date"] = pd.to_datetime(out.get("game_date"), errors="coerce", utc=True)
+    out["game_date"] = _game_dates(out)
     missing_before = out["game_date"].isna()
 
-    if base_df is not None and not base_df.empty:
+    if base_df is not None and not base_df.empty and missing_before.any():
         base = base_df.copy()
-        base["game_date"] = pd.to_datetime(base.get("game_date"), errors="coerce", utc=True)
+        base["league"] = _string_series(base, "league").str.upper().replace(LEAGUE_ALIASES)
+        base["home_team"] = _string_series(base, "home_team").map(normalize_team_name)
+        base["away_team"] = _string_series(base, "away_team").map(normalize_team_name)
+        base["game_date"] = _game_dates(base)
         base = base[base["game_date"].notna()].copy()
 
-        direct = base.sort_values("game_date").drop_duplicates(["league", "home_team", "away_team"], keep="last")
+        schedule = (
+            base.sort_values("game_date")
+            .drop_duplicates(["league", "home_team", "away_team"], keep="last")
+            [["league", "home_team", "away_team", "game_date"]]
+        )
         out = out.merge(
-            direct[["league", "home_team", "away_team", "game_date"]],
+            schedule,
             on=["league", "home_team", "away_team"],
             how="left",
             suffixes=("", "_base"),
         )
         out["game_date"] = out["game_date"].where(out["game_date"].notna(), out["game_date_base"])
         out = out.drop(columns=["game_date_base"])
-
-        reverse = base.rename(columns={"home_team": "away_team", "away_team": "home_team"})
-        reverse = reverse.sort_values("game_date").drop_duplicates(["league", "home_team", "away_team"], keep="last")
-        out = out.merge(
-            reverse[["league", "home_team", "away_team", "game_date"]],
-            on=["league", "home_team", "away_team"],
-            how="left",
-            suffixes=("", "_reverse"),
-        )
-        out["game_date"] = out["game_date"].where(out["game_date"].notna(), out["game_date_reverse"])
-        out = out.drop(columns=["game_date_reverse"])
 
     filled = int((missing_before & out["game_date"].notna()).sum())
     missing_after = int(out["game_date"].isna().sum())
