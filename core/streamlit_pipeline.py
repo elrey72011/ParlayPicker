@@ -3,6 +3,7 @@ from __future__ import annotations
 import functools
 import logging
 import sys
+import warnings
 from itertools import combinations
 from pathlib import Path
 from typing import Any
@@ -118,9 +119,16 @@ def _concat_valid_bet_frames(frames: list[pd.DataFrame], expected_columns: list[
             continue
         if frame.dropna(how="all").empty:
             continue
-        valid_frames.append(frame.copy())
+        # Cast NA-only columns to float64 before concat to avoid FutureWarning
+        frame = frame.copy()
+        for col in frame.columns:
+            if frame[col].isna().all():
+                frame[col] = frame[col].astype("float64")
+        valid_frames.append(frame)
 
-    out = pd.concat(valid_frames, ignore_index=True) if valid_frames else pd.DataFrame(columns=expected_columns)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", FutureWarning)
+        out = pd.concat(valid_frames, ignore_index=True) if valid_frames else pd.DataFrame(columns=expected_columns)
     return out
 
 
