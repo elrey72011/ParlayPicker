@@ -20,7 +20,6 @@ from core.probability_engine import american_to_prob
 from core.schema.base_schema import ensure_base_schema
 from core.team_mapper import normalize_team_name
 
-# Suppress pandas FutureWarning about empty/all-NA columns in concat at module level
 warnings.filterwarnings("ignore", category=FutureWarning, module="pandas")
 
 logger = logging.getLogger(__name__)
@@ -30,42 +29,19 @@ DATE_ALIASES = ["game_date", "commence_time", "start_time", "time", "date", "eve
 LEAGUE_ALIASES = {"NCAAM": "NCAAB", "NCAA MEN'S BASKETBALL": "NCAAB", "NCAA MENS BASKETBALL": "NCAAB"}
 
 BEST_PICK_COLUMNS = [
-    "league",
-    "home_team",
-    "away_team",
-    "game_date",
-    "best_pick",
-    "calibrated_probability",
-    "expected_value",
-    "edge",
-    "odds_american",
-    "market_probability",
-    "ml_probability",
-    "kalshi_probability",
-    "kalshi_match_status",
-    "kalshi_match_reason",
+    "league", "home_team", "away_team", "game_date", "best_pick",
+    "calibrated_probability", "expected_value", "edge",
+    "odds_american", "market_probability", "ml_probability",
+    "kalshi_probability", "kalshi_match_status", "kalshi_match_reason",
 ]
 
 CANONICAL_BET_COLUMNS = [
-    "league",
-    "home_team",
-    "away_team",
-    "game_date",
-    "game_key",
-    "market_type",
-    "spread_line",
-    "total_line",
-    "theover_probability",
-    "odds_american",
-    "market_probability",
-    "ml_probability",
-    "calibrated_probability",
-    "expected_value",
-    "edge",
-    "best_pick",
+    "league", "home_team", "away_team", "game_date", "game_key",
+    "market_type", "spread_line", "total_line",
+    "theover_probability", "odds_american", "market_probability",
+    "ml_probability", "calibrated_probability", "expected_value", "edge", "best_pick",
 ]
 
-# Columns that indicate a CSV is already a processed pipeline export
 _EXPORT_SIGNAL_COLS = {"market_type", "calibrated_probability", "expected_value", "edge"}
 
 
@@ -115,7 +91,6 @@ def _normalize_upload(df: pd.DataFrame | None) -> pd.DataFrame:
 
 
 def _is_pipeline_export(df: pd.DataFrame | None) -> bool:
-    """Return True if df looks like a processed pipeline export (already has canonical columns)."""
     if df is None or df.empty:
         return False
     cols = {str(c).strip().lower() for c in df.columns}
@@ -123,7 +98,6 @@ def _is_pipeline_export(df: pd.DataFrame | None) -> bool:
 
 
 def _coerce_export_to_canonical(df: pd.DataFrame, selected_sports: list[str] | None) -> pd.DataFrame:
-    """Normalise a pre-processed pipeline export CSV into CANONICAL_BET_COLUMNS format."""
     out = df.copy()
     out.columns = [str(c).strip().lower() for c in out.columns]
     out["league"] = _string_series(out, "league").str.upper().replace(LEAGUE_ALIASES)
@@ -144,7 +118,6 @@ def _coerce_export_to_canonical(df: pd.DataFrame, selected_sports: list[str] | N
     out["edge"] = pd.to_numeric(out.get("edge"), errors="coerce")
     out["game_key"] = _mk_game_key(out)
     out["best_pick"] = out.apply(_format_best_pick, axis=1)
-    # Re-run full analysis to ensure all derived columns are consistent
     out = _apply_analysis_calculations(out)
     if selected_sports:
         selected = {str(s).upper() for s in selected_sports}
@@ -156,13 +129,10 @@ def _coerce_export_to_canonical(df: pd.DataFrame, selected_sports: list[str] | N
 
 
 def _concat_valid_bet_frames(frames: list[pd.DataFrame], expected_columns: list[str]) -> pd.DataFrame:
-    valid_frames: list[pd.DataFrame] = [
-        frame.copy()
-        for frame in frames
-        if frame is not None
-        and isinstance(frame, pd.DataFrame)
-        and not frame.empty
-        and not frame.dropna(how="all").empty
+    valid_frames = [
+        frame.copy() for frame in frames
+        if frame is not None and isinstance(frame, pd.DataFrame)
+        and not frame.empty and not frame.dropna(how="all").empty
     ]
     if not valid_frames:
         return pd.DataFrame(columns=expected_columns)
@@ -183,7 +153,6 @@ def _mk_game_key(df: pd.DataFrame) -> pd.Series:
 
 @functools.lru_cache(maxsize=1)
 def load_base_data() -> pd.DataFrame:
-    """Load the master schedule CSV once per process lifetime."""
     try:
         base_df = pd.read_csv("data/master_all_sports.csv")
     except Exception:
@@ -246,7 +215,7 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
     theover = theover.where(theover <= 1, theover / 100.0)
     ml = _numeric_series(out, "ml_probability")
     calibrated = theover.where(theover.notna(), ml)
-    calibrated = calibrated.where(calibrated.notna(), out["market_probability"])  # fallback chain
+    calibrated = calibrated.where(calibrated.notna(), out["market_probability"])
     calibrated = calibrated.clip(0.01, 0.99)
 
     out["theover_probability"] = theover
@@ -259,87 +228,108 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def _build_spread_rows(normalized: pd.DataFrame) -> list[pd.DataFrame]:
+    """Expand a raw spreads upload into spread_home + spread_away rows."""
+    spread_line = _first_existing_numeric(normalized, ["spread_line", "spread", "line", "points"])
+    spread_prob = _first_existing_numeric(normalized, ["theover_probability", "winprobability", "win_probability", "probability"])
+    spread_odds = _first_existing_numeric(normalized, ["odds_american", "american_odds", "odds"], default=-110.0)
+
+    base = normalized[["league", "home_team", "away_team", "game_date"]].copy()
+
+    spread_home = base.copy()
+    spread_home["market_type"] = "spread_home"
+    spread_home["spread_line"] = spread_line
+    spread_home["total_line"] = pd.NA
+    spread_home["theover_probability"] = spread_prob
+    spread_home["odds_american"] = spread_odds
+
+    spread_away = base.copy()
+    spread_away["market_type"] = "spread_away"
+    spread_away["spread_line"] = -spread_line
+    spread_away["total_line"] = pd.NA
+    spread_away["theover_probability"] = (1 - spread_prob).where(spread_prob.notna(), pd.NA)
+    spread_away["odds_american"] = spread_odds
+
+    return [spread_home, spread_away]
+
+
+def _build_total_rows(normalized: pd.DataFrame) -> list[pd.DataFrame]:
+    """Expand a raw totals upload into total_over + total_under rows."""
+    total_line = _first_existing_numeric(normalized, ["total_line", "total", "line", "points"])
+    total_prob = _first_existing_numeric(normalized, ["theover_probability", "winprobability", "win_probability", "probability"])
+    total_odds = _first_existing_numeric(normalized, ["odds_american", "american_odds", "odds"], default=-110.0)
+
+    base = normalized[["league", "home_team", "away_team", "game_date"]].copy()
+
+    total_over = base.copy()
+    total_over["market_type"] = "total_over"
+    total_over["spread_line"] = pd.NA
+    total_over["total_line"] = total_line
+    total_over["theover_probability"] = total_prob
+    total_over["odds_american"] = total_odds
+
+    total_under = base.copy()
+    total_under["market_type"] = "total_under"
+    total_under["spread_line"] = pd.NA
+    total_under["total_line"] = total_line
+    total_under["theover_probability"] = (1 - total_prob).where(total_prob.notna(), pd.NA)
+    total_under["odds_american"] = total_odds
+
+    return [total_over, total_under]
+
+
 def build_theover_bet_rows(
     spreads_df: pd.DataFrame | None,
     totals_df: pd.DataFrame | None,
     selected_sports: list[str] | None,
 ) -> pd.DataFrame:
+    """Build canonical bet rows from uploaded CSVs.
+
+    Each upload is tagged by its slot (spreads vs totals), so the row-expansion
+    logic is driven by the uploader label — not by guessing from column names.
+    Pipeline export CSVs (already fully processed) are passed through directly.
+    """
     pieces: list[pd.DataFrame] = []
 
-    for upload_df in (spreads_df, totals_df):
+    uploads: list[tuple[pd.DataFrame | None, str]] = [
+        (spreads_df, "spreads"),
+        (totals_df, "totals"),
+    ]
+
+    for upload_df, file_type in uploads:
         if upload_df is None or (isinstance(upload_df, pd.DataFrame) and upload_df.empty):
             continue
 
         if _is_pipeline_export(upload_df):
-            # Already processed — normalise and pass through directly
-            logger.info("build_theover_bet_rows: detected pipeline export CSV, passing through directly")
+            logger.info("build_theover_bet_rows: detected pipeline export CSV (%s), passing through directly", file_type)
             pieces.append(_coerce_export_to_canonical(upload_df, selected_sports))
             continue
 
-        # Raw TheOver upload — build rows from scratch
+        # Raw upload — expand rows based on which uploader slot it came from
         normalized = _normalize_upload(upload_df)
         if normalized.empty:
             continue
 
-        # Determine if this is a spreads or totals file by checking which line column has data
-        has_spread = "spread_line" in normalized.columns and normalized["spread_line"].notna().any()
-        has_total = "total_line" in normalized.columns and normalized["total_line"].notna().any()
-        # Fall back to checking for generic 'line' column
-        if not has_spread and not has_total:
-            has_spread = "line" in normalized.columns or "spread" in normalized.columns
-            has_total = "total" in normalized.columns or "points" in normalized.columns
-            # If ambiguous, treat as both
-            if not has_spread and not has_total:
-                has_spread = True
-                has_total = True
-
-        if has_spread or (not has_spread and not has_total):
-            spread_line = _first_existing_numeric(normalized, ["spread_line", "spread", "line", "points"])
-            spread_prob = _first_existing_numeric(normalized, ["theover_probability", "winprobability", "win_probability", "probability"])
-            spread_odds = _first_existing_numeric(normalized, ["odds_american", "american_odds", "odds"], default=-110.0)
-
-            base = normalized[["league", "home_team", "away_team", "game_date"]].copy()
-            spread_home = base.copy()
-            spread_home["market_type"] = "spread_home"
-            spread_home["spread_line"] = spread_line
-            spread_home["total_line"] = pd.NA
-            spread_home["theover_probability"] = spread_prob
-            spread_home["odds_american"] = spread_odds
-
-            spread_away = base.copy()
-            spread_away["market_type"] = "spread_away"
-            spread_away["spread_line"] = -spread_line
-            spread_away["total_line"] = pd.NA
-            spread_away["theover_probability"] = (1 - spread_prob).where(spread_prob.notna(), pd.NA)
-            spread_away["odds_american"] = spread_odds
-            pieces.extend([spread_home, spread_away])
-
-        if has_total or (not has_spread and not has_total):
-            total_line = _first_existing_numeric(normalized, ["total_line", "total", "line", "points"])
-            total_prob = _first_existing_numeric(normalized, ["theover_probability", "winprobability", "win_probability", "probability"])
-            total_odds = _first_existing_numeric(normalized, ["odds_american", "american_odds", "odds"], default=-110.0)
-
-            base = normalized[["league", "home_team", "away_team", "game_date"]].copy()
-            total_over = base.copy()
-            total_over["market_type"] = "total_over"
-            total_over["spread_line"] = pd.NA
-            total_over["total_line"] = total_line
-            total_over["theover_probability"] = total_prob
-            total_over["odds_american"] = total_odds
-
-            total_under = base.copy()
-            total_under["market_type"] = "total_under"
-            total_under["spread_line"] = pd.NA
-            total_under["total_line"] = total_line
-            total_under["theover_probability"] = (1 - total_prob).where(total_prob.notna(), pd.NA)
-            total_under["odds_american"] = total_odds
-            pieces.extend([total_over, total_under])
+        if file_type == "spreads":
+            pieces.extend(_build_spread_rows(normalized))
+        elif file_type == "totals":
+            pieces.extend(_build_total_rows(normalized))
+        else:
+            # Fallback: try to infer (should not normally be reached)
+            has_spread_data = "spread_line" in normalized.columns and normalized["spread_line"].notna().any()
+            has_total_data = "total_line" in normalized.columns and normalized["total_line"].notna().any()
+            if has_spread_data:
+                pieces.extend(_build_spread_rows(normalized))
+            if has_total_data:
+                pieces.extend(_build_total_rows(normalized))
+            if not has_spread_data and not has_total_data:
+                pieces.extend(_build_spread_rows(normalized))
+                pieces.extend(_build_total_rows(normalized))
 
     out = _concat_valid_bet_frames(pieces, expected_columns=CANONICAL_BET_COLUMNS)
     if out.empty:
         return pd.DataFrame(columns=CANONICAL_BET_COLUMNS)
 
-    # Final normalisation pass (skip if already done in _coerce_export_to_canonical)
     if "game_key" not in out.columns:
         out["league"] = _string_series(out, "league").str.upper().replace(LEAGUE_ALIASES)
         out["home_team"] = _string_series(out, "home_team").map(normalize_team_name)
@@ -548,15 +538,13 @@ def generate_parlays(best_picks_df: pd.DataFrame, max_legs: int = 5) -> pd.DataF
             odds = float(legs_df["decimal_odds"].prod())
             ev = prob * (odds - 1) - (1 - prob)
             legs_str = " | ".join(legs_df["best_pick"].astype(str).tolist())
-            records.append(
-                {
-                    "parlay_legs": legs_str,
-                    "combined_probability": prob,
-                    "combined_decimal_odds": odds,
-                    "parlay_ev": ev,
-                    "legs": leg_count,
-                }
-            )
+            records.append({
+                "parlay_legs": legs_str,
+                "combined_probability": prob,
+                "combined_decimal_odds": odds,
+                "parlay_ev": ev,
+                "legs": leg_count,
+            })
 
     if not records:
         return pd.DataFrame(columns=cols)
@@ -578,15 +566,9 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
         portfolio["recommended_bet"] = 0.0
 
     cols = [
-        "league",
-        "home_team",
-        "away_team",
-        "best_pick",
-        "calibrated_probability",
-        "expected_value",
-        "edge",
-        "decimal_odds",
-        "recommended_bet",
+        "league", "home_team", "away_team", "best_pick",
+        "calibrated_probability", "expected_value", "edge",
+        "decimal_odds", "recommended_bet",
     ]
     for col in cols:
         if col not in portfolio.columns:
