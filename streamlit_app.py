@@ -31,6 +31,8 @@ from core.streamlit_pipeline import (
     optimize_portfolio_allocation,
     run_analysis_pipeline,
     run_bankroll_simulation,
+    CANONICAL_BET_COLUMNS,
+    VALID_MARKETS,
 )
 from core.team_normalizer import normalize_team
 from core.theover_loader import load_theover_csv
@@ -40,6 +42,35 @@ try:
 except Exception:  # pragma: no cover
     def enrich_with_kalshi_markets(df: pd.DataFrame) -> pd.DataFrame:
         return df
+
+
+# Columns that signal a CSV is already a processed pipeline export
+_PIPELINE_EXPORT_SIGNAL_COLS = {"market_type", "calibrated_probability", "expected_value", "edge"}
+_CANONICAL_COLS_SET = set(CANONICAL_BET_COLUMNS)
+
+
+def _is_pipeline_export(df: pd.DataFrame) -> bool:
+    """Return True if df looks like a processed pipeline export rather than a raw TheOver upload."""
+    if df is None or df.empty:
+        return False
+    cols = set(str(c).strip().lower() for c in df.columns)
+    return bool(_PIPELINE_EXPORT_SIGNAL_COLS.issubset(cols))
+
+
+def _coerce_pipeline_export(df: pd.DataFrame, sports: list[str] | None) -> pd.DataFrame:
+    """Normalise a pre-processed pipeline export so it works as analysis_df directly."""
+    out = df.copy()
+    out.columns = [str(c).strip().lower() for c in out.columns]
+    # Ensure all canonical columns exist
+    for col in CANONICAL_BET_COLUMNS:
+        if col not in out.columns:
+            out[col] = pd.NA
+    # Filter to selected sports if provided
+    if sports:
+        selected = {str(s).upper() for s in sports}
+        league_s = out["league"].fillna("").astype(str).str.upper()
+        out = out[league_s.isin(selected)].copy()
+    return out
 
 
 def _safe_str_series(df: pd.DataFrame, col: str, default: str = "") -> pd.Series:
@@ -92,11 +123,7 @@ def _merge_kalshi_into_analysis(analysis_df: pd.DataFrame, best_picks_df: pd.Dat
 
 
 def _run_pipeline(controls: dict) -> None:
-    """Run the full analysis pipeline and write results to session_state in one atomic batch.
-
-    All st.warning / st.error calls are deferred to after session_state is fully
-    written so no delta is emitted mid-pipeline that could trigger a spurious rerun.
-    """
+    """Run the full analysis pipeline and write results to session_state in one atomic batch."""
     deferred_warnings: list[str] = []
     deferred_errors: list[str] = []
 
@@ -108,18 +135,100 @@ def _run_pipeline(controls: dict) -> None:
     if err:
         deferred_warnings.append(err)
 
+    # Normalize team names only on non-empty DataFrames
     for upload_df in (spreads_df, totals_df):
+        if upload_df is None or upload_df.empty:
+            continue
         for team_col in ["home_team", "away_team"]:
             if team_col in upload_df.columns:
                 upload_df[team_col] = upload_df[team_col].apply(normalize_team)
 
-    analysis_df, best_picks_df, diagnostics = run_analysis_pipeline(
-        sports=controls["sports"],
-        max_rows=int(controls["max_rows"]),
-        use_ml=bool(controls["use_ml"]),
-        spreads_df=spreads_df,
-        totals_df=totals_df,
-    )
+    # Detect if the uploaded CSVs are already processed pipeline exports
+    spreads_is_export = _is_pipeline_export(spreads_df)
+    totals_is_export = _is_pipeline_export(totals_df)
+
+    if spreads_is_export or totals_is_export:
+        # One or both uploads are already-processed exports — merge them and use directly
+        export_frames = []
+        if spreads_is_export:
+            export_frames.append(_coerce_pipeline_export(spreads_df, controls["sports"]))
+            deferred_warnings.append("Spreads CSV detected as a processed pipeline export — using directly.")
+        else:
+            # Still pass raw spreads through normal pipeline path below if present
+            pass
+        if totals_is_export:
+            export_frames.append(_coerce_pipeline_export(totals_df, controls["sports"]))
+            deferred_warnings.append("Totals CSV detected as a processed pipeline export — using directly.")
+        else:
+            pass
+
+        # For any non-export files, still run through normal pipeline
+        raw_spreads = None if spreads_is_export else spreads_df
+        raw_totals = None if totals_is_export else totals_df
+
+        if raw_spreads is not None or raw_totals is not None:
+            pipeline_analysis_df, pipeline_best_picks_df, diagnostics = run_analysis_pipeline(
+                sports=controls["sports"],
+                max_rows=int(controls["max_rows"]),
+                use_ml=bool(controls["use_ml"]),
+                spreads_df=raw_spreads if raw_spreads is not None and not raw_spreads.empty else None,
+                totals_df=raw_totals if raw_totals is not None and not raw_totals.empty else None,
+            )
+            export_frames.append(pipeline_analysis_df)
+        else:
+            diagnostics = {
+                "total_rows": 0, "bet_rows": 0, "best_picks": 0,
+                "kalshi_attempted": 0, "kalshi_matches": 0, "kalshi_match_rate": 0.0,
+                "match_rate": 0.0, "theover_totals_games": 0, "theover_spreads_games": 0,
+                "date_fill_total_rows": 0, "date_fill_success_rows": 0,
+                "date_fill_success_rate": 0.0, "missing_game_date_rows": 0,
+                "positive_ev_picks": 0, "market_type_counts": {},
+                "allowed_market_type_rows": 0, "positive_ev_rows": 0,
+                "best_pick_nonempty_rows": 0, "best_picks_count": 0,
+                "odds_schedule_loaded": False, "base_rows_loaded": 0,
+                "merge_keys_used": [], "stale_base_schedule": False,
+                "base_date_coverage": 0.0, "has_normalized_bet_rows": False,
+                "odds_fallback_only": True,
+            }
+
+        valid_export_frames = [f for f in export_frames if f is not None and not f.empty]
+        if valid_export_frames:
+            import warnings
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                analysis_df = pd.concat(valid_export_frames, ignore_index=True)
+        else:
+            analysis_df = pd.DataFrame()
+
+        # Update diagnostics based on merged export
+        if not analysis_df.empty:
+            market_s = _safe_str_series(analysis_df, "market_type")
+            diagnostics["total_rows"] = len(analysis_df)
+            diagnostics["bet_rows"] = len(analysis_df)
+            diagnostics["total_games"] = int(analysis_df[["league", "home_team", "away_team"]].drop_duplicates().shape[0])
+            diagnostics["market_type_counts"] = market_s.value_counts(dropna=False).to_dict()
+            diagnostics["allowed_market_type_rows"] = int(market_s.isin(VALID_MARKETS).sum())
+            diagnostics["positive_ev_rows"] = int((_safe_numeric_series(analysis_df, "expected_value", 0.0) > 0).sum())
+            diagnostics["theover_totals_games"] = int(analysis_df[market_s.str.startswith("total")]["game_key"].nunique()) if "game_key" in analysis_df.columns else 0
+            diagnostics["theover_spreads_games"] = int(analysis_df[market_s.str.startswith("spread")]["game_key"].nunique()) if "game_key" in analysis_df.columns else 0
+            diagnostics["has_normalized_bet_rows"] = True
+
+        best_picks_df = build_best_picks_df(analysis_df) if not analysis_df.empty else pd.DataFrame()
+        if not analysis_df.empty:
+            diagnostics["best_picks"] = len(best_picks_df)
+            diagnostics["best_picks_count"] = len(best_picks_df)
+            diagnostics["best_pick_nonempty_rows"] = int(_safe_str_series(best_picks_df, "best_pick").str.strip().str.len().gt(0).sum()) if not best_picks_df.empty else 0
+            diagnostics["positive_ev_picks"] = int((_safe_numeric_series(best_picks_df, "expected_value", 0.0) > 0).sum()) if not best_picks_df.empty else 0
+
+    else:
+        # Normal path: raw TheOver CSVs
+        analysis_df, best_picks_df, diagnostics = run_analysis_pipeline(
+            sports=controls["sports"],
+            max_rows=int(controls["max_rows"]),
+            use_ml=bool(controls["use_ml"]),
+            spreads_df=spreads_df,
+            totals_df=totals_df,
+        )
 
     empty_state = {
         "analysis_df": pd.DataFrame(),
@@ -137,9 +246,8 @@ def _run_pipeline(controls: dict) -> None:
     for leg_count in (2, 3, 4, 5):
         empty_state[f"parlays_{leg_count}_df"] = pd.DataFrame()
 
-    if analysis_df.empty:
+    if analysis_df is None or analysis_df.empty:
         st.session_state.update(empty_state)
-        # Emit deferred UI feedback AFTER state is fully written
         for msg in deferred_warnings:
             st.warning(msg)
         st.warning("No rows found for the selected sports.")
@@ -200,7 +308,10 @@ def _run_pipeline(controls: dict) -> None:
         f for f in theover_frames
         if f is not None and isinstance(f, pd.DataFrame) and not f.empty and not f.dropna(how="all").empty
     ]
-    theover_df = pd.concat(valid_theover_frames, ignore_index=True) if valid_theover_frames else pd.DataFrame()
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        theover_df = pd.concat(valid_theover_frames, ignore_index=True) if valid_theover_frames else pd.DataFrame()
 
     kalshi_df = analysis_df[analysis_df["kalshi_probability"].notna()].copy() if "kalshi_probability" in analysis_df.columns else analysis_df.iloc[0:0]
 
@@ -210,7 +321,7 @@ def _run_pipeline(controls: dict) -> None:
         else analysis_df.iloc[0:0]
     )
 
-    # --- Atomic single update: write all session_state at once ---
+    # Atomic single update
     st.session_state.update({
         "pipeline_status": "using stored results",
         "analysis_df": analysis_df,
@@ -226,7 +337,6 @@ def _run_pipeline(controls: dict) -> None:
         **{f"parlays_{lc}_df": empty_state[f"parlays_{lc}_df"] for lc in (2, 3, 4, 5)},
     })
 
-    # Emit any deferred warnings AFTER state is fully written
     for msg in deferred_warnings:
         st.warning(msg)
     for msg in deferred_errors:
