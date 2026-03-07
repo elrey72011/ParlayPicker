@@ -79,14 +79,14 @@ def _game_dates(df: pd.DataFrame) -> pd.Series:
     return out
 
 
-def _next_game_date_fallback() -> pd.Timestamp:
-    """Return tomorrow's UTC midnight date.
-    TheOver CSVs are always for upcoming games — when uploaded after ~6pm ET
-    (i.e. past midnight UTC) the games are the next calendar day.
-    Using tomorrow avoids Kalshi ticker mismatches caused by date being off by one.
+def _game_date_fallback() -> pd.Timestamp:
+    """Return today's UTC midnight as the fallback game date.
+    TheOver CSVs have no date column. The app runs in UTC, so when a user
+    uploads at e.g. 11:43 PM EST, the UTC clock already reads the next
+    calendar day (4:43 AM UTC) — meaning today-UTC IS the correct game date.
+    Do NOT add an extra day here.
     """
-    now_utc = pd.Timestamp.now(tz="UTC")
-    return (now_utc + pd.Timedelta(days=1)).normalize()
+    return pd.Timestamp.now(tz="UTC").normalize()
 
 
 def _normalize_upload(df: pd.DataFrame | None) -> pd.DataFrame:
@@ -99,9 +99,9 @@ def _normalize_upload(df: pd.DataFrame | None) -> pd.DataFrame:
     out["away_team"] = _string_series(out, "away_team").map(normalize_team_name)
     out["game_date"] = _game_dates(out)
     if out["game_date"].isna().all():
-        # No date column in upload — default to next calendar day in UTC
-        # (TheOver CSVs are always for upcoming games; uploaded at night = next day games)
-        out["game_date"] = _next_game_date_fallback()
+        # No date column in upload — use today UTC (server clock is UTC;
+        # late-night ET uploads are already the next calendar day in UTC)
+        out["game_date"] = _game_date_fallback()
     return out
 
 
@@ -120,7 +120,7 @@ def _coerce_export_to_canonical(df: pd.DataFrame, selected_sports: list[str] | N
     out["away_team"] = _string_series(out, "away_team").map(normalize_team_name)
     out["game_date"] = _game_dates(out)
     if out["game_date"].isna().all():
-        out["game_date"] = _next_game_date_fallback()
+        out["game_date"] = _game_date_fallback()
     out["market_type"] = _string_series(out, "market_type")
     out["spread_line"] = pd.to_numeric(out.get("spread_line"), errors="coerce")
     out["total_line"] = pd.to_numeric(out.get("total_line"), errors="coerce")
