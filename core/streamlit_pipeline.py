@@ -450,7 +450,8 @@ def run_analysis_pipeline(
     if diagnostics["odds_fallback_only"] and not analysis_df.empty:
         diagnostics["diagnostic_warning"] = "odds_american mostly fallback -110"
 
-    return analysis_df, best_picks_df, diagnostics
+    result = (analysis_df, best_picks_df, diagnostics)
+    return result
 
 
 def generate_parlays(best_picks_df: pd.DataFrame, max_legs: int = 5) -> pd.DataFrame:
