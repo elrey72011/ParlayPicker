@@ -77,6 +77,16 @@ def _safe_str_series(df: pd.DataFrame, col: str, default: str = "") -> pd.Series
     return pd.Series([default] * len(df), index=df.index, dtype="string")
 
 
+
+
+def _consume_run_click(state: dict[str, Any], run_clicked: bool) -> bool:
+    """Edge-trigger run button events so sticky truthy values can't retrigger endlessly."""
+    latch_key = "run_analysis_click_latch"
+    latched = bool(state.get(latch_key, False))
+    should_run = bool(run_clicked and not latched)
+    state[latch_key] = bool(run_clicked)
+    return should_run
+
 def _safe_numeric_series(df: pd.DataFrame, col: str, default: float | int | None = None) -> pd.Series:
     if df is None or df.empty:
         return pd.Series(dtype="float64")
@@ -304,9 +314,10 @@ def main() -> None:
 
     controls = render_sidebar()
     run_clicked = bool(controls["run_analysis"])
+    should_run = _consume_run_click(st.session_state, run_clicked)
 
     # Only run pipeline once per button click; always reset flag on completion or crash
-    if run_clicked and not st.session_state.get("pipeline_running", False):
+    if should_run and not st.session_state.get("pipeline_running", False):
         st.session_state["pipeline_running"] = True
         try:
             with st.spinner("Running analysis..."):
