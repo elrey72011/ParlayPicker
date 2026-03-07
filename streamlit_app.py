@@ -129,9 +129,6 @@ def main() -> None:
                 if team_col in upload_df.columns:
                     upload_df[team_col] = upload_df[team_col].apply(normalize_team)
 
-        st.write("TheOver spreads rows:", len(spreads_df))
-        st.write("TheOver totals rows:", len(totals_df))
-
         analysis_df, best_picks_df, diagnostics = run_analysis_pipeline(
             sports=controls["sports"],
             max_rows=int(controls["max_rows"]),
@@ -243,6 +240,7 @@ def main() -> None:
         st.session_state["simulation_results"] = simulation_results
         st.session_state["diagnostics"] = diagnostics
         st.session_state["best_picks_df"] = best_picks_df
+        st.rerun()
     analysis_df = st.session_state["analysis_df"]
     parlays_df = st.session_state["parlays_df"]
     portfolio_df = st.session_state["portfolio_df"]
@@ -255,7 +253,8 @@ def main() -> None:
     diagnostics = st.session_state.get("diagnostics", {})
 
     pipeline_status = st.session_state.get("pipeline_status", "idle")
-    st.caption(f"Pipeline status: {pipeline_status}")
+    if not analysis_df.empty:
+        st.caption(f"Pipeline status: {pipeline_status}")
 
     if analysis_df is None or analysis_df.empty:
         st.info("Configure filters in the sidebar and click **Run Master Analysis**.")
