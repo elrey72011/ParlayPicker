@@ -117,6 +117,23 @@ def _normalize_upload(df: pd.DataFrame | None) -> pd.DataFrame:
     return out
 
 
+def _concat_valid_bet_frames(frames: list[pd.DataFrame], expected_columns: list[str]) -> pd.DataFrame:
+    valid_frames: list[pd.DataFrame] = []
+    for frame in frames:
+        if frame is None or not isinstance(frame, pd.DataFrame):
+            continue
+        if frame.empty:
+            continue
+        if frame.dropna(how="all").empty:
+            continue
+        valid_frames.append(frame.copy())
+
+    if not valid_frames:
+        return pd.DataFrame(columns=expected_columns)
+
+    return pd.concat(valid_frames, ignore_index=True)
+
+
 def _mk_game_key(df: pd.DataFrame) -> pd.Series:
     return (
         _string_series(df, "league").str.upper()
@@ -255,22 +272,7 @@ def build_theover_bet_rows(
         total_under["odds_american"] = total_odds
         pieces.extend([total_over, total_under])
 
-    valid_pieces: list[pd.DataFrame] = []
-    for p in pieces:
-        if p is None:
-            continue
-        if not isinstance(p, pd.DataFrame):
-            continue
-        if p.empty:
-            continue
-        if p.dropna(how="all").empty:
-            continue
-        cleaned_piece = p.dropna(axis=1, how="all")
-        if cleaned_piece.empty:
-            continue
-        valid_pieces.append(cleaned_piece)
-
-    out = pd.concat(valid_pieces, ignore_index=True) if valid_pieces else pd.DataFrame(columns=CANONICAL_BET_COLUMNS)
+    out = _concat_valid_bet_frames(pieces, expected_columns=CANONICAL_BET_COLUMNS)
     if out.empty:
         return pd.DataFrame(columns=CANONICAL_BET_COLUMNS)
     out["league"] = _string_series(out, "league").str.upper().replace(LEAGUE_ALIASES)
