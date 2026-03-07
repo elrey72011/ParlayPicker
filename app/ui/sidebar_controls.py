@@ -11,7 +11,6 @@ def _resolve_sports_options(dynamic_sports: list[str] | None = None) -> list[str
             deduped = sorted(set(cleaned))
             if deduped:
                 return deduped
-    # Hard fallback to keep the Select Sports widget stable.
     return FALLBACK_SPORTS.copy()
 
 
@@ -22,13 +21,14 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
     if not sports_options:
         sports_options = FALLBACK_SPORTS.copy()
 
-    st.session_state.setdefault("selected_sports", sports_options.copy())
-    selected_defaults = [s for s in st.session_state["selected_sports"] if s in sports_options] or sports_options.copy()
+    # Initialise once — do NOT pass default= to a keyed widget; Streamlit owns
+    # the value after first render and the mismatch causes an infinite rerun.
+    if "selected_sports" not in st.session_state:
+        st.session_state["selected_sports"] = sports_options.copy()
 
     sports = st.sidebar.multiselect(
         "Select Sports",
         sports_options,
-        default=selected_defaults,
         key="selected_sports",
     )
     if not sports:
