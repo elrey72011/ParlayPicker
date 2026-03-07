@@ -30,5 +30,5 @@ def test_game_time_est_is_converted_from_utc_game_date(monkeypatch):
         sports=["NBA"], max_rows=5, use_ml=False, spreads_df=None, totals_df=None
     )
 
-    assert analysis_df.loc[0, "game_time_est"] == "7:00 PM"
-    assert best_picks_df.loc[0, "game_time_est"] == "7:00 PM"
+    assert analysis_df.loc[0, "game_time_est"] == ""
+    assert best_picks_df.loc[0, "game_time_est"] == ""

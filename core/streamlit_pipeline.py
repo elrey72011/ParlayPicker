@@ -112,7 +112,12 @@ def _format_game_time_est(df: pd.DataFrame) -> pd.Series:
         if "game_date" in df.columns
         else pd.Series([pd.NaT] * len(df), index=df.index, dtype="datetime64[ns, UTC]")
     )
-    dt_source = parsed_existing.where(parsed_existing.notna(), parsed_game_date)
+    game_has_clock = ~(
+        parsed_game_date.dt.hour.fillna(0).eq(0)
+        & parsed_game_date.dt.minute.fillna(0).eq(0)
+        & parsed_game_date.dt.second.fillna(0).eq(0)
+    )
+    dt_source = parsed_existing.where(parsed_existing.notna(), parsed_game_date.where(game_has_clock))
 
     formatted = pd.Series([""] * len(df), index=df.index, dtype="string")
     valid = dt_source.notna()
@@ -531,11 +536,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     pool["best_pick"] = pool.apply(_format_best_pick, axis=1)
 
     pool["has_signal_probability"] = _numeric_series(pool, "model_probability").notna() | _numeric_series(pool, "theover_probability").notna() | _numeric_series(pool, "ml_probability").notna()
-    pool["matchup_key"] = _canonical_matchup_key(pool)
 
     best = (
         pool.sort_values(["has_signal_probability", "expected_value", "edge"], ascending=[False, False, False])
-        .groupby(["matchup_key"], dropna=False)
+        .groupby(["league", "home_team", "away_team", "game_date"], dropna=False)
         .first()
         .reset_index(drop=True)
     )
