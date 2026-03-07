@@ -70,7 +70,7 @@ class KalshiAPIError(RuntimeError):
 
 def _normalize_team_token(name: str) -> str:
     s = str(name or "").lower().strip()
-    s = s.replace("’", "'").replace("&", " and ")
+    s = s.replace("\u2019", "'").replace("&", " and ")
     s = s.replace("-", " ").replace(".", " ").replace("'", "")
     s = re.sub(r"\bst\b", "state", s)
     s = re.sub(r"\bsaint\b", "st", s)
@@ -169,19 +169,21 @@ def _deterministic_tickers(row: pd.Series) -> tuple[list[str], str | None, str |
     return list(dict.fromkeys(candidates)), series, away_code, home_code, date_code, family
 
 
-def _fallback_series_lookup(series: str, candidate_tickers: list[str], away_code: str, home_code: str) -> dict[str, Any] | None:
-    markets = _get_markets({"series_ticker": series, "status": "open", "limit": 1000})
-    by_ticker = {str(m.get("ticker") or ""): m for m in markets}
-    for ticker in candidate_tickers:
-        if ticker in by_ticker:
-            return by_ticker[ticker]
-
-    for market in markets:
-        ticker = str(market.get("ticker") or "")
-        title = f"{market.get('title', '')} {market.get('subtitle', '')}".upper()
-        if (away_code in ticker and home_code in ticker) or (away_code in title and home_code in title):
-            return market
-    return None
+def _fetch_series_cache(series_set: set[str]) -> dict[str, dict[str, Any]]:
+    """Fetch all open markets for each unique series in one call per series.
+    Returns a dict of {ticker: market} for fast lookup.
+    """
+    cache: dict[str, dict[str, Any]] = {}
+    for series in series_set:
+        try:
+            markets = _get_markets({"series_ticker": series, "status": "open", "limit": 1000})
+            for m in markets:
+                ticker = str(m.get("ticker") or "")
+                if ticker:
+                    cache[ticker] = m
+        except KalshiAPIError as exc:
+            logger.warning("Kalshi series fetch failed for %s: %s", series, exc)
+    return cache
 
 
 def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
@@ -206,19 +208,30 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
     out["kalshi_match_reason"] = "no_valid_candidates"
     out["kalshi_tried_tickers"] = "[]"
 
+    # --- BATCH STEP: determine all needed series upfront, fetch once per series ---
+    needed_series: set[str] = set()
+    row_meta: dict[Any, tuple[list[str], str | None, str | None, str | None, str, str | None]] = {}
     for idx, row in out.iterrows():
         tried, series, away_code, home_code, date_code, family = _deterministic_tickers(row)
+        row_meta[idx] = (tried, series, away_code, home_code, date_code, family)
+        if series and date_code and away_code and home_code:
+            needed_series.add(series)
+
+    # Single API call per unique series (e.g. KXNCAAMBSPREAD, KXNCAAMBTOTAL)
+    series_cache = _fetch_series_cache(needed_series)
+    logger.info("Kalshi series cache loaded: %d markets across %d series", len(series_cache), len(needed_series))
+
+    # --- MATCH STEP: lookup from cache, no per-row API calls ---
+    for idx, row in out.iterrows():
+        tried, series, away_code, home_code, date_code, family = row_meta[idx]
 
         if not date_code:
-            out.at[idx, "kalshi_tried_tickers"] = "[]"
             out.at[idx, "kalshi_match_reason"] = "missing_date"
             continue
         if not away_code or not home_code:
-            out.at[idx, "kalshi_tried_tickers"] = "[]"
             out.at[idx, "kalshi_match_reason"] = "missing_team_code"
             continue
         if not series or family not in {"spread", "total"}:
-            out.at[idx, "kalshi_tried_tickers"] = "[]"
             out.at[idx, "kalshi_match_reason"] = "no_valid_candidates"
             continue
 
@@ -227,24 +240,22 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             out.at[idx, "kalshi_match_reason"] = "no_valid_candidates"
             continue
 
+        # Direct ticker lookup from cache
         market = None
-        try:
-            exact = _get_markets({"tickers": ",".join(tried), "status": "open"})
-            by_ticker = {str(m.get("ticker") or ""): m for m in exact}
-            for ticker in tried:
-                if ticker in by_ticker:
-                    market = by_ticker[ticker]
-                    break
-        except KalshiAPIError:
-            out.at[idx, "kalshi_match_reason"] = "no_market_for_tickers"
-            continue
+        for ticker in tried:
+            if ticker in series_cache:
+                market = series_cache[ticker]
+                break
 
+        # Fuzzy fallback: scan cache for matching team codes in ticker or title
         if market is None:
-            try:
-                market = _fallback_series_lookup(series, tried, away_code, home_code)
-            except KalshiAPIError:
-                out.at[idx, "kalshi_match_reason"] = "no_market_for_tickers"
-                continue
+            for ticker, m in series_cache.items():
+                if not (series and ticker.startswith(series)):
+                    continue
+                title = f"{m.get('title', '')} {m.get('subtitle', '')}".upper()
+                if (away_code in ticker and home_code in ticker) or (away_code in title and home_code in title):
+                    market = m
+                    break
 
         if market is None:
             out.at[idx, "kalshi_match_reason"] = "no_market_for_tickers"
