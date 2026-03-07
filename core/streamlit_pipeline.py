@@ -70,7 +70,7 @@ def _numeric_series(df: pd.DataFrame, col: str, default: float | int | None = No
     return out
 
 
-def _shrink_to_market(model_prob: pd.Series, market_prob: pd.Series, model_weight: float = 0.65) -> pd.Series:
+def _shrink_to_market(model_prob: pd.Series, market_prob: pd.Series, model_weight: float = 0.35) -> pd.Series:
     """Shrink model probabilities toward market-implied probability to reduce overconfidence."""
     mw = float(model_weight)
     mk = 1.0 - mw
@@ -575,6 +575,48 @@ def run_analysis_pipeline(
             )
             merged = merged.drop(columns=["ml_probability_base"])
 
+        reverse_schedule = base_schedule.rename(columns={"home_team": "away_team", "away_team": "home_team"})
+        reverse_columns = merge_keys + [
+            col for col in ["date", "game_time_est", "odds_american", "ml_probability"]
+            if col in reverse_schedule.columns
+        ]
+        reverse_lookup = reverse_schedule[reverse_columns].drop_duplicates(merge_keys).rename(
+            columns={
+                "date": "date_rev",
+                "game_time_est": "game_time_est_rev",
+                "odds_american": "odds_american_rev",
+                "ml_probability": "ml_probability_rev",
+            }
+        )
+        merged = merged.merge(reverse_lookup, on=merge_keys, how="left")
+
+        if "odds_american_rev" in merged.columns:
+            odds_current = _numeric_series(merged, "odds_american")
+            odds_rev = _numeric_series(merged, "odds_american_rev")
+            merged["odds_american"] = odds_current.where(
+                odds_current.notna() & (odds_current != -110),
+                odds_rev,
+            )
+            merged = merged.drop(columns=["odds_american_rev"])
+
+        if "ml_probability_rev" in merged.columns:
+            merged["ml_probability"] = _numeric_series(merged, "ml_probability").where(
+                _numeric_series(merged, "ml_probability").notna(),
+                _numeric_series(merged, "ml_probability_rev"),
+            )
+            merged = merged.drop(columns=["ml_probability_rev"])
+
+        if "date_rev" in merged.columns:
+            merged["game_date"] = _game_dates(merged).fillna(pd.to_datetime(merged["date_rev"], errors="coerce", utc=True))
+            merged = merged.drop(columns=["date_rev"])
+
+        if "game_time_est_rev" in merged.columns:
+            merged["game_time_est"] = _string_series(merged, "game_time_est").where(
+                _string_series(merged, "game_time_est").str.len().gt(0),
+                _string_series(merged, "game_time_est_rev"),
+            )
+            merged = merged.drop(columns=["game_time_est_rev"])
+
     merged["game_date"] = _game_dates(merged)
     merged["odds_american"] = _numeric_series(merged, "odds_american", -110.0)
     merged["decimal_odds"] = merged["odds_american"].apply(american_to_decimal)
@@ -595,7 +637,7 @@ def run_analysis_pipeline(
     )
     calibrated_probability = pd.Series(calibrated_probability, index=merged.index, dtype="float64")
     calibrated_probability = calibrated_probability.where(calibrated_probability.notna(), merged["market_probability"])
-    calibrated_probability = _shrink_to_market(calibrated_probability, merged["market_probability"], model_weight=0.65)
+    calibrated_probability = _shrink_to_market(calibrated_probability, merged["market_probability"], model_weight=0.35)
 
     merged["theover_probability"] = theover_probability
     merged["calibrated_probability"] = calibrated_probability
