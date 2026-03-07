@@ -270,7 +270,7 @@ def team_code_for_league(league: str, team: str) -> str:
 
 def _get_markets(params: dict[str, Any]) -> list[dict[str, Any]]:
     try:
-        response = requests.get(f"{API_BASE}/markets", params=params, timeout=10)
+        response = requests.get(f"{API_BASE}/markets", params=params, timeout=8)
         response.raise_for_status()
         payload = response.json()
     except Exception as exc:
@@ -317,19 +317,24 @@ def _deterministic_tickers(row: pd.Series) -> tuple[list[str], str | None, str |
     return list(dict.fromkeys(candidates)), series, away_code, home_code, date_code, family
 
 
-def _fetch_series_cache(series_set: set[str]) -> dict[str, dict[str, Any]]:
+def _fetch_series_cache(series_set: set[str], date_codes: set[str] | None = None) -> dict[str, dict[str, Any]]:
     """Fetch all open markets for each unique series in one call per series.
     Returns a dict of {ticker: market} for fast lookup.
     """
     cache: dict[str, dict[str, Any]] = {}
     for series in series_set:
         try:
-            markets = _get_markets({"series_ticker": series, "status": "open", "limit": 1000})
+            markets = _get_markets({"series_ticker": series, "status": "open", "limit": 200})
             for m in markets:
                 ticker = str(m.get("ticker") or "")
-                if ticker:
-                    cache[ticker] = m
+                if not ticker:
+                    continue
+                if date_codes and not any(dc in ticker for dc in date_codes):
+                    continue
+                cache[ticker] = m
         except KalshiAPIError as exc:
+            logger.warning("Kalshi series fetch failed for %s: %s", series, exc)
+        except Exception as exc:
             logger.warning("Kalshi series fetch failed for %s: %s", series, exc)
     return cache
 
@@ -365,8 +370,14 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         if series and date_code and away_code and home_code:
             needed_series.add(series)
 
+    date_codes: set[str] = set()
+    for idx, row in out.iterrows():
+        dc = build_kalshi_date_code(row.get("game_date"))
+        if dc:
+            date_codes.add(dc)
+
     # Single API call per unique series (e.g. KXNCAAMBSPREAD, KXNCAAMBTOTAL)
-    series_cache = _fetch_series_cache(needed_series)
+    series_cache = _fetch_series_cache(needed_series, date_codes=date_codes)
     logger.info("Kalshi series cache loaded: %d markets across %d series", len(series_cache), len(needed_series))
 
     # --- MATCH STEP: lookup from cache, no per-row API calls ---

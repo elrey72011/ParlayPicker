@@ -45,7 +45,7 @@ except Exception:  # pragma: no cover
 
 
 def _enrich_with_kalshi_safe(df: pd.DataFrame) -> tuple[pd.DataFrame, str | None]:
-    """Run Kalshi enrichment with a hard 15-second timeout.
+    """Run Kalshi enrichment with a hard 60-second timeout.
     Returns (enriched_df, error_message_or_None).
     """
     if _enrich_kalshi_raw is None:
@@ -55,10 +55,10 @@ def _enrich_with_kalshi_safe(df: pd.DataFrame) -> tuple[pd.DataFrame, str | None
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
         future = ex.submit(_enrich_kalshi_raw, df)
         try:
-            result = future.result(timeout=15)
+            result = future.result(timeout=60)
             return result, None
         except concurrent.futures.TimeoutError:
-            return df, "Kalshi enrichment timed out (>15s) — skipped."
+            return df, "Kalshi enrichment timed out (>60s) — skipped."
         except Exception as e:
             return df, f"Kalshi enrichment failed: {e}"
 
