@@ -34,7 +34,6 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
     if not sports:
         sports = sports_options.copy()
 
-    max_rows = st.sidebar.slider("Max Games", min_value=10, max_value=500, value=150, key="max_rows")
     bankroll = st.sidebar.number_input("Bankroll", min_value=100.0, value=1000.0, step=50.0, key="bankroll")
 
     st.sidebar.subheader("Analysis Engines")
@@ -55,7 +54,6 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
 
     return {
         "sports": sports,
-        "max_rows": max_rows,
         "bankroll": bankroll,
         "use_ml": use_ml,
         "use_gemini": use_gemini,

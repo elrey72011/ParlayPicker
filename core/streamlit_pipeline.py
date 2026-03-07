@@ -30,7 +30,7 @@ LEAGUE_ALIASES = {"NCAAM": "NCAAB", "NCAA MEN'S BASKETBALL": "NCAAB", "NCAA MENS
 
 BEST_PICK_COLUMNS = [
     "league", "home_team", "away_team", "game_date", "best_pick",
-    "calibrated_probability", "expected_value", "edge",
+    "calibrated_probability", "expected_value", "edge", "consensus_agreement",
     "odds_american", "market_probability", "ml_probability",
     "kalshi_probability", "kalshi_match_status", "kalshi_match_reason",
 ]
@@ -407,7 +407,7 @@ def is_stale_schedule(base_df: pd.DataFrame, bet_rows_df: pd.DataFrame) -> bool:
     bet_dates = pd.to_datetime(bet_rows_df.get("game_date"), errors="coerce", utc=True)
     if base_dates.notna().sum() == 0 or bet_dates.notna().sum() == 0:
         return False
-    return bool(base_dates.max() < bet_dates.max())
+    return bool((bet_dates.max() - base_dates.max()) > pd.Timedelta(days=7))
 
 
 def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
@@ -423,6 +423,12 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     df["expected_value"] = _numeric_series(df, "expected_value", 0.0)
     df["edge"] = _numeric_series(df, "edge", 0.0)
     df["best_pick"] = df.apply(_format_best_pick, axis=1)
+    probs = _numeric_series(df, "calibrated_probability", 0.5)
+    df["consensus_agreement"] = "⚖️ Neutral"
+    agrees = probs > 0.52
+    disagrees = probs < 0.48
+    df.loc[agrees, "consensus_agreement"] = "✅ Agrees"
+    df.loc[disagrees, "consensus_agreement"] = "❌ Disagrees"
     df = df.sort_values(["expected_value", "edge"], ascending=[False, False])
 
     pick_df = (
