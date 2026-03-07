@@ -313,14 +313,18 @@ def _fill_missing_game_dates_from_base(bet_rows_df: pd.DataFrame, base_df: pd.Da
             .drop_duplicates(["league", "home_team", "away_team"], keep="last")
             [["league", "home_team", "away_team", "game_date"]]
         )
-        out = out.merge(
-            schedule,
-            on=["league", "home_team", "away_team"],
-            how="left",
-            suffixes=("", "_base"),
-        )
+
+        direct = schedule.rename(columns={"game_date": "game_date_base"})
+        out = out.merge(direct, on=["league", "home_team", "away_team"], how="left")
         out["game_date"] = out["game_date"].where(out["game_date"].notna(), out["game_date_base"])
         out = out.drop(columns=["game_date_base"])
+
+        reverse = schedule.rename(
+            columns={"home_team": "away_team", "away_team": "home_team", "game_date": "game_date_base_rev"}
+        )
+        out = out.merge(reverse, on=["league", "home_team", "away_team"], how="left")
+        out["game_date"] = out["game_date"].where(out["game_date"].notna(), out["game_date_base_rev"])
+        out = out.drop(columns=["game_date_base_rev"])
 
     filled = int((missing_before & out["game_date"].notna()).sum())
     missing_after = int(out["game_date"].isna().sum())

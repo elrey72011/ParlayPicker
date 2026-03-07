@@ -149,7 +149,7 @@ def _select_probability(market: dict[str, Any]) -> float | None:
     return None
 
 
-def _deterministic_tickers(row: pd.Series) -> tuple[list[str], str | None, str | None, str | None, str]:
+def _deterministic_tickers(row: pd.Series) -> tuple[list[str], str | None, str | None, str | None, str, str | None]:
     league = str(row.get("league") or "").upper()
     family = _market_family(row)
     series = LEAGUE_SERIES_MAP.get(league, {}).get(family or "")
@@ -158,15 +158,15 @@ def _deterministic_tickers(row: pd.Series) -> tuple[list[str], str | None, str |
     date_code = build_kalshi_date_code(row.get("game_date"))
 
     if not date_code:
-        return [], series, away_code, home_code, date_code
+        return [], series, away_code, home_code, date_code, family
     if not away_code or not home_code:
-        return [], series, away_code, home_code, date_code
+        return [], series, away_code, home_code, date_code, family
     if not series:
-        return [], series, away_code, home_code, date_code
+        return [], series, away_code, home_code, date_code, family
 
     prefix = f"{series}-{date_code}"
     candidates = [f"{prefix}{away_code}{home_code}", f"{prefix}{home_code}{away_code}"]
-    return candidates, series, away_code, home_code, date_code
+    return list(dict.fromkeys(candidates)), series, away_code, home_code, date_code, family
 
 
 def _fallback_series_lookup(series: str, candidate_tickers: list[str], away_code: str, home_code: str) -> dict[str, Any] | None:
@@ -207,7 +207,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
     out["kalshi_tried_tickers"] = "[]"
 
     for idx, row in out.iterrows():
-        tried, series, away_code, home_code, date_code = _deterministic_tickers(row)
+        tried, series, away_code, home_code, date_code, family = _deterministic_tickers(row)
 
         if not date_code:
             out.at[idx, "kalshi_tried_tickers"] = "[]"
@@ -217,7 +217,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             out.at[idx, "kalshi_tried_tickers"] = "[]"
             out.at[idx, "kalshi_match_reason"] = "missing_team_code"
             continue
-        if not series:
+        if not series or family not in {"spread", "total"}:
             out.at[idx, "kalshi_tried_tickers"] = "[]"
             out.at[idx, "kalshi_match_reason"] = "no_valid_candidates"
             continue
