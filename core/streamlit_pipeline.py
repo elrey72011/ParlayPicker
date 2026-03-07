@@ -79,6 +79,16 @@ def _game_dates(df: pd.DataFrame) -> pd.Series:
     return out
 
 
+def _next_game_date_fallback() -> pd.Timestamp:
+    """Return tomorrow's UTC midnight date.
+    TheOver CSVs are always for upcoming games — when uploaded after ~6pm ET
+    (i.e. past midnight UTC) the games are the next calendar day.
+    Using tomorrow avoids Kalshi ticker mismatches caused by date being off by one.
+    """
+    now_utc = pd.Timestamp.now(tz="UTC")
+    return (now_utc + pd.Timedelta(days=1)).normalize()
+
+
 def _normalize_upload(df: pd.DataFrame | None) -> pd.DataFrame:
     if df is None or df.empty:
         return pd.DataFrame()
@@ -89,7 +99,9 @@ def _normalize_upload(df: pd.DataFrame | None) -> pd.DataFrame:
     out["away_team"] = _string_series(out, "away_team").map(normalize_team_name)
     out["game_date"] = _game_dates(out)
     if out["game_date"].isna().all():
-        out["game_date"] = pd.Timestamp.now(tz="UTC").normalize()
+        # No date column in upload — default to next calendar day in UTC
+        # (TheOver CSVs are always for upcoming games; uploaded at night = next day games)
+        out["game_date"] = _next_game_date_fallback()
     return out
 
 
@@ -108,7 +120,7 @@ def _coerce_export_to_canonical(df: pd.DataFrame, selected_sports: list[str] | N
     out["away_team"] = _string_series(out, "away_team").map(normalize_team_name)
     out["game_date"] = _game_dates(out)
     if out["game_date"].isna().all():
-        out["game_date"] = pd.Timestamp.now(tz="UTC").normalize()
+        out["game_date"] = _next_game_date_fallback()
     out["market_type"] = _string_series(out, "market_type")
     out["spread_line"] = pd.to_numeric(out.get("spread_line"), errors="coerce")
     out["total_line"] = pd.to_numeric(out.get("total_line"), errors="coerce")
@@ -446,6 +458,7 @@ def run_analysis_pipeline(
         if "game_date_base" in merged.columns:
             merged["game_date"] = pd.to_datetime(merged["game_date"], errors="coerce", utc=True)
             merged["game_date_base"] = pd.to_datetime(merged["game_date_base"], errors="coerce", utc=True)
+            # Only fill missing game_date from base — do NOT overwrite dates already set
             merged["game_date"] = merged["game_date"].where(merged["game_date"].notna(), merged["game_date_base"])
             merged = merged.drop(columns=["game_date_base"])
         if "odds_american_base" in merged.columns:
