@@ -297,6 +297,22 @@ def _build_total_rows(normalized: pd.DataFrame) -> list[pd.DataFrame]:
     total_prob = _first_existing_numeric(normalized, ["theover_probability", "winprobability", "win_probability", "probability"])
     total_odds = _first_existing_numeric(normalized, ["odds_american", "american_odds", "odds"], default=-110.0)
 
+    pick_text = _string_series(normalized, "pick").str.lower()
+    pick_text = pick_text.where(pick_text.str.len().gt(0), _string_series(normalized, "best_pick").str.lower())
+    under_selected = pick_text.str.contains("under", na=False)
+    over_selected = pick_text.str.contains("over", na=False)
+
+    over_prob = total_prob
+    under_prob = (1 - total_prob).where(total_prob.notna(), pd.NA)
+
+    # If uploaded probability is for an explicit UNDER pick, invert the assignment.
+    over_prob = over_prob.where(~under_selected, (1 - total_prob).where(total_prob.notna(), pd.NA))
+    under_prob = under_prob.where(~under_selected, total_prob)
+
+    # If explicit OVER pick is provided, keep default orientation (prob belongs to OVER).
+    over_prob = over_prob.where(~over_selected, total_prob)
+    under_prob = under_prob.where(~over_selected, (1 - total_prob).where(total_prob.notna(), pd.NA))
+
     base_cols = [c for c in ["league", "home_team", "away_team", "game_date", "game_time_est"] if c in normalized.columns]
     base = normalized[base_cols].copy()
 
@@ -304,14 +320,14 @@ def _build_total_rows(normalized: pd.DataFrame) -> list[pd.DataFrame]:
     total_over["market_type"] = "total_over"
     total_over["spread_line"] = pd.NA
     total_over["total_line"] = total_line
-    total_over["theover_probability"] = total_prob
+    total_over["theover_probability"] = over_prob
     total_over["odds_american"] = total_odds
 
     total_under = base.copy()
     total_under["market_type"] = "total_under"
     total_under["spread_line"] = pd.NA
     total_under["total_line"] = total_line
-    total_under["theover_probability"] = (1 - total_prob).where(total_prob.notna(), pd.NA)
+    total_under["theover_probability"] = under_prob
     total_under["odds_american"] = total_odds
 
     return [total_over, total_under]
