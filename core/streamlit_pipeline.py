@@ -606,7 +606,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         pool.sort_values(["has_signal_probability", "expected_value", "edge"], ascending=[False, False, False])
         .groupby(["league", "home_team", "away_team", "game_date"], dropna=False)
         .first()
-        .reset_index()
+        .reset_index(drop=True)
     )
 
     best["calibrated_probability"] = _numeric_series(best, "calibrated_probability", 0.5)
