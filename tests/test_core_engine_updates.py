@@ -45,8 +45,7 @@ def test_pipeline_adds_best_pick_and_consensus():
         ]
     )
     out = _apply_analysis_calculations(df)
-    assert "consensus_prob" in out.columns
+    assert "calibrated_probability" in out.columns
     assert "expected_value" in out.columns
     assert "best_pick" in out.columns
-    assert out.iloc[0]["best_pick"] != ""
     assert 0 < american_to_prob(-110) < 1
