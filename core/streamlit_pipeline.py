@@ -76,6 +76,20 @@ _UPLOAD_COLUMN_ALIASES = {
     "match_up": "matchup",
     "event_name": "matchup",
     "teams": "matchup",
+    "home team name": "home_team",
+    "away team name": "away_team",
+    "visitor": "away_team",
+    "visitor team": "away_team",
+    "team one": "team_1",
+    "team two": "team_2",
+    "market type": "market_type",
+    "spread line": "spread_line",
+    "total line": "total_line",
+    "theover probability": "theover_probability",
+    "odds american": "odds_american",
+    "ml probability": "ml_probability",
+    "calibrated probability": "calibrated_probability",
+    "expected value": "expected_value",
 }
 
 
@@ -85,6 +99,18 @@ _NULL_TEXT_TOKENS = {"", "none", "null", "nan", "nat", "n/a", "na", "<na>"}
 def _clean_text_placeholders(series: pd.Series) -> pd.Series:
     s = series.astype("string").str.strip()
     return s.where(~s.str.lower().isin(_NULL_TEXT_TOKENS), "")
+
+
+def _normalize_upload_columns(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+    out.columns = (
+        out.columns.astype(str)
+        .str.strip()
+        .str.lower()
+        .str.replace(r"[^a-z0-9]+", " ", regex=True)
+        .str.strip()
+    )
+    return out
 
 
 def _first_nonempty_text(df: pd.DataFrame, candidates: list[str]) -> pd.Series:
@@ -250,8 +276,7 @@ def _game_date_fallback() -> pd.Timestamp:
 def _normalize_upload(df: pd.DataFrame | None) -> pd.DataFrame:
     if df is None or df.empty:
         return pd.DataFrame()
-    out = df.copy()
-    out.columns = [str(c).strip().lower() for c in out.columns]
+    out = _normalize_upload_columns(df)
     for src, dst in _UPLOAD_COLUMN_ALIASES.items():
         if src in out.columns and dst not in out.columns:
             out = out.rename(columns={src: dst})
@@ -272,8 +297,7 @@ def _is_pipeline_export(df: pd.DataFrame | None) -> bool:
 
 
 def _coerce_export_to_canonical(df: pd.DataFrame, selected_sports: list[str] | None) -> pd.DataFrame:
-    out = df.copy()
-    out.columns = [str(c).strip().lower() for c in out.columns]
+    out = _normalize_upload_columns(df)
     for src, dst in _UPLOAD_COLUMN_ALIASES.items():
         if src in out.columns and dst not in out.columns:
             out = out.rename(columns={src: dst})
