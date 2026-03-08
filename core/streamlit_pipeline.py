@@ -240,36 +240,19 @@ def _game_dates(df: pd.DataFrame) -> pd.Series:
 
 
 def _format_game_time_est(df: pd.DataFrame) -> pd.Series:
-    """Return game times formatted in America/New_York (e.g., 7:30 PM)."""
+    """Return game dates and times strictly formatted in America/New_York."""
     if df is None or df.empty:
         return pd.Series(dtype="string")
 
-    existing_raw = _string_series(df, "game_time_est").str.strip()
-    parsed_existing = (
-        pd.to_datetime(df["game_time_est"], errors="coerce", utc=True)
-        if "game_time_est" in df.columns
-        else pd.Series([pd.NaT] * len(df), index=df.index, dtype="datetime64[ns, UTC]")
-    )
-    parsed_game_date = (
-        pd.to_datetime(df["game_date"], errors="coerce", utc=True)
-        if "game_date" in df.columns
-        else pd.Series([pd.NaT] * len(df), index=df.index, dtype="datetime64[ns, UTC]")
-    )
-    game_has_clock = ~(
-        parsed_game_date.dt.hour.fillna(0).eq(0)
-        & parsed_game_date.dt.minute.fillna(0).eq(0)
-        & parsed_game_date.dt.second.fillna(0).eq(0)
-    )
-    dt_source = parsed_existing.where(parsed_existing.notna(), parsed_game_date.where(game_has_clock))
+    out = pd.Series([""] * len(df), index=df.index, dtype="string")
+    if "game_date" in df.columns:
+        dt_col = pd.to_datetime(df["game_date"], errors="coerce", utc=True)
+        valid = dt_col.notna()
+        if valid.any():
+            # Convert straight to ET and format
+            est = dt_col[valid].dt.tz_convert("America/New_York").dt.strftime("%Y-%m-%d %I:%M %p ET").str.replace(" 0", " ")
+            out.loc[valid] = est.astype("string")
 
-    formatted = pd.Series([""] * len(df), index=df.index, dtype="string")
-    valid = dt_source.notna()
-    if valid.any():
-        est = dt_source[valid].dt.tz_convert("America/New_York").dt.strftime("%I:%M %p").str.lstrip("0")
-        formatted.loc[valid] = est.astype("string")
-
-    keep_existing = existing_raw.str.len().gt(0) & parsed_existing.isna()
-    out = formatted.where(~keep_existing, existing_raw)
     return out
 
 def _game_date_fallback() -> pd.Timestamp:

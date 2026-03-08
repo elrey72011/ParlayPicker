@@ -312,10 +312,12 @@ def _extract_markets(response: Any) -> list[dict[str, Any]]:
     if isinstance(response, list):
         return response
     if isinstance(response, dict):
-        markets = response.get("data")
+        # We need to correctly handle the structure, checking "markets" first is standard for Kalshi V2
+        # but the tests might return "data".
+        markets = response.get("markets")
         if isinstance(markets, list):
             return markets
-        markets = response.get("markets")
+        markets = response.get("data")
         if isinstance(markets, list):
             return markets
     return []
@@ -456,28 +458,47 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             markets = []
 
         if not markets:
+            series_markets = []
             try:
-                series_resp = api_get_markets(series_ticker=series, status="open", limit=200)
-                series_markets = _extract_markets(series_resp)
+                params = {"series_ticker": series, "status": "open", "limit": 100}
+                for _ in range(5):
+                    resp = api_get_markets(**params)
+                    # Support both test mocks returning "data" or actual API returning "markets"
+                    markets_page = _extract_markets(resp)
+                    if not markets_page:
+                        break
+                    series_markets.extend(markets_page)
+                    cursor = resp.get("cursor") if isinstance(resp, dict) else None
+                    if not cursor:
+                        break
+                    params["cursor"] = cursor
             except Exception:
-                series_markets = []
+                pass # allow series_markets to retain collected items
+
             markets = [
                 m for m in series_markets
                 if away_code in str(m.get("event_ticker") or "") and home_code in str(m.get("event_ticker") or "")
             ]
+
             if not markets:
+                # Provide a relaxed date match since the event ticker prefix format could be different.
                 markets = _markets_by_team_text(
                     series_markets,
                     str(row.get("home_team") or ""),
                     str(row.get("away_team") or ""),
-                    date_code,
+                    "", # Allow match by title even if date code differs. It's an open market.
                 )
 
         if markets:
             mkt = markets[0]
             bid = float(pd.to_numeric(mkt.get("yes_bid_dollars"), errors="coerce") or 0.0)
             ask = float(pd.to_numeric(mkt.get("yes_ask_dollars"), errors="coerce") or 0.0)
-            out.at[idx, "kalshi_probability"] = (bid + ask) / 200.0
+
+            if (bid + ask) > 2.0:
+                # Handle legacy/mock cents data safely without breaking probability bounds
+                out.at[idx, "kalshi_probability"] = (bid + ask) / 200.0
+            else:
+                out.at[idx, "kalshi_probability"] = (bid + ask) / 2.0
             out.at[idx, "kalshi_market_title"] = mkt.get("title")
             out.at[idx, "kalshi_event_ticker"] = mkt.get("event_ticker")
             out.at[idx, "kalshi_market_ticker"] = mkt.get("ticker")
