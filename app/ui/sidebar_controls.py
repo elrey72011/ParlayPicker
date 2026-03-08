@@ -45,7 +45,7 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
 
     st.sidebar.subheader("Analysis Engines")
 
-    use_ml = st.sidebar.checkbox("Enable ML Predictions", True, key="use_ml")
+    use_ml = st.sidebar.checkbox("Enable ML Predictions", False, key="use_ml")
     use_gemini = st.sidebar.checkbox("Enable Gemini Analysis", key="use_gemini")
 
     st.sidebar.subheader("Diagnostics")

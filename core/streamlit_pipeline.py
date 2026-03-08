@@ -893,7 +893,7 @@ def run_analysis_pipeline(
     if merged["game_date"].isna().all():
         merged["game_date"] = _game_date_fallback()
     merged["game_time_est"] = _format_game_time_est(merged)
-    merged["odds_american"] = _numeric_series(merged, "odds_american")
+    merged["odds_american"] = _numeric_series(merged, "odds_american", -110.0)
     merged.loc[_numeric_series(merged, "odds_american", -110.0).eq(-110) & _string_series(merged, "odds_source").str.len().eq(0), "odds_source"] = "fallback_-110"
     merged["decimal_odds"] = merged["odds_american"].apply(american_to_decimal)
     if merged["odds_american"].isna().all():
