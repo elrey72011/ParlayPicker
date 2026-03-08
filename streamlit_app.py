@@ -404,7 +404,6 @@ def main() -> None:
 
     if totals_file is not None:
         try:
-            import pandas as pd
             totals_file.seek(0)
             totals_inspect = pd.read_csv(totals_file)
             totals_file.seek(0)
@@ -428,7 +427,6 @@ def main() -> None:
 
     if spreads_file is not None:
         try:
-            import pandas as pd
             spreads_file.seek(0)
             spreads_inspect = pd.read_csv(spreads_file)
             spreads_file.seek(0)
