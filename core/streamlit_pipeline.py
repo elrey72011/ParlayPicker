@@ -434,63 +434,40 @@ def compute_blended_probability(
     league: pd.Series | None = None,
     market_type: pd.Series | None = None
 ) -> pd.Series:
-    """Compute statistically defined weighted blend of probability sources."""
-    # Convert inputs to float series handling NA
+    """
+    Vectorized blend with dynamic weight normalization per row.
+    Weights are renormalized based on available sources for each bet.
+    """
     market = pd.to_numeric(p_market, errors="coerce")
     kalshi = pd.to_numeric(p_kalshi, errors="coerce")
     ml = pd.to_numeric(p_ml, errors="coerce")
 
-    # Initialize outputs and weights
-    blended = pd.Series([pd.NA] * len(market), index=market.index, dtype="Float64")
+    def _blend_row(p_mkt, p_kal, p_ml):
+        sources = []
+        weights = []
 
-    has_ml = ml.notna()
-    has_kalshi = kalshi.notna()
-    has_market = market.notna()
+        if pd.notna(p_ml):
+            sources.append(p_ml)
+            weights.append(W_ML)
+        if pd.notna(p_mkt):
+            sources.append(p_mkt)
+            weights.append(W_MARKET)
+        if pd.notna(p_kal):
+            sources.append(p_kal)
+            weights.append(W_KALSHI)
 
-    # Condition 1: All three available
-    mask_all = has_ml & has_market & has_kalshi
-    if mask_all.any():
-        blended.loc[mask_all] = ml[mask_all] * W_ML + market[mask_all] * W_MARKET + kalshi[mask_all] * W_KALSHI
+        if not sources:
+            return p_mkt if pd.notna(p_mkt) else 0.5
 
-    # Condition 2: ML + market (no Kalshi)
-    mask_ml_market = has_ml & has_market & ~has_kalshi
-    if mask_ml_market.any():
-        # Redistribute weights proportionally: ML=0.5/(0.5+0.3)=0.625, Market=0.3/(0.5+0.3)=0.375
-        w_ml_norm = W_ML / (W_ML + W_MARKET)
-        w_market_norm = W_MARKET / (W_ML + W_MARKET)
-        blended.loc[mask_ml_market] = ml[mask_ml_market] * w_ml_norm + market[mask_ml_market] * w_market_norm
+        total_w = sum(weights)
+        norm_weights = [w / total_w for w in weights]
+        return sum(w * p for w, p in zip(norm_weights, sources))
 
-    # Condition 3: Kalshi + market (no ML)
-    mask_kalshi_market = ~has_ml & has_market & has_kalshi
-    if mask_kalshi_market.any():
-        # Redistribute proportionally: Kalshi=0.2/(0.2+0.3)=0.4, Market=0.3/(0.2+0.3)=0.6
-        w_kalshi_norm = W_KALSHI / (W_KALSHI + W_MARKET)
-        w_market_norm = W_MARKET / (W_KALSHI + W_MARKET)
-        blended.loc[mask_kalshi_market] = kalshi[mask_kalshi_market] * w_kalshi_norm + market[mask_kalshi_market] * w_market_norm
+    # Vectorized apply row-by-row
+    blended = pd.Series([_blend_row(m, k, l)
+                         for m, k, l in zip(market, kalshi, ml)],
+                        index=market.index)
 
-    # Condition 4: ML + Kalshi (no market)
-    mask_ml_kalshi = has_ml & ~has_market & has_kalshi
-    if mask_ml_kalshi.any():
-        w_ml_norm = W_ML / (W_ML + W_KALSHI)
-        w_kalshi_norm = W_KALSHI / (W_ML + W_KALSHI)
-        blended.loc[mask_ml_kalshi] = ml[mask_ml_kalshi] * w_ml_norm + kalshi[mask_ml_kalshi] * w_kalshi_norm
-
-    # Condition 5: ML only
-    mask_ml_only = has_ml & ~has_market & ~has_kalshi
-    if mask_ml_only.any():
-        blended.loc[mask_ml_only] = ml[mask_ml_only]
-
-    # Condition 6: Kalshi only
-    mask_kalshi_only = ~has_ml & ~has_market & has_kalshi
-    if mask_kalshi_only.any():
-        blended.loc[mask_kalshi_only] = kalshi[mask_kalshi_only]
-
-    # Condition 7: Market only
-    mask_market_only = ~has_ml & has_market & ~has_kalshi
-    if mask_market_only.any():
-        blended.loc[mask_market_only] = market[mask_market_only]
-
-    # Clip and return
     return pd.to_numeric(blended, errors="coerce").clip(0.01, 0.99)
 
 

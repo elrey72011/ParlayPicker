@@ -4,13 +4,55 @@ import json
 import logging
 import re
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Optional, Tuple
 
 import pandas as pd
 import requests
 
 logger = logging.getLogger(__name__)
 API_BASE = "https://api.elections.kalshi.com/trade-api/v2"
+
+# Total line parser (simple)
+TOTAL_LINE_PATTERN = re.compile(r'(?:over|under)\s+([0-9]+\.?[0-9]*)', re.IGNORECASE)
+
+def parse_kalshi_total_line(title: str) -> Tuple[Optional[str], Optional[float]]:
+    """Extract ('over'/'under', line) from Kalshi total title."""
+    m = TOTAL_LINE_PATTERN.search(title)
+    if m:
+        line = float(m.group(1))
+        return "over" if "over" in title.lower() else "under", line
+    return None, None
+
+# Spread line parser
+SPREAD_PATTERN = re.compile(r"wins by over\s+([0-9]+\.?[0-9]*)\s*points?", re.IGNORECASE)
+
+def parse_kalshi_spread_line(title: str) -> Tuple[Optional[str], Optional[float]]:
+    """Extract ('favorite', spread_line) from Kalshi spread title."""
+    m = SPREAD_PATTERN.search(title)
+    if m:
+        return "favorite", float(m.group(1))
+    return None, None
+
+KALSHI_LINE_TOLERANCE = 1.0
+
+def kalshi_line_matches_book(
+    kalshi_title: str,
+    book_side: str,      # 'over'/'under'
+    book_line: float,
+    market_type: str     # 'TOTAL' or 'SPREAD'
+) -> bool:
+    """Strict line match within tolerance."""
+    if market_type.upper() == "TOTAL":
+        side, k_line = parse_kalshi_total_line(kalshi_title)
+        if side and side.lower() == book_side.lower() and k_line is not None:
+            return abs(k_line - book_line) <= KALSHI_LINE_TOLERANCE
+    elif market_type.upper() == "SPREAD":
+        side, k_line = parse_kalshi_spread_line(kalshi_title)
+        # Compare to book's favorite spread (abs value)
+        book_spread = abs(book_line)
+        if side == "favorite" and k_line is not None:
+            return abs(k_line - book_spread) <= KALSHI_LINE_TOLERANCE
+    return False
 API_URL = API_BASE
 
 LEAGUE_SERIES_MAP = {
@@ -518,6 +560,27 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             m_subtitle = str(mkt.get("subtitle") or "").lower()
             combined_text = f"{m_title} {m_subtitle}"
 
+            # NEW: Strict line matching filter
+            if pd.notna(row.get("total_line")) and family == "total":
+                if not kalshi_line_matches_book(
+                    kalshi_title=combined_text,  # Kalshi title + subtitle contains the line
+                    book_side=row.get("total_pick_side", ""),  # 'over'/'under'
+                    book_line=float(row["total_line"]),
+                    market_type="TOTAL"
+                ):
+                    logger.info(f"Kalshi TOTAL rejected: line mismatch {combined_text}")
+                    continue  # Skip this candidate
+
+            if pd.notna(row.get("spread_line")) and family == "spread":
+                if not kalshi_line_matches_book(
+                    kalshi_title=combined_text,
+                    book_side="",  # Spreads don't need side, just line tolerance
+                    book_line=float(row["spread_line"]),
+                    market_type="SPREAD"
+                ):
+                    logger.info(f"Kalshi SPREAD rejected: line mismatch {combined_text}")
+                    continue
+
             # Extract number from Kalshi title/subtitle
             # Often formatted as "wins by over X.5", "total points over X.5", or "covers +X.5"
             line_match = re.search(r'(?:over|under|by|by over|by more than|covers\s*\+?)\s*([0-9]+(?:\.[0-9]+)?)', combined_text)
@@ -592,6 +655,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             out.at[idx, "kalshi_tried_tickers"] = json.dumps(candidates)
             out.at[idx, "kalshi_match_status"] = "miss"
             out.at[idx, "kalshi_match_reason"] = "alt_line_mismatch"
+            out.at[idx, "kalshi_match_quality"] = "line_mismatched"
         else:
             bid = float(pd.to_numeric(best_market.get("yes_bid_dollars"), errors="coerce") or 0.0)
             ask = float(pd.to_numeric(best_market.get("yes_ask_dollars"), errors="coerce") or 0.0)
@@ -606,6 +670,10 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             out.at[idx, "kalshi_market_ticker"] = best_market.get("ticker")
             out.at[idx, "kalshi_match_status"] = match_status
             out.at[idx, "kalshi_match_reason"] = match_reason
+            out.at[idx, "kalshi_match_quality"] = "line_matched"
+
+            # Optional: Add kalshi_line_diff if you have a way to track the final line matched.
+            # Here we default to setting it properly later or it implies 0 / within tolerance.
 
     return out
 
