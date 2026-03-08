@@ -581,15 +581,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             out.at[idx, "kalshi_match_reason"] = match_reason
             continue
 
-        # KALSHI DEBUG [2026-03-08] - Log first 3 candidates per game
-        if len(markets) > 0:
-            game_id = f"{row.get('league', '??')}-{str(row.get('home_team', ''))[:4]}-{str(row.get('away_team', ''))[:4]}"
-            logger.warning(f"KALSHI DEBUG {game_id} | candidates: {len(markets)}")
-            for i, cand in enumerate(markets[:3]):
-                title = cand.get('title', '')[:50] + '...' if len(cand.get('title', '')) > 50 else cand.get('title', '')
-                logger.warning(f"  #{i}: '{title}' | bid={cand.get('yes_bid_dollars', '')} ask={cand.get('yes_ask_dollars', '')} | book_line={row.get('total_line') or row.get('spread_line')}")
-
-        # Re-enable line matching with improved parser [2026-03-08]
+        # Re-enable line matching with improved parser
         for mkt in markets:
             m_title = str(mkt.get("title") or "").lower()
             m_subtitle = str(mkt.get("subtitle") or "").lower()
@@ -682,18 +674,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                             match_status = "matched"
                             match_reason = "total_match"
 
-        # KALSHI POST-MATCH DEBUG [2026-03-08]
-        game_id = f"{row.get('league', '??')}-{str(row.get('home_team', ''))[:4]}-{str(row.get('away_team', ''))[:4]}"
-        logger.warning(f"KALSHI POST enriches {game_id} | candidates: {len(markets)} | best_market: {best_market is not None}")
-
-        # Adding a safe check to print out keys of kalshi_probability if it were a dictionary
-        row_prob_val = row.get("kalshi_probability")
-        if isinstance(row_prob_val, dict):
-            logger.warning(f"  final row kalshi_prob: {pd.notna(row_prob_val)} | keys: {list(row_prob_val.keys())[:3]}")
-        else:
-            logger.warning(f"  final row kalshi_prob: {pd.notna(row_prob_val)}")
-
-        # TEMP FORCE ASSIGN [2026-03-08] - if no match but candidates exist
+        # If no match but candidates exist
         if best_market is None and len(markets) > 0:
             out.at[idx, "kalshi_tried_tickers"] = json.dumps(candidates)
             out.at[idx, "kalshi_match_status"] = "miss_but_forced"

@@ -56,7 +56,7 @@ _EXPORT_SIGNAL_COLS = {"market_type", "calibrated_probability", "expected_value"
 # Cap combos per leg count to prevent combinatorial explosion
 _MAX_PARLAY_COMBOS_PER_LEG = 500
 
-MIN_EDGE_THRESHOLD = 0.01  # TEMP DEBUG [2026-03-08] - was 0.035
+MIN_EDGE_THRESHOLD = 0.035
 W_ML = 0.5
 W_MARKET = 0.3
 W_KALSHI = 0.2
@@ -517,14 +517,6 @@ def _build_spread_rows(normalized: pd.DataFrame) -> list[pd.DataFrame]:
     line = _first_existing_numeric(normalized, ["line", "spread_line", "spread", "points"])
     prob = _first_existing_numeric(normalized, ["theover_probability", "winprobability", "win_probability", "probability"])
 
-    # DEBUG [2026-03-08]: Verify TheOver probability loaded (partial coverage expected)
-    prob_count = prob.notna().sum()
-    total_count = len(normalized)
-    coverage_pct = (prob_count / total_count * 100) if total_count > 0 else 0
-    logger.warning(f"🔍 SPREAD_ROWS DEBUG: Loaded {prob_count}/{total_count} WinProbability values ({coverage_pct:.1f}% coverage)")
-    if prob_count == 0 and total_count > 0:
-        logger.warning(f"⚠️ ZERO WinProbability values loaded! Available columns: {list(normalized.columns)}")
-
     odds = _first_existing_numeric(normalized, ["odds_american", "american_odds", "odds"], default=-110.0)
 
     base_cols = [c for c in ["league", "home_team", "away_team", "game_date", "game_time_est"] if c in normalized.columns]
@@ -559,14 +551,6 @@ def _build_total_rows(normalized: pd.DataFrame) -> list[pd.DataFrame]:
     """Expand a raw totals upload into total_over + total_under rows."""
     total_line = _first_existing_numeric(normalized, ["total_line", "total", "line", "points"])
     total_prob = _first_existing_numeric(normalized, ["theover_probability", "winprobability", "win_probability", "probability"])
-
-    # DEBUG [2026-03-08]: Verify TheOver probability loaded (partial coverage expected)
-    prob_count = total_prob.notna().sum()
-    total_count = len(normalized)
-    coverage_pct = (prob_count / total_count * 100) if total_count > 0 else 0
-    logger.warning(f"🔍 TOTAL_ROWS DEBUG: Loaded {prob_count}/{total_count} WinProbability values ({coverage_pct:.1f}% coverage)")
-    if prob_count == 0 and total_count > 0:
-        logger.warning(f"⚠️ ZERO WinProbability values loaded! Available columns: {list(normalized.columns)}")
 
     total_odds = _first_existing_numeric(normalized, ["odds_american", "american_odds", "odds"], default=-110.0)
 
@@ -652,17 +636,6 @@ def build_theover_bet_rows(
                 pieces.extend(_build_total_rows(normalized))
 
     out = _concat_valid_bet_frames(pieces, expected_columns=CANONICAL_BET_COLUMNS)
-
-    # DEBUG [2026-03-08]: Check if theover_probability exists in output
-    if "theover_probability" in out.columns:
-        prob_count = out["theover_probability"].notna().sum()
-        total = len(out)
-        logger.warning(f"🔍 BUILD_THEOVER: {prob_count}/{total} rows have theover_probability")
-        if prob_count > 0:
-            sample = out[out["theover_probability"].notna()][["home_team", "away_team", "theover_probability"]].head(3)
-            logger.warning(f"🔍 Sample games:\n{sample.to_string()}")
-    else:
-        logger.warning(f"⚠️ theover_probability column NOT IN OUTPUT!")
 
     if out.empty:
         return pd.DataFrame(columns=CANONICAL_BET_COLUMNS)
@@ -819,13 +792,6 @@ def run_analysis_pipeline(
 
     bet_rows = build_theover_bet_rows(spreads_df, totals_df, sports)
 
-    # DEBUG [2026-03-08]: Check bet_rows before merge
-    if "theover_probability" in bet_rows.columns:
-        prob_count = bet_rows["theover_probability"].notna().sum()
-        logger.warning(f"🔍 BEFORE MERGE: {prob_count}/{len(bet_rows)} bet_rows have theover_probability")
-    else:
-        logger.warning(f"⚠️ BEFORE MERGE: theover_probability NOT IN bet_rows!")
-
     bet_rows["game_date"] = _game_dates(bet_rows)
     if not bet_rows.empty and not base_df.empty:
         base_dates = base_df.copy()
@@ -861,16 +827,6 @@ def run_analysis_pipeline(
             how="left",
             suffixes=("", "_base"),
         )
-
-        # DEBUG [2026-03-08]: Check merged after base_schedule merge
-        if "theover_probability" in merged.columns:
-            prob_count = merged["theover_probability"].notna().sum()
-            logger.warning(f"🔍 AFTER MERGE: {prob_count}/{len(merged)} merged rows have theover_probability")
-            if prob_count > 0:
-                sample = merged[merged["theover_probability"].notna()][["home_team", "away_team", "theover_probability"]].head(3)
-                logger.warning(f"🔍 Sample merged games:\n{sample.to_string()}")
-        else:
-            logger.warning(f"⚠️ AFTER MERGE: theover_probability column LOST!")
 
         merged["game_date"] = _game_dates(merged)
         merged["game_date"] = merged["game_date"].fillna(merged["date"])
@@ -989,27 +945,13 @@ def run_analysis_pipeline(
             if "ml_probability" not in merged.columns:
                 merged["ml_probability"] = pd.NA
     else:
-        logger.warning(f"🔍 ML DEBUG: Skipped ML (use_ml={use_ml}, available={ML_AVAILABLE})")
         if "ml_probability" not in merged.columns:
             merged["ml_probability"] = pd.NA
 
-    # If ML is disabled, clear any existing ml_probability values [2026-03-08]
+    # If ML is disabled, clear any existing ml_probability values
     if not use_ml:
         if "ml_probability" in merged.columns:
             merged["ml_probability"] = pd.NA
-        logger.warning("🚫 ML DISABLED: Cleared ml_probability column, will use theover_probability fallback")
-
-    # DEBUG [2026-03-08]: Verify theover_probability exists before blend (partial coverage expected)
-    theover_series = _numeric_series(merged, "theover_probability")
-    theover_count = theover_series.notna().sum()
-    total_count = len(merged)
-    coverage_pct = (theover_count / total_count * 100) if total_count > 0 else 0
-    logger.warning(f"🔍 THEOVER DEBUG: {theover_count}/{total_count} rows ({coverage_pct:.1f}%) have theover_probability before model_probability assignment")
-
-    if theover_count == 0:
-        logger.warning(f"⚠️ CRITICAL: theover_probability column is EMPTY! Available columns: {[c for c in merged.columns if 'prob' in c.lower()]}")
-    elif coverage_pct < 40:
-        logger.warning(f"⚠️ LOW COVERAGE: Only {coverage_pct:.1f}% of games have TheOver data (expected 50-60%)")
 
     theover_probability = _numeric_series(merged, "theover_probability")
     theover_probability = theover_probability.where(theover_probability <= 1, theover_probability / 100.0)
