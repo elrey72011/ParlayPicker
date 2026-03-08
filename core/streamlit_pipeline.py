@@ -72,6 +72,10 @@ _UPLOAD_COLUMN_ALIASES = {
     "team 2": "team_2",
     "team2": "team_2",
     "team_2": "team_2",
+    "match up": "matchup",
+    "match_up": "matchup",
+    "event_name": "matchup",
+    "teams": "matchup",
 }
 
 
@@ -94,7 +98,7 @@ def _first_nonempty_text(df: pd.DataFrame, candidates: list[str]) -> pd.Series:
 
 def _coerce_identity_columns(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
-    matchup_text = _first_nonempty_text(out, ["matchup", "event", "game"])
+    matchup_text = _first_nonempty_text(out, ["matchup", "match_up", "event", "event_name", "teams", "game"])
     matchup_clean = _clean_text_placeholders(matchup_text)
 
     away_from_matchup = pd.Series([""] * len(out), index=out.index, dtype="string")
@@ -114,6 +118,43 @@ def _coerce_identity_columns(df: pd.DataFrame) -> pd.DataFrame:
     out["league"] = league_fallback.str.upper().replace(LEAGUE_ALIASES)
     out["home_team"] = home_fallback.map(normalize_team_name)
     out["away_team"] = away_fallback.map(normalize_team_name)
+    return out
+
+
+def _infer_missing_league_from_base(df: pd.DataFrame, base_df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+    if out.empty or base_df is None or base_df.empty:
+        return out
+
+    out["league"] = _clean_text_placeholders(_string_series(out, "league")).str.upper().replace(LEAGUE_ALIASES)
+    out["home_team"] = _clean_text_placeholders(_string_series(out, "home_team")).map(normalize_team_name)
+    out["away_team"] = _clean_text_placeholders(_string_series(out, "away_team")).map(normalize_team_name)
+
+    missing_mask = out["league"].str.len().eq(0) & out["home_team"].str.len().gt(0) & out["away_team"].str.len().gt(0)
+    if not missing_mask.any():
+        return out
+
+    base = base_df.copy()
+    base["league"] = _string_series(base, "league").str.upper().replace(LEAGUE_ALIASES)
+    base["home_team"] = _string_series(base, "home_team").map(normalize_team_name)
+    base["away_team"] = _string_series(base, "away_team").map(normalize_team_name)
+
+    direct = base[["league", "home_team", "away_team"]].drop_duplicates()
+    reverse = direct.rename(columns={"home_team": "away_team", "away_team": "home_team"})
+    lookup = pd.concat([direct, reverse], ignore_index=True)
+    lookup = lookup[lookup["league"].str.len().gt(0)].drop_duplicates(["home_team", "away_team", "league"])
+    league_by_match = (
+        lookup.groupby(["home_team", "away_team"], as_index=False)["league"]
+        .agg(lambda x: sorted(set([v for v in x if isinstance(v, str) and v])) )
+    )
+
+    match_fill = out.loc[missing_mask, ["home_team", "away_team"]].merge(
+        league_by_match,
+        on=["home_team", "away_team"],
+        how="left",
+    )
+    inferred = match_fill["league"].apply(lambda v: v[0] if isinstance(v, list) and len(v) == 1 else "")
+    out.loc[missing_mask, "league"] = out.loc[missing_mask, "league"].where(out.loc[missing_mask, "league"].str.len().gt(0), inferred.values)
     return out
 
 
@@ -507,6 +548,8 @@ def build_theover_bet_rows(
         inferred_league = str(selected_sports[0]).upper()
         league_series = _clean_text_placeholders(_string_series(out, "league"))
         out["league"] = league_series.where(league_series.str.len().gt(0), inferred_league)
+
+    out = _infer_missing_league_from_base(out, load_base_data())
 
     out["spread"] = pd.to_numeric(out.get("spread_line"), errors="coerce")
     out["total"] = pd.to_numeric(out.get("total_line"), errors="coerce")
