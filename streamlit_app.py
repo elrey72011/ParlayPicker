@@ -138,7 +138,14 @@ def _recompute_consensus_from_kalshi(df: pd.DataFrame) -> pd.DataFrame:
     decimal_odds = _safe_numeric_series(out, "decimal_odds")
     if decimal_odds.isna().all() and "odds_american" in out.columns:
         from core.streamlit_pipeline import american_to_decimal
-        decimal_odds = _safe_numeric_series(out, "odds_american", -110.0).apply(american_to_decimal)
+        # FIXED: No default -110, preserve NaN for missing odds
+        decimal_odds = _safe_numeric_series(out, "odds_american").apply(american_to_decimal)
+
+        if decimal_odds.isna().all():
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning("⚠️ All odds are missing - using default 1.91 (-110 equivalent)")
+            decimal_odds = pd.Series([1.91] * len(out), index=out.index)
 
     out["expected_value"] = blended * (decimal_odds - 1) - (1 - blended)
     out["edge"] = blended - market_prob
