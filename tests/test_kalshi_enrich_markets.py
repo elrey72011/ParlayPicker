@@ -72,9 +72,10 @@ def test_enrich_with_kalshi_markets_title_fallback_when_event_ticker_codes_diffe
 
     def fake_api_get_markets(**params):
         if "tickers" in params:
-            return {"data": []}
+            return {"markets": []}
+
         return {
-            "data": [
+            "markets": [
                 {
                     "ticker": "KXNCAAMBTOTAL-26MAR10XXXX",
                     "event_ticker": "KXNCAAMBTOTAL-26MAR10ABCD",
