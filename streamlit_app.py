@@ -446,9 +446,10 @@ def main() -> None:
                 "edge": "Edge",
                 "consensus_agreement": "Consensus",
                 "kalshi_match_status": "Kalshi Status",
+                "ml_probability": "ML Prob",
             }
             display_df = display_df.rename(columns=rename_map)
-            preferred = ["parlay_rank", "League", "Home Team", "Away Team", "Game Date", "Game Time (ET)", "Best Pick", "Prob", "EV", "Edge", "Consensus", "Kalshi Status"]
+            preferred = ["parlay_rank", "League", "Home Team", "Away Team", "Game Date", "Game Time (ET)", "Best Pick", "Prob", "ML Prob", "EV", "Edge", "Consensus", "Kalshi Status"]
             ordered = [c for c in preferred if c in display_df.columns] + [c for c in display_df.columns if c not in preferred]
             display_df = display_df[ordered]
             st.dataframe(display_df, width="stretch")
