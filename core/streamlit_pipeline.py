@@ -516,6 +516,15 @@ def _build_spread_rows(normalized: pd.DataFrame) -> list[pd.DataFrame]:
     """
     line = _first_existing_numeric(normalized, ["line", "spread_line", "spread", "points"])
     prob = _first_existing_numeric(normalized, ["theover_probability", "winprobability", "win_probability", "probability"])
+
+    # DEBUG [2026-03-08]: Verify TheOver probability loaded (partial coverage expected)
+    prob_count = prob.notna().sum()
+    total_count = len(normalized)
+    coverage_pct = (prob_count / total_count * 100) if total_count > 0 else 0
+    logger.warning(f"🔍 SPREAD_ROWS DEBUG: Loaded {prob_count}/{total_count} WinProbability values ({coverage_pct:.1f}% coverage)")
+    if prob_count == 0 and total_count > 0:
+        logger.warning(f"⚠️ ZERO WinProbability values loaded! Available columns: {list(normalized.columns)}")
+
     odds = _first_existing_numeric(normalized, ["odds_american", "american_odds", "odds"], default=-110.0)
 
     base_cols = [c for c in ["league", "home_team", "away_team", "game_date", "game_time_est"] if c in normalized.columns]
@@ -550,6 +559,15 @@ def _build_total_rows(normalized: pd.DataFrame) -> list[pd.DataFrame]:
     """Expand a raw totals upload into total_over + total_under rows."""
     total_line = _first_existing_numeric(normalized, ["total_line", "total", "line", "points"])
     total_prob = _first_existing_numeric(normalized, ["theover_probability", "winprobability", "win_probability", "probability"])
+
+    # DEBUG [2026-03-08]: Verify TheOver probability loaded (partial coverage expected)
+    prob_count = total_prob.notna().sum()
+    total_count = len(normalized)
+    coverage_pct = (prob_count / total_count * 100) if total_count > 0 else 0
+    logger.warning(f"🔍 TOTAL_ROWS DEBUG: Loaded {prob_count}/{total_count} WinProbability values ({coverage_pct:.1f}% coverage)")
+    if prob_count == 0 and total_count > 0:
+        logger.warning(f"⚠️ ZERO WinProbability values loaded! Available columns: {list(normalized.columns)}")
+
     total_odds = _first_existing_numeric(normalized, ["odds_american", "american_odds", "odds"], default=-110.0)
 
     pick_text = _string_series(normalized, "pick").str.lower()
@@ -949,6 +967,18 @@ def run_analysis_pipeline(
         if "ml_probability" in merged.columns:
             merged["ml_probability"] = pd.NA
         logger.warning("🚫 ML DISABLED: Cleared ml_probability column, will use theover_probability fallback")
+
+    # DEBUG [2026-03-08]: Verify theover_probability exists before blend (partial coverage expected)
+    theover_series = _numeric_series(merged, "theover_probability")
+    theover_count = theover_series.notna().sum()
+    total_count = len(merged)
+    coverage_pct = (theover_count / total_count * 100) if total_count > 0 else 0
+    logger.warning(f"🔍 THEOVER DEBUG: {theover_count}/{total_count} rows ({coverage_pct:.1f}%) have theover_probability before model_probability assignment")
+
+    if theover_count == 0:
+        logger.warning(f"⚠️ CRITICAL: theover_probability column is EMPTY! Available columns: {[c for c in merged.columns if 'prob' in c.lower()]}")
+    elif coverage_pct < 40:
+        logger.warning(f"⚠️ LOW COVERAGE: Only {coverage_pct:.1f}% of games have TheOver data (expected 50-60%)")
 
     theover_probability = _numeric_series(merged, "theover_probability")
     theover_probability = theover_probability.where(theover_probability <= 1, theover_probability / 100.0)
