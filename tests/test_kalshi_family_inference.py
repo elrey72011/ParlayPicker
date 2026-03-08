@@ -10,13 +10,15 @@ from app_core import kalshi_integrator as ki
 
 def test_enrich_uses_best_pick_to_infer_spread_family_when_market_type_missing(monkeypatch):
     df = pd.DataFrame(
-        {
-            "league": ["NBA"],
-            "home_team": ["Boston Celtics"],
-            "away_team": ["Los Angeles Lakers"],
-            "game_date": ["2026-03-10T00:00:00Z"],
-            "best_pick": ["Boston Celtics -4.5"],
-        }
+        [{
+            "league": "NBA",
+            "home_team": "Los Angeles Lakers",
+            "away_team": "Boston Celtics",
+            "game_date": pd.Timestamp("2024-03-08", tz="UTC"),
+            "best_pick": "Boston Celtics -4.5",
+            "spread_line": -4.5,
+            "pick_team": "Boston Celtics"
+        }]
     )
 
     seen = []
@@ -29,11 +31,12 @@ def test_enrich_uses_best_pick_to_infer_spread_family_when_market_type_missing(m
             return {
                 "data": [
                     {
-                        "ticker": "KXNBASPREAD-26MAR10LALBOS",
-                        "event_ticker": "KXNBASPREAD-26MAR10LALBOS",
-                        "title": "Lakers vs Celtics",
-                        "yes_bid_dollars": 54,
-                        "yes_ask_dollars": 56,
+                        "ticker": "KXNBASPREAD-24MAR08LALBOS",
+                        "event_ticker": "KXNBASPREAD-24MAR08LALBOS",
+                        "title": "Boston Celtics wins by over 4.5",
+                        "subtitle": "",
+                        "yes_bid_dollars": 0.45,
+                        "yes_ask_dollars": 0.55,
                     }
                 ]
             }
