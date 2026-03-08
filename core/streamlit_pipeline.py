@@ -21,6 +21,13 @@ from core.probability_engine import american_to_prob
 from core.schema.base_schema import ensure_base_schema
 from core.team_mapper import normalize_team_name
 
+try:
+    from app_core.prediction_engine import PredictionEngine
+    ML_AVAILABLE = True
+except Exception:
+    ML_AVAILABLE = False
+    PredictionEngine = None
+
 warnings.filterwarnings("ignore", category=FutureWarning, module="pandas")
 
 logger = logging.getLogger(__name__)
@@ -894,6 +901,44 @@ def run_analysis_pipeline(
     merged["spread"] = pd.to_numeric(merged.get("spread_line"), errors="coerce")
     merged["total"] = pd.to_numeric(merged.get("total_line"), errors="coerce")
 
+    # ML Prediction Enrichment [2026-03-08]
+    if use_ml and ML_AVAILABLE and PredictionEngine is not None:
+        logger.warning("🔍 ML DEBUG: use_ml=True, attempting predictions...")
+        try:
+            # Only predict for rows missing ml_probability
+            needs_prediction = merged["ml_probability"].isna() if "ml_probability" in merged.columns else pd.Series([True] * len(merged), index=merged.index)
+
+            if needs_prediction.any():
+                engine = PredictionEngine()
+                # predict_batch expects a DataFrame, returns List[float]
+                predictions_list = engine.predict_batch(merged[needs_prediction])
+
+                # Assign predictions only to rows that needed them
+                if "ml_probability" not in merged.columns:
+                    merged["ml_probability"] = pd.NA
+
+                merged.loc[needs_prediction, "ml_probability"] = pd.Series(
+                    predictions_list,
+                    index=merged[needs_prediction].index,
+                    dtype="float64"
+                )
+
+                ml_count = merged["ml_probability"].notna().sum()
+                logger.warning(f"✅ ML DEBUG: Generated {ml_count} total predictions ({needs_prediction.sum()} new)")
+            else:
+                logger.warning("✅ ML DEBUG: All rows already have ml_probability")
+
+        except Exception as e:
+            logger.error(f"❌ ML prediction failed: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            if "ml_probability" not in merged.columns:
+                merged["ml_probability"] = pd.NA
+    else:
+        logger.warning(f"🔍 ML DEBUG: Skipped ML (use_ml={use_ml}, available={ML_AVAILABLE})")
+        if "ml_probability" not in merged.columns:
+            merged["ml_probability"] = pd.NA
+
     theover_probability = _numeric_series(merged, "theover_probability")
     theover_probability = theover_probability.where(theover_probability <= 1, theover_probability / 100.0)
     ml_probability = _numeric_series(merged, "ml_probability")
@@ -958,6 +1003,8 @@ def run_analysis_pipeline(
         "rows_with_game_date": int(pd.to_datetime(analysis_df.get("game_date"), errors="coerce", utc=True).notna().sum()) if not analysis_df.empty else 0,
         "total_games": int(analysis_df[["league", "home_team", "away_team"]].drop_duplicates().shape[0]) if not analysis_df.empty else 0,
         "bet_rows": int(len(analysis_df)),
+        "ml_model_loaded": bool(use_ml and ML_AVAILABLE),
+        "ml_predictions": int(analysis_df["ml_probability"].notna().sum()) if "ml_probability" in analysis_df.columns else 0,
         "best_picks": int(len(best_picks_df)),
         "kalshi_attempted": 0,
         "kalshi_matches": 0,
