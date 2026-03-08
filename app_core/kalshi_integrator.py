@@ -424,7 +424,11 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         series = league_series_ticker(league, family)
 
         game_date = pd.to_datetime(row.get("game_date"), errors="coerce", utc=True)
-        date_code = game_date.strftime("%y%b%d").upper() if pd.notna(game_date) else ""
+        if pd.notna(game_date):
+            dt_local = game_date.tz_convert("America/New_York")
+            date_code = dt_local.strftime("%y%b%d").upper()
+        else:
+            date_code = ""
         away_code = team_code_map(league, str(row.get("away_team") or ""))
         home_code = team_code_map(league, str(row.get("home_team") or ""))
 
@@ -453,7 +457,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
         if not markets:
             try:
-                series_resp = api_get_markets(series_ticker=series, status="open")
+                series_resp = api_get_markets(series_ticker=series, status="open", limit=200)
                 series_markets = _extract_markets(series_resp)
             except Exception:
                 series_markets = []
