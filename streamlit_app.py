@@ -452,8 +452,30 @@ def main() -> None:
             ordered = [c for c in preferred if c in display_df.columns] + [c for c in display_df.columns if c not in preferred]
             display_df = display_df[ordered]
             st.dataframe(display_df, width="stretch")
-            export_cols = [c for c in ["parlay_rank", "league", "home_team", "away_team", "game_date", "game_time_est", "best_pick", "calibrated_probability", "expected_value", "edge", "consensus_agreement", "odds_american", "market_probability", "ml_probability"] if c in best_picks_df.columns]
-            best_picks_export = best_picks_df[export_cols] if export_cols else best_picks_df
+            export_prep_df = best_picks_df.copy()
+
+            csv_rename_map = {
+                "Home": "home_team",
+                "Away": "away_team",
+                "Local Date": "game_date",
+                "Commence (Local)": "game_time_est",
+                "Implied_Prob": "ml_probability"
+            }
+            export_prep_df = export_prep_df.rename(columns=csv_rename_map)
+
+            target_export_cols = [
+                "parlay_rank", "league", "home_team", "away_team", "game_date",
+                "game_time_est", "best_pick", "calibrated_probability", "expected_value",
+                "edge", "consensus_agreement", "odds_american", "market_probability", "ml_probability"
+            ]
+
+            final_export_cols = [c for c in target_export_cols if c in export_prep_df.columns]
+            best_picks_export = export_prep_df[final_export_cols]
+
+            if "home_team" in best_picks_export.columns and not best_picks_export.empty:
+                if not best_picks_export["home_team"].notna().all():
+                    st.warning("Warning: Some rows in the Best Picks export have a missing 'home_team'.")
+
             best_picks_csv = best_picks_export.to_csv(index=False)
             st.download_button(
                 "Export Best Picks",
