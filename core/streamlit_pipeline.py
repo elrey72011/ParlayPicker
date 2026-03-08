@@ -94,9 +94,22 @@ def _first_nonempty_text(df: pd.DataFrame, candidates: list[str]) -> pd.Series:
 
 def _coerce_identity_columns(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
+    matchup_text = _first_nonempty_text(out, ["matchup", "event", "game"])
+    matchup_clean = _clean_text_placeholders(matchup_text)
+
+    away_from_matchup = pd.Series([""] * len(out), index=out.index, dtype="string")
+    home_from_matchup = pd.Series([""] * len(out), index=out.index, dtype="string")
+    sep_pattern = r"\s*(?:@|vs\.?|v\.?|at)\s*"
+    parts = matchup_clean.str.split(sep_pattern, n=1, expand=True, regex=True)
+    if isinstance(parts, pd.DataFrame) and parts.shape[1] >= 2:
+        away_from_matchup = _clean_text_placeholders(parts[0])
+        home_from_matchup = _clean_text_placeholders(parts[1])
+
     # Some TheOver exports include Team 1/Team 2 while Home/Away may be blank.
     home_fallback = _first_nonempty_text(out, ["home_team", "team_1", "home"])
     away_fallback = _first_nonempty_text(out, ["away_team", "team_2", "away"])
+    home_fallback = home_fallback.where(home_fallback.str.len().gt(0), home_from_matchup)
+    away_fallback = away_fallback.where(away_fallback.str.len().gt(0), away_from_matchup)
     league_fallback = _first_nonempty_text(out, ["league", "sport"])
     out["league"] = league_fallback.str.upper().replace(LEAGUE_ALIASES)
     out["home_team"] = home_fallback.map(normalize_team_name)
@@ -489,6 +502,11 @@ def build_theover_bet_rows(
     out = _concat_valid_bet_frames(pieces, expected_columns=CANONICAL_BET_COLUMNS)
     if out.empty:
         return pd.DataFrame(columns=CANONICAL_BET_COLUMNS)
+
+    if selected_sports and len(selected_sports) == 1:
+        inferred_league = str(selected_sports[0]).upper()
+        league_series = _clean_text_placeholders(_string_series(out, "league"))
+        out["league"] = league_series.where(league_series.str.len().gt(0), inferred_league)
 
     out["spread"] = pd.to_numeric(out.get("spread_line"), errors="coerce")
     out["total"] = pd.to_numeric(out.get("total_line"), errors="coerce")
