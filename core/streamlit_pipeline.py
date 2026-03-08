@@ -99,7 +99,7 @@ def _coerce_identity_columns(df: pd.DataFrame) -> pd.DataFrame:
 
     away_from_matchup = pd.Series([""] * len(out), index=out.index, dtype="string")
     home_from_matchup = pd.Series([""] * len(out), index=out.index, dtype="string")
-    sep_pattern = r"\s*(?:@|vs\.?|v\.?|at)\s*"
+    sep_pattern = r"(?i)\s*(?:@|vs\.?|v\.?|at|[-—])\s*"
     parts = matchup_clean.str.split(sep_pattern, n=1, expand=True, regex=True)
     if isinstance(parts, pd.DataFrame) and parts.shape[1] >= 2:
         away_from_matchup = _clean_text_placeholders(parts[0])
@@ -610,10 +610,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         & pool["away_team"].str.len().gt(0)
         & pool["game_date"].notna()
     )
-    if pool["has_identity"].any():
-        pool = pool[pool["has_identity"]].copy()
-
-    pool["has_signal_probability"] = _numeric_series(pool, "model_probability").notna() | _numeric_series(pool, "theover_probability").notna() | _numeric_series(pool, "ml_probability").notna()
+    pool = pool[pool["has_identity"]].copy()
+    if pool.empty:
+        return pd.DataFrame(columns=BEST_PICK_COLUMNS)
 
     pool["has_signal_probability"] = _numeric_series(pool, "model_probability").notna() | _numeric_series(pool, "theover_probability").notna() | _numeric_series(pool, "ml_probability").notna()
 
