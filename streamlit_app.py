@@ -268,6 +268,26 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
         if "game_date" not in best_picks_df.columns or best_picks_df["game_date"].isna().all():
             deferred_warnings.append("game_date missing from best_picks_df — Kalshi matching skipped.")
         else:
+            # TEMP FIX [2026-03-08]: Extract lines from best_pick column if missing
+            if "total_line" not in best_picks_df.columns or best_picks_df["total_line"].isna().all():
+                import re
+                import logging
+                logger = logging.getLogger(__name__)
+                def extract_line(pick_str):
+                    m = re.search(r'([0-9]+\.?[0-9]*)', str(pick_str or ""))
+                    return float(m.group(1)) if m else None
+
+                best_picks_df["total_line"] = best_picks_df["best_pick"].apply(
+                    lambda x: extract_line(x) if "over" in str(x).lower() or "under" in str(x).lower() else None
+                )
+                best_picks_df["spread_line"] = best_picks_df["best_pick"].apply(
+                    lambda x: extract_line(x) if "over" not in str(x).lower() and "under" not in str(x).lower() else None
+                )
+                best_picks_df["total_pick_side"] = best_picks_df["best_pick"].apply(
+                    lambda x: "over" if "over" in str(x).lower() else ("under" if "under" in str(x).lower() else None)
+                )
+                logger.warning("🔧 TEMP: Extracted lines from best_pick column for Kalshi matching")
+
             best_picks_df, kalshi_err = _enrich_with_kalshi_safe(best_picks_df)
             if kalshi_err:
                 deferred_warnings.append(kalshi_err)
