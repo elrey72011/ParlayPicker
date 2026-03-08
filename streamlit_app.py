@@ -168,12 +168,13 @@ def _recompute_consensus_from_kalshi(df: pd.DataFrame) -> pd.DataFrame:
             )
 
     # After recalculating edge, filter picks that fall below minimum threshold
-    if "edge" in out.columns and "best_pick" in out.columns:
-        # Only apply dropping to best picks (not all analysis rows)
-        if len(out) > 0 and pd.notna(out["best_pick"].iloc[0]):
-            out = out[out["edge"] >= MIN_EDGE_THRESHOLD].copy().reset_index(drop=True)
-            if "parlay_rank" in out.columns:
-                out["parlay_rank"] = range(1, len(out) + 1)
+    # TEMP DISABLED [2026-03-08]: Filter after Kalshi enrichment to see match diagnostics
+    # if "edge" in out.columns and "best_pick" in out.columns:
+    #     # Only apply dropping to best picks (not all analysis rows)
+    #     if len(out) > 0 and pd.notna(out["best_pick"].iloc[0]):
+    #         out = out[out["edge"] >= MIN_EDGE_THRESHOLD].copy().reset_index(drop=True)
+    #         if "parlay_rank" in out.columns:
+    #             out["parlay_rank"] = range(1, len(out) + 1)
 
     return out
 
