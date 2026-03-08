@@ -578,31 +578,39 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             out.at[idx, "kalshi_match_reason"] = match_reason
             continue
 
+        # KALSHI DEBUG [2026-03-08] - Log first 3 candidates per game
+        if len(markets) > 0:
+            game_id = f"{row.get('league', '??')}-{str(row.get('home_team', ''))[:4]}-{str(row.get('away_team', ''))[:4]}"
+            logger.warning(f"KALSHI DEBUG {game_id} | candidates: {len(markets)}")
+            for i, cand in enumerate(markets[:3]):
+                title = cand.get('title', '')[:50] + '...' if len(cand.get('title', '')) > 50 else cand.get('title', '')
+                logger.warning(f"  #{i}: '{title}' | bid={cand.get('yes_bid_dollars', '')} ask={cand.get('yes_ask_dollars', '')} | book_line={row.get('total_line') or row.get('spread_line')}")
+
         for mkt in markets:
             m_title = str(mkt.get("title") or "").lower()
             m_subtitle = str(mkt.get("subtitle") or "").lower()
             combined_text = f"{m_title} {m_subtitle}"
 
-            # NEW: Strict line matching filter
-            if pd.notna(row.get("total_line")) and family == "total":
-                if not kalshi_line_matches_book(
-                    kalshi_title=combined_text,  # Kalshi title + subtitle contains the line
-                    book_side=row.get("total_pick_side", ""),  # 'over'/'under'
-                    book_line=float(row["total_line"]),
-                    market_type="TOTAL"
-                ):
-                    logger.info(f"Kalshi TOTAL rejected: line mismatch {combined_text}")
-                    continue  # Skip this candidate
+            # EMERGENCY DISABLE - kalshi_line_matches_book killing all matches [2026-03-08]
+            # if pd.notna(row.get("total_line")) and family == "total":
+            #     if not kalshi_line_matches_book(
+            #         kalshi_title=combined_text,  # Kalshi title + subtitle contains the line
+            #         book_side=row.get("total_pick_side", ""),  # 'over'/'under'
+            #         book_line=float(row["total_line"]),
+            #         market_type="TOTAL"
+            #     ):
+            #         logger.info(f"Kalshi TOTAL rejected: line mismatch {combined_text}")
+            #         continue  # Skip this candidate
 
-            if pd.notna(row.get("spread_line")) and family == "spread":
-                if not kalshi_line_matches_book(
-                    kalshi_title=combined_text,
-                    book_side="",  # Spreads don't need side, just line tolerance
-                    book_line=float(row["spread_line"]),
-                    market_type="SPREAD"
-                ):
-                    logger.info(f"Kalshi SPREAD rejected: line mismatch {combined_text}")
-                    continue
+            # if pd.notna(row.get("spread_line")) and family == "spread":
+            #     if not kalshi_line_matches_book(
+            #         kalshi_title=combined_text,
+            #         book_side="",  # Spreads don't need side, just line tolerance
+            #         book_line=float(row["spread_line"]),
+            #         market_type="SPREAD"
+            #     ):
+            #         logger.info(f"Kalshi SPREAD rejected: line mismatch {combined_text}")
+            #         continue
 
             # Extract number from Kalshi title/subtitle
             # Often formatted as "wins by over X.5", "total points over X.5", or "covers +X.5"
