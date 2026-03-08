@@ -652,6 +652,18 @@ def build_theover_bet_rows(
                 pieces.extend(_build_total_rows(normalized))
 
     out = _concat_valid_bet_frames(pieces, expected_columns=CANONICAL_BET_COLUMNS)
+
+    # DEBUG [2026-03-08]: Check if theover_probability exists in output
+    if "theover_probability" in out.columns:
+        prob_count = out["theover_probability"].notna().sum()
+        total = len(out)
+        logger.warning(f"🔍 BUILD_THEOVER: {prob_count}/{total} rows have theover_probability")
+        if prob_count > 0:
+            sample = out[out["theover_probability"].notna()][["home_team", "away_team", "theover_probability"]].head(3)
+            logger.warning(f"🔍 Sample games:\n{sample.to_string()}")
+    else:
+        logger.warning(f"⚠️ theover_probability column NOT IN OUTPUT!")
+
     if out.empty:
         return pd.DataFrame(columns=CANONICAL_BET_COLUMNS)
 
@@ -806,6 +818,14 @@ def run_analysis_pipeline(
     odds_schedule_loaded = not base_df.empty
 
     bet_rows = build_theover_bet_rows(spreads_df, totals_df, sports)
+
+    # DEBUG [2026-03-08]: Check bet_rows before merge
+    if "theover_probability" in bet_rows.columns:
+        prob_count = bet_rows["theover_probability"].notna().sum()
+        logger.warning(f"🔍 BEFORE MERGE: {prob_count}/{len(bet_rows)} bet_rows have theover_probability")
+    else:
+        logger.warning(f"⚠️ BEFORE MERGE: theover_probability NOT IN bet_rows!")
+
     bet_rows["game_date"] = _game_dates(bet_rows)
     if not bet_rows.empty and not base_df.empty:
         base_dates = base_df.copy()
@@ -841,6 +861,17 @@ def run_analysis_pipeline(
             how="left",
             suffixes=("", "_base"),
         )
+
+        # DEBUG [2026-03-08]: Check merged after base_schedule merge
+        if "theover_probability" in merged.columns:
+            prob_count = merged["theover_probability"].notna().sum()
+            logger.warning(f"🔍 AFTER MERGE: {prob_count}/{len(merged)} merged rows have theover_probability")
+            if prob_count > 0:
+                sample = merged[merged["theover_probability"].notna()][["home_team", "away_team", "theover_probability"]].head(3)
+                logger.warning(f"🔍 Sample merged games:\n{sample.to_string()}")
+        else:
+            logger.warning(f"⚠️ AFTER MERGE: theover_probability column LOST!")
+
         merged["game_date"] = _game_dates(merged)
         merged["game_date"] = merged["game_date"].fillna(merged["date"])
 
