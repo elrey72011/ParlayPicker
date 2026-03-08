@@ -35,25 +35,23 @@ def normalize_team_name(name: str) -> str:
     normalized = name.lower()
 
     # Expand common abbreviations BEFORE removing punctuation
-    replacements = {
-        "l.a. ": "los angeles ",
-        "la ": "los angeles ",
-        " st.": " state",
-        " st ": " state ",
-        "st. ": "saint ",
-        "n.c. ": "north carolina ",
-        "unc ": "north carolina ",
-        "s.c. ": "south carolina ",
-        "u.c. ": "uc ",
-        "usc ": "south carolina ",
-        "penn st": "penn state",
-        "northwestern st": "northwestern state",
-        "nicholls st": "nicholls state",
-        "michigan st": "michigan state",
-    }
+    # Use word boundaries to avoid partial matches
+    replacements = [
+        (r'\bl\.a\.\s', 'los angeles '),
+        (r'\bla\s', 'los angeles '),
+        (r'^st\.\s', 'saint '),   # "St." at beginning (Saint) - must be before \bst\.\s
+        (r'\bst\.\s', 'state '),  # "St." at end or before space
+        (r'\bst\.$', 'state'),    # "St." at end of string
+        (r'\bn\.c\.\s', 'north carolina '),
+        (r'\bunc\s', 'north carolina '),
+        (r'\bunc$', 'north carolina'),
+        (r'\bs\.c\.\s', 'south carolina '),
+        (r'\bu\.c\.\s', 'uc '),
+        (r'\bpenn st\b', 'penn state'),
+    ]
 
-    for abbrev, full in replacements.items():
-        normalized = normalized.replace(abbrev, full)
+    for pattern, replacement in replacements:
+        normalized = re.sub(pattern, replacement, normalized)
 
     # Remove all punctuation
     normalized = re.sub(r'[^\w\s]', '', normalized)
@@ -61,6 +59,4 @@ def normalize_team_name(name: str) -> str:
     # Collapse multiple spaces to single space
     normalized = re.sub(r'\s+', ' ', normalized).strip()
 
-    # Titlecase so that we return "Miami Heat" instead of "miami heat"
-    # This ensures backward compatibility with tests and display consistency.
     return normalized.title()
