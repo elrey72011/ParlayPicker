@@ -125,6 +125,15 @@ def _first_nonempty_text(df: pd.DataFrame, candidates: list[str]) -> pd.Series:
 def _coerce_identity_columns(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
     matchup_text = _first_nonempty_text(out, ["matchup", "match_up", "event", "event_name", "teams", "game"])
+    if matchup_text.str.len().eq(0).all():
+        sep_probe = r"(?i)(?:@|\bvs\b|\bv\b|\bat\b|[-—])"
+        for col in out.columns:
+            if col in {"home_team", "away_team", "team_1", "team_2", "league", "sport", "pick", "pick_team"}:
+                continue
+            series = _clean_text_placeholders(_string_series(out, col))
+            if series.str.contains(sep_probe, regex=True, na=False).any():
+                matchup_text = series
+                break
     matchup_clean = _clean_text_placeholders(matchup_text)
 
     away_from_matchup = pd.Series([""] * len(out), index=out.index, dtype="string")
