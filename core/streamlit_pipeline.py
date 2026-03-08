@@ -944,6 +944,12 @@ def run_analysis_pipeline(
         if "ml_probability" not in merged.columns:
             merged["ml_probability"] = pd.NA
 
+    # If ML is disabled, clear any existing ml_probability values [2026-03-08]
+    if not use_ml:
+        if "ml_probability" in merged.columns:
+            merged["ml_probability"] = pd.NA
+        logger.warning("🚫 ML DISABLED: Cleared ml_probability column, will use theover_probability fallback")
+
     theover_probability = _numeric_series(merged, "theover_probability")
     theover_probability = theover_probability.where(theover_probability <= 1, theover_probability / 100.0)
     ml_probability = _numeric_series(merged, "ml_probability")
