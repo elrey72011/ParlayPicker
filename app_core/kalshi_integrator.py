@@ -681,8 +681,38 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                             match_status = "matched"
                             match_reason = "exact_match" if delta == 0 else "close_match"
 
-        if best_market is None:
-            # We found markets, but none matched our line criteria
+        # KALSHI POST-MATCH DEBUG [2026-03-08]
+        game_id = f"{row.get('league', '??')}-{str(row.get('home_team', ''))[:4]}-{str(row.get('away_team', ''))[:4]}"
+        logger.warning(f"KALSHI POST enriches {game_id} | candidates: {len(markets)} | best_market: {best_market is not None}")
+
+        # Adding a safe check to print out keys of kalshi_probability if it were a dictionary
+        row_prob_val = row.get("kalshi_probability")
+        if isinstance(row_prob_val, dict):
+            logger.warning(f"  final row kalshi_prob: {pd.notna(row_prob_val)} | keys: {list(row_prob_val.keys())[:3]}")
+        else:
+            logger.warning(f"  final row kalshi_prob: {pd.notna(row_prob_val)}")
+
+        # TEMP FORCE ASSIGN [2026-03-08] - if no match but candidates exist
+        if best_market is None and len(markets) > 0:
+            out.at[idx, "kalshi_tried_tickers"] = json.dumps(candidates)
+            out.at[idx, "kalshi_match_status"] = "miss_but_forced"
+            out.at[idx, "kalshi_match_reason"] = "alt_line_mismatch"
+            out.at[idx, "kalshi_match_quality"] = "line_mismatched_forced"
+
+            forced_mkt = markets[0]
+            bid = float(pd.to_numeric(forced_mkt.get("yes_bid_dollars"), errors="coerce") or 0.0)
+            ask = float(pd.to_numeric(forced_mkt.get("yes_ask_dollars"), errors="coerce") or 0.0)
+
+            forced_prob = ((bid + ask) / 200.0) if (bid + ask) > 2.0 else ((bid + ask) / 2.0)
+
+            logger.error(f"🚨 FORCE kalshi_prob={forced_prob} for {game_id} from {str(forced_mkt.get('title', '??'))[:30]}")
+            out.at[idx, "kalshi_probability"] = forced_prob
+            out.at[idx, "kalshi_market_title"] = forced_mkt.get("title")
+            out.at[idx, "kalshi_event_ticker"] = forced_mkt.get("event_ticker")
+            out.at[idx, "kalshi_market_ticker"] = forced_mkt.get("ticker")
+
+        elif best_market is None:
+            # We found no markets or candidates at all
             out.at[idx, "kalshi_tried_tickers"] = json.dumps(candidates)
             out.at[idx, "kalshi_match_status"] = "miss"
             out.at[idx, "kalshi_match_reason"] = "alt_line_mismatch"
