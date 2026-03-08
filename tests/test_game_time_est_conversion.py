@@ -31,6 +31,6 @@ def test_game_time_est_is_converted_from_utc_game_date(monkeypatch):
     )
 
     # With the updated logic, exact midnight UTC timestamps are treated as date-only
-    # placeholders, not valid times. They should yield an empty string for game_time_est.
-    assert analysis_df.loc[0, "game_time_est"] == ""
-    assert best_picks_df.loc[0, "game_time_est"] == ""
+    # placeholders, not valid times. They should yield the date formatted as %Y-%m-%d
+    assert analysis_df.loc[0, "game_time_est"] == "2026-03-07"
+    assert best_picks_df.loc[0, "game_time_est"] == "2026-03-07"

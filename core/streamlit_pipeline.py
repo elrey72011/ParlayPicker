@@ -240,39 +240,32 @@ def _game_dates(df: pd.DataFrame) -> pd.Series:
 
 
 def _format_game_time_est(df: pd.DataFrame) -> pd.Series:
-    """Return game times strictly formatted in America/New_York, ignoring midnight placeholders."""
+    """Return game times formatted in ET. If only a fallback date exists, return the date."""
     if df is None or df.empty:
         return pd.Series(dtype="string")
 
     out = pd.Series([""] * len(df), index=df.index, dtype="string")
-
-    # Parse both columns safely to UTC
-    # Ensure they are Series so we can use .where and .dt accessors
-    dt_existing = pd.to_datetime(df.get("game_time_est"), errors="coerce", utc=True)
-    if not isinstance(dt_existing, pd.Series):
-        dt_existing = pd.Series([dt_existing] * len(df), index=df.index)
-
+    raw_time = df.get("game_time_est", pd.Series([""] * len(df))).astype(str).str.strip().replace("nan", "")
     dt_game = pd.to_datetime(df.get("game_date"), errors="coerce", utc=True)
-    if not isinstance(dt_game, pd.Series):
-        dt_game = pd.Series([dt_game] * len(df), index=df.index)
 
-    # Only use game_date if it's NOT exactly midnight (which means it's a date-only placeholder)
-    game_has_time = dt_game.notna() & ~(dt_game.dt.hour.eq(0) & dt_game.dt.minute.eq(0) & dt_game.dt.second.eq(0))
+    for idx in df.index:
+        t_str = raw_time[idx]
+        d_obj = dt_game[idx]
 
-    # Prioritize dt_existing, fallback to dt_game (only if it has a real clock time)
-    best_dt = dt_existing.where(dt_existing.notna(), dt_game.where(game_has_time))
+        # 1. If we have a raw time string from the API or merge, use it.
+        if t_str:
+            out[idx] = t_str
+            continue
 
-    valid = best_dt.notna()
-    if valid.any():
-        # Convert to ET and remove the leading zero on the hour (e.g., " 07:" -> " 7:")
-        est = best_dt[valid].dt.tz_convert("America/New_York").dt.strftime("%Y-%m-%d %I:%M %p ET").str.replace(" 0", " ")
-        out.loc[valid] = est.astype("string")
-
-    # If we failed to parse anything, keep the raw string from game_time_est as a fallback
-    if "game_time_est" in df.columns:
-        raw_string = df["game_time_est"].astype(str).fillna("").str.strip()
-        # Only fill where out is currently empty
-        out = out.where(out != "", raw_string)
+        # 2. If no time string, but we have a valid UTC date object
+        if pd.notna(d_obj):
+            # Check if it's a midnight fallback placeholder
+            if d_obj.hour == 0 and d_obj.minute == 0 and d_obj.second == 0:
+                out[idx] = d_obj.strftime("%Y-%m-%d")
+            else:
+                # It has a real clock time, convert to ET
+                est = d_obj.tz_convert("America/New_York")
+                out[idx] = est.strftime("%Y-%m-%d %I:%M %p ET").replace(" 0", " ")
 
     return out
 
