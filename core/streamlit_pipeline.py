@@ -325,7 +325,7 @@ def _coerce_export_to_canonical(df: pd.DataFrame, selected_sports: list[str] | N
     out["spread_line"] = pd.to_numeric(out.get("spread_line"), errors="coerce")
     out["total_line"] = pd.to_numeric(out.get("total_line"), errors="coerce")
     out["theover_probability"] = pd.to_numeric(out.get("theover_probability"), errors="coerce")
-    out["odds_american"] = pd.to_numeric(out.get("odds_american", -110.0), errors="coerce").fillna(-110.0)
+    out["odds_american"] = pd.to_numeric(out.get("odds_american"), errors="coerce")
     out["market_probability"] = out["odds_american"].apply(american_to_prob)
     out["ml_probability"] = pd.to_numeric(out.get("ml_probability"), errors="coerce")
     out["calibrated_probability"] = pd.to_numeric(out.get("calibrated_probability"), errors="coerce")
@@ -893,9 +893,14 @@ def run_analysis_pipeline(
     if merged["game_date"].isna().all():
         merged["game_date"] = _game_date_fallback()
     merged["game_time_est"] = _format_game_time_est(merged)
-    merged["odds_american"] = _numeric_series(merged, "odds_american", -110.0)
+    merged["odds_american"] = _numeric_series(merged, "odds_american")
     merged.loc[_numeric_series(merged, "odds_american", -110.0).eq(-110) & _string_series(merged, "odds_source").str.len().eq(0), "odds_source"] = "fallback_-110"
     merged["decimal_odds"] = merged["odds_american"].apply(american_to_decimal)
+    if merged["odds_american"].isna().all():
+        import logging
+        logging.getLogger(__name__).warning("⚠️ All odds missing - using -110 fallback")
+        merged["odds_american"] = -110.0
+        merged["decimal_odds"] = 1.91
     merged["market_probability"] = (1.0 / merged["decimal_odds"]).clip(0.01, 0.99)
 
     merged["spread"] = pd.to_numeric(merged.get("spread_line"), errors="coerce")

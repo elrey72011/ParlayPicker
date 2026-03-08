@@ -396,7 +396,10 @@ def _select_probability(market: dict[str, Any]) -> float | None:
     bid = pd.to_numeric(market.get("yes_bid_dollars"), errors="coerce")
     ask = pd.to_numeric(market.get("yes_ask_dollars"), errors="coerce")
     if pd.notna(bid) and pd.notna(ask):
-        return float((bid + ask) / 2.0)
+        if (bid + ask) > 2.0:
+            return float((bid + ask) / 200.0)
+        else:
+            return float((bid + ask) / 2.0)
 
     last = pd.to_numeric(market.get("last_price_dollars"), errors="coerce")
     if pd.notna(last):
@@ -701,7 +704,13 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             bid = float(pd.to_numeric(forced_mkt.get("yes_bid_dollars"), errors="coerce") or 0.0)
             ask = float(pd.to_numeric(forced_mkt.get("yes_ask_dollars"), errors="coerce") or 0.0)
 
-            forced_prob = (bid + ask) / 2.0  # FIXED: No more conditional /200 logic
+            # REPLACE WITH ADAPTIVE LOGIC:
+            if (bid + ask) > 2.0:
+                # Values are in cents
+                forced_prob = (bid + ask) / 200.0
+            else:
+                # Values are in dollars
+                forced_prob = (bid + ask) / 2.0
 
             # Sanity check: Kalshi probs must be 0-1
             if forced_prob < 0.0 or forced_prob > 1.0:
@@ -724,8 +733,13 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             bid = float(pd.to_numeric(best_market.get("yes_bid_dollars"), errors="coerce") or 0.0)
             ask = float(pd.to_numeric(best_market.get("yes_ask_dollars"), errors="coerce") or 0.0)
 
-            # Simple midpoint average
-            kalshi_prob = (bid + ask) / 2.0
+            # REPLACE WITH ADAPTIVE LOGIC:
+            if (bid + ask) > 2.0:
+                # Values are in cents
+                kalshi_prob = (bid + ask) / 200.0
+            else:
+                # Values are in dollars
+                kalshi_prob = (bid + ask) / 2.0
 
             # Sanity check: probabilities must be between 0 and 1
             if kalshi_prob < 0.0 or kalshi_prob > 1.0:
@@ -773,7 +787,8 @@ def match_nba_spread(row: dict[str, Any], markets: list[dict[str, Any]]) -> dict
             continue
         market_team = canonical_team_name(m.group(1))
         market_line = float(m.group(2))
-        if market_team != target_team:
+        # Kalshi 'yes_side' uses just the city/nickname often, so we'll match by simple substring inclusion.
+        if market_team.lower() not in target_team.lower() and target_team.lower() not in market_team.lower():
             continue
         delta = abs(market_line - target_line)
         if delta < best_delta:
