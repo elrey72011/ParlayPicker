@@ -429,7 +429,7 @@ def main() -> None:
     odds_base_loaded = bool(diagnostics.get("odds_schedule_loaded", False))
 
     with st.container():
-        m1, m2, m3, m4, m5, m6, m7, m8, m9, m10 = st.columns(10)
+        m1, m2, m3, m4, m5, m6, m7, m8, m9, m10, m11 = st.columns(11)
         m1.metric("Total games", games_count)
         m2.metric("Bet rows", bet_rows)
         m3.metric("Best picks", best_rows)
@@ -440,6 +440,11 @@ def main() -> None:
         m8.metric("Date fill success", f"{date_fill_filled}/{date_fill_attempted} ({date_fill_rate:.0%})")
         m9.metric("Positive EV rows", positive_ev_rows)
         m10.metric("Consensus ✅", consensus_agrees)
+
+        kalshi_hits = analysis_df["kalshi_probability"].notna().sum() if analysis_df is not None and not analysis_df.empty and "kalshi_probability" in analysis_df.columns else 0
+        total_analysis_len = len(analysis_df) if analysis_df is not None and not analysis_df.empty else 1
+        m11.metric("Kalshi Matches", f"{kalshi_hits}/{len(analysis_df) if analysis_df is not None else 0} ({kalshi_hits/total_analysis_len*100:.0f}%)")
+
         st.progress(max(0.0, min(1.0, match_rate)), text=f"Kalshi match rate: {match_rate:.0%}")
         st.caption(f"Merge keys used: {diagnostics.get('merge_keys_used', [])}")
         st.caption(f"Odds/base schedule loaded: {odds_base_loaded}")
@@ -479,7 +484,8 @@ def main() -> None:
     with tab3:
         st.subheader("Best Picks")
         if best_picks_df is None or best_picks_df.empty:
-            st.info("No eligible spread/total best picks found.")
+            st.warning(f"⚠️ No picks meet {MIN_EDGE_THRESHOLD*100:.1f}% edge threshold")
+            st.dataframe(pd.DataFrame(columns=best_picks_df.columns if best_picks_df is not None and not best_picks_df.empty else ["league", "pick", "edge"]))
             with st.expander("Best Picks Debug Diagnostics", expanded=True):
                 st.json({
                     "market_type_counts": diagnostics.get("market_type_counts", {}),
@@ -489,6 +495,7 @@ def main() -> None:
                     "bet_rows": diagnostics.get("bet_rows", 0),
                 })
         else:
+            st.success(f"✅ {len(best_picks_df)} picks found")
             display_df = best_picks_df.copy()
             rename_map = {
                 "league": "League",

@@ -49,7 +49,7 @@ _EXPORT_SIGNAL_COLS = {"market_type", "calibrated_probability", "expected_value"
 # Cap combos per leg count to prevent combinatorial explosion
 _MAX_PARLAY_COMBOS_PER_LEG = 500
 
-MIN_EDGE_THRESHOLD = 0.035
+MIN_EDGE_THRESHOLD = 0.01  # TEMP DEBUG [2026-03-08] - was 0.035
 W_ML = 0.5
 W_MARKET = 0.3
 W_KALSHI = 0.2
