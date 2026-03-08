@@ -497,25 +497,115 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                     "", # Allow match by title even if date code differs. It's an open market.
                 )
 
-        if markets:
-            mkt = markets[0]
-            bid = float(pd.to_numeric(mkt.get("yes_bid_dollars"), errors="coerce") or 0.0)
-            ask = float(pd.to_numeric(mkt.get("yes_ask_dollars"), errors="coerce") or 0.0)
+        best_market = None
+        best_delta = float("inf")
+        match_reason = "no_market_for_tickers"
+        match_status = "miss"
+
+        # We need to verify that the Kalshi line matches our book line
+        target_spread = pd.to_numeric(row.get("spread_line"), errors="coerce")
+        target_total = pd.to_numeric(row.get("total_line"), errors="coerce")
+        pick = str(row.get("best_pick") or "").lower()
+
+        if not markets:
+            out.at[idx, "kalshi_tried_tickers"] = json.dumps(candidates)
+            out.at[idx, "kalshi_match_status"] = match_status
+            out.at[idx, "kalshi_match_reason"] = match_reason
+            continue
+
+        for mkt in markets:
+            m_title = str(mkt.get("title") or "").lower()
+            m_subtitle = str(mkt.get("subtitle") or "").lower()
+            combined_text = f"{m_title} {m_subtitle}"
+
+            # Extract number from Kalshi title/subtitle
+            # Often formatted as "wins by over X.5", "total points over X.5", or "covers +X.5"
+            line_match = re.search(r'(?:over|under|by|by over|by more than|covers\s*\+?)\s*([0-9]+(?:\.[0-9]+)?)', combined_text)
+
+            if not line_match:
+                # Moneyline check: if the market family is spread (Kalshi groups moneyline under spread series or as its own)
+                # and target is a moneyline (we represent it as NaN spread or explicit market type), verify.
+                # Actually, ML in our system typically has market_type="moneyline".
+                # But our current code maps everything to family="spread" if it's not "total".
+                # So if there's no line but it says "to win" and we are looking for a moneyline bet
+                is_ml_pick = str(row.get("market_type") or "").lower() == "moneyline"
+                if is_ml_pick and ("moneyline" in combined_text or "to win" in combined_text or "wins" in combined_text):
+                    pick_team_norm = _normalize_team_token(str(row.get("pick_team") or row.get("home_team") if pick.startswith(str(row.get("home_team") or "").lower()) else row.get("away_team")))
+                    if pick_team_norm and pick_team_norm in _normalize_team_token(m_title):
+                        best_market = mkt
+                        match_status = "matched"
+                        match_reason = "exact_match"
+                continue
+
+            k_line = float(line_match.group(1))
+
+            # Match spread lines
+            if family == "spread" and pd.notna(target_spread) and str(row.get("market_type") or "").lower() != "moneyline":
+                # Spread targets are often stored as relative to the home/away team (+4.5, -3.5)
+                # Kalshi stores favorites as "Team A wins by over 3.5" (-4.0)
+                # Kalshi stores underdogs as "Team B covers +3.5" (+3.5)
+
+                # Determine pick direction: favorite (<0) or underdog (>0)
+                pick_is_favorite = target_spread < 0
+
+                # Determine market direction
+                market_is_favorite = "by over" in combined_text or "wins by" in combined_text
+                market_is_underdog = "covers" in combined_text or "spread" in combined_text and "+" in combined_text
+
+                # Default to matching absolute value if we can't definitively determine market direction
+                # but if we can, ensure they match
+                direction_match = True
+                if market_is_favorite and not pick_is_favorite:
+                    direction_match = False
+                elif market_is_underdog and pick_is_favorite:
+                    direction_match = False
+
+                if direction_match:
+                    delta = abs(k_line - abs(target_spread))
+                    if delta <= 1.0:
+                        # Also need to match the specific side (Over vs Under, or specific team)
+                        # We look for the pick team name in the title
+                        pick_team_norm = _normalize_team_token(str(row.get("pick_team") or row.get("home_team") if pick.startswith(str(row.get("home_team") or "").lower()) else row.get("away_team")))
+                        if pick_team_norm and pick_team_norm in _normalize_team_token(m_title):
+                            if delta < best_delta:
+                                best_delta = delta
+                                best_market = mkt
+                                match_status = "matched"
+                                match_reason = "exact_match" if delta == 0 else "close_match"
+
+            # Match total lines
+            elif family == "total" and pd.notna(target_total):
+                delta = abs(k_line - target_total)
+                if delta <= 1.0:
+                    # Match specific side (over/under)
+                    is_over_pick = "over" in pick
+                    is_over_mkt = "over" in m_title or "over" in m_subtitle
+                    if is_over_pick == is_over_mkt:
+                        if delta < best_delta:
+                            best_delta = delta
+                            best_market = mkt
+                            match_status = "matched"
+                            match_reason = "exact_match" if delta == 0 else "close_match"
+
+        if best_market is None:
+            # We found markets, but none matched our line criteria
+            out.at[idx, "kalshi_tried_tickers"] = json.dumps(candidates)
+            out.at[idx, "kalshi_match_status"] = "miss"
+            out.at[idx, "kalshi_match_reason"] = "alt_line_mismatch"
+        else:
+            bid = float(pd.to_numeric(best_market.get("yes_bid_dollars"), errors="coerce") or 0.0)
+            ask = float(pd.to_numeric(best_market.get("yes_ask_dollars"), errors="coerce") or 0.0)
 
             if (bid + ask) > 2.0:
                 # Handle legacy/mock cents data safely without breaking probability bounds
                 out.at[idx, "kalshi_probability"] = (bid + ask) / 200.0
             else:
                 out.at[idx, "kalshi_probability"] = (bid + ask) / 2.0
-            out.at[idx, "kalshi_market_title"] = mkt.get("title")
-            out.at[idx, "kalshi_event_ticker"] = mkt.get("event_ticker")
-            out.at[idx, "kalshi_market_ticker"] = mkt.get("ticker")
-            out.at[idx, "kalshi_match_status"] = "matched"
-            out.at[idx, "kalshi_match_reason"] = ""
-        else:
-            out.at[idx, "kalshi_tried_tickers"] = json.dumps(candidates)
-            out.at[idx, "kalshi_match_status"] = "miss"
-            out.at[idx, "kalshi_match_reason"] = "no_market_for_tickers"
+            out.at[idx, "kalshi_market_title"] = best_market.get("title")
+            out.at[idx, "kalshi_event_ticker"] = best_market.get("event_ticker")
+            out.at[idx, "kalshi_market_ticker"] = best_market.get("ticker")
+            out.at[idx, "kalshi_match_status"] = match_status
+            out.at[idx, "kalshi_match_reason"] = match_reason
 
     return out
 
