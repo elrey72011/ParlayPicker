@@ -564,7 +564,7 @@ def main() -> None:
                 if null_pct > 0.10:
                     st.warning(f"Warning: {null_pct:.1%} of Best Picks are missing ML Probability. Check upstream ML data flow.")
 
-            best_picks_csv = best_picks_export.to_csv(index=False)
+            best_picks_csv = best_picks_export.to_csv(index=False, encoding="utf-8-sig")
             st.download_button(
                 "Export Best Picks",
                 best_picks_csv,
