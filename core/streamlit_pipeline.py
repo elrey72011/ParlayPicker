@@ -75,11 +75,19 @@ _UPLOAD_COLUMN_ALIASES = {
 }
 
 
+_NULL_TEXT_TOKENS = {"", "none", "null", "nan", "nat", "n/a", "na", "<na>"}
+
+
+def _clean_text_placeholders(series: pd.Series) -> pd.Series:
+    s = series.astype("string").str.strip()
+    return s.where(~s.str.lower().isin(_NULL_TEXT_TOKENS), "")
+
+
 def _first_nonempty_text(df: pd.DataFrame, candidates: list[str]) -> pd.Series:
     out = pd.Series([""] * len(df), index=df.index, dtype="string")
     for col in candidates:
         if col in df.columns:
-            candidate = _string_series(df, col).str.strip()
+            candidate = _clean_text_placeholders(_string_series(df, col))
             out = out.where(out.str.len().gt(0), candidate)
     return out
 
