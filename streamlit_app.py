@@ -193,8 +193,6 @@ def _merge_kalshi_into_analysis(analysis_df: pd.DataFrame, best_picks_df: pd.Dat
         return analysis_df
 
     merge_keys = ["league", "home_team", "away_team", "game_date"]
-    if "best_pick" in analysis_df.columns and "best_pick" in best_picks_df.columns:
-        merge_keys.append("best_pick")
 
     left = analysis_df.copy()
     right = best_picks_df[merge_keys + available_cols].drop_duplicates().copy()
