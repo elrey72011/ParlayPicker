@@ -713,7 +713,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 forced_prob = (bid + ask) / 2.0
 
             # Sanity check: Kalshi probs must be 0-1
-            if forced_prob < 0.0 or forced_prob > 1.0:
+            if pd.isna(forced_prob) or forced_prob < 0.0 or forced_prob > 1.0:
                 logger.warning(f"⚠️ Invalid forced Kalshi prob {forced_prob} for {game_id}, using 0.5")
                 forced_prob = 0.5
 
@@ -742,8 +742,10 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 kalshi_prob = (bid + ask) / 2.0
 
             # Sanity check: probabilities must be between 0 and 1
-            if kalshi_prob < 0.0 or kalshi_prob > 1.0:
-                logger.warning(f"⚠️ Invalid Kalshi probability {kalshi_prob} for {game_id}, skipping")
+            if pd.isna(kalshi_prob) or kalshi_prob < 0.0 or kalshi_prob > 1.0:
+                logger.warning(f"⚠️ Invalid Kalshi probability {kalshi_prob} for {game_id}, skipping row")
+                out.at[idx, "kalshi_match_status"] = "error"
+                out.at[idx, "kalshi_match_reason"] = f"invalid_probability_{kalshi_prob}"
                 continue
 
             out.at[idx, "kalshi_probability"] = kalshi_prob

@@ -556,7 +556,8 @@ def main() -> None:
             target_export_cols = [
                 "parlay_rank", "league", "Home", "Away", "Local Date",
                 "Commence (Local)", "best_pick", "calibrated_probability", "expected_value",
-                "edge", "consensus_agreement", "odds_american", "market_probability", "WinProbability"
+                "edge", "consensus_agreement", "odds_american", "market_probability",
+                "kalshi_probability", "WinProbability"
             ]
 
             final_export_cols = [c for c in target_export_cols if c in export_prep_df.columns]
