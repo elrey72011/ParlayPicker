@@ -104,21 +104,77 @@ def _safe_numeric_series(df: pd.DataFrame, col: str, default: float | int | None
 
 
 def _recompute_consensus_from_kalshi(df: pd.DataFrame) -> pd.DataFrame:
-    """Set consensus based on Kalshi availability and probability gap."""
+    """Set consensus based on Kalshi availability and probability gap, and update blends."""
     if df is None or df.empty:
         return df
     out = df.copy()
-    status = _safe_str_series(out, "kalshi_match_status").str.lower()
+
+    # Recalculate blended probability and EV/Edge since we might have new Kalshi probabilities
+    from core.streamlit_pipeline import compute_blended_probability
+
     kalshi_prob = _safe_numeric_series(out, "kalshi_probability")
-    model_prob = _safe_numeric_series(out, "calibrated_probability")
+    market_prob = _safe_numeric_series(out, "market_probability")
+
+    # Handle the two variations of model prob stored depending on df origin
+    if "model_probability" in out.columns:
+        model_prob = _safe_numeric_series(out, "model_probability")
+    else:
+        # Fallback to ml or theover prob
+        ml = _safe_numeric_series(out, "ml_probability")
+        theover = _safe_numeric_series(out, "theover_probability")
+        model_prob = ml.where(ml.notna(), theover)
+
+    blended = compute_blended_probability(
+        p_market=market_prob,
+        p_kalshi=kalshi_prob,
+        p_ml=model_prob,
+        league=_safe_str_series(out, "league"),
+        market_type=_safe_str_series(out, "market_type")
+    )
+
+    # Update core metrics
+    out["calibrated_probability"] = blended
+    decimal_odds = _safe_numeric_series(out, "decimal_odds")
+    if decimal_odds.isna().all() and "odds_american" in out.columns:
+        from core.streamlit_pipeline import american_to_decimal
+        decimal_odds = _safe_numeric_series(out, "odds_american", -110.0).apply(american_to_decimal)
+
+    out["expected_value"] = blended * (decimal_odds - 1) - (1 - blended)
+    out["edge"] = blended - market_prob
+
+    status = _safe_str_series(out, "kalshi_match_status").str.lower()
 
     out["consensus_agreement"] = "⚪ No Kalshi"
     matched = status.eq("matched") & kalshi_prob.notna()
-    gap = model_prob - kalshi_prob
+    gap = blended - kalshi_prob
 
     out.loc[matched, "consensus_agreement"] = "⚖️ Neutral"
     out.loc[matched & gap.ge(0.03), "consensus_agreement"] = "✅ Agrees"
     out.loc[matched & gap.le(-0.03), "consensus_agreement"] = "❌ Disagrees"
+
+    # Debug log for probability blend verification (first 5 picks)
+    if not out.empty and "market_probability" in out.columns:
+        import logging
+        logger = logging.getLogger(__name__)
+        debug_sample = out.head(5)
+        for idx, row in debug_sample.iterrows():
+            logger.info(
+                f"Blend Debug | Pick: {row.get('best_pick', '')} | "
+                f"Market: {row.get('market_probability')}, "
+                f"Kalshi: {row.get('kalshi_probability')}, "
+                f"ML: {row.get('ml_probability')} | "
+                f"Blended: {row.get('calibrated_probability')}"
+            )
+
+    # After recalculating edge, filter picks that fall below minimum threshold
+    from core.streamlit_pipeline import MIN_EDGE_THRESHOLD
+    if "edge" in out.columns and "best_pick" in out.columns:
+        # Only apply dropping to best picks (not all analysis rows)
+        if len(out) > 0 and pd.notna(out["best_pick"].iloc[0]):
+            out = out[out["edge"] >= MIN_EDGE_THRESHOLD].copy().reset_index(drop=True)
+            if "parlay_rank" in out.columns:
+                out["parlay_rank"] = range(1, len(out) + 1)
+
     return out
 
 def _merge_kalshi_into_analysis(analysis_df: pd.DataFrame, best_picks_df: pd.DataFrame) -> pd.DataFrame:
@@ -456,26 +512,31 @@ def main() -> None:
             export_prep_df = best_picks_df.copy()
 
             csv_rename_map = {
-                "Home": "home_team",
-                "Away": "away_team",
-                "Local Date": "game_date",
-                "Commence (Local)": "game_time_est",
-                "Implied_Prob": "ml_probability"
+                "home_team": "Home",
+                "away_team": "Away",
+                "game_date": "Local Date",
+                "game_time_est": "Commence (Local)",
+                "ml_probability": "WinProbability"
             }
             export_prep_df = export_prep_df.rename(columns=csv_rename_map)
 
             target_export_cols = [
-                "parlay_rank", "league", "home_team", "away_team", "game_date",
-                "game_time_est", "best_pick", "calibrated_probability", "expected_value",
-                "edge", "consensus_agreement", "odds_american", "market_probability", "ml_probability"
+                "parlay_rank", "league", "Home", "Away", "Local Date",
+                "Commence (Local)", "best_pick", "calibrated_probability", "expected_value",
+                "edge", "consensus_agreement", "odds_american", "market_probability", "WinProbability"
             ]
 
             final_export_cols = [c for c in target_export_cols if c in export_prep_df.columns]
             best_picks_export = export_prep_df[final_export_cols]
 
-            if "home_team" in best_picks_export.columns and not best_picks_export.empty:
-                if not best_picks_export["home_team"].notna().all():
-                    st.warning("Warning: Some rows in the Best Picks export have a missing 'home_team'.")
+            if "Home" in best_picks_export.columns and not best_picks_export.empty:
+                if not best_picks_export["Home"].notna().all():
+                    st.warning("Warning: Some rows in the Best Picks export have a missing 'Home' team.")
+
+            if "WinProbability" in best_picks_export.columns and not best_picks_export.empty:
+                null_pct = best_picks_export["WinProbability"].isna().mean()
+                if null_pct > 0.10:
+                    st.warning(f"Warning: {null_pct:.1%} of Best Picks are missing ML Probability. Check upstream ML data flow.")
 
             best_picks_csv = best_picks_export.to_csv(index=False)
             st.download_button(

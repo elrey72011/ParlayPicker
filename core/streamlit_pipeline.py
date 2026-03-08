@@ -49,6 +49,11 @@ _EXPORT_SIGNAL_COLS = {"market_type", "calibrated_probability", "expected_value"
 # Cap combos per leg count to prevent combinatorial explosion
 _MAX_PARLAY_COMBOS_PER_LEG = 500
 
+MIN_EDGE_THRESHOLD = 0.035
+W_ML = 0.5
+W_MARKET = 0.3
+W_KALSHI = 0.2
+
 _UPLOAD_COLUMN_ALIASES = {
     "hometeam": "home_team",
     "home team": "home_team",
@@ -88,6 +93,8 @@ _UPLOAD_COLUMN_ALIASES = {
     "theover probability": "theover_probability",
     "odds american": "odds_american",
     "ml probability": "ml_probability",
+    "implied prob": "ml_probability",
+    "implied_prob": "ml_probability",
     "calibrated probability": "calibrated_probability",
     "expected value": "expected_value",
 }
@@ -420,6 +427,73 @@ def _format_best_pick(row: pd.Series) -> str:
     return ""
 
 
+def compute_blended_probability(
+    p_market: pd.Series,
+    p_kalshi: pd.Series,
+    p_ml: pd.Series,
+    league: pd.Series | None = None,
+    market_type: pd.Series | None = None
+) -> pd.Series:
+    """Compute statistically defined weighted blend of probability sources."""
+    # Convert inputs to float series handling NA
+    market = pd.to_numeric(p_market, errors="coerce")
+    kalshi = pd.to_numeric(p_kalshi, errors="coerce")
+    ml = pd.to_numeric(p_ml, errors="coerce")
+
+    # Initialize outputs and weights
+    blended = pd.Series([pd.NA] * len(market), index=market.index, dtype="Float64")
+
+    has_ml = ml.notna()
+    has_kalshi = kalshi.notna()
+    has_market = market.notna()
+
+    # Condition 1: All three available
+    mask_all = has_ml & has_market & has_kalshi
+    if mask_all.any():
+        blended.loc[mask_all] = ml[mask_all] * W_ML + market[mask_all] * W_MARKET + kalshi[mask_all] * W_KALSHI
+
+    # Condition 2: ML + market (no Kalshi)
+    mask_ml_market = has_ml & has_market & ~has_kalshi
+    if mask_ml_market.any():
+        # Redistribute weights proportionally: ML=0.5/(0.5+0.3)=0.625, Market=0.3/(0.5+0.3)=0.375
+        w_ml_norm = W_ML / (W_ML + W_MARKET)
+        w_market_norm = W_MARKET / (W_ML + W_MARKET)
+        blended.loc[mask_ml_market] = ml[mask_ml_market] * w_ml_norm + market[mask_ml_market] * w_market_norm
+
+    # Condition 3: Kalshi + market (no ML)
+    mask_kalshi_market = ~has_ml & has_market & has_kalshi
+    if mask_kalshi_market.any():
+        # Redistribute proportionally: Kalshi=0.2/(0.2+0.3)=0.4, Market=0.3/(0.2+0.3)=0.6
+        w_kalshi_norm = W_KALSHI / (W_KALSHI + W_MARKET)
+        w_market_norm = W_MARKET / (W_KALSHI + W_MARKET)
+        blended.loc[mask_kalshi_market] = kalshi[mask_kalshi_market] * w_kalshi_norm + market[mask_kalshi_market] * w_market_norm
+
+    # Condition 4: ML + Kalshi (no market)
+    mask_ml_kalshi = has_ml & ~has_market & has_kalshi
+    if mask_ml_kalshi.any():
+        w_ml_norm = W_ML / (W_ML + W_KALSHI)
+        w_kalshi_norm = W_KALSHI / (W_ML + W_KALSHI)
+        blended.loc[mask_ml_kalshi] = ml[mask_ml_kalshi] * w_ml_norm + kalshi[mask_ml_kalshi] * w_kalshi_norm
+
+    # Condition 5: ML only
+    mask_ml_only = has_ml & ~has_market & ~has_kalshi
+    if mask_ml_only.any():
+        blended.loc[mask_ml_only] = ml[mask_ml_only]
+
+    # Condition 6: Kalshi only
+    mask_kalshi_only = ~has_ml & ~has_market & has_kalshi
+    if mask_kalshi_only.any():
+        blended.loc[mask_kalshi_only] = kalshi[mask_kalshi_only]
+
+    # Condition 7: Market only
+    mask_market_only = ~has_ml & has_market & ~has_kalshi
+    if mask_market_only.any():
+        blended.loc[mask_market_only] = market[mask_market_only]
+
+    # Clip and return
+    return pd.to_numeric(blended, errors="coerce").clip(0.01, 0.99)
+
+
 def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
     out["odds_american"] = _numeric_series(out, "odds_american", -110.0)
@@ -428,9 +502,18 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
     theover = _numeric_series(out, "theover_probability")
     theover = theover.where(theover <= 1, theover / 100.0)
     ml = _numeric_series(out, "ml_probability")
-    calibrated = theover.where(theover.notna(), ml)
-    calibrated = calibrated.where(calibrated.notna(), out["market_probability"])
-    calibrated = calibrated.clip(0.01, 0.99)
+
+    # theover is a legacy column mapping we still ingest
+    model_prob = ml.where(ml.notna(), theover)
+    kalshi_prob = _numeric_series(out, "kalshi_probability") if "kalshi_probability" in out.columns else pd.Series([pd.NA]*len(out), index=out.index)
+
+    calibrated = compute_blended_probability(
+        p_market=out["market_probability"],
+        p_kalshi=kalshi_prob,
+        p_ml=model_prob,
+        league=_string_series(out, "league"),
+        market_type=_string_series(out, "market_type")
+    )
 
     out["theover_probability"] = theover
     out["ml_probability"] = ml
@@ -698,6 +781,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     best.loc[edge_for_consensus >= 0.03, "consensus_agreement"] = "✅ Agrees"
     best.loc[edge_for_consensus <= -0.03, "consensus_agreement"] = "❌ Disagrees"
 
+    # Filter out picks that do not meet the minimum edge threshold
+    best = best[best["edge"] >= MIN_EDGE_THRESHOLD].copy()
+
     best = best.sort_values(["calibrated_probability", "expected_value"], ascending=[False, False]).reset_index(drop=True)
     best["parlay_rank"] = range(1, len(best) + 1)
 
@@ -844,11 +930,14 @@ def run_analysis_pipeline(
         dtype="float64",
     )
 
-    calibrated_probability = model_probability.where(model_probability.notna(), merged["market_probability"])
-    model_weight = pd.Series(0.35, index=merged.index, dtype="float64")
-    model_weight = model_weight.where(_string_series(merged, "odds_source").ne("fallback_-110"), 0.20)
-    model_weight = model_weight.where(model_probability.notna(), 0.0)
-    calibrated_probability = _shrink_to_market(calibrated_probability, merged["market_probability"], model_weight=model_weight)
+    kalshi_probability = _numeric_series(merged, "kalshi_probability") if "kalshi_probability" in merged.columns else pd.Series([pd.NA]*len(merged), index=merged.index)
+    calibrated_probability = compute_blended_probability(
+        p_market=merged["market_probability"],
+        p_kalshi=kalshi_probability,
+        p_ml=model_probability,
+        league=_string_series(merged, "league"),
+        market_type=_string_series(merged, "market_type")
+    )
 
     merged["theover_probability"] = theover_probability
     merged["model_probability"] = model_probability
