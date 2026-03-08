@@ -701,7 +701,12 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             bid = float(pd.to_numeric(forced_mkt.get("yes_bid_dollars"), errors="coerce") or 0.0)
             ask = float(pd.to_numeric(forced_mkt.get("yes_ask_dollars"), errors="coerce") or 0.0)
 
-            forced_prob = ((bid + ask) / 200.0) if (bid + ask) > 2.0 else ((bid + ask) / 2.0)
+            forced_prob = (bid + ask) / 2.0  # FIXED: No more conditional /200 logic
+
+            # Sanity check: Kalshi probs must be 0-1
+            if forced_prob < 0.0 or forced_prob > 1.0:
+                logger.warning(f"⚠️ Invalid forced Kalshi prob {forced_prob} for {game_id}, using 0.5")
+                forced_prob = 0.5
 
             logger.error(f"🚨 FORCE kalshi_prob={forced_prob} for {game_id} from {str(forced_mkt.get('title', '??'))[:30]}")
             out.at[idx, "kalshi_probability"] = forced_prob
@@ -719,11 +724,15 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             bid = float(pd.to_numeric(best_market.get("yes_bid_dollars"), errors="coerce") or 0.0)
             ask = float(pd.to_numeric(best_market.get("yes_ask_dollars"), errors="coerce") or 0.0)
 
-            if (bid + ask) > 2.0:
-                # Handle legacy/mock cents data safely without breaking probability bounds
-                out.at[idx, "kalshi_probability"] = (bid + ask) / 200.0
-            else:
-                out.at[idx, "kalshi_probability"] = (bid + ask) / 2.0
+            # Simple midpoint average
+            kalshi_prob = (bid + ask) / 2.0
+
+            # Sanity check: probabilities must be between 0 and 1
+            if kalshi_prob < 0.0 or kalshi_prob > 1.0:
+                logger.warning(f"⚠️ Invalid Kalshi probability {kalshi_prob} for {game_id}, skipping")
+                continue
+
+            out.at[idx, "kalshi_probability"] = kalshi_prob
             out.at[idx, "kalshi_market_title"] = best_market.get("title")
             out.at[idx, "kalshi_event_ticker"] = best_market.get("event_ticker")
             out.at[idx, "kalshi_market_ticker"] = best_market.get("ticker")
