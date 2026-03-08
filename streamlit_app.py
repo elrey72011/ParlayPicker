@@ -33,6 +33,7 @@ from core.streamlit_pipeline import (
     run_bankroll_simulation,
     CANONICAL_BET_COLUMNS,
     VALID_MARKETS,
+    MIN_EDGE_THRESHOLD,
 )
 from core.team_normalizer import normalize_team
 from core.theover_loader import load_theover_csv
@@ -167,7 +168,6 @@ def _recompute_consensus_from_kalshi(df: pd.DataFrame) -> pd.DataFrame:
             )
 
     # After recalculating edge, filter picks that fall below minimum threshold
-    from core.streamlit_pipeline import MIN_EDGE_THRESHOLD
     if "edge" in out.columns and "best_pick" in out.columns:
         # Only apply dropping to best picks (not all analysis rows)
         if len(out) > 0 and pd.notna(out["best_pick"].iloc[0]):
