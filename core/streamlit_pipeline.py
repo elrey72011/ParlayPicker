@@ -270,13 +270,9 @@ def _format_game_time_est(df: pd.DataFrame) -> pd.Series:
     return out
 
 def _game_date_fallback() -> pd.Timestamp:
-    """Return today's UTC midnight as the fallback game date.
-    TheOver CSVs have no date column. The app runs in UTC, so when a user
-    uploads at e.g. 11:43 PM EST, the UTC clock already reads the next
-    calendar day (4:43 AM UTC) — meaning today-UTC IS the correct game date.
-    Do NOT add an extra day here.
-    """
-    return pd.Timestamp.now(tz="UTC").normalize()
+    """Return today's US/Eastern date, stored as UTC midnight to match parsed date-only strings."""
+    et_now = pd.Timestamp.now(tz="America/New_York")
+    return pd.Timestamp(year=et_now.year, month=et_now.month, day=et_now.day, tz="UTC")
 
 
 def _normalize_upload(df: pd.DataFrame | None) -> pd.DataFrame:
