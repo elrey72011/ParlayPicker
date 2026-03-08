@@ -397,6 +397,59 @@ def main() -> None:
         st.session_state.setdefault(f"parlays_{leg_count}_df", pd.DataFrame())
 
     controls = render_sidebar()
+
+    # ========== TEMP DEBUG [2026-03-08]: CSV Column Inspector ==========
+    totals_file = controls.get("theover_totals")
+    spreads_file = controls.get("theover_spreads")
+
+    if totals_file is not None:
+        try:
+            import pandas as pd
+            totals_file.seek(0)
+            totals_inspect = pd.read_csv(totals_file)
+            totals_file.seek(0)
+
+            with st.expander("🔍 Totals CSV Diagnostic", expanded=True):
+                st.code(f"Columns: {list(totals_inspect.columns)}")
+
+                if 'WinProbability' in totals_inspect.columns:
+                    non_null = totals_inspect['WinProbability'].notna().sum()
+                    total = len(totals_inspect)
+                    coverage = (non_null / total * 100) if total > 0 else 0
+                    samples = totals_inspect['WinProbability'].head(5).tolist()
+
+                    st.success(f"✅ WinProbability column FOUND!")
+                    st.metric("Coverage", f"{non_null}/{total} rows ({coverage:.1f}%)")
+                    st.text(f"Sample values: {samples}")
+                else:
+                    st.error(f"❌ WinProbability column NOT FOUND!")
+        except Exception as e:
+            st.warning(f"⚠️ Could not inspect totals CSV: {e}")
+
+    if spreads_file is not None:
+        try:
+            import pandas as pd
+            spreads_file.seek(0)
+            spreads_inspect = pd.read_csv(spreads_file)
+            spreads_file.seek(0)
+
+            with st.expander("🔍 Spreads CSV Diagnostic", expanded=True):
+                st.code(f"Columns: {list(spreads_inspect.columns)}")
+
+                if 'WinProbability' in spreads_inspect.columns:
+                    non_null = spreads_inspect['WinProbability'].notna().sum()
+                    total = len(spreads_inspect)
+                    coverage = (non_null / total * 100) if total > 0 else 0
+                    samples = spreads_inspect['WinProbability'].head(5).tolist()
+
+                    st.success(f"✅ WinProbability column FOUND!")
+                    st.metric("Coverage", f"{non_null}/{total} rows ({coverage:.1f}%)")
+                    st.text(f"Sample values: {samples}")
+                else:
+                    st.error(f"❌ WinProbability column NOT FOUND!")
+        except Exception as e:
+            st.warning(f"⚠️ Could not inspect spreads CSV: {e}")
+    # ========== END TEMP DEBUG ==========
     run_counter = int(controls.get("run_analysis_counter", 0))
     should_run = _should_run_pipeline(st.session_state, run_counter)
 
