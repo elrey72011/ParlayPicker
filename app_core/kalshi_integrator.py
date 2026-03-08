@@ -13,7 +13,10 @@ logger = logging.getLogger(__name__)
 API_BASE = "https://api.elections.kalshi.com/trade-api/v2"
 
 # Total line parser (simple)
-TOTAL_LINE_PATTERN = re.compile(r'(?:over|under)\s+([0-9]+\.?[0-9]*)', re.IGNORECASE)
+TOTAL_LINE_PATTERN = re.compile(
+    r'(?:over|under|total points? over|total points? under|covers\s*\+?)\s*([0-9]+\.?[0-9]*)',
+    re.IGNORECASE
+)
 
 def parse_kalshi_total_line(title: str) -> Tuple[Optional[str], Optional[float]]:
     """Extract ('over'/'under', line) from Kalshi total title."""
@@ -24,16 +27,19 @@ def parse_kalshi_total_line(title: str) -> Tuple[Optional[str], Optional[float]]
     return None, None
 
 # Spread line parser
-SPREAD_PATTERN = re.compile(r"wins by over\s+([0-9]+\.?[0-9]*)\s*points?", re.IGNORECASE)
+SPREAD_LINE_PATTERN = re.compile(
+    r'(?:wins by over|by|by over|by more than|covers\s*\+?)\s*([0-9]+\.?[0-9]*)(?:\s*points?)?',
+    re.IGNORECASE
+)
 
 def parse_kalshi_spread_line(title: str) -> Tuple[Optional[str], Optional[float]]:
     """Extract ('favorite', spread_line) from Kalshi spread title."""
-    m = SPREAD_PATTERN.search(title)
+    m = SPREAD_LINE_PATTERN.search(title)
     if m:
         return "favorite", float(m.group(1))
     return None, None
 
-KALSHI_LINE_TOLERANCE = 1.0
+KALSHI_LINE_TOLERANCE = 2.5
 
 def kalshi_line_matches_book(
     kalshi_title: str,
@@ -44,14 +50,31 @@ def kalshi_line_matches_book(
     """Strict line match within tolerance."""
     if market_type.upper() == "TOTAL":
         side, k_line = parse_kalshi_total_line(kalshi_title)
-        if side and side.lower() == book_side.lower() and k_line is not None:
-            return abs(k_line - book_line) <= KALSHI_LINE_TOLERANCE
+        if k_line is None:
+            logger.debug(f"Kalshi line parse failed for '{kalshi_title}', allowing match")
+            return True
+
+        diff = abs(k_line - book_line)
+        if side and side.lower() == book_side.lower() and diff <= KALSHI_LINE_TOLERANCE:
+            return True
+        else:
+            logger.info(f"REJECTED: title='{kalshi_title}' book_line={book_line} parsed={k_line} diff={diff}")
+            return False
+
     elif market_type.upper() == "SPREAD":
-        side, k_line = parse_kalshi_spread_line(kalshi_title)
-        # Compare to book's favorite spread (abs value)
+        _, k_line = parse_kalshi_spread_line(kalshi_title)
+        if k_line is None:
+            logger.debug(f"Kalshi line parse failed for '{kalshi_title}', allowing match")
+            return True
+
         book_spread = abs(book_line)
-        if side == "favorite" and k_line is not None:
-            return abs(k_line - book_spread) <= KALSHI_LINE_TOLERANCE
+        diff = abs(k_line - book_spread)
+        if diff <= KALSHI_LINE_TOLERANCE:
+            return True
+        else:
+            logger.info(f"REJECTED: title='{kalshi_title}' book_line={book_line} parsed={k_line} diff={diff}")
+            return False
+
     return False
 API_URL = API_BASE
 
@@ -583,7 +606,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
             # Extract number from Kalshi title/subtitle
             # Often formatted as "wins by over X.5", "total points over X.5", or "covers +X.5"
-            line_match = re.search(r'(?:over|under|by|by over|by more than|covers\s*\+?)\s*([0-9]+(?:\.[0-9]+)?)', combined_text)
+            line_match = re.search(r'(?:over|under|total points? over|total points? under|wins by over|by|by over|by more than|covers\s*\+?)\s*([0-9]+(?:\.[0-9]+)?)', combined_text)
 
             if not line_match:
                 # Moneyline check: if the market family is spread (Kalshi groups moneyline under spread series or as its own)
@@ -625,7 +648,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
                 if direction_match:
                     delta = abs(k_line - abs(target_spread))
-                    if delta <= 1.0:
+                    if delta <= KALSHI_LINE_TOLERANCE:
                         # Also need to match the specific side (Over vs Under, or specific team)
                         # We look for the pick team name in the title
                         pick_team_norm = _normalize_team_token(str(row.get("pick_team") or row.get("home_team") if pick.startswith(str(row.get("home_team") or "").lower()) else row.get("away_team")))
@@ -639,7 +662,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             # Match total lines
             elif family == "total" and pd.notna(target_total):
                 delta = abs(k_line - target_total)
-                if delta <= 1.0:
+                if delta <= KALSHI_LINE_TOLERANCE:
                     # Match specific side (over/under)
                     is_over_pick = "over" in pick
                     is_over_mkt = "over" in m_title or "over" in m_subtitle

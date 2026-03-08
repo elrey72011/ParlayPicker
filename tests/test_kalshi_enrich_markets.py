@@ -16,6 +16,8 @@ def test_enrich_with_kalshi_markets_sets_match_fields(monkeypatch):
             "home_team": ["Boston Celtics"],
             "away_team": ["Los Angeles Lakers"],
             "game_date": ["2026-03-10T00:00:00Z"],
+            "spread_line": [-4.5],
+            "best_pick": ["Boston Celtics -4.5"]
         }
     )
 
@@ -25,7 +27,7 @@ def test_enrich_with_kalshi_markets_sets_match_fields(monkeypatch):
                 {
                     "ticker": "KXNBASPREAD-26MAR10LALBOS",
                     "event_ticker": "KXNBASPREAD-26MAR10LALBOS",
-                    "title": "Lakers vs Celtics",
+                    "title": "Boston Celtics wins by over 4",
                     "yes_bid_dollars": 58,
                     "yes_ask_dollars": 62,
                 }
@@ -36,7 +38,7 @@ def test_enrich_with_kalshi_markets_sets_match_fields(monkeypatch):
     out = ki.enrich_with_kalshi_markets(df)
 
     assert out.loc[0, "kalshi_match_status"] == "matched"
-    assert out.loc[0, "kalshi_match_reason"] == ""
+    assert out.loc[0, "kalshi_match_reason"] == "close_match"
     assert float(out.loc[0, "kalshi_probability"]) == 0.60
 
 
@@ -67,6 +69,9 @@ def test_enrich_with_kalshi_markets_title_fallback_when_event_ticker_codes_diffe
             "home_team": ["Saint Mary's"],
             "away_team": ["Pepperdine"],
             "game_date": ["2026-03-10T00:00:00Z"],
+            "total_line": [140.5],
+            "total_pick_side": ["over"],
+            "best_pick": ["over"]
         }
     )
 
@@ -79,7 +84,7 @@ def test_enrich_with_kalshi_markets_title_fallback_when_event_ticker_codes_diffe
                 {
                     "ticker": "KXNCAAMBTOTAL-26MAR10XXXX",
                     "event_ticker": "KXNCAAMBTOTAL-26MAR10ABCD",
-                    "title": "Saint Mary's vs Pepperdine",
+                    "title": "Saint Mary's vs Pepperdine over 141",
                     "yes_bid_dollars": 49,
                     "yes_ask_dollars": 51,
                 }
