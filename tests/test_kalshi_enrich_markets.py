@@ -38,7 +38,7 @@ def test_enrich_with_kalshi_markets_sets_match_fields(monkeypatch):
     out = ki.enrich_with_kalshi_markets(df)
 
     assert out.loc[0, "kalshi_match_status"] == "matched"
-    assert out.loc[0, "kalshi_match_reason"] == "close_match"
+    assert out.loc[0, "kalshi_match_reason"] == "spread_match"
     assert float(out.loc[0, "kalshi_probability"]) == 0.60
 
 
