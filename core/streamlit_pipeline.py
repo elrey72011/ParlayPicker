@@ -599,6 +599,21 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     pool["expected_value"] = _numeric_series(pool, "expected_value", 0.0)
     pool["edge"] = _numeric_series(pool, "edge", 0.0)
     pool["best_pick"] = pool.apply(_format_best_pick, axis=1)
+    pool["league"] = _clean_text_placeholders(_string_series(pool, "league"))
+    pool["home_team"] = _clean_text_placeholders(_string_series(pool, "home_team"))
+    pool["away_team"] = _clean_text_placeholders(_string_series(pool, "away_team"))
+    pool["game_date"] = _game_dates(pool)
+
+    pool["has_identity"] = (
+        pool["league"].str.len().gt(0)
+        & pool["home_team"].str.len().gt(0)
+        & pool["away_team"].str.len().gt(0)
+        & pool["game_date"].notna()
+    )
+    if pool["has_identity"].any():
+        pool = pool[pool["has_identity"]].copy()
+
+    pool["has_signal_probability"] = _numeric_series(pool, "model_probability").notna() | _numeric_series(pool, "theover_probability").notna() | _numeric_series(pool, "ml_probability").notna()
 
     pool["has_signal_probability"] = _numeric_series(pool, "model_probability").notna() | _numeric_series(pool, "theover_probability").notna() | _numeric_series(pool, "ml_probability").notna()
 
