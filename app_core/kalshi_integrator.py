@@ -551,8 +551,19 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         # New Event Ticker lookup
         for cand in candidates:
             try:
-                direct_resp = api_get_markets(event_ticker=cand, status="open", limit=200)
-                cand_markets = _extract_markets(direct_resp)
+                cand_markets = []
+                params = {"event_ticker": cand, "status": "open", "limit": 100}
+                for _ in range(5):  # Paginate up to 500 markets per game
+                    resp = api_get_markets(**params)
+                    page = _extract_markets(resp)
+                    if not page:
+                        break
+                    cand_markets.extend(page)
+                    cursor = resp.get("cursor") if isinstance(resp, dict) else None
+                    if not cursor:
+                        break
+                    params["cursor"] = cursor
+
                 if cand_markets:
                     markets.extend(cand_markets)
                     break  # Stop checking other permutations once we find the game
