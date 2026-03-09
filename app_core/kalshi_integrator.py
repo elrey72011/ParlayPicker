@@ -605,11 +605,6 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         match_reason = "no_market_for_tickers"
         match_status = "miss"
 
-        # We need to verify that the Kalshi line matches our book line
-        target_spread = pd.to_numeric(row.get("spread_line"), errors="coerce")
-        target_total = pd.to_numeric(row.get("total_line"), errors="coerce")
-        pick = str(row.get("best_pick") or "").lower()
-
         if not markets:
             out.at[idx, "kalshi_tried_tickers"] = json.dumps(candidates)
             out.at[idx, "kalshi_match_status"] = match_status
@@ -619,102 +614,87 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         markets = [m for m in markets if market_type_matches(row.get('market_type'), m.get('title'))]
         logger.info(f"FILTERED {len(markets)} markets for {row.get('game_id')}, type={row.get('market_type')}")
 
-        # Re-enable line matching with improved parser
-        for mkt in markets:
-            m_title = str(mkt.get("title") or "").lower()
-            m_subtitle = str(mkt.get("subtitle") or "").lower()
-            combined_text = f"{m_title} {m_subtitle}"
+        if family == "spread":
+            target_line_raw = pd.to_numeric(row.get("spread_line"), errors="coerce")
+        else:
+            target_line_raw = pd.to_numeric(row.get("total_line"), errors="coerce")
 
-            # Kalshi totals markets often have separate YES/NO markets per line bucket
-            # Title: "Pacific at Santa Clara: Total Points"
-            # Subtitle might contain "Over 148.5" or the ticker encodes the line
-            # We need to extract from EITHER title/subtitle OR parse from yes_sub_title
+        if pd.isna(target_line_raw):
+            # Moneyline fallback
+            is_ml_pick = str(row.get("market_type") or "").lower() == "moneyline"
+            if is_ml_pick:
+                for mkt in markets:
+                    m_title = str(mkt.get("title") or "").lower()
+                    m_subtitle = str(mkt.get("subtitle") or "").lower()
+                    combined_text = f"{m_title} {m_subtitle}"
 
-            yes_sub = str(mkt.get("yes_sub_title") or "")
-            no_sub = str(mkt.get("no_sub_title") or "")
-
-            # Try multiple extraction strategies
-            k_line = None
-            k_side = None
-
-            # Strategy 1: Parse from yes_sub_title/no_sub_title
-            if "over" in yes_sub.lower():
-                m = re.search(r'([0-9]+\.?[0-9]*)', yes_sub)
-                if m:
-                    k_line = float(m.group(1))
-                    k_side = "over"
-            elif "under" in yes_sub.lower():
-                m = re.search(r'([0-9]+\.?[0-9]*)', yes_sub)
-                if m:
-                    k_line = float(m.group(1))
-                    k_side = "under"
-            elif "over" in no_sub.lower():
-                m = re.search(r'([0-9]+\.?[0-9]*)', no_sub)
-                if m:
-                    k_line = float(m.group(1))
-                    k_side = "under"  # If NO is over, YES is under
-            elif "under" in no_sub.lower():
-                m = re.search(r'([0-9]+\.?[0-9]*)', no_sub)
-                if m:
-                    k_line = float(m.group(1))
-                    k_side = "over"  # If NO is under, YES is over
-
-            # Strategy 2: Parse from combined title/subtitle
-            if k_line is None:
-                line_match = re.search(
-                    r'(?:over|under|total points? over|total points? under|wins by over|by over|covers\s*\+?)\s*([0-9]+\.?[0-9]*)',
-                    combined_text
-                )
-                if line_match:
-                    k_line = float(line_match.group(1))
-                    k_side = "over" if "over" in combined_text else "under"
-
-            # Strategy 3: For spreads
-            if k_line is None and family == "spread":
-                spread_match = re.search(r'(?:wins by|by|covers)\s*\+?\s*([0-9]+\.?[0-9]*)', combined_text)
-                if spread_match:
-                    k_line = float(spread_match.group(1))
-
-            # If we still can't extract a line, skip this candidate
-            if k_line is None:
-                # Moneyline fallback (no line needed)
-                is_ml_pick = str(row.get("market_type") or "").lower() == "moneyline"
-                if is_ml_pick and ("moneyline" in combined_text or "to win" in combined_text):
-                    pick_team_norm = _normalize_team_token(str(row.get("pick_team") or row.get("home_team")))
-                    if pick_team_norm and pick_team_norm in _normalize_team_token(m_title):
-                        best_market = mkt
-                        match_status = "matched"
-                        match_reason = "moneyline_match"
-                        break
-                continue
-
-            # Now match against book lines
-            if family == "spread" and pd.notna(target_spread):
-                delta = abs(k_line - abs(target_spread))
-                if delta <= KALSHI_LINE_TOLERANCE_SPREAD:
-                    pick_team_norm = _normalize_team_token(str(row.get("pick_team") or row.get("home_team")))
-                    if pick_team_norm and pick_team_norm in _normalize_team_token(m_title):
-                        if delta < best_delta:
-                            best_delta = delta
+                    if "moneyline" in combined_text or "to win" in combined_text:
+                        pick_team_norm = _normalize_team_token(str(row.get("pick_team") or row.get("home_team")))
+                        if pick_team_norm and pick_team_norm in _normalize_team_token(m_title):
                             best_market = mkt
                             match_status = "matched"
-                            match_reason = "spread_match"
-                else:
-                    logger.warning(f"Line mismatch {row.get('game_id', 'unknown')}: book={abs(target_spread)}, kalshi={k_line}, diff={delta:.1f} > tolerance {KALSHI_LINE_TOLERANCE_SPREAD}")
+                            match_reason = "moneyline_match"
+                            break
+        else:
+            target_line = abs(target_line_raw)
 
-            elif family == "total" and pd.notna(target_total):
-                delta = abs(k_line - target_total)
-                if delta <= KALSHI_LINE_TOLERANCE_TOTAL:
-                    # Match side (over/under)
-                    book_side = str(row.get("total_pick_side") or "").lower()
-                    if k_side == book_side or k_side is None:
-                        if delta < best_delta:
-                            best_delta = delta
-                            best_market = mkt
-                            match_status = "matched"
-                            match_reason = "total_match"
-                else:
-                    logger.warning(f"Line mismatch {row.get('game_id', 'unknown')}: book={target_total}, kalshi={k_line}, diff={delta:.1f} > tolerance {KALSHI_LINE_TOLERANCE_TOTAL}")
+            for mkt in markets:
+                m_title = str(mkt.get("title") or "").lower()
+                m_subtitle = str(mkt.get("subtitle") or "").lower()
+                combined_text = f"{m_title} {m_subtitle}"
+
+                # Regex to find any standard decimal or integer line (e.g., "-12.5", "+6.5", "222.5", "-12", "+6", "4")
+                numbers = re.findall(r'[-+]?\s*(\d+(?:\.\d+)?)', combined_text)
+
+                for num_str in numbers:
+                    try:
+                        k_line = abs(float(num_str))
+                        delta = abs(k_line - target_line)
+
+                        if family == "spread":
+                            if delta <= KALSHI_LINE_TOLERANCE_SPREAD:
+                                pick_team_norm = _normalize_team_token(str(row.get("pick_team") or row.get("home_team")))
+                                if pick_team_norm and pick_team_norm in _normalize_team_token(m_title):
+                                    if delta < best_delta:
+                                        best_delta = delta
+                                        best_market = mkt
+                                        match_status = "matched"
+                                        match_reason = "spread_match"
+                            else:
+                                logger.debug(f"Line mismatch {row.get('game_id', 'unknown')}: book={target_line}, kalshi={k_line}, diff={delta:.1f} > tolerance {KALSHI_LINE_TOLERANCE_SPREAD}")
+
+                        elif family == "total":
+                            if delta <= KALSHI_LINE_TOLERANCE_TOTAL:
+                                # Determine over/under side from text
+                                yes_sub = str(mkt.get("yes_sub_title") or "").lower()
+                                no_sub = str(mkt.get("no_sub_title") or "").lower()
+
+                                k_side = None
+                                if "over" in yes_sub:
+                                    k_side = "over"
+                                elif "under" in yes_sub:
+                                    k_side = "under"
+                                elif "over" in no_sub:
+                                    k_side = "under"
+                                elif "under" in no_sub:
+                                    k_side = "over"
+                                elif "over" in combined_text:
+                                    k_side = "over"
+                                elif "under" in combined_text:
+                                    k_side = "under"
+
+                                book_side = str(row.get("total_pick_side") or "").lower()
+                                if k_side == book_side or k_side is None:
+                                    if delta < best_delta:
+                                        best_delta = delta
+                                        best_market = mkt
+                                        match_status = "matched"
+                                        match_reason = "total_match"
+                            else:
+                                logger.debug(f"Line mismatch {row.get('game_id', 'unknown')}: book={target_line}, kalshi={k_line}, diff={delta:.1f} > tolerance {KALSHI_LINE_TOLERANCE_TOTAL}")
+
+                    except ValueError:
+                        continue
 
         if best_market is None:
             # We found no markets or candidates at all
