@@ -1013,10 +1013,10 @@ def run_analysis_pipeline(
     if not analysis_df.empty and "market_type" not in analysis_df.columns:
         raise ValueError("analysis_df missing market_type before best-pick construction")
 
-    best_picks_df = build_best_picks_df(analysis_df)
-
-    if not analysis_df.empty and _string_series(analysis_df, "market_type").isin(VALID_MARKETS).any() and best_picks_df.empty:
-        logger.warning("best_picks_df empty while analysis_df has spread/total rows")
+    # In the refactored flow, we no longer build best_picks_df inside run_analysis_pipeline.
+    # Instead, we just return an empty dataframe here, and best_picks_df is built in streamlit_app.py
+    # AFTER the full analysis_df has been enriched with Kalshi probabilities.
+    best_picks_df = pd.DataFrame(columns=BEST_PICK_COLUMNS)
 
     stale = is_stale_schedule(base_df, analysis_df)
     base_coverage = float(_game_dates(base_df).notna().mean()) if not base_df.empty else 0.0
@@ -1078,7 +1078,8 @@ def generate_parlays(best_picks_df: pd.DataFrame, max_legs: int = 5) -> pd.DataF
         _numeric_series(df, "odds_american", -110.0).apply(american_to_decimal)
     )
 
-    df = df.sort_values(["calibrated_probability", "expected_value"], ascending=[False, False]).head(15).reset_index(drop=True)
+    # Increase candidate pool from 15 to 40 positive EV picks
+    df = df.sort_values(["calibrated_probability", "expected_value"], ascending=[False, False]).head(40).reset_index(drop=True)
     df["league"] = _string_series(df, "league")
     df["home_team"] = _string_series(df, "home_team")
     df["away_team"] = _string_series(df, "away_team")
