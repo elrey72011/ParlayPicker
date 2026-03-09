@@ -39,7 +39,8 @@ def parse_kalshi_spread_line(title: str) -> Tuple[Optional[str], Optional[float]
         return "favorite", float(m.group(1))
     return None, None
 
-KALSHI_LINE_TOLERANCE = 2.5
+KALSHI_LINE_TOLERANCE_SPREAD = 2.5
+KALSHI_LINE_TOLERANCE_TOTAL = 20.0
 
 def market_type_matches(market_type: str, title: str) -> bool:
     market_type = str(market_type or '').lower()
@@ -65,7 +66,7 @@ def kalshi_line_matches_book(
             return True
 
         diff = abs(k_line - book_line)
-        if side and side.lower() == book_side.lower() and diff <= KALSHI_LINE_TOLERANCE:
+        if side and side.lower() == book_side.lower() and diff <= KALSHI_LINE_TOLERANCE_TOTAL:
             return True
         else:
             logger.info(f"REJECTED: title='{kalshi_title}' book_line={book_line} parsed={k_line} diff={diff}")
@@ -79,7 +80,7 @@ def kalshi_line_matches_book(
 
         book_spread = abs(book_line)
         diff = abs(k_line - book_spread)
-        if diff <= KALSHI_LINE_TOLERANCE:
+        if diff <= KALSHI_LINE_TOLERANCE_SPREAD:
             return True
         else:
             logger.info(f"REJECTED: title='{kalshi_title}' book_line={book_line} parsed={k_line} diff={diff}")
@@ -592,6 +593,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             continue
 
         markets = [m for m in markets if market_type_matches(row.get('market_type'), m.get('title'))]
+        logger.info(f"FILTERED {len(markets)} markets for {row.get('game_id')}, type={row.get('market_type')}")
 
         # Re-enable line matching with improved parser
         for mkt in markets:
@@ -665,7 +667,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             # Now match against book lines
             if family == "spread" and pd.notna(target_spread):
                 delta = abs(k_line - abs(target_spread))
-                if delta <= KALSHI_LINE_TOLERANCE:
+                if delta <= KALSHI_LINE_TOLERANCE_SPREAD:
                     pick_team_norm = _normalize_team_token(str(row.get("pick_team") or row.get("home_team")))
                     if pick_team_norm and pick_team_norm in _normalize_team_token(m_title):
                         if delta < best_delta:
@@ -674,11 +676,11 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                             match_status = "matched"
                             match_reason = "spread_match"
                 else:
-                    logger.warning(f"Line mismatch {row.get('game_id', 'unknown')}: book={abs(target_spread)}, kalshi={k_line}, diff={delta:.1f} > tolerance {KALSHI_LINE_TOLERANCE}")
+                    logger.warning(f"Line mismatch {row.get('game_id', 'unknown')}: book={abs(target_spread)}, kalshi={k_line}, diff={delta:.1f} > tolerance {KALSHI_LINE_TOLERANCE_SPREAD}")
 
             elif family == "total" and pd.notna(target_total):
                 delta = abs(k_line - target_total)
-                if delta <= KALSHI_LINE_TOLERANCE:
+                if delta <= KALSHI_LINE_TOLERANCE_TOTAL:
                     # Match side (over/under)
                     book_side = str(row.get("total_pick_side") or "").lower()
                     if k_side == book_side or k_side is None:
@@ -688,7 +690,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                             match_status = "matched"
                             match_reason = "total_match"
                 else:
-                    logger.warning(f"Line mismatch {row.get('game_id', 'unknown')}: book={target_total}, kalshi={k_line}, diff={delta:.1f} > tolerance {KALSHI_LINE_TOLERANCE}")
+                    logger.warning(f"Line mismatch {row.get('game_id', 'unknown')}: book={target_total}, kalshi={k_line}, diff={delta:.1f} > tolerance {KALSHI_LINE_TOLERANCE_TOTAL}")
 
         if best_market is None:
             # We found no markets or candidates at all
