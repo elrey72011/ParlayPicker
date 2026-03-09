@@ -444,20 +444,29 @@ def _deterministic_tickers(row: pd.Series) -> tuple[list[str], str | None, str |
 
 
 def _fetch_series_cache(series_set: set[str], date_codes: set[str] | None = None) -> dict[str, dict[str, Any]]:
-    """Fetch all open markets for each unique series in one call per series.
-    Returns a dict of {ticker: market} for fast lookup.
-    """
+    """Fetch all open markets for each unique series in one call per series with pagination."""
     cache: dict[str, dict[str, Any]] = {}
     for series in series_set:
         try:
-            markets = _get_markets({"series_ticker": series, "status": "open", "limit": 200})
-            for m in markets:
-                ticker = str(m.get("ticker") or "")
-                if not ticker:
-                    continue
-                if date_codes and not any(dc in ticker for dc in date_codes):
-                    continue
-                cache[ticker] = m
+            params = {"series_ticker": series, "status": "open", "limit": 100}
+            for _ in range(10):
+                resp = api_get_markets(**params)
+                markets = _extract_markets(resp)
+                if not markets:
+                    break
+
+                for m in markets:
+                    ticker = str(m.get("ticker") or "")
+                    if not ticker:
+                        continue
+                    if date_codes and not any(dc in ticker for dc in date_codes):
+                        continue
+                    cache[ticker] = m
+
+                cursor = resp.get("cursor") if isinstance(resp, dict) else None
+                if not cursor:
+                    break
+                params["cursor"] = cursor
         except KalshiAPIError as exc:
             logger.warning("Kalshi series fetch failed for %s: %s", series, exc)
         except Exception as exc:
@@ -548,7 +557,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             series_markets = []
             try:
                 params = {"series_ticker": series, "status": "open", "limit": 100}
-                for _ in range(5):
+                for _ in range(10):
                     resp = api_get_markets(**params)
                     # Support both test mocks returning "data" or actual API returning "markets"
                     markets_page = _extract_markets(resp)
