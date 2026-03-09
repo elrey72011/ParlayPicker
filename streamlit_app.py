@@ -272,56 +272,36 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
         return empty_state, deferred_warnings, deferred_errors
 
     # Kalshi enrichment with hard timeout
-    if isinstance(best_picks_df, pd.DataFrame) and not best_picks_df.empty:
-        if "game_date" not in best_picks_df.columns or best_picks_df["game_date"].isna().all():
-            deferred_warnings.append("game_date missing from best_picks_df — Kalshi matching skipped.")
+    if isinstance(analysis_df, pd.DataFrame) and not analysis_df.empty:
+        if "game_date" not in analysis_df.columns or analysis_df["game_date"].isna().all():
+            deferred_warnings.append("game_date missing from analysis_df — Kalshi matching skipped.")
         else:
-            # TEMP FIX [2026-03-08]: Extract lines from best_pick column if missing
-            if "total_line" not in best_picks_df.columns or best_picks_df["total_line"].isna().all():
-                import re
-                import logging
-                logger = logging.getLogger(__name__)
-                def extract_line(pick_str):
-                    m = re.search(r'([0-9]+\.?[0-9]*)', str(pick_str or ""))
-                    return float(m.group(1)) if m else None
-
-                best_picks_df["total_line"] = best_picks_df["best_pick"].apply(
-                    lambda x: extract_line(x) if "over" in str(x).lower() or "under" in str(x).lower() else None
-                )
-                best_picks_df["spread_line"] = best_picks_df["best_pick"].apply(
-                    lambda x: extract_line(x) if "over" not in str(x).lower() and "under" not in str(x).lower() else None
-                )
-                best_picks_df["total_pick_side"] = best_picks_df["best_pick"].apply(
-                    lambda x: "over" if "over" in str(x).lower() else ("under" if "under" in str(x).lower() else None)
-                )
-                logger.warning("🔧 TEMP: Extracted lines from best_pick column for Kalshi matching")
-
-            best_picks_df, kalshi_err = _enrich_with_kalshi_safe(best_picks_df)
+            analysis_df, kalshi_err = _enrich_with_kalshi_safe(analysis_df)
             if kalshi_err:
                 deferred_warnings.append(kalshi_err)
 
-    best_picks_df = _recompute_consensus_from_kalshi(best_picks_df)
-    analysis_df = _merge_kalshi_into_analysis(analysis_df, best_picks_df)
     analysis_df = _recompute_consensus_from_kalshi(analysis_df)
+
+    from core.streamlit_pipeline import build_best_picks_df
+    best_picks_df = build_best_picks_df(analysis_df)
 
     if "gemini_analysis" not in analysis_df.columns:
         analysis_df["gemini_analysis"] = ""
 
-    attempted = int(len(best_picks_df)) if isinstance(best_picks_df, pd.DataFrame) else 0
-    matched = (
-        int(best_picks_df["kalshi_match_status"].astype(str).str.lower().eq("matched").sum())
-        if attempted and "kalshi_match_status" in best_picks_df.columns
-        else int(analysis_df.get("kalshi_match_status", pd.Series(dtype="string")).astype(str).str.lower().eq("matched").sum())
-    )
+    attempted = int(len(analysis_df)) if isinstance(analysis_df, pd.DataFrame) else 0
+    matched = int(analysis_df.get("kalshi_match_status", pd.Series(dtype="string")).astype(str).str.lower().eq("matched").sum())
+
     diagnostics["kalshi_attempted"] = attempted
     diagnostics["kalshi_matches"] = matched
     diagnostics["kalshi_match_rate"] = float(matched / max(attempted, 1))
     diagnostics["match_rate"] = diagnostics["kalshi_match_rate"]
-    diagnostics["kalshi_missing_date_rows"] = int(best_picks_df["kalshi_match_reason"].astype(str).eq("missing_date").sum()) if attempted and "kalshi_match_reason" in best_picks_df.columns else 0
-    diagnostics["kalshi_missing_team_code_rows"] = int(best_picks_df["kalshi_match_reason"].astype(str).eq("missing_team_code").sum()) if attempted and "kalshi_match_reason" in best_picks_df.columns else 0
-    diagnostics["kalshi_no_market_rows"] = int(best_picks_df["kalshi_match_reason"].astype(str).eq("no_market_for_tickers").sum()) if attempted and "kalshi_match_reason" in best_picks_df.columns else 0
+    diagnostics["kalshi_missing_date_rows"] = int(analysis_df["kalshi_match_reason"].astype(str).eq("missing_date").sum()) if attempted and "kalshi_match_reason" in analysis_df.columns else 0
+    diagnostics["kalshi_missing_team_code_rows"] = int(analysis_df["kalshi_match_reason"].astype(str).eq("missing_team_code").sum()) if attempted and "kalshi_match_reason" in analysis_df.columns else 0
+    diagnostics["kalshi_no_market_rows"] = int(analysis_df["kalshi_match_reason"].astype(str).eq("no_market_for_tickers").sum()) if attempted and "kalshi_match_reason" in analysis_df.columns else 0
     diagnostics["best_picks"] = int(len(best_picks_df)) if isinstance(best_picks_df, pd.DataFrame) else 0
     diagnostics["positive_ev_rows"] = int((_safe_numeric_series(analysis_df, "expected_value", 0.0) > 0).sum()) if not analysis_df.empty else 0
+    diagnostics["positive_ev_picks"] = int((_safe_numeric_series(best_picks_df, "expected_value", 0.0) > 0).sum()) if not best_picks_df.empty else 0
+    diagnostics["best_pick_nonempty_rows"] = int(_safe_str_series(best_picks_df, "best_pick").str.strip().str.len().gt(0).sum()) if not best_picks_df.empty else 0
 
     parlays_df = generate_parlays(best_picks_df)
     per_leg: dict = {}
