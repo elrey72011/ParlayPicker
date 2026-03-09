@@ -985,11 +985,29 @@ def run_analysis_pipeline(
     # FIX: Generate game_id for Kalshi matching
     if 'game_id' not in merged.columns:
         logger.warning("🔧 FIX: Generating game_id for Kalshi matching")
+        def get_team_short(name):
+            """Extract first 4 chars from FIRST SIGNIFICANT WORD (city OR mascot)"""
+            normalized = str(name).upper().strip()
+            words = normalized.split()
+
+            if len(words) == 1:
+                return words[0][:4]
+
+            # Priority: mascot (if short/reliable) OR city (first word)
+            mascot = words[-1]  # "CLIPPERS", "STATES", "WASHINGTON"
+            city = words[0]     # "LOS", "WEBER", "EASTERN"
+
+            # Use mascot if it's 4+ letters AND not generic ("STATE", "CITY", "COLLEGE")
+            if len(mascot) >= 4 and mascot not in ['STATE', 'CITY', 'COLLEGE']:
+                return mascot[:4]
+            else:
+                return city[:4]
+
         merged['game_id'] = (
             merged['league'].astype(str).str.upper() + '-' +
-            merged['home_team'].apply(lambda x: normalize_team_name(str(x))).str.upper().str[:4] + '-' +
-            merged['away_team'].apply(lambda x: normalize_team_name(str(x))).str.upper().str[:4]
-        ).str.replace(' ', '').str.replace('.', '')
+            merged['home_team'].apply(get_team_short) + '-' +
+            merged['away_team'].apply(get_team_short)
+        )
 
     analysis_df = merged.head(max_rows).copy()
     if not analysis_df.empty and not base_df.empty:
