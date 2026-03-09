@@ -755,11 +755,25 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
 
     pool["has_signal_probability"] = _numeric_series(pool, "model_probability").notna() | _numeric_series(pool, "theover_probability").notna() | _numeric_series(pool, "ml_probability").notna()
 
+    # Create an orientation-insensitive matchup key to force Spreads and Totals to compete
+    # even if the Home/Away order is flipped in the source data.
+    team_a = pool["home_team"].where(pool["home_team"] <= pool["away_team"], pool["away_team"])
+    team_b = pool["away_team"].where(pool["home_team"] <= pool["away_team"], pool["home_team"])
+
+    # Extract local date string safely to ignore minor UTC time variations
+    dt_utc = _game_dates(pool)
+    date_str = pd.Series([""] * len(pool), index=pool.index)
+    valid_dt = dt_utc.notna()
+    if valid_dt.any():
+        date_str.loc[valid_dt] = dt_utc[valid_dt].dt.tz_convert("America/New_York").dt.strftime("%Y-%m-%d")
+
+    pool["matchup_key"] = pool["league"] + "|" + team_a + "|" + team_b + "|" + date_str
+
     best = (
         pool.sort_values(["has_signal_probability", "expected_value", "edge"], ascending=[False, False, False])
-        .groupby(["league", "home_team", "away_team", "game_date"], dropna=False)
+        .groupby("matchup_key", dropna=False)
         .first()
-        .reset_index()
+        .reset_index(drop=True) # Drop the synthetic key, preserving original columns
     )
 
     best["calibrated_probability"] = _numeric_series(best, "calibrated_probability", 0.5)
