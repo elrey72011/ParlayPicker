@@ -547,11 +547,17 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         candidates = [f"{base}{away_code}{home_code}", f"{base}{home_code}{away_code}"]
 
         markets: list[dict[str, Any]] = []
-        try:
-            direct_resp = api_get_markets(tickers=",".join(candidates))
-            markets = _extract_markets(direct_resp)
-        except Exception:
-            markets = []
+
+        # New Event Ticker lookup
+        for cand in candidates:
+            try:
+                direct_resp = api_get_markets(event_ticker=cand, status="open", limit=200)
+                cand_markets = _extract_markets(direct_resp)
+                if cand_markets:
+                    markets.extend(cand_markets)
+                    break  # Stop checking other permutations once we find the game
+            except Exception:
+                continue
 
         if not markets:
             series_markets = []

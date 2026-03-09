@@ -22,7 +22,7 @@ def test_enrich_with_kalshi_markets_sets_match_fields(monkeypatch):
     )
 
     def fake_api_get_markets(**params):
-        if "tickers" in params:
+        if "event_ticker" in params:
             return [
                 {
                     "ticker": "KXNBASPREAD-26MAR10LALBOS",
