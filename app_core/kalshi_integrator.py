@@ -41,6 +41,16 @@ def parse_kalshi_spread_line(title: str) -> Tuple[Optional[str], Optional[float]
 
 KALSHI_LINE_TOLERANCE = 2.5
 
+def market_type_matches(market_type: str, title: str) -> bool:
+    market_type = str(market_type or '').lower()
+    title_lower = str(title or '').lower()
+
+    if 'total' in market_type:
+        return any(word in title_lower for word in ['total', 'points', 'goals'])
+    elif 'spread' in market_type:
+        return 'wins by' in title_lower or 'covers' in title_lower
+    return True
+
 def kalshi_line_matches_book(
     kalshi_title: str,
     book_side: str,      # 'over'/'under'
@@ -580,6 +590,8 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             out.at[idx, "kalshi_match_status"] = match_status
             out.at[idx, "kalshi_match_reason"] = match_reason
             continue
+
+        markets = [m for m in markets if market_type_matches(row.get('market_type'), m.get('title'))]
 
         # Re-enable line matching with improved parser
         for mkt in markets:

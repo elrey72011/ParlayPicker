@@ -84,7 +84,7 @@ def test_enrich_with_kalshi_markets_title_fallback_when_event_ticker_codes_diffe
                 {
                     "ticker": "KXNCAAMBTOTAL-26MAR10XXXX",
                     "event_ticker": "KXNCAAMBTOTAL-26MAR10ABCD",
-                    "title": "Saint Mary's vs Pepperdine over 141",
+                    "title": "Saint Mary's vs Pepperdine total over 141",
                     "yes_bid_dollars": 49,
                     "yes_ask_dollars": 51,
                 }
