@@ -548,12 +548,12 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
         markets: list[dict[str, Any]] = []
 
-        # New Event Ticker lookup
+        # 1. Direct Event Ticker Lookup (Paginated)
         for cand in candidates:
+            cand_markets = []
+            params = {"event_ticker": cand, "status": "open", "limit": 100}
             try:
-                cand_markets = []
-                params = {"event_ticker": cand, "status": "open", "limit": 100}
-                for _ in range(5):  # Paginate up to 500 markets per game
+                for _ in range(5):
                     resp = api_get_markets(**params)
                     page = _extract_markets(resp)
                     if not page:
@@ -566,40 +566,38 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
                 if cand_markets:
                     markets.extend(cand_markets)
-                    break  # Stop checking other permutations once we find the game
+                    break
             except Exception:
                 continue
 
+        # 2. Fallback Series Ticker Lookup (Paginated)
         if not markets:
             series_markets = []
             try:
                 params = {"series_ticker": series, "status": "open", "limit": 100}
-                for _ in range(10):
+                for _ in range(20):
                     resp = api_get_markets(**params)
-                    # Support both test mocks returning "data" or actual API returning "markets"
-                    markets_page = _extract_markets(resp)
-                    if not markets_page:
+                    page = _extract_markets(resp)
+                    if not page:
                         break
-                    series_markets.extend(markets_page)
+                    series_markets.extend(page)
                     cursor = resp.get("cursor") if isinstance(resp, dict) else None
                     if not cursor:
                         break
                     params["cursor"] = cursor
             except Exception:
-                pass # allow series_markets to retain collected items
+                pass
 
             markets = [
                 m for m in series_markets
                 if away_code in str(m.get("event_ticker") or "") and home_code in str(m.get("event_ticker") or "")
             ]
-
             if not markets:
-                # Provide a relaxed date match since the event ticker prefix format could be different.
                 markets = _markets_by_team_text(
                     series_markets,
                     str(row.get("home_team") or ""),
                     str(row.get("away_team") or ""),
-                    "", # Allow match by title even if date code differs. It's an open market.
+                    date_code,
                 )
 
         best_market = None
