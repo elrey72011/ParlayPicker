@@ -982,6 +982,15 @@ def run_analysis_pipeline(
     merged["edge"] = calibrated_probability - merged["market_probability"]
     merged["best_pick"] = merged.apply(_format_best_pick, axis=1)
 
+    # FIX: Generate game_id for Kalshi matching
+    if 'game_id' not in merged.columns:
+        logger.warning("🔧 FIX: Generating game_id for Kalshi matching")
+        merged['game_id'] = (
+            merged['league'].astype(str).str.upper() + '-' +
+            merged['home_team'].apply(lambda x: normalize_team_name(str(x))).str.upper().str[:4] + '-' +
+            merged['away_team'].apply(lambda x: normalize_team_name(str(x))).str.upper().str[:4]
+        ).str.replace(' ', '').str.replace('.', '')
+
     analysis_df = merged.head(max_rows).copy()
     if not analysis_df.empty and not base_df.empty:
         base_dates = base_df.copy()
