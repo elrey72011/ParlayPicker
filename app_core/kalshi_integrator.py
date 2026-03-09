@@ -661,6 +661,8 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                             best_market = mkt
                             match_status = "matched"
                             match_reason = "spread_match"
+                else:
+                    logger.warning(f"Line mismatch {row.get('game_id', 'unknown')}: book={abs(target_spread)}, kalshi={k_line}, diff={delta:.1f} > tolerance {KALSHI_LINE_TOLERANCE}")
 
             elif family == "total" and pd.notna(target_total):
                 delta = abs(k_line - target_total)
@@ -673,38 +675,10 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                             best_market = mkt
                             match_status = "matched"
                             match_reason = "total_match"
+                else:
+                    logger.warning(f"Line mismatch {row.get('game_id', 'unknown')}: book={target_total}, kalshi={k_line}, diff={delta:.1f} > tolerance {KALSHI_LINE_TOLERANCE}")
 
-        # If no match but candidates exist
-        if best_market is None and len(markets) > 0:
-            out.at[idx, "kalshi_tried_tickers"] = json.dumps(candidates)
-            out.at[idx, "kalshi_match_status"] = "miss_but_forced"
-            out.at[idx, "kalshi_match_reason"] = "alt_line_mismatch"
-            out.at[idx, "kalshi_match_quality"] = "line_mismatched_forced"
-
-            forced_mkt = markets[0]
-            bid = float(pd.to_numeric(forced_mkt.get("yes_bid_dollars"), errors="coerce") or 0.0)
-            ask = float(pd.to_numeric(forced_mkt.get("yes_ask_dollars"), errors="coerce") or 0.0)
-
-            # REPLACE WITH ADAPTIVE LOGIC:
-            if (bid + ask) > 2.0:
-                # Values are in cents
-                forced_prob = (bid + ask) / 200.0
-            else:
-                # Values are in dollars
-                forced_prob = (bid + ask) / 2.0
-
-            # Sanity check: Kalshi probs must be 0-1
-            if pd.isna(forced_prob) or forced_prob < 0.0 or forced_prob > 1.0:
-                logger.warning(f"⚠️ Invalid forced Kalshi prob {forced_prob} for {row.get('game_id', 'unknown')}, using 0.5")
-                forced_prob = 0.5
-
-            logger.error(f"🚨 FORCE kalshi_prob={forced_prob} for {row.get('game_id', 'unknown')} from {str(forced_mkt.get('title', '??'))[:30]}")
-            out.at[idx, "kalshi_probability"] = forced_prob
-            out.at[idx, "kalshi_market_title"] = forced_mkt.get("title")
-            out.at[idx, "kalshi_event_ticker"] = forced_mkt.get("event_ticker")
-            out.at[idx, "kalshi_market_ticker"] = forced_mkt.get("ticker")
-
-        elif best_market is None:
+        if best_market is None:
             # We found no markets or candidates at all
             out.at[idx, "kalshi_tried_tickers"] = json.dumps(candidates)
             out.at[idx, "kalshi_match_status"] = "miss"
