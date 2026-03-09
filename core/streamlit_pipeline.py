@@ -764,9 +764,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
 
     best["calibrated_probability"] = _numeric_series(best, "calibrated_probability", 0.5)
     edge_for_consensus = _numeric_series(best, "edge", 0.0)
-    best["consensus_agreement"] = "⚖️ Neutral"
-    best.loc[edge_for_consensus >= 0.03, "consensus_agreement"] = "✅ Agrees"
-    best.loc[edge_for_consensus <= -0.03, "consensus_agreement"] = "❌ Disagrees"
+    best["consensus_agreement"] = "⚪ No Kalshi"
 
     # Filter out picks that do not meet the minimum edge threshold
     best = best[best["edge"] >= MIN_EDGE_THRESHOLD].copy()
