@@ -8643,13 +8643,6 @@ def load_games(selected_leagues: Union[str, List[str]], run_id: Optional[str] = 
                 merged_warnings = list(dict.fromkeys((g.get("warnings") or []) + warnings))
                 g.update(best)
 
-                # Apply Novig overrides directly on the game dict
-                try:
-                    from app_core.odds_api import process_odds_with_novig_priority
-                    g = process_odds_with_novig_priority(g)
-                except Exception as ex:
-                    logger.error(f"Failed to process novig priority: {ex}")
-
                 g["warnings"] = merged_warnings
                 if g.get("best_ml_book") is not None:
                     moneyline_count += 1

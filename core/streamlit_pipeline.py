@@ -478,31 +478,23 @@ def compute_blended_probability(
     return pd.to_numeric(blended, errors="coerce").clip(0.01, 0.99)
 
 
-def _estimate_opposing_odds(odds_american: float) -> float:
-    """Estimates standard opposing odds assuming a standard 20-cent straddle (-110/-110 default)."""
-    if pd.isna(odds_american) or odds_american == -110.0:
-        return -110.0
-    if odds_american < 0:
-        # e.g., -150 implies opposing is roughly +130
-        opposing = -(odds_american + 20)
-        # Avoid the -99 to +99 invalid American odds range
-        if -100 < opposing < 100:
-            return 100.0
-        return float(opposing)
-    else:
-        # e.g., +150 implies opposing is roughly -170
-        return float(-(odds_american + 20))
-
 def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
     out["odds_american"] = _numeric_series(out, "odds_american", -110.0)
 
     # Phase 4: Implementation of Bayesian Shrinkage and Vig Removal
     # De-vig by applying multiplicative normalization for a standard 2-way market.
-    # Estimate the opposing odds based on standard sportsbook straddles.
+    # Since Novig is an exchange without standard sportsbook straddles, use its true implied prob.
+    # We still perform a simple multiplicative normalization in case of minor bid-ask spread deviations
     implied_prob = out["odds_american"].apply(american_to_prob)
-    opposing_odds = out["odds_american"].apply(_estimate_opposing_odds)
-    opposing_implied = opposing_odds.apply(american_to_prob)
+
+    def _get_opposing_from_exchange(odds):
+        # We assume opposing line on exchange is essentially exactly mirrored (ignoring 20-cent vig)
+        if pd.isna(odds) or odds == -110.0:
+            return -110.0
+        return float(-odds)
+
+    opposing_implied = out["odds_american"].apply(_get_opposing_from_exchange).apply(american_to_prob)
     out["market_probability"] = implied_prob / (implied_prob + opposing_implied)
 
     theover = _numeric_series(out, "theover_probability")
@@ -962,9 +954,14 @@ def run_analysis_pipeline(
     # Phase 4: Implementation of Bayesian Shrinkage and Vig Removal
     # Calculate True Fair-Value Baseline Probability by removing sportsbook overround (vig).
     implied_prob = merged["odds_american"].apply(american_to_prob)
-    # Approximate opposing odds by assuming standard 20-cent straddle
-    opposing_odds = merged["odds_american"].apply(_estimate_opposing_odds)
-    opposing_implied = opposing_odds.apply(american_to_prob)
+
+    def _get_opposing_from_exchange(odds):
+        if pd.isna(odds) or odds == -110.0:
+            return -110.0
+        return float(-odds)
+
+    # Novig exchange lines don't use 20-cent straddle
+    opposing_implied = merged["odds_american"].apply(_get_opposing_from_exchange).apply(american_to_prob)
     merged["market_probability"] = (implied_prob / (implied_prob + opposing_implied)).clip(0.01, 0.99)
 
     merged["spread"] = pd.to_numeric(merged.get("spread_line"), errors="coerce")
