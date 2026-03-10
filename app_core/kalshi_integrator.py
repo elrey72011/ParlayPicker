@@ -56,8 +56,8 @@ def parse_kalshi_spread_line(title: str) -> Tuple[Optional[str], Optional[float]
         return "favorite", float(m.group(1))
     return None, None
 
-KALSHI_LINE_TOLERANCE_SPREAD = 2.5
-KALSHI_LINE_TOLERANCE_TOTAL = 20.0
+KALSHI_LINE_TOLERANCE_SPREAD = 0.5
+KALSHI_LINE_TOLERANCE_TOTAL = 0.5
 
 def market_type_matches(market_type: str, title: str) -> bool:
     market_type = str(market_type or '').lower()
@@ -562,7 +562,6 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         "kalshi_market_title",
         "kalshi_event_ticker",
         "kalshi_market_ticker",
-        "kalshi_tried_tickers",
     ]:
         if col not in out.columns:
             out[col] = pd.NA
@@ -578,34 +577,10 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         family = "spread" if family_guess == "spread" else "total"
         series = league_series_ticker(league, family)
 
-        game_date = pd.to_datetime(row.get("game_date"), errors="coerce", utc=True)
-        if pd.notna(game_date):
-            # If the time is exactly midnight UTC, it's a fallback date. Do NOT shift timezone.
-            if game_date.hour == 0 and game_date.minute == 0 and game_date.second == 0:
-                date_code = game_date.strftime("%y%b%d").upper()
-            else:
-                dt_local = game_date.tz_convert("America/New_York")
-                date_code = dt_local.strftime("%y%b%d").upper()
-        else:
-            date_code = ""
-        away_code = team_code_map(league, str(row.get("away_team") or ""))
-        home_code = team_code_map(league, str(row.get("home_team") or ""))
-
-        if not date_code:
-            out.at[idx, "kalshi_match_status"] = "miss"
-            out.at[idx, "kalshi_match_reason"] = "missing_date"
-            continue
-        if not away_code or not home_code:
-            out.at[idx, "kalshi_match_status"] = "miss"
-            out.at[idx, "kalshi_match_reason"] = "missing_team_code"
-            continue
         if not series:
             out.at[idx, "kalshi_match_status"] = "miss"
             out.at[idx, "kalshi_match_reason"] = "missing_series"
             continue
-
-        base = f"{series}-{date_code}"
-        candidates = [f"{base}{away_code}{home_code}", f"{base}{home_code}{away_code}"]
 
         markets: list[dict[str, Any]] = []
 
@@ -655,9 +630,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         for m in series_markets:
             ticker = str(m.get("ticker") or "").upper()
             ev_ticker = str(m.get("event_ticker") or "").upper()
-            # If the date_code is present in the game row, filter by it roughly if possible
-            if date_code and date_code not in ticker and date_code not in ev_ticker:
-                continue
+
 
             hay = (str(m.get("title", "")) + " " + str(m.get("subtitle", "")) + " " + ev_ticker).lower()
 
@@ -695,14 +668,12 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         match_status = "miss"
 
         if not markets:
-            out.at[idx, "kalshi_tried_tickers"] = json.dumps(candidates)
             out.at[idx, "kalshi_match_status"] = match_status
             out.at[idx, "kalshi_match_reason"] = match_reason
             continue
 
         # In case we found no matching markets via dynamic discovery
         if not markets:
-            out.at[idx, "kalshi_tried_tickers"] = json.dumps(candidates)
             out.at[idx, "kalshi_match_status"] = "miss"
             out.at[idx, "kalshi_match_reason"] = "no_market_for_tickers"
             continue
@@ -795,7 +766,6 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
         if best_market is None:
             # We found no markets or candidates at all
-            out.at[idx, "kalshi_tried_tickers"] = json.dumps(candidates)
             out.at[idx, "kalshi_match_status"] = "miss"
             out.at[idx, "kalshi_match_reason"] = "alt_line_mismatch"
             out.at[idx, "kalshi_match_quality"] = "line_mismatched"
