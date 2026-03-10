@@ -45,6 +45,7 @@ class SportsDataGameInsight:
     away: SportsDataTeamInsight
     sport_key: Optional[str] = None
     sport_name: Optional[str] = None
+    is_neutral: bool = False
 
 
 class SportsDataClientBase:
@@ -339,6 +340,8 @@ class SportsDataClientBase:
             home_team.strength_delta = delta
             away_team.strength_delta = -delta
 
+        is_neutral = bool(game.get("NeutralVenue") or game.get("IsNeutralSite"))
+
         return SportsDataGameInsight(
             game_key=str(game.get("GameKey") or game.get("GlobalGameID") or ""),
             season=str(season) if season else None,
@@ -351,6 +354,7 @@ class SportsDataClientBase:
             away=away_team,
             sport_key=self.SPORT_KEY,
             sport_name=self.SPORT_NAME,
+            is_neutral=is_neutral,
         )
 
     def _build_team_insight(

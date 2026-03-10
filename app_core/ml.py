@@ -782,7 +782,9 @@ class HistoricalDataBuilder:
         feature_row.setdefault("sentiment_home", 0.0)
         feature_row.setdefault("sentiment_away", 0.0)
         feature_row.setdefault("sentiment_diff", 0.0)
-        feature_row.setdefault("home_field_advantage", 1.0)
+
+        is_neutral = getattr(summary, "is_neutral", False)
+        feature_row.setdefault("home_field_advantage", 0.0 if is_neutral else 1.0)
 
         feature_row["home_win"] = 1 if home_score > away_score else 0
 
@@ -843,7 +845,9 @@ class HistoricalDataBuilder:
         feature_row.setdefault("sentiment_home", 0.0)
         feature_row.setdefault("sentiment_away", 0.0)
         feature_row.setdefault("sentiment_diff", 0.0)
-        feature_row.setdefault("home_field_advantage", 1.0)
+
+        is_neutral = getattr(insight, "is_neutral", False)
+        feature_row.setdefault("home_field_advantage", 0.0 if is_neutral else 1.0)
 
         feature_row["home_win"] = 1 if home_score > away_score else 0
 
@@ -1150,7 +1154,10 @@ class HistoricalDataBuilder:
 
         features["home_ml_implied"] = _implied_prob(home_odds)
         features["away_ml_implied"] = _implied_prob(away_odds)
-        features["home_field_advantage"] = 1.0
+
+        # Phase 1: Zero out home court advantage for neutral sites
+        is_neutral = False # Needs to be passed through from API in a real scenario
+        features["home_field_advantage"] = 0.0 if is_neutral else 1.0
 
         return features
 

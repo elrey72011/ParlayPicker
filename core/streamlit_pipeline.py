@@ -443,32 +443,32 @@ def compute_blended_probability(
 ) -> pd.Series:
     """
     Vectorized blend with dynamic weight normalization per row.
-    Weights are renormalized based on available sources for each bet.
+    Implements Bayesian Shrinkage (75% Market / 25% Model) as baseline,
+    with Kalshi blended into the market side when available.
     """
     market = pd.to_numeric(p_market, errors="coerce")
     kalshi = pd.to_numeric(p_kalshi, errors="coerce")
     ml = pd.to_numeric(p_ml, errors="coerce")
 
     def _blend_row(p_mkt, p_kal, p_ml):
-        sources = []
-        weights = []
+        # Base fallback if no market data (should rarely happen)
+        if pd.isna(p_mkt):
+            return p_ml if pd.notna(p_ml) else 0.5
 
-        if pd.notna(p_ml):
-            sources.append(p_ml)
-            weights.append(W_ML)
-        if pd.notna(p_mkt):
-            sources.append(p_mkt)
-            weights.append(W_MARKET)
+        mkt_val = p_mkt
+
+        # If valid Kalshi data is available, blend it into the "Market Consensus" side
+        # e.g., 50% Kalshi, 50% traditional sportsbook
         if pd.notna(p_kal):
-            sources.append(p_kal)
-            weights.append(W_KALSHI)
+            consensus_mkt = (mkt_val + p_kal) / 2.0
+        else:
+            consensus_mkt = mkt_val
 
-        if not sources:
-            return p_mkt if pd.notna(p_mkt) else 0.5
+        # Bayesian Shrinkage: 75% Consensus Market / 25% Model
+        if pd.notna(p_ml):
+            return (consensus_mkt * 0.75) + (p_ml * 0.25)
 
-        total_w = sum(weights)
-        norm_weights = [w / total_w for w in weights]
-        return sum(w * p for w, p in zip(norm_weights, sources))
+        return consensus_mkt
 
     # Vectorized apply row-by-row
     blended = pd.Series([_blend_row(m, k, l)
@@ -478,10 +478,32 @@ def compute_blended_probability(
     return pd.to_numeric(blended, errors="coerce").clip(0.01, 0.99)
 
 
+def _estimate_opposing_odds(odds_american: float) -> float:
+    """Estimates standard opposing odds assuming a standard 20-cent straddle (-110/-110 default)."""
+    if pd.isna(odds_american) or odds_american == -110.0:
+        return -110.0
+    if odds_american < 0:
+        # e.g., -150 implies opposing is roughly +130
+        opposing = -(odds_american + 20)
+        # Avoid the -99 to +99 invalid American odds range
+        if -100 < opposing < 100:
+            return 100.0
+        return float(opposing)
+    else:
+        # e.g., +150 implies opposing is roughly -170
+        return float(-(odds_american + 20))
+
 def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
     out["odds_american"] = _numeric_series(out, "odds_american", -110.0)
-    out["market_probability"] = out["odds_american"].apply(american_to_prob)
+
+    # Phase 4: Implementation of Bayesian Shrinkage and Vig Removal
+    # De-vig by applying multiplicative normalization for a standard 2-way market.
+    # Estimate the opposing odds based on standard sportsbook straddles.
+    implied_prob = out["odds_american"].apply(american_to_prob)
+    opposing_odds = out["odds_american"].apply(_estimate_opposing_odds)
+    opposing_implied = opposing_odds.apply(american_to_prob)
+    out["market_probability"] = implied_prob / (implied_prob + opposing_implied)
 
     theover = _numeric_series(out, "theover_probability")
     theover = theover.where(theover <= 1, theover / 100.0)
@@ -503,8 +525,19 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
     out["ml_probability"] = ml
     out["calibrated_probability"] = calibrated
     out["decimal_odds"] = out["odds_american"].apply(american_to_decimal)
-    out["expected_value"] = calibrated * (out["decimal_odds"] - 1) - (1 - calibrated)
-    out["edge"] = calibrated - out["market_probability"]
+
+    ev = calibrated * (out["decimal_odds"] - 1) - (1 - calibrated)
+    edge = calibrated - out["market_probability"]
+
+    # Phase 2: Eradication of Floating-Point Artefacts
+    # Cast micro-edges to exact zero.
+    edge = edge.round(4)
+    zero_mask = edge.abs() < 0.0001
+    edge = edge.mask(zero_mask, 0.0)
+    ev = ev.mask(zero_mask, 0.0)
+
+    out["expected_value"] = ev
+    out["edge"] = edge
     out["best_pick"] = out.apply(_format_best_pick, axis=1)
     return out
 
@@ -785,7 +818,12 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     # Removed strict MIN_EDGE_THRESHOLD filter so ALL 36 games make it to the Best Picks table
     # best = best[best["edge"] >= MIN_EDGE_THRESHOLD].copy()
 
-    best = best.sort_values(["calibrated_probability", "expected_value"], ascending=[False, False]).reset_index(drop=True)
+    # Phase 2: Eradication of Floating-Point Artefacts in Expected Value Calculations
+    # Primary sort by expected_value descending, then game_date, league, home_team ascending
+    best = best.sort_values(
+        ["expected_value", "game_date", "league", "home_team"],
+        ascending=[False, True, True, True]
+    ).reset_index(drop=True)
     best["parlay_rank"] = range(1, len(best) + 1)
 
     for col in BEST_PICK_COLUMNS:
@@ -920,7 +958,14 @@ def run_analysis_pipeline(
         logging.getLogger(__name__).warning("⚠️ All odds missing - using -110 fallback")
         merged["odds_american"] = -110.0
         merged["decimal_odds"] = 1.91
-    merged["market_probability"] = (1.0 / merged["decimal_odds"]).clip(0.01, 0.99)
+
+    # Phase 4: Implementation of Bayesian Shrinkage and Vig Removal
+    # Calculate True Fair-Value Baseline Probability by removing sportsbook overround (vig).
+    implied_prob = merged["odds_american"].apply(american_to_prob)
+    # Approximate opposing odds by assuming standard 20-cent straddle
+    opposing_odds = merged["odds_american"].apply(_estimate_opposing_odds)
+    opposing_implied = opposing_odds.apply(american_to_prob)
+    merged["market_probability"] = (implied_prob / (implied_prob + opposing_implied)).clip(0.01, 0.99)
 
     merged["spread"] = pd.to_numeric(merged.get("spread_line"), errors="coerce")
     merged["total"] = pd.to_numeric(merged.get("total_line"), errors="coerce")
@@ -992,8 +1037,19 @@ def run_analysis_pipeline(
     merged["theover_probability"] = theover_probability
     merged["model_probability"] = model_probability
     merged["calibrated_probability"] = calibrated_probability
-    merged["expected_value"] = calibrated_probability * (merged["decimal_odds"] - 1) - (1 - calibrated_probability)
-    merged["edge"] = calibrated_probability - merged["market_probability"]
+
+    ev = calibrated_probability * (merged["decimal_odds"] - 1) - (1 - calibrated_probability)
+    edge = calibrated_probability - merged["market_probability"]
+
+    # Phase 2: Eradication of Floating-Point Artefacts
+    # Cast micro-edges to exact zero.
+    edge = edge.round(4)
+    zero_mask = edge.abs() < 0.0001
+    edge = edge.mask(zero_mask, 0.0)
+    ev = ev.mask(zero_mask, 0.0)
+
+    merged["expected_value"] = ev
+    merged["edge"] = edge
     merged["best_pick"] = merged.apply(_format_best_pick, axis=1)
 
     # FIX: Generate game_id for Kalshi matching

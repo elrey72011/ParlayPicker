@@ -542,7 +542,20 @@ def main() -> None:
             ]
 
             final_export_cols = [c for c in target_export_cols if c in export_prep_df.columns]
-            best_picks_export = export_prep_df[final_export_cols]
+            best_picks_export = export_prep_df[final_export_cols].copy()
+
+            # Phase 3: Synchronize Kalshi missing strings
+            if "kalshi_probability" in best_picks_export.columns:
+                best_picks_export["kalshi_probability"] = best_picks_export["kalshi_probability"].fillna("⚪ No Kalshi")
+
+            # Apply explicit secondary sorts before export as requested
+            sort_cols = ["expected_value", "Commence (Local)", "league", "Home"]
+            available_sort_cols = [c for c in sort_cols if c in best_picks_export.columns]
+            if available_sort_cols:
+                asc = [False] + [True] * (len(available_sort_cols) - 1)
+                best_picks_export = best_picks_export.sort_values(available_sort_cols, ascending=asc).reset_index(drop=True)
+                if "parlay_rank" in best_picks_export.columns:
+                    best_picks_export["parlay_rank"] = range(1, len(best_picks_export) + 1)
 
             if "Home" in best_picks_export.columns and not best_picks_export.empty:
                 if not best_picks_export["Home"].notna().all():
