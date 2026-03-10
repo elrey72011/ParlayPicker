@@ -766,10 +766,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     if valid_dt.any():
         date_str.loc[valid_dt] = dt_utc[valid_dt].dt.tz_convert("America/New_York").dt.strftime("%Y-%m-%d")
 
-    # NEW: Differentiate between Spread and Total so they don't overwrite each other!
-    market_type = pool["best_pick"].astype(str).apply(lambda x: "Total" if "over" in x.lower() or "under" in x.lower() else "Spread")
+    # Differentiate between Spread and Total safely using the actual market_type column
+    market_family = pool["market_type"].astype(str).str.split("_").str[0].str.capitalize()
 
-    pool["matchup_key"] = pool["league"] + "|" + team_a + "|" + team_b + "|" + date_str + "|" + market_type
+    pool["matchup_key"] = pool["league"] + "|" + team_a + "|" + team_b + "|" + date_str + "|" + market_family
 
     best = (
         pool.sort_values(["has_signal_probability", "expected_value", "edge"], ascending=[False, False, False])
@@ -782,8 +782,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     edge_for_consensus = _numeric_series(best, "edge", 0.0)
     best["consensus_agreement"] = "⚪ No Kalshi"
 
-    # Filter out picks that do not meet the minimum edge threshold
-    best = best[best["edge"] >= MIN_EDGE_THRESHOLD].copy()
+    # Removed strict MIN_EDGE_THRESHOLD filter so ALL 36 games make it to the Best Picks table
+    # best = best[best["edge"] >= MIN_EDGE_THRESHOLD].copy()
 
     best = best.sort_values(["calibrated_probability", "expected_value"], ascending=[False, False]).reset_index(drop=True)
     best["parlay_rank"] = range(1, len(best) + 1)
