@@ -29,33 +29,6 @@ except ImportError:
 logger = logging.getLogger(__name__)
 API_BASE = "https://api.elections.kalshi.com/trade-api/v2"
 
-# Total line parser (simple)
-TOTAL_LINE_PATTERN = re.compile(
-    r'(?:over|under|total points? over|total points? under|covers\s*\+?)\s*([0-9]+\.?[0-9]*)',
-    re.IGNORECASE
-)
-
-def parse_kalshi_total_line(title: str) -> Tuple[Optional[str], Optional[float]]:
-    """Extract ('over'/'under', line) from Kalshi total title."""
-    m = TOTAL_LINE_PATTERN.search(title)
-    if m:
-        line = float(m.group(1))
-        return "over" if "over" in title.lower() else "under", line
-    return None, None
-
-# Spread line parser
-SPREAD_LINE_PATTERN = re.compile(
-    r'(?:wins by over|by|by over|by more than|covers\s*\+?)\s*([0-9]+\.?[0-9]*)(?:\s*points?)?',
-    re.IGNORECASE
-)
-
-def parse_kalshi_spread_line(title: str) -> Tuple[Optional[str], Optional[float]]:
-    """Extract ('favorite', spread_line) from Kalshi spread title."""
-    m = SPREAD_LINE_PATTERN.search(title)
-    if m:
-        return "favorite", float(m.group(1))
-    return None, None
-
 KALSHI_LINE_TOLERANCE_SPREAD = 0.5
 KALSHI_LINE_TOLERANCE_TOTAL = 0.5
 
@@ -69,41 +42,6 @@ def market_type_matches(market_type: str, title: str) -> bool:
         return 'wins by' in title_lower or 'covers' in title_lower
     return True
 
-def kalshi_line_matches_book(
-    kalshi_title: str,
-    book_side: str,      # 'over'/'under'
-    book_line: float,
-    market_type: str     # 'TOTAL' or 'SPREAD'
-) -> bool:
-    """Strict line match within tolerance."""
-    if market_type.upper() == "TOTAL":
-        side, k_line = parse_kalshi_total_line(kalshi_title)
-        if k_line is None:
-            logger.debug(f"Kalshi line parse failed for '{kalshi_title}', allowing match")
-            return True
-
-        diff = abs(k_line - book_line)
-        if side and side.lower() == book_side.lower() and diff <= KALSHI_LINE_TOLERANCE_TOTAL:
-            return True
-        else:
-            logger.info(f"REJECTED: title='{kalshi_title}' book_line={book_line} parsed={k_line} diff={diff}")
-            return False
-
-    elif market_type.upper() == "SPREAD":
-        _, k_line = parse_kalshi_spread_line(kalshi_title)
-        if k_line is None:
-            logger.debug(f"Kalshi line parse failed for '{kalshi_title}', allowing match")
-            return True
-
-        book_spread = abs(book_line)
-        diff = abs(k_line - book_spread)
-        if diff <= KALSHI_LINE_TOLERANCE_SPREAD:
-            return True
-        else:
-            logger.info(f"REJECTED: title='{kalshi_title}' book_line={book_line} parsed={k_line} diff={diff}")
-            return False
-
-    return False
 API_URL = API_BASE
 
 LEAGUE_SERIES_MAP = {
@@ -238,7 +176,6 @@ class KalshiMatchResult:
     probability: float | None = None
     status: str = "no_match"
     reason: str = "no_market_for_tickers"
-    tried_tickers: list[str] | None = None
 
 
 class KalshiAPIError(RuntimeError):
@@ -313,10 +250,6 @@ def _guess_code(team: str) -> str | None:
         return words[0][:4].upper()
     return "".join(w[0] for w in words)[:4].upper()
 
-
-def _kalshi_search_fallback(league: str, home_team: str, away_team: str, game_date: str) -> dict[str, Any] | None:
-    """Query Kalshi series for a date/team match when deterministic ticker guesses fail."""
-    import os
 
     kalshi_api_key = os.environ.get("KALSHI_API_KEY", "")
     if not kalshi_api_key:
@@ -466,14 +399,6 @@ def _select_probability(market: dict[str, Any]) -> float | None:
     return None
 
 
-def _deterministic_tickers(row: pd.Series) -> tuple[list[str], str | None, str | None, str | None, str, str | None]:
-    league = str(row.get("league") or "").upper()
-    family = _market_family(row)
-    series = LEAGUE_SERIES_MAP.get(league, {}).get(family or "")
-    away_code = _guess_code(str(row.get("away_team") or ""))
-    home_code = _guess_code(str(row.get("home_team") or ""))
-    date_code = build_kalshi_date_code(row.get("game_date"))
-
     if not date_code:
         return [], series, away_code, home_code, date_code, family
     if not away_code or not home_code:
@@ -516,12 +441,6 @@ def _fetch_series_cache(series_set: set[str], date_codes: set[str] | None = None
             logger.warning("Kalshi series fetch failed for %s: %s", series, exc)
     return cache
 
-
-def _markets_by_team_text(series_markets: list[dict[str, Any]], home_team: str, away_team: str, date_code: str) -> list[dict[str, Any]]:
-    """Fallback matcher that uses partial substring and initials matching."""
-    candidates = []
-    home_norm = _normalize_team_token(home_team)
-    away_norm = _normalize_team_token(away_team)
 
     h_3 = home_norm.replace(" ", "")[:3].upper()
     a_3 = away_norm.replace(" ", "")[:3].upper()
@@ -715,10 +634,12 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
                 for num_str in numbers:
                     try:
-                        k_line = abs(float(num_str))
-                        delta = abs(k_line - target_line)
+                        extracted_val = abs(float(num_str))
 
                         if family == "spread":
+                            # Kalshi spread math translation: "wins by over 3.5" means -4.0 spread line.
+                            k_line = extracted_val + 0.5
+                            delta = abs(k_line - target_line)
                             if delta <= KALSHI_LINE_TOLERANCE_SPREAD:
                                 m_type = str(row.get("market_type")).lower()
                                 book_line = pd.to_numeric(row.get("spread_line"), errors="coerce")
@@ -754,6 +675,8 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                                         match_reason = "spread_match"
 
                         elif family == "total":
+                            k_line = extracted_val
+                            delta = abs(k_line - target_line)
                             if delta <= KALSHI_LINE_TOLERANCE_TOTAL:
                                 if delta < best_delta:
                                     best_delta = delta
