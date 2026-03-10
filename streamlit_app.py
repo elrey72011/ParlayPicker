@@ -43,6 +43,11 @@ try:
 except Exception:  # pragma: no cover
     _enrich_kalshi_raw = None  # type: ignore[assignment]
 
+try:
+    from app_core.odds_api import OddsAPIAuthError
+except ImportError:
+    class OddsAPIAuthError(Exception): pass
+
 
 KALSHI_ENRICH_TIMEOUT_SECONDS = 60
 
@@ -392,6 +397,10 @@ def main() -> None:
                 st.warning(msg)
             for msg in pipe_errors:
                 st.error(msg)
+        except OddsAPIAuthError as e:
+            st.session_state["pipeline_running"] = False
+            st.error('The Odds API key is invalid, revoked, or missing. Please verify your credentials in Streamlit secrets.')
+            st.stop()
         except Exception:
             st.error(f"Pipeline crashed:\n```\n{traceback.format_exc()}\n```")
         finally:

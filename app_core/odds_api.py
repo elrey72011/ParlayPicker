@@ -6,6 +6,10 @@ from typing import List, Dict
 
 logger = logging.getLogger(__name__)
 
+class OddsAPIAuthError(Exception):
+    """Exception raised for authentication errors with The Odds API (e.g., 401, 403 or missing key)."""
+    pass
+
 class TheOddsAPIClient:
     BASE_URL = "https://api.the-odds-api.com/v4"
 
@@ -29,7 +33,13 @@ class TheOddsAPIClient:
         }
 
         resp = requests.get(url, params=params, timeout=15)
-        resp.raise_for_status()
+
+        try:
+            resp.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            if resp.status_code in (401, 403):
+                raise OddsAPIAuthError(f"Authentication failed: {e}")
+            raise
 
         data = resp.json()
 
