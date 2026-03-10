@@ -38,9 +38,14 @@ def test_build_best_picks_df_competes_spread_vs_total():
 
     best = build_best_picks_df(df)
 
-    # We expect only 1 row because the orientation-insensitive key should group them
-    assert len(best) == 1
+    # We expect 2 rows because the market type discriminator should keep Spreads and Totals separate
+    assert len(best) == 2
 
-    # The winning row should be the Total (EV=0.10)
-    assert best.iloc[0]["expected_value"] == 0.10
-    assert best.iloc[0]["market_type"] == "total_over"
+    # The returned rows should contain both expected_values
+    evs = set(best["expected_value"].tolist())
+    assert 0.10 in evs
+    assert 0.05 in evs
+
+    market_types = set(best["market_type"].tolist())
+    assert "total_over" in market_types
+    assert "spread_home" in market_types

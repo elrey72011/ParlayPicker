@@ -766,7 +766,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     if valid_dt.any():
         date_str.loc[valid_dt] = dt_utc[valid_dt].dt.tz_convert("America/New_York").dt.strftime("%Y-%m-%d")
 
-    pool["matchup_key"] = pool["league"] + "|" + team_a + "|" + team_b + "|" + date_str
+    # NEW: Differentiate between Spread and Total so they don't overwrite each other!
+    market_type = pool["best_pick"].astype(str).apply(lambda x: "Total" if "over" in x.lower() or "under" in x.lower() else "Spread")
+
+    pool["matchup_key"] = pool["league"] + "|" + team_a + "|" + team_b + "|" + date_str + "|" + market_type
 
     best = (
         pool.sort_values(["has_signal_probability", "expected_value", "edge"], ascending=[False, False, False])
@@ -1053,9 +1056,9 @@ def run_analysis_pipeline(
     diagnostics = {
         "total_rows": int(len(analysis_df)),
         "rows_with_game_date": int(pd.to_datetime(analysis_df.get("game_date"), errors="coerce", utc=True).notna().sum()) if not analysis_df.empty else 0,
-        # Safely sort team names alphabetically and append the date to prevent cross-day deduplication
+        # Safely sort team names alphabetically and append the market type to count total betting markets
         "total_games": int(analysis_df.apply(
-            lambda r: f"{r.get('league')}|{min(str(r.get('home_team')), str(r.get('away_team')))}|{max(str(r.get('home_team')), str(r.get('away_team')))}|{pd.to_datetime(r.get('game_date')).strftime('%Y-%m-%d') if pd.notna(r.get('game_date')) else ''}",
+            lambda r: f"{r.get('league')}|{min(str(r.get('home_team')), str(r.get('away_team')))}|{max(str(r.get('home_team')), str(r.get('away_team')))}|{'Total' if 'over' in str(r.get('best_pick')).lower() or 'under' in str(r.get('best_pick')).lower() else 'Spread'}",
             axis=1
         ).nunique()) if not analysis_df.empty else 0,
         "bet_rows": int(len(analysis_df)),
