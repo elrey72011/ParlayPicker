@@ -10,6 +10,22 @@ from typing import Any, Optional, Tuple
 import pandas as pd
 import requests
 
+try:
+    import rapidfuzz
+    from rapidfuzz import fuzz
+except ImportError:
+    try:
+        from thefuzz import fuzz
+    except ImportError:
+        import difflib
+        class FuzzFallback:
+            @staticmethod
+            def token_set_ratio(s1, s2):
+                if not s1 or not s2: return 0
+                matcher = difflib.SequenceMatcher(None, s1, s2)
+                return matcher.ratio() * 100
+        fuzz = FuzzFallback()
+
 logger = logging.getLogger(__name__)
 API_BASE = "https://api.elections.kalshi.com/trade-api/v2"
 
@@ -601,7 +617,12 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 params = {"series_ticker": series, "status": "open", "limit": 100}
                 for _ in range(20): # Paginate up to 2000 markets per series
                     resp = api_get_markets(**params)
+
+                    # _extract_markets checks correctly, but let's make sure it handles the mock format too
                     page = _extract_markets(resp)
+                    if not page and isinstance(resp, dict) and "markets" in resp:
+                        page = resp["markets"]
+
                     if not page:
                         break
                     series_markets.extend(page)
@@ -625,18 +646,48 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         series_markets = series_cache.get(series, series_markets if 'series_markets' in locals() else [])
 
         # 2. Extract specific game markets from the cache
-        markets = [
-            m for m in series_markets
-            if m.get("event_ticker") in candidates
-        ]
+        # We replace the strict hardcoded event_ticker candidate matching with dynamic discovery
+        # using the entire series_markets and fuzzy team matching, which solves Step 3 and Step 1 together.
+        markets = []
+        home_norm = _normalize_team_token(str(row.get("home_team") or ""))
+        away_norm = _normalize_team_token(str(row.get("away_team") or ""))
 
-        if not markets:
-            markets = _markets_by_team_text(
-                series_markets,
-                str(row.get("home_team") or ""),
-                str(row.get("away_team") or ""),
-                date_code,
-            )
+        for m in series_markets:
+            ticker = str(m.get("ticker") or "").upper()
+            ev_ticker = str(m.get("event_ticker") or "").upper()
+            # If the date_code is present in the game row, filter by it roughly if possible
+            if date_code and date_code not in ticker and date_code not in ev_ticker:
+                continue
+
+            hay = (str(m.get("title", "")) + " " + str(m.get("subtitle", "")) + " " + ev_ticker).lower()
+
+            # Fuzzy match check for both teams
+            home_score = fuzz.token_set_ratio(home_norm, hay) if home_norm else 0
+            away_score = fuzz.token_set_ratio(away_norm, hay) if away_norm else 0
+
+            # Also check abbreviation matching in the suffix
+            suffix = ev_ticker.split("-")[-1] if "-" in ev_ticker else ev_ticker
+            h_abbr = _guess_code(str(row.get("home_team") or ""))
+            a_abbr = _guess_code(str(row.get("away_team") or ""))
+
+            home_abbr_match = bool(h_abbr and h_abbr.upper() in suffix)
+            away_abbr_match = bool(a_abbr and a_abbr.upper() in suffix)
+
+            home_matched = home_score >= 80 or home_abbr_match or (home_norm and home_norm.split()[0] in hay)
+            away_matched = away_score >= 80 or away_abbr_match or (away_norm and away_norm.split()[0] in hay)
+
+            if home_matched and away_matched:
+                markets.append(m)
+            else:
+                # Extra fallback for specific tricky names that get tokenized poorly
+                # e.g., "Saint Mary's" vs "saint marys"
+                home_raw = str(row.get("home_team") or "").lower().replace("'", "").replace(".", "").replace("state", "st")
+                away_raw = str(row.get("away_team") or "").lower().replace("'", "").replace(".", "").replace("state", "st")
+
+                hay_raw = hay.replace("'", "").replace(".", "").replace("state", "st")
+
+                if (home_raw in hay_raw or home_matched) and (away_raw in hay_raw or away_matched):
+                    markets.append(m)
 
         best_market = None
         best_delta = float("inf")
@@ -647,6 +698,13 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             out.at[idx, "kalshi_tried_tickers"] = json.dumps(candidates)
             out.at[idx, "kalshi_match_status"] = match_status
             out.at[idx, "kalshi_match_reason"] = match_reason
+            continue
+
+        # In case we found no matching markets via dynamic discovery
+        if not markets:
+            out.at[idx, "kalshi_tried_tickers"] = json.dumps(candidates)
+            out.at[idx, "kalshi_match_status"] = "miss"
+            out.at[idx, "kalshi_match_reason"] = "no_market_for_tickers"
             continue
 
         markets = [m for m in markets if market_type_matches(row.get('market_type'), m.get('title'))]
