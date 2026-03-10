@@ -821,6 +821,11 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     for col in BEST_PICK_COLUMNS:
         if col not in best.columns:
             best[col] = pd.NA
+
+    # Drop kalshi_tried_tickers explicitly to eradicate old fallback logic from the pipeline
+    if "kalshi_tried_tickers" in best.columns:
+        best = best.drop(columns=["kalshi_tried_tickers"])
+
     return best[BEST_PICK_COLUMNS]
 
 

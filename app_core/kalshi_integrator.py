@@ -509,7 +509,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             cache_success = True
             try:
                 params = {"series_ticker": series, "status": "open", "limit": 100}
-                for _ in range(20): # Paginate up to 2000 markets per series
+                while True:
                     resp = api_get_markets(**params)
 
                     # _extract_markets checks correctly, but let's make sure it handles the mock format too
@@ -520,6 +520,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                     if not page:
                         break
                     series_markets.extend(page)
+
                     cursor = resp.get("cursor") if isinstance(resp, dict) else None
                     if not cursor:
                         break
@@ -647,10 +648,10 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
                                 home_t = str(row.get("home_team") or "")
                                 away_t = str(row.get("away_team") or "")
-                                combined_text = f"{str(mkt.get('title', ''))} {str(mkt.get('subtitle', ''))}".lower()
+                                combined_text_lower = f"{str(mkt.get('title', ''))} {str(mkt.get('subtitle', ''))}".lower()
 
-                                home_shared = {w for w in set(_normalize_team_token(home_t).split()).intersection(set(_normalize_team_token(combined_text).split())) if len(w) > 2}
-                                away_shared = {w for w in set(_normalize_team_token(away_t).split()).intersection(set(_normalize_team_token(combined_text).split())) if len(w) > 2}
+                                home_shared = {w for w in set(_normalize_team_token(home_t).split()).intersection(set(_normalize_team_token(combined_text_lower).split())) if len(w) > 2}
+                                away_shared = {w for w in set(_normalize_team_token(away_t).split()).intersection(set(_normalize_team_token(combined_text_lower).split())) if len(w) > 2}
 
                                 ticker_suffix = str(mkt.get("ticker", "")).split("-")[-1]
                                 home_abbr = str(_guess_code(home_t) or "").upper()
@@ -668,24 +669,27 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                                     is_correct_match = True # Assume match if Kalshi subject is completely ambiguous
 
                                 if is_correct_match:
-                                    if delta < best_delta:
-                                        best_delta = delta
-                                        best_market = mkt
-                                        match_status = "matched"
-                                        match_reason = "spread_match"
+                                    best_delta = delta
+                                    best_market = mkt
+                                    match_status = "matched"
+                                    match_reason = "spread_match"
+                                    break # Matched the correct line, break inner loop
 
                         elif family == "total":
                             k_line = extracted_val
                             delta = abs(k_line - target_line)
                             if delta <= KALSHI_LINE_TOLERANCE_TOTAL:
-                                if delta < best_delta:
-                                    best_delta = delta
-                                    best_market = mkt
-                                    match_status = "matched"
-                                    match_reason = "total_match"
+                                best_delta = delta
+                                best_market = mkt
+                                match_status = "matched"
+                                match_reason = "total_match"
+                                break # Matched the correct line, break inner loop
 
                     except ValueError:
                         continue
+
+                if best_market is not None:
+                    break
 
         if best_market is None:
             # We found no markets or candidates at all
