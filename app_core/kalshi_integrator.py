@@ -475,20 +475,30 @@ def _fetch_series_cache(series_set: set[str], date_codes: set[str] | None = None
 
 
 def _markets_by_team_text(series_markets: list[dict[str, Any]], home_team: str, away_team: str, date_code: str) -> list[dict[str, Any]]:
-    """Fallback matcher when event_ticker team codes differ from local aliases."""
-    home_token = _normalize_team_token(home_team)
-    away_token = _normalize_team_token(away_team)
-    candidates: list[dict[str, Any]] = []
+    """Fallback matcher that uses partial substring matching to bridge book abbreviations and Kalshi names."""
+    candidates = []
+
+    # Helper to extract the primary identifying root of a team (e.g., 'Eastern Wa' -> 'east')
+    def _get_prefix(name: str) -> str:
+        words = [w for w in re.sub(r'[^a-zA-Z0-9]', ' ', str(name).lower()).split() if len(w) >= 2 and w not in ('state', 'univ', 'university', 'college')]
+        return words[0] if words else str(name).lower().strip()[:4]
+
+    home_prefix = _get_prefix(home_team)
+    away_prefix = _get_prefix(away_team)
+
     for m in series_markets or []:
         ticker = str(m.get("ticker") or "").upper()
         event_ticker = str(m.get("event_ticker") or "").upper()
-        title = _normalize_team_token(str(m.get("title") or ""))
-        subtitle = _normalize_team_token(str(m.get("subtitle") or ""))
-        hay = " ".join([title, subtitle, event_ticker.lower()])
+        # Combine title, subtitle, and ticker to ensure maximum surface area for the text search
+        hay = (str(m.get("title", "")) + " " + str(m.get("subtitle", "")) + " " + event_ticker).lower()
+
         if date_code and date_code not in ticker and date_code not in event_ticker:
             continue
-        if home_token and away_token and home_token in hay and away_token in hay:
+
+        # If the primary root of BOTH teams exists anywhere in the Kalshi market, it's our game.
+        if home_prefix and away_prefix and home_prefix in hay and away_prefix in hay:
             candidates.append(m)
+
     return candidates
 
 
