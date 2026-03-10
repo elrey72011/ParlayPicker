@@ -414,11 +414,15 @@ def _select_probability(market: dict[str, Any]) -> float | None:
 
     last = pd.to_numeric(market.get("last_price_dollars"), errors="coerce")
     if pd.notna(last):
+        if last > 1.0:
+            return float(last / 100.0)
         return float(last)
 
     for key in ("yes_bid_dollars", "yes_ask_dollars"):
         val = pd.to_numeric(market.get(key), errors="coerce")
         if pd.notna(val):
+            if val > 1.0:
+                return float(val / 100.0)
             return float(val)
     return None
 
@@ -713,9 +717,16 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             if (bid + ask) > 2.0:
                 # Values are in cents
                 kalshi_prob = (bid + ask) / 200.0
-            else:
+            elif bid > 0 and ask > 0:
                 # Values are in dollars
                 kalshi_prob = (bid + ask) / 2.0
+            else:
+                kalshi_prob = _select_probability(best_market)
+
+            if kalshi_prob is None:
+                out.at[idx, "kalshi_match_status"] = "miss"
+                out.at[idx, "kalshi_match_reason"] = "null_probability_extracted"
+                continue
 
             # NEW: Invert probability if we are betting the underdog or the under
             m_type = str(row.get("market_type")).lower()

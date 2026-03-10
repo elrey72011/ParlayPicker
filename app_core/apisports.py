@@ -46,6 +46,7 @@ class GameSummary:
     sport_key: Optional[str] = None
     sport_name: Optional[str] = None
     scoring_metric: Optional[str] = None
+    is_neutral: bool = False
 
 
 class _APISportsBaseClient:
@@ -634,6 +635,16 @@ class _APISportsBaseClient:
             trend=self._determine_trend(away_stats.get("form")),
         )
 
+        is_neutral = False
+        if isinstance(game, dict):
+            # Often indicated in "game" object or teams structure for API-Sports
+            # Try a simple check if "neutral" flag exists
+            teams_obj = game.get("teams", {})
+            if "neutral" in game:
+                is_neutral = bool(game.get("neutral"))
+            elif "home" in teams_obj and isinstance(teams_obj["home"], dict) and "neutral" in teams_obj["home"]:
+                is_neutral = bool(teams_obj["home"].get("neutral"))
+
         return GameSummary(
             id=game.get("id"),
             league=(game.get("league") or {}).get("name"),
@@ -647,6 +658,7 @@ class _APISportsBaseClient:
             sport_key=self.SPORT_KEY,
             sport_name=self.SPORT_NAME,
             scoring_metric=self.SCORING_METRIC_LABEL,
+            is_neutral=is_neutral,
         )
 
 
