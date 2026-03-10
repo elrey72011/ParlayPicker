@@ -535,10 +535,13 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
         # 1. Fetch Series Cache to avoid API Rate Limits
         if series not in series_cache:
+            import time
             series_markets = []
+            fetch_success = True
+            page_num = 0
             try:
                 params = {"series_ticker": series, "status": "open", "limit": 100}
-                for _ in range(20): # Paginate up to 2000 markets per series
+                for page_num in range(20):
                     resp = api_get_markets(**params)
                     page = _extract_markets(resp)
                     if not page:
@@ -548,10 +551,14 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                     if not cursor:
                         break
                     params["cursor"] = cursor
+                    time.sleep(0.25) # 250ms delay to prevent 429 Rate Limit blocks
             except Exception as e:
-                logger.warning(f"Cache fetch failed for {series}: {e}")
+                logger.warning(f"Cache fetch failed for {series} on page {page_num}: {e}")
+                fetch_success = False
 
-            series_cache[series] = series_markets
+            # Only cache if we didn't hit a hard failure, preventing lockout
+            if fetch_success or series_markets:
+                series_cache[series] = series_markets
 
         series_markets = series_cache.get(series, [])
 
