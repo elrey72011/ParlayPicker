@@ -196,7 +196,7 @@ NOTIFICATION_CONFIG = {
 
 # --- ADD THESE NEW KEYS ---
 # The Odds API (for live odds)
-THE_ODDS_API_KEY = os.getenv('THE_ODDS_API_KEY', 'b722c798f7bca605da45a09dba155152')
+THE_ODDS_API_KEY = os.getenv('THE_ODDS_API_KEY', '')
 
 # Gemini API Key (Removed dummy fallback to prevent invalid key usage)
 # GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")

@@ -27,18 +27,20 @@ logger = logging.getLogger(__name__)
 
 # Import odds fetching components
 try:
-    from app_core.odds_api import TheOddsAPIClient, filter_games_today_only
+    from app_core.odds_api import TheOddsAPIClient, filter_games_today_only, OddsAPIAuthError
     ODDS_API_AVAILABLE = True
 except Exception as e:
     ODDS_API_AVAILABLE = False
     logger.warning(f"Could not import TheOddsAPIClient: {e}")
 
-try:
-    import config
-    THE_ODDS_API_KEY = config.THE_ODDS_API_KEY
-except Exception:
-    import os
-    THE_ODDS_API_KEY = os.environ.get("THE_ODDS_API_KEY", "")
+import os
+import streamlit as st
+
+def _get_odds_api_key() -> str:
+    key = st.secrets.get("ODDS_API_KEY")
+    if not key:
+        key = os.environ.get("ODDS_API_KEY", "")
+    return key
 
 try:
     from app_core.prediction_engine import PredictionEngine
@@ -844,11 +846,15 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
 
 def fetch_live_odds_dataframe(sports: list[str] | None = None) -> pd.DataFrame:
     """Fetch live Novig odds and return as flattened dataframe."""
-    if not ODDS_API_AVAILABLE or not THE_ODDS_API_KEY:
-        logger.warning("TheOddsAPI is not available or missing API key.")
+    if not ODDS_API_AVAILABLE:
+        logger.warning("TheOddsAPI is not available.")
         return pd.DataFrame()
 
-    client = TheOddsAPIClient(api_key=THE_ODDS_API_KEY)
+    api_key = _get_odds_api_key()
+    if not api_key:
+        raise OddsAPIAuthError("The Odds API key is missing. Please verify your credentials in Streamlit secrets.")
+
+    client = TheOddsAPIClient(api_key=api_key)
 
     SPORT_KEYS = {
         "NBA": "basketball_nba",
@@ -871,6 +877,9 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None) -> pd.DataFrame:
             if games:
                 today_games = filter_games_today_only(games)
                 all_games.extend(today_games)
+        except OddsAPIAuthError:
+            # Re-raise auth errors immediately so the pipeline stops
+            raise
         except Exception as e:
             logger.error(f"Error fetching live odds for {sport}: {e}")
 
