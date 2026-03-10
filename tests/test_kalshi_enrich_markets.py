@@ -22,7 +22,7 @@ def test_enrich_with_kalshi_markets_sets_match_fields(monkeypatch):
     )
 
     def fake_api_get_markets(**params):
-        if "event_ticker" in params:
+        if "series_ticker" in params:
             return [
                 {
                     "ticker": "KXNBASPREAD-26MAR10LALBOS",
@@ -76,20 +76,19 @@ def test_enrich_with_kalshi_markets_title_fallback_when_event_ticker_codes_diffe
     )
 
     def fake_api_get_markets(**params):
-        if "tickers" in params:
-            return {"markets": []}
-
-        return {
-            "markets": [
-                {
-                    "ticker": "KXNCAAMBTOTAL-26MAR10XXXX",
-                    "event_ticker": "KXNCAAMBTOTAL-26MAR10ABCD",
-                    "title": "Saint Mary's vs Pepperdine total over 141",
-                    "yes_bid_dollars": 49,
-                    "yes_ask_dollars": 51,
-                }
-            ]
-        }
+        if "series_ticker" in params:
+            return {
+                "markets": [
+                    {
+                        "ticker": "KXNCAAMBTOTAL-26MAR10XXXX",
+                        "event_ticker": "KXNCAAMBTOTAL-26MAR10ABCD",
+                        "title": "Saint Mary's vs Pepperdine total over 141",
+                        "yes_bid_dollars": 49,
+                        "yes_ask_dollars": 51,
+                    }
+                ]
+            }
+        return {"markets": []}
 
     monkeypatch.setattr(ki, "api_get_markets", fake_api_get_markets)
     out = ki.enrich_with_kalshi_markets(df)
