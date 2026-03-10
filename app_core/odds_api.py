@@ -9,13 +9,14 @@ logger = logging.getLogger(__name__)
 class TheOddsAPIClient:
     BASE_URL = "https://api.the-odds-api.com/v4"
 
-    def __init__(self, api_key: str, regions="us", markets="h2h,spreads,totals"):
+    def __init__(self, api_key: str, regions="us_ex", markets="h2h,spreads,totals", bookmakers="novig"):
         if not api_key:
             raise ValueError("TheOddsAPI API key is required")
 
         self.api_key = api_key
         self.regions = regions
         self.markets = markets
+        self.bookmakers = bookmakers
 
     def get_odds(self, sport_key: str):
         url = f"{self.BASE_URL}/sports/{sport_key}/odds"
@@ -23,13 +24,21 @@ class TheOddsAPIClient:
             "apiKey": self.api_key,
             "regions": self.regions,
             "markets": self.markets,
+            "bookmakers": self.bookmakers,
             "oddsFormat": "american",
         }
 
         resp = requests.get(url, params=params, timeout=15)
         resp.raise_for_status()
 
-        return resp.json()
+        data = resp.json()
+
+        # Filter out games that don't have any bookmakers (i.e. Novig has no lines)
+        if isinstance(data, list):
+            filtered_data = [game for game in data if game.get("bookmakers")]
+            return filtered_data
+
+        return data
 
 def filter_games_today_only(games: List[Dict]) -> List[Dict]:
     """
@@ -85,58 +94,6 @@ def filter_games_today_only(games: List[Dict]) -> List[Dict]:
     return filtered_games
 
 import pandas as pd
-
-def get_novig_reference(row: Dict) -> Dict:
-    """Extract Novig spread and total as canonical reference."""
-    novig_ref = {}
-    for book in row.get('bookmakers', []):
-        if 'novig' in book.get('key', '').lower():
-            for market in book.get('markets', []):
-                if market.get('key') == 'h2h_spreads':
-                    outcomes = market.get('outcomes', [])
-                    home_o = next((o for o in outcomes if o.get('name') == row.get('home_team')), None)
-                    away_o = next((o for o in outcomes if o.get('name') == row.get('away_team')), None)
-                    if home_o and away_o:
-                        novig_ref.update({
-                            'home_spread_point': home_o.get('point'),
-                            'away_spread_point': away_o.get('point'),
-                            'home_spread_price': home_o.get('price'),
-                            'away_spread_price': away_o.get('price'),
-                        })
-                elif market.get('key') == 'totals':
-                    outcomes = market.get('outcomes', [])
-                    over_o = next((o for o in outcomes if str(o.get('name')).lower() == 'over'), None)
-                    under_o = next((o for o in outcomes if str(o.get('name')).lower() == 'under'), None)
-                    if over_o and under_o:
-                        novig_ref.update({
-                            'over_point': over_o.get('point'),
-                            'under_point': under_o.get('point'),
-                            'over_price': over_o.get('price'),
-                            'under_price': under_o.get('price'),
-                        })
-            break
-    return novig_ref if novig_ref else None
-
-def process_odds_with_novig_priority(row: Dict) -> Dict:
-    """
-    Process row odds using Novig as the canonical reference point.
-    To be used within the main parse/process odds loop in Streamlit.
-    """
-    novig = get_novig_reference(row)
-    if novig:
-        if 'home_spread_point' in novig:
-            row['reference_spread_point'] = novig['home_spread_point']
-            row['best_spread_price'] = min(row.get('best_spread_price', 999), novig['home_spread_price'])
-            row['novig_spread_used'] = True
-        if 'over_point' in novig:
-            row['reference_total_point'] = novig['over_point']
-            row['novig_total_used'] = True
-    else:
-        row['novig_spread_used'] = False
-        row['novig_total_used'] = False
-
-    return row
-
 
 def export_raw_odds_api(odds_response: Dict, filename: str = None) -> str:
     """Export raw odds_api.com response for debugging, properly flattening bookmaker markets."""
