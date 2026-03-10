@@ -671,7 +671,16 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
                         if family == "spread":
                             if delta <= KALSHI_LINE_TOLERANCE_SPREAD:
-                                pick_team_norm = _normalize_team_token(str(row.get("pick_team") or row.get("home_team")))
+                                # FIX: Dynamically determine the target team from the market_type column
+                                m_type = str(row.get("market_type")).lower()
+                                if m_type == "spread_home":
+                                    target_team = str(row.get("home_team") or "")
+                                elif m_type == "spread_away":
+                                    target_team = str(row.get("away_team") or "")
+                                else:
+                                    target_team = str(row.get("pick_team") or row.get("home_team") or "")
+
+                                pick_team_norm = _normalize_team_token(target_team)
                                 if pick_team_norm and pick_team_norm in _normalize_team_token(m_title):
                                     if delta < best_delta:
                                         best_delta = delta
@@ -701,7 +710,15 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                                 elif "under" in combined_text:
                                     k_side = "under"
 
-                                book_side = str(row.get("total_pick_side") or "").lower()
+                                # FIX: Dynamically determine the book side from the market_type column
+                                m_type = str(row.get("market_type")).lower()
+                                if "over" in m_type:
+                                    book_side = "over"
+                                elif "under" in m_type:
+                                    book_side = "under"
+                                else:
+                                    book_side = str(row.get("total_pick_side") or "").lower()
+
                                 if k_side == book_side or k_side is None:
                                     if delta < best_delta:
                                         best_delta = delta
