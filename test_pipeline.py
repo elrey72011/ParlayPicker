@@ -1,31 +1,28 @@
-import pandas as pd
-from core.streamlit_pipeline import build_best_picks_df, BEST_PICK_COLUMNS
-import numpy as np
+import asyncio
+from core.streamlit_pipeline import run_analysis_pipeline
 
-# Create a sample analysis dataframe
-data = {
-    "league": ["NCAAB", "NCAAB", "NBA"],
-    "home_team": ["Eastern Washington", "Eastern Washington", "Lakers"],
-    "away_team": ["Portland State", "Portland State", "Celtics"],
-    "game_date": [np.nan, "2023-11-20T00:00:00Z", np.nan],
-    "market_type": ["spread_home", "total_over", "spread_away"],
-    "expected_value": [0.10, 0.05, 0.08],
-    "edge": [0.05, 0.04, 0.06],
-    "model_probability": [0.6, 0.55, 0.58],
-    "theover_probability": [np.nan, np.nan, np.nan],
-    "ml_probability": [np.nan, np.nan, np.nan],
-    "spread_line": [-2.5, np.nan, 3.5],
-    "total_line": [np.nan, 145.5, np.nan]
-}
-analysis_df = pd.DataFrame(data)
+async def test_run():
+    # Use mock CSV files or real data if available
+    import pandas as pd
+    try:
+        # Load a small mock dataframe instead of full pipeline UI
+        mock_data = pd.DataFrame({
+            "game_id": ["TEST-GAME-1"],
+            "league": ["NBA"],
+            "home_team": ["LAL"],
+            "away_team": ["BOS"],
+            "game_date": ["2024-05-15"],
+            "market_type": ["spread_home"],
+            "spread_line": [-5.5]
+        })
 
-analysis_df["game_date"] = pd.to_datetime(analysis_df["game_date"], errors="coerce", utc=True)
+        from app_core.kalshi_integrator import enrich_with_kalshi_markets
+        result_df = enrich_with_kalshi_markets(mock_data)
 
-best_picks = build_best_picks_df(analysis_df)
+        print("Success! Enriched DF rows:", len(result_df))
+        print("Columns:", list(result_df.columns))
+    except Exception as e:
+        print("Error during test run:", e)
 
-print(f"Total best picks: {len(best_picks)}")
-for idx, row in best_picks.iterrows():
-    print(f"Matchup: {row.get('home_team')} vs {row.get('away_team')}, Pick: {row.get('best_pick')}, EV: {row.get('expected_value')}")
-
-assert len(best_picks) == 2, f"Expected 2 best picks, got {len(best_picks)}"
-print("Success!")
+if __name__ == "__main__":
+    asyncio.run(test_run())

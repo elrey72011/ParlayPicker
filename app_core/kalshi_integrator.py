@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 from dataclasses import dataclass
 from typing import Any, Optional, Tuple
 
@@ -323,9 +324,7 @@ def _kalshi_search_fallback(league: str, home_team: str, away_team: str, game_da
     for series in series_list:
         try:
             url = f"{API_BASE}/markets?series_ticker={series}&limit=100"
-            resp = requests.get(url, headers=headers, timeout=5)
-            if resp.status_code != 200:
-                continue
+            resp = _make_kalshi_request(url, headers=headers, timeout=5)
             markets = resp.json().get("markets", [])
             for market in markets:
                 ticker = str(market.get("ticker") or "")
@@ -365,10 +364,35 @@ def team_code_for_league(league: str, team: str) -> str:
     code = _det_team_code(league, team)
     return str(code or "")
 
+
+def _make_kalshi_request(url: str, headers: dict[str, str] | None = None, params: dict[str, Any] | None = None, timeout: int = 8) -> requests.Response:
+    """Helper to make rate-limited Kalshi API requests with exponential backoff for 429 errors."""
+    time.sleep(0.2)
+    max_retries = 3
+    backoff = 2.0
+
+    for attempt in range(max_retries + 1):
+        resp = requests.get(url, headers=headers, params=params, timeout=timeout)
+        if resp.status_code == 429:
+            if attempt < max_retries:
+                logger.warning(f"Kalshi API 429 Too Many Requests. Retrying in {backoff} seconds (attempt {attempt + 1}/{max_retries})...")
+                time.sleep(backoff)
+                backoff *= 2.0
+                continue
+            else:
+                logger.error(f"Kalshi API 429 Too Many Requests. Max retries ({max_retries}) exceeded.")
+                resp.raise_for_status()
+        else:
+            resp.raise_for_status()
+            return resp
+
+    # Fallback return, should not reach here if raise_for_status happens above
+    return requests.get(url, headers=headers, params=params, timeout=timeout)
+
+
 def _get_markets(params: dict[str, Any]) -> list[dict[str, Any]]:
     try:
-        response = requests.get(f"{API_BASE}/markets", params=params, timeout=8)
-        response.raise_for_status()
+        response = _make_kalshi_request(f"{API_BASE}/markets", params=params, timeout=8)
         payload = response.json()
     except Exception as exc:
         raise KalshiAPIError(str(exc)) from exc
@@ -380,8 +404,7 @@ def _get_markets(params: dict[str, Any]) -> list[dict[str, Any]]:
 def api_get_markets(**params: Any) -> dict[str, Any]:
     """Compatibility wrapper for Kalshi market lookups."""
     try:
-        response = requests.get(f"{API_BASE}/markets", params=params, timeout=8)
-        response.raise_for_status()
+        response = _make_kalshi_request(f"{API_BASE}/markets", params=params, timeout=8)
         payload = response.json()
     except Exception as exc:
         raise KalshiAPIError(str(exc)) from exc
@@ -573,6 +596,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         # 1. Fetch Series Cache to avoid API Rate Limits
         if series not in series_cache:
             series_markets = []
+            cache_success = True
             try:
                 params = {"series_ticker": series, "status": "open", "limit": 100}
                 for _ in range(20): # Paginate up to 2000 markets per series
@@ -587,10 +611,18 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                     params["cursor"] = cursor
             except Exception as e:
                 logger.warning(f"Cache fetch failed for {series}: {e}")
+                cache_success = False
 
-            series_cache[series] = series_markets
+            # Only populate cache if the fetch loop fully succeeded.
+            # This prevents permanently caching a failure state (e.g. from 429 errors).
+            if cache_success:
+                series_cache[series] = series_markets
+            else:
+                # Use partially fetched markets, but do not cache them for future rows,
+                # ensuring we retry fetching the full series next time.
+                pass
 
-        series_markets = series_cache.get(series, [])
+        series_markets = series_cache.get(series, series_markets if 'series_markets' in locals() else [])
 
         # 2. Extract specific game markets from the cache
         markets = [
