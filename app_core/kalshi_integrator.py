@@ -521,6 +521,9 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
     out["kalshi_match_status"] = "miss"
     out["kalshi_match_reason"] = "no_market_for_tickers"
 
+    # Cache the heavy series payloads so we only download them once per league
+    series_cache = {}
+
     for idx, row in out.iterrows():
         league = str(row.get("league") or "").upper()
         family_guess = _market_family(row)
@@ -580,23 +583,28 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             except Exception:
                 continue
 
-        # 2. Fallback Series Ticker Lookup (Paginated)
+        # 2. Fallback Series Ticker Lookup (Cached & Paginated)
         if not markets:
-            series_markets = []
-            try:
-                params = {"series_ticker": series, "status": "open", "limit": 100}
-                for _ in range(20):
-                    resp = api_get_markets(**params)
-                    page = _extract_markets(resp)
-                    if not page:
-                        break
-                    series_markets.extend(page)
-                    cursor = resp.get("cursor") if isinstance(resp, dict) else None
-                    if not cursor:
-                        break
-                    params["cursor"] = cursor
-            except Exception:
-                pass
+            if series not in series_cache:
+                series_markets = []
+                try:
+                    params = {"series_ticker": series, "status": "open", "limit": 100}
+                    for _ in range(20): # Paginate up to 2000 markets per series
+                        resp = api_get_markets(**params)
+                        page = _extract_markets(resp)
+                        if not page:
+                            break
+                        series_markets.extend(page)
+                        cursor = resp.get("cursor") if isinstance(resp, dict) else None
+                        if not cursor:
+                            break
+                        params["cursor"] = cursor
+                except Exception:
+                    pass
+                series_cache[series] = series_markets
+
+            # Pull from the cache instead of hitting the API again
+            series_markets = series_cache[series]
 
             markets = [
                 m for m in series_markets

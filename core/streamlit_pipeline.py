@@ -1053,7 +1053,11 @@ def run_analysis_pipeline(
     diagnostics = {
         "total_rows": int(len(analysis_df)),
         "rows_with_game_date": int(pd.to_datetime(analysis_df.get("game_date"), errors="coerce", utc=True).notna().sum()) if not analysis_df.empty else 0,
-        "total_games": int(analysis_df[["league", "home_team", "away_team"]].drop_duplicates().shape[0]) if not analysis_df.empty else 0,
+        # Safely sort team names alphabetically and append the date to prevent cross-day deduplication
+        "total_games": int(analysis_df.apply(
+            lambda r: f"{r.get('league')}|{min(str(r.get('home_team')), str(r.get('away_team')))}|{max(str(r.get('home_team')), str(r.get('away_team')))}|{pd.to_datetime(r.get('game_date')).strftime('%Y-%m-%d') if pd.notna(r.get('game_date')) else ''}",
+            axis=1
+        ).nunique()) if not analysis_df.empty else 0,
         "bet_rows": int(len(analysis_df)),
         "ml_model_loaded": bool(use_ml and ML_AVAILABLE),
         "ml_predictions": int(analysis_df["ml_probability"].notna().sum()) if "ml_probability" in analysis_df.columns else 0,
