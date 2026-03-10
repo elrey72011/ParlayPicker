@@ -21,16 +21,31 @@ from core.probability_engine import american_to_prob
 from core.schema.base_schema import ensure_base_schema
 from core.team_mapper import normalize_team_name
 
+warnings.filterwarnings("ignore", category=FutureWarning, module="pandas")
+
+logger = logging.getLogger(__name__)
+
+# Import odds fetching components
+try:
+    from app_core.odds_api import TheOddsAPIClient, filter_games_today_only
+    ODDS_API_AVAILABLE = True
+except Exception as e:
+    ODDS_API_AVAILABLE = False
+    logger.warning(f"Could not import TheOddsAPIClient: {e}")
+
+try:
+    import config
+    THE_ODDS_API_KEY = config.THE_ODDS_API_KEY
+except Exception:
+    import os
+    THE_ODDS_API_KEY = os.environ.get("THE_ODDS_API_KEY", "")
+
 try:
     from app_core.prediction_engine import PredictionEngine
     ML_AVAILABLE = True
 except Exception:
     ML_AVAILABLE = False
     PredictionEngine = None
-
-warnings.filterwarnings("ignore", category=FutureWarning, module="pandas")
-
-logger = logging.getLogger(__name__)
 
 VALID_MARKETS = {"spread_home", "spread_away", "total_over", "total_under"}
 DATE_ALIASES = ["game_date", "commence_time", "start_time", "time", "date", "event_date"]
@@ -827,6 +842,77 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     return best[BEST_PICK_COLUMNS]
 
 
+def fetch_live_odds_dataframe(sports: list[str] | None = None) -> pd.DataFrame:
+    """Fetch live Novig odds and return as flattened dataframe."""
+    if not ODDS_API_AVAILABLE or not THE_ODDS_API_KEY:
+        logger.warning("TheOddsAPI is not available or missing API key.")
+        return pd.DataFrame()
+
+    client = TheOddsAPIClient(api_key=THE_ODDS_API_KEY)
+
+    SPORT_KEYS = {
+        "NBA": "basketball_nba",
+        "NHL": "icehockey_nhl",
+        "NCAAB": "basketball_ncaab",
+        "NFL": "americanfootball_nfl",
+        "NCAAF": "americanfootball_ncaaf"
+    }
+
+    sports_to_fetch = sports if sports else list(SPORT_KEYS.keys())
+    all_games = []
+
+    for sport in sports_to_fetch:
+        sport_key = SPORT_KEYS.get(sport.upper())
+        if not sport_key:
+            continue
+
+        try:
+            games = client.get_odds(sport_key)
+            if games:
+                today_games = filter_games_today_only(games)
+                all_games.extend(today_games)
+        except Exception as e:
+            logger.error(f"Error fetching live odds for {sport}: {e}")
+
+    if not all_games:
+        return pd.DataFrame()
+
+    rows = []
+    for game in all_games:
+        for book in game.get('bookmakers', []):
+            book_key = book.get('key', '')
+            if book_key != 'novig':
+                continue
+
+            row = {
+                'game_id': game.get('id'),
+                'home_team': normalize_team_name(game.get('home_team')),
+                'away_team': normalize_team_name(game.get('away_team')),
+                'commence_time': game.get('commence_time'),
+            }
+
+            for market in book.get('markets', []):
+                if market.get('key') == 'spreads':
+                    for o in market.get('outcomes', []):
+                        if normalize_team_name(o.get('name')) == row['home_team']:
+                            row['novig_home_point'] = o.get('point')
+                            row['novig_home_price'] = o.get('price')
+                        elif normalize_team_name(o.get('name')) == row['away_team']:
+                            row['novig_away_point'] = o.get('point')
+                            row['novig_away_price'] = o.get('price')
+                elif market.get('key') == 'totals':
+                    for o in market.get('outcomes', []):
+                        if str(o.get('name')).lower() == 'over':
+                            row['novig_over_point'] = o.get('point')
+                            row['novig_over_price'] = o.get('price')
+                        elif str(o.get('name')).lower() == 'under':
+                            row['novig_under_point'] = o.get('point')
+                            row['novig_under_price'] = o.get('price')
+            rows.append(row)
+
+    return pd.DataFrame(rows)
+
+
 def run_analysis_pipeline(
     sports: list[str] | None = None,
     max_rows: int = 1000,
@@ -836,6 +922,7 @@ def run_analysis_pipeline(
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]:
     base_df = load_base_data()
     odds_schedule_loaded = not base_df.empty
+    live_odds_df = fetch_live_odds_dataframe(sports)
 
     bet_rows = build_theover_bet_rows(spreads_df, totals_df, sports)
 
@@ -853,7 +940,11 @@ def run_analysis_pipeline(
 
     merge_keys = ["league", "home_team", "away_team"]
     merged = bet_rows.copy()
-    merged["odds_source"] = "fallback_-110"
+
+    # Do not set a fallback odds_source
+    if "odds_source" not in merged.columns:
+        merged["odds_source"] = pd.NA
+
     uploaded_odds = _numeric_series(merged, "odds_american")
     merged.loc[uploaded_odds.notna() & (uploaded_odds != -110), "odds_source"] = "uploaded"
     if not base_df.empty:
@@ -941,26 +1032,112 @@ def run_analysis_pipeline(
             )
             merged = merged.drop(columns=["game_time_est_rev"])
 
+    # Merge Live Odds
+    if not live_odds_df.empty:
+        # Avoid duplicating columns during merge
+        live_merge_cols = [c for c in live_odds_df.columns if c not in ["game_id", "commence_time"]]
+        merged = merged.merge(
+            live_odds_df[live_merge_cols].drop_duplicates(["home_team", "away_team"]),
+            on=["home_team", "away_team"],
+            how="left"
+        )
+
+        # For reverse matching, we need to flip the teams AND their respective points/prices.
+        # Otherwise, the home point will incorrectly map to the away point.
+        reverse_live_odds_df = live_odds_df.rename(columns={
+            "home_team": "away_team",
+            "away_team": "home_team",
+            "novig_home_point": "novig_away_point_rev",
+            "novig_home_price": "novig_away_price_rev",
+            "novig_away_point": "novig_home_point_rev",
+            "novig_away_price": "novig_home_price_rev",
+            "novig_over_point": "novig_over_point_rev",
+            "novig_over_price": "novig_over_price_rev",
+            "novig_under_point": "novig_under_point_rev",
+            "novig_under_price": "novig_under_price_rev"
+        })
+
+        rev_merge_cols = ["home_team", "away_team"] + [c for c in reverse_live_odds_df.columns if c.endswith("_rev")]
+        merged = merged.merge(
+            reverse_live_odds_df[rev_merge_cols].drop_duplicates(["home_team", "away_team"]),
+            on=["home_team", "away_team"],
+            how="left"
+        )
+
+        # Combine primary and reverse mapped live odds
+        for c in [col for col in live_merge_cols if col.startswith("novig_")]:
+            rev_c = f"{c}_rev"
+            if rev_c in merged.columns:
+                merged[c] = merged[c].fillna(merged[rev_c])
+                merged = merged.drop(columns=[rev_c])
+
     merged["game_date"] = _game_dates(merged)
     if merged["game_date"].isna().all():
         merged["game_date"] = _game_date_fallback()
     merged["game_time_est"] = _format_game_time_est(merged)
-    merged["odds_american"] = _numeric_series(merged, "odds_american", -110.0)
-    merged.loc[_numeric_series(merged, "odds_american", -110.0).eq(-110) & _string_series(merged, "odds_source").str.len().eq(0), "odds_source"] = "fallback_-110"
+
+    # Map Novig's true points and prices explicitly
+    def map_novig_lines(row):
+        m_type = str(row.get("market_type", "")).lower()
+        if not m_type:
+            return row
+
+        def safe_float(val):
+            try:
+                # Handle cases like "+102"
+                return float(str(val).replace('+', '')) if pd.notna(val) else pd.NA
+            except ValueError:
+                return pd.NA
+
+        if m_type == "spread_home" and "novig_home_point" in row and pd.notna(row["novig_home_point"]):
+            row["spread_line"] = safe_float(row["novig_home_point"])
+            row["odds_american"] = safe_float(row["novig_home_price"])
+            row["odds_source"] = "novig_live"
+        elif m_type == "spread_away" and "novig_away_point" in row and pd.notna(row["novig_away_point"]):
+            row["spread_line"] = safe_float(row["novig_away_point"])
+            row["odds_american"] = safe_float(row["novig_away_price"])
+            row["odds_source"] = "novig_live"
+        elif m_type == "total_over" and "novig_over_point" in row and pd.notna(row["novig_over_point"]):
+            row["total_line"] = safe_float(row["novig_over_point"])
+            row["odds_american"] = safe_float(row["novig_over_price"])
+            row["odds_source"] = "novig_live"
+        elif m_type == "total_under" and "novig_under_point" in row and pd.notna(row["novig_under_point"]):
+            row["total_line"] = safe_float(row["novig_under_point"])
+            row["odds_american"] = safe_float(row["novig_under_price"])
+            row["odds_source"] = "novig_live"
+
+        return row
+
+    merged = merged.apply(map_novig_lines, axis=1)
+
+    # Enforce Strict Drops for missing valid Novig line/price
+    # Only keep rows that successfully mapped a live Novig line and price
+    if "odds_source" in merged.columns:
+        merged = merged[merged["odds_source"] == "novig_live"].copy()
+
+    merged["odds_american"] = _numeric_series(merged, "odds_american", pd.NA)
+    merged = merged.dropna(subset=["odds_american"])
+
+    # Drop rows without matching spread_line or total_line
+    if not merged.empty:
+        is_spread = merged["market_type"].astype(str).str.startswith("spread")
+        is_total = merged["market_type"].astype(str).str.startswith("total")
+
+        has_valid_spread = is_spread & merged["spread_line"].notna()
+        has_valid_total = is_total & merged["total_line"].notna()
+
+        valid_rows = has_valid_spread | has_valid_total
+        merged = merged[valid_rows].copy()
+
     merged["decimal_odds"] = merged["odds_american"].apply(american_to_decimal)
-    if merged["odds_american"].isna().all():
-        import logging
-        logging.getLogger(__name__).warning("⚠️ All odds missing - using -110 fallback")
-        merged["odds_american"] = -110.0
-        merged["decimal_odds"] = 1.91
 
     # Phase 4: Implementation of Bayesian Shrinkage and Vig Removal
     # Calculate True Fair-Value Baseline Probability by removing sportsbook overround (vig).
     implied_prob = merged["odds_american"].apply(american_to_prob)
 
     def _get_opposing_from_exchange(odds):
-        if pd.isna(odds) or odds == -110.0:
-            return -110.0
+        if pd.isna(odds):
+            return pd.NA
         return float(-odds)
 
     # Novig exchange lines don't use 20-cent straddle
