@@ -32,14 +32,14 @@ API_BASE = "https://api.elections.kalshi.com/trade-api/v2"
 KALSHI_LINE_TOLERANCE_SPREAD = 0.5
 KALSHI_LINE_TOLERANCE_TOTAL = 0.5
 
-def market_type_matches(market_type: str, title: str) -> bool:
+def market_type_matches(market_type: str, title: str, subtitle: str = "") -> bool:
     market_type = str(market_type or '').lower()
-    title_lower = str(title or '').lower()
+    combined_text = f"{str(title or '')} {str(subtitle or '')}".lower()
 
     if 'total' in market_type:
-        return any(word in title_lower for word in ['total', 'points', 'goals'])
+        return any(word in combined_text for word in ['total', 'points', 'goals', 'over', 'under'])
     elif 'spread' in market_type:
-        return 'wins by' in title_lower or 'covers' in title_lower
+        return 'wins by' in combined_text or 'covers' in combined_text
     return True
 
 API_URL = API_BASE
@@ -544,15 +544,15 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         # We replace the strict hardcoded event_ticker candidate matching with dynamic discovery
         # using the entire series_markets and fuzzy team matching, which solves Step 3 and Step 1 together.
         markets = []
-        home_norm = _normalize_team_token(str(row.get("home_team") or ""))
-        away_norm = _normalize_team_token(str(row.get("away_team") or ""))
+        home_norm = _normalize_team_token(str(row.get("home_team") or "")).lower().replace('state', 'st')
+        away_norm = _normalize_team_token(str(row.get("away_team") or "")).lower().replace('state', 'st')
 
         for m in series_markets:
             ticker = str(m.get("ticker") or "").upper()
             ev_ticker = str(m.get("event_ticker") or "").upper()
 
 
-            hay = (str(m.get("title", "")) + " " + str(m.get("subtitle", "")) + " " + ev_ticker).lower()
+            hay = (str(m.get("title", "")) + " " + str(m.get("subtitle", "")) + " " + ev_ticker).lower().replace('state', 'st')
 
             # Fuzzy match check for both teams
             home_score = fuzz.token_set_ratio(home_norm, hay) if home_norm else 0
@@ -598,7 +598,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             out.at[idx, "kalshi_match_reason"] = "no_market_for_tickers"
             continue
 
-        markets = [m for m in markets if market_type_matches(row.get('market_type'), m.get('title'))]
+        markets = [m for m in markets if market_type_matches(row.get('market_type'), m.get('title'), m.get('subtitle'))]
         logger.info(f"FILTERED {len(markets)} markets for {row.get('game_id')}, type={row.get('market_type')}")
 
         if family == "spread":
