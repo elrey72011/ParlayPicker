@@ -492,9 +492,6 @@ def _markets_by_team_text(series_markets: list[dict[str, Any]], home_team: str, 
         # Combine title, subtitle, and ticker to ensure maximum surface area for the text search
         hay = (str(m.get("title", "")) + " " + str(m.get("subtitle", "")) + " " + event_ticker).lower()
 
-        if date_code and date_code not in ticker and date_code not in event_ticker:
-            continue
-
         # If the primary root of BOTH teams exists anywhere in the Kalshi market, it's our game.
         if home_prefix and away_prefix and home_prefix in hay and away_prefix in hay:
             candidates.append(m)
@@ -671,62 +668,40 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
                         if family == "spread":
                             if delta <= KALSHI_LINE_TOLERANCE_SPREAD:
-                                # FIX: Dynamically determine the target team from the market_type column
                                 m_type = str(row.get("market_type")).lower()
-                                if m_type == "spread_home":
-                                    target_team = str(row.get("home_team") or "")
-                                elif m_type == "spread_away":
-                                    target_team = str(row.get("away_team") or "")
-                                else:
-                                    target_team = str(row.get("pick_team") or row.get("home_team") or "")
+                                target_team = str(row.get("home_team") if "home" in m_type else row.get("away_team"))
 
-                                pick_team_norm = _normalize_team_token(target_team)
-                                if pick_team_norm and pick_team_norm in _normalize_team_token(m_title):
+                                target_norm = _normalize_team_token(target_team)
+                                m_sub = str(mkt.get("subtitle") or "").lower()
+
+                                # Check if they share any significant identifying words
+                                target_words = set(target_norm.split())
+                                sub_words = set(_normalize_team_token(m_sub).split())
+                                shared = {w for w in target_words.intersection(sub_words) if len(w) > 2}
+
+                                # Fallback: check if the team abbreviation is in the specific market ticker suffix
+                                target_abbr = str(_guess_code(target_team) or "").upper()
+                                ticker_suffix = str(mkt.get("ticker", "")).split("-")[-1]
+
+                                if shared or (target_abbr and target_abbr in ticker_suffix):
                                     if delta < best_delta:
                                         best_delta = delta
                                         best_market = mkt
                                         match_status = "matched"
                                         match_reason = "spread_match"
                             else:
-                                logger.debug(f"Line mismatch {row.get('game_id', 'unknown')}: book={target_line}, kalshi={k_line}, diff={delta:.1f} > tolerance {KALSHI_LINE_TOLERANCE_SPREAD}")
+                                logger.debug(f"Line mismatch {row.get('game_id', 'unknown')}: book={target_line}, kalshi={k_line}, diff={delta:.1f} > tolerance")
 
                         elif family == "total":
                             if delta <= KALSHI_LINE_TOLERANCE_TOTAL:
-                                # Determine over/under side from text
-                                yes_sub = str(mkt.get("yes_sub_title") or "").lower()
-                                no_sub = str(mkt.get("no_sub_title") or "").lower()
-
-                                k_side = None
-                                if "over" in yes_sub:
-                                    k_side = "over"
-                                elif "under" in yes_sub:
-                                    k_side = "under"
-                                elif "over" in no_sub:
-                                    k_side = "under"
-                                elif "under" in no_sub:
-                                    k_side = "over"
-                                elif "over" in combined_text:
-                                    k_side = "over"
-                                elif "under" in combined_text:
-                                    k_side = "under"
-
-                                # FIX: Dynamically determine the book side from the market_type column
-                                m_type = str(row.get("market_type")).lower()
-                                if "over" in m_type:
-                                    book_side = "over"
-                                elif "under" in m_type:
-                                    book_side = "under"
-                                else:
-                                    book_side = str(row.get("total_pick_side") or "").lower()
-
-                                if k_side == book_side or k_side is None:
-                                    if delta < best_delta:
-                                        best_delta = delta
-                                        best_market = mkt
-                                        match_status = "matched"
-                                        match_reason = "total_match"
+                                # Kalshi only posts "Over" markets. If the line matches, this is the correct market.
+                                if delta < best_delta:
+                                    best_delta = delta
+                                    best_market = mkt
+                                    match_status = "matched"
+                                    match_reason = "total_match"
                             else:
-                                logger.debug(f"Line mismatch {row.get('game_id', 'unknown')}: book={target_line}, kalshi={k_line}, diff={delta:.1f} > tolerance {KALSHI_LINE_TOLERANCE_TOTAL}")
+                                logger.debug(f"Line mismatch {row.get('game_id', 'unknown')}: book={target_line}, kalshi={k_line}, diff={delta:.1f} > tolerance")
 
                     except ValueError:
                         continue
@@ -748,6 +723,10 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             else:
                 # Values are in dollars
                 kalshi_prob = (bid + ask) / 2.0
+
+            # NEW: If betting the Under on Kalshi's native Over market, invert the probability
+            if "total_under" in str(row.get("market_type")).lower() and kalshi_prob > 0:
+                kalshi_prob = 1.0 - kalshi_prob
 
             # Sanity check: probabilities must be between 0 and 1
             if pd.isna(kalshi_prob) or kalshi_prob < 0.0 or kalshi_prob > 1.0:
