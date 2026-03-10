@@ -475,25 +475,33 @@ def _fetch_series_cache(series_set: set[str], date_codes: set[str] | None = None
 
 
 def _markets_by_team_text(series_markets: list[dict[str, Any]], home_team: str, away_team: str, date_code: str) -> list[dict[str, Any]]:
-    """Fallback matcher that uses partial substring matching to bridge book abbreviations and Kalshi names."""
+    """Fallback matcher that uses partial substring and initials matching."""
     candidates = []
+    home_norm = _normalize_team_token(home_team)
+    away_norm = _normalize_team_token(away_team)
 
-    # Helper to extract the primary identifying root of a team (e.g., 'Eastern Wa' -> 'east')
-    def _get_prefix(name: str) -> str:
-        words = [w for w in re.sub(r'[^a-zA-Z0-9]', ' ', str(name).lower()).split() if len(w) >= 2 and w not in ('state', 'univ', 'university', 'college')]
-        return words[0] if words else str(name).lower().strip()[:4]
-
-    home_prefix = _get_prefix(home_team)
-    away_prefix = _get_prefix(away_team)
+    h_3 = home_norm.replace(" ", "")[:3].upper()
+    a_3 = away_norm.replace(" ", "")[:3].upper()
+    h_initials = "".join([w[0] for w in home_norm.split() if w]).upper()
+    a_initials = "".join([w[0] for w in away_norm.split() if w]).upper()
 
     for m in series_markets or []:
         ticker = str(m.get("ticker") or "").upper()
-        event_ticker = str(m.get("event_ticker") or "").upper()
-        # Combine title, subtitle, and ticker to ensure maximum surface area for the text search
-        hay = (str(m.get("title", "")) + " " + str(m.get("subtitle", "")) + " " + event_ticker).lower()
+        ev_ticker = str(m.get("event_ticker") or "").upper()
+        hay = (str(m.get("title", "")) + " " + str(m.get("subtitle", "")) + " " + ev_ticker).lower()
 
-        # If the primary root of BOTH teams exists anywhere in the Kalshi market, it's our game.
-        if home_prefix and away_prefix and home_prefix in hay and away_prefix in hay:
+        if date_code and date_code not in ticker and date_code not in ev_ticker:
+            continue
+
+        home_word_match = home_norm.split()[0] in hay or home_team.split()[0].lower() in hay if home_norm else False
+        away_word_match = away_norm.split()[0] in hay or away_team.split()[0].lower() in hay if away_norm else False
+
+        suffix = ev_ticker.split("-")[-1] if "-" in ev_ticker else ev_ticker
+        home_abbr_match = h_3 in suffix or (h_initials and h_initials in suffix)
+        away_abbr_match = a_3 in suffix or (a_initials and a_initials in suffix)
+
+        # Allow matches where the full word matches the title OR the abbreviation is in the suffix
+        if (home_word_match or home_abbr_match) and (away_word_match or away_abbr_match):
             candidates.append(m)
 
     return candidates
@@ -558,62 +566,41 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
         markets: list[dict[str, Any]] = []
 
-        # 1. Direct Event Ticker Lookup (Paginated)
-        for cand in candidates:
-            cand_markets = []
-            params = {"event_ticker": cand, "status": "open", "limit": 100}
+        # 1. Fetch Series Cache to avoid API Rate Limits
+        if series not in series_cache:
+            series_markets = []
             try:
-                for _ in range(5):
+                params = {"series_ticker": series, "status": "open", "limit": 100}
+                for _ in range(20): # Paginate up to 2000 markets per series
                     resp = api_get_markets(**params)
                     page = _extract_markets(resp)
                     if not page:
                         break
-                    cand_markets.extend(page)
+                    series_markets.extend(page)
                     cursor = resp.get("cursor") if isinstance(resp, dict) else None
                     if not cursor:
                         break
                     params["cursor"] = cursor
+            except Exception as e:
+                logger.warning(f"Cache fetch failed for {series}: {e}")
 
-                if cand_markets:
-                    markets.extend(cand_markets)
-                    break
-            except Exception:
-                continue
+            series_cache[series] = series_markets
 
-        # 2. Fallback Series Ticker Lookup (Cached & Paginated)
+        series_markets = series_cache.get(series, [])
+
+        # 2. Extract specific game markets from the cache
+        markets = [
+            m for m in series_markets
+            if m.get("event_ticker") in candidates
+        ]
+
         if not markets:
-            if series not in series_cache:
-                series_markets = []
-                try:
-                    params = {"series_ticker": series, "status": "open", "limit": 100}
-                    for _ in range(20): # Paginate up to 2000 markets per series
-                        resp = api_get_markets(**params)
-                        page = _extract_markets(resp)
-                        if not page:
-                            break
-                        series_markets.extend(page)
-                        cursor = resp.get("cursor") if isinstance(resp, dict) else None
-                        if not cursor:
-                            break
-                        params["cursor"] = cursor
-                except Exception:
-                    pass
-                series_cache[series] = series_markets
-
-            # Pull from the cache instead of hitting the API again
-            series_markets = series_cache[series]
-
-            markets = [
-                m for m in series_markets
-                if away_code in str(m.get("event_ticker") or "") and home_code in str(m.get("event_ticker") or "")
-            ]
-            if not markets:
-                markets = _markets_by_team_text(
-                    series_markets,
-                    str(row.get("home_team") or ""),
-                    str(row.get("away_team") or ""),
-                    date_code,
-                )
+            markets = _markets_by_team_text(
+                series_markets,
+                str(row.get("home_team") or ""),
+                str(row.get("away_team") or ""),
+                date_code,
+            )
 
         best_market = None
         best_delta = float("inf")
@@ -669,39 +656,45 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                         if family == "spread":
                             if delta <= KALSHI_LINE_TOLERANCE_SPREAD:
                                 m_type = str(row.get("market_type")).lower()
-                                target_team = str(row.get("home_team") if "home" in m_type else row.get("away_team"))
+                                book_line = pd.to_numeric(row.get("spread_line"), errors="coerce")
+                                is_favorite_bet = book_line < 0
 
-                                target_norm = _normalize_team_token(target_team)
-                                m_sub = str(mkt.get("subtitle") or "").lower()
+                                home_t = str(row.get("home_team") or "")
+                                away_t = str(row.get("away_team") or "")
+                                combined_text = f"{str(mkt.get('title', ''))} {str(mkt.get('subtitle', ''))}".lower()
 
-                                # Check if they share any significant identifying words
-                                target_words = set(target_norm.split())
-                                sub_words = set(_normalize_team_token(m_sub).split())
-                                shared = {w for w in target_words.intersection(sub_words) if len(w) > 2}
+                                home_shared = {w for w in set(_normalize_team_token(home_t).split()).intersection(set(_normalize_team_token(combined_text).split())) if len(w) > 2}
+                                away_shared = {w for w in set(_normalize_team_token(away_t).split()).intersection(set(_normalize_team_token(combined_text).split())) if len(w) > 2}
 
-                                # Fallback: check if the team abbreviation is in the specific market ticker suffix
-                                target_abbr = str(_guess_code(target_team) or "").upper()
                                 ticker_suffix = str(mkt.get("ticker", "")).split("-")[-1]
+                                home_abbr = str(_guess_code(home_t) or "").upper()
+                                away_abbr = str(_guess_code(away_t) or "").upper()
 
-                                if shared or (target_abbr and target_abbr in ticker_suffix):
+                                kalshi_subject_is_home = bool(home_shared) or (home_abbr and home_abbr in ticker_suffix)
+                                kalshi_subject_is_away = bool(away_shared) or (away_abbr and away_abbr in ticker_suffix)
+
+                                expected_subject_is_home = ("home" in m_type) if is_favorite_bet else not ("home" in m_type)
+
+                                is_correct_match = (expected_subject_is_home and kalshi_subject_is_home) or \
+                                                   (not expected_subject_is_home and kalshi_subject_is_away)
+
+                                if not kalshi_subject_is_home and not kalshi_subject_is_away:
+                                    is_correct_match = True # Assume match if Kalshi subject is completely ambiguous
+
+                                if is_correct_match:
                                     if delta < best_delta:
                                         best_delta = delta
                                         best_market = mkt
                                         match_status = "matched"
                                         match_reason = "spread_match"
-                            else:
-                                logger.debug(f"Line mismatch {row.get('game_id', 'unknown')}: book={target_line}, kalshi={k_line}, diff={delta:.1f} > tolerance")
 
                         elif family == "total":
                             if delta <= KALSHI_LINE_TOLERANCE_TOTAL:
-                                # Kalshi only posts "Over" markets. If the line matches, this is the correct market.
                                 if delta < best_delta:
                                     best_delta = delta
                                     best_market = mkt
                                     match_status = "matched"
                                     match_reason = "total_match"
-                            else:
-                                logger.debug(f"Line mismatch {row.get('game_id', 'unknown')}: book={target_line}, kalshi={k_line}, diff={delta:.1f} > tolerance")
 
                     except ValueError:
                         continue
@@ -724,9 +717,14 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 # Values are in dollars
                 kalshi_prob = (bid + ask) / 2.0
 
-            # NEW: If betting the Under on Kalshi's native Over market, invert the probability
-            if "total_under" in str(row.get("market_type")).lower() and kalshi_prob > 0:
+            # NEW: Invert probability if we are betting the underdog or the under
+            m_type = str(row.get("market_type")).lower()
+            if "total_under" in m_type and kalshi_prob > 0:
                 kalshi_prob = 1.0 - kalshi_prob
+            elif "spread" in m_type:
+                book_line = pd.to_numeric(row.get("spread_line"), errors="coerce")
+                if pd.notna(book_line) and book_line > 0 and kalshi_prob > 0:
+                    kalshi_prob = 1.0 - kalshi_prob
 
             # Sanity check: probabilities must be between 0 and 1
             if pd.isna(kalshi_prob) or kalshi_prob < 0.0 or kalshi_prob > 1.0:
