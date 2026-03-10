@@ -500,10 +500,36 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         family = "spread" if family_guess == "spread" else "total"
         series = league_series_ticker(league, family)
 
+        # RESTORED BLOCK: Calculate date and team codes
+        game_date = pd.to_datetime(row.get("game_date"), errors="coerce", utc=True)
+        if pd.notna(game_date):
+            # If the time is exactly midnight UTC, it's a fallback date. Do NOT shift timezone.
+            if game_date.hour == 0 and game_date.minute == 0 and game_date.second == 0:
+                date_code = game_date.strftime("%y%b%d").upper()
+            else:
+                dt_local = game_date.tz_convert("America/New_York")
+                date_code = dt_local.strftime("%y%b%d").upper()
+        else:
+            date_code = ""
+
+        away_code = team_code_map(league, str(row.get("away_team") or ""))
+        home_code = team_code_map(league, str(row.get("home_team") or ""))
+
+        if not date_code:
+            out.at[idx, "kalshi_match_status"] = "miss"
+            out.at[idx, "kalshi_match_reason"] = "missing_date"
+            continue
+        if not away_code or not home_code:
+            out.at[idx, "kalshi_match_status"] = "miss"
+            out.at[idx, "kalshi_match_reason"] = "missing_team_code"
+            continue
         if not series:
             out.at[idx, "kalshi_match_status"] = "miss"
             out.at[idx, "kalshi_match_reason"] = "missing_series"
             continue
+
+        base = f"{series}-{date_code}"
+        candidates = [f"{base}{away_code}{home_code}", f"{base}{home_code}{away_code}"]
 
         markets: list[dict[str, Any]] = []
 
