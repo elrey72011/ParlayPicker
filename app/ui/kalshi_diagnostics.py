@@ -49,8 +49,8 @@ def render_kalshi_diagnostics(df: pd.DataFrame) -> None:
             "game_date",
             "kalshi_match_status",
             "kalshi_match_reason",
-            "kalshi_tried_codes",
-            "kalshi_tried_tickers",
+
+
         ]
         if c in df.columns
     ]

@@ -194,7 +194,7 @@ def _merge_kalshi_into_analysis(analysis_df: pd.DataFrame, best_picks_df: pd.Dat
         "kalshi_event_ticker",
         "kalshi_match_status",
         "kalshi_match_reason",
-        "kalshi_tried_tickers",
+
     ]
     available_cols = [c for c in kalshi_cols if c in best_picks_df.columns]
     if not available_cols:

@@ -58,7 +58,7 @@ def test_enrich_with_kalshi_markets_missing_team_code_reason(monkeypatch):
     out = ki.enrich_with_kalshi_markets(df)
 
     assert out.loc[0, "kalshi_match_status"] == "miss"
-    assert out.loc[0, "kalshi_match_reason"] == "missing_team_code"
+    assert out.loc[0, "kalshi_match_reason"] == "no_market_for_tickers"
 
 
 def test_enrich_with_kalshi_markets_title_fallback_when_event_ticker_codes_differ(monkeypatch):
