@@ -743,11 +743,11 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     pool["away_team"] = _clean_text_placeholders(_string_series(pool, "away_team"))
     pool["game_date"] = _game_dates(pool)
 
+    # Removed strict game_date.notna() requirement to prevent dropping Spread uploads
     pool["has_identity"] = (
         pool["league"].str.len().gt(0)
         & pool["home_team"].str.len().gt(0)
         & pool["away_team"].str.len().gt(0)
-        # Removed strict game_date.notna() requirement to prevent dropping Spreads
     )
     pool = pool[pool["has_identity"]].copy()
     if pool.empty:
@@ -755,17 +755,24 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
 
     pool["has_signal_probability"] = _numeric_series(pool, "model_probability").notna() | _numeric_series(pool, "theover_probability").notna() | _numeric_series(pool, "ml_probability").notna()
 
-    # Create orientation-insensitive matchup key, stripping spaces to group slight name variations
-    team_a = pool["home_team"].where(pool["home_team"] <= pool["away_team"], pool["away_team"]).str.lower().str.replace(r'[^a-z]', '', regex=True)
-    team_b = pool["away_team"].where(pool["home_team"] <= pool["away_team"], pool["home_team"]).str.lower().str.replace(r'[^a-z]', '', regex=True)
+    # Create orientation-insensitive matchup key to group flipped home/away teams
+    team_a = pool["home_team"].where(pool["home_team"] <= pool["away_team"], pool["away_team"]).str.lower().str.replace(r'[^a-z0-9]', '', regex=True)
+    team_b = pool["away_team"].where(pool["home_team"] <= pool["away_team"], pool["home_team"]).str.lower().str.replace(r'[^a-z0-9]', '', regex=True)
 
-    pool["matchup_key"] = pool["league"] + "|" + team_a + "|" + team_b
+    # Extract local date string safely to ignore minor UTC time variations
+    dt_utc = _game_dates(pool)
+    date_str = pd.Series([""] * len(pool), index=pool.index)
+    valid_dt = dt_utc.notna()
+    if valid_dt.any():
+        date_str.loc[valid_dt] = dt_utc[valid_dt].dt.tz_convert("America/New_York").dt.strftime("%Y-%m-%d")
+
+    pool["matchup_key"] = pool["league"] + "|" + team_a + "|" + team_b + "|" + date_str
 
     best = (
         pool.sort_values(["has_signal_probability", "expected_value", "edge"], ascending=[False, False, False])
         .groupby("matchup_key", dropna=False)
         .first()
-        .reset_index(drop=True) # Drop the synthetic key, preserving original columns
+        .reset_index(drop=True)
     )
 
     best["calibrated_probability"] = _numeric_series(best, "calibrated_probability", 0.5)
