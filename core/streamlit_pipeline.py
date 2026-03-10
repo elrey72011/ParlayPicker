@@ -116,6 +116,7 @@ _UPLOAD_COLUMN_ALIASES = {
     "total line": "total_line",
     "theover probability": "theover_probability",
     "odds american": "odds_american",
+    "american odds": "odds_american",
     "ml probability": "ml_probability",
     "implied prob": "ml_probability",
     "implied_prob": "ml_probability",
@@ -920,10 +921,10 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None) -> pd.DataFrame:
                             row['novig_away_price'] = o.get('price')
                 elif market.get('key') == 'totals':
                     for o in market.get('outcomes', []):
-                        if str(o.get('name')).lower() == 'over':
+                        if o.get('name') == 'Over':
                             row['novig_over_point'] = o.get('point')
                             row['novig_over_price'] = o.get('price')
-                        elif str(o.get('name')).lower() == 'under':
+                        elif o.get('name') == 'Under':
                             row['novig_under_point'] = o.get('point')
                             row['novig_under_price'] = o.get('price')
             rows.append(row)
@@ -1131,6 +1132,9 @@ def run_analysis_pipeline(
     # Enforce Strict Drops for missing valid Novig line/price
     # Only keep rows that successfully mapped a live Novig line and price
     if "odds_source" in merged.columns:
+        dropped_count = (merged["odds_source"] != "novig_live").sum()
+        if dropped_count > 0:
+            logger.warning(f"Warning: Dropped {dropped_count} rows - Missing live Novig line.")
         merged = merged[merged["odds_source"] == "novig_live"].copy()
 
     merged["odds_american"] = _numeric_series(merged, "odds_american", pd.NA)
