@@ -877,11 +877,20 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None) -> pd.DataFrame:
             if games:
                 today_games = filter_games_today_only(games)
                 all_games.extend(today_games)
-        except OddsAPIAuthError:
+        except OddsAPIAuthError as e:
             # Re-raise auth errors immediately so the pipeline stops
-            raise
+            raise OddsAPIAuthError("Invalid or missing API Key") from e
         except Exception as e:
+            # If the exception is an HTTPError with 401/403 or mentions unauthorized, raise it
+            err_str = str(e).lower()
+            if "401" in err_str or "403" in err_str or "unauthorized" in err_str:
+                raise OddsAPIAuthError("Invalid or missing API Key") from e
             logger.error(f"Error fetching live odds for {sport}: {e}")
+
+            # Catch raw HTTP errors that might not have been wrapped
+            if hasattr(e, 'response') and e.response is not None:
+                if e.response.status_code in (401, 403):
+                    raise OddsAPIAuthError("Invalid or missing API Key") from e
 
     if not all_games:
         return pd.DataFrame()

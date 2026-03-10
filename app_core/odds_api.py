@@ -38,7 +38,7 @@ class TheOddsAPIClient:
             resp.raise_for_status()
         except requests.exceptions.HTTPError as e:
             if resp.status_code in (401, 403):
-                raise OddsAPIAuthError(f"Authentication failed: {e}")
+                raise OddsAPIAuthError(f"Invalid or missing API Key")
             raise
 
         data = resp.json()
