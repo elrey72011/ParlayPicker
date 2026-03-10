@@ -442,6 +442,12 @@ def _fetch_series_cache(series_set: set[str], date_codes: set[str] | None = None
     return cache
 
 
+def _markets_by_team_text(series_markets: list[dict[str, Any]], home_team: str, away_team: str, date_code: str) -> list[dict[str, Any]]:
+    """Fallback matcher that uses partial substring and initials matching."""
+    candidates = []
+    home_norm = _normalize_team_token(home_team)
+    away_norm = _normalize_team_token(away_team)
+
     h_3 = home_norm.replace(" ", "")[:3].upper()
     a_3 = away_norm.replace(" ", "")[:3].upper()
     h_initials = "".join([w[0] for w in home_norm.split() if w]).upper()
@@ -452,17 +458,15 @@ def _fetch_series_cache(series_set: set[str], date_codes: set[str] | None = None
         ev_ticker = str(m.get("event_ticker") or "").upper()
         hay = (str(m.get("title", "")) + " " + str(m.get("subtitle", "")) + " " + ev_ticker).lower()
 
-        if date_code and date_code not in ticker and date_code not in ev_ticker:
-            continue
+        # Date constraint intentionally removed to prevent timezone shift misses
 
-        home_word_match = home_norm.split()[0] in hay or home_team.split()[0].lower() in hay if home_norm else False
-        away_word_match = away_norm.split()[0] in hay or away_team.split()[0].lower() in hay if away_norm else False
+        home_word_match = home_norm.split()[0] in hay if home_norm else False
+        away_word_match = away_norm.split()[0] in hay if away_norm else False
 
         suffix = ev_ticker.split("-")[-1] if "-" in ev_ticker else ev_ticker
         home_abbr_match = h_3 in suffix or (h_initials and h_initials in suffix)
         away_abbr_match = a_3 in suffix or (a_initials and a_initials in suffix)
 
-        # Allow matches where the full word matches the title OR the abbreviation is in the suffix
         if (home_word_match or home_abbr_match) and (away_word_match or away_abbr_match):
             candidates.append(m)
 
@@ -506,81 +510,38 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         # 1. Fetch Series Cache to avoid API Rate Limits
         if series not in series_cache:
             series_markets = []
-            cache_success = True
             try:
                 params = {"series_ticker": series, "status": "open", "limit": 100}
-                while True:
+                for _ in range(20): # Paginate up to 2000 markets per series
                     resp = api_get_markets(**params)
-
-                    # _extract_markets checks correctly, but let's make sure it handles the mock format too
                     page = _extract_markets(resp)
-                    if not page and isinstance(resp, dict) and "markets" in resp:
-                        page = resp["markets"]
-
                     if not page:
                         break
                     series_markets.extend(page)
-
                     cursor = resp.get("cursor") if isinstance(resp, dict) else None
                     if not cursor:
                         break
                     params["cursor"] = cursor
             except Exception as e:
                 logger.warning(f"Cache fetch failed for {series}: {e}")
-                cache_success = False
 
-            # Only populate cache if the fetch loop fully succeeded.
-            # This prevents permanently caching a failure state (e.g. from 429 errors).
-            if cache_success:
-                series_cache[series] = series_markets
-            else:
-                # Use partially fetched markets, but do not cache them for future rows,
-                # ensuring we retry fetching the full series next time.
-                pass
+            series_cache[series] = series_markets
 
-        series_markets = series_cache.get(series, series_markets if 'series_markets' in locals() else [])
+        series_markets = series_cache.get(series, [])
 
         # 2. Extract specific game markets from the cache
-        # We replace the strict hardcoded event_ticker candidate matching with dynamic discovery
-        # using the entire series_markets and fuzzy team matching, which solves Step 3 and Step 1 together.
-        markets = []
-        home_norm = _normalize_team_token(str(row.get("home_team") or "")).lower().replace('state', 'st')
-        away_norm = _normalize_team_token(str(row.get("away_team") or "")).lower().replace('state', 'st')
+        markets = [
+            m for m in series_markets
+            if m.get("event_ticker") in candidates
+        ]
 
-        for m in series_markets:
-            ticker = str(m.get("ticker") or "").upper()
-            ev_ticker = str(m.get("event_ticker") or "").upper()
-
-
-            hay = (str(m.get("title", "")) + " " + str(m.get("subtitle", "")) + " " + ev_ticker).lower().replace('state', 'st')
-
-            # Fuzzy match check for both teams
-            home_score = fuzz.token_set_ratio(home_norm, hay) if home_norm else 0
-            away_score = fuzz.token_set_ratio(away_norm, hay) if away_norm else 0
-
-            # Also check abbreviation matching in the suffix
-            suffix = ev_ticker.split("-")[-1] if "-" in ev_ticker else ev_ticker
-            h_abbr = _guess_code(str(row.get("home_team") or ""))
-            a_abbr = _guess_code(str(row.get("away_team") or ""))
-
-            home_abbr_match = bool(h_abbr and h_abbr.upper() in suffix)
-            away_abbr_match = bool(a_abbr and a_abbr.upper() in suffix)
-
-            home_matched = home_score >= 80 or home_abbr_match or (home_norm and home_norm.split()[0] in hay)
-            away_matched = away_score >= 80 or away_abbr_match or (away_norm and away_norm.split()[0] in hay)
-
-            if home_matched and away_matched:
-                markets.append(m)
-            else:
-                # Extra fallback for specific tricky names that get tokenized poorly
-                # e.g., "Saint Mary's" vs "saint marys"
-                home_raw = str(row.get("home_team") or "").lower().replace("'", "").replace(".", "").replace("state", "st")
-                away_raw = str(row.get("away_team") or "").lower().replace("'", "").replace(".", "").replace("state", "st")
-
-                hay_raw = hay.replace("'", "").replace(".", "").replace("state", "st")
-
-                if (home_raw in hay_raw or home_matched) and (away_raw in hay_raw or away_matched):
-                    markets.append(m)
+        if not markets:
+            markets = _markets_by_team_text(
+                series_markets,
+                str(row.get("home_team") or ""),
+                str(row.get("away_team") or ""),
+                date_code,
+            )
 
         best_market = None
         best_delta = float("inf")
@@ -648,10 +609,10 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
                                 home_t = str(row.get("home_team") or "")
                                 away_t = str(row.get("away_team") or "")
-                                combined_text_lower = f"{str(mkt.get('title', ''))} {str(mkt.get('subtitle', ''))}".lower()
+                                combined_text = f"{str(mkt.get('title', ''))} {str(mkt.get('subtitle', ''))}".lower()
 
-                                home_shared = {w for w in set(_normalize_team_token(home_t).split()).intersection(set(_normalize_team_token(combined_text_lower).split())) if len(w) > 2}
-                                away_shared = {w for w in set(_normalize_team_token(away_t).split()).intersection(set(_normalize_team_token(combined_text_lower).split())) if len(w) > 2}
+                                home_shared = {w for w in set(_normalize_team_token(home_t).split()).intersection(set(_normalize_team_token(combined_text).split())) if len(w) > 2}
+                                away_shared = {w for w in set(_normalize_team_token(away_t).split()).intersection(set(_normalize_team_token(combined_text).split())) if len(w) > 2}
 
                                 ticker_suffix = str(mkt.get("ticker", "")).split("-")[-1]
                                 home_abbr = str(_guess_code(home_t) or "").upper()
@@ -669,21 +630,21 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                                     is_correct_match = True # Assume match if Kalshi subject is completely ambiguous
 
                                 if is_correct_match:
-                                    best_delta = delta
-                                    best_market = mkt
-                                    match_status = "matched"
-                                    match_reason = "spread_match"
-                                    break # Matched the correct line, break inner loop
+                                    if delta < best_delta:
+                                        best_delta = delta
+                                        best_market = mkt
+                                        match_status = "matched"
+                                        match_reason = "spread_match"
 
                         elif family == "total":
                             k_line = extracted_val
                             delta = abs(k_line - target_line)
                             if delta <= KALSHI_LINE_TOLERANCE_TOTAL:
-                                best_delta = delta
-                                best_market = mkt
-                                match_status = "matched"
-                                match_reason = "total_match"
-                                break # Matched the correct line, break inner loop
+                                if delta < best_delta:
+                                    best_delta = delta
+                                    best_market = mkt
+                                    match_status = "matched"
+                                    match_reason = "total_match"
 
                     except ValueError:
                         continue
