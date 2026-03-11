@@ -32,23 +32,58 @@ class TheOddsAPIClient:
             "oddsFormat": "american",
         }
 
-        resp = requests.get(url, params=params, timeout=15)
+        all_data = []
 
-        try:
-            resp.raise_for_status()
-        except requests.exceptions.HTTPError as e:
-            if resp.status_code in (401, 403):
-                raise OddsAPIAuthError(f"Invalid or missing API Key")
-            raise
+        import time
+        max_retries = 3
 
-        data = resp.json()
+        while True:
+            backoff = 2.0
+            for attempt in range(max_retries + 1):
+                resp = requests.get(url, params=params, timeout=15)
+
+                try:
+                    resp.raise_for_status()
+                    break
+                except requests.exceptions.HTTPError as e:
+                    if resp.status_code == 429:
+                        if attempt < max_retries:
+                            logger.warning(f"The Odds API 429 Too Many Requests. Retrying in {backoff} seconds...")
+                            time.sleep(backoff)
+                            backoff *= 2.0
+                            continue
+                        else:
+                            raise
+                    elif resp.status_code in (401, 403):
+                        raise OddsAPIAuthError(f"Invalid or missing API Key")
+                    raise
+
+            data = resp.json()
+            if isinstance(data, list):
+                all_data.extend(data)
+            else:
+                return data
+
+            # Check for pagination (cursor-based or page-based)
+            total_results = int(resp.headers.get("x-total-results", len(all_data)))
+            next_page_token = resp.headers.get("x-next-page") or (data.get('next_page') if isinstance(data, dict) else None)
+
+            if next_page_token:
+                params["cursor"] = next_page_token
+                continue
+
+            # Alternative: explicit limit-and-offset or header logic if they specify
+            if len(all_data) >= total_results:
+                break
+
+            if isinstance(data, list) and len(data) == 0:
+                break
+
+            break
 
         # Filter out games that don't have any bookmakers (i.e. Novig has no lines)
-        if isinstance(data, list):
-            filtered_data = [game for game in data if game.get("bookmakers")]
-            return filtered_data
-
-        return data
+        filtered_data = [game for game in all_data if game.get("bookmakers")]
+        return filtered_data
 
 def filter_games_today_only(games: List[Dict]) -> List[Dict]:
     """

@@ -10,6 +10,7 @@ from core import streamlit_pipeline as sp
 
 def test_best_picks_dedupes_reversed_home_away_matchups(monkeypatch):
     base_df = pd.DataFrame()
+    monkeypatch.setattr(sp, "fetch_live_odds_dataframe", lambda x: pd.DataFrame())
     bet_rows_df = pd.DataFrame(
         {
             "league": ["NCAAB", "NCAAB"],
@@ -29,6 +30,8 @@ def test_best_picks_dedupes_reversed_home_away_matchups(monkeypatch):
     _analysis_df, best_picks_df, _diagnostics = sp.run_analysis_pipeline(
         sports=["NCAAB"], max_rows=10, use_ml=False, spreads_df=None, totals_df=None
     )
+
+    best_picks_df = sp.build_best_picks_df(_analysis_df)
 
     assert len(best_picks_df) == 1
     assert best_picks_df.iloc[0]["best_pick"].startswith("Under")

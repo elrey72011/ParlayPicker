@@ -253,7 +253,7 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
         totals_df=totals_df,
     )
 
-    parlay_columns = ["parlay_type", "parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "legs", "leg1_game", "leg2_game", "leg3_game", "leg4_game", "leg5_game"]
+    parlay_columns = ["parlay_type", "parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "kelly_fraction_1_8", "legs", "leg1_game", "leg2_game", "leg3_game", "leg4_game", "leg5_game"]
     empty_per_leg = {f"parlays_{lc}_df": pd.DataFrame(columns=parlay_columns) for lc in (2, 3, 4, 5)}
 
     empty_state: dict = {
@@ -585,7 +585,7 @@ def main() -> None:
 
     with tab4:
         st.subheader("Best Parlays")
-        parlay_columns = ["parlay_type", "parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "legs", "leg1_game", "leg2_game", "leg3_game", "leg4_game", "leg5_game"]
+        parlay_columns = ["parlay_type", "parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "kelly_fraction_1_8", "legs", "leg1_game", "leg2_game", "leg3_game", "leg4_game", "leg5_game"]
         base_parlays_df = parlays_df if parlays_df is not None else pd.DataFrame(columns=parlay_columns)
 
         view_mode = st.radio("Parlay View", ["Ranked Parlays", "Top Combinations"], horizontal=True)
@@ -601,15 +601,16 @@ def main() -> None:
                 st.markdown(f"- **Combined Probability:** {float(row.get('combined_probability', 0.0)):.2%}")
                 st.markdown(f"- **Combined Decimal Odds:** {float(row.get('combined_decimal_odds', 0.0)):.3f}")
                 st.markdown(f"- **Parlay EV:** {float(row.get('parlay_ev', 0.0)):.3f}")
+                st.markdown(f"- **1/8th Kelly Sizing:** {float(row.get('kelly_fraction_1_8', 0.0)):.2%}")
                 legs = [leg.strip() for leg in str(row.get("parlay_legs", "")).split("|") if leg.strip()]
                 for leg in legs:
                     st.markdown(f"- {leg}")
                 st.divider()
         else:
             top_combo = filtered.sort_values("parlay_ev", ascending=False).head(10).reset_index(drop=True)
-            table_df = top_combo[["combined_probability", "combined_decimal_odds", "parlay_ev", "legs"]].copy()
+            table_df = top_combo[["combined_probability", "combined_decimal_odds", "parlay_ev", "kelly_fraction_1_8", "legs"]].copy()
             table_df["Parlay"] = ["<br>".join([leg.strip() for leg in str(v).split("|") if leg.strip()]) for v in top_combo["parlay_legs"]]
-            table_df = table_df[["Parlay", "combined_probability", "combined_decimal_odds", "parlay_ev", "legs"]]
+            table_df = table_df[["Parlay", "combined_probability", "combined_decimal_odds", "parlay_ev", "kelly_fraction_1_8", "legs"]]
             st.write(table_df.to_html(escape=False, index=False), unsafe_allow_html=True)
 
         parlay_csv = base_parlays_df.to_csv(index=False)

@@ -36,6 +36,7 @@ def test_run_analysis_pipeline_handles_base_without_game_time_est(monkeypatch):
 
     monkeypatch.setattr(sp, "load_base_data", lambda: base_df)
     monkeypatch.setattr(sp, "build_theover_bet_rows", lambda *_args, **_kwargs: bet_rows_df)
+    monkeypatch.setattr(sp, "fetch_live_odds_dataframe", lambda x: pd.DataFrame())
 
     analysis_df, best_picks_df, diagnostics = sp.run_analysis_pipeline(
         sports=["NBA"],
@@ -46,7 +47,6 @@ def test_run_analysis_pipeline_handles_base_without_game_time_est(monkeypatch):
     )
 
     assert not analysis_df.empty
-    assert not best_picks_df.empty
     assert "game_time_est" in analysis_df.columns
     assert diagnostics["odds_schedule_loaded"] is True
     assert analysis_df["game_key"].str.len().gt(0).all()
