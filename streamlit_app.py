@@ -599,15 +599,15 @@ def main() -> None:
                 "away_team": "Away",
                 "game_date": "Local Date",
                 "game_time_est": "Commence (Local)",
-                "ml_probability": "WinProbability"
+                "calibrated_probability": "WinProbability"
             }
             export_prep_df = export_prep_df.rename(columns=csv_rename_map)
 
             target_export_cols = [
                 "parlay_rank", "league", "Home", "Away", "Local Date",
-                "Commence (Local)", "best_pick", "calibrated_probability", "expected_value",
+                "Commence (Local)", "best_pick", "WinProbability", "expected_value",
                 "edge", "consensus_agreement", "odds_american", "market_probability",
-                "kalshi_probability", "WinProbability", "gemini_explanation", "gemini_risk_notes"
+                "kalshi_probability", "ml_probability", "gemini_explanation", "gemini_risk_notes"
             ]
 
             final_export_cols = [c for c in target_export_cols if c in export_prep_df.columns]

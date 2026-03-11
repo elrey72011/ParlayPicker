@@ -184,7 +184,8 @@ class PredictionEngine:
             candidate_paths = [
                 str(root_dir / "models" / "model.json"),
                 str(Path.cwd() / "models" / "model.json"),
-                str(Path.cwd() / "model.json")
+                str(Path.cwd() / "model.json"),
+                str(Path(os.path.dirname(__file__)).parent / "models" / "model.json")
             ]
 
             for path in candidate_paths:
