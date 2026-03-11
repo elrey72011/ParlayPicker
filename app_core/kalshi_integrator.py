@@ -590,9 +590,9 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 for num_str in numbers:
                     try:
                         k_line = float(num_str)
-                        # Remove strict float tolerance constraint and find closest neighbor
+                        # Dynamic tolerance band of ± 1.5 points to map sliding-scale traditional lines to Kalshi contracts
                         delta = abs(k_line - extracted_totals_line)
-                        if delta < best_delta:
+                        if delta <= 1.5 and delta < best_delta:
                             best_delta = delta
                             best_market = mkt
                             match_status = "matched"
@@ -700,7 +700,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                                 is_correct_match = True # Assume match if Kalshi subject is completely ambiguous
 
                             if is_correct_match:
-                                if delta < best_delta:
+                                if delta <= 1.5 and delta < best_delta:
                                     best_delta = delta
                                     best_market = mkt
                                     match_status = "matched"

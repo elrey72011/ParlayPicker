@@ -35,8 +35,9 @@ TEAM_MAP = {
     "Golden State Warriors": "Golden State",
     "Houston Rockets": "Houston",
     "Indiana Pacers": "Indiana",
-    "LA Clippers": "L.A. Clippers",
-    "Los Angeles Clippers": "L.A. Clippers",
+    "LA Clippers": "LA Clippers",
+    "L.A. Clippers": "LA Clippers",
+    "Los Angeles Clippers": "LA Clippers",
     "LA Lakers": "L.A. Lakers",
     "Los Angeles Lakers": "L.A. Lakers",
     "Memphis Grizzlies": "Memphis",
@@ -50,6 +51,11 @@ TEAM_MAP = {
     "Philadelphia 76ers": "Philadelphia",
 
     # Missing explicit mappings from logs
+    "Los Angeles Salle": "La Salle",
+    "Cal Poly Slo": "Cal Poly",
+    "Unlv": "UNLV",
+    "Uc San Diego": "UC San Diego",
+    "Uc Davis": "UC Davis",
     "L.A. Lakers": "Los Angeles Lakers",
     "NY Rangers": "New York Rangers",
     "NY Jets": "New York Jets",
