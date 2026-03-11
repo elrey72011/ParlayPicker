@@ -5,6 +5,11 @@ import re
 
 import logging
 
+try:
+    from rapidfuzz import fuzz
+except ImportError:
+    pass
+
 logger = logging.getLogger(__name__)
 
 # Track missing keys for terminal warnings
@@ -43,6 +48,20 @@ TEAM_MAP = {
     "Oklahoma City Thunder": "Oklahoma City",
     "Orlando Magic": "Orlando",
     "Philadelphia 76ers": "Philadelphia",
+
+    # Missing explicit mappings from logs
+    "L.A. Lakers": "Los Angeles Lakers",
+    "NY Rangers": "New York Rangers",
+    "NY Jets": "New York Jets",
+    "NY Islanders": "New York Islanders",
+    "Penn St.": "Penn State",
+    "Missouri St.": "Missouri State",
+    "Florida St Seminoles": "Florida State",
+    "Manhattan Jaspers": "Manhattan",
+    "Jacksonville St.": "Jacksonville State",
+    "Prairie View A&M": "Prairie View A&M",
+    "Virginia Tech": "Virginia Tech",
+    "Virginia Tech Hokies": "Virginia Tech",
     "Phoenix Suns": "Phoenix",
     "Portland Trail Blazers": "Portland",
     "Sacramento Kings": "Sacramento",
@@ -244,8 +263,28 @@ def normalize_team_name(name: str) -> str:
     normalized = name.lower()
 
     # Track if team name is missing from exact map and is likely a long-form API name
-    if name not in TEAM_MAP and name != "Over" and name != "Under" and len(name.split()) > 1:
-        if name not in _MISSING_KEYS_WARNED:
+    if name not in TEAM_MAP and name != "Over" and name != "Under":
+        # Attempt Probabilistic Matching Fallback with rapidfuzz using token_sort_ratio
+        if 'fuzz' in globals():
+            best_match = None
+            best_score = 0
+
+            # Use unique target names from TEAM_MAP values as the schedule names pool
+            # Add existing keys as well, to map against valid long-form names
+            schedule_names = list(set(TEAM_MAP.values()) | set(TEAM_MAP.keys()))
+
+            for schedule_name in schedule_names:
+                score = fuzz.token_sort_ratio(name, schedule_name)
+                if score >= 85 and score > best_score:
+                    best_score = score
+                    best_match = schedule_name
+
+            if best_match:
+                # Map to the short form if it was a key, otherwise it's already a short form
+                return TEAM_MAP.get(best_match, best_match)
+
+        # Fallback to normal normalization logic if rapidfuzz didn't find a match
+        if len(name.split()) > 1 and name not in _MISSING_KEYS_WARNED:
             logger.warning(f"Warning: Team '{name}' not found in dictionary mapping, falling back to substring normalization.")
             _MISSING_KEYS_WARNED.add(name)
 

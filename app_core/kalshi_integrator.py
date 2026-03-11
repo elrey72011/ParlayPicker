@@ -4,6 +4,7 @@ import json
 import logging
 import re
 import time
+import math
 from dataclasses import dataclass
 from typing import Any, Optional, Tuple
 
@@ -512,26 +513,14 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         else:
             date_code = ""
 
-        away_code = team_code_map(league, str(row.get("away_team") or ""))
-        home_code = team_code_map(league, str(row.get("home_team") or ""))
-
         if not date_code:
             out.at[idx, "kalshi_match_status"] = "miss"
             out.at[idx, "kalshi_match_reason"] = "missing_date"
-            continue
-        if not away_code or not home_code:
-            out.at[idx, "kalshi_match_status"] = "miss"
-            out.at[idx, "kalshi_match_reason"] = "missing_team_code"
             continue
         if not series:
             out.at[idx, "kalshi_match_status"] = "miss"
             out.at[idx, "kalshi_match_reason"] = "missing_series"
             continue
-
-        base = f"{series}-{date_code}"
-        candidates = [f"{base}{away_code}{home_code}", f"{base}{home_code}{away_code}"]
-
-        markets: list[dict[str, Any]] = []
 
         # 1. Fetch Series Cache to avoid API Rate Limits
         if series not in series_cache:
@@ -561,20 +550,43 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 series_cache[series] = series_markets
 
         series_markets = series_cache.get(series, [])
+        best_pick = str(row.get("best_pick") or "").strip()
+        is_totals_query = "Over " in best_pick or "Under " in best_pick
+        markets: list[dict[str, Any]] = []
 
-        # 2. Extract specific game markets from the cache
-        markets = [
-            m for m in series_markets
-            if m.get("event_ticker") in candidates
-        ]
+        if is_totals_query:
+            # Bypass team codes, filter directly on the series markets for the correct date
+            # Ensure the market corresponds to the specific game date
+            markets = [
+                m for m in series_markets
+                if date_code in str(m.get("event_ticker") or "")
+                   or date_code in str(m.get("ticker") or "")
+            ]
+        else:
+            away_code = team_code_map(league, str(row.get("away_team") or ""))
+            home_code = team_code_map(league, str(row.get("home_team") or ""))
 
-        if not markets:
-            markets = _markets_by_team_text(
-                series_markets,
-                str(row.get("home_team") or ""),
-                str(row.get("away_team") or ""),
-                date_code,
-            )
+            if not away_code or not home_code:
+                out.at[idx, "kalshi_match_status"] = "miss"
+                out.at[idx, "kalshi_match_reason"] = "missing_team_code"
+                continue
+
+            base = f"{series}-{date_code}"
+            candidates = [f"{base}{away_code}{home_code}", f"{base}{home_code}{away_code}"]
+
+            # 2. Extract specific game markets from the cache
+            markets = [
+                m for m in series_markets
+                if m.get("event_ticker") in candidates
+            ]
+
+            if not markets:
+                markets = _markets_by_team_text(
+                    series_markets,
+                    str(row.get("home_team") or ""),
+                    str(row.get("away_team") or ""),
+                    date_code,
+                )
 
         best_market = None
         best_delta = float("inf")
@@ -584,12 +596,6 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         if not markets:
             out.at[idx, "kalshi_match_status"] = match_status
             out.at[idx, "kalshi_match_reason"] = match_reason
-            continue
-
-        # In case we found no matching markets via dynamic discovery
-        if not markets:
-            out.at[idx, "kalshi_match_status"] = "miss"
-            out.at[idx, "kalshi_match_reason"] = "no_market_for_tickers"
             continue
 
         markets = [m for m in markets if market_type_matches(row.get('market_type'), m.get('title'), m.get('subtitle'))]
@@ -670,9 +676,10 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                                         match_reason = "spread_match"
 
                         elif family == "total":
-                            k_line = extracted_val
-                            delta = abs(k_line - target_line)
-                            if delta <= KALSHI_LINE_TOLERANCE_TOTAL:
+                            k_line = float(extracted_val)
+                            t_line = float(target_line)
+                            if math.isclose(t_line, k_line, abs_tol=0.01):
+                                delta = abs(k_line - t_line)
                                 if delta < best_delta:
                                     best_delta = delta
                                     best_market = mkt
