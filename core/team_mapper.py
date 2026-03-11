@@ -283,10 +283,8 @@ def normalize_team_name(name: str) -> str:
                 # Map to the short form if it was a key, otherwise it's already a short form
                 return TEAM_MAP.get(best_match, best_match)
 
-        # Fallback to normal normalization logic if rapidfuzz didn't find a match
-        if len(name.split()) > 1 and name not in _MISSING_KEYS_WARNED:
-            logger.warning(f"Warning: Team '{name}' not found in dictionary mapping, falling back to substring normalization.")
-            _MISSING_KEYS_WARNED.add(name)
+        # If rapidfuzz doesn't find a match, just proceed with regex normalization
+        pass
 
     # Expand common abbreviations BEFORE removing punctuation
 

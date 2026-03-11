@@ -554,15 +554,58 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         is_totals_query = "Over " in best_pick or "Under " in best_pick
         markets: list[dict[str, Any]] = []
 
+        best_market = None
+        best_delta = float("inf")
+        match_reason = "no_market_for_tickers"
+        match_status = "miss"
+
         if is_totals_query:
-            # Bypass team codes, filter directly on the series markets for the correct date
-            # Ensure the market corresponds to the specific game date
-            markets = [
+            # DIRECTIVE 2: STRICT TOTALS PROTOCOL
+            # Extract line purely from the best_pick string, completely bypassing `row.get('total_line')`
+            match = re.search(r"[-+]?\s*(\d+(?:\.\d+)?)", best_pick)
+            if not match:
+                out.at[idx, "kalshi_match_status"] = "miss"
+                out.at[idx, "kalshi_match_reason"] = "totals_line_unextractable"
+                continue
+
+            extracted_totals_line = float(match.group(1))
+
+            # Filter markets by matching date code and ensuring they are total markets
+            totals_markets = [
                 m for m in series_markets
-                if date_code in str(m.get("event_ticker") or "")
-                   or date_code in str(m.get("ticker") or "")
+                if (date_code in str(m.get("event_ticker") or "")
+                   or date_code in str(m.get("ticker") or ""))
+                   and market_type_matches("total", m.get("title"), m.get("subtitle"))
             ]
+
+            logger.info(f"FILTERED {len(totals_markets)} TOTALS markets for {row.get('game_id')}, target line {extracted_totals_line}")
+
+            for mkt in totals_markets:
+                m_title = str(mkt.get("title") or "").lower()
+                m_subtitle = str(mkt.get("subtitle") or "").lower()
+                combined_text = f"{m_title} {m_subtitle}"
+
+                # Extract Kalshi strike prices
+                numbers = re.findall(r'[-+]?\s*(\d+(?:\.\d+)?)', combined_text)
+                for num_str in numbers:
+                    try:
+                        k_line = float(num_str)
+                        # OVERRIDE: Strict float tolerance of 0.01 bypassing all other settings
+                        if math.isclose(extracted_totals_line, k_line, abs_tol=0.01):
+                            delta = abs(k_line - extracted_totals_line)
+                            if delta < best_delta:
+                                best_delta = delta
+                                best_market = mkt
+                                match_status = "matched"
+                                match_reason = "total_match"
+                    except ValueError:
+                        continue
+
+                if best_market is not None:
+                    break
+
         else:
+            # SPREAD LOGIC (Preserved)
             away_code = team_code_map(league, str(row.get("away_team") or ""))
             home_code = team_code_map(league, str(row.get("home_team") or ""))
 
@@ -588,56 +631,47 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                     date_code,
                 )
 
-        best_market = None
-        best_delta = float("inf")
-        match_reason = "no_market_for_tickers"
-        match_status = "miss"
+            if not markets:
+                out.at[idx, "kalshi_match_status"] = match_status
+                out.at[idx, "kalshi_match_reason"] = match_reason
+                continue
 
-        if not markets:
-            out.at[idx, "kalshi_match_status"] = match_status
-            out.at[idx, "kalshi_match_reason"] = match_reason
-            continue
+            markets = [m for m in markets if market_type_matches(row.get('market_type'), m.get('title'), m.get('subtitle'))]
+            logger.info(f"FILTERED {len(markets)} markets for {row.get('game_id')}, type={row.get('market_type')}")
 
-        markets = [m for m in markets if market_type_matches(row.get('market_type'), m.get('title'), m.get('subtitle'))]
-        logger.info(f"FILTERED {len(markets)} markets for {row.get('game_id')}, type={row.get('market_type')}")
-
-        if family == "spread":
             target_line_raw = pd.to_numeric(row.get("spread_line"), errors="coerce")
-        else:
-            target_line_raw = pd.to_numeric(row.get("total_line"), errors="coerce")
 
-        if pd.isna(target_line_raw):
-            # Moneyline fallback
-            is_ml_pick = str(row.get("market_type") or "").lower() == "moneyline"
-            if is_ml_pick:
+            if pd.isna(target_line_raw):
+                # Moneyline fallback
+                is_ml_pick = str(row.get("market_type") or "").lower() == "moneyline"
+                if is_ml_pick:
+                    for mkt in markets:
+                        m_title = str(mkt.get("title") or "").lower()
+                        m_subtitle = str(mkt.get("subtitle") or "").lower()
+                        combined_text = f"{m_title} {m_subtitle}"
+
+                        if "moneyline" in combined_text or "to win" in combined_text:
+                            pick_team_norm = _normalize_team_token(str(row.get("pick_team") or row.get("home_team")))
+                            if pick_team_norm and pick_team_norm in _normalize_team_token(m_title):
+                                best_market = mkt
+                                match_status = "matched"
+                                match_reason = "moneyline_match"
+                                break
+            else:
+                target_line = abs(target_line_raw)
+
                 for mkt in markets:
                     m_title = str(mkt.get("title") or "").lower()
                     m_subtitle = str(mkt.get("subtitle") or "").lower()
                     combined_text = f"{m_title} {m_subtitle}"
 
-                    if "moneyline" in combined_text or "to win" in combined_text:
-                        pick_team_norm = _normalize_team_token(str(row.get("pick_team") or row.get("home_team")))
-                        if pick_team_norm and pick_team_norm in _normalize_team_token(m_title):
-                            best_market = mkt
-                            match_status = "matched"
-                            match_reason = "moneyline_match"
-                            break
-        else:
-            target_line = abs(target_line_raw)
+                    # Regex to find any standard decimal or integer line (e.g., "-12.5", "+6.5", "222.5", "-12", "+6", "4")
+                    numbers = re.findall(r'[-+]?\s*(\d+(?:\.\d+)?)', combined_text)
 
-            for mkt in markets:
-                m_title = str(mkt.get("title") or "").lower()
-                m_subtitle = str(mkt.get("subtitle") or "").lower()
-                combined_text = f"{m_title} {m_subtitle}"
+                    for num_str in numbers:
+                        try:
+                            extracted_val = abs(float(num_str))
 
-                # Regex to find any standard decimal or integer line (e.g., "-12.5", "+6.5", "222.5", "-12", "+6", "4")
-                numbers = re.findall(r'[-+]?\s*(\d+(?:\.\d+)?)', combined_text)
-
-                for num_str in numbers:
-                    try:
-                        extracted_val = abs(float(num_str))
-
-                        if family == "spread":
                             # Kalshi spread math translation: "wins by over 3.5" means -4.0 spread line.
                             k_line = extracted_val + 0.5
                             delta = abs(k_line - target_line)
@@ -675,22 +709,11 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                                         match_status = "matched"
                                         match_reason = "spread_match"
 
-                        elif family == "total":
-                            k_line = float(extracted_val)
-                            t_line = float(target_line)
-                            if math.isclose(t_line, k_line, abs_tol=0.01):
-                                delta = abs(k_line - t_line)
-                                if delta < best_delta:
-                                    best_delta = delta
-                                    best_market = mkt
-                                    match_status = "matched"
-                                    match_reason = "total_match"
+                        except ValueError:
+                            continue
 
-                    except ValueError:
-                        continue
-
-                if best_market is not None:
-                    break
+                    if best_market is not None:
+                        break
 
         if best_market is None:
             # We found no markets or candidates at all
