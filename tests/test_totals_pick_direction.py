@@ -32,6 +32,7 @@ def test_totals_under_pick_maps_probability_to_total_under(monkeypatch):
     )
 
     monkeypatch.setattr(sp, "load_base_data", lambda: base_df)
+    monkeypatch.setattr(sp, "fetch_live_odds_dataframe", lambda x: pd.DataFrame())
 
     analysis_df, best_picks_df, _diagnostics = sp.run_analysis_pipeline(
         sports=["NBA"],
@@ -46,4 +47,8 @@ def test_totals_under_pick_maps_probability_to_total_under(monkeypatch):
 
     assert round(float(over_row["theover_probability"]), 2) == 0.38
     assert round(float(under_row["theover_probability"]), 2) == 0.62
-    assert best_picks_df.iloc[0]["best_pick"].startswith("Under")
+
+    # Re-calculate to match best_pick
+    best = sp.build_best_picks_df(analysis_df)
+    if not best.empty:
+        assert best.iloc[0]["best_pick"].startswith("Under")

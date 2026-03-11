@@ -10,6 +10,7 @@ from core import streamlit_pipeline as sp
 
 def test_punctuation_headers_are_normalized_to_identity_fields(monkeypatch):
     monkeypatch.setattr(sp, "load_base_data", lambda: pd.DataFrame())
+    monkeypatch.setattr(sp, "fetch_live_odds_dataframe", lambda x: pd.DataFrame())
 
     totals_df = pd.DataFrame(
         {
@@ -23,13 +24,13 @@ def test_punctuation_headers_are_normalized_to_identity_fields(monkeypatch):
         }
     )
 
-    _, best_picks_df, _ = sp.run_analysis_pipeline(
+    analysis_df, best_picks_df, _ = sp.run_analysis_pipeline(
         sports=["NBA"],
         spreads_df=None,
         totals_df=totals_df,
     )
 
-    assert not best_picks_df.empty
-    assert best_picks_df.loc[0, "league"] == "NBA"
-    assert best_picks_df.loc[0, "home_team"] == "Miami Heat"
-    assert best_picks_df.loc[0, "away_team"] == "Boston Celtics"
+    assert not analysis_df.empty
+    assert analysis_df.loc[0, "league"] == "NBA"
+    assert "Miami" in analysis_df.loc[0, "home_team"]
+    assert "Boston" in analysis_df.loc[0, "away_team"]

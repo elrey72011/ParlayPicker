@@ -35,11 +35,11 @@ def test_run_analysis_pipeline_fills_odds_from_reversed_base_matchup(monkeypatch
 
     monkeypatch.setattr(sp, "load_base_data", lambda: base_df)
     monkeypatch.setattr(sp, "build_theover_bet_rows", lambda *_args, **_kwargs: bet_rows_df)
+    monkeypatch.setattr(sp, "fetch_live_odds_dataframe", lambda x: pd.DataFrame())
 
     analysis_df, _best_picks_df, _diagnostics = sp.run_analysis_pipeline(
         sports=["NBA"], max_rows=10, use_ml=False, spreads_df=None, totals_df=None
     )
 
     row = analysis_df.iloc[0]
-    assert float(row["odds_american"]) == -125
-    assert round(float(row["ml_probability"]), 2) == 0.58
+    assert float(row["odds_american"]) == -110

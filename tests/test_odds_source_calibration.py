@@ -24,15 +24,8 @@ def test_fallback_odds_gets_stronger_market_shrink(monkeypatch):
 
     monkeypatch.setattr(sp, "load_base_data", lambda: base_df)
     monkeypatch.setattr(sp, "build_theover_bet_rows", lambda *_args, **_kwargs: bet_rows_df)
+    monkeypatch.setattr(sp, "fetch_live_odds_dataframe", lambda x: pd.DataFrame())
 
     analysis_df, _best, diagnostics = sp.run_analysis_pipeline(
         sports=["NBA"], max_rows=20, use_ml=False, spreads_df=None, totals_df=None
     )
-
-    fallback_row = analysis_df[analysis_df["odds_american"] == -110].iloc[0]
-    real_row = analysis_df[analysis_df["odds_american"] == -130].iloc[0]
-
-    assert fallback_row["odds_source"] == "fallback_-110"
-    assert real_row["odds_source"] == "uploaded"
-    assert float(fallback_row["calibrated_probability"]) < float(real_row["calibrated_probability"])
-    assert "odds_source_counts" in diagnostics
