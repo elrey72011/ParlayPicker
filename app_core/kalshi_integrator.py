@@ -671,39 +671,40 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                             # Kalshi spread math translation: "wins by over 3.5" means -4.0 spread line.
                             k_line = extracted_val + 0.5
                             delta = abs(k_line - target_line)
-                            if delta <= KALSHI_LINE_TOLERANCE_SPREAD:
-                                m_type = str(row.get("market_type")).lower()
-                                book_line = pd.to_numeric(row.get("spread_line"), errors="coerce")
-                                is_favorite_bet = book_line < 0
 
-                                home_t = str(row.get("home_team") or "")
-                                away_t = str(row.get("away_team") or "")
-                                combined_text = f"{str(mkt.get('title', ''))} {str(mkt.get('subtitle', ''))}".lower()
+                            # Using nearest-neighbor algorithm instead of strict KALSHI_LINE_TOLERANCE_SPREAD
+                            m_type = str(row.get("market_type")).lower()
+                            book_line = pd.to_numeric(row.get("spread_line"), errors="coerce")
+                            is_favorite_bet = book_line < 0
 
-                                home_shared = {w for w in set(_normalize_team_token(home_t).split()).intersection(set(_normalize_team_token(combined_text).split())) if len(w) > 2}
-                                away_shared = {w for w in set(_normalize_team_token(away_t).split()).intersection(set(_normalize_team_token(combined_text).split())) if len(w) > 2}
+                            home_t = str(row.get("home_team") or "")
+                            away_t = str(row.get("away_team") or "")
+                            combined_text = f"{str(mkt.get('title', ''))} {str(mkt.get('subtitle', ''))}".lower()
 
-                                ticker_suffix = str(mkt.get("ticker", "")).split("-")[-1]
-                                home_abbr = str(_guess_code(home_t) or "").upper()
-                                away_abbr = str(_guess_code(away_t) or "").upper()
+                            home_shared = {w for w in set(_normalize_team_token(home_t).split()).intersection(set(_normalize_team_token(combined_text).split())) if len(w) > 2}
+                            away_shared = {w for w in set(_normalize_team_token(away_t).split()).intersection(set(_normalize_team_token(combined_text).split())) if len(w) > 2}
 
-                                kalshi_subject_is_home = bool(home_shared) or (home_abbr and home_abbr in ticker_suffix)
-                                kalshi_subject_is_away = bool(away_shared) or (away_abbr and away_abbr in ticker_suffix)
+                            ticker_suffix = str(mkt.get("ticker", "")).split("-")[-1]
+                            home_abbr = str(_guess_code(home_t) or "").upper()
+                            away_abbr = str(_guess_code(away_t) or "").upper()
 
-                                expected_subject_is_home = ("home" in m_type) if is_favorite_bet else not ("home" in m_type)
+                            kalshi_subject_is_home = bool(home_shared) or (home_abbr and home_abbr in ticker_suffix)
+                            kalshi_subject_is_away = bool(away_shared) or (away_abbr and away_abbr in ticker_suffix)
 
-                                is_correct_match = (expected_subject_is_home and kalshi_subject_is_home) or \
-                                                   (not expected_subject_is_home and kalshi_subject_is_away)
+                            expected_subject_is_home = ("home" in m_type) if is_favorite_bet else not ("home" in m_type)
 
-                                if not kalshi_subject_is_home and not kalshi_subject_is_away:
-                                    is_correct_match = True # Assume match if Kalshi subject is completely ambiguous
+                            is_correct_match = (expected_subject_is_home and kalshi_subject_is_home) or \
+                                               (not expected_subject_is_home and kalshi_subject_is_away)
 
-                                if is_correct_match:
-                                    if delta < best_delta:
-                                        best_delta = delta
-                                        best_market = mkt
-                                        match_status = "matched"
-                                        match_reason = "spread_match"
+                            if not kalshi_subject_is_home and not kalshi_subject_is_away:
+                                is_correct_match = True # Assume match if Kalshi subject is completely ambiguous
+
+                            if is_correct_match:
+                                if delta < best_delta:
+                                    best_delta = delta
+                                    best_market = mkt
+                                    match_status = "matched"
+                                    match_reason = "spread_match"
 
                         except ValueError:
                             continue

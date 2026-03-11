@@ -304,8 +304,12 @@ def _format_game_time_est(df: pd.DataFrame) -> pd.Series:
 
 def _game_date_fallback() -> pd.Timestamp:
     """Return today's US/Eastern date, stored as UTC midnight to match parsed date-only strings."""
-    et_now = pd.Timestamp.now(tz="America/New_York")
-    return pd.Timestamp(year=et_now.year, month=et_now.month, day=et_now.day, tz="UTC")
+    from datetime import datetime
+    import pytz
+
+    est = pytz.timezone('America/New_York')
+    now_est = datetime.now(est)
+    return pd.Timestamp(year=now_est.year, month=now_est.month, day=now_est.day, tz="UTC")
 
 
 def _normalize_upload(df: pd.DataFrame | None) -> pd.DataFrame:
@@ -825,8 +829,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     edge_for_consensus = _numeric_series(best, "edge", 0.0)
     best["consensus_agreement"] = "⚪ No Kalshi"
 
-    # Eradicate static arrays and implement dynamic edge thresholding
-    best = best[best["expected_value"] >= 0.02].copy()
+    # Removed strict EV filter to ensure 1 pick per game
+    # best = best[best["expected_value"] >= 0.02].copy()
 
     # Phase 2: Eradication of Floating-Point Artefacts in Expected Value Calculations
     # Primary sort by expected_value descending, then game_date, league, home_team ascending
@@ -905,39 +909,62 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None) -> pd.DataFrame:
     if not all_games:
         return pd.DataFrame()
 
-    rows = []
+    # Aggregate by game, prioritizing Novig, then DraftKings, then FanDuel
+    games_dict = {}
     for game in all_games:
-        for book in game.get('bookmakers', []):
-            book_key = book.get('key', '')
-            if book_key != 'novig':
-                continue
-
-            row = {
-                'game_id': game.get('id'),
+        game_id = game.get('id')
+        if game_id not in games_dict:
+            games_dict[game_id] = {
+                'game_id': game_id,
                 'home_team': normalize_team_name(game.get('home_team')),
                 'away_team': normalize_team_name(game.get('away_team')),
                 'commence_time': game.get('commence_time'),
             }
 
+        for book in game.get('bookmakers', []):
+            book_key = book.get('key', '')
+            if book_key not in ['novig', 'draftkings', 'fanduel']:
+                continue
+
+            # We use 'novig_' prefix for the mapped columns regardless of actual source
+            # so downstream mapping handles it, but we also store the actual book source
             for market in book.get('markets', []):
                 if market.get('key') == 'spreads':
+                    # Only update if we don't already have 'novig' lines or if we are 'novig'
+                    # replacing a lower priority book (priority: novig > draftkings > fanduel)
+                    current_source = games_dict[game_id].get('odds_source_spread')
+                    if current_source == 'novig' and book_key != 'novig':
+                        continue
+                    if current_source == 'draftkings' and book_key == 'fanduel':
+                        continue
+
                     for o in market.get('outcomes', []):
-                        if normalize_team_name(o.get('name')) == row['home_team']:
-                            row['novig_home_point'] = o.get('point')
-                            row['novig_home_price'] = o.get('price')
-                        elif normalize_team_name(o.get('name')) == row['away_team']:
-                            row['novig_away_point'] = o.get('point')
-                            row['novig_away_price'] = o.get('price')
+                        if normalize_team_name(o.get('name')) == games_dict[game_id]['home_team']:
+                            games_dict[game_id]['novig_home_point'] = o.get('point')
+                            games_dict[game_id]['novig_home_price'] = o.get('price')
+                            games_dict[game_id]['odds_source_spread'] = book_key
+                        elif normalize_team_name(o.get('name')) == games_dict[game_id]['away_team']:
+                            games_dict[game_id]['novig_away_point'] = o.get('point')
+                            games_dict[game_id]['novig_away_price'] = o.get('price')
+                            games_dict[game_id]['odds_source_spread'] = book_key
                 elif market.get('key') == 'totals':
+                    current_source = games_dict[game_id].get('odds_source_total')
+                    if current_source == 'novig' and book_key != 'novig':
+                        continue
+                    if current_source == 'draftkings' and book_key == 'fanduel':
+                        continue
+
                     for o in market.get('outcomes', []):
                         if o.get('name') == 'Over':
-                            row['novig_over_point'] = o.get('point')
-                            row['novig_over_price'] = o.get('price')
+                            games_dict[game_id]['novig_over_point'] = o.get('point')
+                            games_dict[game_id]['novig_over_price'] = o.get('price')
+                            games_dict[game_id]['odds_source_total'] = book_key
                         elif o.get('name') == 'Under':
-                            row['novig_under_point'] = o.get('point')
-                            row['novig_under_price'] = o.get('price')
-            rows.append(row)
+                            games_dict[game_id]['novig_under_point'] = o.get('point')
+                            games_dict[game_id]['novig_under_price'] = o.get('price')
+                            games_dict[game_id]['odds_source_total'] = book_key
 
+    rows = list(games_dict.values())
     return pd.DataFrame(rows)
 
 
@@ -1120,31 +1147,40 @@ def run_analysis_pipeline(
         if m_type == "spread_home" and "novig_home_point" in row and pd.notna(row["novig_home_point"]):
             row["spread_line"] = safe_float(row["novig_home_point"])
             row["odds_american"] = safe_float(row["novig_home_price"])
-            row["odds_source"] = "novig_live"
+            row["odds_source"] = row.get("odds_source_spread") or "novig_live"
+            if row["odds_source"] == "novig":
+                row["odds_source"] = "novig_live"
         elif m_type == "spread_away" and "novig_away_point" in row and pd.notna(row["novig_away_point"]):
             row["spread_line"] = safe_float(row["novig_away_point"])
             row["odds_american"] = safe_float(row["novig_away_price"])
-            row["odds_source"] = "novig_live"
+            row["odds_source"] = row.get("odds_source_spread") or "novig_live"
+            if row["odds_source"] == "novig":
+                row["odds_source"] = "novig_live"
         elif m_type == "total_over" and "novig_over_point" in row and pd.notna(row["novig_over_point"]):
             row["total_line"] = safe_float(row["novig_over_point"])
             row["odds_american"] = safe_float(row["novig_over_price"])
-            row["odds_source"] = "novig_live"
+            row["odds_source"] = row.get("odds_source_total") or "novig_live"
+            if row["odds_source"] == "novig":
+                row["odds_source"] = "novig_live"
         elif m_type == "total_under" and "novig_under_point" in row and pd.notna(row["novig_under_point"]):
             row["total_line"] = safe_float(row["novig_under_point"])
             row["odds_american"] = safe_float(row["novig_under_price"])
-            row["odds_source"] = "novig_live"
+            row["odds_source"] = row.get("odds_source_total") or "novig_live"
+            if row["odds_source"] == "novig":
+                row["odds_source"] = "novig_live"
 
         return row
 
     merged = merged.apply(map_novig_lines, axis=1)
 
-    # Enforce Strict Drops for missing valid Novig line/price
-    # Only keep rows that successfully mapped a live Novig line and price
+    # Enforce Strict Drops for missing valid live line/price
+    # Only keep rows that successfully mapped a live line and price from novig, draftkings, or fanduel
     if "odds_source" in merged.columns and not live_odds_df.empty:
-        dropped_count = (merged["odds_source"] != "novig_live").sum()
+        valid_sources = ["novig_live", "draftkings", "fanduel"]
+        dropped_count = (~merged["odds_source"].isin(valid_sources)).sum()
         if dropped_count > 0:
-            logger.warning(f"Warning: Dropped {dropped_count} rows - Missing live Novig line.")
-        merged = merged[merged["odds_source"] == "novig_live"].copy()
+            logger.warning(f"Warning: Dropped {dropped_count} rows - Missing live betting line.")
+        merged = merged[merged["odds_source"].isin(valid_sources)].copy()
 
     merged["odds_american"] = _numeric_series(merged, "odds_american", pd.NA)
     merged = merged.dropna(subset=["odds_american"])

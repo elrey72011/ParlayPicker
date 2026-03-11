@@ -13,14 +13,14 @@ import streamlit as st
 
 logger = logging.getLogger(__name__)
 
-# Try to import Vertex AI dependencies
+# Try to import Google Generative AI dependencies
 try:
-    import vertexai
-    from vertexai.generative_models import GenerativeModel, GenerationConfig
-    VERTEX_AI_AVAILABLE = True
+    from google import genai
+    from google.genai import types
+    GEMINI_AVAILABLE = True
 except ImportError:
-    VERTEX_AI_AVAILABLE = False
-    logger.warning("Vertex AI not available. Install with: pip install google-cloud-aiplatform")
+    GEMINI_AVAILABLE = False
+    logger.warning("Google Generative AI not available. Install with: pip install google-genai")
 
 
 def _normalize_flags(flags: Any) -> List[str]:
@@ -34,7 +34,7 @@ def _normalize_flags(flags: Any) -> List[str]:
 
 class GeminiAnalyzer:
     """
-    Analyzes sports betting games using Google Gemini on Vertex AI.
+    Analyzes sports betting games using Google Gemini via google-genai SDK.
     
     Cost-effective with strong quality.
     """
@@ -44,47 +44,45 @@ class GeminiAnalyzer:
         Initialize Gemini Analyzer.
         
         Args:
-            project_id: Your Google Cloud project ID
+            project_id: Your Google Cloud project ID (for Vertex AI compatibility via genai)
             region: GCP region (us-central1 recommended for Gemini)
         
         Raises:
-            ValueError: If Vertex AI dependencies not available
-            ValueError: If project_id not provided
+            ValueError: If Gemini dependencies not available
         """
-        if not VERTEX_AI_AVAILABLE:
+        if not GEMINI_AVAILABLE:
             raise ValueError(
-                "Vertex AI dependencies not installed. "
-                "Install with: pip install google-cloud-aiplatform"
+                "Gemini dependencies not installed. "
+                "Install with: pip install google-genai"
             )
-        
-        if not project_id:
-            raise ValueError("GCP project_id is required for Vertex AI")
-        
+
         self.project_id = project_id
         self.region = region
-        self.model = None
+        self.client = None
         
-        logger.info(f"Initializing Gemini with project={project_id}, region={region}")
+        logger.info(f"Initializing Gemini Client")
         
-    def _get_model(self):
-        """Get or create Gemini model."""
-        if self.model is None:
+    def _get_client(self):
+        """Get or create Gemini client."""
+        if self.client is None:
             try:
                 # Ensure credentials are set (restore from session state if needed)
                 self._ensure_credentials()
                 
-                # Initialize Vertex AI
-                vertexai.init(project=self.project_id, location=self.region)
+                # Create GenAI client
+                # If project_id and location are provided, google-genai can route through Vertex
+                # depending on the environment and credentials
+                if self.project_id:
+                    self.client = genai.Client(vertexai=True, project=self.project_id, location=self.region)
+                else:
+                    self.client = genai.Client()
                 
-                # Create Gemini Pro model
-                self.model = GenerativeModel("gemini-2.0-flash-001")
-                
-                logger.info("✅ Gemini model initialized successfully")
+                logger.info("✅ Gemini client initialized successfully")
             except Exception as e:
-                logger.error(f"Failed to initialize Gemini model: {e}")
+                logger.error(f"Failed to initialize Gemini client: {e}")
                 raise
         
-        return self.model
+        return self.client
     
     def _ensure_credentials(self):
         """Ensure Google credentials are available."""
@@ -146,10 +144,10 @@ class GeminiAnalyzer:
         )
         
         try:
-            model = self._get_model()
+            client = self._get_client()
             
             # Configure generation
-            generation_config = GenerationConfig(
+            config = types.GenerateContentConfig(
                 temperature=0.2,
                 top_p=0.8,
                 max_output_tokens=2048,
@@ -158,9 +156,10 @@ class GeminiAnalyzer:
             # Call Gemini
             logger.info(f"Calling Gemini for {away_team} @ {home_team}")
             
-            response = model.generate_content(
-                prompt,
-                generation_config=generation_config
+            response = client.models.generate_content(
+                model='gemini-2.0-flash-001',
+                contents=prompt,
+                config=config
             )
             
             # Parse response
@@ -475,9 +474,9 @@ def show_gemini_config_ui():
     st.sidebar.caption("💰 Low-cost Gemini analysis")
     
     # Check if dependencies installed
-    if not VERTEX_AI_AVAILABLE:
-        st.sidebar.error("❌ Vertex AI not installed")
-        st.sidebar.code("pip install google-cloud-aiplatform")
+    if not GEMINI_AVAILABLE:
+        st.sidebar.error("❌ Gemini SDK not installed")
+        st.sidebar.code("pip install google-genai")
         return False
     
     # GCP Project ID
