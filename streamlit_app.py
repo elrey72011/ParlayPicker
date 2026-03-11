@@ -297,8 +297,17 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
     if controls.get("use_gemini") and not best_picks_df.empty:
         import os
         from gemini_integration import GeminiAnalyzer
+
+        # Now allows running with either an API key OR a GCP project ID
+        gemini_api_key = os.environ.get("GEMINI_API_KEY", st.secrets.get("GEMINI_API_KEY", ""))
+        if not gemini_api_key and "gemini_api_key" in st.session_state:
+            gemini_api_key = st.session_state["gemini_api_key"]
+
         gcp_project = os.environ.get("GCP_PROJECT_ID", st.secrets.get("GCP_PROJECT_ID", ""))
-        if gcp_project:
+        if not gcp_project and "gcp_project_id" in st.session_state:
+            gcp_project = st.session_state["gcp_project_id"]
+
+        if gemini_api_key or gcp_project:
             try:
                 analyzer = GeminiAnalyzer(project_id=gcp_project)
                 games_to_analyze = []

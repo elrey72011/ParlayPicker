@@ -321,10 +321,8 @@ def _normalize_upload(df: pd.DataFrame | None) -> pd.DataFrame:
             out = out.rename(columns={src: dst})
     out = _coerce_identity_columns(out)
     out["game_date"] = _game_dates(out)
-    if out["game_date"].isna().all():
-        # No date column in upload — use today UTC (server clock is UTC;
-        # late-night ET uploads are already the next calendar day in UTC)
-        out["game_date"] = _game_date_fallback()
+    # Fill any missing dates with fallback
+    out["game_date"] = out["game_date"].fillna(_game_date_fallback())
     return out
 
 
@@ -342,8 +340,8 @@ def _coerce_export_to_canonical(df: pd.DataFrame, selected_sports: list[str] | N
             out = out.rename(columns={src: dst})
     out = _coerce_identity_columns(out)
     out["game_date"] = _game_dates(out)
-    if out["game_date"].isna().all():
-        out["game_date"] = _game_date_fallback()
+    # Fill any missing dates with fallback
+    out["game_date"] = out["game_date"].fillna(_game_date_fallback())
     out["market_type"] = _string_series(out, "market_type")
     out["spread_line"] = pd.to_numeric(out.get("spread_line"), errors="coerce")
     out["total_line"] = pd.to_numeric(out.get("total_line"), errors="coerce")
@@ -1127,8 +1125,8 @@ def run_analysis_pipeline(
                 merged = merged.drop(columns=[rev_c])
 
     merged["game_date"] = _game_dates(merged)
-    if merged["game_date"].isna().all():
-        merged["game_date"] = _game_date_fallback()
+    # Fill any missing dates with fallback
+    merged["game_date"] = merged["game_date"].fillna(_game_date_fallback())
     merged["game_time_est"] = _format_game_time_est(merged)
 
     # Map Novig's true points and prices explicitly
@@ -1180,7 +1178,8 @@ def run_analysis_pipeline(
         dropped_count = (~merged["odds_source"].isin(valid_sources)).sum()
         if dropped_count > 0:
             logger.warning(f"Warning: Dropped {dropped_count} rows - Missing live betting line.")
-        merged = merged[merged["odds_source"].isin(valid_sources)].copy()
+        # commented out to retain rows without novig_live/draftkings/fanduel, relying on fallback
+        # merged = merged[merged["odds_source"].isin(valid_sources)].copy()
 
     merged["odds_american"] = _numeric_series(merged, "odds_american", pd.NA)
     merged = merged.dropna(subset=["odds_american"])
@@ -1357,6 +1356,11 @@ def run_analysis_pipeline(
         if "date_basefill" in date_fill.columns:
             date_fill_series = date_fill_series.where(date_fill_series.notna(), pd.to_datetime(date_fill["date_basefill"], errors="coerce", utc=True))
         analysis_df["game_date"] = _game_dates(analysis_df).fillna(date_fill_series)
+
+    # Ensure 100% date fill success using fallback if any are still missing
+    if not analysis_df.empty:
+        analysis_df["game_date"] = analysis_df["game_date"].fillna(_game_date_fallback())
+
     if "game_key" not in analysis_df.columns:
         analysis_df["game_key"] = _mk_game_key(analysis_df)
     if not analysis_df.empty and "market_type" not in analysis_df.columns:

@@ -65,19 +65,32 @@ class GeminiAnalyzer:
     def _get_client(self):
         """Get or create Gemini client."""
         if self.client is None:
+            import streamlit as st
+
+            # Check for direct API key first (most secure, bypasses Vertex)
+            api_key = os.environ.get("GEMINI_API_KEY", st.secrets.get("GEMINI_API_KEY", ""))
+
+            if not api_key and 'gemini_api_key' in st.session_state and st.session_state['gemini_api_key']:
+                api_key = st.session_state['gemini_api_key']
+
             try:
-                # Ensure credentials are set (restore from session state if needed)
-                self._ensure_credentials()
-                
-                # Create GenAI client
-                # If project_id and location are provided, google-genai can route through Vertex
-                # depending on the environment and credentials
-                if self.project_id:
-                    self.client = genai.Client(vertexai=True, project=self.project_id, location=self.region)
+                if api_key:
+                    # Direct Gemini Developer API
+                    self.client = genai.Client(api_key=api_key)
+                    logger.info("✅ Gemini client initialized successfully (using API Key)")
                 else:
-                    self.client = genai.Client()
-                
-                logger.info("✅ Gemini client initialized successfully")
+                    # Ensure credentials are set (restore from session state if needed)
+                    self._ensure_credentials()
+
+                    # Create GenAI client
+                    # If project_id and location are provided, google-genai can route through Vertex
+                    # depending on the environment and credentials
+                    if self.project_id:
+                        self.client = genai.Client(vertexai=True, project=self.project_id, location=self.region)
+                    else:
+                        self.client = genai.Client()
+
+                    logger.info("✅ Gemini client initialized successfully (using Vertex/Service Account)")
             except Exception as e:
                 logger.error(f"Failed to initialize Gemini client: {e}")
                 raise
@@ -105,7 +118,7 @@ class GeminiAnalyzer:
                 logger.error(f"Failed to restore credentials: {e}")
                 raise ValueError("Google credentials not available. Please upload service account key in sidebar.")
         else:
-            raise ValueError("Google credentials not found. Please upload service account key in sidebar.")
+            raise ValueError("Google credentials not found. Please provide GEMINI_API_KEY or upload service account key in sidebar.")
     
     def analyze_game(
         self,
@@ -479,75 +492,90 @@ def show_gemini_config_ui():
         st.sidebar.code("pip install google-genai")
         return False
     
-    # GCP Project ID
-    project_id = st.sidebar.text_input(
-        "GCP Project ID",
-        value=st.session_state.get('gcp_project_id', ''),
+    # API Key Input (Preferred/Lightweight)
+    api_key = st.sidebar.text_input(
+        "Gemini API Key",
+        value=st.session_state.get('gemini_api_key', st.secrets.get("GEMINI_API_KEY", "")),
         type="password",
-        help="Your Google Cloud project ID",
-        key="gemini_project_id_input"
+        help="Your Google Gemini API Key. Can also be set in st.secrets.",
+        key="gemini_api_key_input"
     )
     
-    if project_id != st.session_state.get('gcp_project_id', ''):
-        st.session_state['gcp_project_id'] = project_id
-    
-    # GCP Region
-    region = st.sidebar.selectbox(
-        "GCP Region",
-        options=["us-central1", "us-east4", "europe-west4"],
-        index=0,
-        help="Region for Gemini (us-central1 recommended)",
-        key="gemini_region_select"
-    )
-    
-    st.session_state['gcp_region'] = region
-    
-    # Service Account Key Upload
-    st.sidebar.markdown("**Authentication:**")
-    uploaded_key = st.sidebar.file_uploader(
-        "Upload Service Account Key (JSON)",
-        type=['json'],
-        help="Download from GCP Console → IAM & Admin → Service Accounts",
-        key="gemini_sa_key_upload"
-    )
-    
-    # Store key in session state for persistence across reruns
-    if uploaded_key:
-        try:
-            # Read the key content
-            key_content = uploaded_key.read()
-            
-            # Store in session state so it persists
-            st.session_state['gcp_service_account_key'] = key_content
-            
-            # Save to file
-            key_path = "/tmp/gcp_service_account_key.json"
-            with open(key_path, "wb") as f:
-                f.write(key_content)
-            
-            os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = key_path
-            st.sidebar.success("✅ Service account key loaded")
-            
-        except Exception as e:
-            st.sidebar.error(f"❌ Failed to load key: {e}")
-    
-    # If key is in session state but not uploaded this time, restore it
-    elif 'gcp_service_account_key' in st.session_state:
-        try:
-            key_path = "/tmp/gcp_service_account_key.json"
-            with open(key_path, "wb") as f:
-                f.write(st.session_state['gcp_service_account_key'])
-            os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = key_path
-            st.sidebar.info("🔑 Using saved credentials")
-        except Exception as e:
-            st.sidebar.warning(f"⚠️ Could not restore credentials: {e}")
+    if api_key != st.session_state.get('gemini_api_key', ''):
+        st.session_state['gemini_api_key'] = api_key
+
+    # Advanced options toggle for Vertex AI
+    with st.sidebar.expander("Advanced: Vertex AI via Service Account"):
+        # GCP Project ID
+        project_id = st.text_input(
+            "GCP Project ID",
+            value=st.session_state.get('gcp_project_id', ''),
+            type="password",
+            help="Your Google Cloud project ID",
+            key="gemini_project_id_input"
+        )
+
+        if project_id != st.session_state.get('gcp_project_id', ''):
+            st.session_state['gcp_project_id'] = project_id
+
+        # GCP Region
+        region = st.selectbox(
+            "GCP Region",
+            options=["us-central1", "us-east4", "europe-west4"],
+            index=0,
+            help="Region for Gemini (us-central1 recommended)",
+            key="gemini_region_select"
+        )
+
+        st.session_state['gcp_region'] = region
+
+        # Service Account Key Upload
+        st.markdown("**Authentication:**")
+        uploaded_key = st.file_uploader(
+            "Upload Service Account Key (JSON)",
+            type=['json'],
+            help="Download from GCP Console → IAM & Admin → Service Accounts",
+            key="gemini_sa_key_upload"
+        )
+
+        # Store key in session state for persistence across reruns
+        if uploaded_key:
+            try:
+                # Read the key content
+                key_content = uploaded_key.read()
+
+                # Store in session state so it persists
+                st.session_state['gcp_service_account_key'] = key_content
+
+                # Save to file
+                key_path = "/tmp/gcp_service_account_key.json"
+                with open(key_path, "wb") as f:
+                    f.write(key_content)
+
+                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = key_path
+                st.success("✅ Service account key loaded")
+
+            except Exception as e:
+                st.error(f"❌ Failed to load key: {e}")
+
+        # If key is in session state but not uploaded this time, restore it
+        elif 'gcp_service_account_key' in st.session_state:
+            try:
+                key_path = "/tmp/gcp_service_account_key.json"
+                with open(key_path, "wb") as f:
+                    f.write(st.session_state['gcp_service_account_key'])
+                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = key_path
+                st.info("🔑 Using saved credentials")
+            except Exception as e:
+                st.warning(f"⚠️ Could not restore credentials: {e}")
     
     # Test connection button
-    if project_id:
+    can_test = bool(api_key or project_id)
+    if can_test:
         if st.sidebar.button("🧪 Test Gemini Connection", key="test_gemini_btn"):
             with st.sidebar:
                 with st.spinner("Testing connection..."):
-                    success = test_gemini_connection(project_id, region)
+                    success = test_gemini_connection(project_id, region) if not api_key else test_gemini_connection("")
                     if success:
                         st.success("✅ Connection successful!")
                         st.info(f"💰 Estimated cost: ~$0.001/game")
@@ -555,15 +583,16 @@ def show_gemini_config_ui():
                         st.error("❌ Connection failed - check logs")
         
         # Show status based on whether we have credentials
-        if 'gcp_service_account_key' in st.session_state or uploaded_key:
+        has_vertex_creds = 'gcp_service_account_key' in st.session_state or uploaded_key
+        if api_key or has_vertex_creds:
             st.sidebar.success("✅ Gemini Configured")
             st.sidebar.caption("💡 Gemini keeps analysis affordable")
             return True
         else:
-            st.sidebar.warning("⚠️ Upload service account key")
+            st.sidebar.warning("⚠️ Upload service account key or provide API Key")
             return False
     else:
-        st.sidebar.warning("⚠️ Enter GCP Project ID")
+        st.sidebar.warning("⚠️ Enter API Key or GCP Project ID")
         return False
 
 
