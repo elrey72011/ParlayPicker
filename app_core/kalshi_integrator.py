@@ -580,6 +580,8 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
             logger.info(f"FILTERED {len(totals_markets)} TOTALS markets for {row.get('game_id')}, target line {extracted_totals_line}")
 
+            # Collect all Kalshi contracts and their implied probabilities
+            kalshi_lines = []
             for mkt in totals_markets:
                 m_title = str(mkt.get("title") or "").lower()
                 m_subtitle = str(mkt.get("subtitle") or "").lower()
@@ -590,15 +592,59 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 for num_str in numbers:
                     try:
                         k_line = float(num_str)
-                        # Dynamic tolerance band of ± 1.5 points to map sliding-scale traditional lines to Kalshi contracts
-                        delta = abs(k_line - extracted_totals_line)
-                        if delta <= 1.5 and delta < best_delta:
-                            best_delta = delta
-                            best_market = mkt
-                            match_status = "matched"
-                            match_reason = "total_match"
+                        bid = float(pd.to_numeric(mkt.get("yes_bid_dollars"), errors="coerce") or 0.0)
+                        ask = float(pd.to_numeric(mkt.get("yes_ask_dollars"), errors="coerce") or 0.0)
+
+                        if (bid + ask) > 2.0:
+                            kalshi_prob = (bid + ask) / 200.0
+                        elif bid > 0 and ask > 0:
+                            kalshi_prob = (bid + ask) / 2.0
+                        else:
+                            kalshi_prob = _select_probability(mkt)
+
+                        if kalshi_prob is not None:
+                            kalshi_lines.append((k_line, kalshi_prob, mkt))
                     except ValueError:
                         continue
+
+            if kalshi_lines:
+                # Sort contracts by line
+                kalshi_lines.sort(key=lambda x: x[0])
+
+                # Check for exact match
+                exact_matches = [x for x in kalshi_lines if x[0] == extracted_totals_line]
+                if exact_matches:
+                    best_market = exact_matches[0][2]
+                    match_status = "matched"
+                    match_reason = "total_match_exact"
+                    # We will override the probability with interpolation logic below, but setting best_market satisfies the pipeline
+                else:
+                    # Find bracketing contracts
+                    below = [x for x in kalshi_lines if x[0] < extracted_totals_line]
+                    above = [x for x in kalshi_lines if x[0] > extracted_totals_line]
+
+                    if below and above:
+                        # Linear interpolation
+                        x0, y0, mkt0 = below[-1]
+                        x1, y1, mkt1 = above[0]
+
+                        best_market = mkt1  # Assign the upper market for metadata purposes
+                        match_status = "matched"
+                        match_reason = "total_match_interpolated"
+
+                        # We will set the interpolated probability directly to the row to bypass standard extraction
+                        interpolated_prob = y0 + (y1 - y0) * ((extracted_totals_line - x0) / (x1 - x0))
+
+                        # Store it temporarily in best_market dictionary so we can extract it later
+                        best_market["_interpolated_probability"] = interpolated_prob
+                    else:
+                        # If we can't bracket, fall back to nearest neighbor if within 1.5 points
+                        nearest = min(kalshi_lines, key=lambda x: abs(x[0] - extracted_totals_line))
+                        delta = abs(nearest[0] - extracted_totals_line)
+                        if delta <= 1.5:
+                            best_market = nearest[2]
+                            match_status = "matched"
+                            match_reason = "total_match_nearest"
 
         else:
             # SPREAD LOGIC (Preserved)
@@ -656,58 +702,100 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             else:
                 target_line = abs(target_line_raw)
 
+                # Collect all Kalshi spread contracts matching the team side
+                kalshi_lines = []
                 for mkt in markets:
                     m_title = str(mkt.get("title") or "").lower()
                     m_subtitle = str(mkt.get("subtitle") or "").lower()
                     combined_text = f"{m_title} {m_subtitle}"
 
-                    # Regex to find any standard decimal or integer line (e.g., "-12.5", "+6.5", "222.5", "-12", "+6", "4")
-                    numbers = re.findall(r'[-+]?\s*(\d+(?:\.\d+)?)', combined_text)
+                    # Identify which team this contract refers to
+                    m_type = str(row.get("market_type")).lower()
+                    book_line = pd.to_numeric(row.get("spread_line"), errors="coerce")
+                    is_favorite_bet = book_line < 0
 
-                    for num_str in numbers:
-                        try:
-                            extracted_val = abs(float(num_str))
+                    home_t = str(row.get("home_team") or "")
+                    away_t = str(row.get("away_team") or "")
 
-                            # Kalshi spread math translation: "wins by over 3.5" means -4.0 spread line.
-                            k_line = extracted_val + 0.5
-                            delta = abs(k_line - target_line)
+                    home_shared = {w for w in set(_normalize_team_token(home_t).split()).intersection(set(_normalize_team_token(combined_text).split())) if len(w) > 2}
+                    away_shared = {w for w in set(_normalize_team_token(away_t).split()).intersection(set(_normalize_team_token(combined_text).split())) if len(w) > 2}
 
-                            # Using nearest-neighbor algorithm instead of strict KALSHI_LINE_TOLERANCE_SPREAD
-                            m_type = str(row.get("market_type")).lower()
-                            book_line = pd.to_numeric(row.get("spread_line"), errors="coerce")
-                            is_favorite_bet = book_line < 0
+                    ticker_suffix = str(mkt.get("ticker", "")).split("-")[-1]
+                    home_abbr = str(_guess_code(home_t) or "").upper()
+                    away_abbr = str(_guess_code(away_t) or "").upper()
 
-                            home_t = str(row.get("home_team") or "")
-                            away_t = str(row.get("away_team") or "")
-                            combined_text = f"{str(mkt.get('title', ''))} {str(mkt.get('subtitle', ''))}".lower()
+                    kalshi_subject_is_home = bool(home_shared) or (home_abbr and home_abbr in ticker_suffix)
+                    kalshi_subject_is_away = bool(away_shared) or (away_abbr and away_abbr in ticker_suffix)
 
-                            home_shared = {w for w in set(_normalize_team_token(home_t).split()).intersection(set(_normalize_team_token(combined_text).split())) if len(w) > 2}
-                            away_shared = {w for w in set(_normalize_team_token(away_t).split()).intersection(set(_normalize_team_token(combined_text).split())) if len(w) > 2}
+                    expected_subject_is_home = ("home" in m_type) if is_favorite_bet else not ("home" in m_type)
 
-                            ticker_suffix = str(mkt.get("ticker", "")).split("-")[-1]
-                            home_abbr = str(_guess_code(home_t) or "").upper()
-                            away_abbr = str(_guess_code(away_t) or "").upper()
+                    is_correct_match = (expected_subject_is_home and kalshi_subject_is_home) or \
+                                       (not expected_subject_is_home and kalshi_subject_is_away)
 
-                            kalshi_subject_is_home = bool(home_shared) or (home_abbr and home_abbr in ticker_suffix)
-                            kalshi_subject_is_away = bool(away_shared) or (away_abbr and away_abbr in ticker_suffix)
+                    if not kalshi_subject_is_home and not kalshi_subject_is_away:
+                        is_correct_match = True # Assume match if Kalshi subject is completely ambiguous
 
-                            expected_subject_is_home = ("home" in m_type) if is_favorite_bet else not ("home" in m_type)
+                    if is_correct_match:
+                        # Extract line
+                        numbers = re.findall(r'[-+]?\s*(\d+(?:\.\d+)?)', combined_text)
+                        for num_str in numbers:
+                            try:
+                                extracted_val = abs(float(num_str))
+                                # Kalshi spread math translation: "wins by over 3.5" means -4.0 spread line.
+                                k_line = extracted_val + 0.5
 
-                            is_correct_match = (expected_subject_is_home and kalshi_subject_is_home) or \
-                                               (not expected_subject_is_home and kalshi_subject_is_away)
+                                bid = float(pd.to_numeric(mkt.get("yes_bid_dollars"), errors="coerce") or 0.0)
+                                ask = float(pd.to_numeric(mkt.get("yes_ask_dollars"), errors="coerce") or 0.0)
 
-                            if not kalshi_subject_is_home and not kalshi_subject_is_away:
-                                is_correct_match = True # Assume match if Kalshi subject is completely ambiguous
+                                if (bid + ask) > 2.0:
+                                    kalshi_prob = (bid + ask) / 200.0
+                                elif bid > 0 and ask > 0:
+                                    kalshi_prob = (bid + ask) / 2.0
+                                else:
+                                    kalshi_prob = _select_probability(mkt)
 
-                            if is_correct_match:
-                                if delta <= 1.5 and delta < best_delta:
-                                    best_delta = delta
-                                    best_market = mkt
-                                    match_status = "matched"
-                                    match_reason = "spread_match"
+                                if kalshi_prob is not None:
+                                    kalshi_lines.append((k_line, kalshi_prob, mkt))
+                            except ValueError:
+                                continue
 
-                        except ValueError:
-                            continue
+                if kalshi_lines:
+                    # Sort contracts by line
+                    kalshi_lines.sort(key=lambda x: x[0])
+
+                    # Check for exact match
+                    exact_matches = [x for x in kalshi_lines if x[0] == target_line]
+                    if exact_matches:
+                        best_market = exact_matches[0][2]
+                        match_status = "matched"
+                        match_reason = "spread_match_exact"
+                    else:
+                        # Find bracketing contracts
+                        below = [x for x in kalshi_lines if x[0] < target_line]
+                        above = [x for x in kalshi_lines if x[0] > target_line]
+
+                        if below and above:
+                            # Linear interpolation
+                            x0, y0, mkt0 = below[-1]
+                            x1, y1, mkt1 = above[0]
+
+                            best_market = mkt1  # Assign the upper market for metadata purposes
+                            match_status = "matched"
+                            match_reason = "spread_match_interpolated"
+
+                            # Interpolate
+                            interpolated_prob = y0 + (y1 - y0) * ((target_line - x0) / (x1 - x0))
+
+                            # Store it temporarily
+                            best_market["_interpolated_probability"] = interpolated_prob
+                        else:
+                            # Nearest neighbor fallback
+                            nearest = min(kalshi_lines, key=lambda x: abs(x[0] - target_line))
+                            delta = abs(nearest[0] - target_line)
+                            if delta <= 1.5:
+                                best_market = nearest[2]
+                                match_status = "matched"
+                                match_reason = "spread_match_nearest"
 
         if best_market is None:
             # We found no markets or candidates at all
@@ -715,18 +803,22 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             out.at[idx, "kalshi_match_reason"] = "alt_line_mismatch"
             out.at[idx, "kalshi_match_quality"] = "line_mismatched"
         else:
-            bid = float(pd.to_numeric(best_market.get("yes_bid_dollars"), errors="coerce") or 0.0)
-            ask = float(pd.to_numeric(best_market.get("yes_ask_dollars"), errors="coerce") or 0.0)
-
-            # REPLACE WITH ADAPTIVE LOGIC:
-            if (bid + ask) > 2.0:
-                # Values are in cents
-                kalshi_prob = (bid + ask) / 200.0
-            elif bid > 0 and ask > 0:
-                # Values are in dollars
-                kalshi_prob = (bid + ask) / 2.0
+            # If we interpolated the probability, use it directly
+            if "_interpolated_probability" in best_market:
+                kalshi_prob = best_market["_interpolated_probability"]
             else:
-                kalshi_prob = _select_probability(best_market)
+                bid = float(pd.to_numeric(best_market.get("yes_bid_dollars"), errors="coerce") or 0.0)
+                ask = float(pd.to_numeric(best_market.get("yes_ask_dollars"), errors="coerce") or 0.0)
+
+                # REPLACE WITH ADAPTIVE LOGIC:
+                if (bid + ask) > 2.0:
+                    # Values are in cents
+                    kalshi_prob = (bid + ask) / 200.0
+                elif bid > 0 and ask > 0:
+                    # Values are in dollars
+                    kalshi_prob = (bid + ask) / 2.0
+                else:
+                    kalshi_prob = _select_probability(best_market)
 
             if kalshi_prob is None:
                 out.at[idx, "kalshi_match_status"] = "miss"
