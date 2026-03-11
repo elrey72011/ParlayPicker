@@ -306,9 +306,9 @@ class PredictionEngine:
             logger.debug(f"[MODEL_DEBUG] Input features: {features}")
 
             if self.use_fallback:
-                # Enhanced statistical fallback using team features
-                prob = self._calculate_statistical_prob(features)
-                return {"prob": prob, "note": "Statistical Fallback (Feature-Based)"}
+                # Do not inject fake probabilities. Return None to allow dynamic weight redistribution.
+                logger.debug("Model fallback triggered. Returning None for ml_probability to trigger weight redistribution.")
+                return {"prob": None, "note": "Model Failed - Redistributing Weights"}
 
             # Ensure input is 2D (batch of 1)
             # Create DataFrame safely
@@ -354,16 +354,14 @@ class PredictionEngine:
 
             if abs(prob - PLACEHOLDER_VALUE) < PLACEHOLDER_TOLERANCE:
                  # Using fallback gracefully when placeholder detected
-                 logger.debug(f"Placeholder value detected ({prob:.3f}), using statistical fallback.")
-                 fallback_prob = self._calculate_statistical_prob(features)
-                 return {"prob": fallback_prob, "note": "Fallback (Placeholder Detected)"}
+                 logger.debug(f"Placeholder value detected ({prob:.3f}), skipping prediction.")
+                 return {"prob": None, "note": "Fallback (Placeholder Detected)"}
 
             return {"prob": float(prob), "note": "Local Inference"}
         except Exception as e:
             logger.error(f"Prediction error: {e}. Using fallback.")
             logger.error(f"Exception details: {traceback.format_exc()}")
-            prob = self._calculate_statistical_prob(features)
-            return {"prob": prob, "note": f"Error Fallback: {str(e)[:20]}"}
+            return {"prob": None, "note": f"Error Fallback: {str(e)[:20]}"}
 
     def _calculate_statistical_prob(self, features: Dict[str, float]) -> float:
         """
@@ -436,14 +434,8 @@ class PredictionEngine:
         try:
             # Always fallback if model not loaded
             if self.use_fallback:
-                logger.info(f"Predict Batch: Using fallback for {len(df)} rows (Model fallback active).")
-                # Enhanced statistical fallback using team features
-                probs = []
-                for idx, row in df.iterrows():
-                    features = build_model_feature_row_from_record(row.to_dict())
-                    prob = self._calculate_statistical_prob(features)
-                    probs.append(prob)
-                return probs
+                logger.info(f"Predict Batch: Model unavailable, returning None for {len(df)} rows.")
+                return [None] * len(df)
 
             # Ensure input has the correct columns
             missing_cols = [col for col in VERTEX_FEATURE_COLUMNS if col not in df.columns]
@@ -498,34 +490,15 @@ class PredictionEngine:
             for idx, p in enumerate(raw_probs):
                  if abs(p - PLACEHOLDER_VAL) < PLACEHOLDER_TOLERANCE:
                       # Detected placeholder, force fallback for this row
-                      try:
-                          row = df.iloc[idx]
-                          # LOG DETAILS OF PLACEHOLDER ROW (Issue #1)
-                          logger.debug(f"Placeholder row details: {row.to_dict()}")
-
-                          features = build_model_feature_row_from_record(row.to_dict())
-                          fallback_prob = self._calculate_statistical_prob(features)
-                          final_probs.append(fallback_prob)
-                          logger.debug(f"Placeholder at index {idx}: using fallback prob {fallback_prob:.3f}")
-                      except Exception as fallback_err:
-                          logger.error(f"Fallback calculation failed during placeholder fix: {fallback_err}")
-                          final_probs.append(p) # Keep original if fallback fails
+                      logger.debug(f"Placeholder at index {idx}: omitting probability.")
+                      final_probs.append(None)
                  else:
                       final_probs.append(p)
 
             return final_probs
         except Exception as e:
             logger.error(f"Batch prediction failed: {e}", exc_info=True)
-            # Fallback to statistical calculation for batch on error
-            try:
-                probs = []
-                for idx, row in df.iterrows():
-                    features = build_model_feature_row_from_record(row.to_dict())
-                    prob = self._calculate_statistical_prob(features)
-                    probs.append(prob)
-                return probs
-            except:
-                return [0.52] * len(df)
+            return [None] * len(df)
 
 # Global singleton instance
 _SHARED_ENGINE = None

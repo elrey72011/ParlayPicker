@@ -169,8 +169,9 @@ class GeminiAnalyzer:
             # Call Gemini
             logger.info(f"Calling Gemini for {away_team} @ {home_team}")
             
+            # Use the currently active default flash model instead of a hardcoded deprecated version
             response = client.models.generate_content(
-                model='gemini-2.0-flash-001',
+                model='gemini-2.5-flash',
                 contents=prompt,
                 config=config
             )
@@ -204,7 +205,7 @@ class GeminiAnalyzer:
                 'best_spread': best_spread,
                 'sources_used': self._get_sources_used(context_data),
                 'analysis_timestamp': datetime.now().isoformat(),
-                'model': 'gemini-2.0-flash-001',
+                'model': 'gemini-2.5-flash',
                 'explanation': analysis.get('confidence_explanation') or analysis.get('edge_explanation') or '',
             }
             
@@ -417,7 +418,7 @@ CRITICAL RULES:
             'best_spread': best_spread,
             'sources_used': 'error',
             'analysis_timestamp': datetime.now().isoformat(),
-            'model': 'gemini-2.0-flash-001',
+            'model': 'gemini-2.5-flash',
             'error': error_msg
         }
 

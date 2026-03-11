@@ -542,8 +542,15 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
     ev = calibrated * (out["decimal_odds"] - 1) - (1 - calibrated)
     edge = calibrated - out["market_probability"]
 
+    # Null out EV and edge for missing odds
+    missing_odds_mask = out["odds_american"].isna()
+    ev = ev.mask(missing_odds_mask, pd.NA)
+    edge = edge.mask(missing_odds_mask, pd.NA)
+
     # Phase 2: Eradication of Floating-Point Artefacts
     # Cast micro-edges to exact zero.
+    edge = pd.to_numeric(edge, errors="coerce")
+    ev = pd.to_numeric(ev, errors="coerce")
     edge = edge.round(4)
     zero_mask = edge.abs() < 0.0001
     edge = edge.mask(zero_mask, 0.0)
@@ -827,8 +834,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     edge_for_consensus = _numeric_series(best, "edge", 0.0)
     best["consensus_agreement"] = "⚪ No Kalshi"
 
-    # Removed strict EV filter to ensure 1 pick per game
-    # best = best[best["expected_value"] >= 0.02].copy()
+    # Strictly enforce EV > 0 threshold for actionable picks
+    best = best[best["expected_value"] > 0.0].copy()
 
     # Phase 2: Eradication of Floating-Point Artefacts in Expected Value Calculations
     # Primary sort by expected_value descending, then game_date, league, home_team ascending
@@ -836,7 +843,11 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         ["expected_value", "game_date", "league", "home_team"],
         ascending=[False, True, True, True]
     ).reset_index(drop=True)
-    best["parlay_rank"] = range(1, len(best) + 1)
+
+    if not best.empty:
+        best["parlay_rank"] = range(1, len(best) + 1)
+    else:
+        best["parlay_rank"] = pd.Series(dtype=int)
 
     for col in BEST_PICK_COLUMNS:
         if col not in best.columns:
@@ -1177,23 +1188,9 @@ def run_analysis_pipeline(
         valid_sources = ["novig_live", "draftkings", "fanduel"]
         dropped_count = (~merged["odds_source"].isin(valid_sources)).sum()
         if dropped_count > 0:
-            logger.warning(f"Warning: Dropped {dropped_count} rows - Missing live betting line.")
-        # commented out to retain rows without novig_live/draftkings/fanduel, relying on fallback
-        # merged = merged[merged["odds_source"].isin(valid_sources)].copy()
+            logger.warning(f"Warning: Dropped {dropped_count} rows - Missing live betting line. Kept row but EV calculation will be bypassed.")
 
     merged["odds_american"] = _numeric_series(merged, "odds_american", pd.NA)
-    merged = merged.dropna(subset=["odds_american"])
-
-    # Drop rows without matching spread_line or total_line
-    if not merged.empty:
-        is_spread = merged["market_type"].astype(str).str.startswith("spread")
-        is_total = merged["market_type"].astype(str).str.startswith("total")
-
-        has_valid_spread = is_spread & (merged["spread_line"].notna() if "spread_line" in merged.columns else False)
-        has_valid_total = is_total & (merged["total_line"].notna() if "total_line" in merged.columns else False)
-
-        valid_rows = has_valid_spread | has_valid_total
-        merged = merged[valid_rows].copy()
 
     merged["decimal_odds"] = merged["odds_american"].apply(american_to_decimal)
 
@@ -1213,10 +1210,10 @@ def run_analysis_pipeline(
     # Mandatory Sanitization Layer
     if not merged.empty:
         # Drop pathological/synthetic odds (e.g., -99900)
-        valid_odds_mask = (merged["odds_american"] >= -10000) & (merged["odds_american"] <= 10000)
+        valid_odds_mask = merged["odds_american"].isna() | ((merged["odds_american"] >= -10000) & (merged["odds_american"] <= 10000))
 
         # Drop extreme implied probabilities reflecting suspended markets
-        valid_prob_mask = (merged["market_probability"] >= 0.05) & (merged["market_probability"] <= 0.95)
+        valid_prob_mask = merged["market_probability"].isna() | ((merged["market_probability"] >= 0.05) & (merged["market_probability"] <= 0.95))
 
         dropped = len(merged) - (valid_odds_mask & valid_prob_mask).sum()
         if dropped > 0:
@@ -1298,11 +1295,19 @@ def run_analysis_pipeline(
     merged["model_probability"] = model_probability
     merged["calibrated_probability"] = calibrated_probability
 
+    # Bypass EV calculation for rows without odds or main lines
     ev = calibrated_probability * (merged["decimal_odds"] - 1) - (1 - calibrated_probability)
     edge = calibrated_probability - merged["market_probability"]
 
+    # Null out EV and edge for missing odds
+    missing_odds_mask = merged["odds_american"].isna()
+    ev = ev.mask(missing_odds_mask, pd.NA)
+    edge = edge.mask(missing_odds_mask, pd.NA)
+
     # Phase 2: Eradication of Floating-Point Artefacts
     # Cast micro-edges to exact zero.
+    edge = pd.to_numeric(edge, errors="coerce")
+    ev = pd.to_numeric(ev, errors="coerce")
     edge = edge.round(4)
     zero_mask = edge.abs() < 0.0001
     edge = edge.mask(zero_mask, 0.0)
