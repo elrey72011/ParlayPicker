@@ -425,22 +425,38 @@ def _extract_kalshi_line(mkt: dict[str, Any], is_total: bool) -> float | None:
     return None
 
 def _select_probability(market: dict[str, Any]) -> float | None:
-    bid = pd.to_numeric(market.get("yes_bid_dollars"), errors="coerce")
-    ask = pd.to_numeric(market.get("yes_ask_dollars"), errors="coerce")
+    # Explicitly use float casting for fixed-point _dollars migration
+    try:
+        bid = float(pd.to_numeric(market.get("yes_bid_dollars"), errors="coerce") or pd.NA)
+    except (TypeError, ValueError):
+        bid = pd.NA
+    try:
+        ask = float(pd.to_numeric(market.get("yes_ask_dollars"), errors="coerce") or pd.NA)
+    except (TypeError, ValueError):
+        ask = pd.NA
+
     if pd.notna(bid) and pd.notna(ask):
         if (bid + ask) > 2.0:
             return float((bid + ask) / 200.0)
         else:
             return float((bid + ask) / 2.0)
 
-    last = pd.to_numeric(market.get("last_price_dollars"), errors="coerce")
+    try:
+        last = float(pd.to_numeric(market.get("last_price_dollars"), errors="coerce") or pd.NA)
+    except (TypeError, ValueError):
+        last = pd.NA
+
     if pd.notna(last):
         if last > 1.0:
             return float(last / 100.0)
         return float(last)
 
     for key in ("yes_bid_dollars", "yes_ask_dollars"):
-        val = pd.to_numeric(market.get(key), errors="coerce")
+        try:
+            val = float(pd.to_numeric(market.get(key), errors="coerce") or pd.NA)
+        except (TypeError, ValueError):
+            continue
+
         if pd.notna(val):
             if val > 1.0:
                 return float(val / 100.0)
@@ -463,6 +479,9 @@ def _select_probability(market: dict[str, Any]) -> float | None:
 def _fetch_series_cache(series_set: set[str], date_codes: set[str] | None = None) -> dict[str, dict[str, Any]]:
     """Fetch all open markets for each unique series in one call per series with pagination."""
     cache: dict[str, dict[str, Any]] = {}
+
+    first_market_logged = False
+
     for series in series_set:
         try:
             params = {"series_ticker": series, "status": "open", "limit": 100}
@@ -471,6 +490,10 @@ def _fetch_series_cache(series_set: set[str], date_codes: set[str] | None = None
                 markets = _extract_markets(resp)
                 if not markets:
                     break
+
+                if not first_market_logged and markets:
+                    logger.info(f"KALSHI PAYLOAD VERIFICATION (First Market): {json.dumps(markets[0], indent=2)}")
+                    first_market_logged = True
 
                 for m in markets:
                     ticker = str(m.get("ticker") or "")
@@ -533,14 +556,15 @@ def _is_within_24h(market: dict[str, Any], game_date_obj: pd.Timestamp) -> bool:
 
     try:
         kalshi_dt = pd.to_datetime(close_time_str, utc=True)
-        # Ensure game_date_obj is timezone aware (UTC)
-        if game_date_obj.tz is None:
+        # Ensure game_date_obj is strictly timezone aware (UTC)
+        if getattr(game_date_obj, 'tz', None) is None:
             game_date_obj = game_date_obj.tz_localize('UTC')
         else:
             game_date_obj = game_date_obj.tz_convert('UTC')
 
         return abs(kalshi_dt - game_date_obj) <= pd.Timedelta(hours=24)
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Timezone matching error: {e}")
         return True
 
 
@@ -598,6 +622,9 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             series_markets = []
             fetch_success = True
             page_num = 0
+
+            first_market_logged = False
+
             try:
                 params = {"series_ticker": series, "status": "open", "limit": 100}
                 for page_num in range(20):
@@ -605,6 +632,11 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                     page = _extract_markets(resp)
                     if not page:
                         break
+
+                    if not first_market_logged and page:
+                        logger.info(f"KALSHI PAYLOAD VERIFICATION (First Market from {series}): {json.dumps(page[0], indent=2)}")
+                        first_market_logged = True
+
                     series_markets.extend(page)
                     cursor = resp.get("cursor") if isinstance(resp, dict) else None
                     if not cursor:
@@ -670,8 +702,14 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 # Extract Kalshi strike prices
                 k_line = _extract_kalshi_line(mkt, is_total=True)
                 if k_line is not None:
-                    bid = float(pd.to_numeric(mkt.get("yes_bid_dollars"), errors="coerce") or 0.0)
-                    ask = float(pd.to_numeric(mkt.get("yes_ask_dollars"), errors="coerce") or 0.0)
+                    try:
+                        bid = float(pd.to_numeric(mkt.get("yes_bid_dollars"), errors="coerce") or 0.0)
+                    except (TypeError, ValueError):
+                        bid = 0.0
+                    try:
+                        ask = float(pd.to_numeric(mkt.get("yes_ask_dollars"), errors="coerce") or 0.0)
+                    except (TypeError, ValueError):
+                        ask = 0.0
 
                     if (bid + ask) > 2.0:
                         kalshi_prob = (bid + ask) / 200.0
@@ -685,8 +723,9 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
             if kalshi_lines:
                 # Nearest neighbor fallback without interpolation
-                nearest = min(kalshi_lines, key=lambda x: abs(x[0] - extracted_totals_line))
-                delta = abs(nearest[0] - extracted_totals_line)
+                # Ensure type casting to float for accurate calculation
+                nearest = min(kalshi_lines, key=lambda x: abs(float(x[0]) - float(extracted_totals_line)))
+                delta = abs(float(nearest[0]) - float(extracted_totals_line))
 
                 tolerance = MAX_LINE_TOLERANCE.get(league, 1.5)
                 if delta <= tolerance:
@@ -803,9 +842,14 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                         # Extract line
                         k_line = _extract_kalshi_line(mkt, is_total=False)
                         if k_line is not None:
-                            bid = float(pd.to_numeric(mkt.get("yes_bid_dollars"), errors="coerce") or 0.0)
-                            ask = float(pd.to_numeric(mkt.get("yes_ask_dollars"), errors="coerce") or 0.0)
-
+                            try:
+                                bid = float(pd.to_numeric(mkt.get("yes_bid_dollars"), errors="coerce") or 0.0)
+                            except (TypeError, ValueError):
+                                bid = 0.0
+                            try:
+                                ask = float(pd.to_numeric(mkt.get("yes_ask_dollars"), errors="coerce") or 0.0)
+                            except (TypeError, ValueError):
+                                ask = 0.0
                             if (bid + ask) > 2.0:
                                 kalshi_prob = (bid + ask) / 200.0
                             elif bid > 0 and ask > 0:
@@ -818,8 +862,9 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
                 if kalshi_lines:
                     # Nearest neighbor fallback without interpolation
-                    nearest = min(kalshi_lines, key=lambda x: abs(x[0] - target_line))
-                    delta = abs(nearest[0] - target_line)
+                    # Ensure type casting to float for accurate calculation
+                    nearest = min(kalshi_lines, key=lambda x: abs(float(x[0]) - float(target_line)))
+                    delta = abs(float(nearest[0]) - float(target_line))
 
                     tolerance = MAX_LINE_TOLERANCE.get(league, 1.5)
                     if delta <= tolerance:
@@ -847,8 +892,14 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             if "_interpolated_probability" in best_market:
                 kalshi_prob = best_market["_interpolated_probability"]
             else:
-                bid = float(pd.to_numeric(best_market.get("yes_bid_dollars"), errors="coerce") or 0.0)
-                ask = float(pd.to_numeric(best_market.get("yes_ask_dollars"), errors="coerce") or 0.0)
+                try:
+                    bid = float(pd.to_numeric(best_market.get("yes_bid_dollars"), errors="coerce") or 0.0)
+                except (TypeError, ValueError):
+                    bid = 0.0
+                try:
+                    ask = float(pd.to_numeric(best_market.get("yes_ask_dollars"), errors="coerce") or 0.0)
+                except (TypeError, ValueError):
+                    ask = 0.0
 
                 # REPLACE WITH ADAPTIVE LOGIC:
                 if (bid + ask) > 2.0:
