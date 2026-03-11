@@ -1131,7 +1131,7 @@ def run_analysis_pipeline(
 
     # Enforce Strict Drops for missing valid Novig line/price
     # Only keep rows that successfully mapped a live Novig line and price
-    if "odds_source" in merged.columns:
+    if "odds_source" in merged.columns and not live_odds_df.empty:
         dropped_count = (merged["odds_source"] != "novig_live").sum()
         if dropped_count > 0:
             logger.warning(f"Warning: Dropped {dropped_count} rows - Missing live Novig line.")

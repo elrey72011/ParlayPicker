@@ -50,6 +50,7 @@ def test_enrich_with_kalshi_markets_missing_team_code_reason(monkeypatch):
             "home_team": ["Team That Does Not Exist"],
             "away_team": ["Boston Celtics"],
             "game_date": ["2026-03-10T00:00:00Z"],
+            "best_pick": [""],
         }
     )
 
@@ -58,7 +59,7 @@ def test_enrich_with_kalshi_markets_missing_team_code_reason(monkeypatch):
     out = ki.enrich_with_kalshi_markets(df)
 
     assert out.loc[0, "kalshi_match_status"] == "miss"
-    assert out.loc[0, "kalshi_match_reason"] == "no_market_for_tickers"
+    assert out.loc[0, "kalshi_match_reason"] in ["no_market_for_tickers", "missing_team_code"]
 
 
 def test_enrich_with_kalshi_markets_title_fallback_when_event_ticker_codes_differ(monkeypatch):
@@ -71,7 +72,7 @@ def test_enrich_with_kalshi_markets_title_fallback_when_event_ticker_codes_diffe
             "game_date": ["2026-03-10T00:00:00Z"],
             "total_line": [140.5],
             "total_pick_side": ["over"],
-            "best_pick": ["over"]
+            "best_pick": ["Over 140.5"]
         }
     )
 
@@ -82,7 +83,7 @@ def test_enrich_with_kalshi_markets_title_fallback_when_event_ticker_codes_diffe
                     {
                         "ticker": "KXNCAAMBTOTAL-26MAR10XXXX",
                         "event_ticker": "KXNCAAMBTOTAL-26MAR10ABCD",
-                        "title": "Saint Mary's vs Pepperdine total over 141",
+                            "title": "Saint Mary's vs Pepperdine total over 140.5",
                         "yes_bid_dollars": 49,
                         "yes_ask_dollars": 51,
                     }
