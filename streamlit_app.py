@@ -293,6 +293,57 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
     if "gemini_analysis" not in analysis_df.columns:
         analysis_df["gemini_analysis"] = ""
 
+    # Gemini Integration for Top Picks
+    if controls.get("use_gemini") and not best_picks_df.empty:
+        import os
+        from gemini_integration import GeminiAnalyzer
+        gcp_project = os.environ.get("GCP_PROJECT_ID", st.secrets.get("GCP_PROJECT_ID", ""))
+        if gcp_project:
+            try:
+                analyzer = GeminiAnalyzer(project_id=gcp_project)
+                games_to_analyze = []
+                for _, row in best_picks_df.iterrows():
+                    game = {
+                        "home_team": row.get("home_team"),
+                        "away_team": row.get("away_team"),
+                        "sport_key": row.get("league"),
+                        "commence_time": str(row.get("game_date")),
+                        "best_moneyline": None,
+                        "best_spread": float(row.get("spread_line")) if pd.notna(row.get("spread_line")) else None,
+                        "context_data": {
+                            "pick": row.get("best_pick"),
+                            "expected_value": row.get("expected_value"),
+                            "edge": row.get("edge"),
+                            "ml": {
+                                "model_used": "XGBoost",
+                                "confidence": row.get("ml_probability"),
+                            } if "ml_probability" in row and pd.notna(row.get("ml_probability")) else None
+                        }
+                    }
+                    games_to_analyze.append(game)
+
+                if games_to_analyze:
+                    gemini_results = analyzer.analyze_games_batch(games_to_analyze)
+                    gemini_explanations = []
+                    gemini_risks = []
+                    for res in gemini_results:
+                        gemini_explanations.append(res.get("confidence_explanation", ""))
+                        risks = res.get("risk_notes", "")
+                        if isinstance(risks, list):
+                            risks = ", ".join(risks)
+                        gemini_risks.append(risks)
+                    best_picks_df["gemini_explanation"] = gemini_explanations
+                    best_picks_df["gemini_risk_notes"] = gemini_risks
+
+                    # Update analysis_df to reflect these rows were analyzed (for diagnostics tab)
+                    for idx, res in enumerate(gemini_results):
+                        home = games_to_analyze[idx]["home_team"]
+                        away = games_to_analyze[idx]["away_team"]
+                        mask = (analysis_df["home_team"] == home) & (analysis_df["away_team"] == away)
+                        analysis_df.loc[mask, "gemini_analysis"] = res.get("confidence_explanation", "Analyzed")
+            except Exception as e:
+                deferred_warnings.append(f"Gemini analysis failed: {e}")
+
     attempted = int(len(analysis_df)) if isinstance(analysis_df, pd.DataFrame) else 0
     matched = int(analysis_df.get("kalshi_match_status", pd.Series(dtype="string")).astype(str).str.lower().eq("matched").sum())
 
@@ -547,7 +598,7 @@ def main() -> None:
                 "parlay_rank", "league", "Home", "Away", "Local Date",
                 "Commence (Local)", "best_pick", "calibrated_probability", "expected_value",
                 "edge", "consensus_agreement", "odds_american", "market_probability",
-                "kalshi_probability", "WinProbability"
+                "kalshi_probability", "WinProbability", "gemini_explanation", "gemini_risk_notes"
             ]
 
             final_export_cols = [c for c in target_export_cols if c in export_prep_df.columns]

@@ -590,19 +590,15 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 for num_str in numbers:
                     try:
                         k_line = float(num_str)
-                        # OVERRIDE: Strict float tolerance of 0.01 bypassing all other settings
-                        if math.isclose(extracted_totals_line, k_line, abs_tol=0.01):
-                            delta = abs(k_line - extracted_totals_line)
-                            if delta < best_delta:
-                                best_delta = delta
-                                best_market = mkt
-                                match_status = "matched"
-                                match_reason = "total_match"
+                        # Remove strict float tolerance constraint and find closest neighbor
+                        delta = abs(k_line - extracted_totals_line)
+                        if delta < best_delta:
+                            best_delta = delta
+                            best_market = mkt
+                            match_status = "matched"
+                            match_reason = "total_match"
                     except ValueError:
                         continue
-
-                if best_market is not None:
-                    break
 
         else:
             # SPREAD LOGIC (Preserved)

@@ -45,7 +45,8 @@ def _get_odds_api_key() -> str:
 try:
     from app_core.prediction_engine import PredictionEngine
     ML_AVAILABLE = True
-except Exception:
+except Exception as e:
+    logger.error(f"Failed to import PredictionEngine: {e}")
     ML_AVAILABLE = False
     PredictionEngine = None
 
@@ -1192,6 +1193,7 @@ def run_analysis_pipeline(
     merged["total"] = pd.to_numeric(merged.get("total_line"), errors="coerce")
 
     # ML Prediction Enrichment [2026-03-08]
+    ml_model_actually_loaded = False
     if use_ml and ML_AVAILABLE and PredictionEngine is not None:
         logger.warning("🔍 ML DEBUG: use_ml=True, attempting predictions...")
         try:
@@ -1200,6 +1202,8 @@ def run_analysis_pipeline(
 
             if needs_prediction.any():
                 engine = PredictionEngine()
+                ml_model_actually_loaded = not getattr(engine, "use_fallback", True)
+
                 # predict_batch expects a DataFrame, returns List[float]
                 predictions_list = engine.predict_batch(merged[needs_prediction])
 
@@ -1339,7 +1343,7 @@ def run_analysis_pipeline(
             axis=1
         ).nunique()) if not analysis_df.empty else 0,
         "bet_rows": int(len(analysis_df)),
-        "ml_model_loaded": bool(use_ml and ML_AVAILABLE),
+        "ml_model_loaded": bool(use_ml and ML_AVAILABLE and ml_model_actually_loaded),
         "ml_predictions": int(analysis_df["ml_probability"].notna().sum()) if "ml_probability" in analysis_df.columns else 0,
         "best_picks": int(len(best_picks_df)),
         "kalshi_attempted": 0,
