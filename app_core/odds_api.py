@@ -13,7 +13,7 @@ class OddsAPIAuthError(Exception):
 class TheOddsAPIClient:
     BASE_URL = "https://api.the-odds-api.com/v4"
 
-    def __init__(self, api_key: str, regions="us_ex", markets="h2h,spreads,totals", bookmakers="novig"):
+    def __init__(self, api_key: str, regions="us_ex,us", markets="h2h,spreads,totals", bookmakers="novig,draftkings,fanduel"):
         if not api_key:
             raise ValueError("TheOddsAPI API key is required")
 
@@ -81,7 +81,7 @@ class TheOddsAPIClient:
 
             break
 
-        # Filter out games that don't have any bookmakers (i.e. Novig has no lines)
+        # Filter out games that don't have any bookmakers
         filtered_data = [game for game in all_data if game.get("bookmakers")]
         return filtered_data
 

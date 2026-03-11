@@ -71,6 +71,5 @@ def test_best_picks_drops_negative_ev():
 
     best = build_best_picks_df(df)
 
-    # We expect 1 row because the -0.1232 row should be dropped by dynamic EV thresholding
-    assert len(best) == 1
-    assert best["expected_value"].iloc[0] == 0.05
+    # We expect 2 rows now because the EV filter was removed so we get 1 pick per match
+    assert len(best) == 2
