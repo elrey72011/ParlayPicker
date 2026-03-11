@@ -709,9 +709,6 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                         except ValueError:
                             continue
 
-                    if best_market is not None:
-                        break
-
         if best_market is None:
             # We found no markets or candidates at all
             out.at[idx, "kalshi_match_status"] = "miss"
