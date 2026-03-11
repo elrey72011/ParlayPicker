@@ -287,6 +287,22 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
 
     analysis_df = _recompute_consensus_from_kalshi(analysis_df)
 
+    # -----------------------------
+    # Update Kalshi Diagnostics
+    # -----------------------------
+    if "kalshi_match_status" in analysis_df.columns:
+        matched = analysis_df[analysis_df["kalshi_match_status"] == "matched"]
+        diagnostics["kalshi_matches"] = len(matched)
+        diagnostics["kalshi_match_rate"] = len(matched) / max(len(analysis_df), 1)
+        if "kalshi_line_diff" in analysis_df.columns and not matched.empty:
+            avg_diff = matched["kalshi_line_diff"].mean()
+            diagnostics["kalshi_avg_line_diff"] = avg_diff
+            logger.info(f"Kalshi matched {len(matched)} rows with an average line delta of {avg_diff:.4f}")
+        else:
+            diagnostics["kalshi_avg_line_diff"] = 0.0
+    # -----------------------------
+
+
     from core.streamlit_pipeline import build_best_picks_df
     best_picks_df = build_best_picks_df(analysis_df)
 
@@ -559,17 +575,21 @@ def main() -> None:
 
     with tab3:
         st.subheader("Best Picks")
+        with st.expander("Pipeline Debug", expanded=False):
+            st.json({
+                "kalshi_matches": diagnostics.get("kalshi_matches", 0),
+                "kalshi_match_rate": f"{diagnostics.get('kalshi_match_rate', 0.0):.1%}",
+                "kalshi_avg_line_diff": round(diagnostics.get("kalshi_avg_line_diff", 0.0), 3),
+                "market_type_counts": diagnostics.get("market_type_counts", {}),
+                "allowed_market_type_rows": diagnostics.get("allowed_market_type_rows", 0),
+                "positive_ev_rows": diagnostics.get("positive_ev_rows", 0),
+                "best_pick_nonempty_rows": diagnostics.get("best_pick_nonempty_rows", 0),
+                "bet_rows": diagnostics.get("bet_rows", 0),
+            })
+
         if best_picks_df is None or best_picks_df.empty:
             st.warning(f"⚠️ No picks meet {MIN_EDGE_THRESHOLD*100:.1f}% edge threshold")
             st.dataframe(pd.DataFrame(columns=best_picks_df.columns if best_picks_df is not None and not best_picks_df.empty else ["league", "pick", "edge"]))
-            with st.expander("Best Picks Debug Diagnostics", expanded=True):
-                st.json({
-                    "market_type_counts": diagnostics.get("market_type_counts", {}),
-                    "allowed_market_type_rows": diagnostics.get("allowed_market_type_rows", 0),
-                    "positive_ev_rows": diagnostics.get("positive_ev_rows", 0),
-                    "best_pick_nonempty_rows": diagnostics.get("best_pick_nonempty_rows", 0),
-                    "bet_rows": diagnostics.get("bet_rows", 0),
-                })
         else:
             st.success(f"✅ {len(best_picks_df)} picks found")
             display_df = best_picks_df.copy()
