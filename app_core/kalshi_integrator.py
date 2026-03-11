@@ -260,6 +260,8 @@ def _guess_code(team: str) -> str | None:
     return "".join(w[0] for w in words)[:4].upper()
 
 
+def _fetch_event_markets_legacy(league: str, game_date: Any, home_team: str, away_team: str) -> dict[str, Any] | None:
+    import os
     kalshi_api_key = os.environ.get("KALSHI_API_KEY", "")
     if not kalshi_api_key:
         return None
@@ -288,7 +290,10 @@ def _guess_code(team: str) -> str | None:
                 ticker = str(market.get("ticker") or "")
                 if date_str not in ticker:
                     continue
-                if home_code and away_code and home_code in ticker and away_code in ticker:
+                # Bidirectional permutation check
+                has_home = home_code and home_code in ticker
+                has_away = away_code and away_code in ticker
+                if has_home and has_away:
                     return market
                 title = str(market.get("title") or "").lower()
                 if str(home_team or "").lower() in title or str(away_team or "").lower() in title:
@@ -394,8 +399,20 @@ def _extract_kalshi_line(mkt: dict[str, Any], is_total: bool) -> float | None:
     m_subtitle = str(mkt.get("subtitle") or "").lower()
     combined_text = f"{m_title} {m_subtitle}"
 
-    # 1. Primary: Try extracting from subtitle and title
-    numbers = re.findall(r'[-+]?\s*(\d+(?:\.\d+)?)', combined_text)
+    # 1. Primary: Try extracting specifically from subtitle first using regex, as instructed.
+    if m_subtitle:
+        numbers = re.findall(r"[-+]?\d*\.\d+|\d+", m_subtitle)
+        for num_str in numbers:
+            try:
+                val = abs(float(num_str))
+                if not is_total and "wins by" in m_subtitle:
+                    return val + 0.5
+                return val
+            except ValueError:
+                continue
+
+    # Fallback to combined text
+    numbers = re.findall(r"[-+]?\d*\.\d+|\d+", combined_text)
     for num_str in numbers:
         try:
             val = abs(float(num_str))
@@ -424,46 +441,42 @@ def _extract_kalshi_line(mkt: dict[str, Any], is_total: bool) -> float | None:
                     pass
     return None
 
+def _safe_float(val: Any) -> float:
+    try:
+        f_val = pd.to_numeric(val, errors="coerce")
+        return 0.0 if pd.isna(f_val) else float(f_val)
+    except (TypeError, ValueError):
+        return 0.0
+
 def _select_probability(market: dict[str, Any]) -> float | None:
     # Explicitly use float casting for fixed-point _dollars migration
-    try:
-        bid = float(pd.to_numeric(market.get("yes_bid_dollars"), errors="coerce") or pd.NA)
-    except (TypeError, ValueError):
-        bid = pd.NA
-    try:
-        ask = float(pd.to_numeric(market.get("yes_ask_dollars"), errors="coerce") or pd.NA)
-    except (TypeError, ValueError):
-        ask = pd.NA
+    bid = _safe_float(market.get("yes_bid_dollars"))
+    ask = _safe_float(market.get("yes_ask_dollars"))
 
-    if pd.notna(bid) and pd.notna(ask):
+    if bid > 0 or ask > 0:
         if (bid + ask) > 2.0:
             return float((bid + ask) / 200.0)
         else:
             return float((bid + ask) / 2.0)
 
-    try:
-        last = float(pd.to_numeric(market.get("last_price_dollars"), errors="coerce") or pd.NA)
-    except (TypeError, ValueError):
-        last = pd.NA
+    last = _safe_float(market.get("last_price_dollars"))
 
-    if pd.notna(last):
+    if last > 0:
         if last > 1.0:
             return float(last / 100.0)
         return float(last)
 
     for key in ("yes_bid_dollars", "yes_ask_dollars"):
-        try:
-            val = float(pd.to_numeric(market.get(key), errors="coerce") or pd.NA)
-        except (TypeError, ValueError):
-            continue
+        val = _safe_float(market.get(key))
 
-        if pd.notna(val):
+        if val > 0:
             if val > 1.0:
                 return float(val / 100.0)
             return float(val)
-    return None
+    return 0.0
 
 
+def generate_event_tickers(series: str, away_code: str, home_code: str, date_code: str, family: str) -> tuple[list[str], str, str, str, str, str]:
     if not date_code:
         return [], series, away_code, home_code, date_code, family
     if not away_code or not home_code:
@@ -702,14 +715,8 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 # Extract Kalshi strike prices
                 k_line = _extract_kalshi_line(mkt, is_total=True)
                 if k_line is not None:
-                    try:
-                        bid = float(pd.to_numeric(mkt.get("yes_bid_dollars"), errors="coerce") or 0.0)
-                    except (TypeError, ValueError):
-                        bid = 0.0
-                    try:
-                        ask = float(pd.to_numeric(mkt.get("yes_ask_dollars"), errors="coerce") or 0.0)
-                    except (TypeError, ValueError):
-                        ask = 0.0
+                    bid = _safe_float(mkt.get("yes_bid_dollars"))
+                    ask = _safe_float(mkt.get("yes_ask_dollars"))
 
                     if (bid + ask) > 2.0:
                         kalshi_prob = (bid + ask) / 200.0
@@ -756,8 +763,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 out.at[idx, "kalshi_match_reason"] = "missing_team_code"
                 continue
 
-            base = f"{series}-{date_code}"
-            candidates = [f"{base}{away_code}{home_code}", f"{base}{home_code}{away_code}"]
+            candidates, _, _, _, _, _ = generate_event_tickers(series, away_code, home_code, date_code, family)
 
             # 2. Extract specific game markets from the cache
             markets = [
@@ -842,14 +848,8 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                         # Extract line
                         k_line = _extract_kalshi_line(mkt, is_total=False)
                         if k_line is not None:
-                            try:
-                                bid = float(pd.to_numeric(mkt.get("yes_bid_dollars"), errors="coerce") or 0.0)
-                            except (TypeError, ValueError):
-                                bid = 0.0
-                            try:
-                                ask = float(pd.to_numeric(mkt.get("yes_ask_dollars"), errors="coerce") or 0.0)
-                            except (TypeError, ValueError):
-                                ask = 0.0
+                            bid = _safe_float(mkt.get("yes_bid_dollars"))
+                            ask = _safe_float(mkt.get("yes_ask_dollars"))
                             if (bid + ask) > 2.0:
                                 kalshi_prob = (bid + ask) / 200.0
                             elif bid > 0 and ask > 0:
@@ -892,14 +892,8 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             if "_interpolated_probability" in best_market:
                 kalshi_prob = best_market["_interpolated_probability"]
             else:
-                try:
-                    bid = float(pd.to_numeric(best_market.get("yes_bid_dollars"), errors="coerce") or 0.0)
-                except (TypeError, ValueError):
-                    bid = 0.0
-                try:
-                    ask = float(pd.to_numeric(best_market.get("yes_ask_dollars"), errors="coerce") or 0.0)
-                except (TypeError, ValueError):
-                    ask = 0.0
+                bid = _safe_float(best_market.get("yes_bid_dollars"))
+                ask = _safe_float(best_market.get("yes_ask_dollars"))
 
                 # REPLACE WITH ADAPTIVE LOGIC:
                 if (bid + ask) > 2.0:
@@ -911,9 +905,9 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 else:
                     kalshi_prob = _select_probability(best_market)
 
-            if kalshi_prob is None:
+            if kalshi_prob is None or kalshi_prob == 0.0:
                 out.at[idx, "kalshi_match_status"] = "miss"
-                out.at[idx, "kalshi_match_reason"] = "null_probability_extracted"
+                out.at[idx, "kalshi_match_reason"] = "zero_probability"
                 continue
 
             # NEW: Invert probability if we are betting the underdog or the under
@@ -926,7 +920,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                     kalshi_prob = 1.0 - kalshi_prob
 
             # Sanity check: probabilities must be between 0 and 1
-            if pd.isna(kalshi_prob) or kalshi_prob < 0.0 or kalshi_prob > 1.0:
+            if pd.isna(kalshi_prob) or kalshi_prob <= 0.0 or kalshi_prob > 1.0:
                 logger.warning(f"⚠️ Invalid Kalshi probability {kalshi_prob} for {row.get('game_id', 'unknown')}, skipping row")
                 out.at[idx, "kalshi_match_status"] = "error"
                 out.at[idx, "kalshi_match_reason"] = f"invalid_probability_{kalshi_prob}"
