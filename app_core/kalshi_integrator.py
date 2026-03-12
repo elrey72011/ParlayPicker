@@ -12,8 +12,6 @@ from typing import Any, Optional, Tuple
 import pandas as pd
 import requests
 
-from core.team_mapper import aggressive_sanitize_team_name
-
 try:
     import rapidfuzz
     from rapidfuzz import fuzz
@@ -790,23 +788,23 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 nearest = min(kalshi_lines, key=lambda x: abs(float(x[0]) - target_line_abs))
                 delta = abs(float(nearest[0]) - target_line_abs)
 
-                    tolerance = MAX_LINE_TOLERANCE.get(league, 3.0)
-                    if delta <= 3.0:
-                        if delta == 0:
-                            best_market = nearest[2]
-                            match_status = "matched"
-                            match_reason = "total_match_exact"
-                            out.at[idx, "kalshi_line_diff"] = 0.0
-                        else:
-                            best_market = nearest[2]
-                            match_status = "matched"
-                            match_reason = "total_match_nearest"
-                            out.at[idx, "kalshi_line_diff"] = delta
+                tolerance = MAX_LINE_TOLERANCE.get(league, 3.0)
+                if delta <= 3.0:
+                    if delta == 0:
+                        best_market = nearest[2]
+                        match_status = "matched"
+                        match_reason = "total_match_exact"
+                        out.at[idx, "kalshi_line_diff"] = 0.0
                     else:
-                        out.at[idx, "kalshi_match_status"] = "miss"
-                        out.at[idx, "kalshi_match_reason"] = "alt_line_mismatch"
-                        out.at[idx, "kalshi_match_quality"] = "line_mismatched"
-                        continue
+                        best_market = nearest[2]
+                        match_status = "matched"
+                        match_reason = "total_match_nearest"
+                        out.at[idx, "kalshi_line_diff"] = delta
+                else:
+                    out.at[idx, "kalshi_match_status"] = "miss"
+                    out.at[idx, "kalshi_match_reason"] = "alt_line_mismatch"
+                    out.at[idx, "kalshi_match_quality"] = "line_mismatched"
+                    continue
 
         else:
             # SPREAD LOGIC
