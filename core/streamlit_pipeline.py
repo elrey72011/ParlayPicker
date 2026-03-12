@@ -828,7 +828,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
 
     best = (
         pool.sort_values(["has_signal_probability", "expected_value", "edge"], ascending=[False, False, False])
-        .groupby("matchup_key", dropna=False)
+        .groupby("matchup_key")
         .first()
         .reset_index(drop=True)
     )
