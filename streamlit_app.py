@@ -161,12 +161,12 @@ def _recompute_consensus_from_kalshi(df: pd.DataFrame) -> pd.DataFrame:
     status = _safe_str_series(out, "kalshi_match_status").str.lower()
 
     out["consensus_agreement"] = "⚪ No Kalshi"
-    matched = status.eq("matched") & kalshi_prob.notna()
+    valid_kalshi = kalshi_prob.notna() & (kalshi_prob > 0.0)
     gap = blended - kalshi_prob
 
-    out.loc[matched, "consensus_agreement"] = "⚖️ Neutral"
-    out.loc[matched & gap.ge(0.03), "consensus_agreement"] = "✅ Agrees"
-    out.loc[matched & gap.le(-0.03), "consensus_agreement"] = "❌ Disagrees"
+    out.loc[valid_kalshi, "consensus_agreement"] = "⚖️ Neutral"
+    out.loc[valid_kalshi & gap.ge(0.03), "consensus_agreement"] = "✅ Agrees"
+    out.loc[valid_kalshi & gap.le(-0.03), "consensus_agreement"] = "❌ Disagrees"
 
     # Debug log for probability blend verification (first 5 picks)
     if not out.empty and "market_probability" in out.columns:

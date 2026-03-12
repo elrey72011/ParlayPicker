@@ -316,8 +316,14 @@ def normalize_team_name(name: str) -> str:
     if name is None or not isinstance(name, str):
         return str(name) if name is not None else ""
 
-    # First apply legacy exact mappings
-    name = TEAM_MAP.get(name.strip(), name.strip())
+    stripped_name = name.strip()
+    name = stripped_name
+
+    # First apply legacy exact mappings case-insensitively
+    for k, v in TEAM_MAP.items():
+        if k.lower() == stripped_name.lower():
+            name = v
+            break
 
     # Convert to lowercase
     normalized = name.lower()
