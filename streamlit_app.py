@@ -217,15 +217,21 @@ def _merge_kalshi_into_analysis(analysis_df: pd.DataFrame, best_picks_df: pd.Dat
         left["game_date"] = pd.to_datetime(left["game_date"], errors="coerce", utc=True)
         right["game_date"] = pd.to_datetime(right["game_date"], errors="coerce", utc=True)
 
-    # Ensure case-insensitive merging
-    left['home_team'] = left['home_team'].str.lower()
-    left['away_team'] = left['away_team'].str.lower()
+    # Create temporary sanitized columns for a bulletproof merge
+    left['_merge_home'] = left['home_team'].astype(str).str.lower().str.replace(r'[^a-z0-9]', '', regex=True)
+    left['_merge_away'] = left['away_team'].astype(str).str.lower().str.replace(r'[^a-z0-9]', '', regex=True)
 
     if not right.empty:
-        right['home_team'] = right['home_team'].str.lower()
-        right['away_team'] = right['away_team'].str.lower()
+        right['_merge_home'] = right['home_team'].astype(str).str.lower().str.replace(r'[^a-z0-9]', '', regex=True)
+        right['_merge_away'] = right['away_team'].astype(str).str.lower().str.replace(r'[^a-z0-9]', '', regex=True)
 
-    merged = left.merge(right, on=merge_keys, how="left", suffixes=("", "_best"))
+    # Use the temporary sanitized keys instead of the original team names
+    sanitized_merge_keys = [k for k in merge_keys if k not in ["home_team", "away_team"]] + ["_merge_home", "_merge_away"]
+
+    merged = left.merge(right, on=sanitized_merge_keys, how="left", suffixes=("", "_best"))
+
+    # Clean up temporary columns
+    merged = merged.drop(columns=['_merge_home', '_merge_away'])
     for col in available_cols:
         best_col = f"{col}_best"
         if best_col in merged.columns:
