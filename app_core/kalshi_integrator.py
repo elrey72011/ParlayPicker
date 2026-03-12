@@ -399,7 +399,15 @@ def _extract_kalshi_line(mkt: dict[str, Any], is_total: bool) -> float | None:
     m_subtitle = str(mkt.get("subtitle") or "").lower()
     combined_text = f"{m_title} {m_subtitle}"
 
-    # 1. Primary: Try extracting specifically from subtitle first using regex, as instructed.
+    # 1. Primary: Strict Regex Match based on betting terminology
+    match = re.search(r'(?:Over|Under|by over|by at least)\s*(\d+(?:\.\d+)?)', combined_text, re.IGNORECASE)
+    if match:
+        val = abs(float(match.group(1)))
+        if not is_total and "wins by" in combined_text:
+            return val + 0.5
+        return val
+
+    # 2. Secondary Fallback: Original extraction purely from subtitle first, then combined text
     if m_subtitle:
         numbers = re.findall(r"[-+]?\d*\.\d+|\d+", m_subtitle)
         for num_str in numbers:
@@ -423,7 +431,7 @@ def _extract_kalshi_line(mkt: dict[str, Any], is_total: bool) -> float | None:
         except ValueError:
             continue
 
-    # 2. Secondary: Fallback to ticker string
+    # 3. Tertiary: Fallback to ticker string
     ticker = str(mkt.get("ticker") or "").strip()
     if ticker:
         parts = ticker.split("-")
@@ -654,8 +662,24 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 combined = f"{str(m.get('title') or '')} {str(m.get('subtitle') or '')} {str(m.get('ticker') or '')} {str(m.get('event_ticker') or '')}".lower()
                 combined_norm = _normalize_team_token(combined)
 
-                # Full team name check (robust substring)
-                return (team1 and team1 in combined_norm) or (team2 and team2 in combined_norm)
+                t1_words = team1.split() if team1 else []
+                t2_words = team2.split() if team2 else []
+
+                if not t1_words or not t2_words:
+                    return False
+
+                t1_first = t1_words[0]
+                t2_first = t2_words[0]
+
+                if t1_first == t2_first:
+                    # Fallback to checking full string or unique words
+                    t1_match = team1 in combined_norm or any(w in combined_norm for w in t1_words[1:])
+                    t2_match = team2 in combined_norm or any(w in combined_norm for w in t2_words[1:])
+                else:
+                    t1_match = t1_first in combined_norm
+                    t2_match = t2_first in combined_norm
+
+                return t1_match or t2_match
 
             totals_markets = [
                 m for m in series_markets
@@ -692,8 +716,9 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             if kalshi_lines:
                 # Nearest neighbor fallback without interpolation
                 # Ensure type casting to float for accurate calculation
-                nearest = min(kalshi_lines, key=lambda x: abs(float(x[0]) - float(extracted_totals_line)))
-                delta = abs(float(nearest[0]) - float(extracted_totals_line))
+                target_line_abs = abs(float(extracted_totals_line))
+                nearest = min(kalshi_lines, key=lambda x: abs(float(x[0]) - target_line_abs))
+                delta = abs(float(nearest[0]) - target_line_abs)
 
                 tolerance = MAX_LINE_TOLERANCE.get(league, 1.5)
                 if delta <= tolerance:
@@ -723,11 +748,23 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 combined = f"{str(m.get('title') or '')} {str(m.get('subtitle') or '')}".lower()
                 combined_norm = _normalize_team_token(combined)
 
-                # Check if EITHER normalized team name is present in the normalized title/subtitle.
-                # Since Spreads typically only list the winning/covering team in the title
-                # (e.g., "Boston Celtics wins by over 4"), we just need to ensure at least one team matches.
-                # We completely abandon ticker generation and abbreviation logic per the directive.
-                return (team1 and team1 in combined_norm) or (team2 and team2 in combined_norm)
+                t1_words = team1.split() if team1 else []
+                t2_words = team2.split() if team2 else []
+
+                if not t1_words or not t2_words:
+                    return False
+
+                t1_first = t1_words[0]
+                t2_first = t2_words[0]
+
+                if t1_first == t2_first:
+                    t1_match = team1 in combined_norm or any(w in combined_norm for w in t1_words[1:])
+                    t2_match = team2 in combined_norm or any(w in combined_norm for w in t2_words[1:])
+                else:
+                    t1_match = t1_first in combined_norm
+                    t2_match = t2_first in combined_norm
+
+                return t1_match or t2_match
 
             # Extract specific game markets from the cache using robust substring matching
             markets = [
@@ -820,8 +857,9 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 if kalshi_lines:
                     # Nearest neighbor fallback without interpolation
                     # Ensure type casting to float for accurate calculation
-                    nearest = min(kalshi_lines, key=lambda x: abs(float(x[0]) - float(target_line)))
-                    delta = abs(float(nearest[0]) - float(target_line))
+                    target_line_abs = abs(float(target_line))
+                    nearest = min(kalshi_lines, key=lambda x: abs(float(x[0]) - target_line_abs))
+                    delta = abs(float(nearest[0]) - target_line_abs)
 
                     tolerance = MAX_LINE_TOLERANCE.get(league, 1.5)
                     if delta <= tolerance:
