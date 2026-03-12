@@ -1378,9 +1378,9 @@ def run_analysis_pipeline(
     diagnostics = {
         "total_rows": int(len(analysis_df)),
         "rows_with_game_date": int(pd.to_datetime(analysis_df.get("game_date"), errors="coerce", utc=True).notna().sum()) if not analysis_df.empty else 0,
-        # Safely sort team names alphabetically and append the market type to count total betting markets
+        # Safely sort team names alphabetically to count unique actual physical games (matchups) across all markets
         "total_games": int(analysis_df.apply(
-            lambda r: f"{r.get('league')}|{min(str(r.get('home_team')), str(r.get('away_team')))}|{max(str(r.get('home_team')), str(r.get('away_team')))}|{'Total' if 'over' in str(r.get('best_pick')).lower() or 'under' in str(r.get('best_pick')).lower() else 'Spread'}",
+            lambda r: f"{r.get('league')}|{min(str(r.get('home_team')), str(r.get('away_team')))}|{max(str(r.get('home_team')), str(r.get('away_team')))}",
             axis=1
         ).nunique()) if not analysis_df.empty else 0,
         "bet_rows": int(len(analysis_df)),
@@ -1391,8 +1391,8 @@ def run_analysis_pipeline(
         "kalshi_matches": 0,
         "kalshi_match_rate": 0.0,
         "match_rate": 0.0,
-        "theover_totals_games": int(analysis_df[_string_series(analysis_df, "market_type").str.startswith("total")]["game_key"].nunique()) if not analysis_df.empty else 0,
-        "theover_spreads_games": int(analysis_df[_string_series(analysis_df, "market_type").str.startswith("spread")]["game_key"].nunique()) if not analysis_df.empty else 0,
+        "theover_totals_games": int(analysis_df[_string_series(analysis_df, "market_type").str.startswith("total")].apply(lambda r: f"{r.get('league')}|{min(str(r.get('home_team')), str(r.get('away_team')))}|{max(str(r.get('home_team')), str(r.get('away_team')))}", axis=1).nunique()) if not analysis_df.empty else 0,
+        "theover_spreads_games": int(analysis_df[_string_series(analysis_df, "market_type").str.startswith("spread")].apply(lambda r: f"{r.get('league')}|{min(str(r.get('home_team')), str(r.get('away_team')))}|{max(str(r.get('home_team')), str(r.get('away_team')))}", axis=1).nunique()) if not analysis_df.empty else 0,
         "date_fill_total_rows": int(date_stats["date_fill_total_rows"]),
         "date_fill_success_rows": int(date_stats["date_fill_success_rows"]),
         "date_fill_success_rate": float(date_stats["date_fill_success_rate"]),
