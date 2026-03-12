@@ -574,7 +574,7 @@ def _fetch_series_cache(series_set: set[str], date_codes: set[str] | None = None
 
 
 
-def _is_within_24h(item: dict[str, Any], game_date_obj: pd.Timestamp) -> bool:
+def _is_within_48h(item: dict[str, Any], game_date_obj: pd.Timestamp) -> bool:
     if pd.isna(game_date_obj):
         return True
 
@@ -590,7 +590,7 @@ def _is_within_24h(item: dict[str, Any], game_date_obj: pd.Timestamp) -> bool:
         else:
             game_date_obj = game_date_obj.tz_convert('UTC')
 
-        return abs(kalshi_dt - game_date_obj) <= pd.Timedelta(hours=24)
+        return abs(kalshi_dt - game_date_obj) <= pd.Timedelta(hours=48)
     except Exception as e:
         logger.warning(f"Timezone matching error: {e}")
         return True
@@ -652,32 +652,29 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         home_team_name = str(row.get("home_team") or "")
         away_team_name = str(row.get("away_team") or "")
 
+        # Apply NCAAB string normalization for Kalshi collegiate events
+        home_team_name_norm = home_team_name.replace("State", "St.")
+        away_team_name_norm = away_team_name.replace("State", "St.")
+
         # Step 3 & 4: Fuzzy Match Event Title
-        concatenated_teams = f"{away_team_name} {home_team_name}"
+        concatenated_teams = f"{away_team_name_norm} {home_team_name_norm}"
 
         best_event_match = None
         best_event_score = 0.0
 
         for event in series_events:
             # Date Verification
-            if not _is_within_24h(event, game_date):
+            if not _is_within_48h(event, game_date):
                 continue
 
             e_title = str(event.get("title") or "")
             e_subtitle = str(event.get("sub_title") or "")
             combined_event_text = f"{e_title} {e_subtitle}"
 
-            # Use partial matching to better handle short vs long team names (e.g. "Los Angeles L" vs "Los Angeles Lakers")
-            score_sort = fuzz.token_sort_ratio(concatenated_teams, combined_event_text)
-            score_set = fuzz.token_set_ratio(concatenated_teams, combined_event_text)
-            try:
-                score_partial = fuzz.partial_ratio(concatenated_teams, combined_event_text)
-            except AttributeError:
-                score_partial = 0
+            # Use strictly token_set_ratio to isolate intersecting words and better handle string length differences
+            score = fuzz.token_set_ratio(concatenated_teams, combined_event_text)
 
-            score = max(score_sort, score_set, score_partial)
-
-            if score >= 80 and score > best_event_score:
+            if score >= 65 and score > best_event_score:
                 best_event_score = score
                 best_event_match = event
 
