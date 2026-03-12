@@ -30,6 +30,17 @@ def test_enrich_with_kalshi_markets_sets_match_fields(monkeypatch):
             return self._json_data
 
     def fake_make_request(url, **kwargs):
+        if url.endswith("/events") and "series_ticker" in kwargs.get("params", {}):
+            return FakeResponse({
+                "events": [
+                    {
+                        "event_ticker": "KXNBASPREAD-26MAR10LALBOS",
+                        "title": "Boston Celtics at Los Angeles Lakers: Spread",
+                        "sub_title": "LAL at BOS (Mar 10)",
+                        "close_time": "2026-03-10T05:00:00Z",
+                    }
+                ]
+            })
         if "KXNBASPREAD-26MAR10LALBOS" in url:
             return FakeResponse({
                 "event": {
@@ -45,6 +56,10 @@ def test_enrich_with_kalshi_markets_sets_match_fields(monkeypatch):
                 }
             })
         return FakeResponse({"error": "not found"}, 404)
+
+    # Clear cache before running test
+    if hasattr(ki.enrich_with_kalshi_markets, "series_cache"):
+        ki.enrich_with_kalshi_markets.series_cache.clear()
 
     monkeypatch.setattr(ki, "_make_kalshi_request", fake_make_request)
     out = ki.enrich_with_kalshi_markets(df)
@@ -78,12 +93,16 @@ def test_enrich_with_kalshi_markets_missing_team_code_reason(monkeypatch):
         err.response = FakeResponse404({})
         raise err
 
+    # Clear cache before running test
+    if hasattr(ki.enrich_with_kalshi_markets, "series_cache"):
+        ki.enrich_with_kalshi_markets.series_cache.clear()
+
     monkeypatch.setattr(ki, "_make_kalshi_request", fake_make_request)
     monkeypatch.setattr(ki, "team_code_map", lambda league, team: "" if "does not exist" in team.lower() else "BOS")
     out = ki.enrich_with_kalshi_markets(df)
 
     assert out.loc[0, "kalshi_match_status"] == "miss"
-    assert out.loc[0, "kalshi_match_reason"] in ["event_not_found", "no_market_for_tickers", "missing_team_code"]
+    assert out.loc[0, "kalshi_match_reason"] in ["event_not_found", "no_market_for_tickers", "missing_team_code", "no_fuzzy_event_match"]
 
 
 def test_enrich_with_kalshi_markets_title_fallback_when_event_ticker_codes_differ(monkeypatch):
@@ -107,6 +126,17 @@ def test_enrich_with_kalshi_markets_title_fallback_when_event_ticker_codes_diffe
         def json(self): return self._json_data
 
     def fake_make_request(url, **kwargs):
+        if url.endswith("/events") and "series_ticker" in kwargs.get("params", {}):
+            return FakeResponse({
+                "events": [
+                    {
+                        "event_ticker": "KXNCAAMBTOTAL-26MAR10ABCD",
+                        "title": "Pepperdine at Saint Mary's: Total",
+                        "sub_title": "PEP at SMC (Mar 10)",
+                        "close_time": "2026-03-10T05:00:00Z",
+                    }
+                ]
+            })
         if "KXNCAAMBTOTAL" in url:
             return FakeResponse({
                 "event": {
@@ -115,13 +145,18 @@ def test_enrich_with_kalshi_markets_title_fallback_when_event_ticker_codes_diffe
                             "ticker": "KXNCAAMBTOTAL-26MAR10XXXX",
                             "event_ticker": "KXNCAAMBTOTAL-26MAR10ABCD",
                             "title": "Saint Mary's vs Pepperdine total over 140.5",
-                                "yes_bid_dollars": 0.49,
-                                "yes_ask_dollars": 0.51,
+                            "subtitle": "total",
+                            "yes_bid_dollars": 0.49,
+                            "yes_ask_dollars": 0.51,
                         }
                     ]
                 }
             })
         return FakeResponse({}, 404)
+
+    # Clear cache before running test
+    if hasattr(ki.enrich_with_kalshi_markets, "series_cache"):
+        ki.enrich_with_kalshi_markets.series_cache.clear()
 
     monkeypatch.setattr(ki, "_make_kalshi_request", fake_make_request)
     out = ki.enrich_with_kalshi_markets(df)
