@@ -19,7 +19,7 @@ from core.bankroll_simulator import simulate_bankroll
 from core.kelly_optimizer import add_kelly_bet_sizing
 from core.probability_engine import american_to_prob
 from core.schema.base_schema import ensure_base_schema
-from core.team_mapper import normalize_team_name
+from core.team_mapper import normalize_team_name, aggressive_sanitize_team_name
 
 warnings.filterwarnings("ignore", category=FutureWarning, module="pandas")
 
@@ -1317,31 +1317,22 @@ def run_analysis_pipeline(
     merged["edge"] = edge
     merged["best_pick"] = merged.apply(_format_best_pick, axis=1)
 
-    # FIX: Generate game_id for Kalshi matching
+    # FIX: Generate game_id for Kalshi matching utilizing Tier 2 Aggressive Sanitization
     if 'game_id' not in merged.columns:
-        logger.warning("🔧 FIX: Generating game_id for Kalshi matching")
-        def get_team_short(name):
-            """Extract first 4 chars from FIRST SIGNIFICANT WORD (city OR mascot)"""
-            normalized = str(name).upper().strip()
-            words = normalized.split()
-
-            if len(words) == 1:
-                return words[0][:4]
-
-            # Priority: mascot (if short/reliable) OR city (first word)
-            mascot = words[-1]  # "CLIPPERS", "STATES", "WASHINGTON"
-            city = words[0]     # "LOS", "WEBER", "EASTERN"
-
-            # Use mascot if it's 4+ letters AND not generic ("STATE", "CITY", "COLLEGE")
-            if len(mascot) >= 4 and mascot not in ['STATE', 'CITY', 'COLLEGE']:
-                return mascot[:4]
-            else:
-                return city[:4]
+        logger.warning("🔧 FIX: Generating game_id for Kalshi matching utilizing Tier 2 Aggressive Sanitization")
+        def generate_sanitized_id(name):
+            sanitized = aggressive_sanitize_team_name(name)
+            # Create a compact, alphabetical representation of the tokens
+            tokens = sorted(sanitized.split())
+            if not tokens:
+                return "UNKN"
+            # Take the first 3 characters of the first 2 tokens
+            return "".join([t[:3] for t in tokens[:2]]).upper()
 
         merged['game_id'] = (
             merged['league'].astype(str).str.upper() + '-' +
-            merged['home_team'].apply(get_team_short) + '-' +
-            merged['away_team'].apply(get_team_short)
+            merged['home_team'].apply(generate_sanitized_id) + '-' +
+            merged['away_team'].apply(generate_sanitized_id)
         )
 
     analysis_df = merged.head(max_rows).copy()

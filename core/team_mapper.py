@@ -3,7 +3,9 @@ Team name normalization for consistent matching across data sources.
 """
 import re
 
+import json
 import logging
+import os
 
 try:
     from rapidfuzz import fuzz
@@ -14,6 +16,19 @@ logger = logging.getLogger(__name__)
 
 # Track missing keys for terminal warnings
 _MISSING_KEYS_WARNED = set()
+
+# Use __file__ instead of __dirname__ since __dirname__ is not a Python built-in
+DYNAMIC_ALIASES_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "dynamic_aliases.json")
+
+def load_dynamic_aliases() -> dict[str, str]:
+    if not os.path.exists(DYNAMIC_ALIASES_FILE):
+        return {}
+    try:
+        with open(DYNAMIC_ALIASES_FILE, "r") as f:
+            return json.load(f)
+    except Exception as e:
+        logger.error(f"Error loading dynamic aliases: {e}")
+        return {}
 
 # Keep legacy exact mappings for backwards compatibility
 TEAM_MAP = {
@@ -243,6 +258,35 @@ TEAM_MAP = {
     "Colorado Buffaloes": "Colorado",
     "Utah Utes": "Utah",
 }
+
+# Merge dynamic aliases into the primary mapping dictionary
+TEAM_MAP.update(load_dynamic_aliases())
+
+def aggressive_sanitize_team_name(name: str) -> str:
+    """
+    Tier 2: Aggressive Lexical Sanitization and Tokenization
+    Strips all non-alphanumeric characters, structural punctuation,
+    and redundant descriptors (e.g., 'University', 'College', 'Team', 'FC', 'State', 'St').
+    Returns a pristine, tokenized string for robust entity resolution.
+    """
+    if name is None or not isinstance(name, str):
+        return ""
+
+    # Lowercase
+    s = name.lower()
+
+    # Remove structural punctuation
+    s = re.sub(r'[^\w\s]', ' ', s)
+
+    # Strip redundant descriptors
+    descriptors = [r'\buniversity\b', r'\bcollege\b', r'\bteam\b', r'\bfc\b', r'\bstate\b', r'\bst\b']
+    for desc in descriptors:
+        s = re.sub(desc, '', s)
+
+    # Collapse multiple spaces
+    s = re.sub(r'\s+', ' ', s).strip()
+    return s
+
 
 def normalize_team_name(name: str) -> str:
     """
