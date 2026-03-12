@@ -6,10 +6,13 @@ import re
 import time
 import math
 from dataclasses import dataclass
+import os
 from typing import Any, Optional, Tuple
 
 import pandas as pd
 import requests
+
+from core.team_mapper import aggressive_sanitize_team_name
 
 try:
     import rapidfuzz
@@ -652,18 +655,17 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         home_team_name = str(row.get("home_team") or "")
         away_team_name = str(row.get("away_team") or "")
 
-        # Apply NCAAB string normalization for Kalshi collegiate events
-        home_team_name_norm = home_team_name.replace("State", "St.")
-        away_team_name_norm = away_team_name.replace("State", "St.")
+        # Tier 2 & 4: Aggressive Sanitization and Elevated Probabilistic Match
+        home_team_name_norm = aggressive_sanitize_team_name(home_team_name)
+        away_team_name_norm = aggressive_sanitize_team_name(away_team_name)
 
-        # Step 3 & 4: Fuzzy Match Event Title
         concatenated_teams = f"{away_team_name_norm} {home_team_name_norm}"
 
         best_event_match = None
         best_event_score = 0.0
 
         for event in series_events:
-            # Date Verification
+            # Date Verification (Tier 3 Temporal Bounding)
             if not _is_within_48h(event, game_date):
                 continue
 
@@ -671,16 +673,48 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             e_subtitle = str(event.get("sub_title") or "")
             combined_event_text = f"{e_title} {e_subtitle}"
 
-            # Use strictly token_set_ratio to isolate intersecting words and better handle string length differences
-            score = fuzz.token_set_ratio(concatenated_teams, combined_event_text)
+            combined_sanitized = aggressive_sanitize_team_name(combined_event_text)
 
-            if score >= 65 and score > best_event_score:
+            # Use token_set_ratio to bypass positional reliance (Tier 4)
+            score = fuzz.token_set_ratio(concatenated_teams, combined_sanitized)
+
+            # Elevate threshold to 75 to eliminate false positives
+            if score >= 75 and score > best_event_score:
                 best_event_score = score
                 best_event_match = event
 
         if not best_event_match:
             out.at[idx, "kalshi_match_status"] = "miss"
             out.at[idx, "kalshi_match_reason"] = "no_fuzzy_event_match"
+
+            # Queue unmatched row for offline LLM resolution (Tier 5)
+            queue_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "unmatched_queue.json")
+            try:
+                unmatched_list = []
+                if os.path.exists(queue_file):
+                    with open(queue_file, "r") as f:
+                        unmatched_list = json.load(f)
+
+                candidate_events = [
+                    {
+                        "title": str(e.get("title")),
+                        "subtitle": str(e.get("sub_title"))
+                    } for e in series_events if _is_within_48h(e, game_date)
+                ]
+
+                unmatched_list.append({
+                    "home_team": home_team_name,
+                    "away_team": away_team_name,
+                    "game_date": str(game_date),
+                    "league": league,
+                    "candidates": candidate_events[:15] # Keep top 15 candidates for context
+                })
+
+                with open(queue_file, "w") as f:
+                    json.dump(unmatched_list, f, indent=2)
+            except Exception as e:
+                logger.error(f"Failed to append to unmatched_queue.json: {e}")
+
             continue
 
         event_ticker = best_event_match.get("event_ticker")
