@@ -655,9 +655,8 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         home_team_name = str(row.get("home_team") or "")
         away_team_name = str(row.get("away_team") or "")
 
-        # Tier 2 & 4: Aggressive Sanitization and Elevated Probabilistic Match
-        home_team_name_norm = aggressive_sanitize_team_name(home_team_name)
-        away_team_name_norm = aggressive_sanitize_team_name(away_team_name)
+        home_team_name_norm = home_team_name.lower()
+        away_team_name_norm = away_team_name.lower()
 
         concatenated_teams = f"{away_team_name_norm} {home_team_name_norm}"
 
@@ -665,18 +664,14 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         best_event_score = 0.0
 
         for event in series_events:
-            # Date Verification (Tier 3 Temporal Bounding)
             if not _is_within_48h(event, game_date):
                 continue
 
             e_title = str(event.get("title") or "")
             e_subtitle = str(event.get("sub_title") or "")
-            combined_event_text = f"{e_title} {e_subtitle}"
+            combined_event_text = f"{e_title} {e_subtitle}".lower()
 
-            combined_sanitized = aggressive_sanitize_team_name(combined_event_text)
-
-            # Use token_set_ratio to bypass positional reliance (Tier 4)
-            score = fuzz.token_set_ratio(concatenated_teams, combined_sanitized)
+            score = fuzz.token_set_ratio(concatenated_teams, combined_event_text)
 
             # Lowered threshold to 50 to bypass "Conference Tournament" prefix issues
             if score >= 50 and score > best_event_score:
@@ -797,21 +792,21 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
                     tolerance = MAX_LINE_TOLERANCE.get(league, 3.0)
                     if delta <= 3.0:
-                    if delta == 0:
-                        best_market = nearest[2]
-                        match_status = "matched"
-                        match_reason = "total_match_exact"
-                        out.at[idx, "kalshi_line_diff"] = 0.0
+                        if delta == 0:
+                            best_market = nearest[2]
+                            match_status = "matched"
+                            match_reason = "total_match_exact"
+                            out.at[idx, "kalshi_line_diff"] = 0.0
+                        else:
+                            best_market = nearest[2]
+                            match_status = "matched"
+                            match_reason = "total_match_nearest"
+                            out.at[idx, "kalshi_line_diff"] = delta
                     else:
-                        best_market = nearest[2]
-                        match_status = "matched"
-                        match_reason = "total_match_nearest"
-                        out.at[idx, "kalshi_line_diff"] = delta
-                else:
-                    out.at[idx, "kalshi_match_status"] = "miss"
-                    out.at[idx, "kalshi_match_reason"] = "alt_line_mismatch"
-                    out.at[idx, "kalshi_match_quality"] = "line_mismatched"
-                    continue
+                        out.at[idx, "kalshi_match_status"] = "miss"
+                        out.at[idx, "kalshi_match_reason"] = "alt_line_mismatch"
+                        out.at[idx, "kalshi_match_quality"] = "line_mismatched"
+                        continue
 
         else:
             # SPREAD LOGIC

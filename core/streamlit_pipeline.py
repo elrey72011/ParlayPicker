@@ -1299,6 +1299,10 @@ def run_analysis_pipeline(
         dtype="float64",
     )
 
+    # Apply lowercase for clean fuzzy matching right before returning
+    merged['home_team'] = merged['home_team'].astype(str).str.lower()
+    merged['away_team'] = merged['away_team'].astype(str).str.lower()
+
     kalshi_probability = _numeric_series(merged, "kalshi_probability") if "kalshi_probability" in merged.columns else pd.Series([pd.NA]*len(merged), index=merged.index)
     calibrated_probability = compute_blended_probability(
         p_market=merged["market_probability"],
@@ -1333,24 +1337,6 @@ def run_analysis_pipeline(
     merged["expected_value"] = ev
     merged["edge"] = edge
     merged["best_pick"] = merged.apply(_format_best_pick, axis=1)
-
-    # FIX: Generate game_id for Kalshi matching utilizing Tier 2 Aggressive Sanitization
-    if 'game_id' not in merged.columns:
-        logger.warning("🔧 FIX: Generating game_id for Kalshi matching utilizing Tier 2 Aggressive Sanitization")
-        def generate_sanitized_id(name):
-            sanitized = aggressive_sanitize_team_name(name)
-            # Create a compact, alphabetical representation of the tokens
-            tokens = sorted(sanitized.split())
-            if not tokens:
-                return "UNKN"
-            # Take the first 3 characters of the first 2 tokens
-            return "".join([t[:3] for t in tokens[:2]]).upper()
-
-        merged['game_id'] = (
-            merged['league'].astype(str).str.upper() + '-' +
-            merged['home_team'].apply(generate_sanitized_id) + '-' +
-            merged['away_team'].apply(generate_sanitized_id)
-        )
 
     analysis_df = merged.head(max_rows).copy()
     if not analysis_df.empty and not base_df.empty:
