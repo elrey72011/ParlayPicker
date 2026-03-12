@@ -243,7 +243,7 @@ def _lookup_kalshi_team_code(team: str) -> str | None:
     return _KALSHI_TEAM_CODES_NORMALIZED.get(normalized)
 
 
-def _guess_code(team: str) -> str | None:
+def _guess_code(team: str, is_ncaab: bool = False, date_code: str = "") -> str | None:
     mapped = _lookup_kalshi_team_code(team)
     if mapped:
         return mapped
@@ -567,16 +567,12 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
     out["kalshi_match_status"] = "miss"
     out["kalshi_match_reason"] = "no_market_for_tickers"
 
-    # Cache the heavy series payloads so we only download them once per league
-    series_cache = {}
-
     for idx, row in out.iterrows():
         league = str(row.get("league") or "").upper()
         family_guess = _market_family(row)
         family = "spread" if family_guess == "spread" else "total"
         series = league_series_ticker(league, family)
 
-        # RESTORED BLOCK: Calculate date and team codes
         game_date = pd.to_datetime(row.get("game_date"), errors="coerce", utc=True)
         if pd.notna(game_date):
             # If the time is exactly midnight UTC, it's a fallback date. Do NOT shift timezone.
@@ -597,45 +593,48 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             out.at[idx, "kalshi_match_reason"] = "missing_series"
             continue
 
-        # 1. Fetch Series Cache to avoid API Rate Limits
-        if series not in series_cache:
-            import time
-            series_markets = []
-            fetch_success = True
-            page_num = 0
+        is_ncaab = league == "NCAAB"
+        home_team_name = str(row.get("home_team") or "")
+        away_team_name = str(row.get("away_team") or "")
 
-            first_market_logged = False
+        home_code = _guess_code(home_team_name, is_ncaab, date_code)
+        away_code = _guess_code(away_team_name, is_ncaab, date_code)
 
-            try:
-                params = {"series_ticker": series, "status": "open", "limit": 100}
-                for page_num in range(20):
-                    resp = api_get_markets(**params)
-                    page = _extract_markets(resp)
-                    if not page:
-                        break
+        if not home_code or not away_code:
+            out.at[idx, "kalshi_match_status"] = "miss"
+            out.at[idx, "kalshi_match_reason"] = "missing_team_code"
+            continue
 
-                    if not first_market_logged and page:
-                        logger.info(f"KALSHI PAYLOAD VERIFICATION (First Market from {series}): {json.dumps(page[0], indent=2)}")
-                        first_market_logged = True
+        # Kalshi format: {Series}-{Date}{AwayCode}{HomeCode}
+        event_ticker = f"{series}-{date_code}{away_code}{home_code}"
 
-                    series_markets.extend(page)
-                    cursor = resp.get("cursor") if isinstance(resp, dict) else None
-                    if not cursor:
-                        break
-                    params["cursor"] = cursor
-                    time.sleep(0.25) # 250ms delay to prevent 429 Rate Limit blocks
-            except Exception as e:
-                logger.warning(f"Cache fetch failed for {series} on page {page_num}: {e}")
-                fetch_success = False
+        # 1. Fetch exact event ticker with nested markets
+        nested_markets = []
+        try:
+            url = f"{API_BASE}/events/{event_ticker}"
+            resp = _make_kalshi_request(url, params={"with_nested_markets": "true"})
+            payload = resp.json()
+            if payload and "event" in payload:
+                nested_markets = payload["event"].get("markets", [])
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 404:
+                logger.warning(f"Event ticker not found on Kalshi: {event_ticker}")
+                out.at[idx, "kalshi_match_status"] = "miss"
+                out.at[idx, "kalshi_match_reason"] = "event_not_found"
+            else:
+                logger.error(f"Error fetching event {event_ticker}: {e}")
+            continue
+        except Exception as e:
+            logger.error(f"Error fetching event {event_ticker}: {e}")
+            continue
 
-            # Only cache if we didn't hit a hard failure, preventing lockout
-            if fetch_success or series_markets:
-                series_cache[series] = series_markets
+        if not nested_markets:
+            out.at[idx, "kalshi_match_status"] = "miss"
+            out.at[idx, "kalshi_match_reason"] = "no_markets_in_event"
+            continue
 
-        series_markets = series_cache.get(series, [])
         best_pick = str(row.get("best_pick") or "").strip()
         is_totals_query = "Over " in best_pick or "Under " in best_pick
-        markets: list[dict[str, Any]] = []
 
         best_market = None
         best_delta = float("inf")
@@ -643,61 +642,23 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         match_status = "miss"
 
         if is_totals_query:
-            # DIRECTIVE 2: STRICT TOTALS PROTOCOL
-            # Extract line purely from the best_pick string, completely bypassing `row.get('total_line')`
             match = re.search(r"[-+]?\s*(\d+(?:\.\d+)?)", best_pick)
             if not match:
                 out.at[idx, "kalshi_match_status"] = "miss"
                 out.at[idx, "kalshi_match_reason"] = "totals_line_unextractable"
                 continue
 
-            # Ensure strict cleaning and float conversion
             extracted_totals_line = abs(float(match.group(1)))
 
-            # Filter markets by matching date code and ensuring they are total markets
-            home_team_norm = _normalize_team_token(str(row.get("home_team") or ""))
-            away_team_norm = _normalize_team_token(str(row.get("away_team") or ""))
-
-            def _team_in_market(m: dict[str, Any], team1: str, team2: str) -> bool:
-                combined = f"{str(m.get('title') or '')} {str(m.get('subtitle') or '')} {str(m.get('ticker') or '')} {str(m.get('event_ticker') or '')}".lower()
-                combined_norm = _normalize_team_token(combined)
-
-                t1_words = team1.split() if team1 else []
-                t2_words = team2.split() if team2 else []
-
-                if not t1_words or not t2_words:
-                    return False
-
-                t1_first = t1_words[0]
-                t2_first = t2_words[0]
-
-                if t1_first == t2_first:
-                    # Fallback to checking full string or unique words
-                    t1_match = team1 in combined_norm or any(w in combined_norm for w in t1_words[1:])
-                    t2_match = team2 in combined_norm or any(w in combined_norm for w in t2_words[1:])
-                else:
-                    t1_match = t1_first in combined_norm
-                    t2_match = t2_first in combined_norm
-
-                return t1_match or t2_match
-
+            # Since we fetched by precise event ticker, we don't need semantic team string matching.
+            # Just verify it's a total.
             totals_markets = [
-                m for m in series_markets
+                m for m in nested_markets
                 if market_type_matches("total", m.get("title"), m.get("subtitle"))
-                and _is_within_24h(m, game_date)
-                and _team_in_market(m, home_team_norm, away_team_norm)
             ]
 
-            logger.info(f"FILTERED {len(totals_markets)} TOTALS markets for {row.get('game_id')}, target line {extracted_totals_line}")
-
-            # Collect all Kalshi contracts and their implied probabilities
             kalshi_lines = []
             for mkt in totals_markets:
-                m_title = str(mkt.get("title") or "").lower()
-                m_subtitle = str(mkt.get("subtitle") or "").lower()
-                combined_text = f"{m_title} {m_subtitle}"
-
-                # Extract Kalshi strike prices
                 k_line = _extract_kalshi_line(mkt, is_total=True)
                 if k_line is not None:
                     bid = _safe_float(mkt.get("yes_bid_dollars"))
@@ -714,15 +675,12 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                         kalshi_lines.append((k_line, kalshi_prob, mkt))
 
             if kalshi_lines:
-                # Nearest neighbor fallback without interpolation
-                # Ensure type casting to float for accurate calculation
                 target_line_abs = abs(float(extracted_totals_line))
                 nearest = min(kalshi_lines, key=lambda x: abs(float(x[0]) - target_line_abs))
                 delta = abs(float(nearest[0]) - target_line_abs)
 
                 tolerance = MAX_LINE_TOLERANCE.get(league, 1.5)
                 if delta <= tolerance:
-                    # Check for exact match
                     if delta == 0:
                         best_market = nearest[2]
                         match_status = "matched"
@@ -741,47 +699,8 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
         else:
             # SPREAD LOGIC
-            home_team_norm = _normalize_team_token(str(row.get("home_team") or ""))
-            away_team_norm = _normalize_team_token(str(row.get("away_team") or ""))
-
-            def _team_in_market_spread(m: dict[str, Any], team1: str, team2: str) -> bool:
-                combined = f"{str(m.get('title') or '')} {str(m.get('subtitle') or '')}".lower()
-                combined_norm = _normalize_team_token(combined)
-
-                t1_words = team1.split() if team1 else []
-                t2_words = team2.split() if team2 else []
-
-                if not t1_words or not t2_words:
-                    return False
-
-                t1_first = t1_words[0]
-                t2_first = t2_words[0]
-
-                if t1_first == t2_first:
-                    t1_match = team1 in combined_norm or any(w in combined_norm for w in t1_words[1:])
-                    t2_match = team2 in combined_norm or any(w in combined_norm for w in t2_words[1:])
-                else:
-                    t1_match = t1_first in combined_norm
-                    t2_match = t2_first in combined_norm
-
-                return t1_match or t2_match
-
-            # Extract specific game markets from the cache using robust substring matching
-            markets = [
-                m for m in series_markets
-                if _team_in_market_spread(m, home_team_norm, away_team_norm)
-            ]
-
-            # Apply strict 24-hour temporal bounds check to all candidate markets
-            markets = [m for m in markets if _is_within_24h(m, game_date)]
-
-            if not markets:
-                out.at[idx, "kalshi_match_status"] = match_status
-                out.at[idx, "kalshi_match_reason"] = match_reason
-                continue
-
-            markets = [m for m in markets if market_type_matches(row.get('market_type'), m.get('title'), m.get('subtitle'))]
-            logger.info(f"FILTERED {len(markets)} markets for {row.get('game_id')}, type={row.get('market_type')}")
+            # Use all spread markets inside the event
+            markets = [m for m in nested_markets if market_type_matches(row.get('market_type'), m.get('title'), m.get('subtitle'))]
 
             raw_spread_line = str(row.get("spread_line") or "")
             match = re.search(r"[-+]?\s*(\d+(?:\.\d+)?)", raw_spread_line)
@@ -805,30 +724,26 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             else:
                 target_line = abs(float(match.group(1)))
 
-                # Collect all Kalshi spread contracts matching the team side
                 kalshi_lines = []
                 for mkt in markets:
                     m_title = str(mkt.get("title") or "").lower()
                     m_subtitle = str(mkt.get("subtitle") or "").lower()
                     combined_text = f"{m_title} {m_subtitle}"
 
-                    # Identify which team this contract refers to
                     m_type = str(row.get("market_type")).lower()
                     book_line = pd.to_numeric(row.get("spread_line"), errors="coerce")
                     is_favorite_bet = book_line < 0
 
-                    home_t = str(row.get("home_team") or "")
-                    away_t = str(row.get("away_team") or "")
+                    home_t = home_team_name
+                    away_t = away_team_name
 
                     home_shared = {w for w in set(_normalize_team_token(home_t).split()).intersection(set(_normalize_team_token(combined_text).split())) if len(w) > 2}
                     away_shared = {w for w in set(_normalize_team_token(away_t).split()).intersection(set(_normalize_team_token(combined_text).split())) if len(w) > 2}
 
                     ticker_suffix = str(mkt.get("ticker", "")).split("-")[-1]
-                    home_abbr = str(_guess_code(home_t) or "").upper()
-                    away_abbr = str(_guess_code(away_t) or "").upper()
 
-                    kalshi_subject_is_home = bool(home_shared) or (home_abbr and home_abbr in ticker_suffix)
-                    kalshi_subject_is_away = bool(away_shared) or (away_abbr and away_abbr in ticker_suffix)
+                    kalshi_subject_is_home = bool(home_shared) or (home_code in ticker_suffix)
+                    kalshi_subject_is_away = bool(away_shared) or (away_code in ticker_suffix)
 
                     expected_subject_is_home = ("home" in m_type) if is_favorite_bet else not ("home" in m_type)
 
@@ -836,10 +751,9 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                                        (not expected_subject_is_home and kalshi_subject_is_away)
 
                     if not kalshi_subject_is_home and not kalshi_subject_is_away:
-                        is_correct_match = True # Assume match if Kalshi subject is completely ambiguous
+                        is_correct_match = True
 
                     if is_correct_match:
-                        # Extract line
                         k_line = _extract_kalshi_line(mkt, is_total=False)
                         if k_line is not None:
                             bid = _safe_float(mkt.get("yes_bid_dollars"))
@@ -855,8 +769,6 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                                 kalshi_lines.append((k_line, kalshi_prob, mkt))
 
                 if kalshi_lines:
-                    # Nearest neighbor fallback without interpolation
-                    # Ensure type casting to float for accurate calculation
                     target_line_abs = abs(float(target_line))
                     nearest = min(kalshi_lines, key=lambda x: abs(float(x[0]) - target_line_abs))
                     delta = abs(float(nearest[0]) - target_line_abs)
@@ -873,9 +785,6 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                             match_status = "matched"
                             match_reason = "spread_match_nearest"
                             out.at[idx, "kalshi_line_diff"] = delta
-                    else:
-                        # Market found but outside tolerance bounds
-                        pass
 
         if best_market is None:
             # We found no markets or candidates at all
@@ -890,11 +799,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 bid = _safe_float(best_market.get("yes_bid_dollars"))
                 ask = _safe_float(best_market.get("yes_ask_dollars"))
 
-                # REPLACE WITH ADAPTIVE LOGIC:
-                if (bid + ask) > 2.0:
-                    # Values are in cents
-                    kalshi_prob = (bid + ask) / 200.0
-                elif bid > 0 and ask > 0:
+                if bid > 0 and ask > 0:
                     # Values are in dollars
                     kalshi_prob = (bid + ask) / 2.0
                 else:
@@ -932,8 +837,40 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             out.at[idx, "kalshi_match_reason"] = match_reason
             out.at[idx, "kalshi_match_quality"] = "line_matched"
 
-            # Optional: Add kalshi_line_diff if you have a way to track the final line matched.
-            # Here we default to setting it properly later or it implies 0 / within tolerance.
+            # Dynamic EV Recalibration for Kalshi Alternate Lines
+            # Scale probability down by roughly 2.5% per point of delta shift
+            if "calibrated_probability" in out.columns and pd.notna(out.at[idx, "kalshi_line_diff"]):
+                line_diff = float(out.at[idx, "kalshi_line_diff"])
+                if line_diff > 0:
+                    orig_prob = float(out.at[idx, "calibrated_probability"])
+
+                    # Heuristic probability adjustment (can be tuned per sport)
+                    # A shift of 1 point typically drops probability by ~0.025
+                    adj_prob = orig_prob - (line_diff * 0.025)
+                    adj_prob = max(0.01, min(0.99, adj_prob))
+
+                    out.at[idx, "calibrated_probability"] = adj_prob
+
+            # Recalculate Expected Value applying exact Kalshi Fees
+            # EV = (P_win * (1 - P_contract - Fee)) - ((1 - P_win) * (P_contract + Fee))
+            if "calibrated_probability" in out.columns:
+                p_win = float(out.at[idx, "calibrated_probability"])
+                p_contract = kalshi_prob
+
+                # Assume standard order size of 1 contract for basic EV evaluation
+                C = 1.0
+                # Exact Kalshi Taker fee formula: math.ceil(0.07 * C * P * (1-P) * 100) / 100
+                # Exact Kalshi Maker fee formula: math.ceil(0.0175 * C * P * (1-P) * 100) / 100
+                # Fees are calculated in cents and then converted back to dollars
+                # We use taker fee to be more conservative since maker orders may not fill
+                raw_taker_fee_cents = 0.07 * C * p_contract * (1.0 - p_contract) * 100.0
+                fee_dollars = math.ceil(raw_taker_fee_cents) / 100.0
+
+                ev = (p_win * (1.0 - p_contract - fee_dollars)) - ((1.0 - p_win) * (p_contract + fee_dollars))
+                out.at[idx, "expected_value"] = ev
+
+                # Recalculate simple edge without fees for display
+                out.at[idx, "edge"] = p_win - p_contract
 
     return out
 
