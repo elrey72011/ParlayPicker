@@ -127,6 +127,8 @@ TEAM_MAP = {
     "Vegas Golden Knights": "Vegas",
     "Washington Capitals": "Washington",
     "Winnipeg Jets": "Winnipeg",
+    "Winnipeg": "Winnipeg Jets",
+    "Ny Rangers": "New York Rangers",
 
     # NFL Full to Short (Common ones)
     "Arizona Cardinals": "Arizona",

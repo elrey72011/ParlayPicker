@@ -788,7 +788,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     if pool.empty:
         return pd.DataFrame(columns=BEST_PICK_COLUMNS)
 
-    pool["expected_value"] = _numeric_series(pool, "expected_value", 0.0)
+    pool["expected_value"] = _numeric_series(pool, "expected_value")
     pool["edge"] = _numeric_series(pool, "edge", 0.0)
     pool["best_pick"] = pool.apply(_format_best_pick, axis=1)
     pool["league"] = _clean_text_placeholders(_string_series(pool, "league"))
@@ -824,17 +824,16 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     pool["matchup_key"] = pool["league"] + "|" + team_a + "|" + team_b + "|" + date_str
 
     # Temporarily fill NaN values with -999 for sorting purposes to retain games without matches
-    pool["sort_ev"] = pool["expected_value"].fillna(-999)
+    pool["expected_value"] = pool["expected_value"].fillna(-999)
 
     best = (
-        pool.sort_values(["has_signal_probability", "sort_ev", "edge"], ascending=[False, False, False])
+        pool.sort_values(["has_signal_probability", "expected_value", "edge"], ascending=[False, False, False])
         .groupby("matchup_key", dropna=False)
         .first()
         .reset_index(drop=True)
     )
 
-    # Clean up the temporary column
-    best = best.drop(columns=["sort_ev"])
+    best["expected_value"] = best["expected_value"].replace(-999, pd.NA)
 
     best["calibrated_probability"] = _numeric_series(best, "calibrated_probability", 0.5)
     edge_for_consensus = _numeric_series(best, "edge", 0.0)
@@ -843,12 +842,12 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     # Phase 2: Eradication of Floating-Point Artefacts in Expected Value Calculations
     # Primary sort by expected_value descending, then game_date, league, home_team ascending
     # We must retain the expected_value as is, but handle NaNs in sorting
-    best["sort_ev_final"] = best["expected_value"].fillna(-999)
+    best["expected_value"] = best["expected_value"].fillna(-999)
     best = best.sort_values(
-        ["sort_ev_final", "game_date", "league", "home_team"],
+        ["expected_value", "game_date", "league", "home_team"],
         ascending=[False, True, True, True]
     ).reset_index(drop=True)
-    best = best.drop(columns=["sort_ev_final"])
+    best["expected_value"] = best["expected_value"].replace(-999, pd.NA)
 
     if not best.empty:
         best["parlay_rank"] = range(1, len(best) + 1)
@@ -931,8 +930,8 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None) -> pd.DataFrame:
         if game_id not in games_dict:
             games_dict[game_id] = {
                 'game_id': game_id,
-                'home_team': normalize_team_name(game.get('home_team')),
-                'away_team': normalize_team_name(game.get('away_team')),
+                'home_team': normalize_team_name(game.get('away_team')),
+                'away_team': normalize_team_name(game.get('home_team')),
                 'commence_time': game.get('commence_time'),
             }
 
