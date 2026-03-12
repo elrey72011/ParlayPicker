@@ -448,7 +448,7 @@ def _safe_float(val: Any) -> float:
     except (TypeError, ValueError):
         return 0.0
 
-def _select_probability(market: dict[str, Any]) -> float | None:
+def _select_probability(market: dict[str, Any]) -> float:
     # Explicitly use float casting for fixed-point _dollars migration
     bid = _safe_float(market.get("yes_bid_dollars"))
     ask = _safe_float(market.get("yes_ask_dollars"))
@@ -476,17 +476,6 @@ def _select_probability(market: dict[str, Any]) -> float | None:
     return 0.0
 
 
-def generate_event_tickers(series: str, away_code: str, home_code: str, date_code: str, family: str) -> tuple[list[str], str, str, str, str, str]:
-    if not date_code:
-        return [], series, away_code, home_code, date_code, family
-    if not away_code or not home_code:
-        return [], series, away_code, home_code, date_code, family
-    if not series:
-        return [], series, away_code, home_code, date_code, family
-
-    prefix = f"{series}-{date_code}"
-    candidates = [f"{prefix}{away_code}{home_code}", f"{prefix}{home_code}{away_code}"]
-    return list(dict.fromkeys(candidates)), series, away_code, home_code, date_code, family
 
 
 def _fetch_series_cache(series_set: set[str], date_codes: set[str] | None = None) -> dict[str, dict[str, Any]]:
@@ -527,35 +516,6 @@ def _fetch_series_cache(series_set: set[str], date_codes: set[str] | None = None
     return cache
 
 
-def _markets_by_team_text(series_markets: list[dict[str, Any]], home_team: str, away_team: str, date_code: str) -> list[dict[str, Any]]:
-    """Fallback matcher that uses partial substring and initials matching."""
-    candidates = []
-    home_norm = _normalize_team_token(home_team)
-    away_norm = _normalize_team_token(away_team)
-
-    h_3 = home_norm.replace(" ", "")[:3].upper()
-    a_3 = away_norm.replace(" ", "")[:3].upper()
-    h_initials = "".join([w[0] for w in home_norm.split() if w]).upper()
-    a_initials = "".join([w[0] for w in away_norm.split() if w]).upper()
-
-    for m in series_markets or []:
-        ticker = str(m.get("ticker") or "").upper()
-        ev_ticker = str(m.get("event_ticker") or "").upper()
-        hay = (str(m.get("title", "")) + " " + str(m.get("subtitle", "")) + " " + ev_ticker).lower()
-
-        # Date constraint intentionally removed to prevent timezone shift misses
-
-        home_word_match = home_norm.split()[0] in hay if home_norm else False
-        away_word_match = away_norm.split()[0] in hay if away_norm else False
-
-        suffix = ev_ticker.split("-")[-1] if "-" in ev_ticker else ev_ticker
-        home_abbr_match = h_3 in suffix or (h_initials and h_initials in suffix)
-        away_abbr_match = a_3 in suffix or (a_initials and a_initials in suffix)
-
-        if (home_word_match or home_abbr_match) and (away_word_match or away_abbr_match):
-            candidates.append(m)
-
-    return candidates
 
 
 
@@ -683,7 +643,8 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 out.at[idx, "kalshi_match_reason"] = "totals_line_unextractable"
                 continue
 
-            extracted_totals_line = float(match.group(1))
+            # Ensure strict cleaning and float conversion
+            extracted_totals_line = abs(float(match.group(1)))
 
             # Filter markets by matching date code and ensuring they are total markets
             home_team_norm = _normalize_team_token(str(row.get("home_team") or ""))
@@ -691,10 +652,10 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
             def _team_in_market(m: dict[str, Any], team1: str, team2: str) -> bool:
                 combined = f"{str(m.get('title') or '')} {str(m.get('subtitle') or '')} {str(m.get('ticker') or '')} {str(m.get('event_ticker') or '')}".lower()
-                # Check if first word of normalized team name is in the combined text
-                t1_word = team1.split()[0] if team1 else ""
-                t2_word = team2.split()[0] if team2 else ""
-                return (t1_word and t1_word in combined) or (t2_word and t2_word in combined)
+                combined_norm = _normalize_team_token(combined)
+
+                # Full team name check (robust substring)
+                return (team1 and team1 in combined_norm) or (team2 and team2 in combined_norm)
 
             totals_markets = [
                 m for m in series_markets
@@ -754,30 +715,25 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                     continue
 
         else:
-            # SPREAD LOGIC (Preserved)
-            away_code = team_code_map(league, str(row.get("away_team") or ""))
-            home_code = team_code_map(league, str(row.get("home_team") or ""))
+            # SPREAD LOGIC
+            home_team_norm = _normalize_team_token(str(row.get("home_team") or ""))
+            away_team_norm = _normalize_team_token(str(row.get("away_team") or ""))
 
-            if not away_code or not home_code:
-                out.at[idx, "kalshi_match_status"] = "miss"
-                out.at[idx, "kalshi_match_reason"] = "missing_team_code"
-                continue
+            def _team_in_market_spread(m: dict[str, Any], team1: str, team2: str) -> bool:
+                combined = f"{str(m.get('title') or '')} {str(m.get('subtitle') or '')}".lower()
+                combined_norm = _normalize_team_token(combined)
 
-            candidates, _, _, _, _, _ = generate_event_tickers(series, away_code, home_code, date_code, family)
+                # Check if EITHER normalized team name is present in the normalized title/subtitle.
+                # Since Spreads typically only list the winning/covering team in the title
+                # (e.g., "Boston Celtics wins by over 4"), we just need to ensure at least one team matches.
+                # We completely abandon ticker generation and abbreviation logic per the directive.
+                return (team1 and team1 in combined_norm) or (team2 and team2 in combined_norm)
 
-            # 2. Extract specific game markets from the cache
+            # Extract specific game markets from the cache using robust substring matching
             markets = [
                 m for m in series_markets
-                if m.get("event_ticker") in candidates
+                if _team_in_market_spread(m, home_team_norm, away_team_norm)
             ]
-
-            if not markets:
-                markets = _markets_by_team_text(
-                    series_markets,
-                    str(row.get("home_team") or ""),
-                    str(row.get("away_team") or ""),
-                    date_code,
-                )
 
             # Apply strict 24-hour temporal bounds check to all candidate markets
             markets = [m for m in markets if _is_within_24h(m, game_date)]
@@ -790,9 +746,10 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             markets = [m for m in markets if market_type_matches(row.get('market_type'), m.get('title'), m.get('subtitle'))]
             logger.info(f"FILTERED {len(markets)} markets for {row.get('game_id')}, type={row.get('market_type')}")
 
-            target_line_raw = pd.to_numeric(row.get("spread_line"), errors="coerce")
+            raw_spread_line = str(row.get("spread_line") or "")
+            match = re.search(r"[-+]?\s*(\d+(?:\.\d+)?)", raw_spread_line)
 
-            if pd.isna(target_line_raw):
+            if not match:
                 # Moneyline fallback
                 is_ml_pick = str(row.get("market_type") or "").lower() == "moneyline"
                 if is_ml_pick:
@@ -809,7 +766,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                                 match_reason = "moneyline_match"
                                 break
             else:
-                target_line = abs(target_line_raw)
+                target_line = abs(float(match.group(1)))
 
                 # Collect all Kalshi spread contracts matching the team side
                 kalshi_lines = []
@@ -905,9 +862,11 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 else:
                     kalshi_prob = _select_probability(best_market)
 
-            if kalshi_prob is None or kalshi_prob == 0.0:
+            kalshi_prob = _safe_float(kalshi_prob)
+            if kalshi_prob == 0.0:
                 out.at[idx, "kalshi_match_status"] = "miss"
                 out.at[idx, "kalshi_match_reason"] = "zero_probability"
+                out.at[idx, "kalshi_probability"] = 0.0
                 continue
 
             # NEW: Invert probability if we are betting the underdog or the under
@@ -924,9 +883,10 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 logger.warning(f"⚠️ Invalid Kalshi probability {kalshi_prob} for {row.get('game_id', 'unknown')}, skipping row")
                 out.at[idx, "kalshi_match_status"] = "error"
                 out.at[idx, "kalshi_match_reason"] = f"invalid_probability_{kalshi_prob}"
+                out.at[idx, "kalshi_probability"] = 0.0
                 continue
 
-            out.at[idx, "kalshi_probability"] = kalshi_prob
+            out.at[idx, "kalshi_probability"] = float(kalshi_prob)
             out.at[idx, "kalshi_market_title"] = best_market.get("title")
             out.at[idx, "kalshi_event_ticker"] = best_market.get("event_ticker")
             out.at[idx, "kalshi_market_ticker"] = best_market.get("ticker")
