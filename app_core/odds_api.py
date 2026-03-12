@@ -59,6 +59,11 @@ class TheOddsAPIClient:
                     raise
 
             data = resp.json()
+            import json
+            import os
+            os.makedirs('data', exist_ok=True)
+            with open('data/live_odds_debug.json', 'w') as f: json.dump(data, f)
+
             if isinstance(data, list):
                 all_data.extend(data)
             else:

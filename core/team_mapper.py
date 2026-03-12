@@ -260,13 +260,19 @@ TEAM_MAP = {
     "colorado buffaloes": "Colorado",
     "utah utes": "Utah",
     "miamiflorida": "Miami FL",
-    "miami oh": "Miami OH",
+    "miami oh": "miami (oh)",
     "texasarlington": "UT Arlington",
     "texas christian": "TCU",
     "central florida": "UCF",
-    "ny rangers": "New York Rangers",
+    "ny rangers": "new york rangers",
     "massachusetts": "UMass",
     "connecticut": "UConn",
+    "umass": "massachusetts",
+    "missouri": "mizzou",
+    "kentucky": "kentucky",
+    "texas tech": "texas tech",
+    "iowa state": "iowa state",
+    "winnipeg": "winnipeg jets",
 }
 
 # Merge dynamic aliases into the primary mapping dictionary
