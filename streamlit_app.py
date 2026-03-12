@@ -217,6 +217,14 @@ def _merge_kalshi_into_analysis(analysis_df: pd.DataFrame, best_picks_df: pd.Dat
         left["game_date"] = pd.to_datetime(left["game_date"], errors="coerce", utc=True)
         right["game_date"] = pd.to_datetime(right["game_date"], errors="coerce", utc=True)
 
+    # Ensure case-insensitive merging
+    left['home_team'] = left['home_team'].str.lower()
+    left['away_team'] = left['away_team'].str.lower()
+
+    if not right.empty:
+        right['home_team'] = right['home_team'].str.lower()
+        right['away_team'] = right['away_team'].str.lower()
+
     merged = left.merge(right, on=merge_keys, how="left", suffixes=("", "_best"))
     for col in available_cols:
         best_col = f"{col}_best"
