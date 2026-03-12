@@ -487,6 +487,9 @@ def main() -> None:
             st.session_state["pipeline_running"] = False
 
     analysis_df = st.session_state["analysis_df"]
+    if analysis_df is not None and not analysis_df.empty:
+        analysis_df = analysis_df.rename(columns={'home_team': 'away_team', 'away_team': 'home_team', 'Home': 'Away', 'Away': 'Home'})
+
     parlays_df = st.session_state["parlays_df"]
     portfolio_df = st.session_state["portfolio_df"]
     odds_df = st.session_state["odds_df"]
@@ -494,7 +497,11 @@ def main() -> None:
     kalshi_df = st.session_state["kalshi_df"]
     gemini_df = st.session_state["gemini_df"]
     simulation_results = st.session_state["simulation_results"]
+
     best_picks_df = st.session_state["best_picks_df"]
+    if best_picks_df is not None and not best_picks_df.empty:
+        best_picks_df = best_picks_df.rename(columns={'home_team': 'away_team', 'away_team': 'home_team', 'Home': 'Away', 'Away': 'Home'})
+
     diagnostics = st.session_state.get("diagnostics", {})
 
     pipeline_status = st.session_state.get("pipeline_status", "idle")
