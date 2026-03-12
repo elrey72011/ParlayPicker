@@ -823,26 +823,32 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     # selections from the same game across different markets (intra-game covariance).
     pool["matchup_key"] = pool["league"] + "|" + team_a + "|" + team_b + "|" + date_str
 
+    # Temporarily fill NaN values with -999 for sorting purposes to retain games without matches
+    pool["sort_ev"] = pool["expected_value"].fillna(-999)
+
     best = (
-        pool.sort_values(["has_signal_probability", "expected_value", "edge"], ascending=[False, False, False])
+        pool.sort_values(["has_signal_probability", "sort_ev", "edge"], ascending=[False, False, False])
         .groupby("matchup_key", dropna=False)
         .first()
         .reset_index(drop=True)
     )
 
+    # Clean up the temporary column
+    best = best.drop(columns=["sort_ev"])
+
     best["calibrated_probability"] = _numeric_series(best, "calibrated_probability", 0.5)
     edge_for_consensus = _numeric_series(best, "edge", 0.0)
     best["consensus_agreement"] = "⚪ No Kalshi"
 
-    # Strictly enforce EV > 0 threshold for actionable picks
-    best = best[best["expected_value"] > 0.0].copy()
-
     # Phase 2: Eradication of Floating-Point Artefacts in Expected Value Calculations
     # Primary sort by expected_value descending, then game_date, league, home_team ascending
+    # We must retain the expected_value as is, but handle NaNs in sorting
+    best["sort_ev_final"] = best["expected_value"].fillna(-999)
     best = best.sort_values(
-        ["expected_value", "game_date", "league", "home_team"],
+        ["sort_ev_final", "game_date", "league", "home_team"],
         ascending=[False, True, True, True]
     ).reset_index(drop=True)
+    best = best.drop(columns=["sort_ev_final"])
 
     if not best.empty:
         best["parlay_rank"] = range(1, len(best) + 1)
