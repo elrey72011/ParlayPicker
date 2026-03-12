@@ -4,7 +4,10 @@ import traceback
 import warnings
 from typing import Any
 
+import logging
 import sys
+
+logger = logging.getLogger(__name__)
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
