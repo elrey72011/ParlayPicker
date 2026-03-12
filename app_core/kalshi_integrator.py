@@ -347,7 +347,7 @@ def team_code_for_league(league: str, team: str) -> str:
     return str(code or "")
 
 
-def _make_kalshi_request(url: str, headers: dict[str, str] | None = None, params: dict[str, Any] | None = None, timeout: int = 8) -> requests.Response:
+def _make_kalshi_request(url: str, headers: dict[str, str] | None = None, params: dict[str, Any] | None = None, timeout: int = 30) -> requests.Response:
     """Helper to make rate-limited Kalshi API requests with exponential backoff for 429 errors."""
     time.sleep(0.2)
     max_retries = 3
@@ -727,7 +727,8 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         nested_markets = []
         try:
             url = f"{API_BASE}/events/{event_ticker}"
-            resp = _make_kalshi_request(url, params={"with_nested_markets": "true"})
+            # Extend timeout for large/nested event lookups
+            resp = _make_kalshi_request(url, params={"with_nested_markets": "true"}, timeout=30)
             payload = resp.json()
             if payload and "event" in payload:
                 nested_markets = payload["event"].get("markets", [])

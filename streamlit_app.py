@@ -52,7 +52,7 @@ except ImportError:
     class OddsAPIAuthError(Exception): pass
 
 
-KALSHI_ENRICH_TIMEOUT_SECONDS = 60
+KALSHI_ENRICH_TIMEOUT_SECONDS = 300
 
 
 def _enrich_with_kalshi_safe(df: pd.DataFrame) -> tuple[pd.DataFrame, str | None]:
