@@ -330,20 +330,21 @@ def normalize_team_name(name: str) -> str:
     if name is None or not isinstance(name, str):
         return str(name) if name is not None else ""
 
-    stripped_name = name.strip()
-    name = stripped_name
-    stripped_name_lower = stripped_name.lower()
+    # 1. Apply strip and lower immediately to the incoming parameter
+    cleaned_name = name.strip().lower()
 
-    # First apply legacy exact mappings using O(1) lowercased lookup
-    if stripped_name_lower in TEAM_MAP:
-        name = TEAM_MAP[stripped_name_lower]
+    # 2. Perform dictionary lookup on the explicitly cleaned string
+    if cleaned_name in TEAM_MAP:
+        name = TEAM_MAP[cleaned_name]
+    else:
+        name = name.strip()
 
     # Convert to lowercase
     normalized = name.lower()
 
     # Track if team name is missing from exact map and is likely a long-form API name
     # We also check the lowercase name to ensure missing logic works properly with lowercased map
-    if name not in TEAM_MAP and name != "Over" and name != "Under" and stripped_name_lower not in TEAM_MAP:
+    if name not in TEAM_MAP and name != "Over" and name != "Under" and cleaned_name not in TEAM_MAP:
         # Attempt Probabilistic Matching Fallback with rapidfuzz using token_sort_ratio
         if 'fuzz' in globals():
             best_match = None
