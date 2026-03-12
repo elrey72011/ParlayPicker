@@ -314,7 +314,7 @@ def aggressive_sanitize_team_name(name: str) -> str:
     s = name.lower().replace("university", "").replace("college", "").replace("team", "").replace("fc", "").replace("state", "").replace("st", "").strip()
 
     # Single simple regex pass to remove non-alphanumeric characters
-    s = re.sub(r'[^a-z0-9]', ' ', s)
+    s = re.sub(r'[^a-z0-9\s]', ' ', s)
 
     # Collapse multiple spaces
     s = re.sub(r'\s+', ' ', s).strip()

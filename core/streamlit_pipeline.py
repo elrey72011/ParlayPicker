@@ -809,8 +809,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     pool["has_signal_probability"] = _numeric_series(pool, "model_probability").notna() | _numeric_series(pool, "theover_probability").notna() | _numeric_series(pool, "ml_probability").notna()
 
     # Create orientation-insensitive matchup key to group flipped home/away teams
-    team_a = pool["home_team"].where(pool["home_team"] <= pool["away_team"], pool["away_team"]).str.lower().str.replace(r'[^a-z0-9]', '', regex=True)
-    team_b = pool["away_team"].where(pool["home_team"] <= pool["away_team"], pool["home_team"]).str.lower().str.replace(r'[^a-z0-9]', '', regex=True)
+    team_a = pool["home_team"].where(pool["home_team"] <= pool["away_team"], pool["away_team"]).str.lower().str.replace(r'[^a-z0-9\s]', '', regex=True)
+    team_b = pool["away_team"].where(pool["home_team"] <= pool["away_team"], pool["home_team"]).str.lower().str.replace(r'[^a-z0-9\s]', '', regex=True)
 
     # Extract local date string safely to ignore minor UTC time variations
     dt_utc = _game_dates(pool)
