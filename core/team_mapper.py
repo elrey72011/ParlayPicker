@@ -257,6 +257,14 @@ TEAM_MAP = {
     "California Golden Bears": "California",
     "Colorado Buffaloes": "Colorado",
     "Utah Utes": "Utah",
+    "Miamiflorida": "Miami FL",
+    "Miami Oh": "Miami OH",
+    "Texasarlington": "UT Arlington",
+    "Texas Christian": "TCU",
+    "Central Florida": "UCF",
+    "Ny Rangers": "New York Rangers",
+    "Massachusetts": "UMass",
+    "Connecticut": "UConn",
 }
 
 # Merge dynamic aliases into the primary mapping dictionary
