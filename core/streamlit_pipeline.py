@@ -1394,10 +1394,7 @@ def run_analysis_pipeline(
         "total_rows": int(len(analysis_df)),
         "rows_with_game_date": int(pd.to_datetime(analysis_df.get("game_date"), errors="coerce", utc=True).notna().sum()) if not analysis_df.empty else 0,
         # Safely sort team names alphabetically to count unique actual physical games (matchups) across all markets
-        "total_games": int(analysis_df.apply(
-            lambda r: f"{r.get('league')}|{min(str(r.get('home_team')), str(r.get('away_team')))}|{max(str(r.get('home_team')), str(r.get('away_team')))}",
-            axis=1
-        ).nunique()) if not analysis_df.empty else 0,
+        "total_games": int(analysis_df[['home_team', 'away_team']].drop_duplicates().shape[0]) if not analysis_df.empty else 0,
         "bet_rows": int(len(analysis_df)),
         "ml_model_loaded": bool(use_ml and ML_AVAILABLE and ml_model_actually_loaded),
         "ml_predictions": int(analysis_df["ml_probability"].notna().sum()) if "ml_probability" in analysis_df.columns else 0,
