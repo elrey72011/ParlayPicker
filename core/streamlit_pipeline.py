@@ -823,17 +823,14 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     # selections from the same game across different markets (intra-game covariance).
     pool["matchup_key"] = pool["league"] + "|" + team_a + "|" + team_b + "|" + date_str
 
-    # Temporarily fill NaN values with -999 for sorting purposes to retain games without matches
-    pool["expected_value"] = pool["expected_value"].fillna(-999)
+    # Create a temporary sorting column that fills NaNs with a highly negative number
+    pool['sort_ev'] = pool['expected_value'].fillna(-999)
 
-    best = (
-        pool.sort_values(["has_signal_probability", "expected_value", "edge"], ascending=[False, False, False])
-        .groupby("matchup_key")
-        .first()
-        .reset_index(drop=True)
-    )
+    # Sort by the temporary column, group by the unique game identifiers, and take the first row
+    best = pool.sort_values('sort_ev', ascending=False).groupby(['home_team', 'away_team'], as_index=False).first()
 
-    best["expected_value"] = best["expected_value"].replace(-999, pd.NA)
+    # Drop the temporary sorting column to clean the final output
+    best = best.drop(columns=['sort_ev'])
 
     best["calibrated_probability"] = _numeric_series(best, "calibrated_probability", 0.5)
     edge_for_consensus = _numeric_series(best, "edge", 0.0)

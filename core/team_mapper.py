@@ -286,6 +286,12 @@ TEAM_MAP = {
     "texas tech": "texas tech",
     "iowa state": "iowa state",
     "winnipeg": "winnipeg jets",
+    "saint bonaventure": "st. bonaventure",
+    "massachusetts": "umass",
+    "miami oh": "miami (oh)",
+    "mizzou": "missouri",
+    "alabama am": "alabama a&m",
+    "bgsu": "bowling green",
 }
 
 # Merge dynamic aliases into the primary mapping dictionary

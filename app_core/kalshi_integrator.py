@@ -678,8 +678,8 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             # Use token_set_ratio to bypass positional reliance (Tier 4)
             score = fuzz.token_set_ratio(concatenated_teams, combined_sanitized)
 
-            # Elevate threshold to 75 to eliminate false positives
-            if score >= 75 and score > best_event_score:
+            # Lowered threshold to 50 to bypass "Conference Tournament" prefix issues
+            if score >= 50 and score > best_event_score:
                 best_event_score = score
                 best_event_match = event
 
@@ -796,7 +796,8 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 delta = abs(float(nearest[0]) - target_line_abs)
 
                 tolerance = MAX_LINE_TOLERANCE.get(league, 1.5)
-                if delta <= tolerance:
+                # if abs(kalshi_line - odds_line) <= 1.5:
+                if delta <= 1.5:
                     if delta == 0:
                         best_market = nearest[2]
                         match_status = "matched"
@@ -894,7 +895,8 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                     delta = abs(float(nearest[0]) - target_line_abs)
 
                     tolerance = MAX_LINE_TOLERANCE.get(league, 1.5)
-                    if delta <= tolerance:
+                    # if abs(kalshi_line - odds_line) <= 1.5:
+                    if delta <= 1.5:
                         if delta == 0:
                             best_market = nearest[2]
                             match_status = "matched"
