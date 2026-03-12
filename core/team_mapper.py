@@ -300,25 +300,6 @@ TEAM_MAP = {
 # Merge dynamic aliases into the primary mapping dictionary
 TEAM_MAP.update(load_dynamic_aliases())
 
-def aggressive_sanitize_team_name(name: str) -> str:
-    """
-    Tier 2: Aggressive Lexical Sanitization and Tokenization
-    Strips all non-alphanumeric characters, structural punctuation,
-    and redundant descriptors (e.g., 'University', 'College', 'Team', 'FC', 'State', 'St').
-    Returns a pristine, tokenized string for robust entity resolution.
-    """
-    if name is None or not isinstance(name, str):
-        return ""
-
-    # Baseline Python string methods
-    s = name.lower().replace("university", "").replace("college", "").replace("team", "").replace("fc", "").replace("state", "").replace("st", "").strip()
-
-    # Single simple regex pass to remove non-alphanumeric characters
-    s = re.sub(r'[^a-z0-9\s]', ' ', s)
-
-    # Collapse multiple spaces
-    s = re.sub(r'\s+', ' ', s).strip()
-    return s
 
 
 def normalize_team_name(name: str) -> str:

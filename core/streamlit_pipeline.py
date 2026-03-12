@@ -19,7 +19,7 @@ from core.bankroll_simulator import simulate_bankroll
 from core.kelly_optimizer import add_kelly_bet_sizing
 from core.probability_engine import american_to_prob
 from core.schema.base_schema import ensure_base_schema
-from core.team_mapper import normalize_team_name, aggressive_sanitize_team_name
+from core.team_mapper import normalize_team_name
 
 warnings.filterwarnings("ignore", category=FutureWarning, module="pandas")
 
@@ -1300,8 +1300,8 @@ def run_analysis_pipeline(
     )
 
     # Apply lowercase for clean fuzzy matching right before returning
-    merged['home_team'] = merged['home_team'].astype(str).str.lower()
-    merged['away_team'] = merged['away_team'].astype(str).str.lower()
+    # merged['home_team'] = merged['home_team'].astype(str).str.lower()
+    # merged['away_team'] = merged['away_team'].astype(str).str.lower()
 
     kalshi_probability = _numeric_series(merged, "kalshi_probability") if "kalshi_probability" in merged.columns else pd.Series([pd.NA]*len(merged), index=merged.index)
     calibrated_probability = compute_blended_probability(

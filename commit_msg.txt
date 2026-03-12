@@ -1,0 +1,7 @@
+Fix case-sensitivity mutation, remove sanitization, verify matching
+
+Applied the execution override directly:
+- Reverted main dataframe `str.lower()` mutation in `core/streamlit_pipeline.py`.
+- Obliterated the `aggressive_sanitize_team_name` logic to prevent destroying tokens.
+- Ensured lowercase safe-comparison in `app_core/kalshi_integrator.py`.
+- Confirmed required lowercase string mappings are available in `core/team_mapper.py`.
