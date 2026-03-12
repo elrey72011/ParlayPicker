@@ -54,9 +54,11 @@ def market_type_matches(market_type: str, title: str, subtitle: str = "") -> boo
 API_URL = API_BASE
 
 LEAGUE_SERIES_MAP = {
-    "NCAAB": {"spread": "KXNCAAMBSPREAD", "total": "KXNCAAMBTOTAL"},
-    "NBA": {"spread": "KXNBASPREAD", "total": "KXNBATOTAL"},
-    "NHL": {"spread": "KXNHLSPREAD", "total": "KXNHLTOTAL"},
+    "NCAAB": {"spread": "KXNCAAMBSPREAD", "total": "KXNCAAMBTOTAL", "moneyline": "KXNCAABGAME"},
+    "NBA": {"spread": "KXNBASPREAD", "total": "KXNBATOTAL", "moneyline": "KXNBAGAME"},
+    "NHL": {"spread": "KXNHLSPREAD", "total": "KXNHLTOTAL", "moneyline": "KXNHLGAME"},
+    "NFL": {"spread": "KXNFLSPREAD", "total": "KXNFLTOTAL", "moneyline": "KXNFLGAME"},
+    "MLB": {"spread": "KXMLBSPREAD", "total": "KXMLBTOTAL", "moneyline": "KXMLBGAME"},
 }
 
 KALSHI_TEAM_CODES = {
@@ -311,8 +313,22 @@ def _det_team_code(league: str, team: str) -> str | None:
     return _guess_code(team)
 
 
-def league_series_ticker(league: str, family: str) -> str:
-    return str(LEAGUE_SERIES_MAP.get(str(league or "").upper(), {}).get(str(family or "").lower(), ""))
+def league_series_ticker(league: str, market_type: str) -> str:
+    league_upper = str(league or "").upper()
+    market_lower = str(market_type or "").lower()
+
+    # Map raw market types to standard families
+    if "spread" in market_lower:
+        family = "spread"
+    elif "total" in market_lower or "over" in market_lower or "under" in market_lower:
+        family = "total"
+    elif "moneyline" in market_lower or "game" in market_lower:
+        family = "moneyline"
+    else:
+        # Default fallback
+        family = "spread"
+
+    return str(LEAGUE_SERIES_MAP.get(league_upper, {}).get(family, ""))
 
 
 def team_code_map(league: str, team: str) -> str:
@@ -486,6 +502,37 @@ def _select_probability(market: dict[str, Any]) -> float:
 
 
 
+def _fetch_series_events(series_ticker: str) -> list[dict[str, Any]]:
+    """Fetch all open events for a specific series with pagination."""
+    events = []
+    params = {"series_ticker": series_ticker, "status": "open", "limit": 100}
+
+    try:
+        # Loop up to 20 times for massive slates like NCAAB
+        for _ in range(20):
+            # Using _make_kalshi_request directly for the /events endpoint
+            resp = _make_kalshi_request(f"{API_BASE}/events", params=params, timeout=8)
+            payload = resp.json()
+
+            page_events = payload.get("events", [])
+            if not page_events:
+                break
+
+            events.extend(page_events)
+
+            cursor = payload.get("cursor")
+            if not cursor:
+                break
+            params["cursor"] = cursor
+
+    except KalshiAPIError as exc:
+        logger.warning(f"Kalshi series events fetch failed for {series_ticker}: {exc}")
+    except Exception as exc:
+        logger.warning(f"Kalshi series events fetch failed for {series_ticker}: {exc}")
+
+    return events
+
+
 def _fetch_series_cache(series_set: set[str], date_codes: set[str] | None = None) -> dict[str, dict[str, Any]]:
     """Fetch all open markets for each unique series in one call per series with pagination."""
     cache: dict[str, dict[str, Any]] = {}
@@ -527,11 +574,11 @@ def _fetch_series_cache(series_set: set[str], date_codes: set[str] | None = None
 
 
 
-def _is_within_24h(market: dict[str, Any], game_date_obj: pd.Timestamp) -> bool:
+def _is_within_24h(item: dict[str, Any], game_date_obj: pd.Timestamp) -> bool:
     if pd.isna(game_date_obj):
         return True
 
-    close_time_str = market.get("close_time") or market.get("expiration_time")
+    close_time_str = item.get("close_time") or item.get("expiration_time") or item.get("last_updated_ts")
     if not close_time_str:
         return True
 
@@ -593,22 +640,59 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             out.at[idx, "kalshi_match_reason"] = "missing_series"
             continue
 
-        is_ncaab = league == "NCAAB"
+        # Cache for series events
+        if not hasattr(enrich_with_kalshi_markets, "series_cache"):
+            enrich_with_kalshi_markets.series_cache = {}
+
+        if series not in enrich_with_kalshi_markets.series_cache:
+            enrich_with_kalshi_markets.series_cache[series] = _fetch_series_events(series)
+
+        series_events = enrich_with_kalshi_markets.series_cache[series]
+
         home_team_name = str(row.get("home_team") or "")
         away_team_name = str(row.get("away_team") or "")
 
-        home_code = _guess_code(home_team_name, is_ncaab, date_code)
-        away_code = _guess_code(away_team_name, is_ncaab, date_code)
+        # Step 3 & 4: Fuzzy Match Event Title
+        concatenated_teams = f"{away_team_name} {home_team_name}"
 
-        if not home_code or not away_code:
+        best_event_match = None
+        best_event_score = 0.0
+
+        for event in series_events:
+            # Date Verification
+            if not _is_within_24h(event, game_date):
+                continue
+
+            e_title = str(event.get("title") or "")
+            e_subtitle = str(event.get("sub_title") or "")
+            combined_event_text = f"{e_title} {e_subtitle}"
+
+            # Use partial matching to better handle short vs long team names (e.g. "Los Angeles L" vs "Los Angeles Lakers")
+            score_sort = fuzz.token_sort_ratio(concatenated_teams, combined_event_text)
+            score_set = fuzz.token_set_ratio(concatenated_teams, combined_event_text)
+            try:
+                score_partial = fuzz.partial_ratio(concatenated_teams, combined_event_text)
+            except AttributeError:
+                score_partial = 0
+
+            score = max(score_sort, score_set, score_partial)
+
+            if score >= 80 and score > best_event_score:
+                best_event_score = score
+                best_event_match = event
+
+        if not best_event_match:
             out.at[idx, "kalshi_match_status"] = "miss"
-            out.at[idx, "kalshi_match_reason"] = "missing_team_code"
+            out.at[idx, "kalshi_match_reason"] = "no_fuzzy_event_match"
             continue
 
-        # Kalshi format: {Series}-{Date}{AwayCode}{HomeCode}
-        event_ticker = f"{series}-{date_code}{away_code}{home_code}"
+        event_ticker = best_event_match.get("event_ticker")
+        if not event_ticker:
+            out.at[idx, "kalshi_match_status"] = "miss"
+            out.at[idx, "kalshi_match_reason"] = "matched_event_missing_ticker"
+            continue
 
-        # 1. Fetch exact event ticker with nested markets
+        # Step 5: Fetch exact event ticker with nested markets
         nested_markets = []
         try:
             url = f"{API_BASE}/events/{event_ticker}"
@@ -742,8 +826,12 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
                     ticker_suffix = str(mkt.get("ticker", "")).split("-")[-1]
 
-                    kalshi_subject_is_home = bool(home_shared) or (home_code in ticker_suffix)
-                    kalshi_subject_is_away = bool(away_shared) or (away_code in ticker_suffix)
+                    # Fuzzy match code relies on string intersection primarily now,
+                    # but we can try to grab the code from the ticker itself if present
+                    # However, we don't have home_code/away_code generated from the exact string generator anymore
+                    # so we will rely more on the shared string tokens.
+                    kalshi_subject_is_home = bool(home_shared)
+                    kalshi_subject_is_away = bool(away_shared)
 
                     expected_subject_is_home = ("home" in m_type) if is_favorite_bet else not ("home" in m_type)
 

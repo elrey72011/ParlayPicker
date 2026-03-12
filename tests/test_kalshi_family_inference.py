@@ -31,6 +31,17 @@ def test_enrich_uses_best_pick_to_infer_spread_family_when_market_type_missing(m
 
     def fake_make_request(url, **kwargs):
         seen.append(url)
+        if url.endswith("/events") and "series_ticker" in kwargs.get("params", {}):
+            return FakeResponse({
+                "events": [
+                    {
+                        "event_ticker": "KXNBASPREAD-24MAR08BOSLAL",
+                        "title": "Boston Celtics at Los Angeles Lakers: Spread",
+                        "sub_title": "BOS at LAL (Mar 8)",
+                        "close_time": "2024-03-08T05:00:00Z",
+                    }
+                ]
+            })
         if "KXNBASPREAD-24MAR08BOSLAL" in url:
             return FakeResponse({
                 "event": {
@@ -47,6 +58,10 @@ def test_enrich_uses_best_pick_to_infer_spread_family_when_market_type_missing(m
                 }
             })
         return FakeResponse({}, 404)
+
+    # Clear cache before running test
+    if hasattr(ki.enrich_with_kalshi_markets, "series_cache"):
+        ki.enrich_with_kalshi_markets.series_cache.clear()
 
     monkeypatch.setattr(ki, "_make_kalshi_request", fake_make_request)
     out = ki.enrich_with_kalshi_markets(df)
