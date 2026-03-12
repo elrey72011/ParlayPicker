@@ -282,16 +282,11 @@ def aggressive_sanitize_team_name(name: str) -> str:
     if name is None or not isinstance(name, str):
         return ""
 
-    # Lowercase
-    s = name.lower()
+    # Baseline Python string methods
+    s = name.lower().replace("university", "").replace("college", "").replace("team", "").replace("fc", "").replace("state", "").replace("st", "").strip()
 
-    # Remove structural punctuation
-    s = re.sub(r'[^\w\s]', ' ', s)
-
-    # Strip redundant descriptors
-    descriptors = [r'\buniversity\b', r'\bcollege\b', r'\bteam\b', r'\bfc\b', r'\bstate\b', r'\bst\b']
-    for desc in descriptors:
-        s = re.sub(desc, '', s)
+    # Single simple regex pass to remove non-alphanumeric characters
+    s = re.sub(r'[^a-z0-9]', ' ', s)
 
     # Collapse multiple spaces
     s = re.sub(r'\s+', ' ', s).strip()
