@@ -23,27 +23,33 @@ def test_enrich_uses_best_pick_to_infer_spread_family_when_market_type_missing(m
 
     seen = []
 
-    def fake_api_get_markets(**params):
-        seen.append(params)
-        if "tickers" in params:
-            return {"data": []}
-        if params.get("series_ticker") == "KXNBASPREAD":
-            return {
-                "data": [
-                    {
-                        "ticker": "KXNBASPREAD-24MAR08LALBOS",
-                        "event_ticker": "KXNBASPREAD-24MAR08LALBOS",
-                        "title": "Boston Celtics wins by over 4.5",
-                        "subtitle": "",
-                        "yes_bid_dollars": 0.45,
-                        "yes_ask_dollars": 0.55,
-                    }
-                ]
-            }
-        return {"data": []}
+    class FakeResponse:
+        def __init__(self, json_data, status_code=200):
+            self._json_data = json_data
+            self.status_code = status_code
+        def json(self): return self._json_data
 
-    monkeypatch.setattr(ki, "api_get_markets", fake_api_get_markets)
+    def fake_make_request(url, **kwargs):
+        seen.append(url)
+        if "KXNBASPREAD-24MAR08BOSLAL" in url:
+            return FakeResponse({
+                "event": {
+                    "markets": [
+                        {
+                            "ticker": "KXNBASPREAD-24MAR08BOSLAL",
+                            "event_ticker": "KXNBASPREAD-24MAR08BOSLAL",
+                            "title": "Boston Celtics wins by over 4.5",
+                            "subtitle": "",
+                            "yes_bid_dollars": 0.45,
+                            "yes_ask_dollars": 0.55,
+                        }
+                    ]
+                }
+            })
+        return FakeResponse({}, 404)
+
+    monkeypatch.setattr(ki, "_make_kalshi_request", fake_make_request)
     out = ki.enrich_with_kalshi_markets(df)
 
     assert out.loc[0, "kalshi_match_status"] == "matched"
-    assert any(call.get("series_ticker") == "KXNBASPREAD" for call in seen)
+    assert any("KXNBASPREAD" in call for call in seen)
