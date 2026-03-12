@@ -33,15 +33,15 @@ except ImportError:
 logger = logging.getLogger(__name__)
 API_BASE = "https://api.elections.kalshi.com/trade-api/v2"
 
-KALSHI_LINE_TOLERANCE_SPREAD = 0.5
-KALSHI_LINE_TOLERANCE_TOTAL = 0.5
+KALSHI_LINE_TOLERANCE_SPREAD = 1.5
+KALSHI_LINE_TOLERANCE_TOTAL = 1.5
 
 MAX_LINE_TOLERANCE = {
-    "NBA": 3.5,
-    "NCAAB": 2.5,
-    "NHL": 0.5,
+    "NBA": 1.5,
+    "NCAAB": 1.5,
+    "NHL": 1.5,
     "NFL": 1.5,
-    "MLB": 0.5
+    "MLB": 1.5
 }
 
 def market_type_matches(market_type: str, title: str, subtitle: str = "") -> bool:
