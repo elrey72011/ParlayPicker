@@ -292,6 +292,9 @@ TEAM_MAP = {
     "mizzou": "missouri",
     "alabama am": "alabama a&m",
     "bgsu": "bowling green",
+    "ucf": "central florida",
+    "miami fl": "miami (fl)",
+    "saint bonaventure": "st. bonaventure",
 }
 
 # Merge dynamic aliases into the primary mapping dictionary

@@ -33,15 +33,15 @@ except ImportError:
 logger = logging.getLogger(__name__)
 API_BASE = "https://api.elections.kalshi.com/trade-api/v2"
 
-KALSHI_LINE_TOLERANCE_SPREAD = 1.5
-KALSHI_LINE_TOLERANCE_TOTAL = 1.5
+KALSHI_LINE_TOLERANCE_SPREAD = 3.0
+KALSHI_LINE_TOLERANCE_TOTAL = 3.0
 
 MAX_LINE_TOLERANCE = {
-    "NBA": 1.5,
-    "NCAAB": 1.5,
-    "NHL": 1.5,
-    "NFL": 1.5,
-    "MLB": 1.5
+    "NBA": 3.0,
+    "NCAAB": 3.0,
+    "NHL": 3.0,
+    "NFL": 3.0,
+    "MLB": 3.0
 }
 
 def market_type_matches(market_type: str, title: str, subtitle: str = "") -> bool:
@@ -795,9 +795,8 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 nearest = min(kalshi_lines, key=lambda x: abs(float(x[0]) - target_line_abs))
                 delta = abs(float(nearest[0]) - target_line_abs)
 
-                tolerance = MAX_LINE_TOLERANCE.get(league, 1.5)
-                # if abs(kalshi_line - odds_line) <= 1.5:
-                if delta <= 1.5:
+                    tolerance = MAX_LINE_TOLERANCE.get(league, 3.0)
+                    if delta <= 3.0:
                     if delta == 0:
                         best_market = nearest[2]
                         match_status = "matched"
@@ -894,9 +893,8 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                     nearest = min(kalshi_lines, key=lambda x: abs(float(x[0]) - target_line_abs))
                     delta = abs(float(nearest[0]) - target_line_abs)
 
-                    tolerance = MAX_LINE_TOLERANCE.get(league, 1.5)
-                    # if abs(kalshi_line - odds_line) <= 1.5:
-                    if delta <= 1.5:
+                    tolerance = MAX_LINE_TOLERANCE.get(league, 3.0)
+                    if delta <= 3.0:
                         if delta == 0:
                             best_market = nearest[2]
                             match_status = "matched"
