@@ -837,7 +837,22 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
 
     best["calibrated_probability"] = _numeric_series(best, "calibrated_probability", 0.5)
     edge_for_consensus = _numeric_series(best, "edge", 0.0)
-    best["consensus_agreement"] = "⚪ No Kalshi"
+
+    if "consensus_agreement" not in best.columns:
+        best["consensus_agreement"] = "⚪ No Kalshi"
+    else:
+        # Fill any NA consensus_agreements that may have carried over
+        best["consensus_agreement"] = best["consensus_agreement"].fillna("⚪ No Kalshi")
+
+    kalshi_prob = _numeric_series(best, "kalshi_probability") if "kalshi_probability" in best.columns else pd.Series([pd.NA]*len(best), index=best.index)
+    valid_kalshi = kalshi_prob.notna() & (kalshi_prob > 0.0)
+
+    if valid_kalshi.any():
+        blended = best["calibrated_probability"]
+        gap = blended - kalshi_prob
+        best.loc[valid_kalshi, "consensus_agreement"] = "⚖️ Neutral"
+        best.loc[valid_kalshi & gap.ge(0.03), "consensus_agreement"] = "✅ Agrees"
+        best.loc[valid_kalshi & gap.le(-0.03), "consensus_agreement"] = "❌ Disagrees"
 
     # Phase 2: Eradication of Floating-Point Artefacts in Expected Value Calculations
     # Primary sort by expected_value descending, then game_date, league, home_team ascending
