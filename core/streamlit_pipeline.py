@@ -950,11 +950,25 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None) -> pd.DataFrame:
     for game in all_games:
         game_id = game.get('id')
         if game_id not in games_dict:
+            commence_time_str = game.get('commence_time', '')
+            # Explicitly convert commence_time to local US timezone before extracting the date string
+            if commence_time_str:
+                try:
+                    import pytz
+                    from datetime import datetime
+                    utc_time = datetime.fromisoformat(commence_time_str.replace('Z', '+00:00'))
+                    est_time = utc_time.astimezone(pytz.timezone('America/New_York'))
+                    commence_time_str = est_time.strftime('%Y-%m-%d')
+                except Exception as e:
+                    pass
+
             games_dict[game_id] = {
                 'game_id': game_id,
                 'home_team': normalize_team_name(game.get('away_team')),
                 'away_team': normalize_team_name(game.get('home_team')),
-                'commence_time': game.get('commence_time'),
+                'raw_home_team': game.get('away_team'),
+                'raw_away_team': game.get('home_team'),
+                'commence_time': commence_time_str,
                 # Add UUID constraint for rigorous entity resolution (Phase 1)
                 'uuid': game_id,
             }
@@ -1128,7 +1142,7 @@ def run_analysis_pipeline(
             live_odds_df = live_odds_df.merge(base_matchups, on=['home_team', 'away_team'], how='inner')
 
         # Avoid duplicating columns during merge
-        live_merge_cols = [c for c in live_odds_df.columns if c not in ["game_id", "commence_time"]]
+        live_merge_cols = [c for c in live_odds_df.columns if c not in ["game_id", "commence_time", "raw_home_team", "raw_away_team"]]
         merged = merged.merge(
             live_odds_df[live_merge_cols].drop_duplicates(["home_team", "away_team"]),
             on=["home_team", "away_team"],
@@ -1228,6 +1242,15 @@ def run_analysis_pipeline(
     missing_odds_mask = merged["odds_american"].isna()
     missing_odds_count = missing_odds_mask.sum()
     if missing_odds_count > 0:
+        # Pre-drop debug log to track exact unmapped JSON names from Odds API
+        if not live_odds_df.empty and 'raw_home_team' in live_odds_df.columns:
+            merged_teams = set(zip(merged['home_team'], merged['away_team']))
+            unmapped_live = live_odds_df[~live_odds_df.set_index(['home_team', 'away_team']).index.isin(merged_teams)]
+            if not unmapped_live.empty:
+                unmapped_homes = unmapped_live['raw_home_team'].unique().tolist()
+                unmapped_aways = unmapped_live['raw_away_team'].unique().tolist()
+                logger.info(f"Unmapped raw teams from Odds API JSON: Homes={unmapped_homes}, Aways={unmapped_aways}")
+
         dropped_games = merged[missing_odds_mask][['home_team', 'away_team', 'market_type']].to_dict('records')
         logger.warning(f"Warning: Dropped {missing_odds_count} rows - odds_american is NaN after Novig line mapping: {dropped_games}")
         merged = merged[~missing_odds_mask].copy()
