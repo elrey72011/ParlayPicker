@@ -892,7 +892,11 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None) -> pd.DataFrame:
     if not api_key:
         raise OddsAPIAuthError("The Odds API key is missing. Please verify your credentials in Streamlit secrets.")
 
-    client = TheOddsAPIClient(api_key=api_key)
+    client = TheOddsAPIClient(
+        api_key=api_key,
+        regions="us_ex",
+        bookmakers="novig"
+    )
 
     SPORT_KEYS = {
         "NBA": "basketball_nba",
@@ -939,7 +943,7 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None) -> pd.DataFrame:
     if not all_games:
         return pd.DataFrame()
 
-    # Aggregate by game, prioritizing Novig, then DraftKings, then FanDuel
+    # Aggregate by game, focusing strictly on Novig
     games_dict = {}
     for game in all_games:
         game_id = game.get('id')
@@ -955,21 +959,11 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None) -> pd.DataFrame:
 
         for book in game.get('bookmakers', []):
             book_key = book.get('key', '')
-            if book_key not in ['novig', 'draftkings', 'fanduel']:
+            if book_key != 'novig':
                 continue
 
-            # We use 'novig_' prefix for the mapped columns regardless of actual source
-            # so downstream mapping handles it, but we also store the actual book source
             for market in book.get('markets', []):
                 if market.get('key') == 'spreads':
-                    # Only update if we don't already have 'novig' lines or if we are 'novig'
-                    # replacing a lower priority book (priority: novig > draftkings > fanduel)
-                    current_source = games_dict[game_id].get('odds_source_spread')
-                    if current_source == 'novig' and book_key != 'novig':
-                        continue
-                    if current_source == 'draftkings' and book_key == 'fanduel':
-                        continue
-
                     for o in market.get('outcomes', []):
                         if normalize_team_name(o.get('name')) == games_dict[game_id]['home_team']:
                             games_dict[game_id]['novig_home_point'] = o.get('point')
@@ -980,12 +974,6 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None) -> pd.DataFrame:
                             games_dict[game_id]['novig_away_price'] = o.get('price')
                             games_dict[game_id]['odds_source_spread'] = book_key
                 elif market.get('key') == 'totals':
-                    current_source = games_dict[game_id].get('odds_source_total')
-                    if current_source == 'novig' and book_key != 'novig':
-                        continue
-                    if current_source == 'draftkings' and book_key == 'fanduel':
-                        continue
-
                     for o in market.get('outcomes', []):
                         if o.get('name') == 'Over':
                             games_dict[game_id]['novig_over_point'] = o.get('point')
@@ -1222,12 +1210,12 @@ def run_analysis_pipeline(
     merged = merged.apply(map_novig_lines, axis=1)
 
     # Enforce Strict Drops for missing valid live line/price
-    # Only keep rows that successfully mapped a live line and price from novig, draftkings, or fanduel
+    # Only keep rows that successfully mapped a live line and price strictly from novig
     if "odds_source" in merged.columns and not live_odds_df.empty:
-        valid_sources = ["novig_live", "draftkings", "fanduel"]
+        valid_sources = ["novig_live"]
         dropped_count = (~merged["odds_source"].isin(valid_sources)).sum()
         if dropped_count > 0:
-            logger.warning(f"Warning: Dropped {dropped_count} rows - Missing live betting line. Kept row but EV calculation will be bypassed.")
+            logger.warning(f"Warning: Dropped {dropped_count} rows - Missing novig exchange line. Kept row but EV calculation will be bypassed.")
 
     merged["odds_american"] = _numeric_series(merged, "odds_american", pd.NA)
 
