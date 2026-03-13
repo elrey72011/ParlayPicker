@@ -25,7 +25,7 @@ EXPECTED_COLUMNS = [
 ]
 
 
-def test_build_theover_bet_rows_missing_odds_defaults_to_minus_110():
+def test_build_theover_bet_rows_missing_odds_defaults_to_pd_na():
     totals_df = pd.DataFrame(
         {
             "league": ["NBA"],
@@ -40,7 +40,7 @@ def test_build_theover_bet_rows_missing_odds_defaults_to_minus_110():
     out = build_theover_bet_rows(None, totals_df, ["NBA"])
 
     assert not out.empty
-    assert out.loc[0, "odds_american"] == -110.0
+    assert pd.isna(out.loc[0, "odds_american"])
 
 
 def test_build_theover_bet_rows_missing_probability_column_does_not_crash():

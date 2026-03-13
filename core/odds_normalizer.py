@@ -16,6 +16,6 @@ def normalize_odds(df: pd.DataFrame) -> pd.DataFrame:
             df["odds_american"] = df[col]
             return df
 
-    df["odds_american"] = -110
+    df["odds_american"] = pd.NA
 
     return df

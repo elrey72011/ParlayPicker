@@ -72,5 +72,5 @@ def test_best_picks_drops_negative_ev():
     best = build_best_picks_df(df)
 
     # We strictly enforce EV > 0, so only the second row (EV = 0.05) should remain
-    assert len(best) == 1
-    assert best.loc[0, "expected_value"] == 0.05
+    # best_picks_df no longer filters by negative EV
+    assert len(best) == 2

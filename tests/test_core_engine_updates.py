@@ -35,6 +35,8 @@ def test_pipeline_adds_best_pick_and_consensus():
     df = pd.DataFrame(
         [
             {
+                "league": "NBA",
+                "market_type": "spread_home",
                 "away_team": "LAL",
                 "home_team": "BOS",
                 "ai_probability": 0.56,
