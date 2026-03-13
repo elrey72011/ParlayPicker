@@ -171,6 +171,12 @@ FEATURE_COLUMNS = [
     "home_ml_implied",
     "away_ml_implied",
     "home_field_advantage",
+    "home_corsi_pct",
+    "away_corsi_pct",
+    "home_fenwick_pct",
+    "away_fenwick_pct",
+    "home_expected_goals",
+    "away_expected_goals",
 ]
 
 
@@ -1122,6 +1128,45 @@ class HistoricalDataBuilder:
                 features["sportsdata_home_turnover_margin"] = _safe_float(payload.get("turnover_margin"))
                 features["sportsdata_home_net"] = _safe_float(payload.get("net_points_per_game"))
                 features["sportsdata_home_strength_delta"] = _safe_float(payload.get("strength_delta"))
+
+                if sport_key == "NHL":
+                    # Build foundational feature engineering for Corsi and Fenwick from scratch
+                    shots_for = _safe_float(payload.get("shots_for")) or 30.0
+                    shots_against = _safe_float(payload.get("shots_against")) or 30.0
+                    misses_for = _safe_float(payload.get("misses_for")) or 12.0
+                    misses_against = _safe_float(payload.get("misses_against")) or 12.0
+                    blocks_for = _safe_float(payload.get("blocks_for")) or 14.0
+                    blocks_against = _safe_float(payload.get("blocks_against")) or 14.0
+
+                    # Corsi = Shots + Misses + Blocks
+                    corsi_for = shots_for + misses_for + blocks_for
+                    corsi_against = shots_against + misses_against + blocks_against
+                    corsi_total = corsi_for + corsi_against
+                    features["home_corsi_pct"] = corsi_for / corsi_total if corsi_total > 0 else 0.50
+
+                    # Fenwick = Shots + Misses (excludes blocked shots)
+                    fenwick_for = shots_for + misses_for
+                    fenwick_against = shots_against + misses_against
+                    fenwick_total = fenwick_for + fenwick_against
+                    features["home_fenwick_pct"] = fenwick_for / fenwick_total if fenwick_total > 0 else 0.50
+
+                    # Expected Goals (xG) Calculation
+                    base_xg = _safe_float(payload.get("expected_goals")) or (features["home_avg_for"] or 2.5)
+
+                    # 5v5 logic (first 55 minutes)
+                    xg_5v5 = base_xg * (55.0 / 60.0)
+                    possession_modifier = ((features["home_corsi_pct"] + features["home_fenwick_pct"]) / 2.0)
+                    # Weight possession heavily for 5v5
+                    xg_5v5_adjusted = xg_5v5 * (0.8 + 0.4 * possession_modifier)
+
+                    # Late game bimodal variance (final 5 minutes)
+                    # We explicitly reduce the weight of even-strength shot attempt metrics (Corsi/Fenwick)
+                    # for the final 5 minutes of regulation to account for 6-on-5 empty net situations.
+                    xg_final_5 = base_xg * (5.0 / 60.0)
+                    # Only apply a tiny 0.1 weight to possession in the final 5 minutes, relying more on baseline/variance
+                    xg_final_5_adjusted = xg_final_5 * (0.9 + 0.1 * possession_modifier)
+
+                    features["home_expected_goals"] = xg_5v5_adjusted + xg_final_5_adjusted
             else:
                 features["away_avg_for"] = _safe_float(payload.get("team_avg_points_for"))
                 features["away_avg_against"] = _safe_float(payload.get("team_avg_points_against"))
@@ -1132,6 +1177,45 @@ class HistoricalDataBuilder:
                 features["sportsdata_away_turnover_margin"] = _safe_float(payload.get("turnover_margin"))
                 features["sportsdata_away_net"] = _safe_float(payload.get("net_points_per_game"))
                 features["sportsdata_away_strength_delta"] = _safe_float(payload.get("strength_delta"))
+
+                if sport_key == "NHL":
+                    # Build foundational feature engineering for Corsi and Fenwick from scratch
+                    shots_for = _safe_float(payload.get("shots_for")) or 30.0
+                    shots_against = _safe_float(payload.get("shots_against")) or 30.0
+                    misses_for = _safe_float(payload.get("misses_for")) or 12.0
+                    misses_against = _safe_float(payload.get("misses_against")) or 12.0
+                    blocks_for = _safe_float(payload.get("blocks_for")) or 14.0
+                    blocks_against = _safe_float(payload.get("blocks_against")) or 14.0
+
+                    # Corsi = Shots + Misses + Blocks
+                    corsi_for = shots_for + misses_for + blocks_for
+                    corsi_against = shots_against + misses_against + blocks_against
+                    corsi_total = corsi_for + corsi_against
+                    features["away_corsi_pct"] = corsi_for / corsi_total if corsi_total > 0 else 0.50
+
+                    # Fenwick = Shots + Misses (excludes blocked shots)
+                    fenwick_for = shots_for + misses_for
+                    fenwick_against = shots_against + misses_against
+                    fenwick_total = fenwick_for + fenwick_against
+                    features["away_fenwick_pct"] = fenwick_for / fenwick_total if fenwick_total > 0 else 0.50
+
+                    # Expected Goals (xG) Calculation
+                    base_xg = _safe_float(payload.get("expected_goals")) or (features["away_avg_for"] or 2.5)
+
+                    # 5v5 logic (first 55 minutes)
+                    xg_5v5 = base_xg * (55.0 / 60.0)
+                    possession_modifier = ((features["away_corsi_pct"] + features["away_fenwick_pct"]) / 2.0)
+                    # Weight possession heavily for 5v5
+                    xg_5v5_adjusted = xg_5v5 * (0.8 + 0.4 * possession_modifier)
+
+                    # Late game bimodal variance (final 5 minutes)
+                    # We explicitly reduce the weight of even-strength shot attempt metrics (Corsi/Fenwick)
+                    # for the final 5 minutes of regulation to account for 6-on-5 empty net situations.
+                    xg_final_5 = base_xg * (5.0 / 60.0)
+                    # Only apply a tiny 0.1 weight to possession in the final 5 minutes, relying more on baseline/variance
+                    xg_final_5_adjusted = xg_final_5 * (0.9 + 0.1 * possession_modifier)
+
+                    features["away_expected_goals"] = xg_5v5_adjusted + xg_final_5_adjusted
 
         _populate("home", home_payload)
         _populate("away", away_payload)
@@ -1156,7 +1240,12 @@ class HistoricalDataBuilder:
         features["away_ml_implied"] = _implied_prob(away_odds)
 
         # Phase 1: Zero out home court advantage for neutral sites
-        is_neutral = False # Needs to be passed through from API in a real scenario
+        is_neutral = False
+        if home_payload and isinstance(home_payload, dict):
+            is_neutral = bool(home_payload.get("is_neutral", False))
+        elif away_payload and isinstance(away_payload, dict):
+            is_neutral = bool(away_payload.get("is_neutral", False))
+
         features["home_field_advantage"] = 0.0 if is_neutral else 1.0
 
         return features

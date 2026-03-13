@@ -473,16 +473,36 @@ def _safe_float(val: Any) -> float:
     except (TypeError, ValueError):
         return 0.0
 
-def _select_probability(market: dict[str, Any]) -> float:
+def _select_probability(market: dict[str, Any]) -> float | None:
     # Explicitly use float casting for fixed-point _dollars migration
     bid = _safe_float(market.get("yes_bid_dollars"))
     ask = _safe_float(market.get("yes_ask_dollars"))
 
-    if bid > 0 or ask > 0:
-        if (bid + ask) > 2.0:
-            return float((bid + ask) / 200.0)
-        else:
-            return float((bid + ask) / 2.0)
+    # Phase 2: Invalidate Kalshi market if bid-ask spread is > 20 cents, OR if order book is empty on one side
+    # Since prices might be in dollars (e.g. 0.55) or cents (e.g. 55.0)
+    # the threshold needs to match the magnitude.
+
+    # If one side of the order book is completely empty (0 bids or 0 asks), it's illiquid
+    if bid == 0.0 or ask == 0.0:
+        logger.warning(f"Kalshi market illiquid: empty order book side (bid {bid}, ask {ask}).")
+        return None
+
+    bid_ask_spread = abs(bid - ask)
+    if (bid + ask) > 2.0:
+        # Values are in cents
+        if bid_ask_spread > 20.0:
+            logger.warning(f"Kalshi market illiquid: bid {bid}, ask {ask}. Spread > 20 cents.")
+            return None
+    else:
+        # Values are in dollars
+        if bid_ask_spread > 0.20:
+            logger.warning(f"Kalshi market illiquid: bid {bid}, ask {ask}. Spread > 20 cents.")
+            return None
+
+    if (bid + ask) > 2.0:
+        return float((bid + ask) / 200.0)
+    else:
+        return float((bid + ask) / 2.0)
 
     last = _safe_float(market.get("last_price_dollars"))
 
@@ -773,10 +793,18 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                     bid = _safe_float(mkt.get("yes_bid_dollars"))
                     ask = _safe_float(mkt.get("yes_ask_dollars"))
 
-                    if (bid + ask) > 2.0:
-                        kalshi_prob = (bid + ask) / 200.0
+                    if bid == 0.0 or ask == 0.0:
+                        kalshi_prob = None
+                    elif (bid + ask) > 2.0:
+                        if abs(bid - ask) > 20.0:
+                            kalshi_prob = None
+                        else:
+                            kalshi_prob = (bid + ask) / 200.0
                     elif bid > 0 and ask > 0:
-                        kalshi_prob = (bid + ask) / 2.0
+                        if abs(bid - ask) > 0.20:
+                            kalshi_prob = None
+                        else:
+                            kalshi_prob = (bid + ask) / 2.0
                     else:
                         kalshi_prob = _select_probability(mkt)
 
@@ -871,10 +899,18 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                         if k_line is not None:
                             bid = _safe_float(mkt.get("yes_bid_dollars"))
                             ask = _safe_float(mkt.get("yes_ask_dollars"))
-                            if (bid + ask) > 2.0:
-                                kalshi_prob = (bid + ask) / 200.0
+                            if bid == 0.0 or ask == 0.0:
+                                kalshi_prob = None
+                            elif (bid + ask) > 2.0:
+                                if abs(bid - ask) > 20.0:
+                                    kalshi_prob = None
+                                else:
+                                    kalshi_prob = (bid + ask) / 200.0
                             elif bid > 0 and ask > 0:
-                                kalshi_prob = (bid + ask) / 2.0
+                                if abs(bid - ask) > 0.20:
+                                    kalshi_prob = None
+                                else:
+                                    kalshi_prob = (bid + ask) / 2.0
                             else:
                                 kalshi_prob = _select_probability(mkt)
 
@@ -912,11 +948,24 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 bid = _safe_float(best_market.get("yes_bid_dollars"))
                 ask = _safe_float(best_market.get("yes_ask_dollars"))
 
-                if bid > 0 and ask > 0:
+                if bid == 0.0 or ask == 0.0:
+                    logger.warning(f"Kalshi market illiquid: empty order book side for {best_market.get('ticker')}")
+                    kalshi_prob = None
+                elif bid > 0 and ask > 0:
                     # Values are in dollars
-                    kalshi_prob = (bid + ask) / 2.0
+                    if abs(bid - ask) > 0.20:
+                        logger.warning(f"Kalshi market illiquid: spread > 0.20 for {best_market.get('ticker')}")
+                        kalshi_prob = None
+                    else:
+                        kalshi_prob = (bid + ask) / 2.0
                 else:
                     kalshi_prob = _select_probability(best_market)
+
+            if kalshi_prob is None:
+                out.at[idx, "kalshi_match_status"] = "miss"
+                out.at[idx, "kalshi_match_reason"] = "illiquid_market"
+                # Keep kalshi_probability pd.NA to fall back 100% to ML probability
+                continue
 
             kalshi_prob = _safe_float(kalshi_prob)
             if kalshi_prob == 0.0:

@@ -368,12 +368,24 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
                     gemini_results = analyzer.analyze_games_batch(games_to_analyze)
                     gemini_explanations = []
                     gemini_risks = []
-                    for res in gemini_results:
+
+                    bearish_keywords = ["slow pace", "defensive struggle", "risk of blowout", "key player absences", "grind-it-out"]
+
+                    for idx, res in enumerate(gemini_results):
                         gemini_explanations.append(res.get("confidence_explanation", ""))
                         risks = res.get("risk_notes", "")
                         if isinstance(risks, list):
                             risks = ", ".join(risks)
                         gemini_risks.append(risks)
+
+                        # Phase 4: Qualitative LLM Synergy
+                        # Apply a 0.85 fractional discount to EV if bearish keywords are detected in the LLM risk notes
+                        risk_lower = str(risks).lower()
+                        if any(kw in risk_lower for kw in bearish_keywords):
+                            current_ev = best_picks_df.at[best_picks_df.index[idx], "expected_value"]
+                            if pd.notna(current_ev):
+                                best_picks_df.at[best_picks_df.index[idx], "expected_value"] = float(current_ev) * 0.85
+
                     best_picks_df["gemini_explanation"] = gemini_explanations
                     best_picks_df["gemini_risk_notes"] = gemini_risks
 
@@ -656,6 +668,12 @@ def main() -> None:
 
             final_export_cols = [c for c in target_export_cols if c in export_prep_df.columns]
             best_picks_export = export_prep_df[final_export_cols].copy()
+
+            # Phase 5: Output Sanitization
+            # Permanently enforce the edge > 0.02 filter for the final exported CSV to prevent
+            # zero-edge outputs and negative expected value noise from cluttering the dataset.
+            if "edge" in best_picks_export.columns:
+                best_picks_export = best_picks_export[pd.to_numeric(best_picks_export["edge"], errors="coerce") > 0.02].copy()
 
             # Phase 3: Synchronize Kalshi missing strings
             if "kalshi_probability" in best_picks_export.columns:
