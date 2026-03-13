@@ -167,7 +167,7 @@ def export_raw_odds_api(odds_response: Dict, filename: str = None) -> str:
 
             # Extract spreads
             for market in book.get('markets', []):
-                if market.get('key') == 'h2h_spreads':
+                if market.get('key') == 'spreads':
                     for o in market.get('outcomes', []):
                         prefix = f"{book_key}_" if book_key == "novig" else ""
                         if o.get('name') == game.get('home_team'):

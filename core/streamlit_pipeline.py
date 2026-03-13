@@ -501,7 +501,7 @@ def compute_blended_probability(
 
 def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
-    out["odds_american"] = _numeric_series(out, "odds_american", -110.0)
+    out["odds_american"] = _numeric_series(out, "odds_american", pd.NA)
 
     # Phase 4: Implementation of Bayesian Shrinkage and Vig Removal
     # De-vig by applying multiplicative normalization for a standard 2-way market.
@@ -511,8 +511,8 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
 
     def _get_opposing_from_exchange(odds):
         # We assume opposing line on exchange is essentially exactly mirrored (ignoring 20-cent vig)
-        if pd.isna(odds) or odds == -110.0:
-            return -110.0
+        if pd.isna(odds):
+            return pd.NA
         return float(-odds)
 
     opposing_implied = out["odds_american"].apply(_get_opposing_from_exchange).apply(american_to_prob)
@@ -574,7 +574,7 @@ def _build_spread_rows(normalized: pd.DataFrame) -> list[pd.DataFrame]:
     line = _first_existing_numeric(normalized, ["line", "spread_line", "spread", "points"])
     prob = _first_existing_numeric(normalized, ["theover_probability", "winprobability", "win_probability", "probability"])
 
-    odds = _first_existing_numeric(normalized, ["odds_american", "american_odds", "odds"], default=-110.0)
+    odds = _first_existing_numeric(normalized, ["odds_american", "american_odds", "odds"], default=pd.NA)
 
     base_cols = [c for c in ["league", "home_team", "away_team", "game_date", "game_time_est"] if c in normalized.columns]
     base = normalized[base_cols].copy()
@@ -609,7 +609,7 @@ def _build_total_rows(normalized: pd.DataFrame) -> list[pd.DataFrame]:
     total_line = _first_existing_numeric(normalized, ["total_line", "total", "line", "points"])
     total_prob = _first_existing_numeric(normalized, ["theover_probability", "winprobability", "win_probability", "probability"])
 
-    total_odds = _first_existing_numeric(normalized, ["odds_american", "american_odds", "odds"], default=-110.0)
+    total_odds = _first_existing_numeric(normalized, ["odds_american", "american_odds", "odds"], default=pd.NA)
 
     pick_text = _string_series(normalized, "pick").str.lower()
     pick_text = pick_text.where(pick_text.str.len().gt(0), _string_series(normalized, "best_pick").str.lower())
@@ -831,7 +831,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     pool['sort_ev'] = pool['expected_value'].fillna(-999)
 
     # Sort by the temporary column, group by the unique game identifiers, and take the first row
-    best = pool.sort_values('sort_ev', ascending=False).groupby(['home_team', 'away_team'], as_index=False).first()
+    # Use matchup_key to correctly deduplicate reversed home/away matchups
+    best = pool.sort_values('sort_ev', ascending=False).groupby('matchup_key', as_index=False).first()
 
     # Drop the temporary sorting column to clean the final output
     best = best.drop(columns=['sort_ev'])
@@ -1213,11 +1214,22 @@ def run_analysis_pipeline(
     # Only keep rows that successfully mapped a live line and price strictly from novig
     if "odds_source" in merged.columns and not live_odds_df.empty:
         valid_sources = ["novig_live"]
-        dropped_count = (~merged["odds_source"].isin(valid_sources)).sum()
+        missing_mask = ~merged["odds_source"].isin(valid_sources)
+        dropped_count = missing_mask.sum()
         if dropped_count > 0:
-            logger.warning(f"Warning: Dropped {dropped_count} rows - Missing novig exchange line. Kept row but EV calculation will be bypassed.")
+            dropped_games = merged[missing_mask][['home_team', 'away_team', 'market_type']].to_dict('records')
+            logger.warning(f"Warning: Dropped {dropped_count} rows - Missing novig exchange line. These picks have been completely removed from the pipeline: {dropped_games}")
+            merged = merged[~missing_mask].copy()
 
     merged["odds_american"] = _numeric_series(merged, "odds_american", pd.NA)
+
+    # Double check no NaNs exist in odds_american, drop them if they do
+    missing_odds_mask = merged["odds_american"].isna()
+    missing_odds_count = missing_odds_mask.sum()
+    if missing_odds_count > 0:
+        dropped_games = merged[missing_odds_mask][['home_team', 'away_team', 'market_type']].to_dict('records')
+        logger.warning(f"Warning: Dropped {missing_odds_count} rows - odds_american is NaN after Novig line mapping: {dropped_games}")
+        merged = merged[~missing_odds_mask].copy()
 
     merged["decimal_odds"] = merged["odds_american"].apply(american_to_decimal)
 
