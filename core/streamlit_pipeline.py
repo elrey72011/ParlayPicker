@@ -896,6 +896,7 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None) -> pd.DataFrame:
     client = TheOddsAPIClient(
         api_key=api_key,
         regions="us_ex",
+        markets="h2h,spreads,totals",
         bookmakers="novig"
     )
 
