@@ -295,6 +295,12 @@ TEAM_MAP = {
     "ucf": "central florida",
     "miami fl": "miami (fl)",
     "saint bonaventure": "st. bonaventure",
+    "massachusetts": "umass",
+    "miami oh": "miami (oh)",
+    "mizzou": "missouri",
+    "bowling green": "bgsu",
+    "texas tech": "texas tech",
+    "iowa state": "iowa state",
 }
 
 # Merge dynamic aliases into the primary mapping dictionary
@@ -321,15 +327,14 @@ def normalize_team_name(name: str) -> str:
         return str(name) if name is not None else ""
 
     # 1. Apply strip and lower immediately to the incoming parameter
-    cleaned_name = name.strip().lower()
+    name = name.strip().lower()
+    cleaned_name = name
 
     # 2. Perform dictionary lookup on the explicitly cleaned string
     if cleaned_name in TEAM_MAP:
         name = TEAM_MAP[cleaned_name]
-    else:
-        name = name.strip()
 
-    # Convert to lowercase
+    # Convert to lowercase (in case the dictionary mapping has uppercase)
     normalized = name.lower()
 
     # Track if team name is missing from exact map and is likely a long-form API name

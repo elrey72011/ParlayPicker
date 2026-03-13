@@ -671,7 +671,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
             score = fuzz.token_set_ratio(concatenated_teams, combined_event_text)
 
-            # Lowered threshold to 50 to bypass "Conference Tournament" prefix issues
+            # Lowered threshold to exactly 50 to bypass "Conference Tournament" prefix issues
             if score >= 50 and score > best_event_score:
                 best_event_score = score
                 best_event_match = event
