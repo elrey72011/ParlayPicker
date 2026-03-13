@@ -340,26 +340,9 @@ def normalize_team_name(name: str) -> str:
     # Track if team name is missing from exact map and is likely a long-form API name
     # We also check the lowercase name to ensure missing logic works properly with lowercased map
     if name not in TEAM_MAP and name != "Over" and name != "Under" and cleaned_name not in TEAM_MAP:
-        # Attempt Probabilistic Matching Fallback with rapidfuzz using token_sort_ratio
-        if 'fuzz' in globals():
-            best_match = None
-            best_score = 0
-
-            # Use unique target names from TEAM_MAP values as the schedule names pool
-            # Add existing keys as well, to map against valid long-form names
-            schedule_names = list(set(TEAM_MAP.values()) | set(TEAM_MAP.keys()))
-
-            for schedule_name in schedule_names:
-                score = fuzz.token_sort_ratio(name, schedule_name)
-                if score >= 85 and score > best_score:
-                    best_score = score
-                    best_match = schedule_name
-
-            if best_match:
-                # Map to the short form if it was a key, otherwise it's already a short form
-                return TEAM_MAP.get(best_match, best_match)
-
-        # If rapidfuzz doesn't find a match, just proceed with regex normalization
+        # SYSTEM OVERRIDE: Deprecate fuzzy logic. Remove any reliance on naive fuzzywuzzy,
+        # Levenshtein distance algorithms, or unanchored substring matching for primary team identification.
+        # Strict dictionary mapping only.
         pass
 
     # Expand common abbreviations BEFORE removing punctuation

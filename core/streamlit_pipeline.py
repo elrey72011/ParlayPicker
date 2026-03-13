@@ -556,6 +556,10 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
     edge = edge.mask(zero_mask, 0.0)
     ev = ev.mask(zero_mask, 0.0)
 
+    # Phase 3: NHL Statistical Recalibration
+    nhl_totals_mask = (out["league"].str.upper() == "NHL") & (out["market_type"].str.contains("total", case=False, na=False))
+    ev = ev.where(~nhl_totals_mask, ev * 0.80)
+
     out["expected_value"] = ev
     out["edge"] = edge
     out["best_pick"] = out.apply(_format_best_pick, axis=1)
@@ -945,6 +949,8 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None) -> pd.DataFrame:
                 'home_team': normalize_team_name(game.get('away_team')),
                 'away_team': normalize_team_name(game.get('home_team')),
                 'commence_time': game.get('commence_time'),
+                # Add UUID constraint for rigorous entity resolution (Phase 1)
+                'uuid': game_id,
             }
 
         for book in game.get('bookmakers', []):
@@ -1036,7 +1042,7 @@ def run_analysis_pipeline(
         base_schedule["date"] = _game_dates(base_schedule)
 
         base_merge_columns = merge_keys + [
-            col for col in ["date", "game_time_est", "odds_american", "ml_probability"]
+            col for col in ["date", "game_time_est", "odds_american", "ml_probability", "is_neutral"]
             if col in base_schedule.columns
         ]
 
@@ -1074,7 +1080,7 @@ def run_analysis_pipeline(
 
         reverse_schedule = base_schedule.rename(columns={"home_team": "away_team", "away_team": "home_team"})
         reverse_columns = merge_keys + [
-            col for col in ["date", "game_time_est", "odds_american", "ml_probability"]
+            col for col in ["date", "game_time_est", "odds_american", "ml_probability", "is_neutral"]
             if col in reverse_schedule.columns
         ]
         reverse_lookup = reverse_schedule[reverse_columns].drop_duplicates(merge_keys).rename(
@@ -1083,6 +1089,7 @@ def run_analysis_pipeline(
                 "game_time_est": "game_time_est_rev",
                 "odds_american": "odds_american_rev",
                 "ml_probability": "ml_probability_rev",
+                "is_neutral": "is_neutral_rev",
             }
         )
         merged = merged.merge(reverse_lookup, on=merge_keys, how="left")
@@ -1113,8 +1120,23 @@ def run_analysis_pipeline(
             )
             merged = merged.drop(columns=["game_time_est_rev"])
 
+        if "is_neutral_base" in merged.columns:
+            merged["is_neutral"] = merged["is_neutral"].fillna(merged["is_neutral_base"]) if "is_neutral" in merged.columns else merged["is_neutral_base"]
+            merged = merged.drop(columns=["is_neutral_base"])
+
+        if "is_neutral_rev" in merged.columns:
+            merged["is_neutral"] = merged["is_neutral"].fillna(merged["is_neutral_rev"]) if "is_neutral" in merged.columns else merged["is_neutral_rev"]
+            merged = merged.drop(columns=["is_neutral_rev"])
+
     # Merge Live Odds
     if not live_odds_df.empty:
+        # Phase 1: Entity Resolution Validation Layer
+        # Before fully processing live odds matches, cross-reference against the master base schedule.
+        # If the UUID/match doesn't map to a real scheduled game in base_df, drop it as hallucinated.
+        if not base_df.empty:
+            base_matchups = base_df[['home_team', 'away_team']].drop_duplicates()
+            live_odds_df = live_odds_df.merge(base_matchups, on=['home_team', 'away_team'], how='inner')
+
         # Avoid duplicating columns during merge
         live_merge_cols = [c for c in live_odds_df.columns if c not in ["game_id", "commence_time"]]
         merged = merged.merge(
@@ -1316,6 +1338,16 @@ def run_analysis_pipeline(
     merged["model_probability"] = model_probability
     merged["calibrated_probability"] = calibrated_probability
 
+    # Phase 3: NCAAB Statistical Recalibration
+    # If is_neutral == True for neutral-site and tournament games, compress margins to prevent false edges on tight spreads.
+    # We compress the difference between the calibrated probability and 0.5 (neutral) for NCAAB neutral games.
+    if "is_neutral" in merged.columns:
+        ncaab_neutral_mask = (merged["league"].str.upper() == "NCAAB") & ((merged["is_neutral"] == True) | (merged["is_neutral"].astype(str).str.lower() == "true"))
+        # Apply a 0.85 variance multiplier compression
+        compressed_prob = 0.5 + ((calibrated_probability - 0.5) * 0.85)
+        calibrated_probability = calibrated_probability.where(~ncaab_neutral_mask, compressed_prob)
+        merged["calibrated_probability"] = calibrated_probability
+
     # Bypass EV calculation for rows without odds or main lines
     ev = calibrated_probability * (merged["decimal_odds"] - 1) - (1 - calibrated_probability)
     edge = calibrated_probability - merged["market_probability"]
@@ -1333,6 +1365,12 @@ def run_analysis_pipeline(
     zero_mask = edge.abs() < 0.0001
     edge = edge.mask(zero_mask, 0.0)
     ev = ev.mask(zero_mask, 0.0)
+
+    # Phase 3: NHL Statistical Recalibration
+    # Apply a fractional discount (0.80) to the Expected Value for NHL Totals
+    # to account for the bimodal distribution of late-game empty-net scenarios.
+    nhl_totals_mask = (merged["league"].str.upper() == "NHL") & (merged["market_type"].str.contains("total", case=False, na=False))
+    ev = ev.where(~nhl_totals_mask, ev * 0.80)
 
     merged["expected_value"] = ev
     merged["edge"] = edge
