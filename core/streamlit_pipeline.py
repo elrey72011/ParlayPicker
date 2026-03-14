@@ -1042,9 +1042,15 @@ def run_analysis_pipeline(
         bdf["away_team"] = _string_series(bdf, "away_team").map(normalize_team_name)
 
         if not bet_rows.empty:
-            # Extract unique dates from the real predictions and filter base_df
-            active_dates = bet_rows['game_date'].dropna().unique()
-            bdf = bdf[bdf['game_date'].isin(active_dates)]
+            # Extract pure calendar dates from bet_rows
+            bet_dates = pd.to_datetime(bet_rows['game_date'], errors='coerce').dt.date.dropna().unique()
+
+            # Extract pure calendar dates from base_df into a temporary column
+            bdf['temp_date'] = pd.to_datetime(bdf['game_date'], errors='coerce').dt.date
+
+            # Filter and clean
+            bdf = bdf[bdf['temp_date'].isin(bet_dates)].copy()
+            bdf.drop(columns=['temp_date'], inplace=True)
 
             b_rows = bet_rows.copy()
             b_rows["league"] = _string_series(b_rows, "league").str.upper().replace(LEAGUE_ALIASES)
@@ -1546,6 +1552,14 @@ def run_analysis_pipeline(
 
     merged["expected_value"] = ev
     merged["edge"] = edge
+
+    # Protect dummy rows from NaN math errors after all EV calculations are finished
+    if 'odds_source' in merged.columns:
+        dummy_mask = merged['odds_source'] == 'dummy_override'
+        merged.loc[dummy_mask, 'WinProbability'] = 0.523809
+        merged.loc[dummy_mask, 'expected_value'] = 0.0
+        merged.loc[dummy_mask, 'edge'] = 0.0
+
     merged["best_pick"] = merged.apply(_format_best_pick, axis=1)
 
     analysis_df = merged.head(max_rows).copy()
