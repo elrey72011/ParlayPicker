@@ -1008,10 +1008,10 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
         if not sport_key:
             return []
         try:
-            # Pass hardcoded date for historical snapshot backtesting
-            games = client.get_odds(sport_key, date="2026-03-13T16:00:00Z")
+            # Use caller-provided snapshot date when present; otherwise fetch live upcoming board.
+            games = client.get_odds(sport_key, date=date)
             if games:
-                return filter_games_today_only(games)
+                return games
         except OddsAPIAuthError as e:
             if _is_hist_tier_error(e):
                 logger.warning("The Odds API historical endpoint unavailable for %s due to plan/auth limits; skipping remote odds fetch.", sport)
@@ -1038,7 +1038,10 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
                 logger.error(f"Error fetching sport thread: {e}")
 
     if not all_games:
+        logger.warning("No Novig games returned from Odds API for sports=%s date=%s", sports_to_fetch, date)
         return pd.DataFrame()
+
+    logger.info("Fetched %d Novig games prior to flattening (sports=%s date=%s)", len(all_games), sports_to_fetch, date)
 
     # Aggregate by game, focusing strictly on Novig
     games_dict = {}
