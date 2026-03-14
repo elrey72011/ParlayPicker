@@ -1072,8 +1072,9 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
             }
 
         for book in game.get('bookmakers', []):
-            book_key = book.get('key', '')
-            if book_key != 'novig':
+            book_key = str(book.get('key', '') or '').lower()
+            # Accept Novig key variants seen across Odds API payloads (e.g., novig_us).
+            if 'novig' not in book_key:
                 continue
 
             for market in book.get('markets', []):
