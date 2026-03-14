@@ -7,6 +7,7 @@ import warnings
 from itertools import combinations
 from pathlib import Path
 from typing import Any
+from difflib import SequenceMatcher
 
 import numpy as np
 import pandas as pd
@@ -35,6 +36,15 @@ except Exception as e:
 
 import os
 import streamlit as st
+
+try:
+    from thefuzz import fuzz as thefuzz_fuzz
+except Exception:  # pragma: no cover - optional dependency fallback
+    try:
+        from rapidfuzz import fuzz as rapidfuzz_fuzz
+    except Exception:  # pragma: no cover
+        rapidfuzz_fuzz = None
+    thefuzz_fuzz = None
 
 def _get_odds_api_key() -> str:
     key = st.secrets.get("ODDS_API_KEY")
@@ -400,6 +410,56 @@ def _mk_game_key(df: pd.DataFrame) -> pd.Series:
     )
 
 
+def _team_similarity_score(left: str, right: str) -> int:
+    l = str(left or "").strip().lower()
+    r = str(right or "").strip().lower()
+    if not l or not r:
+        return 0
+    if thefuzz_fuzz is not None:
+        return int(thefuzz_fuzz.token_sort_ratio(l, r))
+    if 'rapidfuzz_fuzz' in globals() and rapidfuzz_fuzz is not None:
+        return int(rapidfuzz_fuzz.token_sort_ratio(l, r))
+    return int(round(100 * SequenceMatcher(None, l, r).ratio()))
+
+
+def _fuzzy_match_schedule_row(row: pd.Series, schedule_df: pd.DataFrame, threshold: int = 85) -> pd.Series:
+    league = str(row.get("league") or "").upper()
+    home = str(row.get("home_team") or "")
+    away = str(row.get("away_team") or "")
+    if not league or not home or not away or schedule_df.empty:
+        return pd.Series(dtype="object")
+
+    league_pool = schedule_df[schedule_df["league"].eq(league)]
+    if league_pool.empty:
+        return pd.Series(dtype="object")
+
+    best_idx = None
+    best_score = -1
+    best_orient = ""
+    for idx, cand in league_pool.iterrows():
+        direct_home = _team_similarity_score(home, cand.get("home_team", ""))
+        direct_away = _team_similarity_score(away, cand.get("away_team", ""))
+        direct_min = min(direct_home, direct_away)
+
+        rev_home = _team_similarity_score(home, cand.get("away_team", ""))
+        rev_away = _team_similarity_score(away, cand.get("home_team", ""))
+        rev_min = min(rev_home, rev_away)
+
+        cand_score = max(direct_min, rev_min)
+        if cand_score > best_score:
+            best_idx = idx
+            best_score = cand_score
+            best_orient = "direct" if direct_min >= rev_min else "reverse"
+
+    if best_idx is None or best_score < threshold:
+        return pd.Series(dtype="object")
+
+    matched = league_pool.loc[best_idx].copy()
+    matched["_fuzzy_score"] = int(best_score)
+    matched["_fuzzy_orientation"] = best_orient
+    return matched
+
+
 @functools.lru_cache(maxsize=1)
 def load_base_data() -> pd.DataFrame:
     try:
@@ -414,6 +474,19 @@ def load_base_data() -> pd.DataFrame:
     base_df["game_date"] = _game_dates(base_df)
     base_df["game_key"] = _mk_game_key(base_df)
     return base_df
+
+
+def _drop_stale_stored_rows(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
+    if df is None or df.empty:
+        return df, 0
+    out = df.copy()
+    game_dates = _game_dates(out)
+    now_utc = pd.Timestamp.utcnow().tz_localize("UTC") if pd.Timestamp.utcnow().tz is None else pd.Timestamp.utcnow()
+    stale_mask = game_dates.notna() & game_dates.lt(now_utc)
+    stale_count = int(stale_mask.sum())
+    if stale_count:
+        out = out.loc[~stale_mask].copy()
+    return out, stale_count
 
 
 def _first_existing_numeric(df: pd.DataFrame, candidates: list[str], default: float | int | None = None) -> pd.Series:
@@ -782,7 +855,7 @@ def is_stale_schedule(base_df: pd.DataFrame, bet_rows_df: pd.DataFrame) -> bool:
     if base_df is None or base_df.empty or bet_rows_df is None or bet_rows_df.empty:
         return False
     base_dates = _game_dates(base_df)
-    bet_dates = pd.to_datetime(bet_rows_df.get("game_date"), errors="coerce", utc=True)
+    bet_dates = _game_dates(bet_rows_df)
     if base_dates.notna().sum() == 0 or bet_dates.notna().sum() == 0:
         return False
     return bool((bet_dates.max() - base_dates.max()) > pd.Timedelta(days=7))
@@ -1033,11 +1106,12 @@ def run_analysis_pipeline(
     spreads_df: pd.DataFrame | None = None,
     totals_df: pd.DataFrame | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]:
-    base_df = load_base_data()
-    odds_schedule_loaded = not base_df.empty
-    live_odds_df = fetch_live_odds_dataframe(sports)
-
+    raw_base_df = load_base_data()
+    odds_schedule_loaded = not raw_base_df.empty
     bet_rows = build_theover_bet_rows(spreads_df, totals_df, sports)
+    stale = is_stale_schedule(raw_base_df, bet_rows)
+    base_df, stale_base_rows_removed = _drop_stale_stored_rows(raw_base_df)
+    live_odds_df = fetch_live_odds_dataframe(sports)
 
     bet_rows["game_date"] = _game_dates(bet_rows)
     if not bet_rows.empty and not base_df.empty:
@@ -1060,7 +1134,7 @@ def run_analysis_pipeline(
         bet_rows = bet_rows.drop(columns=["home_team_lower", "away_team_lower"])
     bet_rows, date_stats = _fill_missing_game_dates_from_base(bet_rows, base_df)
 
-    merge_keys = ["league", "home_team", "away_team"]
+    merge_keys = ["league", "home_team", "away_team", "fuzzy_team_match>=85"]
     merged = bet_rows.copy()
 
     # Do not set a fallback odds_source
@@ -1170,6 +1244,35 @@ def run_analysis_pipeline(
         if "is_neutral_rev" in merged.columns:
             merged["is_neutral"] = merged["is_neutral"].fillna(merged["is_neutral_rev"]) if "is_neutral" in merged.columns else merged["is_neutral_rev"]
             merged = merged.drop(columns=["is_neutral_rev"])
+
+        # Fuzzy fallback when strict league/home/away join misses schedule rows.
+        needs_fuzzy = (
+            _game_dates(merged).isna()
+            | _numeric_series(merged, "ml_probability").isna()
+            | _numeric_series(merged, "odds_american").isna()
+        )
+        if needs_fuzzy.any():
+            schedule_for_fuzzy = base_schedule[[
+                c for c in ["league", "home_team", "away_team", "date", "game_time_est", "odds_american", "ml_probability", "is_neutral"]
+                if c in base_schedule.columns
+            ]].drop_duplicates()
+
+            for idx in merged.index[needs_fuzzy]:
+                match = _fuzzy_match_schedule_row(merged.loc[idx], schedule_for_fuzzy, threshold=85)
+                if match.empty:
+                    continue
+
+                if pd.isna(_game_dates(merged.loc[[idx]]).iloc[0]) and pd.notna(match.get("date")):
+                    merged.at[idx, "game_date"] = pd.to_datetime(match.get("date"), errors="coerce", utc=True)
+                if pd.isna(pd.to_numeric(merged.at[idx, "odds_american"], errors="coerce")) and pd.notna(match.get("odds_american")):
+                    merged.at[idx, "odds_american"] = pd.to_numeric(match.get("odds_american"), errors="coerce")
+                    merged.at[idx, "odds_source"] = "base_fuzzy"
+                if pd.isna(pd.to_numeric(merged.at[idx, "ml_probability"], errors="coerce")) and pd.notna(match.get("ml_probability")):
+                    merged.at[idx, "ml_probability"] = pd.to_numeric(match.get("ml_probability"), errors="coerce")
+                if (not str(merged.at[idx, "game_time_est"] or "").strip()) and pd.notna(match.get("game_time_est")):
+                    merged.at[idx, "game_time_est"] = str(match.get("game_time_est"))
+                if "is_neutral" in merged.columns and pd.isna(merged.at[idx, "is_neutral"]) and pd.notna(match.get("is_neutral")):
+                    merged.at[idx, "is_neutral"] = match.get("is_neutral")
 
     logger.info(f"Number of live Novig games fetched: {len(live_odds_df)}")
 
@@ -1341,14 +1444,32 @@ def run_analysis_pipeline(
     # Calculate True Fair-Value Baseline Probability by removing sportsbook overround (vig).
     implied_prob = merged["odds_american"].apply(american_to_prob)
 
+    # No-vig midpoint method for Novig rows when both sides are available.
+    m_type_local = _string_series(merged, "market_type").str.lower()
+    implied_back = implied_prob.copy()
+    implied_lay = pd.Series([pd.NA] * len(merged), index=merged.index, dtype="Float64")
+
+    novig_away_price = _numeric_series(merged, "novig_away_price")
+    novig_home_price = _numeric_series(merged, "novig_home_price")
+    novig_under_price = _numeric_series(merged, "novig_under_price")
+    novig_over_price = _numeric_series(merged, "novig_over_price")
+
+    implied_lay = implied_lay.where(~m_type_local.eq("spread_home"), novig_away_price.apply(american_to_prob))
+    implied_lay = implied_lay.where(~m_type_local.eq("spread_away"), novig_home_price.apply(american_to_prob))
+    implied_lay = implied_lay.where(~m_type_local.eq("total_over"), novig_under_price.apply(american_to_prob))
+    implied_lay = implied_lay.where(~m_type_local.eq("total_under"), novig_over_price.apply(american_to_prob))
+
+    novig_midpoint = ((implied_back + implied_lay) / 2.0).clip(0.01, 0.99)
+
     def _get_opposing_from_exchange(odds):
         if pd.isna(odds):
             return pd.NA
         return float(-odds)
 
-    # Novig exchange lines don't use 20-cent straddle
+    # Fallback de-vig when midpoint inputs are unavailable.
     opposing_implied = merged["odds_american"].apply(_get_opposing_from_exchange).apply(american_to_prob)
-    merged["market_probability"] = (implied_prob / (implied_prob + opposing_implied)).clip(0.01, 0.99)
+    fallback_market_probability = (implied_prob / (implied_prob + opposing_implied)).clip(0.01, 0.99)
+    merged["market_probability"] = novig_midpoint.where(novig_midpoint.notna(), fallback_market_probability)
 
     # Mandatory Sanitization Layer
     if not merged.empty:
@@ -1369,6 +1490,7 @@ def run_analysis_pipeline(
 
     # ML Prediction Enrichment [2026-03-08]
     ml_model_actually_loaded = False
+    merged["model_status"] = "OK"
     if use_ml and ML_AVAILABLE and PredictionEngine is not None:
         logger.warning("🔍 ML DEBUG: use_ml=True, attempting predictions...")
         try:
@@ -1403,6 +1525,7 @@ def run_analysis_pipeline(
             logger.error(traceback.format_exc())
             if "ml_probability" not in merged.columns:
                 merged["ml_probability"] = pd.NA
+            merged["model_status"] = "Model Failure"
     else:
         if "ml_probability" not in merged.columns:
             merged["ml_probability"] = pd.NA
@@ -1411,6 +1534,9 @@ def run_analysis_pipeline(
     if not use_ml:
         if "ml_probability" in merged.columns:
             merged["ml_probability"] = pd.NA
+        merged["model_status"] = "Model Disabled"
+
+    merged.loc[_numeric_series(merged, "ml_probability").isna() & _string_series(merged, "model_status").eq("OK"), "model_status"] = "Model Failure"
 
     theover_probability = _numeric_series(merged, "theover_probability")
     theover_probability = theover_probability.where(theover_probability <= 1, theover_probability / 100.0)
@@ -1521,7 +1647,6 @@ def run_analysis_pipeline(
     # AFTER the full analysis_df has been enriched with Kalshi probabilities.
     best_picks_df = pd.DataFrame(columns=BEST_PICK_COLUMNS)
 
-    stale = is_stale_schedule(base_df, analysis_df)
     base_coverage = float(_game_dates(base_df).notna().mean()) if not base_df.empty else 0.0
 
     diagnostics = {
@@ -1553,6 +1678,7 @@ def run_analysis_pipeline(
         "odds_schedule_loaded": odds_schedule_loaded,
         "odds_source_counts": _string_series(analysis_df, "odds_source").value_counts(dropna=False).to_dict() if not analysis_df.empty else {},
         "base_rows_loaded": int(len(base_df)),
+        "stale_base_rows_removed": int(stale_base_rows_removed),
         "merge_keys_used": merge_keys,
         "stale_base_schedule": stale,
         "base_date_coverage": base_coverage,
