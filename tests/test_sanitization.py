@@ -26,6 +26,7 @@ def test_sanitization_drops_extreme_odds(monkeypatch):
             "spread_line": -1.0,
             "odds_american": -110.0,
             "theover_probability": 0.50,
+            "odds_source": "uploaded",
         }
     ])
 

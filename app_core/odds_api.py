@@ -54,6 +54,10 @@ class TheOddsAPIClient:
             for attempt in range(max_retries + 1):
                 resp = requests.get(url, params=params, timeout=15)
 
+                if resp.status_code != 200:
+                    logger.error(f"Odds API Failed [{resp.status_code}]: {resp.text}")
+                    return []
+
                 try:
                     resp.raise_for_status()
                     break

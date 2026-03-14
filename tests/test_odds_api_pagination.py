@@ -15,6 +15,7 @@ def test_odds_api_pagination(monkeypatch):
 
         mock_resp = MagicMock()
         mock_resp.raise_for_status = MagicMock()
+        mock_resp.status_code = 200
 
         if call_count == 1:
             # First page
