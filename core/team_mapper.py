@@ -31,6 +31,85 @@ def load_dynamic_aliases() -> dict[str, str]:
         return {}
 
 # Keep legacy exact mappings for backwards compatibility
+NBA_EXACT_MAP = {
+    "atlanta hawks": "Atlanta",
+    "boston celtics": "Boston",
+    "brooklyn nets": "Brooklyn",
+    "charlotte hornets": "Charlotte",
+    "chicago bulls": "Chicago",
+    "cleveland cavaliers": "Cleveland",
+    "dallas mavericks": "Dallas",
+    "denver nuggets": "Denver",
+    "detroit pistons": "Detroit",
+    "golden state warriors": "Golden State",
+    "houston rockets": "Houston",
+    "indiana pacers": "Indiana",
+    "los angeles clippers": "LA Clippers",
+    "la clippers": "LA Clippers",
+    "los angeles lakers": "Los Angeles Lakers",
+    "la lakers": "Los Angeles Lakers",
+    "memphis grizzlies": "Memphis",
+    "miami heat": "Miami",
+    "milwaukee bucks": "Milwaukee",
+    "minnesota timberwolves": "Minnesota",
+    "new orleans pelicans": "New Orleans",
+    "new york knicks": "New York",
+    "oklahoma city thunder": "Oklahoma City",
+    "orlando magic": "Orlando",
+    "philadelphia 76ers": "Philadelphia",
+    "phoenix suns": "Phoenix",
+    "portland trail blazers": "Portland",
+    "sacramento kings": "Sacramento",
+    "san antonio spurs": "San Antonio",
+    "toronto raptors": "Toronto",
+    "utah jazz": "Utah",
+    "washington wizards": "Washington",
+}
+
+NHL_EXACT_MAP = {
+    "anaheim ducks": "Anaheim",
+    "boston bruins": "Boston",
+    "buffalo sabres": "Buffalo",
+    "calgary flames": "Calgary",
+    "carolina hurricanes": "Carolina",
+    "chicago blackhawks": "Chicago",
+    "colorado avalanche": "Colorado",
+    "columbus blue jackets": "Columbus",
+    "dallas stars": "Dallas",
+    "detroit red wings": "Detroit",
+    "edmonton oilers": "Edmonton",
+    "florida panthers": "Florida",
+    "los angeles kings": "Los Angeles",
+    "la kings": "Los Angeles",
+    "minnesota wild": "Minnesota",
+    "montreal canadiens": "Montreal",
+    "nashville predators": "Nashville",
+    "new jersey devils": "New Jersey",
+    "new york islanders": "NY Islanders",
+    "new york rangers": "NY Rangers",
+    "ottawa senators": "Ottawa",
+    "philadelphia flyers": "Philadelphia",
+    "pittsburgh penguins": "Pittsburgh",
+    "san jose sharks": "San Jose",
+    "seattle kraken": "Seattle",
+    "st. louis blues": "St. Louis",
+    "st louis blues": "St. Louis",
+    "tampa bay lightning": "Tampa Bay",
+    "toronto maple leafs": "Toronto",
+    "utah hockey club": "Utah",
+    "vancouver canucks": "Vancouver",
+    "vegas golden knights": "Vegas",
+    "washington capitals": "Washington",
+    "winnipeg jets": "Winnipeg",
+}
+
+NCAAB_EXTRA_MAP = {
+    "prairie view a&m panthers": "Prairie View Am",
+    "utah tech trailblazers": "Utah Tech",
+    "fiu panthers": "Florida Intl",
+    "fau owls": "Florida Atlantic",
+}
+
 TEAM_MAP = {
     "alabama am": "alabama a&m",
     "alabama crimson tide": "Alabama",
@@ -652,6 +731,10 @@ ODDS_API_EXACT_MAP = {
     "youngstown st penguins": "Youngstown St"
 }
 
+# Merge newly added exact maps
+TEAM_MAP.update(NBA_EXACT_MAP)
+TEAM_MAP.update(NHL_EXACT_MAP)
+TEAM_MAP.update(NCAAB_EXTRA_MAP)
 # Merge dynamic aliases into the primary mapping dictionary
 TEAM_MAP.update(ODDS_API_EXACT_MAP)
 TEAM_MAP.update(load_dynamic_aliases())
