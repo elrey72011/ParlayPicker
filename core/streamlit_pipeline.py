@@ -1292,24 +1292,39 @@ def run_analysis_pipeline(
             merged["away_team_lower"] = merged["away_team"].str.lower().str.strip()
 
         # Phase 1: Entity Resolution Validation Layer
-        # Before fully processing live odds matches, cross-reference against the master base schedule.
-        # If the UUID/match doesn't map to a real scheduled game in base_df, drop it as hallucinated.
+        # Validate live odds against current pipeline matchups first (uploaded/analysis rows),
+        # with base schedule as secondary context. Avoid over-pruning that causes false fallbacks.
+        live_odds_df["matchup_key"] = live_odds_df.apply(
+            lambda r: "|".join(sorted([str(r["home_team_lower"]), str(r["away_team_lower"])])), axis=1
+        )
+
+        allowed_keys = set()
+        if "home_team_lower" in merged.columns and "away_team_lower" in merged.columns:
+            merged_keys = merged.apply(
+                lambda r: "|".join(sorted([str(r["home_team_lower"]), str(r["away_team_lower"])])), axis=1
+            )
+            allowed_keys.update(k for k in merged_keys.tolist() if isinstance(k, str) and k)
+
         if not base_df.empty:
             # Orientation-insensitive validation: keep legitimate reversed home/away feeds.
             base_matchups = base_df[['home_team', 'away_team']].copy().drop_duplicates()
             base_matchups["home_team_lower"] = base_matchups["home_team"].str.lower().str.strip()
             base_matchups["away_team_lower"] = base_matchups["away_team"].str.lower().str.strip()
-            base_matchups["matchup_key"] = base_matchups.apply(
+            base_keys = base_matchups.apply(
                 lambda r: "|".join(sorted([str(r["home_team_lower"]), str(r["away_team_lower"])])), axis=1
             )
+            allowed_keys.update(k for k in base_keys.tolist() if isinstance(k, str) and k)
 
-            live_odds_df["matchup_key"] = live_odds_df.apply(
-                lambda r: "|".join(sorted([str(r["home_team_lower"]), str(r["away_team_lower"])])), axis=1
-            )
-            live_odds_df = live_odds_df[
-                live_odds_df["matchup_key"].isin(base_matchups["matchup_key"])
-            ].copy()
-            live_odds_df = live_odds_df.drop(columns=["matchup_key"])
+        if allowed_keys:
+            pre_count = len(live_odds_df)
+            filtered_live = live_odds_df[live_odds_df["matchup_key"].isin(allowed_keys)].copy()
+            # Guardrail: if validation would discard everything, keep original live odds set.
+            if not filtered_live.empty:
+                live_odds_df = filtered_live
+            elif pre_count > 0:
+                logger.warning("Live odds validation against known matchups removed all rows; keeping original live_odds_df to avoid false fallbacks.")
+
+        live_odds_df = live_odds_df.drop(columns=["matchup_key"])
 
         # Avoid duplicating columns during merge
         live_merge_cols = [c for c in live_odds_df.columns if c not in ["game_id", "commence_time", "raw_home_team", "raw_away_team", "home_team", "away_team"]]
