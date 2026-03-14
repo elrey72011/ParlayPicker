@@ -899,11 +899,13 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None) -> pd.DataFrame:
     if not api_key:
         raise OddsAPIAuthError("The Odds API key is missing. Please verify your credentials in Streamlit secrets.")
 
+    # Explicitly require 'spreads,totals' for Novig exchanges and 'american' oddsFormat
     client = TheOddsAPIClient(
         api_key=api_key,
         regions="us_ex",
-        markets="h2h,spreads,totals",
-        bookmakers="novig"
+        markets="spreads,totals",
+        bookmakers="novig",
+        oddsFormat="american"
     )
 
     SPORT_KEYS = {
