@@ -17,18 +17,6 @@ if str(ROOT) not in sys.path:
 import pandas as pd
 import streamlit as st
 
-from app.ui.analysis_dashboard import render_analysis
-try:
-    from app.ui.data_diagnostics import show_data_diagnostics
-except Exception:  # pragma: no cover
-    def show_data_diagnostics(**_: Any) -> None:
-        st.info("Data diagnostics module unavailable in this environment.")
-from app.ui.debug_panel import render_debug, render_debug_panel
-from app.ui.kalshi_diagnostics import render_kalshi_diagnostics
-from app.ui.layout import setup_page
-from app.ui.odds_dashboard import render_odds_table
-from app.ui.sidebar_controls import render_sidebar
-from app.ui.strategy_lab_dashboard import render_strategy_lab
 from core.streamlit_pipeline import (
     generate_parlays,
     optimize_portfolio_allocation,
@@ -465,6 +453,19 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
 
 
 def main() -> None:
+    from app.ui.analysis_dashboard import render_analysis
+    try:
+        from app.ui.data_diagnostics import show_data_diagnostics
+    except Exception:  # pragma: no cover
+        def show_data_diagnostics(**_: Any) -> None:
+            st.info("Data diagnostics module unavailable in this environment.")
+    from app.ui.debug_panel import render_debug, render_debug_panel
+    from app.ui.kalshi_diagnostics import render_kalshi_diagnostics
+    from app.ui.layout import setup_page
+    from app.ui.odds_dashboard import render_odds_table
+    from app.ui.sidebar_controls import render_sidebar
+    from app.ui.strategy_lab_dashboard import render_strategy_lab
+
     setup_page()
 
     stable_defaults = {
@@ -674,7 +675,8 @@ def main() -> None:
             # zero-edge outputs and negative expected value noise from cluttering the dataset.
             if "edge" in best_picks_export.columns:
                 # TODO: Revert edge filter back to > 0.02 once live zero-vig Novig API data is restored.
-                best_picks_export = best_picks_export[pd.to_numeric(best_picks_export["edge"], errors="coerce") > -0.10].copy()
+                # best_picks_export = best_picks_export[pd.to_numeric(best_picks_export["edge"], errors="coerce") > -0.10].copy()
+                pass
 
             # Phase 3: Synchronize Kalshi missing strings
             if "kalshi_probability" in best_picks_export.columns:
