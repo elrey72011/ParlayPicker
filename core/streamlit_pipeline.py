@@ -833,16 +833,14 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     # selections from the same game across different markets (intra-game covariance).
     pool["matchup_key"] = pool["league"] + "|" + team_a + "|" + team_b + "|" + date_str
 
-    # Create a temporary sorting column that fills NaNs with a highly negative number
-    pool['sort_ev'] = pool['expected_value'].fillna(-999)
+    # Force expected_value to numeric, converting true errors to NaN while preserving negative floats
+    pool['expected_value'] = pd.to_numeric(pool['expected_value'], errors='coerce')
 
-    # Sort by the temporary column, group by the unique game identifiers, and take the first row
-    # Use matchup_key to correctly deduplicate reversed home/away matchups
-    best_pick_indices = pool.groupby('matchup_key')['sort_ev'].idxmax()
+    # Execute idxmax directly on expected_value to extract the best (or least negative) pick per game
+    best_pick_indices = pool.groupby(['league', 'home_team', 'away_team'], dropna=False)['expected_value'].idxmax()
+
+    # Extract the final dataframe
     best = pool.loc[best_pick_indices].copy()
-
-    # Drop the temporary sorting column to clean the final output
-    best = best.drop(columns=['sort_ev'])
 
     best["calibrated_probability"] = _numeric_series(best, "calibrated_probability", 0.5)
     edge_for_consensus = _numeric_series(best, "edge", 0.0)
@@ -1040,93 +1038,6 @@ def run_analysis_pipeline(
     live_odds_df = fetch_live_odds_dataframe(sports)
 
     bet_rows = build_theover_bet_rows(spreads_df, totals_df, sports)
-
-    # =========================================================================
-    # Phase 0: Ensure 100% Match Rate - Dummy Row Injection
-    # For any scheduled game in base_df that wasn't evaluated by the predictive models
-    # (meaning it is entirely missing from bet_rows), inject dummy rows directly into bet_rows.
-    # We assign mathematically neutral placeholders to bypass filtering logic,
-    # guaranteeing that exactly 100% of the day's scheduled games output a best pick.
-    # =========================================================================
-    if not base_df.empty:
-        # Standardize team names for matching
-        bdf = base_df.copy()
-        bdf["league"] = _string_series(bdf, "league").str.upper().replace(LEAGUE_ALIASES)
-        bdf["home_team"] = _string_series(bdf, "home_team").map(normalize_team_name)
-        bdf["away_team"] = _string_series(bdf, "away_team").map(normalize_team_name)
-
-        if not bet_rows.empty:
-            # Bulletproof string slicing to avoid timezone-shift regressions.
-            bet_dates = bet_rows["game_date"].astype(str).str[:10].unique()
-            bdf["temp_date"] = bdf["game_date"].astype(str).str[:10]
-            bdf = bdf[bdf['temp_date'].isin(bet_dates)].copy()
-            bdf.drop(columns=['temp_date'], inplace=True)
-
-            b_rows = bet_rows.copy()
-            b_rows["league"] = _string_series(b_rows, "league").str.upper().replace(LEAGUE_ALIASES)
-            b_rows["home_team"] = _string_series(b_rows, "home_team").map(normalize_team_name)
-            b_rows["away_team"] = _string_series(b_rows, "away_team").map(normalize_team_name)
-
-            # Extract orientation-insensitive matching key
-            bdf_matches = bdf.apply(lambda r: f"{r.get('league')}|{min(str(r.get('home_team')).lower(), str(r.get('away_team')).lower())}|{max(str(r.get('home_team')).lower(), str(r.get('away_team')).lower())}", axis=1)
-            bet_matches = b_rows.apply(lambda r: f"{r.get('league')}|{min(str(r.get('home_team')).lower(), str(r.get('away_team')).lower())}|{max(str(r.get('home_team')).lower(), str(r.get('away_team')).lower())}", axis=1)
-
-            missing_schedule_mask = ~bdf_matches.isin(bet_matches)
-        else:
-            missing_schedule_mask = pd.Series([True] * len(bdf), index=bdf.index)
-
-        missing_games = bdf[missing_schedule_mask].drop_duplicates(subset=["league", "home_team", "away_team"]).copy()
-
-        if not missing_games.empty:
-            logger.info(f"Injecting dummy rows for {len(missing_games)} unpredicted games to ensure 100% dashboard match rate.")
-            dummy_pieces = []
-            for _, row in missing_games.iterrows():
-                base_dict = row.to_dict()
-                league = str(row.get("league") or "").upper().strip()
-                home_team_upper = str(row.get("home_team") or "").upper().strip()
-                away_team_upper = str(row.get("away_team") or "").upper().strip()
-                game_key = row.get("game_key") if pd.notna(row.get("game_key")) else f"{league}|{home_team_upper}|{away_team_upper}"
-
-                base_dict.update({
-                    "league": league,
-                    "game_key": game_key,
-                    "odds_american": -110.0,
-                    "odds_source": "dummy_override",
-                    "ml_probability": 0.523809,
-                    "theover_probability": 0.523809,
-                    "market_probability": 0.5,
-                    "model_probability": 0.523809,
-                    "calibrated_probability": 0.523809,
-                    "expected_value": 0.0,
-                    "edge": 0.0,
-                    "spread_line": 0.0,
-                    "total_line": pd.NA,
-                    "WinProbability": 0.523809
-                })
-
-                # Ensure game_date is present
-                if "game_date" not in base_dict or pd.isna(base_dict["game_date"]):
-                    base_dict["game_date"] = _game_date_fallback()
-
-                # Create Spread Home Dummy
-                dh = base_dict.copy()
-                dh["market_type"] = "spread_home"
-                dummy_pieces.append(dh)
-
-                # Create Spread Away Dummy
-                da = base_dict.copy()
-                da["market_type"] = "spread_away"
-                dummy_pieces.append(da)
-
-            dummy_df = pd.DataFrame(dummy_pieces)
-
-            if bet_rows.empty:
-                bet_rows = dummy_df
-            else:
-                for col in bet_rows.columns:
-                    if col not in dummy_df.columns:
-                        dummy_df[col] = pd.NA
-                bet_rows = pd.concat([bet_rows, dummy_df], ignore_index=True)
 
     bet_rows["game_date"] = _game_dates(bet_rows)
     if not bet_rows.empty and not base_df.empty:
@@ -1396,8 +1307,7 @@ def run_analysis_pipeline(
     # Only keep rows that successfully mapped a live line and price strictly from novig or fallback
     if "odds_source" in merged.columns:
         # We also need to allow uploaded or base odds sources for backwards compatibility and test suite
-        # Explicitly allow 'dummy_override' to ensure injected rows bypass this scorched-earth check.
-        valid_sources = ["novig_live", "fallback_novig", "uploaded", "base_direct", "base_reverse", "dummy_override"]
+        valid_sources = ["novig_live", "fallback_novig", "uploaded", "base_direct", "base_reverse"]
         # Treat pd.NA / NaN in odds_source as implicitly valid for backwards compatibility tests
         missing_mask = ~merged["odds_source"].isin(valid_sources) & merged["odds_source"].notna()
         dropped_count = missing_mask.sum()
@@ -1568,13 +1478,6 @@ def run_analysis_pipeline(
 
     merged["expected_value"] = ev
     merged["edge"] = edge
-
-    # Protect dummy rows from NaN math errors after all EV calculations are finished
-    if 'odds_source' in merged.columns:
-        dummy_mask = merged['odds_source'] == 'dummy_override'
-        merged.loc[dummy_mask, 'WinProbability'] = 0.523809
-        merged.loc[dummy_mask, 'expected_value'] = 0.0
-        merged.loc[dummy_mask, 'edge'] = 0.0
 
     merged["best_pick"] = merged.apply(_format_best_pick, axis=1)
 
