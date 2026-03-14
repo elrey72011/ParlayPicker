@@ -899,11 +899,11 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None) -> pd.DataFrame:
     if not api_key:
         raise OddsAPIAuthError("The Odds API key is missing. Please verify your credentials in Streamlit secrets.")
 
-    # Explicitly require 'spreads,totals' for Novig exchanges and 'american' oddsFormat
+    # Explicitly require 'h2h,spreads,totals' for Novig exchanges and 'american' oddsFormat
     client = TheOddsAPIClient(
         api_key=api_key,
         regions="us_ex",
-        markets="spreads,totals",
+        markets="h2h,spreads,totals",
         bookmakers="novig",
         oddsFormat="american"
     )
@@ -1157,6 +1157,8 @@ def run_analysis_pipeline(
             merged["is_neutral"] = merged["is_neutral"].fillna(merged["is_neutral_rev"]) if "is_neutral" in merged.columns else merged["is_neutral_rev"]
             merged = merged.drop(columns=["is_neutral_rev"])
 
+    logger.info(f"Number of live Novig games fetched: {len(live_odds_df)}")
+
     # Merge Live Odds
     if not live_odds_df.empty:
         # Lowercase merge keys for case-insensitive merge
@@ -1217,47 +1219,62 @@ def run_analysis_pipeline(
     merged["game_date"] = merged["game_date"].fillna(_game_date_fallback())
     merged["game_time_est"] = _format_game_time_est(merged)
 
-    # Map Novig's true points and prices explicitly
-    def map_novig_lines(row):
-        m_type = str(row.get("market_type", "")).lower()
-        if not m_type:
-            return row
+    # Explicit Column Coalescing for Novig lines
+    # Define mapping criteria based strictly on market_type
+    m_type = merged["market_type"].str.lower()
 
-        def safe_float(val):
-            try:
-                # Handle cases like "+102"
-                return float(str(val).replace('+', '')) if pd.notna(val) else pd.NA
-            except ValueError:
-                return pd.NA
+    # Safely ensure target columns exist to prevent KeyError
+    for col in ["novig_home_point", "novig_home_price", "novig_away_point", "novig_away_price",
+                "novig_over_point", "novig_over_price", "novig_under_point", "novig_under_price"]:
+        if col not in merged.columns:
+            merged[col] = pd.NA
 
-        if m_type == "spread_home" and "novig_home_point" in row and pd.notna(row["novig_home_point"]):
-            row["spread_line"] = safe_float(row["novig_home_point"])
-            row["odds_american"] = safe_float(row["novig_home_price"])
-            row["odds_source"] = row.get("odds_source_spread") or "novig_live"
-            if row["odds_source"] == "novig":
-                row["odds_source"] = "novig_live"
-        elif m_type == "spread_away" and "novig_away_point" in row and pd.notna(row["novig_away_point"]):
-            row["spread_line"] = safe_float(row["novig_away_point"])
-            row["odds_american"] = safe_float(row["novig_away_price"])
-            row["odds_source"] = row.get("odds_source_spread") or "novig_live"
-            if row["odds_source"] == "novig":
-                row["odds_source"] = "novig_live"
-        elif m_type == "total_over" and "novig_over_point" in row and pd.notna(row["novig_over_point"]):
-            row["total_line"] = safe_float(row["novig_over_point"])
-            row["odds_american"] = safe_float(row["novig_over_price"])
-            row["odds_source"] = row.get("odds_source_total") or "novig_live"
-            if row["odds_source"] == "novig":
-                row["odds_source"] = "novig_live"
-        elif m_type == "total_under" and "novig_under_point" in row and pd.notna(row["novig_under_point"]):
-            row["total_line"] = safe_float(row["novig_under_point"])
-            row["odds_american"] = safe_float(row["novig_under_price"])
-            row["odds_source"] = row.get("odds_source_total") or "novig_live"
-            if row["odds_source"] == "novig":
-                row["odds_source"] = "novig_live"
+    def safe_series_float(series):
+        # Strip '+' prefix if exists, handle errors safely
+        return pd.to_numeric(series.astype(str).str.replace('+', '', regex=False), errors='coerce')
 
-        return row
+    cond_spread_home = (m_type == "spread_home") & merged["novig_home_price"].notna()
+    cond_spread_away = (m_type == "spread_away") & merged["novig_away_price"].notna()
+    cond_total_over = (m_type == "total_over") & merged["novig_over_price"].notna()
+    cond_total_under = (m_type == "total_under") & merged["novig_under_price"].notna()
 
-    merged = merged.apply(map_novig_lines, axis=1)
+    # Coalesce odds_american
+    merged["odds_american"] = np.select(
+        [cond_spread_home, cond_spread_away, cond_total_over, cond_total_under],
+        [
+            safe_series_float(merged["novig_home_price"]),
+            safe_series_float(merged["novig_away_price"]),
+            safe_series_float(merged["novig_over_price"]),
+            safe_series_float(merged["novig_under_price"])
+        ],
+        default=merged.get("odds_american", pd.NA)
+    )
+
+    # Coalesce spread_line
+    merged["spread_line"] = np.select(
+        [cond_spread_home, cond_spread_away],
+        [
+            safe_series_float(merged["novig_home_point"]),
+            safe_series_float(merged["novig_away_point"])
+        ],
+        default=merged.get("spread_line", pd.NA)
+    )
+
+    # Coalesce total_line
+    merged["total_line"] = np.select(
+        [cond_total_over, cond_total_under],
+        [
+            safe_series_float(merged["novig_over_point"]),
+            safe_series_float(merged["novig_under_point"])
+        ],
+        default=merged.get("total_line", pd.NA)
+    )
+
+    # Override odds_source to novig_live if successfully mapped from novig
+    cond_any = cond_spread_home | cond_spread_away | cond_total_over | cond_total_under
+    if "odds_source" not in merged.columns:
+        merged["odds_source"] = pd.NA
+    merged["odds_source"] = np.where(cond_any, "novig_live", merged["odds_source"])
 
     # Enforce Strict Drops for missing valid live line/price
     # Only keep rows that successfully mapped a live line and price strictly from novig
