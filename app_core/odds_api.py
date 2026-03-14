@@ -23,15 +23,26 @@ class TheOddsAPIClient:
         self.bookmakers = bookmakers
         self.oddsFormat = oddsFormat
 
-    def get_odds(self, sport_key: str):
-        url = f"{self.BASE_URL}/sports/{sport_key}/odds"
-        params = {
-            "apiKey": self.api_key,
-            "regions": self.regions,
-            "markets": self.markets,
-            "bookmakers": self.bookmakers,
-            "oddsFormat": self.oddsFormat,
-        }
+    def get_odds(self, sport_key: str, date: str = None):
+        if date:
+            url = f"{self.BASE_URL}/historical/sports/{sport_key}/odds"
+            params = {
+                "apiKey": self.api_key,
+                "regions": self.regions,
+                "markets": self.markets,
+                "bookmakers": self.bookmakers,
+                "oddsFormat": self.oddsFormat,
+                "date": date
+            }
+        else:
+            url = f"{self.BASE_URL}/sports/{sport_key}/odds"
+            params = {
+                "apiKey": self.api_key,
+                "regions": self.regions,
+                "markets": self.markets,
+                "bookmakers": self.bookmakers,
+                "oddsFormat": self.oddsFormat,
+            }
 
         all_data = []
 
@@ -66,10 +77,16 @@ class TheOddsAPIClient:
             with open('data/live_odds_debug.json', 'w') as f:
                 json.dump(data, f, indent=4)
 
-            if isinstance(data, list):
-                all_data.extend(data)
+            # Unwrap historical data wrapper if present
+            if isinstance(data, dict) and "data" in data:
+                games_data = data.get("data", [])
             else:
-                return data
+                games_data = data
+
+            if isinstance(games_data, list):
+                all_data.extend(games_data)
+            else:
+                return games_data
 
             # Check for pagination (cursor-based or page-based)
             total_results = int(resp.headers.get("x-total-results", len(all_data)))
@@ -83,7 +100,7 @@ class TheOddsAPIClient:
             if len(all_data) >= total_results:
                 break
 
-            if isinstance(data, list) and len(data) == 0:
+            if isinstance(games_data, list) and len(games_data) == 0:
                 break
 
             break

@@ -886,8 +886,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     return best[BEST_PICK_COLUMNS]
 
 
-def fetch_live_odds_dataframe(sports: list[str] | None = None) -> pd.DataFrame:
-    """Fetch live Novig odds and return as flattened dataframe."""
+def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None = None) -> pd.DataFrame:
+    """Fetch live or historical Novig odds and return as flattened dataframe."""
     if not ODDS_API_AVAILABLE:
         logger.warning("TheOddsAPI is not available.")
         return pd.DataFrame()
@@ -926,7 +926,8 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None) -> pd.DataFrame:
         if not sport_key:
             return []
         try:
-            games = client.get_odds(sport_key)
+            # Pass hardcoded date for historical snapshot backtesting
+            games = client.get_odds(sport_key, date="2026-03-13T16:00:00Z")
             if games:
                 return filter_games_today_only(games)
         except OddsAPIAuthError as e:
