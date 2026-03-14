@@ -163,3 +163,130 @@ def test_enrich_with_kalshi_markets_title_fallback_when_event_ticker_codes_diffe
 
     assert out.loc[0, "kalshi_match_status"] == "matched"
     assert float(out.loc[0, "kalshi_probability"]) == 0.50
+
+def test_enrich_with_kalshi_markets_matches_from_event_ticker_codes(monkeypatch):
+    df = pd.DataFrame(
+        {
+            "league": ["NBA"],
+            "market_type": ["total_over"],
+            "home_team": ["Los Angeles Clippers"],
+            "away_team": ["Sacramento Kings"],
+            "game_date": ["2026-03-10T00:00:00Z"],
+            "total_line": [229.5],
+            "best_pick": ["Over 229.5"],
+        }
+    )
+
+    class FakeResponse:
+        def __init__(self, json_data, status_code=200):
+            self._json_data = json_data
+            self.status_code = status_code
+
+        def json(self):
+            return self._json_data
+
+    def fake_make_request(url, **kwargs):
+        if url.endswith("/events") and "series_ticker" in kwargs.get("params", {}):
+            return FakeResponse(
+                {
+                    "events": [
+                        {
+                            "event_ticker": "KXNBATOTAL-26MAR10LACSAC",
+                            # intentionally no full names in title/subtitle
+                            "title": "LAC vs SAC total",
+                            "sub_title": "NBA Total",
+                            "close_time": "2026-03-10T05:00:00Z",
+                        }
+                    ]
+                }
+            )
+        if "KXNBATOTAL-26MAR10LACSAC" in url:
+            return FakeResponse(
+                {
+                    "event": {
+                        "markets": [
+                            {
+                                "ticker": "KXNBATOTAL-26MAR10LACSAC-2295",
+                                "event_ticker": "KXNBATOTAL-26MAR10LACSAC",
+                                "title": "Total points over 229.5",
+                                "subtitle": "over/under",
+                                "yes_bid_dollars": 0.48,
+                                "yes_ask_dollars": 0.52,
+                            }
+                        ]
+                    }
+                }
+            )
+        return FakeResponse({}, 404)
+
+    if hasattr(ki.enrich_with_kalshi_markets, "series_cache"):
+        ki.enrich_with_kalshi_markets.series_cache.clear()
+
+    monkeypatch.setattr(ki, "_make_kalshi_request", fake_make_request)
+    out = ki.enrich_with_kalshi_markets(df)
+
+    assert out.loc[0, "kalshi_match_status"] == "matched"
+    assert float(out.loc[0, "kalshi_probability"]) == 0.50
+
+def test_enrich_with_kalshi_markets_accepts_nearby_alt_line_within_league_tolerance(monkeypatch):
+    df = pd.DataFrame(
+        {
+            "league": ["NBA"],
+            "market_type": ["spread_home"],
+            "home_team": ["Boston Celtics"],
+            "away_team": ["Washington Wizards"],
+            "game_date": ["2026-03-10T00:00:00Z"],
+            "spread_line": [-7.5],
+            "best_pick": ["Boston Celtics -7.5"],
+        }
+    )
+
+    class FakeResponse:
+        def __init__(self, json_data, status_code=200):
+            self._json_data = json_data
+            self.status_code = status_code
+
+        def json(self):
+            return self._json_data
+
+    def fake_make_request(url, **kwargs):
+        if url.endswith("/events") and "series_ticker" in kwargs.get("params", {}):
+            return FakeResponse(
+                {
+                    "events": [
+                        {
+                            "event_ticker": "KXNBASPREAD-26MAR10BOSWAS",
+                            "title": "BOS vs WAS spread",
+                            "sub_title": "NBA Spread",
+                            "close_time": "2026-03-10T05:00:00Z",
+                        }
+                    ]
+                }
+            )
+        if "KXNBASPREAD-26MAR10BOSWAS" in url:
+            return FakeResponse(
+                {
+                    "event": {
+                        "markets": [
+                            {
+                                "ticker": "KXNBASPREAD-26MAR10BOSWAS-125",
+                                "event_ticker": "KXNBASPREAD-26MAR10BOSWAS",
+                                "title": "Boston Celtics wins by over 12.5",
+                                "subtitle": "spread",
+                                "yes_bid_dollars": 0.47,
+                                "yes_ask_dollars": 0.53,
+                            }
+                        ]
+                    }
+                }
+            )
+        return FakeResponse({}, 404)
+
+    if hasattr(ki.enrich_with_kalshi_markets, "series_cache"):
+        ki.enrich_with_kalshi_markets.series_cache.clear()
+
+    monkeypatch.setattr(ki, "_make_kalshi_request", fake_make_request)
+    out = ki.enrich_with_kalshi_markets(df)
+
+    assert out.loc[0, "kalshi_match_status"] == "matched"
+    assert out.loc[0, "kalshi_match_reason"] == "spread_match_nearest"
