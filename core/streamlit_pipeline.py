@@ -1110,7 +1110,9 @@ def run_analysis_pipeline(
     odds_schedule_loaded = not raw_base_df.empty
     bet_rows = build_theover_bet_rows(spreads_df, totals_df, sports)
     stale = is_stale_schedule(raw_base_df, bet_rows)
-    base_df, stale_base_rows_removed = _drop_stale_stored_rows(raw_base_df)
+    # Keep full base schedule available for fill/lookup; report stale rows but do not drop master data.
+    base_df = raw_base_df.copy()
+    stale_base_rows_removed = 0
     live_odds_df = fetch_live_odds_dataframe(sports)
 
     bet_rows["game_date"] = _game_dates(bet_rows)
@@ -1398,11 +1400,15 @@ def run_analysis_pipeline(
         & _numeric_series(merged, "odds_american").notna()
     ).any())
 
-    # Fallback Mode for Missing Novig Lines (e.g., late night or free tier API rejection)
-    # Only use this when API odds are unavailable AND no local uploaded odds are present.
-    if live_odds_df.empty and not has_local_uploaded_odds:
-        logger.warning("Novig API unavailable/empty due to time or tier restrictions. Falling back to standard -110 odds to render dashboard.")
-        missing_odds_mask = merged["odds_american"].isna()
+    # Fallback Mode for Missing Novig lines.
+    # If live feed is unavailable OR partially unmatched, keep rows actionable via -110 fallback
+    # unless user supplied their own non-default odds.
+    missing_odds_mask = merged["odds_american"].isna()
+    if missing_odds_mask.any() and not has_local_uploaded_odds:
+        if live_odds_df.empty:
+            logger.warning("Novig API unavailable/empty due to time or tier restrictions. Falling back to standard -110 odds to render dashboard.")
+        else:
+            logger.warning("Novig API returned data but did not match all uploaded rows. Applying -110 fallback for unmatched rows.")
         merged.loc[missing_odds_mask, "odds_american"] = -110.0
         merged.loc[missing_odds_mask, "odds_source"] = "fallback_novig"
 
@@ -1421,11 +1427,10 @@ def run_analysis_pipeline(
 
     merged["odds_american"] = _numeric_series(merged, "odds_american", pd.NA)
 
-    # Double check no NaNs exist in odds_american, drop them if they do
+    # Final guardrail: if any rows still lack odds, patch with fallback instead of dropping data.
     missing_odds_mask = merged["odds_american"].isna()
-    missing_odds_count = missing_odds_mask.sum()
+    missing_odds_count = int(missing_odds_mask.sum())
     if missing_odds_count > 0:
-        # Pre-drop debug log to track exact unmapped JSON names from Odds API
         if not live_odds_df.empty and 'raw_home_team' in live_odds_df.columns:
             merged_teams = set(zip(merged['home_team'], merged['away_team']))
             unmapped_live = live_odds_df[~live_odds_df.set_index(['home_team', 'away_team']).index.isin(merged_teams)]
@@ -1434,9 +1439,13 @@ def run_analysis_pipeline(
                 unmapped_aways = unmapped_live['raw_away_team'].unique().tolist()
                 logger.info(f"Unmapped raw teams from Odds API JSON: Homes={unmapped_homes}, Aways={unmapped_aways}")
 
-        dropped_games = merged[missing_odds_mask][['home_team', 'away_team', 'market_type']].to_dict('records')
-        logger.warning(f"Warning: Dropped {missing_odds_count} rows - odds_american is NaN after Novig line mapping: {dropped_games}")
-        merged = merged[~missing_odds_mask].copy()
+        patched_games = merged[missing_odds_mask][['home_team', 'away_team', 'market_type']].to_dict('records')
+        logger.warning(f"Warning: Patched {missing_odds_count} rows - odds_american was NaN after Novig line mapping. Applying -110 fallback: {patched_games}")
+        merged.loc[missing_odds_mask, "odds_american"] = -110.0
+        merged.loc[missing_odds_mask, "odds_source"] = _string_series(merged, "odds_source").where(
+            _string_series(merged, "odds_source").str.len().gt(0),
+            "fallback_novig"
+        )
 
     merged["decimal_odds"] = merged["odds_american"].apply(american_to_decimal)
 
