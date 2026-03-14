@@ -1294,10 +1294,21 @@ def run_analysis_pipeline(
         # Before fully processing live odds matches, cross-reference against the master base schedule.
         # If the UUID/match doesn't map to a real scheduled game in base_df, drop it as hallucinated.
         if not base_df.empty:
+            # Orientation-insensitive validation: keep legitimate reversed home/away feeds.
             base_matchups = base_df[['home_team', 'away_team']].copy().drop_duplicates()
             base_matchups["home_team_lower"] = base_matchups["home_team"].str.lower().str.strip()
             base_matchups["away_team_lower"] = base_matchups["away_team"].str.lower().str.strip()
-            live_odds_df = live_odds_df.merge(base_matchups[["home_team_lower", "away_team_lower"]], on=['home_team_lower', 'away_team_lower'], how='inner')
+            base_matchups["matchup_key"] = base_matchups.apply(
+                lambda r: "|".join(sorted([str(r["home_team_lower"]), str(r["away_team_lower"])])), axis=1
+            )
+
+            live_odds_df["matchup_key"] = live_odds_df.apply(
+                lambda r: "|".join(sorted([str(r["home_team_lower"]), str(r["away_team_lower"])])), axis=1
+            )
+            live_odds_df = live_odds_df[
+                live_odds_df["matchup_key"].isin(base_matchups["matchup_key"])
+            ].copy()
+            live_odds_df = live_odds_df.drop(columns=["matchup_key"])
 
         # Avoid duplicating columns during merge
         live_merge_cols = [c for c in live_odds_df.columns if c not in ["game_id", "commence_time", "raw_home_team", "raw_away_team", "home_team", "away_team"]]
