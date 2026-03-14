@@ -12,23 +12,9 @@ from typing import Any, Optional, Tuple
 import pandas as pd
 import requests
 
-try:
-    import rapidfuzz
-    from rapidfuzz import fuzz
-except ImportError:
-    try:
-        from thefuzz import fuzz
-    except ImportError:
-        import difflib
-        class FuzzFallback:
-            @staticmethod
-            def token_set_ratio(s1, s2):
-                if not s1 or not s2: return 0
-                matcher = difflib.SequenceMatcher(None, s1, s2)
-                return matcher.ratio() * 100
-        fuzz = FuzzFallback()
-
 logger = logging.getLogger(__name__)
+
+from core.team_mapper import normalize_team_name
 API_BASE = "https://api.elections.kalshi.com/trade-api/v2"
 
 KALSHI_LINE_TOLERANCE_SPREAD = 3.0
@@ -673,13 +659,10 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         home_team_name = str(row.get("home_team") or "")
         away_team_name = str(row.get("away_team") or "")
 
-        home_team_name_norm = home_team_name.lower()
-        away_team_name_norm = away_team_name.lower()
-
-        concatenated_teams = f"{away_team_name_norm} {home_team_name_norm}"
+        home_team_name_norm = normalize_team_name(home_team_name).lower()
+        away_team_name_norm = normalize_team_name(away_team_name).lower()
 
         best_event_match = None
-        best_event_score = 0.0
 
         for event in series_events:
             if not _is_within_48h(event, game_date):
@@ -687,14 +670,16 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
             e_title = str(event.get("title") or "")
             e_subtitle = str(event.get("sub_title") or "")
-            combined_event_text = f"{e_title} {e_subtitle}".lower()
 
-            score = fuzz.token_set_ratio(concatenated_teams, combined_event_text)
+            # Normalize the Kalshi event strings
+            norm_title = normalize_team_name(e_title).lower()
+            norm_subtitle = normalize_team_name(e_subtitle).lower()
+            combined_event_text = f"{norm_title} {norm_subtitle}"
 
-            # Lowered threshold to exactly 50 to bypass "Conference Tournament" prefix issues
-            if score >= 50 and score > best_event_score:
-                best_event_score = score
+            # Exact dictionary match
+            if home_team_name_norm in combined_event_text and away_team_name_norm in combined_event_text:
                 best_event_match = event
+                break
 
         if not best_event_match:
             out.at[idx, "kalshi_match_status"] = "miss"
