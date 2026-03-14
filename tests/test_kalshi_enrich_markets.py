@@ -290,3 +290,66 @@ def test_enrich_with_kalshi_markets_accepts_nearby_alt_line_within_league_tolera
 
     assert out.loc[0, "kalshi_match_status"] == "matched"
     assert out.loc[0, "kalshi_match_reason"] == "spread_match_nearest"
+
+def test_enrich_with_kalshi_markets_single_candidate_event_fallback(monkeypatch):
+    df = pd.DataFrame(
+        {
+            "league": ["NBA"],
+            "market_type": ["total_over"],
+            "home_team": ["Boston Celtics"],
+            "away_team": ["Miami Heat"],
+            "game_date": ["2026-03-10T00:00:00Z"],
+            "total_line": [220.5],
+            "best_pick": ["Over 220.5"],
+        }
+    )
+
+    class FakeResponse:
+        def __init__(self, json_data, status_code=200):
+            self._json_data = json_data
+            self.status_code = status_code
+
+        def json(self):
+            return self._json_data
+
+    def fake_make_request(url, **kwargs):
+        if url.endswith("/events") and "series_ticker" in kwargs.get("params", {}):
+            return FakeResponse(
+                {
+                    "events": [
+                        {
+                            "event_ticker": "KXNBATOTAL-26MAR10XXYY",
+                            "title": "NBA Total",
+                            "sub_title": "Game total",
+                            "close_time": "2026-03-10T05:00:00Z",
+                        }
+                    ]
+                }
+            )
+        if "KXNBATOTAL-26MAR10XXYY" in url:
+            return FakeResponse(
+                {
+                    "event": {
+                        "markets": [
+                            {
+                                "ticker": "KXNBATOTAL-26MAR10XXYY-2205",
+                                "event_ticker": "KXNBATOTAL-26MAR10XXYY",
+                                "title": "Total points over 220.5",
+                                "subtitle": "over/under",
+                                "yes_bid_dollars": 0.49,
+                                "yes_ask_dollars": 0.51,
+                            }
+                        ]
+                    }
+                }
+            )
+        return FakeResponse({}, 404)
+
+    if hasattr(ki.enrich_with_kalshi_markets, "series_cache"):
+        ki.enrich_with_kalshi_markets.series_cache.clear()
+
+    monkeypatch.setattr(ki, "_make_kalshi_request", fake_make_request)
+    out = ki.enrich_with_kalshi_markets(df)
+
+    assert out.loc[0, "kalshi_match_status"] == "matched"
+    assert str(out.loc[0, "kalshi_event_ticker"]).endswith("XXYY")

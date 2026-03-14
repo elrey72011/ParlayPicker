@@ -741,6 +741,14 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             if best_event_score < 20:
                 best_event_match = None
 
+        # Last-mile fallback: if there's exactly one near-time candidate event in the target series,
+        # use it so line-level matching can decide match quality.
+        if not best_event_match:
+            near_time_events = [e for e in series_events if _is_within_48h(e, game_date)]
+            if len(near_time_events) == 1:
+                best_event_match = near_time_events[0]
+                out.at[idx, "kalshi_match_quality"] = "event_single_candidate_fallback"
+
         if not best_event_match:
             out.at[idx, "kalshi_match_status"] = "miss"
             out.at[idx, "kalshi_match_reason"] = "no_fuzzy_event_match"
@@ -874,10 +882,19 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                         match_reason = "total_match_nearest"
                         out.at[idx, "kalshi_line_diff"] = delta
                 else:
-                    out.at[idx, "kalshi_match_status"] = "miss"
-                    out.at[idx, "kalshi_match_reason"] = "alt_line_mismatch"
-                    out.at[idx, "kalshi_match_quality"] = "line_mismatched"
-                    continue
+                    # Loose fallback tier: still accept nearest line for coverage, but label quality.
+                    loose_tolerance = tolerance + 4.0
+                    if delta <= loose_tolerance:
+                        best_market = nearest[2]
+                        match_status = "matched"
+                        match_reason = "total_match_nearest_loose"
+                        out.at[idx, "kalshi_line_diff"] = delta
+                        out.at[idx, "kalshi_match_quality"] = "line_mismatched_loose"
+                    else:
+                        out.at[idx, "kalshi_match_status"] = "miss"
+                        out.at[idx, "kalshi_match_reason"] = "alt_line_mismatch"
+                        out.at[idx, "kalshi_match_quality"] = "line_mismatched"
+                        continue
 
         else:
             # SPREAD LOGIC
@@ -979,6 +996,14 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                             match_status = "matched"
                             match_reason = "spread_match_nearest"
                             out.at[idx, "kalshi_line_diff"] = delta
+                    else:
+                        loose_tolerance = tolerance + 4.0
+                        if delta <= loose_tolerance:
+                            best_market = nearest[2]
+                            match_status = "matched"
+                            match_reason = "spread_match_nearest_loose"
+                            out.at[idx, "kalshi_line_diff"] = delta
+                            out.at[idx, "kalshi_match_quality"] = "line_mismatched_loose"
 
         if best_market is None:
             # We found no markets or candidates at all
