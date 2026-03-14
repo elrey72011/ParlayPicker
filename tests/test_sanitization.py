@@ -42,7 +42,7 @@ def test_sanitization_drops_extreme_odds(monkeypatch):
     assert len(analysis_df) == 1
     assert analysis_df.iloc[0]["odds_american"] == -110.0
 
-def test_best_picks_drops_negative_ev():
+def test_best_picks_keeps_negative_ev():
     df = pd.DataFrame([
         {
             "league": "NBA",
@@ -72,6 +72,6 @@ def test_best_picks_drops_negative_ev():
 
     best = build_best_picks_df(df)
 
-    # We strictly enforce EV > 0, so only the second row (EV = 0.05) should remain
+    # We no longer filter by EV > 0, so both rows should remain
     # best_picks_df no longer filters by negative EV
     assert len(best) == 2

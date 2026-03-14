@@ -838,7 +838,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
 
     # Sort by the temporary column, group by the unique game identifiers, and take the first row
     # Use matchup_key to correctly deduplicate reversed home/away matchups
-    best = pool.sort_values('sort_ev', ascending=False).groupby('matchup_key', as_index=False).first()
+    best_pick_indices = pool.groupby('matchup_key')['sort_ev'].idxmax()
+    best = pool.loc[best_pick_indices].copy()
 
     # Drop the temporary sorting column to clean the final output
     best = best.drop(columns=['sort_ev'])
@@ -1523,7 +1524,7 @@ def run_analysis_pipeline(
         "date_fill_success_rows": int(date_stats["date_fill_success_rows"]),
         "date_fill_success_rate": float(date_stats["date_fill_success_rate"]),
         "missing_game_date_rows": int(date_stats["missing_game_date_rows"]),
-        "positive_ev_picks": int((_numeric_series(best_picks_df, "expected_value", 0.0) > 0).sum()) if not best_picks_df.empty else 0,
+        "positive_ev_picks": int((_numeric_series(analysis_df, "expected_value", 0.0) > 0).sum()) if not analysis_df.empty else 0,
         "market_type_counts": _string_series(analysis_df, "market_type").value_counts(dropna=False).to_dict() if not analysis_df.empty else {},
         "allowed_market_type_rows": int(_string_series(analysis_df, "market_type").isin(VALID_MARKETS).sum()) if not analysis_df.empty else 0,
         "positive_ev_rows": int((_numeric_series(analysis_df, "expected_value", 0.0) > 0).sum()) if not analysis_df.empty else 0,
