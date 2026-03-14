@@ -1306,6 +1306,7 @@ def run_analysis_pipeline(
             allowed_keys.update(k for k in merged_keys.tolist() if isinstance(k, str) and k)
 
         if not base_df.empty:
+            # Orientation-insensitive validation: keep legitimate reversed home/away feeds.
             base_matchups = base_df[['home_team', 'away_team']].copy().drop_duplicates()
             base_matchups["home_team_lower"] = base_matchups["home_team"].str.lower().str.strip()
             base_matchups["away_team_lower"] = base_matchups["away_team"].str.lower().str.strip()
