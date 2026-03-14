@@ -21,11 +21,11 @@ KALSHI_LINE_TOLERANCE_SPREAD = 3.0
 KALSHI_LINE_TOLERANCE_TOTAL = 3.0
 
 MAX_LINE_TOLERANCE = {
-    "NBA": 3.0,
-    "NCAAB": 3.0,
-    "NHL": 3.0,
-    "NFL": 3.0,
-    "MLB": 3.0
+    "NBA": 6.0,
+    "NCAAB": 8.0,
+    "NHL": 4.0,
+    "NFL": 6.0,
+    "MLB": 4.0
 }
 
 def market_type_matches(market_type: str, title: str, subtitle: str = "") -> bool:
@@ -337,7 +337,7 @@ def _team_tokens_for_match(name: str) -> set[str]:
     return {w for w in tokenized.split() if len(w) > 2 and w not in stop}
 
 
-def _event_match_score(event: dict[str, Any], home_team: str, away_team: str, league: str) -> int:
+def _event_match_score(event: dict[str, Any], home_team: str, away_team: str, league: str, date_code: str = "") -> int:
     title = str(event.get("title") or "")
     subtitle = str(event.get("sub_title") or "")
     ticker = str(event.get("event_ticker") or "")
@@ -383,6 +383,14 @@ def _event_match_score(event: dict[str, Any], home_team: str, away_team: str, le
     has_away = (away_code and away_code in combined_upper) or (away_norm and away_norm in combined_norm) or bool(away_tokens.intersection(combined_tokens))
     if has_home ^ has_away:
         score -= 30
+
+    # Date affinity improves precision while still allowing missing date fields.
+    if date_code:
+        dc = str(date_code).upper()
+        if dc and dc in combined_upper:
+            score += 25
+        else:
+            score -= 10
 
     return score
 
@@ -722,14 +730,16 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             if not _is_within_48h(event, game_date):
                 continue
 
-            score = _event_match_score(event, home_team_name, away_team_name, league)
+            score = _event_match_score(event, home_team_name, away_team_name, league, date_code=date_code)
             if score > best_event_score:
                 best_event_score = score
                 best_event_match = event
 
-        # Conservative acceptance threshold; requires both teams to appear via codes/names/tokens.
-        if best_event_score < 55:
-            best_event_match = None
+        # Conservative acceptance threshold; tuned to reduce false misses for abbreviated Kalshi events.
+        if best_event_score < 35:
+            # last-chance fallback: accept strongest candidate if it clearly references both teams via code/name tokens
+            if best_event_score < 20:
+                best_event_match = None
 
         if not best_event_match:
             out.at[idx, "kalshi_match_status"] = "miss"
@@ -852,7 +862,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 delta = abs(float(nearest[0]) - target_line_abs)
 
                 tolerance = MAX_LINE_TOLERANCE.get(league, 3.0)
-                if delta <= 3.0:
+                if delta <= tolerance:
                     if delta == 0:
                         best_market = nearest[2]
                         match_status = "matched"
@@ -958,7 +968,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                     delta = abs(float(nearest[0]) - target_line_abs)
 
                     tolerance = MAX_LINE_TOLERANCE.get(league, 3.0)
-                    if delta <= 3.0:
+                    if delta <= tolerance:
                         if delta == 0:
                             best_market = nearest[2]
                             match_status = "matched"
