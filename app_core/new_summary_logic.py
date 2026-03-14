@@ -548,34 +548,31 @@ def build_game_summary_v2(df: pd.DataFrame) -> pd.DataFrame:
         # Build eligible picks list
         eligible = []
 
-        # Check if this game has invalid lines warning
-        has_invalid_lines = _has_invalid_line_warnings(group)
+        # We no longer skip games with invalid line warnings, allowing them to
+        # fall back to ML if needed. We just collect valid spread/total picks.
 
-        if not has_invalid_lines:
-            # Get spread probability and confidence
-            s_p = _get_prob(summary, "Spread Prob")
-            spread_conf = _get_confidence(group, "Spread")
+        # Get spread probability
+        s_p = _get_prob(summary, "Spread Prob")
 
-            # Get total probability and confidence
-            t_p = _get_prob(summary, "Total Prob")
-            total_conf = _get_confidence(group, "Total")
+        # Get total probability
+        t_p = _get_prob(summary, "Total Prob")
 
-            # Issue 3: Explicit check for Spread prob validity (logging)
-            if spread_pick and s_p is not None:
-                if not _is_valid_prob_range(s_p):
-                    # Only log if it's significantly below 50 (e.g. not 49.9 due to float errors)
-                    if s_p < 0.499:
-                        logger.error(f"🚨 CRITICAL BUG: Spread pick {spread_pick} has prob {s_p:.1%} < 50%! Skipping eligibility.")
-                elif spread_conf in ["MEDIUM", "HIGH"]:
-                    eligible.append(("SPREAD", spread_pick, s_p))
+        # Issue 3: Explicit check for Spread prob validity (logging)
+        if spread_pick and s_p is not None:
+            if not _is_valid_prob_range(s_p):
+                # Only log if it's significantly below 50 (e.g. not 49.9 due to float errors)
+                if s_p < 0.499:
+                    logger.error(f"🚨 CRITICAL BUG: Spread pick {spread_pick} has prob {s_p:.1%} < 50%! Skipping eligibility.")
+            else:
+                eligible.append(("SPREAD", spread_pick, s_p))
 
-            # Issue 3: Explicit check for Total prob validity (logging)
-            if total_pick and t_p is not None:
-                if not _is_valid_prob_range(t_p):
-                    if t_p < 0.499:
-                        logger.error(f"🚨 CRITICAL BUG: Total pick {total_pick} has prob {t_p:.1%} < 50%! Skipping eligibility.")
-                elif total_conf in ["MEDIUM", "HIGH"]:
-                    eligible.append(("TOTAL", total_pick, t_p))
+        # Issue 3: Explicit check for Total prob validity (logging)
+        if total_pick and t_p is not None:
+            if not _is_valid_prob_range(t_p):
+                if t_p < 0.499:
+                    logger.error(f"🚨 CRITICAL BUG: Total pick {total_pick} has prob {t_p:.1%} < 50%! Skipping eligibility.")
+            else:
+                eligible.append(("TOTAL", total_pick, t_p))
 
         # Select best pick from eligible list
         if eligible:
@@ -583,6 +580,14 @@ def build_game_summary_v2(df: pd.DataFrame) -> pd.DataFrame:
             best = max(eligible, key=lambda x: x[2])
             overall_pick = best[1]
             overall_prob = best[2]
+
+        # ML Fallback: If no spread/total pick qualified, check Moneyline
+        if not overall_pick:
+            ml_p = _get_prob(summary, "ML Prob")
+            ml_pick_summary = summary.get("ML Pick")
+            if ml_pick_summary and ml_p is not None and _is_valid_prob_range(ml_p):
+                overall_pick = ml_pick_summary
+                overall_prob = ml_p
 
         summary["Best Overall Pick"] = overall_pick  # Changed from "Overall Pick" to "Best Overall Pick" to match UI
         summary["Best Overall Prob"] = overall_prob  # Changed from "Overall Prob" to "Best Overall Prob" to match UI
