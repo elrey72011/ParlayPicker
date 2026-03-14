@@ -1042,6 +1042,10 @@ def run_analysis_pipeline(
         bdf["away_team"] = _string_series(bdf, "away_team").map(normalize_team_name)
 
         if not bet_rows.empty:
+            # Extract unique dates from the real predictions and filter base_df
+            active_dates = bet_rows['game_date'].dropna().unique()
+            bdf = bdf[bdf['game_date'].isin(active_dates)]
+
             b_rows = bet_rows.copy()
             b_rows["league"] = _string_series(b_rows, "league").str.upper().replace(LEAGUE_ALIASES)
             b_rows["home_team"] = _string_series(b_rows, "home_team").map(normalize_team_name)
@@ -1062,7 +1066,14 @@ def run_analysis_pipeline(
             dummy_pieces = []
             for _, row in missing_games.iterrows():
                 base_dict = row.to_dict()
+                league = str(row.get("league") or "").upper().strip()
+                home_team_upper = str(row.get("home_team") or "").upper().strip()
+                away_team_upper = str(row.get("away_team") or "").upper().strip()
+                game_key = row.get("game_key") if pd.notna(row.get("game_key")) else f"{league}|{home_team_upper}|{away_team_upper}"
+
                 base_dict.update({
+                    "league": league,
+                    "game_key": game_key,
                     "odds_american": -110.0,
                     "odds_source": "dummy_override",
                     "ml_probability": 0.523809,
@@ -1096,6 +1107,9 @@ def run_analysis_pipeline(
             if bet_rows.empty:
                 bet_rows = dummy_df
             else:
+                for col in bet_rows.columns:
+                    if col not in dummy_df.columns:
+                        dummy_df[col] = pd.NA
                 bet_rows = pd.concat([bet_rows, dummy_df], ignore_index=True)
 
     bet_rows["game_date"] = _game_dates(bet_rows)
