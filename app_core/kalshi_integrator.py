@@ -331,6 +331,62 @@ def team_code_for_league(league: str, team: str) -> str:
     return str(code or "")
 
 
+def _team_tokens_for_match(name: str) -> set[str]:
+    tokenized = _normalize_team_token(name)
+    stop = {"the", "of", "and", "university", "college", "state", "team"}
+    return {w for w in tokenized.split() if len(w) > 2 and w not in stop}
+
+
+def _event_match_score(event: dict[str, Any], home_team: str, away_team: str, league: str) -> int:
+    title = str(event.get("title") or "")
+    subtitle = str(event.get("sub_title") or "")
+    ticker = str(event.get("event_ticker") or "")
+
+    combined_norm = " ".join([
+        _normalize_team_token(title),
+        _normalize_team_token(subtitle),
+        _normalize_team_token(ticker),
+    ]).strip()
+    combined_upper = f"{title} {subtitle} {ticker}".upper()
+
+    home_norm = _normalize_team_token(home_team)
+    away_norm = _normalize_team_token(away_team)
+    home_tokens = _team_tokens_for_match(home_team)
+    away_tokens = _team_tokens_for_match(away_team)
+
+    home_code = team_code_for_league(league, home_team).upper()
+    away_code = team_code_for_league(league, away_team).upper()
+
+    score = 0
+
+    # Strong signal: explicit Kalshi codes in ticker/title payload
+    if home_code and home_code in combined_upper:
+        score += 60
+    if away_code and away_code in combined_upper:
+        score += 60
+
+    # Strong signal: canonical normalized names
+    if home_norm and home_norm in combined_norm:
+        score += 45
+    if away_norm and away_norm in combined_norm:
+        score += 45
+
+    # Medium signal: token overlap allows abbreviation/morphology tolerance
+    combined_tokens = set(combined_norm.split())
+    if home_tokens:
+        score += min(25, 10 * len(home_tokens.intersection(combined_tokens)))
+    if away_tokens:
+        score += min(25, 10 * len(away_tokens.intersection(combined_tokens)))
+
+    # Penalize one-sided matches to avoid false positives
+    has_home = (home_code and home_code in combined_upper) or (home_norm and home_norm in combined_norm) or bool(home_tokens.intersection(combined_tokens))
+    has_away = (away_code and away_code in combined_upper) or (away_norm and away_norm in combined_norm) or bool(away_tokens.intersection(combined_tokens))
+    if has_home ^ has_away:
+        score -= 30
+
+    return score
+
+
 def _make_kalshi_request(url: str, headers: dict[str, str] | None = None, params: dict[str, Any] | None = None, timeout: int = 30) -> requests.Response:
     """Helper to make rate-limited Kalshi API requests with exponential backoff for 429 errors."""
     time.sleep(0.2)
@@ -659,27 +715,21 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         home_team_name = str(row.get("home_team") or "")
         away_team_name = str(row.get("away_team") or "")
 
-        home_team_name_norm = normalize_team_name(home_team_name).lower()
-        away_team_name_norm = normalize_team_name(away_team_name).lower()
-
         best_event_match = None
+        best_event_score = -1
 
         for event in series_events:
             if not _is_within_48h(event, game_date):
                 continue
 
-            e_title = str(event.get("title") or "")
-            e_subtitle = str(event.get("sub_title") or "")
-
-            # Normalize the Kalshi event strings
-            norm_title = normalize_team_name(e_title).lower()
-            norm_subtitle = normalize_team_name(e_subtitle).lower()
-            combined_event_text = f"{norm_title} {norm_subtitle}"
-
-            # Exact dictionary match
-            if home_team_name_norm in combined_event_text and away_team_name_norm in combined_event_text:
+            score = _event_match_score(event, home_team_name, away_team_name, league)
+            if score > best_event_score:
+                best_event_score = score
                 best_event_match = event
-                break
+
+        # Conservative acceptance threshold; requires both teams to appear via codes/names/tokens.
+        if best_event_score < 55:
+            best_event_match = None
 
         if not best_event_match:
             out.at[idx, "kalshi_match_status"] = "miss"
