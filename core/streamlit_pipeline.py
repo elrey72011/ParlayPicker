@@ -922,6 +922,16 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
 
     import concurrent.futures
 
+    def _is_hist_tier_error(exc: Exception) -> bool:
+        err = str(exc).lower()
+        return (
+            "401" in err
+            or "403" in err
+            or "unauthorized" in err
+            or "historical_unavailable_on_free_usage_plan" in err
+            or "tier" in err and "historical" in err
+        )
+
     def fetch_sport(sport: str) -> list:
         sport_key = SPORT_KEYS.get(sport.upper())
         if not sport_key:
@@ -932,11 +942,15 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
             if games:
                 return filter_games_today_only(games)
         except OddsAPIAuthError as e:
-            pass  # Let tests proceed or handle appropriately
+            if _is_hist_tier_error(e):
+                logger.warning("The Odds API historical endpoint unavailable for %s due to plan/auth limits; skipping remote odds fetch.", sport)
+                return []
+            logger.warning("The Odds API auth error for %s; skipping remote odds fetch.", sport)
+            return []
         except Exception as e:
-            err_str = str(e).lower()
-            if "401" in err_str or "403" in err_str or "unauthorized" in err_str:
-                pass
+            if _is_hist_tier_error(e):
+                logger.warning("The Odds API historical endpoint unavailable for %s due to plan/auth limits; skipping remote odds fetch.", sport)
+                return []
             logger.error(f"Error fetching live odds for {sport}: {e}")
         return []
 
@@ -1042,13 +1056,9 @@ def run_analysis_pipeline(
         bdf["away_team"] = _string_series(bdf, "away_team").map(normalize_team_name)
 
         if not bet_rows.empty:
-            # Extract pure calendar dates from bet_rows
-            bet_dates = pd.to_datetime(bet_rows['game_date'], errors='coerce').dt.date.dropna().unique()
-
-            # Extract pure calendar dates from base_df into a temporary column
-            bdf['temp_date'] = pd.to_datetime(bdf['game_date'], errors='coerce').dt.date
-
-            # Filter and clean
+            # Bulletproof string slicing to avoid timezone-shift regressions.
+            bet_dates = bet_rows["game_date"].astype(str).str[:10].unique()
+            bdf["temp_date"] = bdf["game_date"].astype(str).str[:10]
             bdf = bdf[bdf['temp_date'].isin(bet_dates)].copy()
             bdf.drop(columns=['temp_date'], inplace=True)
 
@@ -1369,8 +1379,14 @@ def run_analysis_pipeline(
         merged["odds_source"] = pd.NA
     merged["odds_source"] = np.where(cond_any, "novig_live", merged["odds_source"])
 
+    has_local_uploaded_odds = bool((
+        _string_series(merged, "odds_source").str.lower().eq("uploaded")
+        & _numeric_series(merged, "odds_american").notna()
+    ).any())
+
     # Fallback Mode for Missing Novig Lines (e.g., late night or free tier API rejection)
-    if live_odds_df.empty:
+    # Only use this when API odds are unavailable AND no local uploaded odds are present.
+    if live_odds_df.empty and not has_local_uploaded_odds:
         logger.warning("Novig API unavailable/empty due to time or tier restrictions. Falling back to standard -110 odds to render dashboard.")
         missing_odds_mask = merged["odds_american"].isna()
         merged.loc[missing_odds_mask, "odds_american"] = -110.0
