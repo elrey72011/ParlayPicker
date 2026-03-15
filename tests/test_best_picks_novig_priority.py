@@ -77,3 +77,27 @@ def test_best_picks_uses_highest_ev_when_no_novig_live_rows_exist():
     assert len(best) == 1
     assert best.loc[0, "odds_source"] == "uploaded"
     assert float(best.loc[0, "expected_value"]) == 0.10
+
+
+def test_best_picks_skips_game_when_only_fallback_rows_exist():
+    base = _base_rows()
+    analysis_df = pd.DataFrame(
+        [
+            {
+                **base,
+                "market_type": "spread_home",
+                "expected_value": 0.05,
+                "odds_source": "fallback_novig",
+            },
+            {
+                **base,
+                "market_type": "spread_away",
+                "expected_value": 0.10,
+                "odds_source": "fallback_novig",
+            },
+        ]
+    )
+
+    best = build_best_picks_df(analysis_df)
+
+    assert best.empty
