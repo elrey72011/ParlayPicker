@@ -909,8 +909,21 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     # Force expected_value to numeric, converting true errors to NaN while preserving negative floats
     pool['expected_value'] = pd.to_numeric(pool['expected_value'], errors='coerce')
 
-    # Execute idxmax directly on expected_value to extract the best (or least negative) pick per game
-    best_pick_indices = pool.groupby(['league', 'home_team', 'away_team'], dropna=False)['expected_value'].idxmax()
+    # Choose one pick per game with odds-source priority while keeping game coverage:
+    # 1) Prefer novig_live rows when available.
+    # 2) Otherwise prefer non-fallback rows.
+    # 3) If only fallback_novig rows exist, select the best fallback row.
+    best_pick_indices: list[int] = []
+    for _, group in pool.groupby(['league', 'home_team', 'away_team'], dropna=False):
+        odds_source = _string_series(group, "odds_source").str.lower()
+        novig_rows = group[odds_source.eq("novig_live")]
+        if not novig_rows.empty:
+            idx = novig_rows["expected_value"].idxmax()
+        else:
+            non_fallback_rows = group[~odds_source.eq("fallback_novig")]
+            candidate_rows = non_fallback_rows if not non_fallback_rows.empty else group
+            idx = candidate_rows["expected_value"].idxmax()
+        best_pick_indices.append(idx)
 
     # Extract the final dataframe
     best = pool.loc[best_pick_indices].copy()
