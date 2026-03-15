@@ -79,7 +79,7 @@ def test_best_picks_uses_highest_ev_when_no_novig_live_rows_exist():
     assert float(best.loc[0, "expected_value"]) == 0.10
 
 
-def test_best_picks_skips_game_when_only_fallback_rows_exist():
+def test_best_picks_uses_fallback_when_only_fallback_rows_exist():
     base = _base_rows()
     analysis_df = pd.DataFrame(
         [
@@ -100,4 +100,6 @@ def test_best_picks_skips_game_when_only_fallback_rows_exist():
 
     best = build_best_picks_df(analysis_df)
 
-    assert best.empty
+    assert len(best) == 1
+    assert best.loc[0, "odds_source"] == "fallback_novig"
+    assert float(best.loc[0, "expected_value"]) == 0.10
