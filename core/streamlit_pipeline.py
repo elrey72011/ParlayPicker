@@ -70,6 +70,7 @@ BEST_PICK_COLUMNS = [
     "calibrated_probability", "expected_value", "edge", "consensus_agreement",
     "odds_american", "odds_source", "market_probability", "ml_probability",
     "kalshi_probability", "kalshi_match_status", "kalshi_match_reason",
+    "gemini_explanation", "gemini_risk_notes",
 ]
 
 CANONICAL_BET_COLUMNS = [
@@ -636,8 +637,8 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
     # Cast micro-edges to exact zero.
     edge = pd.to_numeric(edge, errors="coerce")
     ev = pd.to_numeric(ev, errors="coerce")
-    edge = edge.round(3)
-    ev = ev.round(3)
+    edge = edge.round(4)
+    ev = ev.round(4)
     zero_mask = edge.abs() < 0.0001
     edge = edge.mask(zero_mask, 0.0)
     ev = ev.mask(zero_mask, 0.0)
@@ -1656,8 +1657,8 @@ def run_analysis_pipeline(
     # Cast micro-edges to exact zero.
     edge = pd.to_numeric(edge, errors="coerce")
     ev = pd.to_numeric(ev, errors="coerce")
-    edge = edge.round(3)
-    ev = ev.round(3)
+    edge = edge.round(4)
+    ev = ev.round(4)
     zero_mask = edge.abs() < 0.0001
     edge = edge.mask(zero_mask, 0.0)
     ev = ev.mask(zero_mask, 0.0)

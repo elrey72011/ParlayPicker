@@ -11,6 +11,7 @@ from core.kelly_optimizer import kelly_fraction
 from core.probability_engine import american_to_prob, remove_vig
 from core.smart_parlay_engine import generate_smart_parlays
 from parlaypicker.core.parlay_engine import parlay_probability
+from parlaypicker.core.probability_engine import calibrated_probability
 
 
 def test_header_mapping_mixed_case_to_canonical_columns():
@@ -72,7 +73,7 @@ def test_rounding_ev_and_edge_are_consistent_to_two_decimals():
     assert round(edge, 2) == 0.05
 
 
-def test_apply_analysis_calculations_rounds_ev_and_edge_to_three_decimals():
+def test_apply_analysis_calculations_rounds_ev_and_edge_to_four_decimals():
     df = pd.DataFrame(
         {
             "league": ["NBA"],
@@ -87,8 +88,8 @@ def test_apply_analysis_calculations_rounds_ev_and_edge_to_three_decimals():
 
     ev = out.loc[0, "expected_value"]
     edge = out.loc[0, "edge"]
-    assert np.isclose(ev, round(ev, 3))
-    assert np.isclose(edge, round(edge, 3))
+    assert np.isclose(ev, round(ev, 4))
+    assert np.isclose(edge, round(edge, 4))
 
 
 def test_zero_odds_convention_pipeline_does_not_crash():
@@ -215,6 +216,13 @@ def test_build_best_picks_df_selects_best_per_game_across_markets_and_has_schema
     for col in sp.BEST_PICK_COLUMNS:
         assert col in best.columns
 
+
+
+
+def test_calibrated_probability_boundaries():
+    assert calibrated_probability(0.0) == 0.01
+    assert calibrated_probability(1.0) == 0.99
+    assert calibrated_probability(-10) == 0.01
 
 def test_prob_boundary_inputs_for_ev_formula():
     decimal = sp.american_to_decimal(-110)
