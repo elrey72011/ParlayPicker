@@ -345,10 +345,20 @@ def _is_pipeline_export(df: pd.DataFrame | None) -> bool:
 
 def _coerce_export_to_canonical(df: pd.DataFrame, selected_sports: list[str] | None) -> pd.DataFrame:
     out = _normalize_upload_columns(df)
+    original_columns = set(out.columns)
     for src, dst in _UPLOAD_COLUMN_ALIASES.items():
         if src in out.columns and dst not in out.columns:
             out = out.rename(columns={src: dst})
+
     out = _coerce_identity_columns(out)
+    required_identity = {"league", "home_team", "away_team", "market_type"}
+    missing_cols = [c for c in sorted(required_identity) if c not in out.columns or _string_series(out, c).str.len().eq(0).all()]
+    if missing_cols:
+        logger.warning(
+            "Upload normalization missing expected canonical columns: %s (from source columns: %s)",
+            ", ".join(missing_cols),
+            sorted(original_columns),
+        )
     out["game_date"] = _game_dates(out)
     # Fill any missing dates with fallback
     out["game_date"] = out["game_date"].fillna(_game_date_fallback())
@@ -502,13 +512,15 @@ def _first_existing_numeric(df: pd.DataFrame, candidates: list[str], default: fl
 def american_to_decimal(odds: Any) -> float:
     v = pd.to_numeric(odds, errors="coerce")
     if pd.isna(v):
+        # Preserve long-standing -110 default when odds are unavailable.
         return 1.9091
     v = float(v)
+    if v == 0.0:
+        # Explicit convention for invalid zero-odds placeholder values.
+        return 2.0
     if v > 0:
         return 1 + (v / 100.0)
-    if v < 0:
-        return 1 + (100.0 / abs(v))
-    return 1.0
+    return 1 + (100.0 / abs(v))
 
 
 def _format_best_pick(row: pd.Series) -> str:
@@ -624,7 +636,8 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
     # Cast micro-edges to exact zero.
     edge = pd.to_numeric(edge, errors="coerce")
     ev = pd.to_numeric(ev, errors="coerce")
-    edge = edge.round(4)
+    edge = edge.round(3)
+    ev = ev.round(3)
     zero_mask = edge.abs() < 0.0001
     edge = edge.mask(zero_mask, 0.0)
     ev = ev.mask(zero_mask, 0.0)
@@ -1643,7 +1656,8 @@ def run_analysis_pipeline(
     # Cast micro-edges to exact zero.
     edge = pd.to_numeric(edge, errors="coerce")
     ev = pd.to_numeric(ev, errors="coerce")
-    edge = edge.round(4)
+    edge = edge.round(3)
+    ev = ev.round(3)
     zero_mask = edge.abs() < 0.0001
     edge = edge.mask(zero_mask, 0.0)
     ev = ev.mask(zero_mask, 0.0)
