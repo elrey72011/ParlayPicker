@@ -8,6 +8,8 @@ import pandas as pd
 def american_to_prob(odds):
     if pd.isna(odds):
         return pd.NA
+    if float(odds) == 0.0:
+        return pd.NA
     if odds > 0:
         return 100 / (odds + 100)
     return abs(odds) / (abs(odds) + 100)
