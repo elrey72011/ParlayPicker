@@ -926,7 +926,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         best_pick_indices.append(idx)
 
     # Extract the final dataframe
-    best = pool.loc[best_pick_indices].copy()
+    best = pool.loc[best_pick_indices].copy() if best_pick_indices else pd.DataFrame(columns=pool.columns)
 
     best["calibrated_probability"] = _numeric_series(best, "calibrated_probability", 0.5)
     edge_for_consensus = _numeric_series(best, "edge", 0.0)
