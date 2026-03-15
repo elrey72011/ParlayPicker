@@ -9,7 +9,16 @@ from parlaypicker.utils.config import MODEL_WEIGHTS
 
 def american_to_prob(odds: float | np.ndarray) -> float | np.ndarray:
     odds_arr = np.asarray(odds, dtype=float)
-    probs = np.where(odds_arr > 0, 100.0 / (odds_arr + 100.0), np.abs(odds_arr) / (np.abs(odds_arr) + 100.0))
+    probs = np.empty_like(odds_arr, dtype=float)
+
+    zero_mask = odds_arr == 0
+    pos_mask = odds_arr > 0
+    neg_mask = ~(zero_mask | pos_mask)
+
+    probs[zero_mask] = 0.5
+    probs[pos_mask] = 100.0 / (odds_arr[pos_mask] + 100.0)
+    probs[neg_mask] = np.abs(odds_arr[neg_mask]) / (np.abs(odds_arr[neg_mask]) + 100.0)
+
     return float(probs) if np.isscalar(odds) else probs
 
 
