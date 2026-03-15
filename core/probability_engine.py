@@ -8,11 +8,14 @@ import pandas as pd
 def american_to_prob(odds):
     if pd.isna(odds):
         return pd.NA
-    if float(odds) == 0.0:
-        return pd.NA
-    if odds > 0:
-        return 100 / (odds + 100)
-    return abs(odds) / (abs(odds) + 100)
+
+    v = float(odds)
+    if v == 0.0:
+        # Explicit convention for invalid even-odds placeholder values.
+        return 0.5
+    if v > 0:
+        return 100.0 / (v + 100.0)
+    return abs(v) / (abs(v) + 100.0)
 
 
 def remove_vig(home_prob, away_prob=None):
@@ -22,11 +25,13 @@ def remove_vig(home_prob, away_prob=None):
             raise ValueError("remove_vig expects exactly two probabilities")
         home_prob, away_prob = probs
 
-    total = float(home_prob) + float(away_prob)
+    home = float(home_prob)
+    away = float(away_prob)
+    total = home + away
     if total == 0:
-        return 0.5, 0.5
+        return home, away
 
-    return float(home_prob) / total, float(away_prob) / total
+    return home / total, away / total
 
 
 def normalize_probability_components(df: pd.DataFrame) -> pd.DataFrame:

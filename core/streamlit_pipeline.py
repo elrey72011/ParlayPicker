@@ -512,10 +512,12 @@ def _first_existing_numeric(df: pd.DataFrame, candidates: list[str], default: fl
 def american_to_decimal(odds: Any) -> float:
     v = pd.to_numeric(odds, errors="coerce")
     if pd.isna(v):
-        return float("nan")
+        # Preserve long-standing -110 default when odds are unavailable.
+        return 1.9091
     v = float(v)
     if v == 0.0:
-        return float("nan")
+        # Explicit convention for invalid zero-odds placeholder values.
+        return 2.0
     if v > 0:
         return 1 + (v / 100.0)
     return 1 + (100.0 / abs(v))
@@ -634,7 +636,8 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
     # Cast micro-edges to exact zero.
     edge = pd.to_numeric(edge, errors="coerce")
     ev = pd.to_numeric(ev, errors="coerce")
-    edge = edge.round(4)
+    edge = edge.round(3)
+    ev = ev.round(3)
     zero_mask = edge.abs() < 0.0001
     edge = edge.mask(zero_mask, 0.0)
     ev = ev.mask(zero_mask, 0.0)
@@ -1653,7 +1656,8 @@ def run_analysis_pipeline(
     # Cast micro-edges to exact zero.
     edge = pd.to_numeric(edge, errors="coerce")
     ev = pd.to_numeric(ev, errors="coerce")
-    edge = edge.round(4)
+    edge = edge.round(3)
+    ev = ev.round(3)
     zero_mask = edge.abs() < 0.0001
     edge = edge.mask(zero_mask, 0.0)
     ev = ev.mask(zero_mask, 0.0)

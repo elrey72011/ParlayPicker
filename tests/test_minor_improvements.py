@@ -8,6 +8,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from core import streamlit_pipeline as sp
 from core.kelly_optimizer import kelly_fraction
+from core.probability_engine import american_to_prob, remove_vig
 from core.smart_parlay_engine import generate_smart_parlays
 from parlaypicker.core.parlay_engine import parlay_probability
 
@@ -54,6 +55,12 @@ def test_coerce_export_permuted_columns_and_ignores_irrelevant_fields():
     assert "Some Irrelevant Col" not in out.columns
 
 
+def test_normalize_upload_columns_random_case_and_symbols():
+    upload = pd.DataFrame({"Home-Team": ["A"], "AWAY_team": ["B"], "Win Probability!!": [0.55]})
+    normalized = sp._normalize_upload_columns(upload)
+    assert list(normalized.columns) == ["home team", "away team", "win probability"]
+
+
 def test_rounding_ev_and_edge_are_consistent_to_two_decimals():
     calibrated = 0.55
     market = 0.50
@@ -65,7 +72,26 @@ def test_rounding_ev_and_edge_are_consistent_to_two_decimals():
     assert round(edge, 2) == 0.05
 
 
-def test_zero_odds_returns_nan_and_pipeline_does_not_crash():
+def test_apply_analysis_calculations_rounds_ev_and_edge_to_three_decimals():
+    df = pd.DataFrame(
+        {
+            "league": ["NBA"],
+            "home_team": ["A"],
+            "away_team": ["B"],
+            "market_type": ["spread_home"],
+            "odds_american": [-137],
+            "theover_probability": [0.59337],
+        }
+    )
+    out = sp._apply_analysis_calculations(df)
+
+    ev = out.loc[0, "expected_value"]
+    edge = out.loc[0, "edge"]
+    assert np.isclose(ev, round(ev, 3))
+    assert np.isclose(edge, round(edge, 3))
+
+
+def test_zero_odds_convention_pipeline_does_not_crash():
     df = pd.DataFrame(
         {
             "league": ["NBA"],
@@ -79,13 +105,41 @@ def test_zero_odds_returns_nan_and_pipeline_does_not_crash():
 
     out = sp._apply_analysis_calculations(df)
 
-    assert pd.isna(sp.american_to_decimal(0))
-    assert pd.isna(out.loc[0, "market_probability"])
-    assert pd.isna(out.loc[0, "expected_value"]) or out.loc[0, "expected_value"] == 0
+    assert sp.american_to_decimal(0) == 2.0
+    assert american_to_prob(0) == 0.5
+    assert out.loc[0, "market_probability"] == 0.5
+
+
+def test_remove_vig_edge_cases():
+    assert remove_vig(0, 0) == (0.0, 0.0)
+    home, away = remove_vig(1.2, -0.2)
+    assert np.isclose(home, 1.2)
+    assert np.isclose(away, -0.2)
+
+
+def test_american_odds_edge_cases():
+    assert american_to_prob(0) == 0.5
+    assert american_to_prob(-100) == 0.5
+    assert american_to_prob(100) == 0.5
+
+
+def test_decimal_conversion_edge_cases():
+    assert sp.american_to_decimal(-100) == 2.0
+    assert sp.american_to_decimal(100) == 2.0
+    assert sp.american_to_decimal(None) == 1.9091
+
+
+def test_expected_value_with_positive_and_negative_odds():
+    ev_pos = 0.5 * (sp.american_to_decimal(200) - 1) - (1 - 0.5)
+    ev_neg = 0.5 * (sp.american_to_decimal(-200) - 1) - (1 - 0.5)
+    assert round(ev_pos, 4) == 0.5
+    assert round(ev_neg, 4) == -0.25
 
 
 def test_parlay_probability_and_generate_smart_parlays_formula():
     assert parlay_probability([0.5, 0.6]) == 0.3
+    assert parlay_probability([]) == 1.0
+    assert parlay_probability([1.0, 0.0, 0.7]) == 0.0
 
     bets = pd.DataFrame(
         {
@@ -112,6 +166,8 @@ def test_kelly_fraction_edge_cases():
     assert kelly_fraction(0.55, np.nan) == 0.0
     assert kelly_fraction(0.55, 1.0) == 0.0
     assert kelly_fraction(-0.10, 2.0) == 0.0
+    assert kelly_fraction(1.0, 2.0) == 1.0
+    assert kelly_fraction(0.5, 1.5) == 0.0
 
 
 def test_compute_blended_probability_market_ml_only_and_with_kalshi():
@@ -126,7 +182,7 @@ def test_compute_blended_probability_market_ml_only_and_with_kalshi():
     assert np.isclose(out.iloc[1], 0.75 * consensus + 0.25 * 0.60)
 
 
-def test_build_best_picks_df_selects_best_per_game_across_markets():
+def test_build_best_picks_df_selects_best_per_game_across_markets_and_has_schema():
     analysis_df = pd.DataFrame(
         {
             "league": ["NBA", "NBA", "NBA", "NBA"],
@@ -156,6 +212,8 @@ def test_build_best_picks_df_selects_best_per_game_across_markets():
     assert len(best) == 2
     game1 = best[(best["home_team"] == "A") & (best["away_team"] == "B")].iloc[0]
     assert game1["market_type"] == "total_over"
+    for col in sp.BEST_PICK_COLUMNS:
+        assert col in best.columns
 
 
 def test_prob_boundary_inputs_for_ev_formula():
