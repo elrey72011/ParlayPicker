@@ -1271,8 +1271,17 @@ def run_analysis_pipeline(
                 if team_col in fill_view.columns:
                     if base_col not in merged.columns:
                         merged[base_col] = pd.NA
-                    merged.loc[needs_team_only, base_col] = merged.loc[needs_team_only, base_col].where(
-                        merged.loc[needs_team_only, base_col].notna(), fill_view[team_col].values
+
+                    current_slice = merged.loc[needs_team_only, base_col]
+                    fill_series = pd.Series(fill_view[team_col].values, index=current_slice.index)
+
+                    if base_col == "date":
+                        fill_series = pd.to_datetime(fill_series, errors="coerce", utc=True)
+                    elif base_col in {"odds_american_base", "ml_probability_base"}:
+                        fill_series = pd.to_numeric(fill_series, errors="coerce")
+
+                    merged.loc[needs_team_only, base_col] = current_slice.where(
+                        current_slice.notna(), fill_series
                     )
 
         merged["game_date"] = _game_dates(merged)
@@ -1681,9 +1690,26 @@ def run_analysis_pipeline(
             logger.error(f"❌ ML prediction failed: {e}")
             import traceback
             logger.error(traceback.format_exc())
-            if "ml_probability" not in merged.columns:
-                merged["ml_probability"] = pd.NA
-            merged["model_status"] = "Model Failure"
+
+            # Graceful fallback: if model inference aborted due to empty feature matrix,
+            # retry with statistical fallback probabilities so pipeline remains usable.
+            fallback_applied = False
+            if "Feature matrix is empty due to schedule merge failure" in str(e):
+                try:
+                    engine = PredictionEngine()
+                    engine.use_fallback = True
+                    fallback_predictions = engine.predict_batch(merged)
+                    merged["ml_probability"] = pd.Series(fallback_predictions, index=merged.index, dtype="float64")
+                    merged["model_status"] = "Statistical Fallback"
+                    fallback_applied = True
+                    logger.warning("⚠️ ML DEBUG: Applied statistical fallback predictions after empty-feature validation failure.")
+                except Exception as fallback_err:
+                    logger.error(f"❌ Statistical fallback prediction failed: {fallback_err}")
+
+            if not fallback_applied:
+                if "ml_probability" not in merged.columns:
+                    merged["ml_probability"] = pd.NA
+                merged["model_status"] = "Model Failure"
     else:
         if "ml_probability" not in merged.columns:
             merged["ml_probability"] = pd.NA
