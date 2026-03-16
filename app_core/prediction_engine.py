@@ -306,9 +306,12 @@ class PredictionEngine:
             logger.debug(f"[MODEL_DEBUG] Input features: {features}")
 
             if self.use_fallback:
-                # Do not inject fake probabilities. Return None to allow dynamic weight redistribution.
-                logger.debug("Model fallback triggered. Returning None for ml_probability to trigger weight redistribution.")
-                return {"prob": None, "note": "Model Failed - Redistributing Weights"}
+                fallback_prob = self._calculate_statistical_prob(features)
+                logger.debug(
+                    "Model fallback triggered. Returning statistical fallback probability %.4f",
+                    fallback_prob,
+                )
+                return {"prob": float(fallback_prob), "note": "Statistical Fallback"}
 
             # Ensure input is 2D (batch of 1)
             # Create DataFrame safely
@@ -432,10 +435,16 @@ class PredictionEngine:
             return []
 
         try:
-            # Always fallback if model not loaded
+            # Formula-based fallback if model is unavailable.
             if self.use_fallback:
-                logger.info(f"Predict Batch: Model unavailable, returning None for {len(df)} rows.")
-                return [None] * len(df)
+                logger.info(
+                    f"Predict Batch: Model unavailable, generating statistical fallback probabilities for {len(df)} rows."
+                )
+                fallback_probs: List[float] = []
+                for _, row in df.iterrows():
+                    features = build_model_feature_row_from_record(row.to_dict())
+                    fallback_probs.append(float(self._calculate_statistical_prob(features)))
+                return fallback_probs
 
             # Ensure input has the correct columns
             missing_cols = [col for col in VERTEX_FEATURE_COLUMNS if col not in df.columns]
@@ -445,10 +454,18 @@ class PredictionEngine:
                      df[c] = 0.0
 
             # Select only the required columns in the correct order
-            inference_data = df[VERTEX_FEATURE_COLUMNS].copy()
+            raw_inference_data = df[VERTEX_FEATURE_COLUMNS].copy()
+            raw_numeric = raw_inference_data.apply(pd.to_numeric, errors='coerce')
+
+            # Strict validation: do not allow model inference on empty feature rows.
+            empty_feature_rows = raw_numeric.isna().all(axis=1)
+            if empty_feature_rows.any():
+                raise ValueError(
+                    "Feature matrix contains empty rows due to schedule join failure."
+                )
 
             # Ensure proper casting and fillna to prevent errors - critical for preventing placeholder values
-            inference_data = inference_data.apply(pd.to_numeric, errors='coerce').fillna(0.0)
+            inference_data = raw_numeric.fillna(0.0)
             # Replace any remaining inf values
             inference_data = inference_data.replace([np.inf, -np.inf], 0.0).astype(float)
 
@@ -496,6 +513,9 @@ class PredictionEngine:
                       final_probs.append(p)
 
             return final_probs
+        except ValueError as e:
+            logger.error(f"Batch prediction failed: {e}", exc_info=True)
+            raise
         except Exception as e:
             logger.error(f"Batch prediction failed: {e}", exc_info=True)
             return [None] * len(df)
