@@ -82,6 +82,61 @@ def build_model_feature_row_from_record(record: Mapping[str, Any]) -> Dict[str, 
 
     return row
 
+
+
+def _american_to_prob_safe(odds_val: Any) -> float | None:
+    """Convert American odds to implied probability, returning None when unavailable."""
+    try:
+        odds = float(odds_val)
+    except (TypeError, ValueError):
+        return None
+    if odds == 0:
+        return None
+    if odds > 0:
+        return 100.0 / (odds + 100.0)
+    return abs(odds) / (abs(odds) + 100.0)
+
+
+def _build_fallback_features_from_row(row_dict: Dict[str, Any]) -> Dict[str, float]:
+    """Build fallback features with market-derived priors to avoid flat 0.5 outputs."""
+    features = build_model_feature_row_from_record(row_dict)
+
+    implied_candidates = [
+        row_dict.get("implied_home_prob"),
+        row_dict.get("market_probability"),
+        row_dict.get("theover_probability"),
+    ]
+    implied_prob = None
+    for candidate in implied_candidates:
+        try:
+            if candidate is not None:
+                val = float(candidate)
+                if val > 1.0:
+                    val = val / 100.0
+                if 0.0 < val < 1.0:
+                    implied_prob = val
+                    break
+        except (TypeError, ValueError):
+            continue
+
+    if implied_prob is None:
+        implied_prob = _american_to_prob_safe(row_dict.get("odds_american"))
+
+    if implied_prob is not None:
+        features["implied_home_prob"] = float(implied_prob)
+
+    kalshi_candidates = [row_dict.get("kalshi_prob"), row_dict.get("kalshi_probability")]
+    for candidate in kalshi_candidates:
+        try:
+            if candidate is not None:
+                val = float(candidate)
+                if 0.0 < val < 1.0:
+                    features["kalshi_prob"] = val
+                    break
+        except (TypeError, ValueError):
+            continue
+
+    return features
 def match_team_name(target: str, candidates: List[str], threshold: float = 80.0) -> Optional[str]:
     """
     Wrapper for TeamNameMatcher to support rapidfuzz/fuzzy matching.
@@ -442,7 +497,7 @@ class PredictionEngine:
                 )
                 fallback_probs: List[float] = []
                 for _, row in df.iterrows():
-                    features = build_model_feature_row_from_record(row.to_dict())
+                    features = _build_fallback_features_from_row(row.to_dict())
                     fallback_probs.append(float(self._calculate_statistical_prob(features)))
                 return fallback_probs
 
