@@ -332,6 +332,25 @@ def _date_join_key(series: pd.Series) -> pd.Series:
     dt_local = pd.to_datetime(series.apply(_normalize_local), errors="coerce")
     dt_utc = pd.to_datetime(series, errors="coerce", utc=True).dt.tz_localize(None).dt.normalize()
     return dt_local.where(dt_local.notna(), dt_utc)
+
+
+def _utc_day_key(series: pd.Series) -> pd.Series:
+    """Return timezone-aware UTC day key for deterministic schedule merges."""
+
+    def _to_utc_day(value: Any) -> pd.Timestamp:
+        if pd.isna(value):
+            return pd.NaT
+        try:
+            ts = pd.Timestamp(value)
+        except Exception:
+            return pd.NaT
+        if ts.tzinfo is None:
+            ts = ts.tz_localize("UTC")
+        else:
+            ts = ts.tz_convert("UTC")
+        return ts.floor("D")
+
+    return pd.to_datetime(series.apply(_to_utc_day), errors="coerce", utc=True)
 def _game_date_fallback() -> pd.Timestamp:
     """Return today's US/Eastern date, stored as UTC midnight to match parsed date-only strings."""
     from datetime import datetime
@@ -1201,7 +1220,7 @@ def run_analysis_pipeline(
         base_schedule["home_team"] = _string_series(base_schedule, "home_team").map(normalize_team_name)
         base_schedule["away_team"] = _string_series(base_schedule, "away_team").map(normalize_team_name)
         base_schedule["date"] = _game_dates(base_schedule)
-        base_schedule["game_date_key"] = pd.to_datetime(base_schedule["date"], errors="coerce", utc=True).dt.date
+        base_schedule["game_date_key"] = _utc_day_key(base_schedule["date"])
 
         base_schedule["home_team_lower"] = base_schedule["home_team"].str.lower().str.strip()
         base_schedule["away_team_lower"] = base_schedule["away_team"].str.lower().str.strip()
@@ -1215,7 +1234,7 @@ def run_analysis_pipeline(
         merged["home_team_lower"] = merged["home_team"].str.lower().str.strip()
         merged["away_team_lower"] = merged["away_team"].str.lower().str.strip()
         merged["date_day"] = _date_join_key(merged.get("game_date"))
-        merged["game_date_key"] = pd.to_datetime(merged.get("game_date"), errors="coerce", utc=True).dt.date
+        merged["game_date_key"] = _utc_day_key(merged.get("game_date"))
 
         # Primary join includes normalized game-date to avoid stale cross-date team matches.
         merged = merged.merge(
@@ -1261,6 +1280,14 @@ def run_analysis_pipeline(
                 on=["league", "home_team_lower", "away_team_lower"],
                 how="left",
             )
+
+            # Explicit dtype coercion before assignment to prevent datetime64[ns, UTC] vs NaT shearing.
+            if "date" not in merged.columns:
+                merged["date"] = pd.Series(pd.NaT, index=merged.index, dtype="datetime64[ns, UTC]")
+            merged["date"] = pd.to_datetime(merged["date"], errors="coerce", utc=True)
+            if "date_team" in fill_view.columns:
+                fill_view["date_team"] = pd.to_datetime(fill_view["date_team"], errors="coerce", utc=True)
+
             for base_col, team_col in [
                 ("date", "date_team"),
                 ("game_time_est_base", "game_time_est_team"),

@@ -279,8 +279,8 @@ def _sync_ml_probabilities(analysis_df: pd.DataFrame, pipeline_best_picks_df: pd
     if right.empty:
         return analysis_df
 
-    left["game_date"] = pd.to_datetime(left["game_date"], errors="coerce", utc=True)
-    right["game_date"] = pd.to_datetime(right["game_date"], errors="coerce", utc=True)
+    left["game_date"] = pd.to_datetime(left["game_date"], errors="coerce", utc=True).dt.floor("D")
+    right["game_date"] = pd.to_datetime(right["game_date"], errors="coerce", utc=True).dt.floor("D")
 
     left["_merge_home"] = left["home_team"].astype(str).str.lower().str.replace(r"[^a-z0-9\s]", "", regex=True)
     left["_merge_away"] = left["away_team"].astype(str).str.lower().str.replace(r"[^a-z0-9\s]", "", regex=True)
