@@ -1561,25 +1561,18 @@ def run_analysis_pipeline(
         logger.warning("🔍 ML DEBUG: use_ml=True, attempting predictions...")
         try:
             existing_ml = _numeric_series(merged, "ml_probability")
-
-            # Detect stale/collapsed imported ml_probability (e.g., same value everywhere)
-            # and force model recomputation so live features can drive new predictions.
-            collapsed_existing = False
             non_na_existing = existing_ml.dropna()
-            if len(non_na_existing) > 1 and non_na_existing.nunique() <= 1:
-                collapsed_existing = True
+            if len(non_na_existing) > 0:
                 logger.warning(
-                    "⚠️ ML DEBUG: Existing ml_probability appears collapsed to a constant "
-                    f"({non_na_existing.iloc[0]:.6f}); forcing full recompute."
+                    "⚠️ ML DEBUG: Ignoring %s pre-populated ml_probability values and recomputing from model/features.",
+                    len(non_na_existing),
                 )
-                merged["ml_probability"] = pd.NA
 
-            # Predict all rows when collapse is detected; otherwise only fill missing values.
-            needs_prediction = (
-                pd.Series([True] * len(merged), index=merged.index)
-                if collapsed_existing
-                else merged["ml_probability"].isna() if "ml_probability" in merged.columns else pd.Series([True] * len(merged), index=merged.index)
-            )
+            # Authoritative ML path: when ML is enabled, always recompute all rows.
+            # This prevents stale uploaded/base values (including collapsed constants like 0.1906)
+            # from leaking into the final ML Prob column.
+            needs_prediction = pd.Series([True] * len(merged), index=merged.index)
+            merged["ml_probability"] = pd.NA
 
             if needs_prediction.any():
                 engine = PredictionEngine()
