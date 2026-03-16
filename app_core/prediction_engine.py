@@ -82,6 +82,61 @@ def build_model_feature_row_from_record(record: Mapping[str, Any]) -> Dict[str, 
 
     return row
 
+
+
+def _american_to_prob_safe(odds_val: Any) -> float | None:
+    """Convert American odds to implied probability, returning None when unavailable."""
+    try:
+        odds = float(odds_val)
+    except (TypeError, ValueError):
+        return None
+    if odds == 0:
+        return None
+    if odds > 0:
+        return 100.0 / (odds + 100.0)
+    return abs(odds) / (abs(odds) + 100.0)
+
+
+def _build_fallback_features_from_row(row_dict: Dict[str, Any]) -> Dict[str, float]:
+    """Build fallback features with market-derived priors to avoid flat 0.5 outputs."""
+    features = build_model_feature_row_from_record(row_dict)
+
+    implied_candidates = [
+        row_dict.get("implied_home_prob"),
+        row_dict.get("market_probability"),
+        row_dict.get("theover_probability"),
+    ]
+    implied_prob = None
+    for candidate in implied_candidates:
+        try:
+            if candidate is not None:
+                val = float(candidate)
+                if val > 1.0:
+                    val = val / 100.0
+                if 0.0 < val < 1.0:
+                    implied_prob = val
+                    break
+        except (TypeError, ValueError):
+            continue
+
+    if implied_prob is None:
+        implied_prob = _american_to_prob_safe(row_dict.get("odds_american"))
+
+    if implied_prob is not None:
+        features["implied_home_prob"] = float(implied_prob)
+
+    kalshi_candidates = [row_dict.get("kalshi_prob"), row_dict.get("kalshi_probability")]
+    for candidate in kalshi_candidates:
+        try:
+            if candidate is not None:
+                val = float(candidate)
+                if 0.0 < val < 1.0:
+                    features["kalshi_prob"] = val
+                    break
+        except (TypeError, ValueError):
+            continue
+
+    return features
 def match_team_name(target: str, candidates: List[str], threshold: float = 80.0) -> Optional[str]:
     """
     Wrapper for TeamNameMatcher to support rapidfuzz/fuzzy matching.
@@ -306,9 +361,12 @@ class PredictionEngine:
             logger.debug(f"[MODEL_DEBUG] Input features: {features}")
 
             if self.use_fallback:
-                # Do not inject fake probabilities. Return None to allow dynamic weight redistribution.
-                logger.debug("Model fallback triggered. Returning None for ml_probability to trigger weight redistribution.")
-                return {"prob": None, "note": "Model Failed - Redistributing Weights"}
+                fallback_prob = self._calculate_statistical_prob(features)
+                logger.debug(
+                    "Model fallback triggered. Returning statistical fallback probability %.4f",
+                    fallback_prob,
+                )
+                return {"prob": float(fallback_prob), "note": "Statistical Fallback"}
 
             # Ensure input is 2D (batch of 1)
             # Create DataFrame safely
@@ -432,23 +490,32 @@ class PredictionEngine:
             return []
 
         try:
-            # Always fallback if model not loaded
+            # Formula-based fallback if model is unavailable.
             if self.use_fallback:
-                logger.info(f"Predict Batch: Model unavailable, returning None for {len(df)} rows.")
-                return [None] * len(df)
+                logger.info(
+                    f"Predict Batch: Model unavailable, generating statistical fallback probabilities for {len(df)} rows."
+                )
+                fallback_probs: List[float] = []
+                for _, row in df.iterrows():
+                    features = _build_fallback_features_from_row(row.to_dict())
+                    fallback_probs.append(float(self._calculate_statistical_prob(features)))
+                return fallback_probs
 
-            # Ensure input has the correct columns
-            missing_cols = [col for col in VERTEX_FEATURE_COLUMNS if col not in df.columns]
-            if missing_cols:
-                 # Add missing columns with default 0.0
-                 for c in missing_cols:
-                     df[c] = 0.0
+            # Select required columns while preserving missing columns as NaN.
+            # This allows pre-inference validation to detect schedule/feature join failures.
+            raw_inference_data = df.reindex(columns=VERTEX_FEATURE_COLUMNS).copy()
+            raw_numeric = raw_inference_data.apply(pd.to_numeric, errors='coerce')
 
-            # Select only the required columns in the correct order
-            inference_data = df[VERTEX_FEATURE_COLUMNS].copy()
+            # Strict validation: prevent predicting on predominantly-empty feature rows.
+            row_nan_ratio = raw_numeric.isna().sum(axis=1) / max(len(VERTEX_FEATURE_COLUMNS), 1)
+            if row_nan_ratio.mean() > 0.5:
+                raise ValueError(
+                    "Feature matrix is empty due to schedule merge failure. "
+                    "Aborting ML predictions to prevent baseline default (0.1906)."
+                )
 
             # Ensure proper casting and fillna to prevent errors - critical for preventing placeholder values
-            inference_data = inference_data.apply(pd.to_numeric, errors='coerce').fillna(0.0)
+            inference_data = raw_numeric.fillna(0.0)
             # Replace any remaining inf values
             inference_data = inference_data.replace([np.inf, -np.inf], 0.0).astype(float)
 
@@ -496,6 +563,9 @@ class PredictionEngine:
                       final_probs.append(p)
 
             return final_probs
+        except ValueError as e:
+            logger.error(f"Batch prediction failed: {e}", exc_info=True)
+            raise
         except Exception as e:
             logger.error(f"Batch prediction failed: {e}", exc_info=True)
             return [None] * len(df)
