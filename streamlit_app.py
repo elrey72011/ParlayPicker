@@ -299,6 +299,12 @@ def _sync_ml_probabilities(analysis_df: pd.DataFrame, pipeline_best_picks_df: pd
     if recovered > 0:
         logger.warning("🔧 ML sync: recovered %s ml_probability values via key-based merge.", recovered)
 
+    ml_after_sync = pd.to_numeric(merged["ml_probability"], errors="coerce").dropna()
+    if len(ml_after_sync) > 1 and ml_after_sync.nunique() <= 1:
+        raise ValueError(
+            "ML predictions are constant after sync; feature matrix likely invalid from schedule join failure."
+        )
+
     merged = merged.drop(columns=[c for c in ["ml_probability_sync", "_merge_home", "_merge_away"] if c in merged.columns])
     return merged
 
@@ -365,7 +371,11 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
                 deferred_warnings.append(kalshi_err)
 
     if controls.get("use_ml"):
-        analysis_df = _sync_ml_probabilities(analysis_df, pipeline_best_picks_df)
+        try:
+            analysis_df = _sync_ml_probabilities(analysis_df, pipeline_best_picks_df)
+        except ValueError as exc:
+            deferred_errors.append(f"ML Merge Failed: {exc}")
+            return empty_state, deferred_warnings, deferred_errors
 
         ml_non_null = _safe_numeric_series(analysis_df, "ml_probability").notna().sum()
         if ml_non_null == 0:

@@ -454,10 +454,18 @@ class PredictionEngine:
                      df[c] = 0.0
 
             # Select only the required columns in the correct order
-            inference_data = df[VERTEX_FEATURE_COLUMNS].copy()
+            raw_inference_data = df[VERTEX_FEATURE_COLUMNS].copy()
+            raw_numeric = raw_inference_data.apply(pd.to_numeric, errors='coerce')
+
+            # Strict validation: do not allow model inference on empty feature rows.
+            empty_feature_rows = raw_numeric.isna().all(axis=1)
+            if empty_feature_rows.any():
+                raise ValueError(
+                    "Feature matrix contains empty rows due to schedule join failure."
+                )
 
             # Ensure proper casting and fillna to prevent errors - critical for preventing placeholder values
-            inference_data = inference_data.apply(pd.to_numeric, errors='coerce').fillna(0.0)
+            inference_data = raw_numeric.fillna(0.0)
             # Replace any remaining inf values
             inference_data = inference_data.replace([np.inf, -np.inf], 0.0).astype(float)
 
@@ -505,6 +513,9 @@ class PredictionEngine:
                       final_probs.append(p)
 
             return final_probs
+        except ValueError as e:
+            logger.error(f"Batch prediction failed: {e}", exc_info=True)
+            raise
         except Exception as e:
             logger.error(f"Batch prediction failed: {e}", exc_info=True)
             return [None] * len(df)

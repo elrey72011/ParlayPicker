@@ -313,6 +313,25 @@ def _format_game_time_est(df: pd.DataFrame) -> pd.Series:
 
     return out
 
+
+
+def _date_join_key(series: pd.Series) -> pd.Series:
+    """Return normalized date key robust to timezone formatting mismatches."""
+
+    def _normalize_local(value: Any) -> pd.Timestamp:
+        if pd.isna(value):
+            return pd.NaT
+        try:
+            ts = pd.Timestamp(value)
+        except Exception:
+            return pd.NaT
+        if ts.tzinfo is not None:
+            ts = ts.tz_localize(None)
+        return ts.normalize()
+
+    dt_local = pd.to_datetime(series.apply(_normalize_local), errors="coerce")
+    dt_utc = pd.to_datetime(series, errors="coerce", utc=True).dt.tz_localize(None).dt.normalize()
+    return dt_local.where(dt_local.notna(), dt_utc)
 def _game_date_fallback() -> pd.Timestamp:
     """Return today's US/Eastern date, stored as UTC midnight to match parsed date-only strings."""
     from datetime import datetime
@@ -1185,7 +1204,7 @@ def run_analysis_pipeline(
 
         base_schedule["home_team_lower"] = base_schedule["home_team"].str.lower().str.strip()
         base_schedule["away_team_lower"] = base_schedule["away_team"].str.lower().str.strip()
-        base_schedule["date_day"] = pd.to_datetime(base_schedule["date"], errors="coerce", utc=True).dt.normalize()
+        base_schedule["date_day"] = _date_join_key(base_schedule["date"])
 
         base_merge_columns = ["league", "home_team_lower", "away_team_lower", "date_day"] + [
             col for col in ["date", "game_time_est", "odds_american", "ml_probability", "is_neutral"]
@@ -1194,7 +1213,7 @@ def run_analysis_pipeline(
 
         merged["home_team_lower"] = merged["home_team"].str.lower().str.strip()
         merged["away_team_lower"] = merged["away_team"].str.lower().str.strip()
-        merged["date_day"] = _game_dates(merged).dt.normalize()
+        merged["date_day"] = _date_join_key(merged.get("game_date"))
 
         # Primary join includes normalized game-date to avoid stale cross-date team matches.
         merged = merged.merge(
