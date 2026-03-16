@@ -446,15 +446,9 @@ class PredictionEngine:
                     fallback_probs.append(float(self._calculate_statistical_prob(features)))
                 return fallback_probs
 
-            # Ensure input has the correct columns
-            missing_cols = [col for col in VERTEX_FEATURE_COLUMNS if col not in df.columns]
-            if missing_cols:
-                 # Add missing columns with default 0.0
-                 for c in missing_cols:
-                     df[c] = 0.0
-
-            # Select only the required columns in the correct order
-            raw_inference_data = df[VERTEX_FEATURE_COLUMNS].copy()
+            # Select required columns while preserving missing columns as NaN.
+            # This allows pre-inference validation to detect schedule/feature join failures.
+            raw_inference_data = df.reindex(columns=VERTEX_FEATURE_COLUMNS).copy()
             raw_numeric = raw_inference_data.apply(pd.to_numeric, errors='coerce')
 
             # Strict validation: prevent predicting on predominantly-empty feature rows.
