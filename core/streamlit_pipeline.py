@@ -1560,8 +1560,19 @@ def run_analysis_pipeline(
     if use_ml and ML_AVAILABLE and PredictionEngine is not None:
         logger.warning("🔍 ML DEBUG: use_ml=True, attempting predictions...")
         try:
-            # Only predict for rows missing ml_probability
-            needs_prediction = merged["ml_probability"].isna() if "ml_probability" in merged.columns else pd.Series([True] * len(merged), index=merged.index)
+            existing_ml = _numeric_series(merged, "ml_probability")
+            non_na_existing = existing_ml.dropna()
+            if len(non_na_existing) > 0:
+                logger.warning(
+                    "⚠️ ML DEBUG: Ignoring %s pre-populated ml_probability values and recomputing from model/features.",
+                    len(non_na_existing),
+                )
+
+            # Authoritative ML path: when ML is enabled, always recompute all rows.
+            # This prevents stale uploaded/base values (including collapsed constants like 0.1906)
+            # from leaking into the final ML Prob column.
+            needs_prediction = pd.Series([True] * len(merged), index=merged.index)
+            merged["ml_probability"] = pd.NA
 
             if needs_prediction.any():
                 engine = PredictionEngine()
@@ -1581,7 +1592,10 @@ def run_analysis_pipeline(
                 )
 
                 ml_count = merged["ml_probability"].notna().sum()
-                logger.warning(f"✅ ML DEBUG: Generated {ml_count} total predictions ({needs_prediction.sum()} new)")
+                ml_unique = _numeric_series(merged, "ml_probability").dropna().nunique()
+                logger.warning(
+                    f"✅ ML DEBUG: Generated {ml_count} total predictions ({needs_prediction.sum()} new, unique={ml_unique})"
+                )
             else:
                 logger.warning("✅ ML DEBUG: All rows already have ml_probability")
 
