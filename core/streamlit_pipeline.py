@@ -313,6 +313,25 @@ def _format_game_time_est(df: pd.DataFrame) -> pd.Series:
 
     return out
 
+
+
+def _date_join_key(series: pd.Series) -> pd.Series:
+    """Return normalized date key robust to timezone formatting mismatches."""
+
+    def _normalize_local(value: Any) -> pd.Timestamp:
+        if pd.isna(value):
+            return pd.NaT
+        try:
+            ts = pd.Timestamp(value)
+        except Exception:
+            return pd.NaT
+        if ts.tzinfo is not None:
+            ts = ts.tz_localize(None)
+        return ts.normalize()
+
+    dt_local = pd.to_datetime(series.apply(_normalize_local), errors="coerce")
+    dt_utc = pd.to_datetime(series, errors="coerce", utc=True).dt.tz_localize(None).dt.normalize()
+    return dt_local.where(dt_local.notna(), dt_utc)
 def _game_date_fallback() -> pd.Timestamp:
     """Return today's US/Eastern date, stored as UTC midnight to match parsed date-only strings."""
     from datetime import datetime
@@ -1167,7 +1186,7 @@ def run_analysis_pipeline(
         bet_rows = bet_rows.drop(columns=["home_team_lower", "away_team_lower"])
     bet_rows, date_stats = _fill_missing_game_dates_from_base(bet_rows, base_df)
 
-    merge_keys = ["league", "home_team", "away_team", "fuzzy_team_match>=85"]
+    merge_keys = ["league", "home_team", "away_team", "game_date", "fuzzy_team_match>=85"]
     merged = bet_rows.copy()
 
     # Do not set a fallback odds_source
@@ -1182,24 +1201,79 @@ def run_analysis_pipeline(
         base_schedule["home_team"] = _string_series(base_schedule, "home_team").map(normalize_team_name)
         base_schedule["away_team"] = _string_series(base_schedule, "away_team").map(normalize_team_name)
         base_schedule["date"] = _game_dates(base_schedule)
+        base_schedule["game_date_key"] = pd.to_datetime(base_schedule["date"], errors="coerce", utc=True).dt.date
 
         base_schedule["home_team_lower"] = base_schedule["home_team"].str.lower().str.strip()
         base_schedule["away_team_lower"] = base_schedule["away_team"].str.lower().str.strip()
+        base_schedule["date_day"] = _date_join_key(base_schedule["date"])
 
-        base_merge_columns = ["league", "home_team_lower", "away_team_lower"] + [
+        base_merge_columns = ["league", "home_team_lower", "away_team_lower", "date_day", "game_date_key"] + [
             col for col in ["date", "game_time_est", "odds_american", "ml_probability", "is_neutral"]
             if col in base_schedule.columns
         ]
 
         merged["home_team_lower"] = merged["home_team"].str.lower().str.strip()
         merged["away_team_lower"] = merged["away_team"].str.lower().str.strip()
+        merged["date_day"] = _date_join_key(merged.get("game_date"))
+        merged["game_date_key"] = pd.to_datetime(merged.get("game_date"), errors="coerce", utc=True).dt.date
 
+        # Primary join includes normalized game-date to avoid stale cross-date team matches.
         merged = merged.merge(
-            base_schedule[base_merge_columns].drop_duplicates(["league", "home_team_lower", "away_team_lower"]),
-            on=["league", "home_team_lower", "away_team_lower"],
+            base_schedule[base_merge_columns].drop_duplicates(["league", "home_team_lower", "away_team_lower", "date_day", "game_date_key"]),
+            on=["league", "home_team_lower", "away_team_lower", "date_day", "game_date_key"],
             how="left",
             suffixes=("", "_base"),
         )
+
+        # Fallback to team-only lookup for rows still unmatched by date.
+        needs_team_only = _numeric_series(merged, "odds_american_base").isna() & _numeric_series(merged, "ml_probability_base").isna()
+        if needs_team_only.any():
+            team_only_cols = [
+                c
+                for c in [
+                    "league",
+                    "home_team_lower",
+                    "away_team_lower",
+                    "date",
+                    "game_time_est",
+                    "odds_american",
+                    "ml_probability",
+                    "is_neutral",
+                ]
+                if c in base_schedule.columns
+            ]
+            team_only_lookup = (
+                base_schedule[team_only_cols]
+                .sort_values("date")
+                .drop_duplicates(["league", "home_team_lower", "away_team_lower"], keep="last")
+                .rename(
+                    columns={
+                        "date": "date_team",
+                        "game_time_est": "game_time_est_team",
+                        "odds_american": "odds_american_team",
+                        "ml_probability": "ml_probability_team",
+                        "is_neutral": "is_neutral_team",
+                    }
+                )
+            )
+            fill_view = merged.loc[needs_team_only, ["league", "home_team_lower", "away_team_lower"]].merge(
+                team_only_lookup,
+                on=["league", "home_team_lower", "away_team_lower"],
+                how="left",
+            )
+            for base_col, team_col in [
+                ("date", "date_team"),
+                ("game_time_est_base", "game_time_est_team"),
+                ("odds_american_base", "odds_american_team"),
+                ("ml_probability_base", "ml_probability_team"),
+                ("is_neutral_base", "is_neutral_team"),
+            ]:
+                if team_col in fill_view.columns:
+                    if base_col not in merged.columns:
+                        merged[base_col] = pd.NA
+                    merged.loc[needs_team_only, base_col] = merged.loc[needs_team_only, base_col].where(
+                        merged.loc[needs_team_only, base_col].notna(), fill_view[team_col].values
+                    )
 
         merged["game_date"] = _game_dates(merged)
         merged["game_date"] = merged["game_date"].fillna(merged["date"])
@@ -1277,6 +1351,10 @@ def run_analysis_pipeline(
         if "is_neutral_rev" in merged.columns:
             merged["is_neutral"] = merged["is_neutral"].fillna(merged["is_neutral_rev"]) if "is_neutral" in merged.columns else merged["is_neutral_rev"]
             merged = merged.drop(columns=["is_neutral_rev"])
+
+        for _date_col in ["date_day", "game_date_key"]:
+            if _date_col in merged.columns:
+                merged = merged.drop(columns=[_date_col])
 
         # Fuzzy fallback when strict league/home/away join misses schedule rows.
         needs_fuzzy = (
@@ -1560,8 +1638,19 @@ def run_analysis_pipeline(
     if use_ml and ML_AVAILABLE and PredictionEngine is not None:
         logger.warning("🔍 ML DEBUG: use_ml=True, attempting predictions...")
         try:
-            # Only predict for rows missing ml_probability
-            needs_prediction = merged["ml_probability"].isna() if "ml_probability" in merged.columns else pd.Series([True] * len(merged), index=merged.index)
+            existing_ml = _numeric_series(merged, "ml_probability")
+            non_na_existing = existing_ml.dropna()
+            if len(non_na_existing) > 0:
+                logger.warning(
+                    "⚠️ ML DEBUG: Ignoring %s pre-populated ml_probability values and recomputing from model/features.",
+                    len(non_na_existing),
+                )
+
+            # Authoritative ML path: when ML is enabled, always recompute all rows.
+            # This prevents stale uploaded/base values (including collapsed constants like 0.1906)
+            # from leaking into the final ML Prob column.
+            needs_prediction = pd.Series([True] * len(merged), index=merged.index)
+            merged["ml_probability"] = pd.NA
 
             if needs_prediction.any():
                 engine = PredictionEngine()
@@ -1581,7 +1670,10 @@ def run_analysis_pipeline(
                 )
 
                 ml_count = merged["ml_probability"].notna().sum()
-                logger.warning(f"✅ ML DEBUG: Generated {ml_count} total predictions ({needs_prediction.sum()} new)")
+                ml_unique = _numeric_series(merged, "ml_probability").dropna().nunique()
+                logger.warning(
+                    f"✅ ML DEBUG: Generated {ml_count} total predictions ({needs_prediction.sum()} new, unique={ml_unique})"
+                )
             else:
                 logger.warning("✅ ML DEBUG: All rows already have ml_probability")
 
