@@ -98,6 +98,29 @@ def _safe_numeric_series(df: pd.DataFrame, col: str, default: float | int | None
     return s
 
 
+def _compose_model_probability(out: pd.DataFrame) -> tuple[pd.Series, pd.Series, pd.Series]:
+    """Build model probability using market-aware fallback logic.
+
+    Returns a tuple of (model_probability, ml_probability, theover_probability).
+    """
+    ml = _safe_numeric_series(out, "ml_probability")
+    theover = _safe_numeric_series(out, "theover_probability")
+    theover = theover.where(theover <= 1, theover / 100.0)
+
+    market_type = _safe_str_series(out, "market_type").str.lower()
+    spread_model = ml.where(ml.notna(), theover)
+    total_model = theover.where(theover.notna(), ml)
+    model_probability = pd.Series(
+        pd.NA,
+        index=out.index,
+        dtype="Float64",
+    )
+    is_spread = market_type.str.startswith("spread")
+    model_probability = model_probability.where(~is_spread, spread_model)
+    model_probability = model_probability.where(is_spread, total_model)
+    return model_probability.astype("float64"), ml, theover
+
+
 
 
 def _recompute_consensus_from_kalshi(df: pd.DataFrame) -> pd.DataFrame:
@@ -116,10 +139,15 @@ def _recompute_consensus_from_kalshi(df: pd.DataFrame) -> pd.DataFrame:
     if "model_probability" in out.columns:
         model_prob = _safe_numeric_series(out, "model_probability")
     else:
-        # Fallback to ml or theover prob
-        ml = _safe_numeric_series(out, "ml_probability")
-        theover = _safe_numeric_series(out, "theover_probability")
-        model_prob = ml.where(ml.notna(), theover)
+        # Fallback to market-aware ml/theover composition used in the analysis pipeline
+        model_prob, ml, theover = _compose_model_probability(out)
+
+        # Fail loudly in logs if ML appears to have collapsed and we are fully backfilled.
+        if ml.notna().sum() == 0 and model_prob.notna().sum() > 0:
+            logger.warning(
+                "⚠️ ML probabilities are entirely missing during consensus recompute; "
+                "using fallback model_probability from TheOver data."
+            )
 
     blended = compute_blended_probability(
         p_market=market_prob,
@@ -677,10 +705,6 @@ def main() -> None:
                 # TODO: Revert edge filter back to > 0.02 once live zero-vig Novig API data is restored.
                 # best_picks_export = best_picks_export[pd.to_numeric(best_picks_export["edge"], errors="coerce") > -0.10].copy()
                 pass
-
-            # Phase 3: Synchronize Kalshi missing strings
-            if "kalshi_probability" in best_picks_export.columns:
-                best_picks_export["kalshi_probability"] = best_picks_export["kalshi_probability"].fillna("⚪ No Kalshi")
 
             # Apply explicit secondary sorts before export as requested
             sort_cols = ["expected_value", "Commence (Local)", "league", "Home"]
