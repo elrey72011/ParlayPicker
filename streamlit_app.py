@@ -98,9 +98,32 @@ def _safe_numeric_series(df: pd.DataFrame, col: str, default: float | int | None
     return s
 
 
+def _compose_model_probability(out: pd.DataFrame) -> tuple[pd.Series, pd.Series, pd.Series]:
+    """Build model probability using market-aware fallback logic.
+
+    Returns a tuple of (model_probability, ml_probability, theover_probability).
+    """
+    ml = _safe_numeric_series(out, "ml_probability")
+    theover = _safe_numeric_series(out, "theover_probability")
+    theover = theover.where(theover <= 1, theover / 100.0)
+
+    market_type = _safe_str_series(out, "market_type").str.lower()
+    spread_model = ml.where(ml.notna(), theover)
+    total_model = theover.where(theover.notna(), ml)
+    model_probability = pd.Series(
+        pd.NA,
+        index=out.index,
+        dtype="Float64",
+    )
+    is_spread = market_type.str.startswith("spread")
+    model_probability = model_probability.where(~is_spread, spread_model)
+    model_probability = model_probability.where(is_spread, total_model)
+    return model_probability.astype("float64"), ml, theover
 
 
-def _recompute_consensus_from_kalshi(df: pd.DataFrame) -> pd.DataFrame:
+
+
+def _recompute_consensus_from_kalshi(df: pd.DataFrame, require_ml: bool = False) -> pd.DataFrame:
     """Set consensus based on Kalshi availability and probability gap, and update blends."""
     if df is None or df.empty:
         return df
@@ -112,14 +135,17 @@ def _recompute_consensus_from_kalshi(df: pd.DataFrame) -> pd.DataFrame:
     kalshi_prob = _safe_numeric_series(out, "kalshi_probability")
     market_prob = _safe_numeric_series(out, "market_probability")
 
+    ml = _safe_numeric_series(out, "ml_probability")
+
     # Handle the two variations of model prob stored depending on df origin
     if "model_probability" in out.columns:
         model_prob = _safe_numeric_series(out, "model_probability")
     else:
-        # Fallback to ml or theover prob
-        ml = _safe_numeric_series(out, "ml_probability")
-        theover = _safe_numeric_series(out, "theover_probability")
-        model_prob = ml.where(ml.notna(), theover)
+        # Fallback to market-aware ml/theover composition used in the analysis pipeline
+        model_prob, ml, _ = _compose_model_probability(out)
+
+    if require_ml and ml.notna().sum() == 0:
+        raise ValueError("ML predictions failed to merge with the analysis dataframe.")
 
     blended = compute_blended_probability(
         p_market=market_prob,
@@ -228,6 +254,54 @@ def _merge_kalshi_into_analysis(analysis_df: pd.DataFrame, best_picks_df: pd.Dat
     return merged
 
 
+
+
+def _sync_ml_probabilities(analysis_df: pd.DataFrame, pipeline_best_picks_df: pd.DataFrame) -> pd.DataFrame:
+    """Repair missing ML probabilities in analysis_df using key-based join from pipeline best picks."""
+    if analysis_df is None or analysis_df.empty or pipeline_best_picks_df is None or pipeline_best_picks_df.empty:
+        return analysis_df
+
+    required_cols = ["league", "home_team", "away_team", "game_date", "ml_probability"]
+    if any(c not in pipeline_best_picks_df.columns for c in required_cols):
+        return analysis_df
+
+    left = analysis_df.copy()
+    right = pipeline_best_picks_df[required_cols].copy()
+    right["ml_probability"] = pd.to_numeric(right["ml_probability"], errors="coerce")
+    right = right[right["ml_probability"].notna()].drop_duplicates()
+    if right.empty:
+        return analysis_df
+
+    left["game_date"] = pd.to_datetime(left["game_date"], errors="coerce", utc=True)
+    right["game_date"] = pd.to_datetime(right["game_date"], errors="coerce", utc=True)
+
+    left["_merge_home"] = left["home_team"].astype(str).str.lower().str.replace(r"[^a-z0-9\s]", "", regex=True)
+    left["_merge_away"] = left["away_team"].astype(str).str.lower().str.replace(r"[^a-z0-9\s]", "", regex=True)
+    right["_merge_home"] = right["home_team"].astype(str).str.lower().str.replace(r"[^a-z0-9\s]", "", regex=True)
+    right["_merge_away"] = right["away_team"].astype(str).str.lower().str.replace(r"[^a-z0-9\s]", "", regex=True)
+
+    merge_keys = ["league", "game_date", "_merge_home", "_merge_away"]
+    merged = left.merge(
+        right[merge_keys + ["ml_probability"]].rename(columns={"ml_probability": "ml_probability_sync"}),
+        on=merge_keys,
+        how="left",
+    )
+
+    if "ml_probability" in merged.columns:
+        merged["ml_probability"] = pd.to_numeric(merged["ml_probability"], errors="coerce")
+        merged["ml_probability"] = merged["ml_probability"].where(
+            merged["ml_probability"].notna(), merged["ml_probability_sync"]
+        )
+    else:
+        merged["ml_probability"] = merged["ml_probability_sync"]
+
+    recovered = int(pd.to_numeric(merged["ml_probability_sync"], errors="coerce").notna().sum())
+    if recovered > 0:
+        logger.warning("🔧 ML sync: recovered %s ml_probability values via key-based merge.", recovered)
+
+    merged = merged.drop(columns=[c for c in ["ml_probability_sync", "_merge_home", "_merge_away"] if c in merged.columns])
+    return merged
+
 def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
     """Run the full analysis pipeline. Returns (state_updates, warnings, errors).
     Contains NO st.* calls.
@@ -250,7 +324,7 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
             if team_col in upload_df.columns:
                 upload_df[team_col] = upload_df[team_col].apply(normalize_team)
 
-    analysis_df, best_picks_df, diagnostics = run_analysis_pipeline(
+    analysis_df, pipeline_best_picks_df, diagnostics = run_analysis_pipeline(
         sports=controls["sports"],
         max_rows=10_000,
         use_ml=bool(controls["use_ml"]),
@@ -290,7 +364,19 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
             if kalshi_err:
                 deferred_warnings.append(kalshi_err)
 
-    analysis_df = _recompute_consensus_from_kalshi(analysis_df)
+    if controls.get("use_ml"):
+        analysis_df = _sync_ml_probabilities(analysis_df, pipeline_best_picks_df)
+
+        ml_non_null = _safe_numeric_series(analysis_df, "ml_probability").notna().sum()
+        if ml_non_null == 0:
+            deferred_errors.append("ML Merge Failed: Predictions could not be joined to the market odds.")
+            return empty_state, deferred_warnings, deferred_errors
+
+    try:
+        analysis_df = _recompute_consensus_from_kalshi(analysis_df, require_ml=bool(controls.get("use_ml")))
+    except ValueError as exc:
+        deferred_errors.append(f"ML Merge Failed: {exc}")
+        return empty_state, deferred_warnings, deferred_errors
 
     # -----------------------------
     # Update Kalshi Diagnostics
@@ -645,7 +731,10 @@ def main() -> None:
                 "ml_probability": "ML Prob",
             }
             display_df = display_df.rename(columns=rename_map)
-            preferred = ["parlay_rank", "League", "Home Team", "Away Team", "Game Date", "Game Time (ET)", "Best Pick", "Prob", "ML Prob", "EV", "Edge", "Consensus", "Kalshi Status"]
+            if "kalshi_probability" in display_df.columns:
+                kalshi_display = pd.to_numeric(display_df["kalshi_probability"], errors="coerce")
+                display_df["kalshi_probability_display"] = kalshi_display.map(lambda x: "⚪ No Kalshi" if pd.isna(x) else f"{x:.4f}")
+            preferred = ["parlay_rank", "League", "Home Team", "Away Team", "Game Date", "Game Time (ET)", "Best Pick", "Prob", "ML Prob", "EV", "Edge", "Consensus", "Kalshi Status", "kalshi_probability_display"]
             ordered = [c for c in preferred if c in display_df.columns] + [c for c in display_df.columns if c not in preferred]
             display_df = display_df[ordered]
             st.dataframe(display_df, width="stretch")
@@ -677,10 +766,6 @@ def main() -> None:
                 # TODO: Revert edge filter back to > 0.02 once live zero-vig Novig API data is restored.
                 # best_picks_export = best_picks_export[pd.to_numeric(best_picks_export["edge"], errors="coerce") > -0.10].copy()
                 pass
-
-            # Phase 3: Synchronize Kalshi missing strings
-            if "kalshi_probability" in best_picks_export.columns:
-                best_picks_export["kalshi_probability"] = best_picks_export["kalshi_probability"].fillna("⚪ No Kalshi")
 
             # Apply explicit secondary sorts before export as requested
             sort_cols = ["expected_value", "Commence (Local)", "league", "Home"]
