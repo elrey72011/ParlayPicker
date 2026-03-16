@@ -351,6 +351,11 @@ def _utc_day_key(series: pd.Series) -> pd.Series:
         return ts.floor("D")
 
     return pd.to_datetime(series.apply(_to_utc_day), errors="coerce", utc=True)
+
+
+def _force_utc_datetime(series: pd.Series) -> pd.Series:
+    """Force a datetime series to timezone-aware UTC dtype."""
+    return pd.to_datetime(series, errors="coerce", utc=True)
 def _game_date_fallback() -> pd.Timestamp:
     """Return today's US/Eastern date, stored as UTC midnight to match parsed date-only strings."""
     from datetime import datetime
@@ -1226,6 +1231,11 @@ def run_analysis_pipeline(
         base_schedule["away_team_lower"] = base_schedule["away_team"].str.lower().str.strip()
         base_schedule["date_day"] = _date_join_key(base_schedule["date"])
 
+        # Explicitly align temporal dtypes before merge to prevent datetime64 vs NaT shearing.
+        base_schedule["date"] = _force_utc_datetime(base_schedule["date"])
+        base_schedule["date_day"] = _force_utc_datetime(base_schedule["date_day"])
+        base_schedule["game_date_key"] = _force_utc_datetime(base_schedule["game_date_key"])
+
         base_merge_columns = ["league", "home_team_lower", "away_team_lower", "date_day", "game_date_key"] + [
             col for col in ["date", "game_time_est", "odds_american", "ml_probability", "is_neutral"]
             if col in base_schedule.columns
@@ -1235,6 +1245,10 @@ def run_analysis_pipeline(
         merged["away_team_lower"] = merged["away_team"].str.lower().str.strip()
         merged["date_day"] = _date_join_key(merged.get("game_date"))
         merged["game_date_key"] = _utc_day_key(merged.get("game_date"))
+
+        # Explicitly align temporal dtypes before merge to prevent datetime64 vs NaT shearing.
+        merged["date_day"] = _force_utc_datetime(merged["date_day"])
+        merged["game_date_key"] = _force_utc_datetime(merged["game_date_key"])
 
         # Primary join includes normalized game-date to avoid stale cross-date team matches.
         merged = merged.merge(
@@ -1284,9 +1298,9 @@ def run_analysis_pipeline(
             # Explicit dtype coercion before assignment to prevent datetime64[ns, UTC] vs NaT shearing.
             if "date" not in merged.columns:
                 merged["date"] = pd.Series(pd.NaT, index=merged.index, dtype="datetime64[ns, UTC]")
-            merged["date"] = pd.to_datetime(merged["date"], errors="coerce", utc=True)
+            merged["date"] = _force_utc_datetime(merged["date"])
             if "date_team" in fill_view.columns:
-                fill_view["date_team"] = pd.to_datetime(fill_view["date_team"], errors="coerce", utc=True)
+                fill_view["date_team"] = _force_utc_datetime(fill_view["date_team"])
 
             for base_col, team_col in [
                 ("date", "date_team"),
