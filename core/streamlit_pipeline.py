@@ -1224,8 +1224,8 @@ def run_analysis_pipeline(
         base_schedule["league"] = _string_series(base_schedule, "league").str.upper().replace(LEAGUE_ALIASES)
         base_schedule["home_team"] = _string_series(base_schedule, "home_team").map(normalize_team_name)
         base_schedule["away_team"] = _string_series(base_schedule, "away_team").map(normalize_team_name)
-        base_schedule["date"] = _game_dates(base_schedule)
-        base_schedule["game_date_key"] = _utc_day_key(base_schedule["date"])
+        base_schedule["date"] = _force_utc_datetime(_game_dates(base_schedule))
+        base_schedule["merge_date_utc"] = _utc_day_key(base_schedule["date"])
 
         base_schedule["home_team_lower"] = base_schedule["home_team"].str.lower().str.strip()
         base_schedule["away_team_lower"] = base_schedule["away_team"].str.lower().str.strip()
@@ -1236,24 +1236,19 @@ def run_analysis_pipeline(
         base_schedule["date_day"] = _force_utc_datetime(base_schedule["date_day"])
         base_schedule["game_date_key"] = _force_utc_datetime(base_schedule["game_date_key"])
 
-        base_merge_columns = ["league", "home_team_lower", "away_team_lower", "date_day", "game_date_key"] + [
+        base_merge_columns = ["league", "home_team_lower", "away_team_lower", "merge_date_utc"] + [
             col for col in ["date", "game_time_est", "odds_american", "ml_probability", "is_neutral"]
             if col in base_schedule.columns
         ]
 
         merged["home_team_lower"] = merged["home_team"].str.lower().str.strip()
         merged["away_team_lower"] = merged["away_team"].str.lower().str.strip()
-        merged["date_day"] = _date_join_key(merged.get("game_date"))
-        merged["game_date_key"] = _utc_day_key(merged.get("game_date"))
+        merged["merge_date_utc"] = _utc_day_key(merged.get("game_date"))
 
-        # Explicitly align temporal dtypes before merge to prevent datetime64 vs NaT shearing.
-        merged["date_day"] = _force_utc_datetime(merged["date_day"])
-        merged["game_date_key"] = _force_utc_datetime(merged["game_date_key"])
-
-        # Primary join includes normalized game-date to avoid stale cross-date team matches.
+        # Primary join uses explicit UTC day keys to prevent datetime/NaT mismatch shearing.
         merged = merged.merge(
-            base_schedule[base_merge_columns].drop_duplicates(["league", "home_team_lower", "away_team_lower", "date_day", "game_date_key"]),
-            on=["league", "home_team_lower", "away_team_lower", "date_day", "game_date_key"],
+            base_schedule[base_merge_columns].drop_duplicates(["league", "home_team_lower", "away_team_lower", "merge_date_utc"]),
+            on=["league", "home_team_lower", "away_team_lower", "merge_date_utc"],
             how="left",
             suffixes=("", "_base"),
         )
@@ -1314,7 +1309,7 @@ def run_analysis_pipeline(
                         merged[base_col] = pd.NA
 
                     current_slice = merged.loc[needs_team_only, base_col]
-                    fill_series = pd.Series(fill_view[team_col].values, index=current_slice.index)
+                    fill_series = fill_view[team_col].reset_index(drop=True).set_axis(current_slice.index)
 
                     if base_col == "date":
                         fill_series = pd.to_datetime(fill_series, errors="coerce", utc=True)
@@ -1402,9 +1397,8 @@ def run_analysis_pipeline(
             merged["is_neutral"] = merged["is_neutral"].fillna(merged["is_neutral_rev"]) if "is_neutral" in merged.columns else merged["is_neutral_rev"]
             merged = merged.drop(columns=["is_neutral_rev"])
 
-        for _date_col in ["date_day", "game_date_key"]:
-            if _date_col in merged.columns:
-                merged = merged.drop(columns=[_date_col])
+        if "merge_date_utc" in merged.columns:
+            merged = merged.drop(columns=["merge_date_utc"])
 
         # Fuzzy fallback when strict league/home/away join misses schedule rows.
         needs_fuzzy = (
