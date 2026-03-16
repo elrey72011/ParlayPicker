@@ -313,6 +313,49 @@ def _format_game_time_est(df: pd.DataFrame) -> pd.Series:
 
     return out
 
+
+
+def _date_join_key(series: pd.Series) -> pd.Series:
+    """Return normalized date key robust to timezone formatting mismatches."""
+
+    def _normalize_local(value: Any) -> pd.Timestamp:
+        if pd.isna(value):
+            return pd.NaT
+        try:
+            ts = pd.Timestamp(value)
+        except Exception:
+            return pd.NaT
+        if ts.tzinfo is not None:
+            ts = ts.tz_localize(None)
+        return ts.normalize()
+
+    dt_local = pd.to_datetime(series.apply(_normalize_local), errors="coerce")
+    dt_utc = pd.to_datetime(series, errors="coerce", utc=True).dt.tz_localize(None).dt.normalize()
+    return dt_local.where(dt_local.notna(), dt_utc)
+
+
+def _utc_day_key(series: pd.Series) -> pd.Series:
+    """Return timezone-aware UTC day key for deterministic schedule merges."""
+
+    def _to_utc_day(value: Any) -> pd.Timestamp:
+        if pd.isna(value):
+            return pd.NaT
+        try:
+            ts = pd.Timestamp(value)
+        except Exception:
+            return pd.NaT
+        if ts.tzinfo is None:
+            ts = ts.tz_localize("UTC")
+        else:
+            ts = ts.tz_convert("UTC")
+        return ts.floor("D")
+
+    return pd.to_datetime(series.apply(_to_utc_day), errors="coerce", utc=True)
+
+
+def _force_utc_datetime(series: pd.Series) -> pd.Series:
+    """Force a datetime series to timezone-aware UTC dtype."""
+    return pd.to_datetime(series, errors="coerce", utc=True)
 def _game_date_fallback() -> pd.Timestamp:
     """Return today's US/Eastern date, stored as UTC midnight to match parsed date-only strings."""
     from datetime import datetime
@@ -789,7 +832,10 @@ def build_theover_bet_rows(
         league_series = _clean_text_placeholders(_string_series(out, "league"))
         out["league"] = league_series.where(league_series.str.len().gt(0), inferred_league)
 
-    out = _infer_missing_league_from_base(out, load_base_data())
+    base_ref = load_base_data()
+    out = _infer_missing_league_from_base(out, base_ref)
+    out = _resolve_team_names_from_base(out, base_ref)
+    out = _dedupe_inverted_matchups(out)
 
     out["spread"] = pd.to_numeric(out.get("spread_line"), errors="coerce")
     out["total"] = pd.to_numeric(out.get("total_line"), errors="coerce")
@@ -818,6 +864,121 @@ def build_theover_bet_rows(
     return out[CANONICAL_BET_COLUMNS]
 
 
+
+
+
+
+TEAM_NAME_OVERRIDES: dict[tuple[str, str], str] = {
+    # NBA
+    ("NBA", "CHICAGO"): "Chicago Bulls",
+    ("NBA", "MEMPHIS"): "Memphis Grizzlies",
+    ("NBA", "HOUSTON"): "Houston Rockets",
+    ("NBA", "DALLAS"): "Dallas Mavericks",
+    ("NBA", "NEW ORLEANS"): "New Orleans Pelicans",
+    ("NBA", "PORTLAND"): "Portland Trail Blazers",
+    ("NBA", "ATLANTA"): "Atlanta Hawks",
+    ("NBA", "BOSTON"): "Boston Celtics",
+    ("NBA", "PHOENIX"): "Phoenix Suns",
+    ("NBA", "SAN ANTONIO"): "San Antonio Spurs",
+    ("NBA", "ORLANDO"): "Orlando Magic",
+    ("NBA", "BROOKLYN"): "Brooklyn Nets",
+    ("NBA", "GOLDEN STATE"): "Golden State Warriors",
+    ("NBA", "WASHINGTON"): "Washington Wizards",
+    ("NBA", "DETROIT"): "Detroit Pistons",
+    ("NBA", "LOS ANGELES"): "Los Angeles Lakers",
+    # NHL
+    ("NHL", "DALLAS"): "Dallas Stars",
+    ("NHL", "UTAH"): "Utah Hockey Club",
+    ("NHL", "DETROIT"): "Detroit Red Wings",
+    ("NHL", "CALGARY"): "Calgary Flames",
+    ("NHL", "COLORADO"): "Colorado Avalanche",
+    ("NHL", "PITTSBURGH"): "Pittsburgh Penguins",
+    ("NHL", "NY RANGERS"): "New York Rangers",
+    ("NHL", "NEW YORK RANGERS"): "New York Rangers",
+    ("NHL", "LOS ANGELES"): "Los Angeles Kings",
+}
+
+
+def _apply_team_name_overrides(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return df
+    out = df.copy()
+    leagues = _string_series(out, "league").str.upper().replace(LEAGUE_ALIASES)
+
+    def _fix(team: str, league: str) -> str:
+        key = (str(league or "").upper(), str(team or "").upper().strip())
+        return TEAM_NAME_OVERRIDES.get(key, team)
+
+    out["home_team"] = [_fix(t, lg) for t, lg in zip(_string_series(out, "home_team"), leagues)]
+    out["away_team"] = [_fix(t, lg) for t, lg in zip(_string_series(out, "away_team"), leagues)]
+    return out
+def _resolve_team_names_from_base(df: pd.DataFrame, base_df: pd.DataFrame) -> pd.DataFrame:
+    """Resolve city-only/alias team names to canonical full names using base schedule by league."""
+    if df is None or df.empty or base_df is None or base_df.empty:
+        return df
+
+    out = df.copy()
+    base = base_df.copy()
+    base["league"] = _string_series(base, "league").str.upper().replace(LEAGUE_ALIASES)
+    base["home_team"] = _string_series(base, "home_team").map(normalize_team_name)
+    base["away_team"] = _string_series(base, "away_team").map(normalize_team_name)
+
+    all_teams = pd.concat([
+        base[["league", "home_team"]].rename(columns={"home_team": "team"}),
+        base[["league", "away_team"]].rename(columns={"away_team": "team"}),
+    ], ignore_index=True).dropna().drop_duplicates()
+
+    alias_map: dict[tuple[str, str], str] = {}
+    for league, group in all_teams.groupby("league"):
+        teams = sorted(set(group["team"].astype(str)))
+        candidate_to_teams: dict[str, set[str]] = {}
+        for team in teams:
+            parts = team.split()
+            candidates = {team.upper()}
+            if len(parts) > 1:
+                candidates.add(" ".join(parts[:-1]).upper())
+            for c in candidates:
+                if c and c != "NAN":
+                    candidate_to_teams.setdefault(c, set()).add(team)
+        for candidate, matches in candidate_to_teams.items():
+            if len(matches) == 1:
+                alias_map[(str(league), candidate)] = next(iter(matches))
+
+    def _resolve(league: str, team: str) -> str:
+        key = (str(league or "").upper(), str(team or "").upper().strip())
+        return alias_map.get(key, team)
+
+    out["league"] = _string_series(out, "league").str.upper().replace(LEAGUE_ALIASES)
+    out["home_team"] = _string_series(out, "home_team").map(normalize_team_name)
+    out["away_team"] = _string_series(out, "away_team").map(normalize_team_name)
+    out["home_team"] = [
+        _resolve(lg, tm) for lg, tm in zip(_string_series(out, "league"), _string_series(out, "home_team"))
+    ]
+    out["away_team"] = [
+        _resolve(lg, tm) for lg, tm in zip(_string_series(out, "league"), _string_series(out, "away_team"))
+    ]
+    out = _apply_team_name_overrides(out)
+    return out
+
+
+def _dedupe_inverted_matchups(df: pd.DataFrame) -> pd.DataFrame:
+    """Remove duplicated/inverted matchup rows that represent the same market leg."""
+    if df is None or df.empty:
+        return df
+    out = df.copy()
+    out["_canonical_matchup"] = _canonical_matchup_key(out)
+    out["_spread_abs"] = _numeric_series(out, "spread_line").abs()
+    out["_total_line"] = _numeric_series(out, "total_line")
+    out["_market_type"] = _string_series(out, "market_type")
+    before = len(out)
+    out = out.drop_duplicates(
+        subset=["_canonical_matchup", "_market_type", "_spread_abs", "_total_line"],
+        keep="first",
+    ).copy()
+    dropped = before - len(out)
+    if dropped > 0:
+        logger.warning("Deduplication removed %s inverted/duplicate matchup rows.", dropped)
+    return out.drop(columns=["_canonical_matchup", "_spread_abs", "_total_line", "_market_type"])
 def _fill_missing_game_dates_from_base(bet_rows_df: pd.DataFrame, base_df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, float]]:
     out = bet_rows_df.copy()
     out["game_date"] = _game_dates(out)
@@ -1167,7 +1328,7 @@ def run_analysis_pipeline(
         bet_rows = bet_rows.drop(columns=["home_team_lower", "away_team_lower"])
     bet_rows, date_stats = _fill_missing_game_dates_from_base(bet_rows, base_df)
 
-    merge_keys = ["league", "home_team", "away_team", "fuzzy_team_match>=85"]
+    merge_keys = ["league", "home_team", "away_team", "game_date", "fuzzy_team_match>=85"]
     merged = bet_rows.copy()
 
     # Do not set a fallback odds_source
@@ -1181,25 +1342,98 @@ def run_analysis_pipeline(
         base_schedule["league"] = _string_series(base_schedule, "league").str.upper().replace(LEAGUE_ALIASES)
         base_schedule["home_team"] = _string_series(base_schedule, "home_team").map(normalize_team_name)
         base_schedule["away_team"] = _string_series(base_schedule, "away_team").map(normalize_team_name)
-        base_schedule["date"] = _game_dates(base_schedule)
+        base_schedule["date"] = _force_utc_datetime(_game_dates(base_schedule))
+        base_schedule["merge_date_utc"] = _utc_day_key(base_schedule["date"])
+        # Backward-compat safety key: older merge paths referenced game_date_key directly.
+        # Keep it aligned with merge_date_utc to prevent KeyError in mixed/stale runtime code paths.
+        base_schedule["game_date_key"] = base_schedule["merge_date_utc"]
 
         base_schedule["home_team_lower"] = base_schedule["home_team"].str.lower().str.strip()
         base_schedule["away_team_lower"] = base_schedule["away_team"].str.lower().str.strip()
 
-        base_merge_columns = ["league", "home_team_lower", "away_team_lower"] + [
+        base_merge_columns = ["league", "home_team_lower", "away_team_lower", "merge_date_utc"] + [
             col for col in ["date", "game_time_est", "odds_american", "ml_probability", "is_neutral"]
             if col in base_schedule.columns
         ]
 
         merged["home_team_lower"] = merged["home_team"].str.lower().str.strip()
         merged["away_team_lower"] = merged["away_team"].str.lower().str.strip()
+        merged["merge_date_utc"] = _utc_day_key(merged.get("game_date"))
 
+        # Primary join uses explicit UTC day keys to prevent datetime/NaT mismatch shearing.
         merged = merged.merge(
-            base_schedule[base_merge_columns].drop_duplicates(["league", "home_team_lower", "away_team_lower"]),
-            on=["league", "home_team_lower", "away_team_lower"],
+            base_schedule[base_merge_columns].drop_duplicates(["league", "home_team_lower", "away_team_lower", "merge_date_utc"]),
+            on=["league", "home_team_lower", "away_team_lower", "merge_date_utc"],
             how="left",
             suffixes=("", "_base"),
         )
+
+        # Fallback to team-only lookup for rows still unmatched by date.
+        needs_team_only = _numeric_series(merged, "odds_american_base").isna() & _numeric_series(merged, "ml_probability_base").isna()
+        if needs_team_only.any():
+            team_only_cols = [
+                c
+                for c in [
+                    "league",
+                    "home_team_lower",
+                    "away_team_lower",
+                    "date",
+                    "game_time_est",
+                    "odds_american",
+                    "ml_probability",
+                    "is_neutral",
+                ]
+                if c in base_schedule.columns
+            ]
+            team_only_lookup = (
+                base_schedule[team_only_cols]
+                .sort_values("date")
+                .drop_duplicates(["league", "home_team_lower", "away_team_lower"], keep="last")
+                .rename(
+                    columns={
+                        "date": "date_team",
+                        "game_time_est": "game_time_est_team",
+                        "odds_american": "odds_american_team",
+                        "ml_probability": "ml_probability_team",
+                        "is_neutral": "is_neutral_team",
+                    }
+                )
+            )
+            fill_view = merged.loc[needs_team_only, ["league", "home_team_lower", "away_team_lower"]].merge(
+                team_only_lookup,
+                on=["league", "home_team_lower", "away_team_lower"],
+                how="left",
+            )
+
+            # Explicit dtype coercion before assignment to prevent datetime64[ns, UTC] vs NaT shearing.
+            if "date" not in merged.columns:
+                merged["date"] = pd.Series(pd.NaT, index=merged.index, dtype="datetime64[ns, UTC]")
+            merged["date"] = _force_utc_datetime(merged["date"])
+            if "date_team" in fill_view.columns:
+                fill_view["date_team"] = _force_utc_datetime(fill_view["date_team"])
+
+            for base_col, team_col in [
+                ("date", "date_team"),
+                ("game_time_est_base", "game_time_est_team"),
+                ("odds_american_base", "odds_american_team"),
+                ("ml_probability_base", "ml_probability_team"),
+                ("is_neutral_base", "is_neutral_team"),
+            ]:
+                if team_col in fill_view.columns:
+                    if base_col not in merged.columns:
+                        merged[base_col] = pd.NA
+
+                    current_slice = merged.loc[needs_team_only, base_col]
+                    fill_series = fill_view[team_col].reset_index(drop=True).set_axis(current_slice.index)
+
+                    if base_col == "date":
+                        fill_series = pd.to_datetime(fill_series, errors="coerce", utc=True)
+                    elif base_col in {"odds_american_base", "ml_probability_base"}:
+                        fill_series = pd.to_numeric(fill_series, errors="coerce")
+
+                    merged.loc[needs_team_only, base_col] = current_slice.where(
+                        current_slice.notna(), fill_series
+                    )
 
         merged["game_date"] = _game_dates(merged)
         merged["game_date"] = merged["game_date"].fillna(merged["date"])
@@ -1277,6 +1511,9 @@ def run_analysis_pipeline(
         if "is_neutral_rev" in merged.columns:
             merged["is_neutral"] = merged["is_neutral"].fillna(merged["is_neutral_rev"]) if "is_neutral" in merged.columns else merged["is_neutral_rev"]
             merged = merged.drop(columns=["is_neutral_rev"])
+
+        if "merge_date_utc" in merged.columns:
+            merged = merged.drop(columns=["merge_date_utc"])
 
         # Fuzzy fallback when strict league/home/away join misses schedule rows.
         needs_fuzzy = (
@@ -1560,8 +1797,19 @@ def run_analysis_pipeline(
     if use_ml and ML_AVAILABLE and PredictionEngine is not None:
         logger.warning("🔍 ML DEBUG: use_ml=True, attempting predictions...")
         try:
-            # Only predict for rows missing ml_probability
-            needs_prediction = merged["ml_probability"].isna() if "ml_probability" in merged.columns else pd.Series([True] * len(merged), index=merged.index)
+            existing_ml = _numeric_series(merged, "ml_probability")
+            non_na_existing = existing_ml.dropna()
+            if len(non_na_existing) > 0:
+                logger.warning(
+                    "⚠️ ML DEBUG: Ignoring %s pre-populated ml_probability values and recomputing from model/features.",
+                    len(non_na_existing),
+                )
+
+            # Authoritative ML path: when ML is enabled, always recompute all rows.
+            # This prevents stale uploaded/base values (including collapsed constants like 0.1906)
+            # from leaking into the final ML Prob column.
+            needs_prediction = pd.Series([True] * len(merged), index=merged.index)
+            merged["ml_probability"] = pd.NA
 
             if needs_prediction.any():
                 engine = PredictionEngine()
@@ -1581,7 +1829,10 @@ def run_analysis_pipeline(
                 )
 
                 ml_count = merged["ml_probability"].notna().sum()
-                logger.warning(f"✅ ML DEBUG: Generated {ml_count} total predictions ({needs_prediction.sum()} new)")
+                ml_unique = _numeric_series(merged, "ml_probability").dropna().nunique()
+                logger.warning(
+                    f"✅ ML DEBUG: Generated {ml_count} total predictions ({needs_prediction.sum()} new, unique={ml_unique})"
+                )
             else:
                 logger.warning("✅ ML DEBUG: All rows already have ml_probability")
 
@@ -1589,9 +1840,26 @@ def run_analysis_pipeline(
             logger.error(f"❌ ML prediction failed: {e}")
             import traceback
             logger.error(traceback.format_exc())
-            if "ml_probability" not in merged.columns:
-                merged["ml_probability"] = pd.NA
-            merged["model_status"] = "Model Failure"
+
+            # Graceful fallback: if model inference aborted due to empty feature matrix,
+            # retry with statistical fallback probabilities so pipeline remains usable.
+            fallback_applied = False
+            if "Feature matrix is empty due to schedule merge failure" in str(e):
+                try:
+                    engine = PredictionEngine()
+                    engine.use_fallback = True
+                    fallback_predictions = engine.predict_batch(merged)
+                    merged["ml_probability"] = pd.Series(fallback_predictions, index=merged.index, dtype="float64")
+                    merged["model_status"] = "Statistical Fallback"
+                    fallback_applied = True
+                    logger.warning("⚠️ ML DEBUG: Applied statistical fallback predictions after empty-feature validation failure.")
+                except Exception as fallback_err:
+                    logger.error(f"❌ Statistical fallback prediction failed: {fallback_err}")
+
+            if not fallback_applied:
+                if "ml_probability" not in merged.columns:
+                    merged["ml_probability"] = pd.NA
+                merged["model_status"] = "Model Failure"
     else:
         if "ml_probability" not in merged.columns:
             merged["ml_probability"] = pd.NA
