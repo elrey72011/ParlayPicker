@@ -108,8 +108,13 @@ def _compose_model_probability(out: pd.DataFrame) -> tuple[pd.Series, pd.Series,
     theover = theover.where(theover <= 1, theover / 100.0)
 
     market_type = _safe_str_series(out, "market_type").str.lower()
-    spread_model = ml.where(ml.notna(), theover)
-    total_model = theover.where(theover.notna(), ml)
+
+    # Reject known broken XGBoost baseline default score when feature matrix collapses.
+    is_broken_ml = (ml > 0.19063) & (ml < 0.19064)
+    ml_clean = ml.where(~is_broken_ml, pd.NA)
+
+    spread_model = ml_clean.where(ml_clean.notna(), theover)
+    total_model = theover.where(theover.notna(), ml_clean)
     model_probability = pd.Series(
         pd.NA,
         index=out.index,
@@ -136,15 +141,17 @@ def _recompute_consensus_from_kalshi(df: pd.DataFrame, require_ml: bool = False)
     market_prob = _safe_numeric_series(out, "market_probability")
 
     ml = _safe_numeric_series(out, "ml_probability")
+    is_broken_ml = (ml > 0.19063) & (ml < 0.19064)
+    ml_valid = ml.where(~is_broken_ml, pd.NA)
 
     # Handle the two variations of model prob stored depending on df origin
     if "model_probability" in out.columns:
         model_prob = _safe_numeric_series(out, "model_probability")
     else:
         # Fallback to market-aware ml/theover composition used in the analysis pipeline
-        model_prob, ml, _ = _compose_model_probability(out)
+        model_prob, _, _ = _compose_model_probability(out)
 
-    if require_ml and ml.notna().sum() == 0:
+    if require_ml and ml_valid.notna().sum() == 0:
         raise ValueError("ML predictions failed to merge with the analysis dataframe.")
 
     blended = compute_blended_probability(

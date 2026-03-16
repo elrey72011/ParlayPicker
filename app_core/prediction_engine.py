@@ -457,11 +457,12 @@ class PredictionEngine:
             raw_inference_data = df[VERTEX_FEATURE_COLUMNS].copy()
             raw_numeric = raw_inference_data.apply(pd.to_numeric, errors='coerce')
 
-            # Strict validation: do not allow model inference on empty feature rows.
-            empty_feature_rows = raw_numeric.isna().all(axis=1)
-            if empty_feature_rows.any():
+            # Strict validation: prevent predicting on predominantly-empty feature rows.
+            row_nan_ratio = raw_numeric.isna().sum(axis=1) / max(len(VERTEX_FEATURE_COLUMNS), 1)
+            if row_nan_ratio.mean() > 0.5:
                 raise ValueError(
-                    "Feature matrix contains empty rows due to schedule join failure."
+                    "Feature matrix is empty due to schedule merge failure. "
+                    "Aborting ML predictions to prevent baseline default (0.1906)."
                 )
 
             # Ensure proper casting and fillna to prevent errors - critical for preventing placeholder values

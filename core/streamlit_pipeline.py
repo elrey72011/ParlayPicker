@@ -1201,12 +1201,13 @@ def run_analysis_pipeline(
         base_schedule["home_team"] = _string_series(base_schedule, "home_team").map(normalize_team_name)
         base_schedule["away_team"] = _string_series(base_schedule, "away_team").map(normalize_team_name)
         base_schedule["date"] = _game_dates(base_schedule)
+        base_schedule["game_date_key"] = pd.to_datetime(base_schedule["date"], errors="coerce", utc=True).dt.date
 
         base_schedule["home_team_lower"] = base_schedule["home_team"].str.lower().str.strip()
         base_schedule["away_team_lower"] = base_schedule["away_team"].str.lower().str.strip()
         base_schedule["date_day"] = _date_join_key(base_schedule["date"])
 
-        base_merge_columns = ["league", "home_team_lower", "away_team_lower", "date_day"] + [
+        base_merge_columns = ["league", "home_team_lower", "away_team_lower", "date_day", "game_date_key"] + [
             col for col in ["date", "game_time_est", "odds_american", "ml_probability", "is_neutral"]
             if col in base_schedule.columns
         ]
@@ -1214,11 +1215,12 @@ def run_analysis_pipeline(
         merged["home_team_lower"] = merged["home_team"].str.lower().str.strip()
         merged["away_team_lower"] = merged["away_team"].str.lower().str.strip()
         merged["date_day"] = _date_join_key(merged.get("game_date"))
+        merged["game_date_key"] = pd.to_datetime(merged.get("game_date"), errors="coerce", utc=True).dt.date
 
         # Primary join includes normalized game-date to avoid stale cross-date team matches.
         merged = merged.merge(
-            base_schedule[base_merge_columns].drop_duplicates(["league", "home_team_lower", "away_team_lower", "date_day"]),
-            on=["league", "home_team_lower", "away_team_lower", "date_day"],
+            base_schedule[base_merge_columns].drop_duplicates(["league", "home_team_lower", "away_team_lower", "date_day", "game_date_key"]),
+            on=["league", "home_team_lower", "away_team_lower", "date_day", "game_date_key"],
             how="left",
             suffixes=("", "_base"),
         )
@@ -1350,8 +1352,9 @@ def run_analysis_pipeline(
             merged["is_neutral"] = merged["is_neutral"].fillna(merged["is_neutral_rev"]) if "is_neutral" in merged.columns else merged["is_neutral_rev"]
             merged = merged.drop(columns=["is_neutral_rev"])
 
-        if "date_day" in merged.columns:
-            merged = merged.drop(columns=["date_day"])
+        for _date_col in ["date_day", "game_date_key"]:
+            if _date_col in merged.columns:
+                merged = merged.drop(columns=[_date_col])
 
         # Fuzzy fallback when strict league/home/away join misses schedule rows.
         needs_fuzzy = (
