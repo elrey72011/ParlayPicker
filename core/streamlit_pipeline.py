@@ -832,7 +832,10 @@ def build_theover_bet_rows(
         league_series = _clean_text_placeholders(_string_series(out, "league"))
         out["league"] = league_series.where(league_series.str.len().gt(0), inferred_league)
 
-    out = _infer_missing_league_from_base(out, load_base_data())
+    base_ref = load_base_data()
+    out = _infer_missing_league_from_base(out, base_ref)
+    out = _resolve_team_names_from_base(out, base_ref)
+    out = _dedupe_inverted_matchups(out)
 
     out["spread"] = pd.to_numeric(out.get("spread_line"), errors="coerce")
     out["total"] = pd.to_numeric(out.get("total_line"), errors="coerce")
@@ -861,6 +864,121 @@ def build_theover_bet_rows(
     return out[CANONICAL_BET_COLUMNS]
 
 
+
+
+
+
+TEAM_NAME_OVERRIDES: dict[tuple[str, str], str] = {
+    # NBA
+    ("NBA", "CHICAGO"): "Chicago Bulls",
+    ("NBA", "MEMPHIS"): "Memphis Grizzlies",
+    ("NBA", "HOUSTON"): "Houston Rockets",
+    ("NBA", "DALLAS"): "Dallas Mavericks",
+    ("NBA", "NEW ORLEANS"): "New Orleans Pelicans",
+    ("NBA", "PORTLAND"): "Portland Trail Blazers",
+    ("NBA", "ATLANTA"): "Atlanta Hawks",
+    ("NBA", "BOSTON"): "Boston Celtics",
+    ("NBA", "PHOENIX"): "Phoenix Suns",
+    ("NBA", "SAN ANTONIO"): "San Antonio Spurs",
+    ("NBA", "ORLANDO"): "Orlando Magic",
+    ("NBA", "BROOKLYN"): "Brooklyn Nets",
+    ("NBA", "GOLDEN STATE"): "Golden State Warriors",
+    ("NBA", "WASHINGTON"): "Washington Wizards",
+    ("NBA", "DETROIT"): "Detroit Pistons",
+    ("NBA", "LOS ANGELES"): "Los Angeles Lakers",
+    # NHL
+    ("NHL", "DALLAS"): "Dallas Stars",
+    ("NHL", "UTAH"): "Utah Hockey Club",
+    ("NHL", "DETROIT"): "Detroit Red Wings",
+    ("NHL", "CALGARY"): "Calgary Flames",
+    ("NHL", "COLORADO"): "Colorado Avalanche",
+    ("NHL", "PITTSBURGH"): "Pittsburgh Penguins",
+    ("NHL", "NY RANGERS"): "New York Rangers",
+    ("NHL", "NEW YORK RANGERS"): "New York Rangers",
+    ("NHL", "LOS ANGELES"): "Los Angeles Kings",
+}
+
+
+def _apply_team_name_overrides(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return df
+    out = df.copy()
+    leagues = _string_series(out, "league").str.upper().replace(LEAGUE_ALIASES)
+
+    def _fix(team: str, league: str) -> str:
+        key = (str(league or "").upper(), str(team or "").upper().strip())
+        return TEAM_NAME_OVERRIDES.get(key, team)
+
+    out["home_team"] = [_fix(t, lg) for t, lg in zip(_string_series(out, "home_team"), leagues)]
+    out["away_team"] = [_fix(t, lg) for t, lg in zip(_string_series(out, "away_team"), leagues)]
+    return out
+def _resolve_team_names_from_base(df: pd.DataFrame, base_df: pd.DataFrame) -> pd.DataFrame:
+    """Resolve city-only/alias team names to canonical full names using base schedule by league."""
+    if df is None or df.empty or base_df is None or base_df.empty:
+        return df
+
+    out = df.copy()
+    base = base_df.copy()
+    base["league"] = _string_series(base, "league").str.upper().replace(LEAGUE_ALIASES)
+    base["home_team"] = _string_series(base, "home_team").map(normalize_team_name)
+    base["away_team"] = _string_series(base, "away_team").map(normalize_team_name)
+
+    all_teams = pd.concat([
+        base[["league", "home_team"]].rename(columns={"home_team": "team"}),
+        base[["league", "away_team"]].rename(columns={"away_team": "team"}),
+    ], ignore_index=True).dropna().drop_duplicates()
+
+    alias_map: dict[tuple[str, str], str] = {}
+    for league, group in all_teams.groupby("league"):
+        teams = sorted(set(group["team"].astype(str)))
+        candidate_to_teams: dict[str, set[str]] = {}
+        for team in teams:
+            parts = team.split()
+            candidates = {team.upper()}
+            if len(parts) > 1:
+                candidates.add(" ".join(parts[:-1]).upper())
+            for c in candidates:
+                if c and c != "NAN":
+                    candidate_to_teams.setdefault(c, set()).add(team)
+        for candidate, matches in candidate_to_teams.items():
+            if len(matches) == 1:
+                alias_map[(str(league), candidate)] = next(iter(matches))
+
+    def _resolve(league: str, team: str) -> str:
+        key = (str(league or "").upper(), str(team or "").upper().strip())
+        return alias_map.get(key, team)
+
+    out["league"] = _string_series(out, "league").str.upper().replace(LEAGUE_ALIASES)
+    out["home_team"] = _string_series(out, "home_team").map(normalize_team_name)
+    out["away_team"] = _string_series(out, "away_team").map(normalize_team_name)
+    out["home_team"] = [
+        _resolve(lg, tm) for lg, tm in zip(_string_series(out, "league"), _string_series(out, "home_team"))
+    ]
+    out["away_team"] = [
+        _resolve(lg, tm) for lg, tm in zip(_string_series(out, "league"), _string_series(out, "away_team"))
+    ]
+    out = _apply_team_name_overrides(out)
+    return out
+
+
+def _dedupe_inverted_matchups(df: pd.DataFrame) -> pd.DataFrame:
+    """Remove duplicated/inverted matchup rows that represent the same market leg."""
+    if df is None or df.empty:
+        return df
+    out = df.copy()
+    out["_canonical_matchup"] = _canonical_matchup_key(out)
+    out["_spread_abs"] = _numeric_series(out, "spread_line").abs()
+    out["_total_line"] = _numeric_series(out, "total_line")
+    out["_market_type"] = _string_series(out, "market_type")
+    before = len(out)
+    out = out.drop_duplicates(
+        subset=["_canonical_matchup", "_market_type", "_spread_abs", "_total_line"],
+        keep="first",
+    ).copy()
+    dropped = before - len(out)
+    if dropped > 0:
+        logger.warning("Deduplication removed %s inverted/duplicate matchup rows.", dropped)
+    return out.drop(columns=["_canonical_matchup", "_spread_abs", "_total_line", "_market_type"])
 def _fill_missing_game_dates_from_base(bet_rows_df: pd.DataFrame, base_df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, float]]:
     out = bet_rows_df.copy()
     out["game_date"] = _game_dates(out)
