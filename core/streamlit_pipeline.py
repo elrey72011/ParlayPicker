@@ -1226,6 +1226,9 @@ def run_analysis_pipeline(
         base_schedule["away_team"] = _string_series(base_schedule, "away_team").map(normalize_team_name)
         base_schedule["date"] = _force_utc_datetime(_game_dates(base_schedule))
         base_schedule["merge_date_utc"] = _utc_day_key(base_schedule["date"])
+        # Backward-compat safety key: older merge paths referenced game_date_key directly.
+        # Keep it aligned with merge_date_utc to prevent KeyError in mixed/stale runtime code paths.
+        base_schedule["game_date_key"] = base_schedule["merge_date_utc"]
 
         base_schedule["home_team_lower"] = base_schedule["home_team"].str.lower().str.strip()
         base_schedule["away_team_lower"] = base_schedule["away_team"].str.lower().str.strip()
