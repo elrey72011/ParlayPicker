@@ -1350,6 +1350,12 @@ def run_analysis_pipeline(
 
         base_schedule["home_team_lower"] = base_schedule["home_team"].str.lower().str.strip()
         base_schedule["away_team_lower"] = base_schedule["away_team"].str.lower().str.strip()
+        base_schedule["date_day"] = _date_join_key(base_schedule["date"])
+
+        # Explicitly align temporal dtypes before merge to prevent datetime64 vs NaT shearing.
+        base_schedule["date"] = _force_utc_datetime(base_schedule["date"])
+        base_schedule["date_day"] = _force_utc_datetime(base_schedule["date_day"])
+        base_schedule["game_date_key"] = _force_utc_datetime(base_schedule["game_date_key"])
 
         base_merge_columns = ["league", "home_team_lower", "away_team_lower", "merge_date_utc"] + [
             col for col in ["date", "game_time_est", "odds_american", "ml_probability", "is_neutral"]
