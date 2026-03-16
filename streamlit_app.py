@@ -369,9 +369,14 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
 
         ml_non_null = _safe_numeric_series(analysis_df, "ml_probability").notna().sum()
         if ml_non_null == 0:
-            raise ValueError("ML predictions failed to merge with the analysis dataframe.")
+            deferred_errors.append("ML Merge Failed: Predictions could not be joined to the market odds.")
+            return empty_state, deferred_warnings, deferred_errors
 
-    analysis_df = _recompute_consensus_from_kalshi(analysis_df, require_ml=bool(controls.get("use_ml")))
+    try:
+        analysis_df = _recompute_consensus_from_kalshi(analysis_df, require_ml=bool(controls.get("use_ml")))
+    except ValueError as exc:
+        deferred_errors.append(f"ML Merge Failed: {exc}")
+        return empty_state, deferred_warnings, deferred_errors
 
     # -----------------------------
     # Update Kalshi Diagnostics
@@ -726,7 +731,10 @@ def main() -> None:
                 "ml_probability": "ML Prob",
             }
             display_df = display_df.rename(columns=rename_map)
-            preferred = ["parlay_rank", "League", "Home Team", "Away Team", "Game Date", "Game Time (ET)", "Best Pick", "Prob", "ML Prob", "EV", "Edge", "Consensus", "Kalshi Status"]
+            if "kalshi_probability" in display_df.columns:
+                kalshi_display = pd.to_numeric(display_df["kalshi_probability"], errors="coerce")
+                display_df["kalshi_probability_display"] = kalshi_display.map(lambda x: "⚪ No Kalshi" if pd.isna(x) else f"{x:.4f}")
+            preferred = ["parlay_rank", "League", "Home Team", "Away Team", "Game Date", "Game Time (ET)", "Best Pick", "Prob", "ML Prob", "EV", "Edge", "Consensus", "Kalshi Status", "kalshi_probability_display"]
             ordered = [c for c in preferred if c in display_df.columns] + [c for c in display_df.columns if c not in preferred]
             display_df = display_df[ordered]
             st.dataframe(display_df, width="stretch")

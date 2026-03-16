@@ -1167,7 +1167,7 @@ def run_analysis_pipeline(
         bet_rows = bet_rows.drop(columns=["home_team_lower", "away_team_lower"])
     bet_rows, date_stats = _fill_missing_game_dates_from_base(bet_rows, base_df)
 
-    merge_keys = ["league", "home_team", "away_team", "fuzzy_team_match>=85"]
+    merge_keys = ["league", "home_team", "away_team", "game_date", "fuzzy_team_match>=85"]
     merged = bet_rows.copy()
 
     # Do not set a fallback odds_source
@@ -1185,21 +1185,74 @@ def run_analysis_pipeline(
 
         base_schedule["home_team_lower"] = base_schedule["home_team"].str.lower().str.strip()
         base_schedule["away_team_lower"] = base_schedule["away_team"].str.lower().str.strip()
+        base_schedule["date_day"] = pd.to_datetime(base_schedule["date"], errors="coerce", utc=True).dt.normalize()
 
-        base_merge_columns = ["league", "home_team_lower", "away_team_lower"] + [
+        base_merge_columns = ["league", "home_team_lower", "away_team_lower", "date_day"] + [
             col for col in ["date", "game_time_est", "odds_american", "ml_probability", "is_neutral"]
             if col in base_schedule.columns
         ]
 
         merged["home_team_lower"] = merged["home_team"].str.lower().str.strip()
         merged["away_team_lower"] = merged["away_team"].str.lower().str.strip()
+        merged["date_day"] = _game_dates(merged).dt.normalize()
 
+        # Primary join includes normalized game-date to avoid stale cross-date team matches.
         merged = merged.merge(
-            base_schedule[base_merge_columns].drop_duplicates(["league", "home_team_lower", "away_team_lower"]),
-            on=["league", "home_team_lower", "away_team_lower"],
+            base_schedule[base_merge_columns].drop_duplicates(["league", "home_team_lower", "away_team_lower", "date_day"]),
+            on=["league", "home_team_lower", "away_team_lower", "date_day"],
             how="left",
             suffixes=("", "_base"),
         )
+
+        # Fallback to team-only lookup for rows still unmatched by date.
+        needs_team_only = _numeric_series(merged, "odds_american_base").isna() & _numeric_series(merged, "ml_probability_base").isna()
+        if needs_team_only.any():
+            team_only_cols = [
+                c
+                for c in [
+                    "league",
+                    "home_team_lower",
+                    "away_team_lower",
+                    "date",
+                    "game_time_est",
+                    "odds_american",
+                    "ml_probability",
+                    "is_neutral",
+                ]
+                if c in base_schedule.columns
+            ]
+            team_only_lookup = (
+                base_schedule[team_only_cols]
+                .sort_values("date")
+                .drop_duplicates(["league", "home_team_lower", "away_team_lower"], keep="last")
+                .rename(
+                    columns={
+                        "date": "date_team",
+                        "game_time_est": "game_time_est_team",
+                        "odds_american": "odds_american_team",
+                        "ml_probability": "ml_probability_team",
+                        "is_neutral": "is_neutral_team",
+                    }
+                )
+            )
+            fill_view = merged.loc[needs_team_only, ["league", "home_team_lower", "away_team_lower"]].merge(
+                team_only_lookup,
+                on=["league", "home_team_lower", "away_team_lower"],
+                how="left",
+            )
+            for base_col, team_col in [
+                ("date", "date_team"),
+                ("game_time_est_base", "game_time_est_team"),
+                ("odds_american_base", "odds_american_team"),
+                ("ml_probability_base", "ml_probability_team"),
+                ("is_neutral_base", "is_neutral_team"),
+            ]:
+                if team_col in fill_view.columns:
+                    if base_col not in merged.columns:
+                        merged[base_col] = pd.NA
+                    merged.loc[needs_team_only, base_col] = merged.loc[needs_team_only, base_col].where(
+                        merged.loc[needs_team_only, base_col].notna(), fill_view[team_col].values
+                    )
 
         merged["game_date"] = _game_dates(merged)
         merged["game_date"] = merged["game_date"].fillna(merged["date"])
@@ -1277,6 +1330,9 @@ def run_analysis_pipeline(
         if "is_neutral_rev" in merged.columns:
             merged["is_neutral"] = merged["is_neutral"].fillna(merged["is_neutral_rev"]) if "is_neutral" in merged.columns else merged["is_neutral_rev"]
             merged = merged.drop(columns=["is_neutral_rev"])
+
+        if "date_day" in merged.columns:
+            merged = merged.drop(columns=["date_day"])
 
         # Fuzzy fallback when strict league/home/away join misses schedule rows.
         needs_fuzzy = (
