@@ -547,9 +547,9 @@ def _canonical_matchup_teams_key(df: pd.DataFrame) -> pd.Series:
 
 
 def _matchup_id(df: pd.DataFrame) -> pd.Series:
-    """Canonical matchup id using sorted cleaned team names (direction-independent)."""
-    home = clean_team_name(_string_series(df, "home_team")).str.upper()
-    away = clean_team_name(_string_series(df, "away_team")).str.upper()
+    """Canonical matchup id using sorted normalized team names (direction-independent)."""
+    home = clean_team_name(_string_series(df, "home_team").map(normalize_team_name)).str.upper()
+    away = clean_team_name(_string_series(df, "away_team").map(normalize_team_name)).str.upper()
     team_a = home.where(home <= away, away)
     team_b = away.where(home <= away, home)
     return team_a + "|" + team_b
@@ -1246,14 +1246,16 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         best["consensus_agreement"] = best["consensus_agreement"].fillna("⚪ No Kalshi")
 
     kalshi_prob = _numeric_series(best, "kalshi_probability") if "kalshi_probability" in best.columns else pd.Series([pd.NA]*len(best), index=best.index)
-    valid_kalshi = kalshi_prob.notna() & (kalshi_prob > 0.0)
+    valid_kalshi = (kalshi_prob.notna() & (kalshi_prob > 0.0)).fillna(False)
 
     if valid_kalshi.any():
         blended = best["calibrated_probability"]
         gap = blended - kalshi_prob
+        agrees_mask = (valid_kalshi & gap.ge(0.03)).fillna(False)
+        disagrees_mask = (valid_kalshi & gap.le(-0.03)).fillna(False)
         best.loc[valid_kalshi, "consensus_agreement"] = "⚖️ Neutral"
-        best.loc[valid_kalshi & gap.ge(0.03), "consensus_agreement"] = "✅ Agrees"
-        best.loc[valid_kalshi & gap.le(-0.03), "consensus_agreement"] = "❌ Disagrees"
+        best.loc[agrees_mask, "consensus_agreement"] = "✅ Agrees"
+        best.loc[disagrees_mask, "consensus_agreement"] = "❌ Disagrees"
 
     # Phase 2: Eradication of Floating-Point Artefacts in Expected Value Calculations
     # Primary sort by expected_value descending, then game_date, league, home_team ascending
@@ -1488,7 +1490,8 @@ def run_analysis_pipeline(
         live_odds_df["away_team"] = _string_series(live_odds_df, "away_team").map(normalize_team_name)
         live_odds_df["game_date"] = _et_day_string(live_odds_df.get("game_date", pd.Series([pd.NA] * len(live_odds_df), index=live_odds_df.index)))
         fallback_day = _et_day_string(_game_dates(live_odds_df))
-        live_odds_df["game_date"] = live_odds_df["game_date"].fillna(fallback_day)
+        today_et_day = pd.Series([_game_date_fallback().strftime("%Y-%m-%d")] * len(live_odds_df), index=live_odds_df.index, dtype="string")
+        live_odds_df["game_date"] = live_odds_df["game_date"].fillna(fallback_day).fillna(today_et_day)
         live_odds_df["matchup_id"] = _matchup_id(live_odds_df)
 
     bet_rows["game_date"] = _et_day_string(_game_dates(bet_rows))
@@ -1516,9 +1519,43 @@ def run_analysis_pipeline(
         merged = live_odds_df[master_cols].drop_duplicates(["matchup_id", "game_date"]).copy()
         if not bet_rows.empty:
             bet_payload = bet_rows.drop(columns=[c for c in ["league", "home_team", "away_team"] if c in bet_rows.columns]).copy()
+            # Enforce strict dtype/timezone parity on join keys before merge.
+            merged["game_date"] = pd.to_datetime(merged["game_date"], errors="coerce", utc=True).dt.floor("D")
+            bet_payload["game_date"] = pd.to_datetime(bet_payload["game_date"], errors="coerce", utc=True).dt.floor("D")
+            fallback_merge_day = pd.Timestamp.utcnow().floor("D")
+            merged["game_date"] = merged["game_date"].fillna(fallback_merge_day)
+            bet_payload["game_date"] = bet_payload["game_date"].fillna(fallback_merge_day)
+            matchup_date_lookup = merged[["matchup_id", "game_date"]].dropna(subset=["matchup_id", "game_date"]).drop_duplicates("matchup_id")
+            if not matchup_date_lookup.empty:
+                bet_payload = bet_payload.merge(
+                    matchup_date_lookup.rename(columns={"game_date": "game_date_lookup"}),
+                    on="matchup_id",
+                    how="left",
+                )
+                bet_payload["game_date"] = bet_payload["game_date"].fillna(bet_payload["game_date_lookup"])
+                bet_payload = bet_payload.drop(columns=["game_date_lookup"], errors="ignore")
             merged = merged.merge(bet_payload, on=["matchup_id", "game_date"], how="left")
     else:
         merged = bet_rows.copy()
+
+    # Backfill bet payload fields by matchup_id when strict date joins miss.
+    if not bet_rows.empty and "matchup_id" in merged.columns:
+        payload_cols = [c for c in ["matchup_id", "market_type", "spread_line", "total_line", "theover_probability", "odds_american", "league", "home_team", "away_team"] if c in bet_rows.columns]
+        if payload_cols:
+            payload_lookup = bet_rows[payload_cols].drop_duplicates(["matchup_id"], keep="last")
+            merged = merged.merge(payload_lookup, on=["matchup_id"], how="left", suffixes=("", "_payload"))
+            identity_override_cols = {"league", "home_team", "away_team"}
+            for col in [c for c in payload_cols if c != "matchup_id"]:
+                payload_col = f"{col}_payload"
+                if payload_col in merged.columns:
+                    if col in merged.columns:
+                        if col in identity_override_cols:
+                            merged[col] = merged[payload_col].where(merged[payload_col].notna(), merged[col])
+                        else:
+                            merged[col] = merged[col].where(merged[col].notna(), merged[payload_col])
+                    else:
+                        merged[col] = merged[payload_col]
+                    merged = merged.drop(columns=[payload_col], errors="ignore")
 
     # Ensure identity columns survive master-frame merges.
     if "league" not in merged.columns or _string_series(merged, "league").str.len().eq(0).all():
@@ -1571,8 +1608,8 @@ def run_analysis_pipeline(
             if col in base_schedule.columns
         ]
 
-        merged["home_team_lower"] = clean_team_name(merged["home_team"])
-        merged["away_team_lower"] = clean_team_name(merged["away_team"])
+        merged["home_team_lower"] = clean_team_name(_string_series(merged, "home_team").map(normalize_team_name))
+        merged["away_team_lower"] = clean_team_name(_string_series(merged, "away_team").map(normalize_team_name))
         merged["matchup_key"] = _canonical_matchup_teams_key(merged)
         merged["matchup_id"] = _matchup_id(merged)
         merged["merge_date_utc"] = _et_day_string(merged.get("game_date"))
@@ -1754,6 +1791,8 @@ def run_analysis_pipeline(
         live_odds_df["matchup_key"] = _canonical_matchup_teams_key(live_odds_df)
         live_odds_df["matchup_id"] = _matchup_id(live_odds_df)
         live_odds_df["merge_date_utc"] = _et_day_string(live_odds_df.get("game_date"))
+        live_odds_df["live_home_team_lower"] = live_odds_df["home_team_lower"]
+        live_odds_df["live_away_team_lower"] = live_odds_df["away_team_lower"]
         if "home_team_lower" not in merged.columns:
             merged["home_team_lower"] = clean_team_name(merged["home_team"])
             merged["away_team_lower"] = clean_team_name(merged["away_team"])
@@ -1802,6 +1841,37 @@ def run_analysis_pipeline(
             how="left"
         )
 
+        # If strict date join misses all live odds rows, retry matchup-only merge as fallback.
+        novig_cols = [c for c in ["novig_home_price", "novig_away_price", "novig_over_price", "novig_under_price"] if c in merged.columns]
+        if novig_cols and merged[novig_cols].isna().all(axis=None):
+            live_matchup_only = live_odds_df[live_merge_cols].drop(columns=["merge_date_utc"], errors="ignore").drop_duplicates(["matchup_id"])
+            merged_retry = merged.drop(columns=[c for c in novig_cols if c in merged.columns], errors="ignore").merge(
+                live_matchup_only,
+                on=["matchup_id"],
+                how="left",
+                suffixes=("", "_retry"),
+            )
+            for col in novig_cols:
+                retry_col = f"{col}_retry"
+                if retry_col in merged_retry.columns:
+                    merged_retry[col] = merged_retry[retry_col]
+                    merged_retry = merged_retry.drop(columns=[retry_col], errors="ignore")
+            merged = merged_retry
+
+    # Realign live Novig home/away columns to payload orientation when teams are reversed.
+    if {"home_team", "away_team", "live_home_team_lower", "live_away_team_lower"}.issubset(merged.columns):
+        merged["home_team_lower"] = clean_team_name(merged["home_team"])
+        merged["away_team_lower"] = clean_team_name(merged["away_team"])
+        swapped_orientation = (
+            merged["home_team_lower"].eq(merged["live_away_team_lower"])
+            & merged["away_team_lower"].eq(merged["live_home_team_lower"])
+        ).fillna(False)
+        for left_col, right_col in [("novig_home_price", "novig_away_price"), ("novig_home_point", "novig_away_point")]:
+            if left_col in merged.columns and right_col in merged.columns and swapped_orientation.any():
+                left_vals = merged.loc[swapped_orientation, left_col].copy()
+                merged.loc[swapped_orientation, left_col] = merged.loc[swapped_orientation, right_col]
+                merged.loc[swapped_orientation, right_col] = left_vals
+
     merged["game_date"] = _game_dates(merged)
     # Fill any missing dates with fallback
     merged["game_date"] = merged["game_date"].fillna(_game_date_fallback())
@@ -1825,8 +1895,19 @@ def run_analysis_pipeline(
         """Return a numpy bool mask without NA values (required by np.select)."""
         return series.fillna(False).astype(bool).to_numpy()
 
-    cond_spread_home = _bool_mask((m_type == "spread_home") & merged["novig_home_price"].notna())
-    cond_spread_away = _bool_mask((m_type == "spread_away") & merged["novig_away_price"].notna())
+    # Orientation-safe spread side selection using line alignment when available.
+    spread_line_num = pd.to_numeric(merged.get("spread_line"), errors="coerce")
+    novig_home_point_num = pd.to_numeric(merged.get("novig_home_point"), errors="coerce")
+    novig_away_point_num = pd.to_numeric(merged.get("novig_away_point"), errors="coerce")
+
+    home_line_match = (novig_home_point_num - spread_line_num).abs().le(0.01)
+    away_line_match = (novig_away_point_num - spread_line_num).abs().le(0.01)
+
+    spread_home_price_aligned = safe_series_float(merged["novig_home_price"]).where(~away_line_match, safe_series_float(merged["novig_away_price"]))
+    spread_away_price_aligned = safe_series_float(merged["novig_away_price"]).where(~home_line_match, safe_series_float(merged["novig_home_price"]))
+
+    cond_spread_home = _bool_mask((m_type == "spread_home") & (merged["novig_home_price"].notna() | merged["novig_away_price"].notna()))
+    cond_spread_away = _bool_mask((m_type == "spread_away") & (merged["novig_home_price"].notna() | merged["novig_away_price"].notna()))
     cond_total_over = _bool_mask((m_type == "total_over") & merged["novig_over_price"].notna())
     cond_total_under = _bool_mask((m_type == "total_under") & merged["novig_under_price"].notna())
 
@@ -1834,8 +1915,8 @@ def run_analysis_pipeline(
     merged["odds_american"] = np.select(
         [cond_spread_home, cond_spread_away, cond_total_over, cond_total_under],
         [
-            safe_series_float(merged["novig_home_price"]),
-            safe_series_float(merged["novig_away_price"]),
+            spread_home_price_aligned,
+            spread_away_price_aligned,
             safe_series_float(merged["novig_over_price"]),
             safe_series_float(merged["novig_under_price"])
         ],
