@@ -157,6 +157,18 @@ def _normalize_upload_columns(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def clean_team_name(series: pd.Series) -> pd.Series:
+    """
+    Sanitizes team names for ultra-strict joining.
+    Strips all non-alphanumeric characters and lowercases team names
+    to ensure '76ers' and 'Philadelphia 76ers' resolve accurately.
+    """
+    if series is None or series.empty:
+        return series
+
+    return series.astype("string").str.lower().str.replace(r'[^a-z0-9]', '', regex=True)
+
+
 def _first_nonempty_text(df: pd.DataFrame, candidates: list[str]) -> pd.Series:
     out = pd.Series([""] * len(df), index=df.index, dtype="string")
     for col in candidates:
@@ -346,16 +358,19 @@ def _utc_day_key(series: pd.Series) -> pd.Series:
             ts = pd.Timestamp(value)
         except Exception:
             return pd.NaT
+
+        # Ensure input is UTC aware
         if ts.tzinfo is None:
             ts = ts.tz_localize("UTC")
         else:
             ts = ts.tz_convert("UTC")
 
-        # Convert to ET, floor to D, then localize back to UTC to match expected dtype (datetime64[ns, UTC])
-        # This keeps the "date" aligned to the ET calendar day, but stored as UTC midnight.
+        # Convert to US/Eastern timezone to correctly group late night games
         est = ts.tz_convert('America/New_York')
         floored = est.floor("D")
-        # To maintain exact API compatibility, return it as UTC timezone but shifted to represent the ET day start
+
+        # We must return it as UTC timezone but shifted to represent the ET day start
+        # This allows 03:00 UTC (March 18) -> 11:00 PM ET (March 17) -> March 17 UTC Midnight
         return pd.Timestamp(year=floored.year, month=floored.month, day=floored.day, tz="UTC")
 
     return pd.to_datetime(series.apply(_to_utc_day), errors="coerce", utc=True)
@@ -1031,11 +1046,11 @@ def _fill_missing_game_dates_from_base(bet_rows_df: pd.DataFrame, base_df: pd.Da
             [[c for c in ["league", "home_team", "away_team", "game_date", "game_time_est"] if c in base.columns]]
         ).copy()
 
-        schedule["home_team_lower"] = schedule["home_team"].str.lower().str.strip()
-        schedule["away_team_lower"] = schedule["away_team"].str.lower().str.strip()
+        schedule["home_team_lower"] = clean_team_name(schedule["home_team"])
+        schedule["away_team_lower"] = clean_team_name(schedule["away_team"])
 
-        out["home_team_lower"] = out["home_team"].str.lower().str.strip()
-        out["away_team_lower"] = out["away_team"].str.lower().str.strip()
+        out["home_team_lower"] = clean_team_name(out["home_team"])
+        out["away_team_lower"] = clean_team_name(out["away_team"])
 
         direct = schedule.rename(columns={"game_date": "game_date_base"}).drop(columns=["home_team", "away_team"])
         out = out.merge(direct, left_on=["league", "home_team_lower", "away_team_lower"], right_on=["league", "home_team_lower", "away_team_lower"], how="left")
@@ -1232,22 +1247,37 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
             # Use caller-provided snapshot date when present; otherwise fetch live upcoming board.
             games = client.get_odds(sport_key, date=date)
             if games and len(games) > 0:
-                # Check for truncation in the last game returned
-                last_game = games[-1]
-                has_novig = False
-                # Simple heuristic: if Novig is in the requested bookmakers, see if it has spread/total markets
-                for book in last_game.get('bookmakers', []):
-                    if 'novig' in str(book.get('key', '')).lower():
-                        has_novig = True
-                        has_essential_markets = any(m.get('key') in ['spreads', 'totals'] for m in book.get('markets', []))
-                        if not has_essential_markets:
-                            logger.warning(f"Truncation Warning: Final row {last_game.get('id')} lacks essential markets. Retrying single event.")
-                            # Attempt re-fetch of specific game
-                            if hasattr(client, 'get_single_event_odds'):
-                                retry_game = client.get_single_event_odds(sport_key, last_game.get('id'))
-                                if retry_game:
-                                    games[-1] = retry_game
-                        break
+                # Check ALL returned games for truncation, not just the last one
+                for i in range(len(games)):
+                    game = games[i]
+                    has_novig = False
+
+                    for book in game.get('bookmakers', []):
+                        if 'novig' in str(book.get('key', '')).lower():
+                            has_novig = True
+                            has_essential_markets = any(m.get('key') in ['spreads', 'totals'] for m in book.get('markets', []))
+                            if not has_essential_markets:
+                                retries = 0
+                                max_retries = 2
+                                while retries < max_retries:
+                                    logger.warning(f"Truncation Warning: Game row {game.get('id')} ({game.get('home_team')} vs {game.get('away_team')}) lacks essential markets. Retrying single event (Attempt {retries + 1}/{max_retries}).")
+                                    if hasattr(client, 'get_single_event_odds'):
+                                        retry_game = client.get_single_event_odds(sport_key, game.get('id'))
+                                        if retry_game:
+                                            # Check if the retry successfully fetched the missing markets
+                                            has_retry_essential = False
+                                            for retry_book in retry_game.get('bookmakers', []):
+                                                if 'novig' in str(retry_book.get('key', '')).lower():
+                                                    has_retry_essential = any(m.get('key') in ['spreads', 'totals'] for m in retry_book.get('markets', []))
+                                                    break
+
+                                            games[i] = retry_game
+                                            if has_retry_essential:
+                                                logger.info(f"Successfully retried and fetched single event odds for game {game.get('id')}.")
+                                                break
+                                    retries += 1
+                            break
+
                 return games
         except OddsAPIAuthError as e:
             if _is_hist_tier_error(e):
@@ -1364,13 +1394,13 @@ def run_analysis_pipeline(
         base_dates["away_team"] = _string_series(base_dates, "away_team").map(normalize_team_name)
         base_dates["date"] = _game_dates(base_dates)
 
-        base_dates["home_team_lower"] = base_dates["home_team"].str.lower().str.strip()
-        base_dates["away_team_lower"] = base_dates["away_team"].str.lower().str.strip()
+        base_dates["home_team_lower"] = clean_team_name(base_dates["home_team"])
+        base_dates["away_team_lower"] = clean_team_name(base_dates["away_team"])
 
         date_lookup = base_dates[["league", "home_team_lower", "away_team_lower", "date"]].drop_duplicates(["league", "home_team_lower", "away_team_lower"])
 
-        bet_rows["home_team_lower"] = bet_rows["home_team"].str.lower().str.strip()
-        bet_rows["away_team_lower"] = bet_rows["away_team"].str.lower().str.strip()
+        bet_rows["home_team_lower"] = clean_team_name(bet_rows["home_team"])
+        bet_rows["away_team_lower"] = clean_team_name(bet_rows["away_team"])
 
         merged_dates = bet_rows.merge(date_lookup, on=["league", "home_team_lower", "away_team_lower"], how="left")
         bet_rows["game_date"] = bet_rows["game_date"].fillna(merged_dates["date"])
@@ -1398,8 +1428,8 @@ def run_analysis_pipeline(
         # Keep it aligned with merge_date_utc to prevent KeyError in mixed/stale runtime code paths.
         base_schedule["game_date_key"] = base_schedule["merge_date_utc"]
 
-        base_schedule["home_team_lower"] = base_schedule["home_team"].str.lower().str.strip()
-        base_schedule["away_team_lower"] = base_schedule["away_team"].str.lower().str.strip()
+        base_schedule["home_team_lower"] = clean_team_name(base_schedule["home_team"])
+        base_schedule["away_team_lower"] = clean_team_name(base_schedule["away_team"])
         base_schedule["date_day"] = _date_join_key(base_schedule["date"])
 
         base_merge_columns = ["league", "home_team_lower", "away_team_lower", "merge_date_utc"] + [
@@ -1407,8 +1437,8 @@ def run_analysis_pipeline(
             if col in base_schedule.columns
         ]
 
-        merged["home_team_lower"] = merged["home_team"].str.lower().str.strip()
-        merged["away_team_lower"] = merged["away_team"].str.lower().str.strip()
+        merged["home_team_lower"] = clean_team_name(merged["home_team"])
+        merged["away_team_lower"] = clean_team_name(merged["away_team"])
         merged["merge_date_utc"] = _utc_day_key(merged.get("game_date"))
 
         # Primary join uses explicit UTC day keys to prevent datetime/NaT mismatch shearing.
@@ -1600,11 +1630,11 @@ def run_analysis_pipeline(
     # Merge Live Odds
     if not live_odds_df.empty:
         # Lowercase merge keys for case-insensitive merge
-        live_odds_df["home_team_lower"] = live_odds_df["home_team"].str.lower().str.strip()
-        live_odds_df["away_team_lower"] = live_odds_df["away_team"].str.lower().str.strip()
+        live_odds_df["home_team_lower"] = clean_team_name(live_odds_df["home_team"])
+        live_odds_df["away_team_lower"] = clean_team_name(live_odds_df["away_team"])
         if "home_team_lower" not in merged.columns:
-            merged["home_team_lower"] = merged["home_team"].str.lower().str.strip()
-            merged["away_team_lower"] = merged["away_team"].str.lower().str.strip()
+            merged["home_team_lower"] = clean_team_name(merged["home_team"])
+            merged["away_team_lower"] = clean_team_name(merged["away_team"])
 
         # Phase 1: Entity Resolution Validation Layer
         # Validate live odds against current pipeline matchups first (uploaded/analysis rows),
@@ -2006,11 +2036,11 @@ def run_analysis_pipeline(
         base_dates["away_team"] = _string_series(base_dates, "away_team").map(normalize_team_name)
         base_dates["date"] = _game_dates(base_dates)
 
-        base_dates["home_team_lower"] = base_dates["home_team"].str.lower().str.strip()
-        base_dates["away_team_lower"] = base_dates["away_team"].str.lower().str.strip()
+        base_dates["home_team_lower"] = clean_team_name(base_dates["home_team"])
+        base_dates["away_team_lower"] = clean_team_name(base_dates["away_team"])
 
-        analysis_df["home_team_lower"] = analysis_df["home_team"].str.lower().str.strip()
-        analysis_df["away_team_lower"] = analysis_df["away_team"].str.lower().str.strip()
+        analysis_df["home_team_lower"] = clean_team_name(analysis_df["home_team"])
+        analysis_df["away_team_lower"] = clean_team_name(analysis_df["away_team"])
 
         date_fill = analysis_df.merge(
             base_dates[["league", "home_team_lower", "away_team_lower", "date"]],

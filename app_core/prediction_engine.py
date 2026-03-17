@@ -236,11 +236,16 @@ class PredictionEngine:
         if model_path is None:
             # app_core/prediction_engine.py -> parents[1] = root -> models/model.json
             root_dir = Path(__file__).resolve().parents[1]
+
+            # Use absolute path to the project root to ensure it finds the model
+            default_model_path = str(root_dir / "models" / "model.json")
+
             candidate_paths = [
-                str(root_dir / "models" / "model.json"),
+                default_model_path,
                 str(Path.cwd() / "models" / "model.json"),
                 str(Path.cwd() / "model.json"),
-                str(Path(os.path.dirname(__file__)).parent / "models" / "model.json")
+                str(Path(os.path.dirname(__file__)).parent / "models" / "model.json"),
+                os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "models", "model.json"))
             ]
 
             for path in candidate_paths:
@@ -248,9 +253,9 @@ class PredictionEngine:
                     model_path = path
                     break
 
-            # Fallback to default if none found
+            # Fallback to absolute project root if none found
             if not model_path or not os.path.exists(model_path):
-                model_path = str(root_dir / "models" / "model.json")
+                model_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "models", "model.json"))
 
         self.use_fallback = True # Default to fallback
 
