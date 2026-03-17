@@ -5,6 +5,7 @@ import pytz
 from typing import List, Dict
 from dateutil import parser
 from dateutil.tz import gettz
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -150,7 +151,10 @@ class TheOddsAPIClient:
                 continue
             try:
                 est_dt = iso8601_to_est(commence_time)
-                game["game_date_est"] = pd.Timestamp(est_dt).floor("D").strftime("%Y-%m-%d")
+                est_ts = pd.Timestamp(est_dt)
+                game["commence_time_est"] = est_ts.isoformat()
+                game["game_date"] = est_ts.floor("D").strftime("%Y-%m-%d")
+                game["game_date_est"] = game["game_date"]
             except Exception as conv_err:
                 logger.warning("Failed ET conversion for commence_time=%s: %s", commence_time, conv_err)
 
@@ -245,8 +249,6 @@ def filter_games_today_only(games: List[Dict]) -> List[Dict]:
         logger.info(f"DATE FILTER: Keeping games from {today_start.strftime('%H:%M')} to {today_end.strftime('%H:%M')} EST")
 
     return filtered_games
-
-import pandas as pd
 
 def export_raw_odds_api(odds_response: Dict, filename: str = None) -> str:
     """Export raw odds_api.com response for debugging, properly flattening bookmaker markets."""
