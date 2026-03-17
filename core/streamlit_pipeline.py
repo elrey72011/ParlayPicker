@@ -1506,6 +1506,29 @@ def run_analysis_pipeline(
     else:
         merged = bet_rows.copy()
 
+    # Ensure identity columns survive master-frame merges.
+    if "league" not in merged.columns or _string_series(merged, "league").str.len().eq(0).all():
+        if not bet_rows.empty and "league" in bet_rows.columns and "matchup_id" in merged.columns and "game_date" in merged.columns:
+            league_lookup = (
+                bet_rows[[c for c in ["matchup_id", "game_date", "league"] if c in bet_rows.columns]]
+                .dropna(subset=["matchup_id", "game_date"])
+                .drop_duplicates(["matchup_id", "game_date"], keep="last")
+            )
+            if not league_lookup.empty:
+                merged = merged.merge(
+                    league_lookup.rename(columns={"league": "league_from_bets"}),
+                    on=["matchup_id", "game_date"],
+                    how="left",
+                )
+                merged["league"] = _string_series(merged, "league").where(
+                    _string_series(merged, "league").str.len().gt(0),
+                    _string_series(merged, "league_from_bets"),
+                )
+                merged = merged.drop(columns=["league_from_bets"], errors="ignore")
+    if "league" not in merged.columns:
+        merged["league"] = ""
+    merged["league"] = _string_series(merged, "league").str.upper().replace(LEAGUE_ALIASES)
+
     # Do not set a fallback odds_source
     if "odds_source" not in merged.columns:
         merged["odds_source"] = pd.NA
