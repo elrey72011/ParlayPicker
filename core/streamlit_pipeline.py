@@ -85,7 +85,7 @@ _EXPORT_SIGNAL_COLS = {"market_type", "calibrated_probability", "expected_value"
 # Cap combos per leg count to prevent combinatorial explosion
 _MAX_PARLAY_COMBOS_PER_LEG = 500
 
-MIN_EDGE_THRESHOLD = 0.035
+MIN_EDGE_THRESHOLD = 0.02
 W_ML = 0.5
 W_MARKET = 0.3
 W_KALSHI = 0.2
@@ -608,9 +608,9 @@ def compute_blended_probability(
         mkt_val = p_mkt
 
         # If valid Kalshi data is available, blend it into the "Market Consensus" side
-        # e.g., 50% Kalshi, 50% traditional sportsbook
+        # Recalibrated to 15% Kalshi, 85% traditional sportsbook due to 6-8% margin penalty in Kalshi odds.
         if pd.notna(p_kal):
-            consensus_mkt = (mkt_val + p_kal) / 2.0
+            consensus_mkt = (mkt_val * 0.85) + (p_kal * 0.15)
         else:
             consensus_mkt = mkt_val
 
@@ -2055,7 +2055,7 @@ def run_analysis_pipeline(
     return (analysis_df, best_picks_df, diagnostics)
 
 
-def generate_parlays(best_picks_df: pd.DataFrame, max_legs: int = 5) -> pd.DataFrame:
+def generate_parlays(best_picks_df: pd.DataFrame, max_legs: int = 3) -> pd.DataFrame:
     from core.kelly_optimizer import kelly_fraction
     leg_game_cols = [f"leg{i}_game" for i in range(1, max_legs + 1)]
     cols = ["parlay_type", "parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "kelly_fraction_1_8", "legs", *leg_game_cols]
@@ -2063,6 +2063,11 @@ def generate_parlays(best_picks_df: pd.DataFrame, max_legs: int = 5) -> pd.DataF
         return pd.DataFrame(columns=cols)
     df = best_picks_df.copy()
     df = df[_string_series(df, "best_pick").str.strip().str.len() > 0].copy()
+
+    # Enforce minimum edge threshold for parlay components to prevent negative expected value from compounding
+    if "edge" in df.columns:
+        df = df[pd.to_numeric(df["edge"], errors="coerce") >= MIN_EDGE_THRESHOLD].copy()
+
     if len(df) < 2:
         return pd.DataFrame(columns=cols)
 
