@@ -231,100 +231,59 @@ def is_model_trained(model):
 class PredictionEngine:
     def __init__(self, model_path=None):
         self.model = xgb.Booster()
+        self.use_fallback = True
 
-        # Robust path resolution relative to this file
-        if model_path is None:
-            # app_core/prediction_engine.py -> parents[1] = root -> models/model.json
-            root_dir = Path(__file__).resolve().parents[1]
+        root_dir = Path(__file__).resolve().parents[1]
+        candidate_paths = []
+        if model_path:
+            candidate_paths.append(Path(model_path))
+        candidate_paths.extend([
+            root_dir / "models" / "model.json",
+            Path.cwd() / "models" / "model.json",
+            Path.cwd() / "model.json",
+            root_dir / "models" / "xgboost_model.json",
+        ])
 
-            # Use absolute path to the project root to ensure it finds the model
-            default_model_path = str(root_dir / "models" / "model.json")
+        resolved_model_path: Path | None = None
+        for candidate in candidate_paths:
+            try:
+                candidate_abs = candidate.expanduser().resolve()
+            except Exception:
+                candidate_abs = Path(candidate)
+            if candidate_abs.exists() and candidate_abs.is_file():
+                resolved_model_path = candidate_abs
+                break
 
-            candidate_paths = [
-                default_model_path,
-                str(Path.cwd() / "models" / "model.json"),
-                str(Path.cwd() / "model.json"),
-                str(Path(os.path.dirname(__file__)).parent / "models" / "model.json"),
-                os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "models", "model.json"))
-            ]
-
-            for path in candidate_paths:
-                if os.path.exists(path):
-                    model_path = path
-                    break
-
-            # Fallback to absolute project root if none found
-            if not model_path or not os.path.exists(model_path):
-                model_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "models", "model.json"))
-
-        self.use_fallback = True # Default to fallback
-
-        # Explicitly check for model file existence
-        # DEBUG LOGGING (Issue #1)
-        logger.debug(f"[MODEL_DEBUG] Model file path: {model_path}")
-        model_exists = os.path.exists(model_path)
-        logger.debug(f"[MODEL_DEBUG] Model file exists: {model_exists}")
-
-        if model_exists:
-            size = os.path.getsize(model_path)
-            logger.debug(f"[MODEL_DEBUG] Model file size: {size} bytes")
-
-            if size > 0:
-                try:
-                    # Diagnose model type first
-                    loaded_model, framework = diagnose_model_type(model_path)
-                    logger.info(f"[MODEL_FRAMEWORK] Detected framework: {framework}")
-
-                    if "meta" in str(model_path).lower():
-                        logger.info(f"[MODEL_ROUTING] Loaded Meta Model from: {model_path}")
-                    elif "stub" in str(model_path).lower() or "model.json" in str(model_path).lower():
-                        logger.info(f"[MODEL_ROUTING] Loaded Stub Model from: {model_path}")
-                    else:
-                        logger.info(f"[MODEL_ROUTING] Loaded Trained Model from: {model_path}")
-
-                    if framework == "json":
-                        # If it's JSON, load into XGBoost Booster
-                        self.model.load_model(model_path)
-
-                        # Validate training
-                        if is_model_trained(self.model):
-                            self.use_fallback = False
-                            logger.debug(f"[MODEL_DEBUG] Jules: Loaded local XGBoost model from {model_path}")
-                        else:
-                            logger.critical("[TRAINED] MODEL NOT TRAINED - ABORT")
-                            self.use_fallback = True
-
-                    elif framework in ["pickle", "joblib"] and loaded_model is not None:
-                        # If we loaded a pickle/joblib object, use it directly
-                        self.model = loaded_model
-                        if is_model_trained(self.model):
-                            self.use_fallback = False
-                            logger.debug(f"[MODEL_DEBUG] Jules: Loaded local {framework} model from {model_path}")
-                        else:
-                            self.use_fallback = True
-                    else:
-                        logger.info(f"Model file format unknown or invalid at {model_path}. Using statistical fallback.")
-                        self.use_fallback = True
-
-                except Exception as e:
-                    self.use_fallback = True
-                    logger.error(f"[MODEL_DEBUG] Failed to load model from {model_path}: {e}")
-                    logger.error(f"[MODEL_DEBUG] Exception type: {type(e).__name__}")
-                    logger.error(f"[MODEL_DEBUG] Exception details: {traceback.format_exc()}")
-            else:
-                self.use_fallback = True
-                logger.info(f"Model file at {model_path} is empty. Using statistical fallback.")
-        else:
-            self.use_fallback = True
+        if resolved_model_path is None:
             global _LOGGED_MODEL_MISSING
             if not _LOGGED_MODEL_MISSING:
-                logger.info(
-                    f"Model file missing at {model_path}. Using statistical fallback."
-                )
+                logger.error("[MODEL_LOAD] No model artifact found. Checked paths: %s", [str(c) for c in candidate_paths])
                 _LOGGED_MODEL_MISSING = True
+            return
 
-        # CRITICAL FIX 1: Validate Model Behavior (Smoke Test)
-        # Check if model outputs the placeholder value on zero input
+        logger.info("[MODEL_LOAD] Attempting model load from %s", resolved_model_path)
+
+        try:
+            self.model.load_model(str(resolved_model_path))
+            if is_model_trained(self.model):
+                self.use_fallback = False
+                logger.info("[MODEL_LOAD] XGBoost model loaded successfully from %s", resolved_model_path)
+            else:
+                logger.error("[MODEL_LOAD] Model loaded from %s but failed trained-model validation", resolved_model_path)
+        except Exception as xgb_error:
+            logger.error("[MODEL_LOAD] XGBoost.load_model failed for %s: %s", resolved_model_path, xgb_error)
+            logger.error("[MODEL_LOAD] Traceback: %s", traceback.format_exc())
+            try:
+                loaded_model, framework = diagnose_model_type(str(resolved_model_path))
+                if framework in ["pickle", "joblib"] and loaded_model is not None and is_model_trained(loaded_model):
+                    self.model = loaded_model
+                    self.use_fallback = False
+                    logger.info("[MODEL_LOAD] Loaded %s model from %s", framework, resolved_model_path)
+                else:
+                    logger.error("[MODEL_LOAD] Fallback loader failed for %s (framework=%s)", resolved_model_path, framework)
+            except Exception as fallback_error:
+                logger.error("[MODEL_LOAD] Secondary model loading failed for %s: %s", resolved_model_path, fallback_error)
+
         if not self.use_fallback:
             self._validate_model_behavior()
 
