@@ -929,8 +929,10 @@ def _resolve_team_names_from_base(df: pd.DataFrame, base_df: pd.DataFrame) -> pd
     ], ignore_index=True).dropna().drop_duplicates()
 
     alias_map: dict[tuple[str, str], str] = {}
+    league_team_pool: dict[str, list[str]] = {}
     for league, group in all_teams.groupby("league"):
         teams = sorted(set(group["team"].astype(str)))
+        league_team_pool[str(league)] = teams
         candidate_to_teams: dict[str, set[str]] = {}
         for team in teams:
             parts = team.split()
@@ -945,8 +947,26 @@ def _resolve_team_names_from_base(df: pd.DataFrame, base_df: pd.DataFrame) -> pd
                 alias_map[(str(league), candidate)] = next(iter(matches))
 
     def _resolve(league: str, team: str) -> str:
-        key = (str(league or "").upper(), str(team or "").upper().strip())
-        return alias_map.get(key, team)
+        league_norm = str(league or "").upper()
+        team_norm = str(team or "").strip()
+        key = (league_norm, team_norm.upper())
+        direct = alias_map.get(key)
+        if direct:
+            return direct
+
+        # Fuzzy fallback for typos/partial names when direct alias resolution misses.
+        candidates = league_team_pool.get(league_norm, [])
+        if not candidates or not team_norm:
+            return team
+        scored = sorted(
+            [(_team_similarity_score(team_norm, cand), cand) for cand in candidates],
+            key=lambda x: x[0],
+            reverse=True,
+        )
+        if scored and scored[0][0] >= 90:
+            if len(scored) == 1 or scored[0][0] - scored[1][0] >= 5:
+                return scored[0][1]
+        return team
 
     out["league"] = _string_series(out, "league").str.upper().replace(LEAGUE_ALIASES)
     out["home_team"] = _string_series(out, "home_team").map(normalize_team_name)
@@ -969,16 +989,21 @@ def _dedupe_inverted_matchups(df: pd.DataFrame) -> pd.DataFrame:
     out["_canonical_matchup"] = _canonical_matchup_key(out)
     out["_spread_abs"] = _numeric_series(out, "spread_line").abs()
     out["_total_line"] = _numeric_series(out, "total_line")
-    out["_market_type"] = _string_series(out, "market_type")
+    market_type = _string_series(out, "market_type").str.lower()
+    out["_market_dedupe"] = pd.Series(
+        np.where(market_type.str.startswith("spread"), "spread", market_type),
+        index=out.index,
+        dtype="string",
+    )
     before = len(out)
     out = out.drop_duplicates(
-        subset=["_canonical_matchup", "_market_type", "_spread_abs", "_total_line"],
+        subset=["_canonical_matchup", "_market_dedupe", "_spread_abs", "_total_line"],
         keep="first",
     ).copy()
     dropped = before - len(out)
     if dropped > 0:
         logger.warning("Deduplication removed %s inverted/duplicate matchup rows.", dropped)
-    return out.drop(columns=["_canonical_matchup", "_spread_abs", "_total_line", "_market_type"])
+    return out.drop(columns=["_canonical_matchup", "_spread_abs", "_total_line", "_market_dedupe"])
 def _fill_missing_game_dates_from_base(bet_rows_df: pd.DataFrame, base_df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, float]]:
     out = bet_rows_df.copy()
     out["game_date"] = _game_dates(out)
@@ -1327,6 +1352,7 @@ def run_analysis_pipeline(
         bet_rows["game_date"] = bet_rows["game_date"].fillna(merged_dates["date"])
         bet_rows = bet_rows.drop(columns=["home_team_lower", "away_team_lower"])
     bet_rows, date_stats = _fill_missing_game_dates_from_base(bet_rows, base_df)
+    bet_rows = _dedupe_inverted_matchups(bet_rows)
 
     merge_keys = ["league", "home_team", "away_team", "game_date", "fuzzy_team_match>=85"]
     merged = bet_rows.copy()
@@ -1351,11 +1377,6 @@ def run_analysis_pipeline(
         base_schedule["home_team_lower"] = base_schedule["home_team"].str.lower().str.strip()
         base_schedule["away_team_lower"] = base_schedule["away_team"].str.lower().str.strip()
         base_schedule["date_day"] = _date_join_key(base_schedule["date"])
-
-        # Explicitly align temporal dtypes before merge to prevent datetime64 vs NaT shearing.
-        base_schedule["date"] = _force_utc_datetime(base_schedule["date"])
-        base_schedule["date_day"] = _force_utc_datetime(base_schedule["date_day"])
-        base_schedule["game_date_key"] = _force_utc_datetime(base_schedule["game_date_key"])
 
         base_merge_columns = ["league", "home_team_lower", "away_team_lower", "merge_date_utc"] + [
             col for col in ["date", "game_time_est", "odds_american", "ml_probability", "is_neutral"]
