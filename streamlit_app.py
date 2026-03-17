@@ -348,7 +348,7 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
         totals_df=totals_df,
     )
 
-    parlay_columns = ["parlay_type", "parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "kelly_fraction_1_8", "legs", "leg1_game", "leg2_game", "leg3_game", "leg4_game", "leg5_game"]
+    parlay_columns = ["parlay_type", "parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "kelly_fraction_1_8", "legs", "leg1_game", "leg2_game", "leg3_game"]
     empty_per_leg = {f"parlays_{lc}_df": pd.DataFrame(columns=parlay_columns) for lc in (2, 3)}
 
     empty_state: dict = {
@@ -815,7 +815,7 @@ def main() -> None:
 
     with tab4:
         st.subheader("Best Parlays")
-        parlay_columns = ["parlay_type", "parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "kelly_fraction_1_8", "legs", "leg1_game", "leg2_game", "leg3_game", "leg4_game", "leg5_game"]
+        parlay_columns = ["parlay_type", "parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "kelly_fraction_1_8", "legs", "leg1_game", "leg2_game", "leg3_game"]
         base_parlays_df = parlays_df if parlays_df is not None else pd.DataFrame(columns=parlay_columns)
 
         view_mode = st.radio("Parlay View", ["Ranked Parlays", "Top Combinations"], horizontal=True)
