@@ -24,25 +24,32 @@ class TheOddsAPIClient:
         self.oddsFormat = oddsFormat
 
     def get_odds(self, sport_key: str, date: str = None):
+        url = f"{self.BASE_URL}/sports/{sport_key}/odds"
+        params = {
+            "apiKey": self.api_key,
+            "regions": self.regions,
+            "markets": self.markets,
+            "bookmakers": self.bookmakers,
+            "oddsFormat": self.oddsFormat,
+            "dateFormat": "iso",
+        }
+
         if date:
-            url = f"{self.BASE_URL}/historical/sports/{sport_key}/odds"
-            params = {
-                "apiKey": self.api_key,
-                "regions": self.regions,
-                "markets": self.markets,
-                "bookmakers": self.bookmakers,
-                "oddsFormat": self.oddsFormat,
-                "date": date
-            }
-        else:
-            url = f"{self.BASE_URL}/sports/{sport_key}/odds"
-            params = {
-                "apiKey": self.api_key,
-                "regions": self.regions,
-                "markets": self.markets,
-                "bookmakers": self.bookmakers,
-                "oddsFormat": self.oddsFormat,
-            }
+            try:
+                from datetime import datetime, timedelta
+                # Assume date is YYYY-MM-DD
+                dt = datetime.strptime(date[:10], "%Y-%m-%d")
+                commenceTimeFrom = dt.strftime("%Y-%m-%dT00:00:00Z")
+                commenceTimeTo = (dt + timedelta(days=1)).strftime("%Y-%m-%dT00:00:00Z")
+                params["commenceTimeFrom"] = commenceTimeFrom
+                params["commenceTimeTo"] = commenceTimeTo
+            except Exception as e:
+                logger.warning(f"Failed to parse date {date} for commenceTime bounds: {e}")
+                # Fallback to historical endpoint if requested date format doesn't match
+                url = f"{self.BASE_URL}/historical/sports/{sport_key}/odds"
+                params["date"] = date
+                params.pop("commenceTimeFrom", None)
+                params.pop("commenceTimeTo", None)
 
         all_data = []
 
@@ -112,6 +119,32 @@ class TheOddsAPIClient:
         # Filter out games that don't have any bookmakers
         filtered_data = [game for game in all_data if game.get("bookmakers")]
         return filtered_data
+
+    def get_single_event_odds(self, sport_key: str, event_id: str):
+        url = f"{self.BASE_URL}/sports/{sport_key}/events/{event_id}/odds"
+        params = {
+            "apiKey": self.api_key,
+            "regions": self.regions,
+            "markets": self.markets,
+            "bookmakers": self.bookmakers,
+            "oddsFormat": self.oddsFormat,
+        }
+
+        import time
+        max_retries = 2
+
+        for attempt in range(max_retries + 1):
+            resp = requests.get(url, params=params, timeout=15)
+
+            if resp.status_code == 200:
+                return resp.json()
+            elif resp.status_code == 429:
+                if attempt < max_retries:
+                    time.sleep(2.0 * (attempt + 1))
+                    continue
+            logger.error(f"Single event fetch failed for {event_id} [{resp.status_code}]: {resp.text}")
+            return None
+        return None
 
 def filter_games_today_only(games: List[Dict]) -> List[Dict]:
     """

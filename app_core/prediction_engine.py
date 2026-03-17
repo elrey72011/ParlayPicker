@@ -533,16 +533,68 @@ class PredictionEngine:
             raw_inference_data = df.reindex(columns=VERTEX_FEATURE_COLUMNS).copy()
             raw_numeric = raw_inference_data.apply(pd.to_numeric, errors='coerce')
 
-            # Strict validation: prevent predicting on predominantly-empty feature rows.
+            # Merge Hardening: use sanitized team names for "Stale Feature Fallback"
             row_nan_ratio = raw_numeric.isna().sum(axis=1) / max(len(VERTEX_FEATURE_COLUMNS), 1)
+
+            # Keep track of which rows use stale features
+            used_stale_features = pd.Series(False, index=df.index)
+
             if row_nan_ratio.mean() > 0.5:
-                raise ValueError(
-                    "Feature matrix is empty due to schedule merge failure. "
-                    "Aborting ML predictions to prevent baseline default (0.1906)."
-                )
+                logger.warning("Feature matrix mostly empty. Attempting Stale Feature Fallback (up to 7 days).")
+                try:
+                    from config import DATA_DIR
+                    master_file = DATA_DIR / 'master_all_sports.csv'
+                    if master_file.exists():
+                        import re as regex
+                        # Load historical features
+                        hist_df = pd.read_csv(master_file)
+                        if "commence_time" in hist_df.columns:
+                            hist_df["commence_time"] = pd.to_datetime(hist_df["commence_time"], errors="coerce", utc=True)
+                            now_utc = pd.Timestamp.utcnow()
+                            hist_df = hist_df[hist_df["commence_time"] >= (now_utc - pd.Timedelta(days=7))]
+
+                            # Clean team names in hist_df
+                            if "home_team" in hist_df.columns and "away_team" in hist_df.columns:
+                                hist_df["home_clean"] = hist_df["home_team"].astype(str).str.lower().apply(lambda x: regex.sub(r'[^a-z0-9]', '', x))
+                                hist_df["away_clean"] = hist_df["away_team"].astype(str).str.lower().apply(lambda x: regex.sub(r'[^a-z0-9]', '', x))
+
+                                # Process each predominantly empty row
+                                for idx in df.index:
+                                    if row_nan_ratio[idx] > 0.5:
+                                        row_home = regex.sub(r'[^a-z0-9]', '', str(df.at[idx, "home_team"]).lower()) if "home_team" in df.columns else ""
+                                        row_away = regex.sub(r'[^a-z0-9]', '', str(df.at[idx, "away_team"]).lower()) if "away_team" in df.columns else ""
+                                        row_league = str(df.at[idx, "league"]).upper() if "league" in df.columns else ""
+
+                                        if row_home and row_away:
+                                            # Find most recent match for this exact matchup (direction matters for home/away features)
+                                            match = hist_df[
+                                                (hist_df["league"].str.upper() == row_league) &
+                                                (hist_df["home_clean"] == row_home) &
+                                                (hist_df["away_clean"] == row_away)
+                                            ].sort_values("commence_time", ascending=False)
+
+                                            if not match.empty:
+                                                latest = match.iloc[0]
+                                                used_stale_features.at[idx] = True
+                                                for col in VERTEX_FEATURE_COLUMNS:
+                                                    if col in latest and pd.notna(latest[col]):
+                                                        raw_numeric.at[idx, col] = float(latest[col])
+                except Exception as e:
+                    logger.error(f"Stale Feature Fallback failed: {e}")
+
+                # Re-check NaN ratio after fallback
+                row_nan_ratio_after = raw_numeric.isna().sum(axis=1) / max(len(VERTEX_FEATURE_COLUMNS), 1)
+                if row_nan_ratio_after.mean() > 0.5:
+                    raise ValueError(
+                        "Feature matrix is empty due to schedule merge failure. "
+                        "Aborting ML predictions to prevent baseline default (0.1906)."
+                    )
 
             # Ensure proper casting and fillna to prevent errors - critical for preventing placeholder values
             inference_data = raw_numeric.fillna(0.0)
+
+            # Store flag so calling code can retrieve it if needed
+            self.last_batch_used_stale_features = used_stale_features.tolist()
             # Replace any remaining inf values
             inference_data = inference_data.replace([np.inf, -np.inf], 0.0).astype(float)
 

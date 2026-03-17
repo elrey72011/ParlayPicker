@@ -70,14 +70,14 @@ BEST_PICK_COLUMNS = [
     "calibrated_probability", "expected_value", "edge", "consensus_agreement",
     "odds_american", "odds_source", "market_probability", "ml_probability",
     "kalshi_probability", "kalshi_match_status", "kalshi_match_reason",
-    "gemini_explanation", "gemini_risk_notes",
+    "gemini_explanation", "gemini_risk_notes", "used_stale_features",
 ]
 
 CANONICAL_BET_COLUMNS = [
     "league", "home_team", "away_team", "game_date", "game_time_est", "game_key",
     "market_type", "spread_line", "total_line",
     "theover_probability", "odds_american", "market_probability",
-    "ml_probability", "calibrated_probability", "expected_value", "edge", "best_pick",
+    "ml_probability", "calibrated_probability", "expected_value", "edge", "best_pick", "used_stale_features",
 ]
 
 _EXPORT_SIGNAL_COLS = {"market_type", "calibrated_probability", "expected_value", "edge"}
@@ -335,7 +335,9 @@ def _date_join_key(series: pd.Series) -> pd.Series:
 
 
 def _utc_day_key(series: pd.Series) -> pd.Series:
-    """Return timezone-aware UTC day key for deterministic schedule merges."""
+    """Return timezone-aware UTC day key for deterministic schedule merges.
+    Applies ET offset to UTC timestamps before flooring to 'D' to keep nightly slates together.
+    """
 
     def _to_utc_day(value: Any) -> pd.Timestamp:
         if pd.isna(value):
@@ -348,7 +350,13 @@ def _utc_day_key(series: pd.Series) -> pd.Series:
             ts = ts.tz_localize("UTC")
         else:
             ts = ts.tz_convert("UTC")
-        return ts.floor("D")
+
+        # Convert to ET, floor to D, then localize back to UTC to match expected dtype (datetime64[ns, UTC])
+        # This keeps the "date" aligned to the ET calendar day, but stored as UTC midnight.
+        est = ts.tz_convert('America/New_York')
+        floored = est.floor("D")
+        # To maintain exact API compatibility, return it as UTC timezone but shifted to represent the ET day start
+        return pd.Timestamp(year=floored.year, month=floored.month, day=floored.day, tz="UTC")
 
     return pd.to_datetime(series.apply(_to_utc_day), errors="coerce", utc=True)
 
@@ -1187,9 +1195,9 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
     # Explicitly require 'h2h,spreads,totals' for Novig exchanges and 'american' oddsFormat
     client = TheOddsAPIClient(
         api_key=api_key,
-        regions="us_ex",
+        regions="us2,eu",  # Capture both regulated US prices and early sharp lines
         markets="h2h,spreads,totals",
-        bookmakers="novig",
+        bookmakers="novig,draftkings,fanduel,pinnacle",  # Ensure required books are requested
         oddsFormat="american"
     )
 
@@ -1223,7 +1231,23 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
         try:
             # Use caller-provided snapshot date when present; otherwise fetch live upcoming board.
             games = client.get_odds(sport_key, date=date)
-            if games:
+            if games and len(games) > 0:
+                # Check for truncation in the last game returned
+                last_game = games[-1]
+                has_novig = False
+                # Simple heuristic: if Novig is in the requested bookmakers, see if it has spread/total markets
+                for book in last_game.get('bookmakers', []):
+                    if 'novig' in str(book.get('key', '')).lower():
+                        has_novig = True
+                        has_essential_markets = any(m.get('key') in ['spreads', 'totals'] for m in book.get('markets', []))
+                        if not has_essential_markets:
+                            logger.warning(f"Truncation Warning: Final row {last_game.get('id')} lacks essential markets. Retrying single event.")
+                            # Attempt re-fetch of specific game
+                            if hasattr(client, 'get_single_event_odds'):
+                                retry_game = client.get_single_event_odds(sport_key, last_game.get('id'))
+                                if retry_game:
+                                    games[-1] = retry_game
+                        break
                 return games
         except OddsAPIAuthError as e:
             if _is_hist_tier_error(e):
@@ -1855,6 +1879,10 @@ def run_analysis_pipeline(
                     index=merged[needs_prediction].index,
                     dtype="float64"
                 )
+
+                # Assign used_stale_features flag
+                if hasattr(engine, 'last_batch_used_stale_features'):
+                    merged.loc[needs_prediction, "used_stale_features"] = engine.last_batch_used_stale_features
 
                 ml_count = merged["ml_probability"].notna().sum()
                 ml_unique = _numeric_series(merged, "ml_probability").dropna().nunique()
