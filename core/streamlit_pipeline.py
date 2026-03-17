@@ -167,7 +167,10 @@ def clean_team_name(series: pd.Series) -> pd.Series:
         return series
 
     typo_map = {
+        "sacramento": "sacramento",
         "sacremento": "sacramento",
+        "sacramentokings": "sacramento",
+        "sacrementokings": "sacramento",
         "sanantonio": "sanantonio",
         "philidelphia": "philadelphia",
         "phildelphia": "philadelphia",
@@ -535,6 +538,15 @@ def _canonical_matchup_teams_key(df: pd.DataFrame) -> pd.Series:
     team_a = home.where(home <= away, away)
     team_b = away.where(home <= away, home)
     return league + "|" + team_a + "|" + team_b
+
+
+def _matchup_id(df: pd.DataFrame) -> pd.Series:
+    """Canonical matchup id using sorted cleaned team names (direction-independent)."""
+    home = clean_team_name(_string_series(df, "home_team")).str.upper()
+    away = clean_team_name(_string_series(df, "away_team")).str.upper()
+    team_a = home.where(home <= away, away)
+    team_b = away.where(home <= away, home)
+    return team_a + "|" + team_b
 
 
 def _mk_game_key(df: pd.DataFrame) -> pd.Series:
@@ -1457,22 +1469,22 @@ def run_analysis_pipeline(
     live_odds_df = fetch_live_odds_dataframe(sports)
 
     bet_rows["game_date"] = _game_dates(bet_rows)
+    bet_rows["game_date"] = _utc_day_key(bet_rows["game_date"])
     if not bet_rows.empty and not base_df.empty:
         base_dates = base_df.copy()
         base_dates["league"] = _string_series(base_dates, "league").str.upper().replace(LEAGUE_ALIASES)
         base_dates["home_team"] = _string_series(base_dates, "home_team").map(normalize_team_name)
         base_dates["away_team"] = _string_series(base_dates, "away_team").map(normalize_team_name)
-        base_dates["date"] = _game_dates(base_dates)
+        base_dates["date"] = _utc_day_key(_game_dates(base_dates))
+        base_dates["matchup_id"] = _matchup_id(base_dates)
 
-        base_dates["matchup_key"] = _canonical_matchup_teams_key(base_dates)
+        date_lookup = base_dates[["league", "matchup_id", "date"]].drop_duplicates(["league", "matchup_id"])
 
-        date_lookup = base_dates[["league", "matchup_key", "date"]].drop_duplicates(["league", "matchup_key"])
+        bet_rows["matchup_id"] = _matchup_id(bet_rows)
 
-        bet_rows["matchup_key"] = _canonical_matchup_teams_key(bet_rows)
-
-        merged_dates = bet_rows.merge(date_lookup, on=["league", "matchup_key"], how="left")
+        merged_dates = bet_rows.merge(date_lookup, on=["league", "matchup_id"], how="left")
         bet_rows["game_date"] = bet_rows["game_date"].fillna(merged_dates["date"])
-        bet_rows = bet_rows.drop(columns=["matchup_key"])
+        bet_rows = bet_rows.drop(columns=["matchup_id"])
     bet_rows, date_stats = _fill_missing_game_dates_from_base(bet_rows, base_df)
     bet_rows = _dedupe_inverted_matchups(bet_rows)
 
@@ -1499,9 +1511,10 @@ def run_analysis_pipeline(
         base_schedule["home_team_lower"] = clean_team_name(base_schedule["home_team"])
         base_schedule["away_team_lower"] = clean_team_name(base_schedule["away_team"])
         base_schedule["matchup_key"] = _canonical_matchup_teams_key(base_schedule)
+        base_schedule["matchup_id"] = _matchup_id(base_schedule)
         base_schedule["date_day"] = _date_join_key(base_schedule["date"])
 
-        base_merge_columns = ["league", "matchup_key", "merge_date_utc"] + [
+        base_merge_columns = ["league", "matchup_id", "merge_date_utc"] + [
             col for col in ["date", "game_time_est", "odds_american", "ml_probability", "is_neutral"]
             if col in base_schedule.columns
         ]
@@ -1509,12 +1522,13 @@ def run_analysis_pipeline(
         merged["home_team_lower"] = clean_team_name(merged["home_team"])
         merged["away_team_lower"] = clean_team_name(merged["away_team"])
         merged["matchup_key"] = _canonical_matchup_teams_key(merged)
+        merged["matchup_id"] = _matchup_id(merged)
         merged["merge_date_utc"] = _utc_day_key(merged.get("game_date"))
 
         # Primary join uses explicit UTC day keys and canonical matchup keys (order-insensitive).
         merged = merged.merge(
-            base_schedule[base_merge_columns].drop_duplicates(["league", "matchup_key", "merge_date_utc"]),
-            on=["league", "matchup_key", "merge_date_utc"],
+            base_schedule[base_merge_columns].drop_duplicates(["league", "matchup_id", "merge_date_utc"]),
+            on=["league", "matchup_id", "merge_date_utc"],
             how="left",
             suffixes=("", "_base"),
         )
@@ -1526,7 +1540,7 @@ def run_analysis_pipeline(
                 c
                 for c in [
                     "league",
-                    "matchup_key",
+                    "matchup_id",
                     "date",
                     "game_time_est",
                     "odds_american",
@@ -1538,7 +1552,7 @@ def run_analysis_pipeline(
             team_only_lookup = (
                 base_schedule[team_only_cols]
                 .sort_values("date")
-                .drop_duplicates(["league", "matchup_key"], keep="last")
+                .drop_duplicates(["league", "matchup_id"], keep="last")
                 .rename(
                     columns={
                         "date": "date_team",
@@ -1549,9 +1563,9 @@ def run_analysis_pipeline(
                     }
                 )
             )
-            fill_view = merged.loc[needs_team_only, ["league", "matchup_key"]].merge(
+            fill_view = merged.loc[needs_team_only, ["league", "matchup_id"]].merge(
                 team_only_lookup,
-                on=["league", "matchup_key"],
+                on=["league", "matchup_id"],
                 how="left",
             )
 
@@ -1686,11 +1700,17 @@ def run_analysis_pipeline(
         live_odds_df["home_team_lower"] = clean_team_name(live_odds_df["home_team"])
         live_odds_df["away_team_lower"] = clean_team_name(live_odds_df["away_team"])
         live_odds_df["matchup_key"] = _canonical_matchup_teams_key(live_odds_df)
+        live_odds_df["matchup_id"] = _matchup_id(live_odds_df)
+        live_odds_df["merge_date_utc"] = _utc_day_key(_game_dates(live_odds_df))
         if "home_team_lower" not in merged.columns:
             merged["home_team_lower"] = clean_team_name(merged["home_team"])
             merged["away_team_lower"] = clean_team_name(merged["away_team"])
         if "matchup_key" not in merged.columns:
             merged["matchup_key"] = _canonical_matchup_teams_key(merged)
+        if "matchup_id" not in merged.columns:
+            merged["matchup_id"] = _matchup_id(merged)
+        if "merge_date_utc" not in merged.columns:
+            merged["merge_date_utc"] = _utc_day_key(_game_dates(merged))
 
         # Phase 1: Entity Resolution Validation Layer
         # Validate live odds against current pipeline matchups first (uploaded/analysis rows),
@@ -1717,8 +1737,8 @@ def run_analysis_pipeline(
         # Avoid duplicating columns during merge
         live_merge_cols = [c for c in live_odds_df.columns if c not in ["game_id", "commence_time", "raw_home_team", "raw_away_team", "home_team", "away_team", "home_team_lower", "away_team_lower"]]
         merged = merged.merge(
-            live_odds_df[live_merge_cols].drop_duplicates(["matchup_key"]),
-            on=["matchup_key"],
+            live_odds_df[live_merge_cols].drop_duplicates(["matchup_id", "merge_date_utc"]),
+            on=["matchup_id", "merge_date_utc"],
             how="left"
         )
 

@@ -53,17 +53,15 @@ class TheOddsAPIClient:
             target_date = now_est.strftime("%Y-%m-%d")
 
         try:
-            # Treat target_date as ET game-night date, then convert ET day boundaries to UTC.
-            et_tz = pytz.timezone("America/New_York")
+            # Use explicit UTC bounds for the requested target day.
+            # This avoids broad "upcoming" responses and aligns ingestion windows consistently.
             dt = datetime.strptime(target_date[:10], "%Y-%m-%d")
-            et_start = et_tz.localize(datetime(dt.year, dt.month, dt.day, 0, 0, 0))
-            et_end = et_tz.localize(datetime(dt.year, dt.month, dt.day, 23, 59, 59))
-            commenceTimeFrom = et_start.astimezone(pytz.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-            commenceTimeTo = et_end.astimezone(pytz.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+            commenceTimeFrom = datetime(dt.year, dt.month, dt.day, 0, 0, 0, tzinfo=pytz.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+            commenceTimeTo = datetime(dt.year, dt.month, dt.day, 23, 59, 59, tzinfo=pytz.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
             params["commenceTimeFrom"] = commenceTimeFrom
             params["commenceTimeTo"] = commenceTimeTo
             logger.info(
-                "Set Odds API commenceTime bounds for ET game night %s: %s to %s",
+                "Set Odds API commenceTime UTC bounds for target day %s: %s to %s",
                 target_date,
                 commenceTimeFrom,
                 commenceTimeTo,
@@ -152,7 +150,7 @@ class TheOddsAPIClient:
                 continue
             try:
                 est_dt = iso8601_to_est(commence_time)
-                game["game_date_est"] = est_dt.strftime("%Y-%m-%d")
+                game["game_date_est"] = pd.Timestamp(est_dt).floor("D").strftime("%Y-%m-%d")
             except Exception as conv_err:
                 logger.warning("Failed ET conversion for commence_time=%s: %s", commence_time, conv_err)
 
