@@ -1468,8 +1468,17 @@ def run_analysis_pipeline(
     stale_base_rows_removed = 0
     live_odds_df = fetch_live_odds_dataframe(sports)
 
+    # Canonical ET-floored slate keys (matchup_id + game_date) used across all joins.
+    if not live_odds_df.empty:
+        live_odds_df["league"] = _string_series(live_odds_df, "league").str.upper().replace(LEAGUE_ALIASES)
+        live_odds_df["home_team"] = _string_series(live_odds_df, "home_team").map(normalize_team_name)
+        live_odds_df["away_team"] = _string_series(live_odds_df, "away_team").map(normalize_team_name)
+        live_odds_df["game_date"] = _utc_day_key(_game_dates(live_odds_df))
+        live_odds_df["matchup_id"] = _matchup_id(live_odds_df)
+
     bet_rows["game_date"] = _game_dates(bet_rows)
     bet_rows["game_date"] = _utc_day_key(bet_rows["game_date"])
+    bet_rows["matchup_id"] = _matchup_id(bet_rows)
     if not bet_rows.empty and not base_df.empty:
         base_dates = base_df.copy()
         base_dates["league"] = _string_series(base_dates, "league").str.upper().replace(LEAGUE_ALIASES)
@@ -1480,16 +1489,22 @@ def run_analysis_pipeline(
 
         date_lookup = base_dates[["league", "matchup_id", "date"]].drop_duplicates(["league", "matchup_id"])
 
-        bet_rows["matchup_id"] = _matchup_id(bet_rows)
-
         merged_dates = bet_rows.merge(date_lookup, on=["league", "matchup_id"], how="left")
         bet_rows["game_date"] = bet_rows["game_date"].fillna(merged_dates["date"])
-        bet_rows = bet_rows.drop(columns=["matchup_id"])
     bet_rows, date_stats = _fill_missing_game_dates_from_base(bet_rows, base_df)
     bet_rows = _dedupe_inverted_matchups(bet_rows)
 
     merge_keys = ["league", "home_team", "away_team", "game_date", "fuzzy_team_match>=85"]
-    merged = bet_rows.copy()
+
+    # Primary ingestion baseline: live_odds_df is the master slate frame.
+    if not live_odds_df.empty:
+        master_cols = [c for c in ["league", "home_team", "away_team", "game_date", "matchup_id"] if c in live_odds_df.columns]
+        merged = live_odds_df[master_cols].drop_duplicates(["matchup_id", "game_date"]).copy()
+        if not bet_rows.empty:
+            bet_payload = bet_rows.drop(columns=[c for c in ["league", "home_team", "away_team"] if c in bet_rows.columns]).copy()
+            merged = merged.merge(bet_payload, on=["matchup_id", "game_date"], how="left")
+    else:
+        merged = bet_rows.copy()
 
     # Do not set a fallback odds_source
     if "odds_source" not in merged.columns:
@@ -1761,10 +1776,14 @@ def run_analysis_pipeline(
         # Strip '+' prefix if exists, handle errors safely
         return pd.to_numeric(series.astype(str).str.replace('+', '', regex=False), errors='coerce')
 
-    cond_spread_home = (m_type == "spread_home") & merged["novig_home_price"].notna()
-    cond_spread_away = (m_type == "spread_away") & merged["novig_away_price"].notna()
-    cond_total_over = (m_type == "total_over") & merged["novig_over_price"].notna()
-    cond_total_under = (m_type == "total_under") & merged["novig_under_price"].notna()
+    def _bool_mask(series: pd.Series) -> np.ndarray:
+        """Return a numpy bool mask without NA values (required by np.select)."""
+        return series.fillna(False).astype(bool).to_numpy()
+
+    cond_spread_home = _bool_mask((m_type == "spread_home") & merged["novig_home_price"].notna())
+    cond_spread_away = _bool_mask((m_type == "spread_away") & merged["novig_away_price"].notna())
+    cond_total_over = _bool_mask((m_type == "total_over") & merged["novig_over_price"].notna())
+    cond_total_under = _bool_mask((m_type == "total_under") & merged["novig_under_price"].notna())
 
     # Coalesce odds_american
     merged["odds_american"] = np.select(
