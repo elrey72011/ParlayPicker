@@ -583,7 +583,9 @@ class PredictionEngine:
                                     _build_matchup_id(h, a)
                                     for h, a in zip(hist_df["home_team"], hist_df["away_team"])
                                 ]
-                                hist_df["league_norm"] = hist_df.get("league", "").astype(str).str.upper() if "league" in hist_df.columns else ""
+                                if "league" not in hist_df.columns:
+                                    hist_df["league"] = ""
+                                hist_df["league_norm"] = hist_df["league"].astype(str).str.upper()
                                 hist_df["game_date"] = _to_et_game_date(hist_df["commence_time"])
 
                                 # Process each predominantly empty row

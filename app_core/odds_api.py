@@ -58,11 +58,14 @@ class TheOddsAPIClient:
             target_date = now_est.strftime("%Y-%m-%d")
 
         try:
-            # Use explicit UTC bounds for the requested target day.
-            # This avoids broad "upcoming" responses and aligns ingestion windows consistently.
+            # Use ET day boundaries and convert to UTC so "game night" remains stable.
+            # Example: 10:10 PM ET (03:10 UTC next day) still belongs to the same ET slate.
             dt = datetime.strptime(target_date[:10], "%Y-%m-%d")
-            commenceTimeFrom = datetime(dt.year, dt.month, dt.day, 0, 0, 0, tzinfo=pytz.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-            commenceTimeTo = datetime(dt.year, dt.month, dt.day, 23, 59, 59, tzinfo=pytz.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+            eastern = pytz.timezone("America/New_York")
+            day_start_et = eastern.localize(datetime(dt.year, dt.month, dt.day, 0, 0, 0))
+            day_end_et = eastern.localize(datetime(dt.year, dt.month, dt.day, 23, 59, 59))
+            commenceTimeFrom = day_start_et.astimezone(pytz.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+            commenceTimeTo = day_end_et.astimezone(pytz.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
             params["commenceTimeFrom"] = commenceTimeFrom
             params["commenceTimeTo"] = commenceTimeTo
             logger.info(
@@ -164,6 +167,8 @@ class TheOddsAPIClient:
                 game["commence_time_est"] = est_ts.isoformat()
                 game["game_date"] = et_day.strftime("%Y-%m-%d")
                 game["game_date_est"] = game["game_date"]
+                teams_sorted = sorted([str(game.get("home_team") or "").strip(), str(game.get("away_team") or "").strip()])
+                game["matchup_id"] = "_".join(teams_sorted)
             except Exception as conv_err:
                 logger.warning("Failed ET conversion for commence_time=%s: %s", commence_time, conv_err)
 
