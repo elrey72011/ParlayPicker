@@ -291,6 +291,7 @@ class PredictionEngine:
                 _LOGGED_MODEL_MISSING = True
             return
 
+        resolved_model_path = resolved_model_path.resolve()
         logger.info("[MODEL_LOAD] Attempting model load from %s", resolved_model_path)
 
         try:
@@ -511,9 +512,12 @@ class PredictionEngine:
 
         try:
             working_df = df.copy()
+            # Preserve label/identity columns needed by stale-feature fallback joins.
             if "league" not in working_df.columns:
                 working_df["league"] = ""
             working_df["league"] = working_df["league"].astype(str).str.upper()
+            if "game_date" not in working_df.columns:
+                working_df["game_date"] = ""
             home_series = _series_or_default(working_df, "home_team", "")
             away_series = _series_or_default(working_df, "away_team", "")
             working_df["matchup_id"] = [
