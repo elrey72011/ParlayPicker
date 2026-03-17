@@ -3,8 +3,17 @@ import logging
 from datetime import datetime, time
 import pytz
 from typing import List, Dict
+from dateutil import parser
+from dateutil.tz import gettz
 
 logger = logging.getLogger(__name__)
+
+
+def iso8601_to_est(iso_string: str):
+    """Converts ISO 8601 UTC string to Eastern Time aware datetime."""
+    dt_object_utc = parser.parse(str(iso_string))
+    eastern_tz = gettz("America/New_York")
+    return dt_object_utc.astimezone(eastern_tz)
 
 class OddsAPIAuthError(Exception):
     """Exception raised for authentication errors with The Odds API (e.g., 401, 403 or missing key)."""
@@ -13,7 +22,7 @@ class OddsAPIAuthError(Exception):
 class TheOddsAPIClient:
     BASE_URL = "https://api.the-odds-api.com/v4"
 
-    def __init__(self, api_key: str, regions="us_ex,us", markets="h2h,spreads,totals", bookmakers="novig,draftkings,fanduel", oddsFormat="american"):
+    def __init__(self, api_key: str, regions="us2,eu", markets="h2h,spreads,totals", bookmakers="novig,draftkings,fanduel,pinnacle", oddsFormat="american"):
         if not api_key:
             raise ValueError("TheOddsAPI API key is required")
 
@@ -44,14 +53,21 @@ class TheOddsAPIClient:
             target_date = now_est.strftime("%Y-%m-%d")
 
         try:
-            # Assume date is YYYY-MM-DD
+            # Treat target_date as ET game-night date, then convert ET day boundaries to UTC.
+            et_tz = pytz.timezone("America/New_York")
             dt = datetime.strptime(target_date[:10], "%Y-%m-%d")
-            # Explicitly bound the fetch to the target day using 00:00:00Z to 23:59:59Z
-            commenceTimeFrom = dt.strftime("%Y-%m-%dT00:00:00Z")
-            commenceTimeTo = dt.strftime("%Y-%m-%dT23:59:59Z")
+            et_start = et_tz.localize(datetime(dt.year, dt.month, dt.day, 0, 0, 0))
+            et_end = et_tz.localize(datetime(dt.year, dt.month, dt.day, 23, 59, 59))
+            commenceTimeFrom = et_start.astimezone(pytz.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+            commenceTimeTo = et_end.astimezone(pytz.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
             params["commenceTimeFrom"] = commenceTimeFrom
             params["commenceTimeTo"] = commenceTimeTo
-            logger.info(f"Set Odds API commenceTime bounds: {commenceTimeFrom} to {commenceTimeTo}")
+            logger.info(
+                "Set Odds API commenceTime bounds for ET game night %s: %s to %s",
+                target_date,
+                commenceTimeFrom,
+                commenceTimeTo,
+            )
         except Exception as e:
             logger.warning(f"Failed to parse date {target_date} for commenceTime bounds: {e}")
             if date:
@@ -128,7 +144,30 @@ class TheOddsAPIClient:
 
         # Filter out games that don't have any bookmakers
         filtered_data = [game for game in all_data if game.get("bookmakers")]
+
+        # Immediate temporal conversion at ingestion: canonical ET game-night key.
+        for game in filtered_data:
+            commence_time = game.get("commence_time")
+            if not commence_time:
+                continue
+            try:
+                est_dt = iso8601_to_est(commence_time)
+                game["game_date_est"] = est_dt.strftime("%Y-%m-%d")
+            except Exception as conv_err:
+                logger.warning("Failed ET conversion for commence_time=%s: %s", commence_time, conv_err)
+
         return filtered_data
+
+    def get_odds_for_sports(self, sport_keys: List[str], date: str = None) -> Dict[str, List[Dict]]:
+        """Fetch odds for an explicit list of sports using the same day-bounded UTC window."""
+        results: Dict[str, List[Dict]] = {}
+        for sport_key in sport_keys:
+            try:
+                results[sport_key] = self.get_odds(sport_key, date=date)
+            except Exception as exc:
+                logger.error("Failed to fetch odds for %s: %s", sport_key, exc)
+                results[sport_key] = []
+        return results
 
     def get_single_event_odds(self, sport_key: str, event_id: str):
         url = f"{self.BASE_URL}/sports/{sport_key}/events/{event_id}/odds"
