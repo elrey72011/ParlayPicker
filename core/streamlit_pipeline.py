@@ -20,7 +20,7 @@ from core.bankroll_simulator import simulate_bankroll
 from core.kelly_optimizer import add_kelly_bet_sizing
 from core.probability_engine import american_to_prob
 from core.schema.base_schema import ensure_base_schema
-from core.team_mapper import normalize_team_name
+from core.team_mapper import normalize_team_name, NBA_EXACT_MAP, NHL_EXACT_MAP
 
 warnings.filterwarnings("ignore", category=FutureWarning, module="pandas")
 
@@ -255,6 +255,35 @@ def _infer_missing_league_from_base(df: pd.DataFrame, base_df: pd.DataFrame) -> 
     )
     inferred = match_fill["league"].apply(lambda v: v[0] if isinstance(v, list) and len(v) == 1 else "")
     out.loc[missing_mask, "league"] = out.loc[missing_mask, "league"].where(out.loc[missing_mask, "league"].str.len().gt(0), inferred.values)
+    return out
+
+
+def _infer_missing_league_from_team_sets(df: pd.DataFrame, selected_sports: list[str] | None) -> pd.DataFrame:
+    """Fill missing league labels using known pro-team sets, defaulting remaining blanks to NCAAB when selected."""
+    out = df.copy()
+    if out.empty:
+        return out
+
+    out["league"] = _clean_text_placeholders(_string_series(out, "league")).str.upper().replace(LEAGUE_ALIASES)
+    missing_mask = out["league"].str.len().eq(0)
+    if not missing_mask.any():
+        return out
+
+    nba_teams = {normalize_team_name(v) for v in NBA_EXACT_MAP.values()}
+    nhl_teams = {normalize_team_name(v) for v in NHL_EXACT_MAP.values()}
+    home = _string_series(out, "home_team").map(normalize_team_name)
+    away = _string_series(out, "away_team").map(normalize_team_name)
+
+    nba_mask = missing_mask & (home.isin(nba_teams) | away.isin(nba_teams))
+    nhl_mask = missing_mask & (home.isin(nhl_teams) | away.isin(nhl_teams))
+    out.loc[nba_mask, "league"] = "NBA"
+    out.loc[nhl_mask & out["league"].str.len().eq(0), "league"] = "NHL"
+
+    selected = {str(s).upper() for s in (selected_sports or [])}
+    has_ncaab = bool(selected.intersection({"NCAAB", "NCAAM", "NCAA MEN'S BASKETBALL", "NCAA MENS BASKETBALL"}))
+    if has_ncaab:
+        out.loc[out["league"].str.len().eq(0), "league"] = "NCAAB"
+
     return out
 
 
@@ -888,6 +917,7 @@ def build_theover_bet_rows(
 
     base_ref = load_base_data()
     out = _infer_missing_league_from_base(out, base_ref)
+    out = _infer_missing_league_from_team_sets(out, selected_sports)
     out = _resolve_team_names_from_base(out, base_ref)
     out = _dedupe_inverted_matchups(out)
 
@@ -908,7 +938,10 @@ def build_theover_bet_rows(
         out["odds_american"] = pd.to_numeric(out.get("odds_american"), errors="coerce")
         if selected_sports:
             selected = {str(s).upper() for s in selected_sports}
-            out = out[_string_series(out, "league").isin(selected)].copy()
+            selected = {LEAGUE_ALIASES.get(s, s) for s in selected}
+            # Keep rows with missing league labels to avoid dropping valid NCAAB games before inference.
+            league_series = _string_series(out, "league").str.upper().replace(LEAGUE_ALIASES)
+            out = out[league_series.isin(selected) | league_series.str.len().eq(0)].copy()
         out["game_key"] = _mk_game_key(out)
         out = _apply_analysis_calculations(out)
 
