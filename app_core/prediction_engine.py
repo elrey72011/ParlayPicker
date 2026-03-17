@@ -137,6 +137,35 @@ def _build_fallback_features_from_row(row_dict: Dict[str, Any]) -> Dict[str, flo
             continue
 
     return features
+
+
+def _clean_team_for_matchup(value: Any) -> str:
+    team = str(value or "").lower()
+    team = "".join(ch for ch in team if ch.isalnum())
+    if team in {"sacremento", "sacrementokings", "sacramentokings"}:
+        return "sacramento"
+    return team
+
+
+def _build_matchup_id(home: Any, away: Any) -> str:
+    home_clean = _clean_team_for_matchup(home)
+    away_clean = _clean_team_for_matchup(away)
+    if not home_clean and not away_clean:
+        return ""
+    a, b = sorted([home_clean, away_clean])
+    return f"{a}|{b}"
+
+
+def _to_et_game_date(series: pd.Series) -> pd.Series:
+    dt_utc = pd.to_datetime(series, errors="coerce", utc=True)
+    dt_et = dt_utc.dt.tz_convert("America/New_York")
+    return dt_et.dt.floor("D").dt.strftime("%Y-%m-%d")
+
+
+def _series_or_default(df: pd.DataFrame, col: str, default: str = "") -> pd.Series:
+    if col in df.columns:
+        return df[col]
+    return pd.Series([default] * len(df), index=df.index)
 def match_team_name(target: str, candidates: List[str], threshold: float = 80.0) -> Optional[str]:
     """
     Wrapper for TeamNameMatcher to support rapidfuzz/fuzzy matching.
@@ -481,6 +510,18 @@ class PredictionEngine:
             logger.error(f"Failed to validate historical date limits: {e}")
 
         try:
+            working_df = df.copy()
+            if "league" not in working_df.columns:
+                working_df["league"] = ""
+            working_df["league"] = working_df["league"].astype(str).str.upper()
+            home_series = _series_or_default(working_df, "home_team", "")
+            away_series = _series_or_default(working_df, "away_team", "")
+            working_df["matchup_id"] = [
+                _build_matchup_id(h, a)
+                for h, a in zip(home_series, away_series)
+            ]
+            working_df["game_date"] = _to_et_game_date(_series_or_default(working_df, "game_date", ""))
+
             # Formula-based fallback if model is unavailable.
             if self.use_fallback:
                 logger.info("[MODEL_ROUTING] Triggered Statistical Fallback in Predict Batch")
@@ -488,14 +529,14 @@ class PredictionEngine:
                     f"Predict Batch: Model unavailable, generating statistical fallback probabilities for {len(df)} rows."
                 )
                 fallback_probs: List[float] = []
-                for _, row in df.iterrows():
+                for _, row in working_df.iterrows():
                     features = _build_fallback_features_from_row(row.to_dict())
                     fallback_probs.append(float(self._calculate_statistical_prob(features)))
                 return fallback_probs
 
             # Select required columns while preserving missing columns as NaN.
             # This allows pre-inference validation to detect schedule/feature join failures.
-            raw_inference_data = df.reindex(columns=VERTEX_FEATURE_COLUMNS).copy()
+            raw_inference_data = working_df.reindex(columns=VERTEX_FEATURE_COLUMNS).copy()
             raw_numeric = raw_inference_data.apply(pd.to_numeric, errors='coerce')
 
             # Merge Hardening: use sanitized team names for "Stale Feature Fallback"
@@ -510,7 +551,6 @@ class PredictionEngine:
                     from config import DATA_DIR
                     master_file = DATA_DIR / 'master_all_sports.csv'
                     if master_file.exists():
-                        import re as regex
                         # Load historical features
                         hist_df = pd.read_csv(master_file)
                         if "commence_time" in hist_df.columns:
@@ -520,24 +560,26 @@ class PredictionEngine:
 
                             # Clean team names in hist_df
                             if "home_team" in hist_df.columns and "away_team" in hist_df.columns:
-                                hist_df["home_clean"] = hist_df["home_team"].astype(str).str.lower().apply(lambda x: regex.sub(r'[^a-z0-9]', '', x))
-                                hist_df["away_clean"] = hist_df["away_team"].astype(str).str.lower().apply(lambda x: regex.sub(r'[^a-z0-9]', '', x))
-                                hist_df["league_norm"] = hist_df["league"].astype(str).str.upper() if "league" in hist_df.columns else ""
+                                hist_df["matchup_id"] = [
+                                    _build_matchup_id(h, a)
+                                    for h, a in zip(hist_df["home_team"], hist_df["away_team"])
+                                ]
+                                hist_df["league_norm"] = hist_df.get("league", "").astype(str).str.upper() if "league" in hist_df.columns else ""
+                                hist_df["game_date"] = _to_et_game_date(hist_df["commence_time"])
 
                                 # Process each predominantly empty row
                                 for idx in df.index:
                                     if row_nan_ratio[idx] > 0.5:
-                                        row_home = regex.sub(r'[^a-z0-9]', '', str(df.at[idx, "home_team"]).lower()) if "home_team" in df.columns else ""
-                                        row_away = regex.sub(r'[^a-z0-9]', '', str(df.at[idx, "away_team"]).lower()) if "away_team" in df.columns else ""
-                                        row_league = str(df.at[idx, "league"]).upper() if "league" in df.columns else ""
+                                        row_matchup = str(working_df.at[idx, "matchup_id"]) if "matchup_id" in working_df.columns else ""
+                                        row_league = str(working_df.at[idx, "league"]).upper() if "league" in working_df.columns else ""
+                                        row_game_date = str(working_df.at[idx, "game_date"]) if "game_date" in working_df.columns else ""
 
-                                        if row_home and row_away:
-                                            match = hist_df[
-                                                (hist_df["home_clean"] == row_home) &
-                                                (hist_df["away_clean"] == row_away)
-                                            ]
+                                        if row_matchup:
+                                            match = hist_df[hist_df["matchup_id"] == row_matchup]
                                             if row_league and "league" in hist_df.columns:
                                                 match = match[match["league_norm"] == row_league]
+                                            if row_game_date:
+                                                match = match[match["game_date"] == row_game_date]
                                             # Find most recent match for this exact matchup (direction matters for home/away features)
                                             match = match.sort_values("commence_time", ascending=False)
 
