@@ -105,7 +105,10 @@ def _compose_model_probability(out: pd.DataFrame) -> tuple[pd.Series, pd.Series,
     """
     ml = _safe_numeric_series(out, "ml_probability")
     theover = _safe_numeric_series(out, "theover_probability")
-    theover = theover.where(theover <= 1, theover / 100.0)
+
+    # Apply robust normalization if data format shifts, convert to probability [0, 1]
+    # The previous logic only divided by 100 if theover > 1.
+    theover = theover.where(theover <= 1.0, theover / 100.0)
 
     market_type = _safe_str_series(out, "market_type").str.lower()
 
@@ -346,7 +349,7 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
     )
 
     parlay_columns = ["parlay_type", "parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "kelly_fraction_1_8", "legs", "leg1_game", "leg2_game", "leg3_game", "leg4_game", "leg5_game"]
-    empty_per_leg = {f"parlays_{lc}_df": pd.DataFrame(columns=parlay_columns) for lc in (2, 3, 4, 5)}
+    empty_per_leg = {f"parlays_{lc}_df": pd.DataFrame(columns=parlay_columns) for lc in (2, 3)}
 
     empty_state: dict = {
         "analysis_df": pd.DataFrame(),
@@ -504,9 +507,9 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
     diagnostics["positive_ev_picks"] = int((_safe_numeric_series(analysis_df, "expected_value", 0.0) > 0).sum()) if not analysis_df.empty else 0
     diagnostics["best_pick_nonempty_rows"] = int(_safe_str_series(best_picks_df, "best_pick").str.strip().str.len().gt(0).sum()) if not best_picks_df.empty else 0
 
-    parlays_df = generate_parlays(best_picks_df)
+    parlays_df = generate_parlays(best_picks_df, max_legs=3)
     per_leg: dict = {}
-    for lc in (2, 3, 4, 5):
+    for lc in (2, 3):
         parlay_slice = parlays_df[_safe_numeric_series(parlays_df, "legs").eq(lc)].copy()
         per_leg[f"parlays_{lc}_df"] = parlay_slice[parlay_columns] if not parlay_slice.empty else pd.DataFrame(columns=parlay_columns)
 
@@ -587,7 +590,7 @@ def main() -> None:
     }
     for key, default in stable_defaults.items():
         st.session_state.setdefault(key, default)
-    for leg_count in (2, 3, 4, 5):
+    for leg_count in (2, 3):
         st.session_state.setdefault(f"parlays_{leg_count}_df", pd.DataFrame())
 
     controls = render_sidebar()
