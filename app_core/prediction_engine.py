@@ -499,7 +499,7 @@ class PredictionEngine:
         if df is None or df.empty:
             return []
 
-        # Prevent inference on dates > 14 days from historical matrix max date
+        # Prevent inference on dates > 60 days from historical matrix max date
         try:
             if "game_date" in df.columns:
                 from config import DATA_DIR
@@ -509,8 +509,8 @@ class PredictionEngine:
                     max_hist_date = pd.to_datetime(master_df["commence_time"]).max()
 
                     df_dates = pd.to_datetime(df["game_date"], errors="coerce")
-                    if (df_dates > max_hist_date + pd.Timedelta(days=14)).any():
-                        logger.warning("Predict Batch: Some game dates exceed 14 days beyond historical data limits. Rejecting ML inference and forcing statistical fallback to prevent feature space collapse.")
+                    if (df_dates > max_hist_date + pd.Timedelta(days=60)).any():
+                        logger.warning("Predict Batch: Some game dates exceed 60 days beyond historical data limits. Rejecting ML inference and forcing statistical fallback to prevent feature space collapse.")
                         self.use_fallback = True
         except Exception as e:
             logger.error(f"Failed to validate historical date limits: {e}")
