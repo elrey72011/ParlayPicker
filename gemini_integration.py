@@ -146,11 +146,15 @@ class GeminiAnalyzer:
             Dict with analysis results including probabilities and recommendations
         """
         context_data = context_data or {}
-        
+        from datetime import datetime, timezone
+        current_utc_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
         prompt = (
             "You are a reviewer. The pick is already chosen elsewhere. "
             "Provide ONLY confidence_explanation and risk_notes in short text. "
             "Do NOT output probabilities, percentages, or pick a side. "
+            f"Operational baseline: today's UTC date is {current_utc_date}. "
+            "Treat the provided commence time relative to this baseline and do not describe it as a distant-future date unless it is materially far beyond today. "
             f"Context: home={home_team}, away={away_team}, sport={sport_key}, commence={commence_time}. "
             f"Moneyline={best_moneyline}, spread={best_spread}, extra={json.dumps(context_data or {}, default=str)}. "
             'Return JSON: {"confidence_explanation": "...", "risk_notes": "..."}'
