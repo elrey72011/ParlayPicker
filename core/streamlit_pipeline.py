@@ -1479,7 +1479,11 @@ def run_analysis_pipeline(
         live_odds_df["league"] = _string_series(live_odds_df, "league").str.upper().replace(LEAGUE_ALIASES)
         live_odds_df["home_team"] = _string_series(live_odds_df, "home_team").map(normalize_team_name)
         live_odds_df["away_team"] = _string_series(live_odds_df, "away_team").map(normalize_team_name)
-        live_odds_df["game_date"] = _utc_day_key(_game_dates(live_odds_df))
+        # The Odds API ingestion already writes ET-floored game_date; preserve that first.
+        live_day = pd.to_datetime(live_odds_df.get("game_date"), errors="coerce")
+        live_odds_df["game_date"] = _utc_day_key(live_day)
+        fallback_day = _utc_day_key(_game_dates(live_odds_df))
+        live_odds_df["game_date"] = live_odds_df["game_date"].fillna(fallback_day)
         live_odds_df["matchup_id"] = _matchup_id(live_odds_df)
 
     bet_rows["game_date"] = _game_dates(bet_rows)
@@ -1745,7 +1749,7 @@ def run_analysis_pipeline(
         live_odds_df["away_team_lower"] = clean_team_name(live_odds_df["away_team"])
         live_odds_df["matchup_key"] = _canonical_matchup_teams_key(live_odds_df)
         live_odds_df["matchup_id"] = _matchup_id(live_odds_df)
-        live_odds_df["merge_date_utc"] = _utc_day_key(_game_dates(live_odds_df))
+        live_odds_df["merge_date_utc"] = _utc_day_key(pd.to_datetime(live_odds_df.get("game_date"), errors="coerce", utc=True))
         if "home_team_lower" not in merged.columns:
             merged["home_team_lower"] = clean_team_name(merged["home_team"])
             merged["away_team_lower"] = clean_team_name(merged["away_team"])
@@ -1754,7 +1758,7 @@ def run_analysis_pipeline(
         if "matchup_id" not in merged.columns:
             merged["matchup_id"] = _matchup_id(merged)
         if "merge_date_utc" not in merged.columns:
-            merged["merge_date_utc"] = _utc_day_key(_game_dates(merged))
+            merged["merge_date_utc"] = _utc_day_key(pd.to_datetime(merged.get("game_date"), errors="coerce", utc=True))
 
         # Phase 1: Entity Resolution Validation Layer
         # Validate live odds against current pipeline matchups first (uploaded/analysis rows),

@@ -1104,6 +1104,10 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 # Recalculate simple edge without fees for display
                 out.at[idx, "edge"] = p_win - p_contract
 
+    # NA-safe columns to prevent ambiguous boolean evaluation downstream.
+    out["kalshi_probability"] = pd.to_numeric(out.get("kalshi_probability"), errors="coerce").fillna(0.0)
+    out["is_matched"] = out.get("kalshi_match_status", "").astype(str).eq("matched").fillna(False).astype(bool)
+
     return out
 
 
