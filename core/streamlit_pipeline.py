@@ -1776,10 +1776,14 @@ def run_analysis_pipeline(
         # Strip '+' prefix if exists, handle errors safely
         return pd.to_numeric(series.astype(str).str.replace('+', '', regex=False), errors='coerce')
 
-    cond_spread_home = (m_type == "spread_home") & merged["novig_home_price"].notna()
-    cond_spread_away = (m_type == "spread_away") & merged["novig_away_price"].notna()
-    cond_total_over = (m_type == "total_over") & merged["novig_over_price"].notna()
-    cond_total_under = (m_type == "total_under") & merged["novig_under_price"].notna()
+    def _bool_mask(series: pd.Series) -> np.ndarray:
+        """Return a numpy bool mask without NA values (required by np.select)."""
+        return series.fillna(False).astype(bool).to_numpy()
+
+    cond_spread_home = _bool_mask((m_type == "spread_home") & merged["novig_home_price"].notna())
+    cond_spread_away = _bool_mask((m_type == "spread_away") & merged["novig_away_price"].notna())
+    cond_total_over = _bool_mask((m_type == "total_over") & merged["novig_over_price"].notna())
+    cond_total_under = _bool_mask((m_type == "total_under") & merged["novig_under_price"].notna())
 
     # Coalesce odds_american
     merged["odds_american"] = np.select(
