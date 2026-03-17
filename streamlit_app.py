@@ -780,12 +780,9 @@ def main() -> None:
             best_picks_export = export_prep_df[final_export_cols].copy()
 
             # Phase 5: Output Sanitization
-            # Permanently enforce the edge > 0.02 filter for the final exported CSV to prevent
-            # zero-edge outputs and negative expected value noise from cluttering the dataset.
             if "edge" in best_picks_export.columns:
-                # TODO: Revert edge filter back to > 0.02 once live zero-vig Novig API data is restored.
-                # best_picks_export = best_picks_export[pd.to_numeric(best_picks_export["edge"], errors="coerce") > -0.10].copy()
-                pass
+                # Enforcing a > 0.0 threshold to drop negative EV/Edge picks from the final export
+                best_picks_export = best_picks_export[pd.to_numeric(best_picks_export["edge"], errors="coerce") > 0.0].copy()
 
             # Apply explicit secondary sorts before export as requested
             sort_cols = ["expected_value", "Commence (Local)", "league", "Home"]

@@ -270,6 +270,13 @@ class PredictionEngine:
                     loaded_model, framework = diagnose_model_type(model_path)
                     logger.info(f"[MODEL_FRAMEWORK] Detected framework: {framework}")
 
+                    if "meta" in str(model_path).lower():
+                        logger.info(f"[MODEL_ROUTING] Loaded Meta Model from: {model_path}")
+                    elif "stub" in str(model_path).lower() or "model.json" in str(model_path).lower():
+                        logger.info(f"[MODEL_ROUTING] Loaded Stub Model from: {model_path}")
+                    else:
+                        logger.info(f"[MODEL_ROUTING] Loaded Trained Model from: {model_path}")
+
                     if framework == "json":
                         # If it's JSON, load into XGBoost Booster
                         self.model.load_model(model_path)
@@ -361,12 +368,15 @@ class PredictionEngine:
             logger.debug(f"[MODEL_DEBUG] Input features: {features}")
 
             if self.use_fallback:
+                logger.info("[MODEL_ROUTING] Triggered Statistical Fallback")
                 fallback_prob = self._calculate_statistical_prob(features)
                 logger.debug(
                     "Model fallback triggered. Returning statistical fallback probability %.4f",
                     fallback_prob,
                 )
                 return {"prob": float(fallback_prob), "note": "Statistical Fallback"}
+
+            logger.info("[MODEL_ROUTING] Triggered XGBoost Inference")
 
             # Ensure input is 2D (batch of 1)
             # Create DataFrame safely
@@ -508,6 +518,7 @@ class PredictionEngine:
         try:
             # Formula-based fallback if model is unavailable.
             if self.use_fallback:
+                logger.info("[MODEL_ROUTING] Triggered Statistical Fallback in Predict Batch")
                 logger.info(
                     f"Predict Batch: Model unavailable, generating statistical fallback probabilities for {len(df)} rows."
                 )
