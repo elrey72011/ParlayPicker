@@ -111,6 +111,11 @@ NCAAB_EXTRA_MAP = {
 }
 
 TEAM_MAP = {
+    "yale": "Yale",
+    "yale bulldogs": "Yale",
+    "george mason": "George Mason",
+    "george mason patriots": "George Mason",
+    "gmu": "George Mason",
     "alabama am": "alabama a&m",
     "alabama crimson tide": "Alabama",
     "anaheim ducks": "Anaheim",
