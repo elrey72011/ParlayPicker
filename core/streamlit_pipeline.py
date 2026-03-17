@@ -1248,6 +1248,9 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
         "NBA": "basketball_nba",
         "NHL": "icehockey_nhl",
         "NCAAB": "basketball_ncaab",
+        "NCAAM": "basketball_ncaab",
+        "NCAA MEN'S BASKETBALL": "basketball_ncaab",
+        "NCAA MENS BASKETBALL": "basketball_ncaab",
     }
 
     # Default to the full target slate (NBA/NHL/NCAAB) instead of a generic upcoming feed.
@@ -1288,8 +1291,11 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
         return False
 
     def fetch_sport(sport: str) -> list:
-        sport_key = SPORT_KEYS.get(sport.upper())
+        sport_norm = str(sport or "").upper().strip()
+        sport_norm = LEAGUE_ALIASES.get(sport_norm, sport_norm)
+        sport_key = SPORT_KEYS.get(sport_norm)
         if not sport_key:
+            logger.warning("Skipping unsupported sport key request: %s", sport)
             return []
         try:
             # Use caller-provided snapshot date when present; otherwise fetch live upcoming board.

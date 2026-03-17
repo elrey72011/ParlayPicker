@@ -53,14 +53,21 @@ class TheOddsAPIClient:
             target_date = now_est.strftime("%Y-%m-%d")
 
         try:
-            # Assume date is YYYY-MM-DD
+            # Treat target_date as ET game-night date, then convert ET day boundaries to UTC.
+            et_tz = pytz.timezone("America/New_York")
             dt = datetime.strptime(target_date[:10], "%Y-%m-%d")
-            # Explicitly bound the fetch to the target day using 00:00:00Z to 23:59:59Z
-            commenceTimeFrom = dt.strftime("%Y-%m-%dT00:00:00Z")
-            commenceTimeTo = dt.strftime("%Y-%m-%dT23:59:59Z")
+            et_start = et_tz.localize(datetime(dt.year, dt.month, dt.day, 0, 0, 0))
+            et_end = et_tz.localize(datetime(dt.year, dt.month, dt.day, 23, 59, 59))
+            commenceTimeFrom = et_start.astimezone(pytz.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+            commenceTimeTo = et_end.astimezone(pytz.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
             params["commenceTimeFrom"] = commenceTimeFrom
             params["commenceTimeTo"] = commenceTimeTo
-            logger.info(f"Set Odds API commenceTime bounds: {commenceTimeFrom} to {commenceTimeTo}")
+            logger.info(
+                "Set Odds API commenceTime bounds for ET game night %s: %s to %s",
+                target_date,
+                commenceTimeFrom,
+                commenceTimeTo,
+            )
         except Exception as e:
             logger.warning(f"Failed to parse date {target_date} for commenceTime bounds: {e}")
             if date:
