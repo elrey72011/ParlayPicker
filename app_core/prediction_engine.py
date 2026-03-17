@@ -234,14 +234,15 @@ class PredictionEngine:
         self.use_fallback = True
 
         root_dir = Path(__file__).resolve().parents[1]
+        execution_root = Path(os.path.abspath(os.getcwd()))
         candidate_paths = []
         if model_path:
-            candidate_paths.append(Path(model_path))
+            candidate_paths.append(Path(os.path.abspath(str(model_path))))
         candidate_paths.extend([
-            root_dir / "models" / "model.json",
-            Path.cwd() / "models" / "model.json",
-            Path.cwd() / "model.json",
-            root_dir / "models" / "xgboost_model.json",
+            Path(os.path.abspath(str(execution_root / "models" / "model.json"))),
+            Path(os.path.abspath(str(execution_root / "model.json"))),
+            Path(os.path.abspath(str(root_dir / "models" / "model.json"))),
+            Path(os.path.abspath(str(root_dir / "models" / "xgboost_model.json"))),
         ])
 
         resolved_model_path: Path | None = None

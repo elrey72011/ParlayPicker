@@ -3,8 +3,17 @@ import logging
 from datetime import datetime, time
 import pytz
 from typing import List, Dict
+from dateutil import parser
+from dateutil.tz import gettz
 
 logger = logging.getLogger(__name__)
+
+
+def iso8601_to_est(iso_string: str):
+    """Converts ISO 8601 UTC string to Eastern Time aware datetime."""
+    dt_object_utc = parser.parse(str(iso_string))
+    eastern_tz = gettz("America/New_York")
+    return dt_object_utc.astimezone(eastern_tz)
 
 class OddsAPIAuthError(Exception):
     """Exception raised for authentication errors with The Odds API (e.g., 401, 403 or missing key)."""
@@ -128,6 +137,18 @@ class TheOddsAPIClient:
 
         # Filter out games that don't have any bookmakers
         filtered_data = [game for game in all_data if game.get("bookmakers")]
+
+        # Immediate temporal conversion at ingestion: canonical ET game-night key.
+        for game in filtered_data:
+            commence_time = game.get("commence_time")
+            if not commence_time:
+                continue
+            try:
+                est_dt = iso8601_to_est(commence_time)
+                game["game_date_est"] = est_dt.strftime("%Y-%m-%d")
+            except Exception as conv_err:
+                logger.warning("Failed ET conversion for commence_time=%s: %s", commence_time, conv_err)
+
         return filtered_data
 
     def get_odds_for_sports(self, sport_keys: List[str], date: str = None) -> Dict[str, List[Dict]]:

@@ -61,7 +61,7 @@ except Exception as e:
     PredictionEngine = None
 
 VALID_MARKETS = {"spread_home", "spread_away", "total_over", "total_under"}
-DATE_ALIASES = ["game_date", "commence_time", "start_time", "time", "date", "event_date"]
+DATE_ALIASES = ["game_date", "game_date_est", "commence_time", "start_time", "time", "date", "event_date"]
 LEAGUE_ALIASES = {"NCAAM": "NCAAB", "NCAA MEN'S BASKETBALL": "NCAAB", "NCAA MENS BASKETBALL": "NCAAB"}
 
 BEST_PICK_COLUMNS = [
@@ -379,6 +379,11 @@ def _utc_day_key(series: pd.Series) -> pd.Series:
             ts = pd.Timestamp(value)
         except Exception:
             return pd.NaT
+
+        if ts.tzinfo is not None and ts.hour == 0 and ts.minute == 0 and ts.second == 0 and ts.nanosecond == 0:
+            # Date-only values parsed with utc=True should remain on their nominal slate day.
+            ts_utc = ts.tz_convert("UTC")
+            return pd.Timestamp(year=ts_utc.year, month=ts_utc.month, day=ts_utc.day, tz="UTC")
 
         if ts.tzinfo is None:
             # Naive timestamps are assumed local ET schedule times.
@@ -1359,6 +1364,7 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
                 'raw_home_team': game.get('home_team'),
                 'raw_away_team': game.get('away_team'),
                 'commence_time': commence_time_str,
+                'game_date_est': game.get('game_date_est'),
                 # Add UUID constraint for rigorous entity resolution (Phase 1)
                 'uuid': game_id,
             }
