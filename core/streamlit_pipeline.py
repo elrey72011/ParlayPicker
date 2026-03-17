@@ -663,13 +663,19 @@ def american_to_decimal(odds: Any) -> float:
 
 
 def _format_best_pick(row: pd.Series) -> str:
-    market = str(row.get("market_type") or "")
+    def _safe_text(val: Any) -> str:
+        return "" if pd.isna(val) else str(val)
+
+    market = _safe_text(row.get("market_type")).strip().lower()
+    home_team = _safe_text(row.get("home_team"))
+    away_team = _safe_text(row.get("away_team"))
+
     if market == "spread_home":
         line = pd.to_numeric(row.get("spread_line"), errors="coerce")
-        return f"{row.get('home_team', '')} {line:+.1f}" if pd.notna(line) else str(row.get("home_team") or "")
+        return f"{home_team} {line:+.1f}" if pd.notna(line) else home_team
     if market == "spread_away":
         line = pd.to_numeric(row.get("spread_line"), errors="coerce")
-        return f"{row.get('away_team', '')} {abs(line):+.1f}" if pd.notna(line) else str(row.get("away_team") or "")
+        return f"{away_team} {abs(line):+.1f}" if pd.notna(line) else away_team
     if market == "total_over":
         line = pd.to_numeric(row.get("total_line"), errors="coerce")
         return f"Over {line:.1f}" if pd.notna(line) else "Over"
