@@ -1773,7 +1773,15 @@ def run_analysis_pipeline(
                 logger.warning("Live odds validation against known matchups removed all rows; keeping original live_odds_df to avoid false fallbacks.")
 
         # Avoid duplicating columns during merge
-        live_merge_cols = [c for c in live_odds_df.columns if c not in ["game_id", "commence_time", "raw_home_team", "raw_away_team", "home_team", "away_team", "home_team_lower", "away_team_lower"]]
+        live_merge_cols = [
+            c for c in live_odds_df.columns
+            if c not in [
+                "game_id", "commence_time", "raw_home_team", "raw_away_team",
+                "home_team", "away_team", "home_team_lower", "away_team_lower",
+                # Keep pipeline identity columns stable; avoid league_x/league_y suffix splits.
+                "league", "game_date", "game_date_est", "matchup_key",
+            ]
+        ]
         merged = merged.merge(
             live_odds_df[live_merge_cols].drop_duplicates(["matchup_id", "merge_date_utc"]),
             on=["matchup_id", "merge_date_utc"],
@@ -2096,7 +2104,9 @@ def run_analysis_pipeline(
     # Phase 3: NHL Statistical Recalibration
     # Apply a fractional discount (0.80) to the Expected Value for NHL Totals
     # to account for the bimodal distribution of late-game empty-net scenarios.
-    nhl_totals_mask = (merged["league"].str.upper() == "NHL") & (merged["market_type"].str.contains("total", case=False, na=False))
+    if "league" not in merged.columns:
+        merged["league"] = ""
+    nhl_totals_mask = (_string_series(merged, "league").str.upper() == "NHL") & (_string_series(merged, "market_type").str.contains("total", case=False, na=False))
     ev = ev.where(~nhl_totals_mask, ev * 0.80)
 
     merged["expected_value"] = ev
