@@ -154,10 +154,10 @@ class TheOddsAPIClient:
             if not commence_time:
                 continue
             try:
-                utc_ts = pd.to_datetime(commence_time, errors="coerce", utc=True)
-                if pd.isna(utc_ts):
+                est_ts = pd.Timestamp(iso8601_to_est(commence_time))
+                if pd.isna(est_ts):
                     continue
-                est_ts = utc_ts.tz_convert("America/New_York")
+                utc_ts = est_ts.tz_convert("UTC")
                 et_day = est_ts.floor("D")
 
                 game["commence_time_utc"] = utc_ts.isoformat()
