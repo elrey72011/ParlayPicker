@@ -510,8 +510,8 @@ class PredictionEngine:
 
                     df_dates = pd.to_datetime(df["game_date"], errors="coerce")
                     if (df_dates > max_hist_date + pd.Timedelta(days=60)).any():
-                        logger.warning("Predict Batch: Some game dates exceed 60 days beyond historical data limits. Rejecting ML inference and forcing statistical fallback to prevent feature space collapse.")
-                        self.use_fallback = True
+                        logger.warning("Predict Batch: Predicting on dates beyond historical data limits. Features may be stale.")
+                        # self.use_fallback = True  # Bypassed per user request
         except Exception as e:
             logger.error(f"Failed to validate historical date limits: {e}")
 
