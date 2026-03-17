@@ -1480,7 +1480,11 @@ def run_analysis_pipeline(
         live_odds_df["home_team"] = _string_series(live_odds_df, "home_team").map(normalize_team_name)
         live_odds_df["away_team"] = _string_series(live_odds_df, "away_team").map(normalize_team_name)
         # The Odds API ingestion already writes ET-floored game_date; preserve that first.
-        live_day = pd.to_datetime(live_odds_df.get("game_date"), errors="coerce")
+        live_day_raw = live_odds_df.get("game_date")
+        if live_day_raw is None:
+            live_day = pd.Series(dtype="datetime64[ns]")
+        else:
+            live_day = pd.to_datetime(live_day_raw, errors="coerce")
         live_odds_df["game_date"] = _utc_day_key(live_day)
         fallback_day = _utc_day_key(_game_dates(live_odds_df))
         live_odds_df["game_date"] = live_odds_df["game_date"].fillna(fallback_day)

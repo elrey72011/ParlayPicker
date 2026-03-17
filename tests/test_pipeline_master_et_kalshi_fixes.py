@@ -39,3 +39,40 @@ def test_kalshi_enrich_na_safe_output_columns(monkeypatch):
     assert "is_matched" in out.columns
     assert bool(out.loc[0, "is_matched"]) is False
     assert float(out.loc[0, "kalshi_probability"]) == 0.0
+
+def test_run_analysis_pipeline_handles_missing_live_game_date(monkeypatch):
+    import core.streamlit_pipeline as sp
+
+    monkeypatch.setattr(sp, "load_base_data", lambda: pd.DataFrame())
+    monkeypatch.setattr(
+        sp,
+        "build_theover_bet_rows",
+        lambda *args, **kwargs: pd.DataFrame(
+            {
+                "league": ["NBA"],
+                "home_team": ["Boston Celtics"],
+                "away_team": ["Los Angeles Lakers"],
+                "market_type": ["spread_home"],
+                "odds_american": [-110],
+                "theover_probability": [0.55],
+            }
+        ),
+    )
+    monkeypatch.setattr(sp, "is_stale_schedule", lambda *args, **kwargs: False)
+    monkeypatch.setattr(
+        sp,
+        "fetch_live_odds_dataframe",
+        lambda *args, **kwargs: pd.DataFrame(
+            {
+                "league": ["NBA"],
+                "home_team": ["Boston Celtics"],
+                "away_team": ["Los Angeles Lakers"],
+            }
+        ),
+    )
+
+    analysis_df, bet_rows_df, diagnostics = sp.run_analysis_pipeline(use_ml=False)
+
+    assert isinstance(analysis_df, pd.DataFrame)
+    assert isinstance(bet_rows_df, pd.DataFrame)
+    assert isinstance(diagnostics, dict)
