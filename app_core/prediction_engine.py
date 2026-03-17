@@ -157,9 +157,21 @@ def _build_matchup_id(home: Any, away: Any) -> str:
 
 
 def _to_et_game_date(series: pd.Series) -> pd.Series:
-    dt_utc = pd.to_datetime(series, errors="coerce", utc=True)
-    dt_et = dt_utc.dt.tz_convert("America/New_York")
-    return dt_et.dt.floor("D").dt.strftime("%Y-%m-%d")
+    raw = series.astype("string")
+    out = pd.Series([pd.NA] * len(series), index=series.index, dtype="string")
+
+    # Preserve canonical date-only values as-is (already ET day keys).
+    date_only_mask = raw.str.fullmatch(r"\d{4}-\d{2}-\d{2}", na=False)
+    out.loc[date_only_mask] = raw.loc[date_only_mask]
+
+    # Convert timestamp-like values from UTC -> ET day key.
+    ts_mask = ~date_only_mask
+    if ts_mask.any():
+        dt_utc = pd.to_datetime(raw.loc[ts_mask], errors="coerce", utc=True)
+        dt_et = dt_utc.dt.tz_convert("America/New_York")
+        out.loc[ts_mask] = dt_et.dt.floor("D").dt.strftime("%Y-%m-%d")
+
+    return out
 
 
 def _series_or_default(df: pd.DataFrame, col: str, default: str = "") -> pd.Series:

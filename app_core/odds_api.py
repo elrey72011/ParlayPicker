@@ -11,8 +11,12 @@ logger = logging.getLogger(__name__)
 
 
 def iso8601_to_est(iso_string: str):
-    """Converts ISO 8601 UTC string to Eastern Time aware datetime."""
+    """Converts ISO 8601 string to Eastern Time aware datetime via explicit UTC normalization."""
     dt_object_utc = parser.parse(str(iso_string))
+    if dt_object_utc.tzinfo is None:
+        dt_object_utc = dt_object_utc.replace(tzinfo=pytz.UTC)
+    else:
+        dt_object_utc = dt_object_utc.astimezone(pytz.UTC)
     eastern_tz = gettz("America/New_York")
     return dt_object_utc.astimezone(eastern_tz)
 
@@ -150,10 +154,15 @@ class TheOddsAPIClient:
             if not commence_time:
                 continue
             try:
-                est_dt = iso8601_to_est(commence_time)
-                est_ts = pd.Timestamp(est_dt)
+                utc_ts = pd.to_datetime(commence_time, errors="coerce", utc=True)
+                if pd.isna(utc_ts):
+                    continue
+                est_ts = utc_ts.tz_convert("America/New_York")
+                et_day = est_ts.floor("D")
+
+                game["commence_time_utc"] = utc_ts.isoformat()
                 game["commence_time_est"] = est_ts.isoformat()
-                game["game_date"] = est_ts.floor("D").strftime("%Y-%m-%d")
+                game["game_date"] = et_day.strftime("%Y-%m-%d")
                 game["game_date_est"] = game["game_date"]
             except Exception as conv_err:
                 logger.warning("Failed ET conversion for commence_time=%s: %s", commence_time, conv_err)
