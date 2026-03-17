@@ -780,8 +780,12 @@ def main() -> None:
             best_picks_export = export_prep_df[final_export_cols].copy()
 
             # Phase 5: Output Sanitization
-            if "edge" in best_picks_export.columns:
+            if "edge" in best_picks_export.columns and "expected_value" in best_picks_export.columns:
                 # Enforcing a > 0.0 threshold to drop negative EV/Edge picks from the final export
+                mask_edge = pd.to_numeric(best_picks_export["edge"], errors="coerce") > 0.0
+                mask_ev = pd.to_numeric(best_picks_export["expected_value"], errors="coerce") > 0.0
+                best_picks_export = best_picks_export[mask_edge & mask_ev].copy()
+            elif "edge" in best_picks_export.columns:
                 best_picks_export = best_picks_export[pd.to_numeric(best_picks_export["edge"], errors="coerce") > 0.0].copy()
 
             # Apply explicit secondary sorts before export as requested
