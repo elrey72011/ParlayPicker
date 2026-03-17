@@ -292,6 +292,7 @@ def _shrink_to_market(model_prob: pd.Series, market_prob: pd.Series, model_weigh
 
 
 def _game_dates(df: pd.DataFrame) -> pd.Series:
+    """Parse known date columns as UTC-aware datetimes, preserving ISO-8601 timestamps."""
     if df is None or df.empty:
         return pd.Series(dtype="datetime64[ns, UTC]")
     out = pd.Series([pd.NaT] * len(df), index=df.index, dtype="datetime64[ns, UTC]")
@@ -356,30 +357,36 @@ def _date_join_key(series: pd.Series) -> pd.Series:
 
 
 def _utc_day_key(series: pd.Series) -> pd.Series:
-    """Return timezone-aware UTC day key for deterministic schedule merges.
-    Applies ET offset to UTC timestamps before flooring to 'D' to keep nightly slates together.
+    """Return ET-floored game-night day key stored as UTC midnight.
+
+    - ISO-8601 UTC timestamps (e.g. 2026-03-18T03:10:00Z) are converted to ET, then floored.
+    - Date-only strings (e.g. 2026-03-17) are treated as local slate dates and kept on that day.
     """
 
     def _to_utc_day(value: Any) -> pd.Timestamp:
         if pd.isna(value):
             return pd.NaT
+
+        # Preserve date-only inputs as-is to avoid shifting them to the prior ET day.
+        if isinstance(value, str) and len(value.strip()) == 10:
+            try:
+                d = pd.Timestamp(value.strip())
+                return pd.Timestamp(year=d.year, month=d.month, day=d.day, tz="UTC")
+            except Exception:
+                return pd.NaT
+
         try:
             ts = pd.Timestamp(value)
         except Exception:
             return pd.NaT
 
-        # Ensure input is UTC aware
         if ts.tzinfo is None:
-            ts = ts.tz_localize("UTC")
+            # Naive timestamps are assumed local ET schedule times.
+            ts = ts.tz_localize("America/New_York")
         else:
-            ts = ts.tz_convert("UTC")
+            ts = ts.tz_convert("America/New_York")
 
-        # Convert to US/Eastern timezone to correctly group late night games
-        est = ts.tz_convert('America/New_York')
-        floored = est.floor("D")
-
-        # We must return it as UTC timezone but shifted to represent the ET day start
-        # This allows 03:00 UTC (March 18) -> 11:00 PM ET (March 17) -> March 17 UTC Midnight
+        floored = ts.floor("D")
         return pd.Timestamp(year=floored.year, month=floored.month, day=floored.day, tz="UTC")
 
     return pd.to_datetime(series.apply(_to_utc_day), errors="coerce", utc=True)
@@ -1255,37 +1262,24 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
         )
 
     def _has_critical_novig_markets(game_payload: dict) -> bool:
+        """Require critical Novig prices for retry gating: home spread + over total."""
         home_name = normalize_team_name(game_payload.get("home_team"))
-        away_name = normalize_team_name(game_payload.get("away_team"))
         for book in game_payload.get("bookmakers", []):
             book_key = str(book.get("key", "") or "").lower()
             if "novig" not in book_key:
                 continue
-            spreads_ok = False
-            totals_ok = False
+            home_price = None
+            over_price = None
             for market in book.get("markets", []):
                 if market.get("key") == "spreads":
-                    home_price = None
-                    away_price = None
                     for outcome in market.get("outcomes", []):
-                        out_name = normalize_team_name(outcome.get("name"))
-                        if out_name == home_name:
+                        if normalize_team_name(outcome.get("name")) == home_name:
                             home_price = outcome.get("price")
-                        elif out_name == away_name:
-                            away_price = outcome.get("price")
-                    spreads_ok = home_price is not None and away_price is not None
                 elif market.get("key") == "totals":
-                    over_price = None
-                    under_price = None
                     for outcome in market.get("outcomes", []):
-                        out_name = str(outcome.get("name", "")).lower()
-                        if out_name == "over":
+                        if str(outcome.get("name", "")).lower() == "over":
                             over_price = outcome.get("price")
-                        elif out_name == "under":
-                            under_price = outcome.get("price")
-                    totals_ok = over_price is not None and under_price is not None
-            if spreads_ok and totals_ok:
-                return True
+            return pd.notna(home_price) and pd.notna(over_price)
         return False
 
     def fetch_sport(sport: str) -> list:

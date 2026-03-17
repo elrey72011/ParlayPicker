@@ -521,6 +521,7 @@ class PredictionEngine:
                             if "home_team" in hist_df.columns and "away_team" in hist_df.columns:
                                 hist_df["home_clean"] = hist_df["home_team"].astype(str).str.lower().apply(lambda x: regex.sub(r'[^a-z0-9]', '', x))
                                 hist_df["away_clean"] = hist_df["away_team"].astype(str).str.lower().apply(lambda x: regex.sub(r'[^a-z0-9]', '', x))
+                                hist_df["league_norm"] = hist_df["league"].astype(str).str.upper() if "league" in hist_df.columns else ""
 
                                 # Process each predominantly empty row
                                 for idx in df.index:
@@ -530,12 +531,14 @@ class PredictionEngine:
                                         row_league = str(df.at[idx, "league"]).upper() if "league" in df.columns else ""
 
                                         if row_home and row_away:
-                                            # Find most recent match for this exact matchup (direction matters for home/away features)
                                             match = hist_df[
-                                                (hist_df["league"].str.upper() == row_league) &
                                                 (hist_df["home_clean"] == row_home) &
                                                 (hist_df["away_clean"] == row_away)
-                                            ].sort_values("commence_time", ascending=False)
+                                            ]
+                                            if row_league and "league" in hist_df.columns:
+                                                match = match[match["league_norm"] == row_league]
+                                            # Find most recent match for this exact matchup (direction matters for home/away features)
+                                            match = match.sort_values("commence_time", ascending=False)
 
                                             if not match.empty:
                                                 latest = match.iloc[0]

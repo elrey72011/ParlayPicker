@@ -130,6 +130,17 @@ class TheOddsAPIClient:
         filtered_data = [game for game in all_data if game.get("bookmakers")]
         return filtered_data
 
+    def get_odds_for_sports(self, sport_keys: List[str], date: str = None) -> Dict[str, List[Dict]]:
+        """Fetch odds for an explicit list of sports using the same day-bounded UTC window."""
+        results: Dict[str, List[Dict]] = {}
+        for sport_key in sport_keys:
+            try:
+                results[sport_key] = self.get_odds(sport_key, date=date)
+            except Exception as exc:
+                logger.error("Failed to fetch odds for %s: %s", sport_key, exc)
+                results[sport_key] = []
+        return results
+
     def get_single_event_odds(self, sport_key: str, event_id: str):
         url = f"{self.BASE_URL}/sports/{sport_key}/events/{event_id}/odds"
         params = {
