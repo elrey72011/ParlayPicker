@@ -98,6 +98,15 @@ def _safe_numeric_series(df: pd.DataFrame, col: str, default: float | int | None
     return s
 
 
+def _et_floor_day(series: pd.Series) -> pd.Series:
+    """Normalize any datetime-like series to ET day boundaries for deterministic joins."""
+    return (
+        pd.to_datetime(series, errors="coerce", utc=True)
+        .dt.tz_convert("America/New_York")
+        .dt.floor("D")
+    )
+
+
 def _compose_model_probability(out: pd.DataFrame) -> tuple[pd.Series, pd.Series, pd.Series]:
     """Build model probability using market-aware fallback logic.
 
@@ -178,6 +187,8 @@ def _recompute_consensus_from_kalshi(df: pd.DataFrame, require_ml: bool = False)
             logger = logging.getLogger(__name__)
             logger.warning("⚠️ All odds are missing - using default 1.91 (-110 equivalent)")
             decimal_odds = pd.Series([1.91] * len(out), index=out.index)
+    # Row-level fallback: ensure every bet row has actionable decimal odds.
+    decimal_odds = pd.to_numeric(decimal_odds, errors="coerce").fillna(1.91)
 
     out["expected_value"] = blended * (decimal_odds - 1) - (1 - blended)
     out["edge"] = blended - market_prob
@@ -185,12 +196,12 @@ def _recompute_consensus_from_kalshi(df: pd.DataFrame, require_ml: bool = False)
     status = _safe_str_series(out, "kalshi_match_status").str.lower()
 
     out["consensus_agreement"] = "⚪ No Kalshi"
-    valid_kalshi = kalshi_prob.notna() & (kalshi_prob > 0.0)
+    valid_kalshi = (kalshi_prob.notna() & (kalshi_prob > 0.0)).fillna(False)
     gap = blended - kalshi_prob
 
     out.loc[valid_kalshi, "consensus_agreement"] = "⚖️ Neutral"
-    out.loc[valid_kalshi & gap.ge(0.03), "consensus_agreement"] = "✅ Agrees"
-    out.loc[valid_kalshi & gap.le(-0.03), "consensus_agreement"] = "❌ Disagrees"
+    out.loc[(valid_kalshi & gap.ge(0.03)).fillna(False), "consensus_agreement"] = "✅ Agrees"
+    out.loc[(valid_kalshi & gap.le(-0.03)).fillna(False), "consensus_agreement"] = "❌ Disagrees"
 
     # Debug log for probability blend verification (first 5 picks)
     if not out.empty and "market_probability" in out.columns:
@@ -238,8 +249,8 @@ def _merge_kalshi_into_analysis(analysis_df: pd.DataFrame, best_picks_df: pd.Dat
     right = best_picks_df[merge_keys + available_cols].drop_duplicates().copy()
 
     if "game_date" in merge_keys:
-        left["game_date"] = pd.to_datetime(left["game_date"], errors="coerce", utc=True)
-        right["game_date"] = pd.to_datetime(right["game_date"], errors="coerce", utc=True)
+        left["game_date"] = _et_floor_day(left["game_date"])
+        right["game_date"] = _et_floor_day(right["game_date"])
 
     # Create temporary sanitized columns for a bulletproof merge
     left['_merge_home'] = left['home_team'].astype(str).str.lower().str.replace(r'[^a-z0-9\s]', '', regex=True)
@@ -282,8 +293,8 @@ def _sync_ml_probabilities(analysis_df: pd.DataFrame, pipeline_best_picks_df: pd
     if right.empty:
         return analysis_df
 
-    left["game_date"] = pd.to_datetime(left["game_date"], errors="coerce", utc=True).dt.floor("D")
-    right["game_date"] = pd.to_datetime(right["game_date"], errors="coerce", utc=True).dt.floor("D")
+    left["game_date"] = _et_floor_day(left["game_date"])
+    right["game_date"] = _et_floor_day(right["game_date"])
 
     left["_merge_home"] = left["home_team"].astype(str).str.lower().str.replace(r"[^a-z0-9\s]", "", regex=True)
     left["_merge_away"] = left["away_team"].astype(str).str.lower().str.replace(r"[^a-z0-9\s]", "", regex=True)
@@ -402,7 +413,8 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
     # Update Kalshi Diagnostics
     # -----------------------------
     if "kalshi_match_status" in analysis_df.columns:
-        matched = analysis_df[analysis_df["kalshi_match_status"] == "matched"]
+        matched_mask = analysis_df["kalshi_match_status"].astype("string").str.lower().eq("matched").fillna(False)
+        matched = analysis_df[matched_mask]
         diagnostics["kalshi_matches"] = len(matched)
         diagnostics["kalshi_match_rate"] = len(matched) / max(len(analysis_df), 1)
         if "kalshi_line_diff" in analysis_df.columns and not matched.empty:

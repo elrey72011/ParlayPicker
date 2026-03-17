@@ -1520,9 +1520,10 @@ def run_analysis_pipeline(
         if not bet_rows.empty:
             bet_payload = bet_rows.drop(columns=[c for c in ["league", "home_team", "away_team"] if c in bet_rows.columns]).copy()
             # Enforce strict dtype/timezone parity on join keys before merge.
-            merged["game_date"] = pd.to_datetime(merged["game_date"], errors="coerce", utc=True).dt.floor("D")
-            bet_payload["game_date"] = pd.to_datetime(bet_payload["game_date"], errors="coerce", utc=True).dt.floor("D")
-            fallback_merge_day = pd.Timestamp.utcnow().floor("D")
+            # Standardize both sides of the merge to ET day boundaries before join.
+            merged["game_date"] = pd.to_datetime(merged["game_date"], errors="coerce", utc=True).dt.tz_convert("America/New_York").dt.floor("D")
+            bet_payload["game_date"] = pd.to_datetime(bet_payload["game_date"], errors="coerce", utc=True).dt.tz_convert("America/New_York").dt.floor("D")
+            fallback_merge_day = pd.Timestamp.now(tz="America/New_York").floor("D")
             merged["game_date"] = merged["game_date"].fillna(fallback_merge_day)
             bet_payload["game_date"] = bet_payload["game_date"].fillna(fallback_merge_day)
             matchup_date_lookup = merged[["matchup_id", "game_date"]].dropna(subset=["matchup_id", "game_date"]).drop_duplicates("matchup_id")
@@ -2003,6 +2004,7 @@ def run_analysis_pipeline(
         )
 
     merged["decimal_odds"] = merged["odds_american"].apply(american_to_decimal)
+    merged["decimal_odds"] = pd.to_numeric(merged["decimal_odds"], errors="coerce").fillna(1.91)
 
     # Phase 4: Implementation of Bayesian Shrinkage and Vig Removal
     # Calculate True Fair-Value Baseline Probability by removing sportsbook overround (vig).
