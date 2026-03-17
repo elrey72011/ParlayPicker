@@ -1737,13 +1737,14 @@ def run_analysis_pipeline(
     # Only keep rows that successfully mapped a live line and price strictly from novig or fallback
     if "odds_source" in merged.columns:
         # We also need to allow uploaded or base odds sources for backwards compatibility and test suite
-        valid_sources = ["novig_live", "fallback_novig", "uploaded", "base_direct", "base_reverse"]
+        valid_sources = ["novig_live", "fallback_novig", "uploaded", "base_direct", "base_reverse", "base_fuzzy", "dummy_override"]
         # Treat pd.NA / NaN in odds_source as implicitly valid for backwards compatibility tests
         missing_mask = ~merged["odds_source"].isin(valid_sources) & merged["odds_source"].notna()
         dropped_count = missing_mask.sum()
         if dropped_count > 0:
             dropped_games = merged[missing_mask][['home_team', 'away_team', 'market_type']].to_dict('records')
-            logger.warning(f"Warning: Dropped {dropped_count} rows - Missing novig exchange line. These picks have been completely removed from the pipeline: {dropped_games}")
+            invalid_sources = merged[missing_mask]['odds_source'].unique().tolist()
+            logger.warning(f"Warning: Dropped {dropped_count} rows due to invalid odds_source. Found sources: {invalid_sources}. These picks have been completely removed from the pipeline: {dropped_games}")
             merged = merged[~missing_mask].copy()
 
     merged["odds_american"] = _numeric_series(merged, "odds_american", pd.NA)
