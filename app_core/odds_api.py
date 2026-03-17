@@ -34,18 +34,28 @@ class TheOddsAPIClient:
             "dateFormat": "iso",
         }
 
-        if date:
-            try:
-                from datetime import datetime, timedelta
-                # Assume date is YYYY-MM-DD
-                dt = datetime.strptime(date[:10], "%Y-%m-%d")
-                commenceTimeFrom = dt.strftime("%Y-%m-%dT00:00:00Z")
-                commenceTimeTo = (dt + timedelta(days=1)).strftime("%Y-%m-%dT00:00:00Z")
-                params["commenceTimeFrom"] = commenceTimeFrom
-                params["commenceTimeTo"] = commenceTimeTo
-            except Exception as e:
-                logger.warning(f"Failed to parse date {date} for commenceTime bounds: {e}")
-                # Fallback to historical endpoint if requested date format doesn't match
+        from datetime import datetime, timedelta
+
+        # Determine target date for API windowing. If none provided, use today's local date.
+        target_date = date
+        if not target_date:
+            import pytz
+            now_est = datetime.now(pytz.timezone('America/New_York'))
+            target_date = now_est.strftime("%Y-%m-%d")
+
+        try:
+            # Assume date is YYYY-MM-DD
+            dt = datetime.strptime(target_date[:10], "%Y-%m-%d")
+            # Explicitly bound the fetch to the target day using 00:00:00Z to 23:59:59Z
+            commenceTimeFrom = dt.strftime("%Y-%m-%dT00:00:00Z")
+            commenceTimeTo = dt.strftime("%Y-%m-%dT23:59:59Z")
+            params["commenceTimeFrom"] = commenceTimeFrom
+            params["commenceTimeTo"] = commenceTimeTo
+            logger.info(f"Set Odds API commenceTime bounds: {commenceTimeFrom} to {commenceTimeTo}")
+        except Exception as e:
+            logger.warning(f"Failed to parse date {target_date} for commenceTime bounds: {e}")
+            if date:
+                # Fallback to historical endpoint if requested date format doesn't match and date was explicitly given
                 url = f"{self.BASE_URL}/historical/sports/{sport_key}/odds"
                 params["date"] = date
                 params.pop("commenceTimeFrom", None)
