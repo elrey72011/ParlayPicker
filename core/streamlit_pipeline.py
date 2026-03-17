@@ -429,6 +429,12 @@ def _utc_day_key(series: pd.Series) -> pd.Series:
     return pd.to_datetime(series.apply(_to_utc_day), errors="coerce", utc=True)
 
 
+def _et_day_string(series: pd.Series) -> pd.Series:
+    """Return a canonical ET day key (YYYY-MM-DD) for cross-source joins."""
+    day_utc = _utc_day_key(series)
+    return day_utc.dt.strftime("%Y-%m-%d").astype("string")
+
+
 def _force_utc_datetime(series: pd.Series) -> pd.Series:
     """Force a datetime series to timezone-aware UTC dtype."""
     return pd.to_datetime(series, errors="coerce", utc=True)
@@ -1421,6 +1427,7 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
                 'raw_home_team': game.get('home_team'),
                 'raw_away_team': game.get('away_team'),
                 'commence_time': commence_time_str,
+                'game_date': game.get('game_date'),
                 'game_date_est': game.get('game_date_est'),
                 # Add UUID constraint for rigorous entity resolution (Phase 1)
                 'uuid': game_id,
@@ -1479,26 +1486,19 @@ def run_analysis_pipeline(
         live_odds_df["league"] = _string_series(live_odds_df, "league").str.upper().replace(LEAGUE_ALIASES)
         live_odds_df["home_team"] = _string_series(live_odds_df, "home_team").map(normalize_team_name)
         live_odds_df["away_team"] = _string_series(live_odds_df, "away_team").map(normalize_team_name)
-        # The Odds API ingestion already writes ET-floored game_date; preserve that first.
-        live_day_raw = live_odds_df.get("game_date")
-        if live_day_raw is None:
-            live_day = pd.Series(dtype="datetime64[ns]")
-        else:
-            live_day = pd.to_datetime(live_day_raw, errors="coerce")
-        live_odds_df["game_date"] = _utc_day_key(live_day)
-        fallback_day = _utc_day_key(_game_dates(live_odds_df))
+        live_odds_df["game_date"] = _et_day_string(live_odds_df.get("game_date", pd.Series([pd.NA] * len(live_odds_df), index=live_odds_df.index)))
+        fallback_day = _et_day_string(_game_dates(live_odds_df))
         live_odds_df["game_date"] = live_odds_df["game_date"].fillna(fallback_day)
         live_odds_df["matchup_id"] = _matchup_id(live_odds_df)
 
-    bet_rows["game_date"] = _game_dates(bet_rows)
-    bet_rows["game_date"] = _utc_day_key(bet_rows["game_date"])
+    bet_rows["game_date"] = _et_day_string(_game_dates(bet_rows))
     bet_rows["matchup_id"] = _matchup_id(bet_rows)
     if not bet_rows.empty and not base_df.empty:
         base_dates = base_df.copy()
         base_dates["league"] = _string_series(base_dates, "league").str.upper().replace(LEAGUE_ALIASES)
         base_dates["home_team"] = _string_series(base_dates, "home_team").map(normalize_team_name)
         base_dates["away_team"] = _string_series(base_dates, "away_team").map(normalize_team_name)
-        base_dates["date"] = _utc_day_key(_game_dates(base_dates))
+        base_dates["date"] = _et_day_string(_game_dates(base_dates))
         base_dates["matchup_id"] = _matchup_id(base_dates)
 
         date_lookup = base_dates[["league", "matchup_id", "date"]].drop_duplicates(["league", "matchup_id"])
@@ -1555,7 +1555,7 @@ def run_analysis_pipeline(
         base_schedule["home_team"] = _string_series(base_schedule, "home_team").map(normalize_team_name)
         base_schedule["away_team"] = _string_series(base_schedule, "away_team").map(normalize_team_name)
         base_schedule["date"] = _force_utc_datetime(_game_dates(base_schedule))
-        base_schedule["merge_date_utc"] = _utc_day_key(base_schedule["date"])
+        base_schedule["merge_date_utc"] = _et_day_string(base_schedule["date"])
         # Backward-compat safety key: older merge paths referenced game_date_key directly.
         # Keep it aligned with merge_date_utc to prevent KeyError in mixed/stale runtime code paths.
         base_schedule["game_date_key"] = base_schedule["merge_date_utc"]
@@ -1575,7 +1575,7 @@ def run_analysis_pipeline(
         merged["away_team_lower"] = clean_team_name(merged["away_team"])
         merged["matchup_key"] = _canonical_matchup_teams_key(merged)
         merged["matchup_id"] = _matchup_id(merged)
-        merged["merge_date_utc"] = _utc_day_key(merged.get("game_date"))
+        merged["merge_date_utc"] = _et_day_string(merged.get("game_date"))
 
         # Primary join uses explicit UTC day keys and canonical matchup keys (order-insensitive).
         merged = merged.merge(
@@ -1753,7 +1753,7 @@ def run_analysis_pipeline(
         live_odds_df["away_team_lower"] = clean_team_name(live_odds_df["away_team"])
         live_odds_df["matchup_key"] = _canonical_matchup_teams_key(live_odds_df)
         live_odds_df["matchup_id"] = _matchup_id(live_odds_df)
-        live_odds_df["merge_date_utc"] = _utc_day_key(pd.to_datetime(live_odds_df.get("game_date"), errors="coerce", utc=True))
+        live_odds_df["merge_date_utc"] = _et_day_string(live_odds_df.get("game_date"))
         if "home_team_lower" not in merged.columns:
             merged["home_team_lower"] = clean_team_name(merged["home_team"])
             merged["away_team_lower"] = clean_team_name(merged["away_team"])
@@ -1762,7 +1762,7 @@ def run_analysis_pipeline(
         if "matchup_id" not in merged.columns:
             merged["matchup_id"] = _matchup_id(merged)
         if "merge_date_utc" not in merged.columns:
-            merged["merge_date_utc"] = _utc_day_key(pd.to_datetime(merged.get("game_date"), errors="coerce", utc=True))
+            merged["merge_date_utc"] = _et_day_string(merged.get("game_date"))
 
         # Phase 1: Entity Resolution Validation Layer
         # Validate live odds against current pipeline matchups first (uploaded/analysis rows),

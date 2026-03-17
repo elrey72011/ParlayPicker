@@ -536,7 +536,10 @@ class PredictionEngine:
                 _build_matchup_id(h, a)
                 for h, a in zip(home_series, away_series)
             ]
-            working_df["game_date"] = _to_et_game_date(_series_or_default(working_df, "game_date", ""))
+            game_date_src = _series_or_default(working_df, "game_date", "")
+            if game_date_src.astype("string").str.len().eq(0).all() and "commence_time" in working_df.columns:
+                game_date_src = _series_or_default(working_df, "commence_time", "")
+            working_df["game_date"] = _to_et_game_date(game_date_src)
 
             # Formula-based fallback if model is unavailable.
             if self.use_fallback:
