@@ -1376,6 +1376,7 @@ def run_analysis_pipeline(
 
         base_schedule["home_team_lower"] = base_schedule["home_team"].str.lower().str.strip()
         base_schedule["away_team_lower"] = base_schedule["away_team"].str.lower().str.strip()
+        base_schedule["date_day"] = _date_join_key(base_schedule["date"])
 
         base_merge_columns = ["league", "home_team_lower", "away_team_lower", "merge_date_utc"] + [
             col for col in ["date", "game_time_est", "odds_american", "ml_probability", "is_neutral"]
