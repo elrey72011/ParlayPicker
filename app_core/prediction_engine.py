@@ -540,6 +540,13 @@ class PredictionEngine:
             if game_date_src.astype("string").str.len().eq(0).all() and "commence_time" in working_df.columns:
                 game_date_src = _series_or_default(working_df, "commence_time", "")
             working_df["game_date"] = _to_et_game_date(game_date_src)
+            working_df["canonical_match_key"] = (
+                _series_or_default(working_df, "league", "").astype("string").str.upper()
+                + "|"
+                + working_df["matchup_id"].astype("string")
+                + "|"
+                + working_df["game_date"].astype("string")
+            )
 
             # Formula-based fallback if model is unavailable.
             if self.use_fallback:
@@ -587,6 +594,13 @@ class PredictionEngine:
                                     hist_df["league"] = ""
                                 hist_df["league_norm"] = hist_df["league"].astype(str).str.upper()
                                 hist_df["game_date"] = _to_et_game_date(hist_df["commence_time"])
+                                hist_df["canonical_match_key"] = (
+                                    hist_df["league_norm"].astype("string")
+                                    + "|"
+                                    + hist_df["matchup_id"].astype("string")
+                                    + "|"
+                                    + hist_df["game_date"].astype("string")
+                                )
 
                                 # Process each predominantly empty row
                                 for idx in df.index:
@@ -594,13 +608,17 @@ class PredictionEngine:
                                         row_matchup = str(working_df.at[idx, "matchup_id"]) if "matchup_id" in working_df.columns else ""
                                         row_league = str(working_df.at[idx, "league"]).upper() if "league" in working_df.columns else ""
                                         row_game_date = str(working_df.at[idx, "game_date"]) if "game_date" in working_df.columns else ""
+                                        row_match_key = str(working_df.at[idx, "canonical_match_key"]) if "canonical_match_key" in working_df.columns else ""
 
                                         if row_matchup:
-                                            match = hist_df[hist_df["matchup_id"] == row_matchup]
-                                            if row_league and "league" in hist_df.columns:
-                                                match = match[match["league_norm"] == row_league]
-                                            if row_game_date:
-                                                match = match[match["game_date"] == row_game_date]
+                                            if row_match_key:
+                                                match = hist_df[hist_df["canonical_match_key"] == row_match_key]
+                                            else:
+                                                match = hist_df[hist_df["matchup_id"] == row_matchup]
+                                                if row_league and "league" in hist_df.columns:
+                                                    match = match[match["league_norm"] == row_league]
+                                                if row_game_date and row_game_date.lower() not in {"", "<na>", "nan", "nat", "none"}:
+                                                    match = match[match["game_date"] == row_game_date]
                                             # Find most recent match for this exact matchup (direction matters for home/away features)
                                             match = match.sort_values("commence_time", ascending=False)
 
