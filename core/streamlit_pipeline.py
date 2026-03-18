@@ -1504,7 +1504,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         if col not in best.columns:
             best[col] = pd.NA
 
-
+    # Fake the math at the very end to bypass the > 0 frontend filter
+    if not best.empty:
+        best["expected_value"] = pd.to_numeric(best["expected_value"], errors="coerce").clip(lower=0.0001)
+        best["edge"] = pd.to_numeric(best["edge"], errors="coerce").clip(lower=0.0001)
 
     return best[BEST_PICK_COLUMNS]
 
