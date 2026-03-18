@@ -1234,38 +1234,29 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     # Force expected_value to numeric, converting true errors to NaN while preserving negative floats
     pool['expected_value'] = pd.to_numeric(pool['expected_value'], errors='coerce')
 
-    # Build a resilient game identifier so we can always return one pick per game.
-    # Priority: explicit game_id -> explicit game_key -> canonical matchup key fallback.
-    game_id = _clean_text_placeholders(_string_series(pool, "game_id")) if "game_id" in pool.columns else pd.Series([""] * len(pool), index=pool.index, dtype="string")
-    game_key = _clean_text_placeholders(_string_series(pool, "game_key")) if "game_key" in pool.columns else pd.Series([""] * len(pool), index=pool.index, dtype="string")
-    fallback_group = (
-        _clean_text_placeholders(_string_series(pool, "league"))
-        + "|"
-        + _clean_text_placeholders(_string_series(pool, "away_team"))
-        + "@"
-        + _clean_text_placeholders(_string_series(pool, "home_team"))
-        + "|"
-        + _clean_text_placeholders(date_str.astype("string"))
-    )
-    pool["game_id"] = game_id.where(game_id.str.len().gt(0), game_key)
-    pool["game_id"] = pool["game_id"].where(pool["game_id"].str.len().gt(0), fallback_group)
-    pool["game_id"] = pool["game_id"].where(
-        pool["game_id"].str.len().gt(0),
-        pd.Series([f"row-{i}" for i in range(len(pool))], index=pool.index, dtype="string"),
-    )
+    # Strict one-pick-per-game rule: sort globally by EV, then tie-break by probability/edge,
+    # then keep only one market (spread or total) for each unique matchup/date key.
+    prob_tiebreak = _numeric_series(pool, "calibrated_probability")
+    prob_tiebreak = prob_tiebreak.where(prob_tiebreak.notna(), _numeric_series(pool, "model_probability"))
+    prob_tiebreak = prob_tiebreak.where(prob_tiebreak.notna(), _numeric_series(pool, "theover_probability"))
+    prob_tiebreak = prob_tiebreak.where(prob_tiebreak.notna(), _numeric_series(pool, "ml_probability"))
+    pool["prob_tiebreak"] = prob_tiebreak.fillna(-1.0)
 
-    # Ensure deterministic one-pick-per-game coverage regardless of EV sign.
-    # If both spread/total are Kalshi-matched for a game, prioritize larger absolute EV.
-    pool["abs_expected_value"] = pool["expected_value"].abs()
-    pool["kalshi_matched"] = _string_series(pool, "kalshi_match_status").str.lower().eq("matched")
-    pool["is_spread_total"] = _string_series(pool, "market_type").str.lower().str.contains("spread|total", regex=True, na=False)
     pool = pool.sort_values(
-        ["game_id", "kalshi_matched", "is_spread_total", "abs_expected_value", "expected_value"],
-        ascending=[True, False, False, False, False],
+        ["expected_value", "prob_tiebreak", "edge", "market_type"],
+        ascending=[False, False, False, True],
     )
 
-    # Choose one row per game_id using ranking above.
-    best = pool.groupby("game_id", as_index=False, dropna=False).first()
+    # Choose one row per canonical matchup key using the ranking above.
+    best = pool.groupby("matchup_key", as_index=False, dropna=False).first()
+
+    total_games = int(pool["matchup_key"].nunique(dropna=False))
+    if len(best) != total_games:
+        logger.warning(
+            "Best-pick validation mismatch: selected_rows=%s total_games=%s",
+            len(best),
+            total_games,
+        )
 
     best["calibrated_probability"] = _numeric_series(best, "calibrated_probability", 0.5)
     edge_for_consensus = _numeric_series(best, "edge", 0.0)
