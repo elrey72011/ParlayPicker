@@ -1190,7 +1190,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         & pool["home_team"].str.len().gt(0)
         & pool["away_team"].str.len().gt(0)
     )
-    pool = pool[pool["has_identity"]].copy()
+
+    game_key_present = _clean_text_placeholders(_string_series(pool, "game_key")).str.len().gt(0) if "game_key" in pool.columns else pd.Series([False] * len(pool), index=pool.index)
+    pool = pool[pool["has_identity"] | game_key_present].copy()
     if pool.empty:
         return pd.DataFrame(columns=BEST_PICK_COLUMNS)
 
@@ -1214,27 +1216,45 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     # Force expected_value to numeric, converting true errors to NaN while preserving negative floats
     pool['expected_value'] = pd.to_numeric(pool['expected_value'], errors='coerce')
 
-    # Choose one pick per game with odds-source priority while keeping game coverage:
+    # Build a resilient group key so we can always return one pick per game.
+    # Priority: explicit game_key -> canonical matchup key -> fallback row identity.
+    game_key = _clean_text_placeholders(_string_series(pool, "game_key")) if "game_key" in pool.columns else pd.Series([""] * len(pool), index=pool.index, dtype="string")
+    fallback_group = (
+        _clean_text_placeholders(_string_series(pool, "league"))
+        + "|"
+        + _clean_text_placeholders(_string_series(pool, "away_team"))
+        + "@"
+        + _clean_text_placeholders(_string_series(pool, "home_team"))
+        + "|"
+        + _clean_text_placeholders(date_str.astype("string"))
+    )
+    pool["pick_group_key"] = game_key.where(game_key.str.len().gt(0), fallback_group)
+    pool["pick_group_key"] = pool["pick_group_key"].where(
+        pool["pick_group_key"].str.len().gt(0),
+        pd.Series([f"row-{i}" for i in range(len(pool))], index=pool.index, dtype="string"),
+    )
+
+    # Choose one pick per game with odds-source priority while keeping full-game coverage:
     # 1) Prefer novig_live rows when available.
     # 2) Otherwise prefer non-fallback rows.
     # 3) If only fallback_novig rows exist, select the best fallback row.
     best_pick_indices: list[int] = []
-    pool["canonical_matchup_key"] = _canonical_matchup_key(pool)
-    for _, group in pool.groupby(['league', 'canonical_matchup_key'], dropna=False):
+    for _, group in pool.groupby(["pick_group_key"], dropna=False):
         odds_source = _string_series(group, "odds_source").str.lower()
         novig_rows = group[odds_source.eq("novig_live")]
-        if not novig_rows.empty:
-            idx = novig_rows["expected_value"].idxmax()
-        else:
-            non_fallback_rows = group[~odds_source.eq("fallback_novig")]
-            candidate_rows = non_fallback_rows if not non_fallback_rows.empty else group
-            idx = candidate_rows["expected_value"].idxmax()
+        candidate_pool = novig_rows if not novig_rows.empty else group[~odds_source.eq("fallback_novig")]
+        if candidate_pool.empty:
+            candidate_pool = group
+
+        rank_ev = _numeric_series(candidate_pool, "expected_value").fillna(-1e9)
+        rank_edge = _numeric_series(candidate_pool, "edge").fillna(-1e9)
+        candidate_pool = candidate_pool.assign(_rank_ev=rank_ev, _rank_edge=rank_edge)
+        idx = candidate_pool.sort_values(["_rank_ev", "_rank_edge"], ascending=[False, False]).index[0]
         best_pick_indices.append(idx)
 
     # Extract the final dataframe
     best = pool.loc[best_pick_indices].copy() if best_pick_indices else pd.DataFrame(columns=pool.columns)
-    if "canonical_matchup_key" in best.columns:
-        best = best.drop(columns=["canonical_matchup_key"])
+    best = best.drop(columns=["pick_group_key"], errors="ignore")
 
     best["calibrated_probability"] = _numeric_series(best, "calibrated_probability", 0.5)
     edge_for_consensus = _numeric_series(best, "edge", 0.0)

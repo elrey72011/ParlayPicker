@@ -14,6 +14,16 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+
+def _safe_text(value: Any) -> str:
+    """Stringify values without triggering pandas NA boolean ambiguity."""
+    try:
+        if value is None or pd.isna(value):
+            return ""
+    except Exception:
+        pass
+    return str(value)
+
 from core.team_mapper import normalize_team_name
 API_BASE = "https://api.elections.kalshi.com/trade-api/v2"
 
@@ -686,7 +696,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
     out["kalshi_match_reason"] = "no_market_for_tickers"
 
     for idx, row in out.iterrows():
-        league = str(row.get("league") or "").upper()
+        league = _safe_text(row.get("league")).upper()
         family_guess = _market_family(row)
         family = "spread" if family_guess == "spread" else "total"
         series = league_series_ticker(league, family)
@@ -720,8 +730,8 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
         series_events = enrich_with_kalshi_markets.series_cache[series]
 
-        home_team_name = str(row.get("home_team") or "")
-        away_team_name = str(row.get("away_team") or "")
+        home_team_name = _safe_text(row.get("home_team"))
+        away_team_name = _safe_text(row.get("away_team"))
 
         best_event_match = None
         best_event_score = -1
@@ -815,7 +825,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             out.at[idx, "kalshi_match_reason"] = "no_markets_in_event"
             continue
 
-        best_pick = str(row.get("best_pick") or "").strip()
+        best_pick = _safe_text(row.get("best_pick")).strip()
         is_totals_query = "Over " in best_pick or "Under " in best_pick
 
         best_market = None
@@ -901,12 +911,12 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             # Use all spread markets inside the event
             markets = [m for m in nested_markets if market_type_matches(row.get('market_type'), m.get('title'), m.get('subtitle'))]
 
-            raw_spread_line = str(row.get("spread_line") or "")
+            raw_spread_line = _safe_text(row.get("spread_line"))
             match = re.search(r"[-+]?\s*(\d+(?:\.\d+)?)", raw_spread_line)
 
             if not match:
                 # Moneyline fallback
-                is_ml_pick = str(row.get("market_type") or "").lower() == "moneyline"
+                is_ml_pick = _safe_text(row.get("market_type")).lower() == "moneyline"
                 if is_ml_pick:
                     for mkt in markets:
                         m_title = str(mkt.get("title") or "").lower()
