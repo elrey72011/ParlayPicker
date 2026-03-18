@@ -903,7 +903,7 @@ def _format_best_pick(row: pd.Series) -> str:
         return f"{home_team} {line:+.1f}" if pd.notna(line) else home_team
     if market == "spread_away":
         line = pd.to_numeric(row.get("spread_line"), errors="coerce")
-        return f"{away_team} {abs(line):+.1f}" if pd.notna(line) else away_team
+        return f"{away_team} {line:+.1f}" if pd.notna(line) else away_team
     if market == "total_over":
         line = pd.to_numeric(row.get("total_line"), errors="coerce")
         return f"Over {line:.1f}" if pd.notna(line) else "Over"
