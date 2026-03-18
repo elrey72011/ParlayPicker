@@ -146,10 +146,21 @@ def _build_fallback_features_from_row(row_dict: Dict[str, Any]) -> Dict[str, flo
 
 def _clean_team_for_matchup(value: Any) -> str:
     team = str(value).lower() if pd.notna(value) else ""
-    team = "".join(ch for ch in team if ch.isalnum())
-    if team in {"sacremento", "sacrementokings", "sacramentokings"}:
-        return "sacramento"
-    return team
+    # Align exactly with core/streamlit_pipeline.py's clean_team_name regex
+    import re
+    team = re.sub(r"[^a-z0-9]", "", team)
+
+    typo_map = {
+        "sacramento": "sacramento",
+        "sacremento": "sacramento",
+        "sacramentokings": "sacramento",
+        "sacrementokings": "sacramento",
+        "sanantonio": "sanantonio",
+        "philidelphia": "philadelphia",
+        "phildelphia": "philadelphia",
+        "newyorkknicks": "newyork",
+    }
+    return typo_map.get(team, team)
 
 
 def _normalize_identity_merge_keys(df: pd.DataFrame, keys: list[str]) -> pd.DataFrame:
