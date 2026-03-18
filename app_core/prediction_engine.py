@@ -219,45 +219,39 @@ def _build_matchup_id(home: Any, away: Any, date_key: Any = "") -> str:
     return f"{a}|{b}"
 
 
-def _to_et_game_date(series: pd.Series) -> pd.Series:
-    def _to_utc_day(value: Any) -> pd.Timestamp:
-        if pd.isna(value):
-            return pd.NaT
+def _to_et_game_date_string(series: pd.Series) -> pd.Series:
+    """Aggressively convert datetimes or strings to local US/Eastern YYYY-MM-DD."""
+    def _to_et_string(value: Any) -> str:
+        if pd.isna(value) or not value:
+            return ""
 
+        # If it's already a clean YYYY-MM-DD string
         if isinstance(value, str) and len(value.strip()) == 10:
-            try:
-                d = pd.Timestamp(value.strip())
-                return pd.Timestamp(year=d.year, month=d.month, day=d.day, tz="UTC")
-            except Exception:
-                return pd.NaT
+            return value.strip()
 
         try:
             ts = pd.Timestamp(value)
+            if pd.isna(ts):
+                return ""
+
+            # Treat naive timestamps as UTC (from TheOddsAPI)
+            if ts.tzinfo is None:
+                ts = ts.tz_localize("UTC")
+
+            # Convert to Eastern Time
+            ts_et = ts.tz_convert("America/New_York")
+            return ts_et.strftime("%Y-%m-%d")
+
         except Exception:
-            return pd.NaT
+            # Fallback for unexpected formats
+            return str(value)[:10] if isinstance(value, str) else ""
 
-        if ts.tzinfo is not None and ts.hour == 0 and ts.minute == 0 and ts.second == 0 and ts.nanosecond == 0:
-            ts_utc = ts.tz_convert("UTC")
-            return pd.Timestamp(year=ts_utc.year, month=ts_utc.month, day=ts_utc.day, tz="UTC")
-
-        if ts.tzinfo is None:
-            ts = ts.tz_localize("America/New_York")
-        else:
-            ts = ts.tz_convert("America/New_York")
-
-        floored = ts.floor("D")
-        return pd.Timestamp(year=floored.year, month=floored.month, day=floored.day, tz="UTC")
-
-    day_utc = pd.to_datetime(series.apply(_to_utc_day), errors="coerce", utc=True)
-    return day_utc.dt.strftime("%Y-%m-%d").astype("string")
+    return series.apply(_to_et_string).astype("string")
 
 
 def _normalize_game_date_string(series: pd.Series) -> pd.Series:
     """Canonical YYYY-MM-DD string key used for schedule/feature joins."""
-    out = _to_et_game_date(series)
-    dt = pd.to_datetime(out, errors="coerce")
-    normalized = dt.dt.strftime("%Y-%m-%d")
-    return normalized.astype("string")
+    return _to_et_game_date_string(series)
 
 
 def _series_or_default(df: pd.DataFrame, col: str, default: str = "") -> pd.Series:
@@ -726,22 +720,30 @@ class PredictionEngine:
 
                             # Clean team names in hist_df
                             if "home_team" in hist_df.columns and "away_team" in hist_df.columns:
-                                hist_df["home_team"] = hist_df["home_team"].astype("string").fillna("").str.strip()
-                                hist_df["away_team"] = hist_df["away_team"].astype("string").fillna("").str.strip()
+                                # Aggressive formatting: strip non-alphanumeric, lowercase, apply typo map
+                                hist_df["home_team"] = hist_df["home_team"].astype("string").fillna("").str.strip().apply(_clean_team_for_matchup)
+                                hist_df["away_team"] = hist_df["away_team"].astype("string").fillna("").str.strip().apply(_clean_team_for_matchup)
+
+                                # Use the normalized names directly for match building
                                 hist_df["matchup_id"] = [
                                     _build_matchup_id(h, a)
                                     for h, a in zip(hist_df["home_team"], hist_df["away_team"])
                                 ]
+
                                 if "league" not in hist_df.columns:
                                     hist_df["league"] = ""
                                 hist_df = _normalize_identity_merge_keys(hist_df, ["league", "home_team", "away_team"])
                                 hist_df["league_norm"] = hist_df["league"].astype("string").fillna("").str.strip().str.upper()
+
+                                # Aggressive date format coercion
                                 hist_df["game_date"] = _normalize_game_date_string(hist_df["commence_time"])
                                 hist_df["game_date_dt"] = pd.to_datetime(hist_df["game_date"], errors="coerce").dt.tz_localize(None)
+
                                 hist_df["matchup_id_with_date"] = [
                                     _build_matchup_id(h, a, d)
                                     for h, a, d in zip(hist_df["home_team"], hist_df["away_team"], hist_df["game_date"])
                                 ]
+
                                 hist_df["canonical_match_key"] = (
                                     hist_df["league_norm"].astype("string")
                                     + "|"
@@ -751,38 +753,69 @@ class PredictionEngine:
                                 # Process each predominantly empty row
                                 for idx in df.index:
                                     if row_nan_ratio[idx] > 0.5:
-                                        row_matchup = str(working_df.at[idx, "matchup_id"]) if "matchup_id" in working_df.columns else ""
                                         row_league = str(working_df.at[idx, "league"]).upper() if "league" in working_df.columns else ""
                                         row_game_date_dt = working_df.at[idx, "game_date_dt"] if "game_date_dt" in working_df.columns else pd.NaT
-                                        row_game_date = str(working_df.at[idx, "game_date"]) if "game_date" in working_df.columns else ""
-                                        row_match_key = str(working_df.at[idx, "canonical_match_key"]) if "canonical_match_key" in working_df.columns else ""
+
+                                        # Strict YYYY-MM-DD
+                                        raw_game_date = working_df.at[idx, "game_date"] if "game_date" in working_df.columns else ""
+                                        row_game_date = _to_et_game_date_string(pd.Series([raw_game_date])).iloc[0] if raw_game_date else ""
+
                                         row_home = str(working_df.at[idx, "home_team"]) if "home_team" in working_df.columns else ""
                                         row_away = str(working_df.at[idx, "away_team"]) if "away_team" in working_df.columns else ""
 
-                                        if not row_match_key and row_league and row_home and row_away:
-                                            row_matchup_with_date = _build_matchup_id(row_home, row_away, row_game_date)
-                                            row_match_key = f"{row_league}|{row_matchup_with_date}"
+                                        # Provide aggressive cleanup equivalent for the row
+                                        row_home_clean = _clean_team_for_matchup(row_home)
+                                        row_away_clean = _clean_team_for_matchup(row_away)
 
-                                        if row_matchup or row_match_key:
-                                            if row_match_key:
-                                                match = hist_df[hist_df["canonical_match_key"].eq(row_match_key).fillna(False)]
-                                            else:
-                                                match = hist_df[hist_df["matchup_id"].eq(row_matchup).fillna(False)]
-                                                if row_league and "league_norm" in hist_df.columns:
-                                                    match = match[match["league_norm"].astype("string").str.upper().eq(row_league).fillna(False)]
-                                                if row_game_date_dt is not None and not pd.isna(row_game_date_dt) and "game_date_dt" in match.columns:
-                                                    match = match[match["game_date_dt"].dt.normalize().eq(pd.Timestamp(row_game_date_dt).normalize()).fillna(False)]
+                                        # Force a perfectly clean matchup_id explicitly for the fallback lookup
+                                        row_matchup = _build_matchup_id(row_home_clean, row_away_clean)
 
-                                            if match.empty:
-                                                match = _fuzzy_match_hist_row(
-                                                    hist_df=hist_df,
-                                                    row_league=row_league,
-                                                    row_game_date=row_game_date_dt,
-                                                    row_home=row_home,
-                                                    row_away=row_away,
-                                                )
+                                        # Create the aggressive match key dynamically
+                                        row_matchup_with_date = _build_matchup_id(row_home_clean, row_away_clean, row_game_date)
+                                        row_match_key = f"{row_league}|{row_matchup_with_date}" if row_league and row_game_date else ""
 
-                                            # Find most recent match for this exact matchup (direction matters for home/away features)
+                                        # First priority: strict date AND matchup match
+                                        match = pd.DataFrame()
+
+                                        if row_match_key:
+                                            match = hist_df[hist_df["canonical_match_key"].eq(row_match_key).fillna(False)]
+
+
+                                        # Looser Fallback: rolling most recent matchup match (ignore date)
+                                        if match.empty and row_matchup:
+                                            match = hist_df[hist_df["matchup_id"].eq(row_matchup).fillna(False)]
+                                            if row_league and "league_norm" in hist_df.columns:
+                                                match = match[match["league_norm"].astype("string").str.upper().eq(row_league).fillna(False)]
+
+                                            # Ensure the rolling match is within a 7-day lookback window of the current game's date
+                                            if not match.empty and row_game_date_dt is not None and not pd.isna(row_game_date_dt):
+                                                try:
+                                                    target_dt = pd.Timestamp(row_game_date_dt).normalize()
+                                                    seven_days_prior = target_dt - pd.Timedelta(days=7)
+
+                                                    # Filter matches to only include those strictly within 7 days prior
+                                                    if "game_date_dt" in match.columns:
+                                                        valid_window = (match["game_date_dt"].dt.normalize() <= target_dt) & \
+                                                                       (match["game_date_dt"].dt.normalize() >= seven_days_prior)
+                                                        match = match[valid_window]
+                                                except Exception as e:
+                                                    logger.warning(f"Failed to enforce 7-day window during looser fallback: {e}")
+
+                                        # Fallback mechanism: purely fuzzy token match
+                                        if match.empty:
+                                            match = _fuzzy_match_hist_row(
+                                                hist_df=hist_df,
+                                                row_league=row_league,
+                                                row_game_date=row_game_date_dt,
+                                                row_home=row_home_clean,
+                                                row_away=row_away_clean,
+                                            )
+
+                                        # Final logic to grab the most recent valid match found
+                                        if not match.empty:
+                                            # Ensure the direction of features (Home vs Away) is maintained
+                                            # by matching on the actual team names being played.
+                                            # We rely on sort_values to get the most recent valid entry for the rolling fallback.
                                             match = match.sort_values("commence_time", ascending=False)
 
                                             if not match.empty:
