@@ -1489,12 +1489,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
 
     if not best.empty:
         best["parlay_rank"] = range(1, len(best) + 1)
-        best["signal_strength"] = "Market Efficient"
-
-        # Determine signal strength
-        edge_vals = pd.to_numeric(best["edge"], errors="coerce").fillna(0.0)
-        best.loc[edge_vals > 0, "signal_strength"] = "Value"
-        best.loc[edge_vals >= MIN_EDGE_THRESHOLD, "signal_strength"] = "Best Pick"
+        # Force all top picks per game to display regardless of edge threshold
+        best["signal_strength"] = "Best Pick"
     else:
         best["parlay_rank"] = pd.Series(dtype=int)
         best["signal_strength"] = pd.Series(dtype="string")
@@ -2104,6 +2100,8 @@ def run_analysis_pipeline(
 
                 # Assign used_stale_features flag
                 if hasattr(engine, 'last_batch_used_stale_features'):
+                    if "used_stale_features" not in merged.columns:
+                        merged["used_stale_features"] = pd.Series(False, index=merged.index, dtype=bool)
                     merged.loc[needs_prediction, "used_stale_features"] = engine.last_batch_used_stale_features
 
                 if hasattr(engine, 'last_batch_used_neutral_fallback') and engine.last_batch_used_neutral_fallback:
@@ -2280,8 +2278,8 @@ def run_analysis_pipeline(
         "kalshi_matches": 0,
         "kalshi_match_rate": 0.0,
         "match_rate": 0.0,
-        "theover_totals_games": int(theover_rows[_string_series(theover_rows, "market_type").str.startswith("total")]["matchup_id"].nunique()) if not theover_rows.empty else 0,
-        "theover_spreads_games": int(theover_rows[_string_series(theover_rows, "market_type").str.startswith("spread")]["matchup_id"].nunique()) if not theover_rows.empty else 0,
+        "theover_totals_games": int(_matchup_id(_coerce_identity_columns(_normalize_upload_columns(totals_df))).nunique()) if totals_df is not None and not totals_df.empty else 0,
+        "theover_spreads_games": int(_matchup_id(_coerce_identity_columns(_normalize_upload_columns(spreads_df))).nunique()) if spreads_df is not None and not spreads_df.empty else 0,
         "date_fill_total_rows": int(date_stats["date_fill_total_rows"]),
         "date_fill_success_rows": int(date_stats["date_fill_success_rows"]),
         "date_fill_success_rate": float(date_stats["date_fill_success_rate"]),
