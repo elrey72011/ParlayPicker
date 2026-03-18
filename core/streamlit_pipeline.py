@@ -298,6 +298,24 @@ def _string_series(df: pd.DataFrame, col: str, default: str = "") -> pd.Series:
     return pd.Series([default] * len(df), index=df.index, dtype="string")
 
 
+def _normalize_merge_keys(df: pd.DataFrame, keys: list[str]) -> pd.DataFrame:
+    """Normalize merge keys to reduce cross-source drift and Pandas NA ambiguity."""
+    if df is None or df.empty:
+        return df
+    out = df.copy()
+    for key in keys:
+        if key not in out.columns:
+            continue
+        out[key] = (
+            out[key]
+            .astype(str)
+            .str.lower()
+            .str.strip()
+            .replace({"nan": np.nan, "none": np.nan, "<na>": np.nan, "nat": np.nan, "": np.nan})
+        )
+    return out
+
+
 def _numeric_series(df: pd.DataFrame, col: str, default: float | int | None = None) -> pd.Series:
     if df is None or df.empty:
         return pd.Series(dtype="float64")
@@ -2082,6 +2100,8 @@ def run_analysis_pipeline(
             merged["ml_probability"] = pd.NA
 
             if needs_prediction.any():
+                merge_identity_keys = ["league", "home_team", "away_team", "game_date"]
+                merged = _normalize_merge_keys(merged, merge_identity_keys)
                 engine = PredictionEngine()
                 ml_model_actually_loaded = not getattr(engine, "use_fallback", True)
 
@@ -2180,7 +2200,7 @@ def run_analysis_pipeline(
     # If is_neutral == True for neutral-site and tournament games, compress margins to prevent false edges on tight spreads.
     # We compress the difference between the calibrated probability and 0.5 (neutral) for NCAAB neutral games.
     if "is_neutral" in merged.columns:
-        ncaab_neutral_mask = (merged["league"].str.upper() == "NCAAB") & ((merged["is_neutral"] == True) | (merged["is_neutral"].astype(str).str.lower() == "true"))
+        ncaab_neutral_mask = (merged["league"].str.upper().eq("NCAAB").fillna(False)) & (((merged["is_neutral"].eq(True)).fillna(False)) | (merged["is_neutral"].astype(str).str.lower().eq("true").fillna(False)))
         # Apply a 0.85 variance multiplier compression
         compressed_prob = 0.5 + ((calibrated_probability - 0.5) * 0.85)
         calibrated_probability = calibrated_probability.where(~ncaab_neutral_mask, compressed_prob)
@@ -2244,6 +2264,9 @@ def run_analysis_pipeline(
     # Ensure 100% date fill success using fallback if any are still missing
     if not analysis_df.empty:
         analysis_df["game_date"] = analysis_df["game_date"].fillna(_game_date_fallback())
+
+    # Normalize identity merge keys for downstream Kalshi and app-layer merges.
+    analysis_df = _normalize_merge_keys(analysis_df, ["league", "home_team", "away_team", "game_date"])
 
     if "game_key" not in analysis_df.columns:
         analysis_df["game_key"] = _mk_game_key(analysis_df)

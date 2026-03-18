@@ -61,7 +61,8 @@ def _enrich_with_kalshi_safe(df: pd.DataFrame) -> tuple[pd.DataFrame, str | None
         future.cancel()
         return df, f"Kalshi enrichment timed out (>{KALSHI_ENRICH_TIMEOUT_SECONDS}s) — skipped."
     except Exception as e:
-        return df, f"Kalshi enrichment failed: {e}"
+        logger.error("Kalshi enrichment failed: %s", e, exc_info=True)
+        return df, f"Kalshi enrichment failed: {e}\n{traceback.format_exc()}"
     finally:
         executor.shutdown(wait=False, cancel_futures=True)
 
@@ -499,7 +500,7 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
                     for idx, res in enumerate(gemini_results):
                         home = games_to_analyze[idx]["home_team"]
                         away = games_to_analyze[idx]["away_team"]
-                        mask = (analysis_df["home_team"] == home) & (analysis_df["away_team"] == away)
+                        mask = (analysis_df["home_team"].eq(home).fillna(False)) & (analysis_df["away_team"].eq(away).fillna(False))
                         analysis_df.loc[mask, "gemini_analysis"] = res.get("confidence_explanation", "Analyzed")
             except Exception as e:
                 deferred_warnings.append(f"Gemini analysis failed: {e}")
