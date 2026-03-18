@@ -72,7 +72,7 @@ _NCAAB_TEAM_KEYWORD_HINTS = {
 }
 _NCAAB_LEAGUE_RECOVERY_KEYWORDS = {
     "st", "state", "univ", "university",
-    "cowboys", "bulldogs", "redhawks", "tommies", "golden hurricane", "lumberjacks",
+    "cowboys", "bulldogs", "redhawks", "tommies", "golden hurricane", "wildcats", "shockers",
 }
 _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball", "women\'s basketball"}
 
@@ -374,6 +374,16 @@ def _normalize_identity_strings(df: pd.DataFrame, cols: list[str]) -> pd.DataFra
     for col in cols:
         if col not in out.columns:
             continue
+        out[col] = _clean_text_placeholders(_string_series(out, col)).astype("string").str.strip()
+    return out
+
+
+def _enforce_identity_string_dtype(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
+    """Force identity columns to pandas StringDtype for safe text operations in Pandas 2.x."""
+    if df is None or df.empty:
+        return df
+    out = df.copy()
+    for col in cols:
         out[col] = _clean_text_placeholders(_string_series(out, col)).astype("string").str.strip()
     return out
 
@@ -1318,14 +1328,14 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     valid_dt = dt_utc.notna()
     if valid_dt.any():
         date_str.loc[valid_dt] = dt_utc[valid_dt].dt.tz_convert("America/New_York").dt.strftime("%Y-%m-%d")
-    pool["composite_id"] = (
+    pool["matchup_id"] = (
         date_str
         + "|" + pool["home_team"].str.lower().str.replace(r"\s+", " ", regex=True)
         + "|" + pool["away_team"].str.lower().str.replace(r"\s+", " ", regex=True)
     )
 
     # Force expected_value to numeric, converting true errors to NaN while preserving negative floats
-    pool['expected_value'] = pd.to_numeric(pool['expected_value'], errors='coerce')
+    pool["expected_value"] = pd.to_numeric(pool["expected_value"], errors="coerce")
 
     # Strict one-pick-per-game rule: sort globally by EV, then tie-break by probability/edge,
     # then keep only one market (spread or total) for each unique matchup/date key.
@@ -1340,10 +1350,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         ascending=[False, False, False, True],
     )
 
-    # Choose one row per game composite_id using the ranking above.
-    best = pool.groupby("composite_id", as_index=False, dropna=False).first().copy()
+    # Choose one row per game matchup_id using the ranking above.
+    best = pool.groupby("matchup_id", as_index=False, dropna=False).first().copy()
 
-    total_games = int(pool["composite_id"].nunique(dropna=False))
+    total_games = int(pool["matchup_id"].nunique(dropna=False))
     if len(best) != total_games:
         logger.warning(
             "Best-pick validation mismatch: selected_rows=%s total_games=%s",
@@ -1598,6 +1608,10 @@ def run_analysis_pipeline(
     raw_base_df = load_base_data()
     odds_schedule_loaded = not raw_base_df.empty
     bet_rows = build_theover_bet_rows(spreads_df, totals_df, sports)
+    # Enforce StringDtype on identity columns before any text/boolean comparisons.
+    bet_rows = _enforce_identity_string_dtype(bet_rows, ["league", "home_team", "away_team"])
+    # Recover missing NCAAB league labels prior to Kalshi enrichment and ML prediction flow.
+    bet_rows = _preprocess_bet_rows_for_league_bridge(bet_rows)
     bet_rows = _normalize_identity_strings(bet_rows, ["league", "home_team", "away_team"])
     stale = is_stale_schedule(raw_base_df, bet_rows)
     # Keep full base schedule available for fill/lookup; report stale rows but do not drop master data.
@@ -2177,6 +2191,7 @@ def run_analysis_pipeline(
 
     merged["spread"] = pd.to_numeric(merged.get("spread_line"), errors="coerce")
     merged["total"] = pd.to_numeric(merged.get("total_line"), errors="coerce")
+    merged = _enforce_identity_string_dtype(merged, ["league", "home_team", "away_team"])
 
     # ML Prediction Enrichment [2026-03-08]
     ml_model_actually_loaded = False
