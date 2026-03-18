@@ -27,7 +27,7 @@ def _base_rows() -> dict:
     }
 
 
-def test_best_picks_prioritizes_novig_live_over_fallback_when_present():
+def test_best_picks_uses_highest_ev_even_when_novig_live_is_present():
     base = _base_rows()
     analysis_df = pd.DataFrame(
         [
@@ -49,8 +49,8 @@ def test_best_picks_prioritizes_novig_live_over_fallback_when_present():
     best = build_best_picks_df(analysis_df)
 
     assert len(best) == 1
-    assert best.loc[0, "odds_source"] == "novig_live"
-    assert float(best.loc[0, "expected_value"]) == 0.05
+    assert best.loc[0, "odds_source"] == "fallback_novig"
+    assert float(best.loc[0, "expected_value"]) == 0.10
 
 
 def test_best_picks_uses_highest_ev_when_no_novig_live_rows_exist():
