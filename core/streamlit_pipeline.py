@@ -73,6 +73,7 @@ _NCAAB_TEAM_KEYWORD_HINTS = {
 _NCAAB_LEAGUE_RECOVERY_KEYWORDS = {
     "st", "state", "univ", "university",
     "cowboys", "bulldogs", "redhawks", "tommies", "golden hurricane", "wildcats", "shockers", "unlv",
+    "lehigh", "navy", "revolutionaries", "uic", "panthers", "bradley", "dayton", "murray", "saint josephs",
 }
 _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball", "women\'s basketball"}
 
@@ -82,7 +83,7 @@ BEST_PICK_COLUMNS = [
     "calibrated_probability", "expected_value", "edge", "consensus_agreement",
     "odds_american", "odds_source", "market_probability", "ml_probability",
     "kalshi_probability", "kalshi_match_status", "kalshi_match_reason",
-    "gemini_explanation", "gemini_risk_notes", "used_stale_features",
+    "gemini_explanation", "gemini_risk_notes", "used_stale_features", "signal_strength",
 ]
 
 CANONICAL_BET_COLUMNS = [
@@ -1433,8 +1434,15 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
 
     if not best.empty:
         best["parlay_rank"] = range(1, len(best) + 1)
+        best["signal_strength"] = "Market Efficient"
+
+        # Determine signal strength
+        edge_vals = pd.to_numeric(best["edge"], errors="coerce").fillna(0.0)
+        best.loc[edge_vals > 0, "signal_strength"] = "Value"
+        best.loc[edge_vals >= MIN_EDGE_THRESHOLD, "signal_strength"] = "Best Pick"
     else:
         best["parlay_rank"] = pd.Series(dtype=int)
+        best["signal_strength"] = pd.Series(dtype="string")
 
     for col in BEST_PICK_COLUMNS:
         if col not in best.columns:

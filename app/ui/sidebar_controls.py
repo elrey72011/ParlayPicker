@@ -57,6 +57,10 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
     theover_spreads = st.sidebar.file_uploader("Upload TheOver Spreads CSV", type=["csv"], key="theover_spreads")
     theover_totals = st.sidebar.file_uploader("Upload TheOver Totals CSV", type=["csv"], key="theover_totals")
 
+    st.sidebar.subheader("Advanced Settings")
+    with st.sidebar.expander("Advanced Settings", expanded=False):
+        show_all_games = st.checkbox("SHOW_ALL_GAMES (Bypass Edge Filter)", value=False, key="show_all_games")
+
     st.sidebar.button(
         "Run Master Analysis",
         type="primary",
@@ -76,4 +80,5 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
         "theover_spreads": theover_spreads,
         "theover_totals": theover_totals,
         "run_analysis_counter": run_counter,
+        "show_all_games": show_all_games,
     }

@@ -96,9 +96,9 @@ KALSHI_LINE_TOLERANCE_SPREAD = 3.0
 KALSHI_LINE_TOLERANCE_TOTAL = 3.0
 
 MAX_LINE_TOLERANCE = {
-    "NBA": 3.5,
-    "NCAAB": 3.5,
-    "NHL": 1.0,
+    "NBA": 1.5,
+    "NCAAB": 1.5,
+    "NHL": 0.5,
     "MLB": 0.5,
     "NFL": 2.5,
 }

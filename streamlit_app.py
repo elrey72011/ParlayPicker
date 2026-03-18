@@ -40,7 +40,7 @@ except ImportError:
     class OddsAPIAuthError(Exception): pass
 
 
-KALSHI_ENRICH_TIMEOUT_SECONDS = 300
+KALSHI_ENRICH_TIMEOUT_SECONDS = 450
 
 
 def _enrich_with_kalshi_safe(df: pd.DataFrame) -> tuple[pd.DataFrame, str | None]:
@@ -146,6 +146,12 @@ def _compose_model_probability(out: pd.DataFrame) -> tuple[pd.Series, pd.Series,
 
     # Reject known broken XGBoost baseline default score when feature matrix collapses.
     is_broken_ml = (ml > 0.19063) & (ml < 0.19064)
+
+    # Log a WARNING with matchup_ids for future retraining tracking
+    if is_broken_ml.any():
+        broken_matchups = out.loc[is_broken_ml, "matchup_id"].unique() if "matchup_id" in out.columns else []
+        logger.warning(f"⚠️ Trapped broken XGBoost scores (0.19063-0.19064) for matchups: {broken_matchups}. Discarding ML predictions and forcing Statistical Fallback.")
+
     ml_clean = ml.where(~is_broken_ml, pd.NA)
 
     spread_model = ml_clean.where(ml_clean.notna(), theover)
@@ -177,6 +183,11 @@ def _recompute_consensus_from_kalshi(df: pd.DataFrame, require_ml: bool = False)
 
     ml = _safe_numeric_series(out, "ml_probability")
     is_broken_ml = (ml > 0.19063) & (ml < 0.19064)
+
+    if is_broken_ml.any():
+        broken_matchups = out.loc[is_broken_ml, "matchup_id"].unique() if "matchup_id" in out.columns else []
+        logger.warning(f"⚠️ Consensus Step: Trapped broken XGBoost scores (0.19063-0.19064) for matchups: {broken_matchups}.")
+
     ml_valid = ml.where(~is_broken_ml, pd.NA)
 
     # Handle the two variations of model prob stored depending on df origin
@@ -817,12 +828,25 @@ def main() -> None:
                 "bet_rows": diagnostics.get("bet_rows", 0),
             })
 
-        if best_picks_df is None or best_picks_df.empty:
-            st.warning(f"⚠️ No picks meet {MIN_EDGE_THRESHOLD*100:.1f}% edge threshold")
-            st.dataframe(pd.DataFrame(columns=best_picks_df.columns if best_picks_df is not None and not best_picks_df.empty else ["league", "pick", "edge"]))
+        show_all_games = controls.get("show_all_games", False)
+
+        display_df = best_picks_df.copy() if best_picks_df is not None else pd.DataFrame(columns=["league", "pick", "edge"])
+        if not show_all_games and not display_df.empty and "edge" in display_df.columns:
+             display_df = display_df[pd.to_numeric(display_df["edge"], errors="coerce").fillna(0.0) >= MIN_EDGE_THRESHOLD].copy().reset_index(drop=True)
+             if "parlay_rank" in display_df.columns:
+                 display_df["parlay_rank"] = range(1, len(display_df) + 1)
+
+        if display_df.empty:
+            if show_all_games:
+                st.warning("⚠️ No games found.")
+            else:
+                st.warning(f"⚠️ No picks meet {MIN_EDGE_THRESHOLD*100:.1f}% edge threshold")
+            st.dataframe(display_df)
         else:
-            st.success(f"✅ {len(best_picks_df)} picks found")
-            display_df = best_picks_df.copy()
+            if show_all_games:
+                st.success(f"✅ {len(display_df)} games found")
+            else:
+                st.success(f"✅ {len(display_df)} picks found")
             rename_map = {
                 "league": "League",
                 "away_team": "Away Team",
@@ -836,16 +860,19 @@ def main() -> None:
                 "consensus_agreement": "Consensus",
                 "kalshi_match_status": "Kalshi Status",
                 "ml_probability": "ML Prob",
+                "signal_strength": "Signal",
             }
             display_df = display_df.rename(columns=rename_map)
             if "kalshi_probability" in display_df.columns:
                 kalshi_display = pd.to_numeric(display_df["kalshi_probability"], errors="coerce")
                 display_df["kalshi_probability_display"] = kalshi_display.map(lambda x: "⚪ No Kalshi" if pd.isna(x) else f"{x:.4f}")
-            preferred = ["parlay_rank", "League", "Home Team", "Away Team", "Game Date", "Game Time (ET)", "Best Pick", "Prob", "ML Prob", "EV", "Edge", "Consensus", "Kalshi Status", "kalshi_probability_display"]
+            preferred = ["parlay_rank", "League", "Home Team", "Away Team", "Game Date", "Game Time (ET)", "Best Pick", "Prob", "ML Prob", "EV", "Edge", "Consensus", "Kalshi Status", "kalshi_probability_display", "Signal"]
             ordered = [c for c in preferred if c in display_df.columns] + [c for c in display_df.columns if c not in preferred]
             display_df = display_df[ordered]
             st.dataframe(display_df, width="stretch")
             export_prep_df = best_picks_df.copy()
+            if not show_all_games and "edge" in export_prep_df.columns:
+                 export_prep_df = export_prep_df[pd.to_numeric(export_prep_df["edge"], errors="coerce").fillna(0.0) >= MIN_EDGE_THRESHOLD].copy()
 
             csv_rename_map = {
                 "home_team": "Home",
