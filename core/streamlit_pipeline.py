@@ -302,6 +302,26 @@ def _infer_missing_league_from_team_sets(df: pd.DataFrame, selected_sports: list
     return out
 
 
+def _recover_ncaab_league_labels(df: pd.DataFrame) -> pd.DataFrame:
+    """Recover missing NCAAB league labels from college-specific team keywords."""
+    out = df.copy()
+    if out.empty:
+        return out
+
+    out["league"] = _clean_text_placeholders(_string_series(out, "league")).astype("string").str.strip().str.lower()
+    missing_league = out["league"].str.len().eq(0)
+    if not missing_league.any():
+        return out
+
+    home_text = _clean_text_placeholders(_string_series(out, "home_team")).str.lower().str.strip()
+    away_text = _clean_text_placeholders(_string_series(out, "away_team")).str.lower().str.strip()
+    keyword_pattern = r"\b(?:" + "|".join(sorted(re.escape(k) for k in _NCAAB_LEAGUE_RECOVERY_KEYWORDS)) + r")\b"
+    keyword_mask = home_text.str.contains(keyword_pattern, regex=True, na=False) | away_text.str.contains(keyword_pattern, regex=True, na=False)
+
+    out.loc[missing_league & keyword_mask, "league"] = "ncaab"
+    return out
+
+
 def _patch_missing_league_for_college_rows(df: pd.DataFrame, selected_sports: list[str] | None = None) -> pd.DataFrame:
     """Backfill missing league labels for college rows before downstream merges."""
     out = df.copy()
@@ -1329,7 +1349,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     valid_dt = dt_utc.notna()
     if valid_dt.any():
         date_str.loc[valid_dt] = dt_utc[valid_dt].dt.tz_convert("America/New_York").dt.strftime("%Y-%m-%d")
-    pool["matchup_id"] = (
+    pool["unique_matchup_id"] = (
         date_str
         + "|" + pool["home_team"].str.lower().str.replace(r"\s+", " ", regex=True)
         + "|" + pool["away_team"].str.lower().str.replace(r"\s+", " ", regex=True)
@@ -1352,9 +1372,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     )
 
     # Choose one row per game matchup_id using the ranking above.
-    best = pool.groupby("matchup_id", as_index=False, dropna=False).first().copy()
+    best = pool.groupby("unique_matchup_id", as_index=False, dropna=False).first().copy()
 
-    total_games = int(pool["matchup_id"].nunique(dropna=False))
+    total_games = int(pool["unique_matchup_id"].nunique(dropna=False))
     if len(best) != total_games:
         logger.warning(
             "Best-pick validation mismatch: selected_rows=%s total_games=%s",
@@ -1609,6 +1629,8 @@ def run_analysis_pipeline(
     raw_base_df = load_base_data()
     odds_schedule_loaded = not raw_base_df.empty
     bet_rows = build_theover_bet_rows(spreads_df, totals_df, sports)
+    # Earliest league repair pass: recover blank/<NA>/null league values for college matchups.
+    bet_rows = _recover_ncaab_league_labels(bet_rows)
     # Enforce StringDtype on identity columns before any text/boolean comparisons.
     bet_rows = _enforce_identity_string_dtype(bet_rows, ["league", "home_team", "away_team"])
     # Recover missing NCAAB league labels prior to Kalshi enrichment and ML prediction flow.

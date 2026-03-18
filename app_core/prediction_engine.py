@@ -582,9 +582,19 @@ class PredictionEngine:
             # Preserve label/identity columns needed by stale-feature fallback joins.
             if "league" not in working_df.columns:
                 working_df["league"] = ""
-            working_df["league"] = working_df["league"].astype(str).str.upper()
+            working_df["league"] = (
+                working_df["league"]
+                .astype("string")
+                .fillna("")
+                .str.strip()
+                .str.upper()
+            )
             if "game_date" not in working_df.columns:
                 working_df["game_date"] = ""
+            if "home_team" in working_df.columns:
+                working_df["home_team"] = working_df["home_team"].astype("string").fillna("").str.strip()
+            if "away_team" in working_df.columns:
+                working_df["away_team"] = working_df["away_team"].astype("string").fillna("").str.strip()
             home_series = _series_or_default(working_df, "home_team", "")
             away_series = _series_or_default(working_df, "away_team", "")
             working_df["matchup_id"] = [
@@ -642,13 +652,15 @@ class PredictionEngine:
 
                             # Clean team names in hist_df
                             if "home_team" in hist_df.columns and "away_team" in hist_df.columns:
+                                hist_df["home_team"] = hist_df["home_team"].astype("string").fillna("").str.strip()
+                                hist_df["away_team"] = hist_df["away_team"].astype("string").fillna("").str.strip()
                                 hist_df["matchup_id"] = [
                                     _build_matchup_id(h, a)
                                     for h, a in zip(hist_df["home_team"], hist_df["away_team"])
                                 ]
                                 if "league" not in hist_df.columns:
                                     hist_df["league"] = ""
-                                hist_df["league_norm"] = hist_df["league"].astype(str).str.upper()
+                                hist_df["league_norm"] = hist_df["league"].astype("string").fillna("").str.strip().str.upper()
                                 hist_df["game_date"] = _normalize_game_date_string(hist_df["commence_time"])
                                 hist_df["game_date_dt"] = pd.to_datetime(hist_df["game_date"], errors="coerce").dt.tz_localize(None)
                                 hist_df["canonical_match_key"] = (
