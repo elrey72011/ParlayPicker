@@ -70,6 +70,10 @@ _KNOWN_NCAAB_TEAM_TOKENS = {
 _NCAAB_TEAM_KEYWORD_HINTS = {
     "st", "state", "university", "redhawks", "tommies", "cowboys",
 }
+_NCAAB_LEAGUE_RECOVERY_KEYWORDS = {
+    "st", "state", "univ", "university",
+    "cowboys", "bulldogs", "redhawks", "tommies", "golden hurricane", "lumberjacks",
+}
 _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball", "women\'s basketball"}
 
 BEST_PICK_COLUMNS = [
@@ -348,7 +352,7 @@ def _preprocess_bet_rows_for_league_bridge(df: pd.DataFrame) -> pd.DataFrame:
     if not missing_league.any():
         return out
 
-    keyword_pattern = r"\b(?:" + "|".join(sorted(re.escape(k) for k in _NCAAB_TEAM_KEYWORD_HINTS)) + r")\b"
+    keyword_pattern = r"\b(?:" + "|".join(sorted(re.escape(k) for k in _NCAAB_LEAGUE_RECOVERY_KEYWORDS)) + r")\b"
     teams_text = out["home_team"].fillna("") + " " + out["away_team"].fillna("")
     team_keyword_mask = teams_text.str.contains(keyword_pattern, regex=True, na=False)
 
@@ -359,6 +363,18 @@ def _preprocess_bet_rows_for_league_bridge(df: pd.DataFrame) -> pd.DataFrame:
     source_is_college = source_text.str.contains(r"\bncaa\b|\bncaab\b|\bncaam\b|college", regex=True, na=False)
 
     out.loc[missing_league & (team_keyword_mask | source_is_college), "league"] = "ncaab"
+    return out
+
+
+def _normalize_identity_strings(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
+    """Normalize key identity columns to pandas StringDtype and stripped text before joins."""
+    if df is None or df.empty:
+        return df
+    out = df.copy()
+    for col in cols:
+        if col not in out.columns:
+            continue
+        out[col] = _clean_text_placeholders(_string_series(out, col)).astype("string").str.strip()
     return out
 
 
@@ -1276,9 +1292,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     pool["expected_value"] = _numeric_series(pool, "expected_value")
     pool["edge"] = _numeric_series(pool, "edge", 0.0)
     pool["best_pick"] = pool.apply(_format_best_pick, axis=1)
-    pool["league"] = _clean_text_placeholders(_string_series(pool, "league"))
-    pool["home_team"] = _clean_text_placeholders(_string_series(pool, "home_team"))
-    pool["away_team"] = _clean_text_placeholders(_string_series(pool, "away_team"))
+    pool["league"] = _clean_text_placeholders(_string_series(pool, "league")).astype("string").str.strip()
+    pool["home_team"] = _clean_text_placeholders(_string_series(pool, "home_team")).astype("string").str.strip()
+    pool["away_team"] = _clean_text_placeholders(_string_series(pool, "away_team")).astype("string").str.strip()
     pool["game_date"] = _game_dates(pool)
 
     # Removed strict game_date.notna() requirement to prevent dropping Spread uploads
@@ -1296,16 +1312,17 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     pool["has_signal_probability"] = _numeric_series(pool, "model_probability").notna() | _numeric_series(pool, "theover_probability").notna() | _numeric_series(pool, "ml_probability").notna()
 
     # Canonical per-game identity key used for full game coverage selection.
-    team_home = pool["home_team"].str.lower().str.replace(r'[^a-z0-9\s]', '', regex=True)
-    team_away = pool["away_team"].str.lower().str.replace(r'[^a-z0-9\s]', '', regex=True)
-
+    # Guaranteed 1:1 mapping: one selected pick for each unique game_date/home/away combination.
     dt_utc = _game_dates(pool)
     date_str = pd.Series([""] * len(pool), index=pool.index, dtype="string")
     valid_dt = dt_utc.notna()
     if valid_dt.any():
         date_str.loc[valid_dt] = dt_utc[valid_dt].dt.tz_convert("America/New_York").dt.strftime("%Y-%m-%d")
-
-    pool["matchup_id"] = team_home + "|" + team_away + "|" + date_str
+    pool["composite_id"] = (
+        date_str
+        + "|" + pool["home_team"].str.lower().str.replace(r"\s+", " ", regex=True)
+        + "|" + pool["away_team"].str.lower().str.replace(r"\s+", " ", regex=True)
+    )
 
     # Force expected_value to numeric, converting true errors to NaN while preserving negative floats
     pool['expected_value'] = pd.to_numeric(pool['expected_value'], errors='coerce')
@@ -1323,10 +1340,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         ascending=[False, False, False, True],
     )
 
-    # Choose one row per canonical matchup key using the ranking above.
-    best = pool.groupby("matchup_id", as_index=False, dropna=False).head(1).copy()
+    # Choose one row per game composite_id using the ranking above.
+    best = pool.groupby("composite_id", as_index=False, dropna=False).first().copy()
 
-    total_games = int(pool["matchup_id"].nunique(dropna=False))
+    total_games = int(pool["composite_id"].nunique(dropna=False))
     if len(best) != total_games:
         logger.warning(
             "Best-pick validation mismatch: selected_rows=%s total_games=%s",
@@ -1581,6 +1598,7 @@ def run_analysis_pipeline(
     raw_base_df = load_base_data()
     odds_schedule_loaded = not raw_base_df.empty
     bet_rows = build_theover_bet_rows(spreads_df, totals_df, sports)
+    bet_rows = _normalize_identity_strings(bet_rows, ["league", "home_team", "away_team"])
     stale = is_stale_schedule(raw_base_df, bet_rows)
     # Keep full base schedule available for fill/lookup; report stale rows but do not drop master data.
     base_df = raw_base_df.copy()
@@ -1589,6 +1607,7 @@ def run_analysis_pipeline(
 
     # Canonical ET-floored slate keys (matchup_id + game_date) used across all joins.
     if not live_odds_df.empty:
+        live_odds_df = _normalize_identity_strings(live_odds_df, ["league", "home_team", "away_team"])
         live_odds_df["league"] = _string_series(live_odds_df, "league").str.upper().replace(LEAGUE_ALIASES)
         live_odds_df["home_team"] = _string_series(live_odds_df, "home_team").map(normalize_team_name)
         live_odds_df["away_team"] = _string_series(live_odds_df, "away_team").map(normalize_team_name)
@@ -1602,6 +1621,7 @@ def run_analysis_pipeline(
     bet_rows["matchup_id"] = _matchup_id(bet_rows)
     if not bet_rows.empty and not base_df.empty:
         base_dates = base_df.copy()
+        base_dates = _normalize_identity_strings(base_dates, ["league", "home_team", "away_team"])
         base_dates["league"] = _string_series(base_dates, "league").str.upper().replace(LEAGUE_ALIASES)
         base_dates["home_team"] = _string_series(base_dates, "home_team").map(normalize_team_name)
         base_dates["away_team"] = _string_series(base_dates, "away_team").map(normalize_team_name)

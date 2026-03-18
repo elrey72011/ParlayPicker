@@ -77,12 +77,15 @@ KALSHI_LINE_TOLERANCE_SPREAD = 3.0
 KALSHI_LINE_TOLERANCE_TOTAL = 3.0
 
 MAX_LINE_TOLERANCE = {
-    "NBA": 1.5,
-    "NCAAB": 1.5,
-    "NHL": 0.5,
+    "NBA": 3.5,
+    "NCAAB": 3.5,
+    "NHL": 1.0,
     "MLB": 0.5,
     "NFL": 2.5,
 }
+
+_NCAAB_FALLBACK_SERIES = ["KXMARMADROUND"]
+_NCAAB_SERIES_TITLE_HINTS = ("march madness", "ncaa", "kxmarmadround")
 
 def _infer_market_family_from_text(title: str, subtitle: str = "", market_type_hint: str = "") -> str | None:
     combined_text = f"{_safe_text(title)} {_safe_text(subtitle)} {_safe_text(market_type_hint)}".lower()
@@ -706,6 +709,37 @@ def _fetch_series_events(series_ticker: str) -> list[dict[str, Any]]:
     return events
 
 
+def _fetch_ncaab_fallback_series_events() -> list[dict[str, Any]]:
+    """Fetch NCAAB fallback events for tournament-style series (March Madness/NCAA)."""
+    events: list[dict[str, Any]] = []
+    for series in _NCAAB_FALLBACK_SERIES:
+        events.extend(_fetch_series_events(series))
+    deduped: dict[str, dict[str, Any]] = {}
+    for event in events:
+        ticker = str(event.get("event_ticker") or "").strip()
+        if ticker:
+            deduped[ticker] = event
+    return list(deduped.values())
+
+
+def _filter_ncaab_series_candidates(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Keep only events that look like March Madness/NCAA tournament series."""
+    filtered: list[dict[str, Any]] = []
+    for event in events:
+        text = " ".join(
+            [
+                _safe_text(event.get("title")),
+                _safe_text(event.get("sub_title")),
+                _safe_text(event.get("subtitle")),
+                _safe_text(event.get("event_ticker")),
+                _safe_text(event.get("series_ticker")),
+            ]
+        ).lower()
+        if any(hint in text for hint in _NCAAB_SERIES_TITLE_HINTS):
+            filtered.append(event)
+    return filtered
+
+
 def _fetch_series_cache(series_set: set[str], date_codes: set[str] | None = None) -> dict[str, dict[str, Any]]:
     """Fetch all open markets for each unique series in one call per series with pagination."""
     cache: dict[str, dict[str, Any]] = {}
@@ -804,6 +838,9 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
     out = best_picks_df.copy()
     out["game_date"] = pd.to_datetime(out.get("game_date"), errors="coerce", utc=True)
+    for col in ["league", "home_team", "away_team"]:
+        if col in out.columns:
+            out[col] = out[col].astype("string").str.strip()
 
     for col in [
         "kalshi_probability",
@@ -868,6 +905,22 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             enrich_with_kalshi_markets.series_cache[series] = _fetch_series_events(series)
 
         series_events = enrich_with_kalshi_markets.series_cache[series]
+
+        if league == "NCAAB":
+            fallback_key = "__NCAAB_FALLBACK_EVENTS__"
+            if fallback_key not in enrich_with_kalshi_markets.series_cache:
+                enrich_with_kalshi_markets.series_cache[fallback_key] = _fetch_ncaab_fallback_series_events()
+            fallback_events = _filter_ncaab_series_candidates(
+                enrich_with_kalshi_markets.series_cache.get(fallback_key, [])
+            )
+            if fallback_events:
+                combined_events = series_events + fallback_events
+                deduped: dict[str, dict[str, Any]] = {}
+                for event in combined_events:
+                    ticker = str(event.get("event_ticker") or "").strip()
+                    if ticker:
+                        deduped[ticker] = event
+                series_events = list(deduped.values())
 
         home_team_name = str(home_team_val).strip() if pd.notna(home_team_val) else ""
         away_team_name = str(away_team_val).strip() if pd.notna(away_team_val) else ""
