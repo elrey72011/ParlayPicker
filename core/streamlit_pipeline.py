@@ -1695,10 +1695,10 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
 
 
 
-def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame) -> pd.DataFrame:
+def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.DataFrame | None = None) -> pd.DataFrame:
     """
-    Expands the wide live_odds_df (1 row per game) into 4 market rows per game
-    (spread_home, spread_away, total_over, total_under).
+    Expands the wide live_odds_df (1 row per game) into exactly 2 market rows per game
+    (1 Spread, 1 Total) based on the user's uploads in `theover_rows`.
     """
     if live_odds_df is None or live_odds_df.empty:
         return pd.DataFrame()
@@ -1711,18 +1711,35 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame) -> pd.DataFrame:
     if "game_time_est" in live_odds_df.columns:
         id_cols.append("game_time_est")
 
+    has_theover = theover_rows is not None and not theover_rows.empty and "market_type" in theover_rows.columns
+
     for _, row in live_odds_df.iterrows():
         base_dict = {col: row.get(col) for col in id_cols}
+        matchup_id = row.get("matchup_id")
 
-        # We need to map novig prices and points to the expanded rows
-        market_mappings = [
-            ("spread_home", "novig_home_price", "novig_home_point", "odds_source_spread"),
-            ("spread_away", "novig_away_price", "novig_away_point", "odds_source_spread"),
-            ("total_over", "novig_over_price", "novig_over_point", "odds_source_total"),
-            ("total_under", "novig_under_price", "novig_under_point", "odds_source_total")
-        ]
+        # Determine which markets to emit dynamically
+        emit_spread = "spread_home"
+        emit_total = "total_over"
 
-        for market_type, price_col, point_col, source_col in market_mappings:
+        if has_theover and matchup_id:
+            matchup_mask = theover_rows["matchup_id"] == matchup_id
+            if matchup_mask.any():
+                matchup_markets = theover_rows.loc[matchup_mask, "market_type"].tolist()
+                if "spread_away" in matchup_markets:
+                    emit_spread = "spread_away"
+                if "total_under" in matchup_markets:
+                    emit_total = "total_under"
+
+        market_mappings = {
+            "spread_home": ("novig_home_price", "novig_home_point", "odds_source_spread"),
+            "spread_away": ("novig_away_price", "novig_away_point", "odds_source_spread"),
+            "total_over": ("novig_over_price", "novig_over_point", "odds_source_total"),
+            "total_under": ("novig_under_price", "novig_under_point", "odds_source_total")
+        }
+
+        # Process the dynamically selected 2 rows
+        for market_type in [emit_spread, emit_total]:
+            price_col, point_col, source_col = market_mappings[market_type]
             market_dict = base_dict.copy()
             market_dict["market_type"] = market_type
 
@@ -1733,11 +1750,11 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame) -> pd.DataFrame:
                 market_dict["odds_source"] = "fallback_novig"
             else:
                 market_dict["odds_american"] = float(price_val)
-                market_dict["odds_source"] = "odds_api" # As requested by instructions, setting to odds_api
+                market_dict["odds_source"] = "odds_api"
 
             # Map lines based on market type
             point_val = pd.to_numeric(row.get(point_col), errors="coerce")
-            if market_type in ["spread_home", "spread_away"]:
+            if market_type.startswith("spread"):
                 market_dict["spread_line"] = float(point_val) if pd.notna(point_val) else pd.NA
                 market_dict["total_line"] = pd.NA
             else:
@@ -1757,27 +1774,7 @@ def run_analysis_pipeline(
     totals_df: pd.DataFrame | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]:
 
-    # 1. Expand TheOdds API into the Master Slate
-    live_odds_df = fetch_live_odds_dataframe(sports)
-
-    if not live_odds_df.empty:
-        live_odds_df = _normalize_identity_strings(live_odds_df, ["league", "home_team", "away_team"])
-        live_odds_df["league"] = _string_series(live_odds_df, "league").str.upper().replace(LEAGUE_ALIASES)
-        live_odds_df["home_team"] = _string_series(live_odds_df, "home_team").map(normalize_team_name)
-        live_odds_df["away_team"] = _string_series(live_odds_df, "away_team").map(normalize_team_name)
-
-        fallback_day = _et_day_string(_game_dates(live_odds_df))
-        today_et_day = pd.Series([_game_date_fallback().strftime("%Y-%m-%d")] * len(live_odds_df), index=live_odds_df.index, dtype="string")
-        live_odds_df["game_date"] = _et_day_string(live_odds_df.get("game_date", pd.Series([pd.NA] * len(live_odds_df), index=live_odds_df.index)))
-        live_odds_df["game_date"] = live_odds_df["game_date"].fillna(fallback_day).fillna(today_et_day)
-        live_odds_df["matchup_id"] = _matchup_id(live_odds_df)
-
-    master_slate = _expand_live_odds_to_bet_rows(live_odds_df)
-    if master_slate.empty:
-        logger.warning("Master slate is empty after odds expansion. Falling back to an empty DataFrame.")
-        master_slate = pd.DataFrame(columns=["league", "home_team", "away_team", "game_date", "matchup_id", "market_type", "odds_american", "odds_source"])
-
-    # 2. Build the enrichment frame (TheOver)
+    # 1. Build the enrichment frame (TheOver) BEFORE expanding the Master Slate
     theover_rows = build_theover_bet_rows(spreads_df, totals_df, sports)
 
     raw_base_df = load_base_data()
@@ -1818,6 +1815,29 @@ def run_analysis_pipeline(
 
     theover_rows, date_stats = _fill_missing_game_dates_from_base(theover_rows, base_df)
     theover_rows = _dedupe_inverted_matchups(theover_rows)
+
+    # 2. Expand TheOdds API into the Master Slate dynamically using theover_rows
+    live_odds_df = fetch_live_odds_dataframe(sports)
+
+    if not live_odds_df.empty:
+        live_odds_df = _normalize_identity_strings(live_odds_df, ["league", "home_team", "away_team"])
+        live_odds_df["league"] = _string_series(live_odds_df, "league").str.upper().replace(LEAGUE_ALIASES)
+        live_odds_df["home_team"] = _string_series(live_odds_df, "home_team").map(normalize_team_name)
+        live_odds_df["away_team"] = _string_series(live_odds_df, "away_team").map(normalize_team_name)
+
+        fallback_day = _et_day_string(_game_dates(live_odds_df))
+        today_et_day = pd.Series([_game_date_fallback().strftime("%Y-%m-%d")] * len(live_odds_df), index=live_odds_df.index, dtype="string")
+        live_odds_df["game_date"] = _et_day_string(live_odds_df.get("game_date", pd.Series([pd.NA] * len(live_odds_df), index=live_odds_df.index)))
+        live_odds_df["game_date"] = live_odds_df["game_date"].fillna(fallback_day).fillna(today_et_day)
+        live_odds_df["matchup_id"] = _matchup_id(live_odds_df)
+
+    master_slate = _expand_live_odds_to_bet_rows(live_odds_df, theover_rows)
+    if master_slate.empty:
+        logger.warning("Master slate is empty after odds expansion. Falling back to an empty DataFrame.")
+        master_slate = pd.DataFrame(columns=["league", "home_team", "away_team", "game_date", "matchup_id", "market_type", "odds_american", "odds_source"])
+
+    # We removed the second `raw_base_df = load_base_data()` to avoid duplicating the load,
+    # but still need `odds_schedule_loaded` since it's used at the very end.
 
     merge_keys = ["league", "home_team", "away_team", "game_date", "fuzzy_team_match>=85"]
 
