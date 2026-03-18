@@ -1694,6 +1694,61 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
     return pd.DataFrame(rows)
 
 
+
+def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Expands the wide live_odds_df (1 row per game) into 4 market rows per game
+    (spread_home, spread_away, total_over, total_under).
+    """
+    if live_odds_df is None or live_odds_df.empty:
+        return pd.DataFrame()
+
+    out_rows = []
+
+    # Required identity columns
+    id_cols = ["league", "home_team", "away_team", "game_date", "matchup_id"]
+    # Check for game_time_est if exists
+    if "game_time_est" in live_odds_df.columns:
+        id_cols.append("game_time_est")
+
+    for _, row in live_odds_df.iterrows():
+        base_dict = {col: row.get(col) for col in id_cols}
+
+        # We need to map novig prices and points to the expanded rows
+        market_mappings = [
+            ("spread_home", "novig_home_price", "novig_home_point", "odds_source_spread"),
+            ("spread_away", "novig_away_price", "novig_away_point", "odds_source_spread"),
+            ("total_over", "novig_over_price", "novig_over_point", "odds_source_total"),
+            ("total_under", "novig_under_price", "novig_under_point", "odds_source_total")
+        ]
+
+        for market_type, price_col, point_col, source_col in market_mappings:
+            market_dict = base_dict.copy()
+            market_dict["market_type"] = market_type
+
+            # Map pricing
+            price_val = pd.to_numeric(row.get(price_col), errors="coerce")
+            if pd.isna(price_val):
+                market_dict["odds_american"] = -110.0
+                market_dict["odds_source"] = "fallback_novig"
+            else:
+                market_dict["odds_american"] = float(price_val)
+                market_dict["odds_source"] = "odds_api" # As requested by instructions, setting to odds_api
+
+            # Map lines based on market type
+            point_val = pd.to_numeric(row.get(point_col), errors="coerce")
+            if market_type in ["spread_home", "spread_away"]:
+                market_dict["spread_line"] = float(point_val) if pd.notna(point_val) else pd.NA
+                market_dict["total_line"] = pd.NA
+            else:
+                market_dict["spread_line"] = pd.NA
+                market_dict["total_line"] = float(point_val) if pd.notna(point_val) else pd.NA
+
+            out_rows.append(market_dict)
+
+    expanded_df = pd.DataFrame(out_rows)
+    return expanded_df
+
 def run_analysis_pipeline(
     sports: list[str] | None = None,
     max_rows: int = 1000,
@@ -1701,45 +1756,54 @@ def run_analysis_pipeline(
     spreads_df: pd.DataFrame | None = None,
     totals_df: pd.DataFrame | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]:
-    raw_base_df = load_base_data()
-    odds_schedule_loaded = not raw_base_df.empty
-    bet_rows = build_theover_bet_rows(spreads_df, totals_df, sports)
-    # Earliest/high-priority league repair pass: recover blank/<NA>/null league values for college matchups.
-    # CRITICAL: We MUST infer NBA maps FIRST to prevent 'state' matching Golden State.
-    bet_rows = _infer_missing_league_from_team_sets(bet_rows, sports)
-    bet_rows = _restore_missing_ncaab_league_priority(bet_rows)
-    bet_rows = _recover_ncaab_league_labels(bet_rows)
-    # Enforce StringDtype on identity columns before any text/boolean comparisons.
-    bet_rows = _enforce_identity_string_dtype(bet_rows, ["league", "home_team", "away_team"])
-    # Recover missing NCAAB league labels prior to Kalshi enrichment and ML prediction flow.
-    bet_rows = _preprocess_bet_rows_for_league_bridge(bet_rows)
-    bet_rows = _normalize_identity_strings(bet_rows, ["league", "home_team", "away_team"])
-    stale = is_stale_schedule(raw_base_df, bet_rows)
-    # Keep full base schedule available for fill/lookup; report stale rows but do not drop master data.
-    base_df = raw_base_df.copy()
-    stale_base_rows_removed = 0
+
+    # 1. Expand TheOdds API into the Master Slate
     live_odds_df = fetch_live_odds_dataframe(sports)
 
-    # Canonical ET-floored slate keys (matchup_id + game_date) used across all joins.
     if not live_odds_df.empty:
         live_odds_df = _normalize_identity_strings(live_odds_df, ["league", "home_team", "away_team"])
         live_odds_df["league"] = _string_series(live_odds_df, "league").str.upper().replace(LEAGUE_ALIASES)
         live_odds_df["home_team"] = _string_series(live_odds_df, "home_team").map(normalize_team_name)
         live_odds_df["away_team"] = _string_series(live_odds_df, "away_team").map(normalize_team_name)
-        live_odds_df["game_date"] = _et_day_string(live_odds_df.get("game_date", pd.Series([pd.NA] * len(live_odds_df), index=live_odds_df.index)))
+
         fallback_day = _et_day_string(_game_dates(live_odds_df))
         today_et_day = pd.Series([_game_date_fallback().strftime("%Y-%m-%d")] * len(live_odds_df), index=live_odds_df.index, dtype="string")
+        live_odds_df["game_date"] = _et_day_string(live_odds_df.get("game_date", pd.Series([pd.NA] * len(live_odds_df), index=live_odds_df.index)))
         live_odds_df["game_date"] = live_odds_df["game_date"].fillna(fallback_day).fillna(today_et_day)
         live_odds_df["matchup_id"] = _matchup_id(live_odds_df)
 
-    bet_rows = _enforce_identity_string_dtype(bet_rows, ["league", "home_team", "away_team"])
-    bet_rows = _normalize_identity_strings(bet_rows, ["league", "home_team", "away_team"])
-    bet_rows["league"] = _string_series(bet_rows, "league").str.upper().replace(LEAGUE_ALIASES)
-    bet_rows["home_team"] = _string_series(bet_rows, "home_team").map(normalize_team_name)
-    bet_rows["away_team"] = _string_series(bet_rows, "away_team").map(normalize_team_name)
-    bet_rows["game_date"] = _et_day_string(_game_dates(bet_rows))
-    bet_rows["matchup_id"] = _matchup_id(bet_rows)
-    if not bet_rows.empty and not base_df.empty:
+    master_slate = _expand_live_odds_to_bet_rows(live_odds_df)
+    if master_slate.empty:
+        logger.warning("Master slate is empty after odds expansion. Falling back to an empty DataFrame.")
+        master_slate = pd.DataFrame(columns=["league", "home_team", "away_team", "game_date", "matchup_id", "market_type", "odds_american", "odds_source"])
+
+    # 2. Build the enrichment frame (TheOver)
+    theover_rows = build_theover_bet_rows(spreads_df, totals_df, sports)
+
+    raw_base_df = load_base_data()
+    odds_schedule_loaded = not raw_base_df.empty
+
+    # Ensure identity string dtypes on theover_rows
+    theover_rows = _infer_missing_league_from_team_sets(theover_rows, sports)
+    theover_rows = _restore_missing_ncaab_league_priority(theover_rows)
+    theover_rows = _recover_ncaab_league_labels(theover_rows)
+    theover_rows = _enforce_identity_string_dtype(theover_rows, ["league", "home_team", "away_team"])
+    theover_rows = _preprocess_bet_rows_for_league_bridge(theover_rows)
+    theover_rows = _normalize_identity_strings(theover_rows, ["league", "home_team", "away_team"])
+
+    stale = is_stale_schedule(raw_base_df, theover_rows)
+    base_df = raw_base_df.copy()
+    stale_base_rows_removed = 0
+
+    theover_rows = _enforce_identity_string_dtype(theover_rows, ["league", "home_team", "away_team"])
+    theover_rows = _normalize_identity_strings(theover_rows, ["league", "home_team", "away_team"])
+    theover_rows["league"] = _string_series(theover_rows, "league").str.upper().replace(LEAGUE_ALIASES)
+    theover_rows["home_team"] = _string_series(theover_rows, "home_team").map(normalize_team_name)
+    theover_rows["away_team"] = _string_series(theover_rows, "away_team").map(normalize_team_name)
+    theover_rows["game_date"] = _et_day_string(_game_dates(theover_rows))
+    theover_rows["matchup_id"] = _matchup_id(theover_rows)
+
+    if not theover_rows.empty and not base_df.empty:
         base_dates = base_df.copy()
         base_dates = _normalize_identity_strings(base_dates, ["league", "home_team", "away_team"])
         base_dates["league"] = _string_series(base_dates, "league").str.upper().replace(LEAGUE_ALIASES)
@@ -1749,40 +1813,75 @@ def run_analysis_pipeline(
         base_dates["matchup_id"] = _matchup_id(base_dates)
 
         date_lookup = base_dates[["league", "matchup_id", "date"]].drop_duplicates(["league", "matchup_id"])
+        merged_dates = theover_rows.merge(date_lookup, on=["league", "matchup_id"], how="left")
+        theover_rows["game_date"] = theover_rows["game_date"].fillna(merged_dates["date"])
 
-        merged_dates = bet_rows.merge(date_lookup, on=["league", "matchup_id"], how="left")
-        bet_rows["game_date"] = bet_rows["game_date"].fillna(merged_dates["date"])
-    bet_rows, date_stats = _fill_missing_game_dates_from_base(bet_rows, base_df)
-    bet_rows = _dedupe_inverted_matchups(bet_rows)
+    theover_rows, date_stats = _fill_missing_game_dates_from_base(theover_rows, base_df)
+    theover_rows = _dedupe_inverted_matchups(theover_rows)
 
     merge_keys = ["league", "home_team", "away_team", "game_date", "fuzzy_team_match>=85"]
 
-    # Primary ingestion baseline: bet_rows (uploaded CSV) is the master slate frame.
-    merged = bet_rows.copy()
+    # Primary ingestion baseline: master_slate (from Odds API) is the master slate frame.
+    merged = master_slate.copy()
 
-    # Since we are using bet_rows as the baseline, we join live_odds_df onto it rather than the other way around.
-    # To keep downstream logic working that depends on live_odds columns existing on `merged`,
-    # we merge `live_odds_df` onto `merged` immediately if live_odds_df is not empty.
-    if not live_odds_df.empty:
-        live_merge_cols = [c for c in live_odds_df.columns if c not in ["league", "home_team", "away_team", "game_date", "matchup_id"]]
+    # 3. Invert the Merge (Odds API is Base, TheOver is Enrichment)
+    if not theover_rows.empty and not merged.empty:
         # Standardize both sides of the merge to ET day boundaries before join.
         merged["game_date"] = pd.to_datetime(merged["game_date"], errors="coerce", utc=True).dt.tz_convert("America/New_York").dt.floor("D")
-        live_odds_df["game_date"] = pd.to_datetime(live_odds_df["game_date"], errors="coerce", utc=True).dt.tz_convert("America/New_York").dt.floor("D")
+        theover_rows["game_date"] = pd.to_datetime(theover_rows["game_date"], errors="coerce", utc=True).dt.tz_convert("America/New_York").dt.floor("D")
         fallback_merge_day = pd.Timestamp.now(tz="America/New_York").floor("D")
         merged["game_date"] = merged["game_date"].fillna(fallback_merge_day)
-        live_odds_df["game_date"] = live_odds_df["game_date"].fillna(fallback_merge_day)
+        theover_rows["game_date"] = theover_rows["game_date"].fillna(fallback_merge_day)
+
+        # Merge theover enrichment columns
+        theover_cols_to_merge = ["matchup_id", "market_type", "theover_probability", "ml_probability"]
+        # Only merge columns that exist
+        theover_cols_to_merge = [c for c in theover_cols_to_merge if c in theover_rows.columns]
 
         merged = merged.merge(
-            live_odds_df.drop(columns=["league", "home_team", "away_team"]).drop_duplicates(["matchup_id", "game_date"]),
-            on=["matchup_id", "game_date"],
+            theover_rows[theover_cols_to_merge].drop_duplicates(["matchup_id", "market_type"]),
+            on=["matchup_id", "market_type"],
             how="left"
         )
 
+        # 4. Fuzzy Matching Fallback
+        # After the strict join, identify any rows in master_slate where theover_probability is still NaN.
+        # Ensure we only try fuzzy match if theover_rows has probability columns
+        if "theover_probability" in theover_rows.columns or "ml_probability" in theover_rows.columns:
+            needs_fuzzy = pd.Series([False]*len(merged), index=merged.index)
+            if "theover_probability" in merged.columns:
+                needs_fuzzy = needs_fuzzy | merged["theover_probability"].isna()
+            if "ml_probability" in merged.columns:
+                needs_fuzzy = needs_fuzzy | merged["ml_probability"].isna()
+
+            if needs_fuzzy.any():
+                logger.info(f"Attempting fuzzy match for {needs_fuzzy.sum()} rows missing enrichment from TheOver.")
+                theover_schedule = theover_rows.drop_duplicates(["league", "home_team", "away_team", "market_type"])
+
+                for idx in merged.index[needs_fuzzy]:
+                    row_market = merged.at[idx, "market_type"]
+                    # We need to filter theover_schedule to the same market type
+                    market_schedule = theover_schedule[theover_schedule["market_type"] == row_market]
+
+                    if market_schedule.empty:
+                        continue
+
+                    match = _fuzzy_match_schedule_row(merged.loc[idx], market_schedule, threshold=85)
+                    if match.empty:
+                        continue
+
+                    # Patch missing columns
+                    if "theover_probability" in merged.columns and pd.isna(merged.at[idx, "theover_probability"]) and pd.notna(match.get("theover_probability")):
+                        merged.at[idx, "theover_probability"] = match.get("theover_probability")
+
+                    if "ml_probability" in merged.columns and pd.isna(merged.at[idx, "ml_probability"]) and pd.notna(match.get("ml_probability")):
+                        merged.at[idx, "ml_probability"] = match.get("ml_probability")
+
     # Ensure identity columns survive master-frame merges.
     if "league" not in merged.columns or _string_series(merged, "league").str.len().eq(0).all():
-        if not bet_rows.empty and "league" in bet_rows.columns and "matchup_id" in merged.columns and "game_date" in merged.columns:
+        if not theover_rows.empty and "league" in theover_rows.columns and "matchup_id" in merged.columns and "game_date" in merged.columns:
             league_lookup = (
-                bet_rows[[c for c in ["matchup_id", "game_date", "league"] if c in bet_rows.columns]]
+                theover_rows[[c for c in ["matchup_id", "game_date", "league"] if c in theover_rows.columns]]
                 .dropna(subset=["matchup_id", "game_date"])
                 .drop_duplicates(["matchup_id", "game_date"], keep="last")
             )
@@ -1801,12 +1900,17 @@ def run_analysis_pipeline(
         merged["league"] = ""
     merged["league"] = _string_series(merged, "league").str.upper().replace(LEAGUE_ALIASES)
 
+    # 5. Eliminate the Fallback Artifacts
+    # The clunky np.select code and novig_home_price checks have been completely removed from here
+    # since we already mapped odds_american properly during the expand step!
+
     # Do not set a fallback odds_source
     if "odds_source" not in merged.columns:
         merged["odds_source"] = pd.NA
 
     uploaded_odds = _numeric_series(merged, "odds_american")
     merged.loc[uploaded_odds.notna() & (uploaded_odds != -110), "odds_source"] = "uploaded"
+
     if not base_df.empty:
         base_schedule = base_df.copy()
         base_schedule["league"] = _string_series(base_schedule, "league").str.upper().replace(LEAGUE_ALIASES)
@@ -1825,7 +1929,7 @@ def run_analysis_pipeline(
         base_schedule["date_day"] = _date_join_key(base_schedule["date"])
 
         base_merge_columns = ["league", "matchup_id", "merge_date_utc"] + [
-            col for col in ["date", "game_time_est", "odds_american", "ml_probability", "is_neutral"]
+            col for col in ["date", "game_time_est", "is_neutral"]
             if col in base_schedule.columns
         ]
 
@@ -1843,72 +1947,6 @@ def run_analysis_pipeline(
             suffixes=("", "_base"),
         )
 
-        # Fallback to team-only lookup for rows still unmatched by date.
-        needs_team_only = _numeric_series(merged, "odds_american_base").isna() & _numeric_series(merged, "ml_probability_base").isna()
-        if needs_team_only.any():
-            team_only_cols = [
-                c
-                for c in [
-                    "league",
-                    "matchup_id",
-                    "date",
-                    "game_time_est",
-                    "odds_american",
-                    "ml_probability",
-                    "is_neutral",
-                ]
-                if c in base_schedule.columns
-            ]
-            team_only_lookup = (
-                base_schedule[team_only_cols]
-                .sort_values("date")
-                .drop_duplicates(["league", "matchup_id"], keep="last")
-                .rename(
-                    columns={
-                        "date": "date_team",
-                        "game_time_est": "game_time_est_team",
-                        "odds_american": "odds_american_team",
-                        "ml_probability": "ml_probability_team",
-                        "is_neutral": "is_neutral_team",
-                    }
-                )
-            )
-            fill_view = merged.loc[needs_team_only, ["league", "matchup_id"]].merge(
-                team_only_lookup,
-                on=["league", "matchup_id"],
-                how="left",
-            )
-
-            # Explicit dtype coercion before assignment to prevent datetime64[ns, UTC] vs NaT shearing.
-            if "date" not in merged.columns:
-                merged["date"] = pd.Series(pd.NaT, index=merged.index, dtype="datetime64[ns, UTC]")
-            merged["date"] = _force_utc_datetime(merged["date"])
-            if "date_team" in fill_view.columns:
-                fill_view["date_team"] = _force_utc_datetime(fill_view["date_team"])
-
-            for base_col, team_col in [
-                ("date", "date_team"),
-                ("game_time_est_base", "game_time_est_team"),
-                ("odds_american_base", "odds_american_team"),
-                ("ml_probability_base", "ml_probability_team"),
-                ("is_neutral_base", "is_neutral_team"),
-            ]:
-                if team_col in fill_view.columns:
-                    if base_col not in merged.columns:
-                        merged[base_col] = pd.NA
-
-                    current_slice = merged.loc[needs_team_only, base_col]
-                    fill_series = fill_view[team_col].reset_index(drop=True).set_axis(current_slice.index)
-
-                    if base_col == "date":
-                        fill_series = pd.to_datetime(fill_series, errors="coerce", utc=True)
-                    elif base_col in {"odds_american_base", "ml_probability_base"}:
-                        fill_series = pd.to_numeric(fill_series, errors="coerce")
-
-                    merged.loc[needs_team_only, base_col] = current_slice.where(
-                        current_slice.notna(), fill_series
-                    )
-
         merged["game_date"] = _game_dates(merged)
         merged["game_date"] = merged["game_date"].fillna(merged["date"])
 
@@ -1919,297 +1957,16 @@ def run_analysis_pipeline(
             )
             merged = merged.drop(columns=["game_time_est_base"])
 
-        if "odds_american_base" in merged.columns:
-            odds_current = _numeric_series(merged, "odds_american")
-            odds_base = _numeric_series(merged, "odds_american_base")
-            use_base = ~(odds_current.notna() & (odds_current != -110)) & odds_base.notna()
-            merged["odds_american"] = odds_current.where(~use_base, odds_base)
-            merged.loc[use_base, "odds_source"] = "base_direct"
-            merged = merged.drop(columns=["odds_american_base"])
-
-        if "ml_probability_base" in merged.columns:
-            merged["ml_probability"] = _numeric_series(merged, "ml_probability").where(
-                _numeric_series(merged, "ml_probability").notna(),
-                _numeric_series(merged, "ml_probability_base"),
-            )
-            merged = merged.drop(columns=["ml_probability_base"])
-
-        # Canonical matchup merge above is orientation-insensitive; explicit reverse merge is unnecessary.
-
-        if "odds_american_rev" in merged.columns:
-            odds_current = _numeric_series(merged, "odds_american")
-            odds_rev = _numeric_series(merged, "odds_american_rev")
-            use_rev = ~(odds_current.notna() & (odds_current != -110)) & odds_rev.notna()
-            merged["odds_american"] = odds_current.where(~use_rev, odds_rev)
-            merged.loc[use_rev, "odds_source"] = "base_reverse"
-            merged = merged.drop(columns=["odds_american_rev"])
-
-        if "ml_probability_rev" in merged.columns:
-            merged["ml_probability"] = _numeric_series(merged, "ml_probability").where(
-                _numeric_series(merged, "ml_probability").notna(),
-                _numeric_series(merged, "ml_probability_rev"),
-            )
-            merged = merged.drop(columns=["ml_probability_rev"])
-
-        if "date_rev" in merged.columns:
-            merged["game_date"] = _game_dates(merged).fillna(pd.to_datetime(merged["date_rev"], errors="coerce", utc=True))
-            merged = merged.drop(columns=["date_rev"])
-
-        if "game_time_est_rev" in merged.columns:
-            merged["game_time_est"] = _string_series(merged, "game_time_est").where(
-                _string_series(merged, "game_time_est").str.len().gt(0),
-                _string_series(merged, "game_time_est_rev"),
-            )
-            merged = merged.drop(columns=["game_time_est_rev"])
-
         if "is_neutral_base" in merged.columns:
             merged["is_neutral"] = merged["is_neutral"].fillna(merged["is_neutral_base"]) if "is_neutral" in merged.columns else merged["is_neutral_base"]
             merged = merged.drop(columns=["is_neutral_base"])
 
-        if "is_neutral_rev" in merged.columns:
-            merged["is_neutral"] = merged["is_neutral"].fillna(merged["is_neutral_rev"]) if "is_neutral" in merged.columns else merged["is_neutral_rev"]
-            merged = merged.drop(columns=["is_neutral_rev"])
-
         if "merge_date_utc" in merged.columns:
             merged = merged.drop(columns=["merge_date_utc"])
 
-        # Fuzzy fallback when strict league/home/away join misses schedule rows.
-        needs_fuzzy = (
-            _game_dates(merged).isna()
-            | _numeric_series(merged, "ml_probability").isna()
-            | _numeric_series(merged, "odds_american").isna()
-        )
-        if needs_fuzzy.any():
-            schedule_for_fuzzy = base_schedule[[
-                c for c in ["league", "home_team", "away_team", "date", "game_time_est", "odds_american", "ml_probability", "is_neutral"]
-                if c in base_schedule.columns
-            ]].drop_duplicates()
-
-            for idx in merged.index[needs_fuzzy]:
-                match = _fuzzy_match_schedule_row(merged.loc[idx], schedule_for_fuzzy, threshold=85)
-                if match.empty:
-                    continue
-
-                if pd.isna(_game_dates(merged.loc[[idx]]).iloc[0]) and pd.notna(match.get("date")):
-                    merged.at[idx, "game_date"] = pd.to_datetime(match.get("date"), errors="coerce", utc=True)
-                if pd.isna(pd.to_numeric(merged.at[idx, "odds_american"], errors="coerce")) and pd.notna(match.get("odds_american")):
-                    merged.at[idx, "odds_american"] = pd.to_numeric(match.get("odds_american"), errors="coerce")
-                    merged.at[idx, "odds_source"] = "base_fuzzy"
-                if pd.isna(pd.to_numeric(merged.at[idx, "ml_probability"], errors="coerce")) and pd.notna(match.get("ml_probability")):
-                    merged.at[idx, "ml_probability"] = pd.to_numeric(match.get("ml_probability"), errors="coerce")
-                if (not str("" if pd.isna(merged.at[idx, "game_time_est"]) else merged.at[idx, "game_time_est"]).strip()) and pd.notna(match.get("game_time_est")):
-                    merged.at[idx, "game_time_est"] = str(match.get("game_time_est"))
-                if "is_neutral" in merged.columns and pd.isna(merged.at[idx, "is_neutral"]) and pd.notna(match.get("is_neutral")):
-                    merged.at[idx, "is_neutral"] = match.get("is_neutral")
-
     logger.info(f"Number of live Novig games fetched: {len(live_odds_df)}")
 
-    # Merge Live Odds
-    if not live_odds_df.empty:
-        # Lowercase merge keys for case-insensitive merge
-        live_odds_df["home_team_lower"] = clean_team_name(live_odds_df["home_team"])
-        live_odds_df["away_team_lower"] = clean_team_name(live_odds_df["away_team"])
-        live_odds_df["matchup_key"] = _canonical_matchup_teams_key(live_odds_df)
-        live_odds_df["matchup_id"] = _matchup_id(live_odds_df)
-        live_odds_df["merge_date_utc"] = _et_day_string(live_odds_df.get("game_date"))
-        live_odds_df["live_home_team_lower"] = live_odds_df["home_team_lower"]
-        live_odds_df["live_away_team_lower"] = live_odds_df["away_team_lower"]
-        if "home_team_lower" not in merged.columns:
-            merged["home_team_lower"] = clean_team_name(merged["home_team"])
-            merged["away_team_lower"] = clean_team_name(merged["away_team"])
-        if "matchup_key" not in merged.columns:
-            merged["matchup_key"] = _canonical_matchup_teams_key(merged)
-        if "matchup_id" not in merged.columns:
-            merged["matchup_id"] = _matchup_id(merged)
-        if "merge_date_utc" not in merged.columns:
-            merged["merge_date_utc"] = _et_day_string(merged.get("game_date"))
-
-        # Phase 1: Entity Resolution Validation Layer
-        # Validate live odds against current pipeline matchups first (uploaded/analysis rows),
-        # with base schedule as secondary context. Avoid over-pruning that causes false fallbacks.
-        allowed_keys = set()
-        if "matchup_key" in merged.columns:
-            allowed_keys.update(k for k in merged["matchup_key"].tolist() if isinstance(k, str) and k)
-
-        if not base_df.empty:
-            # Orientation-insensitive validation: keep legitimate reversed home/away feeds.
-            base_matchups = base_df[['league', 'home_team', 'away_team', 'game_date']].copy().drop_duplicates()
-            base_keys = _canonical_matchup_teams_key(base_matchups)
-            allowed_keys.update(k for k in base_keys.tolist() if isinstance(k, str) and k)
-
-        if allowed_keys:
-            pre_count = len(live_odds_df)
-            filtered_live = live_odds_df[live_odds_df["matchup_key"].isin(allowed_keys)].copy()
-            # Guardrail: if validation would discard everything, keep original live odds set.
-            if not filtered_live.empty:
-                live_odds_df = filtered_live
-            elif pre_count > 0:
-                logger.warning("Live odds validation against known matchups removed all rows; keeping original live_odds_df to avoid false fallbacks.")
-
-        # Avoid duplicating columns during merge
-        live_merge_cols = [
-            c for c in live_odds_df.columns
-            if c not in [
-                "game_id", "commence_time", "raw_home_team", "raw_away_team",
-                "home_team", "away_team", "home_team_lower", "away_team_lower",
-                # Keep pipeline identity columns stable; avoid league_x/league_y suffix splits.
-                "league", "game_date", "game_date_est", "matchup_key",
-            ]
-        ]
-        merged = merged.merge(
-            live_odds_df[live_merge_cols].drop_duplicates(["matchup_id", "merge_date_utc"]),
-            on=["matchup_id", "merge_date_utc"],
-            how="left"
-        )
-
-        # If strict date join misses all live odds rows, retry matchup-only merge as fallback.
-        novig_cols = [c for c in ["novig_home_price", "novig_away_price", "novig_over_price", "novig_under_price"] if c in merged.columns]
-        if novig_cols and merged[novig_cols].isna().all(axis=None):
-            live_matchup_only = live_odds_df[live_merge_cols].drop(columns=["merge_date_utc"], errors="ignore").drop_duplicates(["matchup_id"])
-            merged_retry = merged.drop(columns=[c for c in novig_cols if c in merged.columns], errors="ignore").merge(
-                live_matchup_only,
-                on=["matchup_id"],
-                how="left",
-                suffixes=("", "_retry"),
-            )
-            for col in novig_cols:
-                retry_col = f"{col}_retry"
-                if retry_col in merged_retry.columns:
-                    merged_retry[col] = merged_retry[retry_col]
-                    merged_retry = merged_retry.drop(columns=[retry_col], errors="ignore")
-            merged = merged_retry
-
-    # Realign live Novig home/away columns to payload orientation when teams are reversed.
-    if {"home_team", "away_team", "live_home_team_lower", "live_away_team_lower"}.issubset(merged.columns):
-        merged["home_team_lower"] = clean_team_name(merged["home_team"])
-        merged["away_team_lower"] = clean_team_name(merged["away_team"])
-        swapped_orientation = (
-            merged["home_team_lower"].eq(merged["live_away_team_lower"])
-            & merged["away_team_lower"].eq(merged["live_home_team_lower"])
-        ).fillna(False)
-        for left_col, right_col in [("novig_home_price", "novig_away_price"), ("novig_home_point", "novig_away_point")]:
-            if left_col in merged.columns and right_col in merged.columns and swapped_orientation.any():
-                left_vals = merged.loc[swapped_orientation, left_col].copy()
-                merged.loc[swapped_orientation, left_col] = merged.loc[swapped_orientation, right_col]
-                merged.loc[swapped_orientation, right_col] = left_vals
-
-    merged["game_date"] = _game_dates(merged)
-    # Fill any missing dates with fallback
-    merged["game_date"] = merged["game_date"].fillna(_game_date_fallback())
-    merged["game_time_est"] = _format_game_time_est(merged)
-
-    # Explicit Column Coalescing for Novig lines
-    # Define mapping criteria based strictly on market_type
-    m_type = merged["market_type"].str.lower()
-
-    # Safely ensure target columns exist to prevent KeyError
-    for col in ["novig_home_point", "novig_home_price", "novig_away_point", "novig_away_price",
-                "novig_over_point", "novig_over_price", "novig_under_point", "novig_under_price"]:
-        if col not in merged.columns:
-            merged[col] = pd.NA
-
-    def safe_series_float(series):
-        # Strip '+' prefix if exists, handle errors safely
-        return pd.to_numeric(series.astype(str).str.replace('+', '', regex=False), errors='coerce')
-
-    def _bool_mask(series: pd.Series) -> np.ndarray:
-        """Return a numpy bool mask without NA values (required by np.select)."""
-        return series.fillna(False).astype(bool).to_numpy()
-
-    # Orientation-safe spread side selection using line alignment when available.
-    spread_line_num = pd.to_numeric(merged.get("spread_line"), errors="coerce")
-    novig_home_point_num = pd.to_numeric(merged.get("novig_home_point"), errors="coerce")
-    novig_away_point_num = pd.to_numeric(merged.get("novig_away_point"), errors="coerce")
-
-    home_line_match = (novig_home_point_num - spread_line_num).abs().le(0.01)
-    away_line_match = (novig_away_point_num - spread_line_num).abs().le(0.01)
-
-    spread_home_price_aligned = safe_series_float(merged["novig_home_price"]).where(~away_line_match, safe_series_float(merged["novig_away_price"]))
-    spread_away_price_aligned = safe_series_float(merged["novig_away_price"]).where(~home_line_match, safe_series_float(merged["novig_home_price"]))
-
-    cond_spread_home = _bool_mask((m_type == "spread_home") & (merged["novig_home_price"].notna() | merged["novig_away_price"].notna()))
-    cond_spread_away = _bool_mask((m_type == "spread_away") & (merged["novig_home_price"].notna() | merged["novig_away_price"].notna()))
-    cond_total_over = _bool_mask((m_type == "total_over") & merged["novig_over_price"].notna())
-    cond_total_under = _bool_mask((m_type == "total_under") & merged["novig_under_price"].notna())
-
-    # Coalesce odds_american
-    merged["odds_american"] = np.select(
-        [cond_spread_home, cond_spread_away, cond_total_over, cond_total_under],
-        [
-            spread_home_price_aligned,
-            spread_away_price_aligned,
-            safe_series_float(merged["novig_over_price"]),
-            safe_series_float(merged["novig_under_price"])
-        ],
-        default=merged.get("odds_american", pd.NA)
-    )
-
-    # Coalesce spread_line
-    merged["spread_line"] = np.select(
-        [cond_spread_home, cond_spread_away],
-        [
-            safe_series_float(merged["novig_home_point"]),
-            safe_series_float(merged["novig_away_point"])
-        ],
-        default=merged.get("spread_line", pd.NA)
-    )
-
-    # Coalesce total_line
-    merged["total_line"] = np.select(
-        [cond_total_over, cond_total_under],
-        [
-            safe_series_float(merged["novig_over_point"]),
-            safe_series_float(merged["novig_under_point"])
-        ],
-        default=merged.get("total_line", pd.NA)
-    )
-
-    # Override odds_source to novig_live if successfully mapped from novig
-    cond_any = cond_spread_home | cond_spread_away | cond_total_over | cond_total_under
-    if "odds_source" not in merged.columns:
-        merged["odds_source"] = pd.NA
-    merged["odds_source"] = np.where(cond_any, "novig_live", merged["odds_source"])
-
-    has_local_uploaded_odds = bool((
-        _string_series(merged, "odds_source").str.lower().eq("uploaded")
-        & _numeric_series(merged, "odds_american").notna()
-    ).any())
-
-    is_odds_api_csv_source = _string_series(merged, "odds_source").str.lower().eq("odds_api")
-
-    # Use uploaded odds API odds for games missing Novig API lines, and explicitly ensure odds_source is odds_api
-    # Apply fallback only if missing AND NOT from odds_api.
-    missing_odds_mask = merged["odds_american"].isna()
-    needs_fallback_mask = missing_odds_mask & ~is_odds_api_csv_source
-
-    if needs_fallback_mask.any() and not has_local_uploaded_odds:
-        if live_odds_df.empty:
-            logger.warning("Novig API unavailable/empty due to time or tier restrictions. Falling back to standard -110 odds to render dashboard.")
-        else:
-            logger.warning("Novig API returned data but did not match all uploaded rows. Applying -110 fallback for unmatched rows.")
-        merged.loc[needs_fallback_mask, "odds_american"] = -110.0
-        merged.loc[needs_fallback_mask, "odds_source"] = "fallback_novig"
-
-    # Explicitly set odds_source = 'odds_api' for all rows matched in uploaded CSV
-    # to avoid the global fallback, ensuring they stay prioritized
-    if is_odds_api_csv_source.any():
-        merged.loc[is_odds_api_csv_source, "odds_source"] = "odds_api"
-
-    # Do NOT drop rows based on missing or invalid odds_source. The master slate
-    # MUST be preserved exactly as uploaded. Patch instead.
-    if "odds_source" in merged.columns:
-        # We also need to allow uploaded or base odds sources for backwards compatibility and test suite
-        valid_sources = ["novig_live", "fallback_novig", "uploaded", "base_direct", "base_reverse", "base_fuzzy", "dummy_override", "odds_api"]
-        # Treat pd.NA / NaN in odds_source as implicitly valid for backwards compatibility tests
-        missing_mask = ~merged["odds_source"].isin(valid_sources) & merged["odds_source"].notna()
-        dropped_count = missing_mask.sum()
-        if dropped_count > 0:
-            dropped_games = merged[missing_mask][['home_team', 'away_team', 'market_type']].to_dict('records')
-            invalid_sources = merged[missing_mask]['odds_source'].unique().tolist()
-            logger.warning(f"Warning: Found {dropped_count} rows with invalid odds_source ({invalid_sources}). Patching with fallback_novig instead of dropping: {dropped_games}")
-            merged.loc[missing_mask, "odds_american"] = -110.0
-            merged.loc[missing_mask, "odds_source"] = "fallback_novig"
-
+    # We still need to ensure odds_american and odds_source are correctly typed.
     merged["odds_american"] = _numeric_series(merged, "odds_american", pd.NA)
 
     # Final guardrail: if any rows still lack odds, patch with fallback instead of dropping data.
