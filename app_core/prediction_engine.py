@@ -9,6 +9,11 @@ import json
 from typing import List, Optional, Any, Dict, Mapping, Tuple
 from app_core.team_name_matcher import TeamNameMatcher
 
+try:
+    from rapidfuzz import fuzz as rapidfuzz_fuzz
+except Exception:  # pragma: no cover - optional dependency
+    rapidfuzz_fuzz = None
+
 # Jules: Initializing local logging for the new engine
 logger = logging.getLogger(__name__)
 
@@ -178,6 +183,48 @@ def _series_or_default(df: pd.DataFrame, col: str, default: str = "") -> pd.Seri
     if col in df.columns:
         return df[col]
     return pd.Series([default] * len(df), index=df.index)
+def _fuzzy_match_hist_row(
+    hist_df: pd.DataFrame,
+    row_league: str,
+    row_game_date: Any,
+    row_home: str,
+    row_away: str,
+) -> pd.DataFrame:
+    """Fuzzy fallback for schedule-key mismatches when exact matchup join misses."""
+    if hist_df is None or hist_df.empty or rapidfuzz_fuzz is None:
+        return hist_df.iloc[0:0]
+
+    candidate = hist_df.copy()
+    if row_league and "league_norm" in candidate.columns:
+        candidate = candidate[candidate["league_norm"].astype("string").str.upper().eq(str(row_league).upper()).fillna(False)]
+    if row_game_date is not None and not pd.isna(row_game_date) and "game_date_dt" in candidate.columns:
+        candidate = candidate[candidate["game_date_dt"].dt.normalize().eq(pd.Timestamp(row_game_date).normalize()).fillna(False)]
+
+    if candidate.empty:
+        return candidate
+
+    row_home_s = str(row_home or "").strip().lower()
+    row_away_s = str(row_away or "").strip().lower()
+    if not row_home_s or not row_away_s:
+        return candidate.iloc[0:0]
+
+    scored: list[tuple[float, int]] = []
+    for idx, rec in candidate.iterrows():
+        cand_home = str(rec.get("home_team", "")).strip().lower()
+        cand_away = str(rec.get("away_team", "")).strip().lower()
+        home_score = float(rapidfuzz_fuzz.token_sort_ratio(row_home_s, cand_home))
+        away_score = float(rapidfuzz_fuzz.token_sort_ratio(row_away_s, cand_away))
+        scored.append(((home_score + away_score) / 2.0, idx))
+
+    if not scored:
+        return candidate.iloc[0:0]
+
+    best_score, best_idx = max(scored, key=lambda x: x[0])
+    if best_score < 85.0:
+        return candidate.iloc[0:0]
+    return candidate.loc[[best_idx]]
+
+
 def match_team_name(target: str, candidates: List[str], threshold: float = 80.0) -> Optional[str]:
     """
     Wrapper for TeamNameMatcher to support rapidfuzz/fuzzy matching.
@@ -540,6 +587,7 @@ class PredictionEngine:
             if game_date_src.astype("string").str.len().eq(0).all() and "commence_time" in working_df.columns:
                 game_date_src = _series_or_default(working_df, "commence_time", "")
             working_df["game_date"] = _to_et_game_date(game_date_src)
+            working_df["game_date_dt"] = pd.to_datetime(working_df["game_date"], errors="coerce").dt.tz_localize(None)
             working_df["canonical_match_key"] = (
                 _series_or_default(working_df, "league", "").astype("string").str.upper()
                 + "|"
@@ -594,6 +642,7 @@ class PredictionEngine:
                                     hist_df["league"] = ""
                                 hist_df["league_norm"] = hist_df["league"].astype(str).str.upper()
                                 hist_df["game_date"] = _to_et_game_date(hist_df["commence_time"])
+                                hist_df["game_date_dt"] = pd.to_datetime(hist_df["game_date"], errors="coerce").dt.tz_localize(None)
                                 hist_df["canonical_match_key"] = (
                                     hist_df["league_norm"].astype("string")
                                     + "|"
@@ -607,18 +656,30 @@ class PredictionEngine:
                                     if row_nan_ratio[idx] > 0.5:
                                         row_matchup = str(working_df.at[idx, "matchup_id"]) if "matchup_id" in working_df.columns else ""
                                         row_league = str(working_df.at[idx, "league"]).upper() if "league" in working_df.columns else ""
-                                        row_game_date = str(working_df.at[idx, "game_date"]) if "game_date" in working_df.columns else ""
+                                        row_game_date_dt = working_df.at[idx, "game_date_dt"] if "game_date_dt" in working_df.columns else pd.NaT
                                         row_match_key = str(working_df.at[idx, "canonical_match_key"]) if "canonical_match_key" in working_df.columns else ""
+                                        row_home = str(working_df.at[idx, "home_team"]) if "home_team" in working_df.columns else ""
+                                        row_away = str(working_df.at[idx, "away_team"]) if "away_team" in working_df.columns else ""
 
                                         if row_matchup:
                                             if row_match_key:
-                                                match = hist_df[hist_df["canonical_match_key"] == row_match_key]
+                                                match = hist_df[hist_df["canonical_match_key"].eq(row_match_key).fillna(False)]
                                             else:
-                                                match = hist_df[hist_df["matchup_id"] == row_matchup]
-                                                if row_league and "league" in hist_df.columns:
-                                                    match = match[match["league_norm"] == row_league]
-                                                if row_game_date and row_game_date.lower() not in {"", "<na>", "nan", "nat", "none"}:
-                                                    match = match[match["game_date"] == row_game_date]
+                                                match = hist_df[hist_df["matchup_id"].eq(row_matchup).fillna(False)]
+                                                if row_league and "league_norm" in hist_df.columns:
+                                                    match = match[match["league_norm"].astype("string").str.upper().eq(row_league).fillna(False)]
+                                                if row_game_date_dt is not None and not pd.isna(row_game_date_dt) and "game_date_dt" in match.columns:
+                                                    match = match[match["game_date_dt"].dt.normalize().eq(pd.Timestamp(row_game_date_dt).normalize()).fillna(False)]
+
+                                            if match.empty:
+                                                match = _fuzzy_match_hist_row(
+                                                    hist_df=hist_df,
+                                                    row_league=row_league,
+                                                    row_game_date=row_game_date_dt,
+                                                    row_home=row_home,
+                                                    row_away=row_away,
+                                                )
+
                                             # Find most recent match for this exact matchup (direction matters for home/away features)
                                             match = match.sort_values("commence_time", ascending=False)
 
