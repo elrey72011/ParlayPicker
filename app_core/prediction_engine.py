@@ -722,7 +722,7 @@ class PredictionEngine:
             used_stale_features = pd.Series(False, index=df.index)
 
             if row_nan_ratio.mean() > 0.5:
-                logger.warning("Feature matrix mostly empty. Attempting Stale Feature Fallback (up to 7 days).")
+                logger.warning("Feature matrix mostly empty. Attempting Stale Feature Fallback (unlimited lookback).")
                 try:
                     from config import DATA_DIR
                     master_file = DATA_DIR / 'master_all_sports.csv'
@@ -731,8 +731,6 @@ class PredictionEngine:
                         hist_df = pd.read_csv(master_file)
                         if "commence_time" in hist_df.columns:
                             hist_df["commence_time"] = pd.to_datetime(hist_df["commence_time"], errors="coerce", utc=True)
-                            now_utc = pd.Timestamp.utcnow()
-                            hist_df = hist_df[hist_df["commence_time"] >= (now_utc - pd.Timedelta(days=7))]
 
                             # Clean team names in hist_df
                             if "home_team" in hist_df.columns and "away_team" in hist_df.columns:
@@ -803,19 +801,15 @@ class PredictionEngine:
                                             if row_league and "league_norm" in hist_df.columns:
                                                 match = match[match["league_norm"].astype("string").str.upper().eq(row_league).fillna(False)]
 
-                                            # Ensure the rolling match is within a 7-day lookback window of the current game's date
+                                            # We no longer restrict by 7 days. Just get all prior matches
                                             if not match.empty and row_game_date_dt is not None and not pd.isna(row_game_date_dt):
                                                 try:
                                                     target_dt = pd.Timestamp(row_game_date_dt).normalize()
-                                                    seven_days_prior = target_dt - pd.Timedelta(days=7)
-
-                                                    # Filter matches to only include those strictly within 7 days prior
                                                     if "game_date_dt" in match.columns:
-                                                        valid_window = (match["game_date_dt"].dt.normalize() <= target_dt) & \
-                                                                       (match["game_date_dt"].dt.normalize() >= seven_days_prior)
+                                                        valid_window = match["game_date_dt"].dt.normalize() <= target_dt
                                                         match = match[valid_window]
                                                 except Exception as e:
-                                                    logger.warning(f"Failed to enforce 7-day window during looser fallback: {e}")
+                                                    logger.warning(f"Failed to filter prior dates during looser fallback: {e}")
 
                                         # Fallback mechanism: purely fuzzy token match
                                         if match.empty:
