@@ -764,7 +764,45 @@ class PredictionEngine:
                                                 except Exception as e:
                                                     logger.warning(f"Failed to filter prior dates during looser fallback: {e}")
 
-                                        # Removed purely fuzzy token match to ensure strict and rigorous normalization
+                                        # Fuzzy Fallback: if exact match fails, use rapidfuzz (or difflib) on cleaned names
+                                        if match.empty and row_league:
+                                            logger.info(f"Exact match failed for {row_matchup}. Attempting fuzzy match.")
+                                            league_pool = hist_df[hist_df["league_norm"].astype("string").str.upper().eq(row_league).fillna(False)]
+                                            if not league_pool.empty:
+                                                best_score = -1
+                                                best_match_id = None
+                                                from difflib import SequenceMatcher
+                                                import re
+
+                                                clean_row = re.sub(r'[^a-z0-9]', '', str(row_matchup).lower())
+
+                                                for cand_id in league_pool["matchup_id"].unique():
+                                                    if pd.isna(cand_id) or not cand_id:
+                                                        continue
+
+                                                    clean_cand = re.sub(r'[^a-z0-9]', '', str(cand_id).lower())
+
+                                                    # Compare the full matchup_id (e.g., LALAKERS|SACRAMENTO)
+                                                    if rapidfuzz_fuzz is not None:
+                                                        score = rapidfuzz_fuzz.token_sort_ratio(clean_row, clean_cand)
+                                                    else:
+                                                        score = SequenceMatcher(None, clean_row, clean_cand).ratio() * 100
+
+                                                    if score > best_score:
+                                                        best_score = score
+                                                        best_match_id = cand_id
+
+                                                if best_score >= 65 and best_match_id:
+                                                    logger.info(f"Fuzzy match successful: {row_matchup} -> {best_match_id} (Score: {best_score:.1f})")
+                                                    match = league_pool[league_pool["matchup_id"].eq(best_match_id).fillna(False)]
+                                                    if not match.empty and row_game_date_dt is not None and not pd.isna(row_game_date_dt):
+                                                        try:
+                                                            target_dt = pd.Timestamp(row_game_date_dt).normalize()
+                                                            if "game_date_dt" in match.columns:
+                                                                valid_window = match["game_date_dt"].dt.normalize() <= target_dt
+                                                                match = match[valid_window]
+                                                        except Exception as e:
+                                                            logger.warning(f"Failed to filter prior dates during fuzzy fallback: {e}")
 
                                         # Final logic to grab the most recent valid match found
                                         if not match.empty:
