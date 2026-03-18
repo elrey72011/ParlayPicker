@@ -335,6 +335,33 @@ def _patch_missing_league_for_college_rows(df: pd.DataFrame, selected_sports: li
     return out
 
 
+def _preprocess_bet_rows_for_league_bridge(df: pd.DataFrame) -> pd.DataFrame:
+    """Normalize identity fields and restore missing NCAAB league labels before joins."""
+    out = df.copy()
+    if out.empty:
+        return out
+
+    for col in ["league", "home_team", "away_team"]:
+        out[col] = _clean_text_placeholders(_string_series(out, col)).astype("string").str.lower().str.strip()
+
+    missing_league = out["league"].str.len().eq(0)
+    if not missing_league.any():
+        return out
+
+    keyword_pattern = r"\b(?:" + "|".join(sorted(re.escape(k) for k in _NCAAB_TEAM_KEYWORD_HINTS)) + r")\b"
+    teams_text = out["home_team"].fillna("") + " " + out["away_team"].fillna("")
+    team_keyword_mask = teams_text.str.contains(keyword_pattern, regex=True, na=False)
+
+    source_text = pd.Series([""] * len(out), index=out.index, dtype="string")
+    for src_col in ["sport", "source", "data_source", "odds_source", "event_name", "matchup", "league_source"]:
+        if src_col in out.columns:
+            source_text = source_text + " " + _clean_text_placeholders(_string_series(out, src_col)).str.lower()
+    source_is_college = source_text.str.contains(r"\bncaa\b|\bncaab\b|\bncaam\b|college", regex=True, na=False)
+
+    out.loc[missing_league & (team_keyword_mask | source_is_college), "league"] = "ncaab"
+    return out
+
+
 def _string_series(df: pd.DataFrame, col: str, default: str = "") -> pd.Series:
     if df is None or df.empty:
         return pd.Series(dtype="string")
@@ -998,6 +1025,8 @@ def build_theover_bet_rows(
     if out.empty:
         return pd.DataFrame(columns=CANONICAL_BET_COLUMNS)
 
+    out = _preprocess_bet_rows_for_league_bridge(out)
+
     if selected_sports and len(selected_sports) == 1:
         inferred_league = str(selected_sports[0]).upper()
         league_series = _clean_text_placeholders(_string_series(out, "league"))
@@ -1264,8 +1293,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     pool["has_signal_probability"] = _numeric_series(pool, "model_probability").notna() | _numeric_series(pool, "theover_probability").notna() | _numeric_series(pool, "ml_probability").notna()
 
     # Canonical per-game identity key used for full game coverage selection.
-    team_a = pool["home_team"].str.lower().str.replace(r'[^a-z0-9\s]', '', regex=True)
-    team_b = pool["away_team"].str.lower().str.replace(r'[^a-z0-9\s]', '', regex=True)
+    team_home = pool["home_team"].str.lower().str.replace(r'[^a-z0-9\s]', '', regex=True)
+    team_away = pool["away_team"].str.lower().str.replace(r'[^a-z0-9\s]', '', regex=True)
 
     dt_utc = _game_dates(pool)
     date_str = pd.Series([""] * len(pool), index=pool.index, dtype="string")
@@ -1273,7 +1302,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     if valid_dt.any():
         date_str.loc[valid_dt] = dt_utc[valid_dt].dt.tz_convert("America/New_York").dt.strftime("%Y-%m-%d")
 
-    pool["matchup_id"] = team_a + "|" + team_b + "|" + date_str
+    pool["matchup_id"] = team_home + "|" + team_away + "|" + date_str
 
     # Force expected_value to numeric, converting true errors to NaN while preserving negative floats
     pool['expected_value'] = pd.to_numeric(pool['expected_value'], errors='coerce')
@@ -1303,7 +1332,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         )
 
 
-    no_edge_mask = _numeric_series(best, "expected_value").isna()
+    no_edge_values = _numeric_series(best, "expected_value")
+    no_edge_mask = no_edge_values.isna() | no_edge_values.eq(0.0)
     if no_edge_mask.any():
         best.loc[no_edge_mask, "best_pick"] = "No Edge"
     best["calibrated_probability"] = _numeric_series(best, "calibrated_probability", 0.5)
