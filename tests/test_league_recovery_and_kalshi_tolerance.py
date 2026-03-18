@@ -26,7 +26,7 @@ def test_preprocess_restores_ncaab_for_blank_league_with_college_keywords():
 
 
 def test_ncaab_and_nba_use_wider_line_tolerance_while_nhl_is_one_point():
-    assert ki.MAX_LINE_TOLERANCE["NCAAB"] == 3.5
-    assert ki.MAX_LINE_TOLERANCE["NBA"] == 3.5
-    assert ki.MAX_LINE_TOLERANCE["NHL"] == 1.0
+    assert ki.MAX_LINE_TOLERANCE["NCAAB"] == 1.5
+    assert ki.MAX_LINE_TOLERANCE["NBA"] == 1.5
+    assert ki.MAX_LINE_TOLERANCE["NHL"] == 0.5
 
