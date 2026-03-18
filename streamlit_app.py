@@ -498,15 +498,14 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
     # -----------------------------
     # Update Kalshi Diagnostics
     # -----------------------------
-    if "kalshi_match_status" in analysis_df.columns:
-        matched_mask = analysis_df["kalshi_match_status"].astype("string").str.lower().eq("matched").fillna(False)
-        matched = analysis_df[matched_mask]
-        diagnostics["kalshi_matches"] = len(matched)
-        diagnostics["kalshi_match_rate"] = len(matched) / max(len(analysis_df), 1)
-        if "kalshi_line_diff" in analysis_df.columns and not matched.empty:
-            avg_diff = matched["kalshi_line_diff"].mean()
+    if "kalshi_probability" in analysis_df.columns:
+        matched = int(analysis_df["kalshi_probability"].notna().sum())
+        diagnostics["kalshi_matches"] = matched
+        diagnostics["kalshi_match_rate"] = matched / max(len(analysis_df), 1)
+        if "kalshi_line_diff" in analysis_df.columns and matched > 0:
+            avg_diff = analysis_df.loc[analysis_df["kalshi_probability"].notna(), "kalshi_line_diff"].mean()
             diagnostics["kalshi_avg_line_diff"] = avg_diff
-            logger.info(f"Kalshi matched {len(matched)} rows with an average line delta of {avg_diff:.4f}")
+            logger.info(f"Kalshi matched {matched} rows with an average line delta of {avg_diff:.4f}")
         else:
             diagnostics["kalshi_avg_line_diff"] = 0.0
     # -----------------------------
@@ -591,7 +590,7 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
                 deferred_warnings.append(f"Gemini analysis failed: {e}")
 
     attempted = int(len(analysis_df)) if isinstance(analysis_df, pd.DataFrame) else 0
-    matched = int(analysis_df.get("kalshi_match_status", pd.Series(dtype="string")).astype(str).str.lower().eq("matched").sum())
+    matched = int(analysis_df["kalshi_probability"].notna().sum()) if "kalshi_probability" in analysis_df.columns else 0
 
     diagnostics["kalshi_attempted"] = attempted
     diagnostics["kalshi_matches"] = matched
@@ -718,8 +717,6 @@ def main() -> None:
             st.session_state["pipeline_running"] = False
 
     analysis_df = st.session_state["analysis_df"]
-    if analysis_df is not None and not analysis_df.empty:
-        analysis_df = analysis_df.rename(columns={'home_team': 'away_team', 'away_team': 'home_team', 'Home': 'Away', 'Away': 'Home'})
 
     parlays_df = st.session_state["parlays_df"]
     portfolio_df = st.session_state["portfolio_df"]
@@ -730,8 +727,6 @@ def main() -> None:
     simulation_results = st.session_state["simulation_results"]
 
     best_picks_df = st.session_state["best_picks_df"]
-    if best_picks_df is not None and not best_picks_df.empty:
-        best_picks_df = best_picks_df.rename(columns={'home_team': 'away_team', 'away_team': 'home_team', 'Home': 'Away', 'Away': 'Home'})
 
     diagnostics = st.session_state.get("diagnostics", {})
 
