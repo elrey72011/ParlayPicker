@@ -828,25 +828,15 @@ def main() -> None:
                 "bet_rows": diagnostics.get("bet_rows", 0),
             })
 
-        show_all_games = controls.get("show_all_games", False)
-
         display_df = best_picks_df.copy() if best_picks_df is not None else pd.DataFrame(columns=["league", "pick", "edge"])
-        if not show_all_games and not display_df.empty and "edge" in display_df.columns:
-             display_df = display_df[pd.to_numeric(display_df["edge"], errors="coerce").fillna(0.0) >= MIN_EDGE_THRESHOLD].copy().reset_index(drop=True)
-             if "parlay_rank" in display_df.columns:
-                 display_df["parlay_rank"] = range(1, len(display_df) + 1)
+        if not display_df.empty and "parlay_rank" in display_df.columns:
+            display_df["parlay_rank"] = range(1, len(display_df) + 1)
 
         if display_df.empty:
-            if show_all_games:
-                st.warning("⚠️ No games found.")
-            else:
-                st.warning(f"⚠️ No picks meet {MIN_EDGE_THRESHOLD*100:.1f}% edge threshold")
+            st.warning("⚠️ No games found.")
             st.dataframe(display_df)
         else:
-            if show_all_games:
-                st.success(f"✅ {len(display_df)} games found")
-            else:
-                st.success(f"✅ {len(display_df)} picks found")
+            st.success(f"✅ {len(display_df)} games found")
             rename_map = {
                 "league": "League",
                 "away_team": "Away Team",
@@ -871,8 +861,6 @@ def main() -> None:
             display_df = display_df[ordered]
             st.dataframe(display_df, width="stretch")
             export_prep_df = best_picks_df.copy()
-            if not show_all_games and "edge" in export_prep_df.columns:
-                 export_prep_df = export_prep_df[pd.to_numeric(export_prep_df["edge"], errors="coerce").fillna(0.0) >= MIN_EDGE_THRESHOLD].copy()
 
             csv_rename_map = {
                 "home_team": "Home",
@@ -893,14 +881,7 @@ def main() -> None:
             final_export_cols = [c for c in target_export_cols if c in export_prep_df.columns]
             best_picks_export = export_prep_df[final_export_cols].copy()
 
-            # Phase 5: Output Sanitization
-            if "edge" in best_picks_export.columns and "expected_value" in best_picks_export.columns:
-                # Enforcing a > 0.0 threshold to drop negative EV/Edge picks from the final export
-                mask_edge = pd.to_numeric(best_picks_export["edge"], errors="coerce") > 0.0
-                mask_ev = pd.to_numeric(best_picks_export["expected_value"], errors="coerce") > 0.0
-                best_picks_export = best_picks_export[mask_edge & mask_ev].copy()
-            elif "edge" in best_picks_export.columns:
-                best_picks_export = best_picks_export[pd.to_numeric(best_picks_export["edge"], errors="coerce") > 0.0].copy()
+            # Phase 5: Output Sanitization (Removed edge/EV filtering to allow neutral/negative fallback games)
 
             # Apply explicit secondary sorts before export as requested
             sort_cols = ["expected_value", "Commence (Local)", "league", "Home"]
