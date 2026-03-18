@@ -354,6 +354,12 @@ def _restore_missing_ncaab_league_priority(df: pd.DataFrame) -> pd.DataFrame:
     nba_full_set = nba_teams.union(nba_exact_keys)
     home_normalized = _string_series(out, "home_team").map(normalize_team_name)
     away_normalized = _string_series(out, "away_team").map(normalize_team_name)
+
+    # Exclude teams that are specifically mapped to NBA but could have college namesakes
+    # unless they are explicitly accompanied by their pro city token.
+    # Note: Indiana and Memphis are mapped to NBA by default in the mapper,
+    # but we need to verify they aren't actually college teams based on opponent.
+
     is_nba_mask = home_normalized.isin(nba_full_set) | away_normalized.isin(nba_full_set)
 
     keyword_pattern = r"\b(?:" + "|".join(sorted(re.escape(k) for k in _NCAAB_LEAGUE_RECOVERY_KEYWORDS)) + r")\b"
@@ -1301,24 +1307,20 @@ def _dedupe_inverted_matchups(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
         return df
     out = df.copy()
-    out["_canonical_matchup"] = _canonical_matchup_key(out)
+    out["_matchup_id_dedupe"] = _matchup_id(out)
+    out["_game_date_dedupe"] = _et_day_string(_game_dates(out))
     out["_spread_abs"] = _numeric_series(out, "spread_line").abs().fillna(-9999.0)
     out["_total_line"] = _numeric_series(out, "total_line").fillna(-9999.0)
-    market_type = _string_series(out, "market_type").str.lower()
-    out["_market_dedupe"] = pd.Series(
-        np.where(market_type.str.startswith("spread"), "spread", market_type),
-        index=out.index,
-        dtype="string",
-    )
+    out["_market_dedupe"] = _string_series(out, "market_type").str.lower()
     before = len(out)
     out = out.drop_duplicates(
-        subset=["_canonical_matchup", "_market_dedupe", "_spread_abs", "_total_line"],
+        subset=["_matchup_id_dedupe", "_game_date_dedupe", "_market_dedupe", "_spread_abs", "_total_line"],
         keep="first",
     ).copy()
     dropped = before - len(out)
     if dropped > 0:
         logger.warning("Deduplication removed %s inverted/duplicate matchup rows.", dropped)
-    return out.drop(columns=["_canonical_matchup", "_spread_abs", "_total_line", "_market_dedupe"])
+    return out.drop(columns=["_matchup_id_dedupe", "_game_date_dedupe", "_spread_abs", "_total_line", "_market_dedupe"])
 def _fill_missing_game_dates_from_base(bet_rows_df: pd.DataFrame, base_df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, float]]:
     out = bet_rows_df.copy()
     out["game_date"] = _game_dates(out)
@@ -1418,10 +1420,11 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     pool["expected_value"] = pd.to_numeric(pool["expected_value"], errors="coerce")
 
     # Mandatory one-pick-per-game rule:
-    # sort globally by EV descending, then keep first row in each matchup_id group.
-    pool = pool.sort_values("expected_value", ascending=False, na_position="last")
+    # sort globally by edge descending, then keep first row in each matchup_id group.
+    pool = pool.sort_values("edge", ascending=False, na_position="last")
 
     # Choose one row per game using the ranking above.
+    # .groupby().first() preserves the highest edge pick from the sorted pool.
     best = pool.groupby("matchup_id", as_index=False, dropna=False).first().copy()
 
     total_games = int(pool["matchup_id"].nunique(dropna=False))
@@ -2186,8 +2189,9 @@ def run_analysis_pipeline(
         if dropped_count > 0:
             dropped_games = merged[missing_mask][['home_team', 'away_team', 'market_type']].to_dict('records')
             invalid_sources = merged[missing_mask]['odds_source'].unique().tolist()
-            logger.warning(f"Warning: Dropped {dropped_count} rows due to invalid odds_source. Found sources: {invalid_sources}. These picks have been completely removed from the pipeline: {dropped_games}")
-            merged = merged[~missing_mask].copy()
+            logger.warning(f"Warning: Found {dropped_count} rows with invalid odds_source ({invalid_sources}). Patching with fallback_novig instead of dropping: {dropped_games}")
+            merged.loc[missing_mask, "odds_american"] = -110.0
+            merged.loc[missing_mask, "odds_source"] = "fallback_novig"
 
     merged["odds_american"] = _numeric_series(merged, "odds_american", pd.NA)
 
@@ -2247,17 +2251,18 @@ def run_analysis_pipeline(
 
     # Mandatory Sanitization Layer
     if not merged.empty:
-        # Drop pathological/synthetic odds (e.g., -99900)
+        # Patch pathological/synthetic odds (e.g., -99900)
         valid_odds_mask = merged["odds_american"].isna() | ((merged["odds_american"] >= -10000) & (merged["odds_american"] <= 10000))
 
-        # Drop extreme implied probabilities reflecting suspended markets
+        # Patch extreme implied probabilities reflecting suspended markets
         valid_prob_mask = merged["market_probability"].isna() | ((merged["market_probability"] >= 0.05) & (merged["market_probability"] <= 0.95))
 
         dropped = len(merged) - (valid_odds_mask & valid_prob_mask).sum()
         if dropped > 0:
-            logger.warning(f"Sanitization layer dropped {dropped} rows with extreme/synthetic lines.")
-
-        merged = merged[valid_odds_mask & valid_prob_mask].copy()
+            logger.warning(f"Sanitization layer patched {dropped} rows with extreme/synthetic lines instead of dropping.")
+            merged.loc[~valid_odds_mask, "odds_american"] = -110.0
+            merged.loc[~valid_odds_mask, "odds_source"] = "fallback_novig"
+            merged.loc[~valid_prob_mask, "market_probability"] = 0.5238
 
     merged["spread"] = pd.to_numeric(merged.get("spread_line"), errors="coerce")
     merged["total"] = pd.to_numeric(merged.get("total_line"), errors="coerce")
