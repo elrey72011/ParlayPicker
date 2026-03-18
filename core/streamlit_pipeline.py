@@ -1216,8 +1216,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     # Force expected_value to numeric, converting true errors to NaN while preserving negative floats
     pool['expected_value'] = pd.to_numeric(pool['expected_value'], errors='coerce')
 
-    # Build a resilient group key so we can always return one pick per game.
-    # Priority: explicit game_key -> canonical matchup key -> fallback row identity.
+    # Build a resilient game identifier so we can always return one pick per game.
+    # Priority: explicit game_id -> explicit game_key -> canonical matchup key fallback.
+    game_id = _clean_text_placeholders(_string_series(pool, "game_id")) if "game_id" in pool.columns else pd.Series([""] * len(pool), index=pool.index, dtype="string")
     game_key = _clean_text_placeholders(_string_series(pool, "game_key")) if "game_key" in pool.columns else pd.Series([""] * len(pool), index=pool.index, dtype="string")
     fallback_group = (
         _clean_text_placeholders(_string_series(pool, "league"))
@@ -1228,33 +1229,18 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         + "|"
         + _clean_text_placeholders(date_str.astype("string"))
     )
-    pool["pick_group_key"] = game_key.where(game_key.str.len().gt(0), fallback_group)
-    pool["pick_group_key"] = pool["pick_group_key"].where(
-        pool["pick_group_key"].str.len().gt(0),
+    pool["game_id"] = game_id.where(game_id.str.len().gt(0), game_key)
+    pool["game_id"] = pool["game_id"].where(pool["game_id"].str.len().gt(0), fallback_group)
+    pool["game_id"] = pool["game_id"].where(
+        pool["game_id"].str.len().gt(0),
         pd.Series([f"row-{i}" for i in range(len(pool))], index=pool.index, dtype="string"),
     )
 
-    # Choose one pick per game with odds-source priority while keeping full-game coverage:
-    # 1) Prefer novig_live rows when available.
-    # 2) Otherwise prefer non-fallback rows.
-    # 3) If only fallback_novig rows exist, select the best fallback row.
-    best_pick_indices: list[int] = []
-    for _, group in pool.groupby(["pick_group_key"], dropna=False):
-        odds_source = _string_series(group, "odds_source").str.lower()
-        novig_rows = group[odds_source.eq("novig_live")]
-        candidate_pool = novig_rows if not novig_rows.empty else group[~odds_source.eq("fallback_novig")]
-        if candidate_pool.empty:
-            candidate_pool = group
+    # Ensure deterministic one-pick-per-game coverage regardless of EV sign.
+    pool = pool.sort_values("expected_value", ascending=False)
 
-        rank_ev = _numeric_series(candidate_pool, "expected_value").fillna(-1e9)
-        rank_edge = _numeric_series(candidate_pool, "edge").fillna(-1e9)
-        candidate_pool = candidate_pool.assign(_rank_ev=rank_ev, _rank_edge=rank_edge)
-        idx = candidate_pool.sort_values(["_rank_ev", "_rank_edge"], ascending=[False, False]).index[0]
-        best_pick_indices.append(idx)
-
-    # Extract the final dataframe
-    best = pool.loc[best_pick_indices].copy() if best_pick_indices else pd.DataFrame(columns=pool.columns)
-    best = best.drop(columns=["pick_group_key"], errors="ignore")
+    # Choose one row per game_id using highest EV row.
+    best = pool.groupby("game_id", as_index=False, dropna=False).first()
 
     best["calibrated_probability"] = _numeric_series(best, "calibrated_probability", 0.5)
     edge_for_consensus = _numeric_series(best, "edge", 0.0)
@@ -1266,14 +1252,15 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         best["consensus_agreement"] = best["consensus_agreement"].fillna("⚪ No Kalshi")
 
     kalshi_prob = _numeric_series(best, "kalshi_probability") if "kalshi_probability" in best.columns else pd.Series([pd.NA]*len(best), index=best.index)
-    valid_kalshi = (kalshi_prob.notna() & (kalshi_prob > 0.0)).fillna(False)
+    is_kalshi_available = ((~pd.isna(kalshi_prob)) & (kalshi_prob > 0.0)).fillna(False).astype(bool)
+    best["is_kalshi_available"] = is_kalshi_available
 
-    if valid_kalshi.any():
+    if is_kalshi_available.any():
         blended = best["calibrated_probability"]
         gap = blended - kalshi_prob
-        agrees_mask = (valid_kalshi & gap.ge(0.03)).fillna(False)
-        disagrees_mask = (valid_kalshi & gap.le(-0.03)).fillna(False)
-        best.loc[valid_kalshi, "consensus_agreement"] = "⚖️ Neutral"
+        agrees_mask = (is_kalshi_available & gap.ge(0.03)).fillna(False).astype(bool)
+        disagrees_mask = (is_kalshi_available & gap.le(-0.03)).fillna(False).astype(bool)
+        best.loc[is_kalshi_available, "consensus_agreement"] = "⚖️ Neutral"
         best.loc[agrees_mask, "consensus_agreement"] = "✅ Agrees"
         best.loc[disagrees_mask, "consensus_agreement"] = "❌ Disagrees"
 
