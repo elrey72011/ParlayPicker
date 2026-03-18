@@ -61,7 +61,29 @@ def _enrich_with_kalshi_safe(df: pd.DataFrame) -> tuple[pd.DataFrame, str | None
         future.cancel()
         return df, f"Kalshi enrichment timed out (>{KALSHI_ENRICH_TIMEOUT_SECONDS}s) — skipped."
     except Exception as e:
-        logger.error("Kalshi enrichment failed: %s", e, exc_info=True)
+        failing_game_ids: list[str] = []
+        try:
+            if isinstance(df, pd.DataFrame) and not df.empty:
+                if "game_id" in df.columns:
+                    failing_game_ids = (
+                        df["game_id"].dropna().astype(str).head(5).tolist()
+                    )
+                elif {"league", "home_team", "away_team", "game_date"}.issubset(df.columns):
+                    preview = (
+                        df[["league", "home_team", "away_team", "game_date"]]
+                        .head(3)
+                        .to_dict(orient="records")
+                    )
+                    logger.error("Kalshi enrichment failed on rows preview: %s", preview)
+        except Exception:
+            failing_game_ids = []
+
+        logger.error(
+            "Kalshi enrichment failed: %s | sample_game_ids=%s",
+            e,
+            failing_game_ids,
+            exc_info=True,
+        )
         return df, f"Kalshi enrichment failed: {e}\n{traceback.format_exc()}"
     finally:
         executor.shutdown(wait=False, cancel_futures=True)
@@ -254,12 +276,12 @@ def _merge_kalshi_into_analysis(analysis_df: pd.DataFrame, best_picks_df: pd.Dat
         right["game_date"] = _et_floor_day(right["game_date"])
 
     # Create temporary sanitized columns for a bulletproof merge
-    left['_merge_home'] = left['home_team'].astype(str).str.lower().str.replace(r'[^a-z0-9\s]', '', regex=True)
-    left['_merge_away'] = left['away_team'].astype(str).str.lower().str.replace(r'[^a-z0-9\s]', '', regex=True)
+    left['_merge_home'] = left['home_team'].astype(str).str.lower().str.replace(r'[^a-z0-9]', '', regex=True)
+    left['_merge_away'] = left['away_team'].astype(str).str.lower().str.replace(r'[^a-z0-9]', '', regex=True)
 
     if not right.empty:
-        right['_merge_home'] = right['home_team'].astype(str).str.lower().str.replace(r'[^a-z0-9\s]', '', regex=True)
-        right['_merge_away'] = right['away_team'].astype(str).str.lower().str.replace(r'[^a-z0-9\s]', '', regex=True)
+        right['_merge_home'] = right['home_team'].astype(str).str.lower().str.replace(r'[^a-z0-9]', '', regex=True)
+        right['_merge_away'] = right['away_team'].astype(str).str.lower().str.replace(r'[^a-z0-9]', '', regex=True)
 
     # Use the temporary sanitized keys instead of the original team names
     sanitized_merge_keys = [k for k in merge_keys if k not in ["home_team", "away_team"]] + ["_merge_home", "_merge_away"]
@@ -297,10 +319,10 @@ def _sync_ml_probabilities(analysis_df: pd.DataFrame, pipeline_best_picks_df: pd
     left["game_date"] = _et_floor_day(left["game_date"])
     right["game_date"] = _et_floor_day(right["game_date"])
 
-    left["_merge_home"] = left["home_team"].astype(str).str.lower().str.replace(r"[^a-z0-9\s]", "", regex=True)
-    left["_merge_away"] = left["away_team"].astype(str).str.lower().str.replace(r"[^a-z0-9\s]", "", regex=True)
-    right["_merge_home"] = right["home_team"].astype(str).str.lower().str.replace(r"[^a-z0-9\s]", "", regex=True)
-    right["_merge_away"] = right["away_team"].astype(str).str.lower().str.replace(r"[^a-z0-9\s]", "", regex=True)
+    left["_merge_home"] = left["home_team"].astype(str).str.lower().str.replace(r"[^a-z0-9]", "", regex=True)
+    left["_merge_away"] = left["away_team"].astype(str).str.lower().str.replace(r"[^a-z0-9]", "", regex=True)
+    right["_merge_home"] = right["home_team"].astype(str).str.lower().str.replace(r"[^a-z0-9]", "", regex=True)
+    right["_merge_away"] = right["away_team"].astype(str).str.lower().str.replace(r"[^a-z0-9]", "", regex=True)
 
     merge_keys = ["league", "game_date", "_merge_home", "_merge_away"]
     merged = left.merge(
