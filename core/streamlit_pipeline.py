@@ -669,9 +669,12 @@ def _team_similarity_score(left: str, right: str) -> int:
 
 
 def _fuzzy_match_schedule_row(row: pd.Series, schedule_df: pd.DataFrame, threshold: int = 85) -> pd.Series:
-    league = str(row.get("league") or "").upper()
-    home = str(row.get("home_team") or "")
-    away = str(row.get("away_team") or "")
+    league_val = row.get("league")
+    home_val = row.get("home_team")
+    away_val = row.get("away_team")
+    league = str(league_val).upper() if pd.notna(league_val) else ""
+    home = str(home_val) if pd.notna(home_val) else ""
+    away = str(away_val) if pd.notna(away_val) else ""
     if not league or not home or not away or schedule_df.empty:
         return pd.Series(dtype="object")
 

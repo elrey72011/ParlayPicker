@@ -41,8 +41,24 @@ def _safe_text(value: Any) -> str:
     return str(value)
 
 
+def _safe_is_missing(value: Any) -> bool:
+    """True when value is None/NA-like, without raising on extension dtypes."""
+    try:
+        return value is None or pd.isna(value)
+    except Exception:
+        return value is None
+
+
+def _safe_first_present(*values: Any) -> Any:
+    """Return the first non-missing value using NA-safe checks."""
+    for value in values:
+        if not _safe_is_missing(value):
+            return value
+    return None
+
+
 def _normalized_merge_key(value: Any) -> str:
-    if value is None or pd.isna(value):
+    if _safe_is_missing(value):
         return ""
     return re.sub(r"[^a-z0-9]", "", str(value).lower())
 
@@ -735,7 +751,11 @@ def _is_within_48h(item: dict[str, Any], game_date_obj: pd.Timestamp) -> bool:
     if pd.isna(game_date_obj):
         return True
 
-    close_time_str = item.get("close_time") or item.get("expiration_time") or item.get("last_updated_ts")
+    close_time_str = _safe_first_present(
+        item.get("close_time"),
+        item.get("expiration_time"),
+        item.get("last_updated_ts"),
+    )
     if not close_time_str:
         return True
 
@@ -751,6 +771,31 @@ def _is_within_48h(item: dict[str, Any], game_date_obj: pd.Timestamp) -> bool:
     except Exception as e:
         logger.warning(f"Timezone matching error: {e}")
         return True
+
+
+_NCAAB_LEAGUE_HINTS = {
+    "state", "st", "university", "college", "tech", "a&m", "saint", "unc", "uc",
+}
+
+
+def _looks_like_college_team_name(team: Any) -> bool:
+    text = _safe_text(team).strip().lower()
+    if not text:
+        return False
+    tokens = set(re.findall(r"[a-z0-9&']+", text))
+    if tokens.intersection(_NCAAB_LEAGUE_HINTS):
+        return True
+    # Common CBB style abbreviations (e.g. OK St, NC State, etc.)
+    return bool(re.search(r"\b(st|state|u)\b", text))
+
+
+def _infer_row_league(league: Any, home_team: Any, away_team: Any) -> str:
+    league_text = _safe_text(league).strip().upper()
+    if league_text:
+        return league_text
+    if _looks_like_college_team_name(home_team) or _looks_like_college_team_name(away_team):
+        return "NCAAB"
+    return ""
 
 
 def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
@@ -772,8 +817,11 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
     out["kalshi_match_reason"] = "no_market_for_tickers"
 
     for idx, row in out.iterrows():
+        home_team_val = row.get("home_team")
+        away_team_val = row.get("away_team")
+
         league_val = row.get("league")
-        league = str(league_val).upper().strip() if pd.notna(league_val) else ""
+        league = _infer_row_league(league_val, home_team_val, away_team_val)
         market_type_val = row.get("market_type")
         market_type = str(market_type_val).strip().lower() if pd.notna(market_type_val) else ""
         strike_price_val = row.get("strike_price")
@@ -821,8 +869,6 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
         series_events = enrich_with_kalshi_markets.series_cache[series]
 
-        home_team_val = row.get("home_team")
-        away_team_val = row.get("away_team")
         home_team_name = str(home_team_val).strip() if pd.notna(home_team_val) else ""
         away_team_name = str(away_team_val).strip() if pd.notna(away_team_val) else ""
         if league == "NCAAB":
