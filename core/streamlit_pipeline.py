@@ -1886,7 +1886,7 @@ def run_analysis_pipeline(
                     if market_schedule.empty:
                         continue
 
-                    match = _fuzzy_match_schedule_row(merged.loc[idx], market_schedule, threshold=85)
+                    match = _fuzzy_match_schedule_row(merged.loc[idx], market_schedule, threshold=65)
                     if match.empty:
                         continue
 
@@ -2106,6 +2106,9 @@ def run_analysis_pipeline(
                 if hasattr(engine, 'last_batch_used_stale_features'):
                     merged.loc[needs_prediction, "used_stale_features"] = engine.last_batch_used_stale_features
 
+                if hasattr(engine, 'last_batch_used_neutral_fallback') and engine.last_batch_used_neutral_fallback:
+                    merged.loc[needs_prediction, "model_status"] = "Neutral Fallback"
+
                 ml_count = merged["ml_probability"].notna().sum()
                 ml_unique = _numeric_series(merged, "ml_probability").dropna().nunique()
                 logger.warning(
@@ -2277,8 +2280,8 @@ def run_analysis_pipeline(
         "kalshi_matches": 0,
         "kalshi_match_rate": 0.0,
         "match_rate": 0.0,
-        "theover_totals_games": int(analysis_df[_string_series(analysis_df, "market_type").str.startswith("total") & _numeric_series(analysis_df, "theover_probability").notna()].apply(lambda r: f"{r.get('league')}|{min(str(r.get('home_team')), str(r.get('away_team')))}|{max(str(r.get('home_team')), str(r.get('away_team')))}", axis=1).nunique()) if not analysis_df.empty else 0,
-        "theover_spreads_games": int(analysis_df[_string_series(analysis_df, "market_type").str.startswith("spread") & _numeric_series(analysis_df, "theover_probability").notna()].apply(lambda r: f"{r.get('league')}|{min(str(r.get('home_team')), str(r.get('away_team')))}|{max(str(r.get('home_team')), str(r.get('away_team')))}", axis=1).nunique()) if not analysis_df.empty else 0,
+        "theover_totals_games": int(theover_rows[_string_series(theover_rows, "market_type").str.startswith("total")]["matchup_id"].nunique()) if not theover_rows.empty else 0,
+        "theover_spreads_games": int(theover_rows[_string_series(theover_rows, "market_type").str.startswith("spread")]["matchup_id"].nunique()) if not theover_rows.empty else 0,
         "date_fill_total_rows": int(date_stats["date_fill_total_rows"]),
         "date_fill_success_rows": int(date_stats["date_fill_success_rows"]),
         "date_fill_success_rate": float(date_stats["date_fill_success_rate"]),

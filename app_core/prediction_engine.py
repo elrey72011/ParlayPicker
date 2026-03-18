@@ -840,16 +840,20 @@ class PredictionEngine:
                 # Re-check NaN ratio after fallback
                 row_nan_ratio_after = raw_numeric.isna().sum(axis=1) / max(len(VERTEX_FEATURE_COLUMNS), 1)
                 if row_nan_ratio_after.mean() > 0.5:
-                    raise ValueError(
-                        "Feature matrix is empty due to schedule merge failure. "
-                        "Aborting ML predictions to prevent baseline default (0.1906)."
+                    logger.warning(
+                        "Feature matrix is STILL empty after unlimited lookback. "
+                        "Applying Hard Safety Net (Neutral Fallback 0.5) to prevent pipeline crash."
                     )
+                    self.last_batch_used_stale_features = [True] * len(df)
+                    self.last_batch_used_neutral_fallback = True
+                    return [0.5] * len(df)
 
             # Ensure proper casting and fillna to prevent errors - critical for preventing placeholder values
             inference_data = raw_numeric.fillna(0.0)
 
             # Store flag so calling code can retrieve it if needed
             self.last_batch_used_stale_features = used_stale_features.tolist()
+            self.last_batch_used_neutral_fallback = False
             # Replace any remaining inf values
             inference_data = inference_data.replace([np.inf, -np.inf], 0.0).astype(float)
 
