@@ -72,7 +72,7 @@ _NCAAB_TEAM_KEYWORD_HINTS = {
 }
 _NCAAB_LEAGUE_RECOVERY_KEYWORDS = {
     "st", "state", "univ", "university",
-    "cowboys", "bulldogs", "redhawks", "tommies", "golden hurricane", "wildcats", "shockers",
+    "cowboys", "bulldogs", "redhawks", "tommies", "golden hurricane", "wildcats", "shockers", "unlv",
 }
 _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball", "women\'s basketball"}
 
@@ -348,13 +348,15 @@ def _preprocess_bet_rows_for_league_bridge(df: pd.DataFrame) -> pd.DataFrame:
     for col in ["league", "home_team", "away_team"]:
         out[col] = _clean_text_placeholders(_string_series(out, col)).astype("string").str.lower().str.strip()
 
-    missing_league = out["league"].str.len().eq(0)
+    # High-priority league restoration: recover blank/NaN/<NA> league values before enrichment.
+    missing_league = _clean_text_placeholders(_string_series(out, "league")).str.len().eq(0)
     if not missing_league.any():
         return out
 
     keyword_pattern = r"\b(?:" + "|".join(sorted(re.escape(k) for k in _NCAAB_LEAGUE_RECOVERY_KEYWORDS)) + r")\b"
-    teams_text = out["home_team"].fillna("") + " " + out["away_team"].fillna("")
-    team_keyword_mask = teams_text.str.contains(keyword_pattern, regex=True, na=False)
+    home_text = _clean_text_placeholders(_string_series(out, "home_team")).str.lower().str.strip()
+    away_text = _clean_text_placeholders(_string_series(out, "away_team")).str.lower().str.strip()
+    team_keyword_mask = home_text.str.contains(keyword_pattern, regex=True, na=False) | away_text.str.contains(keyword_pattern, regex=True, na=False)
 
     source_text = pd.Series([""] * len(out), index=out.index, dtype="string")
     for src_col in ["sport", "source", "data_source", "odds_source", "event_name", "matchup", "league_source"]:
@@ -1309,8 +1311,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
 
     # Removed strict game_date.notna() requirement to prevent dropping Spread uploads
     pool["has_identity"] = (
-        pool["league"].str.len().gt(0)
-        & pool["home_team"].str.len().gt(0)
+        pool["home_team"].str.len().gt(0)
         & pool["away_team"].str.len().gt(0)
     )
 
@@ -1363,9 +1364,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
 
 
     no_edge_values = _numeric_series(best, "expected_value")
-    no_edge_mask = no_edge_values.isna() | no_edge_values.eq(0.0)
+    no_edge_mask = no_edge_values.isna() | no_edge_values.le(0.0)
     if no_edge_mask.any():
-        best.loc[no_edge_mask, "best_pick"] = "No Edge"
+        best.loc[no_edge_mask, "best_pick"] = "Best Available"
     best["calibrated_probability"] = _numeric_series(best, "calibrated_probability", 0.5)
     edge_for_consensus = _numeric_series(best, "edge", 0.0)
 
@@ -1631,6 +1632,11 @@ def run_analysis_pipeline(
         live_odds_df["game_date"] = live_odds_df["game_date"].fillna(fallback_day).fillna(today_et_day)
         live_odds_df["matchup_id"] = _matchup_id(live_odds_df)
 
+    bet_rows = _enforce_identity_string_dtype(bet_rows, ["league", "home_team", "away_team"])
+    bet_rows = _normalize_identity_strings(bet_rows, ["league", "home_team", "away_team"])
+    bet_rows["league"] = _string_series(bet_rows, "league").str.upper().replace(LEAGUE_ALIASES)
+    bet_rows["home_team"] = _string_series(bet_rows, "home_team").map(normalize_team_name)
+    bet_rows["away_team"] = _string_series(bet_rows, "away_team").map(normalize_team_name)
     bet_rows["game_date"] = _et_day_string(_game_dates(bet_rows))
     bet_rows["matchup_id"] = _matchup_id(bet_rows)
     if not bet_rows.empty and not base_df.empty:
