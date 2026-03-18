@@ -91,7 +91,7 @@ CANONICAL_BET_COLUMNS = [
     "league", "home_team", "away_team", "game_date", "game_time_est", "game_key",
     "market_type", "spread_line", "total_line",
     "theover_probability", "odds_american", "odds_source", "market_probability",
-    "ml_probability", "calibrated_probability", "expected_value", "edge", "best_pick", "used_stale_features",
+    "ml_probability", "calibrated_probability", "expected_value", "edge", "best_pick", "used_stale_features", "matchup_id",
 ]
 
 _EXPORT_SIGNAL_COLS = {"market_type", "calibrated_probability", "expected_value", "edge"}
@@ -296,13 +296,26 @@ def _infer_missing_league_from_team_sets(df: pd.DataFrame, selected_sports: list
     home = _string_series(out, "home_team").map(normalize_team_name)
     away = _string_series(out, "away_team").map(normalize_team_name)
 
+    # 1. Precedence Override: Check NBA exact map FIRST
     nba_mask = missing_mask & (home.isin(nba_full_set) | away.isin(nba_full_set))
     nhl_mask = missing_mask & (home.isin(nhl_teams) | away.isin(nhl_teams))
     out.loc[nba_mask, "league"] = "NBA"
     out.loc[nhl_mask & out["league"].str.len().eq(0), "league"] = "NHL"
 
+    # Refresh missing mask after pro-teams assignments
+    missing_mask = out["league"].str.len().eq(0)
+
+    # 2. Check NCAAB keyword recovery regex ONLY on rows that weren't caught by NBA maps.
+    keyword_pattern = r"\b(?:" + "|".join(sorted(re.escape(k) for k in _NCAAB_LEAGUE_RECOVERY_KEYWORDS)) + r")\b"
+    home_text = _clean_text_placeholders(_string_series(out, "home_team")).str.lower()
+    away_text = _clean_text_placeholders(_string_series(out, "away_team")).str.lower()
+    keyword_mask = home_text.str.contains(keyword_pattern, regex=True, na=False) | away_text.str.contains(keyword_pattern, regex=True, na=False)
+    out.loc[missing_mask & keyword_mask, "league"] = "NCAAB"
+
     selected = {str(s).upper() for s in (selected_sports or [])}
     has_ncaab = bool(selected.intersection({"NCAAB", "NCAAM", "NCAA MEN'S BASKETBALL", "NCAA MENS BASKETBALL"}))
+
+    # We must not blindly backfill NCAAB if it's already identified as NBA.
     if has_ncaab:
         out.loc[out["league"].str.len().eq(0), "league"] = "NCAAB"
 
@@ -649,6 +662,9 @@ def _normalize_upload(df: pd.DataFrame | None) -> pd.DataFrame:
     # Fill any missing dates with fallback
     out["game_date"] = out["game_date"].fillna(_game_date_fallback())
 
+    # Apply _matchup_id logic immediately for deterministic joins
+    out["matchup_id"] = _matchup_id(out)
+
     # Tag rows loaded from a raw export file for priority upstream.
     if "odds_source" not in out.columns:
         out["odds_source"] = "odds_api"
@@ -695,9 +711,10 @@ def _coerce_export_to_canonical(df: pd.DataFrame, selected_sports: list[str] | N
     out["game_key"] = _mk_game_key(out)
     out["best_pick"] = out.apply(_format_best_pick, axis=1)
     out = _apply_analysis_calculations(out)
-    if selected_sports:
-        selected = {str(s).upper() for s in selected_sports}
-        out = out[_string_series(out, "league").isin(selected)].copy()
+    # DO NOT filter rows based on league here to prevent losing master slate rows
+    # if selected_sports:
+    #     selected = {str(s).upper() for s in selected_sports}
+    #     out = out[_string_series(out, "league").isin(selected)].copy()
     for col in CANONICAL_BET_COLUMNS:
         if col not in out.columns:
             out[col] = pd.NA
@@ -1175,7 +1192,8 @@ def build_theover_bet_rows(
             selected = {LEAGUE_ALIASES.get(s, s) for s in selected}
             # Keep rows with missing league labels to avoid dropping valid NCAAB games before inference.
             league_series = _string_series(out, "league").str.upper().replace(LEAGUE_ALIASES)
-            out = out[league_series.isin(selected) | league_series.str.len().eq(0)].copy()
+            # DO NOT filter rows based on league here to prevent losing master slate rows
+            # out = out[league_series.isin(selected) | league_series.str.len().eq(0)].copy()
         out["game_key"] = _mk_game_key(out)
         out = _apply_analysis_calculations(out)
 
@@ -1424,8 +1442,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     pool = pool.sort_values("edge", ascending=False, na_position="last")
 
     # Choose one row per game using the ranking above.
-    # .groupby().first() preserves the highest edge pick from the sorted pool.
-    best = pool.groupby("matchup_id", as_index=False, dropna=False).first().copy()
+    # .groupby().idxmax() preserves the highest edge pick from the sorted pool, natively handling index selection.
+    best_indices = pool.groupby("matchup_id", dropna=False)["edge"].idxmax()
+    best = pool.loc[best_indices].copy()
 
     total_games = int(pool["matchup_id"].nunique(dropna=False))
     if len(best) != total_games:
@@ -1435,11 +1454,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
             total_games,
         )
 
-
-    no_edge_values = _numeric_series(best, "expected_value")
-    no_edge_mask = no_edge_values.isna() | no_edge_values.le(0.0)
-    if no_edge_mask.any():
-        best.loc[no_edge_mask, "best_pick"] = "Best Available"
+    # Do not apply threshold filters that would drop rows. Ensure all 25 games are displayed.
     best["calibrated_probability"] = _numeric_series(best, "calibrated_probability", 0.5)
     edge_for_consensus = _numeric_series(best, "edge", 0.0)
 
@@ -1690,6 +1705,8 @@ def run_analysis_pipeline(
     odds_schedule_loaded = not raw_base_df.empty
     bet_rows = build_theover_bet_rows(spreads_df, totals_df, sports)
     # Earliest/high-priority league repair pass: recover blank/<NA>/null league values for college matchups.
+    # CRITICAL: We MUST infer NBA maps FIRST to prevent 'state' matching Golden State.
+    bet_rows = _infer_missing_league_from_team_sets(bet_rows, sports)
     bet_rows = _restore_missing_ncaab_league_priority(bet_rows)
     bet_rows = _recover_ncaab_league_labels(bet_rows)
     # Enforce StringDtype on identity columns before any text/boolean comparisons.
@@ -2178,8 +2195,8 @@ def run_analysis_pipeline(
     if is_odds_api_csv_source.any():
         merged.loc[is_odds_api_csv_source, "odds_source"] = "odds_api"
 
-    # Enforce Strict Drops for missing valid live line/price
-    # Only keep rows that successfully mapped a live line and price strictly from novig or fallback
+    # Do NOT drop rows based on missing or invalid odds_source. The master slate
+    # MUST be preserved exactly as uploaded. Patch instead.
     if "odds_source" in merged.columns:
         # We also need to allow uploaded or base odds sources for backwards compatibility and test suite
         valid_sources = ["novig_live", "fallback_novig", "uploaded", "base_direct", "base_reverse", "base_fuzzy", "dummy_override", "odds_api"]
