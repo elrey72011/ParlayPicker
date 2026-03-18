@@ -322,6 +322,33 @@ def _recover_ncaab_league_labels(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def _restore_missing_ncaab_league_priority(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    High-priority league restoration pass required before Kalshi/ML enrichment.
+    Restores league='ncaab' when league is empty/NaN/<NA> and matchup text looks college.
+    """
+    out = df.copy()
+    if out.empty:
+        return out
+
+    for col in ["league", "home_team", "away_team"]:
+        if col not in out.columns:
+            out[col] = pd.Series([pd.NA] * len(out), index=out.index, dtype="string")
+        out[col] = _clean_text_placeholders(_string_series(out, col)).astype("string").str.strip()
+
+    missing_league = _clean_text_placeholders(_string_series(out, "league")).str.len().eq(0)
+    if not missing_league.any():
+        return out
+
+    keyword_pattern = r"\b(?:" + "|".join(sorted(re.escape(k) for k in _NCAAB_LEAGUE_RECOVERY_KEYWORDS)) + r")\b"
+    home_text = _clean_text_placeholders(_string_series(out, "home_team")).str.lower()
+    away_text = _clean_text_placeholders(_string_series(out, "away_team")).str.lower()
+    keyword_mask = home_text.str.contains(keyword_pattern, regex=True, na=False) | away_text.str.contains(keyword_pattern, regex=True, na=False)
+
+    out.loc[missing_league & keyword_mask, "league"] = "ncaab"
+    return out
+
+
 def _patch_missing_league_for_college_rows(df: pd.DataFrame, selected_sports: list[str] | None = None) -> pd.DataFrame:
     """Backfill missing league labels for college rows before downstream merges."""
     out = df.copy()
@@ -426,13 +453,7 @@ def _normalize_merge_keys(df: pd.DataFrame, keys: list[str]) -> pd.DataFrame:
     for key in keys:
         if key not in out.columns:
             continue
-        out[key] = (
-            out[key]
-            .astype(str)
-            .str.lower()
-            .str.strip()
-            .replace({"nan": np.nan, "none": np.nan, "<na>": np.nan, "nat": np.nan, "": np.nan})
-        )
+        out[key] = _clean_text_placeholders(_string_series(out, key)).astype("string").str.strip()
     return out
 
 
@@ -1349,7 +1370,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     valid_dt = dt_utc.notna()
     if valid_dt.any():
         date_str.loc[valid_dt] = dt_utc[valid_dt].dt.tz_convert("America/New_York").dt.strftime("%Y-%m-%d")
-    pool["unique_matchup_id"] = (
+    pool["matchup_id"] = (
         date_str
         + "|" + pool["home_team"].str.lower().str.replace(r"\s+", " ", regex=True)
         + "|" + pool["away_team"].str.lower().str.replace(r"\s+", " ", regex=True)
@@ -1358,23 +1379,14 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     # Force expected_value to numeric, converting true errors to NaN while preserving negative floats
     pool["expected_value"] = pd.to_numeric(pool["expected_value"], errors="coerce")
 
-    # Strict one-pick-per-game rule: sort globally by EV, then tie-break by probability/edge,
-    # then keep only one market (spread or total) for each unique matchup/date key.
-    prob_tiebreak = _numeric_series(pool, "calibrated_probability")
-    prob_tiebreak = prob_tiebreak.where(prob_tiebreak.notna(), _numeric_series(pool, "model_probability"))
-    prob_tiebreak = prob_tiebreak.where(prob_tiebreak.notna(), _numeric_series(pool, "theover_probability"))
-    prob_tiebreak = prob_tiebreak.where(prob_tiebreak.notna(), _numeric_series(pool, "ml_probability"))
-    pool["prob_tiebreak"] = prob_tiebreak.fillna(-1.0)
+    # Mandatory one-pick-per-game rule:
+    # sort globally by EV descending, then keep first row in each matchup_id group.
+    pool = pool.sort_values("expected_value", ascending=False, na_position="last")
 
-    pool = pool.sort_values(
-        ["expected_value", "prob_tiebreak", "edge", "market_type"],
-        ascending=[False, False, False, True],
-    )
+    # Choose one row per game using the ranking above.
+    best = pool.groupby("matchup_id", as_index=False, dropna=False).first().copy()
 
-    # Choose one row per game matchup_id using the ranking above.
-    best = pool.groupby("unique_matchup_id", as_index=False, dropna=False).first().copy()
-
-    total_games = int(pool["unique_matchup_id"].nunique(dropna=False))
+    total_games = int(pool["matchup_id"].nunique(dropna=False))
     if len(best) != total_games:
         logger.warning(
             "Best-pick validation mismatch: selected_rows=%s total_games=%s",
@@ -1629,7 +1641,8 @@ def run_analysis_pipeline(
     raw_base_df = load_base_data()
     odds_schedule_loaded = not raw_base_df.empty
     bet_rows = build_theover_bet_rows(spreads_df, totals_df, sports)
-    # Earliest league repair pass: recover blank/<NA>/null league values for college matchups.
+    # Earliest/high-priority league repair pass: recover blank/<NA>/null league values for college matchups.
+    bet_rows = _restore_missing_ncaab_league_priority(bet_rows)
     bet_rows = _recover_ncaab_league_labels(bet_rows)
     # Enforce StringDtype on identity columns before any text/boolean comparisons.
     bet_rows = _enforce_identity_string_dtype(bet_rows, ["league", "home_team", "away_team"])
@@ -2220,6 +2233,7 @@ def run_analysis_pipeline(
     merged["spread"] = pd.to_numeric(merged.get("spread_line"), errors="coerce")
     merged["total"] = pd.to_numeric(merged.get("total_line"), errors="coerce")
     merged = _enforce_identity_string_dtype(merged, ["league", "home_team", "away_team"])
+    merged = _restore_missing_ncaab_league_priority(merged)
 
     # ML Prediction Enrichment [2026-03-08]
     ml_model_actually_loaded = False

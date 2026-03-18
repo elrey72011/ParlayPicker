@@ -145,11 +145,21 @@ def _build_fallback_features_from_row(row_dict: Dict[str, Any]) -> Dict[str, flo
 
 
 def _clean_team_for_matchup(value: Any) -> str:
-    team = str(value or "").lower()
+    team = str(value).lower() if pd.notna(value) else ""
     team = "".join(ch for ch in team if ch.isalnum())
     if team in {"sacremento", "sacrementokings", "sacramentokings"}:
         return "sacramento"
     return team
+
+
+def _normalize_identity_merge_keys(df: pd.DataFrame, keys: list[str]) -> pd.DataFrame:
+    """Normalize merge-key identity columns as stripped pandas StringDtype."""
+    out = df.copy()
+    for key in keys:
+        if key not in out.columns:
+            out[key] = pd.Series([""] * len(out), index=out.index, dtype="string")
+        out[key] = out[key].astype("string").str.strip()
+    return out
 
 
 def _build_matchup_id(home: Any, away: Any) -> str:
@@ -595,6 +605,7 @@ class PredictionEngine:
                 working_df["home_team"] = working_df["home_team"].astype("string").fillna("").str.strip()
             if "away_team" in working_df.columns:
                 working_df["away_team"] = working_df["away_team"].astype("string").fillna("").str.strip()
+            working_df = _normalize_identity_merge_keys(working_df, ["league", "home_team", "away_team"])
             home_series = _series_or_default(working_df, "home_team", "")
             away_series = _series_or_default(working_df, "away_team", "")
             working_df["matchup_id"] = [
@@ -660,6 +671,7 @@ class PredictionEngine:
                                 ]
                                 if "league" not in hist_df.columns:
                                     hist_df["league"] = ""
+                                hist_df = _normalize_identity_merge_keys(hist_df, ["league", "home_team", "away_team"])
                                 hist_df["league_norm"] = hist_df["league"].astype("string").fillna("").str.strip().str.upper()
                                 hist_df["game_date"] = _normalize_game_date_string(hist_df["commence_time"])
                                 hist_df["game_date_dt"] = pd.to_datetime(hist_df["game_date"], errors="coerce").dt.tz_localize(None)

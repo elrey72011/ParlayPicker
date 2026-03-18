@@ -72,6 +72,16 @@ def _normalized_merge_key(value: Any) -> str:
     return re.sub(r"[^a-z0-9]", "", str(value).lower())
 
 
+def _normalize_identity_merge_keys(df: pd.DataFrame, keys: list[str]) -> pd.DataFrame:
+    """Normalize merge-key identity columns as stripped pandas StringDtype."""
+    out = df.copy()
+    for key in keys:
+        if key not in out.columns:
+            out[key] = pd.Series([pd.NA] * len(out), index=out.index, dtype="string")
+        out[key] = out[key].astype("string").str.strip()
+    return out
+
+
 def clean_team_name(name: Any) -> str:
     """Normalize team naming noise for robust fuzzy matching."""
     text = _safe_text(name).lower()
@@ -348,7 +358,8 @@ def _fetch_event_markets_legacy(league: str, game_date: Any, home_team: str, awa
         "NCAAB": ["KXNCAAMBTOTAL", "KXNCAAMBSPREAD"],
         "NHL": ["KXNHLTOTAL", "KXNHLSPREAD"],
     }
-    series_list = series_map.get(str(league or "").upper(), [])
+    league_text = str(league).upper() if pd.notna(league) else ""
+    series_list = series_map.get(league_text, [])
 
     home_code = _lookup_kalshi_team_code(home_team) or ""
     away_code = _lookup_kalshi_team_code(away_team) or ""
@@ -360,7 +371,8 @@ def _fetch_event_markets_legacy(league: str, game_date: Any, home_team: str, awa
             resp = _make_kalshi_request(url, headers=headers, timeout=5)
             markets = resp.json().get("markets", [])
             for market in markets:
-                ticker = str(market.get("ticker") or "")
+                ticker_val = market.get("ticker")
+                ticker = str(ticker_val) if pd.notna(ticker_val) else ""
                 if date_str not in ticker:
                     continue
                 # Bidirectional permutation check
@@ -368,8 +380,11 @@ def _fetch_event_markets_legacy(league: str, game_date: Any, home_team: str, awa
                 has_away = away_code and away_code in ticker
                 if has_home and has_away:
                     return market
-                title = str(market.get("title") or "").lower()
-                if str(home_team or "").lower() in title or str(away_team or "").lower() in title:
+                title_val = market.get("title")
+                title = str(title_val).lower() if pd.notna(title_val) else ""
+                home_text = str(home_team).lower() if pd.notna(home_team) else ""
+                away_text = str(away_team).lower() if pd.notna(away_team) else ""
+                if home_text in title or away_text in title:
                     return market
         except Exception:
             continue
@@ -385,8 +400,8 @@ def _det_team_code(league: str, team: str) -> str | None:
 
 
 def league_series_ticker(league: str, market_type: str) -> str:
-    league_upper = str(league or "").upper()
-    market_lower = str(market_type or "").lower()
+    league_upper = str(league).upper() if pd.notna(league) else ""
+    market_lower = str(market_type).lower() if pd.notna(market_type) else ""
 
     # Map raw market types to standard families
     if "spread" in market_lower:
@@ -399,7 +414,8 @@ def league_series_ticker(league: str, market_type: str) -> str:
         # Default fallback
         family = "spread"
 
-    return str(LEAGUE_SERIES_MAP.get(league_upper, {}).get(family, ""))
+    series_val = LEAGUE_SERIES_MAP.get(league_upper, {}).get(family, "")
+    return str(series_val) if pd.notna(series_val) else ""
 
 
 def team_code_map(league: str, team: str) -> str:
@@ -412,7 +428,7 @@ def team_code_map(league: str, team: str) -> str:
 
 def team_code_for_league(league: str, team: str) -> str:
     code = _det_team_code(league, team)
-    return str(code or "")
+    return str(code) if pd.notna(code) else ""
 
 
 def _team_tokens_for_match(name: str) -> set[str]:
@@ -845,9 +861,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
     out = best_picks_df.copy()
     out["game_date"] = pd.to_datetime(out.get("game_date"), errors="coerce", utc=True)
-    for col in ["league", "home_team", "away_team"]:
-        if col in out.columns:
-            out[col] = out[col].astype("string").str.strip()
+    out = _normalize_identity_merge_keys(out, ["league", "home_team", "away_team"])
 
     for col in [
         "kalshi_probability",
@@ -921,7 +935,8 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 combined_events = series_events + fallback_events
                 deduped: dict[str, dict[str, Any]] = {}
                 for event in combined_events:
-                    ticker = str(event.get("event_ticker") or "").strip()
+                    ticker_val = event.get("event_ticker")
+                    ticker = str(ticker_val).strip() if pd.notna(ticker_val) else ""
                     if ticker:
                         deduped[ticker] = event
                 series_events = list(deduped.values())
