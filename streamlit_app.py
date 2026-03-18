@@ -272,8 +272,8 @@ def _merge_kalshi_into_analysis(analysis_df: pd.DataFrame, best_picks_df: pd.Dat
     right = best_picks_df[merge_keys + available_cols].drop_duplicates().copy()
 
     if "game_date" in merge_keys:
-        left["game_date"] = _et_floor_day(left["game_date"])
-        right["game_date"] = _et_floor_day(right["game_date"])
+        left["game_date"] = pd.to_datetime(left["game_date"], errors="coerce", utc=True).dt.date
+        right["game_date"] = pd.to_datetime(right["game_date"], errors="coerce", utc=True).dt.date
 
     # Create temporary sanitized columns for a bulletproof merge
     left['_merge_home'] = left['home_team'].astype(str).str.lower().str.replace(r'[^a-z0-9]', '', regex=True)
@@ -287,6 +287,30 @@ def _merge_kalshi_into_analysis(analysis_df: pd.DataFrame, best_picks_df: pd.Dat
     sanitized_merge_keys = [k for k in merge_keys if k not in ["home_team", "away_team"]] + ["_merge_home", "_merge_away"]
 
     merged = left.merge(right, on=sanitized_merge_keys, how="left", suffixes=("", "_best"))
+
+    # Date drift fallback: retry unmatched rows with right-side game_date shifted by +/- 1 day.
+    if "game_date" in sanitized_merge_keys and merged[available_cols].isna().all(axis=1).any() and not right.empty:
+        shifted_frames = []
+        for delta_days in (-1, 1):
+            shifted = right.copy()
+            shifted["game_date"] = shifted["game_date"].apply(
+                lambda d: (d + pd.Timedelta(days=delta_days)).date() if pd.notna(d) else d
+            )
+            shifted_frames.append(
+                left.merge(shifted, on=sanitized_merge_keys, how="left", suffixes=("", "_best"))
+            )
+
+        missing_mask = merged[available_cols].isna().all(axis=1)
+        for col in available_cols:
+            best_col = f"{col}_best"
+            if best_col not in merged.columns:
+                continue
+            for shifted_merge in shifted_frames:
+                if best_col in shifted_merge.columns:
+                    merged.loc[missing_mask, best_col] = merged.loc[missing_mask, best_col].where(
+                        merged.loc[missing_mask, best_col].notna(),
+                        shifted_merge.loc[missing_mask, best_col],
+                    )
 
     # Clean up temporary columns
     merged = merged.drop(columns=['_merge_home', '_merge_away'])
