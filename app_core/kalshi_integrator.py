@@ -61,8 +61,8 @@ KALSHI_LINE_TOLERANCE_SPREAD = 3.0
 KALSHI_LINE_TOLERANCE_TOTAL = 3.0
 
 MAX_LINE_TOLERANCE = {
-    "NBA": 2.5,
-    "NCAAB": 2.5,
+    "NBA": 1.5,
+    "NCAAB": 1.5,
     "NHL": 0.5,
     "MLB": 0.5,
     "NFL": 2.5,
@@ -774,7 +774,20 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
     for idx, row in out.iterrows():
         league_val = row.get("league")
         league = str(league_val).upper().strip() if pd.notna(league_val) else ""
+        market_type_val = row.get("market_type")
+        market_type = str(market_type_val).strip().lower() if pd.notna(market_type_val) else ""
+        strike_price_val = row.get("strike_price")
+        strike_price_text = str(strike_price_val).strip() if pd.notna(strike_price_val) else ""
+        category_val = row.get("category")
+        category = str(category_val).strip().lower() if pd.notna(category_val) else ""
+
         family_guess = _market_family(row)
+        if not family_guess and "spread" in category:
+            family_guess = "spread"
+        elif not family_guess and ("total" in category or "over" in category or "under" in category):
+            family_guess = "total"
+        elif not family_guess and strike_price_text:
+            family_guess = "spread" if "spread" in market_type else "total"
         family = "spread" if family_guess == "spread" else "total"
         series = league_series_ticker(league, family)
 
@@ -950,7 +963,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
             # Since we fetched by precise event ticker, we don't need semantic team string matching.
             # Just verify it's a total.
-            row_market_type = _safe_text(row.get("market_type"))
+            row_market_type = market_type
             totals_markets = [
                 m for m in nested_markets
                 if market_type_matches(row_market_type or "total", m.get("title"), m.get("subtitle"))
@@ -1008,7 +1021,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         else:
             # SPREAD LOGIC
             # Use spread-like markets inside the event and fallback by inferred text family.
-            row_market_type = _safe_text(row.get('market_type'))
+            row_market_type = market_type
             markets = [
                 m for m in nested_markets
                 if market_type_matches(row_market_type, m.get('title'), m.get('subtitle'))
@@ -1049,7 +1062,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                     m_subtitle = str(mkt.get("subtitle") or "").lower()
                     combined_text = f"{m_title} {m_subtitle}"
 
-                    m_type = str(row.get("market_type")).lower()
+                    m_type = market_type
                     book_line = pd.to_numeric(row.get("spread_line"), errors="coerce")
                     is_favorite_bet = book_line < 0
 
@@ -1162,7 +1175,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 continue
 
             # NEW: Invert probability if we are betting the underdog or the under
-            m_type = str(row.get("market_type")).lower()
+            m_type = market_type
             if "total_under" in m_type and kalshi_prob > 0:
                 kalshi_prob = 1.0 - kalshi_prob
             elif "spread" in m_type:
