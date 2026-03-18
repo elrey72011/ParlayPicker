@@ -144,11 +144,15 @@ def _build_fallback_features_from_row(row_dict: Dict[str, Any]) -> Dict[str, flo
     return features
 
 
-def _clean_team_for_matchup(value: Any) -> str:
-    team = str(value).lower() if pd.notna(value) else ""
-    # Align exactly with core/streamlit_pipeline.py's clean_team_name regex
+def clean_team_name(series: pd.Series) -> pd.Series:
+    """
+    Sanitizes team names for ultra-strict joining.
+    Strips all non-alphanumeric characters and lowercases team names
+    to ensure '76ers' and 'Philadelphia 76ers' resolve accurately.
+    """
     import re
-    team = re.sub(r"[^a-z0-9]", "", team)
+    if series is None or series.empty:
+        return series
 
     typo_map = {
         "sacramento": "sacramento",
@@ -160,7 +164,19 @@ def _clean_team_for_matchup(value: Any) -> str:
         "phildelphia": "philadelphia",
         "newyorkknicks": "newyork",
     }
+
+    # Handle Series
+    if isinstance(series, pd.Series):
+        cleaned = series.astype("string").str.lower().str.replace(r"[^a-z0-9]", "", regex=True)
+        return cleaned.replace(typo_map)
+
+    # Handle scalar strings for backward compatibility in the file
+    team = str(series).lower() if pd.notna(series) else ""
+    team = re.sub(r"[^a-z0-9]", "", team)
     return typo_map.get(team, team)
+
+def _clean_team_for_matchup(value: Any) -> str:
+    return clean_team_name(value)
 
 
 def _normalize_identity_merge_keys(df: pd.DataFrame, keys: list[str]) -> pd.DataFrame:
@@ -659,9 +675,9 @@ class PredictionEngine:
             if "game_date" not in working_df.columns:
                 working_df["game_date"] = ""
             if "home_team" in working_df.columns:
-                working_df["home_team"] = working_df["home_team"].astype("string").fillna("").str.strip()
+                working_df["home_team"] = clean_team_name(working_df["home_team"].astype("string").fillna("").str.strip())
             if "away_team" in working_df.columns:
-                working_df["away_team"] = working_df["away_team"].astype("string").fillna("").str.strip()
+                working_df["away_team"] = clean_team_name(working_df["away_team"].astype("string").fillna("").str.strip())
             working_df = _normalize_identity_merge_keys(working_df, ["league", "home_team", "away_team"])
             home_series = _series_or_default(working_df, "home_team", "")
             away_series = _series_or_default(working_df, "away_team", "")
@@ -721,8 +737,8 @@ class PredictionEngine:
                             # Clean team names in hist_df
                             if "home_team" in hist_df.columns and "away_team" in hist_df.columns:
                                 # Aggressive formatting: strip non-alphanumeric, lowercase, apply typo map
-                                hist_df["home_team"] = hist_df["home_team"].astype("string").fillna("").str.strip().apply(_clean_team_for_matchup)
-                                hist_df["away_team"] = hist_df["away_team"].astype("string").fillna("").str.strip().apply(_clean_team_for_matchup)
+                                hist_df["home_team"] = clean_team_name(hist_df["home_team"].astype("string").fillna("").str.strip())
+                                hist_df["away_team"] = clean_team_name(hist_df["away_team"].astype("string").fillna("").str.strip())
 
                                 # Use the normalized names directly for match building
                                 hist_df["matchup_id"] = [
