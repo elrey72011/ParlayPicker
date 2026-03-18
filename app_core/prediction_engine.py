@@ -174,24 +174,23 @@ def _normalize_identity_merge_keys(df: pd.DataFrame, keys: list[str]) -> pd.Data
 
 
 def _build_matchup_id(home: Any, away: Any, date_key: Any = "") -> str:
-    home_clean = _clean_team_for_matchup(home)
-    away_clean = _clean_team_for_matchup(away)
-    if not home_clean and not away_clean:
-        return ""
-
+    # First, use the team mapper to normalize names, exactly as the pipeline does
     from core.team_mapper import normalize_team_name
 
     # We must match exactly what _matchup_id in core/streamlit_pipeline.py does:
-    # team_a = np.where(home <= away, home, away)  (lexicographical sort on UPPERCASE)
-    home_norm = normalize_team_name(str(home_clean))
-    away_norm = normalize_team_name(str(away_clean))
+    # 1. normalize_team_name
+    # 2. clean_team_name (which strips r"[^a-z0-9]", lowercases, applies typo map)
+    # 3. .str.upper()
+    # 4. lexicographical sort
+
+    home_norm = normalize_team_name(str(home) if pd.notna(home) else "")
+    away_norm = normalize_team_name(str(away) if pd.notna(away) else "")
 
     import re
-    # clean_team_name in pipeline: strips non-alphanumeric, lowercases
+    # clean_team_name logic
     h_clean = re.sub(r"[^a-z0-9]", "", home_norm.lower())
     a_clean = re.sub(r"[^a-z0-9]", "", away_norm.lower())
 
-    # Typo map applied in clean_team_name
     typo_map = {
         "sacramento": "sacramento",
         "sacremento": "sacramento",
@@ -205,10 +204,11 @@ def _build_matchup_id(home: Any, away: Any, date_key: Any = "") -> str:
     h_clean = typo_map.get(h_clean, h_clean)
     a_clean = typo_map.get(a_clean, a_clean)
 
-    # Pipeline then does .str.upper() before lexicographical sort
+    # Convert to upper
     h_upper = h_clean.upper()
     a_upper = a_clean.upper()
 
+    # Sort lexicographically
     a = h_upper
     b = a_upper
     if b < a:
@@ -220,21 +220,36 @@ def _build_matchup_id(home: Any, away: Any, date_key: Any = "") -> str:
 
 
 def _to_et_game_date(series: pd.Series) -> pd.Series:
-    raw = series.astype("string")
-    out = pd.Series([pd.NA] * len(series), index=series.index, dtype="string")
+    def _to_utc_day(value: Any) -> pd.Timestamp:
+        if pd.isna(value):
+            return pd.NaT
 
-    # Preserve canonical date-only values as-is (already ET day keys).
-    date_only_mask = raw.str.fullmatch(r"\d{4}-\d{2}-\d{2}", na=False)
-    out.loc[date_only_mask] = raw.loc[date_only_mask]
+        if isinstance(value, str) and len(value.strip()) == 10:
+            try:
+                d = pd.Timestamp(value.strip())
+                return pd.Timestamp(year=d.year, month=d.month, day=d.day, tz="UTC")
+            except Exception:
+                return pd.NaT
 
-    # Convert timestamp-like values from UTC -> ET day key.
-    ts_mask = ~date_only_mask
-    if ts_mask.any():
-        dt_utc = pd.to_datetime(raw.loc[ts_mask], errors="coerce", utc=True)
-        dt_et = dt_utc.dt.tz_convert("America/New_York")
-        out.loc[ts_mask] = dt_et.dt.floor("D").dt.strftime("%Y-%m-%d")
+        try:
+            ts = pd.Timestamp(value)
+        except Exception:
+            return pd.NaT
 
-    return out
+        if ts.tzinfo is not None and ts.hour == 0 and ts.minute == 0 and ts.second == 0 and ts.nanosecond == 0:
+            ts_utc = ts.tz_convert("UTC")
+            return pd.Timestamp(year=ts_utc.year, month=ts_utc.month, day=ts_utc.day, tz="UTC")
+
+        if ts.tzinfo is None:
+            ts = ts.tz_localize("America/New_York")
+        else:
+            ts = ts.tz_convert("America/New_York")
+
+        floored = ts.floor("D")
+        return pd.Timestamp(year=floored.year, month=floored.month, day=floored.day, tz="UTC")
+
+    day_utc = pd.to_datetime(series.apply(_to_utc_day), errors="coerce", utc=True)
+    return day_utc.dt.strftime("%Y-%m-%d").astype("string")
 
 
 def _normalize_game_date_string(series: pd.Series) -> pd.Series:
