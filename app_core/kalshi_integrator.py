@@ -57,6 +57,15 @@ def _safe_first_present(*values: Any) -> Any:
     return None
 
 
+def _row_text(row: pd.Series, key: str, lowercase: bool = False) -> str:
+    """Read row text safely with pandas NA-awareness for Pandas 2.x."""
+    val = row.get(key)
+    if pd.notna(val):
+        text = str(val).strip()
+        return text.lower() if lowercase else text
+    return ""
+
+
 def _normalized_merge_key(value: Any) -> str:
     if _safe_is_missing(value):
         return ""
@@ -285,14 +294,12 @@ def build_kalshi_date_code(game_date: Any) -> str:
 
 
 def _market_family(row: pd.Series) -> str | None:
-    market_type_val = row.get("market_type")
-    market_type = str(market_type_val).strip().lower() if pd.notna(market_type_val) else ""
+    market_type = _row_text(row, "market_type", lowercase=True)
     if market_type.startswith("spread"):
         return "spread"
     if market_type.startswith("total"):
         return "total"
-    best_pick_val = row.get("best_pick")
-    best_pick = str(best_pick_val).strip().lower() if pd.notna(best_pick_val) else ""
+    best_pick = _row_text(row, "best_pick", lowercase=True)
     if best_pick.startswith("over") or best_pick.startswith("under"):
         return "total"
     if best_pick:
@@ -859,12 +866,9 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
         league_val = row.get("league")
         league = _infer_row_league(league_val, home_team_val, away_team_val)
-        market_type_val = row.get("market_type")
-        market_type = str(market_type_val).strip().lower() if pd.notna(market_type_val) else ""
-        strike_price_val = row.get("strike_price")
-        strike_price_text = str(strike_price_val).strip() if pd.notna(strike_price_val) else ""
-        category_val = row.get("category")
-        category = str(category_val).strip().lower() if pd.notna(category_val) else ""
+        market_type = _row_text(row, "market_type", lowercase=True)
+        strike_price_text = _row_text(row, "strike_price")
+        category = _row_text(row, "category", lowercase=True)
 
         family_guess = _market_family(row)
         if not family_guess and "spread" in category:
