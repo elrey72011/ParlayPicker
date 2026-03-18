@@ -5,6 +5,7 @@ import logging
 import re
 import time
 import math
+from datetime import timedelta
 from dataclasses import dataclass
 import os
 from typing import Any, Optional, Tuple
@@ -13,6 +14,19 @@ import pandas as pd
 import requests
 
 logger = logging.getLogger(__name__)
+
+
+TEAM_NOISE_WORDS = {
+    "university", "college", "state", "st", "inc", "team", "club",
+    # Common mascots/noise words frequently omitted by prediction markets.
+    "bulldogs", "tigers", "wildcats", "shockers", "eagles", "hawks", "bears", "lions", "panthers",
+    "wolves", "wolfpack", "pack", "knights", "raiders", "pirates", "spartans", "trojans",
+    "gators", "huskies", "cougars", "mustangs", "longhorns", "cowboys", "buckeyes",
+    "crimson", "blue", "orange", "golden", "red", "white", "sox", "yankees", "dodgers",
+    "cardinals", "rangers", "bruins", "leafs", "senators", "penguins", "capitals", "jets",
+    "devils", "islanders", "kraken", "flames", "oilers", "canucks", "lightning", "stars",
+    "avalanche", "coyotes", "ducks", "sharks", "predators", "sabres", "blackhawks",
+}
 
 
 def _safe_text(value: Any) -> str:
@@ -30,6 +44,14 @@ def _normalized_merge_key(value: Any) -> str:
         return ""
     return re.sub(r"[^a-z0-9]", "", str(value).lower())
 
+
+def clean_team_name(name: Any) -> str:
+    """Normalize team naming noise for robust fuzzy matching."""
+    text = _safe_text(name).lower()
+    text = re.sub(r"[^a-z0-9\s]", " ", text)
+    tokens = [t for t in text.split() if t and t not in TEAM_NOISE_WORDS]
+    return " ".join(tokens)
+
 from core.team_mapper import normalize_team_name
 API_BASE = "https://api.elections.kalshi.com/trade-api/v2"
 
@@ -44,15 +66,30 @@ MAX_LINE_TOLERANCE = {
     "MLB": 4.0
 }
 
+def _infer_market_family_from_text(title: str, subtitle: str = "", market_type_hint: str = "") -> str | None:
+    combined_text = f"{_safe_text(title)} {_safe_text(subtitle)} {_safe_text(market_type_hint)}".lower()
+
+    spread_terms = ("wins by", "spread")
+    total_terms = ("points scored", "total points", "runs scored", "goals scored", "total", "over", "under")
+
+    if any(term in combined_text for term in spread_terms):
+        return "spread"
+    if any(term in combined_text for term in total_terms):
+        return "total"
+    return None
+
+
 def market_type_matches(market_type: str, title: str, subtitle: str = "") -> bool:
     market_type = _safe_text(market_type).lower()
-    combined_text = f"{_safe_text(title)} {_safe_text(subtitle)}".lower()
+    inferred = _infer_market_family_from_text(title, subtitle, market_type)
 
-    if 'total' in market_type:
-        return any(word in combined_text for word in ['total', 'points', 'goals', 'over', 'under'])
-    elif 'spread' in market_type:
-        return 'wins by' in combined_text or 'covers' in combined_text
-    return True
+    if "total" in market_type:
+        return inferred in {"total", None}
+    if "spread" in market_type:
+        return inferred in {"spread", None}
+
+    # If explicit market_type is missing or ambiguous, trust keyword inference.
+    return inferred is not None or not market_type
 
 API_URL = API_BASE
 
@@ -351,9 +388,12 @@ def team_code_for_league(league: str, team: str) -> str:
 
 
 def _team_tokens_for_match(name: str) -> set[str]:
-    tokenized = _normalize_team_token(name)
-    stop = {"the", "of", "and", "university", "college", "state", "team"}
-    return {w for w in tokenized.split() if len(w) > 2 and w not in stop}
+    normalized = _normalize_team_token(name)
+    cleaned = clean_team_name(name)
+    stop = {"the", "of", "and", "university", "college", "state", "team", "st"}
+    normalized_tokens = {w for w in normalized.split() if len(w) > 2 and w not in stop}
+    cleaned_tokens = {w for w in cleaned.split() if len(w) > 1 and w not in stop}
+    return normalized_tokens.union(cleaned_tokens)
 
 
 def _event_match_score(event: dict[str, Any], home_team: str, away_team: str, league: str, date_code: str = "") -> int:
@@ -371,6 +411,8 @@ def _event_match_score(event: dict[str, Any], home_team: str, away_team: str, le
 
     home_norm = _normalize_team_token(home_team)
     away_norm = _normalize_team_token(away_team)
+    home_clean = clean_team_name(home_team)
+    away_clean = clean_team_name(away_team)
     home_key = _normalized_merge_key(home_team)
     away_key = _normalized_merge_key(away_team)
     home_tokens = _team_tokens_for_match(home_team)
@@ -392,6 +434,12 @@ def _event_match_score(event: dict[str, Any], home_team: str, away_team: str, le
         score += 45
     if away_norm and away_norm in combined_norm:
         score += 45
+
+    # Extra resilience for mascot/noise-token differences (e.g. Wichita St Shockers vs Wichita State)
+    if home_clean and home_clean in clean_team_name(f"{title} {subtitle} {ticker}"):
+        score += 35
+    if away_clean and away_clean in clean_team_name(f"{title} {subtitle} {ticker}"):
+        score += 35
 
     # Additional signal: fully sanitized alphanumeric keys reduce punctuation/spacing mismatch misses
     if home_key and home_key in combined_key:
@@ -721,6 +769,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         series = league_series_ticker(league, family)
 
         game_date = pd.to_datetime(row.get("game_date"), errors="coerce", utc=True)
+        game_date_date = game_date.date() if pd.notna(game_date) else None
         if pd.notna(game_date):
             # If the time is exactly midnight UTC, it's a fallback date. Do NOT shift timezone.
             if game_date.hour == 0 and game_date.minute == 0 and game_date.second == 0:
@@ -757,9 +806,23 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         best_event_match = None
         best_event_score = -1
 
+        candidate_dates = set()
+        if game_date_date is not None:
+            candidate_dates = {
+                game_date_date,
+                game_date_date - timedelta(days=1),
+                game_date_date + timedelta(days=1),
+            }
+
         for event in series_events:
             if not _is_within_48h(event, game_date):
                 continue
+
+            if candidate_dates:
+                close_time = event.get("close_time") or event.get("expiration_time")
+                event_dt = pd.to_datetime(close_time, errors="coerce", utc=True)
+                if pd.notna(event_dt) and event_dt.date() not in candidate_dates:
+                    continue
 
             score = _event_match_score(event, home_team_name, away_team_name, league, date_code=date_code)
             if score > best_event_score:
@@ -775,7 +838,16 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         # Last-mile fallback: if there's exactly one near-time candidate event in the target series,
         # use it so line-level matching can decide match quality.
         if not best_event_match:
-            near_time_events = [e for e in series_events if _is_within_48h(e, game_date)]
+            near_time_events = []
+            for e in series_events:
+                if not _is_within_48h(e, game_date):
+                    continue
+                if candidate_dates:
+                    close_time = e.get("close_time") or e.get("expiration_time")
+                    event_dt = pd.to_datetime(close_time, errors="coerce", utc=True)
+                    if pd.notna(event_dt) and event_dt.date() not in candidate_dates:
+                        continue
+                near_time_events.append(e)
             if len(near_time_events) == 1:
                 best_event_match = near_time_events[0]
                 out.at[idx, "kalshi_match_quality"] = "event_single_candidate_fallback"
@@ -865,9 +937,11 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
             # Since we fetched by precise event ticker, we don't need semantic team string matching.
             # Just verify it's a total.
+            row_market_type = _safe_text(row.get("market_type"))
             totals_markets = [
                 m for m in nested_markets
-                if market_type_matches("total", m.get("title"), m.get("subtitle"))
+                if market_type_matches(row_market_type or "total", m.get("title"), m.get("subtitle"))
+                or _infer_market_family_from_text(m.get("title"), m.get("subtitle"), row_market_type) == "total"
             ]
 
             kalshi_lines = []
@@ -929,8 +1003,13 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
         else:
             # SPREAD LOGIC
-            # Use all spread markets inside the event
-            markets = [m for m in nested_markets if market_type_matches(row.get('market_type'), m.get('title'), m.get('subtitle'))]
+            # Use spread-like markets inside the event and fallback by inferred text family.
+            row_market_type = _safe_text(row.get('market_type'))
+            markets = [
+                m for m in nested_markets
+                if market_type_matches(row_market_type, m.get('title'), m.get('subtitle'))
+                or _infer_market_family_from_text(m.get('title'), m.get('subtitle'), row_market_type) == "spread"
+            ]
 
             raw_spread_line = _safe_text(row.get("spread_line"))
             match = re.search(r"[-+]?\s*(\d+(?:\.\d+)?)", raw_spread_line)

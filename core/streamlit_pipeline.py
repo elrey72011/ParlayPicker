@@ -1255,9 +1255,16 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     )
 
     # Ensure deterministic one-pick-per-game coverage regardless of EV sign.
-    pool = pool.sort_values("expected_value", ascending=False)
+    # If both spread/total are Kalshi-matched for a game, prioritize larger absolute EV.
+    pool["abs_expected_value"] = pool["expected_value"].abs()
+    pool["kalshi_matched"] = _string_series(pool, "kalshi_match_status").str.lower().eq("matched")
+    pool["is_spread_total"] = _string_series(pool, "market_type").str.lower().str.contains("spread|total", regex=True, na=False)
+    pool = pool.sort_values(
+        ["game_id", "kalshi_matched", "is_spread_total", "abs_expected_value", "expected_value"],
+        ascending=[True, False, False, False, False],
+    )
 
-    # Choose one row per game_id using highest EV row.
+    # Choose one row per game_id using ranking above.
     best = pool.groupby("game_id", as_index=False, dropna=False).first()
 
     best["calibrated_probability"] = _numeric_series(best, "calibrated_probability", 0.5)
