@@ -173,12 +173,49 @@ def _normalize_identity_merge_keys(df: pd.DataFrame, keys: list[str]) -> pd.Data
     return out
 
 
-def _build_matchup_id(home: Any, away: Any) -> str:
+def _build_matchup_id(home: Any, away: Any, date_key: Any = "") -> str:
     home_clean = _clean_team_for_matchup(home)
     away_clean = _clean_team_for_matchup(away)
     if not home_clean and not away_clean:
         return ""
-    a, b = sorted([home_clean, away_clean])
+
+    from core.team_mapper import normalize_team_name
+
+    # We must match exactly what _matchup_id in core/streamlit_pipeline.py does:
+    # team_a = np.where(home <= away, home, away)  (lexicographical sort on UPPERCASE)
+    home_norm = normalize_team_name(str(home_clean))
+    away_norm = normalize_team_name(str(away_clean))
+
+    import re
+    # clean_team_name in pipeline: strips non-alphanumeric, lowercases
+    h_clean = re.sub(r"[^a-z0-9]", "", home_norm.lower())
+    a_clean = re.sub(r"[^a-z0-9]", "", away_norm.lower())
+
+    # Typo map applied in clean_team_name
+    typo_map = {
+        "sacramento": "sacramento",
+        "sacremento": "sacramento",
+        "sacramentokings": "sacramento",
+        "sacrementokings": "sacramento",
+        "sanantonio": "sanantonio",
+        "philidelphia": "philadelphia",
+        "phildelphia": "philadelphia",
+        "newyorkknicks": "newyork",
+    }
+    h_clean = typo_map.get(h_clean, h_clean)
+    a_clean = typo_map.get(a_clean, a_clean)
+
+    # Pipeline then does .str.upper() before lexicographical sort
+    h_upper = h_clean.upper()
+    a_upper = a_clean.upper()
+
+    a = h_upper
+    b = a_upper
+    if b < a:
+        a, b = b, a
+
+    if date_key:
+        return f"{a}|{b}|{date_key}"
     return f"{a}|{b}"
 
 
@@ -686,12 +723,14 @@ class PredictionEngine:
                                 hist_df["league_norm"] = hist_df["league"].astype("string").fillna("").str.strip().str.upper()
                                 hist_df["game_date"] = _normalize_game_date_string(hist_df["commence_time"])
                                 hist_df["game_date_dt"] = pd.to_datetime(hist_df["game_date"], errors="coerce").dt.tz_localize(None)
+                                hist_df["matchup_id_with_date"] = [
+                                    _build_matchup_id(h, a, d)
+                                    for h, a, d in zip(hist_df["home_team"], hist_df["away_team"], hist_df["game_date"])
+                                ]
                                 hist_df["canonical_match_key"] = (
                                     hist_df["league_norm"].astype("string")
                                     + "|"
-                                    + hist_df["matchup_id"].astype("string")
-                                    + "|"
-                                    + hist_df["game_date"].astype("string")
+                                    + hist_df["matchup_id_with_date"].astype("string")
                                 )
 
                                 # Process each predominantly empty row
@@ -700,11 +739,16 @@ class PredictionEngine:
                                         row_matchup = str(working_df.at[idx, "matchup_id"]) if "matchup_id" in working_df.columns else ""
                                         row_league = str(working_df.at[idx, "league"]).upper() if "league" in working_df.columns else ""
                                         row_game_date_dt = working_df.at[idx, "game_date_dt"] if "game_date_dt" in working_df.columns else pd.NaT
+                                        row_game_date = str(working_df.at[idx, "game_date"]) if "game_date" in working_df.columns else ""
                                         row_match_key = str(working_df.at[idx, "canonical_match_key"]) if "canonical_match_key" in working_df.columns else ""
                                         row_home = str(working_df.at[idx, "home_team"]) if "home_team" in working_df.columns else ""
                                         row_away = str(working_df.at[idx, "away_team"]) if "away_team" in working_df.columns else ""
 
-                                        if row_matchup:
+                                        if not row_match_key and row_league and row_home and row_away:
+                                            row_matchup_with_date = _build_matchup_id(row_home, row_away, row_game_date)
+                                            row_match_key = f"{row_league}|{row_matchup_with_date}"
+
+                                        if row_matchup or row_match_key:
                                             if row_match_key:
                                                 match = hist_df[hist_df["canonical_match_key"].eq(row_match_key).fillna(False)]
                                             else:
