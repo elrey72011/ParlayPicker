@@ -61,11 +61,11 @@ KALSHI_LINE_TOLERANCE_SPREAD = 3.0
 KALSHI_LINE_TOLERANCE_TOTAL = 3.0
 
 MAX_LINE_TOLERANCE = {
-    "NBA": 6.0,
-    "NCAAB": 8.0,
-    "NHL": 4.0,
-    "NFL": 6.0,
-    "MLB": 4.0
+    "NBA": 2.5,
+    "NCAAB": 2.5,
+    "NHL": 0.5,
+    "MLB": 0.5,
+    "NFL": 2.5,
 }
 
 def _infer_market_family_from_text(title: str, subtitle: str = "", market_type_hint: str = "") -> str | None:
@@ -997,22 +997,13 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                     else:
                         best_market = nearest[2]
                         match_status = "matched"
-                        match_reason = "total_match_nearest"
+                        match_reason = "nearest_line_proxy"
                         out.at[idx, "kalshi_line_diff"] = delta
                 else:
-                    # Loose fallback tier: still accept nearest line for coverage, but label quality.
-                    loose_tolerance = tolerance + 4.0
-                    if delta <= loose_tolerance:
-                        best_market = nearest[2]
-                        match_status = "matched"
-                        match_reason = "total_match_nearest_loose"
-                        out.at[idx, "kalshi_line_diff"] = delta
-                        out.at[idx, "kalshi_match_quality"] = "line_mismatched_loose"
-                    else:
-                        out.at[idx, "kalshi_match_status"] = "miss"
-                        out.at[idx, "kalshi_match_reason"] = "alt_line_mismatch"
-                        out.at[idx, "kalshi_match_quality"] = "line_mismatched"
-                        continue
+                    out.at[idx, "kalshi_match_status"] = "miss"
+                    out.at[idx, "kalshi_match_reason"] = "alt_line_mismatch"
+                    out.at[idx, "kalshi_match_quality"] = "line_mismatched"
+                    continue
 
         else:
             # SPREAD LOGIC
@@ -1123,16 +1114,13 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                         else:
                             best_market = nearest[2]
                             match_status = "matched"
-                            match_reason = "spread_match_nearest"
+                            match_reason = "nearest_line_proxy"
                             out.at[idx, "kalshi_line_diff"] = delta
                     else:
-                        loose_tolerance = tolerance + 4.0
-                        if delta <= loose_tolerance:
-                            best_market = nearest[2]
-                            match_status = "matched"
-                            match_reason = "spread_match_nearest_loose"
-                            out.at[idx, "kalshi_line_diff"] = delta
-                            out.at[idx, "kalshi_match_quality"] = "line_mismatched_loose"
+                        out.at[idx, "kalshi_match_status"] = "miss"
+                        out.at[idx, "kalshi_match_reason"] = "alt_line_mismatch"
+                        out.at[idx, "kalshi_match_quality"] = "line_mismatched"
+                        continue
 
         if best_market is None:
             # We found no markets or candidates at all

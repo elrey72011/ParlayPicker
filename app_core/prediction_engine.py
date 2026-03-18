@@ -179,6 +179,14 @@ def _to_et_game_date(series: pd.Series) -> pd.Series:
     return out
 
 
+def _normalize_game_date_string(series: pd.Series) -> pd.Series:
+    """Canonical YYYY-MM-DD string key used for schedule/feature joins."""
+    out = _to_et_game_date(series)
+    dt = pd.to_datetime(out, errors="coerce")
+    normalized = dt.dt.strftime("%Y-%m-%d")
+    return normalized.astype("string")
+
+
 def _series_or_default(df: pd.DataFrame, col: str, default: str = "") -> pd.Series:
     if col in df.columns:
         return df[col]
@@ -586,7 +594,7 @@ class PredictionEngine:
             game_date_src = _series_or_default(working_df, "game_date", "")
             if game_date_src.astype("string").str.len().eq(0).all() and "commence_time" in working_df.columns:
                 game_date_src = _series_or_default(working_df, "commence_time", "")
-            working_df["game_date"] = _to_et_game_date(game_date_src)
+            working_df["game_date"] = _normalize_game_date_string(game_date_src)
             working_df["game_date_dt"] = pd.to_datetime(working_df["game_date"], errors="coerce").dt.tz_localize(None)
             working_df["canonical_match_key"] = (
                 _series_or_default(working_df, "league", "").astype("string").str.upper()
@@ -641,7 +649,7 @@ class PredictionEngine:
                                 if "league" not in hist_df.columns:
                                     hist_df["league"] = ""
                                 hist_df["league_norm"] = hist_df["league"].astype(str).str.upper()
-                                hist_df["game_date"] = _to_et_game_date(hist_df["commence_time"])
+                                hist_df["game_date"] = _normalize_game_date_string(hist_df["commence_time"])
                                 hist_df["game_date_dt"] = pd.to_datetime(hist_df["game_date"], errors="coerce").dt.tz_localize(None)
                                 hist_df["canonical_match_key"] = (
                                     hist_df["league_norm"].astype("string")

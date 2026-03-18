@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import functools
+import re
 import logging
 import sys
 import warnings
@@ -65,6 +66,9 @@ DATE_ALIASES = ["game_date", "game_date_est", "commence_time", "start_time", "ti
 LEAGUE_ALIASES = {"NCAAM": "NCAAB", "NCAA MEN'S BASKETBALL": "NCAAB", "NCAA MENS BASKETBALL": "NCAAB"}
 _KNOWN_NCAAB_TEAM_TOKENS = {
     "wichita st", "wichita state", "oklahoma st", "oklahoma state", "davidson",
+}
+_NCAAB_TEAM_KEYWORD_HINTS = {
+    "st", "state", "university", "redhawks", "tommies", "cowboys",
 }
 _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball", "women\'s basketball"}
 
@@ -305,15 +309,17 @@ def _patch_missing_league_for_college_rows(df: pd.DataFrame, selected_sports: li
     if not missing_league.any():
         return out
 
-    home = _clean_text_placeholders(_string_series(out, "home_team")).map(normalize_team_name).str.lower().str.strip()
-    away = _clean_text_placeholders(_string_series(out, "away_team")).map(normalize_team_name).str.lower().str.strip()
-    home = home.str.replace(r"\s+", " ", regex=True)
-    away = away.str.replace(r"\s+", " ", regex=True)
+    home_raw = _clean_text_placeholders(_string_series(out, "home_team")).str.lower().str.strip()
+    away_raw = _clean_text_placeholders(_string_series(out, "away_team")).str.lower().str.strip()
+    home = home_raw.map(normalize_team_name).str.lower().str.strip().str.replace(r"\s+", " ", regex=True)
+    away = away_raw.map(normalize_team_name).str.lower().str.strip().str.replace(r"\s+", " ", regex=True)
 
     teams_mask = home.isin(_KNOWN_NCAAB_TEAM_TOKENS) | away.isin(_KNOWN_NCAAB_TEAM_TOKENS)
+    keyword_pattern = r"\b(?:" + "|".join(sorted(re.escape(k) for k in _NCAAB_TEAM_KEYWORD_HINTS)) + r")\b"
+    teams_mask = teams_mask | home_raw.str.contains(keyword_pattern, regex=True, na=False) | away_raw.str.contains(keyword_pattern, regex=True, na=False)
 
     source_text = pd.Series([""] * len(out), index=out.index, dtype="string")
-    for src_col in ["sport", "source", "data_source", "odds_source", "event_name", "matchup"]:
+    for src_col in ["sport", "source", "data_source", "odds_source", "event_name", "matchup", "league_source"]:
         if src_col in out.columns:
             source_text = source_text + " " + _clean_text_placeholders(_string_series(out, src_col)).str.lower()
     college_source_mask = pd.Series(False, index=out.index)
@@ -1257,10 +1263,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
 
     pool["has_signal_probability"] = _numeric_series(pool, "model_probability").notna() | _numeric_series(pool, "theover_probability").notna() | _numeric_series(pool, "ml_probability").notna()
 
-    # Create orientation-insensitive matchup_id to group flipped home/away teams.
-    # Keep grouping resilient even if league is missing.
-    team_a = pool["home_team"].where(pool["home_team"] <= pool["away_team"], pool["away_team"]).str.lower().str.replace(r'[^a-z0-9\s]', '', regex=True)
-    team_b = pool["away_team"].where(pool["home_team"] <= pool["away_team"], pool["home_team"]).str.lower().str.replace(r'[^a-z0-9\s]', '', regex=True)
+    # Canonical per-game identity key used for full game coverage selection.
+    team_a = pool["home_team"].str.lower().str.replace(r'[^a-z0-9\s]', '', regex=True)
+    team_b = pool["away_team"].str.lower().str.replace(r'[^a-z0-9\s]', '', regex=True)
 
     dt_utc = _game_dates(pool)
     date_str = pd.Series([""] * len(pool), index=pool.index, dtype="string")
