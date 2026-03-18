@@ -190,23 +190,18 @@ def _normalize_identity_merge_keys(df: pd.DataFrame, keys: list[str]) -> pd.Data
 
 
 def _build_matchup_id(home: Any, away: Any, date_key: Any = "") -> str:
-    # First, use the team mapper to normalize names, exactly as the pipeline does
     from core.team_mapper import normalize_team_name
+    import re
 
-    # We must match exactly what _matchup_id in core/streamlit_pipeline.py does:
-    # 1. normalize_team_name
-    # 2. clean_team_name (which strips r"[^a-z0-9]", lowercases, applies typo map)
-    # 3. .str.upper()
-    # 4. lexicographical sort
-
+    # 1. Normalize Team Name
     home_norm = normalize_team_name(str(home) if pd.notna(home) else "")
     away_norm = normalize_team_name(str(away) if pd.notna(away) else "")
 
-    import re
-    # clean_team_name logic
+    # 2. Strict Cleaning (Lowercase, strip non-alphanumerics)
     h_clean = re.sub(r"[^a-z0-9]", "", home_norm.lower())
     a_clean = re.sub(r"[^a-z0-9]", "", away_norm.lower())
 
+    # 3. Typo Mapping
     typo_map = {
         "sacramento": "sacramento",
         "sacremento": "sacramento",
@@ -220,19 +215,17 @@ def _build_matchup_id(home: Any, away: Any, date_key: Any = "") -> str:
     h_clean = typo_map.get(h_clean, h_clean)
     a_clean = typo_map.get(a_clean, a_clean)
 
-    # Convert to upper
+    # 4. Uppercase
     h_upper = h_clean.upper()
     a_upper = a_clean.upper()
 
-    # Sort lexicographically
-    a = h_upper
-    b = a_upper
-    if b < a:
-        a, b = b, a
+    # 5. Lexicographical Sorting
+    team_a = h_upper if h_upper <= a_upper else a_upper
+    team_b = a_upper if h_upper <= a_upper else h_upper
 
     if date_key:
-        return f"{a}|{b}|{date_key}"
-    return f"{a}|{b}"
+        return f"{team_a}|{team_b}|{date_key}"
+    return f"{team_a}|{team_b}"
 
 
 def _to_et_game_date_string(series: pd.Series) -> pd.Series:
@@ -274,46 +267,6 @@ def _series_or_default(df: pd.DataFrame, col: str, default: str = "") -> pd.Seri
     if col in df.columns:
         return df[col]
     return pd.Series([default] * len(df), index=df.index)
-def _fuzzy_match_hist_row(
-    hist_df: pd.DataFrame,
-    row_league: str,
-    row_game_date: Any,
-    row_home: str,
-    row_away: str,
-) -> pd.DataFrame:
-    """Fuzzy fallback for schedule-key mismatches when exact matchup join misses."""
-    if hist_df is None or hist_df.empty or rapidfuzz_fuzz is None:
-        return hist_df.iloc[0:0]
-
-    candidate = hist_df.copy()
-    if row_league and "league_norm" in candidate.columns:
-        candidate = candidate[candidate["league_norm"].astype("string").str.upper().eq(str(row_league).upper()).fillna(False)]
-    if row_game_date is not None and not pd.isna(row_game_date) and "game_date_dt" in candidate.columns:
-        candidate = candidate[candidate["game_date_dt"].dt.normalize().eq(pd.Timestamp(row_game_date).normalize()).fillna(False)]
-
-    if candidate.empty:
-        return candidate
-
-    row_home_s = str(row_home or "").strip().lower()
-    row_away_s = str(row_away or "").strip().lower()
-    if not row_home_s or not row_away_s:
-        return candidate.iloc[0:0]
-
-    scored: list[tuple[float, int]] = []
-    for idx, rec in candidate.iterrows():
-        cand_home = str(rec.get("home_team", "")).strip().lower()
-        cand_away = str(rec.get("away_team", "")).strip().lower()
-        home_score = float(rapidfuzz_fuzz.token_sort_ratio(row_home_s, cand_home))
-        away_score = float(rapidfuzz_fuzz.token_sort_ratio(row_away_s, cand_away))
-        scored.append(((home_score + away_score) / 2.0, idx))
-
-    if not scored:
-        return candidate.iloc[0:0]
-
-    best_score, best_idx = max(scored, key=lambda x: x[0])
-    if best_score < 85.0:
-        return candidate.iloc[0:0]
-    return candidate.loc[[best_idx]]
 
 
 def match_team_name(target: str, candidates: List[str], threshold: float = 80.0) -> Optional[str]:
@@ -811,15 +764,7 @@ class PredictionEngine:
                                                 except Exception as e:
                                                     logger.warning(f"Failed to filter prior dates during looser fallback: {e}")
 
-                                        # Fallback mechanism: purely fuzzy token match
-                                        if match.empty:
-                                            match = _fuzzy_match_hist_row(
-                                                hist_df=hist_df,
-                                                row_league=row_league,
-                                                row_game_date=row_game_date_dt,
-                                                row_home=row_home_clean,
-                                                row_away=row_away_clean,
-                                            )
+                                        # Removed purely fuzzy token match to ensure strict and rigorous normalization
 
                                         # Final logic to grab the most recent valid match found
                                         if not match.empty:
