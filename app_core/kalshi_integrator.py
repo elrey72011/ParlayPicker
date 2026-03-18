@@ -96,8 +96,8 @@ KALSHI_LINE_TOLERANCE_SPREAD = 3.0
 KALSHI_LINE_TOLERANCE_TOTAL = 3.0
 
 MAX_LINE_TOLERANCE = {
-    "NBA": 1.5,
-    "NCAAB": 1.5,
+    "NBA": 2.5,
+    "NCAAB": 2.5,
     "NHL": 0.5,
     "MLB": 0.5,
     "NFL": 2.5,
@@ -891,7 +891,12 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             family_guess = "total"
         elif not family_guess and strike_price_text:
             family_guess = "spread" if "spread" in market_type else "total"
-        family = "spread" if family_guess == "spread" else "total"
+
+        if "moneyline" in market_type:
+             family = "moneyline"
+        else:
+             family = "spread" if family_guess == "spread" else "total"
+
         series = league_series_ticker(league, family)
 
         game_date = pd.to_datetime(row.get("game_date"), errors="coerce", utc=True)

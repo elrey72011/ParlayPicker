@@ -74,6 +74,7 @@ _NCAAB_LEAGUE_RECOVERY_KEYWORDS = {
     "st", "state", "univ", "university",
     "cowboys", "bulldogs", "redhawks", "tommies", "golden hurricane", "wildcats", "shockers", "unlv",
     "lehigh", "navy", "revolutionaries", "uic", "panthers", "bradley", "dayton", "murray", "saint josephs",
+    "valley", "uvu", "george washington", "gw",
 }
 _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball", "women\'s basketball"}
 
@@ -89,7 +90,7 @@ BEST_PICK_COLUMNS = [
 CANONICAL_BET_COLUMNS = [
     "league", "home_team", "away_team", "game_date", "game_time_est", "game_key",
     "market_type", "spread_line", "total_line",
-    "theover_probability", "odds_american", "market_probability",
+    "theover_probability", "odds_american", "odds_source", "market_probability",
     "ml_probability", "calibrated_probability", "expected_value", "edge", "best_pick", "used_stale_features",
 ]
 
@@ -287,10 +288,15 @@ def _infer_missing_league_from_team_sets(df: pd.DataFrame, selected_sports: list
 
     nba_teams = {normalize_team_name(v) for v in NBA_EXACT_MAP.values()}
     nhl_teams = {normalize_team_name(v) for v in NHL_EXACT_MAP.values()}
+
+    # We must check against keys of NBA_EXACT_MAP in addition to values.
+    nba_exact_keys = {normalize_team_name(k) for k in NBA_EXACT_MAP.keys()}
+    nba_full_set = nba_teams.union(nba_exact_keys)
+
     home = _string_series(out, "home_team").map(normalize_team_name)
     away = _string_series(out, "away_team").map(normalize_team_name)
 
-    nba_mask = missing_mask & (home.isin(nba_teams) | away.isin(nba_teams))
+    nba_mask = missing_mask & (home.isin(nba_full_set) | away.isin(nba_full_set))
     nhl_mask = missing_mask & (home.isin(nhl_teams) | away.isin(nhl_teams))
     out.loc[nba_mask, "league"] = "NBA"
     out.loc[nhl_mask & out["league"].str.len().eq(0), "league"] = "NHL"
@@ -341,12 +347,21 @@ def _restore_missing_ncaab_league_priority(df: pd.DataFrame) -> pd.DataFrame:
     if not missing_league.any():
         return out
 
+    # We must exclude NBA matches *before* we apply NCAAB regex heuristics,
+    # otherwise Golden State might get labeled NCAAB due to the 'state' token.
+    nba_teams = {normalize_team_name(v) for v in NBA_EXACT_MAP.values()}
+    nba_exact_keys = {normalize_team_name(k) for k in NBA_EXACT_MAP.keys()}
+    nba_full_set = nba_teams.union(nba_exact_keys)
+    home_normalized = _string_series(out, "home_team").map(normalize_team_name)
+    away_normalized = _string_series(out, "away_team").map(normalize_team_name)
+    is_nba_mask = home_normalized.isin(nba_full_set) | away_normalized.isin(nba_full_set)
+
     keyword_pattern = r"\b(?:" + "|".join(sorted(re.escape(k) for k in _NCAAB_LEAGUE_RECOVERY_KEYWORDS)) + r")\b"
     home_text = _clean_text_placeholders(_string_series(out, "home_team")).str.lower()
     away_text = _clean_text_placeholders(_string_series(out, "away_team")).str.lower()
     keyword_mask = home_text.str.contains(keyword_pattern, regex=True, na=False) | away_text.str.contains(keyword_pattern, regex=True, na=False)
 
-    out.loc[missing_league & keyword_mask, "league"] = "ncaab"
+    out.loc[missing_league & keyword_mask & ~is_nba_mask, "league"] = "ncaab"
     return out
 
 
@@ -401,6 +416,14 @@ def _preprocess_bet_rows_for_league_bridge(df: pd.DataFrame) -> pd.DataFrame:
     if not missing_league.any():
         return out
 
+    nba_teams = {normalize_team_name(v).lower() for v in NBA_EXACT_MAP.values()}
+    nba_exact_keys = {normalize_team_name(k).lower() for k in NBA_EXACT_MAP.keys()}
+    nba_full_set = nba_teams.union(nba_exact_keys)
+
+    home_normalized = _string_series(out, "home_team").map(normalize_team_name).str.lower()
+    away_normalized = _string_series(out, "away_team").map(normalize_team_name).str.lower()
+    is_nba_mask = home_normalized.isin(nba_full_set) | away_normalized.isin(nba_full_set)
+
     keyword_pattern = r"\b(?:" + "|".join(sorted(re.escape(k) for k in _NCAAB_LEAGUE_RECOVERY_KEYWORDS)) + r")\b"
     home_text = _clean_text_placeholders(_string_series(out, "home_team")).str.lower().str.strip()
     away_text = _clean_text_placeholders(_string_series(out, "away_team")).str.lower().str.strip()
@@ -412,7 +435,7 @@ def _preprocess_bet_rows_for_league_bridge(df: pd.DataFrame) -> pd.DataFrame:
             source_text = source_text + " " + _clean_text_placeholders(_string_series(out, src_col)).str.lower()
     source_is_college = source_text.str.contains(r"\bncaa\b|\bncaab\b|\bncaam\b|college", regex=True, na=False)
 
-    out.loc[missing_league & (team_keyword_mask | source_is_college), "league"] = "ncaab"
+    out.loc[missing_league & (team_keyword_mask | source_is_college) & ~is_nba_mask, "league"] = "ncaab"
     return out
 
 
@@ -616,9 +639,14 @@ def _normalize_upload(df: pd.DataFrame | None) -> pd.DataFrame:
         if src in out.columns and dst not in out.columns:
             out = out.rename(columns={src: dst})
     out = _coerce_identity_columns(out)
-    out["game_date"] = _game_dates(out)
+    out["game_date"] = _utc_day_key(_game_dates(out))
     # Fill any missing dates with fallback
     out["game_date"] = out["game_date"].fillna(_game_date_fallback())
+
+    # Tag rows loaded from a raw export file for priority upstream.
+    if "odds_source" not in out.columns:
+        out["odds_source"] = "odds_api"
+
     return out
 
 
@@ -688,8 +716,8 @@ def _concat_valid_bet_frames(frames: list[pd.DataFrame], expected_columns: list[
 def _canonical_matchup_key(df: pd.DataFrame) -> pd.Series:
     """Orientation-insensitive game key (league + sorted teams + date)."""
     league = _string_series(df, "league").str.upper()
-    home = clean_team_name(_string_series(df, "home_team")).str.upper()
-    away = clean_team_name(_string_series(df, "away_team")).str.upper()
+    home = clean_team_name(_string_series(df, "home_team").map(normalize_team_name)).str.upper()
+    away = clean_team_name(_string_series(df, "away_team").map(normalize_team_name)).str.upper()
     team_a = home.where(home <= away, away)
     team_b = away.where(home <= away, home)
     date = _utc_day_key(_game_dates(df)).dt.strftime("%Y-%m-%d").fillna("")
@@ -699,8 +727,8 @@ def _canonical_matchup_key(df: pd.DataFrame) -> pd.Series:
 def _canonical_matchup_teams_key(df: pd.DataFrame) -> pd.Series:
     """Orientation-insensitive game key using league + sorted teams only (no date)."""
     league = _string_series(df, "league").str.upper()
-    home = clean_team_name(_string_series(df, "home_team")).str.upper()
-    away = clean_team_name(_string_series(df, "away_team")).str.upper()
+    home = clean_team_name(_string_series(df, "home_team").map(normalize_team_name)).str.upper()
+    away = clean_team_name(_string_series(df, "away_team").map(normalize_team_name)).str.upper()
     team_a = home.where(home <= away, away)
     team_b = away.where(home <= away, home)
     return league + "|" + team_a + "|" + team_b
@@ -1120,13 +1148,15 @@ def build_theover_bet_rows(
         out["home_team"] = _string_series(out, "home_team").map(normalize_team_name)
         out["away_team"] = _string_series(out, "away_team").map(normalize_team_name)
         out["market_type"] = _string_series(out, "market_type")
-        out["game_date"] = _game_dates(out)
+        out["game_date"] = _utc_day_key(_game_dates(out))
         out["spread_line"] = pd.to_numeric(out.get("spread_line"), errors="coerce")
         out["total_line"] = pd.to_numeric(out.get("total_line"), errors="coerce")
         out["spread"] = pd.to_numeric(out.get("spread_line"), errors="coerce")
         out["total"] = pd.to_numeric(out.get("total_line"), errors="coerce")
         out["theover_probability"] = pd.to_numeric(out.get("theover_probability"), errors="coerce")
         out["odds_american"] = pd.to_numeric(out.get("odds_american"), errors="coerce")
+        if "odds_source" not in out.columns:
+            out["odds_source"] = pd.NA
         if selected_sports:
             selected = {str(s).upper() for s in selected_sports}
             selected = {LEAGUE_ALIASES.get(s, s) for s in selected}
@@ -2142,10 +2172,14 @@ def run_analysis_pipeline(
         & _numeric_series(merged, "odds_american").notna()
     ).any())
 
+    is_odds_api_csv_source = _string_series(merged, "odds_source").str.lower().eq("odds_api")
+
+    # Override missing logic specifically if source is known as odds_api from CSV
+    missing_odds_mask = merged["odds_american"].isna() & ~is_odds_api_csv_source
+
     # Fallback Mode for Missing Novig lines.
     # If live feed is unavailable OR partially unmatched, keep rows actionable via -110 fallback
     # unless user supplied their own non-default odds.
-    missing_odds_mask = merged["odds_american"].isna()
     if missing_odds_mask.any() and not has_local_uploaded_odds:
         if live_odds_df.empty:
             logger.warning("Novig API unavailable/empty due to time or tier restrictions. Falling back to standard -110 odds to render dashboard.")
