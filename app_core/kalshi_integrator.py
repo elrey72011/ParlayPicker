@@ -24,6 +24,12 @@ def _safe_text(value: Any) -> str:
         pass
     return str(value)
 
+
+def _normalized_merge_key(value: Any) -> str:
+    if value is None or pd.isna(value):
+        return ""
+    return re.sub(r"[^a-z0-9]", "", str(value).lower())
+
 from core.team_mapper import normalize_team_name
 API_BASE = "https://api.elections.kalshi.com/trade-api/v2"
 
@@ -39,8 +45,8 @@ MAX_LINE_TOLERANCE = {
 }
 
 def market_type_matches(market_type: str, title: str, subtitle: str = "") -> bool:
-    market_type = str(market_type or '').lower()
-    combined_text = f"{str(title or '')} {str(subtitle or '')}".lower()
+    market_type = _safe_text(market_type).lower()
+    combined_text = f"{_safe_text(title)} {_safe_text(subtitle)}".lower()
 
     if 'total' in market_type:
         return any(word in combined_text for word in ['total', 'points', 'goals', 'over', 'under'])
@@ -191,7 +197,7 @@ class KalshiAPIError(RuntimeError):
 
 
 def _normalize_team_token(name: str) -> str:
-    s = str(name or "").lower().strip()
+    s = _safe_text(name).lower().strip()
     s = s.replace("\u2019", "'").replace("&", " and ")
     s = s.replace("-", " ").replace(".", " ").replace("'", "")
     s = re.sub(r"\bst\b", "state", s)
@@ -221,12 +227,14 @@ def build_kalshi_date_code(game_date: Any) -> str:
 
 
 def _market_family(row: pd.Series) -> str | None:
-    market_type = str(row.get("market_type") or "").strip().lower()
+    market_type_val = row.get("market_type")
+    market_type = str(market_type_val).strip().lower() if pd.notna(market_type_val) else ""
     if market_type.startswith("spread"):
         return "spread"
     if market_type.startswith("total"):
         return "total"
-    best_pick = str(row.get("best_pick") or "").strip().lower()
+    best_pick_val = row.get("best_pick")
+    best_pick = str(best_pick_val).strip().lower() if pd.notna(best_pick_val) else ""
     if best_pick.startswith("over") or best_pick.startswith("under"):
         return "total"
     if best_pick:
@@ -235,7 +243,7 @@ def _market_family(row: pd.Series) -> str | None:
 
 
 def _lookup_kalshi_team_code(team: str) -> str | None:
-    raw = str(team or "").strip()
+    raw = _safe_text(team).strip()
     if raw in KALSHI_TEAM_CODES:
         return KALSHI_TEAM_CODES[raw]
     normalized = re.sub(r"\s+", " ", raw.lower().replace(".", "").strip())
@@ -246,8 +254,9 @@ def _guess_code(team: str, is_ncaab: bool = False, date_code: str = "") -> str |
     mapped = _lookup_kalshi_team_code(team)
     if mapped:
         return mapped
-    if str(team or "").strip() in KALSHI_NCAAB_TEAM_CODES:
-        return KALSHI_NCAAB_TEAM_CODES[str(team).strip()]
+    team_text = _safe_text(team).strip()
+    if team_text in KALSHI_NCAAB_TEAM_CODES:
+        return KALSHI_NCAAB_TEAM_CODES[team_text]
     token = _normalize_team_token(team)
     if token in TEAM_CODE_ALIASES:
         return TEAM_CODE_ALIASES[token]
@@ -358,9 +367,12 @@ def _event_match_score(event: dict[str, Any], home_team: str, away_team: str, le
         _normalize_team_token(ticker),
     ]).strip()
     combined_upper = f"{title} {subtitle} {ticker}".upper()
+    combined_key = _normalized_merge_key(f"{title} {subtitle} {ticker}")
 
     home_norm = _normalize_team_token(home_team)
     away_norm = _normalize_team_token(away_team)
+    home_key = _normalized_merge_key(home_team)
+    away_key = _normalized_merge_key(away_team)
     home_tokens = _team_tokens_for_match(home_team)
     away_tokens = _team_tokens_for_match(away_team)
 
@@ -380,6 +392,12 @@ def _event_match_score(event: dict[str, Any], home_team: str, away_team: str, le
         score += 45
     if away_norm and away_norm in combined_norm:
         score += 45
+
+    # Additional signal: fully sanitized alphanumeric keys reduce punctuation/spacing mismatch misses
+    if home_key and home_key in combined_key:
+        score += 12
+    if away_key and away_key in combined_key:
+        score += 12
 
     # Medium signal: token overlap allows abbreviation/morphology tolerance
     combined_tokens = set(combined_norm.split())
@@ -696,7 +714,8 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
     out["kalshi_match_reason"] = "no_market_for_tickers"
 
     for idx, row in out.iterrows():
-        league = _safe_text(row.get("league")).upper()
+        league_val = row.get("league")
+        league = str(league_val).upper().strip() if pd.notna(league_val) else ""
         family_guess = _market_family(row)
         family = "spread" if family_guess == "spread" else "total"
         series = league_series_ticker(league, family)
@@ -730,8 +749,10 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
         series_events = enrich_with_kalshi_markets.series_cache[series]
 
-        home_team_name = _safe_text(row.get("home_team"))
-        away_team_name = _safe_text(row.get("away_team"))
+        home_team_val = row.get("home_team")
+        away_team_val = row.get("away_team")
+        home_team_name = str(home_team_val).strip() if pd.notna(home_team_val) else ""
+        away_team_name = str(away_team_val).strip() if pd.notna(away_team_val) else ""
 
         best_event_match = None
         best_event_score = -1
@@ -924,7 +945,13 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                         combined_text = f"{m_title} {m_subtitle}"
 
                         if "moneyline" in combined_text or "to win" in combined_text:
-                            pick_team_norm = _normalize_team_token(str(row.get("pick_team") or row.get("home_team")))
+                            pick_team_val = row.get("pick_team")
+                            if pd.notna(pick_team_val):
+                                pick_team = str(pick_team_val)
+                            else:
+                                home_team_val = row.get("home_team")
+                                pick_team = str(home_team_val) if pd.notna(home_team_val) else ""
+                            pick_team_norm = _normalize_team_token(pick_team)
                             if pick_team_norm and pick_team_norm in _normalize_team_token(m_title):
                                 best_market = mkt
                                 match_status = "matched"
@@ -1125,14 +1152,27 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
 
 def canonical_team_name(team: str) -> str:
-    return str(team or "").strip()
+    return _safe_text(team).strip()
 
 
 def match_nba_spread(row: dict[str, Any], markets: list[dict[str, Any]]) -> dict[str, Any] | None:
-    pick_team = canonical_team_name(str(row.get("spread_pick_team") or ""))
+    spread_pick_team_val = row.get("spread_pick_team")
+    pick_team = canonical_team_name(str(spread_pick_team_val)) if pd.notna(spread_pick_team_val) else ""
     pick_line = pd.to_numeric(row.get("spread_pick_line"), errors="coerce")
-    home_team = canonical_team_name(str(row.get("Home") or row.get("home_team") or ""))
-    away_team = canonical_team_name(str(row.get("Away") or row.get("away_team") or ""))
+
+    home_raw = row.get("Home")
+    if pd.notna(home_raw):
+        home_team = canonical_team_name(str(home_raw))
+    else:
+        home_fallback = row.get("home_team")
+        home_team = canonical_team_name(str(home_fallback)) if pd.notna(home_fallback) else ""
+
+    away_raw = row.get("Away")
+    if pd.notna(away_raw):
+        away_team = canonical_team_name(str(away_raw))
+    else:
+        away_fallback = row.get("away_team")
+        away_team = canonical_team_name(str(away_fallback)) if pd.notna(away_fallback) else ""
     if pd.isna(pick_line) or not pick_team:
         return None
 
