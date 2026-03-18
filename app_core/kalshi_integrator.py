@@ -16,6 +16,8 @@ import requests
 logger = logging.getLogger(__name__)
 
 
+NCAAB_SUFFIX_TOKENS = {"bulldogs", "cowboys", "wildcats", "shockers"}
+
 TEAM_NOISE_WORDS = {
     "university", "college", "state", "st", "inc", "team", "club",
     # Common mascots/noise words frequently omitted by prediction markets.
@@ -395,6 +397,14 @@ def _team_tokens_for_match(name: str) -> set[str]:
     cleaned_tokens = {w for w in cleaned.split() if len(w) > 1 and w not in stop}
     return normalized_tokens.union(cleaned_tokens)
 
+
+
+
+def _clean_ncaab_team_for_match(name: Any) -> str:
+    text = _safe_text(name).lower()
+    text = re.sub(r"[^a-z0-9\s]", " ", text)
+    tokens = [t for t in text.split() if t and t not in NCAAB_SUFFIX_TOKENS]
+    return " ".join(tokens)
 
 def _event_match_score(event: dict[str, Any], home_team: str, away_team: str, league: str, date_code: str = "") -> int:
     title = str(event.get("title") or "")
@@ -802,6 +812,9 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         away_team_val = row.get("away_team")
         home_team_name = str(home_team_val).strip() if pd.notna(home_team_val) else ""
         away_team_name = str(away_team_val).strip() if pd.notna(away_team_val) else ""
+        if league == "NCAAB":
+            home_team_name = _clean_ncaab_team_for_match(home_team_name)
+            away_team_name = _clean_ncaab_team_for_match(away_team_name)
 
         best_event_match = None
         best_event_score = -1

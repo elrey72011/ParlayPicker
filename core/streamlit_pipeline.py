@@ -63,6 +63,10 @@ except Exception as e:
 VALID_MARKETS = {"spread_home", "spread_away", "total_over", "total_under"}
 DATE_ALIASES = ["game_date", "game_date_est", "commence_time", "start_time", "time", "date", "event_date"]
 LEAGUE_ALIASES = {"NCAAM": "NCAAB", "NCAA MEN'S BASKETBALL": "NCAAB", "NCAA MENS BASKETBALL": "NCAAB"}
+_KNOWN_NCAAB_TEAM_TOKENS = {
+    "wichita st", "wichita state", "oklahoma st", "oklahoma state", "davidson",
+}
+_COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball", "women\'s basketball"}
 
 BEST_PICK_COLUMNS = [
     "parlay_rank",
@@ -287,6 +291,41 @@ def _infer_missing_league_from_team_sets(df: pd.DataFrame, selected_sports: list
     if has_ncaab:
         out.loc[out["league"].str.len().eq(0), "league"] = "NCAAB"
 
+    return out
+
+
+def _patch_missing_league_for_college_rows(df: pd.DataFrame, selected_sports: list[str] | None = None) -> pd.DataFrame:
+    """Backfill missing league labels for college rows before downstream merges."""
+    out = df.copy()
+    if out.empty:
+        return out
+
+    out["league"] = _clean_text_placeholders(_string_series(out, "league")).str.upper().replace(LEAGUE_ALIASES)
+    missing_league = out["league"].str.len().eq(0)
+    if not missing_league.any():
+        return out
+
+    home = _clean_text_placeholders(_string_series(out, "home_team")).map(normalize_team_name).str.lower().str.strip()
+    away = _clean_text_placeholders(_string_series(out, "away_team")).map(normalize_team_name).str.lower().str.strip()
+    home = home.str.replace(r"\s+", " ", regex=True)
+    away = away.str.replace(r"\s+", " ", regex=True)
+
+    teams_mask = home.isin(_KNOWN_NCAAB_TEAM_TOKENS) | away.isin(_KNOWN_NCAAB_TEAM_TOKENS)
+
+    source_text = pd.Series([""] * len(out), index=out.index, dtype="string")
+    for src_col in ["sport", "source", "data_source", "odds_source", "event_name", "matchup"]:
+        if src_col in out.columns:
+            source_text = source_text + " " + _clean_text_placeholders(_string_series(out, src_col)).str.lower()
+    college_source_mask = pd.Series(False, index=out.index)
+    for hint in _COLLEGE_SOURCE_HINTS:
+        college_source_mask = college_source_mask | source_text.str.contains(hint, na=False)
+
+    selected = {str(s).upper() for s in (selected_sports or [])}
+    selected_has_college = bool(selected.intersection({"NCAAB", "NCAAM", "NCAA MEN'S BASKETBALL", "NCAA MENS BASKETBALL"}))
+    if selected_has_college:
+        college_source_mask = college_source_mask | pd.Series(True, index=out.index)
+
+    out.loc[missing_league & (teams_mask | college_source_mask), "league"] = "NCAAB"
     return out
 
 
@@ -565,12 +604,13 @@ def _canonical_matchup_teams_key(df: pd.DataFrame) -> pd.Series:
 
 
 def _matchup_id(df: pd.DataFrame) -> pd.Series:
-    """Canonical matchup id using sorted normalized team names (direction-independent)."""
+    """Canonical matchup id using sorted normalized team names + ET day (direction-independent)."""
     home = clean_team_name(_string_series(df, "home_team").map(normalize_team_name)).str.upper()
     away = clean_team_name(_string_series(df, "away_team").map(normalize_team_name)).str.upper()
     team_a = home.where(home <= away, away)
     team_b = away.where(home <= away, home)
-    return team_a + "|" + team_b
+    date_key = _et_day_string(_game_dates(df)).fillna("")
+    return team_a + "|" + team_b + "|" + date_key
 
 
 def _mk_game_key(df: pd.DataFrame) -> pd.Series:
@@ -959,6 +999,7 @@ def build_theover_bet_rows(
 
     base_ref = load_base_data()
     out = _infer_missing_league_from_base(out, base_ref)
+    out = _patch_missing_league_for_college_rows(out, selected_sports)
     out = _infer_missing_league_from_team_sets(out, selected_sports)
     out = _resolve_team_names_from_base(out, base_ref)
     out = _dedupe_inverted_matchups(out)
@@ -1216,20 +1257,18 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
 
     pool["has_signal_probability"] = _numeric_series(pool, "model_probability").notna() | _numeric_series(pool, "theover_probability").notna() | _numeric_series(pool, "ml_probability").notna()
 
-    # Create orientation-insensitive matchup key to group flipped home/away teams
+    # Create orientation-insensitive matchup_id to group flipped home/away teams.
+    # Keep grouping resilient even if league is missing.
     team_a = pool["home_team"].where(pool["home_team"] <= pool["away_team"], pool["away_team"]).str.lower().str.replace(r'[^a-z0-9\s]', '', regex=True)
     team_b = pool["away_team"].where(pool["home_team"] <= pool["away_team"], pool["home_team"]).str.lower().str.replace(r'[^a-z0-9\s]', '', regex=True)
 
-    # Extract local date string safely to ignore minor UTC time variations
     dt_utc = _game_dates(pool)
-    date_str = pd.Series([""] * len(pool), index=pool.index)
+    date_str = pd.Series([""] * len(pool), index=pool.index, dtype="string")
     valid_dt = dt_utc.notna()
     if valid_dt.any():
         date_str.loc[valid_dt] = dt_utc[valid_dt].dt.tz_convert("America/New_York").dt.strftime("%Y-%m-%d")
 
-    # Do NOT include market_family in matchup_key to strictly prevent multiple
-    # selections from the same game across different markets (intra-game covariance).
-    pool["matchup_key"] = pool["league"] + "|" + team_a + "|" + team_b + "|" + date_str
+    pool["matchup_id"] = team_a + "|" + team_b + "|" + date_str
 
     # Force expected_value to numeric, converting true errors to NaN while preserving negative floats
     pool['expected_value'] = pd.to_numeric(pool['expected_value'], errors='coerce')
@@ -1248,9 +1287,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     )
 
     # Choose one row per canonical matchup key using the ranking above.
-    best = pool.groupby("matchup_key", as_index=False, dropna=False).first()
+    best = pool.groupby("matchup_id", as_index=False, dropna=False).head(1).copy()
 
-    total_games = int(pool["matchup_key"].nunique(dropna=False))
+    total_games = int(pool["matchup_id"].nunique(dropna=False))
     if len(best) != total_games:
         logger.warning(
             "Best-pick validation mismatch: selected_rows=%s total_games=%s",
@@ -1258,6 +1297,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
             total_games,
         )
 
+
+    no_edge_mask = _numeric_series(best, "expected_value").isna()
+    if no_edge_mask.any():
+        best.loc[no_edge_mask, "best_pick"] = "No Edge"
     best["calibrated_probability"] = _numeric_series(best, "calibrated_probability", 0.5)
     edge_for_consensus = _numeric_series(best, "edge", 0.0)
 
@@ -1800,7 +1843,7 @@ def run_analysis_pipeline(
                     merged.at[idx, "odds_source"] = "base_fuzzy"
                 if pd.isna(pd.to_numeric(merged.at[idx, "ml_probability"], errors="coerce")) and pd.notna(match.get("ml_probability")):
                     merged.at[idx, "ml_probability"] = pd.to_numeric(match.get("ml_probability"), errors="coerce")
-                if (not str(merged.at[idx, "game_time_est"] or "").strip()) and pd.notna(match.get("game_time_est")):
+                if (not str("" if pd.isna(merged.at[idx, "game_time_est"]) else merged.at[idx, "game_time_est"]).strip()) and pd.notna(match.get("game_time_est")):
                     merged.at[idx, "game_time_est"] = str(match.get("game_time_est"))
                 if "is_neutral" in merged.columns and pd.isna(merged.at[idx, "is_neutral"]) and pd.notna(match.get("is_neutral")):
                     merged.at[idx, "is_neutral"] = match.get("is_neutral")

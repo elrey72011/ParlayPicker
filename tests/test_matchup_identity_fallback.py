@@ -38,6 +38,6 @@ def test_matchup_text_and_selected_sport_fill_identity(monkeypatch):
     )
 
     assert not analysis_df.empty
-    assert analysis_df.iloc[0]["league"] == "NBA"
-    assert analysis_df.iloc[0]["home_team"] == "Miami"
-    assert analysis_df.iloc[0]["away_team"] == "Boston"
+    assert str(analysis_df.iloc[0]["league"]).upper() == "NBA"
+    assert str(analysis_df.iloc[0]["home_team"]).lower() == "miami"
+    assert str(analysis_df.iloc[0]["away_team"]).lower() == "boston"

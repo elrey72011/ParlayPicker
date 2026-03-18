@@ -271,6 +271,21 @@ def _merge_kalshi_into_analysis(analysis_df: pd.DataFrame, best_picks_df: pd.Dat
     left = analysis_df.copy()
     right = best_picks_df[merge_keys + available_cols].drop_duplicates().copy()
 
+    def _mk_matchup_id(df: pd.DataFrame) -> pd.Series:
+        home = df["home_team"].astype(str).str.lower().str.replace(r"[^a-z0-9\s]", "", regex=True).str.strip()
+        away = df["away_team"].astype(str).str.lower().str.replace(r"[^a-z0-9\s]", "", regex=True).str.strip()
+        team_a = home.where(home <= away, away)
+        team_b = away.where(home <= away, home)
+        date = pd.to_datetime(df["game_date"], errors="coerce", utc=True)
+        date_key = pd.Series([""] * len(df), index=df.index, dtype="string")
+        valid = date.notna()
+        if valid.any():
+            date_key.loc[valid] = date[valid].dt.tz_convert("America/New_York").dt.strftime("%Y-%m-%d")
+        return team_a + "|" + team_b + "|" + date_key
+
+    left["matchup_id"] = _mk_matchup_id(left)
+    right["matchup_id"] = _mk_matchup_id(right)
+
     if "game_date" in merge_keys:
         left["game_date"] = pd.to_datetime(left["game_date"], errors="coerce", utc=True).dt.date
         right["game_date"] = pd.to_datetime(right["game_date"], errors="coerce", utc=True).dt.date
@@ -287,6 +302,19 @@ def _merge_kalshi_into_analysis(analysis_df: pd.DataFrame, best_picks_df: pd.Dat
     sanitized_merge_keys = [k for k in merge_keys if k not in ["home_team", "away_team"]] + ["_merge_home", "_merge_away"]
 
     merged = left.merge(right, on=sanitized_merge_keys, how="left", suffixes=("", "_best"))
+
+    # Fallback merge path: if strict league-based merge misses, retry using matchup_id (league-agnostic identity).
+    if "matchup_id" in left.columns and "matchup_id" in right.columns and merged[available_cols].isna().all(axis=1).any():
+        fallback_right = right[["matchup_id", *available_cols]].drop_duplicates("matchup_id")
+        fallback_merge = left[["matchup_id"]].merge(fallback_right, on="matchup_id", how="left")
+        missing_mask = merged[available_cols].isna().all(axis=1)
+        for col in available_cols:
+            best_col = f"{col}_best"
+            if best_col in merged.columns and col in fallback_merge.columns:
+                merged.loc[missing_mask, best_col] = merged.loc[missing_mask, best_col].where(
+                    merged.loc[missing_mask, best_col].notna(),
+                    fallback_merge.loc[missing_mask, col],
+                )
 
     # Date drift fallback: retry unmatched rows with right-side game_date shifted by +/- 1 day.
     if "game_date" in sanitized_merge_keys and merged[available_cols].isna().all(axis=1).any() and not right.empty:
