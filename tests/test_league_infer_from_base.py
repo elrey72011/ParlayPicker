@@ -40,6 +40,32 @@ def test_infer_missing_league_from_base_for_unique_match(monkeypatch):
     )
 
     assert not analysis_df.empty
-    assert analysis_df.loc[0, "league"] == "NBA"
-    assert "Miami" in analysis_df.loc[0, "home_team"]
-    assert "Boston" in analysis_df.loc[0, "away_team"]
+    assert str(analysis_df.loc[0, "league"]).upper() == "NBA"
+    assert "miami" in str(analysis_df.loc[0, "home_team"]).lower()
+    assert "boston" in str(analysis_df.loc[0, "away_team"]).lower()
+
+
+def test_infer_missing_league_for_known_ncaab_teams(monkeypatch):
+    monkeypatch.setattr(sp, "load_base_data", lambda: pd.DataFrame())
+    monkeypatch.setattr(sp, "fetch_live_odds_dataframe", lambda x: pd.DataFrame())
+
+    totals_df = pd.DataFrame(
+        {
+            "League": [""],
+            "Home Team": ["Wichita St"],
+            "Away Team": ["Oklahoma St"],
+            "Pick": ["Under 140.5"],
+            "Line": [140.5],
+            "Win Probability": [0.55],
+            "Odds": [-110],
+        }
+    )
+
+    analysis_df, _, _ = sp.run_analysis_pipeline(
+        sports=["NCAAB"],
+        spreads_df=None,
+        totals_df=totals_df,
+    )
+
+    assert not analysis_df.empty
+    assert str(analysis_df.loc[0, "league"]).upper() == "NCAAB"

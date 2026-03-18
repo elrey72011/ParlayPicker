@@ -39,3 +39,26 @@ def test_best_picks_returns_one_pick_per_game_key_even_without_positive_ev():
     # G2 should still be present even though both candidate EVs are negative.
     g2_row = best[(best["home_team"] == "Lakers") & (best["away_team"] == "Warriors")].iloc[0]
     assert g2_row["expected_value"] == -0.01
+
+
+def test_best_picks_marks_no_edge_when_ev_missing():
+    analysis_df = pd.DataFrame(
+        {
+            "league": ["NCAAB", "NCAAB"],
+            "home_team": ["Wichita St", "Wichita St"],
+            "away_team": ["Oklahoma St", "Oklahoma St"],
+            "game_date": [pd.Timestamp("2026-03-10", tz="UTC")] * 2,
+            "market_type": ["spread_home", "total_under"],
+            "spread_line": [-2.5, pd.NA],
+            "total_line": [pd.NA, 140.5],
+            "expected_value": [pd.NA, pd.NA],
+            "edge": [0.0, 0.0],
+            "calibrated_probability": [0.51, 0.49],
+            "odds_american": [-110, -110],
+        }
+    )
+
+    best = build_best_picks_df(analysis_df)
+
+    assert len(best) == 1
+    assert best.iloc[0]["best_pick"] == "No Edge"
