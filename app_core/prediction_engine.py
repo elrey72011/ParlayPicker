@@ -151,7 +151,7 @@ def clean_team_name(series: pd.Series) -> pd.Series:
     to ensure '76ers' and 'Philadelphia 76ers' resolve accurately.
     """
     import re
-    if series is None or series.empty:
+    if series is None or (hasattr(series, "empty") and series.empty):
         return series
 
     typo_map = {
