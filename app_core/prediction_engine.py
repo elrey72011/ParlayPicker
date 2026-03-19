@@ -823,9 +823,12 @@ class PredictionEngine:
                 # Re-check NaN ratio after fallback
                 row_nan_ratio_after = raw_numeric.isna().sum(axis=1) / max(len(VERTEX_FEATURE_COLUMNS), 1)
                 if row_nan_ratio_after.mean() > 0.5:
+                    # Log which specific features were missing (NaN)
+                    missing_features = raw_numeric.columns[raw_numeric.isna().any()].tolist()
                     logger.warning(
-                        "Feature matrix is STILL empty after unlimited lookback. "
-                        "Applying Hard Safety Net (Neutral Fallback 0.5) to prevent pipeline crash."
+                        f"Feature matrix is STILL empty after unlimited lookback. "
+                        f"Missing features causing failure: {missing_features}. "
+                        f"Applying Hard Safety Net (Neutral Fallback 0.5) to prevent pipeline crash."
                     )
                     self.last_batch_used_stale_features = [True] * len(df)
                     self.last_batch_used_neutral_fallback = True

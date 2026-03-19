@@ -222,9 +222,22 @@ class SportsDataPipeline:
         # Calculate rolling stats for home team
         for col in ['HomeScore', 'AwayScore']:
             if col in df.columns:
-                df[f'{col}_Rolling{window}'] = df.groupby('HomeTeam')[col].transform(
+                new_col = f'{col}_Rolling{window}'
+                df[new_col] = df.groupby('HomeTeam')[col].transform(
                     lambda x: x.rolling(window, min_periods=1).mean()
                 )
+
+                # Backfill initial NaNs with the team's historical average
+                df[new_col] = df[new_col].fillna(
+                    df.groupby('HomeTeam')[col].transform('mean')
+                )
+
+                # If still NaN (e.g. team has no data at all), use overall mean
+                overall_mean = df[col].mean()
+                if pd.notna(overall_mean):
+                    df[new_col] = df[new_col].fillna(overall_mean)
+                else:
+                    df[new_col] = df[new_col].fillna(0.0)
         
         return df
     
@@ -263,6 +276,13 @@ class SportsDataPipeline:
                 if 'GameID' in df.columns and 'GameID' in odds_df.columns:
                     df = df.merge(odds_df, on='GameID', how='left', suffixes=('', '_odds'))
         
+        # Validation: Diagnostic check for non-null features before passing to Predict Batch phase
+        feature_cols = [col for col in df.columns if 'Rolling' in col or col.startswith('feature_') or col in ['TotalPoints', 'ScoreDifferential', 'HomeWin']]
+        if feature_cols:
+            non_null_counts = df[feature_cols].notna().sum()
+            avg_non_null = non_null_counts.mean()
+            logger.info(f"Validation: Engineered {len(feature_cols)} feature columns. Average non-null count per feature: {avg_non_null:.1f} out of {len(df)} rows.")
+
         # Save processed data
         output_file = self.output_dir / f'{sport.lower()}_processed.csv'
         df.to_csv(output_file, index=False)
@@ -312,7 +332,7 @@ def main():
     pipeline = SportsDataPipeline(api_keys, output_dir='./training_data')
     
     # Process recent seasons
-    seasons = ['2022', '2023', '2024']
+    seasons = ['2022', '2023', '2024', '2025', '2026']
     
     # Run for all sports
     results = pipeline.run_all_sports(seasons)
