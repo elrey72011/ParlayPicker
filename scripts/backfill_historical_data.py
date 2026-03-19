@@ -9,7 +9,15 @@ import pytz
 
 # Add the project root to the python path so imports work
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from app_core.team_name_matcher import TeamNameMatcher
+
+# Import normalize_team_name from the core mapping logic
+from core.team_mapper import normalize_team_name
+
+# We also import streamlit to attempt reading st.secrets safely
+try:
+    import streamlit as st
+except ImportError:
+    st = None
 
 # Define target sports
 TARGET_SPORTS = ['basketball_nba', 'icehockey_nhl', 'basketball_ncaab']
@@ -29,14 +37,32 @@ def iso8601_to_est(iso_string: str):
     return dt_object_utc.astimezone(eastern_tz)
 
 def get_api_key():
-    """Retrieve the API key from environment or prompt."""
-    api_key = os.environ.get("ODDS_API_KEY")
+    """Retrieve the API key from st.secrets or environment."""
+    api_key = None
+
+    # Try Streamlit Secrets first
+    if st is not None:
+        try:
+            api_key = st.secrets.get("ODDS_API_KEY")
+        except Exception:
+            pass
+
+    # Fallback to Environment variables
     if not api_key:
-        api_key = input("Please enter your The Odds API key: ").strip()
+        api_key = os.environ.get("ODDS_API_KEY")
+
+    # User prompt if running locally and missing key
+    if not api_key:
+        print("API Key not found in st.secrets or environment.")
+        # PLACEHOLDER: Paste your odds API key here manually if needed:
+        # api_key = "YOUR_KEY_HERE"
+        if not api_key:
+            api_key = input("Please enter your The Odds API key: ").strip()
+
     return api_key
 
 def fetch_historical_odds(api_key, sport, date_iso):
-    """Fetch historical odds for a specific sport and date."""
+    """Fetch historical odds for a specific sport and date using the paid endpoint."""
     url = f"https://api.the-odds-api.com/v4/historical/sports/{sport}/odds"
     params = {
         "apiKey": api_key,
@@ -46,7 +72,7 @@ def fetch_historical_odds(api_key, sport, date_iso):
         "date": date_iso
     }
 
-    print(f"Fetching odds for {sport} on {date_iso}...")
+    print(f"Fetching historical odds for {sport} on {date_iso}...")
     response = requests.get(url, params=params)
     time.sleep(1)  # Rate limiting safety
 
@@ -80,6 +106,13 @@ def fetch_scores(api_key, sport, days_from):
 
     return response.json()
 
+def clean_team_name_for_id(name: str) -> str:
+    """Helper to strip non-alphanumeric and lowercase, exactly like the pipeline."""
+    import re
+    if not name:
+        return ""
+    return re.sub(r"[^a-z0-9]", "", str(name).lower())
+
 def process_game(game_odds, scores_map):
     """Process a single game's odds and attach scores if available."""
     game_id = game_odds.get("id")
@@ -91,12 +124,21 @@ def process_game(game_odds, scores_map):
     if not home_team or not away_team or not commence_time:
         return None
 
-    # Normalize team names
-    norm_home = TeamNameMatcher.normalize(home_team)
-    norm_away = TeamNameMatcher.normalize(away_team)
+    # Normalization: use core.team_mapper.normalize_team_name (Source of Truth)
+    norm_home = normalize_team_name(home_team)
+    norm_away = normalize_team_name(away_team)
 
-    # Generate match ID logic matching core/streamlit_pipeline.py _matchup_id
-    teams_sorted = sorted([norm_home, norm_away])
+    # Generate Matchup ID Logic matching pipeline (League + Sorted Teams + Game Date)
+    sport_mapped = sport_key.split("_")[-1].upper()
+    if sport_mapped == "NCAAB":
+        sport_mapped = "NCAAB"  # ensure consistency
+
+    home_cleaned = clean_team_name_for_id(norm_home).upper()
+    away_cleaned = clean_team_name_for_id(norm_away).upper()
+
+    # Sort strictly alphabetically
+    team_a = min(home_cleaned, away_cleaned)
+    team_b = max(home_cleaned, away_cleaned)
 
     try:
         est_ts = pd.Timestamp(iso8601_to_est(commence_time))
@@ -105,7 +147,7 @@ def process_game(game_odds, scores_map):
         print(f"Failed to parse commence_time {commence_time}: {e}")
         return None
 
-    matchup_id = "_".join(teams_sorted) + "_" + game_date
+    matchup_id = f"{sport_mapped}|{team_a}|{team_b}|{game_date}"
 
     # Check if we have scores for this game
     score_data = scores_map.get(game_id)
@@ -181,20 +223,44 @@ def process_game(game_odds, scores_map):
     # Determine winner
     home_won = 1 if home_score > away_score else 0
 
+    # Add missing default columns to match master_all_sports.csv exactly
     return {
         "matchup_id": matchup_id,
-        "game_id": game_id,
-        "sport": sport_key.split("_")[-1].upper(),
-        "home_team": norm_home,
-        "away_team": norm_away,
-        "commence_time": commence_time,
-        "game_date": game_date,
+        "home_win_pct": pd.NA,
+        "away_win_pct": pd.NA,
+        "home_avg_points": pd.NA,
+        "away_avg_points": pd.NA,
+        "home_def_rating": pd.NA,
+        "away_def_rating": pd.NA,
+        "spread_normalized": closing_spread / 100.0 if closing_spread != 0 else 0.0,
+        "implied_home_prob": implied_home_prob,
+        "home_last_5": pd.NA,
+        "away_last_5": pd.NA,
+        "home_home_record": pd.NA,
+        "away_away_record": pd.NA,
+        "head_to_head": pd.NA,
+        "home_streak": pd.NA,
+        "away_streak": pd.NA,
+        "rest_advantage": pd.NA,
+        "injuries_impact": pd.NA,
+        "weather_factor": pd.NA,
+        "back_to_back": pd.NA,
+        "primetime_game": pd.NA,
+        "division_game": pd.NA,
+        "public_betting_pct": pd.NA,
+        "sharp_money_indicator": pd.NA,
+        "line_movement": pd.NA,
+        "total_movement": pd.NA,
+        "model_consensus": pd.NA,
+        "theover_probability": implied_home_prob,  # Base fallback
+        "home_won": home_won,
         "home_score": home_score,
         "away_score": away_score,
-        "home_won": home_won,
-        "closing_spread": closing_spread,
-        "closing_total": closing_total,
-        "implied_home_prob": implied_home_prob
+        "game_id": game_id,
+        "sport": sport_mapped,
+        "home_team": norm_home,
+        "away_team": norm_away,
+        "commence_time": commence_time
     }
 
 def main():
@@ -213,17 +279,21 @@ def main():
         print(f"Loaded existing master CSV with {len(existing_df)} rows.")
 
         # We need a standardized matchup_id for deduplication
-        existing_df["_norm_home"] = existing_df["home_team"].apply(lambda x: TeamNameMatcher.normalize(str(x)))
-        existing_df["_norm_away"] = existing_df["away_team"].apply(lambda x: TeamNameMatcher.normalize(str(x)))
+        existing_df["_norm_home"] = existing_df["home_team"].apply(lambda x: normalize_team_name(str(x)))
+        existing_df["_norm_away"] = existing_df["away_team"].apply(lambda x: normalize_team_name(str(x)))
 
         def make_id(row):
-            teams = sorted([str(row["_norm_home"]), str(row["_norm_away"])])
+            sport = str(row.get("sport", "UNKNOWN")).upper()
+            home_cl = clean_team_name_for_id(str(row.get("_norm_home", ""))).upper()
+            away_cl = clean_team_name_for_id(str(row.get("_norm_away", ""))).upper()
+            team_a = min(home_cl, away_cl)
+            team_b = max(home_cl, away_cl)
             try:
                 dt = pd.Timestamp(iso8601_to_est(row["commence_time"]))
                 date_str = dt.floor("D").strftime("%Y-%m-%d")
-                return "_".join(teams) + "_" + date_str
+                return f"{sport}|{team_a}|{team_b}|{date_str}"
             except:
-                return "_".join(teams) + "_unknown_date"
+                return f"{sport}|{team_a}|{team_b}|unknown_date"
 
         existing_df["_temp_matchup_id"] = existing_df.apply(make_id, axis=1)
         existing_ids = set(existing_df["_temp_matchup_id"].dropna().unique())
@@ -234,15 +304,16 @@ def main():
         existing_ids = set()
 
     all_new_games = []
+    league_counts = {"NBA": 0, "NHL": 0, "NCAAB": 0}
 
     for sport in TARGET_SPORTS:
-        # 1. Fetch all scores for the past X days
+        # Fetch all scores for the past X days
         scores_data = fetch_scores(api_key, sport, DAYS_TO_BACKFILL)
         scores_map = {game["id"]: game for game in scores_data}
         print(f"Found {len(scores_map)} total games in the last {DAYS_TO_BACKFILL} days for {sport}.")
 
-        # 2. Iterate through each day to fetch historical odds
-        # Loop forward from today backwards so we get the latest line first
+        # Iterate through each day to fetch historical odds
+        # Loop backwards so we get the latest line first
         for days_ago in range(DAYS_TO_BACKFILL + 1):
             # Target date format: 2024-03-15T12:00:00Z
             target_date = datetime.now(timezone.utc) - timedelta(days=days_ago)
@@ -257,6 +328,12 @@ def main():
                     all_new_games.append(processed)
                     existing_ids.add(processed["matchup_id"]) # Prevent duplicates in the same run
 
+                    lg = processed["sport"]
+                    if lg in league_counts:
+                        league_counts[lg] += 1
+                    else:
+                        league_counts[lg] = 1
+
     if not all_new_games:
         print("No new completed games with odds found to append.")
         return
@@ -266,10 +343,9 @@ def main():
 
     # Match the master CSV column structure exactly
     if not existing_df.empty:
-        # Keep original columns
         original_columns = [c for c in existing_df.columns if c not in ["_norm_home", "_norm_away", "_temp_matchup_id"]]
 
-        # Add new rows, filling missing columns with NaN
+        # Fill any missing columns to avoid dropping column definitions
         for col in original_columns:
             if col not in new_df.columns:
                 new_df[col] = pd.NA
@@ -279,10 +355,13 @@ def main():
         # Concatenate and save
         combined_df = pd.concat([existing_df[original_columns], new_df], ignore_index=True)
     else:
-        combined_df = new_df.drop(columns=["matchup_id", "game_date"], errors='ignore')
+        combined_df = new_df.drop(columns=["matchup_id"], errors='ignore')
 
     combined_df.to_csv(master_csv_path, index=False)
     print(f"✅ Successfully appended {len(new_df)} games to {master_csv_path}")
+    print("\n--- Backfill Summary ---")
+    for lg, count in league_counts.items():
+        print(f"{lg}: {count} new games added")
 
 if __name__ == "__main__":
     main()
