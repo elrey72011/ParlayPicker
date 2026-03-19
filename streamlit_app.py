@@ -233,8 +233,6 @@ def _recompute_consensus_from_kalshi(df: pd.DataFrame, require_ml: bool = False)
         decimal_odds = _safe_numeric_series(out, "odds_american").apply(american_to_decimal)
 
         if decimal_odds.isna().all():
-            import logging
-            logger = logging.getLogger(__name__)
             logger.warning("⚠️ All odds are missing - using default 1.91 (-110 equivalent)")
             decimal_odds = pd.Series([1.91] * len(out), index=out.index)
     # Row-level fallback: ensure every bet row has actionable decimal odds.
@@ -255,8 +253,6 @@ def _recompute_consensus_from_kalshi(df: pd.DataFrame, require_ml: bool = False)
 
     # Debug log for probability blend verification (first 5 picks)
     if not out.empty and "market_probability" in out.columns:
-        import logging
-        logger = logging.getLogger(__name__)
         debug_sample = out.head(5)
         for idx, row in debug_sample.iterrows():
             logger.info(
