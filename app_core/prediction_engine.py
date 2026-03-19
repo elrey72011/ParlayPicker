@@ -663,6 +663,26 @@ class PredictionEngine:
                     fallback_probs.append(float(self._calculate_statistical_prob(features)))
                 return fallback_probs
 
+            # Fill missing implied probabilities BEFORE matrix validation so we don't crash
+            if 'implied_home_prob' not in working_df.columns:
+                working_df['implied_home_prob'] = pd.NA
+            if 'kalshi_prob' not in working_df.columns:
+                working_df['kalshi_prob'] = pd.NA
+
+            if 'decimal_odds' in working_df.columns:
+                working_df['implied_home_prob'] = working_df['implied_home_prob'].fillna(
+                    1 / pd.to_numeric(working_df['decimal_odds'], errors='coerce')
+                )
+
+            # Fill with market_probability or 0.5 as absolute last resort
+            if 'market_probability' in working_df.columns:
+                working_df['implied_home_prob'] = working_df['implied_home_prob'].fillna(
+                    pd.to_numeric(working_df['market_probability'], errors='coerce')
+                )
+
+            working_df['kalshi_prob'] = working_df['kalshi_prob'].fillna(0.5)
+            working_df['implied_home_prob'] = working_df['implied_home_prob'].fillna(0.5)
+
             # Select required columns while preserving missing columns as NaN.
             # This allows pre-inference validation to detect schedule/feature join failures.
             raw_inference_data = working_df.reindex(columns=VERTEX_FEATURE_COLUMNS).copy()
@@ -759,7 +779,10 @@ class PredictionEngine:
                                                 try:
                                                     target_dt = pd.Timestamp(row_game_date_dt).normalize()
                                                     if "game_date_dt" in match.columns:
-                                                        valid_window = match["game_date_dt"].dt.normalize() <= target_dt
+                                                        # Cap future target dates at today so we can still find the latest stats
+                                                        import pandas as pd
+                                                        cap_dt = min(target_dt, pd.Timestamp.now().normalize())
+                                                        valid_window = match["game_date_dt"].dt.normalize() <= cap_dt
                                                         match = match[valid_window]
                                                 except Exception as e:
                                                     logger.warning(f"Failed to filter prior dates during looser fallback: {e}")
@@ -799,7 +822,10 @@ class PredictionEngine:
                                                         try:
                                                             target_dt = pd.Timestamp(row_game_date_dt).normalize()
                                                             if "game_date_dt" in match.columns:
-                                                                valid_window = match["game_date_dt"].dt.normalize() <= target_dt
+                                                                # Cap future target dates at today so we can still find the latest stats
+                                                                import pandas as pd
+                                                                cap_dt = min(target_dt, pd.Timestamp.now().normalize())
+                                                                valid_window = match["game_date_dt"].dt.normalize() <= cap_dt
                                                                 match = match[valid_window]
                                                         except Exception as e:
                                                             logger.warning(f"Failed to filter prior dates during fuzzy fallback: {e}")
@@ -828,11 +854,22 @@ class PredictionEngine:
                     logger.warning(
                         f"Feature matrix is STILL empty after unlimited lookback. "
                         f"Missing features causing failure: {missing_features}. "
-                        f"Applying Hard Safety Net (Neutral Fallback 0.5) to prevent pipeline crash."
+                        f"Applying Hard Safety Net using implied market probabilities."
                     )
                     self.last_batch_used_stale_features = [True] * len(df)
                     self.last_batch_used_neutral_fallback = True
-                    return [0.5] * len(df)
+
+                    # Fallback to implied home probability if available, else 0.5
+                    import pandas as pd
+                    fallbacks = []
+                    for idx, row in working_df.iterrows():
+                        prob = 0.5
+                        if 'implied_home_prob' in row and pd.notna(row['implied_home_prob']):
+                            prob = row['implied_home_prob']
+                        elif 'kalshi_prob' in row and pd.notna(row['kalshi_prob']):
+                            prob = row['kalshi_prob']
+                        fallbacks.append(float(prob))
+                    return fallbacks
 
             # Ensure proper casting and fillna to prevent errors - critical for preventing placeholder values
             inference_data = raw_numeric.fillna(0.0)
