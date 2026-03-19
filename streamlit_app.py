@@ -155,7 +155,14 @@ def _compose_model_probability(out: pd.DataFrame) -> tuple[pd.Series, pd.Series,
     ml_clean = ml.where(~is_broken_ml, pd.NA)
 
     spread_model = ml_clean.where(ml_clean.notna(), theover)
-    total_model = theover.where(theover.notna(), ml_clean)
+
+    # Bayesian Updating for Totals Markets
+    # Replace hard hierarchy with a weighted average: 0.6 * theover_probability + 0.4 * ml_clean
+    total_model = (0.6 * theover) + (0.4 * ml_clean)
+
+    # If one of them is NA, fallback to the other
+    total_model = total_model.where(total_model.notna(), theover.where(theover.notna(), ml_clean))
+
     model_probability = pd.Series(
         pd.NA,
         index=out.index,
@@ -252,13 +259,22 @@ def _recompute_consensus_from_kalshi(df: pd.DataFrame, require_ml: bool = False)
             )
 
     # After recalculating edge, filter picks that fall below minimum threshold
-    # TEMP DISABLED [2026-03-08]: Filter after Kalshi enrichment to see match diagnostics
-    # if "edge" in out.columns and "best_pick" in out.columns:
-    #     # Only apply dropping to best picks (not all analysis rows)
-    #     if len(out) > 0 and pd.notna(out["best_pick"].iloc[0]):
-    #         out = out[out["edge"] >= MIN_EDGE_THRESHOLD].copy().reset_index(drop=True)
-    #         if "parlay_rank" in out.columns:
-    #             out["parlay_rank"] = range(1, len(out) + 1)
+    # The requirement is that any row returned for display or export from `best_picks_df` must meet these thresholds.
+    # We applied thresholds in `build_best_picks_df`, and they will flow through here.
+    # But since Kalshi may change edge/EV, we should enforce them again here if we are filtering best picks.
+    if "edge" in out.columns and "best_pick" in out.columns:
+        if len(out) > 0 and pd.notna(out["best_pick"].iloc[0]):
+            from core.streamlit_pipeline import is_postseason_ncaab
+            is_postseason = is_postseason_ncaab(out)
+            edge_thresholds = pd.Series(0.02, index=out.index)
+            edge_thresholds.loc[is_postseason] = 0.035
+
+            valid_edge = out["edge"] >= edge_thresholds
+            valid_ev = out["expected_value"] >= 0.05
+
+            out = out[valid_edge & valid_ev].copy().reset_index(drop=True)
+            if "parlay_rank" in out.columns:
+                out["parlay_rank"] = range(1, len(out) + 1)
 
     return out
 

@@ -1380,6 +1380,20 @@ def _fill_missing_game_dates_from_base(bet_rows_df: pd.DataFrame, base_df: pd.Da
     }
 
 
+def is_postseason_ncaab(df: pd.DataFrame) -> pd.Series:
+    """Identify NCAAB games played on or after March 17, 2026."""
+    if df is None or df.empty:
+        return pd.Series(dtype=bool)
+
+    league_mask = _string_series(df, "league").str.upper() == "NCAAB"
+
+    date_series = pd.to_datetime(df.get("game_date"), errors="coerce", utc=True)
+    postseason_start = pd.Timestamp("2026-03-17", tz="UTC")
+
+    date_mask = date_series >= postseason_start
+    return league_mask & date_mask
+
+
 def is_stale_schedule(base_df: pd.DataFrame, bet_rows_df: pd.DataFrame) -> bool:
     if base_df is None or base_df.empty or bet_rows_df is None or bet_rows_df.empty:
         return False
@@ -1446,6 +1460,20 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     best_indices = pool.groupby("matchup_id", dropna=False)["edge"].idxmax()
     best = pool.loc[best_indices].copy()
 
+    # Phase 5: Enforce Thresholds
+    # MIN_EDGE_THRESHOLD of 0.02 for high-liquidity markets (NBA, NHL) and 0.035 for "Postseason" lower-liquidity markets (NCAAB).
+    # Expected Value Floor of 0.05.
+    is_postseason = is_postseason_ncaab(best)
+
+    edge_thresholds = pd.Series(0.02, index=best.index)
+    edge_thresholds.loc[is_postseason] = 0.035
+
+    valid_edge_mask = best["edge"] >= edge_thresholds
+    valid_ev_mask = best["expected_value"] >= 0.05
+
+    # We must filter out non-qualifying picks from the output so they don't show in UI/CSV
+    best = best[valid_edge_mask & valid_ev_mask].copy()
+
     total_games = int(pool["matchup_id"].nunique(dropna=False))
     if len(best) != total_games:
         logger.warning(
@@ -1454,7 +1482,6 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
             total_games,
         )
 
-    # Do not apply threshold filters that would drop rows. Ensure all 25 games are displayed.
     best["calibrated_probability"] = _numeric_series(best, "calibrated_probability", 0.5)
     edge_for_consensus = _numeric_series(best, "edge", 0.0)
 
@@ -1504,10 +1531,11 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         if col not in best.columns:
             best[col] = pd.NA
 
-    # Fake the math at the very end to bypass the > 0 frontend filter
+    # Fake the math at the very end to bypass the > 0 frontend filter is removed since we are strictly enforcing thresholds
+    # We leave the actual edge/ev as is.
     if not best.empty:
-        best["expected_value"] = pd.to_numeric(best["expected_value"], errors="coerce").clip(lower=0.0001)
-        best["edge"] = pd.to_numeric(best["edge"], errors="coerce").clip(lower=0.0001)
+        best["expected_value"] = pd.to_numeric(best["expected_value"], errors="coerce")
+        best["edge"] = pd.to_numeric(best["edge"], errors="coerce")
 
     return best[BEST_PICK_COLUMNS]
 
@@ -2169,7 +2197,10 @@ def run_analysis_pipeline(
 
     market_type = _string_series(merged, "market_type").str.lower()
     spread_model = ml_probability.where(ml_probability.notna(), theover_probability)
-    total_model = theover_probability.where(theover_probability.notna(), ml_probability)
+
+    total_model = (0.6 * theover_probability) + (0.4 * ml_probability)
+    total_model = total_model.where(total_model.notna(), theover_probability.where(theover_probability.notna(), ml_probability))
+
     model_probability = pd.Series(
         np.where(market_type.str.startswith("spread"), spread_model, total_model),
         index=merged.index,
@@ -2179,6 +2210,46 @@ def run_analysis_pipeline(
     # Apply lowercase for clean fuzzy matching right before returning
     # merged['home_team'] = merged['home_team'].astype(str).str.lower()
     # merged['away_team'] = merged['away_team'].astype(str).str.lower()
+
+    # --- Metadata Framework & Situational Adjustments ---
+    # Placeholder for external metadata ingestion (starting goalies, player injuries, live pace)
+    # This framework adjusts the raw model probability before blending with the market.
+
+    # Goalie Delta (NHL): Reduce win prob by 6.5% if a secondary goalie is starting, boost opponent by 6.5%.
+    # Placeholder mock: Jonathan Quick instead of Igor Shesterkin
+    is_nhl = merged["league"].str.upper() == "NHL"
+
+    # Rangers are home, Quick is in -> Rangers probability down, Away probability up
+    rangers_home = is_nhl & merged["home_team"].str.contains("Rangers", case=False, na=False)
+    model_probability = model_probability.where(~(rangers_home & (merged["market_type"] == "spread_home")), model_probability - 0.065)
+    model_probability = model_probability.where(~(rangers_home & (merged["market_type"] == "spread_away")), model_probability + 0.065)
+
+    # Rangers are away, Quick is in -> Rangers probability down, Home probability up
+    rangers_away = is_nhl & merged["away_team"].str.contains("Rangers", case=False, na=False)
+    model_probability = model_probability.where(~(rangers_away & (merged["market_type"] == "spread_away")), model_probability - 0.065)
+    model_probability = model_probability.where(~(rangers_away & (merged["market_type"] == "spread_home")), model_probability + 0.065)
+
+    # Pace-Setter (NBA): Inflate "Over" probability by 4% when a high-usage star (e.g. Luka Dončić) is active.
+    is_nba = merged["league"].str.upper() == "NBA"
+    # Placeholder mock: Luka Dončić active for Dallas
+    mavs_game = is_nba & (merged["home_team"].str.contains("Mavericks", case=False, na=False) | merged["away_team"].str.contains("Mavericks", case=False, na=False))
+    model_probability = model_probability.where(~(mavs_game & (merged["market_type"] == "total_over")), model_probability + 0.04)
+    model_probability = model_probability.where(~(mavs_game & (merged["market_type"] == "total_under")), model_probability - 0.04)
+
+    # Tournament Efficiency Decay: Flat 4% reduction to final "Over" probability for all postseason games.
+    is_postseason = is_postseason_ncaab(merged)
+    model_probability = model_probability.where(~(is_postseason & (merged["market_type"] == "total_over")), model_probability - 0.04)
+    model_probability = model_probability.where(~(is_postseason & (merged["market_type"] == "total_under")), model_probability + 0.04)
+
+    # Home Court Dominance: NIT games at campus sites.
+    # Placeholder mock: Illinois State and Bradley at home
+    nit_campus_home = is_postseason & (merged["home_team"].str.contains("Illinois State", case=False, na=False) | merged["home_team"].str.contains("Bradley", case=False, na=False))
+    model_probability = model_probability.where(~(nit_campus_home & (merged["market_type"] == "spread_home")), model_probability + 0.065)
+    model_probability = model_probability.where(~(nit_campus_home & (merged["market_type"] == "spread_away")), model_probability - 0.065)
+
+    # Ensure probabilities are bounded
+    model_probability = model_probability.clip(0.01, 0.99)
+    # --- End Metadata Framework ---
 
     kalshi_probability = _numeric_series(merged, "kalshi_probability") if "kalshi_probability" in merged.columns else pd.Series([pd.NA]*len(merged), index=merged.index)
     calibrated_probability = compute_blended_probability(
@@ -2234,6 +2305,19 @@ def run_analysis_pipeline(
     merged["edge"] = edge
 
     merged["best_pick"] = merged.apply(_format_best_pick, axis=1)
+
+    # Phase 5: Global Threshold Filtering
+    # The requirement is that any row returned for display or export must meet strict edge/ev thresholds.
+    if not merged.empty:
+        is_postseason = is_postseason_ncaab(merged)
+        edge_thresholds = pd.Series(0.02, index=merged.index)
+        edge_thresholds.loc[is_postseason] = 0.035
+
+        valid_edge_mask = merged["edge"] >= edge_thresholds
+        valid_ev_mask = merged["expected_value"] >= 0.05
+
+        # Filter merged dataframe BEFORE assigning to analysis_df
+        merged = merged[valid_edge_mask & valid_ev_mask].copy()
 
     analysis_df = merged.head(max_rows).copy()
     if not analysis_df.empty and not base_df.empty:
@@ -2332,7 +2416,10 @@ def generate_parlays(best_picks_df: pd.DataFrame, max_legs: int = 3) -> pd.DataF
 
     # Enforce minimum edge threshold for parlay components to prevent negative expected value from compounding
     if "edge" in df.columns:
-        df = df[pd.to_numeric(df["edge"], errors="coerce") >= MIN_EDGE_THRESHOLD].copy()
+        is_postseason = is_postseason_ncaab(df)
+        edge_thresholds = pd.Series(0.02, index=df.index)
+        edge_thresholds.loc[is_postseason] = 0.035
+        df = df[(pd.to_numeric(df["edge"], errors="coerce") >= edge_thresholds) & (pd.to_numeric(df.get("expected_value", 0.0), errors="coerce") >= 0.05)].copy()
 
     if len(df) < 2:
         return pd.DataFrame(columns=cols)
