@@ -96,8 +96,8 @@ KALSHI_LINE_TOLERANCE_SPREAD = 3.0
 KALSHI_LINE_TOLERANCE_TOTAL = 3.0
 
 MAX_LINE_TOLERANCE = {
-    "NBA": 2.5,
-    "NCAAB": 2.5,
+    "NBA": 3.5,
+    "NCAAB": 3.5,
     "NHL": 0.5,
     "MLB": 0.5,
     "NFL": 2.5,
@@ -979,9 +979,9 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 best_event_match = event
 
         # Conservative acceptance threshold; tuned to reduce false misses for abbreviated Kalshi events.
-        if best_event_score < 35:
+        if best_event_score < 25:
             # last-chance fallback: accept strongest candidate if it clearly references both teams via code/name tokens
-            if best_event_score < 20:
+            if best_event_score < 15:
                 best_event_match = None
 
         # Last-mile fallback: if there's exactly one near-time candidate event in the target series,

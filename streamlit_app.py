@@ -217,6 +217,15 @@ def _recompute_consensus_from_kalshi(df: pd.DataFrame, require_ml: bool = False)
 
     # Update core metrics
     out["calibrated_probability"] = blended
+
+    # Check if the Hard Safety Net was used (e.g., probability is exactly 0.5 for all and there's a note)
+    # Since ml_valid might be filled with 0.5 from fallback:
+    if "ml_probability" in out.columns and (out["ml_probability"] == 0.5).all() and len(out) > 0:
+        logger.warning(
+            "Hard Safety Net (Neutral Fallback 0.5) triggered for predictions. "
+            "Please check the ML engine logs for the specific missing features that caused the matrix to be mostly empty."
+        )
+
     decimal_odds = _safe_numeric_series(out, "decimal_odds")
     if decimal_odds.isna().all() and "odds_american" in out.columns:
         from core.streamlit_pipeline import american_to_decimal
