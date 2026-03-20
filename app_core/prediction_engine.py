@@ -1107,24 +1107,24 @@ class PredictionEngine:
                     if "total" in market_type:
                         # Totals: Kalshi is anchored to the OVER. Bump UP if Over, DOWN if Under.
                         if "over" in best_pick:
-                            prob = min(0.99, prob + 0.20)
+                            prob = min(0.99, prob + 0.35)
                         else:
-                            prob = max(0.01, prob - 0.20)
+                            prob = max(0.01, prob - 0.35)
                     else:
                         # Spread/ML: Kalshi is anchored to the HOME team. Bump UP if Home, DOWN if Away.
                         is_home_pick = (pick_team == home_team) or (home_team in best_pick and home_team != "")
                         is_away_pick = (pick_team == away_team) or (away_team in best_pick and away_team != "")
 
                         if is_home_pick:
-                            prob = min(0.99, prob + 0.20)
+                            prob = min(0.99, prob + 0.35)
                         elif is_away_pick:
-                            prob = max(0.01, prob - 0.20)
+                            prob = max(0.01, prob - 0.35)
                         else:
                             # Fallback for heavy aliases: bump the favorite
                             if prob >= 0.5:
-                                prob = min(0.99, prob + 0.20)
+                                prob = min(0.99, prob + 0.35)
                             else:
-                                prob = max(0.01, prob - 0.20)
+                                prob = max(0.01, prob - 0.35)
 
                     final_probs.append(prob)
 
