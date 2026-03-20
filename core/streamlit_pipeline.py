@@ -1471,8 +1471,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     valid_edge_mask = best["edge"] >= edge_thresholds
     valid_ev_mask = best["expected_value"] >= 0.005
 
-    # We must filter out non-qualifying picks from the output so they don't show in UI/CSV
-    best = best[valid_edge_mask & valid_ev_mask].copy()
+    # We must NOT filter out non-qualifying picks from the output to ensure 1:1 parity between games and picks
+    # best = best[valid_edge_mask & valid_ev_mask].copy()
 
     total_games = int(pool["matchup_id"].nunique(dropna=False))
     if len(best) != total_games:
