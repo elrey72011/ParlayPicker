@@ -641,8 +641,12 @@ class PredictionEngine:
             game_date_src = _series_or_default(working_df, "game_date", "")
             if game_date_src.astype("string").str.len().eq(0).all() and "commence_time" in working_df.columns:
                 game_date_src = _series_or_default(working_df, "commence_time", "")
-            working_df["game_date"] = _normalize_game_date_string(game_date_src)
+
+            # FORCE EASTERN TIME YYYY-MM-DD FOR HISTORICAL JOIN
+            working_df["game_date"] = _to_et_game_date_string(game_date_src)
             working_df["game_date_dt"] = pd.to_datetime(working_df["game_date"], errors="coerce").dt.tz_localize(None)
+
+            # Create match key matching historical format
             working_df["canonical_match_key"] = (
                 _series_or_default(working_df, "league", "").astype("string").str.upper()
                 + "|"
@@ -1089,16 +1093,6 @@ class PredictionEngine:
                       final_probs.append(None)
                  else:
                       final_probs.append(p)
-
-            # Variance Override: If XGBoost spits out flat probabilities, use the dynamic market edges
-            valid_probs = [p for p in final_probs if p is not None]
-            if len(valid_probs) == 0 or len(set(valid_probs)) <= 1:
-                logger.warning("XGBoost returned empty or identical probabilities. Overriding with dynamic market fallbacks.")
-                final_probs = []
-                for idx in working_df.index:
-                    k_val = float(working_df.at[idx, 'kalshi_prob'])
-                    i_val = float(working_df.at[idx, 'implied_home_prob'])
-                    final_probs.append(k_val if k_val != 0.5 else i_val)
 
             return final_probs
         except ValueError as e:
