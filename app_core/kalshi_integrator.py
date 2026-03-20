@@ -983,23 +983,41 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 if pd.notna(event_dt) and event_dt.date() not in candidate_dates:
                     continue
 
-            # Strict Substring Bypass for NCAAB
+            # Strict Substring Bypass for NCAAB with Aliases
             if str(league).upper() in ['NCAAB', 'NCAAM']:
                 from core.team_mapper import normalize_team_name
                 norm_home = normalize_team_name(home_team_name)
                 norm_away = normalize_team_name(away_team_name)
-
                 title = event.get("title", "")
                 ticker = event.get("ticker", "")
-
-                # kalshi string using title + ticker as requested by user
                 norm_kalshi = normalize_team_name(str(title) + " " + str(ticker))
 
-                if (norm_home and len(norm_home) > 3 and norm_home in norm_kalshi) or \
-                   (norm_away and len(norm_away) > 3 and norm_away in norm_kalshi):
+                kalshi_ncaab_aliases = {
+                    "ucf": ["ucf", "central florida"],
+                    "uconn": ["uconn", "connecticut"],
+                    "wright state": ["wright state", "wright st"],
+                    "wright st": ["wright state", "wright st"],
+                    "queens university": ["queens nc", "queens university"],
+                    "liu sharks": ["long island university", "liu sharks", "liu"]
+                }
+
+                matched_bypass = False
+                for team in [norm_home, norm_away]:
+                    if not team or len(team) < 3: # FIXED: allow 3-char like ucf
+                        continue
+
+                    search_terms = kalshi_ncaab_aliases.get(team, [team])
+                    for term in search_terms:
+                        if term in norm_kalshi:
+                            matched_bypass = True
+                            break
+                    if matched_bypass:
+                        break
+
+                if matched_bypass:
                     best_event_score = 100
                     best_event_match = event
-                    break
+                    break # Force match and exit loop
 
             score = _event_match_score(event, home_team_name, away_team_name, league, date_code=date_code)
             if score > best_event_score:
@@ -1320,31 +1338,24 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             # Extract raw "Yes" probability using the already resolved kalshi_prob
             raw_prob = kalshi_prob
 
-            # Compute implied home from raw odds to fix pipeline timing
+            # 2. Compute implied home robustly to fix pipeline timing
             implied_home = 0.5
-            novig_price = row.get('novig_home_price')
-            home_price = row.get('home_price')
-            odds_american = row.get('odds_american')
-
-            if pd.notna(novig_price) and novig_price != "":
-                try:
-                    implied_home = 1.0 / float(novig_price)
-                except Exception:
-                    pass
-            elif pd.notna(home_price) and home_price != "":
-                try:
-                    implied_home = 1.0 / float(home_price)
-                except Exception:
-                    pass
-            elif pd.notna(odds_american) and odds_american != "":
-                try:
-                    oa = float(odds_american)
-                    if oa > 0:
-                        implied_home = 100.0 / (oa + 100.0)
-                    elif oa < 0:
-                        implied_home = abs(oa) / (abs(oa) + 100.0)
-                except Exception:
-                    pass
+            for col in ['novig_home_price', 'home_price', 'odds_american']:
+                val = row.get(col)
+                if pd.notna(val) and val != "":
+                    try:
+                        v = float(val)
+                        if abs(v) >= 100:  # American Odds
+                            implied_home = 100.0 / (v + 100.0) if v > 0 else abs(v) / (abs(v) + 100.0)
+                            break
+                        elif 1.0 < v < 100.0:  # Decimal Odds
+                            implied_home = 1.0 / v
+                            break
+                        elif 0.0 < v <= 1.0:  # Already Implied
+                            implied_home = v
+                            break
+                    except Exception:
+                        continue
 
             # Orient mathematically
             dist_to_home = abs(raw_prob - implied_home)
