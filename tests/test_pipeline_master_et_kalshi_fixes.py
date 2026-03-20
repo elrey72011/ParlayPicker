@@ -7,7 +7,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from app_core.odds_api import iso8601_to_est
 from app_core import kalshi_integrator as ki
-from app_core.prediction_engine import _to_et_game_date
+from app_core.prediction_engine import _to_et_game_date_string as _to_et_game_date
 
 
 def test_iso8601_to_est_handles_utc_boundary_day_shift():
