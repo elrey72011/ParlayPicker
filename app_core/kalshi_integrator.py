@@ -983,6 +983,24 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 if pd.notna(event_dt) and event_dt.date() not in candidate_dates:
                     continue
 
+            # Strict Substring Bypass for NCAAB
+            if str(league).upper() in ['NCAAB', 'NCAAM']:
+                from core.team_mapper import normalize_team_name
+                norm_home = normalize_team_name(home_team_name)
+                norm_away = normalize_team_name(away_team_name)
+
+                title = event.get("title", "")
+                ticker = event.get("ticker", "")
+
+                # kalshi string using title + ticker as requested by user
+                norm_kalshi = normalize_team_name(str(title) + " " + str(ticker))
+
+                if (norm_home and len(norm_home) > 3 and norm_home in norm_kalshi) or \
+                   (norm_away and len(norm_away) > 3 and norm_away in norm_kalshi):
+                    best_event_score = 100
+                    best_event_match = event
+                    break
+
             score = _event_match_score(event, home_team_name, away_team_name, league, date_code=date_code)
             if score > best_event_score:
                 best_event_score = score
@@ -1299,24 +1317,40 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             home_team = str(row.get('home_team', ''))
             away_team = str(row.get('away_team', ''))
 
-            # Extract raw "Yes" probability
+            # Extract raw "Yes" probability using the already resolved kalshi_prob
             raw_prob = kalshi_prob
 
-            # Get the bookmaker's implied home probability for orientation
-            implied_home = pd.to_numeric(row.get('implied_home_prob', 0.5), errors='coerce')
-            if pd.isna(implied_home):
-                implied_home = 0.5
+            # Compute implied home from raw odds to fix pipeline timing
+            implied_home = 0.5
+            novig_price = row.get('novig_home_price')
+            home_price = row.get('home_price')
+            odds_american = row.get('odds_american')
 
-            # Orient mathematically: Is raw_prob closer to the Home implied or Away implied?
+            if pd.notna(novig_price) and novig_price != "":
+                try:
+                    implied_home = 1.0 / float(novig_price)
+                except Exception:
+                    pass
+            elif pd.notna(home_price) and home_price != "":
+                try:
+                    implied_home = 1.0 / float(home_price)
+                except Exception:
+                    pass
+            elif pd.notna(odds_american) and odds_american != "":
+                try:
+                    oa = float(odds_american)
+                    if oa > 0:
+                        implied_home = 100.0 / (oa + 100.0)
+                    elif oa < 0:
+                        implied_home = abs(oa) / (abs(oa) + 100.0)
+                except Exception:
+                    pass
+
+            # Orient mathematically
             dist_to_home = abs(raw_prob - implied_home)
             dist_to_away = abs((1.0 - raw_prob) - implied_home)
 
-            if dist_to_away < dist_to_home:
-                # The raw_prob was for the Away team. Invert it for the Home team.
-                final_prob = 1.0 - raw_prob
-            else:
-                # The raw_prob was for the Home team. Keep it.
-                final_prob = raw_prob
+            final_prob = (1.0 - raw_prob) if (dist_to_away < dist_to_home) else raw_prob
 
             # Sanity check: probabilities must be between 0 and 1
             if pd.isna(final_prob) or final_prob <= 0.0 or final_prob > 1.0:
