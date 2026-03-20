@@ -1,13 +1,21 @@
 import logging
 from core.streamlit_pipeline import run_analysis_pipeline
 import pandas as pd
+import json
 
 logging.basicConfig(level=logging.INFO)
 
 print("Starting pipeline...")
 try:
     results = run_analysis_pipeline()
-    best_picks_df = results["best_picks"]
+
+    if isinstance(results, tuple):
+        analysis_df = results[0]
+        best_picks_df = results[1]
+    else:
+        best_picks_df = results["best_picks"]
+
+    print(best_picks_df.columns)
 
     # Calculate Kalshi metrics to emulate the Streamlit UI output
     kalshi_matches = len(best_picks_df[best_picks_df['kalshi_match_status'] == 'matched'])
@@ -29,4 +37,6 @@ try:
         print(f"{category}: {count}")
 
 except Exception as e:
+    import traceback
+    traceback.print_exc()
     print(f"Error running pipeline: {e}")
