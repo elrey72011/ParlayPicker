@@ -494,22 +494,10 @@ def _event_match_score(event: dict[str, Any], home_team: str, away_team: str, le
         }
         for k_alias, standard in alias_map.items():
             # 1. Is this specific row trying to match one of our aliased teams?
-            is_alias_game = standard in home_norm or standard in away_norm
-
-            if is_alias_game:
+            if standard in home_norm or standard in away_norm:
                 # 2. Is the alias (or its standard name) present in the Kalshi string?
-                alias_in_kalshi = k_alias in combined_norm or standard in combined_norm
-
-                # 3. Identify the opponent and check if THEY are also in the Kalshi string
-                opponent_norm = away_norm if standard in home_norm else home_norm
-
-                # Strip noise from opponent for safer matching
-                opponent_clean = " ".join([w for w in opponent_norm.split() if len(w) > 2 and w not in TEAM_NOISE_WORDS])
-                opponent_in_kalshi = opponent_clean in combined_norm if opponent_clean else False
-
-                # 4. ONLY return 100 if BOTH the aliased team and the opponent match!
-                if alias_in_kalshi and opponent_in_kalshi:
-                    return 100
+                if k_alias in combined_norm or standard in combined_norm:
+                    return 100 # Force perfect score immediately
 
 
     score = 0
@@ -545,11 +533,12 @@ def _event_match_score(event: dict[str, Any], home_team: str, away_team: str, le
     if away_tokens:
         score += min(25, 10 * len(away_tokens.intersection(combined_tokens)))
 
-    # Penalize one-sided matches to avoid false positives
+    # Penalize one-sided matches heavily to avoid false positives (e.g., A vs B matching A vs C)
     has_home = (home_code and home_code in combined_upper) or (home_norm and home_norm in combined_norm) or bool(home_tokens.intersection(combined_tokens))
     has_away = (away_code and away_code in combined_upper) or (away_norm and away_norm in combined_norm) or bool(away_tokens.intersection(combined_tokens))
+
     if has_home ^ has_away:
-        score -= 30
+        score -= 100
 
     # NEW: Strict penalty if neither team is explicitly found
     if not has_home and not has_away:
