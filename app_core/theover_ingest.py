@@ -1178,7 +1178,7 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
                     # Pass just the (home, away) tuples to the matcher
                     # Use stricter MIN_FALLBACK_THRESHOLD (0.75) instead of 0.70
                     simple_tuples = [(t[0], t[1]) for t in league_tuples]
-                    matched_tuple = TeamNameMatcher.match_game(csv_home, csv_away, simple_tuples, threshold=MIN_FALLBACK_THRESHOLD)
+                    matched_tuple = TeamNameMatcher.match_game(csv_home, csv_away, simple_tuples, threshold=MIN_FALLBACK_THRESHOLD, league=league)
 
                     if matched_tuple:
                         # Find the game object for this tuple
