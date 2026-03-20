@@ -704,6 +704,9 @@ class PredictionEngine:
                                 elif 0 < numeric_val <= 1.0:
                                     i_prob = numeric_val
                                     break
+                                elif 1.0 < numeric_val < 100.0:
+                                    i_prob = 1.0 / numeric_val
+                                    break
                         except Exception:
                             continue
                 working_df.at[idx, 'implied_home_prob'] = i_prob if i_prob else 0.5
@@ -1015,6 +1018,9 @@ class PredictionEngine:
                                                 break
                                             elif 0 < numeric_val <= 1.0:
                                                 prob = numeric_val
+                                                break
+                                            elif 1.0 < numeric_val < 100.0:
+                                                prob = 1.0 / numeric_val
                                                 break
                                     except Exception:
                                         continue

@@ -263,23 +263,9 @@ def _recompute_consensus_from_kalshi(df: pd.DataFrame, require_ml: bool = False)
                 f"Blended: {row.get('calibrated_probability')}"
             )
 
-    # After recalculating edge, filter picks that fall below minimum threshold
-    # The requirement is that any row returned for display or export from `best_picks_df` must meet these thresholds.
-    # We applied thresholds in `build_best_picks_df`, and they will flow through here.
-    # But since Kalshi may change edge/EV, we should enforce them again here if we are filtering best picks.
-    if "edge" in out.columns and "best_pick" in out.columns:
-        if len(out) > 0 and pd.notna(out["best_pick"].iloc[0]):
-            from core.streamlit_pipeline import is_postseason_ncaab
-            is_postseason = is_postseason_ncaab(out)
-            edge_thresholds = pd.Series(0.01, index=out.index)
-            edge_thresholds.loc[is_postseason] = 0.01
-
-            valid_edge = out["edge"] >= edge_thresholds
-            valid_ev = out["expected_value"] >= 0.005
-
-            out = out[valid_edge & valid_ev].copy().reset_index(drop=True)
-            if "parlay_rank" in out.columns:
-                out["parlay_rank"] = range(1, len(out) + 1)
+    # Do not filter out rows from the master analysis_df based on edge or expected value.
+    # The frontend grids must display the entire master schedule.
+    # We leave the strict edge/EV filtering strictly for best_picks_df construction.
 
     return out
 
