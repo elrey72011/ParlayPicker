@@ -1299,8 +1299,10 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 continue
 
             # 1. Extract and translate the specific market title
+            from core.team_mapper import normalize_team_name as _global_normalize
+
             raw_title = best_market.get('title', '')
-            norm_title = f" {normalize_team_name(raw_title)} "
+            norm_title = f" {_global_normalize(raw_title)} "
 
             if league.upper() in ['NCAAB', 'NCAAM']:
                 alias_map = {
@@ -1313,8 +1315,8 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 for k_alias, standard in alias_map.items():
                     norm_title = norm_title.replace(f" {k_alias} ", f" {standard} ")
 
-            pad_home = f" {normalize_team_name(row.get('home_team', ''))} "
-            pad_away = f" {normalize_team_name(row.get('away_team', ''))} "
+            pad_home = f" {_global_normalize(row.get('home_team', ''))} "
+            pad_away = f" {_global_normalize(row.get('away_team', ''))} "
 
             # 2. First-Subject Orientation
             if "total" in raw_title.lower() or "total" in norm_title:
