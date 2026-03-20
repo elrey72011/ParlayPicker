@@ -1289,7 +1289,6 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             if kalshi_prob is None:
                 out.at[idx, "kalshi_match_status"] = "miss"
                 out.at[idx, "kalshi_match_reason"] = "illiquid_market"
-                # Keep kalshi_probability pd.NA to fall back 100% to ML probability
                 continue
 
             kalshi_prob = _safe_float(kalshi_prob)
@@ -1300,7 +1299,6 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 continue
 
             # 1. Extract and translate the specific market title
-            from core.team_mapper import normalize_team_name
             raw_title = best_market.get('title', '')
             norm_title = f" {normalize_team_name(raw_title)} "
 
@@ -1338,12 +1336,13 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
             # Sanity check
             if pd.isna(final_prob) or final_prob <= 0.0 or final_prob > 1.0:
+                logger.warning(f"⚠️ Invalid Kalshi probability {final_prob} for {row.get('game_id', 'unknown')}, skipping row")
                 out.at[idx, "kalshi_match_status"] = "error"
                 out.at[idx, "kalshi_match_reason"] = f"invalid_probability_{final_prob}"
                 out.at[idx, "kalshi_probability"] = 0.0
                 continue
 
-            # 3. Save directly to dataframe
+            # 3. Save directly to dataframe. NO EV MATH HERE.
             out.at[idx, "kalshi_probability"] = float(final_prob)
             out.at[idx, "kalshi_market_title"] = best_market.get("title")
             out.at[idx, "kalshi_event_ticker"] = best_market.get("event_ticker")
