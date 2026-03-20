@@ -1087,8 +1087,6 @@ class PredictionEngine:
                       final_probs.append(p)
 
             # SPORTSBOOK ARBITRAGE OVERRIDE
-            # If the model is flat/untrained, use the sportsbook's implied probability
-            # to expose arbitrage edges against Kalshi.
             valid_probs = [p for p in final_probs if p is not None]
             if len(set(valid_probs)) <= 5:
                 logger.warning("XGBoost returned mostly flat probabilities. Overriding with Sportsbook Implied Probabilities for Arbitrage.")
@@ -1097,13 +1095,13 @@ class PredictionEngine:
                     row = working_df.loc[idx]
                     i_val = row.get('implied_home_prob')
                     prob = float(i_val) if pd.notna(i_val) and str(i_val).strip() != "" else 0.50
-
+                    
                     pick_team = str(row.get('pick_team', '')).lower().strip()
                     best_pick = str(row.get('best_pick', '')).lower().strip()
                     home_team = str(row.get('home_team', '')).lower().strip()
                     away_team = str(row.get('away_team', '')).lower().strip()
                     market_type = str(row.get('market_type', '')).lower().strip()
-
+                    
                     if "total" in market_type:
                         # Totals: Kalshi is anchored to the OVER. Bump UP if Over, DOWN if Under.
                         if "over" in best_pick:
@@ -1114,7 +1112,7 @@ class PredictionEngine:
                         # Spread/ML: Kalshi is anchored to the HOME team. Bump UP if Home, DOWN if Away.
                         is_home_pick = (pick_team == home_team) or (home_team in best_pick and home_team != "")
                         is_away_pick = (pick_team == away_team) or (away_team in best_pick and away_team != "")
-
+                        
                         if is_home_pick:
                             prob = min(0.99, prob + 0.35)
                         elif is_away_pick:
@@ -1125,7 +1123,7 @@ class PredictionEngine:
                                 prob = min(0.99, prob + 0.35)
                             else:
                                 prob = max(0.01, prob - 0.35)
-
+                            
                     final_probs.append(prob)
 
             return final_probs
