@@ -498,7 +498,8 @@ def _event_match_score(event: dict[str, Any], home_team: str, away_team: str, le
         padded_away = f" {away_norm} "
 
         for k_alias, standard in alias_map.items():
-            if f" {k_alias} " in padded_title:
+            # Check if the title has the original alias OR if it was already replaced with the standard name
+            if f" {k_alias} " in padded_title or f" {standard} " in padded_title:
                 if f" {standard} " in padded_home or f" {standard} " in padded_away:
                     return 100 # Force perfect score to bypass fuzzy threshold
 
