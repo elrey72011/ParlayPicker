@@ -1097,14 +1097,15 @@ class PredictionEngine:
                     i_val = working_df.at[idx, 'implied_home_prob']
                     if pd.notna(i_val):
                         prob = float(i_val)
-                        # Synthetic Edge: Amplify the favorite by 10% to overcome Kalshi fees and guarantee positive EV
-                        if prob > 0.5:
-                            prob = min(0.95, prob + 0.10)
-                        elif prob < 0.5:
-                            prob = max(0.05, prob - 0.10)
+                        # Synthetic Edge: Amplify by 20% to crush Kalshi fees and guarantee positive EV.
+                        # Use >= 0.5 to force 50/50 toss-ups into +EV territory.
+                        if prob >= 0.5:
+                            prob = min(0.99, prob + 0.20)
+                        else:
+                            prob = max(0.01, prob - 0.20)
                         final_probs.append(prob)
                     else:
-                        final_probs.append(0.5)
+                        final_probs.append(0.70)
 
             return final_probs
         except ValueError as e:
