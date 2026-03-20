@@ -271,11 +271,11 @@ def _recompute_consensus_from_kalshi(df: pd.DataFrame, require_ml: bool = False)
         if len(out) > 0 and pd.notna(out["best_pick"].iloc[0]):
             from core.streamlit_pipeline import is_postseason_ncaab
             is_postseason = is_postseason_ncaab(out)
-            edge_thresholds = pd.Series(0.02, index=out.index)
-            edge_thresholds.loc[is_postseason] = 0.035
+            edge_thresholds = pd.Series(0.01, index=out.index)
+            edge_thresholds.loc[is_postseason] = 0.01
 
             valid_edge = out["edge"] >= edge_thresholds
-            valid_ev = out["expected_value"] >= 0.05
+            valid_ev = out["expected_value"] >= 0.005
 
             out = out[valid_edge & valid_ev].copy().reset_index(drop=True)
             if "parlay_rank" in out.columns:
