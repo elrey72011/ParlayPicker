@@ -853,7 +853,7 @@ class PredictionEngine:
                                             if row_home_clean and "league_norm" in hist_df.columns:
                                                 home_pool = hist_df[hist_df["league_norm"].astype("string").str.upper().eq(row_league).fillna(False)]
                                                 if not home_pool.empty:
-                                                    home_games = home_pool[(home_pool["home_team"].eq(row_home_clean)) | (home_pool["away_team"].eq(row_home_clean))]
+                                                    home_games = home_pool[(home_pool["home_team"].eq(row_home_clean)) | (home_pool["away_team"].eq(row_home_clean))].copy()
                                                     if row_game_date_dt is not None and not pd.isna(row_game_date_dt):
                                                         try:
                                                             target_dt = pd.Timestamp(row_game_date_dt).normalize()
@@ -864,7 +864,9 @@ class PredictionEngine:
                                                         except Exception as e:
                                                             pass
                                                     if not home_games.empty:
-                                                        home_games = home_games.sort_values("commence_time", ascending=False)
+                                                        # Explicitly sort by date to guarantee we are grabbing the most recent performance
+                                                        if "commence_time" in home_games.columns:
+                                                            home_games = home_games.sort_values("commence_time", ascending=False)
                                                         latest_home = home_games.iloc[0]
                                                         found_home = True
 
@@ -872,7 +874,7 @@ class PredictionEngine:
                                             if row_away_clean and "league_norm" in hist_df.columns:
                                                 away_pool = hist_df[hist_df["league_norm"].astype("string").str.upper().eq(row_league).fillna(False)]
                                                 if not away_pool.empty:
-                                                    away_games = away_pool[(away_pool["home_team"].eq(row_away_clean)) | (away_pool["away_team"].eq(row_away_clean))]
+                                                    away_games = away_pool[(away_pool["home_team"].eq(row_away_clean)) | (away_pool["away_team"].eq(row_away_clean))].copy()
                                                     if row_game_date_dt is not None and not pd.isna(row_game_date_dt):
                                                         try:
                                                             target_dt = pd.Timestamp(row_game_date_dt).normalize()
@@ -883,15 +885,24 @@ class PredictionEngine:
                                                         except Exception as e:
                                                             pass
                                                     if not away_games.empty:
-                                                        away_games = away_games.sort_values("commence_time", ascending=False)
+                                                        # Explicitly sort by date to guarantee we are grabbing the most recent performance
+                                                        if "commence_time" in away_games.columns:
+                                                            away_games = away_games.sort_values("commence_time", ascending=False)
                                                         latest_away = away_games.iloc[0]
                                                         found_away = True
 
                                             if found_home or found_away:
                                                 used_stale_features.at[idx] = True
 
+                                            # Initialize to 0.0 beforehand in case team history is completely missing
+                                            for stat in ["win_pct", "ppg", "oppg", "streak", "rest_days"]:
+                                                if pd.isna(raw_numeric.at[idx, f"feature_home_{stat}"]):
+                                                    raw_numeric.at[idx, f"feature_home_{stat}"] = 0.0
+                                                if pd.isna(raw_numeric.at[idx, f"feature_away_{stat}"]):
+                                                    raw_numeric.at[idx, f"feature_away_{stat}"] = 0.0
+
                                             # Map Home Stats
-                                            if found_home:
+                                            if found_home and latest_home is not None:
                                                 # Determine if they played as home or away in their latest game
                                                 played_as_home = (latest_home["home_team"] == row_home_clean)
                                                 prefix = "feature_home_" if played_as_home else "feature_away_"
@@ -903,7 +914,7 @@ class PredictionEngine:
                                                         raw_numeric.at[idx, new_col] = float(latest_home[hist_col])
 
                                             # Map Away Stats
-                                            if found_away:
+                                            if found_away and latest_away is not None:
                                                 # Determine if they played as home or away in their latest game
                                                 played_as_home = (latest_away["home_team"] == row_away_clean)
                                                 prefix = "feature_home_" if played_as_home else "feature_away_"
@@ -914,27 +925,26 @@ class PredictionEngine:
                                                     if hist_col in latest_away and pd.notna(latest_away[hist_col]):
                                                         raw_numeric.at[idx, new_col] = float(latest_away[hist_col])
 
-                                            # Compute Differentials if both found
-                                            if found_home and found_away:
-                                                h_win = raw_numeric.at[idx, "feature_home_win_pct"]
-                                                a_win = raw_numeric.at[idx, "feature_away_win_pct"]
-                                                if pd.notna(h_win) and pd.notna(a_win):
-                                                    raw_numeric.at[idx, "feature_diff_win_pct"] = float(h_win) - float(a_win)
+                                            # Compute Differentials
+                                            h_win = raw_numeric.at[idx, "feature_home_win_pct"]
+                                            a_win = raw_numeric.at[idx, "feature_away_win_pct"]
+                                            if pd.notna(h_win) and pd.notna(a_win):
+                                                raw_numeric.at[idx, "feature_diff_win_pct"] = float(h_win) - float(a_win)
 
-                                                h_ppg = raw_numeric.at[idx, "feature_home_ppg"]
-                                                a_ppg = raw_numeric.at[idx, "feature_away_ppg"]
-                                                if pd.notna(h_ppg) and pd.notna(a_ppg):
-                                                    raw_numeric.at[idx, "feature_diff_ppg"] = float(h_ppg) - float(a_ppg)
+                                            h_ppg = raw_numeric.at[idx, "feature_home_ppg"]
+                                            a_ppg = raw_numeric.at[idx, "feature_away_ppg"]
+                                            if pd.notna(h_ppg) and pd.notna(a_ppg):
+                                                raw_numeric.at[idx, "feature_diff_ppg"] = float(h_ppg) - float(a_ppg)
 
-                                                h_oppg = raw_numeric.at[idx, "feature_home_oppg"]
-                                                a_oppg = raw_numeric.at[idx, "feature_away_oppg"]
-                                                if pd.notna(h_oppg) and pd.notna(a_oppg):
-                                                    raw_numeric.at[idx, "feature_diff_oppg"] = float(h_oppg) - float(a_oppg)
+                                            h_oppg = raw_numeric.at[idx, "feature_home_oppg"]
+                                            a_oppg = raw_numeric.at[idx, "feature_away_oppg"]
+                                            if pd.notna(h_oppg) and pd.notna(a_oppg):
+                                                raw_numeric.at[idx, "feature_diff_oppg"] = float(h_oppg) - float(a_oppg)
 
-                                                h_streak = raw_numeric.at[idx, "feature_home_streak"]
-                                                a_streak = raw_numeric.at[idx, "feature_away_streak"]
-                                                if pd.notna(h_streak) and pd.notna(a_streak):
-                                                    raw_numeric.at[idx, "feature_diff_streak"] = float(h_streak) - float(a_streak)
+                                            h_streak = raw_numeric.at[idx, "feature_home_streak"]
+                                            a_streak = raw_numeric.at[idx, "feature_away_streak"]
+                                            if pd.notna(h_streak) and pd.notna(a_streak):
+                                                raw_numeric.at[idx, "feature_diff_streak"] = float(h_streak) - float(a_streak)
                 except Exception as e:
                     logger.error(f"Stale Feature Fallback failed: {e}")
 
@@ -951,16 +961,38 @@ class PredictionEngine:
                     self.last_batch_used_stale_features = [True] * len(df)
                     self.last_batch_used_neutral_fallback = True
 
-                    # Fallback to implied home probability if available, else 0.5
                     fallbacks = []
                     for idx, row in working_df.iterrows():
-                        prob = row.get('implied_home_prob')
-                        if pd.isna(prob) or prob == 0.5:
-                            prob = row.get('market_probability')
-                        if pd.isna(prob):
-                            prob = _american_to_prob_safe(row.get('odds_american'))
-                        if pd.isna(prob):
+                        prob = None
+
+                        # 1. Try Kalshi First (Generates Edge vs Bookmakers)
+                        for col in ['kalshi_probability', 'kalshi_prob']:
+                            val = row.get(col)
+                            if pd.notna(val) and val != "" and float(val) > 0.0:
+                                prob = float(val)
+                                break
+
+                        # 2. Try Bookmaker Odds (Neutral EV Fallback)
+                        if prob is None or prob == 0.5:
+                            for col in ['implied_home_prob', 'market_probability', 'home_price', 'odds_home', 'home_odds', 'odds_american']:
+                                val = row.get(col)
+                                if pd.notna(val) and val != "":
+                                    try:
+                                        numeric_val = float(val)
+                                        if numeric_val != 0.5 and numeric_val != 0.0:
+                                            if abs(numeric_val) >= 100:
+                                                prob = _american_to_prob_safe(numeric_val)
+                                                break
+                                            elif 0 < numeric_val <= 1.0:
+                                                prob = numeric_val
+                                                break
+                                    except Exception:
+                                        continue
+
+                        # 3. Final Resort
+                        if prob is None:
                             prob = 0.5
+
                         fallbacks.append(float(prob))
                     return fallbacks
 
