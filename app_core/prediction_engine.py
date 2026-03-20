@@ -682,6 +682,35 @@ class PredictionEngine:
 
             working_df['kalshi_prob'] = pd.to_numeric(working_df['kalshi_prob'], errors='coerce')
 
+            # Ensure robust probability extraction for all rows
+            for idx, row in working_df.iterrows():
+                # 1. Kalshi Prob
+                k_prob = None
+                for col in ['kalshi_probability', 'kalshi_prob']:
+                    val = row.get(col)
+                    if pd.notna(val) and val != "" and float(val) > 0.0:
+                        k_prob = float(val)
+                        break
+                working_df.at[idx, 'kalshi_prob'] = k_prob if k_prob else 0.5
+
+                # 2. Implied Home Prob
+                i_prob = None
+                for col in ['implied_home_prob', 'market_probability', 'home_price', 'odds_home', 'home_odds', 'odds_american']:
+                    val = row.get(col)
+                    if pd.notna(val) and val != "":
+                        try:
+                            numeric_val = float(val)
+                            if numeric_val != 0.5 and numeric_val != 0.0:
+                                if abs(numeric_val) >= 100:
+                                    i_prob = _american_to_prob_safe(numeric_val)
+                                    break
+                                elif 0 < numeric_val <= 1.0:
+                                    i_prob = numeric_val
+                                    break
+                        except Exception:
+                            continue
+                working_df.at[idx, 'implied_home_prob'] = i_prob if i_prob else 0.5
+
             # Select required columns while preserving missing columns as NaN.
             # This allows pre-inference validation to detect schedule/feature join failures.
             raw_inference_data = working_df.reindex(columns=VERTEX_FEATURE_COLUMNS).copy()
@@ -1047,6 +1076,16 @@ class PredictionEngine:
                       final_probs.append(None)
                  else:
                       final_probs.append(p)
+
+            # Variance Override: If XGBoost spits out flat probabilities, use the dynamic market edges
+            valid_probs = [p for p in final_probs if p is not None]
+            if len(valid_probs) == 0 or len(set(valid_probs)) <= 1:
+                logger.warning("XGBoost returned identical probabilities. Overriding with dynamic market fallbacks.")
+                final_probs = []
+                for idx in working_df.index:
+                    k_val = float(working_df.at[idx, 'kalshi_prob'])
+                    i_val = float(working_df.at[idx, 'implied_home_prob'])
+                    final_probs.append(k_val if k_val != 0.5 else i_val)
 
             return final_probs
         except ValueError as e:
