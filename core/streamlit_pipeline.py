@@ -1541,30 +1541,79 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
 
 
 def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None = None) -> pd.DataFrame:
-    from datetime import datetime
+    from app_core.odds_api import TheOddsAPIClient, filter_games_today_only
     import pandas as pd
-    now = datetime.now()
-    records = []
-    for i in range(1, 36):
-        records.append({
-            'game_id': f'game_{i}',
-            'league': 'NCAAB',
-            'home_team': f'HomeTeam {i}',
-            'away_team': f'AwayTeam {i}',
-            'commence_time': now.isoformat(),
-            'odds_source': 'novig',
-            'spread_home': -3.5,
-            'spread_away': 3.5,
-            'spread_home_price': -110,
-            'spread_away_price': -110,
-            'total_over': 150.5,
-            'total_under': 150.5,
-            'total_over_price': -110,
-            'total_under_price': -110,
-            'ml_home_price': -150,
-            'ml_away_price': 130
-        })
-    return pd.DataFrame(records)
+
+    api_key = _get_odds_api_key()
+    if not api_key:
+        logger.error("No ODDS_API_KEY found.")
+        return pd.DataFrame()
+
+    client = TheOddsAPIClient(api_key=api_key)
+
+    sport_keys = []
+    if sports:
+        for s in sports:
+            s_up = s.upper()
+            if s_up in ["NCAAB", "NCAAM", "NCAA MEN'S BASKETBALL"]:
+                sport_keys.append("basketball_ncaab")
+            elif s_up == "NBA":
+                sport_keys.append("basketball_nba")
+            elif s_up == "NHL":
+                sport_keys.append("icehockey_nhl")
+    else:
+        sport_keys = ["basketball_ncaab", "basketball_nba", "icehockey_nhl"]
+
+    all_games = []
+    for sk in sport_keys:
+        games = client.get_odds(sk, date=date)
+        if games:
+            all_games.extend(games)
+
+    all_games = filter_games_today_only(all_games)
+
+    if not all_games:
+        return pd.DataFrame()
+
+    rows = []
+    for game in all_games:
+        for book in game.get('bookmakers', []):
+            book_key = book.get('key', '')
+            if book_key != 'novig':
+                continue
+
+            row = {
+                'game_id': game.get('id'),
+                'league': game.get('sport_key', '').split('_')[-1].upper(),
+                'raw_home_team': game.get('home_team'),
+                'raw_away_team': game.get('away_team'),
+                'home_team': game.get('home_team'),
+                'away_team': game.get('away_team'),
+                'commence_time': game.get('commence_time'),
+                'matchup_id': game.get('matchup_id'),
+                'odds_source': book_key,
+            }
+
+            for market in book.get('markets', []):
+                if market.get('key') == 'spreads':
+                    for o in market.get('outcomes', []):
+                        if o.get('name') == game.get('home_team'):
+                            row['novig_home_point'] = o.get('point')
+                            row['novig_home_price'] = o.get('price')
+                        elif o.get('name') == game.get('away_team'):
+                            row['novig_away_point'] = o.get('point')
+                            row['novig_away_price'] = o.get('price')
+                elif market.get('key') == 'totals':
+                    for o in market.get('outcomes', []):
+                        if str(o.get('name')).lower() == 'over':
+                            row['novig_over_point'] = o.get('point')
+                            row['novig_over_price'] = o.get('price')
+                        elif str(o.get('name')).lower() == 'under':
+                            row['novig_under_point'] = o.get('point')
+                            row['novig_under_price'] = o.get('price')
+            rows.append(row)
+
+    return pd.DataFrame(rows)
 
 def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.DataFrame | None = None) -> pd.DataFrame:
     """
