@@ -1461,15 +1461,15 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     best = pool.loc[best_indices].copy()
 
     # Phase 5: Enforce Thresholds
-    # MIN_EDGE_THRESHOLD of 0.02 for high-liquidity markets (NBA, NHL) and 0.035 for "Postseason" lower-liquidity markets (NCAAB).
-    # Expected Value Floor of 0.05.
+    # MIN_EDGE_THRESHOLD of 0.01 for high-liquidity markets.
+    # Expected Value Floor of 0.005.
     is_postseason = is_postseason_ncaab(best)
 
-    edge_thresholds = pd.Series(0.02, index=best.index)
-    edge_thresholds.loc[is_postseason] = 0.035
+    edge_thresholds = pd.Series(0.01, index=best.index)
+    edge_thresholds.loc[is_postseason] = 0.01
 
     valid_edge_mask = best["edge"] >= edge_thresholds
-    valid_ev_mask = best["expected_value"] >= 0.05
+    valid_ev_mask = best["expected_value"] >= 0.005
 
     # We must filter out non-qualifying picks from the output so they don't show in UI/CSV
     best = best[valid_edge_mask & valid_ev_mask].copy()

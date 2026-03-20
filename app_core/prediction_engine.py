@@ -680,9 +680,6 @@ class PredictionEngine:
                     pd.to_numeric(working_df['market_probability'], errors='coerce')
                 )
 
-            working_df['kalshi_prob'] = pd.to_numeric(working_df['kalshi_prob'], errors='coerce')
-
-            # Ensure robust probability extraction for all rows
             for idx, row in working_df.iterrows():
                 # 1. Kalshi Prob
                 k_prob = None
@@ -710,6 +707,10 @@ class PredictionEngine:
                         except Exception:
                             continue
                 working_df.at[idx, 'implied_home_prob'] = i_prob if i_prob else 0.5
+
+            # Explicit cast to silence FutureWarnings before any remaining fillna
+            working_df['kalshi_prob'] = pd.to_numeric(working_df['kalshi_prob'], errors='coerce')
+            working_df['implied_home_prob'] = pd.to_numeric(working_df['implied_home_prob'], errors='coerce')
 
             # Select required columns while preserving missing columns as NaN.
             # This allows pre-inference validation to detect schedule/feature join failures.
@@ -1080,7 +1081,7 @@ class PredictionEngine:
             # Variance Override: If XGBoost spits out flat probabilities, use the dynamic market edges
             valid_probs = [p for p in final_probs if p is not None]
             if len(valid_probs) == 0 or len(set(valid_probs)) <= 1:
-                logger.warning("XGBoost returned identical probabilities. Overriding with dynamic market fallbacks.")
+                logger.warning("XGBoost returned empty or identical probabilities. Overriding with dynamic market fallbacks.")
                 final_probs = []
                 for idx in working_df.index:
                     k_val = float(working_df.at[idx, 'kalshi_prob'])
