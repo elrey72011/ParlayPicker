@@ -780,7 +780,6 @@ class PredictionEngine:
                                                     target_dt = pd.Timestamp(row_game_date_dt).normalize()
                                                     if "game_date_dt" in match.columns:
                                                         # Cap future target dates at today so we can still find the latest stats
-                                                        import pandas as pd
                                                         cap_dt = min(target_dt, pd.Timestamp.now().normalize())
                                                         valid_window = match["game_date_dt"].dt.normalize() <= cap_dt
                                                         match = match[valid_window]
@@ -823,7 +822,6 @@ class PredictionEngine:
                                                             target_dt = pd.Timestamp(row_game_date_dt).normalize()
                                                             if "game_date_dt" in match.columns:
                                                                 # Cap future target dates at today so we can still find the latest stats
-                                                                import pandas as pd
                                                                 cap_dt = min(target_dt, pd.Timestamp.now().normalize())
                                                                 valid_window = match["game_date_dt"].dt.normalize() <= cap_dt
                                                                 match = match[valid_window]
@@ -860,7 +858,6 @@ class PredictionEngine:
                     self.last_batch_used_neutral_fallback = True
 
                     # Fallback to implied home probability if available, else 0.5
-                    import pandas as pd
                     fallbacks = []
                     for idx, row in working_df.iterrows():
                         prob = 0.5
