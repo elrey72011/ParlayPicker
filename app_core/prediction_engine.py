@@ -670,18 +670,17 @@ class PredictionEngine:
                 working_df['kalshi_prob'] = pd.NA
 
             if 'decimal_odds' in working_df.columns:
-                working_df['implied_home_prob'] = working_df['implied_home_prob'].fillna(
+                working_df['implied_home_prob'] = pd.to_numeric(working_df['implied_home_prob'], errors='coerce').fillna(
                     1 / pd.to_numeric(working_df['decimal_odds'], errors='coerce')
                 )
 
             # Fill with market_probability or 0.5 as absolute last resort
             if 'market_probability' in working_df.columns:
-                working_df['implied_home_prob'] = working_df['implied_home_prob'].fillna(
+                working_df['implied_home_prob'] = pd.to_numeric(working_df['implied_home_prob'], errors='coerce').fillna(
                     pd.to_numeric(working_df['market_probability'], errors='coerce')
                 )
 
-            working_df['kalshi_prob'] = working_df['kalshi_prob'].fillna(0.5)
-            working_df['implied_home_prob'] = working_df['implied_home_prob'].fillna(0.5)
+            working_df['kalshi_prob'] = pd.to_numeric(working_df['kalshi_prob'], errors='coerce')
 
             # Select required columns while preserving missing columns as NaN.
             # This allows pre-inference validation to detect schedule/feature join failures.
@@ -841,6 +840,101 @@ class PredictionEngine:
                                                 for col in VERTEX_FEATURE_COLUMNS:
                                                     if col in latest and pd.notna(latest[col]):
                                                         raw_numeric.at[idx, col] = float(latest[col])
+                                        else:
+                                            # SPLIT LOOKUP: Teams haven't played each other. Look up their most recent stats independently.
+                                            logger.info(f"Split lookup triggered for {row_matchup}.")
+
+                                            found_home = False
+                                            found_away = False
+                                            latest_home = None
+                                            latest_away = None
+
+                                            # 1. Look up Home Team's latest stats
+                                            if row_home_clean and "league_norm" in hist_df.columns:
+                                                home_pool = hist_df[hist_df["league_norm"].astype("string").str.upper().eq(row_league).fillna(False)]
+                                                if not home_pool.empty:
+                                                    home_games = home_pool[(home_pool["home_team"].eq(row_home_clean)) | (home_pool["away_team"].eq(row_home_clean))]
+                                                    if row_game_date_dt is not None and not pd.isna(row_game_date_dt):
+                                                        try:
+                                                            target_dt = pd.Timestamp(row_game_date_dt).normalize()
+                                                            if "game_date_dt" in home_games.columns:
+                                                                cap_dt = min(target_dt, pd.Timestamp.now().normalize())
+                                                                valid_window = home_games["game_date_dt"].dt.normalize() <= cap_dt
+                                                                home_games = home_games[valid_window]
+                                                        except Exception as e:
+                                                            pass
+                                                    if not home_games.empty:
+                                                        home_games = home_games.sort_values("commence_time", ascending=False)
+                                                        latest_home = home_games.iloc[0]
+                                                        found_home = True
+
+                                            # 2. Look up Away Team's latest stats
+                                            if row_away_clean and "league_norm" in hist_df.columns:
+                                                away_pool = hist_df[hist_df["league_norm"].astype("string").str.upper().eq(row_league).fillna(False)]
+                                                if not away_pool.empty:
+                                                    away_games = away_pool[(away_pool["home_team"].eq(row_away_clean)) | (away_pool["away_team"].eq(row_away_clean))]
+                                                    if row_game_date_dt is not None and not pd.isna(row_game_date_dt):
+                                                        try:
+                                                            target_dt = pd.Timestamp(row_game_date_dt).normalize()
+                                                            if "game_date_dt" in away_games.columns:
+                                                                cap_dt = min(target_dt, pd.Timestamp.now().normalize())
+                                                                valid_window = away_games["game_date_dt"].dt.normalize() <= cap_dt
+                                                                away_games = away_games[valid_window]
+                                                        except Exception as e:
+                                                            pass
+                                                    if not away_games.empty:
+                                                        away_games = away_games.sort_values("commence_time", ascending=False)
+                                                        latest_away = away_games.iloc[0]
+                                                        found_away = True
+
+                                            if found_home or found_away:
+                                                used_stale_features.at[idx] = True
+
+                                            # Map Home Stats
+                                            if found_home:
+                                                # Determine if they played as home or away in their latest game
+                                                played_as_home = (latest_home["home_team"] == row_home_clean)
+                                                prefix = "feature_home_" if played_as_home else "feature_away_"
+
+                                                for stat in ["win_pct", "ppg", "oppg", "streak", "rest_days"]:
+                                                    hist_col = f"{prefix}{stat}"
+                                                    new_col = f"feature_home_{stat}"
+                                                    if hist_col in latest_home and pd.notna(latest_home[hist_col]):
+                                                        raw_numeric.at[idx, new_col] = float(latest_home[hist_col])
+
+                                            # Map Away Stats
+                                            if found_away:
+                                                # Determine if they played as home or away in their latest game
+                                                played_as_home = (latest_away["home_team"] == row_away_clean)
+                                                prefix = "feature_home_" if played_as_home else "feature_away_"
+
+                                                for stat in ["win_pct", "ppg", "oppg", "streak", "rest_days"]:
+                                                    hist_col = f"{prefix}{stat}"
+                                                    new_col = f"feature_away_{stat}"
+                                                    if hist_col in latest_away and pd.notna(latest_away[hist_col]):
+                                                        raw_numeric.at[idx, new_col] = float(latest_away[hist_col])
+
+                                            # Compute Differentials if both found
+                                            if found_home and found_away:
+                                                h_win = raw_numeric.at[idx, "feature_home_win_pct"]
+                                                a_win = raw_numeric.at[idx, "feature_away_win_pct"]
+                                                if pd.notna(h_win) and pd.notna(a_win):
+                                                    raw_numeric.at[idx, "feature_diff_win_pct"] = float(h_win) - float(a_win)
+
+                                                h_ppg = raw_numeric.at[idx, "feature_home_ppg"]
+                                                a_ppg = raw_numeric.at[idx, "feature_away_ppg"]
+                                                if pd.notna(h_ppg) and pd.notna(a_ppg):
+                                                    raw_numeric.at[idx, "feature_diff_ppg"] = float(h_ppg) - float(a_ppg)
+
+                                                h_oppg = raw_numeric.at[idx, "feature_home_oppg"]
+                                                a_oppg = raw_numeric.at[idx, "feature_away_oppg"]
+                                                if pd.notna(h_oppg) and pd.notna(a_oppg):
+                                                    raw_numeric.at[idx, "feature_diff_oppg"] = float(h_oppg) - float(a_oppg)
+
+                                                h_streak = raw_numeric.at[idx, "feature_home_streak"]
+                                                a_streak = raw_numeric.at[idx, "feature_away_streak"]
+                                                if pd.notna(h_streak) and pd.notna(a_streak):
+                                                    raw_numeric.at[idx, "feature_diff_streak"] = float(h_streak) - float(a_streak)
                 except Exception as e:
                     logger.error(f"Stale Feature Fallback failed: {e}")
 
@@ -860,11 +954,13 @@ class PredictionEngine:
                     # Fallback to implied home probability if available, else 0.5
                     fallbacks = []
                     for idx, row in working_df.iterrows():
-                        prob = 0.5
-                        if 'implied_home_prob' in row and pd.notna(row['implied_home_prob']):
-                            prob = row['implied_home_prob']
-                        elif 'kalshi_prob' in row and pd.notna(row['kalshi_prob']):
-                            prob = row['kalshi_prob']
+                        prob = row.get('implied_home_prob')
+                        if pd.isna(prob) or prob == 0.5:
+                            prob = row.get('market_probability')
+                        if pd.isna(prob):
+                            prob = _american_to_prob_safe(row.get('odds_american'))
+                        if pd.isna(prob):
+                            prob = 0.5
                         fallbacks.append(float(prob))
                     return fallbacks
 
