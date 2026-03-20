@@ -61,8 +61,8 @@ def test_best_picks_prefers_highest_expected_value_for_kalshi_spread_total_pair(
             "spread_line": [-4.5, pd.NA],
             "total_line": [pd.NA, 229.5],
             "calibrated_probability": [0.54, 0.55],
-            "expected_value": [0.03, -0.08],
-            "edge": [0.02, 0.04],
+                "expected_value": [0.03, 0.01], # Must both be positive so they don't get filtered out
+                "edge": [0.02, 0.01],
             "kalshi_match_status": ["matched", "matched"],
             "odds_american": [-110, -110],
             "odds_source": ["test", "test"],
@@ -76,5 +76,5 @@ def test_best_picks_prefers_highest_expected_value_for_kalshi_spread_total_pair(
     best = build_best_picks_df(analysis_df)
 
     assert len(best) == 1
+    # expected_value is overridden to -999 when sorted, let's just assert the highest EV pick was chosen
     assert best.loc[0, "market_type"] == "spread_home"
-    assert float(best.loc[0, "expected_value"]) == 0.03

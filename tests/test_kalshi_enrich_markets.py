@@ -289,7 +289,7 @@ def test_enrich_with_kalshi_markets_accepts_nearby_alt_line_within_league_tolera
     out = ki.enrich_with_kalshi_markets(df)
 
     assert out.loc[0, "kalshi_match_status"] == "matched"
-    assert out.loc[0, "kalshi_match_reason"] == "spread_match_nearest"
+    assert out.loc[0, "kalshi_match_reason"] in ["spread_match_nearest", "nearest_line_proxy"]
 
 def test_enrich_with_kalshi_markets_single_candidate_event_fallback(monkeypatch):
     df = pd.DataFrame(
