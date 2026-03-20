@@ -533,12 +533,12 @@ def _event_match_score(event: dict[str, Any], home_team: str, away_team: str, le
     if away_tokens:
         score += min(25, 10 * len(away_tokens.intersection(combined_tokens)))
 
-    # Penalize one-sided matches heavily to avoid false positives (e.g., A vs B matching A vs C)
+    # Penalize one-sided matches lethally to avoid false positives (e.g., A vs B matching A vs C)
     has_home = (home_code and home_code in combined_upper) or (home_norm and home_norm in combined_norm) or bool(home_tokens.intersection(combined_tokens))
     has_away = (away_code and away_code in combined_upper) or (away_norm and away_norm in combined_norm) or bool(away_tokens.intersection(combined_tokens))
 
     if has_home ^ has_away:
-        score -= 100
+        score -= 200
 
     # NEW: Strict penalty if neither team is explicitly found
     if not has_home and not has_away:
