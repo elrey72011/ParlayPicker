@@ -492,15 +492,10 @@ def _event_match_score(event: dict[str, Any], home_team: str, away_team: str, le
             "liu": "long island university",
             "central florida": "ucf"
         }
-        # Create padded strings for safe matching
-        padded_title = f" {combined_norm} "
-        padded_home = f" {home_norm} "
-        padded_away = f" {away_norm} "
-
         for k_alias, standard in alias_map.items():
-            # Check if the title has the original alias OR if it was already replaced with the standard name
-            if f" {k_alias} " in padded_title or f" {standard} " in padded_title:
-                if f" {standard} " in padded_home or f" {standard} " in padded_away:
+            # Relax boundary constraints to catch names at the edges of strings
+            if k_alias in combined_norm or standard in combined_norm:
+                if standard in home_norm or standard in away_norm:
                     return 100 # Force perfect score to bypass fuzzy threshold
 
     score = 0
@@ -541,6 +536,10 @@ def _event_match_score(event: dict[str, Any], home_team: str, away_team: str, le
     has_away = (away_code and away_code in combined_upper) or (away_norm and away_norm in combined_norm) or bool(away_tokens.intersection(combined_tokens))
     if has_home ^ has_away:
         score -= 30
+
+    # NEW: Strict penalty if neither team is explicitly found
+    if not has_home and not has_away:
+        score -= 100
 
     # Date affinity improves precision while still allowing missing date fields.
     if date_code:
