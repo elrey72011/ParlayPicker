@@ -552,27 +552,37 @@ def _event_match_score(event: dict[str, Any], home_team: str, away_team: str, le
 
 
 def _make_kalshi_request(url: str, headers: dict[str, str] | None = None, params: dict[str, Any] | None = None, timeout: int = 30) -> requests.Response:
-    """Helper to make rate-limited Kalshi API requests with exponential backoff for 429 errors."""
+    """Helper to make rate-limited Kalshi API requests with exponential backoff for 429 and Connection errors."""
     time.sleep(0.2)
     max_retries = 3
     backoff = 2.0
 
     for attempt in range(max_retries + 1):
-        resp = requests.get(url, headers=headers, params=params, timeout=timeout)
-        if resp.status_code == 429:
+        try:
+            resp = requests.get(url, headers=headers, params=params, timeout=timeout)
+            if resp.status_code == 429:
+                if attempt < max_retries:
+                    logger.warning(f"Kalshi API 429 Too Many Requests. Retrying in {backoff} seconds...")
+                    time.sleep(backoff)
+                    backoff *= 2.0
+                    continue
+                else:
+                    logger.error(f"Kalshi API 429 Too Many Requests. Max retries ({max_retries}) exceeded.")
+                    resp.raise_for_status()
+            else:
+                resp.raise_for_status()
+                return resp
+        except requests.exceptions.RequestException as e:
             if attempt < max_retries:
-                logger.warning(f"Kalshi API 429 Too Many Requests. Retrying in {backoff} seconds (attempt {attempt + 1}/{max_retries})...")
+                logger.warning(f"Kalshi API Network Error ({e}). Retrying in {backoff} seconds...")
                 time.sleep(backoff)
                 backoff *= 2.0
                 continue
             else:
-                logger.error(f"Kalshi API 429 Too Many Requests. Max retries ({max_retries}) exceeded.")
-                resp.raise_for_status()
-        else:
-            resp.raise_for_status()
-            return resp
+                logger.error(f"Kalshi API Request Failed after {max_retries} retries: {e}")
+                raise
 
-    # Fallback return, should not reach here if raise_for_status happens above
+    # Fallback return, should not reach here if raise happens above
     return requests.get(url, headers=headers, params=params, timeout=timeout)
 
 
