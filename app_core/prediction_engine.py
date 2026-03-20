@@ -1008,34 +1008,26 @@ class PredictionEngine:
                     for idx, row in working_df.iterrows():
                         prob = None
 
-                        # 1. Try Kalshi First (Generates Edge vs Bookmakers)
-                        for col in ['kalshi_probability', 'kalshi_prob']:
+                        # Try Bookmaker Odds FIRST (Arbitrage Fallback)
+                        for col in ['implied_home_prob', 'market_probability', 'home_price', 'odds_home', 'home_odds', 'odds_american']:
                             val = row.get(col)
-                            if pd.notna(val) and val != "" and float(val) > 0.0:
-                                prob = float(val)
-                                break
+                            if pd.notna(val) and val != "":
+                                try:
+                                    numeric_val = float(val)
+                                    if numeric_val != 0.5 and numeric_val != 0.0:
+                                        if abs(numeric_val) >= 100:
+                                            prob = 100.0 / (numeric_val + 100.0) if numeric_val > 0 else abs(numeric_val) / (abs(numeric_val) + 100.0)
+                                            break
+                                        elif 0 < numeric_val <= 1.0:
+                                            prob = numeric_val
+                                            break
+                                        elif 1.0 < numeric_val < 100.0:
+                                            prob = 1.0 / numeric_val
+                                            break
+                                except Exception:
+                                    continue
 
-                        # 2. Try Bookmaker Odds (Neutral EV Fallback)
-                        if prob is None or prob == 0.5:
-                            for col in ['implied_home_prob', 'market_probability', 'home_price', 'odds_home', 'home_odds', 'odds_american']:
-                                val = row.get(col)
-                                if pd.notna(val) and val != "":
-                                    try:
-                                        numeric_val = float(val)
-                                        if numeric_val != 0.5 and numeric_val != 0.0:
-                                            if abs(numeric_val) >= 100:
-                                                prob = 100.0 / (numeric_val + 100.0) if numeric_val > 0 else abs(numeric_val) / (abs(numeric_val) + 100.0)
-                                                break
-                                            elif 0 < numeric_val <= 1.0:
-                                                prob = numeric_val
-                                                break
-                                            elif 1.0 < numeric_val < 100.0:
-                                                prob = 1.0 / numeric_val
-                                                break
-                                    except Exception:
-                                        continue
-
-                        # 3. Final Resort
+                        # Final Resort
                         if prob is None:
                             prob = 0.5
 
@@ -1093,6 +1085,17 @@ class PredictionEngine:
                       final_probs.append(None)
                  else:
                       final_probs.append(p)
+
+            # SPORTSBOOK ARBITRAGE OVERRIDE
+            # If the model is flat/untrained, use the sportsbook's implied probability
+            # to expose arbitrage edges against Kalshi.
+            valid_probs = [p for p in final_probs if p is not None]
+            if len(set(valid_probs)) <= 5:
+                logger.warning("XGBoost returned mostly flat probabilities. Overriding with Sportsbook Implied Probabilities for Arbitrage.")
+                final_probs = []
+                for idx in working_df.index:
+                    i_val = working_df.at[idx, 'implied_home_prob']
+                    final_probs.append(float(i_val) if pd.notna(i_val) else 0.5)
 
             return final_probs
         except ValueError as e:
