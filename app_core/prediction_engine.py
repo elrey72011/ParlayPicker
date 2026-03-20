@@ -269,11 +269,11 @@ def _series_or_default(df: pd.DataFrame, col: str, default: str = "") -> pd.Seri
     return pd.Series([default] * len(df), index=df.index)
 
 
-def match_team_name(target: str, candidates: List[str], threshold: float = 80.0) -> Optional[str]:
+def match_team_name(target: str, candidates: List[str], threshold: float = 80.0, league: Optional[str] = None) -> Optional[str]:
     """
     Wrapper for TeamNameMatcher to support rapidfuzz/fuzzy matching.
     """
-    return TeamNameMatcher.match_team(target, candidates, threshold=threshold/100.0)
+    return TeamNameMatcher.match_team(target, candidates, threshold=threshold/100.0, league=league)
 
 def diagnose_model_type(model_path):
     """Identify model framework"""

@@ -13,6 +13,8 @@ from typing import Any, Optional, Tuple
 import pandas as pd
 import requests
 
+from core.team_mapper import normalize_team_name
+
 logger = logging.getLogger(__name__)
 
 
@@ -89,7 +91,6 @@ def clean_team_name(name: Any) -> str:
     tokens = [t for t in text.split() if t and t not in TEAM_NOISE_WORDS]
     return " ".join(tokens)
 
-from core.team_mapper import normalize_team_name
 API_BASE = "https://api.elections.kalshi.com/trade-api/v2"
 
 KALSHI_LINE_TOLERANCE_SPREAD = 3.0
@@ -274,7 +275,10 @@ class KalshiAPIError(RuntimeError):
 
 
 def _normalize_team_token(name: str) -> str:
-    s = _safe_text(name).lower().strip()
+    # First apply robust centralized normalization mapping from core pipeline
+    s = normalize_team_name(name)
+
+    s = _safe_text(s).lower().strip()
     s = s.replace("\u2019", "'").replace("&", " and ")
     s = s.replace("-", " ").replace(".", " ").replace("'", "")
     s = re.sub(r"\bst\b", "state", s)
@@ -1123,23 +1127,16 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 nearest = min(kalshi_lines, key=lambda x: abs(float(x[0]) - target_line_abs))
                 delta = abs(float(nearest[0]) - target_line_abs)
 
-                tolerance = MAX_LINE_TOLERANCE.get(league, 3.0)
-                if delta <= tolerance:
-                    if delta == 0:
-                        best_market = nearest[2]
-                        match_status = "matched"
-                        match_reason = "total_match_exact"
-                        out.at[idx, "kalshi_line_diff"] = 0.0
-                    else:
-                        best_market = nearest[2]
-                        match_status = "matched"
-                        match_reason = "nearest_line_proxy"
-                        out.at[idx, "kalshi_line_diff"] = delta
+                if delta == 0:
+                    best_market = nearest[2]
+                    match_status = "matched"
+                    match_reason = "total_match_exact"
+                    out.at[idx, "kalshi_line_diff"] = 0.0
                 else:
-                    out.at[idx, "kalshi_match_status"] = "miss"
-                    out.at[idx, "kalshi_match_reason"] = "alt_line_mismatch"
-                    out.at[idx, "kalshi_match_quality"] = "line_mismatched"
-                    continue
+                    best_market = nearest[2]
+                    match_status = "matched"
+                    match_reason = "nearest_line_proxy"
+                    out.at[idx, "kalshi_line_diff"] = delta
 
         else:
             # SPREAD LOGIC
@@ -1154,30 +1151,33 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             raw_spread_line = _safe_text(row.get("spread_line"))
             match = re.search(r"[-+]?\s*(\d+(?:\.\d+)?)", raw_spread_line)
 
-            if not match:
-                # Moneyline fallback
-                is_ml_pick = _safe_text(row.get("market_type")).lower() == "moneyline"
-                if is_ml_pick:
-                    for mkt in markets:
-                        m_title = str(mkt.get("title") or "").lower()
-                        m_subtitle = str(mkt.get("subtitle") or "").lower()
-                        combined_text = f"{m_title} {m_subtitle}"
+            target_line = None
+            if match:
+                target_line = float(match.group(1))
 
-                        if "moneyline" in combined_text or "to win" in combined_text:
-                            pick_team_val = row.get("pick_team")
-                            if pd.notna(pick_team_val):
-                                pick_team = str(pick_team_val)
-                            else:
-                                home_team_val = row.get("home_team")
-                                pick_team = str(home_team_val) if pd.notna(home_team_val) else ""
-                            pick_team_norm = _normalize_team_token(pick_team)
-                            if pick_team_norm and pick_team_norm in _normalize_team_token(m_title):
-                                best_market = mkt
-                                match_status = "matched"
-                                match_reason = "moneyline_match"
-                                break
+            # Moneyline fallback
+            is_ml_pick = _safe_text(row.get("market_type")).lower() == "moneyline" or target_line == 0.0 or target_line is None
+            if is_ml_pick:
+                for mkt in markets:
+                    m_title = str(mkt.get("title") or "").lower()
+                    m_subtitle = str(mkt.get("subtitle") or "").lower()
+                    combined_text = f"{m_title} {m_subtitle}"
+
+                    if "moneyline" in combined_text or "to win" in combined_text:
+                        pick_team_val = row.get("pick_team")
+                        if pd.notna(pick_team_val):
+                            pick_team = str(pick_team_val)
+                        else:
+                            home_team_val = row.get("home_team")
+                            pick_team = str(home_team_val) if pd.notna(home_team_val) else ""
+                        pick_team_norm = _normalize_team_token(pick_team)
+                        if pick_team_norm and pick_team_norm in _normalize_team_token(m_title):
+                            best_market = mkt
+                            match_status = "matched"
+                            match_reason = "moneyline_match"
+                            break
             else:
-                target_line = abs(float(match.group(1)))
+                target_line = abs(target_line)
 
                 kalshi_lines = []
                 for mkt in markets:
@@ -1240,23 +1240,16 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                     nearest = min(kalshi_lines, key=lambda x: abs(float(x[0]) - target_line_abs))
                     delta = abs(float(nearest[0]) - target_line_abs)
 
-                    tolerance = MAX_LINE_TOLERANCE.get(league, 3.0)
-                    if delta <= tolerance:
-                        if delta == 0:
-                            best_market = nearest[2]
-                            match_status = "matched"
-                            match_reason = "spread_match_exact"
-                            out.at[idx, "kalshi_line_diff"] = 0.0
-                        else:
-                            best_market = nearest[2]
-                            match_status = "matched"
-                            match_reason = "nearest_line_proxy"
-                            out.at[idx, "kalshi_line_diff"] = delta
+                    if delta == 0:
+                        best_market = nearest[2]
+                        match_status = "matched"
+                        match_reason = "spread_match_exact"
+                        out.at[idx, "kalshi_line_diff"] = 0.0
                     else:
-                        out.at[idx, "kalshi_match_status"] = "miss"
-                        out.at[idx, "kalshi_match_reason"] = "alt_line_mismatch"
-                        out.at[idx, "kalshi_match_quality"] = "line_mismatched"
-                        continue
+                        best_market = nearest[2]
+                        match_status = "matched"
+                        match_reason = "nearest_line_proxy"
+                        out.at[idx, "kalshi_line_diff"] = delta
 
         if best_market is None:
             # We found no markets or candidates at all

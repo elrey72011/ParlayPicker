@@ -379,10 +379,14 @@ class TeamNameMatcher:
         csv_team: str,
         app_teams: List[str],
         threshold: float = TEAM_FUZZY_THRESHOLD,
+        league: Optional[str] = None,
     ) -> Optional[str]:
         """
         Find best matching team name from app_teams list
         """
+        if league == "NCAAB":
+            threshold = 0.70
+
         csv_normalized = cls.normalize(csv_team)
         
         if not csv_normalized:
@@ -437,11 +441,15 @@ class TeamNameMatcher:
         csv_home: str,
         csv_away: str,
         app_games: List[Tuple[str, str]],
-        threshold: float = TEAM_FUZZY_THRESHOLD
+        threshold: float = TEAM_FUZZY_THRESHOLD,
+        league: Optional[str] = None,
     ) -> Optional[Tuple[str, str]]:
         """
         Match a game (home + away) from CSV to app games list
         """
+        if league == "NCAAB":
+            threshold = 0.70
+
         csv_home_norm = cls.normalize(csv_home)
         csv_away_norm = cls.normalize(csv_away)
         

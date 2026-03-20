@@ -961,7 +961,7 @@ def normalize_team_name_simple(name):
     name = ' '.join(name.split())
     return name
 
-def fuzzy_match_team_robust(target: str, choices: List[str], threshold: float = 80.0) -> Optional[str]:
+def fuzzy_match_team_robust(target: str, choices: List[str], threshold: float = 80.0, league: Optional[str] = None) -> Optional[str]:
     """
     Uses rapidfuzz to find the best match for 'target' in 'choices'.
     Returns the matched string from 'choices' if score > threshold, else None.
@@ -994,7 +994,7 @@ def fuzzy_match_team_robust(target: str, choices: List[str], threshold: float = 
                 return match
     else:
         # Fallback to TeamNameMatcher (difflib) if rapidfuzz missing
-        return TeamNameMatcher.match_team(target, choices, threshold=threshold/100.0)
+        return TeamNameMatcher.match_team(target, choices, threshold=threshold/100.0, league=league)
 
     return None
 
@@ -1873,7 +1873,7 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                 # Use even lower threshold for NCAAB/NCAAF where mascots cause noise
                 # Further reduced from 60.0 to 55.0 for NCAAB to improve matching
                 fuzzy_thresh = 55.0 if lg_key in ["NCAAB", "NCAAF"] else 65.0
-                match_norm = fuzzy_match_team_robust(t_norm, stats_index_norm_keys, threshold=fuzzy_thresh)
+                match_norm = fuzzy_match_team_robust(t_norm, stats_index_norm_keys, threshold=fuzzy_thresh, league=lg_key)
                 if match_norm:
                     # Map back to raw key
                     home_map_local[t_norm] = stats_index_norm_map[match_norm]
@@ -1935,7 +1935,7 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                 # Use even lower threshold for NCAAB/NCAAF where mascots cause noise
                 # Further reduced from 60.0 to 55.0 for NCAAB to improve matching
                 fuzzy_thresh = 55.0 if lg_key in ["NCAAB", "NCAAF"] else 65.0
-                match_norm = fuzzy_match_team_robust(t_norm, stats_index_norm_keys, threshold=fuzzy_thresh)
+                match_norm = fuzzy_match_team_robust(t_norm, stats_index_norm_keys, threshold=fuzzy_thresh, league=lg_key)
                 if match_norm:
                     # Map back to raw key
                     away_map_local[t_norm] = stats_index_norm_map[match_norm]
