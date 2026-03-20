@@ -17,6 +17,17 @@ logger = logging.getLogger(__name__)
 # Track missing keys for terminal warnings
 _MISSING_KEYS_WARNED = set()
 
+KALSHI_NCAAB_OVERRIDES = {
+    "uconn": "connecticut",
+    "ucf": "ucf",
+    "wright st": "wright state",
+    "queens university": "queens nc",
+    "queens university of charlotte": "queens nc",
+    "liu sharks": "long island university",
+    "furman": "furman", # ensure standard capitalization doesn't break it
+    "iowa": "iowa",
+}
+
 # Use __file__ instead of __dirname__ since __dirname__ is not a Python built-in
 DYNAMIC_ALIASES_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "dynamic_aliases.json")
 
@@ -793,9 +804,14 @@ def normalize_team_name(name: str) -> str:
 
     # 1. Apply strip and lower immediately to the incoming parameter
     name = name.strip().lower()
+
+    # 2. Intercept hardcoded overrides BEFORE any string replacement or matching
+    if name in KALSHI_NCAAB_OVERRIDES:
+        return KALSHI_NCAAB_OVERRIDES[name]
+
     cleaned_name = name
 
-    # 2. Perform dictionary lookup on the explicitly cleaned string
+    # 3. Perform dictionary lookup on the explicitly cleaned string
     if cleaned_name in TEAM_MAP:
         name = TEAM_MAP[cleaned_name]
 
