@@ -983,7 +983,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 if pd.notna(event_dt) and event_dt.date() not in candidate_dates:
                     continue
 
-            # Strict Substring Bypass for NCAAB with Aliases
+            # Create temporary padded strings purely for scoring, do NOT overwrite the raw tickers
             if str(league).upper() in ['NCAAB', 'NCAAM']:
                 from core.team_mapper import normalize_team_name
                 alias_map = {
@@ -993,13 +993,17 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                     "liu": "long island university",
                     "ucf": "central florida"
                 }
-                for key in ['title', 'sub_title', 'ticker', 'event_ticker']:
-                    if event.get(key):
-                        # Padded with spaces to avoid substring replacement bugs
-                        val = f" {normalize_team_name(event[key])} "
+
+                # Only mutate the human-readable strings, leave the API keys alone!
+                for key in ['title', 'sub_title', 'subtitle']:
+                    val = event.get(key)
+                    if val:
+                        # Pad and replace using standard string manipulation to preserve original capitalization if possible,
+                        # but since it's just for scoring, lowering is fine here.
+                        score_string = f" {normalize_team_name(val)} "
                         for k_alias, standard in alias_map.items():
-                            val = val.replace(f" {k_alias} ", f" {standard} ")
-                        event[key] = val.strip()
+                            score_string = score_string.replace(f" {k_alias} ", f" {standard} ")
+                        event[key] = score_string.strip()
 
             score = _event_match_score(event, home_team_name, away_team_name, league, date_code=date_code)
             if score > best_event_score:
