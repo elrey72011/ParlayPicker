@@ -533,16 +533,12 @@ def _event_match_score(event: dict[str, Any], home_team: str, away_team: str, le
     if away_tokens:
         score += min(25, 10 * len(away_tokens.intersection(combined_tokens)))
 
-    # Penalize one-sided matches lethally to avoid false positives (e.g., A vs B matching A vs C)
+    # Penalize one-sided matches to avoid false positives
     has_home = (home_code and home_code in combined_upper) or (home_norm and home_norm in combined_norm) or bool(home_tokens.intersection(combined_tokens))
     has_away = (away_code and away_code in combined_upper) or (away_norm and away_norm in combined_norm) or bool(away_tokens.intersection(combined_tokens))
 
     if has_home ^ has_away:
-        score -= 200
-
-    # NEW: Strict penalty if neither team is explicitly found
-    if not has_home and not has_away:
-        score -= 100
+        score -= 30
 
     # Date affinity improves precision while still allowing missing date fields.
     if date_code:
@@ -1023,18 +1019,6 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             # last-chance fallback: accept strongest candidate if it clearly references both teams via code/name tokens
             if best_event_score < 15:
                 best_event_match = None
-
-        # Last-mile fallback: if there's exactly one near-time candidate event in the target series,
-        # use it so line-level matching can decide match quality.
-        if not best_event_match:
-            near_time_events = []
-            for e in series_events:
-                if not _is_within_48h(e, game_date):
-                    continue
-                near_time_events.append(e)
-            if len(near_time_events) == 1:
-                best_event_match = near_time_events[0]
-                out.at[idx, "kalshi_match_quality"] = "event_single_candidate_fallback"
 
         if not best_event_match:
             out.at[idx, "kalshi_match_status"] = "miss"
