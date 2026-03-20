@@ -992,32 +992,39 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 ticker = event.get("ticker", "")
                 norm_kalshi = normalize_team_name(str(title) + " " + str(ticker))
 
-                kalshi_ncaab_aliases = {
-                    "ucf": ["ucf", "central florida"],
-                    "uconn": ["uconn", "connecticut"],
-                    "wright state": ["wright state", "wright st"],
-                    "wright st": ["wright state", "wright st"],
-                    "queens university": ["queens nc", "queens university"],
-                    "liu sharks": ["long island university", "liu sharks", "liu"]
+                # Inject alias cleaner to let native heuristic work without false bypasses
+                alias_map = {
+                    "queens nc": "queens university",
+                    "connecticut": "uconn",
+                    "wright st": "wright state",
+                    "liu": "liu sharks",
+                    "ucf": "ucf"
                 }
+                for k_alias, standard in alias_map.items():
+                    norm_kalshi = norm_kalshi.replace(k_alias, standard)
 
-                matched_bypass = False
-                for team in [norm_home, norm_away]:
-                    if not team or len(team) < 3: # FIXED: allow 3-char like ucf
-                        continue
-
-                    search_terms = kalshi_ncaab_aliases.get(team, [team])
-                    for term in search_terms:
-                        if term in norm_kalshi:
-                            matched_bypass = True
-                            break
-                    if matched_bypass:
-                        break
-
-                if matched_bypass:
-                    best_event_score = 100
-                    best_event_match = event
-                    break # Force match and exit loop
+                # Mutate the event payload directly so that _event_match_score
+                # which pulls from event.get("title") and event.get("ticker") works correctly
+                if "title" in event:
+                    title_mut = event.get("title", "")
+                    for k_alias, standard in alias_map.items():
+                        title_mut = title_mut.replace(k_alias, standard).replace(k_alias.title(), standard.title()).replace(k_alias.upper(), standard.upper())
+                    event["title"] = title_mut
+                if "ticker" in event:
+                    ticker_mut = event.get("ticker", "")
+                    for k_alias, standard in alias_map.items():
+                        ticker_mut = ticker_mut.replace(k_alias, standard).replace(k_alias.upper(), standard.upper())
+                    event["ticker"] = ticker_mut
+                if "sub_title" in event:
+                    subtitle_mut = event.get("sub_title", "")
+                    for k_alias, standard in alias_map.items():
+                        subtitle_mut = subtitle_mut.replace(k_alias, standard).replace(k_alias.title(), standard.title()).replace(k_alias.upper(), standard.upper())
+                    event["sub_title"] = subtitle_mut
+                if "event_ticker" in event:
+                    eticker_mut = event.get("event_ticker", "")
+                    for k_alias, standard in alias_map.items():
+                        eticker_mut = eticker_mut.replace(k_alias, standard).replace(k_alias.upper(), standard.upper())
+                    event["event_ticker"] = eticker_mut
 
             score = _event_match_score(event, home_team_name, away_team_name, league, date_code=date_code)
             if score > best_event_score:
@@ -1335,33 +1342,29 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             home_team = str(row.get('home_team', ''))
             away_team = str(row.get('away_team', ''))
 
-            # Extract raw "Yes" probability using the already resolved kalshi_prob
+            # 1. Extract raw probability
             raw_prob = kalshi_prob
 
-            # 2. Compute implied home robustly to fix pipeline timing
-            implied_home = 0.5
-            for col in ['novig_home_price', 'home_price', 'odds_american']:
-                val = row.get(col)
-                if pd.notna(val) and val != "":
-                    try:
-                        v = float(val)
-                        if abs(v) >= 100:  # American Odds
-                            implied_home = 100.0 / (v + 100.0) if v > 0 else abs(v) / (abs(v) + 100.0)
-                            break
-                        elif 1.0 < v < 100.0:  # Decimal Odds
-                            implied_home = 1.0 / v
-                            break
-                        elif 0.0 < v <= 1.0:  # Already Implied
-                            implied_home = v
-                            break
-                    except Exception:
-                        continue
+            # 2. Fully normalize the title for safe searching
+            from core.team_mapper import normalize_team_name
+            norm_kalshi_title_for_search = normalize_team_name(best_market.get('title', ''))
 
-            # Orient mathematically
-            dist_to_home = abs(raw_prob - implied_home)
-            dist_to_away = abs((1.0 - raw_prob) - implied_home)
+            norm_home = normalize_team_name(home_team)
+            norm_away = normalize_team_name(away_team)
 
-            final_prob = (1.0 - raw_prob) if (dist_to_away < dist_to_home) else raw_prob
+            if "total" in norm_kalshi_title_for_search or "over" in norm_kalshi_title_for_search:
+                final_prob = raw_prob
+            else:
+                home_idx = norm_kalshi_title_for_search.find(norm_home) if norm_home else 999
+                away_idx = norm_kalshi_title_for_search.find(norm_away) if norm_away else 999
+
+                home_idx = 999 if home_idx == -1 else home_idx
+                away_idx = 999 if away_idx == -1 else away_idx
+
+                if away_idx < home_idx:
+                    final_prob = 1.0 - raw_prob
+                else:
+                    final_prob = raw_prob
 
             # Sanity check: probabilities must be between 0 and 1
             if pd.isna(final_prob) or final_prob <= 0.0 or final_prob > 1.0:
