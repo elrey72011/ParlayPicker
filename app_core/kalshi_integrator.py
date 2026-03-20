@@ -1290,49 +1290,40 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 out.at[idx, "kalshi_probability"] = 0.0
                 continue
 
-            # Determine if the market target represents the away team
-            is_market_target_away = False
-            if best_market and best_market.get("title") and away_team_name:
-                market_title_lower = str(best_market.get("title")).lower()
-                market_subtitle_lower = str(best_market.get("subtitle") or "").lower()
-                combined_market_text = f"{market_title_lower} {market_subtitle_lower}"
+            home_team = str(row.get('home_team', ''))
+            away_team = str(row.get('away_team', ''))
 
-                home_shared = {w for w in set(_normalize_team_token(home_team_name).split()).intersection(set(_normalize_team_token(combined_market_text).split())) if len(w) > 2}
-                away_shared = {w for w in set(_normalize_team_token(away_team_name).split()).intersection(set(_normalize_team_token(combined_market_text).split())) if len(w) > 2}
+            # Extract raw "Yes" probability
+            raw_prob = kalshi_prob
 
-                if away_shared and not home_shared:
-                    is_market_target_away = True
-                elif away_shared and home_shared and "moneyline" in market_type.lower():
-                    # For moneyline fallback where both might be mentioned, fallback to pick_team
-                    pick_team_val = row.get("pick_team")
-                    if pd.notna(pick_team_val):
-                        pick_team_norm = _normalize_team_token(str(pick_team_val))
-                        away_norm = _normalize_team_token(away_team_name)
-                        if pick_team_norm == away_norm:
-                            is_market_target_away = True
+            # Explicitly check target string to assign correct probability
+            target_str = str(best_market.get('title', '')).lower()
 
-            # Ensure kalshi_probability always represents the probability of the home team
-            if is_market_target_away and kalshi_prob > 0:
-                kalshi_prob = 1.0 - kalshi_prob
+            # Check if the market is explicitly for the AWAY team to win
+            if away_team.lower() in target_str and home_team.lower() not in target_str:
+                final_prob = 1.0 - raw_prob
+            else:
+                # Assume it's for the home team (standard representation)
+                final_prob = raw_prob
 
             # NEW: Invert probability if we are betting the underdog or the under
             m_type = market_type
-            if "total_under" in m_type and kalshi_prob > 0:
-                kalshi_prob = 1.0 - kalshi_prob
+            if "total_under" in m_type and final_prob > 0:
+                final_prob = 1.0 - final_prob
             elif "spread" in m_type:
                 book_line = pd.to_numeric(row.get("spread_line"), errors="coerce")
-                if pd.notna(book_line) and book_line > 0 and kalshi_prob > 0:
-                    kalshi_prob = 1.0 - kalshi_prob
+                if pd.notna(book_line) and book_line > 0 and final_prob > 0:
+                    final_prob = 1.0 - final_prob
 
             # Sanity check: probabilities must be between 0 and 1
-            if pd.isna(kalshi_prob) or kalshi_prob <= 0.0 or kalshi_prob > 1.0:
-                logger.warning(f"⚠️ Invalid Kalshi probability {kalshi_prob} for {row.get('game_id', 'unknown')}, skipping row")
+            if pd.isna(final_prob) or final_prob <= 0.0 or final_prob > 1.0:
+                logger.warning(f"⚠️ Invalid Kalshi probability {final_prob} for {row.get('game_id', 'unknown')}, skipping row")
                 out.at[idx, "kalshi_match_status"] = "error"
-                out.at[idx, "kalshi_match_reason"] = f"invalid_probability_{kalshi_prob}"
+                out.at[idx, "kalshi_match_reason"] = f"invalid_probability_{final_prob}"
                 out.at[idx, "kalshi_probability"] = 0.0
                 continue
 
-            out.at[idx, "kalshi_probability"] = float(kalshi_prob)
+            out.at[idx, "kalshi_probability"] = float(final_prob)
             out.at[idx, "kalshi_market_title"] = best_market.get("title")
             out.at[idx, "kalshi_event_ticker"] = best_market.get("event_ticker")
             out.at[idx, "kalshi_market_ticker"] = best_market.get("ticker")
@@ -1358,7 +1349,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             # EV = (P_win * (1 - P_contract - Fee)) - ((1 - P_win) * (P_contract + Fee))
             if "calibrated_probability" in out.columns:
                 p_win = float(out.at[idx, "calibrated_probability"])
-                p_contract = kalshi_prob
+                p_contract = final_prob
 
                 # Assume standard order size of 1 contract for basic EV evaluation
                 C = 1.0
