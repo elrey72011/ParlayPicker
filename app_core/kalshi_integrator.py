@@ -965,23 +965,9 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         best_event_match = None
         best_event_score = -1
 
-        candidate_dates = set()
-        if game_date_date is not None:
-            candidate_dates = {
-                game_date_date,
-                game_date_date - timedelta(days=1),
-                game_date_date + timedelta(days=1),
-            }
-
         for event in series_events:
             if not _is_within_48h(event, game_date):
                 continue
-
-            if candidate_dates:
-                close_time = event.get("close_time") or event.get("expiration_time")
-                event_dt = pd.to_datetime(close_time, errors="coerce", utc=True)
-                if pd.notna(event_dt) and event_dt.date() not in candidate_dates:
-                    continue
 
             # Create temporary padded strings purely for scoring, do NOT overwrite the raw tickers
             if str(league).upper() in ['NCAAB', 'NCAAM']:
@@ -1023,11 +1009,6 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             for e in series_events:
                 if not _is_within_48h(e, game_date):
                     continue
-                if candidate_dates:
-                    close_time = e.get("close_time") or e.get("expiration_time")
-                    event_dt = pd.to_datetime(close_time, errors="coerce", utc=True)
-                    if pd.notna(event_dt) and event_dt.date() not in candidate_dates:
-                        continue
                 near_time_events.append(e)
             if len(near_time_events) == 1:
                 best_event_match = near_time_events[0]
@@ -1321,14 +1302,26 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             # 1. Extract raw probability
             raw_prob = kalshi_prob
 
-            # 2. Normalize and Pad strings for flawless Index finding
+            # 2. Extract and translate the specific market title
             from core.team_mapper import normalize_team_name
-            kalshi_title = best_market.get('title', '')
-            norm_title = f" {normalize_team_name(kalshi_title)} "
+            raw_title = best_market.get('title', '')
+            norm_title = f" {normalize_team_name(raw_title)} "
+
+            if league.upper() in ['NCAAB', 'NCAAM']:
+                alias_map = {
+                    "queens nc": "queens university",
+                    "connecticut": "uconn",
+                    "wright st": "wright state",
+                    "liu": "long island university",
+                    "central florida": "ucf"
+                }
+                for k_alias, standard in alias_map.items():
+                    norm_title = norm_title.replace(f" {k_alias} ", f" {standard} ")
+
             pad_home = f" {normalize_team_name(row.get('home_team', ''))} "
             pad_away = f" {normalize_team_name(row.get('away_team', ''))} "
 
-            if "total" in kalshi_title.lower() or "total" in norm_title:
+            if "total" in raw_title.lower() or "total" in norm_title:
                 # Totals are always OVER contracts on Kalshi
                 final_prob = raw_prob
             else:
