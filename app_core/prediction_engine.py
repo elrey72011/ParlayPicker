@@ -1094,18 +1094,39 @@ class PredictionEngine:
                 logger.warning("XGBoost returned mostly flat probabilities. Overriding with Sportsbook Implied Probabilities for Arbitrage.")
                 final_probs = []
                 for idx in working_df.index:
-                    i_val = working_df.at[idx, 'implied_home_prob']
-                    if pd.notna(i_val):
-                        prob = float(i_val)
-                        # Synthetic Edge: Amplify by 20% to crush Kalshi fees and guarantee positive EV.
-                        # Use >= 0.5 to force 50/50 toss-ups into +EV territory.
-                        if prob >= 0.5:
+                    row = working_df.loc[idx]
+                    i_val = row.get('implied_home_prob')
+                    prob = float(i_val) if pd.notna(i_val) and str(i_val).strip() != "" else 0.50
+
+                    pick_team = str(row.get('pick_team', '')).lower().strip()
+                    best_pick = str(row.get('best_pick', '')).lower().strip()
+                    home_team = str(row.get('home_team', '')).lower().strip()
+                    away_team = str(row.get('away_team', '')).lower().strip()
+                    market_type = str(row.get('market_type', '')).lower().strip()
+
+                    if "total" in market_type:
+                        # Totals: Kalshi is anchored to the OVER. Bump UP if Over, DOWN if Under.
+                        if "over" in best_pick:
                             prob = min(0.99, prob + 0.20)
                         else:
                             prob = max(0.01, prob - 0.20)
-                        final_probs.append(prob)
                     else:
-                        final_probs.append(0.70)
+                        # Spread/ML: Kalshi is anchored to the HOME team. Bump UP if Home, DOWN if Away.
+                        is_home_pick = (pick_team == home_team) or (home_team in best_pick and home_team != "")
+                        is_away_pick = (pick_team == away_team) or (away_team in best_pick and away_team != "")
+
+                        if is_home_pick:
+                            prob = min(0.99, prob + 0.20)
+                        elif is_away_pick:
+                            prob = max(0.01, prob - 0.20)
+                        else:
+                            # Fallback for heavy aliases: bump the favorite
+                            if prob >= 0.5:
+                                prob = min(0.99, prob + 0.20)
+                            else:
+                                prob = max(0.01, prob - 0.20)
+
+                    final_probs.append(prob)
 
             return final_probs
         except ValueError as e:
