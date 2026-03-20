@@ -1290,6 +1290,31 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 out.at[idx, "kalshi_probability"] = 0.0
                 continue
 
+            # Determine if the market target represents the away team
+            is_market_target_away = False
+            if best_market and best_market.get("title") and away_team_name:
+                market_title_lower = str(best_market.get("title")).lower()
+                market_subtitle_lower = str(best_market.get("subtitle") or "").lower()
+                combined_market_text = f"{market_title_lower} {market_subtitle_lower}"
+
+                home_shared = {w for w in set(_normalize_team_token(home_team_name).split()).intersection(set(_normalize_team_token(combined_market_text).split())) if len(w) > 2}
+                away_shared = {w for w in set(_normalize_team_token(away_team_name).split()).intersection(set(_normalize_team_token(combined_market_text).split())) if len(w) > 2}
+
+                if away_shared and not home_shared:
+                    is_market_target_away = True
+                elif away_shared and home_shared and "moneyline" in market_type.lower():
+                    # For moneyline fallback where both might be mentioned, fallback to pick_team
+                    pick_team_val = row.get("pick_team")
+                    if pd.notna(pick_team_val):
+                        pick_team_norm = _normalize_team_token(str(pick_team_val))
+                        away_norm = _normalize_team_token(away_team_name)
+                        if pick_team_norm == away_norm:
+                            is_market_target_away = True
+
+            # Ensure kalshi_probability always represents the probability of the home team
+            if is_market_target_away and kalshi_prob > 0:
+                kalshi_prob = 1.0 - kalshi_prob
+
             # NEW: Invert probability if we are betting the underdog or the under
             m_type = market_type
             if "total_under" in m_type and kalshi_prob > 0:

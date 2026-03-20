@@ -506,11 +506,15 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
     # Update Kalshi Diagnostics
     # -----------------------------
     if "kalshi_probability" in analysis_df.columns:
-        matched = int(analysis_df["kalshi_probability"].notna().sum())
+        if "kalshi_match_status" in analysis_df.columns:
+            matched = int(analysis_df["kalshi_match_status"].astype(str).str.lower().eq("matched").sum())
+        else:
+            matched = int(analysis_df["kalshi_probability"].notna().sum())
+
         diagnostics["kalshi_matches"] = matched
         diagnostics["kalshi_match_rate"] = matched / max(len(analysis_df), 1)
         if "kalshi_line_diff" in analysis_df.columns and matched > 0:
-            avg_diff = analysis_df.loc[analysis_df["kalshi_probability"].notna(), "kalshi_line_diff"].mean()
+            avg_diff = analysis_df.loc[analysis_df["kalshi_match_status"].astype(str).str.lower().eq("matched"), "kalshi_line_diff"].mean() if "kalshi_match_status" in analysis_df.columns else analysis_df.loc[analysis_df["kalshi_probability"].notna(), "kalshi_line_diff"].mean()
             diagnostics["kalshi_avg_line_diff"] = avg_diff
             logger.info(f"Kalshi matched {matched} rows with an average line delta of {avg_diff:.4f}")
         else:
@@ -597,7 +601,10 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
                 deferred_warnings.append(f"Gemini analysis failed: {e}")
 
     attempted = int(len(analysis_df)) if isinstance(analysis_df, pd.DataFrame) else 0
-    matched = int(analysis_df["kalshi_probability"].notna().sum()) if "kalshi_probability" in analysis_df.columns else 0
+    if isinstance(analysis_df, pd.DataFrame) and "kalshi_match_status" in analysis_df.columns:
+        matched = int(analysis_df["kalshi_match_status"].astype(str).str.lower().eq("matched").sum())
+    else:
+        matched = int(analysis_df["kalshi_probability"].notna().sum()) if "kalshi_probability" in analysis_df.columns else 0
 
     diagnostics["kalshi_attempted"] = attempted
     diagnostics["kalshi_matches"] = matched
@@ -776,7 +783,9 @@ def main() -> None:
         m9.metric("Positive EV rows", positive_ev_rows)
         m10.metric("Consensus ✅", consensus_agrees)
 
-        kalshi_hits = analysis_df["kalshi_probability"].notna().sum() if analysis_df is not None and not analysis_df.empty and "kalshi_probability" in analysis_df.columns else 0
+        kalshi_hits = int(analysis_df["kalshi_match_status"].astype(str).str.lower().eq("matched").sum()) if analysis_df is not None and not analysis_df.empty and "kalshi_match_status" in analysis_df.columns else (
+            analysis_df["kalshi_probability"].notna().sum() if analysis_df is not None and not analysis_df.empty and "kalshi_probability" in analysis_df.columns else 0
+        )
         total_analysis_len = len(analysis_df) if analysis_df is not None and not analysis_df.empty else 1
         m11.metric("Kalshi Matches", f"{kalshi_hits}/{len(analysis_df) if analysis_df is not None else 0} ({kalshi_hits/total_analysis_len*100:.0f}%)")
 
