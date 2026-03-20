@@ -1299,10 +1299,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 out.at[idx, "kalshi_probability"] = 0.0
                 continue
 
-            # 1. Extract raw probability
-            raw_prob = kalshi_prob
-
-            # 2. Extract and translate the specific market title
+            # 1. Extract and translate the specific market title
             from core.team_mapper import normalize_team_name
             raw_title = best_market.get('title', '')
             norm_title = f" {normalize_team_name(raw_title)} "
@@ -1321,9 +1318,10 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             pad_home = f" {normalize_team_name(row.get('home_team', ''))} "
             pad_away = f" {normalize_team_name(row.get('away_team', ''))} "
 
+            # 2. First-Subject Orientation
             if "total" in raw_title.lower() or "total" in norm_title:
                 # Totals are always OVER contracts on Kalshi
-                final_prob = raw_prob
+                final_prob = kalshi_prob
             else:
                 # Spread/Moneyline: The first team mentioned is the subject of the contract
                 home_idx = norm_title.find(pad_home) if pad_home.strip() else 999
@@ -1333,20 +1331,19 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 away_idx = 999 if away_idx == -1 else away_idx
 
                 if away_idx < home_idx:
-                    # Away team is the subject. Invert so it represents Home team.
-                    final_prob = 1.0 - raw_prob
+                    # Away team is the subject. Invert so it strictly represents Home team.
+                    final_prob = 1.0 - kalshi_prob
                 else:
-                    # Home team is the subject. Keep it.
-                    final_prob = raw_prob
+                    final_prob = kalshi_prob
 
-            # Sanity check: probabilities must be between 0 and 1
+            # Sanity check
             if pd.isna(final_prob) or final_prob <= 0.0 or final_prob > 1.0:
-                logger.warning(f"⚠️ Invalid Kalshi probability {final_prob} for {row.get('game_id', 'unknown')}, skipping row")
                 out.at[idx, "kalshi_match_status"] = "error"
                 out.at[idx, "kalshi_match_reason"] = f"invalid_probability_{final_prob}"
                 out.at[idx, "kalshi_probability"] = 0.0
                 continue
 
+            # 3. Save directly to dataframe
             out.at[idx, "kalshi_probability"] = float(final_prob)
             out.at[idx, "kalshi_market_title"] = best_market.get("title")
             out.at[idx, "kalshi_event_ticker"] = best_market.get("event_ticker")
@@ -1354,41 +1351,6 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             out.at[idx, "kalshi_match_status"] = match_status
             out.at[idx, "kalshi_match_reason"] = match_reason
             out.at[idx, "kalshi_match_quality"] = "line_matched"
-
-            # Dynamic EV Recalibration for Kalshi Alternate Lines
-            # Scale probability down by roughly 2.5% per point of delta shift
-            if "calibrated_probability" in out.columns and pd.notna(out.at[idx, "kalshi_line_diff"]):
-                line_diff = float(out.at[idx, "kalshi_line_diff"])
-                if line_diff > 0:
-                    orig_prob = float(out.at[idx, "calibrated_probability"])
-
-                    # Heuristic probability adjustment (can be tuned per sport)
-                    # A shift of 1 point typically drops probability by ~0.025
-                    adj_prob = orig_prob - (line_diff * 0.025)
-                    adj_prob = max(0.01, min(0.99, adj_prob))
-
-                    out.at[idx, "calibrated_probability"] = adj_prob
-
-            # Recalculate Expected Value applying exact Kalshi Fees
-            # EV = (P_win * (1 - P_contract - Fee)) - ((1 - P_win) * (P_contract + Fee))
-            if "calibrated_probability" in out.columns:
-                p_win = float(out.at[idx, "calibrated_probability"])
-                p_contract = final_prob
-
-                # Assume standard order size of 1 contract for basic EV evaluation
-                C = 1.0
-                # Exact Kalshi Taker fee formula: math.ceil(0.07 * C * P * (1-P) * 100) / 100
-                # Exact Kalshi Maker fee formula: math.ceil(0.0175 * C * P * (1-P) * 100) / 100
-                # Fees are calculated in cents and then converted back to dollars
-                # We use taker fee to be more conservative since maker orders may not fill
-                raw_taker_fee_cents = 0.07 * C * p_contract * (1.0 - p_contract) * 100.0
-                fee_dollars = math.ceil(raw_taker_fee_cents) / 100.0
-
-                ev = (p_win * (1.0 - p_contract - fee_dollars)) - ((1.0 - p_win) * (p_contract + fee_dollars))
-                out.at[idx, "expected_value"] = ev
-
-                # Recalculate simple edge without fees for display
-                out.at[idx, "edge"] = p_win - p_contract
 
     # NA-safe columns to prevent ambiguous boolean evaluation downstream.
     out["kalshi_probability"] = pd.to_numeric(out.get("kalshi_probability"), errors="coerce").fillna(0.0)
