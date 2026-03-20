@@ -483,7 +483,7 @@ def _event_match_score(event: dict[str, Any], home_team: str, away_team: str, le
     home_code = team_code_for_league(league, norm_home).upper()
     away_code = team_code_for_league(league, norm_away).upper()
 
-    # STRICT ALIAS OVERRIDE FOR NCAAB
+    # STRICT ALIAS OVERRIDE FOR NCAAB (Moved to top to bypass penalties)
     if league.upper() in ['NCAAB', 'NCAAM']:
         alias_map = {
             "queens nc": "queens university",
@@ -496,7 +496,8 @@ def _event_match_score(event: dict[str, Any], home_team: str, away_team: str, le
             # Relax boundary constraints to catch names at the edges of strings
             if k_alias in combined_norm or standard in combined_norm:
                 if standard in home_norm or standard in away_norm:
-                    return 100 # Force perfect score to bypass fuzzy threshold
+                    return 100 # Force perfect score immediately
+
 
     score = 0
 
