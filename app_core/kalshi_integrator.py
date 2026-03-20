@@ -453,9 +453,15 @@ def _clean_ncaab_team_for_match(name: Any) -> str:
     return " ".join(tokens)
 
 def _event_match_score(event: dict[str, Any], home_team: str, away_team: str, league: str, date_code: str = "") -> int:
-    title = str(event.get("title") or "")
-    subtitle = str(event.get("sub_title") or "")
-    ticker = str(event.get("event_ticker") or "")
+    from core.team_mapper import normalize_team_name
+    # Normalize bookmaker strings
+    norm_home = normalize_team_name(home_team)
+    norm_away = normalize_team_name(away_team)
+
+    # Normalize Kalshi strings
+    title = normalize_team_name(str(event.get("title") or ""))
+    subtitle = normalize_team_name(str(event.get("sub_title") or ""))
+    ticker = normalize_team_name(str(event.get("event_ticker") or ""))
 
     combined_norm = " ".join([
         _normalize_team_token(title),
@@ -465,17 +471,17 @@ def _event_match_score(event: dict[str, Any], home_team: str, away_team: str, le
     combined_upper = f"{title} {subtitle} {ticker}".upper()
     combined_key = _normalized_merge_key(f"{title} {subtitle} {ticker}")
 
-    home_norm = _normalize_team_token(home_team)
-    away_norm = _normalize_team_token(away_team)
-    home_clean = clean_team_name(home_team)
-    away_clean = clean_team_name(away_team)
-    home_key = _normalized_merge_key(home_team)
-    away_key = _normalized_merge_key(away_team)
-    home_tokens = _team_tokens_for_match(home_team)
-    away_tokens = _team_tokens_for_match(away_team)
+    home_norm = _normalize_team_token(norm_home)
+    away_norm = _normalize_team_token(norm_away)
+    home_clean = clean_team_name(norm_home)
+    away_clean = clean_team_name(norm_away)
+    home_key = _normalized_merge_key(norm_home)
+    away_key = _normalized_merge_key(norm_away)
+    home_tokens = _team_tokens_for_match(norm_home)
+    away_tokens = _team_tokens_for_match(norm_away)
 
-    home_code = team_code_for_league(league, home_team).upper()
-    away_code = team_code_for_league(league, away_team).upper()
+    home_code = team_code_for_league(league, norm_home).upper()
+    away_code = team_code_for_league(league, norm_away).upper()
 
     score = 0
 
@@ -1296,24 +1302,21 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             # Extract raw "Yes" probability
             raw_prob = kalshi_prob
 
-            # Explicitly check target string to assign correct probability
-            target_str = str(best_market.get('title', '')).lower()
+            # Get the bookmaker's implied home probability for orientation
+            implied_home = pd.to_numeric(row.get('implied_home_prob', 0.5), errors='coerce')
+            if pd.isna(implied_home):
+                implied_home = 0.5
 
-            # Check if the market is explicitly for the AWAY team to win
-            if away_team.lower() in target_str and home_team.lower() not in target_str:
+            # Orient mathematically: Is raw_prob closer to the Home implied or Away implied?
+            dist_to_home = abs(raw_prob - implied_home)
+            dist_to_away = abs((1.0 - raw_prob) - implied_home)
+
+            if dist_to_away < dist_to_home:
+                # The raw_prob was for the Away team. Invert it for the Home team.
                 final_prob = 1.0 - raw_prob
             else:
-                # Assume it's for the home team (standard representation)
+                # The raw_prob was for the Home team. Keep it.
                 final_prob = raw_prob
-
-            # NEW: Invert probability if we are betting the underdog or the under
-            m_type = market_type
-            if "total_under" in m_type and final_prob > 0:
-                final_prob = 1.0 - final_prob
-            elif "spread" in m_type:
-                book_line = pd.to_numeric(row.get("spread_line"), errors="coerce")
-                if pd.notna(book_line) and book_line > 0 and final_prob > 0:
-                    final_prob = 1.0 - final_prob
 
             # Sanity check: probabilities must be between 0 and 1
             if pd.isna(final_prob) or final_prob <= 0.0 or final_prob > 1.0:
