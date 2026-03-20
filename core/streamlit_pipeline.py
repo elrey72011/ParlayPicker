@@ -1710,6 +1710,11 @@ def run_analysis_pipeline(
 
     stale = is_stale_schedule(raw_base_df, theover_rows)
     base_df = raw_base_df.copy()
+
+    # Drop stale odds columns to prevent leak into live odds merge
+    leak_cols = ['odds_american', 'odds_home', 'odds_away', 'odds_source', 'market_probability', 'implied_home_prob', 'decimal_odds']
+    base_df = base_df.drop(columns=[c for c in leak_cols if c in base_df.columns], errors='ignore')
+
     stale_base_rows_removed = 0
 
     theover_rows = _enforce_identity_string_dtype(theover_rows, ["league", "home_team", "away_team"])
