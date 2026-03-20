@@ -493,10 +493,23 @@ def _event_match_score(event: dict[str, Any], home_team: str, away_team: str, le
             "central florida": "ucf"
         }
         for k_alias, standard in alias_map.items():
-            # Relax boundary constraints to catch names at the edges of strings
-            if k_alias in combined_norm or standard in combined_norm:
-                if standard in home_norm or standard in away_norm:
-                    return 100 # Force perfect score immediately
+            # 1. Is this specific row trying to match one of our aliased teams?
+            is_alias_game = standard in home_norm or standard in away_norm
+
+            if is_alias_game:
+                # 2. Is the alias (or its standard name) present in the Kalshi string?
+                alias_in_kalshi = k_alias in combined_norm or standard in combined_norm
+
+                # 3. Identify the opponent and check if THEY are also in the Kalshi string
+                opponent_norm = away_norm if standard in home_norm else home_norm
+
+                # Strip noise from opponent for safer matching
+                opponent_clean = " ".join([w for w in opponent_norm.split() if len(w) > 2 and w not in TEAM_NOISE_WORDS])
+                opponent_in_kalshi = opponent_clean in combined_norm if opponent_clean else False
+
+                # 4. ONLY return 100 if BOTH the aliased team and the opponent match!
+                if alias_in_kalshi and opponent_in_kalshi:
+                    return 100
 
 
     score = 0
