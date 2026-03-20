@@ -19,5 +19,6 @@ def calculate_ev(prob, odds):
 
 def compute_ev(prediction: Prediction) -> float:
     """Typed EV helper that avoids fragile DataFrame column access."""
-    prob = (prediction.ai_probability + prediction.ml_probability) / 2
+    # Use max() so highly confident ML Arbitrage edges aren't dragged below breakeven by Kalshi's baseline
+    prob = max(prediction.ai_probability, prediction.ml_probability)
     return float(calculate_ev(prob, -110))
