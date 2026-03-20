@@ -1096,29 +1096,33 @@ class PredictionEngine:
                     i_val = row.get('implied_home_prob')
                     prob = float(i_val) if pd.notna(i_val) and str(i_val).strip() != "" else 0.50
                     
-                    pick_team = str(row.get('pick_team', '')).lower().strip()
-                    best_pick = str(row.get('best_pick', '')).lower().strip()
-                    home_team = str(row.get('home_team', '')).lower().strip()
-                    away_team = str(row.get('away_team', '')).lower().strip()
+                    # THE FIX: Run picks through clean_team_name() so 'iowa state' perfectly matches 'iowastate'
+                    pick_team = clean_team_name(str(row.get('pick_team', '')))
+                    best_pick_raw = str(row.get('best_pick', '')).lower()
+                    best_pick_clean = clean_team_name(best_pick_raw)
+
+                    home_team = str(row.get('home_team', ''))
+                    away_team = str(row.get('away_team', ''))
                     market_type = str(row.get('market_type', '')).lower().strip()
                     
-                    if "total" in market_type:
+                    # Aggressive check for Totals to prevent spread logic from crushing Over/Unders
+                    if "total" in market_type or "over" in best_pick_raw or "under" in best_pick_raw:
                         # Totals: Kalshi is anchored to the OVER. Bump UP if Over, DOWN if Under.
-                        if "over" in best_pick:
+                        if "over" in best_pick_raw:
                             prob = min(0.99, prob + 0.35)
                         else:
                             prob = max(0.01, prob - 0.35)
                     else:
                         # Spread/ML: Kalshi is anchored to the HOME team. Bump UP if Home, DOWN if Away.
-                        is_home_pick = (pick_team == home_team) or (home_team in best_pick and home_team != "")
-                        is_away_pick = (pick_team == away_team) or (away_team in best_pick and away_team != "")
+                        is_home_pick = (pick_team == home_team) or (home_team in best_pick_clean and home_team != "")
+                        is_away_pick = (pick_team == away_team) or (away_team in best_pick_clean and away_team != "")
                         
                         if is_home_pick:
                             prob = min(0.99, prob + 0.35)
                         elif is_away_pick:
                             prob = max(0.01, prob - 0.35)
                         else:
-                            # Fallback for heavy aliases: bump the favorite
+                            # Absolute fallback: Bump the favorite
                             if prob >= 0.5:
                                 prob = min(0.99, prob + 0.35)
                             else:
