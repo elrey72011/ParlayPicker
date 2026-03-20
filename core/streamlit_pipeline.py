@@ -1958,6 +1958,15 @@ def run_analysis_pipeline(
             if needs_prediction.any():
                 merge_identity_keys = ["league", "home_team", "away_team", "game_date"]
                 merged = _normalize_merge_keys(merged, merge_identity_keys)
+
+                if 'decimal_odds' in merged.columns:
+                    merged['implied_home_prob'] = merged.get('implied_home_prob', pd.Series(dtype=float))
+                    merged['implied_home_prob'] = pd.to_numeric(merged['implied_home_prob'], errors='coerce').fillna(
+                        1 / pd.to_numeric(merged['decimal_odds'], errors='coerce')
+                    )
+                if 'kalshi_probability' in merged.columns:
+                    merged['kalshi_prob'] = merged.get('kalshi_prob', merged['kalshi_probability'])
+
                 engine = PredictionEngine()
                 ml_model_actually_loaded = not getattr(engine, "use_fallback", True)
 
