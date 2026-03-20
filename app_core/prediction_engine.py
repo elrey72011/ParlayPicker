@@ -176,7 +176,9 @@ def clean_team_name(series: pd.Series) -> pd.Series:
     return typo_map.get(team, team)
 
 def _clean_team_for_matchup(value: Any) -> str:
-    return clean_team_name(value)
+    from core.team_mapper import normalize_team_name as _global_normalize
+    norm_val = _global_normalize(str(value) if pd.notna(value) else "")
+    return clean_team_name(norm_val)
 
 
 def _normalize_identity_merge_keys(df: pd.DataFrame, keys: list[str]) -> pd.DataFrame:
@@ -597,19 +599,31 @@ class PredictionEngine:
         if df is None or df.empty:
             return []
 
-        # Prevent inference on dates > 60 days from historical matrix max date
+        # Prevent inference on dates > 60 days from system date OR historical matrix max date
         try:
             if "game_date" in df.columns:
                 from config import DATA_DIR
                 master_file = DATA_DIR / 'master_all_sports.csv'
+                max_hist_date = None
+
                 if master_file.exists():
                     master_df = pd.read_csv(master_file, usecols=["commence_time"])
                     max_hist_date = pd.to_datetime(master_df["commence_time"]).max()
 
-                    df_dates = pd.to_datetime(df["game_date"], errors="coerce")
-                    if (df_dates > max_hist_date + pd.Timedelta(days=60)).any():
-                        logger.warning("Predict Batch: Predicting on dates beyond historical data limits. Features may be stale.")
-                        # self.use_fallback = True  # Bypassed per user request
+                # Calculate upper bounds dynamically from system date + master CSV date
+                system_date = pd.Timestamp.now(tz="UTC")
+                valid_upper_bound = system_date + pd.Timedelta(days=60)
+
+                if max_hist_date is not None:
+                    # Allow up to 60 days past WHICHEVER is more recent: the master slate limit or today's date
+                    valid_upper_bound = max(valid_upper_bound, max_hist_date + pd.Timedelta(days=60))
+
+                # Normalize dataframe dates and remove timezone for comparison
+                df_dates = pd.to_datetime(df["game_date"], errors="coerce", utc=True)
+
+                if (df_dates > valid_upper_bound).any():
+                    logger.warning(f"Predict Batch: Predicting on dates beyond dynamic historical data limits ({valid_upper_bound.strftime('%Y-%m-%d')}). Features may be stale.")
+                    # self.use_fallback = True  # Bypassed per user request
         except Exception as e:
             logger.error(f"Failed to validate historical date limits: {e}")
 
@@ -627,10 +641,11 @@ class PredictionEngine:
             )
             if "game_date" not in working_df.columns:
                 working_df["game_date"] = ""
+            from core.team_mapper import normalize_team_name as _global_normalize
             if "home_team" in working_df.columns:
-                working_df["home_team"] = clean_team_name(working_df["home_team"].astype("string").fillna("").str.strip())
+                working_df["home_team"] = clean_team_name(working_df["home_team"].apply(lambda x: _global_normalize(str(x) if pd.notna(x) else "")).astype("string").fillna("").str.strip())
             if "away_team" in working_df.columns:
-                working_df["away_team"] = clean_team_name(working_df["away_team"].astype("string").fillna("").str.strip())
+                working_df["away_team"] = clean_team_name(working_df["away_team"].apply(lambda x: _global_normalize(str(x) if pd.notna(x) else "")).astype("string").fillna("").str.strip())
             working_df = _normalize_identity_merge_keys(working_df, ["league", "home_team", "away_team"])
             home_series = _series_or_default(working_df, "home_team", "")
             away_series = _series_or_default(working_df, "away_team", "")
@@ -749,9 +764,10 @@ class PredictionEngine:
 
                             # Clean team names in hist_df
                             if "home_team" in hist_df.columns and "away_team" in hist_df.columns:
-                                # Aggressive formatting: strip non-alphanumeric, lowercase, apply typo map
-                                hist_df["home_team"] = clean_team_name(hist_df["home_team"].astype("string").fillna("").str.strip())
-                                hist_df["away_team"] = clean_team_name(hist_df["away_team"].astype("string").fillna("").str.strip())
+                                # Aggressive formatting: normalize, strip non-alphanumeric, lowercase, apply typo map
+                                from core.team_mapper import normalize_team_name as _global_normalize
+                                hist_df["home_team"] = clean_team_name(hist_df["home_team"].apply(lambda x: _global_normalize(str(x) if pd.notna(x) else "")).astype("string").fillna("").str.strip())
+                                hist_df["away_team"] = clean_team_name(hist_df["away_team"].apply(lambda x: _global_normalize(str(x) if pd.notna(x) else "")).astype("string").fillna("").str.strip())
 
                                 # Use the normalized names directly for match building
                                 hist_df["matchup_id"] = [
@@ -816,7 +832,6 @@ class PredictionEngine:
                                             if row_league and "league_norm" in hist_df.columns:
                                                 match = match[match["league_norm"].astype("string").str.upper().eq(row_league).fillna(False)]
 
-                                            # We no longer restrict by 7 days. Just get all prior matches
                                             if not match.empty and row_game_date_dt is not None and not pd.isna(row_game_date_dt):
                                                 try:
                                                     target_dt = pd.Timestamp(row_game_date_dt).normalize()
@@ -993,11 +1008,15 @@ class PredictionEngine:
 
                 # Re-check NaN ratio after fallback
                 row_nan_ratio_after = raw_numeric.isna().sum(axis=1) / max(len(VERTEX_FEATURE_COLUMNS), 1)
-                if row_nan_ratio_after.mean() > 0.5:
+
+                # Calibration / Fallback override: Even if matrix is still somewhat sparse,
+                # we don't abort completely unless we have NOTHING. Fill missing with 0.0 for stats, 0.5 for probs.
+
+                if row_nan_ratio_after.mean() > 0.8:
                     # Log which specific features were missing (NaN)
                     missing_features = raw_numeric.columns[raw_numeric.isna().any()].tolist()
                     logger.warning(
-                        f"Feature matrix is STILL empty after unlimited lookback. "
+                        f"Feature matrix is critically empty (>80% NaN) after unlimited lookback. "
                         f"Missing features causing failure: {missing_features}. "
                         f"Applying Hard Safety Net using implied market probabilities."
                     )
