@@ -706,13 +706,13 @@ def _select_probability(market: dict[str, Any]) -> float | None:
     bid_ask_spread = abs(bid - ask)
     if (bid + ask) > 2.0:
         # Values are in cents
-        if bid_ask_spread > 20.0:
-            logger.warning(f"Kalshi market illiquid: bid {bid}, ask {ask}. Spread > 20 cents.")
+        if bid_ask_spread > 40.0:
+            logger.warning(f"Kalshi market illiquid: bid {bid}, ask {ask}. Spread > 40 cents.")
             return None
     else:
         # Values are in dollars
-        if bid_ask_spread > 0.20:
-            logger.warning(f"Kalshi market illiquid: bid {bid}, ask {ask}. Spread > 20 cents.")
+        if bid_ask_spread > 0.40:
+            logger.warning(f"Kalshi market illiquid: bid {bid}, ask {ask}. Spread > 40 cents.")
             return None
 
     if (bid + ask) > 2.0:
@@ -842,7 +842,7 @@ def _fetch_series_cache(series_set: set[str], date_codes: set[str] | None = None
 
 
 
-def _is_within_48h(item: dict[str, Any], game_date_obj: pd.Timestamp) -> bool:
+def _is_within_72h(item: dict[str, Any], game_date_obj: pd.Timestamp) -> bool:
     if pd.isna(game_date_obj):
         return True
 
@@ -862,7 +862,7 @@ def _is_within_48h(item: dict[str, Any], game_date_obj: pd.Timestamp) -> bool:
         else:
             game_date_obj = game_date_obj.tz_convert('UTC')
 
-        return abs(kalshi_dt - game_date_obj) <= pd.Timedelta(hours=48)
+        return abs(kalshi_dt - game_date_obj) <= pd.Timedelta(hours=72)
     except Exception as e:
         logger.warning(f"Timezone matching error: {e}")
         return True
@@ -994,7 +994,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         best_event_score = -1
 
         for event in series_events:
-            if not _is_within_48h(event, game_date):
+            if not _is_within_72h(event, game_date):
                 continue
 
             # Create temporary padded strings purely for scoring, do NOT overwrite the raw tickers
@@ -1027,7 +1027,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         # Conservative acceptance threshold; tuned to reduce false misses for abbreviated Kalshi events.
         if best_event_score < 25:
             # last-chance fallback: accept strongest candidate if it clearly references both teams via code/name tokens
-            if best_event_score < 15:
+            if best_event_score < 10:
                 best_event_match = None
 
         if not best_event_match:
@@ -1046,7 +1046,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                     {
                         "title": str(e.get("title")),
                         "subtitle": str(e.get("sub_title"))
-                    } for e in series_events if _is_within_48h(e, game_date)
+                    } for e in series_events if _is_within_72h(e, game_date)
                 ]
 
                 unmatched_list.append({
@@ -1132,12 +1132,12 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                     if bid == 0.0 or ask == 0.0:
                         kalshi_prob = None
                     elif (bid + ask) > 2.0:
-                        if abs(bid - ask) > 20.0:
+                        if abs(bid - ask) > 40.0:
                             kalshi_prob = None
                         else:
                             kalshi_prob = (bid + ask) / 200.0
                     elif bid > 0 and ask > 0:
-                        if abs(bid - ask) > 0.20:
+                        if abs(bid - ask) > 0.40:
                             kalshi_prob = None
                         else:
                             kalshi_prob = (bid + ask) / 2.0
@@ -1245,12 +1245,12 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                             if bid == 0.0 or ask == 0.0:
                                 kalshi_prob = None
                             elif (bid + ask) > 2.0:
-                                if abs(bid - ask) > 20.0:
+                                if abs(bid - ask) > 40.0:
                                     kalshi_prob = None
                                 else:
                                     kalshi_prob = (bid + ask) / 200.0
                             elif bid > 0 and ask > 0:
-                                if abs(bid - ask) > 0.20:
+                                if abs(bid - ask) > 0.40:
                                     kalshi_prob = None
                                 else:
                                     kalshi_prob = (bid + ask) / 2.0
@@ -1294,8 +1294,8 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                     kalshi_prob = None
                 elif bid > 0 and ask > 0:
                     # Values are in dollars
-                    if abs(bid - ask) > 0.20:
-                        logger.warning(f"Kalshi market illiquid: spread > 0.20 for {best_market.get('ticker')}")
+                    if abs(bid - ask) > 0.40:
+                        logger.warning(f"Kalshi market illiquid: spread > 0.40 for {best_market.get('ticker')}")
                         kalshi_prob = None
                     else:
                         kalshi_prob = (bid + ask) / 2.0
