@@ -685,9 +685,14 @@ class PredictionEngine:
                 k_prob = None
                 for col in ['kalshi_probability', 'kalshi_prob']:
                     val = row.get(col)
-                    if pd.notna(val) and val != "" and float(val) > 0.0:
-                        k_prob = float(val)
-                        break
+                    if pd.notna(val) and val != "":
+                        try:
+                            numeric_k = float(val)
+                            if numeric_k > 0.0:
+                                k_prob = numeric_k
+                                break
+                        except Exception:
+                            continue
                 working_df.at[idx, 'kalshi_prob'] = k_prob if k_prob else 0.5
 
                 # 2. Implied Home Prob
@@ -699,7 +704,8 @@ class PredictionEngine:
                             numeric_val = float(val)
                             if numeric_val != 0.5 and numeric_val != 0.0:
                                 if abs(numeric_val) >= 100:
-                                    i_prob = _american_to_prob_safe(numeric_val)
+                                    # Inline American Odds Conversion
+                                    i_prob = 100.0 / (numeric_val + 100.0) if numeric_val > 0 else abs(numeric_val) / (abs(numeric_val) + 100.0)
                                     break
                                 elif 0 < numeric_val <= 1.0:
                                     i_prob = numeric_val
@@ -1014,7 +1020,7 @@ class PredictionEngine:
                                         numeric_val = float(val)
                                         if numeric_val != 0.5 and numeric_val != 0.0:
                                             if abs(numeric_val) >= 100:
-                                                prob = _american_to_prob_safe(numeric_val)
+                                                prob = 100.0 / (numeric_val + 100.0) if numeric_val > 0 else abs(numeric_val) / (abs(numeric_val) + 100.0)
                                                 break
                                             elif 0 < numeric_val <= 1.0:
                                                 prob = numeric_val
