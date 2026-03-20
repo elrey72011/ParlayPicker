@@ -483,6 +483,25 @@ def _event_match_score(event: dict[str, Any], home_team: str, away_team: str, le
     home_code = team_code_for_league(league, norm_home).upper()
     away_code = team_code_for_league(league, norm_away).upper()
 
+    # STRICT ALIAS OVERRIDE FOR NCAAB
+    if league.upper() in ['NCAAB', 'NCAAM']:
+        alias_map = {
+            "queens nc": "queens university",
+            "connecticut": "uconn",
+            "wright st": "wright state",
+            "liu": "long island university",
+            "central florida": "ucf"
+        }
+        # Create padded strings for safe matching
+        padded_title = f" {combined_norm} "
+        padded_home = f" {home_norm} "
+        padded_away = f" {away_norm} "
+
+        for k_alias, standard in alias_map.items():
+            if f" {k_alias} " in padded_title:
+                if f" {standard} " in padded_home or f" {standard} " in padded_away:
+                    return 100 # Force perfect score to bypass fuzzy threshold
+
     score = 0
 
     # Strong signal: explicit Kalshi codes in ticker/title payload
@@ -1291,19 +1310,22 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 out.at[idx, "kalshi_match_reason"] = "illiquid_market"
                 continue
 
-            kalshi_prob = _safe_float(kalshi_prob)
-            if kalshi_prob == 0.0:
+            from core.team_mapper import normalize_team_name as _global_normalize
+
+            # 1. Extract raw Kalshi probability safely
+            raw_prob = _safe_float(kalshi_prob)
+
+            if raw_prob == 0.0:
                 out.at[idx, "kalshi_match_status"] = "miss"
                 out.at[idx, "kalshi_match_reason"] = "zero_probability"
                 out.at[idx, "kalshi_probability"] = 0.0
                 continue
 
-            # 1. Extract and translate the specific market title
-            from core.team_mapper import normalize_team_name as _global_normalize
-
-            raw_title = best_market.get('title', '')
+            # 2. Extract specific market title and normalize
+            raw_title = str(best_market.get('title', ''))
             norm_title = f" {_global_normalize(raw_title)} "
 
+            # 3. Apply aliases to the market title for accurate indexing
             if league.upper() in ['NCAAB', 'NCAAM']:
                 alias_map = {
                     "queens nc": "queens university",
@@ -1315,15 +1337,16 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 for k_alias, standard in alias_map.items():
                     norm_title = norm_title.replace(f" {k_alias} ", f" {standard} ")
 
-            pad_home = f" {_global_normalize(row.get('home_team', ''))} "
-            pad_away = f" {_global_normalize(row.get('away_team', ''))} "
+            pad_home = f" {_global_normalize(str(row.get('home_team', '')))} "
+            pad_away = f" {_global_normalize(str(row.get('away_team', '')))} "
 
-            # 2. First-Subject Orientation
-            if "total" in raw_title.lower() or "total" in norm_title:
-                # Totals are always OVER contracts on Kalshi
-                final_prob = kalshi_prob
+            # 4. First-Subject Orientation Logic
+            market_type_str = str(row.get('market_type', '')).lower()
+            if "total" in raw_title.lower() or "total" in norm_title or "total" in market_type_str:
+                # Totals contracts always represent the OVER
+                final_prob = raw_prob
             else:
-                # Spread/Moneyline: The first team mentioned is the subject of the contract
+                # Spread/Moneyline: The first team mentioned is the subject
                 home_idx = norm_title.find(pad_home) if pad_home.strip() else 999
                 away_idx = norm_title.find(pad_away) if pad_away.strip() else 999
 
@@ -1331,20 +1354,20 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 away_idx = 999 if away_idx == -1 else away_idx
 
                 if away_idx < home_idx:
-                    # Away team is the subject. Invert so it strictly represents Home team.
-                    final_prob = 1.0 - kalshi_prob
+                    # Away team is the subject. Invert to anchor to Home team.
+                    final_prob = 1.0 - raw_prob
                 else:
-                    final_prob = kalshi_prob
+                    final_prob = raw_prob
 
             # Sanity check
             if pd.isna(final_prob) or final_prob <= 0.0 or final_prob > 1.0:
-                logger.warning(f"⚠️ Invalid Kalshi probability {final_prob} for {row.get('game_id', 'unknown')}, skipping row")
+                logger.warning(f"⚠️ Invalid Kalshi probability {final_prob}, skipping row")
                 out.at[idx, "kalshi_match_status"] = "error"
                 out.at[idx, "kalshi_match_reason"] = f"invalid_probability_{final_prob}"
                 out.at[idx, "kalshi_probability"] = 0.0
                 continue
 
-            # 3. Save directly to dataframe. NO EV MATH HERE.
+            # 5. Save explicitly to dataframe
             out.at[idx, "kalshi_probability"] = float(final_prob)
             out.at[idx, "kalshi_market_title"] = best_market.get("title")
             out.at[idx, "kalshi_event_ticker"] = best_market.get("event_ticker")
