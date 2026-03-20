@@ -986,45 +986,20 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             # Strict Substring Bypass for NCAAB with Aliases
             if str(league).upper() in ['NCAAB', 'NCAAM']:
                 from core.team_mapper import normalize_team_name
-                norm_home = normalize_team_name(home_team_name)
-                norm_away = normalize_team_name(away_team_name)
-                title = event.get("title", "")
-                ticker = event.get("ticker", "")
-                norm_kalshi = normalize_team_name(str(title) + " " + str(ticker))
-
-                # Inject alias cleaner to let native heuristic work without false bypasses
                 alias_map = {
                     "queens nc": "queens university",
                     "connecticut": "uconn",
                     "wright st": "wright state",
-                    "liu": "liu sharks",
-                    "ucf": "ucf"
+                    "liu": "long island university",
+                    "ucf": "central florida"
                 }
-                for k_alias, standard in alias_map.items():
-                    norm_kalshi = norm_kalshi.replace(k_alias, standard)
-
-                # Mutate the event payload directly so that _event_match_score
-                # which pulls from event.get("title") and event.get("ticker") works correctly
-                if "title" in event:
-                    title_mut = event.get("title", "")
-                    for k_alias, standard in alias_map.items():
-                        title_mut = title_mut.replace(k_alias, standard).replace(k_alias.title(), standard.title()).replace(k_alias.upper(), standard.upper())
-                    event["title"] = title_mut
-                if "ticker" in event:
-                    ticker_mut = event.get("ticker", "")
-                    for k_alias, standard in alias_map.items():
-                        ticker_mut = ticker_mut.replace(k_alias, standard).replace(k_alias.upper(), standard.upper())
-                    event["ticker"] = ticker_mut
-                if "sub_title" in event:
-                    subtitle_mut = event.get("sub_title", "")
-                    for k_alias, standard in alias_map.items():
-                        subtitle_mut = subtitle_mut.replace(k_alias, standard).replace(k_alias.title(), standard.title()).replace(k_alias.upper(), standard.upper())
-                    event["sub_title"] = subtitle_mut
-                if "event_ticker" in event:
-                    eticker_mut = event.get("event_ticker", "")
-                    for k_alias, standard in alias_map.items():
-                        eticker_mut = eticker_mut.replace(k_alias, standard).replace(k_alias.upper(), standard.upper())
-                    event["event_ticker"] = eticker_mut
+                for key in ['title', 'sub_title', 'ticker', 'event_ticker']:
+                    if event.get(key):
+                        # Padded with spaces to avoid substring replacement bugs
+                        val = f" {normalize_team_name(event[key])} "
+                        for k_alias, standard in alias_map.items():
+                            val = val.replace(f" {k_alias} ", f" {standard} ")
+                        event[key] = val.strip()
 
             score = _event_match_score(event, home_team_name, away_team_name, league, date_code=date_code)
             if score > best_event_score:
@@ -1339,31 +1314,32 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 out.at[idx, "kalshi_probability"] = 0.0
                 continue
 
-            home_team = str(row.get('home_team', ''))
-            away_team = str(row.get('away_team', ''))
-
             # 1. Extract raw probability
             raw_prob = kalshi_prob
 
-            # 2. Fully normalize the title for safe searching
+            # 2. Normalize and Pad strings for flawless Index finding
             from core.team_mapper import normalize_team_name
-            norm_kalshi_title_for_search = normalize_team_name(best_market.get('title', ''))
+            kalshi_title = best_market.get('title', '')
+            norm_title = f" {normalize_team_name(kalshi_title)} "
+            pad_home = f" {normalize_team_name(row.get('home_team', ''))} "
+            pad_away = f" {normalize_team_name(row.get('away_team', ''))} "
 
-            norm_home = normalize_team_name(home_team)
-            norm_away = normalize_team_name(away_team)
-
-            if "total" in norm_kalshi_title_for_search or "over" in norm_kalshi_title_for_search:
+            if "total" in kalshi_title.lower() or "total" in norm_title:
+                # Totals are always OVER contracts on Kalshi
                 final_prob = raw_prob
             else:
-                home_idx = norm_kalshi_title_for_search.find(norm_home) if norm_home else 999
-                away_idx = norm_kalshi_title_for_search.find(norm_away) if norm_away else 999
+                # Spread/Moneyline: The first team mentioned is the subject of the contract
+                home_idx = norm_title.find(pad_home) if pad_home.strip() else 999
+                away_idx = norm_title.find(pad_away) if pad_away.strip() else 999
 
                 home_idx = 999 if home_idx == -1 else home_idx
                 away_idx = 999 if away_idx == -1 else away_idx
 
                 if away_idx < home_idx:
+                    # Away team is the subject. Invert so it represents Home team.
                     final_prob = 1.0 - raw_prob
                 else:
+                    # Home team is the subject. Keep it.
                     final_prob = raw_prob
 
             # Sanity check: probabilities must be between 0 and 1
