@@ -300,11 +300,12 @@ def show_complete_analysis_workflow():
                 )
             
             with col3:
+                total_games = len(st.session_state['workflow_results']['master'])
                 max_bets = st.number_input(
                     "Max Bets to Show",
-                    min_value=5,
-                    max_value=25,
-                    value=10,
+                    min_value=min(1, total_games) if total_games > 0 else 0,
+                    max_value=max(1, total_games),
+                    value=total_games if total_games > 0 else 0,
                     key="max_bets_show"
                 )
             
@@ -589,7 +590,7 @@ def compute_best_bets(
     master_results: pd.DataFrame,
     min_confidence: float = 0.53,
     min_edge: float = 0.03,
-    max_count: int = 10
+    max_count: Optional[int] = None
 ) -> pd.DataFrame:
     """
     Compute best betting opportunities
@@ -607,8 +608,10 @@ def compute_best_bets(
     # Sort by expected value
     filtered = filtered.sort_values('expected_value', ascending=False)
     
-    # Return top N
-    return filtered.head(max_count)
+    # Return all if max_count is None
+    if max_count is not None:
+        return filtered.head(max_count)
+    return filtered
 
 
 def build_optimal_parlays(
