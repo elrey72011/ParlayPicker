@@ -79,12 +79,12 @@ _NCAAB_LEAGUE_RECOVERY_KEYWORDS = {
 _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball", "women\'s basketball"}
 
 BEST_PICK_COLUMNS = [
-    "parlay_rank",
+    "Triple_Filter_Rank", "parlay_rank",
     "league", "home_team", "away_team", "game_date", "game_time_est", "market_type", "best_pick",
     "calibrated_probability", "expected_value", "edge", "consensus_agreement",
     "odds_american", "odds_source", "market_probability", "ml_probability",
     "kalshi_probability", "kalshi_match_status", "kalshi_match_reason",
-    "gemini_explanation", "gemini_risk_notes", "used_stale_features", "signal_strength",
+    "gemini_explanation", "gemini_risk_notes", "used_stale_features", "Pick_Quality",
 ]
 
 CANONICAL_BET_COLUMNS = [
@@ -1404,6 +1404,81 @@ def is_stale_schedule(base_df: pd.DataFrame, bet_rows_df: pd.DataFrame) -> bool:
     return bool((bet_dates.max() - base_dates.max()) > pd.Timedelta(days=7))
 
 
+def _apply_triple_filter_ranking(df: pd.DataFrame) -> pd.DataFrame:
+    """Triple-Filter Ranking System to distinguish between high-conviction model predictions and conservative statistical floors."""
+    if df is None or df.empty:
+        return df
+
+    final_df = df.copy()
+
+    # 1. Edge Calculation (Brain vs Market)
+    ml_prob = pd.to_numeric(final_df.get('ml_probability'), errors='coerce')
+    theover_prob = pd.to_numeric(final_df.get('theover_probability'), errors='coerce')
+    expected_value = pd.to_numeric(final_df.get('expected_value', 0.0), errors='coerce').fillna(0.0)
+
+    triple_filter_edge = ml_prob - theover_prob
+
+    # 2. Uniqueness Check (Against the high-precision blacklist)
+    BLACKLIST = [0.623034656047821, 0.10671072453260422, 0.48637846, 0.31053704, 0.35, 0.562239, 0.559358, 0.633159]
+
+    if isinstance(ml_prob, pd.Series):
+        final_df['is_unique'] = ml_prob.apply(
+            lambda x: not any(abs(x - b) < 1e-5 for b in BLACKLIST) if pd.notna(x) else False
+        )
+    else:
+        # ml_prob could be a scalar if dataframe has only 1 row or get returns a single value
+        ml_val = float(ml_prob)
+        final_df['is_unique'] = not any(abs(ml_val - b) < 1e-5 for b in BLACKLIST) if pd.notna(ml_val) else False
+
+    # 3. Assign Pick_Quality Tiers (S, A, B, C)
+    tier_scores = []
+    for idx in final_df.index:
+        is_unique = final_df.at[idx, 'is_unique']
+
+        # Accessing values safely in case of scalars
+        edge = triple_filter_edge.at[idx] if isinstance(triple_filter_edge, pd.Series) else triple_filter_edge
+        ev = expected_value.at[idx] if isinstance(expected_value, pd.Series) else expected_value
+        ml = ml_prob.at[idx] if isinstance(ml_prob, pd.Series) else ml_prob
+        theov = theover_prob.at[idx] if isinstance(theover_prob, pd.Series) else theover_prob
+
+        edge = edge if pd.notna(edge) else 0.0
+        ml = ml if pd.notna(ml) else 0.5
+        theov = theov if pd.notna(theov) else 0.5
+
+        if is_unique and edge > 0.15 and ev > 0:
+            tier_scores.append(1)  # S-Tier
+        elif is_unique and edge > 0.08 and ev > 0:
+            tier_scores.append(2)  # A-Tier
+        elif (is_unique and ml > 0.5 and theov > 0.5) or (not is_unique and ev > 0.10):
+            tier_scores.append(3)  # B-Tier
+        elif is_unique and ev > 0:
+            tier_scores.append(4)  # C-Tier
+        else:
+            tier_scores.append(5)  # D-Tier
+
+    final_df['tier_score'] = tier_scores
+
+    # Jules: Use this dictionary for labeling and sorting
+    TIER_LABELS = {
+        1: "S-Tier (The Hammer)",
+        2: "A-Tier (High Value)",
+        3: "B-Tier (Consensus/Safe Floor)",
+        4: "C-Tier (Value)",
+        5: "D-Tier (Weak/Negative)"
+    }
+
+    # Mapping Logic for sorting
+    final_df['Pick_Quality'] = final_df['tier_score'].map(TIER_LABELS)
+
+    # 4. Final Rank Generation
+    final_df = final_df.sort_values(by=['tier_score', 'expected_value'], ascending=[True, False]).reset_index(drop=True)
+    final_df['Triple_Filter_Rank'] = range(1, len(final_df) + 1)
+
+    # Clean up temporary columns
+    final_df = final_df.drop(columns=['is_unique', 'tier_score'], errors='ignore')
+
+    return final_df
+
 def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     if analysis_df is None or analysis_df.empty:
         return pd.DataFrame(columns=BEST_PICK_COLUMNS)
@@ -1516,26 +1591,20 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
 
     if not best.empty:
         best["parlay_rank"] = range(1, len(best) + 1)
-        # Force all top picks per game to display regardless of edge threshold
-        best["signal_strength"] = "Best Pick"
     else:
         best["parlay_rank"] = pd.Series(dtype=int)
-        best["signal_strength"] = pd.Series(dtype="string")
-
-    # Final override: ensure all 25 rows are explicitly tagged as Best Pick
-    # to bypass the UI datagrid negative-EV filter.
-    if not best.empty:
-        best["signal_strength"] = "Best Pick"
-
-    for col in BEST_PICK_COLUMNS:
-        if col not in best.columns:
-            best[col] = pd.NA
 
     # Fake the math at the very end to bypass the > 0 frontend filter is removed since we are strictly enforcing thresholds
     # We leave the actual edge/ev as is.
     if not best.empty:
         best["expected_value"] = pd.to_numeric(best["expected_value"], errors="coerce")
         best["edge"] = pd.to_numeric(best["edge"], errors="coerce")
+
+    best = _apply_triple_filter_ranking(best)
+
+    for col in BEST_PICK_COLUMNS:
+        if col not in best.columns:
+            best[col] = pd.NA
 
     return best[BEST_PICK_COLUMNS]
 
