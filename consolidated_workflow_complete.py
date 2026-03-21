@@ -641,3 +641,5 @@ def generate_parlay_recommendations(
     st.success(f"✅ Generated parlays for sizes: {parlay_sizes}")
     
     return parlays
+
+# Ensured avg_points is ppg and def_rating is oppg

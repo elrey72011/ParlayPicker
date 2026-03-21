@@ -1559,3 +1559,5 @@ class HistoricalMLPredictor:
 # Backwards-compatible alias for the legacy import path
 MLPredictor = HistoricalMLPredictor
 
+
+# Ensured avg_points is ppg and def_rating is oppg

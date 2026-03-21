@@ -121,6 +121,9 @@ NCAAB_EXTRA_MAP = {
     "utah tech trailblazers": "Utah Tech",
     "fiu panthers": "Florida Intl",
     "fau owls": "Florida Atlantic",
+    "north carolina wilmington": "UNC Wilmington",
+    "michigan st spartans": "Michigan State",
+    "saint louis": "St. Louis",
 }
 
 TEAM_MAP = {

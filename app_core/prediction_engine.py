@@ -1040,6 +1040,17 @@ class PredictionEngine:
 
                                             # Handle Differentials (Negation logic)
                                             # We also need to explicitly handle sentiment_diff if roles are swapped
+
+                                            # explicit mapping to match CSV column names
+                                            csv_diff_mapping = {
+                                                "feature_diff_win_pct": "win_pct_diff",
+                                                "feature_diff_ppg": "ppg_diff",
+                                                "feature_diff_oppg": "oppg_diff",
+                                                "feature_diff_streak": "streak_diff",
+                                                "feature_diff_last5": "pd_last5_diff",
+                                                "sentiment_diff": "sentiment_diff"
+                                            }
+
                                             diff_stats_with_sentiment = diff_stats + ["sentiment_diff"]
                                             for diff in diff_stats_with_sentiment:
                                                 h_diff = 0.0
@@ -1047,9 +1058,19 @@ class PredictionEngine:
                                                     if diff in latest_home and pd.notna(latest_home[diff]):
                                                         h_diff = float(latest_home[diff])
                                                     else:
-                                                        raw_diff = diff.replace('feature_', '')
-                                                        if raw_diff in latest_home and pd.notna(latest_home[raw_diff]):
-                                                            h_diff = float(latest_home[raw_diff])
+                                                        # First try exact mapped CSV column
+                                                        mapped_csv_col = csv_diff_mapping.get(diff)
+                                                        if mapped_csv_col and mapped_csv_col in latest_home and pd.notna(latest_home[mapped_csv_col]):
+                                                            h_diff = float(latest_home[mapped_csv_col])
+                                                        else:
+                                                            # Fallback generic replacement logic
+                                                            raw_diff = diff.replace('feature_', '')
+                                                            if raw_diff in latest_home and pd.notna(latest_home[raw_diff]):
+                                                                h_diff = float(latest_home[raw_diff])
+                                                            else:
+                                                                raw_diff_2 = raw_diff.replace('diff_', '') + '_diff'
+                                                                if raw_diff_2 in latest_home and pd.notna(latest_home[raw_diff_2]):
+                                                                    h_diff = float(latest_home[raw_diff_2])
 
                                                 if not played_as_home_h:
                                                     h_diff = -h_diff # Invert Home-Away perspective

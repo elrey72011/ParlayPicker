@@ -173,10 +173,10 @@ class DataEnrichmentPipeline:
             return {
                 'home_win_pct': 0.52,  # Slight home advantage
                 'away_win_pct': 0.48,
-                'home_avg_points': 100.0,
-                'away_avg_points': 100.0,
-                'home_def_rating': 100.0,
-                'away_def_rating': 100.0,
+                'home_ppg': 100.0,
+                'away_ppg': 100.0,
+                'home_oppg': 100.0,
+                'away_oppg': 100.0,
                 'sportsdata_probability': 0.52,
                 'sportsdata_confidence': 0.02,
                 'sportsdata_available': False,
@@ -201,10 +201,10 @@ class DataEnrichmentPipeline:
             return {
                 'home_win_pct': home_win_pct,
                 'away_win_pct': away_win_pct,
-                'home_avg_points': home_stats.get('avg_points', 100),
-                'away_avg_points': away_stats.get('avg_points', 100),
-                'home_def_rating': home_stats.get('def_rating', 100),
-                'away_def_rating': away_stats.get('def_rating', 100),
+                'home_ppg': home_stats.get('ppg', 100),
+                'away_ppg': away_stats.get('ppg', 100),
+                'home_oppg': home_stats.get('oppg', 100),
+                'away_oppg': away_stats.get('oppg', 100),
                 'sportsdata_probability': prob,
                 'sportsdata_confidence': abs(prob - 0.5),
                 'sportsdata_available': True,
@@ -218,10 +218,10 @@ class DataEnrichmentPipeline:
             return {
                 'home_win_pct': 0.52,
                 'away_win_pct': 0.48,
-                'home_avg_points': 100.0,
-                'away_avg_points': 100.0,
-                'home_def_rating': 100.0,
-                'away_def_rating': 100.0,
+                'home_ppg': 100.0,
+                'away_ppg': 100.0,
+                'home_oppg': 100.0,
+                'away_oppg': 100.0,
                 'sportsdata_probability': 0.52,
                 'sportsdata_confidence': 0.02,
                 'sportsdata_available': False,
@@ -386,8 +386,8 @@ class VertexConsolidator:
             # Source 3: SportsData stats
             float(row.get('home_win_pct', 0.5)),
             float(row.get('away_win_pct', 0.5)),
-            float(row.get('home_avg_points', 100)) / 100,
-            float(row.get('away_avg_points', 100)) / 100,
+            float(row.get('home_ppg', 100)) / 100,
+            float(row.get('away_ppg', 100)) / 100,
             float(row.get('sportsdata_probability', 0.5)),
             
             # Source 4: Sentiment
