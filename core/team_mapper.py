@@ -124,6 +124,9 @@ NCAAB_EXTRA_MAP = {
 }
 
 TEAM_MAP = {
+    "north carolina wilmington": "UNC Wilmington",
+    "michigan st spartans": "Michigan State",
+    "saint louis": "St. Louis",
     "yale": "Yale",
     "yale bulldogs": "Yale",
     "george mason": "George Mason",

@@ -893,22 +893,29 @@ class PredictionEngine:
                                                     roles_swapped = True
 
                                                 for col in VERTEX_FEATURE_COLUMNS:
+                                                    # Check exact match first
                                                     if col in latest and pd.notna(latest[col]):
                                                         val = float(latest[col])
-                                                        if roles_swapped:
-                                                            # Invert probabilities
-                                                            if col in ["implied_home_prob", "kalshi_prob"]:
-                                                                val = 1.0 - val
-                                                            # Negate differentials
-                                                            elif col == "sentiment_diff" or col.startswith("feature_diff_"):
-                                                                val = -val
-                                                            # Swap home/away prefixed stats
-                                                            elif col.startswith("feature_home_"):
-                                                                col = col.replace("feature_home_", "feature_away_")
-                                                            elif col.startswith("feature_away_"):
-                                                                col = col.replace("feature_away_", "feature_home_")
+                                                    # Bridge the prefix mapping gap
+                                                    elif col.startswith("feature_") and col.replace("feature_", "") in latest and pd.notna(latest[col.replace("feature_", "")]):
+                                                        val = float(latest[col.replace("feature_", "")])
+                                                    else:
+                                                        continue
 
-                                                        raw_numeric.at[idx, col] = val
+                                                    if roles_swapped:
+                                                        # Invert probabilities
+                                                        if col in ["implied_home_prob", "kalshi_prob"]:
+                                                            val = 1.0 - val
+                                                        # Negate differentials
+                                                        elif col == "sentiment_diff" or col.startswith("feature_diff_"):
+                                                            val = -val
+                                                        # Swap home/away prefixed stats
+                                                        elif col.startswith("feature_home_"):
+                                                            col = col.replace("feature_home_", "feature_away_")
+                                                        elif col.startswith("feature_away_"):
+                                                            col = col.replace("feature_away_", "feature_home_")
+
+                                                    raw_numeric.at[idx, col] = val
                                         else:
                                             # SPLIT LOOKUP: Teams haven't played each other. Look up their most recent stats independently.
                                             logger.info(f"Split lookup triggered for {row_matchup}.")
