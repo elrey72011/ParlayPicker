@@ -956,12 +956,14 @@ class PredictionEngine:
                                             if found_home or found_away:
                                                 used_stale_features.at[idx] = True
 
+                                            logger.debug(f"Split lookup tracing: row_home_clean='{row_home_clean}', row_away_clean='{row_away_clean}', hist_df_homes={hist_df['home_team'].unique()[:5] if 'home_team' in hist_df.columns else 'N/A'}")
+
                                             # Initialize to 0.0 beforehand in case team history is completely missing
                                             target_stats = ["win_pct", "ppg", "oppg", "streak", "rest_days", "implied_home_prob", "kalshi_prob"]
-                                            for stat in ["win_pct", "ppg", "oppg", "streak", "rest_days"]:
-                                                if pd.isna(raw_numeric.at[idx, f"feature_home_{stat}"]):
+                                            for stat in ["win_pct", "ppg", "oppg", "streak", "rest_days", "implied_home_prob", "kalshi_prob"]:
+                                                if f"feature_home_{stat}" in raw_numeric.columns and pd.isna(raw_numeric.at[idx, f"feature_home_{stat}"]):
                                                     raw_numeric.at[idx, f"feature_home_{stat}"] = 0.0
-                                                if pd.isna(raw_numeric.at[idx, f"feature_away_{stat}"]):
+                                                if f"feature_away_{stat}" in raw_numeric.columns and pd.isna(raw_numeric.at[idx, f"feature_away_{stat}"]):
                                                     raw_numeric.at[idx, f"feature_away_{stat}"] = 0.0
 
                                             home_derived_implied_prob = None
@@ -973,51 +975,67 @@ class PredictionEngine:
                                             if found_home and latest_home is not None:
                                                 # Determine if they played as home or away in their latest game
                                                 played_as_home = (latest_home["home_team"] == row_home_clean)
-                                                prefix = "feature_home_" if played_as_home else "feature_away_"
+                                                prefix = "home_" if played_as_home else "away_"
 
-                                                for stat in ["win_pct", "ppg", "oppg", "streak", "rest_days"]:
+                                                for stat in ["win_pct", "ppg", "oppg", "streak", "rest_days", "implied_home_prob", "kalshi_prob"]:
+                                                    # Map from raw CSV headers ("home_win_pct")
                                                     hist_col = f"{prefix}{stat}"
-                                                    new_col = f"feature_home_{stat}"
+                                                    if stat == "ppg":
+                                                        hist_col = f"{prefix}avg_points"
+                                                    elif stat == "oppg":
+                                                        hist_col = f"{prefix}def_rating"
+                                                    elif stat == "implied_home_prob":
+                                                        hist_col = "implied_home_prob"
+                                                    elif stat == "kalshi_prob":
+                                                        hist_col = "kalshi_prob"
+
                                                     if hist_col in latest_home and pd.notna(latest_home[hist_col]):
-                                                        raw_numeric.at[idx, new_col] = float(latest_home[hist_col])
+                                                        val = float(latest_home[hist_col])
+                                                        # Probability inversion if they played as Away in history
+                                                        if stat in ["implied_home_prob", "kalshi_prob"]:
+                                                            if not played_as_home:
+                                                                val = 1.0 - val
 
-                                                # Extract market odds for Home Team
-                                                if "implied_home_prob" in latest_home and pd.notna(latest_home["implied_home_prob"]):
-                                                    if played_as_home:
-                                                        home_derived_implied_prob = float(latest_home["implied_home_prob"])
-                                                    else:
-                                                        home_derived_implied_prob = 1.0 - float(latest_home["implied_home_prob"])
-
-                                                if "kalshi_prob" in latest_home and pd.notna(latest_home["kalshi_prob"]):
-                                                    if played_as_home:
-                                                        home_derived_kalshi_prob = float(latest_home["kalshi_prob"])
-                                                    else:
-                                                        home_derived_kalshi_prob = 1.0 - float(latest_home["kalshi_prob"])
+                                                            if stat == "implied_home_prob":
+                                                                home_derived_implied_prob = val
+                                                            elif stat == "kalshi_prob":
+                                                                home_derived_kalshi_prob = val
+                                                        else:
+                                                            new_col = f"feature_home_{stat}"
+                                                            raw_numeric.at[idx, new_col] = val
 
                                             # Map Away Stats
                                             if found_away and latest_away is not None:
                                                 # Determine if they played as home or away in their latest game
                                                 played_as_home = (latest_away["home_team"] == row_away_clean)
-                                                prefix = "feature_home_" if played_as_home else "feature_away_"
+                                                prefix = "home_" if played_as_home else "away_"
 
-                                                for stat in ["win_pct", "ppg", "oppg", "streak", "rest_days"]:
+                                                for stat in ["win_pct", "ppg", "oppg", "streak", "rest_days", "implied_home_prob", "kalshi_prob"]:
+                                                    # Map from raw CSV headers ("home_win_pct")
                                                     hist_col = f"{prefix}{stat}"
-                                                    new_col = f"feature_away_{stat}"
+                                                    if stat == "ppg":
+                                                        hist_col = f"{prefix}avg_points"
+                                                    elif stat == "oppg":
+                                                        hist_col = f"{prefix}def_rating"
+                                                    elif stat == "implied_home_prob":
+                                                        hist_col = "implied_home_prob"
+                                                    elif stat == "kalshi_prob":
+                                                        hist_col = "kalshi_prob"
+
                                                     if hist_col in latest_away and pd.notna(latest_away[hist_col]):
-                                                        raw_numeric.at[idx, new_col] = float(latest_away[hist_col])
+                                                        val = float(latest_away[hist_col])
+                                                        # Probability inversion if they played as Home in history
+                                                        if stat in ["implied_home_prob", "kalshi_prob"]:
+                                                            if played_as_home:
+                                                                val = 1.0 - val
 
-                                                # Extract market odds for Away Team
-                                                if "implied_home_prob" in latest_away and pd.notna(latest_away["implied_home_prob"]):
-                                                    if played_as_home:
-                                                        away_derived_implied_prob = 1.0 - float(latest_away["implied_home_prob"])
-                                                    else:
-                                                        away_derived_implied_prob = float(latest_away["implied_home_prob"])
-
-                                                if "kalshi_prob" in latest_away and pd.notna(latest_away["kalshi_prob"]):
-                                                    if played_as_home:
-                                                        away_derived_kalshi_prob = 1.0 - float(latest_away["kalshi_prob"])
-                                                    else:
-                                                        away_derived_kalshi_prob = float(latest_away["kalshi_prob"])
+                                                            if stat == "implied_home_prob":
+                                                                away_derived_implied_prob = val
+                                                            elif stat == "kalshi_prob":
+                                                                away_derived_kalshi_prob = val
+                                                        else:
+                                                            new_col = f"feature_away_{stat}"
+                                                            raw_numeric.at[idx, new_col] = val
 
                                             # Average or fallback derived probabilities
                                             if home_derived_implied_prob is not None and away_derived_implied_prob is not None:
