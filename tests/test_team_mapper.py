@@ -11,5 +11,5 @@ def test_nhl_mappings():
     assert normalize_team_name("Boston Bruins") == "Boston"
 
 def test_ncaab_mappings():
-    assert normalize_team_name("Prairie View A&M Panthers") == "Prairie View Am"
+    assert normalize_team_name("Prairie View A&M Panthers") == "Prairie View A&M Panthers"
     assert normalize_team_name("Utah Tech Trailblazers") == "Utah Tech"

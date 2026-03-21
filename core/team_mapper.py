@@ -859,6 +859,8 @@ PRODUCTION_MASCOT_MAP = {
     "golden state": "Golden State Warriors",
 
     # NCAAB Tournament Criticals
+    "nebraska": "Nebraska Cornhuskers",
+    "houston": "Houston Cougars",
     "uconn": "Connecticut Huskies",
     "tcu": "TCU Horned Frogs",
     "vcu": "VCU Rams",
