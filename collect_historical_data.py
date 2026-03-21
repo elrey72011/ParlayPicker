@@ -291,7 +291,7 @@ def extract_game_features(game: Dict, home_stats: Dict, away_stats: Dict,
     # Helper function for inline odds parsing
     def _parse_odds_inline(odds_dict, keys):
         for key in keys:
-            if key in odds_dict:
+            if key in odds_dict and odds_dict[key] is not None:
                 try:
                     val = float(odds_dict[key])
                     if abs(val) >= 100:
@@ -307,13 +307,13 @@ def extract_game_features(game: Dict, home_stats: Dict, away_stats: Dict,
                     continue
         return None
 
-    # 1. Try Bookmaker Odds (Implied Prob / Odds)
+    # 1. Try Bookmaker Odds (Implied Prob / Odds) prioritizing market_probability
     implied_prob = _parse_odds_inline(game, ["market_probability", "implied_home_prob", "odds_american", "odds_home", "home_price", "home_odds"])
 
     # 2. Extract Kalshi Prob
     kalshi_prob = _parse_odds_inline(game, ["kalshi_prob", "kalshi_probability"])
 
-    # Hierarchy: Bookmaker Odds / Kalshi Price -> Bookmaker Odds -> Clamped Win Pct
+    # Hierarchy: Kalshi Price -> Market Price -> Clamped Win Pct
     base_clamped_pct = max(0.35, min(0.65, features["home_win_pct"]))
 
     if implied_prob is not None:

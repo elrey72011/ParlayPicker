@@ -813,7 +813,27 @@ def normalize_team_name(name: str) -> str:
 
     # 3. Perform dictionary lookup on the explicitly cleaned string
     if cleaned_name in TEAM_MAP:
-        name = TEAM_MAP[cleaned_name]
+        mapped_name = TEAM_MAP[cleaned_name]
+        # Check if mapped name is one of our exact overrides we want returned exactly as is
+        # (Since it was mapped from a lowercase key, we can't just return it title-cased if it has special casing)
+        if mapped_name.lower() in ("connecticut", "uconn"):
+            return "Connecticut"
+        if mapped_name.lower() in ("queens nc", "queens university"):
+            return "Queens NC"
+        if mapped_name.lower() in ("california baptist", "ca baptist", "cal baptist"):
+            return "California Baptist"
+        if mapped_name.lower() in ("st. john's", "saint johns", "st johns"):
+            return "St. John's"
+        if mapped_name.lower() in ("prairie view a&m", "prairie view panthers", "prairie view am"):
+            return "Prairie View A&M"
+
+        name = mapped_name
+
+    # Second check right here since Uconn/Queens might be incoming directly unmapped
+    if name.lower() in ("connecticut", "uconn"):
+        return "Connecticut"
+    if name.lower() in ("queens nc", "queens university"):
+        return "Queens NC"
 
     # Convert to lowercase (in case the dictionary mapping has uppercase)
     normalized = name.lower()
@@ -852,7 +872,29 @@ def normalize_team_name(name: str) -> str:
     # Collapse multiple spaces to single space
     normalized = re.sub(r'\s+', ' ', normalized).strip()
 
-    return normalized.title()
+    title_cased = normalized.title()
+
+    # Check post-processing overrides again
+    if title_cased.lower() in overrides:
+        return overrides[title_cased.lower()]
+
+    # Re-apply force maps on the finalized string to ensure exact capitalization and punctuation logic
+    # since `normalized` removes punctuation which breaks St. John's, A&M, etc.
+    for k, v in overrides.items():
+        if title_cased.lower() == k.lower() or title_cased.lower() == re.sub(r'[^\w\s]', '', k.lower()):
+            return v
+
+    # Specific override checks for problematic names with punctuation
+    if title_cased.lower() in ("st johns", "saint johns", "saint johns red storm", "st johns red storm"):
+        return "St. John's"
+    if title_cased.lower() in ("prairie view am", "prairie view am panthers", "prairie view panthers"):
+        return "Prairie View A&M"
+    if title_cased.lower() in ("connecticut", "uconn", "connecticut huskies", "uconn huskies"):
+        return "Connecticut"
+    if title_cased.lower() in ("queens nc", "queens university", "queens university royals", "queens university of charlotte", "queens nc royals"):
+        return "Queens NC"
+
+    return title_cased
 
 
 # Merge dynamic aliases into the primary mapping dictionary
@@ -865,28 +907,49 @@ TEAM_MAP.update(load_dynamic_aliases())
 
 # POST-PROCESSING OVERRIDES TO ENSURE EXACT MATCHES
 overrides = {
-    "california baptist lancers": "Ca Baptist",
-    "ca baptist lancers": "Ca Baptist",
-    "california baptist": "Ca Baptist",
+    "california baptist lancers": "California Baptist",
+    "ca baptist lancers": "California Baptist",
+    "california baptist": "California Baptist",
+    "cal baptist": "California Baptist",
+    "cal baptist lancers": "California Baptist",
+    "ca baptist": "California Baptist",
     "miami (fl) hurricanes": "Miami Fl",
     "miami (fl)": "Miami Fl",
     "miami florida hurricanes": "Miami Fl",
     "miami florida": "Miami Fl",
-    "connecticut huskies": "Uconn",
-    "uconn huskies": "Uconn",
-    "connecticut": "Uconn",
-    "uconn": "Uconn",
+    "connecticut huskies": "Connecticut",
+    "uconn huskies": "Connecticut",
+    "connecticut": "Connecticut",
+    "uconn": "Connecticut",
     "dallas mavericks": "Dallas",
-    "golden state warriors": "Golden State"
+    "golden state warriors": "Golden State",
+    "queens university": "Queens NC",
+    "queens university of charlotte": "Queens NC",
+    "queens university royals": "Queens NC",
+    "queens nc": "Queens NC",
+    "saint johns": "St. John's",
+    "st johns": "St. John's",
+    "st. john's": "St. John's",
+    "st. john's red storm": "St. John's",
+    "saint john's": "St. John's",
+    "prairie view panthers": "Prairie View A&M",
+    "prairie view a&m": "Prairie View A&M",
+    "prairie view a&m panthers": "Prairie View A&M"
 }
 TEAM_MAP.update(overrides)
 
 # Force any value in the dictionary that maps to variations of Uconn or Miami Fl
 for k, v in TEAM_MAP.items():
     if v.lower() in ("uconn", "connecticut"):
-        TEAM_MAP[k] = "Uconn"
+        TEAM_MAP[k] = "Connecticut"
     if v.lower() in ("miami fl", "miami (fl)", "miami florida"):
         TEAM_MAP[k] = "Miami Fl"
-    if v.lower() == "ca baptist":
-        TEAM_MAP[k] = "Ca Baptist"
+    if v.lower() in ("ca baptist", "cal baptist", "california baptist"):
+        TEAM_MAP[k] = "California Baptist"
+    if v.lower() in ("queens nc", "queens university", "queens university royals", "queens university of charlotte"):
+        TEAM_MAP[k] = "Queens NC"
+    if v.lower() in ("st. john's", "saint johns", "st johns", "saint john's", "st. john's red storm"):
+        TEAM_MAP[k] = "St. John's"
+    if v.lower() in ("prairie view a&m", "prairie view panthers", "prairie view am", "prairie view a&m panthers"):
+        TEAM_MAP[k] = "Prairie View A&M"
 

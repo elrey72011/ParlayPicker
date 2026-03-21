@@ -147,10 +147,13 @@ def _build_fallback_features_from_row(row_dict: Dict[str, Any]) -> Dict[str, flo
 def clean_team_name(series: pd.Series) -> pd.Series:
     """
     Sanitizes team names for ultra-strict joining.
-    Strips all non-alphanumeric characters and lowercases team names
-    to ensure '76ers' and 'Philadelphia 76ers' resolve accurately.
+    Passes names through the global normalize_team_name function
+    and then strips all non-alphanumeric characters to ensure
+    '76ers' and 'Philadelphia 76ers' resolve accurately.
     """
     import re
+    from core.team_mapper import normalize_team_name as _global_normalize
+
     if series is None or (hasattr(series, "empty") and series.empty):
         return series
 
@@ -165,15 +168,29 @@ def clean_team_name(series: pd.Series) -> pd.Series:
         "newyorkknicks": "newyork",
     }
 
+    def _clean_str(s):
+        if not isinstance(s, str):
+            if pd.isna(s):
+                return ""
+            s = str(s)
+        # 1. Active global normalization
+        s = _global_normalize(s)
+
+        # 2. Local cleanup
+        s = s.lower().strip()
+        for k, v in typo_map.items():
+            if s == k:
+                s = v
+        # Removes ALL spaces/punctuation (e.g., 'st. john's' -> 'stjohns')
+        s = re.sub(r'[^a-z0-9]', '', s)
+        return s
+
     # Handle Series
     if isinstance(series, pd.Series):
-        cleaned = series.astype("string").str.lower().str.replace(r"[^a-z0-9]", "", regex=True)
-        return cleaned.replace(typo_map)
+        return series.apply(_clean_str)
 
     # Handle scalar strings for backward compatibility in the file
-    team = str(series).lower() if pd.notna(series) else ""
-    team = re.sub(r"[^a-z0-9]", "", team)
-    return typo_map.get(team, team)
+    return _clean_str(series)
 
 def _clean_team_for_matchup(value: Any) -> str:
     from core.team_mapper import normalize_team_name as _global_normalize
@@ -866,9 +883,32 @@ class PredictionEngine:
                                             if not match.empty:
                                                 latest = match.iloc[0]
                                                 used_stale_features.at[idx] = True
+
+                                                # Determine if roles are swapped in this historical game vs the current game
+                                                hist_home = str(latest.get("home_team", "")).lower()
+                                                current_home = row_home_clean.lower() if row_home_clean else ""
+
+                                                roles_swapped = False
+                                                if current_home and hist_home and current_home != hist_home:
+                                                    roles_swapped = True
+
                                                 for col in VERTEX_FEATURE_COLUMNS:
                                                     if col in latest and pd.notna(latest[col]):
-                                                        raw_numeric.at[idx, col] = float(latest[col])
+                                                        val = float(latest[col])
+                                                        if roles_swapped:
+                                                            # Invert probabilities
+                                                            if col in ["implied_home_prob", "kalshi_prob"]:
+                                                                val = 1.0 - val
+                                                            # Negate differentials
+                                                            elif col == "sentiment_diff" or col.startswith("feature_diff_"):
+                                                                val = -val
+                                                            # Swap home/away prefixed stats
+                                                            elif col.startswith("feature_home_"):
+                                                                col = col.replace("feature_home_", "feature_away_")
+                                                            elif col.startswith("feature_away_"):
+                                                                col = col.replace("feature_away_", "feature_home_")
+
+                                                        raw_numeric.at[idx, col] = val
                                         else:
                                             # SPLIT LOOKUP: Teams haven't played each other. Look up their most recent stats independently.
                                             logger.info(f"Split lookup triggered for {row_matchup}.")
@@ -877,6 +917,8 @@ class PredictionEngine:
                                             found_away = False
                                             latest_home = None
                                             latest_away = None
+
+                                            logger.debug(f"Split lookup mapping attempt. League: {row_league}, Home: {row_home_clean}, Away: {row_away_clean}")
 
                                             # 1. Look up Home Team's latest stats
                                             if row_home_clean and "league_norm" in hist_df.columns:
@@ -905,6 +947,11 @@ class PredictionEngine:
                                                             away_games = away_games.sort_values("commence_time", ascending=False)
                                                         latest_away = away_games.iloc[0]
                                                         found_away = True
+
+                                            if not found_home:
+                                                logger.debug(f"Split lookup missing team: {row_home_clean} in league {row_league}")
+                                            if not found_away:
+                                                logger.debug(f"Split lookup missing team: {row_away_clean} in league {row_league}")
 
                                             if found_home or found_away:
                                                 used_stale_features.at[idx] = True
