@@ -134,9 +134,9 @@ TEAM_MAP = {
     "ucf": "UCF",
     "wright st": "Wright State",
     "wright state": "Wright State",
-    "queens university": "Queens Nc",
-    "queens nc": "Queens Nc",
-    "queens university of charlotte": "Queens Nc",
+    "queens university": "Queens NC",
+    "queens nc": "Queens NC",
+    "queens university of charlotte": "Queens NC",
     "liu sharks": "Long Island University",
     "liu": "Long Island University",
     "long island university": "Long Island University",
@@ -934,7 +934,8 @@ overrides = {
     "saint john's": "St. John's",
     "prairie view panthers": "Prairie View A&M",
     "prairie view a&m": "Prairie View A&M",
-    "prairie view a&m panthers": "Prairie View A&M"
+    "prairie view a&m panthers": "Prairie View A&M",
+    "cal baptist": "California Baptist"
 }
 TEAM_MAP.update(overrides)
 
