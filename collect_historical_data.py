@@ -288,32 +288,47 @@ def extract_game_features(game: Dict, home_stats: Dict, away_stats: Dict,
     # Implied Home Prob Extraction
     implied_prob = None
 
-    # 1. Try to find market_probability
-    if "market_probability" in game:
-        try:
-            val = float(game["market_probability"])
-            if 0.0 < val < 1.0:
-                implied_prob = val
-        except (ValueError, TypeError):
-            pass
+    # Helper function for inline odds parsing
+    def _parse_odds_inline(odds_dict, keys):
+        for key in keys:
+            if key in odds_dict:
+                try:
+                    val = float(odds_dict[key])
+                    if abs(val) >= 100:
+                        # American Odds
+                        return 100.0 / (val + 100.0) if val > 0 else abs(val) / (abs(val) + 100.0)
+                    elif 1.0 < val < 100.0:
+                        # Decimal Odds
+                        return 1.0 / val
+                    elif 0.0 < val <= 1.0:
+                        # Already implied probability
+                        return val
+                except (ValueError, TypeError):
+                    continue
+        return None
 
-    # 2. Try to find odds_american
-    if implied_prob is None and "odds_american" in game:
-        try:
-            odds = float(game["odds_american"])
-            if odds != 0:
-                if odds > 0:
-                    implied_prob = 100.0 / (odds + 100.0)
-                else:
-                    implied_prob = abs(odds) / (abs(odds) + 100.0)
-        except (ValueError, TypeError):
-            pass
+    # 1. Try Bookmaker Odds (Implied Prob / Odds)
+    implied_prob = _parse_odds_inline(game, ["market_probability", "implied_home_prob", "odds_american", "odds_home", "home_price", "home_odds"])
 
-    # 3. Fallback to clamped home win percentage
+    # 2. Extract Kalshi Prob
+    kalshi_prob = _parse_odds_inline(game, ["kalshi_prob", "kalshi_probability"])
+
+    # Hierarchy: Bookmaker Odds / Kalshi Price -> Bookmaker Odds -> Clamped Win Pct
+    base_clamped_pct = max(0.35, min(0.65, features["home_win_pct"]))
+
     if implied_prob is not None:
-        features["implied_home_prob"] = implied_prob
+        features["implied_home_prob"] = float(implied_prob)
+    elif kalshi_prob is not None:
+        features["implied_home_prob"] = float(kalshi_prob)
     else:
-        features["implied_home_prob"] = max(0.35, min(0.65, features["home_win_pct"]))
+        features["implied_home_prob"] = base_clamped_pct
+
+    if kalshi_prob is not None:
+        features["kalshi_prob"] = float(kalshi_prob)
+    elif implied_prob is not None:
+        features["kalshi_prob"] = float(implied_prob)
+    else:
+        features["kalshi_prob"] = base_clamped_pct
     
     # Streaks
     def parse_streak(s):
