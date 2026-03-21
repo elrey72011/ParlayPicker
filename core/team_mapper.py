@@ -403,6 +403,15 @@ TEAM_MAP = {
 
 # Auto-injected exact mappings for Odds API full mascot names to standard names
 ODDS_API_EXACT_MAP = {
+    "montreal": "Montreal Canadiens",
+    "san jose": "San Jose Sharks",
+    "ny islanders": "New York Islanders",
+    "ny rangers": "New York Rangers",
+    "ottawa": "Ottawa Senators",
+    "utah": "Utah Jazz",
+    "philly": "Philadelphia 76ers",
+    "la lakers": "Los Angeles Lakers",
+    "la clippers": "LA Clippers",
     "abilene christian wildcats": "Abilene Christian",
     "air force falcons": "Air Force",
     "akron zips": "Akron",
