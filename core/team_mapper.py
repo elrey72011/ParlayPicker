@@ -836,6 +836,7 @@ TEAM_MAP.update(NCAAB_EXTRA_MAP)
 TEAM_MAP.update(ODDS_API_EXACT_MAP)
 
 # Consolidation of Professional and Tournament Mascots
+# Jules: Adding these pro mappings to ensure Split Lookup join success
 PRODUCTION_MASCOT_MAP = {
     # NHL Standard Expansion
     "montreal": "Montreal Canadiens",
@@ -867,7 +868,7 @@ PRODUCTION_MASCOT_MAP = {
     "wright st": "Wright State Raiders",
     "queens": "Queens University Royals"
 }
-# Update the main TEAM_MAP
+# Update the master map
 TEAM_MAP.update(PRODUCTION_MASCOT_MAP)
 
 TEAM_MAP.update(load_dynamic_aliases())
