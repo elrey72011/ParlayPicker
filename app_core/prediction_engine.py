@@ -462,10 +462,10 @@ class PredictionEngine:
                 prob = float(prediction[0])
 
             # Check for placeholder
-            PLACEHOLDER_VALUE = 0.623034656047821
-            PLACEHOLDER_TOLERANCE = 1e-9
+            PLACEHOLDER_VALUES = [0.623034656047821, 0.10671072453260422, 0.48637846]
+            PLACEHOLDER_TOLERANCE = 1e-7
 
-            if abs(prob - PLACEHOLDER_VALUE) < PLACEHOLDER_TOLERANCE:
+            if any(abs(prob - val) < PLACEHOLDER_TOLERANCE for val in PLACEHOLDER_VALUES):
                 logger.info(f"Model validation: placeholder detected on zero input, using fallback mode.")
                 self.use_fallback = True
             else:
@@ -534,10 +534,10 @@ class PredictionEngine:
             logger.debug(f"[MODEL_DEBUG] Raw prediction: {prob}")
 
             # HARD REJECTION of placeholder values (Section 4)
-            PLACEHOLDER_VALUE = 0.623034656047821
-            PLACEHOLDER_TOLERANCE = 1e-9
+            PLACEHOLDER_VALUES = [0.623034656047821, 0.10671072453260422, 0.48637846]
+            PLACEHOLDER_TOLERANCE = 1e-7
 
-            if abs(prob - PLACEHOLDER_VALUE) < PLACEHOLDER_TOLERANCE:
+            if any(abs(prob - val) < PLACEHOLDER_TOLERANCE for val in PLACEHOLDER_VALUES):
                  # Using fallback gracefully when placeholder detected
                  logger.debug(f"Placeholder value detected ({prob:.3f}), skipping prediction.")
                  return {"prob": None, "note": "Fallback (Placeholder Detected)"}
@@ -806,6 +806,12 @@ class PredictionEngine:
                                 for idx in df.index:
                                     if row_nan_ratio[idx] > 0.5:
                                         row_league = str(working_df.at[idx, "league"]).upper() if "league" in working_df.columns else ""
+
+                                        # NEW GUARD: Prevent cross-league pollution
+                                        if not row_league or row_league == "":
+                                            logger.debug(f"Row {idx}: Missing league, skipping ML join.")
+                                            continue
+
                                         row_game_date_dt = working_df.at[idx, "game_date_dt"] if "game_date_dt" in working_df.columns else pd.NaT
 
                                         # Strict YYYY-MM-DD
@@ -1166,20 +1172,20 @@ class PredictionEngine:
             else:
                 raw_probs = [float(probs)]
 
-            # Check for placeholder value 0.623034656047821
-            PLACEHOLDER_VAL = 0.623034656047821
-            PLACEHOLDER_TOLERANCE = 1e-9
+            # Check for placeholder values
+            PLACEHOLDER_VALUES = [0.623034656047821, 0.10671072453260422, 0.48637846]
+            PLACEHOLDER_TOLERANCE = 1e-7
 
             # Check for placeholders in batch
             if isinstance(raw_probs, list):
-                 placeholder_count = sum(1 for p in raw_probs if abs(p - PLACEHOLDER_VAL) < PLACEHOLDER_TOLERANCE)
+                 placeholder_count = sum(1 for p in raw_probs if any(abs(p - val) < PLACEHOLDER_TOLERANCE for val in PLACEHOLDER_VALUES))
                  if placeholder_count > 0:
                       logger.info(f"Batch prediction: {placeholder_count}/{len(raw_probs)} placeholder values detected, using fallbacks.")
                  else:
                       logger.info(f"Batch prediction: {len(raw_probs)} rows processed successfully with model.")
 
             for idx, p in enumerate(raw_probs):
-                 if abs(p - PLACEHOLDER_VAL) < PLACEHOLDER_TOLERANCE:
+                 if any(abs(p - val) < PLACEHOLDER_TOLERANCE for val in PLACEHOLDER_VALUES):
                       # Detected placeholder, force fallback for this row
                       logger.debug(f"Placeholder at index {idx}: omitting probability.")
                       final_probs.append(None)
