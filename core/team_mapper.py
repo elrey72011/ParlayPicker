@@ -126,11 +126,13 @@ NCAAB_EXTRA_MAP = {
     "saint louis": "St. Louis",
 }
 
+# Consolidation of Pro and Tournament Mappings
 PRODUCTION_MASCOT_MAP = {
     "utah": "Utah Jazz",
+    "nebraska": "Nebraska Cornhuskers",
+    "houston": "Houston Cougars",
     "montreal": "Montreal Canadiens",
-    "vancouver": "Vancouver Canucks",
-    "nebraska": "Nebraska Cornhuskers"
+    "vancouver": "Vancouver Canucks"
 }
 TEAM_MAP = {}
 TEAM_MAP.update(PRODUCTION_MASCOT_MAP)
