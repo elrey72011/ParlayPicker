@@ -922,6 +922,12 @@ class PredictionEngine:
                                                     raw_numeric.at[idx, col] = val
                                         else:
                                             # SPLIT LOOKUP: Teams haven't played each other. Look up their most recent stats independently.
+
+                                            # Strict check: Skip Split Lookup if league is missing to prevent cross-league pollution (e.g., NHL Utah vs NCAAB Utah)
+                                            if not row_league or row_league == "":
+                                                logger.warning(f"Split lookup aborted for {row_matchup} due to missing league. Resorting to neutral defaults.")
+                                                continue
+
                                             logger.info(f"Split lookup triggered for {row_matchup}.")
 
                                             found_home = False
@@ -1046,20 +1052,22 @@ class PredictionEngine:
                                             # We also need to explicitly handle sentiment_diff if roles are swapped
 
                                             # Calculate primary differentials (Home - Away) explicitly handling missing columns
-                                            h_ppg = raw_numeric.at[idx, "feature_home_ppg"] if "feature_home_ppg" in raw_numeric.columns else 0.5
-                                            a_ppg = raw_numeric.at[idx, "feature_away_ppg"] if "feature_away_ppg" in raw_numeric.columns else 0.5
+
+                                            # Get current mapped values or default if missing
+                                            h_ppg = raw_numeric.at[idx, "feature_home_ppg"] if "feature_home_ppg" in raw_numeric.columns and pd.notna(raw_numeric.at[idx, "feature_home_ppg"]) else 0.5
+                                            a_ppg = raw_numeric.at[idx, "feature_away_ppg"] if "feature_away_ppg" in raw_numeric.columns and pd.notna(raw_numeric.at[idx, "feature_away_ppg"]) else 0.5
                                             raw_numeric.at[idx, "feature_diff_ppg"] = h_ppg - a_ppg
 
-                                            h_oppg = raw_numeric.at[idx, "feature_home_oppg"] if "feature_home_oppg" in raw_numeric.columns else 0.5
-                                            a_oppg = raw_numeric.at[idx, "feature_away_oppg"] if "feature_away_oppg" in raw_numeric.columns else 0.5
+                                            h_oppg = raw_numeric.at[idx, "feature_home_oppg"] if "feature_home_oppg" in raw_numeric.columns and pd.notna(raw_numeric.at[idx, "feature_home_oppg"]) else 0.5
+                                            a_oppg = raw_numeric.at[idx, "feature_away_oppg"] if "feature_away_oppg" in raw_numeric.columns and pd.notna(raw_numeric.at[idx, "feature_away_oppg"]) else 0.5
                                             raw_numeric.at[idx, "feature_diff_oppg"] = h_oppg - a_oppg
 
-                                            h_win_pct = raw_numeric.at[idx, "feature_home_win_pct"] if "feature_home_win_pct" in raw_numeric.columns else 0.5
-                                            a_win_pct = raw_numeric.at[idx, "feature_away_win_pct"] if "feature_away_win_pct" in raw_numeric.columns else 0.5
+                                            h_win_pct = raw_numeric.at[idx, "feature_home_win_pct"] if "feature_home_win_pct" in raw_numeric.columns and pd.notna(raw_numeric.at[idx, "feature_home_win_pct"]) else 0.5
+                                            a_win_pct = raw_numeric.at[idx, "feature_away_win_pct"] if "feature_away_win_pct" in raw_numeric.columns and pd.notna(raw_numeric.at[idx, "feature_away_win_pct"]) else 0.5
                                             raw_numeric.at[idx, "feature_diff_win_pct"] = h_win_pct - a_win_pct
 
-                                            h_streak = raw_numeric.at[idx, "feature_home_streak"] if "feature_home_streak" in raw_numeric.columns else 0.0
-                                            a_streak = raw_numeric.at[idx, "feature_away_streak"] if "feature_away_streak" in raw_numeric.columns else 0.0
+                                            h_streak = raw_numeric.at[idx, "feature_home_streak"] if "feature_home_streak" in raw_numeric.columns and pd.notna(raw_numeric.at[idx, "feature_home_streak"]) else 0.0
+                                            a_streak = raw_numeric.at[idx, "feature_away_streak"] if "feature_away_streak" in raw_numeric.columns and pd.notna(raw_numeric.at[idx, "feature_away_streak"]) else 0.0
                                             raw_numeric.at[idx, "feature_diff_streak"] = h_streak - a_streak
 
                                             # Handle special cases

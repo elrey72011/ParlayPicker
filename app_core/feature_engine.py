@@ -94,11 +94,11 @@ def prepare_features_for_inference(history_df, todays_df):
     # 5. Differentials & Defaults
     combined = combined.fillna({
         "home_win_pct": 0.5, "away_win_pct": 0.5,
-        "home_ppg": 100, "away_ppg": 100,
+        "home_ppg": 0.5, "away_ppg": 0.5,
         "home_form_last5": 0.5, "away_form_last5": 0.5,
         "home_pd_last5": 0, "away_pd_last5": 0,
         "home_sos_last5": 0.5, "away_sos_last5": 0.5,
-        "home_oppg": 100, "away_oppg": 100,
+        "home_oppg": 0.5, "away_oppg": 0.5,
         "home_streak": 0, "away_streak": 0,
         "public_betting_pct": 50, "sharp_money_indicator": 0
     })

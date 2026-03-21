@@ -780,7 +780,46 @@ ODDS_API_EXACT_MAP = {
     "youngstown st penguins": "Youngstown St"
 }
 
+
+NCAAB_MASCOT_MAP = {
+    "uconn": "Connecticut Huskies",
+    "duke": "Duke Blue Devils",
+    "purdue": "Purdue Boilermakers",
+    "kansas": "Kansas Jayhawks",
+    "houston": "Houston Cougars",
+    "gonzaga": "Gonzaga Bulldogs",
+    "arizona": "Arizona Wildcats",
+    "illinois": "Illinois Fighting Illini",
+    "michigan state": "Michigan State Spartans",
+    "vcu": "VCU Rams",
+    "tcu": "TCU Horned Frogs",
+    "ucf": "UCF Knights",
+    "st johns": "St. John's Red Storm",
+    "villanova": "Villanova Wildcats",
+    "louisville": "Louisville Cardinals",
+    "arkansas": "Arkansas Razorbacks",
+    "tennessee": "Tennessee Volunteers",
+    "kentucky": "Kentucky Wildcats",
+    "creighton": "Creighton Bluejays",
+    "baylor": "Baylor Bears",
+    "marquette": "Marquette Golden Eagles",
+    "wisconsin": "Wisconsin Badgers",
+    "ucla": "UCLA Bruins",
+    "ohio state": "Ohio State Buckeyes",
+    "vanderbilt": "Vanderbilt Commodores",
+    "virginia": "Virginia Cavaliers",
+    "clemson": "Clemson Tigers",
+    "saint marys": "Saint Mary's Gaels",
+    "high point": "High Point Panthers",
+    "furman": "Furman Paladins",
+    "queens": "Queens NC Royals",
+    "prairie view am": "Prairie View A&M Panthers",
+    "california baptist": "California Baptist Lancers"
+}
+
 # Merge newly added exact maps
+TEAM_MAP.update(NCAAB_MASCOT_MAP)
+
 TEAM_MAP.update(NBA_EXACT_MAP)
 TEAM_MAP.update(NHL_EXACT_MAP)
 TEAM_MAP.update(NCAAB_EXTRA_MAP)
