@@ -980,11 +980,7 @@ class PredictionEngine:
                                                 for stat in ["win_pct", "ppg", "oppg", "streak", "rest_days", "implied_home_prob", "kalshi_prob"]:
                                                     # Map from raw CSV headers ("home_win_pct")
                                                     hist_col = f"{prefix}{stat}"
-                                                    if stat == "ppg":
-                                                        hist_col = f"{prefix}avg_points"
-                                                    elif stat == "oppg":
-                                                        hist_col = f"{prefix}def_rating"
-                                                    elif stat == "implied_home_prob":
+                                                    if stat == "implied_home_prob":
                                                         hist_col = "implied_home_prob"
                                                     elif stat == "kalshi_prob":
                                                         hist_col = "kalshi_prob"
@@ -1001,6 +997,9 @@ class PredictionEngine:
                                                             elif stat == "kalshi_prob":
                                                                 home_derived_kalshi_prob = val
                                                         else:
+                                                            if not played_as_home and stat in ["streak", "rest_days"]:
+                                                                # Negate differential-like numerical stats if played as Away, if any diff logic applies here
+                                                                pass
                                                             new_col = f"feature_home_{stat}"
                                                             raw_numeric.at[idx, new_col] = val
 
@@ -1013,11 +1012,7 @@ class PredictionEngine:
                                                 for stat in ["win_pct", "ppg", "oppg", "streak", "rest_days", "implied_home_prob", "kalshi_prob"]:
                                                     # Map from raw CSV headers ("home_win_pct")
                                                     hist_col = f"{prefix}{stat}"
-                                                    if stat == "ppg":
-                                                        hist_col = f"{prefix}avg_points"
-                                                    elif stat == "oppg":
-                                                        hist_col = f"{prefix}def_rating"
-                                                    elif stat == "implied_home_prob":
+                                                    if stat == "implied_home_prob":
                                                         hist_col = "implied_home_prob"
                                                     elif stat == "kalshi_prob":
                                                         hist_col = "kalshi_prob"
@@ -1034,6 +1029,9 @@ class PredictionEngine:
                                                             elif stat == "kalshi_prob":
                                                                 away_derived_kalshi_prob = val
                                                         else:
+                                                            if played_as_home and stat in ["streak", "rest_days"]:
+                                                                # Negate differential-like numerical stats if played as Home, if any diff logic applies here
+                                                                pass
                                                             new_col = f"feature_away_{stat}"
                                                             raw_numeric.at[idx, new_col] = val
 

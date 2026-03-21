@@ -50,8 +50,8 @@ LEAGUE_IDS = {
 
 # Feature names for ML training (27 features)
 FEATURE_NAMES = [
-    "home_win_pct", "away_win_pct", "home_avg_points", "away_avg_points",
-    "home_def_rating", "away_def_rating", "spread_normalized",
+    "home_win_pct", "away_win_pct", "home_ppg", "away_ppg",
+    "home_oppg", "away_oppg", "spread_normalized",
     "home_last_5", "away_last_5", "home_home_record", "away_away_record",
     "head_to_head", "rest_advantage", "injuries_impact", "weather_factor",
     "public_betting_pct", "sharp_money_indicator", "line_movement",
@@ -240,10 +240,10 @@ def extract_game_features(game: Dict, home_stats: Dict, away_stats: Dict,
         home_def = 24
         away_def = 24
     
-    features["home_avg_points"] = normalize_points(home_pts, sport)
-    features["away_avg_points"] = normalize_points(away_pts, sport)
-    features["home_def_rating"] = normalize_points(home_def, sport)
-    features["away_def_rating"] = normalize_points(away_def, sport)
+    features["home_ppg"] = normalize_points(home_pts, sport)
+    features["away_ppg"] = normalize_points(away_pts, sport)
+    features["home_oppg"] = normalize_points(home_def, sport)
+    features["away_oppg"] = normalize_points(away_def, sport)
     
     # Spread (default)
     features["spread_normalized"] = 0.5
