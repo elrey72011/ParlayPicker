@@ -66,6 +66,18 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
 
     run_counter = int(st.session_state.get("run_analysis_counter", 0))
 
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("🛠️ Data Maintenance")
+    if st.sidebar.button("🔄 Sync Historical Rosters", help="Runs a 48-hour backfill to update team mascots and fresh stats."):
+        with st.spinner("Syncing rosters from The Odds API..."):
+            try:
+                # DYNAMIC IMPORT to avoid circular dependencies
+                from collect_historical_data import run_backfill
+                run_backfill(sports=sports, days=2) # Uses currently selected sports
+                st.sidebar.success("✅ Sync Complete!")
+            except Exception as e:
+                st.sidebar.error(f"Sync failed: {e}")
+
     return {
         "sports": sports,
         "bankroll": bankroll,
