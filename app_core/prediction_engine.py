@@ -1185,10 +1185,12 @@ class PredictionEngine:
                       logger.info(f"Batch prediction: {len(raw_probs)} rows processed successfully with model.")
 
             for idx, p in enumerate(raw_probs):
-                 if any(abs(p - val) < PLACEHOLDER_TOLERANCE for val in PLACEHOLDER_VALUES):
+                 if p is None or any(abs(p - val) < PLACEHOLDER_TOLERANCE for val in PLACEHOLDER_VALUES):
                       # Detected placeholder, force fallback for this row
-                      logger.debug(f"Placeholder detected ({p:.4f}) at index {idx}, triggering Statistical Fallback.")
-                      final_probs.append(None)
+                      logger.debug(f"Placeholder detected ({p if p is None else f'{p:.4f}'}) at index {idx}, triggering Statistical Fallback.")
+                      row_features = inference_data.iloc[idx].to_dict()
+                      fallback_val = self._calculate_statistical_prob(row_features)
+                      final_probs.append(fallback_val)
                  else:
                       final_probs.append(p)
 
