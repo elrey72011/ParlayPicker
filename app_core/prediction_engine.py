@@ -1041,41 +1041,29 @@ class PredictionEngine:
                                             # Handle Differentials (Negation logic)
                                             # We also need to explicitly handle sentiment_diff if roles are swapped
 
-                                            # explicit mapping to match CSV column names
-                                            csv_diff_mapping = {
-                                                "feature_diff_win_pct": "win_pct_diff",
-                                                "feature_diff_ppg": "ppg_diff",
-                                                "feature_diff_oppg": "oppg_diff",
-                                                "feature_diff_streak": "streak_diff",
-                                                "feature_diff_last5": "pd_last5_diff",
-                                                "sentiment_diff": "sentiment_diff"
-                                            }
+                                            # Calculate differentials manually from independently retrieved stats
+                                            raw_numeric.at[idx, "feature_diff_ppg"] = raw_numeric.at[idx, "feature_home_ppg"] - raw_numeric.at[idx, "feature_away_ppg"]
+                                            raw_numeric.at[idx, "feature_diff_oppg"] = raw_numeric.at[idx, "feature_home_oppg"] - raw_numeric.at[idx, "feature_away_oppg"]
+                                            raw_numeric.at[idx, "feature_diff_win_pct"] = raw_numeric.at[idx, "feature_home_win_pct"] - raw_numeric.at[idx, "feature_away_win_pct"]
 
-                                            diff_stats_with_sentiment = diff_stats + ["sentiment_diff"]
-                                            for diff in diff_stats_with_sentiment:
-                                                h_diff = 0.0
-                                                if latest_home is not None:
-                                                    if diff in latest_home and pd.notna(latest_home[diff]):
-                                                        h_diff = float(latest_home[diff])
-                                                    else:
-                                                        # First try exact mapped CSV column
-                                                        mapped_csv_col = csv_diff_mapping.get(diff)
-                                                        if mapped_csv_col and mapped_csv_col in latest_home and pd.notna(latest_home[mapped_csv_col]):
-                                                            h_diff = float(latest_home[mapped_csv_col])
-                                                        else:
-                                                            # Fallback generic replacement logic
-                                                            raw_diff = diff.replace('feature_', '')
-                                                            if raw_diff in latest_home and pd.notna(latest_home[raw_diff]):
-                                                                h_diff = float(latest_home[raw_diff])
-                                                            else:
-                                                                raw_diff_2 = raw_diff.replace('diff_', '') + '_diff'
-                                                                if raw_diff_2 in latest_home and pd.notna(latest_home[raw_diff_2]):
-                                                                    h_diff = float(latest_home[raw_diff_2])
+                                            # Optional differentials if they exist in target stats (streak is currently not mapped to numeric perfectly here,
+                                            # but keeping pattern consistent if needed later)
+                                            if "feature_home_streak" in raw_numeric.columns and "feature_away_streak" in raw_numeric.columns:
+                                                try:
+                                                    raw_numeric.at[idx, "feature_diff_streak"] = float(raw_numeric.at[idx, "feature_home_streak"]) - float(raw_numeric.at[idx, "feature_away_streak"])
+                                                except:
+                                                    pass
 
-                                                if not played_as_home_h:
-                                                    h_diff = -h_diff # Invert Home-Away perspective
+                                            # Sentiment diff lookup still requires file lookup if available
+                                            h_sentiment_diff = 0.0
+                                            if latest_home is not None:
+                                                if "sentiment_diff" in latest_home and pd.notna(latest_home["sentiment_diff"]):
+                                                    h_sentiment_diff = float(latest_home["sentiment_diff"])
 
-                                                raw_numeric.at[idx, diff] = h_diff # Simplified: prioritized current home team sentiment
+                                            if not played_as_home_h:
+                                                h_sentiment_diff = -h_sentiment_diff
+
+                                            raw_numeric.at[idx, "sentiment_diff"] = h_sentiment_diff
 
                 except Exception as e:
                     logger.error(f"Stale Feature Fallback failed: {e}")

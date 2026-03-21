@@ -146,13 +146,13 @@ ODDS_BASE_URL = "https://api.the-odds-api.com"
 
 
 FEATURE_COLUMNS = [
-    "home_avg_for",
-    "home_avg_against",
+    "home_ppg",
+    "home_oppg",
     "home_form_pct",
     "home_trend_score",
     "home_record_pct",
-    "away_avg_for",
-    "away_avg_against",
+    "away_ppg",
+    "away_oppg",
     "away_form_pct",
     "away_trend_score",
     "away_record_pct",
@@ -939,14 +939,14 @@ class HistoricalDataBuilder:
         home = getattr(summary, "home", None)
         away = getattr(summary, "away", None)
 
-        features["home_avg_for"] = _safe_float(getattr(home, "average_points_for", None))
-        features["home_avg_against"] = _safe_float(getattr(home, "average_points_against", None))
+        features["home_ppg"] = _safe_float(getattr(home, "average_points_for", None))
+        features["home_oppg"] = _safe_float(getattr(home, "average_points_against", None))
         features["home_form_pct"] = _form_to_pct(getattr(home, "form", None))
         features["home_trend_score"] = _trend_to_score(getattr(home, "trend", None))
         features["home_record_pct"] = _record_to_pct(getattr(home, "record", None))
 
-        features["away_avg_for"] = _safe_float(getattr(away, "average_points_for", None))
-        features["away_avg_against"] = _safe_float(getattr(away, "average_points_against", None))
+        features["away_ppg"] = _safe_float(getattr(away, "average_points_for", None))
+        features["away_oppg"] = _safe_float(getattr(away, "average_points_against", None))
         features["away_form_pct"] = _form_to_pct(getattr(away, "form", None))
         features["away_trend_score"] = _trend_to_score(getattr(away, "trend", None))
         features["away_record_pct"] = _record_to_pct(getattr(away, "record", None))
@@ -954,19 +954,19 @@ class HistoricalDataBuilder:
         sportsdata_home = getattr(summary, "sportsdata_home", None)
         sportsdata_away = getattr(summary, "sportsdata_away", None)
 
-        if features["home_avg_for"] is None and sportsdata_home is not None:
-            features["home_avg_for"] = _safe_float(getattr(sportsdata_home, "points_for_per_game", None))
-        if features["home_avg_against"] is None and sportsdata_home is not None:
-            features["home_avg_against"] = _safe_float(getattr(sportsdata_home, "points_against_per_game", None))
+        if features["home_ppg"] is None and sportsdata_home is not None:
+            features["home_ppg"] = _safe_float(getattr(sportsdata_home, "points_for_per_game", None))
+        if features["home_oppg"] is None and sportsdata_home is not None:
+            features["home_oppg"] = _safe_float(getattr(sportsdata_home, "points_against_per_game", None))
         if features["home_trend_score"] is None and sportsdata_home is not None:
             features["home_trend_score"] = _trend_to_score(getattr(sportsdata_home, "trend", None))
         if features["home_record_pct"] is None and sportsdata_home is not None:
             features["home_record_pct"] = _record_to_pct(getattr(sportsdata_home, "record", None))
 
-        if features["away_avg_for"] is None and sportsdata_away is not None:
-            features["away_avg_for"] = _safe_float(getattr(sportsdata_away, "points_for_per_game", None))
-        if features["away_avg_against"] is None and sportsdata_away is not None:
-            features["away_avg_against"] = _safe_float(getattr(sportsdata_away, "points_against_per_game", None))
+        if features["away_ppg"] is None and sportsdata_away is not None:
+            features["away_ppg"] = _safe_float(getattr(sportsdata_away, "points_for_per_game", None))
+        if features["away_oppg"] is None and sportsdata_away is not None:
+            features["away_oppg"] = _safe_float(getattr(sportsdata_away, "points_against_per_game", None))
         if features["away_trend_score"] is None and sportsdata_away is not None:
             features["away_trend_score"] = _trend_to_score(getattr(sportsdata_away, "trend", None))
         if features["away_record_pct"] is None and sportsdata_away is not None:
@@ -1119,8 +1119,8 @@ class HistoricalDataBuilder:
             if not payload:
                 return
             if prefix == "home":
-                features["home_avg_for"] = _safe_float(payload.get("team_ppg_for"))
-                features["home_avg_against"] = _safe_float(payload.get("team_ppg_against"))
+                features["home_ppg"] = _safe_float(payload.get("team_ppg_for"))
+                features["home_oppg"] = _safe_float(payload.get("team_ppg_against"))
                 features["home_form_pct"] = _form_to_pct(payload.get("team_form"))
                 features["home_trend_score"] = _trend_to_score(payload.get("trend"))
                 features["home_record_pct"] = _record_to_pct(payload.get("team_record"))
@@ -1151,7 +1151,7 @@ class HistoricalDataBuilder:
                     features["home_fenwick_pct"] = fenwick_for / fenwick_total if fenwick_total > 0 else 0.50
 
                     # Expected Goals (xG) Calculation
-                    base_xg = _safe_float(payload.get("expected_goals")) or (features["home_avg_for"] or 2.5)
+                    base_xg = _safe_float(payload.get("expected_goals")) or (features["home_ppg"] or 2.5)
 
                     # 5v5 logic (first 55 minutes)
                     xg_5v5 = base_xg * (55.0 / 60.0)
@@ -1168,8 +1168,8 @@ class HistoricalDataBuilder:
 
                     features["home_expected_goals"] = xg_5v5_adjusted + xg_final_5_adjusted
             else:
-                features["away_avg_for"] = _safe_float(payload.get("team_ppg_for"))
-                features["away_avg_against"] = _safe_float(payload.get("team_ppg_against"))
+                features["away_ppg"] = _safe_float(payload.get("team_ppg_for"))
+                features["away_oppg"] = _safe_float(payload.get("team_ppg_against"))
                 features["away_form_pct"] = _form_to_pct(payload.get("team_form"))
                 features["away_trend_score"] = _trend_to_score(payload.get("trend"))
                 features["away_record_pct"] = _record_to_pct(payload.get("team_record"))
@@ -1200,7 +1200,7 @@ class HistoricalDataBuilder:
                     features["away_fenwick_pct"] = fenwick_for / fenwick_total if fenwick_total > 0 else 0.50
 
                     # Expected Goals (xG) Calculation
-                    base_xg = _safe_float(payload.get("expected_goals")) or (features["away_avg_for"] or 2.5)
+                    base_xg = _safe_float(payload.get("expected_goals")) or (features["away_ppg"] or 2.5)
 
                     # 5v5 logic (first 55 minutes)
                     xg_5v5 = base_xg * (55.0 / 60.0)
