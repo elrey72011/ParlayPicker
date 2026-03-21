@@ -599,24 +599,15 @@ class PredictionEngine:
         if df is None or df.empty:
             return []
 
-        # Prevent inference on dates > 60 days from system date OR historical matrix max date
+        # Prevent inference on dates > 60 days from system date
         try:
             if "game_date" in df.columns:
-                from config import DATA_DIR
-                master_file = DATA_DIR / 'master_all_sports.csv'
-                max_hist_date = None
-
-                if master_file.exists():
-                    master_df = pd.read_csv(master_file, usecols=["commence_time"])
-                    max_hist_date = pd.to_datetime(master_df["commence_time"]).max()
-
-                # Use current UTC date for dynamic upper bound comparison logic in logger
-                valid_upper_bound = pd.Timestamp.now(tz="UTC")
+                valid_upper_bound = pd.Timestamp.now(tz="UTC") + pd.Timedelta(days=60)
 
                 # Normalize dataframe dates and remove timezone for comparison
                 df_dates = pd.to_datetime(df["game_date"], errors="coerce", utc=True)
 
-                if (df_dates > valid_upper_bound + pd.Timedelta(days=60)).any():
+                if (df_dates > valid_upper_bound).any():
                     logger.warning(f"Predict Batch: Predicting on dates beyond dynamic historical data limits ({valid_upper_bound.strftime('%Y-%m-%d')}). Features may be stale.")
                     # self.use_fallback = True  # Bypassed per user request
         except Exception as e:
@@ -919,6 +910,7 @@ class PredictionEngine:
                                                 used_stale_features.at[idx] = True
 
                                             # Initialize to 0.0 beforehand in case team history is completely missing
+                                            target_stats = ["win_pct", "ppg", "oppg", "streak", "rest_days", "implied_home_prob", "kalshi_prob"]
                                             for stat in ["win_pct", "ppg", "oppg", "streak", "rest_days"]:
                                                 if pd.isna(raw_numeric.at[idx, f"feature_home_{stat}"]):
                                                     raw_numeric.at[idx, f"feature_home_{stat}"] = 0.0
