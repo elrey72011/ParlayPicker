@@ -1119,8 +1119,8 @@ class HistoricalDataBuilder:
             if not payload:
                 return
             if prefix == "home":
-                features["home_avg_for"] = _safe_float(payload.get("team_avg_points_for"))
-                features["home_avg_against"] = _safe_float(payload.get("team_avg_points_against"))
+                features["home_avg_for"] = _safe_float(payload.get("team_ppg_for"))
+                features["home_avg_against"] = _safe_float(payload.get("team_ppg_against"))
                 features["home_form_pct"] = _form_to_pct(payload.get("team_form"))
                 features["home_trend_score"] = _trend_to_score(payload.get("trend"))
                 features["home_record_pct"] = _record_to_pct(payload.get("team_record"))
@@ -1168,8 +1168,8 @@ class HistoricalDataBuilder:
 
                     features["home_expected_goals"] = xg_5v5_adjusted + xg_final_5_adjusted
             else:
-                features["away_avg_for"] = _safe_float(payload.get("team_avg_points_for"))
-                features["away_avg_against"] = _safe_float(payload.get("team_avg_points_against"))
+                features["away_avg_for"] = _safe_float(payload.get("team_ppg_for"))
+                features["away_avg_against"] = _safe_float(payload.get("team_ppg_against"))
                 features["away_form_pct"] = _form_to_pct(payload.get("team_form"))
                 features["away_trend_score"] = _trend_to_score(payload.get("trend"))
                 features["away_record_pct"] = _record_to_pct(payload.get("team_record"))

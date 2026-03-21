@@ -99,8 +99,8 @@ class BestBetAnalyzer:
         # Placeholder - implement based on your SportsData client
         return {
             f'{prefix}_win_pct': 0.5,
-            f'{prefix}_avg_points': 100,
-            f'{prefix}_avg_points_allowed': 100,
+            f'{prefix}_ppg': 100,
+            f'{prefix}_ppg_allowed': 100,
             f'{prefix}_home_win_pct': 0.5 if prefix == 'home' else 0.45,
         }
     
@@ -123,10 +123,10 @@ class BestBetAnalyzer:
         features = [
             enriched_game.get('home_win_pct', 0.5),
             enriched_game.get('away_win_pct', 0.5),
-            enriched_game.get('home_avg_points', 100),
-            enriched_game.get('away_avg_points', 100),
-            enriched_game.get('home_avg_points_allowed', 100),
-            enriched_game.get('away_avg_points_allowed', 100),
+            enriched_game.get('home_ppg', 100),
+            enriched_game.get('away_ppg', 100),
+            enriched_game.get('home_ppg_allowed', 100),
+            enriched_game.get('away_ppg_allowed', 100),
             enriched_game.get('home_last_5_wins', 0) / 5.0,
             enriched_game.get('away_last_5_wins', 0) / 5.0,
             enriched_game.get('home_sentiment', 0),

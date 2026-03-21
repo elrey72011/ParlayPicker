@@ -75,17 +75,17 @@ def prepare_features_for_inference(history_df, todays_df):
     cols_to_keep = ["game_id", "win_pct_before", "pf_last5", "form_last5", "pd_last5", "sos_last5"]
     
     home_stats = team_games[team_games["is_home"] == 1][cols_to_keep].rename(columns={
-        "win_pct_before": "home_win_pct", "pf_last5": "home_avg_points",
+        "win_pct_before": "home_win_pct", "pf_last5": "home_ppg",
         "form_last5": "home_form_last5", "pd_last5": "home_pd_last5", "sos_last5": "home_sos_last5"
     })
     
     away_stats = team_games[team_games["is_home"] == 0][cols_to_keep].rename(columns={
-        "win_pct_before": "away_win_pct", "pf_last5": "away_avg_points",
+        "win_pct_before": "away_win_pct", "pf_last5": "away_ppg",
         "form_last5": "away_form_last5", "pd_last5": "away_pd_last5", "sos_last5": "away_sos_last5"
     })
     
     # Drop columns if they already exist to avoid conflicts
-    drop_cols = ["home_win_pct", "away_win_pct", "home_avg_points", "away_avg_points"]
+    drop_cols = ["home_win_pct", "away_win_pct", "home_ppg", "away_ppg"]
     combined = combined.drop(columns=[c for c in drop_cols if c in combined.columns], errors='ignore')
     
     combined = combined.merge(home_stats, on="game_id", how="left")
@@ -94,26 +94,26 @@ def prepare_features_for_inference(history_df, todays_df):
     # 5. Differentials & Defaults
     combined = combined.fillna({
         "home_win_pct": 0.5, "away_win_pct": 0.5,
-        "home_avg_points": 100, "away_avg_points": 100,
+        "home_ppg": 100, "away_ppg": 100,
         "home_form_last5": 0.5, "away_form_last5": 0.5,
         "home_pd_last5": 0, "away_pd_last5": 0,
         "home_sos_last5": 0.5, "away_sos_last5": 0.5,
-        "home_def_rating": 100, "away_def_rating": 100,
+        "home_oppg": 100, "away_oppg": 100,
         "home_streak": 0, "away_streak": 0,
         "public_betting_pct": 50, "sharp_money_indicator": 0
     })
 
     combined["win_pct_diff"] = combined["home_win_pct"] - combined["away_win_pct"]
-    combined["avg_points_diff"] = combined["home_avg_points"] - combined["away_avg_points"]
+    combined["ppg_diff"] = combined["home_ppg"] - combined["away_ppg"]
     combined["form_diff"] = combined["home_form_last5"] - combined["away_form_last5"]
     combined["pd_last5_diff"] = combined["home_pd_last5"] - combined["away_pd_last5"]
     combined["sos_diff"] = combined["home_sos_last5"] - combined["away_sos_last5"]
     
-    if "home_def_rating" not in combined.columns:
-        combined["home_def_rating"] = combined["away_avg_points"]
-        combined["away_def_rating"] = combined["home_avg_points"]
+    if "home_oppg" not in combined.columns:
+        combined["home_oppg"] = combined["away_ppg"]
+        combined["away_oppg"] = combined["home_ppg"]
         
-    combined["def_rating_diff"] = combined["home_def_rating"] - combined["away_def_rating"]
+    combined["oppg_diff"] = combined["home_oppg"] - combined["away_oppg"]
     combined["streak_diff"] = combined["home_streak"] - combined["away_streak"]
     
     combined["public_betting_centered"] = (combined["public_betting_pct"] - 50.0) / 50.0

@@ -128,8 +128,8 @@ def get_vertex_ai_prediction(features_dict, game_context=None):
         # 1. Define the exact feature order your model expects 
         # (Must match FEATURE_NAMES from train_vertex_model.py)
         expected_features = [
-            "home_win_pct", "away_win_pct", "home_avg_points", "away_avg_points",
-            "home_def_rating", "away_def_rating", "spread_normalized", "home_last_5",
+            "home_win_pct", "away_win_pct", "home_ppg", "away_ppg",
+            "home_oppg", "away_oppg", "spread_normalized", "home_last_5",
             "away_last_5", "home_home_record", "away_away_record", "head_to_head",
             "rest_advantage", "injuries_impact", "weather_factor", "public_betting_pct",
             "sharp_money_indicator", "line_movement", "total_movement", "model_consensus",
