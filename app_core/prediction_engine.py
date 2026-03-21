@@ -1041,18 +1041,14 @@ class PredictionEngine:
                                             # Handle Differentials (Negation logic)
                                             # We also need to explicitly handle sentiment_diff if roles are swapped
 
-                                            # Calculate differentials manually from independently retrieved stats
+                                            # Calculate primary differentials (Home - Away)
                                             raw_numeric.at[idx, "feature_diff_ppg"] = raw_numeric.at[idx, "feature_home_ppg"] - raw_numeric.at[idx, "feature_away_ppg"]
                                             raw_numeric.at[idx, "feature_diff_oppg"] = raw_numeric.at[idx, "feature_home_oppg"] - raw_numeric.at[idx, "feature_away_oppg"]
                                             raw_numeric.at[idx, "feature_diff_win_pct"] = raw_numeric.at[idx, "feature_home_win_pct"] - raw_numeric.at[idx, "feature_away_win_pct"]
+                                            raw_numeric.at[idx, "feature_diff_streak"] = raw_numeric.at[idx, "feature_home_streak"] - raw_numeric.at[idx, "feature_away_streak"]
 
-                                            # Optional differentials if they exist in target stats (streak is currently not mapped to numeric perfectly here,
-                                            # but keeping pattern consistent if needed later)
-                                            if "feature_home_streak" in raw_numeric.columns and "feature_away_streak" in raw_numeric.columns:
-                                                try:
-                                                    raw_numeric.at[idx, "feature_diff_streak"] = float(raw_numeric.at[idx, "feature_home_streak"]) - float(raw_numeric.at[idx, "feature_away_streak"])
-                                                except:
-                                                    pass
+                                            # Handle special cases
+                                            raw_numeric.at[idx, "feature_diff_last5"] = raw_numeric.at[idx, "feature_diff_win_pct"] # Proxy for momentum
 
                                             # Sentiment diff lookup still requires file lookup if available
                                             h_sentiment_diff = 0.0

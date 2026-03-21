@@ -100,7 +100,7 @@ class BestBetAnalyzer:
         return {
             f'{prefix}_win_pct': 0.5,
             f'{prefix}_ppg': 100,
-            f'{prefix}_ppg_allowed': 100,
+            f'{prefix}_oppg': 100,
             f'{prefix}_home_win_pct': 0.5 if prefix == 'home' else 0.45,
         }
     
@@ -125,8 +125,8 @@ class BestBetAnalyzer:
             enriched_game.get('away_win_pct', 0.5),
             enriched_game.get('home_ppg', 100),
             enriched_game.get('away_ppg', 100),
-            enriched_game.get('home_ppg_allowed', 100),
-            enriched_game.get('away_ppg_allowed', 100),
+            enriched_game.get('home_oppg', 100),
+            enriched_game.get('away_oppg', 100),
             enriched_game.get('home_last_5_wins', 0) / 5.0,
             enriched_game.get('away_last_5_wins', 0) / 5.0,
             enriched_game.get('home_sentiment', 0),
