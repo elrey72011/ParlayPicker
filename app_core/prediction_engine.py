@@ -1032,7 +1032,9 @@ class PredictionEngine:
                                                     raw_numeric.at[idx, f"feature_away_{stat}"] = final_away_val
 
                                             # Handle Differentials (Negation logic)
-                                            for diff in diff_stats:
+                                            # We also need to explicitly handle sentiment_diff if roles are swapped
+                                            diff_stats_with_sentiment = diff_stats + ["sentiment_diff"]
+                                            for diff in diff_stats_with_sentiment:
                                                 h_diff = 0.0
                                                 if latest_home is not None:
                                                     if diff in latest_home and pd.notna(latest_home[diff]):
