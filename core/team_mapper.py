@@ -126,6 +126,12 @@ NCAAB_EXTRA_MAP = {
     "saint louis": "St. Louis",
 }
 
+PRODUCTION_MASCOT_MAP = {
+    "utah": "Utah Jazz", "philly": "Philadelphia 76ers", "okc": "Oklahoma City Thunder",
+    "montreal": "Montreal Canadiens", "san jose": "San Jose Sharks", "vancouver": "Vancouver Canucks",
+    "nebraska": "Nebraska Cornhuskers", "houston": "Houston Cougars", "tcu": "TCU Horned Frogs"
+}
+
 TEAM_MAP = {
     "north carolina wilmington": "UNC Wilmington",
     "michigan st spartans": "Michigan State",
@@ -400,6 +406,7 @@ TEAM_MAP = {
     "wisconsin badgers": "Wisconsin",
     "xavier musketeers": "Xavier",
 }
+TEAM_MAP.update(PRODUCTION_MASCOT_MAP)
 
 # Auto-injected exact mappings for Odds API full mascot names to standard names
 ODDS_API_EXACT_MAP = {
@@ -834,13 +841,6 @@ TEAM_MAP.update(NHL_EXACT_MAP)
 TEAM_MAP.update(NCAAB_EXTRA_MAP)
 # Merge dynamic aliases into the primary mapping dictionary
 TEAM_MAP.update(ODDS_API_EXACT_MAP)
-
-PRODUCTION_MASCOT_MAP = {
-    "utah": "Utah Jazz", "philly": "Philadelphia 76ers", "okc": "Oklahoma City Thunder",
-    "montreal": "Montreal Canadiens", "san jose": "San Jose Sharks", "vancouver": "Vancouver Canucks",
-    "nebraska": "Nebraska Cornhuskers", "houston": "Houston Cougars", "tcu": "TCU Horned Frogs"
-}
-TEAM_MAP.update(PRODUCTION_MASCOT_MAP)
 
 TEAM_MAP.update(load_dynamic_aliases())
 

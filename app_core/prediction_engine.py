@@ -1172,11 +1172,10 @@ class PredictionEngine:
             else:
                 raw_probs = [float(probs)]
 
-            # Jules: Expanded Blacklist and Statistical Healing
-            PLACEHOLDER_BLACKLIST = [0.623034, 0.106711, 0.486378, 0.310537]
+            # Jules: Full blacklist and Statistical Healing
+            BLACKLIST = [0.623034, 0.106711, 0.486378, 0.310537]
             for idx_batch, p in enumerate(raw_probs):
-                if p is None or any(abs(p - b) < 1e-7 for b in PLACEHOLDER_BLACKLIST):
-                    # Heal the row using performance stats (derived from inference_data)
+                if p is None or any(abs(p - b) < 1e-7 for b in BLACKLIST):
                     row_features = inference_data.iloc[idx_batch].to_dict()
                     final_probs.append(self._calculate_statistical_prob(row_features))
                 else:
