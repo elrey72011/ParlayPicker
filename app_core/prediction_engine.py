@@ -807,10 +807,10 @@ class PredictionEngine:
                                     if row_nan_ratio[idx] > 0.5:
                                         row_league = str(working_df.at[idx, "league"]).upper() if "league" in working_df.columns else ""
 
-                                        # NEW GUARD: Prevent cross-league pollution
+                                        # Jules: NEW GUARD - Prevent cross-league contamination
                                         if not row_league or row_league == "":
-                                            logger.warning(f"Row {idx} missing league identity; skipping ML join to avoid cross-league stats.")
-                                            continue
+                                            logger.warning(f"Row {idx} missing league identity; skipping ML join.")
+                                            continue # Let the row remain NaN and be healed by Step 2
 
                                         row_game_date_dt = working_df.at[idx, "game_date_dt"] if "game_date_dt" in working_df.columns else pd.NaT
 
@@ -1172,27 +1172,15 @@ class PredictionEngine:
             else:
                 raw_probs = [float(probs)]
 
-            # Check for placeholder values
-            PLACEHOLDER_VALUES = [0.623034656047821, 0.10671072453260422, 0.48637846, 0.31053704]
-            PLACEHOLDER_TOLERANCE = 1e-7
-
-            # Check for placeholders in batch
-            if isinstance(raw_probs, list):
-                 placeholder_count = sum(1 for p in raw_probs if any(abs(p - val) < PLACEHOLDER_TOLERANCE for val in PLACEHOLDER_VALUES))
-                 if placeholder_count > 0:
-                      logger.info(f"Batch prediction: {placeholder_count}/{len(raw_probs)} placeholder values detected, using fallbacks.")
-                 else:
-                      logger.info(f"Batch prediction: {len(raw_probs)} rows processed successfully with model.")
-
-            for idx, p in enumerate(raw_probs):
-                 if p is None or any(abs(p - val) < PLACEHOLDER_TOLERANCE for val in PLACEHOLDER_VALUES):
-                      # Detected placeholder, force fallback for this row
-                      logger.debug(f"Placeholder detected ({p if p is None else f'{p:.4f}'}) at index {idx}, triggering Statistical Fallback.")
-                      row_features = inference_data.iloc[idx].to_dict()
-                      fallback_val = self._calculate_statistical_prob(row_features)
-                      final_probs.append(fallback_val)
-                 else:
-                      final_probs.append(p)
+            # Jules: Expanded Blacklist and Statistical Healing
+            PLACEHOLDER_BLACKLIST = [0.623034, 0.106711, 0.486378, 0.310537]
+            for idx_batch, p in enumerate(raw_probs):
+                if p is None or any(abs(p - b) < 1e-7 for b in PLACEHOLDER_BLACKLIST):
+                    # Heal the row using performance stats (derived from inference_data)
+                    row_features = inference_data.iloc[idx_batch].to_dict()
+                    final_probs.append(self._calculate_statistical_prob(row_features))
+                else:
+                    final_probs.append(p)
 
             # SPORTSBOOK ARBITRAGE OVERRIDE
             valid_probs = [p for p in final_probs if p is not None]
