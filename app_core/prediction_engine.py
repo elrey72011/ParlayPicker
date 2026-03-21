@@ -1172,10 +1172,12 @@ class PredictionEngine:
             else:
                 raw_probs = [float(probs)]
 
-            # Jules: Full blacklist and Statistical Healing
+            # Jules: Expanded Blacklist and Statistical Healing recovery
             BLACKLIST = [0.623034, 0.106711, 0.486378, 0.310537]
             for idx_batch, p in enumerate(raw_probs):
+                # Reject blacklisted model bias and trigger the statistical formula instead
                 if p is None or any(abs(p - b) < 1e-7 for b in BLACKLIST):
+                    # Derive performance features from the prepared matrix
                     row_features = inference_data.iloc[idx_batch].to_dict()
                     final_probs.append(self._calculate_statistical_prob(row_features))
                 else:

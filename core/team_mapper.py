@@ -127,12 +127,15 @@ NCAAB_EXTRA_MAP = {
 }
 
 PRODUCTION_MASCOT_MAP = {
-    "utah": "Utah Jazz", "philly": "Philadelphia 76ers", "okc": "Oklahoma City Thunder",
-    "montreal": "Montreal Canadiens", "san jose": "San Jose Sharks", "vancouver": "Vancouver Canucks",
-    "nebraska": "Nebraska Cornhuskers", "houston": "Houston Cougars", "tcu": "TCU Horned Frogs"
+    "utah": "Utah Jazz",
+    "montreal": "Montreal Canadiens",
+    "vancouver": "Vancouver Canucks",
+    "nebraska": "Nebraska Cornhuskers"
 }
+TEAM_MAP = {}
+TEAM_MAP.update(PRODUCTION_MASCOT_MAP)
 
-TEAM_MAP = {
+TEAM_MAP.update({
     "north carolina wilmington": "UNC Wilmington",
     "michigan st spartans": "Michigan State",
     "saint louis": "St. Louis",
@@ -405,8 +408,7 @@ TEAM_MAP = {
     "winnipeg jets": "Winnipeg",
     "wisconsin badgers": "Wisconsin",
     "xavier musketeers": "Xavier",
-}
-TEAM_MAP.update(PRODUCTION_MASCOT_MAP)
+})
 
 # Auto-injected exact mappings for Odds API full mascot names to standard names
 ODDS_API_EXACT_MAP = {
