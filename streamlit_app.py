@@ -849,6 +849,8 @@ def main() -> None:
         else:
             st.success(f"✅ {len(display_df)} games found")
             rename_map = {
+                "Triple_Filter_Rank": "Triple Filter Rank",
+                "Pick_Quality": "Pick Quality",
                 "league": "League",
                 "away_team": "Away Team",
                 "home_team": "Home Team",
@@ -863,13 +865,12 @@ def main() -> None:
                 "consensus_agreement": "Consensus",
                 "kalshi_match_status": "Kalshi Status",
                 "ml_probability": "ML Prob",
-                "signal_strength": "Signal",
             }
             display_df = display_df.rename(columns=rename_map)
             if "kalshi_probability" in display_df.columns:
                 kalshi_display = pd.to_numeric(display_df["kalshi_probability"], errors="coerce")
                 display_df["kalshi_probability_display"] = kalshi_display.map(lambda x: "⚪ No Kalshi" if pd.isna(x) else f"{x:.4f}")
-            preferred = ["parlay_rank", "League", "Home Team", "Away Team", "Game Date", "Game Time (ET)", "Best Pick", "Prob", "ML Prob", "Odds", "Source", "EV", "Edge", "Consensus", "Kalshi Status", "kalshi_probability_display", "Signal"]
+            preferred = ["Triple Filter Rank", "Pick Quality", "parlay_rank", "League", "Home Team", "Away Team", "Game Date", "Game Time (ET)", "Best Pick", "Prob", "ML Prob", "Odds", "Source", "EV", "Edge", "Consensus", "Kalshi Status", "kalshi_probability_display"]
             ordered = [c for c in preferred if c in display_df.columns] + [c for c in display_df.columns if c not in preferred]
             display_df = display_df[ordered]
             st.dataframe(display_df, width="stretch")
@@ -885,7 +886,7 @@ def main() -> None:
             export_prep_df = export_prep_df.rename(columns=csv_rename_map)
 
             target_export_cols = [
-                "parlay_rank", "league", "Home", "Away", "Local Date",
+                "Triple_Filter_Rank", "Pick_Quality", "parlay_rank", "league", "Home", "Away", "Local Date",
                 "Commence (Local)", "best_pick", "WinProbability", "expected_value",
                 "edge", "consensus_agreement", "odds_american", "odds_source", "market_probability",
                 "kalshi_probability", "ml_probability", "gemini_explanation", "gemini_risk_notes"
