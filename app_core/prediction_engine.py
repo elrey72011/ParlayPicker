@@ -1041,11 +1041,22 @@ class PredictionEngine:
                                             # Handle Differentials (Negation logic)
                                             # We also need to explicitly handle sentiment_diff if roles are swapped
 
-                                            # Calculate primary differentials (Home - Away)
-                                            raw_numeric.at[idx, "feature_diff_ppg"] = raw_numeric.at[idx, "feature_home_ppg"] - raw_numeric.at[idx, "feature_away_ppg"]
-                                            raw_numeric.at[idx, "feature_diff_oppg"] = raw_numeric.at[idx, "feature_home_oppg"] - raw_numeric.at[idx, "feature_away_oppg"]
-                                            raw_numeric.at[idx, "feature_diff_win_pct"] = raw_numeric.at[idx, "feature_home_win_pct"] - raw_numeric.at[idx, "feature_away_win_pct"]
-                                            raw_numeric.at[idx, "feature_diff_streak"] = raw_numeric.at[idx, "feature_home_streak"] - raw_numeric.at[idx, "feature_away_streak"]
+                                            # Calculate primary differentials (Home - Away) explicitly handling missing columns
+                                            h_ppg = raw_numeric.at[idx, "feature_home_ppg"] if "feature_home_ppg" in raw_numeric.columns else 0.5
+                                            a_ppg = raw_numeric.at[idx, "feature_away_ppg"] if "feature_away_ppg" in raw_numeric.columns else 0.5
+                                            raw_numeric.at[idx, "feature_diff_ppg"] = h_ppg - a_ppg
+
+                                            h_oppg = raw_numeric.at[idx, "feature_home_oppg"] if "feature_home_oppg" in raw_numeric.columns else 0.5
+                                            a_oppg = raw_numeric.at[idx, "feature_away_oppg"] if "feature_away_oppg" in raw_numeric.columns else 0.5
+                                            raw_numeric.at[idx, "feature_diff_oppg"] = h_oppg - a_oppg
+
+                                            h_win_pct = raw_numeric.at[idx, "feature_home_win_pct"] if "feature_home_win_pct" in raw_numeric.columns else 0.5
+                                            a_win_pct = raw_numeric.at[idx, "feature_away_win_pct"] if "feature_away_win_pct" in raw_numeric.columns else 0.5
+                                            raw_numeric.at[idx, "feature_diff_win_pct"] = h_win_pct - a_win_pct
+
+                                            h_streak = raw_numeric.at[idx, "feature_home_streak"] if "feature_home_streak" in raw_numeric.columns else 0.0
+                                            a_streak = raw_numeric.at[idx, "feature_away_streak"] if "feature_away_streak" in raw_numeric.columns else 0.0
+                                            raw_numeric.at[idx, "feature_diff_streak"] = h_streak - a_streak
 
                                             # Handle special cases
                                             raw_numeric.at[idx, "feature_diff_last5"] = raw_numeric.at[idx, "feature_diff_win_pct"] # Proxy for momentum
