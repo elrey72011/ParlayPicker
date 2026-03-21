@@ -294,15 +294,16 @@ def extract_game_features(game: Dict, home_stats: Dict, away_stats: Dict,
             if key in odds_dict and odds_dict[key] is not None:
                 try:
                     val = float(odds_dict[key])
-                    if abs(val) >= 100:
-                        # American Odds
-                        return 100.0 / (val + 100.0) if val > 0 else abs(val) / (abs(val) + 100.0)
-                    elif 1.0 < val < 100.0:
-                        # Decimal Odds
-                        return 1.0 / val
-                    elif 0.0 < val <= 1.0:
-                        # Already implied probability
-                        return val
+                    if val != 0.5 and val != 0.0:
+                        if abs(val) >= 100:
+                            # American Odds
+                            return 100.0 / (val + 100.0) if val > 0 else abs(val) / (abs(val) + 100.0)
+                        elif 1.0 < val < 100.0:
+                            # Decimal Odds
+                            return 1.0 / val
+                        elif 0.0 < val <= 1.0:
+                            # Already implied probability
+                            return val
                 except (ValueError, TypeError):
                     continue
         return None
@@ -313,7 +314,7 @@ def extract_game_features(game: Dict, home_stats: Dict, away_stats: Dict,
     # 2. Extract Kalshi Prob
     kalshi_prob = _parse_odds_inline(game, ["kalshi_prob", "kalshi_probability"])
 
-    # Hierarchy: Kalshi Price -> Market Price -> Clamped Win Pct
+    # Hierarchy: Market Price -> Kalshi Price -> Clamped Win Pct
     base_clamped_pct = max(0.35, min(0.65, features["home_win_pct"]))
 
     if implied_prob is not None:
