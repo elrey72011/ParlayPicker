@@ -350,7 +350,6 @@ def main():
 
 
 def run_backfill(sports: List[str], days: int = 2):
-    """Execution wrapper for the Sync button in Streamlit."""
     from config import DATA_DIR
     output_path = str(DATA_DIR / "master_all_sports.csv")
     return collect_historical_data(days=days, sports=sports, output_file=output_path)
