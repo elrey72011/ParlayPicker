@@ -561,10 +561,10 @@ class PredictionEngine:
         implied_prob = features.get('implied_home_prob', 0.5)
         home_win_pct = features.get('feature_home_win_pct', 0.5)
         away_win_pct = features.get('feature_away_win_pct', 0.5)
-        home_ppg = features.get('feature_home_ppg', 110.0)
-        away_ppg = features.get('feature_away_ppg', 110.0)
-        home_oppg = features.get('feature_home_oppg', 110.0)
-        away_oppg = features.get('feature_away_oppg', 110.0)
+        home_ppg = features.get('feature_home_ppg', 0.5)
+        away_ppg = features.get('feature_away_ppg', 0.5)
+        home_oppg = features.get('feature_home_oppg', 0.5)
+        away_oppg = features.get('feature_away_oppg', 0.5)
         kalshi_prob = features.get('kalshi_prob', 0.5)
         sentiment_diff = features.get('sentiment_diff', 0.0)
 
@@ -583,8 +583,8 @@ class PredictionEngine:
         home_net = home_ppg - home_oppg
         away_net = away_ppg - away_oppg
         net_diff = home_net - away_net
-        # Scale: -20 to +20 maps to 0.40-0.60 prob
-        ppg_component = 0.5 + (net_diff / 100.0)
+        # Scale: apply 0.2 multiplier
+        ppg_component = 0.5 + (net_diff * 0.2)
         ppg_component = max(0.40, min(0.60, ppg_component))
 
         # Component 4: Kalshi probability (if available and not default)
@@ -779,7 +779,11 @@ class PredictionEngine:
                                 ]
 
                                 if "league" not in hist_df.columns:
-                                    hist_df["league"] = ""
+                                    if "sport" in hist_df.columns:
+                                        hist_df["league"] = hist_df["sport"]
+                                    else:
+                                        logger.error("Historical data integrity failure: Neither 'league' nor 'sport' columns found in master CSV.")
+                                        hist_df["league"] = ""
                                 hist_df = _normalize_identity_merge_keys(hist_df, ["league", "home_team", "away_team"])
                                 hist_df["league_norm"] = hist_df["league"].astype("string").fillna("").str.strip().str.upper()
 
