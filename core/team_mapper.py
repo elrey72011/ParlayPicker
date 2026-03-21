@@ -135,8 +135,8 @@ TEAM_MAP = {
     "george mason": "George Mason",
     "george mason patriots": "George Mason",
     "gmu": "George Mason",
-    "uconn": "Uconn",
-    "connecticut": "Uconn",
+    "uconn": "Connecticut Huskies",
+    "connecticut": "Connecticut Huskies",
     "ucf": "UCF",
     "wright st": "Wright State",
     "wright state": "Wright State",
@@ -202,8 +202,8 @@ TEAM_MAP = {
     "colorado buffaloes": "Colorado",
     "colorado state rams": "Colorado State",
     "columbus blue jackets": "Columbus",
-    "connecticut": "Uconn",
-    "connecticut huskies": "Uconn",
+    "connecticut": "Connecticut Huskies",
+    "connecticut huskies": "Connecticut Huskies",
     "creighton bluejays": "Creighton",
     "dallas cowboys": "Dallas",
     "dallas mavericks": "Dallas",
@@ -372,7 +372,7 @@ TEAM_MAP = {
     "uc santa barbara": "UCSB",
     "central florida": "UCF",
     "ucla bruins": "UCLA",
-    "uconn huskies": "Uconn",
+    "uconn huskies": "Connecticut Huskies",
     "umass": "massachusetts",
     "unlv": "UNLV",
     "usc trojans": "USC",
@@ -464,7 +464,7 @@ ODDS_API_EXACT_MAP = {
     "colorado buffaloes": "Colorado",
     "colorado st rams": "Colorado St",
     "columbia lions": "Columbia",
-    "connecticut huskies": "Connecticut",
+    "connecticut huskies": "Connecticut Huskies",
     "coppin st eagles": "Coppin St",
     "cornell big red": "Cornell",
     "creighton bluejays": "Creighton",
@@ -729,7 +729,7 @@ ODDS_API_EXACT_MAP = {
     "uc santa barbara gauchos": "UC Santa Barbara",
     "ucf knights": "UCF",
     "ucla bruins": "UCLA",
-    "uconn huskies": "UConn",
+    "uconn huskies": "Connecticut Huskies",
     "uic flames": "UIC",
     "ul monroe warhawks": "UL Monroe",
     "umass lowell river hawks": "UMass Lowell",
@@ -822,8 +822,8 @@ def normalize_team_name(name: str) -> str:
         mapped_name = TEAM_MAP[cleaned_name]
         # Check if mapped name is one of our exact overrides we want returned exactly as is
         # (Since it was mapped from a lowercase key, we can't just return it title-cased if it has special casing)
-        if mapped_name.lower() in ("connecticut", "uconn"):
-            return "Connecticut"
+        if mapped_name.lower() in ("connecticut", "uconn", "connecticut huskies"):
+            return "Connecticut Huskies"
         if mapped_name.lower() in ("queens nc", "queens university"):
             return "Queens NC"
         if mapped_name.lower() in ("california baptist", "ca baptist", "cal baptist"):
@@ -836,8 +836,8 @@ def normalize_team_name(name: str) -> str:
         name = mapped_name
 
     # Second check right here since Uconn/Queens might be incoming directly unmapped
-    if name.lower() in ("connecticut", "uconn"):
-        return "Connecticut"
+    if name.lower() in ("connecticut", "uconn", "connecticut huskies"):
+        return "Connecticut Huskies"
     if name.lower() in ("queens nc", "queens university"):
         return "Queens NC"
 
@@ -896,7 +896,7 @@ def normalize_team_name(name: str) -> str:
     if title_cased.lower() in ("prairie view am", "prairie view am panthers", "prairie view panthers"):
         return "Prairie View A&M"
     if title_cased.lower() in ("connecticut", "uconn", "connecticut huskies", "uconn huskies"):
-        return "Connecticut"
+        return "Connecticut Huskies"
     if title_cased.lower() in ("queens nc", "queens university", "queens university royals", "queens university of charlotte", "queens nc royals"):
         return "Queens NC"
 
@@ -923,10 +923,10 @@ overrides = {
     "miami (fl)": "Miami Fl",
     "miami florida hurricanes": "Miami Fl",
     "miami florida": "Miami Fl",
-    "connecticut huskies": "Connecticut",
-    "uconn huskies": "Connecticut",
-    "connecticut": "Connecticut",
-    "uconn": "Connecticut",
+    "connecticut huskies": "Connecticut Huskies",
+    "uconn huskies": "Connecticut Huskies",
+    "connecticut": "Connecticut Huskies",
+    "uconn": "Connecticut Huskies",
     "dallas mavericks": "Dallas",
     "golden state warriors": "Golden State",
     "queens university": "Queens NC",
@@ -947,8 +947,8 @@ TEAM_MAP.update(overrides)
 
 # Force any value in the dictionary that maps to variations of Uconn or Miami Fl
 for k, v in TEAM_MAP.items():
-    if v.lower() in ("uconn", "connecticut"):
-        TEAM_MAP[k] = "Connecticut"
+    if v.lower() in ("uconn", "connecticut", "connecticut huskies"):
+        TEAM_MAP[k] = "Connecticut Huskies"
     if v.lower() in ("miami fl", "miami (fl)", "miami florida"):
         TEAM_MAP[k] = "Miami Fl"
     if v.lower() in ("ca baptist", "cal baptist", "california baptist"):

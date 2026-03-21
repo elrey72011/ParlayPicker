@@ -85,6 +85,18 @@ def build_model_feature_row_from_record(record: Mapping[str, Any]) -> Dict[str, 
         else:
              row[col] = default_val
 
+    # Apply Differential Negation
+    if "feature_diff_ppg" in VERTEX_FEATURE_COLUMNS:
+        row["feature_diff_ppg"] = row.get("feature_home_ppg", 0.0) - row.get("feature_away_ppg", 0.0)
+    if "feature_diff_oppg" in VERTEX_FEATURE_COLUMNS:
+        row["feature_diff_oppg"] = row.get("feature_home_oppg", 0.0) - row.get("feature_away_oppg", 0.0)
+    if "feature_diff_win_pct" in VERTEX_FEATURE_COLUMNS:
+        row["feature_diff_win_pct"] = row.get("feature_home_win_pct", 0.5) - row.get("feature_away_win_pct", 0.5)
+    if "feature_diff_streak" in VERTEX_FEATURE_COLUMNS:
+        row["feature_diff_streak"] = row.get("feature_home_streak", 0.0) - row.get("feature_away_streak", 0.0)
+    if "feature_diff_last5" in VERTEX_FEATURE_COLUMNS:
+        row["feature_diff_last5"] = row.get("feature_diff_win_pct", 0.0)  # Proxy for momentum
+
     return row
 
 
