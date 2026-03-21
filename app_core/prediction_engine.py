@@ -960,7 +960,7 @@ class PredictionEngine:
 
                                             # Initialize to 0.0 beforehand in case team history is completely missing
                                             target_stats = ["win_pct", "ppg", "oppg", "streak", "rest_days", "implied_home_prob", "kalshi_prob"]
-                                            for stat in ["win_pct", "ppg", "oppg", "streak", "rest_days", "implied_home_prob", "kalshi_prob"]:
+                                            for stat in target_stats:
                                                 if f"feature_home_{stat}" in raw_numeric.columns and pd.isna(raw_numeric.at[idx, f"feature_home_{stat}"]):
                                                     raw_numeric.at[idx, f"feature_home_{stat}"] = 0.0
                                                 if f"feature_away_{stat}" in raw_numeric.columns and pd.isna(raw_numeric.at[idx, f"feature_away_{stat}"]):
@@ -975,11 +975,11 @@ class PredictionEngine:
                                             if found_home and latest_home is not None:
                                                 # Determine if they played as home or away in their latest game
                                                 played_as_home = (latest_home["home_team"] == row_home_clean)
-                                                prefix = "home_" if played_as_home else "away_"
+                                                hist_prefix = "home_" if played_as_home else "away_"
 
-                                                for stat in ["win_pct", "ppg", "oppg", "streak", "rest_days", "implied_home_prob", "kalshi_prob"]:
-                                                    # Map from raw CSV headers ("home_win_pct")
-                                                    hist_col = f"{prefix}{stat}"
+                                                for stat in target_stats:
+                                                    # Map from raw CSV headers (e.g., "home_ppg" or "away_ppg")
+                                                    hist_col = f"{hist_prefix}{stat}"
                                                     if stat == "implied_home_prob":
                                                         hist_col = "implied_home_prob"
                                                     elif stat == "kalshi_prob":
@@ -997,9 +997,7 @@ class PredictionEngine:
                                                             elif stat == "kalshi_prob":
                                                                 home_derived_kalshi_prob = val
                                                         else:
-                                                            if not played_as_home and stat in ["streak", "rest_days"]:
-                                                                # Negate differential-like numerical stats if played as Away, if any diff logic applies here
-                                                                pass
+                                                            # Model Assignment: Save to feature_home_{stat}
                                                             new_col = f"feature_home_{stat}"
                                                             raw_numeric.at[idx, new_col] = val
 
@@ -1007,11 +1005,11 @@ class PredictionEngine:
                                             if found_away and latest_away is not None:
                                                 # Determine if they played as home or away in their latest game
                                                 played_as_home = (latest_away["home_team"] == row_away_clean)
-                                                prefix = "home_" if played_as_home else "away_"
+                                                hist_prefix = "home_" if played_as_home else "away_"
 
-                                                for stat in ["win_pct", "ppg", "oppg", "streak", "rest_days", "implied_home_prob", "kalshi_prob"]:
-                                                    # Map from raw CSV headers ("home_win_pct")
-                                                    hist_col = f"{prefix}{stat}"
+                                                for stat in target_stats:
+                                                    # Map from raw CSV headers (e.g., "home_ppg" or "away_ppg")
+                                                    hist_col = f"{hist_prefix}{stat}"
                                                     if stat == "implied_home_prob":
                                                         hist_col = "implied_home_prob"
                                                     elif stat == "kalshi_prob":
@@ -1029,9 +1027,7 @@ class PredictionEngine:
                                                             elif stat == "kalshi_prob":
                                                                 away_derived_kalshi_prob = val
                                                         else:
-                                                            if played_as_home and stat in ["streak", "rest_days"]:
-                                                                # Negate differential-like numerical stats if played as Home, if any diff logic applies here
-                                                                pass
+                                                            # Model Assignment: Save to feature_away_{stat}
                                                             new_col = f"feature_away_{stat}"
                                                             raw_numeric.at[idx, new_col] = val
 

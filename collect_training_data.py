@@ -66,10 +66,10 @@ SPORT_CONFIGS = {
 FEATURE_NAMES = [
     "home_win_pct",
     "away_win_pct",
-    "home_avg_points",
-    "away_avg_points",
-    "home_def_rating",
-    "away_def_rating",
+    "home_ppg",
+    "away_ppg",
+    "home_oppg",
+    "away_oppg",
     "spread_normalized",
     "home_last_5",
     "away_last_5",
@@ -323,20 +323,20 @@ def extract_features(
     
     # Points/Goals
     if sport in ["NBA", "NCAAB"]:
-        features["home_avg_points"] = home_stats.get("PointsPerGame", home_stats.get("points", {}).get("for", {}).get("average", {}).get("all", 100)) or 100
-        features["away_avg_points"] = away_stats.get("PointsPerGame", away_stats.get("points", {}).get("for", {}).get("average", {}).get("all", 100)) or 100
-        features["home_def_rating"] = home_stats.get("OpponentPointsPerGame", 100) or 100
-        features["away_def_rating"] = away_stats.get("OpponentPointsPerGame", 100) or 100
+        features["home_ppg"] = home_stats.get("PointsPerGame", home_stats.get("points", {}).get("for", {}).get("average", {}).get("all", 100)) or 100
+        features["away_ppg"] = away_stats.get("PointsPerGame", away_stats.get("points", {}).get("for", {}).get("average", {}).get("all", 100)) or 100
+        features["home_oppg"] = home_stats.get("OpponentPointsPerGame", 100) or 100
+        features["away_oppg"] = away_stats.get("OpponentPointsPerGame", 100) or 100
     elif sport == "NHL":
-        features["home_avg_points"] = home_stats.get("GoalsPerGame", 3.0) or 3.0
-        features["away_avg_points"] = away_stats.get("GoalsPerGame", 3.0) or 3.0
-        features["home_def_rating"] = home_stats.get("GoalsAgainstPerGame", 3.0) or 3.0
-        features["away_def_rating"] = away_stats.get("GoalsAgainstPerGame", 3.0) or 3.0
+        features["home_ppg"] = home_stats.get("GoalsPerGame", 3.0) or 3.0
+        features["away_ppg"] = away_stats.get("GoalsPerGame", 3.0) or 3.0
+        features["home_oppg"] = home_stats.get("GoalsAgainstPerGame", 3.0) or 3.0
+        features["away_oppg"] = away_stats.get("GoalsAgainstPerGame", 3.0) or 3.0
     else:  # Football
-        features["home_avg_points"] = home_stats.get("PointsPerGame", 24) or 24
-        features["away_avg_points"] = away_stats.get("PointsPerGame", 24) or 24
-        features["home_def_rating"] = home_stats.get("OpponentPointsPerGame", 24) or 24
-        features["away_def_rating"] = away_stats.get("OpponentPointsPerGame", 24) or 24
+        features["home_ppg"] = home_stats.get("PointsPerGame", 24) or 24
+        features["away_ppg"] = away_stats.get("PointsPerGame", 24) or 24
+        features["home_oppg"] = home_stats.get("OpponentPointsPerGame", 24) or 24
+        features["away_oppg"] = away_stats.get("OpponentPointsPerGame", 24) or 24
     
     # Spread
     spread = odds_data.get("spread", 0) or 0
