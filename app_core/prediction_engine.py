@@ -610,18 +610,13 @@ class PredictionEngine:
                     master_df = pd.read_csv(master_file, usecols=["commence_time"])
                     max_hist_date = pd.to_datetime(master_df["commence_time"]).max()
 
-                # Calculate upper bounds dynamically from system date + master CSV date
-                system_date = pd.Timestamp.now(tz="UTC")
-                valid_upper_bound = system_date + pd.Timedelta(days=60)
-
-                if max_hist_date is not None:
-                    # Allow up to 60 days past WHICHEVER is more recent: the master slate limit or today's date
-                    valid_upper_bound = max(valid_upper_bound, max_hist_date + pd.Timedelta(days=60))
+                # Use current UTC date for dynamic upper bound comparison logic in logger
+                valid_upper_bound = pd.Timestamp.now(tz="UTC")
 
                 # Normalize dataframe dates and remove timezone for comparison
                 df_dates = pd.to_datetime(df["game_date"], errors="coerce", utc=True)
 
-                if (df_dates > valid_upper_bound).any():
+                if (df_dates > valid_upper_bound + pd.Timedelta(days=60)).any():
                     logger.warning(f"Predict Batch: Predicting on dates beyond dynamic historical data limits ({valid_upper_bound.strftime('%Y-%m-%d')}). Features may be stale.")
                     # self.use_fallback = True  # Bypassed per user request
         except Exception as e:
@@ -832,16 +827,8 @@ class PredictionEngine:
                                             if row_league and "league_norm" in hist_df.columns:
                                                 match = match[match["league_norm"].astype("string").str.upper().eq(row_league).fillna(False)]
 
-                                            if not match.empty and row_game_date_dt is not None and not pd.isna(row_game_date_dt):
-                                                try:
-                                                    target_dt = pd.Timestamp(row_game_date_dt).normalize()
-                                                    if "game_date_dt" in match.columns:
-                                                        # Cap future target dates at today so we can still find the latest stats
-                                                        cap_dt = min(target_dt, pd.Timestamp.now().normalize())
-                                                        valid_window = match["game_date_dt"].dt.normalize() <= cap_dt
-                                                        match = match[valid_window]
-                                                except Exception as e:
-                                                    logger.warning(f"Failed to filter prior dates during looser fallback: {e}")
+                                            # We intentionally do not filter by valid_window here to allow "unlimited lookback"
+                                            # to the most recent historical stats available regardless of date.
 
                                         # Fuzzy Fallback: if exact match fails, use rapidfuzz (or difflib) on cleaned names
                                         if match.empty and row_league:
@@ -874,16 +861,9 @@ class PredictionEngine:
                                                 if best_score >= 65 and best_match_id:
                                                     logger.info(f"Fuzzy match successful: {row_matchup} -> {best_match_id} (Score: {best_score:.1f})")
                                                     match = league_pool[league_pool["matchup_id"].eq(best_match_id).fillna(False)]
-                                                    if not match.empty and row_game_date_dt is not None and not pd.isna(row_game_date_dt):
-                                                        try:
-                                                            target_dt = pd.Timestamp(row_game_date_dt).normalize()
-                                                            if "game_date_dt" in match.columns:
-                                                                # Cap future target dates at today so we can still find the latest stats
-                                                                cap_dt = min(target_dt, pd.Timestamp.now().normalize())
-                                                                valid_window = match["game_date_dt"].dt.normalize() <= cap_dt
-                                                                match = match[valid_window]
-                                                        except Exception as e:
-                                                            logger.warning(f"Failed to filter prior dates during fuzzy fallback: {e}")
+
+                                                    # We intentionally do not filter by valid_window here to allow "unlimited lookback"
+                                                    # to the most recent historical stats available regardless of date.
 
                                         # Final logic to grab the most recent valid match found
                                         if not match.empty:
@@ -912,15 +892,8 @@ class PredictionEngine:
                                                 home_pool = hist_df[hist_df["league_norm"].astype("string").str.upper().eq(row_league).fillna(False)]
                                                 if not home_pool.empty:
                                                     home_games = home_pool[(home_pool["home_team"].eq(row_home_clean)) | (home_pool["away_team"].eq(row_home_clean))].copy()
-                                                    if row_game_date_dt is not None and not pd.isna(row_game_date_dt):
-                                                        try:
-                                                            target_dt = pd.Timestamp(row_game_date_dt).normalize()
-                                                            if "game_date_dt" in home_games.columns:
-                                                                cap_dt = min(target_dt, pd.Timestamp.now().normalize())
-                                                                valid_window = home_games["game_date_dt"].dt.normalize() <= cap_dt
-                                                                home_games = home_games[valid_window]
-                                                        except Exception as e:
-                                                            pass
+
+                                                    # Allow unlimited lookback for latest available stats regardless of date
                                                     if not home_games.empty:
                                                         # Explicitly sort by date to guarantee we are grabbing the most recent performance
                                                         if "commence_time" in home_games.columns:
@@ -933,15 +906,8 @@ class PredictionEngine:
                                                 away_pool = hist_df[hist_df["league_norm"].astype("string").str.upper().eq(row_league).fillna(False)]
                                                 if not away_pool.empty:
                                                     away_games = away_pool[(away_pool["home_team"].eq(row_away_clean)) | (away_pool["away_team"].eq(row_away_clean))].copy()
-                                                    if row_game_date_dt is not None and not pd.isna(row_game_date_dt):
-                                                        try:
-                                                            target_dt = pd.Timestamp(row_game_date_dt).normalize()
-                                                            if "game_date_dt" in away_games.columns:
-                                                                cap_dt = min(target_dt, pd.Timestamp.now().normalize())
-                                                                valid_window = away_games["game_date_dt"].dt.normalize() <= cap_dt
-                                                                away_games = away_games[valid_window]
-                                                        except Exception as e:
-                                                            pass
+
+                                                    # Allow unlimited lookback for latest available stats regardless of date
                                                     if not away_games.empty:
                                                         # Explicitly sort by date to guarantee we are grabbing the most recent performance
                                                         if "commence_time" in away_games.columns:
@@ -959,6 +925,11 @@ class PredictionEngine:
                                                 if pd.isna(raw_numeric.at[idx, f"feature_away_{stat}"]):
                                                     raw_numeric.at[idx, f"feature_away_{stat}"] = 0.0
 
+                                            home_derived_implied_prob = None
+                                            home_derived_kalshi_prob = None
+                                            away_derived_implied_prob = None
+                                            away_derived_kalshi_prob = None
+
                                             # Map Home Stats
                                             if found_home and latest_home is not None:
                                                 # Determine if they played as home or away in their latest game
@@ -971,6 +942,19 @@ class PredictionEngine:
                                                     if hist_col in latest_home and pd.notna(latest_home[hist_col]):
                                                         raw_numeric.at[idx, new_col] = float(latest_home[hist_col])
 
+                                                # Extract market odds for Home Team
+                                                if "implied_home_prob" in latest_home and pd.notna(latest_home["implied_home_prob"]):
+                                                    if played_as_home:
+                                                        home_derived_implied_prob = float(latest_home["implied_home_prob"])
+                                                    else:
+                                                        home_derived_implied_prob = 1.0 - float(latest_home["implied_home_prob"])
+
+                                                if "kalshi_prob" in latest_home and pd.notna(latest_home["kalshi_prob"]):
+                                                    if played_as_home:
+                                                        home_derived_kalshi_prob = float(latest_home["kalshi_prob"])
+                                                    else:
+                                                        home_derived_kalshi_prob = 1.0 - float(latest_home["kalshi_prob"])
+
                                             # Map Away Stats
                                             if found_away and latest_away is not None:
                                                 # Determine if they played as home or away in their latest game
@@ -982,6 +966,34 @@ class PredictionEngine:
                                                     new_col = f"feature_away_{stat}"
                                                     if hist_col in latest_away and pd.notna(latest_away[hist_col]):
                                                         raw_numeric.at[idx, new_col] = float(latest_away[hist_col])
+
+                                                # Extract market odds for Away Team
+                                                if "implied_home_prob" in latest_away and pd.notna(latest_away["implied_home_prob"]):
+                                                    if played_as_home:
+                                                        away_derived_implied_prob = 1.0 - float(latest_away["implied_home_prob"])
+                                                    else:
+                                                        away_derived_implied_prob = float(latest_away["implied_home_prob"])
+
+                                                if "kalshi_prob" in latest_away and pd.notna(latest_away["kalshi_prob"]):
+                                                    if played_as_home:
+                                                        away_derived_kalshi_prob = 1.0 - float(latest_away["kalshi_prob"])
+                                                    else:
+                                                        away_derived_kalshi_prob = float(latest_away["kalshi_prob"])
+
+                                            # Average or fallback derived probabilities
+                                            if home_derived_implied_prob is not None and away_derived_implied_prob is not None:
+                                                raw_numeric.at[idx, "implied_home_prob"] = (home_derived_implied_prob + away_derived_implied_prob) / 2.0
+                                            elif home_derived_implied_prob is not None:
+                                                raw_numeric.at[idx, "implied_home_prob"] = home_derived_implied_prob
+                                            elif away_derived_implied_prob is not None:
+                                                raw_numeric.at[idx, "implied_home_prob"] = away_derived_implied_prob
+
+                                            if home_derived_kalshi_prob is not None and away_derived_kalshi_prob is not None:
+                                                raw_numeric.at[idx, "kalshi_prob"] = (home_derived_kalshi_prob + away_derived_kalshi_prob) / 2.0
+                                            elif home_derived_kalshi_prob is not None:
+                                                raw_numeric.at[idx, "kalshi_prob"] = home_derived_kalshi_prob
+                                            elif away_derived_kalshi_prob is not None:
+                                                raw_numeric.at[idx, "kalshi_prob"] = away_derived_kalshi_prob
 
                                             # Compute Differentials
                                             h_win = raw_numeric.at[idx, "feature_home_win_pct"]

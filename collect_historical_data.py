@@ -284,7 +284,36 @@ def extract_game_features(game: Dict, home_stats: Dict, away_stats: Dict,
     features["total_movement"] = 0
     features["model_consensus"] = 0.5
     features["theover_probability"] = features["home_win_pct"]
-    features["implied_home_prob"] = features["home_win_pct"]
+
+    # Implied Home Prob Extraction
+    implied_prob = None
+
+    # 1. Try to find market_probability
+    if "market_probability" in game:
+        try:
+            val = float(game["market_probability"])
+            if 0.0 < val < 1.0:
+                implied_prob = val
+        except (ValueError, TypeError):
+            pass
+
+    # 2. Try to find odds_american
+    if implied_prob is None and "odds_american" in game:
+        try:
+            odds = float(game["odds_american"])
+            if odds != 0:
+                if odds > 0:
+                    implied_prob = 100.0 / (odds + 100.0)
+                else:
+                    implied_prob = abs(odds) / (abs(odds) + 100.0)
+        except (ValueError, TypeError):
+            pass
+
+    # 3. Fallback to clamped home win percentage
+    if implied_prob is not None:
+        features["implied_home_prob"] = implied_prob
+    else:
+        features["implied_home_prob"] = max(0.35, min(0.65, features["home_win_pct"]))
     
     # Streaks
     def parse_streak(s):
