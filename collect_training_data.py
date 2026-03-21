@@ -680,3 +680,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# Ensured avg_points is ppg and def_rating is oppg
