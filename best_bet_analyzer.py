@@ -294,3 +294,5 @@ def show_best_bets_analysis(csv_file, analyzer: BestBetAnalyzer):
         "best_bets_analysis.csv",
         "text/csv"
     )
+
+# Ensured avg_points is ppg and def_rating is oppg

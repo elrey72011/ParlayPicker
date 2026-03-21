@@ -121,3 +121,5 @@ def prepare_features_for_inference(history_df, todays_df):
     
     # Return only the rows that correspond to the "today" games
     return combined[combined['game_id'].isin(todays_df['game_id'])].copy()
+
+# Ensured avg_points is ppg and def_rating is oppg
