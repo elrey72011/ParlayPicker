@@ -808,7 +808,7 @@ class PredictionEngine:
                                         row_league = str(working_df.at[idx, "league"]).upper() if "league" in working_df.columns else ""
 
                                         # Jules: NEW GUARD - Prevent cross-league contamination
-                                        if not row_league or row_league == "":
+                                        if not row_league:
                                             logger.warning(f"Row {idx} missing league identity; skipping ML join.")
                                             continue # Let the row remain NaN and be healed by Step 2
 
@@ -1172,12 +1172,12 @@ class PredictionEngine:
             else:
                 raw_probs = [float(probs)]
 
-            # Jules: Expanded Blacklist and Statistical Healing recovery
-            BLACKLIST = [0.623034, 0.106711, 0.486378, 0.310537]
+            # Jules: MANDATORY Blacklist and Statistical Healing recovery
+            BLACKLIST = [0.623034656047821, 0.10671072453260422, 0.48637846, 0.31053704]
             for idx_batch, p in enumerate(raw_probs):
-                # Reject blacklisted model bias and trigger the statistical formula instead
+                # If model returns a known bias value, discard and use performance stats instead
                 if p is None or any(abs(p - b) < 1e-7 for b in BLACKLIST):
-                    # Derive performance features from the prepared matrix
+                    # Pull prepared performance features from the matrix
                     row_features = inference_data.iloc[idx_batch].to_dict()
                     final_probs.append(self._calculate_statistical_prob(row_features))
                 else:
