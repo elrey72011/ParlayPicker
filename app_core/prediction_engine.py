@@ -462,11 +462,11 @@ class PredictionEngine:
                 prob = float(prediction[0])
 
             # Check for placeholder
-            PLACEHOLDER_VALUES = [0.623034656047821, 0.10671072453260422, 0.48637846]
+            PLACEHOLDER_VALUES = [0.623034656047821, 0.10671072453260422, 0.48637846, 0.31053704]
             PLACEHOLDER_TOLERANCE = 1e-7
 
             if any(abs(prob - val) < PLACEHOLDER_TOLERANCE for val in PLACEHOLDER_VALUES):
-                logger.info(f"Model validation: placeholder detected on zero input, using fallback mode.")
+                logger.info(f"Model validation: placeholder detected ({prob:.4f}) on zero input, using fallback mode.")
                 self.use_fallback = True
             else:
                 logger.debug(f"Model validation passed. Zero-input output: {prob}")
@@ -534,12 +534,12 @@ class PredictionEngine:
             logger.debug(f"[MODEL_DEBUG] Raw prediction: {prob}")
 
             # HARD REJECTION of placeholder values (Section 4)
-            PLACEHOLDER_VALUES = [0.623034656047821, 0.10671072453260422, 0.48637846]
+            PLACEHOLDER_VALUES = [0.623034656047821, 0.10671072453260422, 0.48637846, 0.31053704]
             PLACEHOLDER_TOLERANCE = 1e-7
 
             if any(abs(prob - val) < PLACEHOLDER_TOLERANCE for val in PLACEHOLDER_VALUES):
                  # Using fallback gracefully when placeholder detected
-                 logger.debug(f"Placeholder value detected ({prob:.3f}), skipping prediction.")
+                 logger.debug(f"Placeholder detected ({prob:.4f}), triggering Statistical Fallback.")
                  return {"prob": None, "note": "Fallback (Placeholder Detected)"}
 
             return {"prob": float(prob), "note": "Local Inference"}
@@ -809,7 +809,7 @@ class PredictionEngine:
 
                                         # NEW GUARD: Prevent cross-league pollution
                                         if not row_league or row_league == "":
-                                            logger.debug(f"Row {idx}: Missing league, skipping ML join.")
+                                            logger.warning(f"Row {idx} missing league identity; skipping ML join to avoid cross-league stats.")
                                             continue
 
                                         row_game_date_dt = working_df.at[idx, "game_date_dt"] if "game_date_dt" in working_df.columns else pd.NaT
@@ -1173,7 +1173,7 @@ class PredictionEngine:
                 raw_probs = [float(probs)]
 
             # Check for placeholder values
-            PLACEHOLDER_VALUES = [0.623034656047821, 0.10671072453260422, 0.48637846]
+            PLACEHOLDER_VALUES = [0.623034656047821, 0.10671072453260422, 0.48637846, 0.31053704]
             PLACEHOLDER_TOLERANCE = 1e-7
 
             # Check for placeholders in batch
@@ -1187,7 +1187,7 @@ class PredictionEngine:
             for idx, p in enumerate(raw_probs):
                  if any(abs(p - val) < PLACEHOLDER_TOLERANCE for val in PLACEHOLDER_VALUES):
                       # Detected placeholder, force fallback for this row
-                      logger.debug(f"Placeholder at index {idx}: omitting probability.")
+                      logger.debug(f"Placeholder detected ({p:.4f}) at index {idx}, triggering Statistical Fallback.")
                       final_probs.append(None)
                  else:
                       final_probs.append(p)
