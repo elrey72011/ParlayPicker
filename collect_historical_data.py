@@ -349,9 +349,10 @@ def main():
     collect_historical_data(days=args.days, sports=args.sports, output_file=args.output, api_key=args.api_key)
 
 
-def run_backfill(sports: List[str], days: int = 2):
+def run_backfill(sports: List[str], days: int = 2): # Force 2-day lookback
     from config import DATA_DIR
     output_path = str(DATA_DIR / "master_all_sports.csv")
+    # This physically populates the 'Utah Jazz' rows for the mapper to find
     return collect_historical_data(days=days, sports=sports, output_file=output_path)
 
 

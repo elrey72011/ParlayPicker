@@ -804,13 +804,13 @@ class PredictionEngine:
 
                                 # Process each predominantly empty row
                                 for idx in df.index:
+                                    row_league = df.at[idx, 'league']
+                                    # If we don't know the league, we CANNOT join stats accurately
+                                    if not row_league or pd.isna(row_league):
+                                        continue
+
                                     if row_nan_ratio[idx] > 0.5:
                                         row_league = str(working_df.at[idx, "league"]).upper() if "league" in working_df.columns else ""
-
-                                        # Jules: NEW GUARD - Prevent cross-league contamination
-                                        if not row_league:
-                                            logger.warning(f"Row {idx} missing league identity; skipping ML join.")
-                                            continue # Let the row remain NaN and be healed by Step 2
 
                                         row_game_date_dt = working_df.at[idx, "game_date_dt"] if "game_date_dt" in working_df.columns else pd.NaT
 
