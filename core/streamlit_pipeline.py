@@ -2372,6 +2372,11 @@ def run_analysis_pipeline(
     if diagnostics["odds_fallback_only"] and not analysis_df.empty:
         diagnostics["diagnostic_warning"] = "odds_american mostly fallback -110"
 
+    # Jules: MANDATORY Game Time EST population for UI consistency
+    # This ensures "Odds", "Analysis", and "Best Picks" tabs all have human-readable times.
+    if not analysis_df.empty:
+        analysis_df["game_time_est"] = _format_game_time_est(analysis_df)
+
     return (analysis_df, best_picks_df, diagnostics)
 
 
