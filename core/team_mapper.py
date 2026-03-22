@@ -18,7 +18,6 @@ logger = logging.getLogger(__name__)
 _MISSING_KEYS_WARNED = set()
 
 KALSHI_NCAAB_OVERRIDES = {
-    "uconn": "connecticut",
     "ucf": "ucf",
     "wright st": "wright state",
     "queens university": "queens nc",
@@ -126,8 +125,9 @@ NCAAB_EXTRA_MAP = {
     "saint louis": "St. Louis",
 }
 
-# Jules: Production-grade Mascot Bridge
+# Consolidated Production Mascot Bridge
 PRODUCTION_MASCOT_MAP = {
+    # Pro Teams
     "utah": "Utah Jazz",
     "philly": "Philadelphia 76ers",
     "la lakers": "Los Angeles Lakers",
@@ -137,10 +137,25 @@ PRODUCTION_MASCOT_MAP = {
     "san jose": "San Jose Sharks",
     "ny islanders": "New York Islanders",
     "vancouver": "Vancouver Canucks",
-    "nebraska": "Nebraska Cornhuskers",
+
+    # Tournament Heavyweights (Requested)
+    "unc": "North Carolina Tar Heels",
+    "nc state": "NC State Wolfpack",
+    "ncsu": "NC State Wolfpack",
+    "purdue": "Purdue Boilermakers",
+    "arizona": "Arizona Wildcats",
+    "tennessee": "Tennessee Volunteers",
+
+    # Additional High-Volume Tournament Programs
+    "uconn": "UConn Huskies",
+    "connecticut": "UConn Huskies",
+    "u of c": "UConn Huskies",
+    "duke": "Duke Blue Devils",
+    "kansas": "Kansas Jayhawks",
+    "kentucky": "Kentucky Wildcats",
+    "alabama": "Alabama Crimson Tide",
     "houston": "Houston Cougars",
-    "tcu": "TCU Horned Frogs",
-    "uconn": "UConn Huskies"
+    "nebraska": "Nebraska Cornhuskers"
 }
 TEAM_MAP = {}
 TEAM_MAP.update(PRODUCTION_MASCOT_MAP)
@@ -891,7 +906,7 @@ def normalize_team_name(name: str) -> str:
         # Check if mapped name is one of our exact overrides we want returned exactly as is
         # (Since it was mapped from a lowercase key, we can't just return it title-cased if it has special casing)
         if mapped_name.lower() in ("connecticut", "uconn", "connecticut huskies"):
-            return "Connecticut Huskies"
+            return "UConn Huskies"
         if mapped_name.lower() in ("queens nc", "queens university", "queens university royals"):
             return "Queens University Royals"
         if mapped_name.lower() in ("california baptist", "ca baptist", "cal baptist", "california baptist lancers"):
@@ -902,12 +917,14 @@ def normalize_team_name(name: str) -> str:
             return "Prairie View A&M Panthers"
         if mapped_name.lower() in ("miami fl", "miami (fl)", "miami florida", "miami (fl) hurricanes"):
             return "Miami (FL) Hurricanes"
+        if mapped_name.lower() in ("nc state", "nc state wolfpack", "ncsu"):
+            return "NC State Wolfpack"
 
         name = mapped_name
 
     # Second check right here since Uconn/Queens might be incoming directly unmapped
-    if name.lower() in ("connecticut", "uconn", "connecticut huskies"):
-        return "Connecticut Huskies"
+    if name.lower() in ("connecticut", "uconn", "connecticut huskies", "uconn huskies"):
+        return "UConn Huskies"
     if name.lower() in ("queens nc", "queens university", "queens university royals"):
         return "Queens University Royals"
 
@@ -966,11 +983,13 @@ def normalize_team_name(name: str) -> str:
     if title_cased.lower() in ("prairie view am", "prairie view am panthers", "prairie view panthers", "prairie view a&m panthers", "prairie view a&m"):
         return "Prairie View A&M Panthers"
     if title_cased.lower() in ("connecticut", "uconn", "connecticut huskies", "uconn huskies"):
-        return "Connecticut Huskies"
+        return "UConn Huskies"
     if title_cased.lower() in ("queens nc", "queens university", "queens university royals", "queens university of charlotte", "queens nc royals"):
         return "Queens University Royals"
     if title_cased.lower() in ("miami (fl) hurricanes", "miami florida hurricanes", "miami fl", "miami (fl)"):
         return "Miami (FL) Hurricanes"
+    if title_cased.lower() in ("nc state", "nc state wolfpack", "ncsu"):
+        return "NC State Wolfpack"
 
     return title_cased
 
@@ -995,10 +1014,10 @@ overrides = {
     "miami florida hurricanes": "Miami (FL) Hurricanes",
     "miami florida": "Miami (FL) Hurricanes",
     "miami fl": "Miami (FL) Hurricanes",
-    "connecticut huskies": "Connecticut Huskies",
-    "uconn huskies": "Connecticut Huskies",
-    "connecticut": "Connecticut Huskies",
-    "uconn": "Connecticut Huskies",
+    "connecticut huskies": "UConn Huskies",
+    "uconn huskies": "UConn Huskies",
+    "connecticut": "UConn Huskies",
+    "uconn": "UConn Huskies",
     "dallas mavericks": "Dallas",
     "golden state warriors": "Golden State",
     "queens university": "Queens University Royals",
@@ -1013,14 +1032,15 @@ overrides = {
     "prairie view panthers": "Prairie View A&M Panthers",
     "prairie view a&m": "Prairie View A&M Panthers",
     "prairie view a&m panthers": "Prairie View A&M Panthers",
-    "prairie view am": "Prairie View A&M Panthers"
+    "prairie view am": "Prairie View A&M Panthers",
+    "nc state wolfpack": "NC State Wolfpack"
 }
 TEAM_MAP.update(overrides)
 
 # Force any value in the dictionary that maps to variations of Uconn or Miami Fl
 for k, v in TEAM_MAP.items():
-    if v.lower() in ("uconn", "connecticut", "connecticut huskies"):
-        TEAM_MAP[k] = "Connecticut Huskies"
+    if v.lower() in ("uconn", "connecticut", "connecticut huskies", "uconn huskies"):
+        TEAM_MAP[k] = "UConn Huskies"
     if v.lower() in ("miami fl", "miami (fl)", "miami florida", "miami (fl) hurricanes"):
         TEAM_MAP[k] = "Miami (FL) Hurricanes"
     if v.lower() in ("ca baptist", "cal baptist", "california baptist", "california baptist lancers"):
@@ -1031,4 +1051,6 @@ for k, v in TEAM_MAP.items():
         TEAM_MAP[k] = "St. John's Red Storm"
     if v.lower() in ("prairie view a&m", "prairie view panthers", "prairie view am", "prairie view a&m panthers"):
         TEAM_MAP[k] = "Prairie View A&M Panthers"
+    if v.lower() in ("nc state", "nc state wolfpack", "ncsu"):
+        TEAM_MAP[k] = "NC State Wolfpack"
 
