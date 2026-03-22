@@ -1659,6 +1659,7 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
                 'home_team': game.get('home_team'),
                 'away_team': game.get('away_team'),
                 'commence_time': game.get('commence_time'),
+                'commence_time_raw': game.get('commence_time'),
                 'matchup_id': game.get('matchup_id'),
                 'odds_source': book_key,
             }
@@ -1695,7 +1696,7 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
     out_rows = []
 
     # Required identity columns
-    id_cols = ["league", "home_team", "away_team", "game_date", "matchup_id"]
+    id_cols = ["league", "home_team", "away_team", "game_date", "matchup_id", "commence_time_raw"]
     # Check for game_time_est if exists
     if "game_time_est" in live_odds_df.columns:
         id_cols.append("game_time_est")
@@ -2372,10 +2373,17 @@ def run_analysis_pipeline(
     if diagnostics["odds_fallback_only"] and not analysis_df.empty:
         diagnostics["diagnostic_warning"] = "odds_american mostly fallback -110"
 
-    # Jules: MANDATORY Game Time EST population for UI consistency
-    # This ensures "Odds", "Analysis", and "Best Picks" tabs all have human-readable times.
+    # Jules: Fix Midnight Flattening by using raw UTC if available
     if not analysis_df.empty:
-        analysis_df["game_time_est"] = _format_game_time_est(analysis_df)
+        # 1. Identify best source for time
+        src_col = "commence_time_raw" if "commence_time_raw" in analysis_df.columns else "game_date"
+
+        # 2. Format using a temporary view that preserves the Index
+        temp_df = analysis_df[[src_col]].rename(columns={src_col: "game_date"})
+        analysis_df["game_time_est"] = _format_game_time_est(temp_df)
+
+        # 3. Final Cleanup
+        analysis_df = analysis_df.drop(columns=["commence_time_raw"], errors="ignore")
 
     return (analysis_df, best_picks_df, diagnostics)
 
