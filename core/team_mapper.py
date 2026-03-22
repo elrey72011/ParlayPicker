@@ -126,13 +126,21 @@ NCAAB_EXTRA_MAP = {
     "saint louis": "St. Louis",
 }
 
-# Consolidation of Pro and Tournament Mappings
+# Jules: Production-grade Mascot Bridge
 PRODUCTION_MASCOT_MAP = {
     "utah": "Utah Jazz",
+    "philly": "Philadelphia 76ers",
+    "la lakers": "Los Angeles Lakers",
+    "la clippers": "LA Clippers",
+    "okc": "Oklahoma City Thunder",
+    "montreal": "Montreal Canadiens",
+    "san jose": "San Jose Sharks",
+    "ny islanders": "New York Islanders",
+    "vancouver": "Vancouver Canucks",
     "nebraska": "Nebraska Cornhuskers",
     "houston": "Houston Cougars",
-    "montreal": "Montreal Canadiens",
-    "vancouver": "Vancouver Canucks"
+    "tcu": "TCU Horned Frogs",
+    "uconn": "UConn Huskies"
 }
 TEAM_MAP = {}
 TEAM_MAP.update(PRODUCTION_MASCOT_MAP)
