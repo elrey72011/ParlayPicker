@@ -1183,20 +1183,22 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             # Moneyline fallback
             is_ml_pick = any(x in _safe_text(row.get("market_type")).lower() for x in ["moneyline", "h2h"]) or target_line == 0.0 or target_line is None
             if is_ml_pick:
+                from app_core.team_name_matcher import TeamNameMatcher
                 for mkt in markets:
                     m_title = str(mkt.get("title") or "").lower()
                     m_subtitle = str(mkt.get("subtitle") or "").lower()
                     combined_text = f"{m_title} {m_subtitle}"
 
-                    if family == "moneyline" or "moneyline" in combined_text or "to win" in combined_text:
+                    if family == "moneyline" or any(x in combined_text for x in ["moneyline", "to win", "winner", "vs"]):
                         pick_team_val = row.get("pick_team")
                         if pd.notna(pick_team_val):
                             pick_team = str(pick_team_val)
                         else:
                             home_team_val = row.get("home_team")
                             pick_team = str(home_team_val) if pd.notna(home_team_val) else ""
-                        pick_team_norm = _normalize_team_token(pick_team)
-                        if pick_team_norm and pick_team_norm in _normalize_team_token(m_title):
+                        pick_team_norm = TeamNameMatcher.normalize(pick_team)
+                        market_title_norm = TeamNameMatcher.normalize(m_title)
+                        if pick_team_norm and pick_team_norm in market_title_norm:
                             best_market = mkt
                             match_status = "matched"
                             match_reason = "moneyline_match"
