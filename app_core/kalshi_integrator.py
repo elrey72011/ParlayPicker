@@ -1365,7 +1365,9 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 continue
 
             # 5. Save explicitly to dataframe
-            out.at[idx, "kalshi_probability"] = float(final_prob)
+            # Invert probability if the row represents an 'Away' or 'Under' outcome
+            is_away_or_under = any(x in market_type_str for x in ["away", "under"])
+            out.at[idx, "kalshi_probability"] = 1.0 - float(final_prob) if is_away_or_under else float(final_prob)
             out.at[idx, "kalshi_market_title"] = best_market.get("title")
             out.at[idx, "kalshi_event_ticker"] = best_market.get("event_ticker")
             out.at[idx, "kalshi_market_ticker"] = best_market.get("ticker")
