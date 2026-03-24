@@ -1625,7 +1625,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         best["edge"] = pd.to_numeric(best["edge"], errors="coerce")
 
         # 1. Sync the slate date with actual start time
-        best["game_date"] = pd.to_datetime(best["game_time_est"]).dt.date
+        # Remove ' ET' suffix and parse as a naive datetime before extracting the date
+        best["game_date"] = pd.to_datetime(best["game_time_est"].str.replace(" ET", "", regex=False)).dt.date
 
         # 2. Final ranking pass for sequential 1-21 numbering
         best = _apply_triple_filter_ranking(best)
