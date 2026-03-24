@@ -1534,12 +1534,6 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     # Force expected_value to numeric, converting true errors to NaN while preserving negative floats
     pool["expected_value"] = pd.to_numeric(pool["expected_value"], errors="coerce")
 
-    # Phase 3: NHL Guardrails (Spread and Moneyline)
-    # 1. Puck Line Penalty: apply 0.80 multiplier to expected_value for NHL spreads
-    is_nhl = pool["league"].str.upper() == "NHL"
-    is_spread = pool["market_type"].str.startswith("spread")
-    pool.loc[is_nhl & is_spread, "expected_value"] *= 0.80
-
     # 2. Assign calibrated probability with a default
     pool["calibrated_probability"] = _numeric_series(pool, "calibrated_probability", 0.5)
 
@@ -2230,8 +2224,10 @@ def run_analysis_pipeline(
     total_model = (0.6 * theover_probability) + (0.4 * ml_probability)
     total_model = total_model.where(total_model.notna(), theover_probability.where(theover_probability.notna(), ml_probability))
 
+    # Group Spread and H2H (Moneyline) as 'Sides' for probability logic
+    is_side = market_type.str.contains("spread|h2h", case=False, na=False)
     model_probability = pd.Series(
-        np.where(market_type.str.startswith("spread"), spread_model, total_model),
+        np.where(is_side, spread_model, total_model),
         index=merged.index,
         dtype="float64",
     )
