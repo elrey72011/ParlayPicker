@@ -15189,72 +15189,19 @@ with tab_master:
         logger.info(f"Saving collapsed df ({len(df)} rows) to session state...")
         # --- GEMINI ENRICHMENT (Moved & Fixed) ---
         use_gemini_explanations = st.session_state.get("use_gemini_explanations", True)
-        gemini_row_limit = int(st.session_state.get("gemini_row_limit", MAX_GEMINI_CALLS_PER_RUN) or MAX_GEMINI_CALLS_PER_RUN)
-        gemini_full_run = bool(st.session_state.get("gemini_full_run", False))
-
-        # Rank rows for Gemini priority
-        # Use the correct column name found in your CSV
-        df["_gemini_rank"] = pd.to_numeric(df.get("At_a_Glance_Score"), errors='coerce').fillna(0)
-        sorted_indices = df.sort_values("_gemini_rank", ascending=False).index
-        allowed_indices = set(sorted_indices[:gemini_row_limit]) if not gemini_full_run else set(df.index)
 
         if not use_gemini_explanations:
              df["gemini_mode"] = "disabled"
              df["gemini_rationale"] = "Disabled by user"
         else:
-             # Iterate and update
-             gemini_updates = {}
+             with st.spinner("🤖 Gemini is auditing picks..."):
+                 from integrations.gemini_client import run_gemini_analysis
+                 df = run_gemini_analysis(df, st.session_state)
+                 df["gemini_mode"] = "active"
 
-             for idx, row in df.iterrows():
-                 if idx not in allowed_indices:
-                     gemini_updates[idx] = {"gemini_mode": "guardrail", "gemini_rationale": "Skipped (Limit)"}
-                     continue
-
-                 # Check session limit
-                 if st.session_state.get("gemini_calls_made", 0) >= MAX_GEMINI_CALLS_PER_RUN and not gemini_full_run:
-                     gemini_updates[idx] = {"gemini_mode": "limit_reached", "gemini_rationale": "Session limit reached"}
-                     continue
-
-                 # Call API (Cached)
-                 row_key = f"{row.get('league')}_{row.get('Home')}_{row.get('Away')}"
-                 cached = st.session_state["gemini_cache"].get(row_key)
-
-                 if cached:
-                     gemini_updates[idx] = {
-                         "gemini_mode": "active",
-                         "gemini_rationale": cached.get("rationale"),
-                         "gemini_total_confidence": cached.get("confidence"),
-                         "gemini_error": cached.get("error")
-                     }
-                 else:
-                     # Real Call
-                     st.session_state["gemini_calls_made"] += 1
-                     try:
-                         res = generate_pick_rationale(
-                             pick=row.get("Pick") or row.get("Best Overall Pick"),
-                             home_team=row.get("Home"),
-                             away_team=row.get("Away"),
-                             market=row.get("Market"),
-                             prob=row.get("final_probability"),
-                             edge=row.get("Edge"),
-                             session_state=st.session_state
-                         )
-                         st.session_state["gemini_cache"][row_key] = res
-                         gemini_updates[idx] = {
-                             "gemini_mode": "active",
-                             "gemini_rationale": res.get("rationale"),
-                             "gemini_total_confidence": res.get("confidence"),
-                             "gemini_error": res.get("error")
-                         }
-                     except Exception as e:
-                         gemini_updates[idx] = {"gemini_mode": "error", "gemini_error": str(e)}
-
-             # Apply updates
-             if gemini_updates:
-                 gem_df = pd.DataFrame.from_dict(gemini_updates, orient='index')
-                 # Merge: drop old columns then concat new ones
-                 df = df.drop(columns=[c for c in gem_df.columns if c in df.columns], errors='ignore')
-                 df = pd.concat([df, gem_df], axis=1)
+                 # Map columns for legacy support if needed
+                 if "gemini_explanation" in df.columns:
+                     df["gemini_rationale"] = df["gemini_explanation"]
 
         # Fix Issue 6 & 7: Column Availability
         # DISABLED OVERWRITE: This was clobbering the true API status (kalshi_available=True)

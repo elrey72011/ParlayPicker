@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from typing import Any
 import pandas as pd
 
 
-def run_gemini_analysis(df: pd.DataFrame) -> pd.DataFrame:
+def run_gemini_analysis(df: pd.DataFrame, session_state: Any = None) -> pd.DataFrame:
     """Best-effort Gemini annotation that preserves UI behavior when Gemini is unavailable."""
     if df is None or df.empty:
         return pd.DataFrame() if df is None else df.copy()
@@ -11,31 +12,38 @@ def run_gemini_analysis(df: pd.DataFrame) -> pd.DataFrame:
     result = df.copy()
 
     try:
-        from app_core.llm_assistant import initialize_gemini, generate_batch_confidence_explanation
+        from app_core.llm_assistant import generate_batch_confidence_explanation
 
-        model = initialize_gemini()
-        if model is None:
-            raise RuntimeError("Gemini model failed to initialize.")
+        # Clean data for LLM reasoning - scrub ALL potential date columns
+        cols_to_drop = ["Local Date", "Commence (Local)", "Commence (UTC)", "Commence UTC"]
+        llm_payload = result.drop(columns=cols_to_drop, errors="ignore")
 
-        # Clean data for LLM reasoning
-        llm_payload = result.drop(columns=["Local Date", "Commence (Local)"], errors="ignore")
+        # Inject a fallback game_id if one doesn't exist
+        if "game_id" not in llm_payload.columns:
+            llm_payload["game_id"] = [str(i) for i in range(len(llm_payload))]
+
         games_list = llm_payload.to_dict('records') # Convert to List[Dict]
 
-        analyses = generate_batch_confidence_explanation(games_list, model)
+        # Call with session_state
+        analyses = generate_batch_confidence_explanation(games_list, session_state)
 
-        # Since `generate_batch_confidence_explanation` actually returns a dict, let's process it correctly
-        if isinstance(analyses, dict) and analyses:
-            # Map back to result if `game_id` is present
-            if "game_id" in result.columns:
-                result["gemini_analysis"] = result["game_id"].astype(str).map(analyses)
-            else:
-                # If no game_id, try using index or order
-                result["gemini_analysis"] = [analyses.get(str(i), {}) for i in range(len(result))]
-        elif isinstance(analyses, list) and len(analyses) == len(result):
-            result["gemini_analysis"] = analyses
-        else:
-            result["gemini_analysis"] = "Gemini analysis unavailable"
+        # Unpack dictionary into the two expected export columns
+        def unpack_gemini(row_id):
+            analysis = analyses.get(str(row_id), {})
+            return pd.Series({
+                "gemini_explanation": str(analysis.get("explanation", "Gemini analysis unavailable")),
+                "gemini_risk_notes": str(analysis.get("risk_notes", ""))
+            })
+
+        # Apply unpacking
+        temp_cols = pd.Series(llm_payload["game_id"]).apply(unpack_gemini)
+
+        # Merge back to result
+        result["gemini_explanation"] = temp_cols["gemini_explanation"]
+        result["gemini_risk_notes"] = temp_cols["gemini_risk_notes"]
+
     except Exception as exc:  # pragma: no cover
-        result["gemini_analysis"] = f"Gemini disabled/error: {exc}"
+        result["gemini_explanation"] = "Gemini analysis unavailable"
+        result["gemini_risk_notes"] = ""
 
     return result
