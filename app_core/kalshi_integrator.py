@@ -902,6 +902,8 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
     out["game_date"] = pd.to_datetime(out.get("game_date"), errors="coerce", utc=True)
     out = _normalize_identity_merge_keys(out, ["league", "home_team", "away_team"])
 
+    event_data_cache = {}
+
     for col in [
         "kalshi_probability",
         "kalshi_market_title",
@@ -962,8 +964,6 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         # Cache for series events
         if not hasattr(enrich_with_kalshi_markets, "series_cache"):
             enrich_with_kalshi_markets.series_cache = {}
-        if not hasattr(enrich_with_kalshi_markets, "event_data_cache"):
-            enrich_with_kalshi_markets.event_data_cache = {}
 
         if series not in enrich_with_kalshi_markets.series_cache:
             fetched = _fetch_series_events(series)
@@ -1073,8 +1073,8 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
         # Step 5: Fetch exact event ticker with nested markets
         nested_markets = []
-        if event_ticker in enrich_with_kalshi_markets.event_data_cache:
-            nested_markets = enrich_with_kalshi_markets.event_data_cache[event_ticker]
+        if event_ticker in event_data_cache:
+            nested_markets = event_data_cache[event_ticker]
         else:
             try:
                 url = f"{API_BASE}/events/{event_ticker}"
@@ -1087,7 +1087,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                     for mkt in nested_markets:
                         m_title = str(mkt.get("title") or "").lower()
                         mkt["market_title_std"] = TeamNameMatcher.normalize(m_title)
-                    enrich_with_kalshi_markets.event_data_cache[event_ticker] = nested_markets
+                    event_data_cache[event_ticker] = nested_markets
             except requests.exceptions.HTTPError as e:
                 if e.response.status_code == 404:
                     logger.warning(f"Event ticker not found on Kalshi: {event_ticker}")
