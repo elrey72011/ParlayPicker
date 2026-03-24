@@ -962,9 +962,29 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         # Cache for series events
         if not hasattr(enrich_with_kalshi_markets, "series_cache"):
             enrich_with_kalshi_markets.series_cache = {}
+        if not hasattr(enrich_with_kalshi_markets, "event_data_cache"):
+            enrich_with_kalshi_markets.event_data_cache = {}
 
         if series not in enrich_with_kalshi_markets.series_cache:
-            enrich_with_kalshi_markets.series_cache[series] = _fetch_series_events(series)
+            fetched = _fetch_series_events(series)
+            from core.team_mapper import normalize_team_name
+            for e in fetched:
+                if str(league).upper() in ['NCAAB', 'NCAAM']:
+                    alias_map = {
+                        "queens nc": "queens university",
+                        "connecticut": "uconn",
+                        "wright st": "wright state",
+                        "liu": "long island university",
+                        "ucf": "central florida"
+                    }
+                    for key in ['title', 'sub_title', 'subtitle']:
+                        val = e.get(key)
+                        if val:
+                            score_string = f" {normalize_team_name(val)} "
+                            for k_alias, standard in alias_map.items():
+                                score_string = score_string.replace(f" {k_alias} ", f" {standard} ")
+                            e[key] = score_string.strip()
+            enrich_with_kalshi_markets.series_cache[series] = fetched
 
         series_events = enrich_with_kalshi_markets.series_cache[series]
 
@@ -998,27 +1018,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             if not _is_within_72h(event, game_date):
                 continue
 
-            # Create temporary padded strings purely for scoring, do NOT overwrite the raw tickers
-            if str(league).upper() in ['NCAAB', 'NCAAM']:
-                from core.team_mapper import normalize_team_name
-                alias_map = {
-                    "queens nc": "queens university",
-                    "connecticut": "uconn",
-                    "wright st": "wright state",
-                    "liu": "long island university",
-                    "ucf": "central florida"
-                }
 
-                # Only mutate the human-readable strings, leave the API keys alone!
-                for key in ['title', 'sub_title', 'subtitle']:
-                    val = event.get(key)
-                    if val:
-                        # Pad and replace using standard string manipulation to preserve original capitalization if possible,
-                        # but since it's just for scoring, lowering is fine here.
-                        score_string = f" {normalize_team_name(val)} "
-                        for k_alias, standard in alias_map.items():
-                            score_string = score_string.replace(f" {k_alias} ", f" {standard} ")
-                        event[key] = score_string.strip()
 
             score = _event_match_score(event, home_team_name, away_team_name, league, date_code=date_code)
             if score > best_event_score:
@@ -1073,24 +1073,32 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
         # Step 5: Fetch exact event ticker with nested markets
         nested_markets = []
-        try:
-            url = f"{API_BASE}/events/{event_ticker}"
-            # Extend timeout for large/nested event lookups
-            resp = _make_kalshi_request(url, params={"with_nested_markets": "true"}, timeout=30)
-            payload = resp.json()
-            if payload and "event" in payload:
-                nested_markets = payload["event"].get("markets", [])
-        except requests.exceptions.HTTPError as e:
-            if e.response.status_code == 404:
-                logger.warning(f"Event ticker not found on Kalshi: {event_ticker}")
-                out.at[idx, "kalshi_match_status"] = "miss"
-                out.at[idx, "kalshi_match_reason"] = "event_not_found"
-            else:
+        if event_ticker in enrich_with_kalshi_markets.event_data_cache:
+            nested_markets = enrich_with_kalshi_markets.event_data_cache[event_ticker]
+        else:
+            try:
+                url = f"{API_BASE}/events/{event_ticker}"
+                # Extend timeout for large/nested event lookups
+                resp = _make_kalshi_request(url, params={"with_nested_markets": "true"}, timeout=30)
+                payload = resp.json()
+                if payload and "event" in payload:
+                    nested_markets = payload["event"].get("markets", [])
+                    # Pre-normalize nested market titles for efficiency
+                    for mkt in nested_markets:
+                        m_title = str(mkt.get("title") or "").lower()
+                        mkt["market_title_std"] = TeamNameMatcher.normalize(m_title)
+                    enrich_with_kalshi_markets.event_data_cache[event_ticker] = nested_markets
+            except requests.exceptions.HTTPError as e:
+                if e.response.status_code == 404:
+                    logger.warning(f"Event ticker not found on Kalshi: {event_ticker}")
+                    out.at[idx, "kalshi_match_status"] = "miss"
+                    out.at[idx, "kalshi_match_reason"] = "event_not_found"
+                else:
+                    logger.error(f"Error fetching event {event_ticker}: {e}")
+                continue
+            except Exception as e:
                 logger.error(f"Error fetching event {event_ticker}: {e}")
-            continue
-        except Exception as e:
-            logger.error(f"Error fetching event {event_ticker}: {e}")
-            continue
+                continue
 
         if not nested_markets:
             out.at[idx, "kalshi_match_status"] = "miss"
@@ -1197,14 +1205,14 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                             home_team_val = row.get("home_team")
                             pick_team = str(home_team_val) if pd.notna(home_team_val) else ""
 
-                        pick_team_norm = TeamNameMatcher.normalize(pick_team)
-                        market_title_norm = TeamNameMatcher.normalize(m_title)
+                        pick_team_std = TeamNameMatcher.normalize(pick_team)
+                        market_title_std = mkt.get("market_title_std", TeamNameMatcher.normalize(m_title))
 
                         # Primary check using normalized exact match
-                        if pick_team_norm and pick_team_norm in market_title_norm:
+                        if pick_team_std and pick_team_std in market_title_std:
                             best_market = mkt
                             match_status = "matched"
-                            match_reason = "moneyline_match_normalized"
+                            match_reason = "moneyline_match"
                             break
 
                         # Fallback to fuzzy token match
