@@ -1637,7 +1637,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         best = best.sort_values(by="Triple_Filter_Rank", ascending=True).reset_index(drop=True)
         best = best.sort_values(by="Triple_Filter_Rank", ascending=True)
 
-    return best[BEST_PICK_COLUMNS]
+    return best[BEST_PICK_COLUMNS].sort_values(by="Triple_Filter_Rank", ascending=True)
 
 
 def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None = None) -> pd.DataFrame:
