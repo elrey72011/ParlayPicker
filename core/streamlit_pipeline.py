@@ -1620,16 +1620,15 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         best["edge"] = pd.to_numeric(best["edge"], errors="coerce")
 
         # 1. Sync the slate date with actual start time
-        # Remove ' ET' suffix and parse as a naive datetime before extracting the date
-        best["game_date"] = pd.to_datetime(best["game_time_est"].str.replace(" ET", "", regex=False), format="%Y-%m-%d %I:%M %p").dt.date
+        # Strip the ' ET' label and use mixed format parsing to handle cases where time is missing
+        clean_times = best["game_time_est"].astype(str).str.replace(" ET", "", regex=False)
+        best["game_date"] = pd.to_datetime(clean_times, format='mixed', errors='coerce').dt.date.fillna(best["game_date"])
 
         # 2. Final ranking pass for sequential 1-21 numbering
         best = _apply_triple_filter_ranking(best)
 
-        # 3. Assign parlay_rank AFTER the second ranking pass so the exported numbers sequentially map 1 to N
-        best["parlay_rank"] = range(1, len(best) + 1)
     else:
-        best["parlay_rank"] = pd.Series(dtype=int)
+        pass
 
     for col in BEST_PICK_COLUMNS:
         if col not in best.columns:
@@ -1637,6 +1636,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
 
     # Final Cleanup: Drop temporary columns used for processing
     best = best.drop(columns=["tier_score", "expected_value_sort", "is_unique", "is_kalshi_available"], errors="ignore")
+
+    # 3. Assign parlay_rank AFTER the second ranking pass so the exported numbers sequentially map 1 to N
+    best["parlay_rank"] = range(1, len(best) + 1) if not best.empty else pd.Series(dtype=int)
 
     return best[BEST_PICK_COLUMNS]
 
