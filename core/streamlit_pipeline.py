@@ -910,6 +910,10 @@ def _format_best_pick(row: pd.Series) -> str:
     if market == "total_under":
         line = pd.to_numeric(row.get("total_line"), errors="coerce")
         return f"Under {line:.1f}" if pd.notna(line) else "Under"
+    if market == "h2h_home":
+        return home_team
+    if market == "h2h_away":
+        return away_team
     return ""
 
 
@@ -1634,6 +1638,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     # 3. Assign parlay_rank AFTER the second ranking pass so the exported numbers sequentially map 1 to N
     best["parlay_rank"] = range(1, len(best) + 1) if not best.empty else pd.Series(dtype=int)
 
+    if not best.empty and "Triple_Filter_Rank" in best.columns:
+        best = best.sort_values(by="Triple_Filter_Rank", ascending=True).reset_index(drop=True)
+
     return best[BEST_PICK_COLUMNS]
 
 
@@ -1767,7 +1774,11 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
         }
 
         # Process the dynamically selected rows
-        for market_type in [emit_spread, emit_total, emit_h2h]:
+        # If league is NHL, emit the Moneyline (H2H), otherwise emit Spread.
+        league = str(row.get("league", "")).upper()
+        emit_side = emit_h2h if league == "NHL" else emit_spread
+
+        for market_type in [emit_side, emit_total]:
             price_col, point_col, source_col = market_mappings[market_type]
             market_dict = base_dict.copy()
             market_dict["market_type"] = market_type
