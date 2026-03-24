@@ -1617,12 +1617,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         best["expected_value"] = pd.to_numeric(best["expected_value"], errors="coerce")
         best["edge"] = pd.to_numeric(best["edge"], errors="coerce")
 
-        # 1. Sync the slate date with actual start time
-        # Strip the ' ET' label and use mixed format parsing to handle cases where time is missing
-        best["game_date"] = pd.to_datetime(best["game_time_est"].astype(str).str.replace(" ET", "", regex=False), format='mixed', errors='coerce').dt.date.fillna(best["game_date"])
-
-
-        # 2. Final ranking pass for sequential 1-21 numbering
+        # 1. Final ranking pass for sequential 1-21 numbering
         best = _apply_triple_filter_ranking(best)
 
     else:
@@ -2447,6 +2442,10 @@ def run_analysis_pipeline(
 
         # 3. Final Cleanup
         analysis_df = analysis_df.drop(columns=["commence_time_raw"], errors="ignore")
+
+        # 4. Sync the slate date with actual start time
+        # Strip the ' ET' label and use mixed format parsing to handle cases where time is missing
+        analysis_df["game_date"] = pd.to_datetime(analysis_df["game_time_est"].astype(str).str.replace(" ET", "", regex=False), format='mixed', errors='coerce').dt.date.fillna(analysis_df["game_date"])
 
     return (analysis_df, best_picks_df, diagnostics)
 
