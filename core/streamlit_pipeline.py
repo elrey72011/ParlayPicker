@@ -1624,6 +1624,12 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         best["expected_value"] = pd.to_numeric(best["expected_value"], errors="coerce")
         best["edge"] = pd.to_numeric(best["edge"], errors="coerce")
 
+        # 1. Sync the slate date with actual start time
+        best["game_date"] = pd.to_datetime(best["game_time_est"]).dt.date
+
+        # 2. Final ranking pass for sequential 1-21 numbering
+        best = _apply_triple_filter_ranking(best)
+
     for col in BEST_PICK_COLUMNS:
         if col not in best.columns:
             best[col] = pd.NA
