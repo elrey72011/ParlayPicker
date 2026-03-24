@@ -99,7 +99,7 @@ KALSHI_LINE_TOLERANCE_TOTAL = 3.0
 MAX_LINE_TOLERANCE = {
     "NBA": 3.5,
     "NCAAB": 3.5,
-    "NHL": 0.5,
+    "NHL": 1.5,
     "MLB": 0.5,
     "NFL": 2.5,
 }
@@ -930,7 +930,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         elif not family_guess and strike_price_text:
             family_guess = "spread" if "spread" in market_type else "total"
 
-        if "moneyline" in market_type:
+        if any(x in market_type for x in ["moneyline", "h2h"]):
              family = "moneyline"
         else:
              family = "spread" if family_guess == "spread" else "total"
@@ -1181,14 +1181,14 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 target_line = float(match.group(1))
 
             # Moneyline fallback
-            is_ml_pick = _safe_text(row.get("market_type")).lower() == "moneyline" or target_line == 0.0 or target_line is None
+            is_ml_pick = any(x in _safe_text(row.get("market_type")).lower() for x in ["moneyline", "h2h"]) or target_line == 0.0 or target_line is None
             if is_ml_pick:
                 for mkt in markets:
                     m_title = str(mkt.get("title") or "").lower()
                     m_subtitle = str(mkt.get("subtitle") or "").lower()
                     combined_text = f"{m_title} {m_subtitle}"
 
-                    if "moneyline" in combined_text or "to win" in combined_text:
+                    if family == "moneyline" or "moneyline" in combined_text or "to win" in combined_text:
                         pick_team_val = row.get("pick_team")
                         if pd.notna(pick_team_val):
                             pick_team = str(pick_team_val)
