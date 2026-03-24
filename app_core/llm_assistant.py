@@ -5,6 +5,7 @@ import os
 import time
 import json
 import logging
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 import streamlit as st
 from streamlit.runtime.secrets import StreamlitSecretNotFoundError
@@ -333,7 +334,9 @@ def generate_batch_confidence_explanation(games_data: List[Dict[str, Any]], sess
         batch = games_data[i:i+BATCH_SIZE]
 
         # Build prompt
-        prompt = f"""Analyze these {len(batch)} sports betting picks and provide confidence assessments.
+        current_time_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+        prompt = f"""Current Time: {current_time_str}
+Analyze these {len(batch)} sports betting picks and provide confidence assessments.
 
 For each game, return a JSON object with:
 - game_id: The identifier provided in input

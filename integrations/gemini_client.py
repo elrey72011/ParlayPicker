@@ -17,8 +17,21 @@ def run_gemini_analysis(df: pd.DataFrame) -> pd.DataFrame:
         if model is None:
             raise RuntimeError("Gemini model failed to initialize.")
 
-        analyses = generate_batch_confidence_explanation(result, model)
-        if isinstance(analyses, list) and len(analyses) == len(result):
+        # Clean data for LLM reasoning
+        llm_payload = result.drop(columns=["Local Date", "Commence (Local)"], errors="ignore")
+        games_list = llm_payload.to_dict('records') # Convert to List[Dict]
+
+        analyses = generate_batch_confidence_explanation(games_list, model)
+
+        # Since `generate_batch_confidence_explanation` actually returns a dict, let's process it correctly
+        if isinstance(analyses, dict) and analyses:
+            # Map back to result if `game_id` is present
+            if "game_id" in result.columns:
+                result["gemini_analysis"] = result["game_id"].astype(str).map(analyses)
+            else:
+                # If no game_id, try using index or order
+                result["gemini_analysis"] = [analyses.get(str(i), {}) for i in range(len(result))]
+        elif isinstance(analyses, list) and len(analyses) == len(result):
             result["gemini_analysis"] = analyses
         else:
             result["gemini_analysis"] = "Gemini analysis unavailable"
