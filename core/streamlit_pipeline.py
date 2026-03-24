@@ -1475,7 +1475,7 @@ def _apply_triple_filter_ranking(df: pd.DataFrame) -> pd.DataFrame:
     final_df['Triple_Filter_Rank'] = range(1, len(final_df) + 1)
 
     # Clean up temporary columns
-    final_df = final_df.drop(columns=['is_unique', 'tier_score'], errors='ignore')
+    # final_df = final_df.drop(columns=['is_unique', 'tier_score'], errors='ignore')
 
     return final_df
 
@@ -1538,19 +1538,20 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     if pool.empty:
         return pd.DataFrame(columns=BEST_PICK_COLUMNS)
 
-    # 3. Apply Triple-Filter Ranking before selection
+    # 1. Add the ranking metadata
     pool = _apply_triple_filter_ranking(pool)
 
-    # Mandatory one-pick-per-game rule:
-    # Sort globally by tier_score (Ascending) then expected_value (Descending)
-    # Then keep first row in each matchup_id group.
-    # We must retain the expected_value as is, but handle NaNs in sorting
-    pool["expected_value_sort"] = pool["expected_value"].fillna(-999)
-    pool = pool.sort_values(["tier_score", "expected_value_sort"], ascending=[True, False], na_position="last")
-    pool = pool.drop(columns=["expected_value_sort"])
+    # 2. Create the temporary sort column for EV
+    pool["expected_value_sort"] = pd.to_numeric(pool["expected_value"], errors="coerce").fillna(-999)
 
-    # Choose one row per game using the ranking above.
-    # We drop_duplicates by matchup_id keeping the first (best sorted) pick natively handling index selection.
+    # 3. Sort by Reliability (Tier) then Value (EV)
+    pool = pool.sort_values(
+        by=["tier_score", "expected_value_sort"],
+        ascending=[True, False],
+        na_position="last"
+    )
+
+    # 4. Keep the best pick for each game
     best = pool.drop_duplicates(subset=["matchup_id"], keep="first").copy()
 
     # Phase 5: Enforce Thresholds
@@ -1621,6 +1622,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     for col in BEST_PICK_COLUMNS:
         if col not in best.columns:
             best[col] = pd.NA
+
+    # Final Cleanup: Drop temporary columns used for processing
+    best = best.drop(columns=["tier_score", "expected_value_sort", "is_unique", "is_kalshi_available"], errors="ignore")
 
     return best[BEST_PICK_COLUMNS]
 
