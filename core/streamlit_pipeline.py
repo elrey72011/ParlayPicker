@@ -1635,6 +1635,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
 
     if not best.empty and "Triple_Filter_Rank" in best.columns:
         best = best.sort_values(by="Triple_Filter_Rank", ascending=True).reset_index(drop=True)
+        best = best.sort_values(by="Triple_Filter_Rank", ascending=True)
 
     return best[BEST_PICK_COLUMNS]
 
@@ -1770,7 +1771,11 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
 
         # Consolidate to 2 rows: Side + Total. Use H2H for NHL, Spread for others.
         league_str = str(row.get("league", "")).upper()
-        side_market = emit_h2h if league_str == "NHL" else emit_spread
+        if league_str == "NHL":
+            side_market = emit_h2h
+        else:
+            side_market = emit_spread
+
         for market_type in [side_market, emit_total]:
             price_col, point_col, source_col = market_mappings[market_type]
             market_dict = base_dict.copy()
