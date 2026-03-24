@@ -61,7 +61,7 @@ except Exception as e:
     ML_AVAILABLE = False
     PredictionEngine = None
 
-VALID_MARKETS = {"spread_home", "spread_away", "total_over", "total_under"}
+VALID_MARKETS = {"spread_home", "spread_away", "total_over", "total_under", "h2h_home", "h2h_away"}
 DATE_ALIASES = ["game_date", "game_date_est", "commence_time", "start_time", "time", "date", "event_date"]
 LEAGUE_ALIASES = {"NCAAM": "NCAAB", "NCAA MEN'S BASKETBALL": "NCAAB", "NCAA MENS BASKETBALL": "NCAAB"}
 _KNOWN_NCAAB_TEAM_TOKENS = {
@@ -1526,14 +1526,32 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     # Force expected_value to numeric, converting true errors to NaN while preserving negative floats
     pool["expected_value"] = pd.to_numeric(pool["expected_value"], errors="coerce")
 
+    # Phase 3: NHL Guardrails (Spread and Moneyline)
+    # 1. Puck Line Penalty: apply 0.80 multiplier to expected_value for NHL spreads
+    is_nhl = pool["league"].str.upper() == "NHL"
+    is_spread = pool["market_type"].str.startswith("spread")
+    pool.loc[is_nhl & is_spread, "expected_value"] *= 0.80
+
+    # 2. Probability Floor: Drop any pick with calibrated_probability < 0.45
+    pool["calibrated_probability"] = _numeric_series(pool, "calibrated_probability", 0.5)
+    pool = pool[pool["calibrated_probability"] >= 0.45].copy()
+    if pool.empty:
+        return pd.DataFrame(columns=BEST_PICK_COLUMNS)
+
+    # 3. Apply Triple-Filter Ranking before selection
+    pool = _apply_triple_filter_ranking(pool)
+
     # Mandatory one-pick-per-game rule:
-    # sort globally by edge descending, then keep first row in each matchup_id group.
-    pool = pool.sort_values("edge", ascending=False, na_position="last")
+    # Sort globally by tier_score (Ascending) then expected_value (Descending)
+    # Then keep first row in each matchup_id group.
+    # We must retain the expected_value as is, but handle NaNs in sorting
+    pool["expected_value_sort"] = pool["expected_value"].fillna(-999)
+    pool = pool.sort_values(["tier_score", "expected_value_sort"], ascending=[True, False], na_position="last")
+    pool = pool.drop(columns=["expected_value_sort"])
 
     # Choose one row per game using the ranking above.
-    # .groupby().idxmax() preserves the highest edge pick from the sorted pool, natively handling index selection.
-    best_indices = pool.groupby("matchup_id", dropna=False)["edge"].idxmax()
-    best = pool.loc[best_indices].copy()
+    # We drop_duplicates by matchup_id keeping the first (best sorted) pick natively handling index selection.
+    best = pool.drop_duplicates(subset=["matchup_id"], keep="first").copy()
 
     # Phase 5: Enforce Thresholds
     # MIN_EDGE_THRESHOLD of 0.01 for high-liquidity markets.
@@ -1599,8 +1617,6 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     if not best.empty:
         best["expected_value"] = pd.to_numeric(best["expected_value"], errors="coerce")
         best["edge"] = pd.to_numeric(best["edge"], errors="coerce")
-
-    best = _apply_triple_filter_ranking(best)
 
     for col in BEST_PICK_COLUMNS:
         if col not in best.columns:
@@ -1681,6 +1697,12 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
                         elif str(o.get('name')).lower() == 'under':
                             row['novig_under_point'] = o.get('point')
                             row['novig_under_price'] = o.get('price')
+                elif market.get('key') == 'h2h':
+                    for o in market.get('outcomes', []):
+                        if o.get('name') == game.get('home_team'):
+                            row['novig_h2h_home_price'] = o.get('price')
+                        elif o.get('name') == game.get('away_team'):
+                            row['novig_h2h_away_price'] = o.get('price')
             rows.append(row)
 
     return pd.DataFrame(rows)
@@ -1710,6 +1732,7 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
         # Determine which markets to emit dynamically
         emit_spread = "spread_home"
         emit_total = "total_over"
+        emit_h2h = "h2h_home"
 
         if has_theover and matchup_id:
             matchup_mask = theover_rows["matchup_id"] == matchup_id
@@ -1719,16 +1742,20 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
                     emit_spread = "spread_away"
                 if "total_under" in matchup_markets:
                     emit_total = "total_under"
+                if "h2h_away" in matchup_markets:
+                    emit_h2h = "h2h_away"
 
         market_mappings = {
             "spread_home": ("novig_home_price", "novig_home_point", "odds_source_spread"),
             "spread_away": ("novig_away_price", "novig_away_point", "odds_source_spread"),
             "total_over": ("novig_over_price", "novig_over_point", "odds_source_total"),
-            "total_under": ("novig_under_price", "novig_under_point", "odds_source_total")
+            "total_under": ("novig_under_price", "novig_under_point", "odds_source_total"),
+            "h2h_home": ("novig_h2h_home_price", None, "odds_source_h2h"),
+            "h2h_away": ("novig_h2h_away_price", None, "odds_source_h2h")
         }
 
-        # Process the dynamically selected 2 rows
-        for market_type in [emit_spread, emit_total]:
+        # Process the dynamically selected rows
+        for market_type in [emit_spread, emit_total, emit_h2h]:
             price_col, point_col, source_col = market_mappings[market_type]
             market_dict = base_dict.copy()
             market_dict["market_type"] = market_type
@@ -1743,13 +1770,20 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
                 market_dict["odds_source"] = "odds_api"
 
             # Map lines based on market type
-            point_val = pd.to_numeric(row.get(point_col), errors="coerce")
+            if point_col:
+                point_val = pd.to_numeric(row.get(point_col), errors="coerce")
+            else:
+                point_val = pd.NA
+
             if market_type.startswith("spread"):
                 market_dict["spread_line"] = float(point_val) if pd.notna(point_val) else pd.NA
                 market_dict["total_line"] = pd.NA
-            else:
+            elif market_type.startswith("total"):
                 market_dict["spread_line"] = pd.NA
                 market_dict["total_line"] = float(point_val) if pd.notna(point_val) else pd.NA
+            else:
+                market_dict["spread_line"] = pd.NA
+                market_dict["total_line"] = pd.NA
 
             out_rows.append(market_dict)
 
@@ -2021,11 +2055,15 @@ def run_analysis_pipeline(
     novig_home_price = _numeric_series(merged, "novig_home_price")
     novig_under_price = _numeric_series(merged, "novig_under_price")
     novig_over_price = _numeric_series(merged, "novig_over_price")
+    novig_h2h_away_price = _numeric_series(merged, "novig_h2h_away_price")
+    novig_h2h_home_price = _numeric_series(merged, "novig_h2h_home_price")
 
     implied_lay = implied_lay.where(~m_type_local.eq("spread_home"), novig_away_price.apply(american_to_prob))
     implied_lay = implied_lay.where(~m_type_local.eq("spread_away"), novig_home_price.apply(american_to_prob))
     implied_lay = implied_lay.where(~m_type_local.eq("total_over"), novig_under_price.apply(american_to_prob))
     implied_lay = implied_lay.where(~m_type_local.eq("total_under"), novig_over_price.apply(american_to_prob))
+    implied_lay = implied_lay.where(~m_type_local.eq("h2h_home"), novig_h2h_away_price.apply(american_to_prob))
+    implied_lay = implied_lay.where(~m_type_local.eq("h2h_away"), novig_h2h_home_price.apply(american_to_prob))
 
     novig_midpoint = ((implied_back + implied_lay) / 2.0).clip(0.01, 0.99)
 
