@@ -1016,7 +1016,7 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
     ev = ev.mask(zero_mask, 0.0)
 
     # Phase 3: NHL Statistical Recalibration
-    nhl_totals_mask = (out["league"].str.upper() == "NHL") & (out["market_type"].str.contains("total", case=False, na=False))
+    nhl_totals_mask = (out["league"].str.upper() == "NHL") & (out["market_type"].str.contains("total|spread", case=False, na=False))
     ev = ev.where(~nhl_totals_mask, ev * 0.80)
 
     out["expected_value"] = ev
@@ -1613,11 +1613,6 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     ).reset_index(drop=True)
     best["expected_value"] = best["expected_value"].replace(-999, pd.NA)
 
-    if not best.empty:
-        best["parlay_rank"] = range(1, len(best) + 1)
-    else:
-        best["parlay_rank"] = pd.Series(dtype=int)
-
     # Fake the math at the very end to bypass the > 0 frontend filter is removed since we are strictly enforcing thresholds
     # We leave the actual edge/ev as is.
     if not best.empty:
@@ -1626,10 +1621,15 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
 
         # 1. Sync the slate date with actual start time
         # Remove ' ET' suffix and parse as a naive datetime before extracting the date
-        best["game_date"] = pd.to_datetime(best["game_time_est"].str.replace(" ET", "", regex=False)).dt.date
+        best["game_date"] = pd.to_datetime(best["game_time_est"].str.replace(" ET", "", regex=False), format="%Y-%m-%d %I:%M %p").dt.date
 
         # 2. Final ranking pass for sequential 1-21 numbering
         best = _apply_triple_filter_ranking(best)
+
+        # 3. Assign parlay_rank AFTER the second ranking pass so the exported numbers sequentially map 1 to N
+        best["parlay_rank"] = range(1, len(best) + 1)
+    else:
+        best["parlay_rank"] = pd.Series(dtype=int)
 
     for col in BEST_PICK_COLUMNS:
         if col not in best.columns:
@@ -2321,11 +2321,11 @@ def run_analysis_pipeline(
     ev = ev.mask(zero_mask, 0.0)
 
     # Phase 3: NHL Statistical Recalibration
-    # Apply a fractional discount (0.80) to the Expected Value for NHL Totals
+    # Apply a fractional discount (0.80) to the Expected Value for NHL Totals and Spreads
     # to account for the bimodal distribution of late-game empty-net scenarios.
     if "league" not in merged.columns:
         merged["league"] = ""
-    nhl_totals_mask = (_string_series(merged, "league").str.upper() == "NHL") & (_string_series(merged, "market_type").str.contains("total", case=False, na=False))
+    nhl_totals_mask = (_string_series(merged, "league").str.upper() == "NHL") & (_string_series(merged, "market_type").str.contains("total|spread", case=False, na=False))
     ev = ev.where(~nhl_totals_mask, ev * 0.80)
 
     merged["expected_value"] = ev
