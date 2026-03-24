@@ -1431,6 +1431,12 @@ def _apply_triple_filter_ranking(df: pd.DataFrame) -> pd.DataFrame:
         final_df['is_unique'] = not any(abs(ml_val - b) < 1e-5 for b in BLACKLIST) if pd.notna(ml_val) else False
 
     # 3. Assign Pick_Quality Tiers (S, A, B, C)
+    cal_prob_series = final_df.get('calibrated_probability')
+    if cal_prob_series is not None:
+        calibrated_prob = pd.to_numeric(cal_prob_series, errors='coerce').fillna(0.5)
+    else:
+        calibrated_prob = pd.Series([0.5] * len(final_df), index=final_df.index)
+
     tier_scores = []
     for idx in final_df.index:
         is_unique = final_df.at[idx, 'is_unique']
@@ -1440,10 +1446,12 @@ def _apply_triple_filter_ranking(df: pd.DataFrame) -> pd.DataFrame:
         ev = expected_value.at[idx] if isinstance(expected_value, pd.Series) else expected_value
         ml = ml_prob.at[idx] if isinstance(ml_prob, pd.Series) else ml_prob
         theov = theover_prob.at[idx] if isinstance(theover_prob, pd.Series) else theover_prob
+        cal_p = calibrated_prob.at[idx] if isinstance(calibrated_prob, pd.Series) else calibrated_prob
 
         edge = edge if pd.notna(edge) else 0.0
         ml = ml if pd.notna(ml) else 0.5
         theov = theov if pd.notna(theov) else 0.5
+        cal_p = cal_p if pd.notna(cal_p) else 0.5
 
         if is_unique and edge > 0.15 and ev > 0:
             tier_scores.append(1)  # S-Tier
@@ -1451,7 +1459,7 @@ def _apply_triple_filter_ranking(df: pd.DataFrame) -> pd.DataFrame:
             tier_scores.append(2)  # A-Tier
         elif (is_unique and ml > 0.5 and theov > 0.5) or (not is_unique and ev > 0.10):
             tier_scores.append(3)  # B-Tier
-        elif is_unique and ev > 0:
+        elif is_unique and ev > 0 and cal_p >= 0.45:
             tier_scores.append(4)  # C-Tier
         else:
             tier_scores.append(5)  # D-Tier
@@ -1532,11 +1540,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     is_spread = pool["market_type"].str.startswith("spread")
     pool.loc[is_nhl & is_spread, "expected_value"] *= 0.80
 
-    # 2. Probability Floor: Drop any pick with calibrated_probability < 0.45
+    # 2. Assign calibrated probability with a default
     pool["calibrated_probability"] = _numeric_series(pool, "calibrated_probability", 0.5)
-    pool = pool[pool["calibrated_probability"] >= 0.45].copy()
-    if pool.empty:
-        return pd.DataFrame(columns=BEST_PICK_COLUMNS)
 
     # 1. Add the ranking metadata
     pool = _apply_triple_filter_ranking(pool)
