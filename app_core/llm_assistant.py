@@ -343,6 +343,7 @@ For each game, return a JSON object with:
 - recommended_bet: <string describing the pick or 'none'>
 - confidence: HIGH/MEDIUM/LOW
 - explanation: Brief 1-sentence explanation explaining agreement or disagreement (max 240 chars)
+- risk_notes: Specific risks or reasons for caution (max 240 chars)
 - flags: Array of short flag strings (e.g. "missing_odds", "contrarian")
 
 Games to analyze:
@@ -387,8 +388,10 @@ Return ONLY a JSON array of objects. No markdown formatting.
 
             if isinstance(batch_results, list):
                 for res in batch_results:
-                    if isinstance(res, dict) and 'game_id' in res:
-                        all_results[str(res['game_id'])] = res
+                    if isinstance(res, dict):
+                        g_id = str(res.get('game_id', ''))
+                        if g_id:
+                            all_results[g_id] = res
             else:
                  logger.warning(f"Gemini batch response was not a list: {str(text)[:100]}")
 
