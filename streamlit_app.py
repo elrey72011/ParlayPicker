@@ -530,75 +530,39 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
 
     # Gemini Integration for Top Picks
     if controls.get("use_gemini") and not best_picks_df.empty:
-        import os
-        from gemini_integration import GeminiAnalyzer
+        try:
+            from integrations.gemini_client import run_gemini_analysis
 
-        # Now allows running with either an API key OR a GCP project ID
-        gemini_api_key = os.environ.get("GEMINI_API_KEY", st.secrets.get("GEMINI_API_KEY", ""))
-        if not gemini_api_key and "gemini_api_key" in st.session_state:
-            gemini_api_key = st.session_state["gemini_api_key"]
+            # Pass to Gemini wrapper with date columns automatically scrubbed
+            analyzed_df = run_gemini_analysis(best_picks_df, st.session_state)
 
-        gcp_project = os.environ.get("GCP_PROJECT_ID", st.secrets.get("GCP_PROJECT_ID", ""))
-        if not gcp_project and "gcp_project_id" in st.session_state:
-            gcp_project = st.session_state["gcp_project_id"]
+            # Update best_picks_df columns
+            best_picks_df["gemini_explanation"] = analyzed_df.get("gemini_explanation", "Gemini analysis unavailable")
+            best_picks_df["gemini_risk_notes"] = analyzed_df.get("gemini_risk_notes", "")
 
-        if gemini_api_key or gcp_project:
-            try:
-                analyzer = GeminiAnalyzer(project_id=gcp_project)
-                games_to_analyze = []
-                for _, row in best_picks_df.iterrows():
-                    game = {
-                        "home_team": row.get("home_team"),
-                        "away_team": row.get("away_team"),
-                        "sport_key": row.get("league"),
-                        "commence_time": str(row.get("game_date")),
-                        "best_moneyline": None,
-                        "best_spread": float(row.get("spread_line")) if pd.notna(row.get("spread_line")) else None,
-                        "context_data": {
-                            "pick": row.get("best_pick"),
-                            "expected_value": row.get("expected_value"),
-                            "edge": row.get("edge"),
-                            "ml": {
-                                "model_used": "XGBoost",
-                                "confidence": row.get("ml_probability"),
-                            } if "ml_probability" in row and pd.notna(row.get("ml_probability")) else None
-                        }
-                    }
-                    games_to_analyze.append(game)
+            bearish_keywords = ["slow pace", "defensive struggle", "risk of blowout", "key player absences", "grind-it-out"]
 
-                if games_to_analyze:
-                    gemini_results = analyzer.analyze_games_batch(games_to_analyze)
-                    gemini_explanations = []
-                    gemini_risks = []
+            for idx, row in best_picks_df.iterrows():
+                risks = str(row.get("gemini_risk_notes", ""))
 
-                    bearish_keywords = ["slow pace", "defensive struggle", "risk of blowout", "key player absences", "grind-it-out"]
+                # Phase 4: Qualitative LLM Synergy
+                # Apply a 0.85 fractional discount to EV if bearish keywords are detected in the LLM risk notes
+                risk_lower = risks.lower()
+                if any(kw in risk_lower for kw in bearish_keywords):
+                    current_ev = best_picks_df.at[idx, "expected_value"]
+                    if pd.notna(current_ev):
+                        best_picks_df.at[idx, "expected_value"] = float(current_ev) * 0.85
 
-                    for idx, res in enumerate(gemini_results):
-                        gemini_explanations.append(res.get("confidence_explanation", ""))
-                        risks = res.get("risk_notes", "")
-                        if isinstance(risks, list):
-                            risks = ", ".join(risks)
-                        gemini_risks.append(risks)
+                # Update analysis_df to reflect these rows were analyzed (for diagnostics tab)
+                home = row.get("home_team")
+                away = row.get("away_team")
+                explanation = row.get("gemini_explanation", "Analyzed")
+                if pd.notna(home) and pd.notna(away):
+                    mask = (analysis_df["home_team"].eq(home).fillna(False)) & (analysis_df["away_team"].eq(away).fillna(False))
+                    analysis_df.loc[mask, "gemini_analysis"] = explanation
 
-                        # Phase 4: Qualitative LLM Synergy
-                        # Apply a 0.85 fractional discount to EV if bearish keywords are detected in the LLM risk notes
-                        risk_lower = str(risks).lower()
-                        if any(kw in risk_lower for kw in bearish_keywords):
-                            current_ev = best_picks_df.at[best_picks_df.index[idx], "expected_value"]
-                            if pd.notna(current_ev):
-                                best_picks_df.at[best_picks_df.index[idx], "expected_value"] = float(current_ev) * 0.85
-
-                    best_picks_df["gemini_explanation"] = gemini_explanations
-                    best_picks_df["gemini_risk_notes"] = gemini_risks
-
-                    # Update analysis_df to reflect these rows were analyzed (for diagnostics tab)
-                    for idx, res in enumerate(gemini_results):
-                        home = games_to_analyze[idx]["home_team"]
-                        away = games_to_analyze[idx]["away_team"]
-                        mask = (analysis_df["home_team"].eq(home).fillna(False)) & (analysis_df["away_team"].eq(away).fillna(False))
-                        analysis_df.loc[mask, "gemini_analysis"] = res.get("confidence_explanation", "Analyzed")
-            except Exception as e:
-                deferred_warnings.append(f"Gemini analysis failed: {e}")
+        except Exception as e:
+            deferred_warnings.append(f"Gemini analysis failed: {e}")
 
     attempted = int(len(analysis_df)) if isinstance(analysis_df, pd.DataFrame) else 0
     if isinstance(analysis_df, pd.DataFrame) and "kalshi_match_status" in analysis_df.columns:

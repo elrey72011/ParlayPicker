@@ -15,7 +15,7 @@ def run_gemini_analysis(df: pd.DataFrame, session_state: Any = None) -> pd.DataF
         from app_core.llm_assistant import generate_batch_confidence_explanation
 
         # Clean data for LLM reasoning - scrub ALL potential date columns
-        cols_to_drop = ["Local Date", "Commence (Local)", "Commence (UTC)", "Commence UTC"]
+        cols_to_drop = ["Local Date", "Commence (Local)", "Commence (UTC)", "Commence UTC", "game_date", "game_time_est"]
         llm_payload = result.drop(columns=cols_to_drop, errors="ignore")
 
         # Inject a fallback game_id if one doesn't exist
