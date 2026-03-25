@@ -558,6 +558,8 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
                 if pd.notna(home) and pd.notna(away):
                     mask = (analysis_df["home_team"].eq(home).fillna(False)) & (analysis_df["away_team"].eq(away).fillna(False))
                     analysis_df.loc[mask, "gemini_analysis"] = explanation
+                    analysis_df.loc[mask, "gemini_explanation"] = explanation
+                    analysis_df.loc[mask, "gemini_risk_notes"] = risks
 
         except Exception as e:
             deferred_warnings.append(f"Gemini analysis failed: {e}")
