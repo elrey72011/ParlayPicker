@@ -1244,8 +1244,10 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                     m_title = str(mkt.get("title") or "").lower()
                     m_subtitle = str(mkt.get("subtitle") or "").lower()
                     combined_text = f"{m_title} {m_subtitle}"
+                    e_title_context = str(best_event_match.get('title') or "")
+                    combined_upper = f"{combined_text} {e_title_context}".upper()
 
-                    if family == "moneyline" or any(x in combined_text for x in ["moneyline", "to win", "winner", "vs"]):
+                    if family == "moneyline" or any(x in combined_text for x in ["moneyline", "to win", "winner", "vs", "win by", "wins by"]):
                         pick_team_val = row.get("pick_team")
                         if pd.notna(pick_team_val):
                             pick_team = str(pick_team_val)
@@ -1269,7 +1271,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                         mt_tokens = set(_normalize_team_token(combined_text).split())
                         shared_tokens = {w for w in pt_tokens.intersection(mt_tokens) if len(w) > 2}
 
-                        if (h_code != "" and h_code in combined_text.upper()) or len(shared_tokens) > 0:
+                        if (h_code != "" and h_code in combined_upper) or len(shared_tokens) > 0:
                             best_market = mkt
                             match_status = "matched"
                             match_reason = "moneyline_match_fuzzy"
@@ -1303,7 +1305,8 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                     # Include event context so we can identify 'Home team' or 'Away team' mentions
                     e_title = str(best_event_match.get('title') or "")
                     e_subtitle = str(best_event_match.get('sub_title') or "")
-                    combined_upper = f"{m_title} {m_subtitle} {e_title} {e_subtitle}".upper()
+                    e_title_context = str(best_event_match.get('title') or "")
+                    combined_upper = f"{combined_text} {e_title_context} {e_title} {e_subtitle}".upper()
 
                     # Identify subject using both name tokens AND tickers
                     kalshi_subject_is_home = bool(home_shared) or (h_code != "" and h_code in combined_upper)
@@ -1376,7 +1379,10 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         if best_market is None:
             # We found no markets or candidates at all
             out.at[idx, "kalshi_match_status"] = "miss"
-            out.at[idx, "kalshi_match_reason"] = "alt_line_mismatch"
+            if match_reason == "no_market_for_tickers":
+                 out.at[idx, "kalshi_match_reason"] = "alt_line_mismatch"
+            else:
+                 out.at[idx, "kalshi_match_reason"] = match_reason
             out.at[idx, "kalshi_match_quality"] = "line_mismatched"
         else:
             # If we interpolated the probability, use it directly
