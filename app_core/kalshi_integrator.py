@@ -659,7 +659,8 @@ def _extract_kalshi_line(mkt: dict[str, Any], is_total: bool) -> float | None:
     if match:
         val = abs(float(match.group(1)))
         if not is_total and "wins by" in combined_text:
-            return val + 0.5
+            if "more than" not in combined_text and "over" not in combined_text:
+                return val + 0.5
         return val
 
     # 2. Secondary Fallback: Original extraction purely from subtitle first, then combined text
@@ -669,7 +670,8 @@ def _extract_kalshi_line(mkt: dict[str, Any], is_total: bool) -> float | None:
             try:
                 val = abs(float(num_str))
                 if not is_total and "wins by" in m_subtitle:
-                    return val + 0.5
+                    if "more than" not in m_subtitle and "over" not in m_subtitle:
+                        return val + 0.5
                 return val
             except ValueError:
                 continue
@@ -681,7 +683,8 @@ def _extract_kalshi_line(mkt: dict[str, Any], is_total: bool) -> float | None:
             val = abs(float(num_str))
             # Spread translations (e.g. "wins by over 3.5")
             if not is_total and "wins by" in combined_text:
-                return val + 0.5
+                if "more than" not in combined_text and "over" not in combined_text:
+                    return val + 0.5
             return val
         except ValueError:
             continue
@@ -1283,7 +1286,17 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                     kalshi_subject_is_home = bool(home_shared) or (h_code != "" and h_code in combined_upper)
                     kalshi_subject_is_away = bool(away_shared) or (a_code != "" and a_code in combined_upper)
 
-                    expected_subject_is_home = ("home" in m_type) if is_favorite_bet else not ("home" in m_type)
+                    # 1. Identify which team the pick is actually on
+                    pick_team_name = _safe_text(row.get("pick_team")).strip()
+                    # home_team_name was defined earlier as home_team_val, we'll re-extract to be safe
+                    home_team_name_for_match = _safe_text(row.get("home_team")).strip()
+
+                    # 2. Determine if the pick is on the Home or Away team
+                    # We use this to know which Kalshi subject we are looking for
+                    if pick_team_name == home_team_name_for_match:
+                        expected_subject_is_home = True
+                    else:
+                        expected_subject_is_home = False
 
                     is_correct_match = (expected_subject_is_home and kalshi_subject_is_home) or \
                                        (not expected_subject_is_home and kalshi_subject_is_away)
