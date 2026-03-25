@@ -1345,10 +1345,16 @@ def _dedupe_inverted_matchups(df: pd.DataFrame) -> pd.DataFrame:
     return out.drop(columns=["_matchup_id_dedupe", "_game_date_dedupe", "_spread_abs", "_total_line", "_market_dedupe"])
 def _fill_missing_game_dates_from_base(bet_rows_df: pd.DataFrame, base_df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, float]]:
     out = bet_rows_df.copy()
-    out["game_date"] = _game_dates(out)
-    missing_before = out["game_date"].isna()
 
-    if base_df is not None and not base_df.empty and missing_before.any():
+    # Check what is truly missing right before applying any fallback values
+    # We look at the raw 'game_date' column before `_game_dates()` which applies fallbacks
+    is_missing_before = out.get("game_date", pd.Series([pd.NA] * len(out))).isna()
+
+    out["game_date"] = _game_dates(out)
+
+    missing_before_join = out["game_date"].isna()
+
+    if base_df is not None and not base_df.empty and missing_before_join.any():
         base = base_df.copy()
         base["league"] = _string_series(base, "league").str.upper().replace(LEAGUE_ALIASES)
         base["home_team"] = _string_series(base, "home_team").map(normalize_team_name)
@@ -1374,12 +1380,16 @@ def _fill_missing_game_dates_from_base(bet_rows_df: pd.DataFrame, base_df: pd.Da
         out["game_date"] = out["game_date"].where(out["game_date"].notna(), out["game_date_base"])
         out = out.drop(columns=["game_date_base", "matchup_key"])
 
-    filled = int((missing_before & out["game_date"].notna()).sum())
+    # Number of rows missing before the join based on the raw pre-fallback state
+    missing_count = int(is_missing_before.sum())
+    # The count of dates filled successfully after the join
+    filled = int((is_missing_before & out["game_date"].notna()).sum())
     missing_after = int(out["game_date"].isna().sum())
+
     return out, {
-        "date_fill_total_rows": int(missing_before.sum()),
+        "date_fill_total_rows": missing_count,
         "date_fill_success_rows": filled,
-        "date_fill_success_rate": float(filled / max(int(missing_before.sum()), 1)),
+        "date_fill_success_rate": float(filled / max(missing_count, 1)),
         "missing_game_date_rows": missing_after,
     }
 

@@ -30,14 +30,30 @@ def run_gemini_analysis(df: pd.DataFrame, session_state: Any = None) -> pd.DataF
         # Unpack dictionary into the two expected export columns based on game_id
         # Use result.index to ensure alignment
         analyses_results = [analyses.get(str(gid), {}) for gid in llm_payload["game_id"]]
-        result["gemini_explanation"] = [str(res.get("explanation", "Gemini analysis unavailable")) for res in analyses_results]
-        result["gemini_risk_notes"] = [str(res.get("risk_notes", "")) for res in analyses_results]
+
+        explanations = []
+        risk_notes = []
+        for res in analyses_results:
+            expl = res.get("explanation")
+            if expl is None or expl == "":
+                expl = "Gemini analysis unavailable"
+
+            risk = res.get("risk_notes")
+            if risk is None or risk == "":
+                # The user specified defaulting gemini_risk_notes to "Gemini analysis unavailable" if it's missing
+                risk = "Gemini analysis unavailable"
+
+            explanations.append(str(expl))
+            risk_notes.append(str(risk))
+
+        result["gemini_explanation"] = explanations
+        result["gemini_risk_notes"] = risk_notes
 
     except Exception as exc:  # pragma: no cover
         import logging
         logger = logging.getLogger(__name__)
         logger.error(f"Gemini integration mapping failed: {exc}", exc_info=True)
         result["gemini_explanation"] = "Gemini analysis unavailable"
-        result["gemini_risk_notes"] = ""
+        result["gemini_risk_notes"] = "Gemini analysis unavailable"
 
     return result
