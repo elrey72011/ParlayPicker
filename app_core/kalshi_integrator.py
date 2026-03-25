@@ -100,7 +100,7 @@ KALSHI_LINE_TOLERANCE_TOTAL = 3.0
 MAX_LINE_TOLERANCE = {
     "NBA": 3.5,
     "NCAAB": 3.5,
-    "NHL": 2.5,
+    "NHL": 2.5,  # Increased from 1.5 to fix alt_line_mismatch
     "MLB": 0.5,
     "NFL": 2.5,
 }
@@ -209,6 +209,11 @@ KALSHI_TEAM_CODES = {
     "Vegas Golden Knights": "VGK", "Vegas": "VGK",
     "Washington Capitals": "WSH",
     "Winnipeg Jets": "WPG", "Winnipeg": "WPG",
+    "Montreal": "MTL",
+    "Ny Rangers": "NYR",
+    "Ny Islanders": "NYI",
+    "St Louis": "STL",
+    "Tampa Bay": "TBL"
 }
 
 _KALSHI_TEAM_CODES_NORMALIZED = {
@@ -1172,17 +1177,23 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 target_line_abs = abs(float(extracted_totals_line))
                 nearest = min(kalshi_lines, key=lambda x: abs(float(x[0]) - target_line_abs))
                 delta = abs(float(nearest[0]) - target_line_abs)
+                league_tolerance = MAX_LINE_TOLERANCE.get(league, 3.0)
 
-                if delta == 0:
-                    best_market = nearest[2]
-                    match_status = "matched"
-                    match_reason = "total_match_exact"
-                    out.at[idx, "kalshi_line_diff"] = 0.0
+                if delta <= league_tolerance:
+                    if delta == 0:
+                        best_market = nearest[2]
+                        match_status = "matched"
+                        match_reason = "total_match_exact"
+                        out.at[idx, "kalshi_line_diff"] = 0.0
+                    else:
+                        best_market = nearest[2]
+                        match_status = "matched"
+                        match_reason = "nearest_line_proxy"
+                        out.at[idx, "kalshi_line_diff"] = delta
                 else:
-                    best_market = nearest[2]
-                    match_status = "matched"
-                    match_reason = "nearest_line_proxy"
-                    out.at[idx, "kalshi_line_diff"] = delta
+                    best_market = None
+                    match_status = "miss"
+                    match_reason = "alt_line_mismatch"
 
         else:
             # SPREAD LOGIC
@@ -1259,10 +1270,12 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
                     # Fuzzy match code relies on string intersection primarily now,
                     # but we can try to grab the code from the ticker itself if present
-                    # However, we don't have home_code/away_code generated from the exact string generator anymore
-                    # so we will rely more on the shared string tokens.
-                    kalshi_subject_is_home = bool(home_shared)
-                    kalshi_subject_is_away = bool(away_shared)
+                    h_code = team_code_for_league(league, home_t).upper()
+                    a_code = team_code_for_league(league, away_t).upper()
+
+                    # Subject matches if tokens OR codes intersect
+                    kalshi_subject_is_home = bool(home_shared) or (h_code != "" and h_code in combined_text.upper())
+                    kalshi_subject_is_away = bool(away_shared) or (a_code != "" and a_code in combined_text.upper())
 
                     expected_subject_is_home = ("home" in m_type) if is_favorite_bet else not ("home" in m_type)
 
@@ -1299,17 +1312,23 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                     target_line_abs = abs(float(target_line))
                     nearest = min(kalshi_lines, key=lambda x: abs(float(x[0]) - target_line_abs))
                     delta = abs(float(nearest[0]) - target_line_abs)
+                    league_tolerance = MAX_LINE_TOLERANCE.get(league, 3.0)
 
-                    if delta == 0:
-                        best_market = nearest[2]
-                        match_status = "matched"
-                        match_reason = "spread_match_exact"
-                        out.at[idx, "kalshi_line_diff"] = 0.0
+                    if delta <= league_tolerance:
+                        if delta == 0:
+                            best_market = nearest[2]
+                            match_status = "matched"
+                            match_reason = "spread_match_exact"
+                            out.at[idx, "kalshi_line_diff"] = 0.0
+                        else:
+                            best_market = nearest[2]
+                            match_status = "matched"
+                            match_reason = "nearest_line_proxy"
+                            out.at[idx, "kalshi_line_diff"] = delta
                     else:
-                        best_market = nearest[2]
-                        match_status = "matched"
-                        match_reason = "nearest_line_proxy"
-                        out.at[idx, "kalshi_line_diff"] = delta
+                        best_market = None
+                        match_status = "miss"
+                        match_reason = "alt_line_mismatch"
 
         if best_market is None:
             # We found no markets or candidates at all
