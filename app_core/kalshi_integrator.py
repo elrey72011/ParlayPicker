@@ -195,13 +195,13 @@ KALSHI_TEAM_CODES = {
     "Nashville Predators": "NSH", "Nashville": "NSH",
     "New Jersey Devils": "NJD", "New Jersey": "NJD",
     "New York Islanders": "NYI", "NY Islanders": "NYI",
-    "New York Rangers": "NYR", "NY Rangers": "NYR", "Ny Rangers": "NYR",
+    "New York Rangers": "NYR", "NY Rangers": "NYR", "Ny Rangers": "NYR", "New York": "NYR",
     "Ottawa Senators": "OTT", "Ottawa": "OTT",
     "Philadelphia Flyers": "PHI",
     "Pittsburgh Penguins": "PIT", "Pittsburgh": "PIT",
     "San Jose Sharks": "SJS", "San Jose": "SJS",
     "Seattle Kraken": "SEA", "Seattle": "SEA",
-    "St. Louis Blues": "STL", "St. Louis": "STL",
+    "St. Louis Blues": "STL", "St. Louis": "STL", "St Louis": "STL",
     "Tampa Bay Lightning": "TBL", "Tampa Bay": "TBL",
     "Toronto Maple Leafs": "TOR", "Toronto": "TOR",
     "Utah Hockey Club": "UTA",
@@ -521,6 +521,11 @@ def _event_match_score(event: dict[str, Any], home_team: str, away_team: str, le
             score += 35
         if "ny " in away_norm and "new york " in combined_norm:
             score += 35
+        # Leniency for short names like "Toronto" vs "Toronto Maple Leafs"
+        if len(home_clean) >= 5 and home_clean in clean_team_name(f"{title} {subtitle} {ticker}"):
+            score += 20
+        if len(away_clean) >= 5 and away_clean in clean_team_name(f"{title} {subtitle} {ticker}"):
+            score += 20
 
     # Extra resilience for mascot/noise-token differences (e.g. Wichita St Shockers vs Wichita State)
     if home_clean and home_clean in clean_team_name(f"{title} {subtitle} {ticker}"):

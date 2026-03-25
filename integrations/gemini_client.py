@@ -28,18 +28,10 @@ def run_gemini_analysis(df: pd.DataFrame, session_state: Any = None) -> pd.DataF
         analyses = generate_batch_confidence_explanation(games_list, session_state)
 
         # Unpack dictionary into the two expected export columns based on game_id
-        explanations = []
-        risk_notes = []
-
-        for idx, row in llm_payload.iterrows():
-            g_id = str(row.get("game_id", ""))
-            analysis = analyses.get(g_id, {})
-            explanations.append(str(analysis.get("explanation", "Gemini analysis unavailable")))
-            risk_notes.append(str(analysis.get("risk_notes", "")))
-
-        # Assign back to result dataframe directly to avoid index/alignment issues
-        result["gemini_explanation"] = explanations
-        result["gemini_risk_notes"] = risk_notes
+        # Use result.index to ensure alignment
+        analyses_results = [analyses.get(str(gid), {}) for gid in llm_payload["game_id"]]
+        result["gemini_explanation"] = [str(res.get("explanation", "Gemini analysis unavailable")) for res in analyses_results]
+        result["gemini_risk_notes"] = [str(res.get("risk_notes", "")) for res in analyses_results]
 
     except Exception as exc:  # pragma: no cover
         import logging
