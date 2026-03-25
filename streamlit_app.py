@@ -207,10 +207,16 @@ def _recompute_consensus_from_kalshi(df: pd.DataFrame, require_ml: bool = False)
     if require_ml and ml_valid.notna().sum() == 0:
         raise ValueError("ML predictions failed to merge with the analysis dataframe.")
 
+    # Extract the missing features required for the new Tiered Weight system
+    theover_prob = _safe_numeric_series(out, "theover_probability")
+    sentiment_prob = _safe_numeric_series(out, "sentiment_diff", default=0.5)
+
     blended = compute_blended_probability(
         p_market=market_prob,
         p_kalshi=kalshi_prob,
         p_ml=model_prob,
+        p_theover=theover_prob,
+        p_sentiment=sentiment_prob,
         league=_safe_str_series(out, "league"),
         market_type=_safe_str_series(out, "market_type")
     )

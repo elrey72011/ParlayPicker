@@ -1033,8 +1033,8 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
         p_market=out["market_probability"],
         p_kalshi=kalshi_prob,
         p_ml=model_prob,
-        p_theover=_numeric_series(out, "theover_probability", 0.5),
-        p_sentiment=_numeric_series(out, "sentiment_diff", 0.0).apply(lambda x: 0.5 + (x * 0.5)),
+        p_theover=theover,  # Use existing variable
+        p_sentiment=_numeric_series(out, "sentiment_diff", default=0.5),
         league=_string_series(out, "league"),
         market_type=_string_series(out, "market_type")
     )
@@ -2351,8 +2351,8 @@ def run_analysis_pipeline(
         p_market=merged["market_probability"],
         p_kalshi=kalshi_probability,
         p_ml=model_probability,
-        p_theover=_numeric_series(merged, "theover_probability", 0.5),
-        p_sentiment=sentiment_series,
+        p_theover=theover_probability,  # Use existing variable
+        p_sentiment=_numeric_series(merged, "sentiment_diff", default=0.5),
         league=_string_series(merged, "league"),
         market_type=_string_series(merged, "market_type")
     )
