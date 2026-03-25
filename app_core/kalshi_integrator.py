@@ -659,6 +659,8 @@ def _extract_kalshi_line(mkt: dict[str, Any], is_total: bool) -> float | None:
     if match:
         val = abs(float(match.group(1)))
         if not is_total and "wins by" in combined_text:
+            # Only add 0.5 if it's an integer-style phrasing (e.g. "wins by 1")
+            # If it says "more than 1.5", it's already the correct decimal.
             if "more than" not in combined_text and "over" not in combined_text:
                 return val + 0.5
         return val
@@ -670,6 +672,8 @@ def _extract_kalshi_line(mkt: dict[str, Any], is_total: bool) -> float | None:
             try:
                 val = abs(float(num_str))
                 if not is_total and "wins by" in m_subtitle:
+                    # Only add 0.5 if it's an integer-style phrasing (e.g. "wins by 1")
+                    # If it says "more than 1.5", it's already the correct decimal.
                     if "more than" not in m_subtitle and "over" not in m_subtitle:
                         return val + 0.5
                 return val
@@ -683,6 +687,8 @@ def _extract_kalshi_line(mkt: dict[str, Any], is_total: bool) -> float | None:
             val = abs(float(num_str))
             # Spread translations (e.g. "wins by over 3.5")
             if not is_total and "wins by" in combined_text:
+                # Only add 0.5 if it's an integer-style phrasing (e.g. "wins by 1")
+                # If it says "more than 1.5", it's already the correct decimal.
                 if "more than" not in combined_text and "over" not in combined_text:
                     return val + 0.5
             return val
@@ -1280,7 +1286,11 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                     # but we can try to grab the code from the ticker itself if present
                     h_code = team_code_for_league(league, home_t).upper()
                     a_code = team_code_for_league(league, away_t).upper()
-                    combined_upper = combined_text.upper()
+
+                    # Include event context so we can identify 'Home team' or 'Away team' mentions
+                    e_title = str(best_event_match.get('title') or "")
+                    e_subtitle = str(best_event_match.get('sub_title') or "")
+                    combined_upper = f"{m_title} {m_subtitle} {e_title} {e_subtitle}".upper()
 
                     # Identify subject using both name tokens AND tickers
                     kalshi_subject_is_home = bool(home_shared) or (h_code != "" and h_code in combined_upper)
@@ -1298,9 +1308,11 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                     else:
                         expected_subject_is_home = False
 
-                    is_correct_match = (expected_subject_is_home and kalshi_subject_is_home) or \
-                                       (not expected_subject_is_home and kalshi_subject_is_away)
+                    # Loosen the filter: Accept the market if it's about EITHER team in the game.
+                    # The orientation logic (around line 1150) will handle the probability inversion.
+                    is_correct_match = kalshi_subject_is_home or kalshi_subject_is_away
 
+                    # Fallback: if we can't identify either subject, trust the event match
                     if not kalshi_subject_is_home and not kalshi_subject_is_away:
                         is_correct_match = True
 
