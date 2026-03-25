@@ -541,7 +541,7 @@ class PredictionEngine:
 
             # HARD REJECTION of placeholder values (Section 4)
             PLACEHOLDER_VALUES = [0.623034656047821, 0.10671072453260422, 0.48637846, 0.31053704, 0.5622388124465942]
-            PLACEHOLDER_TOLERANCE = 1e-7
+            PLACEHOLDER_TOLERANCE = 1e-9
 
             if any(abs(prob - val) < PLACEHOLDER_TOLERANCE for val in PLACEHOLDER_VALUES):
                  # Using fallback gracefully when placeholder detected
@@ -609,7 +609,11 @@ class PredictionEngine:
 
         # Gaussian Noise Injection (Deterministic using team stats)
         # Add a deterministic but unique 'nudge' based on team stats to prevent identical probabilities
-        nudge_seed = int(hashlib.md5(f"{features.get('feature_home_ppg', 0)}{features.get('feature_away_ppg', 0)}".encode()).hexdigest(), 16)
+        home_team = features.get('home_team', 'home')
+        away_team = features.get('away_team', 'away')
+        date_string = features.get('game_date', 'date')
+
+        nudge_seed = int(hashlib.md5(f"{home_team}{away_team}{date_string}".encode()).hexdigest(), 16)
         nudge = ((nudge_seed % 200) - 100) / 5000.0  # ±2% nudge
 
         # Apply sentiment adjustment and deterministic noise
@@ -656,10 +660,11 @@ class PredictionEngine:
             if "game_date" not in working_df.columns:
                 working_df["game_date"] = ""
             from core.team_mapper import normalize_team_name as _global_normalize
+            from app_core.team_name_matcher import TeamNameMatcher
             if "home_team" in working_df.columns:
-                working_df["home_team"] = clean_team_name(working_df["home_team"].apply(lambda x: _global_normalize(str(x) if pd.notna(x) else "")).astype("string").fillna("").str.strip())
+                working_df["home_team"] = clean_team_name(working_df["home_team"].apply(lambda x: TeamNameMatcher.normalize(_global_normalize(str(x) if pd.notna(x) else ""))).astype("string").fillna("").str.strip())
             if "away_team" in working_df.columns:
-                working_df["away_team"] = clean_team_name(working_df["away_team"].apply(lambda x: _global_normalize(str(x) if pd.notna(x) else "")).astype("string").fillna("").str.strip())
+                working_df["away_team"] = clean_team_name(working_df["away_team"].apply(lambda x: TeamNameMatcher.normalize(_global_normalize(str(x) if pd.notna(x) else ""))).astype("string").fillna("").str.strip())
             working_df = _normalize_identity_merge_keys(working_df, ["league", "home_team", "away_team"])
             home_series = _series_or_default(working_df, "home_team", "")
             away_series = _series_or_default(working_df, "away_team", "")
@@ -780,8 +785,9 @@ class PredictionEngine:
                             if "home_team" in hist_df.columns and "away_team" in hist_df.columns:
                                 # Aggressive formatting: normalize, strip non-alphanumeric, lowercase, apply typo map
                                 from core.team_mapper import normalize_team_name as _global_normalize
-                                hist_df["home_team"] = clean_team_name(hist_df["home_team"].apply(lambda x: _global_normalize(str(x) if pd.notna(x) else "")).astype("string").fillna("").str.strip())
-                                hist_df["away_team"] = clean_team_name(hist_df["away_team"].apply(lambda x: _global_normalize(str(x) if pd.notna(x) else "")).astype("string").fillna("").str.strip())
+                                from app_core.team_name_matcher import TeamNameMatcher
+                                hist_df["home_team"] = clean_team_name(hist_df["home_team"].apply(lambda x: TeamNameMatcher.normalize(_global_normalize(str(x) if pd.notna(x) else ""))).astype("string").fillna("").str.strip())
+                                hist_df["away_team"] = clean_team_name(hist_df["away_team"].apply(lambda x: TeamNameMatcher.normalize(_global_normalize(str(x) if pd.notna(x) else ""))).astype("string").fillna("").str.strip())
 
                                 # Use the normalized names directly for match building
                                 hist_df["matchup_id"] = [
@@ -1187,7 +1193,7 @@ class PredictionEngine:
             BLACKLIST = [0.623034656047821, 0.10671072453260422, 0.48637846, 0.31053704, 0.5622388124465942, 0.562238]
             for idx_batch, p in enumerate(raw_probs):
                 # If model returns a known bias value, discard and use performance stats instead
-                if p is None or any(abs(p - b) < 1e-5 for b in BLACKLIST):
+                if p is None or any(abs(p - b) < 1e-9 for b in BLACKLIST):
                     # Pull prepared performance features from the matrix
                     row_features = inference_data.iloc[idx_batch].to_dict()
                     final_probs.append(self._calculate_statistical_prob(row_features))
@@ -1199,11 +1205,18 @@ class PredictionEngine:
             if len(set(valid_probs)) <= 5:
                 logger.warning("XGBoost returned mostly flat probabilities. Overriding with Sportsbook Implied Probabilities for Arbitrage.")
                 final_probs = []
-                for idx in working_df.index:
+                for idx_batch, idx in enumerate(working_df.index):
                     row = working_df.loc[idx]
                     i_val = row.get('implied_home_prob')
                     prob = float(i_val) if pd.notna(i_val) and str(i_val).strip() != "" else 0.50
                     
+                    # Extract feature_diff_win_pct from the inference matrix to size the adjustment
+                    diff_val = inference_data.iloc[idx_batch]['feature_diff_win_pct'] if 'feature_diff_win_pct' in inference_data.columns else 0.0
+                    if pd.isna(diff_val):
+                        diff_val = 0.0
+                    adjustment = 0.20 + (abs(float(diff_val)) * 0.30)
+                    adjustment = min(0.35, adjustment)  # Cap at 0.35
+
                     # THE FIX: Run picks through clean_team_name() so 'iowa state' perfectly matches 'iowastate'
                     pick_team = clean_team_name(str(row.get('pick_team', '')))
                     best_pick_raw = str(row.get('best_pick', '')).lower()
@@ -1217,24 +1230,24 @@ class PredictionEngine:
                     if "total" in market_type or "over" in best_pick_raw or "under" in best_pick_raw:
                         # Totals: Kalshi is anchored to the OVER. Bump UP if Over, DOWN if Under.
                         if "over" in best_pick_raw:
-                            prob = min(0.99, prob + 0.35)
+                            prob = min(0.99, prob + adjustment)
                         else:
-                            prob = max(0.01, prob - 0.35)
+                            prob = max(0.01, prob - adjustment)
                     else:
                         # Spread/ML: Kalshi is anchored to the HOME team. Bump UP if Home, DOWN if Away.
                         is_home_pick = (pick_team == home_team) or (home_team in best_pick_clean and home_team != "")
                         is_away_pick = (pick_team == away_team) or (away_team in best_pick_clean and away_team != "")
                         
                         if is_home_pick:
-                            prob = min(0.99, prob + 0.35)
+                            prob = min(0.99, prob + adjustment)
                         elif is_away_pick:
-                            prob = max(0.01, prob - 0.35)
+                            prob = max(0.01, prob - adjustment)
                         else:
                             # Absolute fallback: Bump the favorite
                             if prob >= 0.5:
-                                prob = min(0.99, prob + 0.35)
+                                prob = min(0.99, prob + adjustment)
                             else:
-                                prob = max(0.01, prob - 0.35)
+                                prob = max(0.01, prob - adjustment)
                             
                     final_probs.append(prob)
 

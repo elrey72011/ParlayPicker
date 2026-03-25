@@ -100,7 +100,7 @@ KALSHI_LINE_TOLERANCE_TOTAL = 3.0
 MAX_LINE_TOLERANCE = {
     "NBA": 3.5,
     "NCAAB": 3.5,
-    "NHL": 1.5,
+    "NHL": 2.5,
     "MLB": 0.5,
     "NFL": 2.5,
 }
@@ -194,8 +194,8 @@ KALSHI_TEAM_CODES = {
     "Montreal Canadiens": "MTL", "Montreal": "MTL",
     "Nashville Predators": "NSH", "Nashville": "NSH",
     "New Jersey Devils": "NJD", "New Jersey": "NJD",
-    "New York Islanders": "NYI", "NY Islanders": "NYI",
-    "New York Rangers": "NYR", "NY Rangers": "NYR", "Ny Rangers": "NYR", "New York": "NYR",
+    "New York Islanders": "NYI", "NY Islanders": "NYI", "Ny Islanders": "NYI", "Islanders": "NYI",
+    "New York Rangers": "NYR", "NY Rangers": "NYR", "Ny Rangers": "NYR", "Rangers": "NYR",
     "Ottawa Senators": "OTT", "Ottawa": "OTT",
     "Philadelphia Flyers": "PHI",
     "Pittsburgh Penguins": "PIT", "Pittsburgh": "PIT",
