@@ -1244,8 +1244,9 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                     m_title = str(mkt.get("title") or "").lower()
                     m_subtitle = str(mkt.get("subtitle") or "").lower()
                     combined_text = f"{m_title} {m_subtitle}"
-                    e_title_context = str(best_event_match.get('title') or "")
-                    combined_upper = f"{combined_text} {e_title_context}".upper()
+                    e_title = str(best_event_match.get('title') or "")
+                    e_subtitle = str(best_event_match.get('sub_title') or "")
+                    combined_upper = f"{combined_text} {e_title} {e_subtitle}".upper()
 
                     if family == "moneyline" or any(x in combined_text for x in ["moneyline", "to win", "winner", "vs", "win by", "wins by"]):
                         pick_team_val = row.get("pick_team")
@@ -1305,8 +1306,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                     # Include event context so we can identify 'Home team' or 'Away team' mentions
                     e_title = str(best_event_match.get('title') or "")
                     e_subtitle = str(best_event_match.get('sub_title') or "")
-                    e_title_context = str(best_event_match.get('title') or "")
-                    combined_upper = f"{combined_text} {e_title_context} {e_title} {e_subtitle}".upper()
+                    combined_upper = f"{combined_text} {e_title} {e_subtitle}".upper()
 
                     # Identify subject using both name tokens AND tickers
                     kalshi_subject_is_home = bool(home_shared) or (h_code != "" and h_code in combined_upper)
@@ -1380,7 +1380,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             # We found no markets or candidates at all
             out.at[idx, "kalshi_match_status"] = "miss"
             if match_reason == "no_market_for_tickers":
-                 out.at[idx, "kalshi_match_reason"] = "alt_line_mismatch"
+                 out.at[idx, "kalshi_match_reason"] = "no_matching_market_found"
             else:
                  out.at[idx, "kalshi_match_reason"] = match_reason
             out.at[idx, "kalshi_match_quality"] = "line_mismatched"
