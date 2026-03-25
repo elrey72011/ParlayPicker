@@ -1,42 +1,20 @@
-import logging
-from core.streamlit_pipeline import run_analysis_pipeline
 import pandas as pd
-import json
+from app_core.kalshi_integrator import enrich_with_kalshi_markets
 
-logging.basicConfig(level=logging.INFO)
+# Create dummy row
+df = pd.DataFrame([{
+    "league": "NBA",
+    "home_team": "Atlanta Hawks",
+    "away_team": "Boston Celtics",
+    "game_date": "2024-01-01",
+    "market_type": "spread_home",
+    "best_pick": "Atlanta Hawks +5.5",
+    "spread_line": "+5.5",
+    "category": "spread"
+}])
 
-print("Starting pipeline...")
-try:
-    results = run_analysis_pipeline()
+# Enrich
+out = enrich_with_kalshi_markets(df)
 
-    if isinstance(results, tuple):
-        analysis_df = results[0]
-        best_picks_df = results[1]
-    else:
-        best_picks_df = results["best_picks"]
-
-    print(best_picks_df.columns)
-
-    # Calculate Kalshi metrics to emulate the Streamlit UI output
-    kalshi_matches = len(best_picks_df[best_picks_df['kalshi_match_status'] == 'matched'])
-    total_games = len(best_picks_df)
-
-    # Calculate EV distribution
-    ev_dist = {
-        "High Edge (>5%)": len(best_picks_df[best_picks_df['expected_value'] > 0.05]),
-        "Medium Edge (2-5%)": len(best_picks_df[(best_picks_df['expected_value'] > 0.02) & (best_picks_df['expected_value'] <= 0.05)]),
-        "Low Edge (0-2%)": len(best_picks_df[(best_picks_df['expected_value'] > 0) & (best_picks_df['expected_value'] <= 0.02)]),
-        "Negative Edge": len(best_picks_df[best_picks_df['expected_value'] < 0])
-    }
-
-    print("\n--- Kalshi Match Count ---")
-    print(f"Total Matches: {kalshi_matches} / {total_games}")
-
-    print("\n--- EV Distribution ---")
-    for category, count in ev_dist.items():
-        print(f"{category}: {count}")
-
-except Exception as e:
-    import traceback
-    traceback.print_exc()
-    print(f"Error running pipeline: {e}")
+# Check missing status and probability
+print(out[["kalshi_match_status", "kalshi_probability"]].to_dict('records'))
