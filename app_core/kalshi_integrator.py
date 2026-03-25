@@ -701,9 +701,10 @@ def _extract_kalshi_line(mkt: dict[str, Any], is_total: bool) -> float | None:
         parts = ticker.split("-")
         if parts:
             last_part = parts[-1]
-            if last_part.isdigit():
+            t_match = re.search(r'(\d+(?:\.\d+)?)', last_part)
+            if t_match:
                 try:
-                    line = float(last_part)
+                    line = float(t_match.group(1))
                     if is_total:
                         # For totals, append .5 if it's an integer
                         if line == int(line):
@@ -1433,6 +1434,11 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
                 home_idx = 999 if home_idx == -1 else home_idx
                 away_idx = 999 if away_idx == -1 else away_idx
+
+                if home_idx == 999 and " home " in norm_title:
+                    home_idx = norm_title.find(" home ")
+                if away_idx == 999 and " away " in norm_title:
+                    away_idx = norm_title.find(" away ")
 
                 if away_idx < home_idx:
                     # Away team is the subject. Invert to anchor to Home team.
