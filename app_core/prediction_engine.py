@@ -6,6 +6,7 @@ import traceback
 import numpy as np
 from pathlib import Path
 import json
+import hashlib
 from typing import List, Optional, Any, Dict, Mapping, Tuple
 from app_core.team_name_matcher import TeamNameMatcher
 
@@ -467,7 +468,7 @@ class PredictionEngine:
                 prob = float(prediction[0])
 
             # Check for placeholder
-            PLACEHOLDER_VALUES = [0.623034656047821, 0.10671072453260422, 0.48637846, 0.31053704]
+            PLACEHOLDER_VALUES = [0.623034656047821, 0.10671072453260422, 0.48637846, 0.31053704, 0.5622388124465942]
             PLACEHOLDER_TOLERANCE = 1e-7
 
             if any(abs(prob - val) < PLACEHOLDER_TOLERANCE for val in PLACEHOLDER_VALUES):
@@ -539,7 +540,7 @@ class PredictionEngine:
             logger.debug(f"[MODEL_DEBUG] Raw prediction: {prob}")
 
             # HARD REJECTION of placeholder values (Section 4)
-            PLACEHOLDER_VALUES = [0.623034656047821, 0.10671072453260422, 0.48637846, 0.31053704]
+            PLACEHOLDER_VALUES = [0.623034656047821, 0.10671072453260422, 0.48637846, 0.31053704, 0.5622388124465942]
             PLACEHOLDER_TOLERANCE = 1e-7
 
             if any(abs(prob - val) < PLACEHOLDER_TOLERANCE for val in PLACEHOLDER_VALUES):
@@ -598,19 +599,6 @@ class PredictionEngine:
         # Component 5: Sentiment adjustment (small nudge)
         sentiment_adj = sentiment_diff * 0.02  # ±2% max
 
-        # Gaussian Noise Injection (Deterministic using home/away win pcts)
-        # We derive a pseudo-random seed from the features so it's consistent for the same game
-        import hashlib
-        import random
-        seed_str = f"{home_win_pct}_{away_win_pct}_{implied_prob}"
-        seed_hash = int(hashlib.md5(seed_str.encode()).hexdigest()[:8], 16)
-
-        # Capture the state so we don't mess up global random operations, then apply noise
-        st_state = random.getstate()
-        random.seed(seed_hash)
-        noise = random.uniform(-0.015, 0.015) # ±1.5%
-        random.setstate(st_state)
-
         # Weighted combination
         base_prob = (
             implied_component * 0.40 +
@@ -619,8 +607,13 @@ class PredictionEngine:
             kalshi_component * 0.10
         )
 
+        # Gaussian Noise Injection (Deterministic using team stats)
+        # Add a deterministic but unique 'nudge' based on team stats to prevent identical probabilities
+        nudge_seed = int(hashlib.md5(f"{features.get('feature_home_ppg', 0)}{features.get('feature_away_ppg', 0)}".encode()).hexdigest(), 16)
+        nudge = ((nudge_seed % 200) - 100) / 5000.0  # ±2% nudge
+
         # Apply sentiment adjustment and deterministic noise
-        final_prob = base_prob + sentiment_adj + noise
+        final_prob = base_prob + sentiment_adj + nudge
 
         # Clamp to reasonable range [0.35, 0.65] to avoid extreme predictions without model
         final_prob = max(0.35, min(0.65, final_prob))
