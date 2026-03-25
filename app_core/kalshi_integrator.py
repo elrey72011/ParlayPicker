@@ -655,7 +655,7 @@ def _extract_kalshi_line(mkt: dict[str, Any], is_total: bool) -> float | None:
     combined_text = f"{m_title} {m_subtitle}"
 
     # 1. Primary: Strict Regex Match based on betting terminology
-    match = re.search(r'(?:Over|Under|by over|by at least)\s*(\d+(?:\.\d+)?)', combined_text, re.IGNORECASE)
+    match = re.search(r'(?:Over|Under|by over|by at least|more than)\s*(\d+(?:\.\d+)?)', combined_text, re.IGNORECASE)
     if match:
         val = abs(float(match.group(1)))
         if not is_total and "wins by" in combined_text:
@@ -1184,13 +1184,12 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 league_tolerance = MAX_LINE_TOLERANCE.get(league, 3.0)
 
                 if delta <= league_tolerance:
+                    best_market = nearest[2]
                     if delta == 0:
-                        best_market = nearest[2]
                         match_status = "matched"
                         match_reason = "total_match_exact"
                         out.at[idx, "kalshi_line_diff"] = 0.0
                     else:
-                        best_market = nearest[2]
                         match_status = "matched"
                         match_reason = "nearest_line_proxy"
                         out.at[idx, "kalshi_line_diff"] = delta
@@ -1278,10 +1277,11 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                     # but we can try to grab the code from the ticker itself if present
                     h_code = team_code_for_league(league, home_t).upper()
                     a_code = team_code_for_league(league, away_t).upper()
+                    combined_upper = combined_text.upper()
 
-                    # Subject matches if tokens OR codes intersect
-                    kalshi_subject_is_home = bool(home_shared) or (h_code != "" and h_code in combined_text.upper())
-                    kalshi_subject_is_away = bool(away_shared) or (a_code != "" and a_code in combined_text.upper())
+                    # Identify subject using both name tokens AND tickers
+                    kalshi_subject_is_home = bool(home_shared) or (h_code != "" and h_code in combined_upper)
+                    kalshi_subject_is_away = bool(away_shared) or (a_code != "" and a_code in combined_upper)
 
                     expected_subject_is_home = ("home" in m_type) if is_favorite_bet else not ("home" in m_type)
 
@@ -1321,13 +1321,12 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                     league_tolerance = MAX_LINE_TOLERANCE.get(league, 3.0)
 
                     if delta <= league_tolerance:
+                        best_market = nearest[2]
                         if delta == 0:
-                            best_market = nearest[2]
                             match_status = "matched"
                             match_reason = "spread_match_exact"
                             out.at[idx, "kalshi_line_diff"] = 0.0
                         else:
-                            best_market = nearest[2]
                             match_status = "matched"
                             match_reason = "nearest_line_proxy"
                             out.at[idx, "kalshi_line_diff"] = delta
