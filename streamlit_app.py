@@ -531,10 +531,12 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
     # Gemini Integration for Top Picks
     if controls.get("use_gemini") and not best_picks_df.empty:
         try:
+            logger.info(f"Firing Gemini API for {len(best_picks_df)} best picks...")
             from integrations.gemini_client import run_gemini_analysis
 
             # Pass to Gemini wrapper with date columns automatically scrubbed
             analyzed_df = run_gemini_analysis(best_picks_df, st.session_state)
+            logger.info("Gemini analysis payload unpacked successfully.")
 
             # Update best_picks_df columns
             best_picks_df["gemini_explanation"] = analyzed_df.get("gemini_explanation", "Gemini analysis unavailable")
