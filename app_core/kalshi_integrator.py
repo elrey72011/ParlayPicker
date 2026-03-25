@@ -661,7 +661,7 @@ def _extract_kalshi_line(mkt: dict[str, Any], is_total: bool) -> float | None:
         if not is_total and "wins by" in combined_text:
             # Only add 0.5 if it's an integer-style phrasing (e.g. "wins by 1")
             # If it says "more than 1.5", it's already the correct decimal.
-            if "more than" not in combined_text and "over" not in combined_text:
+            if "more than" not in combined_text and "over" not in combined_text and "at least" not in combined_text:
                 return val + 0.5
         return val
 
@@ -674,7 +674,7 @@ def _extract_kalshi_line(mkt: dict[str, Any], is_total: bool) -> float | None:
                 if not is_total and "wins by" in m_subtitle:
                     # Only add 0.5 if it's an integer-style phrasing (e.g. "wins by 1")
                     # If it says "more than 1.5", it's already the correct decimal.
-                    if "more than" not in m_subtitle and "over" not in m_subtitle:
+                    if "more than" not in m_subtitle and "over" not in m_subtitle and "at least" not in m_subtitle:
                         return val + 0.5
                 return val
             except ValueError:
@@ -689,7 +689,7 @@ def _extract_kalshi_line(mkt: dict[str, Any], is_total: bool) -> float | None:
             if not is_total and "wins by" in combined_text:
                 # Only add 0.5 if it's an integer-style phrasing (e.g. "wins by 1")
                 # If it says "more than 1.5", it's already the correct decimal.
-                if "more than" not in combined_text and "over" not in combined_text:
+                if "more than" not in combined_text and "over" not in combined_text and "at least" not in combined_text:
                     return val + 0.5
             return val
         except ValueError:
