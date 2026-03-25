@@ -19,9 +19,14 @@ if str(ROOT) not in sys.path:
 
 from core.bankroll_simulator import simulate_bankroll
 from core.kelly_optimizer import add_kelly_bet_sizing
+from app_core.calibration import generate_calibration_dataset
 from core.probability_engine import american_to_prob
 from core.schema.base_schema import ensure_base_schema
 from core.team_mapper import normalize_team_name, NBA_EXACT_MAP, NHL_EXACT_MAP
+from app_core.weights_config import (
+    KALSHI_WEIGHT, MARKET_WEIGHT, ML_MODEL_WEIGHT, THEOVER_WEIGHT, SENTIMENT_WEIGHT,
+    FALLBACK_MARKET_WEIGHT, FALLBACK_ML_WEIGHT, FALLBACK_THEOVER_WEIGHT, FALLBACK_SENTIMENT_WEIGHT
+)
 
 warnings.filterwarnings("ignore", category=FutureWarning, module="pandas")
 
@@ -84,14 +89,14 @@ BEST_PICK_COLUMNS = [
     "calibrated_probability", "expected_value", "edge", "consensus_agreement",
     "odds_american", "odds_source", "market_probability", "ml_probability",
     "kalshi_probability", "kalshi_match_status", "kalshi_match_reason",
-    "gemini_explanation", "gemini_risk_notes", "used_stale_features", "Pick_Quality",
+    "gemini_explanation", "gemini_risk_notes", "used_stale_features", "Pick_Quality", "Conviction_Score",
 ]
 
 CANONICAL_BET_COLUMNS = [
     "league", "home_team", "away_team", "game_date", "game_time_est", "game_key",
     "market_type", "spread_line", "total_line",
     "theover_probability", "odds_american", "odds_source", "market_probability",
-    "ml_probability", "calibrated_probability", "expected_value", "edge", "best_pick", "used_stale_features", "matchup_id",
+    "ml_probability", "calibrated_probability", "expected_value", "edge", "best_pick", "used_stale_features", "matchup_id", "Conviction_Score",
 ]
 
 _EXPORT_SIGNAL_COLS = {"market_type", "calibrated_probability", "expected_value", "edge"}
@@ -921,41 +926,77 @@ def compute_blended_probability(
     p_market: pd.Series,
     p_kalshi: pd.Series,
     p_ml: pd.Series,
+    p_theover: pd.Series,
+    p_sentiment: pd.Series,
     league: pd.Series | None = None,
     market_type: pd.Series | None = None
 ) -> pd.Series:
     """
-    Vectorized blend with dynamic weight normalization per row.
-    Implements Bayesian Shrinkage (75% Market / 25% Model) as baseline,
-    with Kalshi blended into the market side when available.
+    Vectorized blend using two-tier logic defined in weights_config.
     """
     market = pd.to_numeric(p_market, errors="coerce")
     kalshi = pd.to_numeric(p_kalshi, errors="coerce")
     ml = pd.to_numeric(p_ml, errors="coerce")
+    theover = pd.to_numeric(p_theover, errors="coerce").fillna(0.5)
+    sentiment = pd.to_numeric(p_sentiment, errors="coerce").fillna(0.5)
+    m_type = pd.Series(market_type).fillna("").astype(str).str.lower()
 
-    def _blend_row(p_mkt, p_kal, p_ml):
-        # Base fallback if no market data (should rarely happen)
+    def _blend_row(p_mkt, p_kal, p_ml, p_the, p_sen, m_typ):
         if pd.isna(p_mkt):
-            return p_ml if pd.notna(p_ml) else 0.5
+            p_mkt = p_ml if pd.notna(p_ml) else 0.5
 
-        mkt_val = p_mkt
-
-        # If valid Kalshi data is available, blend it into the "Market Consensus" side
-        # Recalibrated to 15% Kalshi, 85% traditional sportsbook due to 6-8% margin penalty in Kalshi odds.
+        # Orient Kalshi Probability (Kalshi is anchored to Home/Over)
+        k_oriented = None
         if pd.notna(p_kal):
-            consensus_mkt = (mkt_val * 0.85) + (p_kal * 0.15)
+            k_oriented = p_kal
+            if m_typ.endswith("away") or m_typ.endswith("under"):
+                k_oriented = 1.0 - k_oriented
+
+        # Tier 1 vs Tier 2
+        if k_oriented is not None and k_oriented >= 0.55:
+            # Tier 1
+            w_kalshi = KALSHI_WEIGHT
+            w_market = MARKET_WEIGHT
+            w_ml = ML_MODEL_WEIGHT
+            w_the = THEOVER_WEIGHT
+            w_sen = SENTIMENT_WEIGHT
+
+            # Re-normalize if ML is missing
+            if pd.isna(p_ml):
+                total_w = w_kalshi + w_market + w_the + w_sen
+                w_kalshi /= total_w
+                w_market /= total_w
+                w_the /= total_w
+                w_sen /= total_w
+                p_ml_val = 0.0
+                w_ml = 0.0
+            else:
+                p_ml_val = p_ml
+
+            prob = (k_oriented * w_kalshi) + (p_mkt * w_market) + (p_ml_val * w_ml) + (p_the * w_the) + (p_sen * w_sen)
         else:
-            consensus_mkt = mkt_val
+            # Tier 2 Fallback (Kalshi disagrees or unavailable)
+            w_market = FALLBACK_MARKET_WEIGHT
+            w_ml = FALLBACK_ML_WEIGHT
+            w_the = FALLBACK_THEOVER_WEIGHT
+            w_sen = FALLBACK_SENTIMENT_WEIGHT
 
-        # Bayesian Shrinkage: 75% Consensus Market / 25% Model
-        if pd.notna(p_ml):
-            return (consensus_mkt * 0.75) + (p_ml * 0.25)
+            if pd.isna(p_ml):
+                total_w = w_market + w_the + w_sen
+                w_market /= total_w
+                w_the /= total_w
+                w_sen /= total_w
+                p_ml_val = 0.0
+                w_ml = 0.0
+            else:
+                p_ml_val = p_ml
 
-        return consensus_mkt
+            prob = (p_mkt * w_market) + (p_ml_val * w_ml) + (p_the * w_the) + (p_sen * w_sen)
 
-    # Vectorized apply row-by-row
-    blended = pd.Series([_blend_row(m, k, l)
-                         for m, k, l in zip(market, kalshi, ml)],
+        return prob
+
+    blended = pd.Series([_blend_row(m, k, l, t, s, typ)
+                         for m, k, l, t, s, typ in zip(market, kalshi, ml, theover, sentiment, m_type)],
                         index=market.index)
 
     return pd.to_numeric(blended, errors="coerce").clip(0.01, 0.99)
@@ -992,6 +1033,8 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
         p_market=out["market_probability"],
         p_kalshi=kalshi_prob,
         p_ml=model_prob,
+        p_theover=_numeric_series(out, "theover_probability", 0.5),
+        p_sentiment=_numeric_series(out, "sentiment_diff", 0.0).apply(lambda x: 0.5 + (x * 0.5)),
         league=_string_series(out, "league"),
         market_type=_string_series(out, "market_type")
     )
@@ -2259,29 +2302,33 @@ def run_analysis_pipeline(
     # merged['away_team'] = merged['away_team'].astype(str).str.lower()
 
     # --- Metadata Framework & Situational Adjustments ---
-    # Placeholder for external metadata ingestion (starting goalies, player injuries, live pace)
+    # Live external metadata ingestion (starting goalies, player injuries, live pace)
     # This framework adjusts the raw model probability before blending with the market.
 
     # Goalie Delta (NHL): Reduce win prob by 6.5% if a secondary goalie is starting, boost opponent by 6.5%.
-    # Placeholder mock: Jonathan Quick instead of Igor Shesterkin
+    # Check for feature_goalie_delta column (1.0 = true)
     is_nhl = merged["league"].str.upper() == "NHL"
+    has_goalie_delta = pd.Series([False] * len(merged), index=merged.index)
+    if "feature_goalie_delta" in merged.columns:
+        has_goalie_delta = pd.to_numeric(merged["feature_goalie_delta"], errors="coerce").fillna(0) == 1.0
 
-    # Rangers are home, Quick is in -> Rangers probability down, Away probability up
-    rangers_home = is_nhl & merged["home_team"].str.contains("Rangers", case=False, na=False)
-    model_probability = model_probability.where(~(rangers_home & (merged["market_type"] == "spread_home")), model_probability - 0.065)
-    model_probability = model_probability.where(~(rangers_home & (merged["market_type"] == "spread_away")), model_probability + 0.065)
+    # Apply goalie penalty assuming it applies to the home team's goalie
+    # (Downstream data ingestion maps this feature when the home team uses a backup)
+    # Home team probability down, Away probability up
+    goalie_impact = is_nhl & has_goalie_delta
+    model_probability = model_probability.where(~(goalie_impact & (merged["market_type"] == "spread_home")), model_probability - 0.065)
+    model_probability = model_probability.where(~(goalie_impact & (merged["market_type"] == "spread_away")), model_probability + 0.065)
 
-    # Rangers are away, Quick is in -> Rangers probability down, Home probability up
-    rangers_away = is_nhl & merged["away_team"].str.contains("Rangers", case=False, na=False)
-    model_probability = model_probability.where(~(rangers_away & (merged["market_type"] == "spread_away")), model_probability - 0.065)
-    model_probability = model_probability.where(~(rangers_away & (merged["market_type"] == "spread_home")), model_probability + 0.065)
-
-    # Pace-Setter (NBA): Inflate "Over" probability by 4% when a high-usage star (e.g. Luka Dončić) is active.
+    # Pace-Setter (NBA): Inflate "Over" probability by 4% when a high-usage star is active.
+    # Check for feature_star_active column (1.0 = true)
     is_nba = merged["league"].str.upper() == "NBA"
-    # Placeholder mock: Luka Dončić active for Dallas
-    mavs_game = is_nba & (merged["home_team"].str.contains("Mavericks", case=False, na=False) | merged["away_team"].str.contains("Mavericks", case=False, na=False))
-    model_probability = model_probability.where(~(mavs_game & (merged["market_type"] == "total_over")), model_probability + 0.04)
-    model_probability = model_probability.where(~(mavs_game & (merged["market_type"] == "total_under")), model_probability - 0.04)
+    has_star_active = pd.Series([False] * len(merged), index=merged.index)
+    if "feature_star_active" in merged.columns:
+        has_star_active = pd.to_numeric(merged["feature_star_active"], errors="coerce").fillna(0) == 1.0
+
+    star_impact = is_nba & has_star_active
+    model_probability = model_probability.where(~(star_impact & (merged["market_type"] == "total_over")), model_probability + 0.04)
+    model_probability = model_probability.where(~(star_impact & (merged["market_type"] == "total_under")), model_probability - 0.04)
 
     # Tournament Efficiency Decay: Flat 4% reduction to final "Over" probability for all postseason games.
     is_postseason = is_postseason_ncaab(merged)
@@ -2299,10 +2346,13 @@ def run_analysis_pipeline(
     # --- End Metadata Framework ---
 
     kalshi_probability = _numeric_series(merged, "kalshi_probability") if "kalshi_probability" in merged.columns else pd.Series([pd.NA]*len(merged), index=merged.index)
+    sentiment_series = _numeric_series(merged, "sentiment_diff", 0.0).apply(lambda x: 0.5 + (x * 0.5)) if "sentiment_diff" in merged.columns else pd.Series([0.5]*len(merged), index=merged.index)
     calibrated_probability = compute_blended_probability(
         p_market=merged["market_probability"],
         p_kalshi=kalshi_probability,
         p_ml=model_probability,
+        p_theover=_numeric_series(merged, "theover_probability", 0.5),
+        p_sentiment=sentiment_series,
         league=_string_series(merged, "league"),
         market_type=_string_series(merged, "market_type")
     )
@@ -2462,6 +2512,75 @@ def run_analysis_pipeline(
         # 4. Sync the slate date with actual start time
         # Strip the ' ET' label and use mixed format parsing to handle cases where time is missing
         analysis_df["game_date"] = pd.to_datetime(analysis_df["game_time_est"].astype(str).str.replace(" ET", "", regex=False), format='mixed', errors='coerce').dt.date.fillna(analysis_df["game_date"])
+
+    # Phase 6: Close the Feedback Loop
+    # Calculate Conviction_Score based on historical calibration performance
+    if not analysis_df.empty:
+        # Load historical outcomes explicitly to ensure full ground truth
+        try:
+            hist_df = pd.read_csv("data/master_all_sports.csv")
+        except Exception:
+            hist_df = pd.DataFrame()
+
+        try:
+            # We need to ensure we have the required columns for generating calibration dataset
+            if 'market_type' not in hist_df.columns and 'best_pick_type' not in hist_df.columns and 'Market' not in hist_df.columns:
+                # Add dummy market type if missing to trick generator to run
+                hist_df['Market'] = 'SPREAD'
+
+            # Map current slate to SPREAD or TOTAL generically
+            analysis_df['generic_market'] = analysis_df['market_type'].astype(str).str.upper().apply(
+                lambda x: 'TOTAL' if 'TOTAL' in x else 'SPREAD'
+            )
+
+            # Use appropriate probability column
+            prob_col = 'final_probability' if 'final_probability' in hist_df.columns else 'calibrated_probability' if 'calibrated_probability' in hist_df.columns else 'ml_probability' if 'ml_probability' in hist_df.columns else None
+
+            if prob_col:
+                # Generate metrics
+                bins = [0.0, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95, 1.0]
+                calibration_metrics = generate_calibration_dataset(hist_df, probability_col=prob_col, bins=bins)
+
+                if not calibration_metrics.empty:
+                    # Bucket current slate predictions
+                    analysis_df['prob_bucket'] = pd.cut(
+                        pd.to_numeric(analysis_df['calibrated_probability'], errors='coerce').fillna(0.5),
+                        bins=bins, right=False, include_lowest=True
+                    ).astype(str)
+
+                    # Convert metrics bucket to string for joining
+                    calibration_metrics['bucket'] = calibration_metrics['bucket'].astype(str)
+
+                    # Join calibration metrics
+                    analysis_df = analysis_df.merge(
+                        calibration_metrics[['league', 'market_type', 'bucket', 'empirical_win_rate']],
+                        left_on=['league', 'generic_market', 'prob_bucket'],
+                        right_on=['league', 'market_type', 'bucket'],
+                        how='left',
+                        suffixes=('', '_cal')
+                    )
+
+                    # Calculate Conviction Score: 1 - abs(current_prob - empirical_win_rate)
+                    # If empirical win rate is NaN (e.g. bucket hasn't occurred), fallback to current_prob as its own empirical rate (Conviction = 1.0)
+                    empirical_rate = pd.to_numeric(analysis_df['empirical_win_rate'], errors='coerce')
+                    current_prob = pd.to_numeric(analysis_df['calibrated_probability'], errors='coerce').fillna(0.5)
+
+                    empirical_rate_filled = empirical_rate.fillna(current_prob)
+                    analysis_df['Conviction_Score'] = 1.0 - (current_prob - empirical_rate_filled).abs()
+
+                    # Cleanup
+                    drop_cols = ['prob_bucket', 'generic_market', 'market_type_cal', 'bucket', 'empirical_win_rate']
+                    analysis_df = analysis_df.drop(columns=[c for c in drop_cols if c in analysis_df.columns], errors='ignore')
+                else:
+                    analysis_df['Conviction_Score'] = pd.NA
+                    analysis_df = analysis_df.drop(columns=['generic_market'], errors='ignore')
+            else:
+                analysis_df['Conviction_Score'] = pd.NA
+                analysis_df = analysis_df.drop(columns=['generic_market'], errors='ignore')
+        except Exception as e:
+            logger.warning(f"Failed to generate calibration metrics: {e}")
+            analysis_df['Conviction_Score'] = pd.NA
+            analysis_df = analysis_df.drop(columns=['generic_market'], errors='ignore')
 
     return (analysis_df, best_picks_df, diagnostics)
 

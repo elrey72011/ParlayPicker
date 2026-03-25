@@ -148,12 +148,13 @@ def _build_fallback_features_from_row(row_dict: Dict[str, Any]) -> Dict[str, flo
 def clean_team_name(series: pd.Series) -> pd.Series:
     """
     Sanitizes team names for ultra-strict joining.
-    Passes names through the global normalize_team_name function
-    and then strips all non-alphanumeric characters to ensure
-    '76ers' and 'Philadelphia 76ers' resolve accurately.
+    Passes names through the global normalize_team_name function,
+    TeamNameMatcher.normalize, and then strips all non-alphanumeric
+    characters to ensure '76ers' and 'Philadelphia 76ers' resolve accurately.
     """
     import re
     from core.team_mapper import normalize_team_name as _global_normalize
+    from app_core.team_name_matcher import TeamNameMatcher
 
     if series is None or (hasattr(series, "empty") and series.empty):
         return series
@@ -177,7 +178,10 @@ def clean_team_name(series: pd.Series) -> pd.Series:
         # 1. Active global normalization
         s = _global_normalize(s)
 
-        # 2. Local cleanup
+        # 2. TeamNameMatcher normalization
+        s = TeamNameMatcher.normalize(s)
+
+        # 3. Local cleanup
         s = s.lower().strip()
         for k, v in typo_map.items():
             if s == k:
@@ -214,37 +218,14 @@ def _normalize_identity_merge_keys(df: pd.DataFrame, keys: list[str]) -> pd.Data
 
 
 def _build_matchup_id(home: Any, away: Any, date_key: Any = "") -> str:
-    from app_core.team_name_matcher import TeamNameMatcher
-    from core.team_mapper import normalize_team_name
-    import re
+    # Use the robust clean_team_name function which correctly handles all mapping and stripping
+    h_clean = clean_team_name(home)
+    a_clean = clean_team_name(away)
 
-    # 1. Normalize Team Name
-    home_norm = TeamNameMatcher.normalize(normalize_team_name(str(home) if pd.notna(home) else ""))
-    away_norm = TeamNameMatcher.normalize(normalize_team_name(str(away) if pd.notna(away) else ""))
-
-    # 2. Strict Cleaning (Lowercase, strip non-alphanumerics)
-    h_clean = re.sub(r"[^a-z0-9]", "", home_norm.lower())
-    a_clean = re.sub(r"[^a-z0-9]", "", away_norm.lower())
-
-    # 3. Typo Mapping
-    typo_map = {
-        "sacramento": "sacramento",
-        "sacremento": "sacramento",
-        "sacramentokings": "sacramento",
-        "sacrementokings": "sacramento",
-        "sanantonio": "sanantonio",
-        "philidelphia": "philadelphia",
-        "phildelphia": "philadelphia",
-        "newyorkknicks": "newyork",
-    }
-    h_clean = typo_map.get(h_clean, h_clean)
-    a_clean = typo_map.get(a_clean, a_clean)
-
-    # 4. Uppercase
     h_upper = h_clean.upper()
     a_upper = a_clean.upper()
 
-    # 5. Lexicographical Sorting
+    # Lexicographical Sorting
     team_a = h_upper if h_upper <= a_upper else a_upper
     team_b = a_upper if h_upper <= a_upper else h_upper
 
@@ -1210,12 +1191,21 @@ class PredictionEngine:
                     i_val = row.get('implied_home_prob')
                     prob = float(i_val) if pd.notna(i_val) and str(i_val).strip() != "" else 0.50
                     
+                    # Jules: Dynamically scale Arbitrage Adjustment based on feature density
+                    # Determine NaN ratio for this specific row using the original raw data
+                    nan_ratio = row_nan_ratio[idx] if idx in row_nan_ratio.index else 0.0
+
                     # Extract feature_diff_win_pct from the inference matrix to size the adjustment
                     diff_val = inference_data.iloc[idx_batch]['feature_diff_win_pct'] if 'feature_diff_win_pct' in inference_data.columns else 0.0
                     if pd.isna(diff_val):
                         diff_val = 0.0
                     adjustment = 0.20 + (abs(float(diff_val)) * 0.30)
-                    adjustment = min(0.35, adjustment)  # Cap at 0.35
+
+                    # Cap adjustment to 0.05 if mostly empty features to prevent false value
+                    if nan_ratio > 0.5:
+                        adjustment = min(0.05, adjustment)
+                    else:
+                        adjustment = min(0.35, adjustment)  # Cap at 0.35 normally
 
                     # THE FIX: Run picks through clean_team_name() so 'iowa state' perfectly matches 'iowastate'
                     pick_team = clean_team_name(str(row.get('pick_team', '')))
