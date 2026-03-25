@@ -1671,8 +1671,11 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
                 sport_keys.append("basketball_nba")
             elif s_up == "NHL":
                 sport_keys.append("icehockey_nhl")
+            elif s_up == "MLB":
+                sport_keys.append("baseball_mlb_preseason")
+                sport_keys.append("baseball_mlb")
     else:
-        sport_keys = ["basketball_ncaab", "basketball_nba", "icehockey_nhl"]
+        sport_keys = ["basketball_ncaab", "basketball_nba", "icehockey_nhl", "baseball_mlb_preseason", "baseball_mlb"]
 
     all_games = []
     for sk in sport_keys:

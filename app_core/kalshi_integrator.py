@@ -211,8 +211,12 @@ KALSHI_TEAM_CODES = {
     "Winnipeg Jets": "WPG", "Winnipeg": "WPG",
     "Montreal": "MTL",
     "Ny Rangers": "NYR",
+    "Rangers": "NYR",
+    "Toronto": "TOR",
     "Ny Islanders": "NYI",
+    "Islanders": "NYI",
     "St Louis": "STL",
+    "St. Louis": "STL",
     "Tampa Bay": "TBL"
 }
 
@@ -1238,11 +1242,13 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                             match_reason = "moneyline_match"
                             break
 
-                        # Fallback to fuzzy token match
+                        h_code = team_code_for_league(league, pick_team).upper()
+                        # Fallback to ticker code or fuzzy token match
                         pt_tokens = set(_normalize_team_token(pick_team).split())
                         mt_tokens = set(_normalize_team_token(combined_text).split())
                         shared_tokens = {w for w in pt_tokens.intersection(mt_tokens) if len(w) > 2}
-                        if len(shared_tokens) > 0:
+
+                        if (h_code != "" and h_code in combined_text.upper()) or len(shared_tokens) > 0:
                             best_market = mkt
                             match_status = "matched"
                             match_reason = "moneyline_match_fuzzy"
