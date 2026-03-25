@@ -130,6 +130,10 @@ def market_type_matches(market_type: str, title: str, subtitle: str = "") -> boo
     if "spread" in market_type:
         return inferred in {"spread", None}
 
+    # New: allow side bets to match both pure winners and spread fallbacks
+    if "moneyline" in market_type or "h2h" in market_type:
+         return inferred in {"spread", None}
+
     # If explicit market_type is missing or ambiguous, trust keyword inference.
     return inferred is not None or not market_type
 
@@ -1244,35 +1248,24 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                     m_title = str(mkt.get("title") or "").lower()
                     m_subtitle = str(mkt.get("subtitle") or "").lower()
                     combined_text = f"{m_title} {m_subtitle}"
+
+                    e_ticker = str(best_event_match.get('event_ticker') or "")
                     e_title = str(best_event_match.get('title') or "")
-                    e_subtitle = str(best_event_match.get('sub_title') or "")
-                    combined_upper = f"{combined_text} {e_title} {e_subtitle}".upper()
+                    # Include event ticker context for guaranteed code identification (e.g. NYR, TOR)
+                    combined_upper = f"{combined_text} {e_title} {e_ticker}".upper()
 
                     if family == "moneyline" or any(x in combined_text for x in ["moneyline", "to win", "winner", "vs", "win by", "wins by"]):
-                        pick_team_val = row.get("pick_team")
-                        if pd.notna(pick_team_val):
-                            pick_team = str(pick_team_val)
-                        else:
-                            home_team_val = row.get("home_team")
-                            pick_team = str(home_team_val) if pd.notna(home_team_val) else ""
+                        # Identify codes for both teams
+                        h_code = team_code_for_league(league, row.get("home_team")).upper()
+                        a_code = team_code_for_league(league, row.get("away_team")).upper()
 
-                        pick_team_std = TeamNameMatcher.normalize(pick_team)
-                        market_title_std = mkt.get("market_title_std", TeamNameMatcher.normalize(m_title))
+                        # Accept if EITHER team is mentioned. Inversion is handled downstream.
+                        is_h_match = (h_code != "" and h_code in combined_upper) or \
+                                     (TeamNameMatcher.normalize(row.get("home_team")) in combined_text.lower())
+                        is_a_match = (a_code != "" and a_code in combined_upper) or \
+                                     (TeamNameMatcher.normalize(row.get("away_team")) in combined_text.lower())
 
-                        # Primary check using normalized exact match
-                        if pick_team_std and pick_team_std in market_title_std:
-                            best_market = mkt
-                            match_status = "matched"
-                            match_reason = "moneyline_match"
-                            break
-
-                        h_code = team_code_for_league(league, pick_team).upper()
-                        # Fallback to ticker code or fuzzy token match
-                        pt_tokens = set(_normalize_team_token(pick_team).split())
-                        mt_tokens = set(_normalize_team_token(combined_text).split())
-                        shared_tokens = {w for w in pt_tokens.intersection(mt_tokens) if len(w) > 2}
-
-                        if (h_code != "" and h_code in combined_upper) or len(shared_tokens) > 0:
+                        if is_h_match or is_a_match:
                             best_market = mkt
                             match_status = "matched"
                             match_reason = "moneyline_match_fuzzy"
@@ -1380,7 +1373,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             # We found no markets or candidates at all
             out.at[idx, "kalshi_match_status"] = "miss"
             if match_reason == "no_market_for_tickers":
-                 out.at[idx, "kalshi_match_reason"] = "no_matching_market_found"
+                 out.at[idx, "kalshi_match_reason"] = "no_suitable_market_in_event"
             else:
                  out.at[idx, "kalshi_match_reason"] = match_reason
             out.at[idx, "kalshi_match_quality"] = "line_mismatched"
