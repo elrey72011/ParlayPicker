@@ -27,22 +27,24 @@ def run_gemini_analysis(df: pd.DataFrame, session_state: Any = None) -> pd.DataF
         # Call with session_state
         analyses = generate_batch_confidence_explanation(games_list, session_state)
 
-        # Unpack dictionary into the two expected export columns
-        def unpack_gemini(row_id):
-            analysis = analyses.get(str(row_id), {})
-            return pd.Series({
-                "gemini_explanation": str(analysis.get("explanation", "Gemini analysis unavailable")),
-                "gemini_risk_notes": str(analysis.get("risk_notes", ""))
-            })
+        # Unpack dictionary into the two expected export columns based on game_id
+        explanations = []
+        risk_notes = []
 
-        # Apply unpacking
-        temp_cols = pd.Series(llm_payload["game_id"]).apply(unpack_gemini)
+        for idx, row in llm_payload.iterrows():
+            g_id = str(row.get("game_id", ""))
+            analysis = analyses.get(g_id, {})
+            explanations.append(str(analysis.get("explanation", "Gemini analysis unavailable")))
+            risk_notes.append(str(analysis.get("risk_notes", "")))
 
-        # Merge back to result
-        result["gemini_explanation"] = temp_cols["gemini_explanation"]
-        result["gemini_risk_notes"] = temp_cols["gemini_risk_notes"]
+        # Assign back to result dataframe directly to avoid index/alignment issues
+        result["gemini_explanation"] = explanations
+        result["gemini_risk_notes"] = risk_notes
 
     except Exception as exc:  # pragma: no cover
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Gemini integration mapping failed: {exc}", exc_info=True)
         result["gemini_explanation"] = "Gemini analysis unavailable"
         result["gemini_risk_notes"] = ""
 
