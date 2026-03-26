@@ -98,10 +98,10 @@ KALSHI_LINE_TOLERANCE_SPREAD = 3.0
 KALSHI_LINE_TOLERANCE_TOTAL = 3.0
 
 MAX_LINE_TOLERANCE = {
-    "NBA": 3.5,
-    "NCAAB": 3.5,
-    "NHL": 2.5,  # Increased from 1.5 to fix alt_line_mismatch
-    "MLB": 0.5,
+    "NBA": 5.5,
+    "NCAAB": 5.5,
+    "NHL": 3.5,
+    "MLB": 1.5,
     "NFL": 2.5,
 }
 
@@ -656,83 +656,67 @@ def _extract_kalshi_line(mkt: dict[str, Any], is_total: bool) -> float | None:
     """
     Extracts the strike price from a Kalshi market.
     Primary source: subtitle and title.
-    Fallback: ticker string (if total and ends with integer, append .5).
+    Fallback: ticker string.
+    Universal totals math applied at the very end (+0.5 for integer totals).
     """
     m_title = str(mkt.get("title") or "").lower()
     m_subtitle = str(mkt.get("subtitle") or "").lower()
     combined_text = f"{m_title} {m_subtitle}"
 
+    val = None
+
     # 1. Primary: Strict Regex Match based on betting terminology
     match = re.search(r'(?:Over|Under|by over|by at least|more than)\s*(\d+(?:\.\d+)?)', combined_text, re.IGNORECASE)
     if match:
         val = abs(float(match.group(1)))
-        if not is_total and "wins by" in combined_text:
-            # Only add 0.5 if it's an integer-style phrasing (e.g. "wins by 1")
-            # If it says "more than 1.5", it's already the correct decimal.
-            if "more than" not in combined_text and "over" not in combined_text and "at least" not in combined_text:
-                return val + 0.5
-        if is_total:
-            # For totals, append .5 if it's an integer
-            if val == int(val):
+        if not is_total and "wins by" in combined_text.lower():
+            if "more than" not in combined_text.lower() and "over" not in combined_text.lower() and "at least" not in combined_text.lower():
                 val += 0.5
-        return val
 
     # 2. Secondary Fallback: Original extraction purely from subtitle first, then combined text
-    if m_subtitle:
+    if val is None and m_subtitle:
         numbers = re.findall(r"[-+]?\d*\.\d+|\d+", m_subtitle)
         for num_str in numbers:
             try:
                 val = abs(float(num_str))
-                if not is_total and "wins by" in combined_text:
-                    # Only add 0.5 if it's an integer-style phrasing (e.g. "wins by 1")
-                    # If it says "more than 1.5", it's already the correct decimal.
-                    if "more than" not in combined_text and "over" not in combined_text and "at least" not in combined_text:
-                        return val + 0.5
-                if is_total:
-                    # For totals, append .5 if it's an integer
-                    if val == int(val):
+                if not is_total and "wins by" in combined_text.lower():
+                    if "more than" not in combined_text.lower() and "over" not in combined_text.lower() and "at least" not in combined_text.lower():
                         val += 0.5
-                return val
+                break
             except ValueError:
                 continue
 
     # Fallback to combined text
-    numbers = re.findall(r"[-+]?\d*\.\d+|\d+", combined_text)
-    for num_str in numbers:
-        try:
-            val = abs(float(num_str))
-            # Spread translations (e.g. "wins by over 3.5")
-            if not is_total and "wins by" in combined_text:
-                # Only add 0.5 if it's an integer-style phrasing (e.g. "wins by 1")
-                # If it says "more than 1.5", it's already the correct decimal.
-                if "more than" not in combined_text and "over" not in combined_text and "at least" not in combined_text:
-                    return val + 0.5
-            if is_total:
-                # For totals, append .5 if it's an integer
-                if val == int(val):
-                    val += 0.5
-            return val
-        except ValueError:
-            continue
+    if val is None:
+        numbers = re.findall(r"[-+]?\d*\.\d+|\d+", combined_text)
+        for num_str in numbers:
+            try:
+                val = abs(float(num_str))
+                if not is_total and "wins by" in combined_text.lower():
+                    if "more than" not in combined_text.lower() and "over" not in combined_text.lower() and "at least" not in combined_text.lower():
+                        val += 0.5
+                break
+            except ValueError:
+                continue
 
     # 3. Tertiary: Fallback to ticker string
-    ticker = str(mkt.get("ticker") or "").strip()
-    if ticker:
-        parts = ticker.split("-")
-        if parts:
-            last_part = parts[-1]
-            t_match = re.search(r'(\d+(?:\.\d+)?)', last_part)
-            if t_match:
-                try:
-                    line = float(t_match.group(1))
-                    if is_total:
-                        # For totals, append .5 if it's an integer
-                        if line == int(line):
-                            line += 0.5
-                    return line
-                except ValueError:
-                    pass
-    return None
+    if val is None:
+        ticker = str(mkt.get("ticker") or "").strip()
+        if ticker:
+            parts = ticker.split("-")
+            if parts:
+                last_part = parts[-1]
+                t_match = re.search(r'(\d+(?:\.\d+)?)', last_part)
+                if t_match:
+                    try:
+                        val = float(t_match.group(1))
+                    except ValueError:
+                        pass
+
+    if val is not None and is_total and val == int(val):
+        return val + 0.5
+
+    return val
 
 def _safe_float(val: Any) -> float:
     try:
@@ -1211,7 +1195,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 target_line_abs = abs(float(extracted_totals_line))
                 nearest = min(kalshi_lines, key=lambda x: abs(float(x[0]) - target_line_abs))
                 delta = abs(float(nearest[0]) - target_line_abs)
-                league_tolerance = MAX_LINE_TOLERANCE.get(league, 3.0)
+                league_tolerance = MAX_LINE_TOLERANCE.get(league, 3.5)
 
                 if delta <= league_tolerance:
                     best_market = nearest[2]
@@ -1356,7 +1340,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                     target_line_abs = abs(float(target_line))
                     nearest = min(kalshi_lines, key=lambda x: abs(float(x[0]) - target_line_abs))
                     delta = abs(float(nearest[0]) - target_line_abs)
-                    league_tolerance = MAX_LINE_TOLERANCE.get(league, 3.0)
+                    league_tolerance = MAX_LINE_TOLERANCE.get(league, 3.5)
 
                     if delta <= league_tolerance:
                         best_market = nearest[2]

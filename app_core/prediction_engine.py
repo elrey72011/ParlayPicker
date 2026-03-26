@@ -607,6 +607,8 @@ class PredictionEngine:
         if df is None or df.empty:
             return []
 
+        LEAGUE_MAP = {"NCAAM": "NCAAB", "NCAA MENS BASKETBALL": "NCAAB"}
+
         # Prevent inference on dates > 60 days from system date
         try:
             if "game_date" in df.columns:
@@ -632,6 +634,7 @@ class PredictionEngine:
                 .fillna("")
                 .str.strip()
                 .str.upper()
+                .replace(LEAGUE_MAP)
             )
             if "game_date" not in working_df.columns:
                 working_df["game_date"] = ""
@@ -778,7 +781,7 @@ class PredictionEngine:
                                         logger.error("Historical data integrity failure: Neither 'league' nor 'sport' columns found in master CSV.")
                                         hist_df["league"] = ""
                                 hist_df = _normalize_identity_merge_keys(hist_df, ["league", "home_team", "away_team"])
-                                hist_df["league_norm"] = hist_df["league"].astype("string").fillna("").str.strip().str.upper()
+                                hist_df["league_norm"] = hist_df["league"].astype("string").fillna("").str.strip().str.upper().replace(LEAGUE_MAP)
 
                                 # Aggressive date format coercion
                                 hist_df["game_date"] = _normalize_game_date_string(hist_df["commence_time"])
