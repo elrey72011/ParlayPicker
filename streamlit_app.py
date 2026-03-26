@@ -858,7 +858,7 @@ def main() -> None:
             target_export_cols = [
                 "Triple_Filter_Rank", "Pick_Quality", "parlay_rank", "league", "Home", "Away", "Local Date",
                 "Commence (Local)", "best_pick", "WinProbability", "expected_value",
-                "edge", "consensus_agreement", "odds_american", "odds_source", "market_probability",
+                "edge", "Conviction_Score", "consensus_agreement", "odds_american", "odds_source", "market_probability",
                 "kalshi_probability", "ml_probability", "gemini_explanation", "gemini_risk_notes"
             ]
 
