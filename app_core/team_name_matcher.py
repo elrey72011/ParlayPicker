@@ -336,6 +336,10 @@ class TeamNameMatcher:
         'STANFORD': 'STANFORD CARDINAL',
         'CAL': 'CALIFORNIA GOLDEN BEARS',
         'CALIFORNIA': 'CALIFORNIA GOLDEN BEARS',
+        'COLORADO': 'COLORADO AVALANCHE',
+        'WINNIPEG': 'WINNIPEG JETS',
+        'HOUSTON': 'HOUSTON COUGARS',
+        'ILLINOIS': 'ILLINOIS FIGHTING ILLINI',
     }
     
     @classmethod
