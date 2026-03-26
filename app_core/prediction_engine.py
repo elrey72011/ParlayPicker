@@ -539,14 +539,41 @@ class PredictionEngine:
         - PPG differential (20%)
         - Kalshi probability if available (10%)
         """
-        # Get feature values safely
+        # League Average Healing (Example Baselines)
+        LEAGUE_STATS = {
+            "NBA": {"win_pct": 0.50, "ppg": 114.0},
+            "NCAAB": {"win_pct": 0.50, "ppg": 72.0},
+            "NHL": {"win_pct": 0.50, "ppg": 3.1},
+            "MLB": {"win_pct": 0.50, "ppg": 4.5}
+        }
+
+        league = features.get('league', '')
+        league_defaults = LEAGUE_STATS.get(league, {"win_pct": 0.50, "ppg": 0.50})
+        default_win_pct = league_defaults["win_pct"]
+        default_ppg = league_defaults["ppg"]
+
+        # Get feature values safely, using league baselines for missing data
         implied_prob = features.get('implied_home_prob', 0.5)
-        home_win_pct = features.get('feature_home_win_pct', 0.5)
-        away_win_pct = features.get('feature_away_win_pct', 0.5)
-        home_ppg = features.get('feature_home_ppg', 0.5)
-        away_ppg = features.get('feature_away_ppg', 0.5)
-        home_oppg = features.get('feature_home_oppg', 0.5)
-        away_oppg = features.get('feature_away_oppg', 0.5)
+
+        # Use league defaults if values are missing, 0.0, or 0.5 (which is the fallback from missing feature mappings)
+        h_win_raw = features.get('feature_home_win_pct', default_win_pct)
+        home_win_pct = h_win_raw if h_win_raw not in (0.0, 0.5) else default_win_pct
+
+        a_win_raw = features.get('feature_away_win_pct', default_win_pct)
+        away_win_pct = a_win_raw if a_win_raw not in (0.0, 0.5) else default_win_pct
+
+        h_ppg_raw = features.get('feature_home_ppg', default_ppg)
+        home_ppg = h_ppg_raw if h_ppg_raw not in (0.0, 0.5) else default_ppg
+
+        a_ppg_raw = features.get('feature_away_ppg', default_ppg)
+        away_ppg = a_ppg_raw if a_ppg_raw not in (0.0, 0.5) else default_ppg
+
+        h_oppg_raw = features.get('feature_home_oppg', default_ppg)
+        home_oppg = h_oppg_raw if h_oppg_raw not in (0.0, 0.5) else default_ppg
+
+        a_oppg_raw = features.get('feature_away_oppg', default_ppg)
+        away_oppg = a_oppg_raw if a_oppg_raw not in (0.0, 0.5) else default_ppg
+
         kalshi_prob = features.get('kalshi_prob', 0.5)
         sentiment_diff = features.get('sentiment_diff', 0.0)
 
@@ -681,6 +708,8 @@ class PredictionEngine:
                 fallback_probs: List[float] = []
                 for _, row in working_df.iterrows():
                     features = _build_fallback_features_from_row(row.to_dict())
+                    # Ensure league is injected for statistical fallback
+                    features['league'] = row.get('league', '')
                     fallback_probs.append(float(self._calculate_statistical_prob(features)))
                 return fallback_probs
 
@@ -1195,6 +1224,11 @@ class PredictionEngine:
                 if p is None or any(abs(p - b) < 1e-9 for b in BLACKLIST):
                     # Pull prepared performance features from the matrix
                     row_features = inference_data.iloc[idx_batch].to_dict()
+
+                    # Ensure league is injected for statistical fallback by getting it from the original working_df
+                    original_idx = inference_data.index[idx_batch]
+                    row_features['league'] = working_df.loc[original_idx, 'league'] if 'league' in working_df.columns else ''
+
                     final_probs.append(self._calculate_statistical_prob(row_features))
                 else:
                     final_probs.append(p)
