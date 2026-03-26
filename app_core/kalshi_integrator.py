@@ -99,11 +99,17 @@ KALSHI_LINE_TOLERANCE_TOTAL = 3.0
 
 MAX_LINE_TOLERANCE = {
     "NBA": 5.5,
-    "NCAAB": 5.5,
+    "NCAAB": 10.5,
     "NHL": 3.5,
     "MLB": 1.5,
     "NFL": 2.5,
 }
+
+def _normalize_league_for_kalshi(league: str) -> str:
+    l_up = str(league or "").upper()
+    if l_up in ["NCAAM", "NCAAMB", "NCAA MENS BASKETBALL"]:
+        return "NCAAB"
+    return l_up
 
 _NCAAB_FALLBACK_SERIES = ["KXMARMADROUND"]
 _NCAAB_SERIES_TITLE_HINTS = ("march madness", "ncaa", "kxmarmadround")
@@ -956,6 +962,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
         league_val = row.get("league")
         league = _infer_row_league(league_val, home_team_val, away_team_val)
+        league = _normalize_league_for_kalshi(league)
         market_type = _row_text(row, "market_type", lowercase=True)
         strike_price_text = _row_text(row, "strike_price")
         category = _row_text(row, "category", lowercase=True)
@@ -1168,6 +1175,21 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
             kalshi_lines = []
             for mkt in totals_markets:
+                ticker_str = str(mkt.get("ticker", ""))
+                ticker_parts = ticker_str.split("-")
+
+                if ticker_parts:
+                    ticker_prefix = (ticker_parts[0].replace('KX', '')
+                                     .replace('MBSPREAD', 'B')
+                                     .replace('MBTOTAL', 'B')
+                                     .replace('BGAME', 'B'))
+
+                    if ticker_prefix == "NCAAMB":
+                        ticker_prefix = "NCAAB"
+
+                    if ticker_prefix != league:
+                        continue
+
                 k_line = _extract_kalshi_line(mkt, is_total=True)
                 if k_line is not None:
                     bid = _safe_float(mkt.get("yes_bid_dollars"))
@@ -1233,6 +1255,21 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             is_ml_pick = any(x in _safe_text(row.get("market_type")).lower() for x in ["moneyline", "h2h"]) or target_line == 0.0 or target_line is None
             if is_ml_pick:
                 for mkt in markets:
+                    ticker_str = str(mkt.get("ticker", ""))
+                    ticker_parts = ticker_str.split("-")
+
+                    if ticker_parts:
+                        ticker_prefix = (ticker_parts[0].replace('KX', '')
+                                         .replace('MBSPREAD', 'B')
+                                         .replace('MBTOTAL', 'B')
+                                         .replace('BGAME', 'B'))
+
+                        if ticker_prefix == "NCAAMB":
+                            ticker_prefix = "NCAAB"
+
+                        if ticker_prefix != league:
+                            continue
+
                     m_title = str(mkt.get("title") or "").lower()
                     m_subtitle = str(mkt.get("subtitle") or "").lower()
                     combined_text = f"{m_title} {m_subtitle}"
@@ -1263,6 +1300,21 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
                 kalshi_lines = []
                 for mkt in markets:
+                    ticker_str = str(mkt.get("ticker", ""))
+                    ticker_parts = ticker_str.split("-")
+
+                    if ticker_parts:
+                        ticker_prefix = (ticker_parts[0].replace('KX', '')
+                                         .replace('MBSPREAD', 'B')
+                                         .replace('MBTOTAL', 'B')
+                                         .replace('BGAME', 'B'))
+
+                        if ticker_prefix == "NCAAMB":
+                            ticker_prefix = "NCAAB"
+
+                        if ticker_prefix != league:
+                            continue
+
                     m_title = str(mkt.get("title") or "").lower()
                     m_subtitle = str(mkt.get("subtitle") or "").lower()
                     combined_text = f"{m_title} {m_subtitle}"
