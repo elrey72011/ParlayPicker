@@ -101,7 +101,7 @@ MAX_LINE_TOLERANCE = {
     "NBA": 5.5,
     "NCAAB": 10.5,
     "NHL": 5.5,
-    "MLB": 4.5,
+    "MLB": 8.5,
     "NFL": 2.5,
 }
 
