@@ -221,7 +221,11 @@ KALSHI_TEAM_CODES = {
     "Islanders": "NYI",
     "St Louis": "STL",
     "St. Louis": "STL",
-    "Tampa Bay": "TBL"
+    "Tampa Bay": "TBL",
+    "Colorado": "COL",
+    "Winnipeg": "WPG",
+    "Houston": "HOU",
+    "Illinois": "ILL"
 }
 
 _KALSHI_TEAM_CODES_NORMALIZED = {
