@@ -22,6 +22,10 @@ def run_gemini_analysis(df: pd.DataFrame, session_state: Any = None) -> pd.DataF
         if "game_id" not in llm_payload.columns:
             llm_payload["game_id"] = [str(i) for i in range(len(llm_payload))]
 
+        # Ensure is_live_data exists in payload
+        if "is_live_data" not in llm_payload.columns:
+            llm_payload["is_live_data"] = False
+
         games_list = llm_payload.to_dict('records') # Convert to List[Dict]
 
         # Call with session_state

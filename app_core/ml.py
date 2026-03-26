@@ -1118,6 +1118,12 @@ class HistoricalDataBuilder:
         def _populate(prefix: str, payload: Optional[Dict[str, Any]]) -> None:
             if not payload:
                 return
+
+            if sport_key == "NHL":
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.debug(f"NHL Payload [{prefix}]: shots_for={payload.get('shots_for')}, misses_for={payload.get('misses_for')}, blocks_for={payload.get('blocks_for')}")
+
             if prefix == "home":
                 features["home_ppg"] = _safe_float(payload.get("team_ppg_for"))
                 features["home_oppg"] = _safe_float(payload.get("team_ppg_against"))
