@@ -1505,7 +1505,17 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             # 5. Save explicitly to dataframe
             # Invert probability if the row represents an 'Away' or 'Under' outcome
             is_away_or_under = any(x in market_type_str for x in ["away", "under"])
-            out.at[idx, "kalshi_probability"] = 1.0 - float(final_prob) if is_away_or_under else float(final_prob)
+            final_pick_prob = 1.0 - float(final_prob) if is_away_or_under else float(final_prob)
+
+            # PROXY DECAY (New Logic)
+            delta = _safe_float(out.at[idx, "kalshi_line_diff"])
+            if delta > 0:
+                tolerance = MAX_LINE_TOLERANCE.get(league, 3.5)
+                # Pull toward 0.5 based on how much of the tolerance was used
+                decay_factor = min(0.4, delta / (tolerance * 1.5))
+                final_pick_prob = (final_pick_prob * (1 - decay_factor)) + (0.5 * decay_factor)
+
+            out.at[idx, "kalshi_probability"] = final_pick_prob
             out.at[idx, "kalshi_market_title"] = best_market.get("title")
             out.at[idx, "kalshi_event_ticker"] = best_market.get("event_ticker")
             out.at[idx, "kalshi_market_ticker"] = best_market.get("ticker")
