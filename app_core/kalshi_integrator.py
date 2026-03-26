@@ -1511,9 +1511,8 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             delta = _safe_float(out.at[idx, "kalshi_line_diff"])
             if delta > 0:
                 tolerance = MAX_LINE_TOLERANCE.get(league, 3.5)
-                # Pull toward 0.5 based on how much of the tolerance was used
-                decay_factor = min(0.4, delta / (tolerance * 1.5))
-                final_pick_prob = (final_pick_prob * (1 - decay_factor)) + (0.5 * decay_factor)
+                decay = min(0.4, delta / (tolerance * 1.5))
+                final_pick_prob = (final_pick_prob * (1 - decay)) + (0.5 * decay)
 
             out.at[idx, "kalshi_probability"] = final_pick_prob
             out.at[idx, "kalshi_market_title"] = best_market.get("title")

@@ -544,10 +544,13 @@ class PredictionEngine:
             "NBA": {"win_pct": 0.50, "ppg": 114.0},
             "NCAAB": {"win_pct": 0.50, "ppg": 72.0},
             "NHL": {"win_pct": 0.50, "ppg": 3.1},
-            "MLB": {"win_pct": 0.50, "ppg": 4.5}
+            "MLB": {"win_pct": 0.50, "ppg": 4.5},
+            "NFL": {"win_pct": 0.50, "ppg": 46.0}
         }
 
         league = features.get('league', '')
+        if league == 'CBB':
+            league = 'NCAAB'
         league_defaults = LEAGUE_STATS.get(league, {"win_pct": 0.50, "ppg": 0.50})
         default_win_pct = league_defaults["win_pct"]
         default_ppg = league_defaults["ppg"]
@@ -1221,7 +1224,7 @@ class PredictionEngine:
             BLACKLIST = [0.623034656047821, 0.10671072453260422, 0.48637846, 0.31053704, 0.5622388124465942, 0.562238]
             for idx_batch, p in enumerate(raw_probs):
                 # If model returns a known bias value, discard and use performance stats instead
-                if p is None or any(abs(p - b) < 1e-9 for b in BLACKLIST):
+                if p is None or any(abs(p - b) < 1e-5 for b in BLACKLIST):
                     # Pull prepared performance features from the matrix
                     row_features = inference_data.iloc[idx_batch].to_dict()
 
