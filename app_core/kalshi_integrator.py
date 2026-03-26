@@ -182,7 +182,7 @@ KALSHI_TEAM_CODES = {
     "Portland Trail Blazers": "POR", "Portland": "POR",
     "Sacramento Kings": "SAC", "Sacramento": "SAC",
     "San Antonio Spurs": "SAS", "San Antonio": "SAS",
-    "Toronto Raptors": "TOR", "Toronto": "TOR",
+    "Toronto Raptors": "TOR",
     "Utah Jazz": "UTA", "Utah": "UTA",
     "Washington Wizards": "WAS", "Washington": "WAS",
     # NHL
@@ -213,7 +213,7 @@ KALSHI_TEAM_CODES = {
     "Seattle Kraken": "SEA", "Seattle": "SEA",
     "St. Louis Blues": "STL", "St. Louis": "STL", "St Louis": "STL",
     "Tampa Bay Lightning": "TBL", "Tampa Bay": "TBL",
-    "Toronto Maple Leafs": "TOR", "Toronto": "TOR",
+    "Toronto Maple Leafs": "TOR",
     "Utah Hockey Club": "UTA",
     "Vancouver Canucks": "VAN", "Vancouver": "VAN",
     "Vegas Golden Knights": "VGK", "Vegas": "VGK",
@@ -1267,16 +1267,21 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                     # Include event ticker context for guaranteed code identification (e.g. NYR, TOR)
                     combined_upper = f"{combined_text} {e_title} {e_ticker}".upper()
 
-                    if family == "moneyline" or any(x in combined_text for x in ["moneyline", "to win", "winner", "vs", "win by", "wins by"]):
+                    if family == "moneyline" or any(x in combined_text for x in ["moneyline", "to win", " win ", "winner", " winner ", "vs", "win by", "wins by"]):
                         # Identify codes for both teams
                         h_code = team_code_for_league(league, row.get("home_team")).upper()
                         a_code = team_code_for_league(league, row.get("away_team")).upper()
 
+                        # Upgrade identification to token-intersection
+                        h_tokens = _team_tokens_for_match(row.get("home_team"))
+                        a_tokens = _team_tokens_for_match(row.get("away_team"))
+                        market_tokens = set(_normalize_team_token(combined_text).split())
+
                         # Accept if EITHER team is mentioned. Inversion is handled downstream.
                         is_h_match = (h_code != "" and h_code in combined_upper) or \
-                                     (TeamNameMatcher.normalize(row.get("home_team")) in combined_text.lower())
+                                     bool(h_tokens.intersection(market_tokens))
                         is_a_match = (a_code != "" and a_code in combined_upper) or \
-                                     (TeamNameMatcher.normalize(row.get("away_team")) in combined_text.lower())
+                                     bool(a_tokens.intersection(market_tokens))
 
                         if not is_h_match and not is_a_match:
                             # Trust the event-level match if this is a general 'win' or 'winner' market
