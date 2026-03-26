@@ -174,7 +174,7 @@ KALSHI_TEAM_CODES = {
     "Milwaukee Bucks": "MIL", "Milwaukee": "MIL",
     "Minnesota Timberwolves": "MIN", "Minnesota": "MIN",
     "New Orleans Pelicans": "NOP", "New Orleans": "NOP",
-    "New York Knicks": "NYK", "New York": "NYK",
+    "New York Knicks": "NYK",
     "Oklahoma City Thunder": "OKC", "Oklahoma City": "OKC",
     "Orlando Magic": "ORL", "Orlando": "ORL",
     "Philadelphia 76ers": "PHI", "Philadelphia": "PHI",
@@ -963,6 +963,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         league_val = row.get("league")
         league = _infer_row_league(league_val, home_team_val, away_team_val)
         league = _normalize_league_for_kalshi(league)
+        clean_league = str(league).upper().strip()
         market_type = _row_text(row, "market_type", lowercase=True)
         strike_price_text = _row_text(row, "strike_price")
         category = _row_text(row, "category", lowercase=True)
@@ -1187,7 +1188,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                     if ticker_prefix == "NCAAMB":
                         ticker_prefix = "NCAAB"
 
-                    if ticker_prefix != league:
+                    if not ticker_prefix.startswith(clean_league):
                         continue
 
                 k_line = _extract_kalshi_line(mkt, is_total=True)
@@ -1267,7 +1268,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                         if ticker_prefix == "NCAAMB":
                             ticker_prefix = "NCAAB"
 
-                        if ticker_prefix != league:
+                        if not ticker_prefix.startswith(clean_league):
                             continue
 
                     m_title = str(mkt.get("title") or "").lower()
@@ -1312,7 +1313,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                         if ticker_prefix == "NCAAMB":
                             ticker_prefix = "NCAAB"
 
-                        if ticker_prefix != league:
+                        if not ticker_prefix.startswith(clean_league):
                             continue
 
                     m_title = str(mkt.get("title") or "").lower()
