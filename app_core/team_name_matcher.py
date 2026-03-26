@@ -101,6 +101,9 @@ class TeamNameMatcher:
         'NY GIANTS': 'NEW YORK GIANTS',
         'NY JETS': 'NEW YORK JETS',
         'NEW YORK': 'NEW YORK',  # Generic fallback for NY teams
+        'NY RANGERS': 'NEW YORK RANGERS',
+        'NY ISLANDERS': 'NEW YORK ISLANDERS',
+        'NY GIANTS': 'NEW YORK GIANTS',
 
         # NCAAB/NCAAF specific
         'OLE MISS': 'MISSISSIPPI',

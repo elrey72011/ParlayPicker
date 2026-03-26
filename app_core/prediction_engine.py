@@ -145,7 +145,7 @@ def _build_fallback_features_from_row(row_dict: Dict[str, Any]) -> Dict[str, flo
     return features
 
 
-def clean_team_name(series: pd.Series) -> pd.Series:
+def clean_team_name(series: Any) -> Any:
     """
     Sanitizes team names for ultra-strict joining.
     Passes names through the global normalize_team_name function,
@@ -198,13 +198,8 @@ def clean_team_name(series: pd.Series) -> pd.Series:
     return _clean_str(series)
 
 def _clean_team_for_matchup(value: Any) -> str:
-    from app_core.team_name_matcher import TeamNameMatcher
-    from core.team_mapper import normalize_team_name as _global_normalize
-    # First apply our rigorous global standardization
-    norm_val = _global_normalize(str(value) if pd.notna(value) else "")
-    # Then apply the TeamNameMatcher standardization used by Kalshi for ultimate consistency
-    norm_val = TeamNameMatcher.normalize(norm_val)
-    return clean_team_name(norm_val)
+    # Delegate entirely to clean_team_name which already applies the full normalize stack
+    return clean_team_name(value)
 
 
 def _normalize_identity_merge_keys(df: pd.DataFrame, keys: list[str]) -> pd.DataFrame:
