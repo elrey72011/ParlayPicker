@@ -517,7 +517,7 @@ class PredictionEngine:
 
             # HARD REJECTION of placeholder values (Section 4)
             PLACEHOLDER_VALUES = [0.623034656047821, 0.10671072453260422, 0.48637846, 0.31053704, 0.5622388124465942]
-            PLACEHOLDER_TOLERANCE = 1e-9
+            PLACEHOLDER_TOLERANCE = 1e-5
 
             if any(abs(prob - val) < PLACEHOLDER_TOLERANCE for val in PLACEHOLDER_VALUES):
                  # Using fallback gracefully when placeholder detected
@@ -551,7 +551,7 @@ class PredictionEngine:
         league = features.get('league', '')
         if league == 'CBB':
             league = 'NCAAB'
-        league_defaults = LEAGUE_STATS.get(league, {"win_pct": 0.50, "ppg": 0.50})
+        league_defaults = LEAGUE_STATS.get(league, {"win_pct": 0.50, "ppg": 0.0})
         default_win_pct = league_defaults["win_pct"]
         default_ppg = league_defaults["ppg"]
 
