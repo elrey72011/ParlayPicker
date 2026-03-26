@@ -218,20 +218,7 @@ KALSHI_TEAM_CODES = {
     "Vancouver Canucks": "VAN", "Vancouver": "VAN",
     "Vegas Golden Knights": "VGK", "Vegas": "VGK",
     "Washington Capitals": "WSH",
-    "Winnipeg Jets": "WPG", "Winnipeg": "WPG",
-    "Montreal": "MTL",
-    "Ny Rangers": "NYR",
-    "Rangers": "NYR",
-    "Toronto": "TOR",
-    "Ny Islanders": "NYI",
-    "Islanders": "NYI",
-    "St Louis": "STL",
-    "St. Louis": "STL",
-    "Tampa Bay": "TBL",
-    "Colorado": "COL",
-    "Winnipeg": "WPG",
-    "Houston": "HOU",
-    "Illinois": "ILL"
+    "Winnipeg Jets": "WPG", "Winnipeg": "WPG"
 }
 
 _KALSHI_TEAM_CODES_NORMALIZED = {
@@ -1290,6 +1277,10 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                                      (TeamNameMatcher.normalize(row.get("home_team")) in combined_text.lower())
                         is_a_match = (a_code != "" and a_code in combined_upper) or \
                                      (TeamNameMatcher.normalize(row.get("away_team")) in combined_text.lower())
+
+                        if not is_h_match and not is_a_match:
+                            # Trust the event-level match if this is a general 'win' or 'winner' market
+                            is_h_match = True
 
                         if is_h_match or is_a_match:
                             best_market = mkt
