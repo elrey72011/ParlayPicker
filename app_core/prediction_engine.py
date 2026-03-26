@@ -607,7 +607,11 @@ class PredictionEngine:
         if df is None or df.empty:
             return []
 
-        LEAGUE_MAP = {"NCAAM": "NCAAB", "NCAA MENS BASKETBALL": "NCAAB"}
+        LEAGUE_MAP = {"NCAAM": "NCAAB", "NCAAMB": "NCAAB", "NCAA MENS BASKETBALL": "NCAAB"}
+
+        # Apply standard league mapping to original data immediately
+        if "league" in df.columns:
+            df["league"] = df["league"].astype("string").fillna("").str.strip().str.upper().replace(LEAGUE_MAP)
 
         # Prevent inference on dates > 60 days from system date
         try:
@@ -757,6 +761,13 @@ class PredictionEngine:
                     if master_file.exists():
                         # Load historical features
                         hist_df = pd.read_csv(master_file)
+
+                        # Apply standard league mapping to historical data
+                        if "league" in hist_df.columns:
+                            hist_df["league"] = hist_df["league"].astype("string").fillna("").str.strip().str.upper().replace(LEAGUE_MAP)
+                        elif "sport" in hist_df.columns:
+                            hist_df["sport"] = hist_df["sport"].astype("string").fillna("").str.strip().str.upper().replace(LEAGUE_MAP)
+
                         if "commence_time" in hist_df.columns:
                             hist_df["commence_time"] = pd.to_datetime(hist_df["commence_time"], errors="coerce", utc=True)
 
