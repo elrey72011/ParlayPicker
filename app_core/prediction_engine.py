@@ -1198,9 +1198,9 @@ class PredictionEngine:
 
                     # Cap adjustment to 0.05 if mostly empty features to prevent false value
                     if nan_ratio > 0.5:
-                        adjustment = min(0.05, adjustment)
+                        adjustment = min(0.05, adjustment)  # Throttled cap for low-data scenarios
                     else:
-                        adjustment = min(0.35, adjustment)  # Cap at 0.35 normally
+                        adjustment = min(0.35, adjustment)  # Standard cap
 
                     # THE FIX: Run picks through clean_team_name() so 'iowa state' perfectly matches 'iowastate'
                     pick_team = clean_team_name(str(row.get('pick_team', '')))
