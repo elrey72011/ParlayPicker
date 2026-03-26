@@ -762,11 +762,20 @@ class PredictionEngine:
                         # Load historical features
                         hist_df = pd.read_csv(master_file)
 
+                        # Force column name parity for the merge
+                        if "sport" in hist_df.columns and "league" not in hist_df.columns:
+                            hist_df = hist_df.rename(columns={"sport": "league"})
+
                         # Apply standard league mapping to historical data
                         if "league" in hist_df.columns:
-                            hist_df["league"] = hist_df["league"].astype("string").fillna("").str.strip().str.upper().replace(LEAGUE_MAP)
-                        elif "sport" in hist_df.columns:
-                            hist_df["sport"] = hist_df["sport"].astype("string").fillna("").str.strip().str.upper().replace(LEAGUE_MAP)
+                            hist_df["league"] = (
+                                hist_df["league"]
+                                .astype("string")
+                                .fillna("")
+                                .str.strip()
+                                .str.upper()
+                                .replace(LEAGUE_MAP)
+                            )
 
                         if "commence_time" in hist_df.columns:
                             hist_df["commence_time"] = pd.to_datetime(hist_df["commence_time"], errors="coerce", utc=True)
