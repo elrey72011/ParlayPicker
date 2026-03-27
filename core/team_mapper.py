@@ -979,6 +979,21 @@ def normalize_team_name(name: str) -> str:
     # Collapse multiple spaces to single space
     normalized = re.sub(r'\s+', ' ', normalized).strip()
 
+    words = normalized.split()
+    if len(words) >= 2:
+        from app_core.team_name_mapping import TEAM_SUFFIXES
+        # Do not strip these specific generic tokens for display names
+        exclude_from_display_strip = {"state", "tech", "a&m", "university", "college", "men", "women", "basketball", "international"}
+        for suffix in TEAM_SUFFIXES:
+            s_lower = suffix.lower()
+            if s_lower in exclude_from_display_strip:
+                continue
+            if normalized.endswith(" " + s_lower):
+                temp_name = normalized[:-len(s_lower)-1].strip()
+                if len(temp_name.split()) >= 1:
+                    normalized = temp_name
+                    break
+
     title_cased = normalized.title()
 
     # Check post-processing overrides again
