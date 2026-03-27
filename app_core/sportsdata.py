@@ -172,7 +172,7 @@ class SportsDataClientBase:
                     self.last_error = "Plan Restriction (403)"
                     logger.error(f"SportsData HTTP 403 Error: Plan Restriction / Forbidden on {path}")
                 else:
-                    self.last_error = f"http_{status}"
+                    self.last_error = "Plan Restriction (403)" if status == 403 else "API Key Limit Reached (429)" if status == 429 else f"http_{status}"
 
                 if (
                     exc.response is not None

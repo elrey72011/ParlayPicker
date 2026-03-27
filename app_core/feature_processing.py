@@ -131,12 +131,19 @@ def normalize_team(name: str) -> str:
 
     words = name.split()
     if len(words) >= 2:
+        # Check against full multi-word mascots first, then fallback to last word.
+        # But we must only strip if it leaves at least one word.
         for mascot in mascots_to_strip:
             if name.endswith(" " + mascot):
                 new_name = name[:-len(mascot)-1].strip()
                 if len(new_name.split()) >= 1: # ensure we don't strip it entirely
                     name = new_name
                     break
+        else:
+            # If no multi-word mascot matched, check if the single last word is a mascot
+            last_word = words[-1]
+            if last_word in mascots_to_strip:
+                name = " ".join(words[:-1])
 
     return name
 
@@ -567,7 +574,6 @@ MANUAL_TEAM_OVERRIDES = {
     "GARDNER WEBB": "GARDNER WEBB",
     "ST THOMAS MN": "ST THOMAS (MN)",
     "ST THOMAS (MN)": "ST THOMAS (MN)",
-    "STATE THOMAS MN": "ST THOMAS (MN)",
     "OMAHA": "NEBRASKA OMAHA",
     "NEBRASKA OMAHA": "NEBRASKA OMAHA",
     "QUEENS NC": "QUEENS (NC)",
@@ -583,7 +589,6 @@ MANUAL_TEAM_OVERRIDES = {
     "ST FRANCIS PA": "SAINT FRANCIS (PA)",
     "SAINT FRANCIS PA": "SAINT FRANCIS (PA)",
     "ST FRANCIS (PA)": "SAINT FRANCIS (PA)",
-    "STATE FRANCIS PA": "SAINT FRANCIS (PA)", # Post-normalization fix
     "MONMOUTH HAWKS": "MONMOUTH",
     "ALBANY GREAT DANES": "ALBANY",
     "TOWSON TIGERS": "TOWSON",
@@ -601,7 +606,6 @@ MANUAL_TEAM_OVERRIDES = {
     "MT ST MARYS": "MOUNT ST MARY'S",
     "MOUNT ST MARYS": "MOUNT ST MARY'S",
     "MT SAINT MARYS": "MOUNT ST MARY'S",
-    "MT STATE MARYS": "MOUNT ST MARY'S", # Post-normalization fix
     "N COLORADO": "NORTHERN COLORADO",
     "NORTHERN COLORADO": "NORTHERN COLORADO",
     "UNC BEARS": "NORTHERN COLORADO",
@@ -758,7 +762,6 @@ MANUAL_TEAM_OVERRIDES = {
     # NHL accent + city-only fixes
     "MONTRÉAL CANADIENS": "MONTREAL CANADIENS",
     "ST LOUIS": "ST LOUIS BLUES",
-    "STATE LOUIS": "ST LOUIS BLUES", # Fix for ST->STATE regex
     "ST LOUIS BLUES": "ST LOUIS BLUES",
 
     # NFL
