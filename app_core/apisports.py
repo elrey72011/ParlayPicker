@@ -262,8 +262,10 @@ class _APISportsBaseClient:
                 attempts += 1
                 if attempts >= self.max_retries:
                     self.last_error = "API-Sports rate limit reached. Please try again shortly."
+                    logger.warning(f"API-Sports HTTP 429: Rate limit (Too Many Requests) reached on {path} after retries.")
                     return {} # Return empty dict instead of None
                 self.last_error = "API-Sports rate limit reached. Retrying shortly..."
+                logger.info(f"API-Sports HTTP 429: Rate limit hit on {path}. Retrying in {wait_seconds}s...")
                 time.sleep(wait_seconds)
                 continue
 
@@ -505,7 +507,8 @@ class _APISportsBaseClient:
     # Formatting helpers
     @staticmethod
     def _normalize_name(name: str) -> str:
-        return re.sub(r"[^A-Z]", "", (name or "").upper())
+        # Rather than aggressive non-alphabet stripping, allow spaces and alphanumeric to match variants correctly
+        return re.sub(r"[^A-Z0-9 ]", "", (name or "").upper())
 
     def match_game(self, games: List[Dict], home: str, away: str) -> Optional[Dict]:
         """Match an odds snapshot game to an API-Sports game response."""
@@ -513,18 +516,22 @@ class _APISportsBaseClient:
         if not games:
             return {}
 
-        home_variants = [self._normalize_name(v) for v in get_team_variants(home)]
-        away_variants = [self._normalize_name(v) for v in get_team_variants(away)]
+        home_variants = set(self._normalize_name(v) for v in get_team_variants(home))
+        away_variants = set(self._normalize_name(v) for v in get_team_variants(away))
 
         for game in games:
             teams = game.get("teams") or {}
             home_team = teams.get("home") or {}
             away_team = teams.get("away") or {}
 
-            game_home_norm = self._normalize_name(home_team.get("name", ""))
-            game_away_norm = self._normalize_name(away_team.get("name", ""))
+            game_home_raw = home_team.get("name", "")
+            game_away_raw = away_team.get("name", "")
 
-            if game_home_norm in home_variants and game_away_norm in away_variants:
+            # If the API provides full names, we check against our variants
+            game_home_variants = set(self._normalize_name(v) for v in get_team_variants(game_home_raw))
+            game_away_variants = set(self._normalize_name(v) for v in get_team_variants(game_away_raw))
+
+            if game_home_variants.intersection(home_variants) and game_away_variants.intersection(away_variants):
                 return game
         return {}
 

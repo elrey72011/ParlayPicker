@@ -1762,7 +1762,20 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     # ------------------------------------------------------------
     # 3) Fetch stats AFTER league_keys exists (ok if empty)
     # ------------------------------------------------------------
+    # Tier 1: Attempt Live Stats Fetching
     stats_df = fetch_team_stats(api_clients, season_year=season_year)
+
+    # Tier 2: If live stats are missing or incomplete, attempt season averages fallback
+    used_historical_stats = False
+    if stats_df is None or stats_df.empty:
+        if season_year is not None:
+            logger.warning(f"Live stats mostly empty for {season_year}. Attempting fallback to previous season averages.")
+            fallback_stats = fetch_team_stats(api_clients, season_year=season_year - 1)
+            if fallback_stats is not None and not fallback_stats.empty:
+                stats_df = fallback_stats
+                used_historical_stats = True
+
+    # Tier 3: LEAGUE_AVERAGES are applied dynamically via default Series later
 
     # ------------------------------------------------------------
     # 4) Normalize team names league-aware
@@ -2017,8 +2030,12 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     home_fallback = home_matched_names.isna()
     away_fallback = away_matched_names.isna()
     combined_fallback = home_fallback | away_fallback
-    features_data["feature_stats_fallback"] = combined_fallback
-    features_data["is_live_data"] = ~combined_fallback
+
+    # feature_stats_fallback indicates missing row data. If used_historical_stats is true, it is also a fallback
+    features_data["feature_stats_fallback"] = combined_fallback | used_historical_stats
+
+    # is_live_data is false if ANY fallback is used (missing data or historical season averages)
+    features_data["is_live_data"] = ~(combined_fallback | used_historical_stats)
 
     # Task 2: Standardize stats_quality values (REAL/FALLBACK/MISSING)
     # Optimized using np.select for vectorization
