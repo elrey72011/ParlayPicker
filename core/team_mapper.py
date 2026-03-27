@@ -143,23 +143,23 @@ PRODUCTION_MASCOT_MAP = {
     "vancouver": "Vancouver Canucks",
 
     # Tournament Heavyweights (Requested)
-    "unc": "North Carolina Tar Heels",
-    "nc state": "NC State Wolfpack",
-    "ncsu": "NC State Wolfpack",
-    "purdue": "Purdue Boilermakers",
-    "arizona": "Arizona Wildcats",
-    "tennessee": "Tennessee Volunteers",
+    "unc": "North Carolina",
+    "nc state": "NC State",
+    "ncsu": "NC State",
+    "purdue": "Purdue",
+    "arizona": "Arizona",
+    "tennessee": "Tennessee",
 
     # Additional High-Volume Tournament Programs
-    "uconn": "UConn Huskies",
-    "connecticut": "UConn Huskies",
-    "u of c": "UConn Huskies",
-    "duke": "Duke Blue Devils",
-    "kansas": "Kansas Jayhawks",
-    "kentucky": "Kentucky Wildcats",
-    "alabama": "Alabama Crimson Tide",
-    "houston": "Houston Cougars",
-    "nebraska": "Nebraska Cornhuskers"
+    "uconn": "UConn",
+    "connecticut": "UConn",
+    "u of c": "UConn",
+    "duke": "Duke",
+    "kansas": "Kansas",
+    "kentucky": "Kentucky",
+    "alabama": "Alabama",
+    "houston": "Houston",
+    "nebraska": "Nebraska"
 }
 TEAM_MAP = {}
 TEAM_MAP.update(PRODUCTION_MASCOT_MAP)
@@ -840,23 +840,23 @@ ODDS_API_EXACT_MAP = {
 
 NCAAB_MASCOT_MAP = {
     "uconn": "Connecticut Huskies",
-    "duke": "Duke Blue Devils",
-    "purdue": "Purdue Boilermakers",
-    "kansas": "Kansas Jayhawks",
-    "houston": "Houston Cougars",
+    "duke": "Duke",
+    "purdue": "Purdue",
+    "kansas": "Kansas",
+    "houston": "Houston",
     "gonzaga": "Gonzaga Bulldogs",
-    "arizona": "Arizona Wildcats",
+    "arizona": "Arizona",
     "illinois": "Illinois Fighting Illini",
     "michigan state": "Michigan State Spartans",
     "vcu": "VCU Rams",
     "tcu": "TCU Horned Frogs",
     "ucf": "UCF Knights",
-    "st johns": "St. John's Red Storm",
+    "st johns": "St. John's",
     "villanova": "Villanova Wildcats",
     "louisville": "Louisville Cardinals",
     "arkansas": "Arkansas Razorbacks",
-    "tennessee": "Tennessee Volunteers",
-    "kentucky": "Kentucky Wildcats",
+    "tennessee": "Tennessee",
+    "kentucky": "Kentucky",
     "creighton": "Creighton Bluejays",
     "baylor": "Baylor Bears",
     "marquette": "Marquette Golden Eagles",
@@ -870,8 +870,8 @@ NCAAB_MASCOT_MAP = {
     "high point": "High Point Panthers",
     "furman": "Furman Paladins",
     "queens": "Queens NC Royals",
-    "prairie view am": "Prairie View A&M Panthers",
-    "california baptist": "California Baptist Lancers"
+    "prairie view am": "Prairie View A&M",
+    "california baptist": "California Baptist"
 }
 
 # Merge newly added exact maps
@@ -920,27 +920,27 @@ def normalize_team_name(name: str) -> str:
         # Check if mapped name is one of our exact overrides we want returned exactly as is
         # (Since it was mapped from a lowercase key, we can't just return it title-cased if it has special casing)
         if mapped_name.lower() in ("connecticut", "uconn", "connecticut huskies"):
-            return "UConn Huskies"
+            return "UConn"
         if mapped_name.lower() in ("queens nc", "queens university", "queens university royals"):
-            return "Queens University Royals"
+            return "Queens University"
         if mapped_name.lower() in ("california baptist", "ca baptist", "cal baptist", "california baptist lancers"):
-            return "California Baptist Lancers"
+            return "California Baptist"
         if mapped_name.lower() in ("st. john's", "saint johns", "st johns", "st. john's red storm"):
-            return "St. John's Red Storm"
+            return "St. John's"
         if mapped_name.lower() in ("prairie view a&m", "prairie view panthers", "prairie view am", "prairie view a&m panthers"):
-            return "Prairie View A&M Panthers"
+            return "Prairie View A&M"
         if mapped_name.lower() in ("miami fl", "miami (fl)", "miami florida", "miami (fl) hurricanes"):
-            return "Miami (FL) Hurricanes"
+            return "Miami (FL)"
         if mapped_name.lower() in ("nc state", "nc state wolfpack", "ncsu"):
-            return "NC State Wolfpack"
+            return "NC State"
 
         name = mapped_name
 
     # Second check right here since Uconn/Queens might be incoming directly unmapped
     if name.lower() in ("connecticut", "uconn", "connecticut huskies", "uconn huskies"):
-        return "UConn Huskies"
+        return "UConn"
     if name.lower() in ("queens nc", "queens university", "queens university royals"):
-        return "Queens University Royals"
+        return "Queens University"
 
     # Convert to lowercase (in case the dictionary mapping has uppercase)
     normalized = name.lower()
@@ -1008,17 +1008,17 @@ def normalize_team_name(name: str) -> str:
 
     # Specific override checks for problematic names with punctuation
     if title_cased.lower() in ("st johns", "saint johns", "saint johns red storm", "st johns red storm", "st. john's red storm", "st. john's"):
-        return "St. John's Red Storm"
+        return "St. John's"
     if title_cased.lower() in ("prairie view am", "prairie view am panthers", "prairie view panthers", "prairie view a&m panthers", "prairie view a&m"):
-        return "Prairie View A&M Panthers"
+        return "Prairie View A&M"
     if title_cased.lower() in ("connecticut", "uconn", "connecticut huskies", "uconn huskies"):
-        return "UConn Huskies"
+        return "UConn"
     if title_cased.lower() in ("queens nc", "queens university", "queens university royals", "queens university of charlotte", "queens nc royals"):
-        return "Queens University Royals"
+        return "Queens University"
     if title_cased.lower() in ("miami (fl) hurricanes", "miami florida hurricanes", "miami fl", "miami (fl)"):
-        return "Miami (FL) Hurricanes"
+        return "Miami (FL)"
     if title_cased.lower() in ("nc state", "nc state wolfpack", "ncsu"):
-        return "NC State Wolfpack"
+        return "NC State"
 
     return title_cased
 
@@ -1033,59 +1033,59 @@ TEAM_MAP.update(load_dynamic_aliases())
 
 # POST-PROCESSING OVERRIDES TO ENSURE EXACT MATCHES
 overrides = {
-    "california baptist lancers": "California Baptist Lancers",
-    "ca baptist lancers": "California Baptist Lancers",
-    "california baptist": "California Baptist Lancers",
-    "cal baptist": "California Baptist Lancers",
-    "ca baptist": "California Baptist Lancers",
-    "miami (fl) hurricanes": "Miami (FL) Hurricanes",
-    "miami (fl)": "Miami (FL) Hurricanes",
-    "miami florida hurricanes": "Miami (FL) Hurricanes",
-    "miami florida": "Miami (FL) Hurricanes",
-    "miami fl": "Miami (FL) Hurricanes",
-    "connecticut huskies": "UConn Huskies",
-    "uconn huskies": "UConn Huskies",
-    "connecticut": "UConn Huskies",
-    "uconn": "UConn Huskies",
+    "california baptist lancers": "California Baptist",
+    "ca baptist lancers": "California Baptist",
+    "california baptist": "California Baptist",
+    "cal baptist": "California Baptist",
+    "ca baptist": "California Baptist",
+    "miami (fl) hurricanes": "Miami (FL)",
+    "miami (fl)": "Miami (FL)",
+    "miami florida hurricanes": "Miami (FL)",
+    "miami florida": "Miami (FL)",
+    "miami fl": "Miami (FL)",
+    "connecticut huskies": "UConn",
+    "uconn huskies": "UConn",
+    "connecticut": "UConn",
+    "uconn": "UConn",
     "dallas mavericks": "Dallas",
     "golden state warriors": "Golden State",
-    "queens university": "Queens University Royals",
-    "queens university of charlotte": "Queens University Royals",
-    "queens university royals": "Queens University Royals",
-    "queens nc": "Queens University Royals",
-    "saint johns": "St. John's Red Storm",
-    "st johns": "St. John's Red Storm",
-    "st. john's": "St. John's Red Storm",
-    "st. john's red storm": "St. John's Red Storm",
-    "saint john's": "St. John's Red Storm",
-    "saint louis": "Saint Louis Billikens",
-    "st louis": "Saint Louis Billikens",
-    "st. louis": "Saint Louis Billikens",
-    "saint louis billikens": "Saint Louis Billikens",
-    "st louis billikens": "Saint Louis Billikens",
-    "st. louis billikens": "Saint Louis Billikens",
-    "prairie view panthers": "Prairie View A&M Panthers",
-    "prairie view a&m": "Prairie View A&M Panthers",
-    "prairie view a&m panthers": "Prairie View A&M Panthers",
-    "prairie view am": "Prairie View A&M Panthers",
-    "nc state wolfpack": "NC State Wolfpack"
+    "queens university": "Queens University",
+    "queens university of charlotte": "Queens University",
+    "queens university royals": "Queens University",
+    "queens nc": "Queens University",
+    "saint johns": "St. John's",
+    "st johns": "St. John's",
+    "st. john's": "St. John's",
+    "st. john's red storm": "St. John's",
+    "saint john's": "St. John's",
+    "saint louis": "Saint Louis",
+    "st louis": "Saint Louis",
+    "st. louis": "Saint Louis",
+    "saint louis billikens": "Saint Louis",
+    "st louis billikens": "Saint Louis",
+    "st. louis billikens": "Saint Louis",
+    "prairie view panthers": "Prairie View A&M",
+    "prairie view a&m": "Prairie View A&M",
+    "prairie view a&m panthers": "Prairie View A&M",
+    "prairie view am": "Prairie View A&M",
+    "nc state wolfpack": "NC State"
 }
 TEAM_MAP.update(overrides)
 
 # Force any value in the dictionary that maps to variations of Uconn or Miami Fl
 for k, v in TEAM_MAP.items():
     if v.lower() in ("uconn", "connecticut", "connecticut huskies", "uconn huskies"):
-        TEAM_MAP[k] = "UConn Huskies"
+        TEAM_MAP[k] = "UConn"
     if v.lower() in ("miami fl", "miami (fl)", "miami florida", "miami (fl) hurricanes"):
-        TEAM_MAP[k] = "Miami (FL) Hurricanes"
+        TEAM_MAP[k] = "Miami (FL)"
     if v.lower() in ("ca baptist", "cal baptist", "california baptist", "california baptist lancers"):
-        TEAM_MAP[k] = "California Baptist Lancers"
+        TEAM_MAP[k] = "California Baptist"
     if v.lower() in ("queens nc", "queens university", "queens university royals", "queens university of charlotte"):
-        TEAM_MAP[k] = "Queens University Royals"
+        TEAM_MAP[k] = "Queens University"
     if v.lower() in ("st. john's", "saint johns", "st johns", "saint john's", "st. john's red storm"):
-        TEAM_MAP[k] = "St. John's Red Storm"
+        TEAM_MAP[k] = "St. John's"
     if v.lower() in ("prairie view a&m", "prairie view panthers", "prairie view am", "prairie view a&m panthers"):
-        TEAM_MAP[k] = "Prairie View A&M Panthers"
+        TEAM_MAP[k] = "Prairie View A&M"
     if v.lower() in ("nc state", "nc state wolfpack", "ncsu"):
-        TEAM_MAP[k] = "NC State Wolfpack"
+        TEAM_MAP[k] = "NC State"
 

@@ -376,6 +376,8 @@ MANUAL_TEAM_OVERRIDES = {
     "ILLINOIS FIGHTING ILLINI": "ILLINOIS",
     "INDIANA HOOSIERS": "INDIANA",
     "MICHIGAN WOLVERINES": "MICHIGAN",
+    "MICHIGAN": "MICHIGAN",
+    "ALABAMA": "ALABAMA",
     "MINNESOTA GOLDEN GOPHERS": "MINNESOTA",
     "NEBRASKA CORNHUSKERS": "NEBRASKA",
     "NORTHWESTERN WILDCATS": "NORTHWESTERN",
@@ -435,6 +437,8 @@ MANUAL_TEAM_OVERRIDES = {
     "ARKANSAS RAZORBACKS": "ARKANSAS",
     "INDIANA HOOSIERS": "INDIANA",
     "MICHIGAN WOLVERINES": "MICHIGAN",
+    "MICHIGAN": "MICHIGAN",
+    "ALABAMA": "ALABAMA",
     "OHIO STATE BUCKEYES": "OHIO STATE",
     "FLORIDA GATORS": "FLORIDA",
     "TEXAS TECH RED RAIDERS": "TEXAS TECH",
@@ -1567,6 +1571,62 @@ def fetch_from_espn_ncaab(season_year: int) -> List[Dict[str, Any]]:
         logger.error(f"ESPN NCAAB fallback failed: {e}")
         return []
 
+
+@st.cache_data(ttl=21600)
+def fetch_from_espn_mlb(season_year: int) -> List[Dict[str, Any]]:
+    """
+    Fetch MLB stats from ESPN API.
+    """
+    try:
+        logger.info(f"Fetching MLB stats from ESPN for season: {season_year}")
+        url = "https://site.api.espn.com/apis/v2/sports/baseball/mlb/standings"
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+
+        stats = []
+        children = data.get("children", [])
+        for league in children:
+            entries = league.get("standings", {}).get("entries", [])
+            for entry in entries:
+                team_info = entry.get("team", {})
+                team_name = team_info.get("displayName")
+                if not team_name:
+                    continue
+
+                # Stats parsing
+                stat_list = entry.get("stats", [])
+                stat_map = {s.get("name"): s.get("value") for s in stat_list}
+
+                wins = float(stat_map.get("wins", 0))
+                losses = float(stat_map.get("losses", 0))
+                ppg = float(stat_map.get("avgPointsFor", 0))
+                oppg = float(stat_map.get("avgPointsAgainst", 0))
+
+                games = wins + losses
+                win_pct = wins / games if games > 0 else 0.0
+
+                stats.append({
+                    "team_norm": robust_normalize_team(team_name, league="MLB"),
+                    "league_key": "MLB",
+                    "win_pct": win_pct,
+                    "home_win_pct": win_pct, # Approx
+                    "away_win_pct": win_pct, # Approx
+                    "points_per_game": ppg,
+                    "points_allowed_per_game": oppg,
+                    "turnovers": 0.0,
+                    "streak": 0.0,
+                    "last5_win_pct": win_pct, # Approx
+                    "source": "ESPN"
+                })
+
+        logger.info(f"Successfully fetched MLB stats from ESPN for {len(stats)} teams.")
+        return stats
+
+    except Exception as e:
+        logger.error(f"ESPN MLB fetch failed: {e}")
+        return []
+
 @st.cache_data(ttl=21600)
 def fetch_ncaab_stats(season_year: int) -> List[Dict[str, Any]]:
     """
@@ -1686,6 +1746,9 @@ def fetch_team_stats(api_clients: Dict[str, Any], season_year: Optional[int] = N
 
     if "NCAAB" in leagues:
         all_stats.extend(fetch_ncaab_stats(season_year))
+
+    if "MLB" in leagues:
+        all_stats.extend(fetch_from_espn_mlb(season_year))
 
     # API-Sports fallback logic REMOVED as per instruction to "replace" logic.
     # If the user wants to keep API-Sports as a fallback for other leagues not listed,
@@ -2130,6 +2193,16 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
         features_data['feature_home_oppg'] = features_data['feature_home_oppg'].mask(is_nhl, features_data['feature_home_oppg'] * nhl_scale_factor)
         features_data['feature_away_ppg'] = features_data['feature_away_ppg'].mask(is_nhl, features_data['feature_away_ppg'] * nhl_scale_factor)
         features_data['feature_away_oppg'] = features_data['feature_away_oppg'].mask(is_nhl, features_data['feature_away_oppg'] * nhl_scale_factor)
+
+
+    # SCALING: MLB stats are ~4.5, model expects ~110.0. Scale by 25x if league is MLB.
+    is_mlb = league_keys == "MLB"
+    if is_mlb.any():
+        mlb_scale_factor = 25.0
+        features_data['feature_home_ppg'] = features_data['feature_home_ppg'].mask(is_mlb, features_data['feature_home_ppg'] * mlb_scale_factor)
+        features_data['feature_home_oppg'] = features_data['feature_home_oppg'].mask(is_mlb, features_data['feature_home_oppg'] * mlb_scale_factor)
+        features_data['feature_away_ppg'] = features_data['feature_away_ppg'].mask(is_mlb, features_data['feature_away_ppg'] * mlb_scale_factor)
+        features_data['feature_away_oppg'] = features_data['feature_away_oppg'].mask(is_mlb, features_data['feature_away_oppg'] * mlb_scale_factor)
 
     # 4. Fill Defaults if stats_df was empty or incomplete
     if 'feature_home_win_pct' not in features_data:
