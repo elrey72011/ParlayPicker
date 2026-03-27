@@ -343,7 +343,7 @@ For each game, return a JSON object with:
 - recommended_bet: <string describing the pick or 'none'>
 - confidence: HIGH/MEDIUM/LOW
 - explanation: Brief 1-sentence explanation explaining agreement or disagreement (max 240 chars)
-- risk_notes: Specific risks or reasons for caution (max 240 chars)
+- risk_notes: Specific risks or reasons for caution (max 240 chars). If the 'is_live_data' flag is false, you must output the exact risk note: "Analysis used league-average fallbacks due to missing live stats."
 - flags: Array of short flag strings (e.g. "missing_odds", "contrarian")
 
 Games to analyze:

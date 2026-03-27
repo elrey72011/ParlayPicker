@@ -1701,15 +1701,9 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
             return fill_val
 
     # ------------------------------------------------------------
-    # INIT: defaults + feature container (MUST exist even if stats_df is empty)
+    # INIT: feature container (MUST exist even if stats_df is empty)
     # ------------------------------------------------------------
     features_data: Dict[str, Any] = {}
-
-    # Defaults as Series aligned to df.index
-    default_win_pct = pd.Series(0.50, index=df.index)
-    default_last5   = pd.Series(0.50, index=df.index)
-    default_ppg     = pd.Series(110.0, index=df.index)
-    default_oppg    = pd.Series(110.0, index=df.index)
 
     # ------------------------------------------------------------
     # 0) Determine league column (prefer sport_title, then league)
@@ -1758,6 +1752,12 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     # OPTIMIZATION: Add to features_data instead of direct assignment to avoid fragmentation
     # features_data is initialized at start of function
     features_data["League"] = league_keys
+
+    # Defaults as Series aligned to df.index
+    default_win_pct = pd.Series([LEAGUE_AVERAGES.get(lg, LEAGUE_AVERAGES["default"])["win_pct"] for lg in league_keys], index=df.index)
+    default_last5   = pd.Series([LEAGUE_AVERAGES.get(lg, LEAGUE_AVERAGES["default"])["last5_win_pct"] for lg in league_keys], index=df.index)
+    default_ppg     = pd.Series([LEAGUE_AVERAGES.get(lg, LEAGUE_AVERAGES["default"])["ppg"] for lg in league_keys], index=df.index)
+    default_oppg    = pd.Series([LEAGUE_AVERAGES.get(lg, LEAGUE_AVERAGES["default"])["oppg"] for lg in league_keys], index=df.index)
 
     # ------------------------------------------------------------
     # 3) Fetch stats AFTER league_keys exists (ok if empty)
@@ -2018,6 +2018,7 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     away_fallback = away_matched_names.isna()
     combined_fallback = home_fallback | away_fallback
     features_data["feature_stats_fallback"] = combined_fallback
+    features_data["is_live_data"] = ~combined_fallback
 
     # Task 2: Standardize stats_quality values (REAL/FALLBACK/MISSING)
     # Optimized using np.select for vectorization

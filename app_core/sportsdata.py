@@ -11,6 +11,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import requests
 import streamlit as st
+from app_core.team_name_mapping import get_team_variants
 
 
 @dataclass
@@ -289,9 +290,9 @@ class SportsDataClientBase:
         if not games:
             return {}
 
-        home_norm = self._normalize_name(home)
-        away_norm = self._normalize_name(away)
-        if not home_norm or not away_norm:
+        home_variants = [self._normalize_name(v) for v in get_team_variants(home)]
+        away_variants = [self._normalize_name(v) for v in get_team_variants(away)]
+        if not home_variants or not away_variants:
             return {}
 
         for game in games:
@@ -299,7 +300,7 @@ class SportsDataClientBase:
                 continue
             game_home = self._normalize_name(game.get("HomeTeam") or game.get("HomeTeamName"))
             game_away = self._normalize_name(game.get("AwayTeam") or game.get("AwayTeamName"))
-            if game_home == home_norm and game_away == away_norm:
+            if game_home in home_variants and game_away in away_variants:
                 return game
         return {}
 

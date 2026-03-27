@@ -125,6 +125,7 @@ def get_vertex_ai_prediction(features_dict, game_context=None):
     Get prediction from your custom trained XGBoost model.
     """
     try:
+        logger.debug(f"Vertex AI Payload Keys: {list(features_dict.keys())}")
         # 1. Define the exact feature order your model expects 
         # (Must match FEATURE_NAMES from train_vertex_model.py)
         expected_features = [
@@ -195,6 +196,9 @@ def show_vertex_ai_prediction_section(home_team: str, away_team: str, league: st
         'home_spread': home_spread,
     }
     
+    with st.expander("🔍 Feature Matrix Debug"):
+        st.write(features)
+
     with st.spinner(f"🤖 Analyzing {context} with AI..."):
         prediction = get_vertex_ai_prediction(features, context)
     

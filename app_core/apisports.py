@@ -13,6 +13,7 @@ import pytz
 import requests
 import streamlit as st
 import logging
+from app_core.team_name_mapping import get_team_variants
 
 logger = logging.getLogger(__name__)
 
@@ -512,17 +513,18 @@ class _APISportsBaseClient:
         if not games:
             return {}
 
-        home_norm = self._normalize_name(home)
-        away_norm = self._normalize_name(away)
+        home_variants = [self._normalize_name(v) for v in get_team_variants(home)]
+        away_variants = [self._normalize_name(v) for v in get_team_variants(away)]
 
         for game in games:
             teams = game.get("teams") or {}
             home_team = teams.get("home") or {}
             away_team = teams.get("away") or {}
-            if (
-                self._normalize_name(home_team.get("name", "")) == home_norm
-                and self._normalize_name(away_team.get("name", "")) == away_norm
-            ):
+
+            game_home_norm = self._normalize_name(home_team.get("name", ""))
+            game_away_norm = self._normalize_name(away_team.get("name", ""))
+
+            if game_home_norm in home_variants and game_away_norm in away_variants:
                 return game
         return {}
 
