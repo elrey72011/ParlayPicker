@@ -345,6 +345,19 @@ MANUAL_TEAM_OVERRIDES = {
     "ATHLETICS": "OAKLAND",
     "OAKLAND ATHLETICS": "OAKLAND",
 
+    # Vulnerable Single-Word Mascot Protections (Mapped to City/School Only)
+    "HEAT": "MIAMI",
+    "MAGIC": "ORLANDO",
+    "JAZZ": "UTAH",
+    "WILD": "MINNESOTA",
+    "SUNS": "PHOENIX",
+    "KINGS": "SACRAMENTO",
+    "BLUES": "ST LOUIS",
+    "STARS": "DALLAS",
+    "DUCKS": "ANAHEIM",
+    "SHARKS": "SAN JOSE",
+    "KRAKEN": "SEATTLE",
+
     # Additional NCAAB mascot stripping (common variations that appear in logs)
     "DUKE BLUE DEVILS": "DUKE",
     "NORTH CAROLINA TAR HEELS": "NORTH CAROLINA",
@@ -865,28 +878,30 @@ def robust_normalize_team(name: str, league: Optional[str] = None) -> str:
 
     # Task 3 Fix: Refined Pre-processing
     # Pre-processing: Handle punctuation and abbreviations before stripping chars
-    name_upper = name.upper()
+    name_upper = name.upper().strip()
 
     # Handle "SAINT" / "St." / "St " -> "ST" for standardizing
     name_upper = re.sub(r"\b(?:SAINT|ST\.?)(?!\w)", "ST", name_upper)
 
     # Handle "L.A." / "LA" -> "LOS ANGELES"
-    name_upper = re.sub(r"L\.A\.", "LOS ANGELES", name_upper)
-    name_upper = re.sub(r"\bLA\b", "LOS ANGELES", name_upper) # Standalone LA
+    name_upper = re.sub(r"\bL\.?A\.?\b", "LOS ANGELES", name_upper)
 
     # Handle "N.Y." / "NY" -> "NEW YORK"
-    name_upper = re.sub(r"\bN\.Y\.\b", "NEW YORK", name_upper)
-    name_upper = re.sub(r"\bNY\b", "NEW YORK", name_upper)
+    name_upper = re.sub(r"\bN\.?Y\.?\b", "NEW YORK", name_upper)
 
     # Handle "N.C." / "NC" -> "NORTH CAROLINA" (common in NCAAB)
     # Be careful not to match inside words
     name_upper = re.sub(r"\bN\.C\.", "NORTH CAROLINA", name_upper)
 
-    # 1. Base Normalization (Uppercase, AlphaNumeric, Single Space)
+    # 1. Base Normalization Override Check (Check overrides BEFORE aggressive stripping)
+    if name_upper in MANUAL_TEAM_OVERRIDES:
+        return MANUAL_TEAM_OVERRIDES[name_upper]
+
+    # 2. Run Mascot Stripping (Uppercase, AlphaNumeric, Single Space)
     # This removes dots, ampersands, hyphens
     norm = normalize_team(name_upper)
 
-    # 2. Post-processing for remaining variants
+    # 3. Post-processing for remaining variants
 
     # Handle "LA RAMS" explicitly (if it survived as LA RAMS or LOS ANGELES RAMS)
     if "LA RAMS" in norm:
@@ -895,22 +910,21 @@ def robust_normalize_team(name: str, league: Optional[str] = None) -> str:
     # Handle "MD" -> "MARYLAND" (e.g. "MD EASTERN SHORE")
     norm = re.sub(r"\bMD\b", "MARYLAND", norm)
 
-
     # Clean up multiple spaces again just in case
     norm = re.sub(r"\s+", " ", norm).strip()
 
-    # 3. Check Overrides
+    # 4. Check Overrides Again (for the stripped version)
     if norm in MANUAL_TEAM_OVERRIDES:
         return MANUAL_TEAM_OVERRIDES[norm]
 
-    # 4. League Specific Logic
+    # 5. League Specific Logic
     is_nfl = False
     if league:
         lg = str(league).strip().upper()
         if lg == "NFL":
             is_nfl = True
 
-    # 5. NFL Aliases (City -> Full Name)
+    # 6. NFL Aliases (City -> Full Name)
     if is_nfl and norm in NFL_TEAM_ALIASES:
         resolved = NFL_TEAM_ALIASES[norm]
         if _NFL_ALIAS_LOG_COUNT < _NFL_ALIAS_LOG_LIMIT:
@@ -1592,20 +1606,18 @@ def fetch_from_espn_mlb(season_year: int) -> List[Dict[str, Any]]:
         stats = []
         # Recursive helper to find "entries" regardless of nesting (Leagues -> Divisions)
         def find_entries(node):
+            entries = []
             if isinstance(node, dict):
                 if "entries" in node:
-                    return node["entries"]
-                for key in ["children", "standings"]:
+                    entries.extend(node["entries"])
+                # Must check ALL children, not just return the first result
+                for key in ["children", "standings", "groups", "leagues"]:
                     if key in node:
-                        result = find_entries(node[key])
-                        if result: return result
+                        entries.extend(find_entries(node[key]))
             elif isinstance(node, list):
-                all_entries = []
                 for child in node:
-                    found = find_entries(child)
-                    if found: all_entries.extend(found)
-                return all_entries
-            return []
+                    entries.extend(find_entries(child))
+            return entries
 
         all_entries = find_entries(data)
 
