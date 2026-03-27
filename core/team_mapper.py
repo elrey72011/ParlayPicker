@@ -1070,7 +1070,9 @@ overrides = {
     "prairie view a&m": "Prairie View A&M",
     "prairie view a&m panthers": "Prairie View A&M",
     "prairie view am": "Prairie View A&M",
-    "nc state wolfpack": "NC State"
+    "nc state wolfpack": "NC State",
+    "athletics": "Oakland",
+    "athletics mlb": "Oakland"
 }
 TEAM_MAP.update(overrides)
 
