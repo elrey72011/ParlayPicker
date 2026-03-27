@@ -1660,9 +1660,9 @@ def fetch_from_espn_mlb(season_year: int) -> List[Dict[str, Any]]:
             losses = float(stat_map.get("losses", 0))
             games = wins + losses
 
-            # Use 'runs' for MLBScored; fallback to 'pointsFor'
-            p_for = float(stat_map.get("runs", stat_map.get("pointsFor", 0)))
-            p_against = float(stat_map.get("runsAgainst", stat_map.get("pointsAgainst", 0)))
+            # MLB Stat Key Fallback Chain
+            p_for = float(stat_map.get("points", stat_map.get("runs", stat_map.get("pointsFor", 0))))
+            p_against = float(stat_map.get("pointsAgainst", stat_map.get("runsAgainst", stat_map.get("pointsAgainstFor", 0))))
 
             stats.append({
                 "team_norm": robust_normalize_team(team_name, league="MLB"),
@@ -1789,23 +1789,13 @@ def fetch_team_stats(api_clients: Dict[str, Any], season_year: Optional[int] = N
     leagues = list(api_clients.keys())
 
     # Dispatch Logic
-    if "NBA" in leagues:
-        all_stats.extend(fetch_nba_stats(season_year))
-
-    if "NFL" in leagues:
-        all_stats.extend(fetch_nfl_stats(season_year))
-
-    if "NCAAF" in leagues:
-        all_stats.extend(fetch_ncaaf_stats(season_year))
-
-    if "NHL" in leagues:
-        all_stats.extend(fetch_nhl_stats(season_year))
-
-    if "NCAAB" in leagues:
-        all_stats.extend(fetch_ncaab_stats(season_year))
-
-    if "MLB" in leagues:
-        all_stats.extend(fetch_from_espn_mlb(season_year))
+    # Unconditionally fetch all leagues to ensure caches are populated
+    all_stats.extend(fetch_nba_stats(season_year))
+    all_stats.extend(fetch_nfl_stats(season_year))
+    all_stats.extend(fetch_ncaaf_stats(season_year))
+    all_stats.extend(fetch_nhl_stats(season_year))
+    all_stats.extend(fetch_ncaab_stats(season_year))
+    all_stats.extend(fetch_from_espn_mlb(season_year))
 
     # API-Sports fallback logic REMOVED as per instruction to "replace" logic.
     # If the user wants to keep API-Sports as a fallback for other leagues not listed,
@@ -2262,6 +2252,17 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
         features_data['feature_home_oppg'] = features_data['feature_home_oppg'].mask(is_mlb, features_data['feature_home_oppg'] * mlb_scale_factor)
         features_data['feature_away_ppg'] = features_data['feature_away_ppg'].mask(is_mlb, features_data['feature_away_ppg'] * mlb_scale_factor)
         features_data['feature_away_oppg'] = features_data['feature_away_oppg'].mask(is_mlb, features_data['feature_away_oppg'] * mlb_scale_factor)
+
+    # SCALING: NCAAB (~72) and NCAAF (~28) to NBA (~110) magnitude
+    is_ncaab = league_keys == "NCAAB"
+    if is_ncaab.any():
+        for col in ['feature_home_ppg', 'feature_home_oppg', 'feature_away_ppg', 'feature_away_oppg']:
+            features_data[col] = features_data[col].mask(is_ncaab, features_data[col] * 1.55)
+
+    is_ncaaf = league_keys == "NCAAF"
+    if is_ncaaf.any():
+        for col in ['feature_home_ppg', 'feature_home_oppg', 'feature_away_ppg', 'feature_away_oppg']:
+            features_data[col] = features_data[col].mask(is_ncaaf, features_data[col] * 4.0)
 
     # 4. Fill Defaults if stats_df was empty or incomplete
     if 'feature_home_win_pct' not in features_data:
