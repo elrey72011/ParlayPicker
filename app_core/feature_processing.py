@@ -1322,11 +1322,6 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
             if season_stats:
                 season_year = season_year - 1
 
-        # If still empty, do NOT treat as outage; try ESPN fallback
-        if not season_stats:
-            logger.warning("NCAAF stats unavailable via CFBD. Attempting ESPN fallback...")
-            return fetch_from_espn_ncaaf(season_year)
-
         season_games = _fetch_games_for_year(season_year)
 
         # Build win pct map (same logic as before)
@@ -1407,11 +1402,23 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
                 continue
 
         logger.info(f"Successfully fetched NCAAF stats for {len(stats)} teams.")
-        return stats
 
     except Exception as e:
         logger.error(f"Failed to fetch NCAAF stats: {e}", exc_info=True)
-        return []
+
+    # Merge CFBD stats with ESPN Fallback (Power-6 / Scraper miss fix)
+    logger.info("Merging NCAAF stats from ESPN fallback...")
+    espn_stats = fetch_from_espn_ncaaf(season_year)
+
+    # Priority: CFBD (Scraper) > ESPN
+    merged_stats = {s["team_norm"]: s for s in stats}
+    for espn_s in espn_stats:
+        if espn_s["team_norm"] not in merged_stats:
+            merged_stats[espn_s["team_norm"]] = espn_s
+
+    final_stats = list(merged_stats.values())
+    logger.info(f"Final merged NCAAF stats count: {len(final_stats)}")
+    return final_stats
 
 @st.cache_data(ttl=21600)
 def fetch_nhl_stats(season_year: int) -> List[Dict[str, Any]]:
@@ -1512,22 +1519,25 @@ def fetch_from_espn_ncaaf(season_year: int) -> List[Dict[str, Any]]:
             if not team_name:
                 continue
 
-            # Extract stats
+            # Use abbreviation for consistent cross-sport parsing
             stat_list = entry.get("stats", [])
-            stat_map = {s.get("name"): s.get("value") for s in stat_list}
+            stat_map = {str(s.get("abbreviation", s.get("name", ""))).upper(): s.get("value") for s in stat_list}
 
-            wins = stat_map.get("wins", 0.0)
-            losses = stat_map.get("losses", 0.0)
-            points_for = stat_map.get("pointsFor", 0.0)
-            points_against = stat_map.get("pointsAgainst", 0.0)
-
+            wins = float(stat_map.get("W", 0))
+            losses = float(stat_map.get("L", 0))
             games = wins + losses
-            if games == 0:
+
+            if games == 0 and not stat_map.get("APF") and not stat_map.get("APA"):
                 continue
 
-            win_pct = wins / games
-            ppg = points_for / games
-            oppg = points_against / games
+            win_pct = (wins / games) if games > 0 else 0.0
+
+            # Resilient Keys: R (MLB), PF (College), PTS (NBA)
+            p_for = float(stat_map.get("R", stat_map.get("PF", stat_map.get("PTS", 0))))
+            p_against = float(stat_map.get("RA", stat_map.get("PA", stat_map.get("OPP PTS", 0))))
+
+            ppg = (p_for / games) if games > 0 else float(stat_map.get("APF", 0))
+            oppg = (p_against / games) if games > 0 else float(stat_map.get("APA", 0))
 
             stats.append({
                 "team_norm": robust_normalize_team(team_name, league="NCAAF"),
@@ -1571,17 +1581,25 @@ def fetch_from_espn_ncaab(season_year: int) -> List[Dict[str, Any]]:
             if not team_name:
                 continue
 
-            # Stats parsing
+            # Use abbreviation for consistent cross-sport parsing
             stat_list = entry.get("stats", [])
-            stat_map = {s.get("name"): s.get("value") for s in stat_list}
+            stat_map = {str(s.get("abbreviation", s.get("name", ""))).upper(): s.get("value") for s in stat_list}
 
-            wins = float(stat_map.get("wins", 0))
-            losses = float(stat_map.get("losses", 0))
-            ppg = float(stat_map.get("avgPointsFor", 0))
-            oppg = float(stat_map.get("avgPointsAgainst", 0))
-
+            wins = float(stat_map.get("W", 0))
+            losses = float(stat_map.get("L", 0))
             games = wins + losses
-            win_pct = wins / games if games > 0 else 0.0
+
+            if games == 0 and not stat_map.get("APF") and not stat_map.get("APA"):
+                continue
+
+            win_pct = (wins / games) if games > 0 else 0.0
+
+            # Resilient Keys: R (MLB), PF (College), PTS (NBA)
+            p_for = float(stat_map.get("R", stat_map.get("PF", stat_map.get("PTS", 0))))
+            p_against = float(stat_map.get("RA", stat_map.get("PA", stat_map.get("OPP PTS", 0))))
+
+            ppg = (p_for / games) if games > 0 else float(stat_map.get("APF", 0))
+            oppg = (p_against / games) if games > 0 else float(stat_map.get("APA", 0))
 
             stats.append({
                 "team_norm": robust_normalize_team(team_name, league="NCAAB"),
@@ -1623,17 +1641,20 @@ def fetch_from_espn_mlb(season_year: int) -> List[Dict[str, Any]]:
             team_name = team_info.get("displayName")
             if not team_name: continue
 
+            # Use abbreviation for consistent cross-sport parsing
             stat_list = entry.get("stats", [])
-            stat_map = {s.get("name"): s.get("value") for s in stat_list}
+            stat_map = {str(s.get("abbreviation", s.get("name", ""))).upper(): s.get("value") for s in stat_list}
 
-            # Manual calculation using resilient keys
-            wins = float(stat_map.get("wins", 0))
-            losses = float(stat_map.get("losses", 0))
+            wins = float(stat_map.get("W", 0))
+            losses = float(stat_map.get("L", 0))
             games = wins + losses
 
-            # MLB Stat Key Fallback Chain
-            p_for = float(stat_map.get("points", stat_map.get("runs", stat_map.get("pointsFor", 0))))
-            p_against = float(stat_map.get("pointsAgainst", stat_map.get("runsAgainst", stat_map.get("pointsAgainstFor", 0))))
+            # Resilient Keys: R (MLB), PF (College), PTS (NBA)
+            p_for = float(stat_map.get("R", stat_map.get("PF", stat_map.get("PTS", 0))))
+            p_against = float(stat_map.get("RA", stat_map.get("PA", stat_map.get("OPP PTS", 0))))
+
+            ppg = (p_for / games) if games > 0 else float(stat_map.get("APF", 0))
+            oppg = (p_against / games) if games > 0 else float(stat_map.get("APA", 0))
 
             stats.append({
                 "team_norm": robust_normalize_team(team_name, league="MLB"),
@@ -1641,8 +1662,8 @@ def fetch_from_espn_mlb(season_year: int) -> List[Dict[str, Any]]:
                 "win_pct": (wins / games) if games > 0 else 0.5,
                 "home_win_pct": (wins / games) if games > 0 else 0.5,
                 "away_win_pct": (wins / games) if games > 0 else 0.5,
-                "points_per_game": (p_for / games) if games > 0 else 0.0,
-                "points_allowed_per_game": (p_against / games) if games > 0 else 0.0,
+                "points_per_game": ppg,
+                "points_allowed_per_game": oppg,
                 "turnovers": 0.0,
                 "streak": 0.0,
                 "last5_win_pct": (wins / games) if games > 0 else 0.5,
@@ -1730,12 +1751,19 @@ def fetch_ncaab_stats(season_year: int) -> List[Dict[str, Any]]:
         except Exception as e:
             logger.warning(f"Failed to fetch NCAAB stats wrapper: {e}")
 
-    # Fallback to ESPN if CBBpy failed or returned no stats
-    if not stats:
-        logger.warning("NCAAB stats unavailable via CBBpy. Attempting ESPN fallback...")
-        return fetch_from_espn_ncaab(season_year)
+    # Merge CBBpy stats with ESPN Fallback (Power-6 / Scraper miss fix)
+    logger.info("Merging NCAAB stats from ESPN fallback...")
+    espn_stats = fetch_from_espn_ncaab(season_year)
 
-    return stats
+    # Priority: CBBpy (Scraper) > ESPN
+    merged_stats = {s["team_norm"]: s for s in stats}
+    for espn_s in espn_stats:
+        if espn_s["team_norm"] not in merged_stats:
+            merged_stats[espn_s["team_norm"]] = espn_s
+
+    final_stats = list(merged_stats.values())
+    logger.info(f"Final merged NCAAB stats count: {len(final_stats)}")
+    return final_stats
 
 # -------------------------------------------------------------------------
 
