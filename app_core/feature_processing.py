@@ -123,50 +123,20 @@ def normalize_team(name: str) -> str:
 
     # Aggressively strip known mascots (Pro and College) if they are the last word
     # This prevents failures when one side has a mascot and the other doesn't
-    mascots_to_strip = [
-        "BLUES", "LAKERS", "PELICANS", "AVALANCHE", "BILLIKENS",
-        "PANTHERS", "GATORS", "CLIPPERS", "TIMBERWOLVES", "WARRIORS",
-        "ROCKETS", "PACERS", "GRIZZLIES", "HEAT", "BUCKS", "KNICKS",
-        "THUNDER", "MAGIC", "76ERS", "SUNS", "TRAIL BLAZERS", "KINGS",
-        "SPURS", "RAPTORS", "JAZZ", "WIZARDS", "DUCKS", "BRUINS", "SABRES",
-        "FLAMES", "HURRICANES", "BLACKHAWKS", "BLUE JACKETS", "STARS",
-        "RED WINGS", "OILERS", "KINGS", "WILD", "CANADIENS", "PREDATORS",
-        "DEVILS", "ISLANDERS", "RANGERS", "SENATORS", "FLYERS", "PENGUINS",
-        "SHARKS", "KRAKEN", "LIGHTNING", "MAPLE LEAFS", "CANUCKS",
-        "GOLDEN KNIGHTS", "CAPITALS", "JETS", "BULLS", "CAVALIERS", "MAVERICKS",
-        "NUGGETS", "PISTONS", "HORNETS", "CELTICS", "HAWKS", "NETS",
-        "CARDINALS", "FALCONS", "RAVENS", "BILLS", "BEARS", "BENGALS",
-        "BROWNS", "COWBOYS", "BRONCOS", "LIONS", "PACKERS", "TEXANS",
-        "COLTS", "JAGUARS", "CHIEFS", "RAIDERS", "CHARGERS", "RAMS",
-        "DOLPHINS", "VIKINGS", "PATRIOTS", "SAINTS", "GIANTS", "EAGLES",
-        "STEELERS", "49ERS", "SEAHAWKS", "BUCCANEERS", "TITANS", "COMMANDERS",
-        "ASTROS", "RANGERS", "ANGELS", "ATHLETICS", "MARINERS", "BLUE JAYS",
-        "ORIOLES", "RAYS", "RED SOX", "YANKEES", "GUARDIANS", "ROYALS",
-        "TIGERS", "TWINS", "WHITE SOX", "BRAVES", "MARLINS", "METS",
-        "PHILLIES", "NATIONALS", "CUBS", "REDS", "BREWERS", "PIRATES",
-        "DIAMONDBACKS", "ROCKIES", "DODGERS", "PADRES", "GIANTS",
-        "VOLUNTEERS", "WILDCATS", "JAYHAWKS", "HOOSIERS", "BOILERMAKERS",
-        "SPARTANS", "BUCKEYES", "WOLVERINES", "FIGHTING ILLINI", "GOPHERS",
-        "BADGERS", "NITTANY LIONS", "HUSKIES", "COUGARS", "BEAVERS", "DUCKS",
-        "BRUINS", "TROJANS", "SUN DEVILS", "BUFFALOES", "UTES", "TIGERS",
-        "CRIMSON TIDE", "RAZORBACKS", "BULLDOGS", "COMMODORES", "LONGHORNS",
-        "SOONERS", "COWBOYS", "RED RAIDERS", "BEARS", "FROGS", "MOUNTAINEERS",
-        "CYCLONES", "BLUE DEVILS", "TAR HEELS", "WOLFPACK", "HOKIES", "CAVALIERS",
-        "YELLOW JACKETS", "SEMINOLES", "HURRICANES", "EAGLES", "ORANGE", "PANTHERS",
-        "IRISH", "FRIARS", "PIRATES", "RED STORM", "BLUE DEMONS", "HOYAS",
-        "BULLDOGS", "MUSKETEERS", "BLUEJAYS", "GOLDEN EAGLES", "BEARCATS",
-        "SHOCKERS", "OWLS", "GREEN WAVE", "FLYERS", "RAMS", "BONNIES",
-        "SPIDERS", "AZTECS", "WOLF PACK", "LOBOS", "BRONCOS", "RAMS",
-        "GAELS", "DONS", "WAVES", "AGGIES", "FALCONS"
-    ]
+    try:
+        from app_core.team_name_mapping import TEAM_SUFFIXES
+        mascots_to_strip = [m.upper() for m in TEAM_SUFFIXES]
+    except ImportError:
+        mascots_to_strip = []
 
-    for mascot in mascots_to_strip:
-        # Match mascot at the end of the string, preceded by a space
-        pattern = r"\b" + re.escape(mascot) + r"$"
-        new_name = re.sub(pattern, "", name).strip()
-        # Ensure we don't accidentally strip the whole name
-        if len(new_name) > 0:
-            name = new_name
+    words = name.split()
+    if len(words) >= 2:
+        for mascot in mascots_to_strip:
+            if name.endswith(" " + mascot):
+                new_name = name[:-len(mascot)-1].strip()
+                if len(new_name.split()) >= 1: # ensure we don't strip it entirely
+                    name = new_name
+                    break
 
     return name
 
@@ -876,9 +846,7 @@ def robust_normalize_team(name: str, league: Optional[str] = None) -> str:
     name_upper = name.upper()
 
     # Handle "SAINT" / "St." / "St " -> "ST" for standardizing
-    name_upper = re.sub(r"\bSAINT\b", "ST", name_upper)
-    name_upper = re.sub(r"\bST\.", "ST", name_upper)
-    name_upper = re.sub(r"\bST\b", "ST", name_upper)
+    name_upper = re.sub(r"\b(SAINT|ST\.|ST)(?!\w)", "ST", name_upper)
 
     # Handle "L.A." / "LA" -> "LOS ANGELES"
     name_upper = re.sub(r"L\.A\.", "LOS ANGELES", name_upper)
@@ -901,8 +869,6 @@ def robust_normalize_team(name: str, league: Optional[str] = None) -> str:
     # Handle "MD" -> "MARYLAND" (e.g. "MD EASTERN SHORE")
     norm = re.sub(r"\bMD\b", "MARYLAND", norm)
 
-    # Remove the `norm = re.sub(r"\bST(?=\s*$)", "STATE", norm)` replacement to prevent "ST" from becoming "STATE"
-    # This prevents "St. Louis" from erroneously becoming "STATE LOUIS"
 
     # Clean up multiple spaces again just in case
     norm = re.sub(r"\s+", " ", norm).strip()
