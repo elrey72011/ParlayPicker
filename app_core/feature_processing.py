@@ -343,6 +343,7 @@ MANUAL_TEAM_OVERRIDES = {
     "SEATTLE MARINERS": "SEATTLE",
     "CLEVELAND GUARDIANS": "CLEVELAND",
     "ATHLETICS": "OAKLAND",
+    "OAKLAND ATHLETICS": "OAKLAND",
 
     # Additional NCAAB mascot stripping (common variations that appear in logs)
     "DUKE BLUE DEVILS": "DUKE",
@@ -874,7 +875,7 @@ def robust_normalize_team(name: str, league: Optional[str] = None) -> str:
     name_upper = re.sub(r"\bLA\b", "LOS ANGELES", name_upper) # Standalone LA
 
     # Handle "N.Y." / "NY" -> "NEW YORK"
-    name_upper = re.sub(r"N\.Y\.", "NEW YORK", name_upper)
+    name_upper = re.sub(r"\bN\.Y\.\b", "NEW YORK", name_upper)
     name_upper = re.sub(r"\bNY\b", "NEW YORK", name_upper)
 
     # Handle "N.C." / "NC" -> "NORTH CAROLINA" (common in NCAAB)
@@ -1580,9 +1581,7 @@ def fetch_from_espn_ncaab(season_year: int) -> List[Dict[str, Any]]:
 
 @st.cache_data(ttl=21600)
 def fetch_from_espn_mlb(season_year: int) -> List[Dict[str, Any]]:
-    """
-    Fetch MLB stats from ESPN API.
-    """
+    """Fetch MLB stats from ESPN API by traversing Leagues and Divisions."""
     try:
         logger.info(f"Fetching MLB stats from ESPN for season: {season_year}")
         url = "https://site.api.espn.com/apis/v2/sports/baseball/mlb/standings"
@@ -1591,50 +1590,58 @@ def fetch_from_espn_mlb(season_year: int) -> List[Dict[str, Any]]:
         data = resp.json()
 
         stats = []
-        children = data.get("children", [])
-        for league in children:
-            entries = league.get("standings", {}).get("entries", [])
-            for entry in entries:
-                team_info = entry.get("team", {})
-                team_name = team_info.get("displayName")
-                if not team_name:
-                    continue
+        # Recursive helper to find "entries" regardless of nesting (Leagues -> Divisions)
+        def find_entries(node):
+            if isinstance(node, dict):
+                if "entries" in node:
+                    return node["entries"]
+                for key in ["children", "standings"]:
+                    if key in node:
+                        result = find_entries(node[key])
+                        if result: return result
+            elif isinstance(node, list):
+                all_entries = []
+                for child in node:
+                    found = find_entries(child)
+                    if found: all_entries.extend(found)
+                return all_entries
+            return []
 
-                # Stats parsing
-                stat_list = entry.get("stats", [])
-                stat_map = {s.get("name"): s.get("value") for s in stat_list}
+        all_entries = find_entries(data)
 
-                # Stats parsing - Manual calculation with fallback keys
-                wins = float(stat_map.get("wins", 0))
-                losses = float(stat_map.get("losses", 0))
-                games = wins + losses
+        for entry in all_entries:
+            team_info = entry.get("team", {})
+            team_name = team_info.get("displayName")
+            if not team_name: continue
 
-                win_pct = wins / games if games > 0 else 0.0
+            stat_list = entry.get("stats", [])
+            stat_map = {s.get("name"): s.get("value") for s in stat_list}
 
-                # Check multiple keys for MLB runs/points
-                p_for = float(stat_map.get("runs", stat_map.get("pointsFor", 0)))
-                p_against = float(stat_map.get("runsAgainst", stat_map.get("pointsAgainst", 0)))
+            # Manual calculation using resilient keys
+            wins = float(stat_map.get("wins", 0))
+            losses = float(stat_map.get("losses", 0))
+            games = wins + losses
 
-                ppg = (p_for / games) if games > 0 else 0.0
-                oppg = (p_against / games) if games > 0 else 0.0
+            # Use 'runs' for MLBScored; fallback to 'pointsFor'
+            p_for = float(stat_map.get("runs", stat_map.get("pointsFor", 0)))
+            p_against = float(stat_map.get("runsAgainst", stat_map.get("pointsAgainst", 0)))
 
-                stats.append({
-                    "team_norm": robust_normalize_team(team_name, league="MLB"),
-                    "league_key": "MLB",
-                    "win_pct": win_pct,
-                    "home_win_pct": win_pct, # Approx
-                    "away_win_pct": win_pct, # Approx
-                    "points_per_game": ppg,
-                    "points_allowed_per_game": oppg,
-                    "turnovers": 0.0,
-                    "streak": 0.0,
-                    "last5_win_pct": win_pct, # Approx
-                    "source": "ESPN"
-                })
+            stats.append({
+                "team_norm": robust_normalize_team(team_name, league="MLB"),
+                "league_key": "MLB",
+                "win_pct": (wins / games) if games > 0 else 0.5,
+                "home_win_pct": (wins / games) if games > 0 else 0.5,
+                "away_win_pct": (wins / games) if games > 0 else 0.5,
+                "points_per_game": (p_for / games) if games > 0 else 0.0,
+                "points_allowed_per_game": (p_against / games) if games > 0 else 0.0,
+                "turnovers": 0.0,
+                "streak": 0.0,
+                "last5_win_pct": (wins / games) if games > 0 else 0.5,
+                "source": "ESPN"
+            })
 
-        logger.info(f"Successfully fetched MLB stats from ESPN for {len(stats)} teams.")
+        logger.info(f"Successfully fetched MLB stats for {len(stats)} teams.")
         return stats
-
     except Exception as e:
         logger.error(f"ESPN MLB fetch failed: {e}")
         return []
