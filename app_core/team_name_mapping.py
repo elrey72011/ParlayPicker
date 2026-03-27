@@ -153,53 +153,42 @@ for full_name, abbrevs in NCAAB_TEAM_ABBREV_MAP.items():
         ABBREV_TO_FULL_MAP[abbrev.upper()] = full_name
 
 TEAM_SUFFIXES = [
-    # General College/Other
-    "Rams", "Wildcats", "Eagles", "Bears", "Tigers", "Bulldogs",
-    "Cardinals", "Trojans", "Bruins", "Sun Devils", "Ducks",
-    "Huskies", "Cougars", "Spartans", "Wolverines", "Buckeyes",
-    "Fighting Irish", "Tar Heels", "Blue Devils", "Demon Deacons",
-    "Yellow Jackets", "Hokies", "Cavaliers", "Mountaineers",
-    "Cyclones", "Sooners", "Cowboys", "Jayhawks", "Longhorns",
-    "Aggies", "Razorbacks", "Volunteers", "Gamecocks", "Gators",
-    "Crimson Tide", "Roll Tide", "Tide", "War Eagle",
-    "Men", "Women", "Basketball", "College", "University",
-    "State", "Tech", "A&M", "International",
-    "Falcons", "Golden Flashes", "Zips", "Bulls", "Bobcats", "RedHawks", "Rockets", "Chippewas",
-    "Friars", "Red Storm", "Billikens", "Spiders", "Flyers", "Patriots", "Dukes", "Explorers", "Revolutionaries",
+    # Multi-word Mascots (MUST be first for correct stripping)
+    "Trail Blazers", "Golden Knights", "Maple Leafs", "Blue Jackets", "Red Wings",
+    "Red Sox", "White Sox", "Blue Jays", "Fighting Irish", "Tar Heels", "Blue Devils",
+    "Demon Deacons", "Yellow Jackets", "Sun Devils", "Golden Hurricane", "Crimson Tide",
+    "Roll Tide", "War Eagle", "Red Storm", "Golden Flashes", "RedHawks", "Dukes",
 
     # MLB Mascots
-    "Diamondbacks", "Braves", "Orioles", "Red Sox", "Cubs", "White Sox",
-    "Reds", "Guardians", "Rockies", "Tigers", "Astros", "Royals",
-    "Angels", "Dodgers", "Marlins", "Brewers", "Twins", "Mets",
-    "Yankees", "Athletics", "Phillies", "Pirates", "Padres", "Giants",
-    "Mariners", "Cardinals", "Rays", "Rangers", "Blue Jays", "Nationals",
+    "Diamondbacks", "Braves", "Orioles", "Cubs", "Reds", "Guardians", "Rockies", "Tigers",
+    "Astros", "Royals", "Angels", "Dodgers", "Marlins", "Brewers", "Twins", "Mets", "Yankees",
+    "Athletics", "Phillies", "Pirates", "Padres", "Giants", "Mariners", "Cardinals", "Rays",
+    "Rangers", "Nationals", "A's",
 
     # NBA Mascots
-    "Hawks", "Celtics", "Nets", "Hornets", "Bulls", "Cavaliers",
-    "Mavericks", "Nuggets", "Pistons", "Warriors", "Rockets", "Pacers",
-    "Clippers", "Lakers", "Grizzlies", "Heat", "Bucks", "Timberwolves",
-    "Pelicans", "Knicks", "Thunder", "Magic", "76ers", "Suns",
-    "Trail Blazers", "Kings", "Spurs", "Raptors", "Jazz", "Wizards",
-
-    # NFL Mascots
-    "Cardinals", "Falcons", "Ravens", "Bills", "Panthers", "Bears",
-    "Bengals", "Browns", "Cowboys", "Broncos", "Lions", "Packers",
-    "Texans", "Colts", "Jaguars", "Chiefs", "Raiders", "Chargers",
-    "Rams", "Dolphins", "Vikings", "Patriots", "Saints", "Giants",
-    "Jets", "Eagles", "Steelers", "49ers", "Seahawks", "Buccaneers",
-    "Titans", "Commanders", "Football Team",
+    "Hawks", "Celtics", "Nets", "Hornets", "Bulls", "Cavaliers", "Mavericks", "Nuggets",
+    "Pistons", "Warriors", "Rockets", "Pacers", "Clippers", "Lakers", "Grizzlies", "Heat",
+    "Bucks", "Timberwolves", "Pelicans", "Knicks", "Thunder", "Magic", "76ers", "Suns",
+    "Kings", "Spurs", "Raptors", "Jazz", "Wizards",
 
     # NHL Mascots
-    "Ducks", "Bruins", "Sabres", "Flames", "Hurricanes", "Blackhawks",
-    "Avalanche", "Blue Jackets", "Stars", "Red Wings", "Oilers",
-    "Panthers", "Kings", "Wild", "Canadiens", "Predators", "Devils",
-    "Islanders", "Rangers", "Senators", "Flyers", "Penguins", "Sharks",
-    "Kraken", "Blues", "Lightning", "Maple Leafs", "Canucks",
-    "Golden Knights", "Capitals", "Jets", "Hockey Club", "Coyotes",
+    "Ducks", "Bruins", "Sabres", "Flames", "Hurricanes", "Blackhawks", "Avalanche", "Stars",
+    "Oilers", "Panthers", "Kings", "Wild", "Canadiens", "Predators", "Devils", "Islanders",
+    "Rangers", "Senators", "Flyers", "Penguins", "Sharks", "Kraken", "Blues", "Canucks", "Capitals", "Jets",
 
-    # WNBA Mascots
-    "Dream", "Sky", "Sun", "Fever", "Aces", "Sparks", "Lynx",
-    "Liberty", "Mercury", "Storm", "Wings", "Mystics"
+    # NFL Mascots
+    "Ravens", "Bills", "Browns", "Broncos", "Texans", "Colts", "Jaguars", "Chiefs", "Raiders",
+    "Chargers", "Rams", "Dolphins", "Vikings", "Patriots", "Saints", "Jets", "Eagles", "Steelers",
+    "49ers", "Seahawks", "Buccaneers", "Titans", "Commanders",
+
+    # Common College Mascots & General Tokens
+    "Rams", "Wildcats", "Eagles", "Bears", "Tigers", "Bulldogs", "Cardinals", "Trojans",
+    "Bruins", "Huskies", "Cougars", "Spartans", "Wolverines", "Buckeyes", "Hokies", "Cavaliers",
+    "Mountaineers", "Cyclones", "Sooners", "Cowboys", "Jayhawks", "Longhorns", "Aggies",
+    "Razorbacks", "Volunteers", "Gamecocks", "Gators", "Tide", "Men", "Women", "Basketball",
+    "College", "University", "State", "Tech", "A&M", "International", "Falcons", "Zips",
+    "Bulls", "Bobcats", "Rockets", "Chippewas", "Friars", "Billikens", "Spiders", "Flyers",
+    "Patriots", "Explorers", "Revolutionaries"
 ]
 
 def normalize_team_name(team_name: str) -> str:
