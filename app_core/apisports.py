@@ -266,7 +266,7 @@ class _APISportsBaseClient:
                     self.last_error = "API Key Limit Reached (429)"
                     logger.warning(f"API-Sports HTTP 429 Error: Rate limit (Too Many Requests) reached on {path} after retries.")
                     return {} # Return empty dict instead of None
-                self.last_error = "API-Sports rate limit reached. Retrying shortly..."
+                self.last_error = "API Key Limit Reached (429)"
                 logger.warning(f"API-Sports HTTP 429 Error: Rate limit hit on {path}. Retrying in {wait_seconds}s...")
                 time.sleep(wait_seconds)
                 continue
