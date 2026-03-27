@@ -79,7 +79,7 @@ _NCAAB_LEAGUE_RECOVERY_KEYWORDS = {
     "st", "state", "univ", "university",
     "cowboys", "bulldogs", "redhawks", "tommies", "golden hurricane", "wildcats", "shockers", "unlv",
     "lehigh", "navy", "revolutionaries", "uic", "panthers", "bradley", "dayton", "murray", "saint josephs",
-    "valley", "uvu", "george washington", "gw",
+    "valley", "uvu", "george washington", "gw", "billikens",
 }
 _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball", "women\'s basketball"}
 
@@ -312,6 +312,8 @@ def _infer_missing_league_from_team_sets(df: pd.DataFrame, selected_sports: list
     missing_mask = out["league"].str.len().eq(0)
 
     # 2. Precedence Override: Check NBA/NHL exact map
+    # We must NOT override NCAAB assignments that were just made by keyword_mask,
+    # so we use the updated missing_mask which excludes rows already assigned to NCAAB.
     nba_mask = missing_mask & (home.isin(nba_full_set) | away.isin(nba_full_set))
     nhl_mask = missing_mask & (home.isin(nhl_teams) | away.isin(nhl_teams))
     out.loc[nba_mask, "league"] = "NBA"

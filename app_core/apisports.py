@@ -245,7 +245,7 @@ class _APISportsBaseClient:
                 return {} # Return empty dict instead of None
             
             if resp.status_code == 403:
-                self.last_error = "API-Sports Plan Restriction (403 Forbidden)"
+                self.last_error = "Plan Restriction (403)"
                 logger.error(f"API-Sports HTTP 403 Error: Plan Restriction / Forbidden on {path}")
                 return {} # Return empty dict instead of None
 
@@ -263,7 +263,7 @@ class _APISportsBaseClient:
                     wait_seconds = min(2.0 ** attempts, 5.0)
                 attempts += 1
                 if attempts >= self.max_retries:
-                    self.last_error = "API-Sports rate limit reached. Please try again shortly."
+                    self.last_error = "API Key Limit Reached (429)"
                     logger.warning(f"API-Sports HTTP 429 Error: Rate limit (Too Many Requests) reached on {path} after retries.")
                     return {} # Return empty dict instead of None
                 self.last_error = "API-Sports rate limit reached. Retrying shortly..."

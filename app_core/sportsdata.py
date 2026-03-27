@@ -165,11 +165,14 @@ class SportsDataClientBase:
                 return data
             except requests.HTTPError as exc:
                 status = exc.response.status_code if exc.response is not None else "error"
-                self.last_error = f"http_{status}"
                 if status == 429:
+                    self.last_error = "API Key Limit Reached (429)"
                     logger.warning(f"SportsData HTTP 429 Error: Rate limit (Too Many Requests) reached on {path}")
                 elif status == 403:
+                    self.last_error = "Plan Restriction (403)"
                     logger.error(f"SportsData HTTP 403 Error: Plan Restriction / Forbidden on {path}")
+                else:
+                    self.last_error = f"http_{status}"
 
                 if (
                     exc.response is not None
