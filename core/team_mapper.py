@@ -957,8 +957,10 @@ def normalize_team_name(name: str) -> str:
 
     # Use word boundaries to avoid partial matches
     replacements = [
-        (r'\bl\.a\.\s', 'los angeles '),
-        (r'\bla\s', 'los angeles '),
+        (r'\bl\.?a\.?\s', 'los angeles '),
+        (r'\bl\.?a\.?$', 'los angeles'),     # ADDED THIS for standalone/terminal "LA"
+        (r'\bn\.?y\.?\s', 'new york '),
+        (r'\bn\.?y\.?$', 'new york'),        # ADDED THIS for standalone/terminal "NY"
         (r'^st\.\s', 'st '),   # "St." at beginning (Saint) - must be before \bst\.\s
         (r'\bst\.\s', 'st '),  # "St." at end or before space
         (r'\bst\.$', 'st'),    # "St." at end of string
