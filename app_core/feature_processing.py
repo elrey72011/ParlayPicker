@@ -342,6 +342,7 @@ MANUAL_TEAM_OVERRIDES = {
     # MLB Pro Mascots
     "SEATTLE MARINERS": "SEATTLE",
     "CLEVELAND GUARDIANS": "CLEVELAND",
+    "ATHLETICS": "OAKLAND",
 
     # Additional NCAAB mascot stripping (common variations that appear in logs)
     "DUKE BLUE DEVILS": "DUKE",
@@ -871,6 +872,10 @@ def robust_normalize_team(name: str, league: Optional[str] = None) -> str:
     # Handle "L.A." / "LA" -> "LOS ANGELES"
     name_upper = re.sub(r"L\.A\.", "LOS ANGELES", name_upper)
     name_upper = re.sub(r"\bLA\b", "LOS ANGELES", name_upper) # Standalone LA
+
+    # Handle "N.Y." / "NY" -> "NEW YORK"
+    name_upper = re.sub(r"N\.Y\.", "NEW YORK", name_upper)
+    name_upper = re.sub(r"\bNY\b", "NEW YORK", name_upper)
 
     # Handle "N.C." / "NC" -> "NORTH CAROLINA" (common in NCAAB)
     # Be careful not to match inside words
@@ -1599,16 +1604,19 @@ def fetch_from_espn_mlb(season_year: int) -> List[Dict[str, Any]]:
                 stat_list = entry.get("stats", [])
                 stat_map = {s.get("name"): s.get("value") for s in stat_list}
 
+                # Stats parsing - Manual calculation with fallback keys
                 wins = float(stat_map.get("wins", 0))
                 losses = float(stat_map.get("losses", 0))
-
                 games = wins + losses
+
                 win_pct = wins / games if games > 0 else 0.0
 
-                points_for = float(stat_map.get("pointsFor", 0))
-                points_against = float(stat_map.get("pointsAgainst", 0))
-                ppg = (points_for / games) if games > 0 else 0.0
-                oppg = (points_against / games) if games > 0 else 0.0
+                # Check multiple keys for MLB runs/points
+                p_for = float(stat_map.get("runs", stat_map.get("pointsFor", 0)))
+                p_against = float(stat_map.get("runsAgainst", stat_map.get("pointsAgainst", 0)))
+
+                ppg = (p_for / games) if games > 0 else 0.0
+                oppg = (p_against / games) if games > 0 else 0.0
 
                 stats.append({
                     "team_norm": robust_normalize_team(team_name, league="MLB"),

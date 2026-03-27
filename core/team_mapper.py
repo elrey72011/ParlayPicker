@@ -454,7 +454,7 @@ ODDS_API_EXACT_MAP = {
     "montreal": "Montreal",
     "san jose": "San Jose",
     "ny islanders": "New York",
-    "ny rangers": "NY",
+    "ny rangers": "New York",
     "ottawa": "Ottawa",
     "utah": "Utah",
     "philly": "Philadelphia",
