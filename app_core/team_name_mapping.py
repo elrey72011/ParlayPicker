@@ -88,7 +88,7 @@ NCAAB_TEAM_ABBREV_MAP = {
     "Syracuse": ["SYR", "Syracuse Orange"],
     "Clemson": ["CLEM", "Clemson Tigers"],
     "Florida State": ["FSU", "Florida State Seminoles"],
-    "NC State": ["NCST", "N.C. State", "NC State Wolfpack"],
+    "NC State": ["NCST", "N.C. State", "NC State Wolfpack", "North Carolina State", "North Carolina State Wolfpack"],
     "Pittsburgh": ["PITT", "Pittsburgh Panthers"],
     "Virginia Tech": ["VT", "Virginia Tech Hokies"],
     "Wake Forest": ["WAKE", "Wake Forest Demon Deacons"],
@@ -219,9 +219,10 @@ def get_team_variants(team_name: str) -> List[str]:
     normalized_upper = normalized.upper()
     for full_name, abbrevs in NCAAB_TEAM_ABBREV_MAP.items():
         # Check if the team_name matches any known variant
-        if (team_name in abbrevs or
-            normalized in abbrevs or
-            team_name.upper() in [a.upper() for a in abbrevs]):
+        if (team_name.lower() == full_name.lower() or
+            normalized.lower() == full_name.lower() or
+            team_name.lower() in [a.lower() for a in abbrevs] or
+            normalized.lower() in [a.lower() for a in abbrevs]):
             variants.extend([full_name] + abbrevs)
             break
 
@@ -232,12 +233,27 @@ def get_team_variants(team_name: str) -> List[str]:
         if full_name in NCAAB_TEAM_ABBREV_MAP:
             variants.extend(NCAAB_TEAM_ABBREV_MAP[full_name])
 
+    # Also iterate to see if the team_name maps from any reverse map that includes part of it
+    for full_name, abbrevs in NCAAB_TEAM_ABBREV_MAP.items():
+        if team_name.lower() in [a.lower() for a in abbrevs] or normalized.lower() in [a.lower() for a in abbrevs]:
+            variants.extend([full_name] + abbrevs)
+
     # Add common variations
     # Handle "State" variations
     if " State" in team_name:
         base = team_name.replace(" State", "")
         variants.append(base)
         variants.append(f"{base} St")
+        variants.append(f"{base} St.")
+    elif " St." in team_name:
+        base = team_name.replace(" St.", "")
+        variants.append(base)
+        variants.append(f"{base} State")
+        variants.append(f"{base} St")
+    elif " St" in team_name and not team_name.startswith("St "):
+        base = team_name.replace(" St", "")
+        variants.append(base)
+        variants.append(f"{base} State")
         variants.append(f"{base} St.")
 
     # Handle "Saint" vs "St." variations
@@ -247,6 +263,9 @@ def get_team_variants(team_name: str) -> List[str]:
     elif "St. " in team_name:
         variants.append(team_name.replace("St. ", "Saint "))
         variants.append(team_name.replace("St. ", "St "))
+    elif "St " in team_name:
+        variants.append(team_name.replace("St ", "Saint "))
+        variants.append(team_name.replace("St ", "St. "))
 
     # Remove duplicates while preserving order
     seen = set()

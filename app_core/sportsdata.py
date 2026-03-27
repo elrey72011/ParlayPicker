@@ -150,6 +150,8 @@ class SportsDataClientBase:
         while attempt <= self.max_retries:
             try:
                 resp = self.session.get(url, params=params, timeout=self.timeout)
+                if resp.status_code == 429:
+                    logger.warning(f"SportsData HTTP 429: Rate limit (Too Many Requests) reached on {path} (Attempt {attempt+1}/{self.max_retries+1})")
                 if resp.status_code in self.RETRY_STATUS and attempt < self.max_retries:
                     delay = self.backoff_seconds * (attempt + 1)
                     time.sleep(delay)
@@ -162,6 +164,8 @@ class SportsDataClientBase:
             except requests.HTTPError as exc:
                 status = exc.response.status_code if exc.response is not None else "error"
                 self.last_error = f"http_{status}"
+                if status == 429:
+                    logger.warning(f"SportsData HTTP 429 Error: Rate limit (Too Many Requests) reached on {path}")
                 if (
                     exc.response is not None
                     and exc.response.status_code in self.RETRY_STATUS
@@ -273,7 +277,7 @@ class SportsDataClientBase:
     def _normalize_name(value: Optional[str]) -> str:
         if value is None:
             return ""
-        return re.sub(r"[^A-Z]", "", str(value).upper())
+        return re.sub(r"[^A-Z0-9 ]", "", str(value).upper())
 
     def _collect_identifiers(self, entry: Dict[str, Any]) -> Iterable[str]:
         for field in self.TEAM_IDENTIFIERS:
@@ -290,17 +294,21 @@ class SportsDataClientBase:
         if not games:
             return {}
 
-        home_variants = [self._normalize_name(v) for v in get_team_variants(home)]
-        away_variants = [self._normalize_name(v) for v in get_team_variants(away)]
+        home_variants = set(self._normalize_name(v) for v in get_team_variants(home))
+        away_variants = set(self._normalize_name(v) for v in get_team_variants(away))
         if not home_variants or not away_variants:
             return {}
 
         for game in games:
             if not isinstance(game, dict):
                 continue
-            game_home = self._normalize_name(game.get("HomeTeam") or game.get("HomeTeamName"))
-            game_away = self._normalize_name(game.get("AwayTeam") or game.get("AwayTeamName"))
-            if game_home in home_variants and game_away in away_variants:
+            game_home_raw = game.get("HomeTeam") or game.get("HomeTeamName") or ""
+            game_away_raw = game.get("AwayTeam") or game.get("AwayTeamName") or ""
+
+            game_home_variants = set(self._normalize_name(v) for v in get_team_variants(str(game_home_raw)))
+            game_away_variants = set(self._normalize_name(v) for v in get_team_variants(str(game_away_raw)))
+
+            if game_home_variants.intersection(home_variants) and game_away_variants.intersection(away_variants):
                 return game
         return {}
 
