@@ -1490,46 +1490,58 @@ def fetch_from_espn_ncaaf(season_year: int) -> List[Dict[str, Any]]:
 
         stats = []
 
-        # Iterate through conferences (children)
-        children = data.get("children", [])
-        for conf in children:
-            entries = conf.get("standings", {}).get("entries", [])
-            for entry in entries:
-                team_info = entry.get("team", {})
-                team_name = team_info.get("displayName")
-                if not team_name:
-                    continue
+        # Recursive helper to find "entries" regardless of nesting
+        def find_entries(node):
+            entries = []
+            if isinstance(node, dict):
+                if "entries" in node:
+                    entries.extend(node["entries"])
+                for key in ["children", "standings", "groups", "leagues"]:
+                    if key in node:
+                        entries.extend(find_entries(node[key]))
+            elif isinstance(node, list):
+                for child in node:
+                    entries.extend(find_entries(child))
+            return entries
 
-                # Extract stats
-                stat_list = entry.get("stats", [])
-                stat_map = {s.get("name"): s.get("value") for s in stat_list}
+        all_entries = find_entries(data)
 
-                wins = stat_map.get("wins", 0.0)
-                losses = stat_map.get("losses", 0.0)
-                points_for = stat_map.get("pointsFor", 0.0)
-                points_against = stat_map.get("pointsAgainst", 0.0)
+        for entry in all_entries:
+            team_info = entry.get("team", {})
+            team_name = team_info.get("displayName")
+            if not team_name:
+                continue
 
-                games = wins + losses
-                if games == 0:
-                    continue
+            # Extract stats
+            stat_list = entry.get("stats", [])
+            stat_map = {s.get("name"): s.get("value") for s in stat_list}
 
-                win_pct = wins / games
-                ppg = points_for / games
-                oppg = points_against / games
+            wins = stat_map.get("wins", 0.0)
+            losses = stat_map.get("losses", 0.0)
+            points_for = stat_map.get("pointsFor", 0.0)
+            points_against = stat_map.get("pointsAgainst", 0.0)
 
-                stats.append({
-                    "team_norm": robust_normalize_team(team_name, league="NCAAF"),
-                    "league_key": "NCAAF",
-                    "win_pct": float(win_pct),
-                    "home_win_pct": float(win_pct), # Approx
-                    "away_win_pct": float(win_pct), # Approx
-                    "points_per_game": float(ppg),
-                    "points_allowed_per_game": float(oppg),
-                    "turnovers": 0.0, # Not available in standings summary
-                    "streak": 0.0,
-                    "last5_win_pct": float(win_pct),
-                    "source": "ESPN_FALLBACK"
-                })
+            games = wins + losses
+            if games == 0:
+                continue
+
+            win_pct = wins / games
+            ppg = points_for / games
+            oppg = points_against / games
+
+            stats.append({
+                "team_norm": robust_normalize_team(team_name, league="NCAAF"),
+                "league_key": "NCAAF",
+                "win_pct": float(win_pct),
+                "home_win_pct": float(win_pct), # Approx
+                "away_win_pct": float(win_pct), # Approx
+                "points_per_game": float(ppg),
+                "points_allowed_per_game": float(oppg),
+                "turnovers": 0.0, # Not available in standings summary
+                "streak": 0.0,
+                "last5_win_pct": float(win_pct),
+                "source": "ESPN_FALLBACK"
+            })
 
         logger.info(f"Successfully fetched NCAAF stats from ESPN for {len(stats)} teams.")
         return stats
@@ -1550,40 +1562,54 @@ def fetch_from_espn_ncaab(season_year: int) -> List[Dict[str, Any]]:
         data = resp.json()
 
         stats = []
-        children = data.get("children", [])
-        for conf in children:
-            entries = conf.get("standings", {}).get("entries", [])
-            for entry in entries:
-                team_info = entry.get("team", {})
-                team_name = team_info.get("displayName")
-                if not team_name:
-                    continue
 
-                # Stats parsing
-                stat_list = entry.get("stats", [])
-                stat_map = {s.get("name"): s.get("value") for s in stat_list}
+        # Recursive helper to find "entries" regardless of nesting
+        def find_entries(node):
+            entries = []
+            if isinstance(node, dict):
+                if "entries" in node:
+                    entries.extend(node["entries"])
+                for key in ["children", "standings", "groups", "leagues"]:
+                    if key in node:
+                        entries.extend(find_entries(node[key]))
+            elif isinstance(node, list):
+                for child in node:
+                    entries.extend(find_entries(child))
+            return entries
 
-                wins = float(stat_map.get("wins", 0))
-                losses = float(stat_map.get("losses", 0))
-                ppg = float(stat_map.get("avgPointsFor", 0))
-                oppg = float(stat_map.get("avgPointsAgainst", 0))
+        all_entries = find_entries(data)
 
-                games = wins + losses
-                win_pct = wins / games if games > 0 else 0.0
+        for entry in all_entries:
+            team_info = entry.get("team", {})
+            team_name = team_info.get("displayName")
+            if not team_name:
+                continue
 
-                stats.append({
-                    "team_norm": robust_normalize_team(team_name, league="NCAAB"),
-                    "league_key": "NCAAB",
-                    "win_pct": win_pct,
-                    "home_win_pct": win_pct, # Approx
-                    "away_win_pct": win_pct, # Approx
-                    "points_per_game": ppg,
-                    "points_allowed_per_game": oppg,
-                    "turnovers": 0.0, # Not in basic standings
-                    "streak": 0.0,
-                    "last5_win_pct": win_pct, # Approx
-                    "source": "ESPN_FALLBACK"
-                })
+            # Stats parsing
+            stat_list = entry.get("stats", [])
+            stat_map = {s.get("name"): s.get("value") for s in stat_list}
+
+            wins = float(stat_map.get("wins", 0))
+            losses = float(stat_map.get("losses", 0))
+            ppg = float(stat_map.get("avgPointsFor", 0))
+            oppg = float(stat_map.get("avgPointsAgainst", 0))
+
+            games = wins + losses
+            win_pct = wins / games if games > 0 else 0.0
+
+            stats.append({
+                "team_norm": robust_normalize_team(team_name, league="NCAAB"),
+                "league_key": "NCAAB",
+                "win_pct": win_pct,
+                "home_win_pct": win_pct, # Approx
+                "away_win_pct": win_pct, # Approx
+                "points_per_game": ppg,
+                "points_allowed_per_game": oppg,
+                "turnovers": 0.0, # Not in basic standings
+                "streak": 0.0,
+                "last5_win_pct": win_pct, # Approx
+                "source": "ESPN_FALLBACK"
+            })
 
         logger.info(f"Successfully fetched NCAAB stats from ESPN for {len(stats)} teams.")
         return stats
@@ -1841,6 +1867,8 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     # ------------------------------------------------------------
     def get_row_league_key(l_val: Any) -> str:
         s = str(l_val).upper()
+        if "MLB" in s or "BASEBALL" in s:
+            return "MLB"
         if "NCAAB" in s or "COLLEGE BASKETBALL" in s:
             return "NCAAB"
         if "NCAAF" in s or "COLLEGE FOOTBALL" in s:
