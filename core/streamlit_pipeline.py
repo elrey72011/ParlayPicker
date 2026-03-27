@@ -291,16 +291,6 @@ def _infer_missing_league_from_team_sets(df: pd.DataFrame, selected_sports: list
     if not missing_mask.any():
         return out
 
-    nba_teams = {normalize_team_name(v) for v in NBA_EXACT_MAP.values()}
-    nhl_teams = {normalize_team_name(v) for v in NHL_EXACT_MAP.values()}
-
-    # We must check against keys of NBA_EXACT_MAP in addition to values.
-    nba_exact_keys = {normalize_team_name(k) for k in NBA_EXACT_MAP.keys()}
-    nba_full_set = nba_teams.union(nba_exact_keys)
-
-    home = _string_series(out, "home_team").map(normalize_team_name)
-    away = _string_series(out, "away_team").map(normalize_team_name)
-
     # 1. Check NCAAB keyword recovery regex FIRST to prevent college teams from being swallowed by pro city names
     keyword_pattern = r"\b(?:" + "|".join(sorted(re.escape(k) for k in _NCAAB_LEAGUE_RECOVERY_KEYWORDS)) + r")\b"
     home_text = _clean_text_placeholders(_string_series(out, "home_team")).str.lower()
@@ -312,6 +302,16 @@ def _infer_missing_league_from_team_sets(df: pd.DataFrame, selected_sports: list
     missing_mask = out["league"].str.len().eq(0)
 
     # 2. Precedence Override: Check NBA/NHL exact map
+    nba_teams = {normalize_team_name(v) for v in NBA_EXACT_MAP.values()}
+    nhl_teams = {normalize_team_name(v) for v in NHL_EXACT_MAP.values()}
+
+    # We must check against keys of NBA_EXACT_MAP in addition to values.
+    nba_exact_keys = {normalize_team_name(k) for k in NBA_EXACT_MAP.keys()}
+    nba_full_set = nba_teams.union(nba_exact_keys)
+
+    home = _string_series(out, "home_team").map(normalize_team_name)
+    away = _string_series(out, "away_team").map(normalize_team_name)
+
     # We must NOT override NCAAB assignments that were just made by keyword_mask,
     # so we use the updated missing_mask which excludes rows already assigned to NCAAB.
     nba_mask = missing_mask & (home.isin(nba_full_set) | away.isin(nba_full_set))
