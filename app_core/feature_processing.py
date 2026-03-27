@@ -104,6 +104,7 @@ LEAGUE_AVERAGES = {
     "NHL": {"ppg": 3.0, "oppg": 3.0, "win_pct": 0.5, "last5_win_pct": 0.5},
     "NCAAB": {"ppg": 72.0, "oppg": 72.0, "win_pct": 0.5, "last5_win_pct": 0.5},
     "NCAAF": {"ppg": 28.0, "oppg": 28.0, "win_pct": 0.5, "last5_win_pct": 0.5},
+    "MLB": {"ppg": 4.5, "oppg": 4.5, "win_pct": 0.5, "last5_win_pct": 0.5},
     "default": {"ppg": 50.0, "oppg": 50.0, "win_pct": 0.5, "last5_win_pct": 0.5}
 }
 
@@ -1600,11 +1601,14 @@ def fetch_from_espn_mlb(season_year: int) -> List[Dict[str, Any]]:
 
                 wins = float(stat_map.get("wins", 0))
                 losses = float(stat_map.get("losses", 0))
-                ppg = float(stat_map.get("avgPointsFor", 0))
-                oppg = float(stat_map.get("avgPointsAgainst", 0))
 
                 games = wins + losses
                 win_pct = wins / games if games > 0 else 0.0
+
+                points_for = float(stat_map.get("pointsFor", 0))
+                points_against = float(stat_map.get("pointsAgainst", 0))
+                ppg = (points_for / games) if games > 0 else 0.0
+                oppg = (points_against / games) if games > 0 else 0.0
 
                 stats.append({
                     "team_norm": robust_normalize_team(team_name, league="MLB"),
