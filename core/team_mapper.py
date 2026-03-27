@@ -959,9 +959,9 @@ def normalize_team_name(name: str) -> str:
     replacements = [
         (r'\bl\.a\.\s', 'los angeles '),
         (r'\bla\s', 'los angeles '),
-        (r'^st\.\s', 'saint '),   # "St." at beginning (Saint) - must be before \bst\.\s
-        (r'\bst\.\s', 'state '),  # "St." at end or before space
-        (r'\bst\.$', 'state'),    # "St." at end of string
+        (r'^st\.\s', 'st '),   # "St." at beginning (Saint) - must be before \bst\.\s
+        (r'\bst\.\s', 'st '),  # "St." at end or before space
+        (r'\bst\.$', 'st'),    # "St." at end of string
         (r'\bn\.c\.\s', 'north carolina '),
         (r'\bunc\s', 'north carolina '),
         (r'\bunc$', 'north carolina'),

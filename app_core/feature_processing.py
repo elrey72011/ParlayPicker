@@ -95,6 +95,8 @@ logger = logging.getLogger(__name__)
 # (Now applies mainly if keys are missing or libs are missing)
 FREE_TIER_MODE = True
 
+_MASCOTS_TO_STRIP = None
+
 # Define the features we want to ensure exist
 LEAGUE_AVERAGES = {
     "NBA": {"ppg": 114.0, "oppg": 114.0, "win_pct": 0.5, "last5_win_pct": 0.5},
@@ -123,11 +125,21 @@ def normalize_team(name: str) -> str:
 
     # Aggressively strip known mascots (Pro and College) if they are the last word
     # This prevents failures when one side has a mascot and the other doesn't
-    try:
-        from app_core.team_name_mapping import TEAM_SUFFIXES
-        mascots_to_strip = [m.upper() for m in TEAM_SUFFIXES]
-    except ImportError:
-        mascots_to_strip = []
+    global _MASCOTS_TO_STRIP
+    if _MASCOTS_TO_STRIP is None:
+        try:
+            from app_core.team_name_mapping import TEAM_SUFFIXES
+            _MASCOTS_TO_STRIP = []
+            for m in TEAM_SUFFIXES:
+                m_upper = m.upper().replace("'", "").replace(".", "")
+                m_upper = re.sub(r"[^A-Z0-9 ]", "", m_upper)
+                m_upper = re.sub(r"\s+", " ", m_upper).strip()
+                if m_upper:
+                    _MASCOTS_TO_STRIP.append(m_upper)
+        except ImportError:
+            _MASCOTS_TO_STRIP = []
+
+    mascots_to_strip = _MASCOTS_TO_STRIP
 
     words = name.split()
     if len(words) >= 2:
@@ -849,7 +861,7 @@ def robust_normalize_team(name: str, league: Optional[str] = None) -> str:
     name_upper = name.upper()
 
     # Handle "SAINT" / "St." / "St " -> "ST" for standardizing
-    name_upper = re.sub(r"\b(SAINT|ST\.|ST)(?!\w)", "ST", name_upper)
+    name_upper = re.sub(r"\b(?:SAINT|ST\.?)(?!\w)", "ST", name_upper)
 
     # Handle "L.A." / "LA" -> "LOS ANGELES"
     name_upper = re.sub(r"L\.A\.", "LOS ANGELES", name_upper)
