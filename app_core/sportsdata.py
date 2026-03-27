@@ -151,7 +151,9 @@ class SportsDataClientBase:
             try:
                 resp = self.session.get(url, params=params, timeout=self.timeout)
                 if resp.status_code == 429:
-                    logger.warning(f"SportsData HTTP 429: Rate limit (Too Many Requests) reached on {path} (Attempt {attempt+1}/{self.max_retries+1})")
+                    logger.warning(f"SportsData HTTP 429 Error: Rate limit (Too Many Requests) reached on {path} (Attempt {attempt+1}/{self.max_retries+1})")
+                if resp.status_code == 403:
+                    logger.error(f"SportsData HTTP 403 Error: Plan Restriction / Forbidden on {path}")
                 if resp.status_code in self.RETRY_STATUS and attempt < self.max_retries:
                     delay = self.backoff_seconds * (attempt + 1)
                     time.sleep(delay)
@@ -166,6 +168,9 @@ class SportsDataClientBase:
                 self.last_error = f"http_{status}"
                 if status == 429:
                     logger.warning(f"SportsData HTTP 429 Error: Rate limit (Too Many Requests) reached on {path}")
+                elif status == 403:
+                    logger.error(f"SportsData HTTP 403 Error: Plan Restriction / Forbidden on {path}")
+
                 if (
                     exc.response is not None
                     and exc.response.status_code in self.RETRY_STATUS

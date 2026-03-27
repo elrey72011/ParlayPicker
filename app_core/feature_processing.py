@@ -108,7 +108,7 @@ LEAGUE_AVERAGES = {
 def normalize_team(name: str) -> str:
     """
     Standardized normalization: Uppercase, alphanumeric + spaces only, single space.
-    Does NOT strip mascots or suffixes.
+    Aggressively strips mascots from professional and college teams.
     """
     if not name:
         return ""
@@ -120,6 +120,54 @@ def normalize_team(name: str) -> str:
     # Replace all non-alphanumeric characters with a space BEFORE collapsing spaces
     name = re.sub(r"[^A-Z0-9 ]", " ", name)
     name = re.sub(r"\s+", " ", name).strip()
+
+    # Aggressively strip known mascots (Pro and College) if they are the last word
+    # This prevents failures when one side has a mascot and the other doesn't
+    mascots_to_strip = [
+        "BLUES", "LAKERS", "PELICANS", "AVALANCHE", "BILLIKENS",
+        "PANTHERS", "GATORS", "CLIPPERS", "TIMBERWOLVES", "WARRIORS",
+        "ROCKETS", "PACERS", "GRIZZLIES", "HEAT", "BUCKS", "KNICKS",
+        "THUNDER", "MAGIC", "76ERS", "SUNS", "TRAIL BLAZERS", "KINGS",
+        "SPURS", "RAPTORS", "JAZZ", "WIZARDS", "DUCKS", "BRUINS", "SABRES",
+        "FLAMES", "HURRICANES", "BLACKHAWKS", "BLUE JACKETS", "STARS",
+        "RED WINGS", "OILERS", "KINGS", "WILD", "CANADIENS", "PREDATORS",
+        "DEVILS", "ISLANDERS", "RANGERS", "SENATORS", "FLYERS", "PENGUINS",
+        "SHARKS", "KRAKEN", "LIGHTNING", "MAPLE LEAFS", "CANUCKS",
+        "GOLDEN KNIGHTS", "CAPITALS", "JETS", "BULLS", "CAVALIERS", "MAVERICKS",
+        "NUGGETS", "PISTONS", "HORNETS", "CELTICS", "HAWKS", "NETS",
+        "CARDINALS", "FALCONS", "RAVENS", "BILLS", "BEARS", "BENGALS",
+        "BROWNS", "COWBOYS", "BRONCOS", "LIONS", "PACKERS", "TEXANS",
+        "COLTS", "JAGUARS", "CHIEFS", "RAIDERS", "CHARGERS", "RAMS",
+        "DOLPHINS", "VIKINGS", "PATRIOTS", "SAINTS", "GIANTS", "EAGLES",
+        "STEELERS", "49ERS", "SEAHAWKS", "BUCCANEERS", "TITANS", "COMMANDERS",
+        "ASTROS", "RANGERS", "ANGELS", "ATHLETICS", "MARINERS", "BLUE JAYS",
+        "ORIOLES", "RAYS", "RED SOX", "YANKEES", "GUARDIANS", "ROYALS",
+        "TIGERS", "TWINS", "WHITE SOX", "BRAVES", "MARLINS", "METS",
+        "PHILLIES", "NATIONALS", "CUBS", "REDS", "BREWERS", "PIRATES",
+        "DIAMONDBACKS", "ROCKIES", "DODGERS", "PADRES", "GIANTS",
+        "VOLUNTEERS", "WILDCATS", "JAYHAWKS", "HOOSIERS", "BOILERMAKERS",
+        "SPARTANS", "BUCKEYES", "WOLVERINES", "FIGHTING ILLINI", "GOPHERS",
+        "BADGERS", "NITTANY LIONS", "HUSKIES", "COUGARS", "BEAVERS", "DUCKS",
+        "BRUINS", "TROJANS", "SUN DEVILS", "BUFFALOES", "UTES", "TIGERS",
+        "CRIMSON TIDE", "RAZORBACKS", "BULLDOGS", "COMMODORES", "LONGHORNS",
+        "SOONERS", "COWBOYS", "RED RAIDERS", "BEARS", "FROGS", "MOUNTAINEERS",
+        "CYCLONES", "BLUE DEVILS", "TAR HEELS", "WOLFPACK", "HOKIES", "CAVALIERS",
+        "YELLOW JACKETS", "SEMINOLES", "HURRICANES", "EAGLES", "ORANGE", "PANTHERS",
+        "IRISH", "FRIARS", "PIRATES", "RED STORM", "BLUE DEMONS", "HOYAS",
+        "BULLDOGS", "MUSKETEERS", "BLUEJAYS", "GOLDEN EAGLES", "BEARCATS",
+        "SHOCKERS", "OWLS", "GREEN WAVE", "FLYERS", "RAMS", "BONNIES",
+        "SPIDERS", "AZTECS", "WOLF PACK", "LOBOS", "BRONCOS", "RAMS",
+        "GAELS", "DONS", "WAVES", "AGGIES", "FALCONS"
+    ]
+
+    for mascot in mascots_to_strip:
+        # Match mascot at the end of the string, preceded by a space
+        pattern = r"\b" + re.escape(mascot) + r"$"
+        new_name = re.sub(pattern, "", name).strip()
+        # Ensure we don't accidentally strip the whole name
+        if len(new_name) > 0:
+            name = new_name
+
     return name
 
 # -------------------------------------------------------------------------
@@ -830,9 +878,7 @@ def robust_normalize_team(name: str, league: Optional[str] = None) -> str:
     # Handle "SAINT" / "St." / "St " -> "ST" for standardizing
     name_upper = re.sub(r"\bSAINT\b", "ST", name_upper)
     name_upper = re.sub(r"\bST\.", "ST", name_upper)
-    # Important: Do not universally replace "ST" with "STATE" or "ST" here
-    # "NC STATE" is "NC STATE", "SAINT LOUIS" is "ST LOUIS".
-    # We will let "ST" stay "ST" and "STATE" stay "STATE".
+    name_upper = re.sub(r"\bST\b", "ST", name_upper)
 
     # Handle "L.A." / "LA" -> "LOS ANGELES"
     name_upper = re.sub(r"L\.A\.", "LOS ANGELES", name_upper)
@@ -841,14 +887,6 @@ def robust_normalize_team(name: str, league: Optional[str] = None) -> str:
     # Handle "N.C." / "NC" -> "NORTH CAROLINA" (common in NCAAB)
     # Be careful not to match inside words
     name_upper = re.sub(r"\bN\.C\.", "NORTH CAROLINA", name_upper)
-    # NC State is special, usually kept as NC State or North Carolina State
-    # But stats often use "NC State". Let's standardize to "NC STATE" for that specific case if needed,
-    # or expand to NORTH CAROLINA if that's what stats use.
-    # Checking override list: "NC STATE" -> "NC STATE".
-    # Let's leave NC alone if it's NC STATE, but expand N.C. to NORTH CAROLINA generally?
-    # Actually, "NC A&T" -> "NORTH CAROLINA AT".
-
-    # Handle "U." -> "UNIVERSITY"? No, usually dropped.
 
     # 1. Base Normalization (Uppercase, AlphaNumeric, Single Space)
     # This removes dots, ampersands, hyphens
@@ -863,18 +901,8 @@ def robust_normalize_team(name: str, league: Optional[str] = None) -> str:
     # Handle "MD" -> "MARYLAND" (e.g. "MD EASTERN SHORE")
     norm = re.sub(r"\bMD\b", "MARYLAND", norm)
 
-    # Handle "E " -> "EASTERN " etc? Maybe too risky.
-
-    # Remove "AM" replacement if it causes mismatch with normalized stats keys
-    # norm = re.sub(r"\bAM\b", "A&M", norm)
-
-    # Standardize "STATE" again just in case "ST" survived
-    # Wait, if we want "ST LOUIS", changing "ST" to "STATE" here breaks it ("STATE LOUIS").
-    # We should only change "ST" to "STATE" if it's preceded by a word (like "APPALACHIAN ST" -> "APPALACHIAN STATE").
-    # But "ST JOHNS" -> "ST JOHNS", not "STATE JOHNS".
-    # A simple heuristic: if "ST" is at the end of the string, it's "STATE".
-    norm = re.sub(r"\bST(?=\s*$)", "STATE", norm)
-    # If "ST" is preceded by a space and is the last word.
+    # Remove the `norm = re.sub(r"\bST(?=\s*$)", "STATE", norm)` replacement to prevent "ST" from becoming "STATE"
+    # This prevents "St. Louis" from erroneously becoming "STATE LOUIS"
 
     # Clean up multiple spaces again just in case
     norm = re.sub(r"\s+", " ", norm).strip()

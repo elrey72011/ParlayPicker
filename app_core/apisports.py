@@ -241,10 +241,12 @@ class _APISportsBaseClient:
 
             if resp.status_code == 401:
                 self.last_error = "Invalid API-Sports key"
+                logger.error(f"API-Sports HTTP 401 Error: Invalid or missing API Key on {path}")
                 return {} # Return empty dict instead of None
             
             if resp.status_code == 403:
                 self.last_error = "API-Sports Plan Restriction (403 Forbidden)"
+                logger.error(f"API-Sports HTTP 403 Error: Plan Restriction / Forbidden on {path}")
                 return {} # Return empty dict instead of None
 
             if resp.status_code == 429:
@@ -262,10 +264,10 @@ class _APISportsBaseClient:
                 attempts += 1
                 if attempts >= self.max_retries:
                     self.last_error = "API-Sports rate limit reached. Please try again shortly."
-                    logger.warning(f"API-Sports HTTP 429: Rate limit (Too Many Requests) reached on {path} after retries.")
+                    logger.warning(f"API-Sports HTTP 429 Error: Rate limit (Too Many Requests) reached on {path} after retries.")
                     return {} # Return empty dict instead of None
                 self.last_error = "API-Sports rate limit reached. Retrying shortly..."
-                logger.info(f"API-Sports HTTP 429: Rate limit hit on {path}. Retrying in {wait_seconds}s...")
+                logger.warning(f"API-Sports HTTP 429 Error: Rate limit hit on {path}. Retrying in {wait_seconds}s...")
                 time.sleep(wait_seconds)
                 continue
 
@@ -273,6 +275,7 @@ class _APISportsBaseClient:
                 resp.raise_for_status()
             except requests.RequestException as exc:
                 self.last_error = f"API-Sports request failed: {exc}"
+                logger.error(f"API-Sports request failed on {path}: {exc}")
                 return {} # Return empty dict instead of None
 
             try:

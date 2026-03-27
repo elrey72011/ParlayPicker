@@ -301,21 +301,21 @@ def _infer_missing_league_from_team_sets(df: pd.DataFrame, selected_sports: list
     home = _string_series(out, "home_team").map(normalize_team_name)
     away = _string_series(out, "away_team").map(normalize_team_name)
 
-    # 1. Precedence Override: Check NBA exact map FIRST
-    nba_mask = missing_mask & (home.isin(nba_full_set) | away.isin(nba_full_set))
-    nhl_mask = missing_mask & (home.isin(nhl_teams) | away.isin(nhl_teams))
-    out.loc[nba_mask, "league"] = "NBA"
-    out.loc[nhl_mask & out["league"].str.len().eq(0), "league"] = "NHL"
-
-    # Refresh missing mask after pro-teams assignments
-    missing_mask = out["league"].str.len().eq(0)
-
-    # 2. Check NCAAB keyword recovery regex ONLY on rows that weren't caught by NBA maps.
+    # 1. Check NCAAB keyword recovery regex FIRST to prevent college teams from being swallowed by pro city names
     keyword_pattern = r"\b(?:" + "|".join(sorted(re.escape(k) for k in _NCAAB_LEAGUE_RECOVERY_KEYWORDS)) + r")\b"
     home_text = _clean_text_placeholders(_string_series(out, "home_team")).str.lower()
     away_text = _clean_text_placeholders(_string_series(out, "away_team")).str.lower()
     keyword_mask = home_text.str.contains(keyword_pattern, regex=True, na=False) | away_text.str.contains(keyword_pattern, regex=True, na=False)
     out.loc[missing_mask & keyword_mask, "league"] = "NCAAB"
+
+    # Refresh missing mask after NCAAB assignment
+    missing_mask = out["league"].str.len().eq(0)
+
+    # 2. Precedence Override: Check NBA/NHL exact map
+    nba_mask = missing_mask & (home.isin(nba_full_set) | away.isin(nba_full_set))
+    nhl_mask = missing_mask & (home.isin(nhl_teams) | away.isin(nhl_teams))
+    out.loc[nba_mask, "league"] = "NBA"
+    out.loc[nhl_mask & out["league"].str.len().eq(0), "league"] = "NHL"
 
     selected = {str(s).upper() for s in (selected_sports or [])}
     has_ncaab = bool(selected.intersection({"NCAAB", "NCAAM", "NCAA MEN'S BASKETBALL", "NCAA MENS BASKETBALL"}))
@@ -392,7 +392,10 @@ def _restore_missing_ncaab_league_priority(df: pd.DataFrame) -> pd.DataFrame:
     away_text = _clean_text_placeholders(_string_series(out, "away_team")).str.lower()
     keyword_mask = home_text.str.contains(keyword_pattern, regex=True, na=False) | away_text.str.contains(keyword_pattern, regex=True, na=False)
 
-    out.loc[missing_league & keyword_mask & ~is_pro_mask, "league"] = "ncaab"
+    # Allow NCAAB keyword mask to override the is_pro_mask. If a team has a college mascot, it's college.
+    # Ex: "Saint Louis Billikens" contains "Billikens" which isn't in pro_full_set,
+    # but "Saint Louis" is. Because keyword_mask matches, we trust it's NCAAB.
+    out.loc[missing_league & keyword_mask, "league"] = "ncaab"
     return out
 
 
@@ -472,7 +475,8 @@ def _preprocess_bet_rows_for_league_bridge(df: pd.DataFrame) -> pd.DataFrame:
             source_text = source_text + " " + _clean_text_placeholders(_string_series(out, src_col)).str.lower()
     source_is_college = source_text.str.contains(r"\bncaa\b|\bncaab\b|\bncaam\b|college", regex=True, na=False)
 
-    out.loc[missing_league & (team_keyword_mask | source_is_college) & ~is_pro_mask, "league"] = "ncaab"
+    # Let college hints bypass the pro mask if they have college keywords
+    out.loc[missing_league & (team_keyword_mask | source_is_college), "league"] = "ncaab"
     return out
 
 
