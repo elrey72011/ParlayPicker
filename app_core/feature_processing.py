@@ -1477,6 +1477,20 @@ def fetch_nhl_stats(season_year: int) -> List[Dict[str, Any]]:
         logger.error(f"Failed to fetch NHL stats: {e}", exc_info=True)
         return []
 
+def find_entries(node):
+    """Recursive helper to find "entries" regardless of nesting."""
+    entries = []
+    if isinstance(node, dict):
+        if "entries" in node:
+            entries.extend(node["entries"])
+        for key in ["children", "standings", "groups", "leagues"]:
+            if key in node:
+                entries.extend(find_entries(node[key]))
+    elif isinstance(node, list):
+        for child in node:
+            entries.extend(find_entries(child))
+    return entries
+
 def fetch_from_espn_ncaaf(season_year: int) -> List[Dict[str, Any]]:
     """
     Fetch NCAAF stats from ESPN hidden API (Fallback).
@@ -1489,20 +1503,6 @@ def fetch_from_espn_ncaaf(season_year: int) -> List[Dict[str, Any]]:
         data = resp.json()
 
         stats = []
-
-        # Recursive helper to find "entries" regardless of nesting
-        def find_entries(node):
-            entries = []
-            if isinstance(node, dict):
-                if "entries" in node:
-                    entries.extend(node["entries"])
-                for key in ["children", "standings", "groups", "leagues"]:
-                    if key in node:
-                        entries.extend(find_entries(node[key]))
-            elif isinstance(node, list):
-                for child in node:
-                    entries.extend(find_entries(child))
-            return entries
 
         all_entries = find_entries(data)
 
@@ -1563,20 +1563,6 @@ def fetch_from_espn_ncaab(season_year: int) -> List[Dict[str, Any]]:
 
         stats = []
 
-        # Recursive helper to find "entries" regardless of nesting
-        def find_entries(node):
-            entries = []
-            if isinstance(node, dict):
-                if "entries" in node:
-                    entries.extend(node["entries"])
-                for key in ["children", "standings", "groups", "leagues"]:
-                    if key in node:
-                        entries.extend(find_entries(node[key]))
-            elif isinstance(node, list):
-                for child in node:
-                    entries.extend(find_entries(child))
-            return entries
-
         all_entries = find_entries(data)
 
         for entry in all_entries:
@@ -1630,21 +1616,6 @@ def fetch_from_espn_mlb(season_year: int) -> List[Dict[str, Any]]:
         data = resp.json()
 
         stats = []
-        # Recursive helper to find "entries" regardless of nesting (Leagues -> Divisions)
-        def find_entries(node):
-            entries = []
-            if isinstance(node, dict):
-                if "entries" in node:
-                    entries.extend(node["entries"])
-                # Must check ALL children, not just return the first result
-                for key in ["children", "standings", "groups", "leagues"]:
-                    if key in node:
-                        entries.extend(find_entries(node[key]))
-            elif isinstance(node, list):
-                for child in node:
-                    entries.extend(find_entries(child))
-            return entries
-
         all_entries = find_entries(data)
 
         for entry in all_entries:
