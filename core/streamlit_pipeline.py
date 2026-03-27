@@ -365,27 +365,34 @@ def _restore_missing_ncaab_league_priority(df: pd.DataFrame) -> pd.DataFrame:
     if not missing_league.any():
         return out
 
-    # We must exclude NBA matches *before* we apply NCAAB regex heuristics,
+    # We must exclude NBA/NHL matches *before* we apply NCAAB regex heuristics,
     # otherwise Golden State might get labeled NCAAB due to the 'state' token.
     nba_teams = {normalize_team_name(v) for v in NBA_EXACT_MAP.values()}
     nba_exact_keys = {normalize_team_name(k) for k in NBA_EXACT_MAP.keys()}
     nba_full_set = nba_teams.union(nba_exact_keys)
+
+    nhl_teams = {normalize_team_name(v) for v in NHL_EXACT_MAP.values()}
+    nhl_exact_keys = {normalize_team_name(k) for k in NHL_EXACT_MAP.keys()}
+    nhl_full_set = nhl_teams.union(nhl_exact_keys)
+
+    pro_full_set = nba_full_set.union(nhl_full_set)
+
     home_normalized = _string_series(out, "home_team").map(normalize_team_name)
     away_normalized = _string_series(out, "away_team").map(normalize_team_name)
 
-    # Exclude teams that are specifically mapped to NBA but could have college namesakes
+    # Exclude teams that are specifically mapped to NBA/NHL but could have college namesakes
     # unless they are explicitly accompanied by their pro city token.
     # Note: Indiana and Memphis are mapped to NBA by default in the mapper,
     # but we need to verify they aren't actually college teams based on opponent.
 
-    is_nba_mask = home_normalized.isin(nba_full_set) | away_normalized.isin(nba_full_set)
+    is_pro_mask = home_normalized.isin(pro_full_set) | away_normalized.isin(pro_full_set)
 
     keyword_pattern = r"\b(?:" + "|".join(sorted(re.escape(k) for k in _NCAAB_LEAGUE_RECOVERY_KEYWORDS)) + r")\b"
     home_text = _clean_text_placeholders(_string_series(out, "home_team")).str.lower()
     away_text = _clean_text_placeholders(_string_series(out, "away_team")).str.lower()
     keyword_mask = home_text.str.contains(keyword_pattern, regex=True, na=False) | away_text.str.contains(keyword_pattern, regex=True, na=False)
 
-    out.loc[missing_league & keyword_mask & ~is_nba_mask, "league"] = "ncaab"
+    out.loc[missing_league & keyword_mask & ~is_pro_mask, "league"] = "ncaab"
     return out
 
 
@@ -444,9 +451,15 @@ def _preprocess_bet_rows_for_league_bridge(df: pd.DataFrame) -> pd.DataFrame:
     nba_exact_keys = {normalize_team_name(k).lower() for k in NBA_EXACT_MAP.keys()}
     nba_full_set = nba_teams.union(nba_exact_keys)
 
+    nhl_teams = {normalize_team_name(v).lower() for v in NHL_EXACT_MAP.values()}
+    nhl_exact_keys = {normalize_team_name(k).lower() for k in NHL_EXACT_MAP.keys()}
+    nhl_full_set = nhl_teams.union(nhl_exact_keys)
+
+    pro_full_set = nba_full_set.union(nhl_full_set)
+
     home_normalized = _string_series(out, "home_team").map(normalize_team_name).str.lower()
     away_normalized = _string_series(out, "away_team").map(normalize_team_name).str.lower()
-    is_nba_mask = home_normalized.isin(nba_full_set) | away_normalized.isin(nba_full_set)
+    is_pro_mask = home_normalized.isin(pro_full_set) | away_normalized.isin(pro_full_set)
 
     keyword_pattern = r"\b(?:" + "|".join(sorted(re.escape(k) for k in _NCAAB_LEAGUE_RECOVERY_KEYWORDS)) + r")\b"
     home_text = _clean_text_placeholders(_string_series(out, "home_team")).str.lower().str.strip()
@@ -459,7 +472,7 @@ def _preprocess_bet_rows_for_league_bridge(df: pd.DataFrame) -> pd.DataFrame:
             source_text = source_text + " " + _clean_text_placeholders(_string_series(out, src_col)).str.lower()
     source_is_college = source_text.str.contains(r"\bncaa\b|\bncaab\b|\bncaam\b|college", regex=True, na=False)
 
-    out.loc[missing_league & (team_keyword_mask | source_is_college) & ~is_nba_mask, "league"] = "ncaab"
+    out.loc[missing_league & (team_keyword_mask | source_is_college) & ~is_pro_mask, "league"] = "ncaab"
     return out
 
 

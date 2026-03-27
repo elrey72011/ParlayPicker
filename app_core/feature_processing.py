@@ -180,6 +180,20 @@ TEAM_NAME_MAPPING = {
     # NHL: Mapping St. Louis correctly
     "st louis": "ST LOUIS BLUES",
     "st louis blues": "ST LOUIS BLUES",
+
+    # NBA Mappings for `nba_api` (it expects full names)
+    "orlando": "ORLANDO MAGIC",
+    "sacramento": "SACRAMENTO KINGS",
+    "detroit": "DETROIT PISTONS",
+    "new orleans": "NEW ORLEANS PELICANS",
+
+    # NHL Mappings for `nhlpy` (it typically expects full names like "Florida Panthers")
+    "florida": "FLORIDA PANTHERS",
+    "minnesota": "MINNESOTA WILD",
+    "tampa bay": "TAMPA BAY LIGHTNING",
+    "seattle": "SEATTLE KRAKEN",
+    "vancouver": "VANCOUVER CANUCKS",
+    "los angeles": "LOS ANGELES KINGS",
 }
 
 # Manual overrides for team name normalization failures
@@ -286,6 +300,10 @@ MANUAL_TEAM_OVERRIDES = {
     "SOUTHEAST MISSOURI": "SOUTHEAST MISSOURI STATE",
     "SEMO": "SOUTHEAST MISSOURI STATE",
     "SIU EDWARDSVILLE": "SIU EDWARDSVILLE",
+
+    # MLB Pro Mascots
+    "SEATTLE MARINERS": "SEATTLE",
+    "CLEVELAND GUARDIANS": "CLEVELAND",
 
     # Additional NCAAB mascot stripping (common variations that appear in logs)
     "DUKE BLUE DEVILS": "DUKE",
@@ -809,9 +827,12 @@ def robust_normalize_team(name: str, league: Optional[str] = None) -> str:
     # Pre-processing: Handle punctuation and abbreviations before stripping chars
     name_upper = name.upper()
 
-    # Handle "St." / "St " -> "STATE"
-    name_upper = re.sub(r"\bST\.", "STATE", name_upper)
-    name_upper = re.sub(r"\bST\b", "STATE", name_upper) # Standalone ST
+    # Handle "SAINT" / "St." / "St " -> "ST" for standardizing
+    name_upper = re.sub(r"\bSAINT\b", "ST", name_upper)
+    name_upper = re.sub(r"\bST\.", "ST", name_upper)
+    # Important: Do not universally replace "ST" with "STATE" or "ST" here
+    # "NC STATE" is "NC STATE", "SAINT LOUIS" is "ST LOUIS".
+    # We will let "ST" stay "ST" and "STATE" stay "STATE".
 
     # Handle "L.A." / "LA" -> "LOS ANGELES"
     name_upper = re.sub(r"L\.A\.", "LOS ANGELES", name_upper)
@@ -844,29 +865,16 @@ def robust_normalize_team(name: str, league: Optional[str] = None) -> str:
 
     # Handle "E " -> "EASTERN " etc? Maybe too risky.
 
-    # Handle "AM" -> "A&M" reconstruction for specific schools?
-    # Common A&M schools: Texas A&M, Florida A&M, Alabama A&M, Prairie View A&M
-    # normalize_team turned "Texas A&M" -> "TEXAS AM"
-    # We want "TEXAS AM" -> "TEXAS A&M" IF that is what the stats library expects.
-    # cbbpy often uses "Texas A&M".
-    # Let's selectively restore A&M for known cases to match `MANUAL_TEAM_OVERRIDES` keys if they use A&M.
-    # Looking at overrides: "TEXAS AM": "TEXAS AM" (wait, it says "TEXAS A&M": "TEXAS AM")
-    # If the target is "TEXAS AM", then we don't need to add &.
-    # Let's check overrides again.
-    # "TEXAS AM": "TEXAS AM"
-    # "FLORIDA AM": "FLORIDA AM"
-    # So we SHOULD NOT add & back if we map to "AM".
-    # But if stats use "Texas A&M", we might need to change the mapping target or the norm.
-    # The user request said "Centralize and expand...".
-    # Let's assume standardizing to "AM" is safer if we control the map.
-    # But if stats library returns "Texas A&M", `normalize_team` on stats side will produce "TEXAS AM".
-    # So "TEXAS AM" == "TEXAS AM". This should match.
-
     # Remove "AM" replacement if it causes mismatch with normalized stats keys
-    # norm = re.sub(r"\bAM\b", "A&M", norm) <--- REMOVED this line as it likely breaks matching against normalized stats
+    # norm = re.sub(r"\bAM\b", "A&M", norm)
 
     # Standardize "STATE" again just in case "ST" survived
-    norm = re.sub(r"\bST\b", "STATE", norm)
+    # Wait, if we want "ST LOUIS", changing "ST" to "STATE" here breaks it ("STATE LOUIS").
+    # We should only change "ST" to "STATE" if it's preceded by a word (like "APPALACHIAN ST" -> "APPALACHIAN STATE").
+    # But "ST JOHNS" -> "ST JOHNS", not "STATE JOHNS".
+    # A simple heuristic: if "ST" is at the end of the string, it's "STATE".
+    norm = re.sub(r"\bST(?=\s*$)", "STATE", norm)
+    # If "ST" is preceded by a space and is the last word.
 
     # Clean up multiple spaces again just in case
     norm = re.sub(r"\s+", " ", norm).strip()
