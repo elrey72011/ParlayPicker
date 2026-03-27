@@ -153,6 +153,7 @@ for full_name, abbrevs in NCAAB_TEAM_ABBREV_MAP.items():
         ABBREV_TO_FULL_MAP[abbrev.upper()] = full_name
 
 TEAM_SUFFIXES = [
+    # General College/Other
     "Rams", "Wildcats", "Eagles", "Bears", "Tigers", "Bulldogs",
     "Cardinals", "Trojans", "Bruins", "Sun Devils", "Ducks",
     "Huskies", "Cougars", "Spartans", "Wolverines", "Buckeyes",
@@ -165,24 +166,40 @@ TEAM_SUFFIXES = [
     "State", "Tech", "A&M", "International",
     "Falcons", "Golden Flashes", "Zips", "Bulls", "Bobcats", "RedHawks", "Rockets", "Chippewas",
     "Friars", "Red Storm", "Billikens", "Spiders", "Flyers", "Patriots", "Dukes", "Explorers", "Revolutionaries",
-    # NHL / NBA / MLB Pro Mascots
-    "Blues", "Lakers", "Pelicans", "Mariners", "Guardians", "Avalanche",
-    "Lightning", "Kings", "Magic", "Pistons", "Celtics", "Knicks",
-    "Nets", "76ers", "Raptors", "Bulls", "Cavaliers", "Pacers",
-    "Bucks", "Hawks", "Hornets", "Heat", "Timberwolves", "Thunder",
-    "Nuggets", "Jazz", "Trail Blazers", "Suns", "Clippers", "Warriors",
-    "Kings", "Spurs", "Mavericks", "Rockets", "Grizzlies",
-    "Bruins", "Sabres", "Red Wings", "Panthers", "Canadiens",
-    "Senators", "Maple Leafs", "Hurricanes", "Blue Jackets", "Devils",
-    "Islanders", "Rangers", "Flyers", "Penguins", "Capitals",
-    "Coyotes", "Flames", "Oilers", "Canucks", "Golden Knights",
-    "Ducks", "Sharks", "Kraken", "Stars", "Wild", "Predators",
-    "Jets", "Hockey Club",
-    # NFL Pro Mascots
-    "Ravens", "Bengals", "Browns", "Steelers", "Texans", "Colts", "Jaguars", "Titans",
-    "Broncos", "Chiefs", "Raiders", "Chargers", "Cowboys", "Giants", "Eagles", "Commanders",
-    "Football Team", "Bears", "Lions", "Packers", "Vikings", "Falcons", "Panthers", "Saints",
-    "Buccaneers", "Cardinals", "Rams", "49ers", "Seahawks", "Dolphins", "Patriots", "Jets", "Bills"
+
+    # MLB Mascots
+    "Diamondbacks", "Braves", "Orioles", "Red Sox", "Cubs", "White Sox",
+    "Reds", "Guardians", "Rockies", "Tigers", "Astros", "Royals",
+    "Angels", "Dodgers", "Marlins", "Brewers", "Twins", "Mets",
+    "Yankees", "Athletics", "Phillies", "Pirates", "Padres", "Giants",
+    "Mariners", "Cardinals", "Rays", "Rangers", "Blue Jays", "Nationals",
+
+    # NBA Mascots
+    "Hawks", "Celtics", "Nets", "Hornets", "Bulls", "Cavaliers",
+    "Mavericks", "Nuggets", "Pistons", "Warriors", "Rockets", "Pacers",
+    "Clippers", "Lakers", "Grizzlies", "Heat", "Bucks", "Timberwolves",
+    "Pelicans", "Knicks", "Thunder", "Magic", "76ers", "Suns",
+    "Trail Blazers", "Kings", "Spurs", "Raptors", "Jazz", "Wizards",
+
+    # NFL Mascots
+    "Cardinals", "Falcons", "Ravens", "Bills", "Panthers", "Bears",
+    "Bengals", "Browns", "Cowboys", "Broncos", "Lions", "Packers",
+    "Texans", "Colts", "Jaguars", "Chiefs", "Raiders", "Chargers",
+    "Rams", "Dolphins", "Vikings", "Patriots", "Saints", "Giants",
+    "Jets", "Eagles", "Steelers", "49ers", "Seahawks", "Buccaneers",
+    "Titans", "Commanders", "Football Team",
+
+    # NHL Mascots
+    "Ducks", "Bruins", "Sabres", "Flames", "Hurricanes", "Blackhawks",
+    "Avalanche", "Blue Jackets", "Stars", "Red Wings", "Oilers",
+    "Panthers", "Kings", "Wild", "Canadiens", "Predators", "Devils",
+    "Islanders", "Rangers", "Senators", "Flyers", "Penguins", "Sharks",
+    "Kraken", "Blues", "Lightning", "Maple Leafs", "Canucks",
+    "Golden Knights", "Capitals", "Jets", "Hockey Club", "Coyotes",
+
+    # WNBA Mascots
+    "Dream", "Sky", "Sun", "Fever", "Aces", "Sparks", "Lynx",
+    "Liberty", "Mercury", "Storm", "Wings", "Mystics"
 ]
 
 def normalize_team_name(team_name: str) -> str:
