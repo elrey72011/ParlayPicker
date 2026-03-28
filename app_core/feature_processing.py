@@ -1413,8 +1413,17 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
     # Priority: CFBD (Scraper) > ESPN
     merged_stats = {s["team_norm"]: s for s in stats}
     for espn_s in espn_stats:
-        if espn_s["team_norm"] not in merged_stats:
-            merged_stats[espn_s["team_norm"]] = espn_s
+        # Implement a games > 0 check to prefer the more detailed scraper version
+        # Only add ESPN fallback if scraper version doesn't exist, or if scraper version is essentially empty
+        team_norm = espn_s["team_norm"]
+        if team_norm not in merged_stats:
+            merged_stats[team_norm] = espn_s
+        else:
+            # Check if scraper version has 0 games (or wins+losses = 0)
+            existing_s = merged_stats[team_norm]
+            games_played = existing_s.get("wins", 0) + existing_s.get("losses", 0)
+            if games_played == 0:
+                merged_stats[team_norm] = espn_s
 
     final_stats = list(merged_stats.values())
     logger.info(f"Final merged NCAAF stats count: {len(final_stats)}")
@@ -1527,9 +1536,6 @@ def fetch_from_espn_ncaaf(season_year: int) -> List[Dict[str, Any]]:
             losses = float(stat_map.get("L", 0))
             games = wins + losses
 
-            if games == 0 and not stat_map.get("APF") and not stat_map.get("APA"):
-                continue
-
             win_pct = (wins / games) if games > 0 else 0.0
 
             # Resilient Keys: R (MLB), PF (College), PTS (NBA)
@@ -1589,9 +1595,6 @@ def fetch_from_espn_ncaab(season_year: int) -> List[Dict[str, Any]]:
             losses = float(stat_map.get("L", 0))
             games = wins + losses
 
-            if games == 0 and not stat_map.get("APF") and not stat_map.get("APA"):
-                continue
-
             win_pct = (wins / games) if games > 0 else 0.0
 
             # Resilient Keys: R (MLB), PF (College), PTS (NBA)
@@ -1648,6 +1651,8 @@ def fetch_from_espn_mlb(season_year: int) -> List[Dict[str, Any]]:
             wins = float(stat_map.get("W", 0))
             losses = float(stat_map.get("L", 0))
             games = wins + losses
+
+            win_pct = (wins / games) if games > 0 else 0.0
 
             # Resilient Keys: R (MLB), PF (College), PTS (NBA)
             p_for = float(stat_map.get("R", stat_map.get("PF", stat_map.get("PTS", 0))))
@@ -1758,8 +1763,22 @@ def fetch_ncaab_stats(season_year: int) -> List[Dict[str, Any]]:
     # Priority: CBBpy (Scraper) > ESPN
     merged_stats = {s["team_norm"]: s for s in stats}
     for espn_s in espn_stats:
-        if espn_s["team_norm"] not in merged_stats:
-            merged_stats[espn_s["team_norm"]] = espn_s
+        # Implement a games > 0 check to prefer the more detailed scraper version
+        # Only add ESPN fallback if scraper version doesn't exist, or if scraper version is essentially empty
+        team_norm = espn_s["team_norm"]
+        if team_norm not in merged_stats:
+            merged_stats[team_norm] = espn_s
+        else:
+            # Check if scraper version has 0 games (or wins+losses = 0)
+            existing_s = merged_stats[team_norm]
+            games_played = existing_s.get("wins", 0) + existing_s.get("losses", 0)
+            # if we didn't track wins/losses in scraper dict, we can assume it's good if we matched, but
+            # cbbpy returns empty when `games == 0` earlier in the loop anyway.
+            # but if it was added without games_played, we check here.
+            # since `cbbpy` doesn't output `wins` / `losses` raw keys but just `win_pct`,
+            # we should also check if games wasn't added
+            if games_played == 0 and "win_pct" in existing_s and existing_s.get("win_pct") == 0.0 and existing_s.get("points_per_game") == 0.0:
+                 merged_stats[team_norm] = espn_s
 
     final_stats = list(merged_stats.values())
     logger.info(f"Final merged NCAAB stats count: {len(final_stats)}")
@@ -1785,7 +1804,7 @@ def fetch_team_stats(api_clients: Dict[str, Any], season_year: Optional[int] = N
             season_year -= 1
 
     # Get list of leagues we care about from keys
-    leagues = list(api_clients.keys())
+    # leagues = list(api_clients.keys()) # unused, intentionally unconditional fetching
 
     # Dispatch Logic
     # Unconditionally fetch all leagues to ensure caches are populated
