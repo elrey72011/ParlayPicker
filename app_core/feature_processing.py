@@ -1530,21 +1530,16 @@ def fetch_from_espn_ncaaf(season_year: int) -> List[Dict[str, Any]]:
             # Resilient stat extraction: Search keywords in both name and abbreviation
             wins, losses, gp, p_for, p_against = 0.0, 0.0, 0.0, 0.0, 0.0
             p_avg, d_avg = 0.0, 0.0
-
             for s in entry.get("stats", []):
-                nm = str(s.get("name", "")).lower()
-                ab = str(s.get("abbreviation", "")).lower()
+                nm, ab = str(s.get("name", "")).lower(), str(s.get("abbreviation", "")).lower()
                 val = float(s.get("value", 0))
-
                 if "wins" in nm or ab == "w": wins = val
                 elif "losses" in nm or ab == "l": losses = val
                 elif "gamesplayed" in nm or ab == "gp": gp = val
-                elif any(x in nm for x in ["pointsfor", "runsscored", "points"]) or ab in ["r", "pf", "pts", "rs"]: p_for = val
+                elif any(x in nm for x in ["pointsfor", "runs"]) or ab in ["r", "pf"]: p_for = val
                 elif any(x in nm for x in ["pointsagainst", "runsagainst"]) or ab in ["ra", "pa"]: p_against = val
                 elif nm in ["avg", "ppg", "apf"] or ab == "apf": p_avg = val
                 elif nm in ["apa", "opp ppg"] or ab == "apa": d_avg = val
-
-            # Heuristic Logic for PPG/Win%
             games = gp if gp > 0 else (wins + losses)
             ppg = p_avg if p_avg > 0 else (p_for / games if games > 0 else 0.0)
             oppg = d_avg if d_avg > 0 else (p_against / games if games > 0 else 0.0)
@@ -1595,21 +1590,16 @@ def fetch_from_espn_ncaab(season_year: int) -> List[Dict[str, Any]]:
             # Resilient stat extraction: Search keywords in both name and abbreviation
             wins, losses, gp, p_for, p_against = 0.0, 0.0, 0.0, 0.0, 0.0
             p_avg, d_avg = 0.0, 0.0
-
             for s in entry.get("stats", []):
-                nm = str(s.get("name", "")).lower()
-                ab = str(s.get("abbreviation", "")).lower()
+                nm, ab = str(s.get("name", "")).lower(), str(s.get("abbreviation", "")).lower()
                 val = float(s.get("value", 0))
-
                 if "wins" in nm or ab == "w": wins = val
                 elif "losses" in nm or ab == "l": losses = val
                 elif "gamesplayed" in nm or ab == "gp": gp = val
-                elif any(x in nm for x in ["pointsfor", "runsscored", "points"]) or ab in ["r", "pf", "pts", "rs"]: p_for = val
+                elif any(x in nm for x in ["pointsfor", "runs"]) or ab in ["r", "pf"]: p_for = val
                 elif any(x in nm for x in ["pointsagainst", "runsagainst"]) or ab in ["ra", "pa"]: p_against = val
                 elif nm in ["avg", "ppg", "apf"] or ab == "apf": p_avg = val
                 elif nm in ["apa", "opp ppg"] or ab == "apa": d_avg = val
-
-            # Heuristic Logic for PPG/Win%
             games = gp if gp > 0 else (wins + losses)
             ppg = p_avg if p_avg > 0 else (p_for / games if games > 0 else 0.0)
             oppg = d_avg if d_avg > 0 else (p_against / games if games > 0 else 0.0)
@@ -1658,21 +1648,16 @@ def fetch_from_espn_mlb(season_year: int) -> List[Dict[str, Any]]:
             # Resilient stat extraction: Search keywords in both name and abbreviation
             wins, losses, gp, p_for, p_against = 0.0, 0.0, 0.0, 0.0, 0.0
             p_avg, d_avg = 0.0, 0.0
-
             for s in entry.get("stats", []):
-                nm = str(s.get("name", "")).lower()
-                ab = str(s.get("abbreviation", "")).lower()
+                nm, ab = str(s.get("name", "")).lower(), str(s.get("abbreviation", "")).lower()
                 val = float(s.get("value", 0))
-
                 if "wins" in nm or ab == "w": wins = val
                 elif "losses" in nm or ab == "l": losses = val
                 elif "gamesplayed" in nm or ab == "gp": gp = val
-                elif any(x in nm for x in ["pointsfor", "runsscored", "points"]) or ab in ["r", "pf", "pts", "rs"]: p_for = val
+                elif any(x in nm for x in ["pointsfor", "runs"]) or ab in ["r", "pf"]: p_for = val
                 elif any(x in nm for x in ["pointsagainst", "runsagainst"]) or ab in ["ra", "pa"]: p_against = val
                 elif nm in ["avg", "ppg", "apf"] or ab == "apf": p_avg = val
                 elif nm in ["apa", "opp ppg"] or ab == "apa": d_avg = val
-
-            # Heuristic Logic for PPG/Win%
             games = gp if gp > 0 else (wins + losses)
             ppg = p_avg if p_avg > 0 else (p_for / games if games > 0 else 0.0)
             oppg = d_avg if d_avg > 0 else (p_against / games if games > 0 else 0.0)
