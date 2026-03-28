@@ -1526,6 +1526,7 @@ def fetch_from_espn_ncaaf(season_year: int) -> List[Dict[str, Any]]:
             team_name = team_info.get("displayName")
             if not team_name:
                 continue
+            team_norm = robust_normalize_team(team_name, "NCAAF")
 
             # Resilient stat extraction: Search keywords in both name and abbreviation
             wins, losses, gp, p_for, p_against = 0.0, 0.0, 0.0, 0.0, 0.0
@@ -1546,7 +1547,7 @@ def fetch_from_espn_ncaaf(season_year: int) -> List[Dict[str, Any]]:
             win_pct = (wins / games) if games > 0 else 0.5
 
             stats.append({
-                "team_norm": robust_normalize_team(team_name, league="NCAAF"),
+                "team_norm": team_norm,
                 "league_key": "NCAAF",
                 "win_pct": win_pct,
                 "home_win_pct": win_pct, # Approx
@@ -1586,6 +1587,7 @@ def fetch_from_espn_ncaab(season_year: int) -> List[Dict[str, Any]]:
             team_name = team_info.get("displayName")
             if not team_name:
                 continue
+            team_norm = robust_normalize_team(team_name, "NCAAB")
 
             # Resilient stat extraction: Search keywords in both name and abbreviation
             wins, losses, gp, p_for, p_against = 0.0, 0.0, 0.0, 0.0, 0.0
@@ -1606,7 +1608,7 @@ def fetch_from_espn_ncaab(season_year: int) -> List[Dict[str, Any]]:
             win_pct = (wins / games) if games > 0 else 0.5
 
             stats.append({
-                "team_norm": robust_normalize_team(team_name, league="NCAAB"),
+                "team_norm": team_norm,
                 "league_key": "NCAAB",
                 "win_pct": win_pct,
                 "home_win_pct": win_pct, # Approx
@@ -1644,6 +1646,7 @@ def fetch_from_espn_mlb(season_year: int) -> List[Dict[str, Any]]:
             team_info = entry.get("team", {})
             team_name = team_info.get("displayName")
             if not team_name: continue
+            team_norm = robust_normalize_team(team_name, "MLB")
 
             # Resilient stat extraction: Search keywords in both name and abbreviation
             wins, losses, gp, p_for, p_against = 0.0, 0.0, 0.0, 0.0, 0.0
@@ -1664,7 +1667,7 @@ def fetch_from_espn_mlb(season_year: int) -> List[Dict[str, Any]]:
             win_pct = (wins / games) if games > 0 else 0.5
 
             stats.append({
-                "team_norm": robust_normalize_team(team_name, league="MLB"),
+                "team_norm": team_norm,
                 "league_key": "MLB",
                 "win_pct": win_pct,
                 "home_win_pct": win_pct,
