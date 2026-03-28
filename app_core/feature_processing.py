@@ -1527,37 +1527,40 @@ def fetch_from_espn_ncaaf(season_year: int) -> List[Dict[str, Any]]:
             if not team_name:
                 continue
 
-            # Use abbreviation and name for consistent cross-sport parsing
-            stat_list = entry.get("stats", [])
-            stat_map = {str(s.get("abbreviation", s.get("name", ""))).upper(): s.get("value") for s in stat_list}
+            # Resilient stat extraction: Search keywords in both name and abbreviation
+            wins, losses, gp, p_for, p_against = 0.0, 0.0, 0.0, 0.0, 0.0
+            p_avg, d_avg = 0.0, 0.0
 
-            wins = float(stat_map.get("W", 0))
-            losses = float(stat_map.get("L", 0))
-            games = float(stat_map.get("GP", wins + losses))
+            for s in entry.get("stats", []):
+                nm = str(s.get("name", "")).lower()
+                ab = str(s.get("abbreviation", "")).lower()
+                val = float(s.get("value", 0))
 
-            win_pct = (wins / games) if games > 0 else 0.0
+                if "wins" in nm or ab == "w": wins = val
+                elif "losses" in nm or ab == "l": losses = val
+                elif "gamesplayed" in nm or ab == "gp": gp = val
+                elif any(x in nm for x in ["pointsfor", "runsscored", "points"]) or ab in ["r", "pf", "pts", "rs"]: p_for = val
+                elif any(x in nm for x in ["pointsagainst", "runsagainst"]) or ab in ["ra", "pa"]: p_against = val
+                elif nm in ["avg", "ppg", "apf"] or ab == "apf": p_avg = val
+                elif nm in ["apa", "opp ppg"] or ab == "apa": d_avg = val
 
-            # Resilient Scoring: 'R' (MLB), 'PF' (College), 'PTS' (NBA), 'AVG' (Direct Average)
-            p_avg = float(stat_map.get("AVG", stat_map.get("PPG", stat_map.get("APF", 0))))
-            p_total = float(stat_map.get("R", stat_map.get("PF", stat_map.get("PTS", 0))))
-            ppg = p_avg if p_avg > 0 else (p_total / games if games > 0 else 0.0)
-
-            # Resilient Defense: 'RA' (MLB), 'PA' (College), 'OPP_PTS', 'APA' (Avg Points Allowed)
-            d_avg = float(stat_map.get("APA", stat_map.get("OPP PPG", 0)))
-            d_total = float(stat_map.get("RA", stat_map.get("PA", stat_map.get("OPP PTS", 0))))
-            oppg = d_avg if d_avg > 0 else (d_total / games if games > 0 else 0.0)
+            # Heuristic Logic for PPG/Win%
+            games = gp if gp > 0 else (wins + losses)
+            ppg = p_avg if p_avg > 0 else (p_for / games if games > 0 else 0.0)
+            oppg = d_avg if d_avg > 0 else (p_against / games if games > 0 else 0.0)
+            win_pct = (wins / games) if games > 0 else 0.5
 
             stats.append({
                 "team_norm": robust_normalize_team(team_name, league="NCAAF"),
                 "league_key": "NCAAF",
-                "win_pct": float(win_pct),
-                "home_win_pct": float(win_pct), # Approx
-                "away_win_pct": float(win_pct), # Approx
-                "points_per_game": float(ppg),
-                "points_allowed_per_game": float(oppg),
+                "win_pct": win_pct,
+                "home_win_pct": win_pct, # Approx
+                "away_win_pct": win_pct, # Approx
+                "points_per_game": ppg,
+                "points_allowed_per_game": oppg,
                 "turnovers": 0.0, # Not available in standings summary
                 "streak": 0.0,
-                "last5_win_pct": float(win_pct),
+                "last5_win_pct": win_pct,
                 "source": "ESPN_FALLBACK"
             })
 
@@ -1589,25 +1592,28 @@ def fetch_from_espn_ncaab(season_year: int) -> List[Dict[str, Any]]:
             if not team_name:
                 continue
 
-            # Use abbreviation and name for consistent cross-sport parsing
-            stat_list = entry.get("stats", [])
-            stat_map = {str(s.get("abbreviation", s.get("name", ""))).upper(): s.get("value") for s in stat_list}
+            # Resilient stat extraction: Search keywords in both name and abbreviation
+            wins, losses, gp, p_for, p_against = 0.0, 0.0, 0.0, 0.0, 0.0
+            p_avg, d_avg = 0.0, 0.0
 
-            wins = float(stat_map.get("W", 0))
-            losses = float(stat_map.get("L", 0))
-            games = float(stat_map.get("GP", wins + losses))
+            for s in entry.get("stats", []):
+                nm = str(s.get("name", "")).lower()
+                ab = str(s.get("abbreviation", "")).lower()
+                val = float(s.get("value", 0))
 
-            win_pct = (wins / games) if games > 0 else 0.0
+                if "wins" in nm or ab == "w": wins = val
+                elif "losses" in nm or ab == "l": losses = val
+                elif "gamesplayed" in nm or ab == "gp": gp = val
+                elif any(x in nm for x in ["pointsfor", "runsscored", "points"]) or ab in ["r", "pf", "pts", "rs"]: p_for = val
+                elif any(x in nm for x in ["pointsagainst", "runsagainst"]) or ab in ["ra", "pa"]: p_against = val
+                elif nm in ["avg", "ppg", "apf"] or ab == "apf": p_avg = val
+                elif nm in ["apa", "opp ppg"] or ab == "apa": d_avg = val
 
-            # Resilient Scoring: 'R' (MLB), 'PF' (College), 'PTS' (NBA), 'AVG' (Direct Average)
-            p_avg = float(stat_map.get("AVG", stat_map.get("PPG", stat_map.get("APF", 0))))
-            p_total = float(stat_map.get("R", stat_map.get("PF", stat_map.get("PTS", 0))))
-            ppg = p_avg if p_avg > 0 else (p_total / games if games > 0 else 0.0)
-
-            # Resilient Defense: 'RA' (MLB), 'PA' (College), 'OPP_PTS', 'APA' (Avg Points Allowed)
-            d_avg = float(stat_map.get("APA", stat_map.get("OPP PPG", 0)))
-            d_total = float(stat_map.get("RA", stat_map.get("PA", stat_map.get("OPP PTS", 0))))
-            oppg = d_avg if d_avg > 0 else (d_total / games if games > 0 else 0.0)
+            # Heuristic Logic for PPG/Win%
+            games = gp if gp > 0 else (wins + losses)
+            ppg = p_avg if p_avg > 0 else (p_for / games if games > 0 else 0.0)
+            oppg = d_avg if d_avg > 0 else (p_against / games if games > 0 else 0.0)
+            win_pct = (wins / games) if games > 0 else 0.5
 
             stats.append({
                 "team_norm": robust_normalize_team(team_name, league="NCAAB"),
@@ -1649,37 +1655,40 @@ def fetch_from_espn_mlb(season_year: int) -> List[Dict[str, Any]]:
             team_name = team_info.get("displayName")
             if not team_name: continue
 
-            # Use abbreviation and name for consistent cross-sport parsing
-            stat_list = entry.get("stats", [])
-            stat_map = {str(s.get("abbreviation", s.get("name", ""))).upper(): s.get("value") for s in stat_list}
+            # Resilient stat extraction: Search keywords in both name and abbreviation
+            wins, losses, gp, p_for, p_against = 0.0, 0.0, 0.0, 0.0, 0.0
+            p_avg, d_avg = 0.0, 0.0
 
-            wins = float(stat_map.get("W", 0))
-            losses = float(stat_map.get("L", 0))
-            games = float(stat_map.get("GP", wins + losses))
+            for s in entry.get("stats", []):
+                nm = str(s.get("name", "")).lower()
+                ab = str(s.get("abbreviation", "")).lower()
+                val = float(s.get("value", 0))
 
-            win_pct = (wins / games) if games > 0 else 0.0
+                if "wins" in nm or ab == "w": wins = val
+                elif "losses" in nm or ab == "l": losses = val
+                elif "gamesplayed" in nm or ab == "gp": gp = val
+                elif any(x in nm for x in ["pointsfor", "runsscored", "points"]) or ab in ["r", "pf", "pts", "rs"]: p_for = val
+                elif any(x in nm for x in ["pointsagainst", "runsagainst"]) or ab in ["ra", "pa"]: p_against = val
+                elif nm in ["avg", "ppg", "apf"] or ab == "apf": p_avg = val
+                elif nm in ["apa", "opp ppg"] or ab == "apa": d_avg = val
 
-            # Resilient Scoring: 'R' (MLB), 'PF' (College), 'PTS' (NBA), 'AVG' (Direct Average)
-            p_avg = float(stat_map.get("AVG", stat_map.get("PPG", stat_map.get("APF", 0))))
-            p_total = float(stat_map.get("R", stat_map.get("PF", stat_map.get("PTS", 0))))
-            ppg = p_avg if p_avg > 0 else (p_total / games if games > 0 else 0.0)
-
-            # Resilient Defense: 'RA' (MLB), 'PA' (College), 'OPP_PTS', 'APA' (Avg Points Allowed)
-            d_avg = float(stat_map.get("APA", stat_map.get("OPP PPG", 0)))
-            d_total = float(stat_map.get("RA", stat_map.get("PA", stat_map.get("OPP PTS", 0))))
-            oppg = d_avg if d_avg > 0 else (d_total / games if games > 0 else 0.0)
+            # Heuristic Logic for PPG/Win%
+            games = gp if gp > 0 else (wins + losses)
+            ppg = p_avg if p_avg > 0 else (p_for / games if games > 0 else 0.0)
+            oppg = d_avg if d_avg > 0 else (p_against / games if games > 0 else 0.0)
+            win_pct = (wins / games) if games > 0 else 0.5
 
             stats.append({
                 "team_norm": robust_normalize_team(team_name, league="MLB"),
                 "league_key": "MLB",
-                "win_pct": (wins / games) if games > 0 else 0.5,
-                "home_win_pct": (wins / games) if games > 0 else 0.5,
-                "away_win_pct": (wins / games) if games > 0 else 0.5,
+                "win_pct": win_pct,
+                "home_win_pct": win_pct,
+                "away_win_pct": win_pct,
                 "points_per_game": ppg,
                 "points_allowed_per_game": oppg,
                 "turnovers": 0.0,
                 "streak": 0.0,
-                "last5_win_pct": (wins / games) if games > 0 else 0.5,
+                "last5_win_pct": win_pct,
                 "source": "ESPN"
             })
 
