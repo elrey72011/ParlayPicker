@@ -937,6 +937,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         "kalshi_market_title",
         "kalshi_event_ticker",
         "kalshi_market_ticker",
+        "kalshi_line_diff",
     ]:
         if col not in out.columns:
             out[col] = pd.NA
