@@ -1566,12 +1566,14 @@ def _apply_triple_filter_ranking(df: pd.DataFrame) -> pd.DataFrame:
     return final_df
 
 def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
+    logger.info(f"BEST PICKS AUDIT: Received analysis_df with {len(analysis_df)} rows")
     if analysis_df is None or analysis_df.empty:
         return pd.DataFrame(columns=BEST_PICK_COLUMNS)
     if "market_type" not in analysis_df.columns:
         raise ValueError("analysis_df missing market_type before best-pick construction")
 
     pool = analysis_df[_string_series(analysis_df, "market_type").isin(list(VALID_MARKETS))].copy()
+    logger.info(f"BEST PICKS AUDIT: Rows after VALID_MARKETS filter: {len(pool)}")
     if pool.empty:
         return pd.DataFrame(columns=BEST_PICK_COLUMNS)
 
@@ -1591,6 +1593,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
 
     game_key_present = _clean_text_placeholders(_string_series(pool, "game_key")).str.len().gt(0) if "game_key" in pool.columns else pd.Series([False] * len(pool), index=pool.index)
     pool = pool[pool["has_identity"] | game_key_present].copy()
+    logger.info(f"BEST PICKS AUDIT: Rows after identity/game_key filter: {len(pool)}")
     if pool.empty:
         return pd.DataFrame(columns=BEST_PICK_COLUMNS)
 
@@ -1617,6 +1620,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
 
     # 1. Add the ranking metadata
     pool = _apply_triple_filter_ranking(pool)
+    logger.info(f"BEST PICKS AUDIT: Rows passed through Triple Filter Ranking: {len(pool)}")
 
     # 2. Create the temporary sort column for EV
     pool["expected_value_sort"] = pd.to_numeric(pool["expected_value"], errors="coerce").fillna(-999)
@@ -1630,6 +1634,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
 
     # 4. Keep the best pick for each game
     best = pool.drop_duplicates(subset=["matchup_id"], keep="first").copy()
+    logger.info(f"BEST PICKS AUDIT: Rows after 'one-per-game' drop_duplicates: {len(best)} (started with {len(pool)})")
+    logger.info("BEST PICKS AUDIT: IMPORTANT - The one-per-game logic drops all but the highest-EV pick per game (e.g. discards the other side and the total).")
 
     # Phase 5: Enforce Thresholds
     # MIN_EDGE_THRESHOLD of 0.01 for high-liquidity markets.
@@ -1644,8 +1650,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
 
     # We must NOT filter out non-qualifying picks from the output to ensure 1:1 parity between games and picks
     # best = best[valid_edge_mask & valid_ev_mask].copy()
+    logger.info(f"BEST PICKS AUDIT: Non-qualifying picks (edge < 0.01 or EV < 0.005) left intact: {(~valid_edge_mask | ~valid_ev_mask).sum()}")
 
     total_games = int(pool["matchup_id"].nunique(dropna=False))
+    logger.info(f"PIPELINE AUDIT: [9/9] Rows surviving into best-picks ranking/export: {len(best)}")
     if len(best) != total_games:
         logger.warning(
             "Best-pick validation mismatch: selected_rows=%s total_games=%s",
@@ -1970,8 +1978,7 @@ def run_analysis_pipeline(
 
     # Primary ingestion baseline: master_slate (from Odds API) is the master slate frame.
     merged = master_slate.copy()
-    print('master_slate len:', len(master_slate))
-    logger.info(f"PIPELINE TRACE: master_slate initialized with {len(merged)} rows.")
+    logger.info(f"PIPELINE AUDIT: [1/9] Total raw rows loaded into analysis (master_slate initialized): {len(merged)}")
 
     # 3. Invert the Merge (Odds API is Base, TheOver is Enrichment)
     if not theover_rows.empty and not merged.empty:
@@ -2177,7 +2184,7 @@ def run_analysis_pipeline(
     merged["market_probability"] = novig_midpoint.where(novig_midpoint.notna(), fallback_market_probability)
 
     # Mandatory Sanitization Layer
-    logger.info(f"PIPELINE TRACE: Rows before sanitization: {len(merged)}")
+    logger.info(f"PIPELINE AUDIT: [2/9] Rows before sanitization: {len(merged)}")
     if not merged.empty:
         # Patch pathological/synthetic odds (e.g., -99900)
         valid_odds_mask = merged["odds_american"].isna() | ((merged["odds_american"] >= -10000) & (merged["odds_american"] <= 10000))
@@ -2186,11 +2193,17 @@ def run_analysis_pipeline(
         valid_prob_mask = merged["market_probability"].isna() | ((merged["market_probability"] >= 0.05) & (merged["market_probability"] <= 0.95))
 
         dropped = len(merged) - (valid_odds_mask & valid_prob_mask).sum()
+        logger.info(f"PIPELINE AUDIT: [3/9] Rows patched by sanitization: {dropped}")
+        # Not dropping, we patch instead.
+        logger.info(f"PIPELINE AUDIT: [4/9] Rows dropped or excluded after sanitization: 0")
         if dropped > 0:
             logger.warning(f"Sanitization layer patched {dropped} rows with extreme/synthetic lines instead of dropping.")
             merged.loc[~valid_odds_mask, "odds_american"] = -110.0
             merged.loc[~valid_odds_mask, "odds_source"] = "fallback_novig"
             merged.loc[~valid_prob_mask, "market_probability"] = 0.5238
+            merged.loc[~valid_odds_mask | ~valid_prob_mask, "sanitized_value"] = True
+        if "sanitized_value" not in merged.columns:
+            merged["sanitized_value"] = False
 
     merged["spread"] = pd.to_numeric(merged.get("spread_line"), errors="coerce")
     merged["total"] = pd.to_numeric(merged.get("total_line"), errors="coerce")
@@ -2219,6 +2232,7 @@ def run_analysis_pipeline(
             needs_prediction = pd.Series([True] * len(merged), index=merged.index)
             merged["ml_probability"] = pd.NA
 
+            logger.info(f"PIPELINE AUDIT: [5/9] Rows eligible for ML (needs_prediction mask): {needs_prediction.sum()}")
             if needs_prediction.any():
                 merge_identity_keys = ["league", "home_team", "away_team", "game_date"]
                 merged = _normalize_merge_keys(merged, merge_identity_keys)
@@ -2266,9 +2280,9 @@ def run_analysis_pipeline(
                 ml_model_actually_loaded = not getattr(engine, "use_fallback", True)
 
                 # predict_batch expects a DataFrame, returns List[float]
-                logger.info(f"PIPELINE TRACE: Sending {len(enriched_for_prediction)} rows into predict_batch.")
+                logger.info(f"PIPELINE AUDIT: [6/9] Rows actually sent into predict_batch: {len(enriched_for_prediction)}")
                 predictions_list = engine.predict_batch(enriched_for_prediction)
-                logger.info(f"PIPELINE TRACE: Received {len(predictions_list)} predictions from predict_batch.")
+                logger.info(f"PIPELINE AUDIT: [7/9] Rows returned from predict_batch: {len(predictions_list)}")
 
                 # Extra safeguard for assignment back to merged
                 num_needed = needs_prediction.sum()
@@ -2286,7 +2300,7 @@ def run_analysis_pipeline(
                     index=merged[needs_prediction].index,
                     dtype="float64"
                 )
-                logger.info(f"PIPELINE TRACE: Successfully merged {len(predictions_list)} predictions back into master slate.")
+                logger.info(f"PIPELINE AUDIT: [8/9] Rows successfully merged back into the analysis dataframe: {len(predictions_list)}")
 
                 # Assign used_stale_features flag
                 if hasattr(engine, 'last_batch_used_stale_features'):
