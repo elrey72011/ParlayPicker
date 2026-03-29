@@ -22,42 +22,52 @@ import math
 _FALLBACK_LOG_COUNT = 0
 _FALLBACK_LOG_LIMIT = 15  # max number of fallback logs to emit
 
+logger = logging.getLogger(__name__)
+
+# Startup diagnostic logging
+logger.info("Initializing app_core.feature_processing: Checking live stats dependencies...")
+
 try:
     from nba_api.stats.endpoints import leaguedashteamstats
+    logger.info("✅ nba_api loaded successfully.")
 except ImportError:
     leaguedashteamstats = None
-    warnings.warn("nba_api not installed. NBA stats fetching will fail.")
+    logger.error("❌ nba_api not installed. NBA stats fetching will fail.")
 
 try:
     import nfl_data_py as nfl
+    logger.info("✅ nfl_data_py loaded successfully.")
 except ImportError:
     nfl = None
-    warnings.warn("nfl_data_py not installed. NFL stats fetching will fail.")
+    logger.error("❌ nfl_data_py not installed. NFL stats fetching will fail.")
 
 try:
     import cfbd
+    logger.info("✅ cfbd loaded successfully.")
 except ImportError:
     cfbd = None
-    warnings.warn("cfbd not installed. NCAAF stats fetching will fail.")
+    logger.error("❌ cfbd not installed. NCAAF stats fetching will fail.")
 
 try:
     from nhlpy import NHLClient
+    logger.info("✅ nhlpy loaded successfully.")
 except ImportError:
     NHLClient = None
-    warnings.warn("nhl-api-py not installed. NHL stats fetching will fail.")
+    logger.error("❌ nhlpy not installed. NHL stats fetching will fail.")
 
 try:
     import cbbpy.mens_scraper as cbb_s
+    logger.info("✅ cbbpy loaded successfully.")
 except ImportError:
     cbb_s = None
-    warnings.warn("CBBpy not installed. NCAAB stats fetching will fail.")
+    logger.error("❌ CBBpy not installed. NCAAB stats fetching will fail.")
 
 try:
     import rapidfuzz
     from rapidfuzz import process, fuzz
 except ImportError:
     rapidfuzz = None
-    warnings.warn("rapidfuzz not installed. Fuzzy matching will be degraded.")
+    logger.warning("rapidfuzz not installed. Fuzzy matching will be degraded.")
 
 # Streamlit secrets access for API keys
 try:
@@ -88,8 +98,6 @@ if st is None or not hasattr(st, "cache_data"):
 
 from app_core.team_name_matcher import TeamNameMatcher
 from app_core.prediction_engine import VERTEX_FEATURE_COLUMNS
-
-logger = logging.getLogger(__name__)
 
 # Config: Set to True to skip stats API calls on Free Tier plans
 # (Now applies mainly if keys are missing or libs are missing)
@@ -2372,6 +2380,30 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     
     # 6. Map Remaining Features (Existing) using safe_numeric_fill
     
+    # Add diagnostic tracking for fallback rows to trace exactly which features failed
+    if combined_fallback.any():
+        fallback_indices = df.index[combined_fallback]
+        _fallback_tracked_count = 0
+        for idx in fallback_indices:
+            if _fallback_tracked_count < 20: # Log first 20 failure rows for debugging
+                try:
+                    league_str = df.loc[idx, league_col] if league_col else "Unknown"
+                    h_team = df.loc[idx, home_col]
+                    a_team = df.loc[idx, away_col]
+                    h_norm = home_norm.loc[idx]
+                    a_norm = away_norm.loc[idx]
+                    h_matched = home_matched_names.loc[idx]
+                    a_matched = away_matched_names.loc[idx]
+
+                    h_stat = f"MISSING (Tried '{h_norm}')" if bool(home_fallback.loc[idx]) else f"OK ('{h_matched}')"
+                    a_stat = f"MISSING (Tried '{a_norm}')" if bool(away_fallback.loc[idx]) else f"OK ('{a_matched}')"
+                    logger.warning(f"DEBUG Stats Enrichment Failed: {league_str} {h_team} -> {h_stat} vs {a_team} -> {a_stat}")
+                except Exception:
+                    pass
+                _fallback_tracked_count += 1
+            else:
+                break
+
     # Identify implied probability column
     imp_col = next((c for c in df.columns if str(c).lower() in ['implied_prob', 'implied_home_prob', 'implied_prob_home']), None)
 
