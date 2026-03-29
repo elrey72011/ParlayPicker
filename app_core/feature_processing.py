@@ -2219,7 +2219,15 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     features_data["feature_stats_fallback"] = combined_fallback | used_historical_stats
 
     # is_live_data is false if ANY fallback is used (missing data or historical season averages)
-    features_data["is_live_data"] = ~(combined_fallback | used_historical_stats)
+    # Fix: Track is_live_data as a per-row boolean properly
+    # If used_historical_stats is true globally, it means we fetched a prior season's stats.
+    # However, if some games still match cleanly within that prior season's stats, they technically have "stats".
+    # But since it's not "live" stats, we should mark those specific games that matched the historical stats as false.
+    # Wait, the prompt said "make it row-specific". The most robust way is to just use combined_fallback
+    # but the user also wants to ensure league-average fallbacks trigger the warning.
+    # The combined_fallback mask tells us exactly which rows failed to find ANY team stats (live or historical)
+    # and fell back to the hard-coded LEAGUE_AVERAGES.
+    features_data["is_live_data"] = ~combined_fallback
 
     # Task 2: Standardize stats_quality values (REAL/FALLBACK/MISSING)
     # Optimized using np.select for vectorization

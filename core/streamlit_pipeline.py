@@ -2653,14 +2653,33 @@ def run_analysis_pipeline(
                     drop_cols = ['prob_bucket', 'generic_market', 'market_type_cal', 'bucket', 'empirical_win_rate']
                     analysis_df = analysis_df.drop(columns=[c for c in drop_cols if c in analysis_df.columns], errors='ignore')
                 else:
-                    analysis_df['Conviction_Score'] = pd.NA
+                    # Deterministic fallback Conviction Score
+                    # If calibration is missing, calculate based on raw prob + EV
+                    prob_series = analysis_df.get('calibrated_probability', analysis_df.get('ml_probability', pd.Series(0.5, index=analysis_df.index)))
+                    ev_series = analysis_df.get('expected_value', pd.Series(0.0, index=analysis_df.index))
+                    current_prob = pd.to_numeric(prob_series, errors='coerce').fillna(0.5)
+                    ev = pd.to_numeric(ev_series, errors='coerce').fillna(0.0)
+                    analysis_df['Conviction_Score'] = 0.5 + (current_prob - 0.5).abs() + (ev * 2.0).clip(-0.2, 0.2)
+                    analysis_df['Conviction_Score'] = analysis_df['Conviction_Score'].clip(0.01, 0.99)
                     analysis_df = analysis_df.drop(columns=['generic_market'], errors='ignore')
             else:
-                analysis_df['Conviction_Score'] = pd.NA
+                # Deterministic fallback Conviction Score
+                prob_series = analysis_df.get('calibrated_probability', analysis_df.get('ml_probability', pd.Series(0.5, index=analysis_df.index)))
+                ev_series = analysis_df.get('expected_value', pd.Series(0.0, index=analysis_df.index))
+                current_prob = pd.to_numeric(prob_series, errors='coerce').fillna(0.5)
+                ev = pd.to_numeric(ev_series, errors='coerce').fillna(0.0)
+                analysis_df['Conviction_Score'] = 0.5 + (current_prob - 0.5).abs() + (ev * 2.0).clip(-0.2, 0.2)
+                analysis_df['Conviction_Score'] = analysis_df['Conviction_Score'].clip(0.01, 0.99)
                 analysis_df = analysis_df.drop(columns=['generic_market'], errors='ignore')
         except Exception as e:
             logger.warning(f"Failed to generate calibration metrics: {e}")
-            analysis_df['Conviction_Score'] = pd.NA
+            # Deterministic fallback Conviction Score
+            prob_series = analysis_df.get('calibrated_probability', analysis_df.get('ml_probability', pd.Series(0.5, index=analysis_df.index)))
+            ev_series = analysis_df.get('expected_value', pd.Series(0.0, index=analysis_df.index))
+            current_prob = pd.to_numeric(prob_series, errors='coerce').fillna(0.5)
+            ev = pd.to_numeric(ev_series, errors='coerce').fillna(0.0)
+            analysis_df['Conviction_Score'] = 0.5 + (current_prob - 0.5).abs() + (ev * 2.0).clip(-0.2, 0.2)
+            analysis_df['Conviction_Score'] = analysis_df['Conviction_Score'].clip(0.01, 0.99)
             analysis_df = analysis_df.drop(columns=['generic_market'], errors='ignore')
 
     return (analysis_df, best_picks_df, diagnostics)
