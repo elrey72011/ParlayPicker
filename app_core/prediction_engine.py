@@ -31,6 +31,53 @@ from config import VERTEX_CONFIG
 # Columns the XGBoost model expects. Order matters for DMatrix.
 VERTEX_FEATURE_COLUMNS: List[str] = VERTEX_CONFIG['feature_cols']
 
+def _collapse_duplicate_columns(df: pd.DataFrame, critical_cols: Optional[List[str]] = None) -> pd.DataFrame:
+    """
+    Detects and collapses duplicate columns in a DataFrame row-wise, preferring non-null values.
+    If multiple non-null values exist, the first one is taken. If ambiguity remains, the last column is kept.
+    Logs diagnostics about the duplicates found.
+    """
+    if df.empty or not df.columns.duplicated().any():
+        return df
+
+    critical_cols = critical_cols or []
+    dup_mask = df.columns.duplicated(keep=False)
+    dup_cols = df.columns[dup_mask].unique()
+
+    logger.warning(f"[_collapse_duplicate_columns] Found {len(dup_cols)} duplicate column names: {list(dup_cols)}")
+
+    for col in dup_cols:
+        count = (df.columns == col).sum()
+        is_crit = "YES" if col in critical_cols else "NO"
+        logger.warning(f"  - Column '{col}' appears {count} times (Critical: {is_crit})")
+
+    # Create a new DataFrame to hold the collapsed columns
+    collapsed_df = pd.DataFrame(index=df.index)
+
+    # Iterate through unique columns
+    for col in df.columns.unique():
+        # Get all columns matching this name
+        col_data = df.loc[:, df.columns == col]
+
+        if isinstance(col_data, pd.DataFrame):
+            if col_data.shape[1] > 1:
+                # We have duplicate columns, collapse them
+                # bfill along columns (axis=1) fills NaNs with the next valid value in the row
+                # Then take the first column (iloc[:, 0]) which now has the first available non-null value
+                collapsed = col_data.bfill(axis=1).iloc[:, 0]
+                collapsed_df[col] = collapsed
+            else:
+                collapsed_df[col] = col_data.iloc[:, 0]
+        else:
+            # Single column as Series
+            collapsed_df[col] = col_data
+
+    # Hard assertion to ensure no duplicates remain
+    assert not collapsed_df.columns.duplicated().any(), f"Duplicate columns still exist after collapse: {collapsed_df.columns[collapsed_df.columns.duplicated()].unique()}"
+
+    logger.info(f"[_collapse_duplicate_columns] Successfully collapsed DataFrame from shape {df.shape} to {collapsed_df.shape}")
+    return collapsed_df
+
 def safefloat(val: Any) -> float:
     """Safely convert to float, defaulting to 0.0 on error/None/NaN/inf."""
     if val is None:
@@ -616,6 +663,21 @@ class PredictionEngine:
         if df is None or df.empty:
             return []
 
+        # DIAGNOSTICS & DEDUPLICATION: check for duplicate columns at the start of predict_batch
+        logger.info(f"[predict_batch] Input DataFrame shape: {df.shape}")
+        has_dupes = df.columns.duplicated().any()
+        logger.info(f"[predict_batch] Duplicate columns exist in input: {has_dupes}")
+        if has_dupes:
+            dup_cols = df.columns[df.columns.duplicated()].unique()
+            logger.warning(f"[predict_batch] Duplicate columns found in input: {list(dup_cols)}")
+            critical_cols = ['implied_home_prob', 'kalshi_prob', 'market_probability', 'decimal_odds']
+            critical_dupes = [col for col in dup_cols if col in critical_cols]
+            if critical_dupes:
+                logger.warning(f"[predict_batch] CRITICAL duplicate columns found in input: {critical_dupes}")
+
+        df = _collapse_duplicate_columns(df, critical_cols=['implied_home_prob', 'kalshi_prob', 'market_probability', 'decimal_odds'])
+        logger.info(f"[predict_batch] Shape after collapse: {df.shape}")
+
         LEAGUE_MAP = {"NCAAM": "NCAAB", "NCAAMB": "NCAAB", "NCAA MENS BASKETBALL": "NCAAB"}
 
         # Apply standard league mapping to original data immediately
@@ -704,6 +766,18 @@ class PredictionEngine:
             if 'kalshi_prob' not in working_df.columns:
                 working_df['kalshi_prob'] = pd.NA
 
+            # Log Python type of target columns before numeric coercion
+            logger.info(f"Type of working_df['implied_home_prob']: {type(working_df.get('implied_home_prob'))}")
+            logger.info(f"Type of working_df['kalshi_prob']: {type(working_df.get('kalshi_prob'))}")
+            logger.info(f"Type of working_df['market_probability']: {type(working_df.get('market_probability'))}")
+
+            if isinstance(working_df.get('implied_home_prob'), pd.DataFrame):
+                logger.error("working_df['implied_home_prob'] is a DataFrame, indicating duplicate columns survived!")
+            if isinstance(working_df.get('kalshi_prob'), pd.DataFrame):
+                logger.error("working_df['kalshi_prob'] is a DataFrame, indicating duplicate columns survived!")
+            if isinstance(working_df.get('market_probability'), pd.DataFrame):
+                logger.error("working_df['market_probability'] is a DataFrame, indicating duplicate columns survived!")
+
             if 'decimal_odds' in working_df.columns:
                 working_df['implied_home_prob'] = pd.to_numeric(working_df['implied_home_prob'], errors='coerce').fillna(
                     1 / pd.to_numeric(working_df['decimal_odds'], errors='coerce')
@@ -720,6 +794,10 @@ class PredictionEngine:
                 k_prob = None
                 for col in ['kalshi_probability', 'kalshi_prob']:
                     val = row.get(col)
+                    if isinstance(val, pd.Series):
+                        # Defensive collapse: if a duplicate column survived, grab the first non-null
+                        val = val.dropna().iloc[0] if not val.dropna().empty else pd.NA
+
                     if pd.notna(val) and val != "":
                         try:
                             numeric_k = float(val)
@@ -734,6 +812,10 @@ class PredictionEngine:
                 i_prob = None
                 for col in ['implied_home_prob', 'market_probability', 'home_price', 'odds_home', 'home_odds', 'odds_american']:
                     val = row.get(col)
+                    if isinstance(val, pd.Series):
+                        # Defensive collapse: if a duplicate column survived, grab the first non-null
+                        val = val.dropna().iloc[0] if not val.dropna().empty else pd.NA
+
                     if pd.notna(val) and val != "":
                         try:
                             numeric_val = float(val)
