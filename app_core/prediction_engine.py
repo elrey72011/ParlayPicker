@@ -1446,6 +1446,7 @@ class PredictionEngine:
 
             if is_flat:
                 logger.warning(f"XGBoost returned critically flat probabilities ({unique_count}/{total_count}). Overriding with Hybrid Fallback Score.")
+                logger.info(f"PIPELINE TRACE: Flat probabilities detected. Overriding all {total_count} predictions with Hybrid Fallback.")
                 final_probs = []
 
                 chosen_market_probs = []
@@ -1742,9 +1743,11 @@ class PredictionEngine:
                                     logger.info(f"      [{row.get('league')}] {row.get('matchup_id')} | Pick: {row.get('market_type')} | Mkt: {mkt_prob:.3f} | Kalshi: {kalshi_val:.3f} | Stale: {stale_flag} | Synth: {synth_flags}")
             else:
                 self._last_metrics["hybrid_override_triggered"] = False
+                logger.info(f"PIPELINE TRACE: Variance looks good ({unique_count}/{total_count}). Hybrid fallback NOT triggered.")
 
             final_unique = len(set(final_probs))
             self._last_metrics["final_unique_count"] = final_unique
+            logger.info(f"PIPELINE TRACE: Final unique probabilities exiting predict_batch: {final_unique} out of {len(final_probs)}")
 
             # --- HEALTH SCORE / SUMMARY BLOCK ---
             logger.info("=" * 60)
