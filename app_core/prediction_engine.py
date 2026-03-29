@@ -1773,9 +1773,16 @@ class PredictionEngine:
             fuzzy_pct = (self._last_metrics["fuzzy_join_rescued"] / max(total_count, 1)) * 100
             split_pct = (self._last_metrics["split_lookup_rescued"] / max(total_count, 1)) * 100
 
-            logger.info(f"Rows using Strict Historical Reconstruction: {strict_pct:.1f}% ({self._last_metrics['strict_join_rescued']})")
-            logger.info(f"Rows using Fuzzy Reconstruction: {fuzzy_pct:.1f}% ({self._last_metrics['fuzzy_join_rescued']})")
-            logger.info(f"Rows using Split Lookup: {split_pct:.1f}% ({self._last_metrics['split_lookup_rescued']})")
+            # Calculate rows that used true live stats (neither fallback nor historical reconstruction)
+            total_historical_rescued = self._last_metrics['strict_join_rescued'] + self._last_metrics['fuzzy_join_rescued'] + self._last_metrics['split_lookup_rescued']
+            live_stats_count = total_count - total_historical_rescued
+            live_stats_pct = (live_stats_count / max(total_count, 1)) * 100
+
+            logger.info(f"Data Source Breakdown:")
+            logger.info(f" - Rows using TRUE Live Stats (APIs): {live_stats_pct:.1f}% ({live_stats_count})")
+            logger.info(f" - Rows using Strict Historical Reconstruction: {strict_pct:.1f}% ({self._last_metrics['strict_join_rescued']})")
+            logger.info(f" - Rows using Fuzzy Historical Reconstruction: {fuzzy_pct:.1f}% ({self._last_metrics['fuzzy_join_rescued']})")
+            logger.info(f" - Rows using Split Historical Lookup: {split_pct:.1f}% ({self._last_metrics['split_lookup_rescued']})")
 
             hybrid_pct = 100.0 if is_flat else 0.0
             logger.info(f"Rows using Hybrid Override: {hybrid_pct:.1f}%")
