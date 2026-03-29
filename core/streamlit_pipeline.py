@@ -2232,6 +2232,21 @@ def run_analysis_pipeline(
                 api_clients = {}  # Stub for backward compatibility if it expects dict
                 enriched_for_prediction = enrich_with_model_features(merged[needs_prediction].copy(), api_clients)
 
+                # DIAGNOSTICS & DEDUPLICATION: check for duplicate columns after feature enrichment
+                logger.info(f"Shape after enrich_with_model_features: {enriched_for_prediction.shape}")
+                has_dupes = enriched_for_prediction.columns.duplicated().any()
+                logger.info(f"Duplicate columns exist after enrichment: {has_dupes}")
+                if has_dupes:
+                    dup_cols = enriched_for_prediction.columns[enriched_for_prediction.columns.duplicated()].unique()
+                    logger.warning(f"Duplicate columns found after enrichment: {list(dup_cols)}")
+                    critical_cols = ['implied_home_prob', 'kalshi_prob', 'market_probability', 'decimal_odds']
+                    critical_dupes = [col for col in dup_cols if col in critical_cols]
+                    if critical_dupes:
+                        logger.warning(f"CRITICAL duplicate columns found after enrichment: {critical_dupes}")
+
+                from app_core.prediction_engine import _collapse_duplicate_columns
+                enriched_for_prediction = _collapse_duplicate_columns(enriched_for_prediction, critical_cols=['implied_home_prob', 'kalshi_prob', 'market_probability', 'decimal_odds'])
+
                 # Copy the enriched columns back into merged (or at least provide to predictor)
                 # Ensure the predictor runs on the enriched dataframe
 
@@ -2240,6 +2255,13 @@ def run_analysis_pipeline(
 
                 # predict_batch expects a DataFrame, returns List[float]
                 predictions_list = engine.predict_batch(enriched_for_prediction)
+
+                # Extra safeguard for assignment back to merged
+                num_needed = needs_prediction.sum()
+                if len(predictions_list) != num_needed:
+                    error_msg = f"Prediction mismatch: predict_batch returned {len(predictions_list)} predictions, but {num_needed} were needed."
+                    logger.error(error_msg)
+                    raise ValueError(error_msg)
 
                 # Assign predictions only to rows that needed them
                 if "ml_probability" not in merged.columns:
