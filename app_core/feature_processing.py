@@ -25,6 +25,7 @@ _FALLBACK_LOG_LIMIT = 15  # max number of fallback logs to emit
 logger = logging.getLogger(__name__)
 
 # Startup diagnostic logging
+logger.info("==========================================================")
 logger.info("Initializing app_core.feature_processing: Checking live stats dependencies...")
 
 try:
@@ -41,12 +42,12 @@ except ImportError:
     nfl = None
     logger.error("❌ nfl_data_py not installed. NFL stats fetching will fail.")
 
-try:
-    import cfbd
-    logger.info("✅ cfbd loaded successfully.")
-except ImportError:
-    cfbd = None
-    logger.error("❌ cfbd not installed. NCAAF stats fetching will fail.")
+# Removed cfbd due to dependency conflicts with google-genai.
+# Will use direct requests to api.collegefootballdata.com instead.
+logger.info("✅ NCAAF Adapter loaded successfully (using raw requests).")
+# Additional explicit logging for CFBD check (will test token during actual fetch)
+logger.info("  -> cfbd python package was completely removed from requirements.txt to fix deployment conflicts.")
+logger.info("  -> NCAAF will gracefully skip to ESPN fallback if CFBD_API_KEY is missing or invalid.")
 
 # Removed nhlpy as it uses a deprecated NHL API.
 # Will use direct requests to api-web.nhle.com instead.
@@ -55,6 +56,7 @@ logger.info("✅ NHL Adapter loaded successfully (using api-web.nhle.com directl
 # Removed CBBpy as it does not have a working stats adapter.
 # Will use ESPN as the primary source for NCAAB.
 logger.info("✅ NCAAB Adapter loaded successfully (using ESPN primary).")
+logger.info("==========================================================")
 
 try:
     import rapidfuzz
@@ -1259,9 +1261,9 @@ def fetch_nfl_stats(season_year: int) -> List[Dict[str, Any]]:
 @st.cache_data(ttl=21600)
 def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
     """
-    Fetch NCAAF stats from CFBD API.
+    Fetch NCAAF stats using direct requests to api.collegefootballdata.com.
 
-    Returns empty list if CFBD is unavailable, unauthorized, or disabled for this session.
+    Returns empty list if API is unavailable, unauthorized, or disabled for this session.
     """
     # Check if CFBD was disabled earlier in this session (e.g., due to 401)
     if st is not None and hasattr(st, "session_state"):
@@ -1280,14 +1282,10 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
             parts = s.split(None, 1)
             s = parts[1].strip() if len(parts) == 2 else ""
         # CRITICAL: remove ALL whitespace/newlines from multiline secrets
-        # (Handles cases where secrets have leading/trailing newlines or spaces)
         s = "".join(s.split())
         return s
 
-    if cfbd is None:
-        return []
-
-    # Improved: Explicitly check st.secrets if _get_secret fails or for robustness
+    # Explicitly check st.secrets if _get_secret fails or for robustness
     raw_key = _get_secret("CFBD_API_KEY") or _get_secret("CFBDAPIKEY")
     if not raw_key and st is not None:
         try:
@@ -1301,97 +1299,70 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
 
     token = _normalize_cfbd_token(raw_key)
     if not token:
-        logger.warning("CFBD_API_KEY not found. Skipping NCAAF stats.")
-        return []
+        logger.warning("CFBD_API_KEY not found. Skipping live NCAAF API stats. (Will use ESPN fallback)")
+        return fetch_from_espn_ncaaf(season_year)
 
-    def _make_client(primary: bool) -> "cfbd.ApiClient":
-        cfg = cfbd.Configuration()
-        # Fix Issue #4: Proper CFBD Authorization handling
-        # Ensure token doesn't have extra whitespace
-        clean_token = token.strip()
-        cfg.api_key['Authorization'] = clean_token
-        cfg.api_key_prefix['Authorization'] = 'Bearer'
-        return cfbd.ApiClient(cfg)
+    logger.info(f"CFBD auth prepared via raw requests (token_length={len(token)})")
 
-    # Use only one robust client configuration as per correction instructions
-    api_client = _make_client(primary=True)
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json"
+    }
 
-    logger.info(f"CFBD auth prepared (token_length={len(token)})")
+    def _is_unauthorized(status_code: int) -> bool:
+        return status_code == 401
 
-    def _is_unauthorized(e: Exception) -> bool:
-        status = getattr(e, "status", None)
-        msg = str(e)
-        return status == 401 or "401" in msg or "Unauthorized" in msg
-
-    def _fetch_stats_for_year(yr: int) -> List[Any]:
-        # Retry logic: Try up to 3 times
+    def _fetch_from_api(endpoint: str, params: Dict[str, Any]) -> List[Any]:
+        url = f"https://api.collegefootballdata.com{endpoint}"
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                api_instance = cfbd.StatsApi(api_client)
-                return api_instance.get_team_stats(year=yr)
-            except Exception as e:
-                if _is_unauthorized(e):
-                    # Set session flag to disable CFBD for remainder of session
+                resp = requests.get(url, headers=headers, params=params, timeout=10)
+                if _is_unauthorized(resp.status_code):
                     if st is not None and hasattr(st, "session_state"):
                         st.session_state["cfbd_disabled_reason"] = "UNAUTHORIZED_401"
                     logger.warning(
-                        f"⚠️ CFBD unauthorized (401) when fetching NCAAF stats. "
+                        f"⚠️ CFBD unauthorized (401) when fetching from {endpoint}. "
                         "Disabling CFBD for this session. Check CFBD_API_KEY value in Streamlit secrets."
                     )
-                    return [] # Don't retry auth errors
-                else:
-                    if attempt < max_retries - 1:
-                        time.sleep(1) # Wait 1s before retry
-                        continue
-                    logger.warning(f"NCAAF Stats fetch failed for {yr}: {e}")
-        return []
-
-    def _fetch_games_for_year(yr: int) -> List[Any]:
-        # Retry logic: Try up to 3 times
-        max_retries = 3
-        for attempt in range(max_retries):
-            try:
-                games_api = cfbd.GamesApi(api_client)
-                return games_api.get_games(year=yr)
-            except Exception as e:
-                if _is_unauthorized(e):
-                    # Set session flag to disable CFBD for remainder of session
+                    return []
+                resp.raise_for_status()
+                return resp.json()
+            except requests.exceptions.RequestException as e:
+                status = getattr(e.response, 'status_code', None)
+                if status == 401:
                     if st is not None and hasattr(st, "session_state"):
                         st.session_state["cfbd_disabled_reason"] = "UNAUTHORIZED_401"
-                    logger.warning(
-                        f"⚠️ CFBD unauthorized (401) when fetching NCAAF games. "
-                        "Disabling CFBD for this session. Check CFBD_API_KEY value in Streamlit secrets."
-                    )
-                    return [] # Don't retry auth errors
-                else:
-                    if attempt < max_retries - 1:
-                        time.sleep(1)
-                        continue
-                    logger.warning(f"NCAAF Games API Unavailable for {yr}: {e}")
+                    logger.warning("⚠️ CFBD unauthorized (401). Disabling.")
+                    return []
+                if attempt < max_retries - 1:
+                    time.sleep(1)
+                    continue
+                logger.warning(f"CFBD API error for {endpoint}: {e}")
         return []
 
     try:
         # 1) requested year
-        season_stats = _fetch_stats_for_year(season_year)
+        season_stats = _fetch_from_api("/stats/season", {"year": season_year})
 
         # 2) fallback to prior year if empty
         if not season_stats:
             logger.warning(f"No NCAAF stats found for {season_year}. Trying {season_year - 1}...")
-            season_stats = _fetch_stats_for_year(season_year - 1)
+            season_stats = _fetch_from_api("/stats/season", {"year": season_year - 1})
             if season_stats:
                 season_year = season_year - 1
 
-        season_games = _fetch_games_for_year(season_year)
+        season_games = _fetch_from_api("/games", {"year": season_year})
 
-        # Build win pct map (same logic as before)
+        # Build win pct map
         team_records: Dict[str, Dict[str, int]] = {}
         for g in season_games or []:
             try:
-                home = getattr(g, "home_team", None)
-                away = getattr(g, "away_team", None)
-                home_pts = getattr(g, "home_points", None)
-                away_pts = getattr(g, "away_points", None)
+                home = g.get("home_team")
+                away = g.get("away_team")
+                home_pts = g.get("home_points")
+                away_pts = g.get("away_points")
+
                 if not home or not away:
                     continue
 
@@ -1411,9 +1382,9 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
                 continue
 
         stats: List[Dict[str, Any]] = []
-        for offense in season_stats:
+        for offense in season_stats or []:
             try:
-                team = getattr(offense, "team", None) or getattr(offense, "school", None)
+                team = offense.get("team") or offense.get("school")
                 if not team:
                     continue
 
@@ -1422,21 +1393,31 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
                 games_played = wins + losses
                 win_pct = (wins / games_played) if games_played > 0 else 0.0
 
-                ppg = getattr(offense, "points", None)
+                # Data might be in total points or points_per_game depending on the endpoint structure.
+                # Assuming /stats/season returns dicts with 'statName' and 'statValue'
+                # or similar depending on the CFBD API version.
+                # Note: /stats/season actually returns a list of dictionaries with stats.
+                # If the schema from cfbd-python was different, we map it.
+                # The CFBD /stats/season endpoint returns:
+                # [ { "team": "Air Force", "statName": "scoringOffense", "statValue": 35.5 }, ... ]
+                # But looking at old code, it expected `offense.points`, `offense.points_per_game`.
+                # Let's handle both.
+
+                ppg = offense.get("points")
                 if ppg is None:
-                    ppg = getattr(offense, "points_per_game", 0.0) or 0.0
+                    ppg = offense.get("points_per_game", 0.0) or 0.0
 
-                oppg = getattr(offense, "points_allowed", None)
+                oppg = offense.get("points_allowed")
                 if oppg is None:
-                    oppg = getattr(offense, "points_allowed_per_game", 0.0) or 0.0
+                    oppg = offense.get("points_allowed_per_game", 0.0) or 0.0
 
-                ypg = getattr(offense, "yards_per_game", None)
+                ypg = offense.get("yards_per_game")
                 if ypg is None:
-                    ypg = getattr(offense, "yards", 0.0) or 0.0
+                    ypg = offense.get("yards", 0.0) or 0.0
 
-                avg_tov = getattr(offense, "turnovers", None)
+                avg_tov = offense.get("turnovers")
                 if avg_tov is None:
-                    avg_tov = getattr(offense, "turnovers_per_game", 0.0) or 0.0
+                    avg_tov = offense.get("turnovers_per_game", 0.0) or 0.0
 
                 def _to_float(x: Any) -> float:
                     try:
@@ -1461,10 +1442,50 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
             except Exception:
                 continue
 
+        # If the API returns key-value stat pairs rather than a single object per team
+        # (which CFBD's /stats/season often does), we need to aggregate them if the stats list is empty
+        # or mispopulated above.
+        if stats and "statName" in season_stats[0]:
+            # It's the key-value structure
+            agg_stats = {}
+            for s in season_stats:
+                t = s.get("team")
+                if not t: continue
+                if t not in agg_stats:
+                    agg_stats[t] = {"team": t}
+                name = s.get("statName")
+                val = s.get("statValue")
+                if name == "scoringOffense": agg_stats[t]["points_per_game"] = val
+                if name == "scoringDefense": agg_stats[t]["points_allowed_per_game"] = val
+                if name == "totalOffense": agg_stats[t]["yards_per_game"] = val
+                if name == "turnoversLost": agg_stats[t]["turnovers"] = val
+
+            # Rebuild stats list
+            stats = []
+            for t, data in agg_stats.items():
+                wins = team_records.get(t, {}).get("wins", 0)
+                losses = team_records.get(t, {}).get("losses", 0)
+                games_played = wins + losses
+                win_pct = (wins / games_played) if games_played > 0 else 0.0
+
+                stats.append({
+                    "team_norm": robust_normalize_team(t, league="NCAAF"),
+                    "wins": wins,
+                    "losses": losses,
+                    "win_pct": float(win_pct),
+                    "points_per_game": float(data.get("points_per_game", 0.0)),
+                    "points_allowed_per_game": float(data.get("points_allowed_per_game", 0.0)),
+                    "yards_per_game": float(data.get("yards_per_game", 0.0)),
+                    "turnovers": float(data.get("turnovers", 0.0)),
+                    "streak": 0.0,
+                    "last5_win_pct": float(win_pct),
+                })
+
         logger.info(f"Successfully fetched NCAAF stats for {len(stats)} teams.")
 
     except Exception as e:
-        logger.error(f"Failed to fetch NCAAF stats: {e}", exc_info=True)
+        logger.error(f"Failed to fetch NCAAF stats via API: {e}", exc_info=True)
+        stats = []
 
     # Merge CFBD stats with ESPN Fallback (Power-6 / Scraper miss fix)
     logger.info("Merging NCAAF stats from ESPN fallback...")
@@ -1473,8 +1494,6 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
     # Priority: CFBD (Scraper) > ESPN
     merged_stats = {s["team_norm"]: s for s in stats}
     for espn_s in espn_stats:
-        # Implement a games > 0 check to prefer the more detailed scraper version
-        # Only add ESPN fallback if scraper version doesn't exist, or if scraper version is essentially empty
         team_norm = espn_s["team_norm"]
         if team_norm not in merged_stats:
             merged_stats[team_norm] = espn_s
