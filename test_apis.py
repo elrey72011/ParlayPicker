@@ -3,11 +3,13 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("test_apis")
 
+import requests
+
 try:
-    import cfbd
-    logger.info("✅ cfbd loaded successfully.")
-except ImportError as e:
-    logger.error(f"❌ cfbd not installed. Error: {e}")
+    resp = requests.get("https://api.collegefootballdata.com", timeout=5)
+    logger.info("✅ CFBD API is reachable.")
+except Exception as e:
+    logger.error(f"❌ CFBD API not reachable. Error: {e}")
 
 try:
     import nhlpy
