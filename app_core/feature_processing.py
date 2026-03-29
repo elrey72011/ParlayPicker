@@ -2215,21 +2215,11 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     away_fallback = away_matched_names.isna()
     combined_fallback = home_fallback | away_fallback
 
-    # feature_stats_fallback indicates missing row data. If used_historical_stats is true, it is also a fallback
-    features_data["feature_stats_fallback"] = combined_fallback | used_historical_stats
+    # Make feature_stats_fallback truly per-row by strictly relying on combined_fallback
+    # (which indicates if a specific row failed to find team stats and used LEAGUE_AVERAGES)
+    features_data["feature_stats_fallback"] = combined_fallback
 
-    # is_live_data is false if ANY fallback is used (missing data or historical season averages)
-    # Fix: Track is_live_data as a per-row boolean properly
-    # If used_historical_stats is true globally, it means we fetched a prior season's stats.
-    # However, if some games still match cleanly within that prior season's stats, they technically have "stats".
-    # But since it's not "live" stats, we should mark those specific games that matched the historical stats as false.
-    # Wait, the prompt said "make it row-specific". The most robust way is to just use combined_fallback
-    # but the user also wants to ensure league-average fallbacks trigger the warning.
-    # The combined_fallback mask tells us exactly which rows failed to find ANY team stats (live or historical)
-    # and fell back to the hard-coded LEAGUE_AVERAGES.
-    features_data["is_live_data"] = ~combined_fallback
-
-    # Task 2: Standardize stats_quality values (REAL/FALLBACK/MISSING)
+    # Task 2: Standardize stats_quality values (REAL/HISTORICAL/FALLBACK/MISSING)
     # Optimized using np.select for vectorization
     conditions = [
         (home_fallback & away_fallback),  # Both missing
@@ -2237,8 +2227,11 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     ]
     choices = ["MISSING", "FALLBACK"]
 
+    # If used_historical_stats is globally true, any matched row technically used historical stats
+    default_quality = "HISTORICAL" if used_historical_stats else "REAL"
+
     # Generate stats_quality array
-    quality_arr = np.select(conditions, choices, default="REAL")
+    quality_arr = np.select(conditions, choices, default=default_quality)
 
     # Assign as Series with correct index
     quality_series = pd.Series(quality_arr, index=df.index)
@@ -2253,11 +2246,14 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     # If source is ESPN_FALLBACK, mark as ESPN (only if currently REAL)
     is_espn = (home_source == "ESPN_FALLBACK") | (away_source == "ESPN_FALLBACK")
 
-    # Update only if currently REAL (don't overwrite MISSING/FALLBACK)
-    mask_update_espn = is_espn & (quality_series == "REAL")
+    # Update only if currently REAL or HISTORICAL (don't overwrite MISSING/FALLBACK)
+    mask_update_espn = is_espn & (quality_series.isin(["REAL", "HISTORICAL"]))
     quality_series[mask_update_espn] = "ESPN"
 
     features_data["stats_quality"] = quality_series
+
+    # is_live_data strictly evaluates to True only if stats_quality is REAL or ESPN
+    features_data["is_live_data"] = quality_series.isin(["REAL", "ESPN"])
 
     if combined_fallback.any():
         fallback_indices = df.index[combined_fallback]
