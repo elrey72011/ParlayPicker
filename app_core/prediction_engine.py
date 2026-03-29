@@ -556,7 +556,7 @@ class PredictionEngine:
             logger.error(f"Exception details: {traceback.format_exc()}")
             return {"prob": None, "note": f"Error Fallback: {str(e)[:20]}"}
 
-    def _calculate_statistical_prob(self, features: Dict[str, float]) -> float:
+    def _calculate_statistical_prob(self, features: Dict[str, float], market_type: str = '') -> float:
         """
         Calculate probability using team features when model is unavailable.
         Uses weighted combination of:
@@ -645,7 +645,7 @@ class PredictionEngine:
         away_team = features.get('away_team', 'away')
         date_string = features.get('game_date', 'date')
 
-        nudge_seed = int(hashlib.md5(f"{home_team}{away_team}{date_string}".encode()).hexdigest(), 16)
+        nudge_seed = int(hashlib.md5(f"{home_team}{away_team}{date_string}{market_type}".encode()).hexdigest(), 16)
         nudge = ((nudge_seed % 200) - 100) / 5000.0  # ±2% nudge
 
         # Apply sentiment adjustment and deterministic noise
@@ -765,7 +765,8 @@ class PredictionEngine:
                     features['home_team'] = row.get('home_team', '')
                     features['away_team'] = row.get('away_team', '')
                     features['game_date'] = row.get('game_date', '')
-                    fallback_probs.append(float(self._calculate_statistical_prob(features)))
+                    market_type = str(row.get('market_type', '')).lower().strip()
+                    fallback_probs.append(float(self._calculate_statistical_prob(features, market_type)))
                 return fallback_probs
 
             # Fill missing implied probabilities BEFORE matrix validation so we don't crash
@@ -1414,7 +1415,8 @@ class PredictionEngine:
                     row_features['away_team'] = working_df.loc[original_idx, 'away_team'] if 'away_team' in working_df.columns else ''
                     row_features['game_date'] = working_df.loc[original_idx, 'game_date'] if 'game_date' in working_df.columns else ''
 
-                    final_probs.append(self._calculate_statistical_prob(row_features))
+                    market_type = str(row_features.get('market_type', '')).lower().strip()
+                    final_probs.append(self._calculate_statistical_prob(row_features, market_type))
                     healed_count += 1
                 else:
                     final_probs.append(p)
@@ -1445,7 +1447,7 @@ class PredictionEngine:
                 is_flat = True
 
             if is_flat:
-                logger.warning(f"XGBoost returned critically flat probabilities ({unique_count}/{total_count}). Overriding with Hybrid Fallback Score.")
+                logger.warning(f"ML UNIQUENESS AUDIT: XGBoost returned critically flat probabilities ({unique_count}/{total_count}). Overriding with Hybrid Fallback Score.")
                 logger.info(f"PIPELINE TRACE: Flat probabilities detected. Overriding all {total_count} predictions with Hybrid Fallback.")
                 final_probs = []
 
@@ -1642,7 +1644,7 @@ class PredictionEngine:
                         row_features['away_team'] = row.get('away_team', '')
                         row_features['game_date'] = row.get('game_date', '')
                         
-                        stat_prob = self._calculate_statistical_prob(row_features)
+                        stat_prob = self._calculate_statistical_prob(row_features, market_type)
                         if is_away_side or is_under:
                             residual_prob = 1.0 - stat_prob
                         else:
@@ -1701,6 +1703,9 @@ class PredictionEngine:
                     final_probs.append(hybrid_score)
 
                 # Variance Diagnostics Logging
+                logger.info(f"ML UNIQUENESS AUDIT: Unique prob count before fallback (raw_unique_count): {self._last_metrics.get('raw_unique_count')}")
+                logger.info(f"ML UNIQUENESS AUDIT: Unique prob count after fallback: {len(set(final_probs))}")
+
                 from collections import Counter
                 unique_before = len(set(scores_before_eps))
                 unique_after = len(set(scores_after_eps))
@@ -1740,10 +1745,12 @@ class PredictionEngine:
                                     if abs(feat.get('feature_home_oppg', 0.0)) < 1e-5: synth_flags.append('home_oppg')
                                     if abs(feat.get('feature_away_rest_days', 0.0)) < 1e-5: synth_flags.append('away_rest')
 
-                                    logger.info(f"      [{row.get('league')}] {row.get('matchup_id')} | Pick: {row.get('market_type')} | Mkt: {mkt_prob:.3f} | Kalshi: {kalshi_val:.3f} | Stale: {stale_flag} | Synth: {synth_flags}")
+                                    stats_qual = row.get('stats_quality', 'UNKNOWN')
+                                    sanitized = row.get('sanitized_value', False)
+                                    logger.info(f"ML UNIQUENESS AUDIT:      [{row.get('league')}] {row.get('matchup_id')} | Pick: {row.get('market_type')} | Mkt: {mkt_prob:.3f} | Kalshi: {kalshi_val:.3f} | Stale: {stale_flag} | Synth: {synth_flags} | StatsQual: {stats_qual} | Sanitized: {sanitized}")
             else:
                 self._last_metrics["hybrid_override_triggered"] = False
-                logger.info(f"PIPELINE TRACE: Variance looks good ({unique_count}/{total_count}). Hybrid fallback NOT triggered.")
+                logger.info(f"ML UNIQUENESS AUDIT: Variance looks good ({unique_count}/{total_count}). Hybrid fallback NOT triggered.")
 
             final_unique = len(set(final_probs))
             self._last_metrics["final_unique_count"] = final_unique
@@ -1788,10 +1795,14 @@ class PredictionEngine:
             logger.info(f" - Rows using Split Historical Lookup: {split_pct:.1f}% ({self._last_metrics['split_lookup_rescued']})")
 
             hybrid_pct = 100.0 if is_flat else 0.0
-            logger.info(f"Rows using Hybrid Override: {hybrid_pct:.1f}%")
+            logger.info(f"Rows using Hybrid Override (Fallback): {hybrid_pct:.1f}%")
 
             sanitized_pct = (self._last_metrics.get('healed_count', 0) / max(total_count, 1)) * 100
             logger.info(f"Rows patched by Sanitization: {sanitized_pct:.1f}%")
+            logger.info("=" * 60)
+
+            # Summarizing for the user explicitly:
+            logger.info(f"FALLBACK AUDIT: Live Stats = {live_stats_count}, Historical/Stale = {total_historical_rescued}, Hybrid = {total_count if is_flat else 0}")
             logger.info("=" * 60)
 
             return final_probs
