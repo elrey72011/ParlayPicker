@@ -207,14 +207,27 @@ VERTEX_CONFIG = {
     'location': GCP_CONFIG['location'],
     'endpoint_id': os.getenv('VERTEX_ENDPOINT_ID', '155434660283809792'), # Your Working ID
     'feature_cols': [
-        "home_win_pct", "away_win_pct", "home_ppg", "away_ppg",
-        "home_form_last5", "away_form_last5", "home_pd_last5", "away_pd_last5",
-        "home_sos_last5", "away_sos_last5", "win_pct_diff", "ppg_diff",
-        "form_diff", "pd_last5_diff", "sos_diff", "oppg_diff", "streak_diff",
-        "spread_normalized", "public_betting_centered", "sharp_vs_public",
-        "rest_advantage", "back_to_back", "primetime_game", "division_game",
-        "injuries_impact", "weather_factor", "line_movement", "total_movement",
-        "model_consensus", "theover_probability"
+        "implied_home_prob",
+        "sentiment_diff",
+        "kalshi_prob",
+        "injuries_home_count",
+        "injuries_away_count",
+        "weather_flag",
+        "feature_home_win_pct",
+        "feature_home_ppg",
+        "feature_home_oppg",
+        "feature_home_streak",
+        "feature_away_win_pct",
+        "feature_away_ppg",
+        "feature_away_oppg",
+        "feature_away_streak",
+        "feature_diff_win_pct",
+        "feature_diff_ppg",
+        "feature_diff_oppg",
+        "feature_diff_last5",
+        "feature_diff_streak",
+        "feature_home_rest_days",
+        "feature_away_rest_days",
     ]
 }
 

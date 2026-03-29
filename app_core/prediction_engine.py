@@ -27,30 +27,9 @@ _LOGGED_MODEL_MISSING = False
 # MODEL INPUT SCHEMA
 # -------------------------------------------------------------------
 
+from config import VERTEX_CONFIG
 # Columns the XGBoost model expects. Order matters for DMatrix.
-VERTEX_FEATURE_COLUMNS: List[str] = [
-    "implied_home_prob",
-    "sentiment_diff",
-    "kalshi_prob",
-    "injuries_home_count",
-    "injuries_away_count",
-    "weather_flag",
-    "feature_home_win_pct",
-    "feature_home_ppg",
-    "feature_home_oppg",
-    "feature_home_streak",
-    "feature_away_win_pct",
-    "feature_away_ppg",
-    "feature_away_oppg",
-    "feature_away_streak",
-    "feature_diff_win_pct",
-    "feature_diff_ppg",
-    "feature_diff_oppg",
-    "feature_diff_last5",
-    "feature_diff_streak",
-    "feature_home_rest_days",
-    "feature_away_rest_days",
-]
+VERTEX_FEATURE_COLUMNS: List[str] = VERTEX_CONFIG['feature_cols']
 
 def safefloat(val: Any) -> float:
     """Safely convert to float, defaulting to 0.0 on error/None/NaN/inf."""
@@ -711,8 +690,11 @@ class PredictionEngine:
                 fallback_probs: List[float] = []
                 for _, row in working_df.iterrows():
                     features = _build_fallback_features_from_row(row.to_dict())
-                    # Ensure league is injected for statistical fallback
+                    # Ensure league and current row identity are injected for statistical fallback nudge
                     features['league'] = row.get('league', '')
+                    features['home_team'] = row.get('home_team', '')
+                    features['away_team'] = row.get('away_team', '')
+                    features['game_date'] = row.get('game_date', '')
                     fallback_probs.append(float(self._calculate_statistical_prob(features)))
                 return fallback_probs
 
@@ -839,15 +821,13 @@ class PredictionEngine:
                                 hist_df["game_date"] = _normalize_game_date_string(hist_df["commence_time"])
                                 hist_df["game_date_dt"] = pd.to_datetime(hist_df["game_date"], errors="coerce").dt.tz_localize(None)
 
-                                hist_df["matchup_id_with_date"] = [
-                                    _build_matchup_id(h, a, d)
-                                    for h, a, d in zip(hist_df["home_team"], hist_df["away_team"], hist_df["game_date"])
-                                ]
-
+                                # Consistent match key: league|matchup_id|game_date
                                 hist_df["canonical_match_key"] = (
                                     hist_df["league_norm"].astype("string")
                                     + "|"
-                                    + hist_df["matchup_id_with_date"].astype("string")
+                                    + hist_df["matchup_id"].astype("string")
+                                    + "|"
+                                    + hist_df["game_date"].astype("string")
                                 )
 
                                 # Process each predominantly empty row
@@ -876,9 +856,8 @@ class PredictionEngine:
                                         # Force a perfectly clean matchup_id explicitly for the fallback lookup
                                         row_matchup = _build_matchup_id(row_home_clean, row_away_clean)
 
-                                        # Create the aggressive match key dynamically
-                                        row_matchup_with_date = _build_matchup_id(row_home_clean, row_away_clean, row_game_date)
-                                        row_match_key = f"{row_league}|{row_matchup_with_date}" if row_league and row_game_date else ""
+                                        # Create the aggressive match key dynamically consistently
+                                        row_match_key = f"{row_league}|{row_matchup}|{row_game_date}" if row_league and row_matchup and row_game_date else ""
 
                                         # First priority: strict date AND matchup match
                                         match = pd.DataFrame()
@@ -950,15 +929,40 @@ class PredictionEngine:
                                                 if current_home and hist_home and current_home != hist_home:
                                                     roles_swapped = True
 
+                                                # Create explicit mapping layer from historical to engine schema
+                                                hist_mapping = {
+                                                    "implied_home_prob": latest.get("implied_home_prob", latest.get("home_win_pct")),
+                                                    "kalshi_prob": latest.get("kalshi_prob", latest.get("theover_probability")),
+                                                    "sentiment_diff": latest.get("sentiment_diff", latest.get("sharp_vs_public", 0.0)),
+                                                    "injuries_home_count": latest.get("injuries_home_count", latest.get("injuries_impact", 0.0)), # Proxy
+                                                    "injuries_away_count": latest.get("injuries_away_count", 0.0), # Unmapped in CSV
+                                                    "weather_flag": latest.get("weather_flag", latest.get("weather_factor", 0.0)),
+                                                    "feature_home_win_pct": latest.get("feature_home_win_pct", latest.get("home_win_pct")),
+                                                    "feature_home_ppg": latest.get("feature_home_ppg", latest.get("home_ppg")),
+                                                    "feature_home_oppg": latest.get("feature_home_oppg", latest.get("home_oppg")), # Often unmapped in CSV
+                                                    "feature_home_streak": latest.get("feature_home_streak", latest.get("home_form_last5")), # Proxy
+                                                    "feature_away_win_pct": latest.get("feature_away_win_pct", latest.get("away_win_pct")),
+                                                    "feature_away_ppg": latest.get("feature_away_ppg", latest.get("away_ppg")),
+                                                    "feature_away_oppg": latest.get("feature_away_oppg", latest.get("away_oppg")), # Often unmapped
+                                                    "feature_away_streak": latest.get("feature_away_streak", latest.get("away_form_last5")), # Proxy
+                                                    "feature_diff_win_pct": latest.get("feature_diff_win_pct", latest.get("win_pct_diff")),
+                                                    "feature_diff_ppg": latest.get("feature_diff_ppg", latest.get("ppg_diff")),
+                                                    "feature_diff_oppg": latest.get("feature_diff_oppg", latest.get("oppg_diff")),
+                                                    "feature_diff_last5": latest.get("feature_diff_last5", latest.get("form_diff")),
+                                                    "feature_diff_streak": latest.get("feature_diff_streak", latest.get("streak_diff")),
+                                                    "feature_home_rest_days": latest.get("feature_home_rest_days", latest.get("rest_advantage")), # Proxy
+                                                    "feature_away_rest_days": latest.get("feature_away_rest_days", 0.0) # Unmapped in CSV
+                                                }
+
+                                                # Warning: feature_home_oppg, feature_away_oppg, injuries_away_count, feature_away_rest_days
+                                                # may not exist in master_all_sports.csv and rely heavily on defaults when missing
+
                                                 for col in VERTEX_FEATURE_COLUMNS:
-                                                    # Check exact match first
-                                                    if col in latest and pd.notna(latest[col]):
-                                                        val = float(latest[col])
-                                                    # Bridge the prefix mapping gap
-                                                    elif col.startswith("feature_") and col.replace("feature_", "") in latest and pd.notna(latest[col.replace("feature_", "")]):
-                                                        val = float(latest[col.replace("feature_", "")])
-                                                    else:
+                                                    val = hist_mapping.get(col)
+                                                    if pd.isna(val) or val is None:
                                                         continue
+
+                                                    val = float(val)
 
                                                     if roles_swapped:
                                                         # Invert probabilities
@@ -1188,6 +1192,23 @@ class PredictionEngine:
                         fallbacks.append(float(prob))
                     return fallbacks
 
+            # Feature coverage logging BEFORE silent fill
+            if not raw_numeric.empty:
+                coverage_stats = []
+                for col in VERTEX_FEATURE_COLUMNS:
+                    if col in raw_numeric.columns:
+                        valid_count = raw_numeric[col].notna().sum()
+                        pct = (valid_count / len(raw_numeric)) * 100
+                        coverage_stats.append(f"{col}: {pct:.0f}%")
+                    else:
+                        coverage_stats.append(f"{col}: 0%")
+                logger.info(f"Feature coverage before inference (batch size {len(raw_numeric)}):\n  " + "\n  ".join(coverage_stats))
+
+                # Log matching statistics
+                if len(used_stale_features) > 0:
+                    stale_count = used_stale_features.sum()
+                    logger.info(f"Fallback Summary: {stale_count} out of {len(raw_numeric)} rows used historical fallback.")
+
             # Ensure proper casting and fillna to prevent errors - critical for preventing placeholder values
             inference_data = raw_numeric.fillna(0.0)
 
@@ -1228,9 +1249,12 @@ class PredictionEngine:
                     # Pull prepared performance features from the matrix
                     row_features = inference_data.iloc[idx_batch].to_dict()
 
-                    # Ensure league is injected for statistical fallback by getting it from the original working_df
+                    # Ensure league and identity is injected for statistical fallback by getting it from the original working_df
                     original_idx = inference_data.index[idx_batch]
                     row_features['league'] = working_df.loc[original_idx, 'league'] if 'league' in working_df.columns else ''
+                    row_features['home_team'] = working_df.loc[original_idx, 'home_team'] if 'home_team' in working_df.columns else ''
+                    row_features['away_team'] = working_df.loc[original_idx, 'away_team'] if 'away_team' in working_df.columns else ''
+                    row_features['game_date'] = working_df.loc[original_idx, 'game_date'] if 'game_date' in working_df.columns else ''
 
                     final_probs.append(self._calculate_statistical_prob(row_features))
                 else:
@@ -1238,8 +1262,28 @@ class PredictionEngine:
 
             # SPORTSBOOK ARBITRAGE OVERRIDE
             valid_probs = [p for p in final_probs if p is not None]
-            if len(set(valid_probs)) <= 5:
-                logger.warning("XGBoost returned mostly flat probabilities. Overriding with Sportsbook Implied Probabilities for Arbitrage.")
+            unique_count = len(set(valid_probs))
+            total_count = len(df)
+
+            # Log output variance for monitoring
+            if total_count > 0:
+                unique_ratio = unique_count / total_count
+                logger.info(f"Output variance check: {unique_count} unique probabilities out of {total_count} rows ({unique_ratio:.1%}).")
+
+                if total_count >= 20 and unique_ratio < 0.45:
+                    logger.warning(f"Low output variance detected: {unique_count} unique probabilities across {total_count} games.")
+
+            # Trigger protective override if extremely flat (<= 35% unique on meaningful slates, or hard 5 on tiny slates)
+            is_flat = False
+            if total_count >= 20:
+                import math
+                if unique_count < math.ceil(total_count * 0.35):
+                    is_flat = True
+            elif unique_count <= 5:
+                is_flat = True
+
+            if is_flat:
+                logger.warning(f"XGBoost returned critically flat probabilities ({unique_count}/{total_count}). Overriding with Sportsbook Implied Probabilities for Arbitrage.")
                 final_probs = []
                 for idx_batch, idx in enumerate(working_df.index):
                     row = working_df.loc[idx]
