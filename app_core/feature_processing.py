@@ -880,6 +880,9 @@ def robust_normalize_team(name: str, league: Optional[str] = None) -> str:
     # Pre-processing: Handle punctuation and abbreviations before stripping chars
     name_upper = name.upper().strip()
 
+    # Strip Tournament Seeds like "(1)" or "[12]"
+    name_upper = re.sub(r"\s*[\(\[][0-9]+[\)\]]\s*", " ", name_upper).strip()
+
     # Handle "SAINT" / "St." / "St " -> "ST" for standardizing
     name_upper = re.sub(r"\b(?:SAINT|ST\.?)(?!\w)", "ST", name_upper)
 
@@ -1537,8 +1540,8 @@ def fetch_from_espn_ncaaf(season_year: int) -> List[Dict[str, Any]]:
                 if "wins" in nm or ab == "w": wins = val
                 elif "losses" in nm or ab == "l": losses = val
                 elif "gamesplayed" in nm or ab == "gp": gp = val
-                elif any(x in nm for x in ["pointsfor", "runs"]) or ab in ["r", "pf"]: p_for = val
-                elif any(x in nm for x in ["pointsagainst", "runsagainst"]) or ab in ["ra", "pa"]: p_against = val
+                elif any(x in nm for x in ["pointsagainst", "pointsallowed", "runsagainst"]) or ab in ["ra", "pa"]: p_against = val
+                elif any(x in nm for x in ["pointsfor", "points", "runs"]) or ab in ["r", "pf"]: p_for = val
                 elif nm in ["avg", "ppg", "apf"] or ab == "apf": p_avg = val
                 elif nm in ["apa", "opp ppg"] or ab == "apa": d_avg = val
             games = gp if gp > 0 else (wins + losses)
@@ -1598,8 +1601,8 @@ def fetch_from_espn_ncaab(season_year: int) -> List[Dict[str, Any]]:
                 if "wins" in nm or ab == "w": wins = val
                 elif "losses" in nm or ab == "l": losses = val
                 elif "gamesplayed" in nm or ab == "gp": gp = val
-                elif any(x in nm for x in ["pointsfor", "runs"]) or ab in ["r", "pf"]: p_for = val
-                elif any(x in nm for x in ["pointsagainst", "runsagainst"]) or ab in ["ra", "pa"]: p_against = val
+                elif any(x in nm for x in ["pointsagainst", "pointsallowed", "runsagainst"]) or ab in ["ra", "pa"]: p_against = val
+                elif any(x in nm for x in ["pointsfor", "points", "runs"]) or ab in ["r", "pf"]: p_for = val
                 elif nm in ["avg", "ppg", "apf"] or ab == "apf": p_avg = val
                 elif nm in ["apa", "opp ppg"] or ab == "apa": d_avg = val
             games = gp if gp > 0 else (wins + losses)
@@ -1657,8 +1660,8 @@ def fetch_from_espn_mlb(season_year: int) -> List[Dict[str, Any]]:
                 if "wins" in nm or ab == "w": wins = val
                 elif "losses" in nm or ab == "l": losses = val
                 elif "gamesplayed" in nm or ab == "gp": gp = val
-                elif any(x in nm for x in ["pointsfor", "runs"]) or ab in ["r", "pf"]: p_for = val
-                elif any(x in nm for x in ["pointsagainst", "runsagainst"]) or ab in ["ra", "pa"]: p_against = val
+                elif any(x in nm for x in ["pointsagainst", "pointsallowed", "runsagainst"]) or ab in ["ra", "pa"]: p_against = val
+                elif any(x in nm for x in ["pointsfor", "points", "runs"]) or ab in ["r", "pf"]: p_for = val
                 elif nm in ["avg", "ppg", "apf"] or ab == "apf": p_avg = val
                 elif nm in ["apa", "opp ppg"] or ab == "apa": d_avg = val
             games = gp if gp > 0 else (wins + losses)
@@ -1904,6 +1907,12 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     # OPTIMIZATION: Add to features_data instead of direct assignment to avoid fragmentation
     # features_data is initialized at start of function
     features_data["League"] = league_keys
+
+    # Explicitly set the OHE league columns
+    for lg in ["NBA", "NFL", "NHL", "NCAAB", "NCAAF", "MLB"]:
+        col = f"feature_league_{lg}"
+        if col in VERTEX_FEATURE_COLUMNS:
+            features_data[col] = (league_keys == lg).astype(float)
 
     # Defaults as Series aligned to df.index
     default_win_pct = pd.Series([LEAGUE_AVERAGES.get(lg, LEAGUE_AVERAGES["default"])["win_pct"] for lg in league_keys], index=df.index)
