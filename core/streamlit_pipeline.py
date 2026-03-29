@@ -87,7 +87,7 @@ BEST_PICK_COLUMNS = [
     "Triple_Filter_Rank", "parlay_rank",
     "league", "home_team", "away_team", "game_date", "game_time_est", "market_type", "best_pick",
     "calibrated_probability", "expected_value", "edge", "consensus_agreement",
-    "odds_american", "odds_source", "market_probability", "ml_probability",
+    "odds_american", "odds_source", "market_probability", "ml_probability", "display_probability",
     "kalshi_probability", "kalshi_match_status", "kalshi_match_reason",
     "gemini_explanation", "gemini_risk_notes", "used_stale_features", "Pick_Quality", "Conviction_Score",
 ]
@@ -96,7 +96,7 @@ CANONICAL_BET_COLUMNS = [
     "league", "home_team", "away_team", "game_date", "game_time_est", "game_key",
     "market_type", "spread_line", "total_line",
     "theover_probability", "odds_american", "odds_source", "market_probability",
-    "ml_probability", "calibrated_probability", "expected_value", "edge", "best_pick", "used_stale_features", "matchup_id", "Conviction_Score",
+    "ml_probability", "display_probability", "calibrated_probability", "expected_value", "edge", "best_pick", "used_stale_features", "matchup_id", "Conviction_Score",
 ]
 
 _EXPORT_SIGNAL_COLS = {"market_type", "calibrated_probability", "expected_value", "edge"}
@@ -729,6 +729,7 @@ def _coerce_export_to_canonical(df: pd.DataFrame, selected_sports: list[str] | N
     out["odds_american"] = pd.to_numeric(out.get("odds_american"), errors="coerce")
     out["market_probability"] = out["odds_american"].apply(american_to_prob)
     out["ml_probability"] = pd.to_numeric(out.get("ml_probability"), errors="coerce")
+    out["display_probability"] = pd.to_numeric(out.get("display_probability"), errors="coerce")
     out["calibrated_probability"] = pd.to_numeric(out.get("calibrated_probability"), errors="coerce")
     out["expected_value"] = pd.to_numeric(out.get("expected_value"), errors="coerce")
     out["edge"] = pd.to_numeric(out.get("edge"), errors="coerce")
@@ -1046,6 +1047,7 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
 
     # theover is a legacy column mapping we still ingest
     model_prob = ml.where(ml.notna(), theover)
+    out["display_probability"] = model_prob.round(3)
     kalshi_prob = _numeric_series(out, "kalshi_probability") if "kalshi_probability" in out.columns else pd.Series([pd.NA]*len(out), index=out.index)
 
     calibrated = compute_blended_probability(
@@ -2378,6 +2380,7 @@ def run_analysis_pipeline(
 
     merged["theover_probability"] = theover_probability
     merged["model_probability"] = model_probability
+    merged["display_probability"] = model_probability.round(3)
     merged["calibrated_probability"] = calibrated_probability
 
     # Phase 3: NCAAB Statistical Recalibration
