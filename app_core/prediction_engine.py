@@ -675,8 +675,16 @@ class PredictionEngine:
             if critical_dupes:
                 logger.warning(f"[predict_batch] CRITICAL duplicate columns found in input: {critical_dupes}")
 
-        df = _collapse_duplicate_columns(df, critical_cols=['implied_home_prob', 'kalshi_prob', 'market_probability', 'decimal_odds'])
+        from app_core.dataframe_utils import collapse_duplicate_columns
+        df = collapse_duplicate_columns(df, critical_cols=['implied_home_prob', 'kalshi_prob', 'market_probability', 'decimal_odds', 'ml_probability'])
         logger.info(f"[predict_batch] Shape after collapse: {df.shape}")
+
+        if df.columns.duplicated().any():
+            remaining_dupes = df.columns[df.columns.duplicated()].unique()
+            raise RuntimeError(f"Duplicate columns STILL exist in input df after collapse in predict_batch: {list(remaining_dupes)}")
+
+        critical_cols_present = [c for c in ['implied_home_prob', 'kalshi_prob', 'market_probability', 'decimal_odds', 'ml_probability'] if c in df.columns]
+        logger.info(f"[predict_batch] Critical columns present: {critical_cols_present}")
 
         LEAGUE_MAP = {"NCAAM": "NCAAB", "NCAAMB": "NCAAB", "NCAA MENS BASKETBALL": "NCAAB"}
 
@@ -790,13 +798,22 @@ class PredictionEngine:
                 )
 
             for idx, row in working_df.iterrows():
+                def _get_scalar(row_obj, col_name):
+                    v = row_obj.get(col_name)
+                    if isinstance(v, pd.DataFrame):
+                        logger.error(f"[predict_batch row loop] '{col_name}' is a DataFrame!")
+                        v = v.iloc[:, 0]
+                    if isinstance(v, pd.Series):
+                        logger.error(f"[predict_batch row loop] '{col_name}' is a Series!")
+                        # Safely collapse to first valid scalar
+                        v = v.dropna()
+                        v = v.iloc[0] if not v.empty else pd.NA
+                    return v
+
                 # 1. Kalshi Prob
                 k_prob = None
                 for col in ['kalshi_probability', 'kalshi_prob']:
-                    val = row.get(col)
-                    if isinstance(val, pd.Series):
-                        # Defensive collapse: if a duplicate column survived, grab the first non-null
-                        val = val.dropna().iloc[0] if not val.dropna().empty else pd.NA
+                    val = _get_scalar(row, col)
 
                     if pd.notna(val) and val != "":
                         try:
@@ -811,10 +828,7 @@ class PredictionEngine:
                 # 2. Implied Home Prob
                 i_prob = None
                 for col in ['implied_home_prob', 'market_probability', 'home_price', 'odds_home', 'home_odds', 'odds_american']:
-                    val = row.get(col)
-                    if isinstance(val, pd.Series):
-                        # Defensive collapse: if a duplicate column survived, grab the first non-null
-                        val = val.dropna().iloc[0] if not val.dropna().empty else pd.NA
+                    val = _get_scalar(row, col)
 
                     if pd.notna(val) and val != "":
                         try:
@@ -837,6 +851,11 @@ class PredictionEngine:
             # Explicit cast to silence FutureWarnings before any remaining fillna
             working_df['kalshi_prob'] = pd.to_numeric(working_df['kalshi_prob'], errors='coerce')
             working_df['implied_home_prob'] = pd.to_numeric(working_df['implied_home_prob'], errors='coerce')
+
+            # Log exact type to catch silent dataframe anomalies before coercion
+            logger.info(f"Type of working_df['implied_home_prob']: {type(working_df.get('implied_home_prob'))}")
+            logger.info(f"Type of working_df['kalshi_prob']: {type(working_df.get('kalshi_prob'))}")
+            logger.info(f"Type of working_df['market_probability']: {type(working_df.get('market_probability'))}")
 
             # Select required columns while preserving missing columns as NaN.
             # This allows pre-inference validation to detect schedule/feature join failures.
@@ -1286,9 +1305,20 @@ class PredictionEngine:
                     for idx, row in working_df.iterrows():
                         prob = None
 
+                        def _get_scalar_fallback(row_obj, col_name):
+                            v = row_obj.get(col_name)
+                            if isinstance(v, pd.DataFrame):
+                                logger.error(f"[fallback row loop] '{col_name}' is a DataFrame!")
+                                v = v.iloc[:, 0]
+                            if isinstance(v, pd.Series):
+                                logger.error(f"[fallback row loop] '{col_name}' is a Series!")
+                                v = v.dropna()
+                                v = v.iloc[0] if not v.empty else pd.NA
+                            return v
+
                         # Try Bookmaker Odds FIRST (Arbitrage Fallback)
                         for col in ['implied_home_prob', 'market_probability', 'home_price', 'odds_home', 'home_odds', 'odds_american']:
-                            val = row.get(col)
+                            val = _get_scalar_fallback(row, col)
                             if pd.notna(val) and val != "":
                                 try:
                                     numeric_val = float(val)
