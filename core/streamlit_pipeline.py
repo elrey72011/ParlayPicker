@@ -2234,6 +2234,7 @@ def run_analysis_pipeline(
 
                 # DIAGNOSTICS & DEDUPLICATION: check for duplicate columns after feature enrichment
                 logger.info(f"Shape after enrich_with_model_features: {enriched_for_prediction.shape}")
+                logger.info(f"Dataframe shape after enrichment: {enriched_for_prediction.shape}")
                 has_dupes = enriched_for_prediction.columns.duplicated().any()
                 logger.info(f"Duplicate columns exist after enrichment: {has_dupes}")
                 if has_dupes:
@@ -2244,8 +2245,15 @@ def run_analysis_pipeline(
                     if critical_dupes:
                         logger.warning(f"CRITICAL duplicate columns found after enrichment: {critical_dupes}")
 
-                from app_core.prediction_engine import _collapse_duplicate_columns
-                enriched_for_prediction = _collapse_duplicate_columns(enriched_for_prediction, critical_cols=['implied_home_prob', 'kalshi_prob', 'market_probability', 'decimal_odds'])
+                from app_core.dataframe_utils import collapse_duplicate_columns
+                enriched_for_prediction = collapse_duplicate_columns(
+                    enriched_for_prediction,
+                    critical_cols=['implied_home_prob', 'kalshi_prob', 'market_probability', 'decimal_odds', 'ml_probability']
+                )
+
+                if enriched_for_prediction.columns.duplicated().any():
+                    remaining_dupes = enriched_for_prediction.columns[enriched_for_prediction.columns.duplicated()].unique()
+                    raise RuntimeError(f"Duplicate columns STILL exist in enriched_for_prediction after collapse: {list(remaining_dupes)}")
 
                 # Copy the enriched columns back into merged (or at least provide to predictor)
                 # Ensure the predictor runs on the enriched dataframe

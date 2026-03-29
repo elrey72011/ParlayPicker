@@ -2465,6 +2465,13 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     # Consolidate memory layout to prevent fragmentation warnings
     features_df = features_df.copy()
 
+    # Drop any columns from the original df that we just computed/updated in features_df
+    # to prevent pd.concat(axis=1) from creating duplicated column names
+    cols_to_drop = [c for c in features_df.columns if c in df.columns]
+    if cols_to_drop:
+        logger.info(f"Dropping {len(cols_to_drop)} columns from original dataframe to prevent duplication: {cols_to_drop}")
+        df = df.drop(columns=cols_to_drop)
+
     result = pd.concat([df, features_df], axis=1)
     return result
 
