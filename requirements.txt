@@ -23,8 +23,7 @@ xgboost>=2.0.0
 # Live Stats Integrations
 nba_api>=1.4.0
 nfl_data_py>=0.3.0
-nhlpy>=0.2.0
-cbbpy>=2.0.0
+cfbd>=5.0.0
 
 # AI
 google-genai
