@@ -1283,62 +1283,279 @@ class PredictionEngine:
                 is_flat = True
 
             if is_flat:
-                logger.warning(f"XGBoost returned critically flat probabilities ({unique_count}/{total_count}). Overriding with Sportsbook Implied Probabilities for Arbitrage.")
+                logger.warning(f"XGBoost returned critically flat probabilities ({unique_count}/{total_count}). Overriding with Hybrid Fallback Score.")
                 final_probs = []
+
+                chosen_market_probs = []
+                scores_before_eps = []
+                scores_after_eps = []
+
                 for idx_batch, idx in enumerate(working_df.index):
                     row = working_df.loc[idx]
-                    i_val = row.get('implied_home_prob')
-                    prob = float(i_val) if pd.notna(i_val) and str(i_val).strip() != "" else 0.50
-                    
-                    # Jules: Dynamically scale Arbitrage Adjustment based on feature density
-                    # Determine NaN ratio for this specific row using the original raw data
-                    nan_ratio = row_nan_ratio[idx] if idx in row_nan_ratio.index else 0.0
-
-                    # Extract feature_diff_win_pct from the inference matrix to size the adjustment
-                    diff_val = inference_data.iloc[idx_batch]['feature_diff_win_pct'] if 'feature_diff_win_pct' in inference_data.columns else 0.0
-                    if pd.isna(diff_val):
-                        diff_val = 0.0
-                    adjustment = 0.20 + (abs(float(diff_val)) * 0.30)
-
-                    # Cap adjustment to 0.05 if mostly empty features to prevent false value
-                    if nan_ratio > 0.5:
-                        adjustment = min(0.05, adjustment)  # Throttled cap for low-data scenarios
-                    else:
-                        adjustment = min(0.35, adjustment)  # Standard cap
-
-                    # THE FIX: Run picks through clean_team_name() so 'iowa state' perfectly matches 'iowastate'
-                    pick_team = clean_team_name(str(row.get('pick_team', '')))
-                    best_pick_raw = str(row.get('best_pick', '')).lower()
-                    best_pick_clean = clean_team_name(best_pick_raw)
-
-                    home_team = str(row.get('home_team', ''))
-                    away_team = str(row.get('away_team', ''))
+                    league_str = str(row.get('league', '')).upper()
                     market_type = str(row.get('market_type', '')).lower().strip()
                     
-                    # Aggressive check for Totals to prevent spread logic from crushing Over/Unders
-                    if "total" in market_type or "over" in best_pick_raw or "under" in best_pick_raw:
-                        # Totals: Kalshi is anchored to the OVER. Bump UP if Over, DOWN if Under.
-                        if "over" in best_pick_raw:
-                            prob = min(0.99, prob + adjustment)
-                        else:
-                            prob = max(0.01, prob - adjustment)
+                    is_home_side = market_type in ('spread_home', 'h2h_home')
+                    is_away_side = market_type in ('spread_away', 'h2h_away')
+                    is_over = market_type == 'total_over'
+                    is_under = market_type == 'total_under'
+
+                    # Component 1: Market Probability (45%)
+                    chosen_price = None
+                    opp_price = None
+
+                    if is_home_side:
+                        chosen_price = row.get('novig_home_price') or row.get('novig_h2h_home_price')
+                        opp_price = row.get('novig_away_price') or row.get('novig_h2h_away_price')
+                    elif is_away_side:
+                        chosen_price = row.get('novig_away_price') or row.get('novig_h2h_away_price')
+                        opp_price = row.get('novig_home_price') or row.get('novig_h2h_home_price')
+                    elif is_over:
+                        chosen_price = row.get('novig_over_price')
+                        opp_price = row.get('novig_under_price')
+                    elif is_under:
+                        chosen_price = row.get('novig_under_price')
+                        opp_price = row.get('novig_over_price')
+
+                    def get_american(val):
+                        try:
+                            if pd.notna(val) and str(val).strip() != "":
+                                return float(val)
+                        except Exception:
+                            pass
+                        return None
+
+                    def am_to_prob(odds):
+                        if odds is None or odds == 0: return None
+                        if odds > 0: return 100.0 / (odds + 100.0)
+                        return abs(odds) / (abs(odds) + 100.0)
+
+                    c_price = get_american(chosen_price)
+                    o_price = get_american(opp_price)
+
+                    market_prob = None
+                    if c_price is not None and o_price is not None:
+                        cp = am_to_prob(c_price)
+                        op = am_to_prob(o_price)
+                        if cp and op:
+                            market_prob = cp / (cp + op)
+                    elif c_price is not None:
+                        market_prob = am_to_prob(c_price)
                     else:
-                        # Spread/ML: Kalshi is anchored to the HOME team. Bump UP if Home, DOWN if Away.
-                        is_home_pick = (pick_team == home_team) or (home_team in best_pick_clean and home_team != "")
-                        is_away_pick = (pick_team == away_team) or (away_team in best_pick_clean and away_team != "")
-                        
-                        if is_home_pick:
-                            prob = min(0.99, prob + adjustment)
-                        elif is_away_pick:
-                            prob = max(0.01, prob - adjustment)
-                        else:
-                            # Absolute fallback: Bump the favorite
-                            if prob >= 0.5:
-                                prob = min(0.99, prob + adjustment)
+                        am = get_american(row.get('odds_american'))
+                        if am is not None:
+                            market_prob = am_to_prob(am)
+
+                    # Component 2: Kalshi Probability (20%)
+                    k_prob = None
+                    try:
+                        kalshi = row.get('kalshi_prob')
+                        if pd.notna(kalshi):
+                            val = float(kalshi)
+                            if val > 0 and abs(val - 0.5) > 0.01:
+                                if is_away_side or is_under:
+                                    k_prob = 1.0 - val
+                                else:
+                                    k_prob = val
+                    except Exception:
+                        pass
+
+                    # Component 3: Magnitude Signal (10%)
+                    mag_comp = None
+                    try:
+                        if is_home_side or is_away_side:
+                            line = row.get('spread_line') if pd.notna(row.get('spread_line')) else row.get('spread')
+                            if pd.notna(line):
+                                norm = min(abs(float(line)) / 15.0, 1.0)
+                                mag_comp = 0.50 + 0.10 * norm
+                        elif is_over or is_under:
+                            # Prefer total movement if available, else use league median
+                            total_movement = row.get('total_movement')
+                            if pd.notna(total_movement):
+                                norm = min(abs(float(total_movement)) / 10.0, 1.0)
+                                mag_comp = 0.50 + 0.10 * norm
                             else:
-                                prob = max(0.01, prob - adjustment)
-                            
-                    final_probs.append(prob)
+                                line = row.get('total_line')
+                                if pd.notna(line):
+                                    league_median = {'NBA': 228.0, 'NCAAB': 142.0, 'NFL': 45.0, 'NHL': 6.0}.get(league_str, 150.0)
+                                    band = {'NBA': 20.0, 'NCAAB': 20.0, 'NFL': 10.0, 'NHL': 1.5}.get(league_str, 20.0)
+                                    norm = min(abs(float(line) - league_median) / band, 1.0)
+                                    mag_comp = 0.50 + 0.10 * norm
+                    except Exception:
+                        pass
+
+                    # Component 4: Feature Differential (10%)
+                    feat_comp = None
+                    try:
+                        if is_home_side or is_away_side:
+                            diff_win_pct = inference_data.iloc[idx_batch].get('feature_diff_win_pct', 0.0)
+                            diff_ppg = inference_data.iloc[idx_batch].get('feature_diff_ppg', 0.0)
+                            diff_streak = inference_data.iloc[idx_batch].get('feature_diff_streak', 0.0)
+
+                            blend = 0.5 * float(diff_win_pct) + 0.3 * (float(diff_ppg) / 20.0) + 0.2 * (float(diff_streak) / 10.0)
+                            blend = max(-1.0, min(1.0, blend))
+                            if is_away_side:
+                                blend = -blend
+                            feat_comp = 0.50 + 0.12 * blend
+                        elif is_over or is_under:
+                            h_ppg = inference_data.iloc[idx_batch].get('feature_home_ppg', 0.0)
+                            a_ppg = inference_data.iloc[idx_batch].get('feature_away_ppg', 0.0)
+                            proxy = (float(h_ppg) + float(a_ppg)) / 2.0
+                            median_ppg = {'NBA': 114.0, 'NCAAB': 72.0, 'NFL': 22.0, 'NHL': 3.0}.get(league_str, 100.0)
+                            norm = (proxy - median_ppg) / (median_ppg * 0.2)
+                            norm = max(-1.0, min(1.0, norm))
+                            if is_under:
+                                norm = -norm
+                            feat_comp = 0.50 + 0.12 * norm
+                    except Exception:
+                        pass
+
+                    # Component 5: Rest Differential (5%)
+                    rest_comp = None
+                    try:
+                        if is_home_side or is_away_side:
+                            h_rest = inference_data.iloc[idx_batch].get('feature_home_rest_days', 3.0)
+                            a_rest = inference_data.iloc[idx_batch].get('feature_away_rest_days', 3.0)
+                            rest_diff = float(h_rest) - float(a_rest)
+                            rest_diff = max(-4.0, min(4.0, rest_diff))
+                            if is_away_side:
+                                rest_diff = -rest_diff
+                            rest_comp = 0.50 + (rest_diff / 4.0) * 0.05
+                        elif is_over or is_under:
+                            rest_comp = 0.50
+                    except Exception:
+                        pass
+
+                    # Component 6: Sentiment / Movement (5%)
+                    sent_comp = None
+                    try:
+                        sent_val = None
+                        move_val = None
+
+                        if is_home_side or is_away_side:
+                            sent_diff = inference_data.iloc[idx_batch].get('sentiment_diff', 0.0)
+                            sent_diff = float(sent_diff)
+                            if is_away_side:
+                                sent_diff = -sent_diff
+                            sent_val = 0.50 + sent_diff * 0.05
+
+                            line_move = row.get('line_movement')
+                            if pd.notna(line_move):
+                                move = float(line_move)
+                                # negative movement means line moved in favor of home
+                                if is_away_side:
+                                    move = -move
+                                # cap movement impact
+                                move_val = 0.50 - (move / 10.0) * 0.05
+                                move_val = max(0.40, min(0.60, move_val))
+
+                        elif is_over or is_under:
+                            total_move = row.get('total_movement')
+                            if pd.notna(total_move):
+                                move = float(total_move)
+                                # positive movement means total went up (favoring over)
+                                if is_under:
+                                    move = -move
+                                move_val = 0.50 + (move / 5.0) * 0.05
+                                move_val = max(0.40, min(0.60, move_val))
+
+                        if sent_val is not None and move_val is not None:
+                            sent_comp = (sent_val + move_val) / 2.0
+                        elif sent_val is not None:
+                            sent_comp = sent_val
+                        elif move_val is not None:
+                            sent_comp = move_val
+                        else:
+                            sent_comp = 0.50
+                    except Exception:
+                        pass
+
+                    # Component 7: Residual Fallback (5%)
+                    residual_prob = None
+                    try:
+                        row_features = inference_data.iloc[idx_batch].to_dict()
+                        row_features['league'] = league_str
+                        row_features['home_team'] = row.get('home_team', '')
+                        row_features['away_team'] = row.get('away_team', '')
+                        row_features['game_date'] = row.get('game_date', '')
+                        
+                        stat_prob = self._calculate_statistical_prob(row_features)
+                        if is_away_side or is_under:
+                            residual_prob = 1.0 - stat_prob
+                        else:
+                            residual_prob = stat_prob
+                    except Exception:
+                        pass
+
+                    # Blend components with renormalizing weights
+                    components = {}
+                    weights = {}
+
+                    if market_prob is not None:
+                        components['market'] = market_prob
+                        weights['market'] = 0.45
+                    if k_prob is not None:
+                        components['kalshi'] = k_prob
+                        weights['kalshi'] = 0.20
+                    if mag_comp is not None:
+                        components['magnitude'] = mag_comp
+                        weights['magnitude'] = 0.10
+                    if feat_comp is not None:
+                        components['feature'] = feat_comp
+                        weights['feature'] = 0.10
+                    if rest_comp is not None:
+                        components['rest'] = rest_comp
+                        weights['rest'] = 0.05
+                    if sent_comp is not None:
+                        components['sentiment'] = sent_comp
+                        weights['sentiment'] = 0.05
+                    if residual_prob is not None:
+                        components['residual'] = residual_prob
+                        weights['residual'] = 0.05
+
+                    total_weight = sum(weights.values())
+                    if total_weight > 0:
+                        hybrid_score = sum(components[k] * weights[k] for k in components) / total_weight
+                    else:
+                        hybrid_score = 0.5
+
+                    score_before_eps = hybrid_score
+
+                    # Deterministic Tie-break Epsilon
+                    matchup_id = row.get('matchup_id', '')
+                    game_date = row.get('game_date', '')
+                    seed_str = f"{matchup_id}|{game_date}|{market_type}"
+                    md5_hash = hashlib.md5(seed_str.encode()).hexdigest()
+                    # map hash to a tiny positive float between 0 and 9e-7
+                    epsilon = (int(md5_hash[:8], 16) / 0xFFFFFFFF) * 9e-7
+
+                    hybrid_score += epsilon
+                    hybrid_score = max(0.01, min(0.99, hybrid_score))
+
+                    chosen_market_probs.append(market_prob if market_prob is not None else 0.5)
+                    scores_before_eps.append(score_before_eps)
+                    scores_after_eps.append(hybrid_score)
+                    final_probs.append(hybrid_score)
+
+                # Variance Diagnostics Logging
+                from collections import Counter
+                unique_before = len(set(scores_before_eps))
+                unique_after = len(set(scores_after_eps))
+
+                market_prob_counts = Counter(chosen_market_probs)
+                before_eps_counts = Counter(scores_before_eps)
+
+                identical_market_rows = sum(count for count in market_prob_counts.values() if count > 1)
+                identical_before_rows = sum(count for count in before_eps_counts.values() if count > 1)
+
+                logger.info(f"Hybrid Fallback Variance Report:")
+                logger.info(f"  - Unique chosen market probabilities: {len(set(chosen_market_probs))}/{total_count} (Rows sharing exact values: {identical_market_rows})")
+                logger.info(f"  - Unique raw scores BEFORE epsilon: {unique_before}/{total_count} (Rows sharing exact values: {identical_before_rows})")
+                logger.info(f"  - Unique final scores AFTER epsilon: {unique_after}/{total_count}")
+
+                if identical_before_rows > 0:
+                    top_dupes = before_eps_counts.most_common(3)
+                    logger.info(f"  - Sample duplicate groups (before epsilon): {top_dupes}")
 
             return final_probs
         except ValueError as e:
