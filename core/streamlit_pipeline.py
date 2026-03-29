@@ -2227,11 +2227,19 @@ def run_analysis_pipeline(
                 if 'kalshi_probability' in merged.columns:
                     merged['kalshi_prob'] = merged.get('kalshi_prob', merged['kalshi_probability'])
 
+                # We need to enrich the features here to provide live data coverage before hitting prediction fallback
+                from app_core.feature_processing import enrich_with_model_features
+                api_clients = {}  # Stub for backward compatibility if it expects dict
+                enriched_for_prediction = enrich_with_model_features(merged[needs_prediction].copy(), api_clients)
+
+                # Copy the enriched columns back into merged (or at least provide to predictor)
+                # Ensure the predictor runs on the enriched dataframe
+
                 engine = PredictionEngine()
                 ml_model_actually_loaded = not getattr(engine, "use_fallback", True)
 
                 # predict_batch expects a DataFrame, returns List[float]
-                predictions_list = engine.predict_batch(merged[needs_prediction])
+                predictions_list = engine.predict_batch(enriched_for_prediction)
 
                 # Assign predictions only to rows that needed them
                 if "ml_probability" not in merged.columns:

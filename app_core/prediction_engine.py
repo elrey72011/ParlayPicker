@@ -761,8 +761,29 @@ class PredictionEngine:
             raw_inference_data = working_df.reindex(columns=VERTEX_FEATURE_COLUMNS).copy()
             raw_numeric = raw_inference_data.apply(pd.to_numeric, errors='coerce')
 
+            # --- DIAGNOSTIC: True Coverage Logging Before Fills/Fallbacks ---
+            # Identifies explicitly non-null features that came through the live pipeline
+            if not raw_numeric.empty:
+                true_coverage_stats = []
+                for col in VERTEX_FEATURE_COLUMNS:
+                    if col in raw_numeric.columns:
+                        valid_count = raw_numeric[col].notna().sum()
+                        pct = (valid_count / len(raw_numeric)) * 100
+                        true_coverage_stats.append(f"{col}: {pct:.0f}%")
+                    else:
+                        true_coverage_stats.append(f"{col}: 0%")
+                logger.info(f"TRUE Feature coverage before ANY fallback/fill (batch size {len(raw_numeric)}):\n  " + "\n  ".join(true_coverage_stats))
+
             # Merge Hardening: use sanitized team names for "Stale Feature Fallback"
             row_nan_ratio = raw_numeric.isna().sum(axis=1) / max(len(VERTEX_FEATURE_COLUMNS), 1)
+
+            # Metrics tracking for the summary block
+            metrics = {
+                "total_rows": len(raw_numeric),
+                "strict_join_rescued": 0,
+                "fuzzy_join_rescued": 0,
+                "split_lookup_rescued": 0,
+            }
 
             # Keep track of which rows use stale features
             used_stale_features = pd.Series(False, index=df.index)
@@ -864,6 +885,8 @@ class PredictionEngine:
 
                                         if row_match_key:
                                             match = hist_df[hist_df["canonical_match_key"].eq(row_match_key).fillna(False)]
+                                            if not match.empty:
+                                                metrics["strict_join_rescued"] += 1
 
 
                                         # Looser Fallback: rolling most recent matchup match (ignore date)
@@ -872,6 +895,9 @@ class PredictionEngine:
                                             if row_league and "league_norm" in hist_df.columns:
                                                 match = match[match["league_norm"].astype("string").str.upper().eq(row_league).fillna(False)]
 
+                                            if not match.empty:
+                                                # Treat recent lookup as a strict match
+                                                metrics["strict_join_rescued"] += 1
                                             # We intentionally do not filter by valid_window here to allow "unlimited lookback"
                                             # to the most recent historical stats available regardless of date.
 
@@ -906,6 +932,7 @@ class PredictionEngine:
                                                 if best_score >= 65 and best_match_id:
                                                     logger.info(f"Fuzzy match successful: {row_matchup} -> {best_match_id} (Score: {best_score:.1f})")
                                                     match = league_pool[league_pool["matchup_id"].eq(best_match_id).fillna(False)]
+                                                    metrics["fuzzy_join_rescued"] += 1
 
                                                     # We intentionally do not filter by valid_window here to allow "unlimited lookback"
                                                     # to the most recent historical stats available regardless of date.
@@ -930,6 +957,15 @@ class PredictionEngine:
                                                     roles_swapped = True
 
                                                 # Create explicit mapping layer from historical to engine schema
+                                                # Documenting synthetic / unmapped features:
+                                                #   - injuries_home_count: Proxy mapped from injuries_impact
+                                                #   - injuries_away_count: Unmapped in CSV (defaults to 0.0)
+                                                #   - feature_home_oppg: Often unmapped in CSV (defaults to 0.0 if not found)
+                                                #   - feature_home_streak: Proxy mapped from home_form_last5
+                                                #   - feature_away_oppg: Often unmapped in CSV (defaults to 0.0 if not found)
+                                                #   - feature_away_streak: Proxy mapped from away_form_last5
+                                                #   - feature_home_rest_days: Proxy mapped from rest_advantage
+                                                #   - feature_away_rest_days: Unmapped in CSV (defaults to 0.0)
                                                 hist_mapping = {
                                                     "implied_home_prob": latest.get("implied_home_prob", latest.get("home_win_pct")),
                                                     "kalshi_prob": latest.get("kalshi_prob", latest.get("theover_probability")),
@@ -956,6 +992,7 @@ class PredictionEngine:
 
                                                 # Warning: feature_home_oppg, feature_away_oppg, injuries_away_count, feature_away_rest_days
                                                 # may not exist in master_all_sports.csv and rely heavily on defaults when missing
+                                                # They will be tracked as synthetic coverage.
 
                                                 for col in VERTEX_FEATURE_COLUMNS:
                                                     val = hist_mapping.get(col)
@@ -1030,6 +1067,7 @@ class PredictionEngine:
 
                                             if found_home or found_away:
                                                 used_stale_features.at[idx] = True
+                                                metrics["split_lookup_rescued"] += 1
 
                                             logger.debug(f"Split lookup tracing: row_home_clean='{row_home_clean}', row_away_clean='{row_away_clean}', hist_df_homes={hist_df['home_team'].unique()[:5] if 'home_team' in hist_df.columns else 'N/A'}")
 
@@ -1192,22 +1230,25 @@ class PredictionEngine:
                         fallbacks.append(float(prob))
                     return fallbacks
 
-            # Feature coverage logging BEFORE silent fill
+            # --- DIAGNOSTIC: Model-Ready Coverage Logging AFTER Fills/Fallbacks but BEFORE zero-fill ---
+            # Identifies coverage after applying historical lookups and synthetic defaults.
             if not raw_numeric.empty:
-                coverage_stats = []
+                model_ready_coverage_stats = []
                 for col in VERTEX_FEATURE_COLUMNS:
                     if col in raw_numeric.columns:
                         valid_count = raw_numeric[col].notna().sum()
                         pct = (valid_count / len(raw_numeric)) * 100
-                        coverage_stats.append(f"{col}: {pct:.0f}%")
+                        model_ready_coverage_stats.append(f"{col}: {pct:.0f}%")
                     else:
-                        coverage_stats.append(f"{col}: 0%")
-                logger.info(f"Feature coverage before inference (batch size {len(raw_numeric)}):\n  " + "\n  ".join(coverage_stats))
+                        model_ready_coverage_stats.append(f"{col}: 0%")
+                logger.info(f"MODEL-READY Feature coverage (batch size {len(raw_numeric)}):\n  " + "\n  ".join(model_ready_coverage_stats))
 
                 # Log matching statistics
                 if len(used_stale_features) > 0:
                     stale_count = used_stale_features.sum()
                     logger.info(f"Fallback Summary: {stale_count} out of {len(raw_numeric)} rows used historical fallback.")
+
+            self._last_metrics = metrics
 
             # Ensure proper casting and fillna to prevent errors - critical for preventing placeholder values
             inference_data = raw_numeric.fillna(0.0)
@@ -1241,8 +1282,13 @@ class PredictionEngine:
             else:
                 raw_probs = [float(probs)]
 
+            # ML Variance Diagnostic 1: Raw model output uniqueness
+            raw_valid_probs = [p for p in raw_probs if p is not None]
+            self._last_metrics["raw_unique_count"] = len(set(raw_valid_probs))
+
             # Jules: MANDATORY Blacklist and Statistical Healing recovery
             BLACKLIST = [0.623034656047821, 0.10671072453260422, 0.48637846, 0.31053704, 0.5622388124465942, 0.562238]
+            healed_count = 0
             for idx_batch, p in enumerate(raw_probs):
                 # If model returns a known bias value, discard and use performance stats instead
                 if p is None or any(abs(p - b) < 1e-5 for b in BLACKLIST):
@@ -1257,13 +1303,17 @@ class PredictionEngine:
                     row_features['game_date'] = working_df.loc[original_idx, 'game_date'] if 'game_date' in working_df.columns else ''
 
                     final_probs.append(self._calculate_statistical_prob(row_features))
+                    healed_count += 1
                 else:
                     final_probs.append(p)
 
-            # SPORTSBOOK ARBITRAGE OVERRIDE
+            self._last_metrics["healed_count"] = healed_count
+
+            # ML Variance Diagnostic 2: Post-healing output uniqueness
             valid_probs = [p for p in final_probs if p is not None]
             unique_count = len(set(valid_probs))
             total_count = len(df)
+            self._last_metrics["post_healing_unique_count"] = unique_count
 
             # Log output variance for monitoring
             if total_count > 0:
@@ -1542,6 +1592,9 @@ class PredictionEngine:
                 unique_before = len(set(scores_before_eps))
                 unique_after = len(set(scores_after_eps))
 
+                self._last_metrics["hybrid_override_triggered"] = True
+                self._last_metrics["hybrid_unique_before_eps"] = unique_before
+
                 market_prob_counts = Counter(chosen_market_probs)
                 before_eps_counts = Counter(scores_before_eps)
 
@@ -1556,6 +1609,68 @@ class PredictionEngine:
                 if identical_before_rows > 0:
                     top_dupes = before_eps_counts.most_common(3)
                     logger.info(f"  - Sample duplicate groups (before epsilon): {top_dupes}")
+
+                    # Detailed sampling of repeated groups
+                    for dup_score, dup_count in top_dupes:
+                        if dup_count > 1:
+                            logger.info(f"    - Inspecting group collapsing to raw score {dup_score:.5f} ({dup_count} rows):")
+                            for idx_batch, score in enumerate(scores_before_eps):
+                                if abs(score - dup_score) < 1e-7:
+                                    row = working_df.iloc[idx_batch]
+                                    feat = inference_data.iloc[idx_batch]
+                                    kalshi_val = feat.get('kalshi_prob', 0.5)
+                                    mkt_prob = chosen_market_probs[idx_batch]
+                                    stale_flag = used_stale_features.iloc[idx_batch]
+
+                                    # Determine what was synthetic
+                                    synth_flags = []
+                                    if abs(feat.get('feature_home_oppg', 0.0)) < 1e-5: synth_flags.append('home_oppg')
+                                    if abs(feat.get('feature_away_rest_days', 0.0)) < 1e-5: synth_flags.append('away_rest')
+
+                                    logger.info(f"      [{row.get('league')}] {row.get('matchup_id')} | Pick: {row.get('market_type')} | Mkt: {mkt_prob:.3f} | Kalshi: {kalshi_val:.3f} | Stale: {stale_flag} | Synth: {synth_flags}")
+            else:
+                self._last_metrics["hybrid_override_triggered"] = False
+
+            final_unique = len(set(final_probs))
+            self._last_metrics["final_unique_count"] = final_unique
+
+            # --- HEALTH SCORE / SUMMARY BLOCK ---
+            logger.info("=" * 60)
+            logger.info("PIPELINE HEALTH SUMMARY")
+            logger.info("=" * 60)
+            logger.info(f"Total Games/Rows Evaluated: {total_count}")
+            logger.info(f"1. Raw Model Unique Outputs: {self._last_metrics.get('raw_unique_count', 0)}")
+            logger.info(f"2. Post-Healing Unique Outputs: {self._last_metrics.get('post_healing_unique_count', 0)} (Rows healed: {self._last_metrics.get('healed_count', 0)})")
+
+            if self._last_metrics.get("hybrid_override_triggered", False):
+                logger.info(f"3. Post-Hybrid Unique Outputs (Pre-Epsilon): {self._last_metrics.get('hybrid_unique_before_eps', 0)}")
+            else:
+                logger.info(f"3. Post-Hybrid Unique Outputs (Pre-Epsilon): N/A (Override Not Triggered)")
+
+            logger.info(f"4. Final Unique Outputs: {final_unique}")
+
+            if not raw_numeric.empty:
+                true_cov_mean = (raw_numeric.notna().sum(axis=1) / max(len(VERTEX_FEATURE_COLUMNS), 1)).mean() * 100
+                synth_cov_mean = 100 - true_cov_mean
+                logger.info(f"True Feature Coverage (Avg/Row): {true_cov_mean:.1f}%")
+                logger.info(f"Synthetic/Default-Filled Coverage (Avg/Row): {synth_cov_mean:.1f}%")
+            else:
+                logger.info("Feature Coverage: N/A (Empty Matrix)")
+
+            strict_pct = (self._last_metrics["strict_join_rescued"] / max(total_count, 1)) * 100
+            fuzzy_pct = (self._last_metrics["fuzzy_join_rescued"] / max(total_count, 1)) * 100
+            split_pct = (self._last_metrics["split_lookup_rescued"] / max(total_count, 1)) * 100
+
+            logger.info(f"Rows using Strict Historical Reconstruction: {strict_pct:.1f}% ({self._last_metrics['strict_join_rescued']})")
+            logger.info(f"Rows using Fuzzy Reconstruction: {fuzzy_pct:.1f}% ({self._last_metrics['fuzzy_join_rescued']})")
+            logger.info(f"Rows using Split Lookup: {split_pct:.1f}% ({self._last_metrics['split_lookup_rescued']})")
+
+            hybrid_pct = 100.0 if is_flat else 0.0
+            logger.info(f"Rows using Hybrid Override: {hybrid_pct:.1f}%")
+
+            sanitized_pct = (self._last_metrics.get('healed_count', 0) / max(total_count, 1)) * 100
+            logger.info(f"Rows patched by Sanitization: {sanitized_pct:.1f}%")
+            logger.info("=" * 60)
 
             return final_probs
         except ValueError as e:
