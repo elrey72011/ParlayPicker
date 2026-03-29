@@ -1971,6 +1971,7 @@ def run_analysis_pipeline(
     # Primary ingestion baseline: master_slate (from Odds API) is the master slate frame.
     merged = master_slate.copy()
     print('master_slate len:', len(master_slate))
+    logger.info(f"PIPELINE TRACE: master_slate initialized with {len(merged)} rows.")
 
     # 3. Invert the Merge (Odds API is Base, TheOver is Enrichment)
     if not theover_rows.empty and not merged.empty:
@@ -2176,6 +2177,7 @@ def run_analysis_pipeline(
     merged["market_probability"] = novig_midpoint.where(novig_midpoint.notna(), fallback_market_probability)
 
     # Mandatory Sanitization Layer
+    logger.info(f"PIPELINE TRACE: Rows before sanitization: {len(merged)}")
     if not merged.empty:
         # Patch pathological/synthetic odds (e.g., -99900)
         valid_odds_mask = merged["odds_american"].isna() | ((merged["odds_american"] >= -10000) & (merged["odds_american"] <= 10000))
@@ -2194,12 +2196,14 @@ def run_analysis_pipeline(
     merged["total"] = pd.to_numeric(merged.get("total_line"), errors="coerce")
     merged = _enforce_identity_string_dtype(merged, ["league", "home_team", "away_team"])
     merged = _restore_missing_ncaab_league_priority(merged)
+    logger.info(f"PIPELINE TRACE: Rows after sanitization & formatting: {len(merged)}")
 
     # ML Prediction Enrichment [2026-03-08]
     ml_model_actually_loaded = False
     merged["model_status"] = "OK"
     if use_ml and ML_AVAILABLE and PredictionEngine is not None:
         logger.warning("🔍 ML DEBUG: use_ml=True, attempting predictions...")
+        logger.info(f"PIPELINE TRACE: Sending {len(merged)} rows into ML prediction logic.")
         try:
             existing_ml = _numeric_series(merged, "ml_probability")
             non_na_existing = existing_ml.dropna()
@@ -2262,7 +2266,9 @@ def run_analysis_pipeline(
                 ml_model_actually_loaded = not getattr(engine, "use_fallback", True)
 
                 # predict_batch expects a DataFrame, returns List[float]
+                logger.info(f"PIPELINE TRACE: Sending {len(enriched_for_prediction)} rows into predict_batch.")
                 predictions_list = engine.predict_batch(enriched_for_prediction)
+                logger.info(f"PIPELINE TRACE: Received {len(predictions_list)} predictions from predict_batch.")
 
                 # Extra safeguard for assignment back to merged
                 num_needed = needs_prediction.sum()
@@ -2280,6 +2286,7 @@ def run_analysis_pipeline(
                     index=merged[needs_prediction].index,
                     dtype="float64"
                 )
+                logger.info(f"PIPELINE TRACE: Successfully merged {len(predictions_list)} predictions back into master slate.")
 
                 # Assign used_stale_features flag
                 if hasattr(engine, 'last_batch_used_stale_features'):
