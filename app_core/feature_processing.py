@@ -48,19 +48,13 @@ except ImportError:
     cfbd = None
     logger.error("❌ cfbd not installed. NCAAF stats fetching will fail.")
 
-try:
-    from nhlpy import NHLClient
-    logger.info("✅ nhlpy loaded successfully.")
-except ImportError:
-    NHLClient = None
-    logger.error("❌ nhlpy not installed. NHL stats fetching will fail.")
+# Removed nhlpy as it uses a deprecated NHL API.
+# Will use direct requests to api-web.nhle.com instead.
+logger.info("✅ NHL Adapter loaded successfully (using api-web.nhle.com directly).")
 
-try:
-    import cbbpy.mens_scraper as cbb_s
-    logger.info("✅ cbbpy loaded successfully.")
-except ImportError:
-    cbb_s = None
-    logger.error("❌ CBBpy not installed. NCAAB stats fetching will fail.")
+# Removed CBBpy as it does not have a working stats adapter.
+# Will use ESPN as the primary source for NCAAB.
+logger.info("✅ NCAAB Adapter loaded successfully (using ESPN primary).")
 
 try:
     import rapidfuzz
@@ -240,6 +234,15 @@ TEAM_NAME_MAPPING = {
     "seattle": "SEATTLE KRAKEN",
     "vancouver": "VANCOUVER CANUCKS",
     "los angeles": "LOS ANGELES KINGS",
+    "dallas": "DALLAS STARS",
+    "boston": "BOSTON BRUINS",
+    "chicago": "CHICAGO BLACKHAWKS",
+    "carolina": "CAROLINA HURRICANES",
+    "columbus": "COLUMBUS BLUE JACKETS",
+    "new jersey": "NEW JERSEY DEVILS",
+    "philadelphia": "PHILADELPHIA FLYERS",
+    "montreal": "MONTREAL CANADIENS",
+    "nashville": "NASHVILLE PREDATORS",
 }
 
 # Manual overrides for team name normalization failures
@@ -874,6 +877,52 @@ def _parse_form(form_str: str) -> float:
     total = len(form_str)
     return wins / total if total > 0 else 0.5
 
+def resolve_nhl_ambiguity(team_name: str, opponent_name: str) -> str:
+    """
+    Resolves ambiguous NHL teams like "NEW YORK" based on opponent context.
+    If it's too ambiguous and can't be resolved, it returns the original string.
+    """
+    team_name = team_name.upper().strip()
+    opponent_name = opponent_name.upper().strip()
+
+    if team_name != "NEW YORK":
+        return team_name
+
+    try:
+        # Check current schedule to see who is playing the opponent
+        url = "https://api-web.nhle.com/v1/schedule/now"
+        resp = requests.get(url, timeout=5)
+        if resp.status_code == 200:
+            data = resp.json()
+            for day in data.get('gameWeek', []):
+                for game in day.get('games', []):
+                    home = game.get('homeTeam', {})
+                    away = game.get('awayTeam', {})
+
+                    home_city = home.get('placeName', {}).get('default', '').upper()
+                    home_name = home.get('commonName', {}).get('default', '').upper()
+
+                    away_city = away.get('placeName', {}).get('default', '').upper()
+                    away_name = away.get('commonName', {}).get('default', '').upper()
+
+                    home_full = f"{home_city} {home_name}"
+                    away_full = f"{away_city} {away_name}"
+
+                    # If the opponent is in this game, check if the other team is NYR or NYI
+                    # Normalize opponent to match
+                    opp_norm = robust_normalize_team(opponent_name, "NHL")
+                    if opp_norm in robust_normalize_team(home_full, "NHL") or opp_norm in robust_normalize_team(away_full, "NHL"):
+                        # Opponent found in this game
+                        if "RANGERS" in home_full or "RANGERS" in away_full:
+                            return "NEW YORK RANGERS"
+                        if "ISLANDERS" in home_full or "ISLANDERS" in away_full:
+                            return "NEW YORK ISLANDERS"
+    except Exception as e:
+        logger.debug(f"Failed to resolve NHL ambiguity for {team_name} vs {opponent_name}: {e}")
+
+    return team_name
+
+
 def robust_normalize_team(name: str, league: Optional[str] = None) -> str:
     """
     Standardized team name normalization.
@@ -1443,23 +1492,33 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
 @st.cache_data(ttl=21600)
 def fetch_nhl_stats(season_year: int) -> List[Dict[str, Any]]:
     """
-    Fetch NHL stats using nhlpy.
+    Fetch NHL stats using the official NHL Edge API directly.
     """
-    if NHLClient is None:
-        return []
-
     try:
-        logger.info(f"Fetching NHL stats for season: {season_year}")
-        client = NHLClient()
-
-        # nhlpy usually provides standings which contain most info
-        standings = client.standings.league_standings()
-        # standings is usually a dict with 'standings' list
+        logger.info(f"Fetching NHL stats from api-web.nhle.com for season: {season_year}")
+        url = "https://api-web.nhle.com/v1/standings/now"
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
 
         stats = []
-        for entry in standings.get('standings', []):
+        for entry in data.get('standings', []):
             team_name = entry.get('teamName', {}).get('default', '')
-            if not team_name: continue
+            if not team_name:
+                # Some API updates use teamCommonName or placeName
+                team_name = entry.get('teamCommonName', {}).get('default', '')
+                if not team_name:
+                    continue
+
+            # Edge API provides full placeName and commonName (e.g. "New York" and "Rangers")
+            # Let's combine them if placeName exists to ensure full "New York Rangers"
+            place_name = entry.get('placeName', {}).get('default', '')
+            common_name = entry.get('teamCommonName', {}).get('default', '')
+
+            # Use the combined name if possible to be safe
+            full_name = f"{place_name} {common_name}".strip()
+            if not full_name:
+                full_name = team_name
             
             # Extract stats
             games = entry.get('gamesPlayed', 0)
@@ -1471,22 +1530,25 @@ def fetch_nhl_stats(season_year: int) -> List[Dict[str, Any]]:
             
             win_pct = wins / games
 
-            # Map goalsPerGame -> points_per_game if available
-            if 'goalsPerGame' in entry:
-                ppg = float(entry['goalsPerGame'])
-            else:
-                ppg = points_for / games
-
+            # Metrics
+            ppg = points_for / games
             oppg = points_against / games
             
             # Streak
-            streak_code = entry.get('streakCode', '') # e.g. 'W2'
+            streak_code = entry.get('streakCode', '') # e.g. 'W2' or 'L1' or 'W'
+            # Streak count is separate in the Edge API sometimes, check both
+            streak_count = entry.get('streakCount', 1)
+            if streak_code and not any(char.isdigit() for char in streak_code):
+                streak_code = f"{streak_code}{streak_count}"
+
             streak = _parse_streak(streak_code)
             
-            # Turnovers not standard in standings
+            l10_wins = entry.get('l10Wins', 0)
+            l10_games = entry.get('l10GamesPlayed', 10)
+            l10_win_pct = (l10_wins / l10_games) if l10_games > 0 else win_pct
             
             stats.append({
-                "team_norm": robust_normalize_team(team_name, league="NHL"),
+                "team_norm": robust_normalize_team(full_name, league="NHL"),
                 "league_key": "NHL",
                 "win_pct": win_pct,
                 "home_win_pct": win_pct,
@@ -1495,7 +1557,7 @@ def fetch_nhl_stats(season_year: int) -> List[Dict[str, Any]]:
                 "points_allowed_per_game": oppg,
                 "turnovers": 0.0,
                 "streak": streak,
-                "last5_win_pct": entry.get('l10Points', 0) / 20.0 # Approx from L10 points? Or just use win_pct
+                "last5_win_pct": l10_win_pct
             })
             
         logger.info(f"Successfully fetched NHL stats for {len(stats)} teams.")
@@ -1700,105 +1762,19 @@ def fetch_from_espn_mlb(season_year: int) -> List[Dict[str, Any]]:
 @st.cache_data(ttl=21600)
 def fetch_ncaab_stats(season_year: int) -> List[Dict[str, Any]]:
     """
-    Fetch NCAAB stats using CBBpy or ESPN Fallback.
+    Fetch NCAAB stats exclusively using the ESPN Hidden API.
+    (CBBpy has been removed due to broken API and performance timeouts).
     """
-
-    stats = []
-
-    # Try CBBpy first
-    if cbb_s is not None:
-        def _scrape_worker():
-            try:
-                # cbbpy 2.1.2 issues - often missing get_stats
-                # If valid function exists, use it
-                if hasattr(cbb_s, 'get_stats'):
-                    return cbb_s.get_stats(season=season_year + 1)
-                else:
-                    raise AttributeError("cbbpy module has no attribute 'get_stats'")
-            except Exception as e:
-                # Raise to be caught by wrapper
-                raise e
-
-        try:
-            logger.info(f"Fetching NCAAB stats for season: {season_year}")
-
-            # Run in thread with timeout
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(_scrape_worker)
-                try:
-                    df = future.result(timeout=15)
-
-                    if df is not None and not df.empty:
-                        # Process DataFrame from CBBpy
-                        for _, row in df.iterrows():
-                            team_name = row.get('team', '')
-                            if not team_name: continue
-
-                            games = float(row.get('games', 0))
-                            if games == 0: continue
-
-                            wins = float(row.get('wins', 0))
-                            points = float(row.get('points', 0))
-                            opp_points = float(row.get('opp_points', 0))
-                            turnovers = float(row.get('turnovers', 0))
-
-                            win_pct = wins / games
-                            ppg = points / games
-                            oppg = opp_points / games
-                            avg_tov = turnovers / games
-
-                            stats.append({
-                                "team_norm": robust_normalize_team(team_name, league="NCAAB"),
-                                "league_key": "NCAAB",
-                                "win_pct": win_pct,
-                                "home_win_pct": win_pct,
-                                "away_win_pct": win_pct,
-                                "points_per_game": ppg,
-                                "points_allowed_per_game": oppg,
-                                "turnovers": avg_tov,
-                                "streak": 0.0,
-                                "last5_win_pct": win_pct,
-                                "quality": "REAL",
-                                "confidence_multiplier": 1.0
-                            })
-
-                        logger.info(f"Successfully fetched NCAAB stats (CBBpy) for {len(stats)} teams.")
-
-                except concurrent.futures.TimeoutError:
-                    logger.warning("NCAAB stats fetch timed out (cbbpy).")
-                except Exception as e:
-                    logger.warning(f"NCAAB stats fetch failed (cbbpy): {e}")
-
-        except Exception as e:
-            logger.warning(f"Failed to fetch NCAAB stats wrapper: {e}")
-
-    # Merge CBBpy stats with ESPN Fallback (Power-6 / Scraper miss fix)
-    logger.info("Merging NCAAB stats from ESPN fallback...")
+    logger.info(f"Fetching primary NCAAB stats from ESPN for season: {season_year}")
     espn_stats = fetch_from_espn_ncaab(season_year)
 
-    # Priority: CBBpy (Scraper) > ESPN
-    merged_stats = {s["team_norm"]: s for s in stats}
-    for espn_s in espn_stats:
-        # Implement a games > 0 check to prefer the more detailed scraper version
-        # Only add ESPN fallback if scraper version doesn't exist, or if scraper version is essentially empty
-        team_norm = espn_s["team_norm"]
-        if team_norm not in merged_stats:
-            merged_stats[team_norm] = espn_s
-        else:
-            # Check if scraper version has 0 games (or wins+losses = 0)
-            existing_s = merged_stats[team_norm]
-            games_played = existing_s.get("wins", 0) + existing_s.get("losses", 0)
-            # if we didn't track wins/losses in scraper dict, we can assume it's good if we matched, but
-            # cbbpy returns empty when `games == 0` earlier in the loop anyway.
-            # but if it was added without games_played, we check here.
-            # since `cbbpy` doesn't output `wins` / `losses` raw keys but just `win_pct`,
-            # we should also check if games wasn't added
-            if games_played == 0 and "win_pct" in existing_s and existing_s.get("win_pct") == 0.0 and existing_s.get("points_per_game") == 0.0:
-                 merged_stats[team_norm] = espn_s
+    # We strip 'ESPN_FALLBACK' to ensure it's treated as REAL data
+    for s in espn_stats:
+        if s.get("source") == "ESPN_FALLBACK":
+            s["source"] = "REAL_ESPN"
 
-    final_stats = list(merged_stats.values())
-    logger.info(f"Final merged NCAAB stats count: {len(final_stats)}")
-    return final_stats
+    logger.info(f"Final NCAAB stats count (ESPN Primary): {len(espn_stats)}")
+    return espn_stats
 
 # -------------------------------------------------------------------------
 
@@ -1954,15 +1930,27 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     _ac = away_col
     _lk = league_keys
 
-    home_norm = df.apply(
-        lambda r: robust_normalize_team(str(r[_hc]), _lk.at[r.name]),
-        axis=1
-    )
+    home_norm = []
+    away_norm = []
     
-    away_norm = df.apply(
-        lambda r: robust_normalize_team(str(r[_ac]), _lk.at[r.name]),
-        axis=1
-    )
+    for idx, row in df.iterrows():
+        lk = _lk.at[idx]
+        h_name = str(row[_hc])
+        a_name = str(row[_ac])
+
+        # Disambiguate NHL teams first using match context
+        if lk == "NHL":
+            h_name = resolve_nhl_ambiguity(h_name, a_name)
+            a_name = resolve_nhl_ambiguity(a_name, h_name)
+
+        h_norm_str = robust_normalize_team(h_name, lk)
+        a_norm_str = robust_normalize_team(a_name, lk)
+
+        home_norm.append(h_norm_str)
+        away_norm.append(a_norm_str)
+
+    home_norm = pd.Series(home_norm, index=df.index)
+    away_norm = pd.Series(away_norm, index=df.index)
     
     # ------------------------------------------------------------
     # 5) Fuzzy Matching and Feature Population
@@ -2158,7 +2146,15 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
             total_attempts = total_matches + stats_log.get('miss', 0)
             if total_attempts > 0:
                 match_pct = (total_matches / total_attempts) * 100
-                logger.info(f"{lg_key} Stats Match Rate: {total_matches}/{total_attempts} ({match_pct:.1f}%)")
+                logger.info(f"--- {lg_key} STATS MATCHING SUMMARY ---")
+                logger.info(f"- Total Lookups: {total_attempts}")
+                logger.info(f"- Live Stats Success: {total_matches} ({match_pct:.1f}%)")
+                logger.info(f"- Fallback Count: {stats_log.get('miss', 0)}")
+                if stats_log.get('miss', 0) > 0:
+                    missing_home = [t for t, m in home_map_local.items() if m is None]
+                    missing_away = [t for t, m in away_map_local.items() if m is None]
+                    missing = list(set(missing_home + missing_away))
+                    logger.info(f"- Top Failed Lookups: {missing[:10]}")
 
             if lg_key == "NCAAB":
                 ncaab_match_stats["total"] = total_attempts // 2 # Approximate games from teams
