@@ -1752,11 +1752,11 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
 
     # Sort Phase: Map Pick_Status to ordinal values to enforce sort groupings
     status_sort_map = {
-        "Actionable": 1,
-        "Below Threshold": 2,
+        "Actionable": 5,
+        "Below Threshold": 4,
         "Fallback / Low Confidence": 3,
-        "No Play": 4,
-        "Missing Line": 5
+        "No Play": 2,
+        "Missing Line": 1
     }
 
     # Use categorical logic or mapped column
@@ -1772,7 +1772,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     # We will sort roughly now by status, EV, etc. to get a base order for ranking
     best = best.sort_values(
         ["_status_sort", "expected_value", "game_date", "league", "home_team"],
-        ascending=[True, False, True, True, True]
+        ascending=[False, False, True, True, True]
     ).reset_index(drop=True)
 
     best["expected_value"] = best["expected_value"].replace(-999, pd.NA)
@@ -1793,7 +1793,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         # We also keep expected_value and edge as tie-breakers.
         best = best.sort_values(
             by=["_status_sort", "Triple_Filter_Rank", "expected_value", "edge"],
-            ascending=[True, True, False, False]
+            ascending=[False, True, False, False]
         ).reset_index(drop=True)
 
     for col in BEST_PICK_COLUMNS:
