@@ -245,6 +245,17 @@ TEAM_NAME_MAPPING = {
     "philadelphia": "PHILADELPHIA FLYERS",
     "montreal": "MONTREAL CANADIENS",
     "nashville": "NASHVILLE PREDATORS",
+
+    # NHL Enhanced Location-Only Mappings (Task 1)
+    "colorado": "COLORADO AVALANCHE",
+    "florida": "FLORIDA PANTHERS",
+    "carolina": "CAROLINA HURRICANES",
+    "tampa bay": "TAMPA BAY LIGHTNING",
+    "new jersey": "NEW JERSEY DEVILS",
+    "san jose": "SAN JOSE SHARKS",
+    "vegas": "VEGAS GOLDEN KNIGHTS",
+    "dallas": "DALLAS STARS",
+    "washington": "WASHINGTON CAPITALS",
 }
 
 # Manual overrides for team name normalization failures
@@ -257,6 +268,17 @@ MANUAL_TEAM_OVERRIDES = {
     "WINNIPEG JETS": "WINNIPEG JETS",
     "LOS ANGELES KINGS": "LOS ANGELES KINGS",
     "UTAH MAMMOTH": "UTAH", # If Utah has new team name issues
+
+    # NHL Enhanced Location-Only Mappings (Task 1)
+    "COLORADO": "COLORADO AVALANCHE",
+    "FLORIDA": "FLORIDA PANTHERS",
+    "CAROLINA": "CAROLINA HURRICANES",
+    "TAMPA BAY": "TAMPA BAY LIGHTNING",
+    "NEW JERSEY": "NEW JERSEY DEVILS",
+    "SAN JOSE": "SAN JOSE SHARKS",
+    "VEGAS": "VEGAS GOLDEN KNIGHTS",
+    "DALLAS": "DALLAS STARS",
+    "WASHINGTON": "WASHINGTON CAPITALS",
 
     # NCAAB/NCAAF
     # Map common variations to the canonical name used in stats (usually School Name for colleges)
