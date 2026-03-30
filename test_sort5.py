@@ -32,3 +32,10 @@ data = {
 df = pd.DataFrame(data)
 
 best_picks = build_best_picks_df(df)
+import json
+print("Sorted Statuses:")
+print(best_picks["Pick_Status"].tolist())
+print("Rank:")
+print(best_picks["Triple_Filter_Rank"].tolist())
+print("EV:")
+print(best_picks["expected_value"].tolist())
