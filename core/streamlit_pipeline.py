@@ -1791,6 +1791,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
 
         # We sort by: 1) Status Bucket, 2) Triple Filter Rank (which factors tier and EV)
         # We also keep expected_value and edge as tie-breakers.
+        # Convert Triple_Filter_Rank to numeric to ensure correct ascending numeric sort
+        best["Triple_Filter_Rank"] = pd.to_numeric(best["Triple_Filter_Rank"], errors="coerce").fillna(9999)
+
         best = best.sort_values(
             by=["_status_sort", "Triple_Filter_Rank", "expected_value", "edge"],
             ascending=[False, True, False, False]
