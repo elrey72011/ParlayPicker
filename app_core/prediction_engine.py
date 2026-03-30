@@ -1439,6 +1439,7 @@ class PredictionEngine:
                             logger.info(f"  League: {row.get('league')}, Matchup: {row.get('matchup_id')}, Market: {row.get('market_type')}")
                             logger.info(f"  Teams: {row.get('home_team')} vs {row.get('away_team')}")
                             logger.info(f"  Implied Home Prob: {row.get('implied_home_prob')}, Kalshi Prob: {row.get('kalshi_prob')}")
+                            logger.info(f"  Diff Win Pct: {feat_dict.get('feature_diff_win_pct')}, Diff PPG: {feat_dict.get('feature_diff_ppg')}, Diff Streak: {feat_dict.get('feature_diff_streak')}")
                             logger.info(f"  Stale Features Used: {used_stale_features.iloc[idx_batch]}")
                             logger.info(f"  Feature Vector: {clean_feat}")
 
@@ -1483,25 +1484,53 @@ class PredictionEngine:
             total_count = len(df)
             self._last_metrics["post_healing_unique_count"] = unique_count
 
+            # Trigger protective override based on RAW unique count (before blacklist healing)
+            # using refined tiered logic as requested
+            raw_unique_count = self._last_metrics.get("raw_unique_count", 0)
+            is_flat = False
+
+            # Rule 1: Ratio-based rule for ALL slate sizes (must be >= 60% unique)
+            raw_unique_ratio = raw_unique_count / total_count if total_count > 0 else 0
+            if total_count > 0 and raw_unique_ratio < 0.60:
+                logger.warning(f"ML RAW COMPRESSION AUDIT: Raw unique ratio ({raw_unique_ratio:.1%}) is below 60%. Triggering intervention.")
+                is_flat = True
+
+            # Rule 2: Absolute repeat thresholds based on slate size
+            if not is_flat and total_count > 0:
+                try:
+                    from collections import Counter
+                    raw_counts = Counter(raw_valid_probs)
+                    max_repeats = max(raw_counts.values()) if raw_counts else 0
+
+                    if total_count <= 30:
+                        if max_repeats >= 2:
+                            logger.warning(f"ML RAW COMPRESSION AUDIT: Slate <= 30 rows and a raw probability repeated {max_repeats} times (threshold: 2+). Triggering intervention.")
+                            is_flat = True
+                    elif total_count <= 60:
+                        if max_repeats >= 3:
+                            logger.warning(f"ML RAW COMPRESSION AUDIT: Slate 31-60 rows and a raw probability repeated {max_repeats} times (threshold: 3+). Triggering intervention.")
+                            is_flat = True
+                    else:
+                        max_ratio = max_repeats / total_count if total_count > 0 else 0
+                        if max_repeats >= 4:
+                            logger.warning(f"ML RAW COMPRESSION AUDIT: Slate > 60 rows and a raw probability repeated {max_repeats} times (threshold: 4+). Triggering intervention.")
+                            is_flat = True
+                        elif max_ratio >= 0.10:
+                            logger.warning(f"ML RAW COMPRESSION AUDIT: Slate > 60 rows and a raw probability covers {max_ratio:.1%} of rows (threshold: 10%+). Triggering intervention.")
+                            is_flat = True
+                except Exception as e:
+                    logger.error(f"Error during ML RAW COMPRESSION AUDIT tier check: {e}")
+
             # Log output variance for monitoring
             if total_count > 0:
                 unique_ratio = unique_count / total_count
-                logger.info(f"Output variance check: {unique_count} unique probabilities out of {total_count} rows ({unique_ratio:.1%}).")
+                logger.info(f"Output variance check (post-healing): {unique_count} unique probabilities out of {total_count} rows ({unique_ratio:.1%}). Raw unique: {raw_unique_count}")
 
                 if total_count >= 20 and unique_ratio < 0.45:
-                    logger.warning(f"Low output variance detected: {unique_count} unique probabilities across {total_count} games.")
-
-            # Trigger protective override if extremely flat (<= 35% unique on meaningful slates, or hard 5 on tiny slates)
-            is_flat = False
-            if total_count >= 20:
-                import math
-                if unique_count < math.ceil(total_count * 0.35):
-                    is_flat = True
-            elif unique_count <= 5:
-                is_flat = True
+                    logger.warning(f"Low post-healing output variance detected: {unique_count} unique probabilities across {total_count} games.")
 
             if is_flat:
-                logger.warning(f"ML UNIQUENESS AUDIT: XGBoost returned critically flat probabilities ({unique_count}/{total_count}). Overriding with Hybrid Fallback Score.")
+                logger.warning(f"ML UNIQUENESS AUDIT: XGBoost returned critically flat raw probabilities ({raw_unique_count}/{total_count}). Overriding with Hybrid Fallback Score.")
                 logger.info(f"PIPELINE TRACE: Flat probabilities detected. Overriding all {total_count} predictions with Hybrid Fallback.")
                 final_probs = []
 

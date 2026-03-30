@@ -85,7 +85,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 
 BEST_PICK_COLUMNS = [
     "Triple_Filter_Rank", "parlay_rank",
-    "league", "home_team", "away_team", "game_date", "game_time_est", "market_type", "best_pick",
+    "league", "home_team", "away_team", "game_date", "game_time_est", "market_type", "best_pick", "Pick_Status",
     "calibrated_probability", "expected_value", "edge", "consensus_agreement",
     "odds_american", "odds_source", "market_probability", "ml_probability", "display_probability",
     "kalshi_probability", "kalshi_match_status", "kalshi_match_reason",
@@ -927,23 +927,23 @@ def _format_best_pick(row: pd.Series) -> str:
         line = pd.to_numeric(row.get("spread_line"), errors="coerce")
         if pd.isna(line):
             line = pd.to_numeric(row.get("spread"), errors="coerce")
-        return f"{home_team} {line:+.1f}" if pd.notna(line) else home_team
+        return f"{home_team} {line:+.1f}" if pd.notna(line) else f"{home_team} (No Line)"
     if market == "spread_away":
         line = pd.to_numeric(row.get("spread_line"), errors="coerce")
         if pd.isna(line):
             line = pd.to_numeric(row.get("spread"), errors="coerce")
-        return f"{away_team} {line:+.1f}" if pd.notna(line) else away_team
+        return f"{away_team} {line:+.1f}" if pd.notna(line) else f"{away_team} (No Line)"
     if market == "total_over":
         line = pd.to_numeric(row.get("total_line"), errors="coerce")
         # try fallback to 'total' if 'total_line' is missing
         if pd.isna(line):
             line = pd.to_numeric(row.get("total"), errors="coerce")
-        return f"Over {line:.1f}" if pd.notna(line) else "Over"
+        return f"Over {line:.1f}" if pd.notna(line) else "Over (No Line)"
     if market == "total_under":
         line = pd.to_numeric(row.get("total_line"), errors="coerce")
         if pd.isna(line):
             line = pd.to_numeric(row.get("total"), errors="coerce")
-        return f"Under {line:.1f}" if pd.notna(line) else "Under"
+        return f"Under {line:.1f}" if pd.notna(line) else "Under (No Line)"
     if market == "h2h_home":
         return home_team
     if market == "h2h_away":
@@ -1653,23 +1653,39 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     logger.info(f"BEST PICKS AUDIT: Rows after 'one-per-game' drop_duplicates: {len(best)} (started with {len(pool)})")
     logger.info("BEST PICKS AUDIT: IMPORTANT - The one-per-game logic drops all but the highest-EV pick per game (e.g. discards the other side and the total).")
 
-    # Phase 5: Enforce Thresholds
+    # Phase 5: Enforce Thresholds and Pick Status Labelling
     # MIN_EDGE_THRESHOLD of 0.01 for high-liquidity markets.
     # Expected Value Floor of 0.005.
-    is_postseason = is_postseason_ncaab(best)
 
-    edge_thresholds = pd.Series(0.01, index=best.index)
-    edge_thresholds.loc[is_postseason] = 0.01
+    # Pick_Status logic setup
+    if "Pick_Status" not in best.columns:
+        best["Pick_Status"] = pd.Series([""] * len(best), index=best.index, dtype="string")
 
-    valid_edge_mask = best["edge"] >= edge_thresholds
+    for idx in best.index:
+        bp = str(best.at[idx, "best_pick"])
+        ev = best.at[idx, "expected_value"]
+        edge = best.at[idx, "edge"]
+        stale = bool(best.at[idx, "used_stale_features"]) if "used_stale_features" in best.columns and pd.notna(best.at[idx, "used_stale_features"]) else False
+
+        # Determine status
+        if "(No Line)" in bp:
+            status = "Missing Line"
+        elif pd.isna(ev) or pd.isna(edge) or ev < 0 or edge < 0:
+            status = "No Play"
+        elif stale:
+            status = "Fallback / Low Confidence"
+        elif ev < 0.005 or edge < 0.01:
+            status = "Below Threshold"
+        else:
+            status = "Actionable"
+
+        best.at[idx, "Pick_Status"] = status
+
+    # Legacy logging/metrics variables for reference
+    valid_edge_mask = best["edge"] >= 0.01
     valid_ev_mask = best["expected_value"] >= 0.005
 
-    # We must NOT filter out non-qualifying picks from the output to ensure 1:1 parity between games and picks
-    # best = best[valid_edge_mask & valid_ev_mask].copy()
     logger.info(f"BEST PICKS AUDIT: Non-qualifying picks (edge < 0.01 or EV < 0.005) left intact: {(~valid_edge_mask | ~valid_ev_mask).sum()}")
-
-    # Explicitly label non-qualifying picks as "No Play"
-    best.loc[~valid_edge_mask | ~valid_ev_mask, "Pick_Quality"] = "No Play (Negative/Low Edge)"
 
     total_games = int(pool["matchup_id"].nunique(dropna=False))
     logger.info(f"PIPELINE AUDIT: [9/9] Rows surviving into best-picks ranking/export: {len(best)}")
