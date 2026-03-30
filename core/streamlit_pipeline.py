@@ -1905,17 +1905,13 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
             # Cross-tabs
             if "Pick_Status" in best.columns:
                 logger.info("--- FINAL ODDS SOURCE x PICK STATUS ---")
-                for source in best["odds_source"].unique():
-                    if pd.isna(source):
-                        source_df = best[best["odds_source"].isna()]
-                        source_label = "NA/MISSING"
-                    else:
-                        source_df = best[best["odds_source"] == source]
-                        source_label = source
-                    counts = source_df["Pick_Status"].value_counts().to_dict()
+                # Group by odds_source and Pick_Status
+                cross_tabs = best.groupby("odds_source")["Pick_Status"].value_counts().unstack(fill_value=0)
+                for source in cross_tabs.index:
+                    counts = cross_tabs.loc[source].to_dict()
+                    # Keep counts as ordered dict and filter non-zero
                     filtered_counts = {k: v for k, v in counts.items() if v > 0}
-                    if filtered_counts:
-                        logger.info(f"odds_source '{source_label}' -> {filtered_counts}")
+                    logger.info(f"odds_source '{source}' -> {filtered_counts}")
 
     return best[BEST_PICK_COLUMNS]
 
