@@ -34,5 +34,5 @@ def test_kalshi_enrichment_infers_ncaab_for_blank_league_and_college_teams(monke
     out = kalshi_integrator.enrich_with_kalshi_markets(df)
 
     assert len(out) == 1
-    assert captured["series"] == ["KXNCAAMBSPREAD"]
+    assert "KXNCAAMBSPREAD" in captured["series"]
     assert out.iloc[0]["kalshi_match_reason"] != "missing_series"

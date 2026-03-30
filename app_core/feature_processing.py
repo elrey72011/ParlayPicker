@@ -1001,10 +1001,10 @@ def robust_normalize_team(name: str, league: Optional[str] = None) -> str:
 
     # Proactive NHL Location-Only mapping validation logging
     if is_nhl:
-        # Check if the name matches one of the known location-only names that we want to ensure maps to a full team name
+        # Check if the name matches one of the known risky location-only names
         nhl_location_check = {"COLORADO", "FLORIDA", "CAROLINA", "TAMPA BAY", "NEW JERSEY", "SAN JOSE", "VEGAS", "DALLAS"}
-        # If the input or stripped norm is exactly the location
-        # Check stripping manually so we don't return early without logging
+
+        # We only log mapping success for these explicit shorthand names, not every normal NHL team
         temp_norm = normalize_team(name_upper)
         if name_upper in nhl_location_check or temp_norm in nhl_location_check:
             mapped_val = MANUAL_TEAM_OVERRIDES.get(name_upper, MANUAL_TEAM_OVERRIDES.get(temp_norm))

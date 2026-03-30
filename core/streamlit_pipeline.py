@@ -1780,42 +1780,38 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
             else:
                 logger.info(f"Branch not exercised: {status} (0 rows)")
 
-    # Validation Logging: non-uploaded odds rows
+    # Validation Logging: odds rows classification
     if "odds_source" in best.columns and "Pick_Status" in best.columns:
-        non_uploaded_df = best[best["odds_source"].isin(["odds_api", "fallback_novig"])]
-        if not non_uploaded_df.empty:
-            logger.info("--- NON-UPLOADED ODDS CLASSIFICATION ---")
-            odds_api_counts = non_uploaded_df[non_uploaded_df["odds_source"] == "odds_api"]["Pick_Status"].value_counts().to_dict()
-            fallback_novig_counts = non_uploaded_df[non_uploaded_df["odds_source"] == "fallback_novig"]["Pick_Status"].value_counts().to_dict()
+        logger.info("--- ODDS SOURCE CLASSIFICATION ---")
+        for source in ["uploaded", "odds_api", "fallback_novig"]:
+            source_df = best[best["odds_source"] == source]
+            source_count = len(source_df)
+            if source_count > 0:
+                counts = source_df["Pick_Status"].value_counts().to_dict()
+                logger.info(f"{source} rows: {source_count} total, classified as {counts}")
+            else:
+                logger.info(f"{source} rows: 0 total")
 
-            if odds_api_counts:
-                logger.info(f"odds_api rows classified as: {odds_api_counts}")
-            if fallback_novig_counts:
-                logger.info(f"fallback_novig rows classified as: {fallback_novig_counts}")
-
-    # Sort Phase: Map Pick_Status to ordinal values to enforce sort groupings
-    status_sort_map = {
-        "Actionable": 5,
-        "Below Threshold": 4,
-        "Fallback / Low Confidence": 3,
-        "No Play": 2,
-        "Missing Line": 1
-    }
-
-    # Use categorical logic or mapped column
+    # Sort Phase: Use ordered categorical logic for exact ordering.
+    status_order = [
+        "Actionable",
+        "Below Threshold",
+        "Fallback / Low Confidence",
+        "No Play",
+        "Missing Line"
+    ]
     if "Pick_Status" in best.columns:
-        best["_status_sort"] = best["Pick_Status"].map(status_sort_map).fillna(99)
-    else:
-        best["_status_sort"] = 99
+        best["Pick_Status"] = pd.Categorical(best["Pick_Status"], categories=status_order, ordered=True)
 
     # Phase 2: Eradication of Floating-Point Artefacts in Expected Value Calculations
     # We must retain the expected_value as is, but handle NaNs in sorting
     best["expected_value"] = best["expected_value"].fillna(-999)
 
     # We will sort roughly now by status, EV, etc. to get a base order for ranking
+    # Categorical ascending=True puts 'Actionable' first, down to 'Missing Line', then NaN/Others at bottom
     best = best.sort_values(
-        ["_status_sort", "expected_value", "game_date", "league", "home_team"],
-        ascending=[False, False, True, True, True]
+        ["Pick_Status", "expected_value", "game_date", "league", "home_team"],
+        ascending=[True, False, True, True, True]
     ).reset_index(drop=True)
 
     best["expected_value"] = best["expected_value"].replace(-999, pd.NA)
@@ -1827,23 +1823,21 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         # 1. Final ranking pass for sequential 1-21 numbering
         best = _apply_triple_filter_ranking(best)
 
-        # After re-ranking, _apply_triple_filter_ranking changes the sort order to its internal tier logic.
-        # We MUST re-apply the primary status sort over the rank so 'Actionable' rows are always first, etc.
-        # Ensure status sort map is available again
-        best["_status_sort"] = best["Pick_Status"].map(status_sort_map).fillna(99)
+        # We MUST re-apply the categorical type to Pick_Status in case _apply_triple_filter_ranking lost it
+        best["Pick_Status"] = pd.Categorical(best["Pick_Status"], categories=status_order, ordered=True)
 
-        # We sort by: 1) Status Bucket, 2) Triple Filter Rank (which factors tier and EV)
-        # We also keep expected_value and edge as tie-breakers.
-        # Convert Triple_Filter_Rank to numeric to ensure correct ascending numeric sort
-        best["Triple_Filter_Rank"] = pd.to_numeric(best["Triple_Filter_Rank"], errors="coerce").fillna(9999)
-
-        # Re-fill expected_value and edge NaNs for sorting, drop them after
+        # Sort by:
+        # 1) Pick_Status (Categorical ascending so 'Actionable' is first)
+        # 2) Triple_Filter_Rank (ascending so 1 is first)
+        # 3) expected_value (descending as tie-breaker)
+        # 4) edge (descending as tie-breaker)
+        best["Triple_Filter_Rank"] = pd.to_numeric(best["Triple_Filter_Rank"], errors="coerce").fillna(99999)
         best["_ev_sort"] = pd.to_numeric(best["expected_value"], errors="coerce").fillna(-999)
         best["_edge_sort"] = pd.to_numeric(best["edge"], errors="coerce").fillna(-999)
 
         best = best.sort_values(
-            by=["_status_sort", "Triple_Filter_Rank", "_ev_sort", "_edge_sort"],
-            ascending=[False, True, False, False]
+            by=["Pick_Status", "Triple_Filter_Rank", "_ev_sort", "_edge_sort"],
+            ascending=[True, True, False, False]
         ).reset_index(drop=True)
 
         best = best.drop(columns=["_ev_sort", "_edge_sort"], errors="ignore")
