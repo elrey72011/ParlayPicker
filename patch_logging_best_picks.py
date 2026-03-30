@@ -1,50 +1,86 @@
 import re
 
-with open('core/streamlit_pipeline.py', 'r') as f:
+file_path = "core/streamlit_pipeline.py"
+
+with open(file_path, "r") as f:
     content = f.read()
 
-def patch(content, pattern, replace):
-    if pattern not in content:
-        print(f"FAILED TO MATCH: {pattern[:50]}")
-    return content.replace(pattern, replace)
+search_block = """    # Final Validation Logs
+    if not best.empty:
+        logger.info("--- FINAL PIPELINE VALIDATION AUDIT ---")
 
-content = patch(
-    content,
-    """    pool["expected_value"] = pd.to_numeric(pool["expected_value"], errors="coerce")
+        # Pick Status Counts
+        if "Pick_Status" in best.columns:
+            status_counts = best["Pick_Status"].value_counts(dropna=False).to_dict()
+            logger.info("--- FINAL STATUS COUNTS ---")
+            for status in status_order:
+                count = status_counts.get(status, 0)
+                if count > 0:
+                    logger.info(f"Validated branch: {status} ({count} rows)")
+                else:
+                    logger.info(f"Branch not exercised: {status} (0 rows)")
 
-    # 2. Assign calibrated probability with a default
-    pool["calibrated_probability"] = _numeric_series(pool, "calibrated_probability", 0.5)
+        # Odds Source Counts
+        if "odds_source" in best.columns:
+            logger.info("--- FINAL ODDS SOURCE CLASSIFICATION ---")
+            source_counts = best["odds_source"].value_counts(dropna=False).to_dict()
+            for source, count in source_counts.items():
+                logger.info(f"odds_source '{source}': {count} total rows")
 
-    # 1. Add the ranking metadata
-    pool = _apply_triple_filter_ranking(pool)""",
-    """    pool["expected_value"] = pd.to_numeric(pool["expected_value"], errors="coerce")
+            # Cross-tabs
+            if "Pick_Status" in best.columns:
+                logger.info("--- FINAL ODDS SOURCE x PICK STATUS ---")
+                for source in best["odds_source"].dropna().unique():
+                    source_df = best[best["odds_source"] == source]
+                    counts = source_df["Pick_Status"].value_counts().to_dict()
+                    filtered_counts = {k: v for k, v in counts.items() if v > 0}
+                    logger.info(f"odds_source '{source}' -> {filtered_counts}")
 
-    # 2. Assign calibrated probability with a default
-    pool["calibrated_probability"] = _numeric_series(pool, "calibrated_probability", 0.5)
+    return best[BEST_PICK_COLUMNS]"""
 
-    # 1. Add the ranking metadata
-    pool = _apply_triple_filter_ranking(pool)
-    logger.info(f"BEST PICKS AUDIT: Rows passed through Triple Filter Ranking: {len(pool)}")"""
-)
+replace_block = """    # Final Validation Logs (Lightweight terminal/application logging)
+    if not best.empty:
+        logger.info("--- FINAL PIPELINE VALIDATION AUDIT ---")
 
-content = patch(
-    content,
-    """    best = pool.drop_duplicates(subset=["matchup_id"], keep="first").copy()
-    logger.info(f"BEST PICKS AUDIT: Rows after 'one-per-game' drop_duplicates: {len(best)} (started with {len(pool)})")
+        # Pick Status Counts
+        if "Pick_Status" in best.columns:
+            status_counts = best["Pick_Status"].value_counts(dropna=False).to_dict()
+            logger.info("--- FINAL STATUS COUNTS ---")
+            for status in status_order:
+                count = status_counts.get(status, 0)
+                if count > 0:
+                    logger.info(f"Validated branch: {status} ({count} rows)")
+                else:
+                    logger.info(f"Branch not exercised: {status} (0 rows)")
 
-    # Phase 5: Enforce Thresholds
-    # MIN_EDGE_THRESHOLD of 0.01 for high-liquidity markets.
-    # Expected Value Floor of 0.005.
-    is_postseason = is_postseason_ncaab(best)""",
-    """    best = pool.drop_duplicates(subset=["matchup_id"], keep="first").copy()
-    logger.info(f"BEST PICKS AUDIT: Rows after 'one-per-game' drop_duplicates: {len(best)} (started with {len(pool)})")
-    logger.info("BEST PICKS AUDIT: IMPORTANT - The one-per-game logic drops all but the highest-EV pick per game (e.g. discards the other side and the total).")
+        # Odds Source Counts
+        if "odds_source" in best.columns:
+            logger.info("--- FINAL ODDS SOURCE CLASSIFICATION ---")
+            source_counts = best["odds_source"].value_counts(dropna=False).to_dict()
+            for source, count in source_counts.items():
+                if pd.notna(source):
+                    logger.info(f"odds_source '{source}': {count} total rows")
+                else:
+                    logger.info(f"odds_source 'NA/MISSING': {count} total rows")
 
-    # Phase 5: Enforce Thresholds
-    # MIN_EDGE_THRESHOLD of 0.01 for high-liquidity markets.
-    # Expected Value Floor of 0.005.
-    is_postseason = is_postseason_ncaab(best)"""
-)
+            # Cross-tabs
+            if "Pick_Status" in best.columns:
+                logger.info("--- FINAL ODDS SOURCE x PICK STATUS ---")
+                for source in best["odds_source"].unique():
+                    if pd.isna(source):
+                        source_df = best[best["odds_source"].isna()]
+                        source_label = "NA/MISSING"
+                    else:
+                        source_df = best[best["odds_source"] == source]
+                        source_label = source
+                    counts = source_df["Pick_Status"].value_counts().to_dict()
+                    filtered_counts = {k: v for k, v in counts.items() if v > 0}
+                    if filtered_counts:
+                        logger.info(f"odds_source '{source_label}' -> {filtered_counts}")
 
-with open('core/streamlit_pipeline.py', 'w') as f:
+    return best[BEST_PICK_COLUMNS]"""
+
+content = content.replace(search_block, replace_block)
+
+with open(file_path, "w") as f:
     f.write(content)

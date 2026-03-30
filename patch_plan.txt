@@ -1,9 +1,11 @@
-1. Identify "Postseason" games (NCAAB after March 17, 2026).
-2. Filter out picks with Edge < 0.02 (or 0.035 for NCAAB postseason) and Expected Value < 0.05 from the UI and exports.
-3. Bayesian Updating for Totals: 0.6 * theover_probability + 0.4 * ml_clean.
-4. Goalie Delta (NHL): reduce win prob by 5-8% if secondary goalie (Quick instead of Shesterkin).
-5. Pace-Setter (NBA): inflate "Over" prob by 4% if Luka Doncic is active.
-6. Tournament Efficiency Decay: reduce "Over" prob by 4% for postseason games.
-7. Home Court Dominance: boost Home team win prob by 6.5% for NIT games played at campus sites (Illinois State, Bradley).
+Before the final sort:
+best["Pick_Status"] = pd.Categorical(best["Pick_Status"], categories=status_order, ordered=True)
+best["_rank_sort"] = pd.to_numeric(best["Triple_Filter_Rank"], errors="coerce")
+best["_ev_sort"] = pd.to_numeric(best["expected_value"], errors="coerce")
+best["_edge_sort"] = pd.to_numeric(best["edge"], errors="coerce")
 
-Let's modify `core/streamlit_pipeline.py`.
+best = best.sort_values(
+    by=["Pick_Status", "_rank_sort", "_ev_sort", "_edge_sort"],
+    ascending=[True, True, False, False],
+    na_position="last"
+).reset_index(drop=True)

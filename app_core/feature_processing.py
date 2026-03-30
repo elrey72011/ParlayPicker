@@ -1005,9 +1005,14 @@ def robust_normalize_team(name: str, league: Optional[str] = None) -> str:
         nhl_location_check = {"COLORADO", "FLORIDA", "CAROLINA", "TAMPA BAY", "NEW JERSEY", "SAN JOSE", "VEGAS", "DALLAS"}
 
         # We only log mapping success for these explicit shorthand names, not every normal NHL team
+        # NOTE: name is the original string provided (e.g., 'Colorado')
+        # name_upper is the stripped/upper version
         temp_norm = normalize_team(name_upper)
-        if name_upper in nhl_location_check or temp_norm in nhl_location_check:
-            mapped_val = MANUAL_TEAM_OVERRIDES.get(name_upper, MANUAL_TEAM_OVERRIDES.get(temp_norm))
+
+        # Check if the original name, upper name, or normalized name is just the location
+        # A lot of times, `name` comes in as "Colorado" or "Florida"
+        if name_upper in nhl_location_check or temp_norm in nhl_location_check or name.upper().strip() in nhl_location_check:
+            mapped_val = MANUAL_TEAM_OVERRIDES.get(name_upper, MANUAL_TEAM_OVERRIDES.get(temp_norm, MANUAL_TEAM_OVERRIDES.get(name.upper().strip())))
             if mapped_val:
                 # Explicitly format as requested by the user
                 logger.info(f"NHL TEAM MAPPING: '{name}' -> '{mapped_val}'")

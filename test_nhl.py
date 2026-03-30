@@ -1,10 +1,9 @@
 import logging
+import sys
 from app_core.feature_processing import robust_normalize_team
 
-logging.basicConfig(level=logging.INFO, format="%(message)s")
+logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 
-tests = ["Colorado", "Florida", "NY Rangers", "Carolina", "Tampa Bay", "Vegas", "San Jose", "New Jersey", "Dallas"]
-for t in tests:
-    print(f"Testing {t}:")
-    result = robust_normalize_team(t, league="NHL")
-    print(f"Result: {result}\n")
+print(robust_normalize_team("Colorado", "NHL"))
+print(robust_normalize_team("Florida", "NHL"))
+print(robust_normalize_team("Chicago Blackhawks", "NHL"))

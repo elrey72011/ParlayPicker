@@ -1810,8 +1810,18 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         best["expected_value"] = pd.to_numeric(best["expected_value"], errors="coerce")
         best["edge"] = pd.to_numeric(best["edge"], errors="coerce")
 
-        # 1. Final ranking pass for sequential 1-21 numbering
-        best = _apply_triple_filter_ranking(best)
+        # 1. Final ranking pass: Instead of sequential 1-N globally, we calculate the ranking per bucket
+        bucket_dfs = []
+        for status in status_order:
+            bucket_df = best[best["Pick_Status"] == status].copy()
+            if not bucket_df.empty:
+                bucket_df = _apply_triple_filter_ranking(bucket_df)
+                # Ensure rank is local per bucket 1..N based on tier_score/ev
+                bucket_df["Triple_Filter_Rank"] = range(1, len(bucket_df) + 1)
+                bucket_dfs.append(bucket_df)
+
+        if bucket_dfs:
+            best = pd.concat(bucket_dfs, ignore_index=True)
 
         # We MUST re-apply the categorical type to Pick_Status in case _apply_triple_filter_ranking lost it
         best["Pick_Status"] = pd.Categorical(best["Pick_Status"], categories=status_order, ordered=True)
@@ -1867,7 +1877,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     # 3. Assign parlay_rank AFTER the final sort pass so the exported numbers sequentially map 1 to N
     best["parlay_rank"] = range(1, len(best) + 1) if not best.empty else pd.Series(dtype=int)
 
-    # Final Validation Logs
+    # Final Validation Logs (Lightweight terminal/application logging)
     if not best.empty:
         logger.info("--- FINAL PIPELINE VALIDATION AUDIT ---")
 
@@ -1887,16 +1897,25 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
             logger.info("--- FINAL ODDS SOURCE CLASSIFICATION ---")
             source_counts = best["odds_source"].value_counts(dropna=False).to_dict()
             for source, count in source_counts.items():
-                logger.info(f"odds_source '{source}': {count} total rows")
+                if pd.notna(source):
+                    logger.info(f"odds_source '{source}': {count} total rows")
+                else:
+                    logger.info(f"odds_source 'NA/MISSING': {count} total rows")
 
             # Cross-tabs
             if "Pick_Status" in best.columns:
                 logger.info("--- FINAL ODDS SOURCE x PICK STATUS ---")
-                for source in best["odds_source"].dropna().unique():
-                    source_df = best[best["odds_source"] == source]
+                for source in best["odds_source"].unique():
+                    if pd.isna(source):
+                        source_df = best[best["odds_source"].isna()]
+                        source_label = "NA/MISSING"
+                    else:
+                        source_df = best[best["odds_source"] == source]
+                        source_label = source
                     counts = source_df["Pick_Status"].value_counts().to_dict()
                     filtered_counts = {k: v for k, v in counts.items() if v > 0}
-                    logger.info(f"odds_source '{source}' -> {filtered_counts}")
+                    if filtered_counts:
+                        logger.info(f"odds_source '{source_label}' -> {filtered_counts}")
 
     return best[BEST_PICK_COLUMNS]
 
