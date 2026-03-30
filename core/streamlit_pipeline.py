@@ -2597,6 +2597,36 @@ def run_analysis_pipeline(
     # Phase 6: Close the Feedback Loop
     # Calculate Conviction_Score based on historical calibration performance
     if not analysis_df.empty:
+
+        def _compute_deterministic_conviction(df):
+            """Calculate a robust deterministic fallback Conviction Score safely."""
+            try:
+                # Safely extract prob
+                if 'calibrated_probability' in df.columns:
+                    prob_series = df['calibrated_probability']
+                elif 'ml_probability' in df.columns:
+                    prob_series = df['ml_probability']
+                else:
+                    prob_series = pd.Series(0.5, index=df.index)
+
+                # Safely extract EV
+                if 'expected_value' in df.columns:
+                    ev_series = df['expected_value']
+                else:
+                    ev_series = pd.Series(0.0, index=df.index)
+
+                # Use robust vectorization conversions
+                current_prob = pd.to_numeric(prob_series, errors='coerce').fillna(0.5)
+                ev = pd.to_numeric(ev_series, errors='coerce').fillna(0.0)
+
+                return (0.5 + (current_prob - 0.5).abs() + (ev * 2.0).clip(-0.2, 0.2)).clip(0.01, 0.99)
+            except Exception as e:
+                logger.warning(f"Failed to compute deterministic conviction: {e}")
+                return pd.Series(0.5, index=df.index)
+
+        # 1. Start with the deterministic fallback out of the gate so it never blanks
+        analysis_df['Conviction_Score'] = _compute_deterministic_conviction(analysis_df)
+
         # Load historical outcomes explicitly to ensure full ground truth
         try:
             hist_df = pd.read_csv("data/master_all_sports.csv")
@@ -2641,46 +2671,31 @@ def run_analysis_pipeline(
                         suffixes=('', '_cal')
                     )
 
-                    # Calculate Conviction Score: 1 - abs(current_prob - empirical_win_rate)
-                    # If empirical win rate is NaN (e.g. bucket hasn't occurred), fallback to current_prob as its own empirical rate (Conviction = 1.0)
+                    # Replace missing empirical rates with the previously calculated deterministic Conviction Score
+                    # instead of forcing a full 1.0 match (which incorrectly claims 100% conviction for missing bins)
                     empirical_rate = pd.to_numeric(analysis_df['empirical_win_rate'], errors='coerce')
                     current_prob = pd.to_numeric(analysis_df['calibrated_probability'], errors='coerce').fillna(0.5)
 
-                    empirical_rate_filled = empirical_rate.fillna(current_prob)
-                    analysis_df['Conviction_Score'] = 1.0 - (current_prob - empirical_rate_filled).abs()
+                    # If an empirical rate exists for the bin, use it: Conviction = 1.0 - abs(prob - empirical)
+                    # If it does not exist, stick with the deterministic base conviction we initialized earlier
+                    has_empirical = empirical_rate.notna()
+                    if has_empirical.any():
+                        analysis_df.loc[has_empirical, 'Conviction_Score'] = 1.0 - (current_prob[has_empirical] - empirical_rate[has_empirical]).abs()
 
                     # Cleanup
                     drop_cols = ['prob_bucket', 'generic_market', 'market_type_cal', 'bucket', 'empirical_win_rate']
                     analysis_df = analysis_df.drop(columns=[c for c in drop_cols if c in analysis_df.columns], errors='ignore')
-                else:
-                    # Deterministic fallback Conviction Score
-                    # If calibration is missing, calculate based on raw prob + EV
-                    prob_series = analysis_df.get('calibrated_probability', analysis_df.get('ml_probability', pd.Series(0.5, index=analysis_df.index)))
-                    ev_series = analysis_df.get('expected_value', pd.Series(0.0, index=analysis_df.index))
-                    current_prob = pd.to_numeric(prob_series, errors='coerce').fillna(0.5)
-                    ev = pd.to_numeric(ev_series, errors='coerce').fillna(0.0)
-                    analysis_df['Conviction_Score'] = 0.5 + (current_prob - 0.5).abs() + (ev * 2.0).clip(-0.2, 0.2)
-                    analysis_df['Conviction_Score'] = analysis_df['Conviction_Score'].clip(0.01, 0.99)
-                    analysis_df = analysis_df.drop(columns=['generic_market'], errors='ignore')
-            else:
-                # Deterministic fallback Conviction Score
-                prob_series = analysis_df.get('calibrated_probability', analysis_df.get('ml_probability', pd.Series(0.5, index=analysis_df.index)))
-                ev_series = analysis_df.get('expected_value', pd.Series(0.0, index=analysis_df.index))
-                current_prob = pd.to_numeric(prob_series, errors='coerce').fillna(0.5)
-                ev = pd.to_numeric(ev_series, errors='coerce').fillna(0.0)
-                analysis_df['Conviction_Score'] = 0.5 + (current_prob - 0.5).abs() + (ev * 2.0).clip(-0.2, 0.2)
-                analysis_df['Conviction_Score'] = analysis_df['Conviction_Score'].clip(0.01, 0.99)
-                analysis_df = analysis_df.drop(columns=['generic_market'], errors='ignore')
+
+            # Final Safety Catch: If anything turned NaN, heal it back via deterministic calculation
+            if analysis_df['Conviction_Score'].isna().any():
+                deterministic = _compute_deterministic_conviction(analysis_df)
+                analysis_df['Conviction_Score'] = analysis_df['Conviction_Score'].fillna(deterministic)
+
         except Exception as e:
             logger.warning(f"Failed to generate calibration metrics: {e}")
-            # Deterministic fallback Conviction Score
-            prob_series = analysis_df.get('calibrated_probability', analysis_df.get('ml_probability', pd.Series(0.5, index=analysis_df.index)))
-            ev_series = analysis_df.get('expected_value', pd.Series(0.0, index=analysis_df.index))
-            current_prob = pd.to_numeric(prob_series, errors='coerce').fillna(0.5)
-            ev = pd.to_numeric(ev_series, errors='coerce').fillna(0.0)
-            analysis_df['Conviction_Score'] = 0.5 + (current_prob - 0.5).abs() + (ev * 2.0).clip(-0.2, 0.2)
-            analysis_df['Conviction_Score'] = analysis_df['Conviction_Score'].clip(0.01, 0.99)
-            analysis_df = analysis_df.drop(columns=['generic_market'], errors='ignore')
+
+        finally:
+             analysis_df = analysis_df.drop(columns=['generic_market'], errors='ignore')
 
     return (analysis_df, best_picks_df, diagnostics)
 
