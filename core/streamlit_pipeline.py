@@ -1770,6 +1770,29 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         best.loc[agrees_mask, "consensus_agreement"] = "✅ Agrees"
         best.loc[disagrees_mask, "consensus_agreement"] = "❌ Disagrees"
 
+    # Validation Logging: Pick_Status branches
+    if "Pick_Status" in best.columns:
+        status_counts = best["Pick_Status"].value_counts().to_dict()
+        logger.info("--- STATUS BRANCH VALIDATION ---")
+        for status in ["Actionable", "Below Threshold", "Fallback / Low Confidence", "No Play", "Missing Line"]:
+            if status in status_counts:
+                logger.info(f"Validated branch: {status} ({status_counts[status]} rows)")
+            else:
+                logger.info(f"Branch not exercised: {status} (0 rows)")
+
+    # Validation Logging: non-uploaded odds rows
+    if "odds_source" in best.columns and "Pick_Status" in best.columns:
+        non_uploaded_df = best[best["odds_source"].isin(["odds_api", "fallback_novig"])]
+        if not non_uploaded_df.empty:
+            logger.info("--- NON-UPLOADED ODDS CLASSIFICATION ---")
+            odds_api_counts = non_uploaded_df[non_uploaded_df["odds_source"] == "odds_api"]["Pick_Status"].value_counts().to_dict()
+            fallback_novig_counts = non_uploaded_df[non_uploaded_df["odds_source"] == "fallback_novig"]["Pick_Status"].value_counts().to_dict()
+
+            if odds_api_counts:
+                logger.info(f"odds_api rows classified as: {odds_api_counts}")
+            if fallback_novig_counts:
+                logger.info(f"fallback_novig rows classified as: {fallback_novig_counts}")
+
     # Sort Phase: Map Pick_Status to ordinal values to enforce sort groupings
     status_sort_map = {
         "Actionable": 5,
