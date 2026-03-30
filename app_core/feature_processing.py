@@ -989,6 +989,31 @@ def robust_normalize_team(name: str, league: Optional[str] = None) -> str:
     # Be careful not to match inside words
     name_upper = re.sub(r"\bN\.C\.", "NORTH CAROLINA", name_upper)
 
+    # 5. League Specific Logic
+    is_nfl = False
+    is_nhl = False
+    if league:
+        lg = str(league).strip().upper()
+        if lg == "NFL":
+            is_nfl = True
+        elif lg == "NHL":
+            is_nhl = True
+
+    # Proactive NHL Location-Only mapping validation logging
+    if is_nhl:
+        # Check if the name matches one of the known location-only names that we want to ensure maps to a full team name
+        nhl_location_check = {"COLORADO", "FLORIDA", "CAROLINA", "TAMPA BAY", "NEW JERSEY", "SAN JOSE", "VEGAS", "DALLAS"}
+        # If the input or stripped norm is exactly the location
+        # Check stripping manually so we don't return early without logging
+        temp_norm = normalize_team(name_upper)
+        if name_upper in nhl_location_check or temp_norm in nhl_location_check:
+            mapped_val = MANUAL_TEAM_OVERRIDES.get(name_upper, MANUAL_TEAM_OVERRIDES.get(temp_norm))
+            if mapped_val:
+                logger.info(f"NHL TEAM MAPPING: '{name}' -> '{mapped_val}'")
+                return mapped_val
+            else:
+                logger.warning(f"⚠️ NHL Mapping Validation: '{name}' normalized to raw location '{temp_norm}'. We expect this to be mapped to the full team name in MANUAL_TEAM_OVERRIDES.")
+
     # 1. Base Normalization Override Check (Check overrides BEFORE aggressive stripping)
     if name_upper in MANUAL_TEAM_OVERRIDES:
         return MANUAL_TEAM_OVERRIDES[name_upper]
@@ -1013,16 +1038,6 @@ def robust_normalize_team(name: str, league: Optional[str] = None) -> str:
     if norm in MANUAL_TEAM_OVERRIDES:
         return MANUAL_TEAM_OVERRIDES[norm]
 
-    # 5. League Specific Logic
-    is_nfl = False
-    is_nhl = False
-    if league:
-        lg = str(league).strip().upper()
-        if lg == "NFL":
-            is_nfl = True
-        elif lg == "NHL":
-            is_nhl = True
-
     # 6. NFL Aliases (City -> Full Name)
     if is_nfl and norm in NFL_TEAM_ALIASES:
         resolved = NFL_TEAM_ALIASES[norm]
@@ -1030,18 +1045,6 @@ def robust_normalize_team(name: str, league: Optional[str] = None) -> str:
             logger.info(f"NFL Alias Applied: '{name}' -> '{resolved}'")
             _NFL_ALIAS_LOG_COUNT += 1
         return resolved
-
-    # Proactive NHL Location-Only mapping validation logging
-    if is_nhl:
-        # Check if the name matches one of the known location-only names that we want to ensure maps to a full team name
-        nhl_location_check = {"COLORADO", "FLORIDA", "CAROLINA", "TAMPA BAY", "NEW JERSEY", "SAN JOSE", "VEGAS", "DALLAS"}
-        if norm in nhl_location_check:
-            # If the normalized name is just the city, it means it didn't hit our overrides
-            # We enforce the mapping here if it missed earlier overrides for some reason, and log it to verify
-            logger.warning(f"⚠️ NHL Mapping Validation: '{name}' normalized to raw location '{norm}'. We expect this to be mapped to the full team name in MANUAL_TEAM_OVERRIDES.")
-            # Fallback exact map check to be absolutely safe
-            if norm in MANUAL_TEAM_OVERRIDES:
-                return MANUAL_TEAM_OVERRIDES[norm]
 
     return norm
 
