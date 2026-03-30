@@ -1312,6 +1312,21 @@ TEAM_NAME_OVERRIDES: dict[tuple[str, str], str] = {
     ("NHL", "NY RANGERS"): "New York Rangers",
     ("NHL", "NEW YORK RANGERS"): "New York Rangers",
     ("NHL", "LOS ANGELES"): "Los Angeles Kings",
+    ("NHL", "FLORIDA"): "Florida Panthers",
+    ("NHL", "CAROLINA"): "Carolina Hurricanes",
+    ("NHL", "TAMPA BAY"): "Tampa Bay Lightning",
+    ("NHL", "NEW JERSEY"): "New Jersey Devils",
+    ("NHL", "SAN JOSE"): "San Jose Sharks",
+    ("NHL", "VEGAS"): "Vegas Golden Knights",
+    ("NHL", "BUFFALO"): "Buffalo Sabres",
+    ("NHL", "OTTAWA"): "Ottawa Senators",
+    ("NHL", "MONTREAL"): "Montreal Canadiens",
+    ("NHL", "NASHVILLE"): "Nashville Predators",
+    ("NHL", "PHILADELPHIA"): "Philadelphia Flyers",
+    ("NHL", "CHICAGO"): "Chicago Blackhawks",
+    ("NHL", "COLUMBUS"): "Columbus Blue Jackets",
+    ("NHL", "WINNIPEG"): "Winnipeg Jets",
+    ("NHL", "MINNESOTA"): "Minnesota Wild",
 }
 
 
@@ -1566,7 +1581,12 @@ def _apply_triple_filter_ranking(df: pd.DataFrame) -> pd.DataFrame:
     final_df['Pick_Quality'] = final_df['tier_score'].map(TIER_LABELS)
 
     # 4. Final Rank Generation
-    final_df = final_df.sort_values(by=['tier_score', 'expected_value'], ascending=[True, False]).reset_index(drop=True)
+    # Ensure expected_value is numeric and clean of missing values for sorting
+    ev_sort = pd.to_numeric(final_df['expected_value'], errors='coerce').fillna(-999)
+    final_df['_ev_sort_temp'] = ev_sort
+
+    final_df = final_df.sort_values(by=['tier_score', '_ev_sort_temp'], ascending=[True, False]).reset_index(drop=True)
+    final_df = final_df.drop(columns=['_ev_sort_temp'])
     final_df['Triple_Filter_Rank'] = range(1, len(final_df) + 1)
 
     # Clean up temporary columns
@@ -1794,10 +1814,16 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         # Convert Triple_Filter_Rank to numeric to ensure correct ascending numeric sort
         best["Triple_Filter_Rank"] = pd.to_numeric(best["Triple_Filter_Rank"], errors="coerce").fillna(9999)
 
+        # Re-fill expected_value and edge NaNs for sorting, drop them after
+        best["_ev_sort"] = pd.to_numeric(best["expected_value"], errors="coerce").fillna(-999)
+        best["_edge_sort"] = pd.to_numeric(best["edge"], errors="coerce").fillna(-999)
+
         best = best.sort_values(
-            by=["_status_sort", "Triple_Filter_Rank", "expected_value", "edge"],
+            by=["_status_sort", "Triple_Filter_Rank", "_ev_sort", "_edge_sort"],
             ascending=[False, True, False, False]
         ).reset_index(drop=True)
+
+        best = best.drop(columns=["_ev_sort", "_edge_sort"], errors="ignore")
 
     for col in BEST_PICK_COLUMNS:
         if col not in best.columns:
