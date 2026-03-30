@@ -1771,7 +1771,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         best.loc[agrees_mask, "consensus_agreement"] = "✅ Agrees"
         best.loc[disagrees_mask, "consensus_agreement"] = "❌ Disagrees"
 
-    # Validation Logging: Pick_Status branches
+    # Validation Logging: Pick_Status counts and odds_source cross-tabs
     if "Pick_Status" in best.columns:
         status_counts = best["Pick_Status"].value_counts().to_dict()
         logger.info("--- STATUS BRANCH VALIDATION ---")
@@ -1781,7 +1781,6 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
             else:
                 logger.info(f"Branch not exercised: {status} (0 rows)")
 
-    # Validation Logging: odds rows classification
     if "odds_source" in best.columns and "Pick_Status" in best.columns:
         logger.info("--- ODDS SOURCE CLASSIFICATION ---")
         for source in ["uploaded", "odds_api", "fallback_novig"]:
@@ -1807,19 +1806,6 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     if "Pick_Status" in best.columns:
         best["Pick_Status"] = pd.Categorical(best["Pick_Status"], categories=status_order, ordered=True)
 
-    # Phase 2: Eradication of Floating-Point Artefacts in Expected Value Calculations
-    # We must retain the expected_value as is, but handle NaNs in sorting
-    best["expected_value"] = best["expected_value"].fillna(-999)
-
-    # We will sort roughly now by status, EV, etc. to get a base order for ranking
-    # Categorical ascending=True puts 'Actionable' first, down to 'Missing Line', then NaN/Others at bottom
-    best = best.sort_values(
-        ["Pick_Status", "expected_value", "game_date", "league", "home_team"],
-        ascending=[True, False, True, True, True]
-    ).reset_index(drop=True)
-
-    best["expected_value"] = best["expected_value"].replace(-999, pd.NA)
-
     if not best.empty:
         best["expected_value"] = pd.to_numeric(best["expected_value"], errors="coerce")
         best["edge"] = pd.to_numeric(best["edge"], errors="coerce")
@@ -1838,8 +1824,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
 
         # Cast to numeric so that sort logic is proper, missing goes to NaN
         best["_rank_sort"] = pd.to_numeric(best["Triple_Filter_Rank"], errors="coerce")
-        best["_ev_sort"] = pd.to_numeric(best["expected_value"], errors="coerce").fillna(-999)
-        best["_edge_sort"] = pd.to_numeric(best["edge"], errors="coerce").fillna(-999)
+        best["_ev_sort"] = pd.to_numeric(best["expected_value"], errors="coerce")
+        best["_edge_sort"] = pd.to_numeric(best["edge"], errors="coerce")
 
         best = best.sort_values(
             by=["Pick_Status", "_rank_sort", "_ev_sort", "_edge_sort"],
