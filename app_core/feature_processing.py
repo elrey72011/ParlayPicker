@@ -1009,6 +1009,7 @@ def robust_normalize_team(name: str, league: Optional[str] = None) -> str:
         if name_upper in nhl_location_check or temp_norm in nhl_location_check:
             mapped_val = MANUAL_TEAM_OVERRIDES.get(name_upper, MANUAL_TEAM_OVERRIDES.get(temp_norm))
             if mapped_val:
+                # Explicitly format as requested by the user
                 logger.info(f"NHL TEAM MAPPING: '{name}' -> '{mapped_val}'")
                 return mapped_val
             else:
