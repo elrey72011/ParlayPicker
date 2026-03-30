@@ -2497,11 +2497,30 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
         # Fill missing values in prob_series with calculated ML probs
         prob_series = prob_series.fillna(ml_probs).infer_objects(copy=False)
 
+    # Step 2.5: Calculate from market_probability or decimal_odds if still missing
+    if prob_series.isna().any():
+        if 'market_probability' in df.columns:
+            mkt_probs = pd.to_numeric(df['market_probability'], errors='coerce')
+            prob_series = prob_series.fillna(mkt_probs).infer_objects(copy=False)
+        if 'decimal_odds' in df.columns and prob_series.isna().any():
+            dec_probs = 1 / pd.to_numeric(df['decimal_odds'], errors='coerce')
+            prob_series = prob_series.fillna(dec_probs).infer_objects(copy=False)
+        if 'odds_american' in df.columns and prob_series.isna().any():
+            am_probs = pd.to_numeric(df['odds_american'], errors='coerce').apply(ml_to_prob)
+            prob_series = prob_series.fillna(am_probs).infer_objects(copy=False)
+
     # Step 3: Final fallback to 0.5 only if still NaN
     features_data['implied_home_prob'] = prob_series.fillna(0.5).infer_objects(copy=False)
 
-    features_data['sentiment_diff'] = safe_numeric_fill(df.get('Sentiment_Diff'), 0.0)
-    features_data['kalshi_prob'] = safe_numeric_fill(df.get('kalshi_prob'), 0.5)
+    features_data['sentiment_diff'] = safe_numeric_fill(df.get('sentiment_diff'), 0.0)
+
+    # Try multiple kalshi column names
+    k_col = next((c for c in df.columns if str(c).lower() in ['kalshi_prob', 'kalshi_probability']), None)
+    if k_col:
+        k_series = pd.to_numeric(df[k_col], errors='coerce')
+        features_data['kalshi_prob'] = k_series.fillna(0.5).infer_objects(copy=False)
+    else:
+        features_data['kalshi_prob'] = 0.5
     features_data['injuries_home_count'] = safe_numeric_fill(df.get('injuries_home_count'), 0)
     features_data['injuries_away_count'] = safe_numeric_fill(df.get('injuries_away_count'), 0)
     
