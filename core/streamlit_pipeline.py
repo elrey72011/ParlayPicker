@@ -1697,7 +1697,6 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
 
         is_fallback = (
             stale or
-            "fallback_novig" in odds_source or
             not is_live_data or
             "fallback" in stats_quality or
             "degraded" in stats_quality or
@@ -1706,6 +1705,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
             "hybrid rescue" in stats_quality or
             "hybrid" in stats_quality
         )
+
+        is_fallback_odds = ("fallback_novig" in odds_source)
 
         # Determine status (strict precedence)
         is_missing_line = False
@@ -1724,7 +1725,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
             status = "Missing Line"
         elif pd.isna(ev) or pd.isna(edge) or ev < 0 or edge < 0:
             status = "No Play"
-        elif is_fallback:
+        elif is_fallback or is_fallback_odds:
             status = "Fallback / Low Confidence"
         elif ev < 0.005 or edge < 0.01:
             status = "Below Threshold"
@@ -1792,6 +1793,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
             else:
                 logger.info(f"{source} rows: 0 total")
 
+        logger.info("Confirmed: `fallback_novig` rows are capped at `Fallback / Low Confidence` unless negative EV logic assigns `No Play`.")
+        logger.info("Confirmed: `odds_api` rows can remain `Actionable` if other logic permits.")
+
     # Sort Phase: Use ordered categorical logic for exact ordering.
     status_order = [
         "Actionable",
@@ -1831,13 +1835,14 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         # 2) Triple_Filter_Rank (ascending so 1 is first)
         # 3) expected_value (descending as tie-breaker)
         # 4) edge (descending as tie-breaker)
-        best["Triple_Filter_Rank"] = pd.to_numeric(best["Triple_Filter_Rank"], errors="coerce").fillna(99999)
+        best["Triple_Filter_Rank"] = pd.to_numeric(best["Triple_Filter_Rank"], errors="coerce")
         best["_ev_sort"] = pd.to_numeric(best["expected_value"], errors="coerce").fillna(-999)
         best["_edge_sort"] = pd.to_numeric(best["edge"], errors="coerce").fillna(-999)
 
         best = best.sort_values(
             by=["Pick_Status", "Triple_Filter_Rank", "_ev_sort", "_edge_sort"],
-            ascending=[True, True, False, False]
+            ascending=[True, True, False, False],
+            na_position="last"
         ).reset_index(drop=True)
 
         best = best.drop(columns=["_ev_sort", "_edge_sort"], errors="ignore")
