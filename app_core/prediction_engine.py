@@ -1399,6 +1399,60 @@ class PredictionEngine:
             raw_valid_probs = [p for p in raw_probs if p is not None]
             self._last_metrics["raw_unique_count"] = len(set(raw_valid_probs))
 
+            # --- START DIAGNOSTIC LOGGING FOR RAW DUPLICATES ---
+            try:
+                from collections import Counter
+                raw_prob_counts = Counter(raw_valid_probs)
+                duplicates = [(p, c) for p, c in raw_prob_counts.items() if c > 1]
+
+                if duplicates:
+                    logger.info(f"ML RAW COMPRESSION AUDIT: Found {len(duplicates)} repeated raw prob values. Top 3: {sorted(duplicates, key=lambda x: x[1], reverse=True)[:3]}")
+
+                    # Try to get leaf indices if possible (only for xgb.Booster)
+                    leaves = None
+                    if isinstance(self.model, xgb.Booster):
+                        try:
+                            # predict with pred_leaf=True returns an array of shape (nsamples, ntrees)
+                            leaves = self.model.predict(dmatrix, pred_leaf=True)
+                            logger.info(f"ML RAW COMPRESSION AUDIT: Successfully extracted leaf indices. Shape: {leaves.shape}")
+                        except Exception as e:
+                            logger.warning(f"ML RAW COMPRESSION AUDIT: Could not extract leaves: {e}")
+
+                    # Log a sample for the most frequent duplicated probability
+                    top_dup_prob, top_dup_count = sorted(duplicates, key=lambda x: x[1], reverse=True)[0]
+                    logger.info(f"ML RAW COMPRESSION AUDIT: Sampling rows for raw probability = {top_dup_prob} (Count: {top_dup_count})")
+
+                    sampled_count = 0
+                    for idx_batch, p in enumerate(raw_probs):
+                        if p is not None and abs(p - top_dup_prob) < 1e-7:
+                            if sampled_count >= 3:
+                                break
+
+                            original_idx = inference_data.index[idx_batch]
+                            row = working_df.loc[original_idx]
+                            feat_dict = inference_data.iloc[idx_batch].to_dict()
+
+                            # Clean up dict for printing (round floats)
+                            clean_feat = {k: round(v, 4) if isinstance(v, float) else v for k, v in feat_dict.items()}
+
+                            logger.info(f"  --- Duplicate Row {sampled_count+1} ---")
+                            logger.info(f"  League: {row.get('league')}, Matchup: {row.get('matchup_id')}, Market: {row.get('market_type')}")
+                            logger.info(f"  Teams: {row.get('home_team')} vs {row.get('away_team')}")
+                            logger.info(f"  Implied Home Prob: {row.get('implied_home_prob')}, Kalshi Prob: {row.get('kalshi_prob')}")
+                            logger.info(f"  Stale Features Used: {used_stale_features.iloc[idx_batch]}")
+                            logger.info(f"  Feature Vector: {clean_feat}")
+
+                            if leaves is not None:
+                                # Just log a hash or the first few tree leaves to show if they differ
+                                row_leaves = leaves[idx_batch]
+                                leaf_hash = hashlib.md5(row_leaves.tobytes()).hexdigest()
+                                logger.info(f"  XGBoost Leaf Path Hash: {leaf_hash} (First 5 leaves: {row_leaves[:5].tolist()})")
+
+                            sampled_count += 1
+            except Exception as e:
+                logger.error(f"Error during ML RAW COMPRESSION AUDIT logging: {e}")
+            # --- END DIAGNOSTIC LOGGING ---
+
             # Jules: MANDATORY Blacklist and Statistical Healing recovery
             BLACKLIST = [0.623034656047821, 0.10671072453260422, 0.48637846, 0.31053704, 0.5622388124465942, 0.562238]
             healed_count = 0

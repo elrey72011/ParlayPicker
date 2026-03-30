@@ -61,4 +61,5 @@ def test_best_picks_marks_no_edge_when_ev_missing():
     best = build_best_picks_df(analysis_df)
 
     assert len(best) == 1
-    assert best.iloc[0]["best_pick"] == "No Edge"
+    # We now mark invalid picks in Pick_Quality, not in best_pick string
+    assert "No Play" in best.iloc[0]["Pick_Quality"]
