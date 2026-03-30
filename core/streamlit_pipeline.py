@@ -1842,8 +1842,61 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     # Final Cleanup: Drop temporary columns used for processing
     best = best.drop(columns=["tier_score", "expected_value_sort", "is_unique", "is_kalshi_available", "_status_sort"], errors="ignore")
 
+    # Final guaranteed sort pass immediately before export
+    if not best.empty:
+        status_order = [
+            "Actionable",
+            "Below Threshold",
+            "Fallback / Low Confidence",
+            "No Play",
+            "Missing Line"
+        ]
+        best["Pick_Status"] = pd.Categorical(best["Pick_Status"], categories=status_order, ordered=True)
+        best["_rank_sort"] = pd.to_numeric(best["Triple_Filter_Rank"], errors="coerce")
+        best["_ev_sort"] = pd.to_numeric(best["expected_value"], errors="coerce")
+        best["_edge_sort"] = pd.to_numeric(best["edge"], errors="coerce")
+
+        best = best.sort_values(
+            by=["Pick_Status", "_rank_sort", "_ev_sort", "_edge_sort"],
+            ascending=[True, True, False, False],
+            na_position="last"
+        ).reset_index(drop=True)
+
+        best = best.drop(columns=["_rank_sort", "_ev_sort", "_edge_sort"], errors="ignore")
+
     # 3. Assign parlay_rank AFTER the final sort pass so the exported numbers sequentially map 1 to N
     best["parlay_rank"] = range(1, len(best) + 1) if not best.empty else pd.Series(dtype=int)
+
+    # Final Validation Logs
+    if not best.empty:
+        logger.info("--- FINAL PIPELINE VALIDATION AUDIT ---")
+
+        # Pick Status Counts
+        if "Pick_Status" in best.columns:
+            status_counts = best["Pick_Status"].value_counts(dropna=False).to_dict()
+            logger.info("--- FINAL STATUS COUNTS ---")
+            for status in status_order:
+                count = status_counts.get(status, 0)
+                if count > 0:
+                    logger.info(f"Validated branch: {status} ({count} rows)")
+                else:
+                    logger.info(f"Branch not exercised: {status} (0 rows)")
+
+        # Odds Source Counts
+        if "odds_source" in best.columns:
+            logger.info("--- FINAL ODDS SOURCE CLASSIFICATION ---")
+            source_counts = best["odds_source"].value_counts(dropna=False).to_dict()
+            for source, count in source_counts.items():
+                logger.info(f"odds_source '{source}': {count} total rows")
+
+            # Cross-tabs
+            if "Pick_Status" in best.columns:
+                logger.info("--- FINAL ODDS SOURCE x PICK STATUS ---")
+                for source in best["odds_source"].dropna().unique():
+                    source_df = best[best["odds_source"] == source]
+                    counts = source_df["Pick_Status"].value_counts().to_dict()
+                    filtered_counts = {k: v for k, v in counts.items() if v > 0}
+                    logger.info(f"odds_source '{source}' -> {filtered_counts}")
 
     return best[BEST_PICK_COLUMNS]
 
