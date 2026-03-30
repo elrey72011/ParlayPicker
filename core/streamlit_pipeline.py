@@ -1835,17 +1835,19 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         # 2) Triple_Filter_Rank (ascending so 1 is first)
         # 3) expected_value (descending as tie-breaker)
         # 4) edge (descending as tie-breaker)
-        best["Triple_Filter_Rank"] = pd.to_numeric(best["Triple_Filter_Rank"], errors="coerce")
+
+        # Cast to numeric so that sort logic is proper, missing goes to NaN
+        best["_rank_sort"] = pd.to_numeric(best["Triple_Filter_Rank"], errors="coerce")
         best["_ev_sort"] = pd.to_numeric(best["expected_value"], errors="coerce").fillna(-999)
         best["_edge_sort"] = pd.to_numeric(best["edge"], errors="coerce").fillna(-999)
 
         best = best.sort_values(
-            by=["Pick_Status", "Triple_Filter_Rank", "_ev_sort", "_edge_sort"],
+            by=["Pick_Status", "_rank_sort", "_ev_sort", "_edge_sort"],
             ascending=[True, True, False, False],
             na_position="last"
         ).reset_index(drop=True)
 
-        best = best.drop(columns=["_ev_sort", "_edge_sort"], errors="ignore")
+        best = best.drop(columns=["_rank_sort", "_ev_sort", "_edge_sort"], errors="ignore")
 
     for col in BEST_PICK_COLUMNS:
         if col not in best.columns:
