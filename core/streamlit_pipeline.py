@@ -1665,6 +1665,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         bp = str(best.at[idx, "best_pick"])
         ev = best.at[idx, "expected_value"]
         edge = best.at[idx, "edge"]
+        market_type = str(best.at[idx, "market_type"]) if "market_type" in best.columns else ""
 
         # Check fallback indicators
         stale = bool(best.at[idx, "used_stale_features"]) if "used_stale_features" in best.columns and pd.notna(best.at[idx, "used_stale_features"]) else False
@@ -1687,7 +1688,19 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         )
 
         # Determine status (strict precedence)
+        is_missing_line = False
         if "(No Line)" in bp:
+            # market_type from _format_best_pick is spread_home, spread_away, total_over, total_under
+            # So if bp contains "(No Line)", it inherently means a required line is missing for a spread/total.
+            # Only trigger Missing Line for spreads/totals
+            if any(m in market_type.lower() for m in ["spread", "total"]):
+                is_missing_line = True
+            elif "h2h" in market_type.lower():
+                # For moneyline, a missing spread/total line isn't fatal unless odds are totally absent
+                if pd.isna(best.at[idx, "market_probability"]) and pd.isna(best.at[idx, "ml_probability"]):
+                    is_missing_line = True
+
+        if is_missing_line:
             status = "Missing Line"
         elif pd.isna(ev) or pd.isna(edge) or ev < 0 or edge < 0:
             status = "No Play"
