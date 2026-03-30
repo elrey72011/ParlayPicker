@@ -1665,14 +1665,18 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         bp = str(best.at[idx, "best_pick"])
         ev = best.at[idx, "expected_value"]
         edge = best.at[idx, "edge"]
-        stale = bool(best.at[idx, "used_stale_features"]) if "used_stale_features" in best.columns and pd.notna(best.at[idx, "used_stale_features"]) else False
 
-        # Determine status
+        # Check fallback indicators
+        stale = bool(best.at[idx, "used_stale_features"]) if "used_stale_features" in best.columns and pd.notna(best.at[idx, "used_stale_features"]) else False
+        odds_source = str(best.at[idx, "odds_source"]).lower() if "odds_source" in best.columns else ""
+        is_fallback = stale or "fallback_novig" in odds_source
+
+        # Determine status (strict precedence)
         if "(No Line)" in bp:
             status = "Missing Line"
         elif pd.isna(ev) or pd.isna(edge) or ev < 0 or edge < 0:
             status = "No Play"
-        elif stale:
+        elif is_fallback:
             status = "Fallback / Low Confidence"
         elif ev < 0.005 or edge < 0.01:
             status = "Below Threshold"
@@ -1718,18 +1722,33 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         best.loc[agrees_mask, "consensus_agreement"] = "✅ Agrees"
         best.loc[disagrees_mask, "consensus_agreement"] = "❌ Disagrees"
 
+    # Sort Phase: Map Pick_Status to ordinal values to enforce sort groupings
+    status_sort_map = {
+        "Actionable": 1,
+        "Below Threshold": 2,
+        "Fallback / Low Confidence": 3,
+        "No Play": 4,
+        "Missing Line": 5
+    }
+
+    # Use categorical logic or mapped column
+    if "Pick_Status" in best.columns:
+        best["_status_sort"] = best["Pick_Status"].map(status_sort_map).fillna(99)
+    else:
+        best["_status_sort"] = 99
+
     # Phase 2: Eradication of Floating-Point Artefacts in Expected Value Calculations
-    # Primary sort by expected_value descending, then game_date, league, home_team ascending
     # We must retain the expected_value as is, but handle NaNs in sorting
     best["expected_value"] = best["expected_value"].fillna(-999)
+
+    # We will sort roughly now by status, EV, etc. to get a base order for ranking
     best = best.sort_values(
-        ["expected_value", "game_date", "league", "home_team"],
-        ascending=[False, True, True, True]
+        ["_status_sort", "expected_value", "game_date", "league", "home_team"],
+        ascending=[True, False, True, True, True]
     ).reset_index(drop=True)
+
     best["expected_value"] = best["expected_value"].replace(-999, pd.NA)
 
-    # Fake the math at the very end to bypass the > 0 frontend filter is removed since we are strictly enforcing thresholds
-    # We leave the actual edge/ev as is.
     if not best.empty:
         best["expected_value"] = pd.to_numeric(best["expected_value"], errors="coerce")
         best["edge"] = pd.to_numeric(best["edge"], errors="coerce")
@@ -1737,24 +1756,28 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         # 1. Final ranking pass for sequential 1-21 numbering
         best = _apply_triple_filter_ranking(best)
 
-    else:
-        pass
+        # After re-ranking, _apply_triple_filter_ranking changes the sort order to its internal tier logic.
+        # We MUST re-apply the primary status sort over the rank so 'Actionable' rows are always first, etc.
+        # Ensure status sort map is available again
+        best["_status_sort"] = best["Pick_Status"].map(status_sort_map).fillna(99)
+
+        # We sort by: 1) Status Bucket, 2) Triple Filter Rank (which factors tier and EV)
+        best = best.sort_values(
+            by=["_status_sort", "Triple_Filter_Rank"],
+            ascending=[True, True]
+        ).reset_index(drop=True)
 
     for col in BEST_PICK_COLUMNS:
         if col not in best.columns:
             best[col] = pd.NA
 
     # Final Cleanup: Drop temporary columns used for processing
-    best = best.drop(columns=["tier_score", "expected_value_sort", "is_unique", "is_kalshi_available"], errors="ignore")
+    best = best.drop(columns=["tier_score", "expected_value_sort", "is_unique", "is_kalshi_available", "_status_sort"], errors="ignore")
 
-    # 3. Assign parlay_rank AFTER the second ranking pass so the exported numbers sequentially map 1 to N
+    # 3. Assign parlay_rank AFTER the final sort pass so the exported numbers sequentially map 1 to N
     best["parlay_rank"] = range(1, len(best) + 1) if not best.empty else pd.Series(dtype=int)
 
-    if not best.empty and "Triple_Filter_Rank" in best.columns:
-        best = best.sort_values(by="Triple_Filter_Rank", ascending=True).reset_index(drop=True)
-        best = best.sort_values(by="Triple_Filter_Rank", ascending=True)
-
-    return best[BEST_PICK_COLUMNS].sort_values(by="Triple_Filter_Rank", ascending=True)
+    return best[BEST_PICK_COLUMNS]
 
 
 def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None = None) -> pd.DataFrame:
