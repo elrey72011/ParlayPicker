@@ -1669,7 +1669,22 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         # Check fallback indicators
         stale = bool(best.at[idx, "used_stale_features"]) if "used_stale_features" in best.columns and pd.notna(best.at[idx, "used_stale_features"]) else False
         odds_source = str(best.at[idx, "odds_source"]).lower() if "odds_source" in best.columns else ""
-        is_fallback = stale or "fallback_novig" in odds_source
+
+        # Additional row-specific fallback signals based on requirement
+        is_live_data = bool(best.at[idx, "is_live_data"]) if "is_live_data" in best.columns and pd.notna(best.at[idx, "is_live_data"]) else True
+        stats_quality = str(best.at[idx, "stats_quality"]).lower() if "stats_quality" in best.columns else ""
+
+        is_fallback = (
+            stale or
+            "fallback_novig" in odds_source or
+            not is_live_data or
+            "fallback" in stats_quality or
+            "degraded" in stats_quality or
+            "historical" in stats_quality or
+            "league_average" in stats_quality or
+            "hybrid rescue" in stats_quality or
+            "hybrid" in stats_quality
+        )
 
         # Determine status (strict precedence)
         if "(No Line)" in bp:
@@ -1762,9 +1777,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         best["_status_sort"] = best["Pick_Status"].map(status_sort_map).fillna(99)
 
         # We sort by: 1) Status Bucket, 2) Triple Filter Rank (which factors tier and EV)
+        # We also keep expected_value and edge as tie-breakers.
         best = best.sort_values(
-            by=["_status_sort", "Triple_Filter_Rank"],
-            ascending=[True, True]
+            by=["_status_sort", "Triple_Filter_Rank", "expected_value", "edge"],
+            ascending=[True, True, False, False]
         ).reset_index(drop=True)
 
     for col in BEST_PICK_COLUMNS:
