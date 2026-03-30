@@ -925,15 +925,24 @@ def _format_best_pick(row: pd.Series) -> str:
 
     if market == "spread_home":
         line = pd.to_numeric(row.get("spread_line"), errors="coerce")
+        if pd.isna(line):
+            line = pd.to_numeric(row.get("spread"), errors="coerce")
         return f"{home_team} {line:+.1f}" if pd.notna(line) else home_team
     if market == "spread_away":
         line = pd.to_numeric(row.get("spread_line"), errors="coerce")
+        if pd.isna(line):
+            line = pd.to_numeric(row.get("spread"), errors="coerce")
         return f"{away_team} {line:+.1f}" if pd.notna(line) else away_team
     if market == "total_over":
         line = pd.to_numeric(row.get("total_line"), errors="coerce")
+        # try fallback to 'total' if 'total_line' is missing
+        if pd.isna(line):
+            line = pd.to_numeric(row.get("total"), errors="coerce")
         return f"Over {line:.1f}" if pd.notna(line) else "Over"
     if market == "total_under":
         line = pd.to_numeric(row.get("total_line"), errors="coerce")
+        if pd.isna(line):
+            line = pd.to_numeric(row.get("total"), errors="coerce")
         return f"Under {line:.1f}" if pd.notna(line) else "Under"
     if market == "h2h_home":
         return home_team
@@ -1579,6 +1588,13 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
 
     pool["expected_value"] = _numeric_series(pool, "expected_value")
     pool["edge"] = _numeric_series(pool, "edge", 0.0)
+
+    # Ensure lines are numeric before applying best_pick formatter
+    if "spread_line" in pool.columns:
+        pool["spread_line"] = pd.to_numeric(pool["spread_line"], errors="coerce")
+    if "total_line" in pool.columns:
+        pool["total_line"] = pd.to_numeric(pool["total_line"], errors="coerce")
+
     pool["best_pick"] = pool.apply(_format_best_pick, axis=1)
     pool["league"] = _clean_text_placeholders(_string_series(pool, "league")).astype("string").str.strip()
     pool["home_team"] = _clean_text_placeholders(_string_series(pool, "home_team")).astype("string").str.strip()
@@ -1651,6 +1667,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     # We must NOT filter out non-qualifying picks from the output to ensure 1:1 parity between games and picks
     # best = best[valid_edge_mask & valid_ev_mask].copy()
     logger.info(f"BEST PICKS AUDIT: Non-qualifying picks (edge < 0.01 or EV < 0.005) left intact: {(~valid_edge_mask | ~valid_ev_mask).sum()}")
+
+    # Explicitly label non-qualifying picks as "No Play"
+    best.loc[~valid_edge_mask | ~valid_ev_mask, "Pick_Quality"] = "No Play (Negative/Low Edge)"
 
     total_games = int(pool["matchup_id"].nunique(dropna=False))
     logger.info(f"PIPELINE AUDIT: [9/9] Rows surviving into best-picks ranking/export: {len(best)}")
