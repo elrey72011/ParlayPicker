@@ -1772,30 +1772,6 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         best.loc[agrees_mask, "consensus_agreement"] = "✅ Agrees"
         best.loc[disagrees_mask, "consensus_agreement"] = "❌ Disagrees"
 
-    # Validation Logging: Pick_Status counts and odds_source cross-tabs
-    if "Pick_Status" in best.columns:
-        status_counts = best["Pick_Status"].value_counts().to_dict()
-        logger.info("--- STATUS BRANCH VALIDATION ---")
-        for status in ["Actionable", "Below Threshold", "Fallback / Low Confidence", "No Play", "Missing Line"]:
-            if status in status_counts:
-                logger.info(f"Validated branch: {status} ({status_counts[status]} rows)")
-            else:
-                logger.info(f"Branch not exercised: {status} (0 rows)")
-
-    if "odds_source" in best.columns and "Pick_Status" in best.columns:
-        logger.info("--- ODDS SOURCE CLASSIFICATION ---")
-        for source in ["uploaded", "odds_api", "fallback_novig"]:
-            source_df = best[best["odds_source"] == source]
-            source_count = len(source_df)
-            if source_count > 0:
-                counts = source_df["Pick_Status"].value_counts().to_dict()
-                logger.info(f"{source} rows: {source_count} total, classified as {counts}")
-            else:
-                logger.info(f"{source} rows: 0 total")
-
-        logger.info("Confirmed: `fallback_novig` rows are capped at `Fallback / Low Confidence` unless negative EV logic assigns `No Play`.")
-        logger.info("Confirmed: `odds_api` rows can remain `Actionable` if other logic permits.")
-
     # Sort Phase: Use ordered categorical logic for exact ordering.
     status_order = [
         "Actionable",
@@ -1896,21 +1872,19 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         # Odds Source Counts
         if "odds_source" in best.columns:
             logger.info("--- FINAL ODDS SOURCE CLASSIFICATION ---")
-            source_counts = best["odds_source"].value_counts(dropna=False).to_dict()
-            for source, count in source_counts.items():
-                if pd.notna(source):
-                    logger.info(f"odds_source '{source}': {count} total rows")
-                else:
-                    logger.info(f"odds_source 'NA/MISSING': {count} total rows")
+
+            # Show all sources
+            sources = best["odds_source"].dropna().unique()
+            for source in sources:
+                 count = (best["odds_source"] == source).sum()
+                 logger.info(f"odds_source '{source}': {count} total rows")
 
             # Cross-tabs
             if "Pick_Status" in best.columns:
                 logger.info("--- FINAL ODDS SOURCE x PICK STATUS ---")
-                # Group by odds_source and Pick_Status
-                cross_tabs = best.groupby("odds_source", observed=True)["Pick_Status"].value_counts().unstack(fill_value=0)
-                for source in cross_tabs.index:
-                    counts = cross_tabs.loc[source].to_dict()
-                    # Keep counts as ordered dict and filter non-zero
+                for source in sources:
+                    source_mask = best["odds_source"] == source
+                    counts = best[source_mask]["Pick_Status"].value_counts().to_dict()
                     filtered_counts = {k: v for k, v in counts.items() if v > 0}
                     logger.info(f"odds_source '{source}' -> {filtered_counts}")
 
