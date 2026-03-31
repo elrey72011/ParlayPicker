@@ -2509,6 +2509,12 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
             am_probs = pd.to_numeric(df['odds_american'], errors='coerce').apply(ml_to_prob)
             prob_series = prob_series.fillna(am_probs).infer_objects(copy=False)
 
+    # Try to populate missing implied prob with ML implied probabilities or odds
+    if 'ml_probability' in df.columns and prob_series.isna().any():
+        prob_series = prob_series.fillna(pd.to_numeric(df['ml_probability'], errors='coerce')).infer_objects(copy=False)
+    if 'market_probability' in df.columns and prob_series.isna().any():
+        prob_series = prob_series.fillna(pd.to_numeric(df['market_probability'], errors='coerce')).infer_objects(copy=False)
+
     # Step 3: Final fallback to 0.5 only if still NaN
     features_data['implied_home_prob'] = prob_series.fillna(0.5).infer_objects(copy=False)
 
@@ -2518,9 +2524,10 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     k_col = next((c for c in df.columns if str(c).lower() in ['kalshi_prob', 'kalshi_probability']), None)
     if k_col:
         k_series = pd.to_numeric(df[k_col], errors='coerce')
-        features_data['kalshi_prob'] = k_series.fillna(0.5).infer_objects(copy=False)
+        # Fallback kalshi_prob to implied_home_prob or market probability before hard default 0.5
+        features_data['kalshi_prob'] = k_series.fillna(features_data['implied_home_prob']).infer_objects(copy=False)
     else:
-        features_data['kalshi_prob'] = 0.5
+        features_data['kalshi_prob'] = features_data['implied_home_prob']
     features_data['injuries_home_count'] = safe_numeric_fill(df.get('injuries_home_count'), 0)
     features_data['injuries_away_count'] = safe_numeric_fill(df.get('injuries_away_count'), 0)
     
