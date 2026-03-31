@@ -2525,7 +2525,9 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     if k_col:
         k_series = pd.to_numeric(df[k_col], errors='coerce')
         # Fallback kalshi_prob to implied_home_prob or market probability before hard default 0.5
-        features_data['kalshi_prob'] = k_series.fillna(features_data['implied_home_prob']).infer_objects(copy=False)
+        # Add another fallback step using the newly enriched implied_home_prob
+        k_series = k_series.fillna(features_data['implied_home_prob']).infer_objects(copy=False)
+        features_data['kalshi_prob'] = k_series.fillna(0.5).infer_objects(copy=False)
     else:
         features_data['kalshi_prob'] = features_data['implied_home_prob']
     features_data['injuries_home_count'] = safe_numeric_fill(df.get('injuries_home_count'), 0)
