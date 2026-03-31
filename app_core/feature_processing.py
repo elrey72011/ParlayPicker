@@ -2484,67 +2484,114 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
 
     # Step 1: Extract real market-derived probabilities first (Highest Priority)
     prob_series = pd.Series([np.nan]*len(df), index=df.index)
+
+    # 1. Existing de-vig/market prob
     if 'market_probability' in df.columns:
         mkt_probs = pd.to_numeric(df['market_probability'], errors='coerce')
-        prob_series = prob_series.fillna(mkt_probs).infer_objects(copy=False)
-    if 'decimal_odds' in df.columns and prob_series.isna().any():
-        dec_probs = 1 / pd.to_numeric(df['decimal_odds'], errors='coerce')
-        prob_series = prob_series.fillna(dec_probs).infer_objects(copy=False)
-    if 'odds_american' in df.columns and prob_series.isna().any():
-        am_probs = pd.to_numeric(df['odds_american'], errors='coerce').apply(ml_to_prob)
-        prob_series = prob_series.fillna(am_probs).infer_objects(copy=False)
+        # only keep if not 0.5 exactly (often a default placeholder)
+        valid_mkt = mkt_probs[(mkt_probs.notna()) & (mkt_probs != 0.5)]
+        prob_series = prob_series.fillna(valid_mkt).infer_objects(copy=False)
 
-    # Step 2: Use existing implied_home_prob if available and not yet filled
-    if imp_col and prob_series.isna().any():
-        existing_imp_probs = pd.to_numeric(df[imp_col], errors='coerce')
-        prob_series = prob_series.fillna(existing_imp_probs).infer_objects(copy=False)
+    # 2. Compute from raw home/away odds if we have both sides
+    h_odds_col = next((c for c in df.columns if str(c).lower() in ['home_odds', 'odds_home', 'home_price', 'novig_home_price', 'novig_h2h_home_price']), None)
+    a_odds_col = next((c for c in df.columns if str(c).lower() in ['away_odds', 'odds_away', 'away_price', 'novig_away_price', 'novig_h2h_away_price']), None)
 
-    if 'Home_ML' in df.columns and prob_series.isna().any():
-        ml_probs = df['Home_ML'].apply(ml_to_prob)
-        prob_series = prob_series.fillna(ml_probs).infer_objects(copy=False)
+    if h_odds_col and a_odds_col and prob_series.isna().any():
+        for idx in prob_series[prob_series.isna()].index:
+            try:
+                h_val = float(df.loc[idx, h_odds_col])
+                a_val = float(df.loc[idx, a_odds_col])
+
+                # Assume american odds if absolute value >= 100
+                if abs(h_val) >= 100 and abs(a_val) >= 100:
+                    h_prob = 100 / (h_val + 100) if h_val > 0 else abs(h_val) / (abs(h_val) + 100)
+                    a_prob = 100 / (a_val + 100) if a_val > 0 else abs(a_val) / (abs(a_val) + 100)
+                    # de-vig
+                    if h_prob > 0 and a_prob > 0:
+                        prob_series.at[idx] = h_prob / (h_prob + a_prob)
+                elif 1 < h_val < 100 and 1 < a_val < 100: # decimal odds
+                    h_prob = 1.0 / h_val
+                    a_prob = 1.0 / a_val
+                    if h_prob > 0 and a_prob > 0:
+                        prob_series.at[idx] = h_prob / (h_prob + a_prob)
+            except Exception:
+                pass
+
+    # 3. Use side-specific implied probability oriented to home
+    if prob_series.isna().any():
+        for idx in prob_series[prob_series.isna()].index:
+            market_type = str(df.loc[idx, 'market_type']).lower() if 'market_type' in df.columns else ''
+
+            # If we know it's a home-oriented row, use its implied prob directly
+            is_home_side = market_type in ('spread_home', 'h2h_home', 'moneyline_home', 'home')
+            is_away_side = market_type in ('spread_away', 'h2h_away', 'moneyline_away', 'away')
+
+            val = None
+            if imp_col:
+                val = pd.to_numeric(df.loc[idx, imp_col], errors='coerce')
+
+            if pd.isna(val) and 'decimal_odds' in df.columns:
+                dec = pd.to_numeric(df.loc[idx, 'decimal_odds'], errors='coerce')
+                if pd.notna(dec) and dec > 1.0:
+                    val = 1.0 / dec
+
+            if pd.isna(val) and 'odds_american' in df.columns:
+                am = df.loc[idx, 'odds_american']
+                val = ml_to_prob(am)
+
+            if pd.notna(val) and 0.0 < val < 1.0 and val != 0.5:
+                if is_home_side:
+                    prob_series.at[idx] = val
+                elif is_away_side:
+                    prob_series.at[idx] = 1.0 - val
+                else:
+                    # If orientation is ambiguous, do not guess, skip
+                    pass
 
     # CRITICAL INSTRUCTION: Do NOT backfill `implied_home_prob` from `ml_probability`.
-    # Only use real market/de-vig probabilities, or existing valid side-specific implied probability.
 
     # Check market_probability for excessive 0.5 use
     if 'market_probability' not in df.columns:
-        # Default to neutral if entirely missing, or fallback to our derived implied prob
         features_data['market_probability'] = prob_series.fillna(0.5).infer_objects(copy=False)
     else:
         mkt_series = pd.to_numeric(df['market_probability'], errors='coerce')
-        # If market_probability is missing, try to use implied_home_prob derived logic as a fallback before 0.5
-        features_data['market_probability'] = mkt_series.fillna(prob_series).fillna(0.5).infer_objects(copy=False)
+        valid_mkt_series = mkt_series.where(mkt_series != 0.5, np.nan)
+        features_data['market_probability'] = valid_mkt_series.fillna(prob_series).fillna(0.5).infer_objects(copy=False)
 
-    # Step 3: Final fallback to 0.5 only if still NaN
+    # Step 4: Final fallback to 0.5 only if still NaN
     features_data['implied_home_prob'] = prob_series.fillna(0.5).infer_objects(copy=False)
 
     features_data['sentiment_diff'] = safe_numeric_fill(df.get('sentiment_diff'), 0.0)
 
-    # Try multiple kalshi column names
+    # Kalshi Probability Fallback Logic
     k_col = next((c for c in df.columns if str(c).lower() in ['kalshi_prob', 'kalshi_probability']), None)
-    if k_col:
-        k_series = pd.to_numeric(df[k_col], errors='coerce')
-        # Fallback kalshi_prob to market_probability or implied_home_prob before hard default 0.5
-        if k_series.isna().any():
-            if 'market_probability' in df.columns:
-                mkt_probs_kalshi = pd.to_numeric(df['market_probability'], errors='coerce')
-                # Only log proxy fallback if it wasn't already matched
-                fallback_mask = k_series.isna() & mkt_probs_kalshi.notna()
-                if fallback_mask.any():
-                    logger.info(f"Kalshi proxy: backfilled {fallback_mask.sum()} missing kalshi_prob with market_probability")
-                k_series = k_series.fillna(mkt_probs_kalshi).infer_objects(copy=False)
+    k_series = pd.Series([np.nan]*len(df), index=df.index)
 
-        if k_series.isna().any():
+    # 1. Real matched Kalshi prob
+    if k_col:
+        k_raw = pd.to_numeric(df[k_col], errors='coerce')
+        k_series = k_series.fillna(k_raw.where(k_raw != 0.5, np.nan)).infer_objects(copy=False)
+
+    # 2. Logged proxy (market_probability / implied_home_prob)
+    if k_series.isna().any():
+        # Try market_probability first
+        if 'market_probability' in features_data:
+            mkt_probs_kalshi = features_data['market_probability']
+            fallback_mask = k_series.isna() & mkt_probs_kalshi.notna() & (mkt_probs_kalshi != 0.5)
+            if fallback_mask.any():
+                logger.info(f"Kalshi proxy: backfilled {fallback_mask.sum()} missing kalshi_prob with market_probability")
+                k_series = k_series.fillna(mkt_probs_kalshi.where(fallback_mask, np.nan)).infer_objects(copy=False)
+
+        # Try implied_home_prob next
+        if k_series.isna().any() and 'implied_home_prob' in features_data:
             impl_probs_kalshi = features_data['implied_home_prob']
             fallback_mask = k_series.isna() & impl_probs_kalshi.notna() & (impl_probs_kalshi != 0.5)
             if fallback_mask.any():
                  logger.info(f"Kalshi proxy: backfilled {fallback_mask.sum()} missing kalshi_prob with implied_home_prob")
-            k_series = k_series.fillna(impl_probs_kalshi).infer_objects(copy=False)
+                 k_series = k_series.fillna(impl_probs_kalshi.where(fallback_mask, np.nan)).infer_objects(copy=False)
 
-        features_data['kalshi_prob'] = k_series.fillna(0.5).infer_objects(copy=False)
-    else:
-        features_data['kalshi_prob'] = features_data['implied_home_prob']
-        logger.info("Kalshi proxy: No kalshi_prob column found. Backfilled entirely with implied_home_prob.")
+    # 3. Default 0.5
+    features_data['kalshi_prob'] = k_series.fillna(0.5).infer_objects(copy=False)
     features_data['injuries_home_count'] = safe_numeric_fill(df.get('injuries_home_count'), 0)
     features_data['injuries_away_count'] = safe_numeric_fill(df.get('injuries_away_count'), 0)
     
