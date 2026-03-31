@@ -398,8 +398,10 @@ class PredictionEngine:
         if model_path:
             candidate_paths.append(Path(os.path.abspath(str(model_path))))
         candidate_paths.extend([
+            Path(os.path.abspath(str(execution_root / "models" / "xgboost_model_v2.json"))),
             Path(os.path.abspath(str(execution_root / "models" / "model.json"))),
             Path(os.path.abspath(str(execution_root / "model.json"))),
+            Path(os.path.abspath(str(root_dir / "models" / "xgboost_model_v2.json"))),
             Path(os.path.abspath(str(root_dir / "models" / "model.json"))),
             Path(os.path.abspath(str(root_dir / "models" / "xgboost_model.json"))),
         ])
