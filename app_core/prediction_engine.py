@@ -1503,11 +1503,11 @@ class PredictionEngine:
                         feat_dict_strict = inference_data.iloc[idx_batch][model_matrix_cols].to_dict()
                         feat_dict_full = inference_data.iloc[idx_batch].to_dict()
 
-                        # Clean up dict for printing (round floats)
-                        clean_feat = {k: round(v, 4) if isinstance(v, float) else v for k, v in feat_dict_strict.items()}
+                        # Create a list of the exact values in the order of VERTEX_FEATURE_COLUMNS
+                        ordered_values = [round(float(feat_dict_strict.get(c, 0.0)), 5) for c in VERTEX_FEATURE_COLUMNS]
 
-                        # Create a hash of the STRICT feature vector
-                        feat_hash_str = json.dumps(clean_feat, sort_keys=True)
+                        # Create a stable hash of the STRICT feature vector
+                        feat_hash_str = json.dumps(ordered_values)
                         feat_hash = hashlib.md5(feat_hash_str.encode()).hexdigest()
 
                         is_duplicate = feat_hash in sampled_feature_hashes
@@ -1516,8 +1516,13 @@ class PredictionEngine:
                         logger.info(f"  --- Duplicate Row {sampled_count+1} ---")
                         logger.info(f"  League: {row.get('league')}, Matchup: {row.get('matchup_id')}, Market: {row.get('market_type')}")
                         logger.info(f"  Teams: {row.get('home_team')} vs {row.get('away_team')}")
-                        logger.info(f"  Implied Home Prob: {row.get('implied_home_prob')}, Kalshi Prob: {row.get('kalshi_prob')}, Market Prob: {row.get('market_probability')}")
-                        logger.info(f"  Diff Win Pct: {feat_dict_full.get('feature_diff_win_pct')}, Diff PPG: {feat_dict_full.get('feature_diff_ppg')}, Diff Streak: {feat_dict_full.get('feature_diff_streak')}")
+
+                        m_prob = round(float(row.get('market_probability', 0.5)), 4) if row.get('market_probability') is not None else 0.5
+                        i_prob = round(float(feat_dict_strict.get('implied_home_prob', 0.5)), 4)
+                        k_prob = round(float(feat_dict_strict.get('kalshi_prob', 0.5)), 4)
+
+                        logger.info(f"  Implied Home Prob: {i_prob}, Kalshi Prob: {k_prob}, Market Prob: {m_prob}")
+                        logger.info(f"  Diff Win Pct: {round(float(feat_dict_full.get('feature_diff_win_pct', 0.0)), 4)}, Diff PPG: {round(float(feat_dict_full.get('feature_diff_ppg', 0.0)), 4)}, Diff Streak: {round(float(feat_dict_full.get('feature_diff_streak', 0.0)), 4)}")
                         logger.info(f"  Stale Features Used: {used_stale_features.iloc[idx_batch]}")
                         logger.info(f"  Feature Vector Signature (Hash): {feat_hash}")
                         if is_duplicate:
@@ -1531,8 +1536,6 @@ class PredictionEngine:
                                  logger.info(f"  Input identical to previously sampled row: NO (Different inputs mapping to same output, but Contextual Features are DEFAULT/NEUTRAL)")
                             else:
                                  logger.info(f"  Input identical to previously sampled row: NO (Genuinely different inputs mapping to same coarse XGBoost bucket/leaf path)")
-
-                        logger.info(f"  Feature Vector: {clean_feat}")
 
                         if leaves is not None and local_i < len(leaves):
                             # Log a hash and the first few tree leaves to show if they differ

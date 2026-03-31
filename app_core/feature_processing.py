@@ -2491,7 +2491,12 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
         return abs(float(val) - 0.5) <= 1e-6
 
     # 1. Existing de-vig/market prob
-    if 'market_probability' in df.columns:
+    if 'implied_home_prob' in df.columns:
+        implied_probs = pd.to_numeric(df['implied_home_prob'], errors='coerce')
+        valid_implied = implied_probs[(implied_probs.notna()) & (~implied_probs.apply(_is_placeholder))]
+        prob_series = prob_series.fillna(valid_implied).infer_objects(copy=False)
+
+    if 'market_probability' in df.columns and prob_series.isna().any():
         mkt_probs = pd.to_numeric(df['market_probability'], errors='coerce')
         # only keep if not 0.5 exactly (often a default placeholder)
         valid_mkt = mkt_probs[(mkt_probs.notna()) & (~mkt_probs.apply(_is_placeholder))]

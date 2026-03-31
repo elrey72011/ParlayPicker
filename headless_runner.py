@@ -1,52 +1,80 @@
-import logging
+import os
 import sys
-from pathlib import Path
+import logging
 import pandas as pd
+from pathlib import Path
 from datetime import datetime
 
-# Configure robust standard logging output
+# Configure logging to go to console to ensure we capture it
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[logging.StreamHandler(sys.stdout)]
 )
+logger = logging.getLogger('headless_runner')
 
-from core.streamlit_pipeline import run_analysis_pipeline, build_best_picks_df
+# Initialize Streamlit secrets environment early to pass api key checks
+os.environ["ODDS_API_KEY"] = "dummy_key_if_needed" # Ensure this won't crash if it tries to fetch live odds, though ideally we use saved ones
 
-# Read the uploaded data simulating what the streamlit app uses
-try:
-    spreads_df = pd.read_csv("data/theover_spreads.csv")
-    totals_df = pd.read_csv("data/theover_totals.csv")
-except Exception as e:
-    logging.error(f"Could not load data: {e}")
-    sys.exit(1)
+def run_headless():
+    logger.info("Starting headless runner for pipeline analysis...")
 
-logging.info("Starting Headless Pipeline Run...")
+    # Use existing components safely
+    from core.streamlit_pipeline import run_analysis_pipeline, load_base_data
+    from core.theover_loader import load_theover_csv
 
-# This matches the call made in streamlit_app.py
-analysis_df, _, diagnostics = run_analysis_pipeline(
-    sports=["NBA", "NHL", "NCAAB", "MLB", "NFL"],
-    max_rows=1000,
-    use_ml=True,
-    spreads_df=spreads_df,
-    totals_df=totals_df
-)
+    # Check if we have TheOver CSVs locally to test with
+    # Look for known test files or use recent ones if available
+    data_dir = Path("data")
 
-# Now we need to pass this enriched analysis_df to Kalshi
-try:
-    from app_core.kalshi_integrator import enrich_with_kalshi_markets
-    analysis_df = enrich_with_kalshi_markets(analysis_df)
-except Exception as e:
-    logging.error(f"Failed Kalshi enrichment: {e}")
+    spreads_path = data_dir / "theover_spreads.csv"
+    totals_path = data_dir / "theover_totals.csv"
 
-# Build best picks explicitly as done in streamlit_app.py
-best_picks_df = build_best_picks_df(analysis_df)
+    spreads_df = None
+    totals_df = None
 
-logging.info("Headless Pipeline Run Complete.")
-logging.info(f"Generated {len(best_picks_df)} final picks out of {len(analysis_df)} analysis rows.")
+    class DummyUpload:
+        def __init__(self, path):
+            self.path = path
+        def seek(self, pos):
+            pass
+        def read(self):
+            with open(self.path, 'rb') as f:
+                return f.read()
 
-# Create an export timestamp matching user logs
-export_ts = datetime.utcnow().strftime("%Y-%m-%dT%H%M%S")
-export_path = f"best_picks_export_HEADLESS_{export_ts}.csv"
-best_picks_df.to_csv(export_path, index=False)
-logging.info(f"Exported to {export_path}")
+    if spreads_path.exists():
+        with open(spreads_path, 'rb') as f:
+            spreads_df, _ = load_theover_csv(f)
+
+    if totals_path.exists():
+        with open(totals_path, 'rb') as f:
+            totals_df, _ = load_theover_csv(f)
+
+    logger.info("Running full pipeline...")
+
+    try:
+        # Run with MLB, NBA, NHL, NCAAB to cover the bases, or just let it default to all
+        sports = ["NBA", "NHL", "NCAAB", "NFL", "MLB"]
+        analysis_df, best_picks_df, diagnostics = run_analysis_pipeline(
+            sports=sports,
+            max_rows=1000,
+            use_ml=True,
+            spreads_df=spreads_df,
+            totals_df=totals_df
+        )
+
+        logger.info(f"Pipeline completed successfully. Generated {len(analysis_df)} analysis rows and {len(best_picks_df)} best picks.")
+
+        # Output summary of the diagnostics, specially ones related to flatness
+        if diagnostics:
+            logger.info("--- Diagnostics Summary ---")
+            for k, v in diagnostics.items():
+                # Filter to some key ones to avoid blowing up the console
+                if k in ["total_games", "bet_rows", "positive_ev_rows", "ml_predictions"]:
+                    logger.info(f"  {k}: {v}")
+
+    except Exception as e:
+        logger.error(f"Pipeline execution failed: {e}", exc_info=True)
+
+if __name__ == "__main__":
+    run_headless()
