@@ -1906,7 +1906,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
             if "Pick_Status" in best.columns:
                 logger.info("--- FINAL ODDS SOURCE x PICK STATUS ---")
                 # Group by odds_source and Pick_Status
-                cross_tabs = best.groupby("odds_source")["Pick_Status"].value_counts().unstack(fill_value=0)
+                cross_tabs = best.groupby("odds_source", observed=True)["Pick_Status"].value_counts().unstack(fill_value=0)
                 for source in cross_tabs.index:
                     counts = cross_tabs.loc[source].to_dict()
                     # Keep counts as ordered dict and filter non-zero

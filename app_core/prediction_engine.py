@@ -1390,19 +1390,19 @@ class PredictionEngine:
             market_probability_default_count = 0
             # Note: columns in inference_data typically do not have the 'feature_' prefix for probs, they match VERTEX_FEATURE_COLUMNS exact names.
             if 'implied_home_prob' in inference_data.columns:
-                implied_home_default_count = (inference_data['implied_home_prob'] == 0.5).sum()
+                implied_home_default_count = (abs(inference_data['implied_home_prob'] - 0.5) <= 1e-6).sum()
             elif 'feature_implied_home_prob' in inference_data.columns:
-                 implied_home_default_count = (inference_data['feature_implied_home_prob'] == 0.5).sum()
+                 implied_home_default_count = (abs(inference_data['feature_implied_home_prob'] - 0.5) <= 1e-6).sum()
 
             if 'kalshi_prob' in inference_data.columns:
-                kalshi_default_count = (inference_data['kalshi_prob'] == 0.5).sum()
+                kalshi_default_count = (abs(inference_data['kalshi_prob'] - 0.5) <= 1e-6).sum()
             elif 'feature_kalshi_prob' in inference_data.columns:
-                kalshi_default_count = (inference_data['feature_kalshi_prob'] == 0.5).sum()
+                kalshi_default_count = (abs(inference_data['feature_kalshi_prob'] - 0.5) <= 1e-6).sum()
 
             if 'market_probability' in inference_data.columns:
-                market_probability_default_count = (inference_data['market_probability'] == 0.5).sum()
+                market_probability_default_count = (abs(inference_data['market_probability'] - 0.5) <= 1e-6).sum()
             elif 'feature_market_probability' in inference_data.columns:
-                market_probability_default_count = (inference_data['feature_market_probability'] == 0.5).sum()
+                market_probability_default_count = (abs(inference_data['feature_market_probability'] - 0.5) <= 1e-6).sum()
 
             logger.info(f"--- MODEL INFERENCE DIAGNOSTICS ---")
             logger.info(f"Total rows entering model: {total_rows_entering_model}")
@@ -1508,7 +1508,7 @@ class PredictionEngine:
                             else:
                                 # Check if they are near-identical (e.g. contextual features are default filled)
                                 near_identical = False
-                                if feat_dict.get('implied_home_prob') == 0.5 and feat_dict.get('kalshi_prob') == 0.5:
+                                if abs(feat_dict.get('implied_home_prob', 0) - 0.5) <= 1e-6 and abs(feat_dict.get('kalshi_prob', 0) - 0.5) <= 1e-6:
                                      near_identical = True
                                 if near_identical:
                                      logger.info(f"  Input identical to previously sampled row: NO (Different inputs mapping to same output, but Contextual Features are DEFAULT/NEUTRAL)")
