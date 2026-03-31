@@ -1,0 +1,332 @@
+Deduplication removed 34 inverted/duplicate matchup rows.
+Set Odds API commenceTime UTC bounds for target day 2026-03-31: 2026-03-31T04:00:00Z to 2026-04-01T03:59:59Z
+Odds API Failed [401]: {"message":"API key is not valid. Get an API key at https://the-odds-api.com","error_code":"INVALID_KEY","details_url":"https://the-odds-api.com/liveapi/guides/v4/api-error-codes.html#invalid-key"}
+
+Set Odds API commenceTime UTC bounds for target day 2026-03-31: 2026-03-31T04:00:00Z to 2026-04-01T03:59:59Z
+Odds API Failed [401]: {"message":"API key is not valid. Get an API key at https://the-odds-api.com","error_code":"INVALID_KEY","details_url":"https://the-odds-api.com/liveapi/guides/v4/api-error-codes.html#invalid-key"}
+
+Set Odds API commenceTime UTC bounds for target day 2026-03-31: 2026-03-31T04:00:00Z to 2026-04-01T03:59:59Z
+Odds API Failed [401]: {"message":"API key is not valid. Get an API key at https://the-odds-api.com","error_code":"INVALID_KEY","details_url":"https://the-odds-api.com/liveapi/guides/v4/api-error-codes.html#invalid-key"}
+
+Live odds expansion returned empty. Falling back to uploaded rows as master slate.
+PIPELINE AUDIT: [1/9] Total raw rows loaded into analysis (master_slate initialized): 520
+Number of live Novig games fetched: 0
+Warning: Patched 520 rows - odds_american was NaN after Novig line mapping. Applying -110 fallback: [{'home_team': '', 'away_team': 'Buffalo', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'San Francisco', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Los Angeles', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Indiana', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Utah', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Oklahoma City', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Boston', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Phoenix', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Charlotte', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Washington', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Minnesota', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'New York', 'market_type': 'spread_home'}, {'home_team': 'Tle', 'away_team': 'Se', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Montreal', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Carolina', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Columbus', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Toronto', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Edmonton', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Florida', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Alabama', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Columbia', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Quinnipiac', 'market_type': 'spread_home'}, {'home_team': 'Florida', 'away_team': 'Miami', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Utah St', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Rider', 'market_type': 'spread_home'}, {'home_team': 'Erines', 'away_team': 'Michigan Wol', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Purdue', 'market_type': 'spread_home'}, {'home_team': 'E', 'away_team': 'Iowa St', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Duquesne', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Northern Co', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Sam Houston St', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Louisiana Tech', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Kennesaw St', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Missouri State', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Idaho', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Arkansas St', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Campbell', 'market_type': 'spread_home'}, {'home_team': 'Y', 'away_team': '', 'market_type': 'spread_home'}, {'home_team': 'Ada Wolf Pack', 'away_team': 'Ne', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Long Beach St', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'New Mexico', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Florida Am', 'market_type': 'spread_home'}, {'home_team': 'Alanche', 'away_team': 'Colorado A', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Richmond', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Wyoming', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Gonzaga', 'market_type': 'spread_home'}, {'home_team': 'Rebels', 'away_team': 'Unl', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Howard', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Michigan St', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'New Mexico St', 'market_type': 'spread_home'}, {'home_team': 'El Paso', 'away_team': 'Texas', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'North Florida', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Queens University', 'market_type': 'spread_home'}, {'home_team': 'S', 'away_team': 'Kentucky Wildc', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Old Dominion', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'James Madison', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Coastal Carolina', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Mercer', 'market_type': 'spread_home'}, {'home_team': 'Tanooga Mocs', 'away_team': 'Ch', 'market_type': 'spread_home'}, {'home_team': 'Ersity', 'away_team': 'Elon Uni', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Le Moyne', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Stonehill', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Princeton', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Siena', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Fairfield', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Mount St Marys', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Eastern Michigan', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Western Michigan', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Detroit Mercy', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Youngstown St', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Cornell', 'market_type': 'spread_home'}, {'home_team': 'Irginia', 'away_team': '', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Notre Dame', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'UConn', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Butler', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Presbyterian', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Winthrop', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Holy Cross', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'iowa', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Ucla', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Rutgers', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Tcu', 'market_type': 'spread_home'}, {'home_team': 'Enture', 'away_team': 'St Bona', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Bucknell', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Bradley', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Western Illinois', 'market_type': 'spread_home'}, {'home_team': 'Ille', 'away_team': 'Jackson', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Arkansas', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Central Ct', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Wagner', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'South Dakota', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Longwood', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Nebraska', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Arizona', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Texas Southern', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Indiana St', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Northern Iowa', 'market_type': 'spread_home'}, {'home_team': 'Arlington', 'away_team': 'Texas', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Morehead St', 'market_type': 'spread_home'}, {'home_team': 'Ille', 'away_team': 'Siu Edwards', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Northern Arizona', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Morgan St', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Southern Miss', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Lamar', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Northwestern St', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Se Louisiana', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Uc San Diego', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Charleston', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Coppin St', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Southern', 'market_type': 'spread_home'}, {'home_team': 'Iew Am', 'away_team': 'Prairie', 'market_type': 'spread_home'}, {'home_team': 'E', 'away_team': 'Tarleton St', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Austin Peay', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Bellarmine', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'South Carolina', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Texas Am', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Eastern Wa', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Montana', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Wofford', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Robert Morris', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Nebraska Omaha', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Wake Forest', 'market_type': 'spread_home'}, {'home_team': 'Ille', 'away_team': 'Louis', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Duke', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Csu Fullerton', 'market_type': 'spread_home'}, {'home_team': 'E', 'away_team': 'Usc Upst', 'market_type': 'spread_home'}, {'home_team': 'Cookman', 'away_team': 'Bethune', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Pacific', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Portland', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Belmont', 'market_type': 'spread_home'}, {'home_team': 'E', 'away_team': 'Kansas St', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Saint Marys Gaels', 'market_type': 'spread_home'}, {'home_team': 'Ine', 'away_team': 'Uc Ir', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Hawaii', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'North Carolina', 'market_type': 'spread_home'}, {'home_team': 'Lanta', 'away_team': '', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Dallas', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Detroit', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Miami', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'San Antonio', 'market_type': 'spread_home'}, {'home_team': 'Pine Bluff', 'away_team': 'Ar', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Air Force', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Akron', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Alcorn St', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Appalachian St', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Auburn', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Bgsu', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Brown', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Csu Bakersfield', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Csu Northridge', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'California', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Canisius', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Central Arkansas', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'ucf', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Chicago St', 'market_type': 'spread_home'}, {'home_team': 'I', 'away_team': 'Cincinn', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Clemson', 'market_type': 'spread_home'}, {'home_team': 'Eland St', 'away_team': 'Cle', 'market_type': 'spread_home'}, {'home_team': 'E', 'away_team': 'Colg', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Delaware', 'market_type': 'spread_home'}, {'home_team': 'E', 'away_team': 'Delaware St', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Fiu', 'market_type': 'spread_home'}, {'home_team': 'E', 'away_team': 'Florida St', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Fordham', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Fresno St', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'furman', 'market_type': 'spread_home'}, {'home_team': 'Webb', 'away_team': 'Gardner', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Georgetown', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Georgia', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Georgia Southern', 'market_type': 'spread_home'}, {'home_team': 'E', 'away_team': 'Grambling St', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Grand Canyon', 'market_type': 'spread_home'}, {'home_team': 'Ard', 'away_team': 'Har', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'High Point', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Hofstra', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Iupui', 'market_type': 'spread_home'}, {'home_team': 'E', 'away_team': 'Idaho St', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Illinois', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Illinois St', 'market_type': 'spread_home'}, {'home_team': 'E Word', 'away_team': 'Incarn', 'market_type': 'spread_home'}, {'home_team': 'E', 'away_team': 'Jackson St', 'market_type': 'spread_home'}, {'home_team': 'Ille St', 'away_team': 'Jackson', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Los Angeles Salle', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Lafayette', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Lehigh', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Liberty', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Lipscomb', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Little Rock', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Loyola Marymount', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Md Eastern', 'market_type': 'spread_home'}, {'home_team': 'Tan', 'away_team': 'Manh', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Marist', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Marshall', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Mercyhurst', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Merrimack', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Miami Oh', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Middle Tn', 'market_type': 'spread_home'}, {'home_team': 'Alley St', 'away_team': 'Miss', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Montana St', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Murray St', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Nc Central', 'market_type': 'spread_home'}, {'home_team': 'E', 'away_team': 'Nicholls St', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'North Alabama', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'North Dakota', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Northern Ky', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Northwestern', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Ohio St', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Oklahoma', 'market_type': 'spread_home'}, {'home_team': 'E', 'away_team': 'Oklahoma St', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Oral Roberts', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Oregon', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Oregon St', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Pittsburgh', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Portland St', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Radford', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Se Missouri St', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Smu', 'market_type': 'spread_home'}, {'home_team': 'E', 'away_team': 'Sacramento St', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Saint Louis', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Saint Peters', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'San Diego St', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'San Jose St', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Santa Clara', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Seton Hall', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Southern Il', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'St Francis Pa', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Stanford', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Stony Brook', 'market_type': 'spread_home'}, {'home_team': 'Olunteers', 'away_team': 'Tennessee', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Tennessee Tech', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Texas', 'market_type': 'spread_home'}, {'home_team': 'Cc', 'away_team': 'Texas Am', 'market_type': 'spread_home'}, {'home_team': 'E', 'away_team': 'Texas St', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Troy', 'market_type': 'spread_home'}, {'home_team': 'Is', 'away_team': 'Uc Da', 'market_type': 'spread_home'}, {'home_team': 'Erside', 'away_team': 'Uc Ri', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Ucsb', 'market_type': 'spread_home'}, {'home_team': 'Ille', 'away_team': 'North Carolina Ashe', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'North Carolina Greensboro', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'North Carolina Wilmington', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Usc', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Utah Tech', 'market_type': 'spread_home'}, {'home_team': 'Alley', 'away_team': 'Utah', 'market_type': 'spread_home'}, {'home_team': 'Alparaiso', 'away_team': '', 'market_type': 'spread_home'}, {'home_team': 'Anderbilt Commodores', 'away_team': '', 'market_type': 'spread_home'}, {'home_team': 'Irginia Tech', 'away_team': '', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Weber St', 'market_type': 'spread_home'}, {'home_team': 'Irginia', 'away_team': 'West', 'market_type': 'spread_home'}, {'home_team': 'Amounts', 'away_team': 'Western Carolina C', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Western Kentucky', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Wisconsin Badgers', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Yale', 'market_type': 'spread_home'}, {'home_team': 'Er', 'away_team': 'Den', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Calgary', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Chicago', 'market_type': 'spread_home'}, {'home_team': 'Ils', 'away_team': 'New Jersey De', 'market_type': 'spread_home'}, {'home_team': 'Ors', 'away_team': 'Ottawa Sen', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Philadelphia', 'market_type': 'spread_home'}, {'home_team': 'Ancouver', 'away_team': '', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Winnipeg', 'market_type': 'spread_home'}, {'home_team': '', 'away_team': 'Buffalo', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'San Francisco', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Los Angeles', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Indiana', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Utah', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Oklahoma City', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Boston', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Phoenix', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Charlotte', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Washington', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Minnesota', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'New York', 'market_type': 'spread_away'}, {'home_team': 'Tle', 'away_team': 'Se', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Montreal', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Carolina', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Columbus', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Toronto', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Edmonton', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Florida', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Alabama', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Columbia', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Quinnipiac', 'market_type': 'spread_away'}, {'home_team': 'Florida', 'away_team': 'Miami', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Utah St', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Rider', 'market_type': 'spread_away'}, {'home_team': 'Erines', 'away_team': 'Michigan Wol', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Purdue', 'market_type': 'spread_away'}, {'home_team': 'E', 'away_team': 'Iowa St', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Duquesne', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Northern Co', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Sam Houston St', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Louisiana Tech', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Kennesaw St', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Missouri State', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Idaho', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Arkansas St', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Campbell', 'market_type': 'spread_away'}, {'home_team': 'Y', 'away_team': '', 'market_type': 'spread_away'}, {'home_team': 'Ada Wolf Pack', 'away_team': 'Ne', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Long Beach St', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'New Mexico', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Florida Am', 'market_type': 'spread_away'}, {'home_team': 'Alanche', 'away_team': 'Colorado A', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Richmond', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Wyoming', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Gonzaga', 'market_type': 'spread_away'}, {'home_team': 'Rebels', 'away_team': 'Unl', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Howard', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Michigan St', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'New Mexico St', 'market_type': 'spread_away'}, {'home_team': 'El Paso', 'away_team': 'Texas', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'North Florida', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Queens University', 'market_type': 'spread_away'}, {'home_team': 'S', 'away_team': 'Kentucky Wildc', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Old Dominion', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'James Madison', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Coastal Carolina', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Mercer', 'market_type': 'spread_away'}, {'home_team': 'Tanooga Mocs', 'away_team': 'Ch', 'market_type': 'spread_away'}, {'home_team': 'Ersity', 'away_team': 'Elon Uni', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Le Moyne', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Stonehill', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Princeton', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Siena', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Fairfield', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Mount St Marys', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Eastern Michigan', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Western Michigan', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Detroit Mercy', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Youngstown St', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Cornell', 'market_type': 'spread_away'}, {'home_team': 'Irginia', 'away_team': '', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Notre Dame', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'UConn', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Butler', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Presbyterian', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Winthrop', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Holy Cross', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'iowa', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Ucla', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Rutgers', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Tcu', 'market_type': 'spread_away'}, {'home_team': 'Enture', 'away_team': 'St Bona', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Bucknell', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Bradley', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Western Illinois', 'market_type': 'spread_away'}, {'home_team': 'Ille', 'away_team': 'Jackson', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Arkansas', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Central Ct', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Wagner', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'South Dakota', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Longwood', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Nebraska', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Arizona', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Texas Southern', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Indiana St', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Northern Iowa', 'market_type': 'spread_away'}, {'home_team': 'Arlington', 'away_team': 'Texas', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Morehead St', 'market_type': 'spread_away'}, {'home_team': 'Ille', 'away_team': 'Siu Edwards', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Northern Arizona', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Morgan St', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Southern Miss', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Lamar', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Northwestern St', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Se Louisiana', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Uc San Diego', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Charleston', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Coppin St', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Southern', 'market_type': 'spread_away'}, {'home_team': 'Iew Am', 'away_team': 'Prairie', 'market_type': 'spread_away'}, {'home_team': 'E', 'away_team': 'Tarleton St', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Austin Peay', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Bellarmine', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'South Carolina', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Texas Am', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Eastern Wa', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Montana', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Wofford', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Robert Morris', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Nebraska Omaha', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Wake Forest', 'market_type': 'spread_away'}, {'home_team': 'Ille', 'away_team': 'Louis', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Duke', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Csu Fullerton', 'market_type': 'spread_away'}, {'home_team': 'E', 'away_team': 'Usc Upst', 'market_type': 'spread_away'}, {'home_team': 'Cookman', 'away_team': 'Bethune', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Pacific', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Portland', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Belmont', 'market_type': 'spread_away'}, {'home_team': 'E', 'away_team': 'Kansas St', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Saint Marys Gaels', 'market_type': 'spread_away'}, {'home_team': 'Ine', 'away_team': 'Uc Ir', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Hawaii', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'North Carolina', 'market_type': 'spread_away'}, {'home_team': 'Lanta', 'away_team': '', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Dallas', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Detroit', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Miami', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'San Antonio', 'market_type': 'spread_away'}, {'home_team': 'Pine Bluff', 'away_team': 'Ar', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Air Force', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Akron', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Alcorn St', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Appalachian St', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Auburn', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Bgsu', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Brown', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Csu Bakersfield', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Csu Northridge', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'California', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Canisius', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Central Arkansas', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'ucf', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Chicago St', 'market_type': 'spread_away'}, {'home_team': 'I', 'away_team': 'Cincinn', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Clemson', 'market_type': 'spread_away'}, {'home_team': 'Eland St', 'away_team': 'Cle', 'market_type': 'spread_away'}, {'home_team': 'E', 'away_team': 'Colg', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Delaware', 'market_type': 'spread_away'}, {'home_team': 'E', 'away_team': 'Delaware St', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Fiu', 'market_type': 'spread_away'}, {'home_team': 'E', 'away_team': 'Florida St', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Fordham', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Fresno St', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'furman', 'market_type': 'spread_away'}, {'home_team': 'Webb', 'away_team': 'Gardner', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Georgetown', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Georgia', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Georgia Southern', 'market_type': 'spread_away'}, {'home_team': 'E', 'away_team': 'Grambling St', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Grand Canyon', 'market_type': 'spread_away'}, {'home_team': 'Ard', 'away_team': 'Har', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'High Point', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Hofstra', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Iupui', 'market_type': 'spread_away'}, {'home_team': 'E', 'away_team': 'Idaho St', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Illinois', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Illinois St', 'market_type': 'spread_away'}, {'home_team': 'E Word', 'away_team': 'Incarn', 'market_type': 'spread_away'}, {'home_team': 'E', 'away_team': 'Jackson St', 'market_type': 'spread_away'}, {'home_team': 'Ille St', 'away_team': 'Jackson', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Los Angeles Salle', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Lafayette', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Lehigh', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Liberty', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Lipscomb', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Little Rock', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Loyola Marymount', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Md Eastern', 'market_type': 'spread_away'}, {'home_team': 'Tan', 'away_team': 'Manh', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Marist', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Marshall', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Mercyhurst', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Merrimack', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Miami Oh', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Middle Tn', 'market_type': 'spread_away'}, {'home_team': 'Alley St', 'away_team': 'Miss', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Montana St', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Murray St', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Nc Central', 'market_type': 'spread_away'}, {'home_team': 'E', 'away_team': 'Nicholls St', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'North Alabama', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'North Dakota', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Northern Ky', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Northwestern', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Ohio St', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Oklahoma', 'market_type': 'spread_away'}, {'home_team': 'E', 'away_team': 'Oklahoma St', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Oral Roberts', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Oregon', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Oregon St', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Pittsburgh', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Portland St', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Radford', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Se Missouri St', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Smu', 'market_type': 'spread_away'}, {'home_team': 'E', 'away_team': 'Sacramento St', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Saint Louis', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Saint Peters', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'San Diego St', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'San Jose St', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Santa Clara', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Seton Hall', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Southern Il', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'St Francis Pa', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Stanford', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Stony Brook', 'market_type': 'spread_away'}, {'home_team': 'Olunteers', 'away_team': 'Tennessee', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Tennessee Tech', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Texas', 'market_type': 'spread_away'}, {'home_team': 'Cc', 'away_team': 'Texas Am', 'market_type': 'spread_away'}, {'home_team': 'E', 'away_team': 'Texas St', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Troy', 'market_type': 'spread_away'}, {'home_team': 'Is', 'away_team': 'Uc Da', 'market_type': 'spread_away'}, {'home_team': 'Erside', 'away_team': 'Uc Ri', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Ucsb', 'market_type': 'spread_away'}, {'home_team': 'Ille', 'away_team': 'North Carolina Ashe', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'North Carolina Greensboro', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'North Carolina Wilmington', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Usc', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Utah Tech', 'market_type': 'spread_away'}, {'home_team': 'Alley', 'away_team': 'Utah', 'market_type': 'spread_away'}, {'home_team': 'Alparaiso', 'away_team': '', 'market_type': 'spread_away'}, {'home_team': 'Anderbilt Commodores', 'away_team': '', 'market_type': 'spread_away'}, {'home_team': 'Irginia Tech', 'away_team': '', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Weber St', 'market_type': 'spread_away'}, {'home_team': 'Irginia', 'away_team': 'West', 'market_type': 'spread_away'}, {'home_team': 'Amounts', 'away_team': 'Western Carolina C', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Western Kentucky', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Wisconsin Badgers', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Yale', 'market_type': 'spread_away'}, {'home_team': 'Er', 'away_team': 'Den', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Calgary', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Chicago', 'market_type': 'spread_away'}, {'home_team': 'Ils', 'away_team': 'New Jersey De', 'market_type': 'spread_away'}, {'home_team': 'Ors', 'away_team': 'Ottawa Sen', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Philadelphia', 'market_type': 'spread_away'}, {'home_team': 'Ancouver', 'away_team': '', 'market_type': 'spread_away'}, {'home_team': '', 'away_team': 'Winnipeg', 'market_type': 'spread_away'}]
+PIPELINE AUDIT: [2/9] Rows before sanitization: 520
+PIPELINE AUDIT: [3/9] Rows patched by sanitization: 0
+PIPELINE AUDIT: [4/9] Rows dropped or excluded after sanitization: 0
+PIPELINE TRACE: Rows after sanitization & formatting: 520
+🔍 ML DEBUG: use_ml=True, attempting predictions...
+PIPELINE TRACE: Sending 520 rows into ML prediction logic.
+PIPELINE AUDIT: [5/9] Rows eligible for ML (needs_prediction mask): 520
+==========================================================
+Initializing app_core.feature_processing: Checking live stats dependencies...
+✅ nba_api loaded successfully.
+✅ nfl_data_py loaded successfully.
+✅ NCAAF Adapter loaded successfully (using raw requests).
+  -> cfbd python package was completely removed from requirements.txt to fix deployment conflicts.
+  -> NCAAF will gracefully skip to ESPN fallback if CFBD_API_KEY is missing or invalid.
+✅ NHL Adapter loaded successfully (using api-web.nhle.com directly).
+✅ NCAAB Adapter loaded successfully (using ESPN primary).
+==========================================================
+2026-03-31 15:58:47.706 No runtime found, using MemoryCacheStorageManager
+2026-03-31 15:58:47.709 No runtime found, using MemoryCacheStorageManager
+2026-03-31 15:58:47.710 No runtime found, using MemoryCacheStorageManager
+2026-03-31 15:58:47.714 No runtime found, using MemoryCacheStorageManager
+2026-03-31 15:58:47.715 No runtime found, using MemoryCacheStorageManager
+2026-03-31 15:58:47.717 No runtime found, using MemoryCacheStorageManager
+2026-03-31 15:58:47.720 No runtime found, using MemoryCacheStorageManager
+2026-03-31 15:58:47.721 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+Fetching NBA stats for season: 2025-26
+Successfully fetched NBA stats for 30 teams.
+2026-03-31 15:58:47.909 No runtime found, using MemoryCacheStorageManager
+2026-03-31 15:58:47.909 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+Fetching NFL stats for season: 2025
+Successfully fetched NFL stats for 32 teams.
+2026-03-31 15:58:48.377 No runtime found, using MemoryCacheStorageManager
+2026-03-31 15:58:48.378 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-03-31 15:58:48.378 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-03-31 15:58:48.378 Session state does not function when running a script without `streamlit run`
+CFBD_API_KEY not found. Skipping live NCAAF API stats. (Will use ESPN fallback)
+Fetching NCAAF stats from ESPN for season: 2025
+Successfully fetched NCAAF stats from ESPN for 136 teams.
+2026-03-31 15:58:48.681 No runtime found, using MemoryCacheStorageManager
+2026-03-31 15:58:48.681 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+Fetching NHL stats from api-web.nhle.com for season: 2025
+Successfully fetched NHL stats for 32 teams.
+2026-03-31 15:58:48.910 No runtime found, using MemoryCacheStorageManager
+2026-03-31 15:58:48.910 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+Fetching primary NCAAB stats from ESPN for season: 2025
+Fetching NCAAB stats from ESPN for season: 2025
+Successfully fetched NCAAB stats from ESPN for 365 teams.
+Final NCAAB stats count (ESPN Primary): 365
+2026-03-31 15:58:49.416 No runtime found, using MemoryCacheStorageManager
+2026-03-31 15:58:49.416 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+Fetching MLB stats from ESPN for season: 2025
+Successfully fetched MLB stats for 30 teams.
+NCAAB MATCH FAIL: GameTeam='E' (Key='e') not found in 341 stats keys.
+  -> Closest candidate: ('rice', 40.0, 11)
+NCAAB MATCH FAIL: GameTeam='Y' (Key='y') not found in 341 stats keys.
+  -> Closest candidate: ('byu', 50.0, 71)
+NCAAB MATCH FAIL: GameTeam='ADA WOLF PACK' (Key='ada wolf pack') not found in 341 stats keys.
+  -> Closest candidate: ('florida gulf coast', 45.16129032258065, 28)
+NCAAB MATCH FAIL: GameTeam='REBELS' (Key='rebels') not found in 341 stats keys.
+  -> Closest candidate: ('weber', 54.54545454545454, 96)
+NCAAB MATCH FAIL: GameTeam='EL PASO' (Key='el paso') not found in 341 stats keys.
+  -> Closest candidate: ('george mason', 52.63157894736843, 43)
+NCAAB MATCH FAIL: GameTeam='S' (Key='s') not found in 341 stats keys.
+  -> Closest candidate: ('smu', 50.0, 55)
+NCAAB MATCH FAIL: GameTeam='I' (Key='i') not found in 341 stats keys.
+  -> Closest candidate: ('uic', 50.0, 218)
+NCAAB MATCH FAIL: GameTeam='ILLE ST' (Key='ille st') not found in 341 stats keys.
+  -> Closest candidate: ('illinois', 53.333333333333336, 122)
+NCAAB MATCH FAIL: GameTeam='CC' (Key='cc') not found in 341 stats keys.
+  -> Closest candidate: ('pacific', 44.44444444444444, 329)
+NCAAB MATCH FAIL: GameTeam='ORS' (Key='ors') not found in 341 stats keys.
+  -> Closest candidate: ('boise', 50.0, 227)
+NCAAB MATCH FAIL: GameTeam='EDMONTON OILERS' (Key='edmonton oilers') not found in 341 stats keys.
+  -> Closest candidate: ('stetson hatters', 53.333333333333336, 26)
+NCAAB MATCH FAIL: GameTeam='CAMPBELL' (Key='campbell') not found in 341 stats keys.
+  -> Closest candidate: ('campbell fighting camels', 50.0, 139)
+NCAAB MATCH FAIL: GameTeam='CH' (Key='ch') not found in 341 stats keys.
+  -> Closest candidate: ('wichita', 44.44444444444444, 20)
+NCAAB MATCH FAIL: GameTeam='FIU' (Key='fiu') not found in 341 stats keys.
+  -> Closest candidate: ('pacific', 40.0, 329)
+NCAAB MATCH FAIL: GameTeam='IUPUI' (Key='iupui') not found in 341 stats keys.
+  -> Closest candidate: ('uic', 50.0, 218)
+NCAAB MATCH FAIL: GameTeam='MARIST' (Key='marist') not found in 341 stats keys.
+  -> Closest candidate: ('maine', 54.54545454545454, 3)
+NCAAB MATCH FAIL: GameTeam='WEST' (Key='west') not found in 341 stats keys.
+  -> Closest candidate: ('wake forest', 53.333333333333336, 53)
+NCAAB MATCH FAIL: GameTeam='CALGARY FLAMES' (Key='calgary flames') not found in 341 stats keys.
+  -> Closest candidate: ('charleston', 50.0, 146)
+NCAAB MATCH FAIL: GameTeam='NEW JERSEY DE' (Key='new jersey de') not found in 341 stats keys.
+  -> Closest candidate: ('notre dame', 52.17391304347826, 49)
+NCAAB MATCH FAIL: GameTeam='OTTAWA SEN' (Key='ottawa sen') not found in 341 stats keys.
+  -> Closest candidate: ('northwestern', 54.54545454545454, 110)
+NCAAB MATCH FAIL: GameTeam='PHILADELPHIA' (Key='philadelphia') not found in 341 stats keys.
+  -> Closest candidate: ('the citadel', 52.17391304347826, 272)
+NCAAB MATCH FAIL: GameTeam='WINNIPEG JETS' (Key='winnipeg jets') not found in 341 stats keys.
+  -> Closest candidate: ('san diego toreros', 46.666666666666664, 325)
+STATS MATCH REPORT [NCAAB]: 92.3% Matched, 7.7% Fallback (98 direct, 3 override, 163 fuzzy, 22 miss)
+STATS MISSING TEAMS [NCAAB] (Top 20): ['CAMPBELL', 'IUPUI', 'ADA WOLF PACK', 'I', 'OTTAWA SEN', 'E', 'WINNIPEG JETS', 'PHILADELPHIA', 'EL PASO', 'MARIST', 'WEST', 'FIU', 'ILLE ST', 'Y', 'S', 'CALGARY FLAMES', 'EDMONTON OILERS', 'ORS', 'REBELS', 'NEW JERSEY DE']
+Missing stats teams: ['CAMPBELL', 'IUPUI', 'ADA WOLF PACK', 'I', 'OTTAWA SEN', 'E', 'WINNIPEG JETS', 'PHILADELPHIA', 'EL PASO', 'MARIST', 'WEST', 'FIU', 'ILLE ST', 'Y', 'S', 'CALGARY FLAMES', 'EDMONTON OILERS', 'ORS', 'REBELS', 'NEW JERSEY DE', 'CH', 'CC']
+Action: Create ticket 'Investigate NCAAB stats coverage for low-tier conferences'
+--- NCAAB STATS MATCHING SUMMARY ---
+- Total Lookups: 286
+- Live Stats Success: 264 (92.3%)
+- Fallback Count: 22
+- Top Failed Lookups: ['CAMPBELL', 'IUPUI', 'ADA WOLF PACK', 'I', 'OTTAWA SEN', 'E', 'WINNIPEG JETS', 'PHILADELPHIA', 'EL PASO', 'MARIST']
+NCAAB STATS MATCHING SUMMARY:
+- Total NCAAB games (approx): 143
+- Successfully matched: 132 (92.3%)
+- Fallback used: 11 (7.7%)
+- Top unmatched teams:
+  1. "CAMPBELL"
+  2. "IUPUI"
+  3. "ADA WOLF PACK"
+  4. "I"
+  5. "OTTAWA SEN"
+  6. "E"
+  7. "WINNIPEG JETS"
+  8. "PHILADELPHIA"
+  9. "EL PASO"
+  10. "MARIST"
+DEBUG Stats Fallback Used: NCAAB  (MISSING) vs Buffalo (OK)
+DEBUG Stats Fallback Used: NCAAB  (MISSING) vs San Francisco (OK)
+DEBUG Stats Fallback Used: NCAAB  (MISSING) vs Los Angeles (OK)
+DEBUG Stats Fallback Used: NCAAB  (MISSING) vs Indiana (OK)
+DEBUG Stats Fallback Used: NCAAB  (MISSING) vs Utah (OK)
+DEBUG Stats Fallback Used: NCAAB  (MISSING) vs Oklahoma City (OK)
+DEBUG Stats Fallback Used: NCAAB  (MISSING) vs Boston (OK)
+DEBUG Stats Fallback Used: NCAAB  (MISSING) vs Phoenix (OK)
+DEBUG Stats Fallback Used: NCAAB  (MISSING) vs Charlotte (OK)
+DEBUG Stats Fallback Used: NCAAB  (MISSING) vs Washington (OK)
+DEBUG Stats Fallback Used: NCAAB  (MISSING) vs Minnesota (OK)
+DEBUG Stats Fallback Used: NCAAB  (MISSING) vs New York (OK)
+DEBUG Stats Fallback Used: NCAAB  (MISSING) vs Montreal (OK)
+DEBUG Stats Fallback Used: NCAAB  (MISSING) vs Carolina (OK)
+DEBUG Stats Fallback Used: NCAAB  (MISSING) vs Columbus (OK)
+DEBUG Stats Fallback Used: (further messages suppressed)
+DEBUG Stats Enrichment Failed: NCAAB  -> MISSING (Tried '') vs Buffalo -> OK ('BUFFALO')
+DEBUG Stats Enrichment Failed: NCAAB  -> MISSING (Tried '') vs San Francisco -> OK ('SAN FRANCISCO')
+DEBUG Stats Enrichment Failed: NCAAB  -> MISSING (Tried '') vs Los Angeles -> OK ('LOS ANGELES SALLE')
+DEBUG Stats Enrichment Failed: NCAAB  -> MISSING (Tried '') vs Indiana -> OK ('INDIANA')
+DEBUG Stats Enrichment Failed: NCAAB  -> MISSING (Tried '') vs Utah -> OK ('UTAH STATE')
+DEBUG Stats Enrichment Failed: NCAAB  -> MISSING (Tried '') vs Oklahoma City -> OK ('OKLAHOMA')
+DEBUG Stats Enrichment Failed: NCAAB  -> MISSING (Tried '') vs Boston -> OK ('BOSTON COLLEGE')
+DEBUG Stats Enrichment Failed: NCAAB  -> MISSING (Tried '') vs Phoenix -> OK ('ELON PHOENIX')
+DEBUG Stats Enrichment Failed: NCAAB  -> MISSING (Tried '') vs Charlotte -> OK ('CHARLOTTE')
+DEBUG Stats Enrichment Failed: NCAAB  -> MISSING (Tried '') vs Washington -> OK ('WASHINGTON STATE')
+DEBUG Stats Enrichment Failed: NCAAB  -> MISSING (Tried '') vs Minnesota -> OK ('MINNESOTA')
+DEBUG Stats Enrichment Failed: NCAAB  -> MISSING (Tried '') vs New York -> OK ('NEW MEXICO')
+DEBUG Stats Enrichment Failed: NCAAB  -> MISSING (Tried '') vs Montreal -> OK ('MONTANA STATE')
+DEBUG Stats Enrichment Failed: NCAAB  -> MISSING (Tried '') vs Carolina -> OK ('COASTAL CAROLINA CHANTICLEERS')
+DEBUG Stats Enrichment Failed: NCAAB  -> MISSING (Tried '') vs Columbus -> OK ('COLUMBIA LIONS')
+DEBUG Stats Enrichment Failed: NCAAB  -> MISSING (Tried '') vs Toronto -> OK ('OREGON STATE')
+DEBUG Stats Enrichment Failed: NCAAB  -> MISSING (Tried '') vs Edmonton -> MISSING (Tried 'EDMONTON OILERS')
+DEBUG Stats Enrichment Failed: NCAAB  -> MISSING (Tried '') vs Florida -> OK ('FLORIDA')
+DEBUG Stats Enrichment Failed: NCAAB  -> MISSING (Tried '') vs Alabama -> OK ('ALABAMA STATE')
+DEBUG Stats Enrichment Failed: NCAAB  -> MISSING (Tried '') vs Columbia -> OK ('COLUMBIA LIONS')
+CONTEXTUAL PROBABILITY AUDIT: implied_home_prob matched/derived 520 rows, defaulted to 0.5 for 0 rows.
+CONTEXTUAL PROBABILITY AUDIT: kalshi_prob used real match for 0 rows, proxy market_probability for 520 rows, proxy implied_home_prob for 0 rows, defaulted to 0.5 for 0 rows.
+Dropping 2 columns from original dataframe to prevent duplication: ['market_probability', 'implied_home_prob']
+Shape after enrich_with_model_features: (520, 67)
+Dataframe shape after enrichment: (520, 67)
+Duplicate columns exist after enrichment: False
+[MODEL_LOAD] Attempting model load from /app/models/model.json
+[MODEL_LOAD] XGBoost model loaded successfully from /app/models/model.json
+PIPELINE AUDIT: [6/9] Rows actually sent into predict_batch: 520
+[predict_batch] Input DataFrame shape: (520, 67)
+[predict_batch] Duplicate columns exist in input: False
+[predict_batch] Shape after collapse: (520, 67)
+[predict_batch] Critical columns present: ['implied_home_prob', 'kalshi_prob', 'market_probability', 'decimal_odds', 'ml_probability']
+Type of working_df['implied_home_prob']: <class 'pandas.core.series.Series'>
+Type of working_df['kalshi_prob']: <class 'pandas.core.series.Series'>
+Type of working_df['market_probability']: <class 'pandas.core.series.Series'>
+Type of working_df['implied_home_prob']: <class 'pandas.core.series.Series'>
+Type of working_df['kalshi_prob']: <class 'pandas.core.series.Series'>
+Type of working_df['market_probability']: <class 'pandas.core.series.Series'>
+TRUE Feature coverage before ANY fallback/fill (batch size 520):
+  implied_home_prob: 100%
+  sentiment_diff: 100%
+  kalshi_prob: 100%
+  injuries_home_count: 100%
+  injuries_away_count: 100%
+  weather_flag: 100%
+  feature_home_win_pct: 100%
+  feature_home_ppg: 100%
+  feature_home_oppg: 100%
+  feature_home_streak: 100%
+  feature_away_win_pct: 100%
+  feature_away_ppg: 100%
+  feature_away_oppg: 100%
+  feature_away_streak: 100%
+  feature_diff_win_pct: 100%
+  feature_diff_ppg: 100%
+  feature_diff_oppg: 100%
+  feature_diff_last5: 100%
+  feature_diff_streak: 100%
+  feature_home_rest_days: 100%
+  feature_away_rest_days: 100%
+MODEL-READY Feature coverage (batch size 520):
+  implied_home_prob: 100%
+  sentiment_diff: 100%
+  kalshi_prob: 100%
+  injuries_home_count: 100%
+  injuries_away_count: 100%
+  weather_flag: 100%
+  feature_home_win_pct: 100%
+  feature_home_ppg: 100%
+  feature_home_oppg: 100%
+  feature_home_streak: 100%
+  feature_away_win_pct: 100%
+  feature_away_ppg: 100%
+  feature_away_oppg: 100%
+  feature_away_streak: 100%
+  feature_diff_win_pct: 100%
+  feature_diff_ppg: 100%
+  feature_diff_oppg: 100%
+  feature_diff_last5: 100%
+  feature_diff_streak: 100%
+  feature_home_rest_days: 100%
+  feature_away_rest_days: 100%
+Fallback Summary: 0 out of 520 rows used historical fallback.
+--- MODEL INFERENCE DIAGNOSTICS ---
+Total rows entering model: 520
+Unique feature-vector count: 414
+Exact duplicate vectors count: 106
+Rows using true live stats: 520
+Rows using stale/historical/default-filled features: 0
+Rows where market_probability == 0.5: 0
+Rows where implied_home_prob == 0.5: 0
+Rows where kalshi_prob == 0.5: 0
+Rows where ml_probability == 0.5: 520
+Rows where theover_probability == 0.5: 0
+Rows where theover_probability_x == 0.5: 520
+Rows where ml_probability_x == 0.5: 520
+Rows where display_probability == 0.5: 520
+Rows where calibrated_probability == 0.5: 520
+Rows where theover_probability_y == 0.5: 520
+Rows where ml_probability_y == 0.5: 520
+-----------------------------------
+ML RAW COMPRESSION AUDIT: Found 24 repeated raw prob values. Top 3: [(0.7754829525947571, 216), (0.6541569828987122, 74), (0.5946995615959167, 48)]
+ML RAW COMPRESSION AUDIT: Sampling rows for raw probability = 0.7754829525947571 (Count: 216)
+ML RAW COMPRESSION AUDIT: Successfully extracted leaf indices for duplicated rows. Shape: (216, 10)
+  --- Duplicate Row 1 ---
+  League: NCAAB, Matchup: |SANFRANCISCO, Market: spread_home
+  Teams:  vs sanfrancisco
+  Implied Home Prob: 0.5238, Kalshi Prob: 0.5238, Market Prob: 0.5238
+  Diff Win Pct: 0.0556, Diff PPG: -0.775, Diff Streak: 0.0
+  Stale Features Used: False
+  Feature Vector Signature (Hash): 77d6927819c54079b3c0ff1e7b98d1af
+  Input identical to previously sampled row: NO (Genuinely different inputs mapping to same coarse XGBoost bucket/leaf path)
+  XGBoost Leaf Path Hash: c871b6810d82aba9e1b0f7d2c06dd2b3 (First 5 leaves: [13.0, 13.0, 12.0, 6.0, 9.0])
+  --- Duplicate Row 2 ---
+  League: NCAAB, Matchup: |INDIANA, Market: spread_home
+  Teams:  vs indiana
+  Implied Home Prob: 0.5238, Kalshi Prob: 0.5238, Market Prob: 0.5238
+  Diff Win Pct: 0.05, Diff PPG: -5.89, Diff Streak: 0.0
+  Stale Features Used: False
+  Feature Vector Signature (Hash): 56bf5b5069ea6f46092563dd38c28be0
+  Input identical to previously sampled row: NO (Genuinely different inputs mapping to same coarse XGBoost bucket/leaf path)
+  XGBoost Leaf Path Hash: c871b6810d82aba9e1b0f7d2c06dd2b3 (First 5 leaves: [13.0, 13.0, 12.0, 6.0, 9.0])
+  --- Duplicate Row 3 ---
+  League: NCAAB, Matchup: |UTAH, Market: spread_home
+  Teams:  vs utah
+  Implied Home Prob: 0.5238, Kalshi Prob: 0.5238, Market Prob: 0.5238
+  Diff Win Pct: -0.25, Diff PPG: -14.725, Diff Streak: 0.0
+  Stale Features Used: False
+  Feature Vector Signature (Hash): 9d79edb14abf5892eda785fa9f910c5c
+  Input identical to previously sampled row: NO (Genuinely different inputs mapping to same coarse XGBoost bucket/leaf path)
+  XGBoost Leaf Path Hash: c871b6810d82aba9e1b0f7d2c06dd2b3 (First 5 leaves: [13.0, 13.0, 12.0, 6.0, 9.0])
+ML RAW COMPRESSION AUDIT CONCLUSION: Flatness caused by MODEL COARSENESS (Different inputs mapping to the same leaf path/bucket).
+ML RAW COMPRESSION AUDIT: Raw unique ratio (4.6%) is below 60%. Triggering intervention.
+Output variance check (post-healing): 24 unique probabilities out of 520 rows (4.6%). Raw unique: 24
+Low post-healing output variance detected: 24 unique probabilities across 520 games.
+ML UNIQUENESS AUDIT: XGBoost returned critically flat raw probabilities (24/520). Overriding with Hybrid Fallback Score.
+PIPELINE TRACE: Flat probabilities detected. Overriding all 520 predictions with Hybrid Fallback.
+ML UNIQUENESS AUDIT: Unique prob count before fallback (raw_unique_count): 24
+ML UNIQUENESS AUDIT: Unique prob count after fallback: 520
+Hybrid Fallback Variance Report:
+  - Unique chosen market probabilities: 1/520 (Rows sharing exact values: 520)
+  - Unique raw scores BEFORE epsilon: 519/520 (Rows sharing exact values: 2)
+  - Unique final scores AFTER epsilon: 520/520
+  - Sample duplicate groups (before epsilon): [(0.5098910317460318, 2), (0.5190323280423281, 1), (0.5205614021164021, 1)]
+    - Inspecting group collapsing to raw score 0.50989 (2 rows):
+ML UNIQUENESS AUDIT:      [NCAAB] |AUSTINPEAY | Pick: spread_home | Mkt: 0.524 | Kalshi: 0.524 | Stale: False | Synth: [] | StatsQual: FALLBACK | Sanitized: False
+ML UNIQUENESS AUDIT:      [NCAAB] |CENTRALARKANSAS | Pick: spread_home | Mkt: 0.524 | Kalshi: 0.524 | Stale: False | Synth: [] | StatsQual: FALLBACK | Sanitized: False
+PIPELINE TRACE: Final unique probabilities exiting predict_batch: 520 out of 520
+============================================================
+PIPELINE HEALTH SUMMARY
+============================================================
+Total Games/Rows Evaluated: 520
+1. Raw Model Unique Outputs: 24
+2. Post-Healing Unique Outputs: 24 (Rows healed: 0)
+3. Post-Hybrid Unique Outputs (Pre-Epsilon): 519
+4. Final Unique Outputs: 520
+True Feature Coverage (Avg/Row): 100.0%
+Synthetic/Default-Filled Coverage (Avg/Row): 0.0%
+Data Source Breakdown:
+ - Rows using TRUE Live Stats (APIs): 100.0% (520)
+ - Rows using Strict Historical Reconstruction: 0.0% (0)
+ - Rows using Fuzzy Historical Reconstruction: 0.0% (0)
+ - Rows using Split Historical Lookup: 0.0% (0)
+Rows using Hybrid Override (Fallback): 100.0%
+Rows patched by Sanitization: 0.0%
+============================================================
+FALLBACK AUDIT: Live Stats = 520, Historical/Stale = 0, Hybrid = 520
+============================================================
+PIPELINE AUDIT: [7/9] Rows returned from predict_batch: 520
+PIPELINE AUDIT: [8/9] Rows successfully merged back into the analysis dataframe: 520
+✅ ML DEBUG: Generated 520 total predictions (520 new, unique=520)
+======================================
+RUNNING PIPELINE DIAGNOSTICS HARNESS (LOCAL)
+======================================
+Loading theover_log_dump.csv as fallback
+
+--- RESULTS ---
+Analysis DF rows: 520
+Unique ML Probs generated: 520
+Unique Calibrated Probs: 520
+Best Picks DF rows: 0
