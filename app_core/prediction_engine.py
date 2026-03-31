@@ -824,6 +824,21 @@ class PredictionEngine:
                                 break
                         except Exception:
                             continue
+
+                # Kalshi Proxy Fallback: use market_probability or implied_home_prob if kalshi_prob is missing
+                if not k_prob:
+                    for col in ['market_probability', 'implied_home_prob']:
+                        val = _get_scalar(row, col)
+                        if pd.notna(val) and val != "":
+                            try:
+                                numeric_val = float(val)
+                                if 0.0 < numeric_val < 1.0 and abs(numeric_val - 0.5) > 1e-6:
+                                    k_prob = numeric_val
+                                    break
+                            except Exception:
+                                continue
+
+                # Note: kalshi_prob inversion happens properly downstream based on orientation.
                 working_df.at[idx, 'kalshi_prob'] = k_prob if k_prob else 0.5
 
                 # 2. Implied Home Prob
@@ -847,6 +862,18 @@ class PredictionEngine:
                                     break
                         except Exception:
                             continue
+
+                market_type = str(row.get('market_type', '')).lower()
+                is_away_side = market_type in ('spread_away', 'h2h_away', 'moneyline_away', 'away')
+                is_under = market_type == 'total_under'
+
+                # We need the model to evaluate the "Home/Over" perspective consistently.
+                # If we are building a row for the away/under outcome, invert the probability
+                # since the XGBoost model expects orientation to be Home/Over.
+                if i_prob and i_prob != 0.5:
+                     if is_away_side or is_under:
+                          i_prob = 1.0 - i_prob
+
                 working_df.at[idx, 'implied_home_prob'] = i_prob if i_prob else 0.5
 
             # Explicit cast to silence FutureWarnings before any remaining fillna
@@ -1389,27 +1416,21 @@ class PredictionEngine:
             rows_using_stale_stats = sum(used_stale_features)
 
             # Contextual inputs checks (must pull from working_df for non-model columns like market_probability)
-            implied_home_default_count = 0
-            kalshi_default_count = 0
-            market_probability_default_count = 0
+            prob_cols = ['market_probability', 'implied_home_prob', 'kalshi_prob', 'ml_probability', 'theover_probability']
 
-            # 1. Check implied_home_prob
-            if 'implied_home_prob' in inference_data.columns:
-                implied_home_default_count = (abs(pd.to_numeric(inference_data['implied_home_prob'], errors='coerce').fillna(0.5) - 0.5) <= 1e-6).sum()
-            elif 'implied_home_prob' in working_df.columns:
-                implied_home_default_count = (abs(pd.to_numeric(working_df['implied_home_prob'], errors='coerce').fillna(0.5) - 0.5) <= 1e-6).sum()
+            # Find any other prob columns in inference_data or working_df
+            for col in inference_data.columns.tolist() + working_df.columns.tolist():
+                if 'prob' in col.lower() and col not in prob_cols:
+                    prob_cols.append(col)
 
-            # 2. Check kalshi_prob
-            if 'kalshi_prob' in inference_data.columns:
-                kalshi_default_count = (abs(pd.to_numeric(inference_data['kalshi_prob'], errors='coerce').fillna(0.5) - 0.5) <= 1e-6).sum()
-            elif 'kalshi_prob' in working_df.columns:
-                kalshi_default_count = (abs(pd.to_numeric(working_df['kalshi_prob'], errors='coerce').fillna(0.5) - 0.5) <= 1e-6).sum()
-
-            # 3. Check market_probability (rarely in inference_data, usually in working_df)
-            if 'market_probability' in working_df.columns:
-                market_probability_default_count = (abs(pd.to_numeric(working_df['market_probability'], errors='coerce').fillna(0.5) - 0.5) <= 1e-6).sum()
-            elif 'market_probability' in inference_data.columns:
-                market_probability_default_count = (abs(pd.to_numeric(inference_data['market_probability'], errors='coerce').fillna(0.5) - 0.5) <= 1e-6).sum()
+            prob_defaults = {}
+            for col in prob_cols:
+                count = 0
+                if col in inference_data.columns:
+                    count = (abs(pd.to_numeric(inference_data[col], errors='coerce').fillna(0.5) - 0.5) <= 1e-6).sum()
+                elif col in working_df.columns:
+                    count = (abs(pd.to_numeric(working_df[col], errors='coerce').fillna(0.5) - 0.5) <= 1e-6).sum()
+                prob_defaults[col] = count
 
             logger.info(f"--- MODEL INFERENCE DIAGNOSTICS ---")
             logger.info(f"Total rows entering model: {total_rows_entering_model}")
@@ -1417,9 +1438,8 @@ class PredictionEngine:
             logger.info(f"Exact duplicate vectors count: {exact_duplicate_vectors_count}")
             logger.info(f"Rows using true live stats: {rows_using_live_stats}")
             logger.info(f"Rows using stale/historical/default-filled features: {rows_using_stale_stats}")
-            logger.info(f"Rows where implied_home_prob == 0.5: {implied_home_default_count}")
-            logger.info(f"Rows where kalshi_prob == 0.5: {kalshi_default_count}")
-            logger.info(f"Rows where market_probability == 0.5: {market_probability_default_count}")
+            for col, count in prob_defaults.items():
+                logger.info(f"Rows where {col} == 0.5: {count}")
             logger.info(f"-----------------------------------")
 
             if isinstance(self.model, xgb.Booster):
@@ -1544,6 +1564,15 @@ class PredictionEngine:
                             logger.info(f"  XGBoost Leaf Path Hash: {leaf_hash} (First 5 leaves: {row_leaves[:5].tolist()})")
 
                         sampled_count += 1
+
+                    # Overall conclusion for this group
+                    if sampled_count > 1:
+                        if len(sampled_feature_hashes) == 1:
+                            logger.info(f"ML RAW COMPRESSION AUDIT CONCLUSION: Flatness caused by EXACTLY IDENTICAL INPUTS (feature collapse).")
+                        elif len(sampled_feature_hashes) < sampled_count:
+                            logger.info(f"ML RAW COMPRESSION AUDIT CONCLUSION: Flatness caused by MIXED identical and near-identical default-filled inputs.")
+                        else:
+                            logger.info(f"ML RAW COMPRESSION AUDIT CONCLUSION: Flatness caused by MODEL COARSENESS (Different inputs mapping to the same leaf path/bucket).")
             except Exception as e:
                 logger.error(f"Error during ML RAW COMPRESSION AUDIT logging: {e}")
             # --- END DIAGNOSTIC LOGGING ---

@@ -1009,7 +1009,8 @@ def robust_normalize_team(name: str, league: Optional[str] = None) -> str:
         # name_upper is the stripped/upper version
         # Check if the exact original input (ignoring case/whitespace) is just the location
         # We only want to log when the input itself is the risky shorthand, not when the clean full name is passed.
-        if name_upper in nhl_location_check:
+        # Ensure we check the original string, stripped, to prevent logging 'Florida Panthers'
+        if str(name).strip().upper() in nhl_location_check:
             mapped_val = MANUAL_TEAM_OVERRIDES.get(name_upper)
             if mapped_val and mapped_val != name_upper:
                 # Explicitly format as requested by the user
@@ -2503,8 +2504,9 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
         prob_series = prob_series.fillna(valid_mkt).infer_objects(copy=False)
 
     # 2. Compute from raw home/away odds if we have both sides
-    h_odds_col = next((c for c in df.columns if str(c).lower() in ['home_odds', 'odds_home', 'home_price', 'novig_home_price', 'novig_h2h_home_price']), None)
-    a_odds_col = next((c for c in df.columns if str(c).lower() in ['away_odds', 'odds_away', 'away_price', 'novig_away_price', 'novig_h2h_away_price']), None)
+    # Use fallback novig prices first, then fallback to other odds columns
+    h_odds_col = next((c for c in df.columns if str(c).lower() in ['novig_home_price', 'novig_h2h_home_price', 'home_odds', 'odds_home', 'home_price']), None)
+    a_odds_col = next((c for c in df.columns if str(c).lower() in ['novig_away_price', 'novig_h2h_away_price', 'away_odds', 'odds_away', 'away_price']), None)
 
     if h_odds_col and a_odds_col and prob_series.isna().any():
         for idx in prob_series[prob_series.isna()].index:
