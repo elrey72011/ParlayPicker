@@ -1002,7 +1002,7 @@ def robust_normalize_team(name: str, league: Optional[str] = None) -> str:
     # Proactive NHL Location-Only mapping validation logging
     if is_nhl:
         # Check if the name matches one of the known risky location-only names
-        nhl_location_check = {"COLORADO", "FLORIDA", "CAROLINA", "TAMPA BAY", "NEW JERSEY", "SAN JOSE", "VEGAS", "DALLAS"}
+        nhl_location_check = {"COLORADO", "FLORIDA", "CAROLINA", "TAMPA BAY", "NEW JERSEY", "SAN JOSE", "VEGAS", "DALLAS", "WASHINGTON"}
 
         # We only log mapping success for these explicit shorthand names, not every normal NHL team
         # NOTE: name is the original string provided (e.g., 'Colorado')
@@ -2514,7 +2514,8 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
              implied_sources["existing_valid"] += int(mask.sum())
 
     # 2. Compute from raw home/away odds if we have both sides
-    # Use fallback novig prices first, then fallback to other odds columns
+    # We prefer matching rows in the dataframe by matchup_id and market_type to find the opposing side odds.
+    # First, try to compute from columns on the same row if they exist.
     h_odds_col = next((c for c in df.columns if str(c).lower() in ['novig_home_price', 'novig_h2h_home_price', 'home_odds', 'odds_home', 'home_price']), None)
     a_odds_col = next((c for c in df.columns if str(c).lower() in ['novig_away_price', 'novig_h2h_away_price', 'away_odds', 'odds_away', 'away_price']), None)
 
@@ -2540,6 +2541,51 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                         implied_sources["computed_devig"] += 1
             except Exception:
                 pass
+
+    # 2b. Compute from paired rows (e.g. if the dataframe has separate rows for Home and Away lines for the same game)
+    if 'matchup_id' in df.columns and 'market_type' in df.columns and 'odds_american' in df.columns and prob_series.isna().any():
+        # Build a lookup of american odds by matchup_id and market_type
+        # e.g., {'matchup1': {'h2h_home': -110, 'h2h_away': -110, ...}}
+        odds_lookup = {}
+        for idx, row in df.iterrows():
+            m_id = row.get('matchup_id')
+            m_type = str(row.get('market_type', '')).lower()
+            odds = row.get('odds_american')
+            if pd.notna(m_id) and pd.notna(m_type) and pd.notna(odds):
+                if m_id not in odds_lookup:
+                    odds_lookup[m_id] = {}
+                odds_lookup[m_id][m_type] = odds
+
+        for idx in prob_series[prob_series.isna()].index:
+            m_id = df.loc[idx, 'matchup_id']
+            m_type = str(df.loc[idx, 'market_type']).lower()
+            if m_id in odds_lookup:
+                # Determine opposing side market type
+                opp_m_type = None
+                if 'home' in m_type:
+                    opp_m_type = m_type.replace('home', 'away')
+                elif 'away' in m_type:
+                    opp_m_type = m_type.replace('away', 'home')
+                elif 'over' in m_type:
+                    opp_m_type = m_type.replace('over', 'under')
+                elif 'under' in m_type:
+                    opp_m_type = m_type.replace('under', 'over')
+
+                if opp_m_type and opp_m_type in odds_lookup[m_id] and m_type in odds_lookup[m_id]:
+                    h_val = odds_lookup[m_id][m_type if 'home' in m_type or 'over' in m_type else opp_m_type]
+                    a_val = odds_lookup[m_id][opp_m_type if 'home' in m_type or 'over' in m_type else m_type]
+
+                    try:
+                        h_val = float(h_val)
+                        a_val = float(a_val)
+                        if abs(h_val) >= 100 and abs(a_val) >= 100:
+                            h_prob = 100 / (h_val + 100) if h_val > 0 else abs(h_val) / (abs(h_val) + 100)
+                            a_prob = 100 / (a_val + 100) if a_val > 0 else abs(a_val) / (abs(a_val) + 100)
+                            if h_prob > 0 and a_prob > 0:
+                                prob_series.at[idx] = h_prob / (h_prob + a_prob)
+                                implied_sources["computed_devig"] += 1
+                    except Exception:
+                        pass
 
     # 3. Use side-specific implied probability oriented to home
     if prob_series.isna().any():
@@ -2567,7 +2613,8 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                 if is_home_side:
                     prob_series.at[idx] = val
                     implied_sources["side_specific"] += 1
-                elif is_away_side:
+                elif is_away_side and market_type in ('spread_away', 'h2h_away', 'moneyline_away'):
+                    # Only use 1.0 - away_implied if the orientation is truly unambiguous (i.e. explicitly labeled as away)
                     prob_series.at[idx] = 1.0 - val
                     implied_sources["side_specific"] += 1
                 else:

@@ -144,15 +144,25 @@ def main():
     X = build_features_from_master(df)
 
     # Split
-    # We want a validation set that roughly mimics a 62-row production slate.
-    val_size = min(62, int(len(df) * 0.2))
+    # Instead of forcing a 62-row snapshot, we evaluate on a dynamic slate size based on the most recent full day
+    # of available validation data, or standard 10-15% of the dataset if dates are unavailable/unreliable.
+
+    if 'commence_time' in df.columns:
+        last_date = df['commence_time'].dt.date.iloc[-1]
+        val_mask = df['commence_time'].dt.date == last_date
+        val_size = val_mask.sum()
+        # Ensure we don't have a trivially small validation set (e.g., just 1 game)
+        if val_size < 10:
+            val_size = int(len(df) * 0.15)
+    else:
+        val_size = int(len(df) * 0.15)
 
     # Chronological Split (predicting the future based on the past)
     X_train, X_val = X.iloc[:-val_size], X.iloc[-val_size:]
     y_train, y_val = y.iloc[:-val_size], y.iloc[-val_size:]
 
     print(f"Schema exactly matches production 21-feature schema: {list(X.columns) == VERTEX_FEATURE_COLUMNS}")
-    print(f"Train set: {X_train.shape}, Validation set (Slate equivalent): {X_val.shape}")
+    print(f"Train set: {X_train.shape}, Validation set (Real Live Slate Equivalent): {X_val.shape}")
 
     dtrain = xgb.DMatrix(X_train, label=y_train)
 
