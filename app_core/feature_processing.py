@@ -2566,6 +2566,11 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     # Step 4: Final fallback to 0.5 only if still NaN
     features_data['implied_home_prob'] = prob_series.fillna(0.5).infer_objects(copy=False)
 
+    # Log implied_home_prob usage counts
+    implied_valid_count = len(prob_series.dropna())
+    implied_default_count = len(prob_series[prob_series.isna()])
+    logger.info(f"CONTEXTUAL PROBABILITY AUDIT: implied_home_prob matched/derived {implied_valid_count} rows, defaulted to 0.5 for {implied_default_count} rows.")
+
     features_data['sentiment_diff'] = safe_numeric_fill(df.get('sentiment_diff'), 0.0)
 
     # Kalshi Probability Fallback Logic
@@ -2577,14 +2582,18 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
         k_raw = pd.to_numeric(df[k_col], errors='coerce')
         k_series = k_series.fillna(k_raw.where(~k_raw.apply(_is_placeholder), np.nan)).infer_objects(copy=False)
 
+    k_real_count = len(k_series.dropna())
+
     # 2. Logged proxy (market_probability / implied_home_prob)
+    kalshi_proxy_counts = {"market_probability": 0, "implied_home_prob": 0}
     if k_series.isna().any():
         # Try market_probability first
         if 'market_probability' in features_data:
             mkt_probs_kalshi = features_data['market_probability']
             fallback_mask = k_series.isna() & mkt_probs_kalshi.notna() & (~mkt_probs_kalshi.apply(_is_placeholder))
             if fallback_mask.any():
-                logger.info(f"Kalshi proxy: backfilled {fallback_mask.sum()} missing kalshi_prob with market_probability")
+                proxy_count = fallback_mask.sum()
+                kalshi_proxy_counts["market_probability"] += proxy_count
                 k_series = k_series.fillna(mkt_probs_kalshi.where(fallback_mask, np.nan)).infer_objects(copy=False)
 
         # Try implied_home_prob next
@@ -2592,11 +2601,16 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
             impl_probs_kalshi = features_data['implied_home_prob']
             fallback_mask = k_series.isna() & impl_probs_kalshi.notna() & (~impl_probs_kalshi.apply(_is_placeholder))
             if fallback_mask.any():
-                 logger.info(f"Kalshi proxy: backfilled {fallback_mask.sum()} missing kalshi_prob with implied_home_prob")
+                 proxy_count = fallback_mask.sum()
+                 kalshi_proxy_counts["implied_home_prob"] += proxy_count
                  k_series = k_series.fillna(impl_probs_kalshi.where(fallback_mask, np.nan)).infer_objects(copy=False)
+
+    k_default_count = len(k_series[k_series.isna()])
 
     # 3. Default 0.5
     features_data['kalshi_prob'] = k_series.fillna(0.5).infer_objects(copy=False)
+
+    logger.info(f"CONTEXTUAL PROBABILITY AUDIT: kalshi_prob used real match for {k_real_count} rows, proxy market_probability for {kalshi_proxy_counts['market_probability']} rows, proxy implied_home_prob for {kalshi_proxy_counts['implied_home_prob']} rows, defaulted to 0.5 for {k_default_count} rows.")
     features_data['injuries_home_count'] = safe_numeric_fill(df.get('injuries_home_count'), 0)
     features_data['injuries_away_count'] = safe_numeric_fill(df.get('injuries_away_count'), 0)
     

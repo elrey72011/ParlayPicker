@@ -584,6 +584,7 @@ def _format_game_time_est(df: pd.DataFrame) -> pd.Series:
         # 2. If no time string, but we have a valid UTC date object
         if pd.notna(d_obj):
             # Check if it's a midnight fallback placeholder
+            # If the user passed in exactly YYYY-MM-DDT00:00:00Z, we map it to date-only.
             if d_obj.hour == 0 and d_obj.minute == 0 and d_obj.second == 0:
                 out[idx] = d_obj.strftime("%Y-%m-%d")
             else:

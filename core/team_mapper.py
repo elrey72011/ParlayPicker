@@ -996,6 +996,12 @@ def normalize_team_name(name: str) -> str:
                     normalized = temp_name
                     break
 
+    # If normalized name is not strictly mapped, check if there's a punctuation-retaining override
+    # using the original `name` variable or the post-processed title case.
+    # We do this before titlecasing the stripped 'normalized' string to preserve things like A&M.
+    if name.lower() in overrides:
+         return overrides[name.lower()]
+
     title_cased = normalized.title()
 
     # Check post-processing overrides again

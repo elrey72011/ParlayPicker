@@ -60,6 +60,7 @@ class TheOddsAPIClient:
         try:
             # Use ET day boundaries and convert to UTC so "game night" remains stable.
             # Example: 10:10 PM ET (03:10 UTC next day) still belongs to the same ET slate.
+            import pytz
             dt = datetime.strptime(target_date[:10], "%Y-%m-%d")
             eastern = pytz.timezone("America/New_York")
             day_start_et = eastern.localize(datetime(dt.year, dt.month, dt.day, 0, 0, 0))
