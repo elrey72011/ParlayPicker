@@ -1387,9 +1387,15 @@ class PredictionEngine:
             # Contextual inputs checks (assuming columns exist in the subset)
             implied_home_default_count = 0
             kalshi_default_count = 0
-            if 'feature_implied_home_prob' in inference_data.columns:
-                implied_home_default_count = (inference_data['feature_implied_home_prob'] == 0.5).sum()
-            if 'feature_kalshi_prob' in inference_data.columns:
+            # Note: columns in inference_data typically do not have the 'feature_' prefix for probs, they match VERTEX_FEATURE_COLUMNS exact names.
+            if 'implied_home_prob' in inference_data.columns:
+                implied_home_default_count = (inference_data['implied_home_prob'] == 0.5).sum()
+            elif 'feature_implied_home_prob' in inference_data.columns:
+                 implied_home_default_count = (inference_data['feature_implied_home_prob'] == 0.5).sum()
+
+            if 'kalshi_prob' in inference_data.columns:
+                kalshi_default_count = (inference_data['kalshi_prob'] == 0.5).sum()
+            elif 'feature_kalshi_prob' in inference_data.columns:
                 kalshi_default_count = (inference_data['feature_kalshi_prob'] == 0.5).sum()
 
             logger.info(f"--- MODEL INFERENCE DIAGNOSTICS ---")
@@ -1398,8 +1404,8 @@ class PredictionEngine:
             logger.info(f"Exact duplicate vectors count: {exact_duplicate_vectors_count}")
             logger.info(f"Rows using true live stats: {rows_using_live_stats}")
             logger.info(f"Rows using stale/historical/default-filled features: {rows_using_stale_stats}")
-            logger.info(f"Rows where feature_implied_home_prob == 0.5: {implied_home_default_count}")
-            logger.info(f"Rows where feature_kalshi_prob == 0.5: {kalshi_default_count}")
+            logger.info(f"Rows where implied_home_prob == 0.5: {implied_home_default_count}")
+            logger.info(f"Rows where kalshi_prob == 0.5: {kalshi_default_count}")
             logger.info(f"-----------------------------------")
 
             if isinstance(self.model, xgb.Booster):
@@ -1425,15 +1431,27 @@ class PredictionEngine:
             self._last_metrics["raw_unique_count"] = len(set(raw_valid_probs))
 
             # --- START DIAGNOSTIC LOGGING FOR RAW DUPLICATES ---
+            # Trigger protective override checks to determine if we should log leaf paths
+            raw_unique_ratio = len(set(raw_valid_probs)) / len(raw_probs) if len(raw_probs) > 0 else 0
+            is_unhealthy_flatness = (len(raw_probs) > 0 and raw_unique_ratio < 0.60)
+
             try:
                 from collections import Counter
                 raw_prob_counts = Counter(raw_valid_probs)
                 duplicates = [(p, c) for p, c in raw_prob_counts.items() if c > 1]
 
-                if duplicates:
+                # Update unhealthy flag based on absolute thresholds too (same as downstream override logic)
+                total_count = len(inference_data)
+                if not is_unhealthy_flatness and total_count > 0:
+                    max_repeats = max(raw_prob_counts.values()) if raw_prob_counts else 0
+                    if total_count <= 30 and max_repeats >= 2: is_unhealthy_flatness = True
+                    elif total_count <= 60 and max_repeats >= 3: is_unhealthy_flatness = True
+                    elif total_count > 60 and (max_repeats >= 4 or (max_repeats/total_count) >= 0.10): is_unhealthy_flatness = True
+
+                if duplicates and is_unhealthy_flatness:
                     logger.info(f"ML RAW COMPRESSION AUDIT: Found {len(duplicates)} repeated raw prob values. Top 3: {sorted(duplicates, key=lambda x: x[1], reverse=True)[:3]}")
 
-                    # Try to get leaf indices if possible (only for xgb.Booster)
+                    # Conditional conditional diagnostics: Try to get leaf indices if possible (only for xgb.Booster)
                     leaves = None
                     if isinstance(self.model, xgb.Booster):
                         try:
@@ -1448,6 +1466,10 @@ class PredictionEngine:
                     logger.info(f"ML RAW COMPRESSION AUDIT: Sampling rows for raw probability = {top_dup_prob} (Count: {top_dup_count})")
 
                     sampled_count = 0
+
+                    # Store hashes to determine if inputs were identical
+                    sampled_feature_hashes = set()
+
                     for idx_batch, p in enumerate(raw_probs):
                         if p is not None and abs(p - top_dup_prob) < 1e-7:
                             if sampled_count >= 3:
@@ -1460,12 +1482,25 @@ class PredictionEngine:
                             # Clean up dict for printing (round floats)
                             clean_feat = {k: round(v, 4) if isinstance(v, float) else v for k, v in feat_dict.items()}
 
+                            # Create a hash of the feature vector
+                            feat_hash_str = json.dumps(clean_feat, sort_keys=True)
+                            feat_hash = hashlib.md5(feat_hash_str.encode()).hexdigest()
+
+                            is_duplicate = feat_hash in sampled_feature_hashes
+                            sampled_feature_hashes.add(feat_hash)
+
                             logger.info(f"  --- Duplicate Row {sampled_count+1} ---")
                             logger.info(f"  League: {row.get('league')}, Matchup: {row.get('matchup_id')}, Market: {row.get('market_type')}")
                             logger.info(f"  Teams: {row.get('home_team')} vs {row.get('away_team')}")
                             logger.info(f"  Implied Home Prob: {row.get('implied_home_prob')}, Kalshi Prob: {row.get('kalshi_prob')}")
                             logger.info(f"  Diff Win Pct: {feat_dict.get('feature_diff_win_pct')}, Diff PPG: {feat_dict.get('feature_diff_ppg')}, Diff Streak: {feat_dict.get('feature_diff_streak')}")
                             logger.info(f"  Stale Features Used: {used_stale_features.iloc[idx_batch]}")
+                            logger.info(f"  Feature Vector Signature (Hash): {feat_hash}")
+                            if is_duplicate:
+                                logger.info(f"  Input identical to previously sampled row: YES")
+                            else:
+                                logger.info(f"  Input identical to previously sampled row: NO (different inputs mapping to same output)")
+
                             logger.info(f"  Feature Vector: {clean_feat}")
 
                             if leaves is not None:

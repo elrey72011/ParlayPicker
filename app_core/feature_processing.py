@@ -1007,18 +1007,16 @@ def robust_normalize_team(name: str, league: Optional[str] = None) -> str:
         # We only log mapping success for these explicit shorthand names, not every normal NHL team
         # NOTE: name is the original string provided (e.g., 'Colorado')
         # name_upper is the stripped/upper version
-        temp_norm = normalize_team(name_upper)
-
-        # Check if the original name, upper name, or normalized name is just the location
-        # A lot of times, `name` comes in as "Colorado" or "Florida"
-        if name_upper in nhl_location_check or temp_norm in nhl_location_check or name.upper().strip() in nhl_location_check:
-            mapped_val = MANUAL_TEAM_OVERRIDES.get(name_upper, MANUAL_TEAM_OVERRIDES.get(temp_norm, MANUAL_TEAM_OVERRIDES.get(name.upper().strip())))
-            if mapped_val:
+        # Check if the exact original input (ignoring case/whitespace) is just the location
+        # We only want to log when the input itself is the risky shorthand, not when the clean full name is passed.
+        if name_upper in nhl_location_check:
+            mapped_val = MANUAL_TEAM_OVERRIDES.get(name_upper)
+            if mapped_val and mapped_val != name_upper:
                 # Explicitly format as requested by the user
                 logger.info(f"NHL TEAM MAPPING: '{name}' -> '{mapped_val}'")
                 return mapped_val
-            else:
-                logger.warning(f"⚠️ NHL Mapping Validation: '{name}' normalized to raw location '{temp_norm}'. We expect this to be mapped to the full team name in MANUAL_TEAM_OVERRIDES.")
+            elif not mapped_val:
+                logger.warning(f"⚠️ NHL Mapping Validation: '{name}' is a raw location. We expect this to be mapped to the full team name in MANUAL_TEAM_OVERRIDES.")
 
     # 1. Base Normalization Override Check (Check overrides BEFORE aggressive stripping)
     if name_upper in MANUAL_TEAM_OVERRIDES:
@@ -2491,13 +2489,7 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     else:
         prob_series = pd.Series([np.nan]*len(df), index=df.index)
 
-    # Step 2: Calculate from Home_ML if present
-    if 'Home_ML' in df.columns:
-        ml_probs = df['Home_ML'].apply(ml_to_prob)
-        # Fill missing values in prob_series with calculated ML probs
-        prob_series = prob_series.fillna(ml_probs).infer_objects(copy=False)
-
-    # Step 2.5: Calculate from market_probability or decimal_odds if still missing
+    # Step 2: Extract real market-derived probabilities first
     if prob_series.isna().any():
         if 'market_probability' in df.columns:
             mkt_probs = pd.to_numeric(df['market_probability'], errors='coerce')
@@ -2508,15 +2500,24 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
         if 'odds_american' in df.columns and prob_series.isna().any():
             am_probs = pd.to_numeric(df['odds_american'], errors='coerce').apply(ml_to_prob)
             prob_series = prob_series.fillna(am_probs).infer_objects(copy=False)
+        if 'Home_ML' in df.columns and prob_series.isna().any():
+            ml_probs = df['Home_ML'].apply(ml_to_prob)
+            prob_series = prob_series.fillna(ml_probs).infer_objects(copy=False)
 
-    # Try to populate missing implied prob with ML implied probabilities or odds
-    if 'ml_probability' in df.columns and prob_series.isna().any():
-        prob_series = prob_series.fillna(pd.to_numeric(df['ml_probability'], errors='coerce')).infer_objects(copy=False)
-    if 'market_probability' in df.columns and prob_series.isna().any():
-        prob_series = prob_series.fillna(pd.to_numeric(df['market_probability'], errors='coerce')).infer_objects(copy=False)
+    # CRITICAL INSTRUCTION: Do NOT backfill `implied_home_prob` from `ml_probability`.
+    # Only use real market/de-vig probabilities, or existing valid side-specific implied probability.
 
     # Step 3: Final fallback to 0.5 only if still NaN
     features_data['implied_home_prob'] = prob_series.fillna(0.5).infer_objects(copy=False)
+
+    # Check market_probability for excessive 0.5 use
+    if 'market_probability' not in features_data and 'market_probability' not in df.columns:
+        # Default to neutral if entirely missing
+        features_data['market_probability'] = 0.5
+    elif 'market_probability' in df.columns:
+        mkt_series = pd.to_numeric(df['market_probability'], errors='coerce')
+        # If market_probability is missing, try to use implied_home_prob as a fallback before 0.5
+        features_data['market_probability'] = mkt_series.fillna(features_data['implied_home_prob']).infer_objects(copy=False)
 
     features_data['sentiment_diff'] = safe_numeric_fill(df.get('sentiment_diff'), 0.0)
 
@@ -2524,12 +2525,27 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     k_col = next((c for c in df.columns if str(c).lower() in ['kalshi_prob', 'kalshi_probability']), None)
     if k_col:
         k_series = pd.to_numeric(df[k_col], errors='coerce')
-        # Fallback kalshi_prob to implied_home_prob or market probability before hard default 0.5
-        # Add another fallback step using the newly enriched implied_home_prob
-        k_series = k_series.fillna(features_data['implied_home_prob']).infer_objects(copy=False)
+        # Fallback kalshi_prob to market_probability or implied_home_prob before hard default 0.5
+        if k_series.isna().any():
+            if 'market_probability' in df.columns:
+                mkt_probs_kalshi = pd.to_numeric(df['market_probability'], errors='coerce')
+                # Only log proxy fallback if it wasn't already matched
+                fallback_mask = k_series.isna() & mkt_probs_kalshi.notna()
+                if fallback_mask.any():
+                    logger.info(f"Kalshi proxy: backfilled {fallback_mask.sum()} missing kalshi_prob with market_probability")
+                k_series = k_series.fillna(mkt_probs_kalshi).infer_objects(copy=False)
+
+        if k_series.isna().any():
+            impl_probs_kalshi = features_data['implied_home_prob']
+            fallback_mask = k_series.isna() & impl_probs_kalshi.notna() & (impl_probs_kalshi != 0.5)
+            if fallback_mask.any():
+                 logger.info(f"Kalshi proxy: backfilled {fallback_mask.sum()} missing kalshi_prob with implied_home_prob")
+            k_series = k_series.fillna(impl_probs_kalshi).infer_objects(copy=False)
+
         features_data['kalshi_prob'] = k_series.fillna(0.5).infer_objects(copy=False)
     else:
         features_data['kalshi_prob'] = features_data['implied_home_prob']
+        logger.info("Kalshi proxy: No kalshi_prob column found. Backfilled entirely with implied_home_prob.")
     features_data['injuries_home_count'] = safe_numeric_fill(df.get('injuries_home_count'), 0)
     features_data['injuries_away_count'] = safe_numeric_fill(df.get('injuries_away_count'), 0)
     
