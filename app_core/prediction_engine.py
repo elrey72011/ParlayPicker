@@ -1379,30 +1379,37 @@ class PredictionEngine:
 
             # Diagnose flat predictions
             total_rows_entering_model = len(inference_data)
-            unique_feature_vectors_count = inference_data.drop_duplicates().shape[0]
+
+            # Use only the strict 21 VERTEX_FEATURE_COLUMNS for uniqueness check
+            model_matrix_cols = [c for c in VERTEX_FEATURE_COLUMNS if c in inference_data.columns]
+            strict_model_input = inference_data[model_matrix_cols]
+            unique_feature_vectors_count = strict_model_input.drop_duplicates().shape[0]
             exact_duplicate_vectors_count = total_rows_entering_model - unique_feature_vectors_count
             rows_using_live_stats = sum(~used_stale_features)
             rows_using_stale_stats = sum(used_stale_features)
 
-            # Contextual inputs checks (assuming columns exist in the subset)
+            # Contextual inputs checks (must pull from working_df for non-model columns like market_probability)
             implied_home_default_count = 0
             kalshi_default_count = 0
             market_probability_default_count = 0
-            # Note: columns in inference_data typically do not have the 'feature_' prefix for probs, they match VERTEX_FEATURE_COLUMNS exact names.
+
+            # 1. Check implied_home_prob
             if 'implied_home_prob' in inference_data.columns:
-                implied_home_default_count = (abs(inference_data['implied_home_prob'] - 0.5) <= 1e-6).sum()
-            elif 'feature_implied_home_prob' in inference_data.columns:
-                 implied_home_default_count = (abs(inference_data['feature_implied_home_prob'] - 0.5) <= 1e-6).sum()
+                implied_home_default_count = (abs(pd.to_numeric(inference_data['implied_home_prob'], errors='coerce').fillna(0.5) - 0.5) <= 1e-6).sum()
+            elif 'implied_home_prob' in working_df.columns:
+                implied_home_default_count = (abs(pd.to_numeric(working_df['implied_home_prob'], errors='coerce').fillna(0.5) - 0.5) <= 1e-6).sum()
 
+            # 2. Check kalshi_prob
             if 'kalshi_prob' in inference_data.columns:
-                kalshi_default_count = (abs(inference_data['kalshi_prob'] - 0.5) <= 1e-6).sum()
-            elif 'feature_kalshi_prob' in inference_data.columns:
-                kalshi_default_count = (abs(inference_data['feature_kalshi_prob'] - 0.5) <= 1e-6).sum()
+                kalshi_default_count = (abs(pd.to_numeric(inference_data['kalshi_prob'], errors='coerce').fillna(0.5) - 0.5) <= 1e-6).sum()
+            elif 'kalshi_prob' in working_df.columns:
+                kalshi_default_count = (abs(pd.to_numeric(working_df['kalshi_prob'], errors='coerce').fillna(0.5) - 0.5) <= 1e-6).sum()
 
-            if 'market_probability' in inference_data.columns:
-                market_probability_default_count = (abs(inference_data['market_probability'] - 0.5) <= 1e-6).sum()
-            elif 'feature_market_probability' in inference_data.columns:
-                market_probability_default_count = (abs(inference_data['feature_market_probability'] - 0.5) <= 1e-6).sum()
+            # 3. Check market_probability (rarely in inference_data, usually in working_df)
+            if 'market_probability' in working_df.columns:
+                market_probability_default_count = (abs(pd.to_numeric(working_df['market_probability'], errors='coerce').fillna(0.5) - 0.5) <= 1e-6).sum()
+            elif 'market_probability' in inference_data.columns:
+                market_probability_default_count = (abs(pd.to_numeric(inference_data['market_probability'], errors='coerce').fillna(0.5) - 0.5) <= 1e-6).sum()
 
             logger.info(f"--- MODEL INFERENCE DIAGNOSTICS ---")
             logger.info(f"Total rows entering model: {total_rows_entering_model}")
@@ -1458,16 +1465,6 @@ class PredictionEngine:
                 if duplicates and is_unhealthy_flatness:
                     logger.info(f"ML RAW COMPRESSION AUDIT: Found {len(duplicates)} repeated raw prob values. Top 3: {sorted(duplicates, key=lambda x: x[1], reverse=True)[:3]}")
 
-                    # Conditional conditional diagnostics: Try to get leaf indices if possible (only for xgb.Booster)
-                    leaves = None
-                    if isinstance(self.model, xgb.Booster):
-                        try:
-                            # predict with pred_leaf=True returns an array of shape (nsamples, ntrees)
-                            leaves = self.model.predict(dmatrix, pred_leaf=True)
-                            logger.info(f"ML RAW COMPRESSION AUDIT: Successfully extracted leaf indices. Shape: {leaves.shape}")
-                        except Exception as e:
-                            logger.warning(f"ML RAW COMPRESSION AUDIT: Could not extract leaves: {e}")
-
                     # Log a sample for the most frequent duplicated probability
                     top_dup_prob, top_dup_count = sorted(duplicates, key=lambda x: x[1], reverse=True)[0]
                     logger.info(f"ML RAW COMPRESSION AUDIT: Sampling rows for raw probability = {top_dup_prob} (Count: {top_dup_count})")
@@ -1477,53 +1474,73 @@ class PredictionEngine:
                     # Store hashes to determine if inputs were identical
                     sampled_feature_hashes = set()
 
+                    # Gather rows sharing this probability
+                    dup_indices = []
                     for idx_batch, p in enumerate(raw_probs):
                         if p is not None and abs(p - top_dup_prob) < 1e-7:
-                            if sampled_count >= 3:
-                                break
+                            dup_indices.append(idx_batch)
 
-                            original_idx = inference_data.index[idx_batch]
-                            row = working_df.loc[original_idx]
-                            feat_dict = inference_data.iloc[idx_batch].to_dict()
+                    # Get leaves ONLY for the duplicated rows
+                    leaves = None
+                    if isinstance(self.model, xgb.Booster) and len(dup_indices) > 0:
+                        try:
+                            # subset dmatrix
+                            subset_data = inference_data.iloc[dup_indices]
+                            subset_dmatrix = xgb.DMatrix(subset_data)
+                            leaves = self.model.predict(subset_dmatrix, pred_leaf=True)
+                            logger.info(f"ML RAW COMPRESSION AUDIT: Successfully extracted leaf indices for duplicated rows. Shape: {leaves.shape}")
+                        except Exception as e:
+                            logger.warning(f"ML RAW COMPRESSION AUDIT: Could not extract leaves for subset: {e}")
 
-                            # Clean up dict for printing (round floats)
-                            clean_feat = {k: round(v, 4) if isinstance(v, float) else v for k, v in feat_dict.items()}
+                    for local_i, idx_batch in enumerate(dup_indices):
+                        if sampled_count >= 3:
+                            break
 
-                            # Create a hash of the feature vector
-                            feat_hash_str = json.dumps(clean_feat, sort_keys=True)
-                            feat_hash = hashlib.md5(feat_hash_str.encode()).hexdigest()
+                        original_idx = inference_data.index[idx_batch]
+                        row = working_df.loc[original_idx]
 
-                            is_duplicate = feat_hash in sampled_feature_hashes
-                            sampled_feature_hashes.add(feat_hash)
+                        # Only hash the strict model columns
+                        feat_dict_strict = inference_data.iloc[idx_batch][model_matrix_cols].to_dict()
+                        feat_dict_full = inference_data.iloc[idx_batch].to_dict()
 
-                            logger.info(f"  --- Duplicate Row {sampled_count+1} ---")
-                            logger.info(f"  League: {row.get('league')}, Matchup: {row.get('matchup_id')}, Market: {row.get('market_type')}")
-                            logger.info(f"  Teams: {row.get('home_team')} vs {row.get('away_team')}")
-                            logger.info(f"  Implied Home Prob: {row.get('implied_home_prob')}, Kalshi Prob: {row.get('kalshi_prob')}, Market Prob: {row.get('market_probability')}")
-                            logger.info(f"  Diff Win Pct: {feat_dict.get('feature_diff_win_pct')}, Diff PPG: {feat_dict.get('feature_diff_ppg')}, Diff Streak: {feat_dict.get('feature_diff_streak')}")
-                            logger.info(f"  Stale Features Used: {used_stale_features.iloc[idx_batch]}")
-                            logger.info(f"  Feature Vector Signature (Hash): {feat_hash}")
-                            if is_duplicate:
-                                logger.info(f"  Input identical to previously sampled row: YES (Exact duplicate inputs)")
+                        # Clean up dict for printing (round floats)
+                        clean_feat = {k: round(v, 4) if isinstance(v, float) else v for k, v in feat_dict_strict.items()}
+
+                        # Create a hash of the STRICT feature vector
+                        feat_hash_str = json.dumps(clean_feat, sort_keys=True)
+                        feat_hash = hashlib.md5(feat_hash_str.encode()).hexdigest()
+
+                        is_duplicate = feat_hash in sampled_feature_hashes
+                        sampled_feature_hashes.add(feat_hash)
+
+                        logger.info(f"  --- Duplicate Row {sampled_count+1} ---")
+                        logger.info(f"  League: {row.get('league')}, Matchup: {row.get('matchup_id')}, Market: {row.get('market_type')}")
+                        logger.info(f"  Teams: {row.get('home_team')} vs {row.get('away_team')}")
+                        logger.info(f"  Implied Home Prob: {row.get('implied_home_prob')}, Kalshi Prob: {row.get('kalshi_prob')}, Market Prob: {row.get('market_probability')}")
+                        logger.info(f"  Diff Win Pct: {feat_dict_full.get('feature_diff_win_pct')}, Diff PPG: {feat_dict_full.get('feature_diff_ppg')}, Diff Streak: {feat_dict_full.get('feature_diff_streak')}")
+                        logger.info(f"  Stale Features Used: {used_stale_features.iloc[idx_batch]}")
+                        logger.info(f"  Feature Vector Signature (Hash): {feat_hash}")
+                        if is_duplicate:
+                            logger.info(f"  Input identical to previously sampled row: YES (Exact duplicate inputs)")
+                        else:
+                            # Check if they are near-identical (e.g. contextual features are default filled)
+                            near_identical = False
+                            if abs(feat_dict_full.get('implied_home_prob', 0) - 0.5) <= 1e-6 and abs(feat_dict_full.get('kalshi_prob', 0) - 0.5) <= 1e-6:
+                                 near_identical = True
+                            if near_identical:
+                                 logger.info(f"  Input identical to previously sampled row: NO (Different inputs mapping to same output, but Contextual Features are DEFAULT/NEUTRAL)")
                             else:
-                                # Check if they are near-identical (e.g. contextual features are default filled)
-                                near_identical = False
-                                if abs(feat_dict.get('implied_home_prob', 0) - 0.5) <= 1e-6 and abs(feat_dict.get('kalshi_prob', 0) - 0.5) <= 1e-6:
-                                     near_identical = True
-                                if near_identical:
-                                     logger.info(f"  Input identical to previously sampled row: NO (Different inputs mapping to same output, but Contextual Features are DEFAULT/NEUTRAL)")
-                                else:
-                                     logger.info(f"  Input identical to previously sampled row: NO (Genuinely different inputs mapping to same coarse XGBoost bucket/leaf path)")
+                                 logger.info(f"  Input identical to previously sampled row: NO (Genuinely different inputs mapping to same coarse XGBoost bucket/leaf path)")
 
-                            logger.info(f"  Feature Vector: {clean_feat}")
+                        logger.info(f"  Feature Vector: {clean_feat}")
 
-                            if leaves is not None:
-                                # Log a hash and the first few tree leaves to show if they differ
-                                row_leaves = leaves[idx_batch]
-                                leaf_hash = hashlib.md5(row_leaves.tobytes()).hexdigest()
-                                logger.info(f"  XGBoost Leaf Path Hash: {leaf_hash} (First 5 leaves: {row_leaves[:5].tolist()})")
+                        if leaves is not None and local_i < len(leaves):
+                            # Log a hash and the first few tree leaves to show if they differ
+                            row_leaves = leaves[local_i]
+                            leaf_hash = hashlib.md5(row_leaves.tobytes()).hexdigest()
+                            logger.info(f"  XGBoost Leaf Path Hash: {leaf_hash} (First 5 leaves: {row_leaves[:5].tolist()})")
 
-                            sampled_count += 1
+                        sampled_count += 1
             except Exception as e:
                 logger.error(f"Error during ML RAW COMPRESSION AUDIT logging: {e}")
             # --- END DIAGNOSTIC LOGGING ---
