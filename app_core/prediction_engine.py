@@ -1416,12 +1416,7 @@ class PredictionEngine:
             rows_using_stale_stats = sum(used_stale_features)
 
             # Contextual inputs checks (must pull from working_df for non-model columns like market_probability)
-            prob_cols = ['market_probability', 'implied_home_prob', 'kalshi_prob', 'ml_probability', 'theover_probability']
-
-            # Find any other prob columns in inference_data or working_df
-            for col in inference_data.columns.tolist() + working_df.columns.tolist():
-                if 'prob' in col.lower() and col not in prob_cols:
-                    prob_cols.append(col)
+            prob_cols = ['market_probability', 'implied_home_prob', 'kalshi_prob']
 
             prob_defaults = {}
             for col in prob_cols:
@@ -1542,7 +1537,7 @@ class PredictionEngine:
                         k_prob = round(float(feat_dict_strict.get('kalshi_prob', 0.5)), 4)
 
                         logger.info(f"  Implied Home Prob: {i_prob}, Kalshi Prob: {k_prob}, Market Prob: {m_prob}")
-                        logger.info(f"  Diff Win Pct: {round(float(feat_dict_full.get('feature_diff_win_pct', 0.0)), 4)}, Diff PPG: {round(float(feat_dict_full.get('feature_diff_ppg', 0.0)), 4)}, Diff Streak: {round(float(feat_dict_full.get('feature_diff_streak', 0.0)), 4)}")
+                        logger.info(f"  Diff Win Pct: {round(float(feat_dict_strict.get('feature_diff_win_pct', 0.0)), 4)}, Diff PPG: {round(float(feat_dict_strict.get('feature_diff_ppg', 0.0)), 4)}, Diff Streak: {round(float(feat_dict_strict.get('feature_diff_streak', 0.0)), 4)}")
                         logger.info(f"  Stale Features Used: {used_stale_features.iloc[idx_batch]}")
                         logger.info(f"  Feature Vector Signature (Hash): {feat_hash}")
                         if is_duplicate:
@@ -1550,7 +1545,7 @@ class PredictionEngine:
                         else:
                             # Check if they are near-identical (e.g. contextual features are default filled)
                             near_identical = False
-                            if abs(feat_dict_full.get('implied_home_prob', 0) - 0.5) <= 1e-6 and abs(feat_dict_full.get('kalshi_prob', 0) - 0.5) <= 1e-6:
+                            if abs(feat_dict_strict.get('implied_home_prob', 0) - 0.5) <= 1e-6 and abs(feat_dict_strict.get('kalshi_prob', 0) - 0.5) <= 1e-6:
                                  near_identical = True
                             if near_identical:
                                  logger.info(f"  Input identical to previously sampled row: NO (Different inputs mapping to same output, but Contextual Features are DEFAULT/NEUTRAL)")

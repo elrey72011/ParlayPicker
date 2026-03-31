@@ -1014,10 +1014,13 @@ def robust_normalize_team(name: str, league: Optional[str] = None) -> str:
             mapped_val = MANUAL_TEAM_OVERRIDES.get(name_upper)
             if mapped_val and mapped_val != name_upper:
                 # Explicitly format as requested by the user
-                logger.info(f"NHL TEAM MAPPING: '{name}' -> '{mapped_val}'")
+                logger.info(f"NHL TEAM MAPPING: '{str(name).strip()}' -> '{mapped_val}'")
+                # Do NOT return immediately here. We want to let it pass through standard logic
+                # if needed, or we can just return it. The prompt asked to log it where it is applied.
+                # Returning here is fine because it's an exact manual override match.
                 return mapped_val
             elif not mapped_val:
-                logger.warning(f"⚠️ NHL Mapping Validation: '{name}' is a raw location. We expect this to be mapped to the full team name in MANUAL_TEAM_OVERRIDES.")
+                pass # Just let it fall through
 
     # 1. Base Normalization Override Check (Check overrides BEFORE aggressive stripping)
     if name_upper in MANUAL_TEAM_OVERRIDES:
@@ -2491,17 +2494,24 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
             return True
         return abs(float(val) - 0.5) <= 1e-6
 
+    # Track how we populated implied_home_prob
+    implied_sources = {"existing_valid": 0, "computed_devig": 0, "side_specific": 0, "defaulted": 0}
+
     # 1. Existing de-vig/market prob
     if 'implied_home_prob' in df.columns:
         implied_probs = pd.to_numeric(df['implied_home_prob'], errors='coerce')
         valid_implied = implied_probs[(implied_probs.notna()) & (~implied_probs.apply(_is_placeholder))]
         prob_series = prob_series.fillna(valid_implied).infer_objects(copy=False)
+        implied_sources["existing_valid"] += int(valid_implied.notna().sum())
 
     if 'market_probability' in df.columns and prob_series.isna().any():
         mkt_probs = pd.to_numeric(df['market_probability'], errors='coerce')
         # only keep if not 0.5 exactly (often a default placeholder)
         valid_mkt = mkt_probs[(mkt_probs.notna()) & (~mkt_probs.apply(_is_placeholder))]
-        prob_series = prob_series.fillna(valid_mkt).infer_objects(copy=False)
+        mask = prob_series.isna() & valid_mkt.notna()
+        if mask.any():
+             prob_series = prob_series.fillna(valid_mkt).infer_objects(copy=False)
+             implied_sources["existing_valid"] += int(mask.sum())
 
     # 2. Compute from raw home/away odds if we have both sides
     # Use fallback novig prices first, then fallback to other odds columns
@@ -2521,11 +2531,13 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                     # de-vig
                     if h_prob > 0 and a_prob > 0:
                         prob_series.at[idx] = h_prob / (h_prob + a_prob)
+                        implied_sources["computed_devig"] += 1
                 elif 1 < h_val < 100 and 1 < a_val < 100: # decimal odds
                     h_prob = 1.0 / h_val
                     a_prob = 1.0 / a_val
                     if h_prob > 0 and a_prob > 0:
                         prob_series.at[idx] = h_prob / (h_prob + a_prob)
+                        implied_sources["computed_devig"] += 1
             except Exception:
                 pass
 
@@ -2554,8 +2566,10 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
             if pd.notna(val) and 0.0 < val < 1.0 and not _is_placeholder(val):
                 if is_home_side:
                     prob_series.at[idx] = val
+                    implied_sources["side_specific"] += 1
                 elif is_away_side:
                     prob_series.at[idx] = 1.0 - val
+                    implied_sources["side_specific"] += 1
                 else:
                     # If orientation is ambiguous, do not guess, skip
                     pass
@@ -2571,12 +2585,9 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
         features_data['market_probability'] = valid_mkt_series.fillna(prob_series).fillna(0.5).infer_objects(copy=False)
 
     # Step 4: Final fallback to 0.5 only if still NaN
+    implied_default_count = int(prob_series.isna().sum())
+    implied_sources["defaulted"] = implied_default_count
     features_data['implied_home_prob'] = prob_series.fillna(0.5).infer_objects(copy=False)
-
-    # Log implied_home_prob usage counts
-    implied_valid_count = len(prob_series.dropna())
-    implied_default_count = len(prob_series[prob_series.isna()])
-    logger.info(f"CONTEXTUAL PROBABILITY AUDIT: implied_home_prob matched/derived {implied_valid_count} rows, defaulted to 0.5 for {implied_default_count} rows.")
 
     features_data['sentiment_diff'] = safe_numeric_fill(df.get('sentiment_diff'), 0.0)
 
@@ -2589,7 +2600,7 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
         k_raw = pd.to_numeric(df[k_col], errors='coerce')
         k_series = k_series.fillna(k_raw.where(~k_raw.apply(_is_placeholder), np.nan)).infer_objects(copy=False)
 
-    k_real_count = len(k_series.dropna())
+    k_real_count = int(k_series.notna().sum())
 
     # 2. Logged proxy (market_probability / implied_home_prob)
     kalshi_proxy_counts = {"market_probability": 0, "implied_home_prob": 0}
@@ -2599,7 +2610,7 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
             mkt_probs_kalshi = features_data['market_probability']
             fallback_mask = k_series.isna() & mkt_probs_kalshi.notna() & (~mkt_probs_kalshi.apply(_is_placeholder))
             if fallback_mask.any():
-                proxy_count = fallback_mask.sum()
+                proxy_count = int(fallback_mask.sum())
                 kalshi_proxy_counts["market_probability"] += proxy_count
                 k_series = k_series.fillna(mkt_probs_kalshi.where(fallback_mask, np.nan)).infer_objects(copy=False)
 
@@ -2608,16 +2619,27 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
             impl_probs_kalshi = features_data['implied_home_prob']
             fallback_mask = k_series.isna() & impl_probs_kalshi.notna() & (~impl_probs_kalshi.apply(_is_placeholder))
             if fallback_mask.any():
-                 proxy_count = fallback_mask.sum()
+                 proxy_count = int(fallback_mask.sum())
                  kalshi_proxy_counts["implied_home_prob"] += proxy_count
                  k_series = k_series.fillna(impl_probs_kalshi.where(fallback_mask, np.nan)).infer_objects(copy=False)
 
-    k_default_count = len(k_series[k_series.isna()])
+    k_default_count = int(k_series.isna().sum())
 
     # 3. Default 0.5
     features_data['kalshi_prob'] = k_series.fillna(0.5).infer_objects(copy=False)
 
-    logger.info(f"CONTEXTUAL PROBABILITY AUDIT: kalshi_prob used real match for {k_real_count} rows, proxy market_probability for {kalshi_proxy_counts['market_probability']} rows, proxy implied_home_prob for {kalshi_proxy_counts['implied_home_prob']} rows, defaulted to 0.5 for {k_default_count} rows.")
+    logger.info(f"--- CONTEXTUAL PROBABILITY AUDIT ---")
+    logger.info(f"implied_home_prob:")
+    logger.info(f"  - Existing valid: {implied_sources['existing_valid']}")
+    logger.info(f"  - Computed de-vig: {implied_sources['computed_devig']}")
+    logger.info(f"  - Side-specific orientation: {implied_sources['side_specific']}")
+    logger.info(f"  - Defaulted to 0.5: {implied_sources['defaulted']}")
+    logger.info(f"kalshi_prob:")
+    logger.info(f"  - Real match: {k_real_count}")
+    logger.info(f"  - Proxy (market_probability): {kalshi_proxy_counts['market_probability']}")
+    logger.info(f"  - Proxy (implied_home_prob): {kalshi_proxy_counts['implied_home_prob']}")
+    logger.info(f"  - Defaulted to 0.5: {k_default_count}")
+    logger.info(f"------------------------------------")
     features_data['injuries_home_count'] = safe_numeric_fill(df.get('injuries_home_count'), 0)
     features_data['injuries_away_count'] = safe_numeric_fill(df.get('injuries_away_count'), 0)
     
