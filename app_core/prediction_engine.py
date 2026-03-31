@@ -1377,6 +1377,31 @@ class PredictionEngine:
             if not inference_data.empty:
                 logger.debug(f"[MODEL_DEBUG] First row sample: {inference_data.iloc[0].to_dict()}")
 
+            # Diagnose flat predictions
+            total_rows_entering_model = len(inference_data)
+            unique_feature_vectors_count = inference_data.drop_duplicates().shape[0]
+            exact_duplicate_vectors_count = total_rows_entering_model - unique_feature_vectors_count
+            rows_using_live_stats = sum(~used_stale_features)
+            rows_using_stale_stats = sum(used_stale_features)
+
+            # Contextual inputs checks (assuming columns exist in the subset)
+            implied_home_default_count = 0
+            kalshi_default_count = 0
+            if 'feature_implied_home_prob' in inference_data.columns:
+                implied_home_default_count = (inference_data['feature_implied_home_prob'] == 0.5).sum()
+            if 'feature_kalshi_prob' in inference_data.columns:
+                kalshi_default_count = (inference_data['feature_kalshi_prob'] == 0.5).sum()
+
+            logger.info(f"--- MODEL INFERENCE DIAGNOSTICS ---")
+            logger.info(f"Total rows entering model: {total_rows_entering_model}")
+            logger.info(f"Unique feature-vector count: {unique_feature_vectors_count}")
+            logger.info(f"Exact duplicate vectors count: {exact_duplicate_vectors_count}")
+            logger.info(f"Rows using true live stats: {rows_using_live_stats}")
+            logger.info(f"Rows using stale/historical/default-filled features: {rows_using_stale_stats}")
+            logger.info(f"Rows where feature_implied_home_prob == 0.5: {implied_home_default_count}")
+            logger.info(f"Rows where feature_kalshi_prob == 0.5: {kalshi_default_count}")
+            logger.info(f"-----------------------------------")
+
             if isinstance(self.model, xgb.Booster):
                 dmatrix = xgb.DMatrix(inference_data)
                 probs = self.model.predict(dmatrix)
