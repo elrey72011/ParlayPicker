@@ -1461,118 +1461,6 @@ class PredictionEngine:
             raw_valid_probs = [p for p in raw_probs if p is not None]
             self._last_metrics["raw_unique_count"] = len(set(raw_valid_probs))
 
-            # --- START DIAGNOSTIC LOGGING FOR RAW DUPLICATES ---
-            # Trigger protective override checks to determine if we should log leaf paths
-            raw_unique_ratio = len(set(raw_valid_probs)) / len(raw_probs) if len(raw_probs) > 0 else 0
-            is_unhealthy_flatness = (len(raw_probs) > 0 and raw_unique_ratio < 0.60)
-
-            try:
-                from collections import Counter
-                raw_prob_counts = Counter(raw_valid_probs)
-                duplicates = [(p, c) for p, c in raw_prob_counts.items() if c > 1]
-
-                # Update unhealthy flag based on absolute thresholds too (same as downstream override logic)
-                total_count = len(inference_data)
-                if not is_unhealthy_flatness and total_count > 0:
-                    max_repeats = max(raw_prob_counts.values()) if raw_prob_counts else 0
-                    if total_count <= 30 and max_repeats >= 2: is_unhealthy_flatness = True
-                    elif total_count <= 60 and max_repeats >= 3: is_unhealthy_flatness = True
-                    elif total_count > 60 and (max_repeats >= 4 or (max_repeats/total_count) >= 0.10): is_unhealthy_flatness = True
-
-                if duplicates and is_unhealthy_flatness:
-                    logger.info(f"ML RAW COMPRESSION AUDIT: Found {len(duplicates)} repeated raw prob values. Top 3: {sorted(duplicates, key=lambda x: x[1], reverse=True)[:3]}")
-
-                    # Log a sample for the most frequent duplicated probability
-                    top_dup_prob, top_dup_count = sorted(duplicates, key=lambda x: x[1], reverse=True)[0]
-                    logger.info(f"ML RAW COMPRESSION AUDIT: Sampling rows for raw probability = {top_dup_prob} (Count: {top_dup_count})")
-
-                    sampled_count = 0
-
-                    # Store hashes to determine if inputs were identical
-                    sampled_feature_hashes = set()
-
-                    # Gather rows sharing this probability
-                    dup_indices = []
-                    for idx_batch, p in enumerate(raw_probs):
-                        if p is not None and abs(p - top_dup_prob) < 1e-7:
-                            dup_indices.append(idx_batch)
-
-                    # Get leaves ONLY for the duplicated rows
-                    leaves = None
-                    if isinstance(self.model, xgb.Booster) and len(dup_indices) > 0:
-                        try:
-                            # subset dmatrix
-                            subset_data = inference_data.iloc[dup_indices]
-                            subset_dmatrix = xgb.DMatrix(subset_data)
-                            leaves = self.model.predict(subset_dmatrix, pred_leaf=True)
-                            logger.info(f"ML RAW COMPRESSION AUDIT: Successfully extracted leaf indices for duplicated rows. Shape: {leaves.shape}")
-                        except Exception as e:
-                            logger.warning(f"ML RAW COMPRESSION AUDIT: Could not extract leaves for subset: {e}")
-
-                    for local_i, idx_batch in enumerate(dup_indices):
-                        if sampled_count >= 3:
-                            break
-
-                        original_idx = inference_data.index[idx_batch]
-                        row = working_df.loc[original_idx]
-
-                        # Only hash the strict model columns
-                        feat_dict_strict = inference_data.iloc[idx_batch][model_matrix_cols].to_dict()
-                        feat_dict_full = inference_data.iloc[idx_batch].to_dict()
-
-                        # Create a list of the exact values in the order of VERTEX_FEATURE_COLUMNS
-                        ordered_values = [round(float(feat_dict_strict.get(c, 0.0)), 5) for c in VERTEX_FEATURE_COLUMNS]
-
-                        # Create a stable hash of the STRICT feature vector
-                        feat_hash_str = json.dumps(ordered_values)
-                        feat_hash = hashlib.md5(feat_hash_str.encode()).hexdigest()
-
-                        is_duplicate = feat_hash in sampled_feature_hashes
-                        sampled_feature_hashes.add(feat_hash)
-
-                        logger.info(f"  --- Duplicate Row {sampled_count+1} ---")
-                        logger.info(f"  League: {row.get('league')}, Matchup: {row.get('matchup_id')}, Market: {row.get('market_type')}")
-                        logger.info(f"  Teams: {row.get('home_team')} vs {row.get('away_team')}")
-
-                        m_prob = round(float(row.get('market_probability', 0.5)), 4) if row.get('market_probability') is not None else 0.5
-                        i_prob = round(float(feat_dict_strict.get('implied_home_prob', 0.5)), 4)
-                        k_prob = round(float(feat_dict_strict.get('kalshi_prob', 0.5)), 4)
-
-                        logger.info(f"  Implied Home Prob: {i_prob}, Kalshi Prob: {k_prob}, Market Prob: {m_prob}")
-                        logger.info(f"  Diff Win Pct: {round(float(feat_dict_strict.get('feature_diff_win_pct', 0.0)), 4)}, Diff PPG: {round(float(feat_dict_strict.get('feature_diff_ppg', 0.0)), 4)}, Diff Streak: {round(float(feat_dict_strict.get('feature_diff_streak', 0.0)), 4)}")
-                        logger.info(f"  Stale Features Used: {used_stale_features.iloc[idx_batch]}")
-                        logger.info(f"  Feature Vector Signature (Hash): {feat_hash}")
-                        if is_duplicate:
-                            logger.info(f"  Input identical to previously sampled row: YES (Exact duplicate inputs)")
-                        else:
-                            # Check if they are near-identical (e.g. contextual features are default filled)
-                            near_identical = False
-                            if abs(feat_dict_strict.get('implied_home_prob', 0) - 0.5) <= 1e-6 and abs(feat_dict_strict.get('kalshi_prob', 0) - 0.5) <= 1e-6:
-                                 near_identical = True
-                            if near_identical:
-                                 logger.info(f"  Input identical to previously sampled row: NO (Different inputs mapping to same output, but Contextual Features are DEFAULT/NEUTRAL)")
-                            else:
-                                 logger.info(f"  Input identical to previously sampled row: NO (Genuinely different inputs mapping to same coarse XGBoost bucket/leaf path)")
-
-                        if leaves is not None and local_i < len(leaves):
-                            # Log a hash and the first few tree leaves to show if they differ
-                            row_leaves = leaves[local_i]
-                            leaf_hash = hashlib.md5(row_leaves.tobytes()).hexdigest()
-                            logger.info(f"  XGBoost Leaf Path Hash: {leaf_hash} (First 5 leaves: {row_leaves[:5].tolist()})")
-
-                        sampled_count += 1
-
-                    # Overall conclusion for this group
-                    if sampled_count > 1:
-                        if len(sampled_feature_hashes) == 1:
-                            logger.info(f"ML RAW COMPRESSION AUDIT CONCLUSION: Flatness caused by EXACTLY IDENTICAL INPUTS (feature collapse).")
-                        elif len(sampled_feature_hashes) < sampled_count:
-                            logger.info(f"ML RAW COMPRESSION AUDIT CONCLUSION: Flatness caused by MIXED identical and near-identical default-filled inputs.")
-                        else:
-                            logger.info(f"ML RAW COMPRESSION AUDIT CONCLUSION: Flatness caused by MODEL COARSENESS (Different inputs mapping to the same leaf path/bucket).")
-            except Exception as e:
-                logger.error(f"Error during ML RAW COMPRESSION AUDIT logging: {e}")
-            # --- END DIAGNOSTIC LOGGING ---
 
             # Jules: MANDATORY Blacklist and Statistical Healing recovery
             BLACKLIST = [0.623034656047821, 0.10671072453260422, 0.48637846, 0.31053704, 0.5622388124465942, 0.562238]
@@ -1927,37 +1815,12 @@ class PredictionEngine:
                 logger.info(f"  - Unique raw scores BEFORE epsilon: {unique_before}/{total_count} (Rows sharing exact values: {identical_before_rows})")
                 logger.info(f"  - Unique final scores AFTER epsilon: {unique_after}/{total_count}")
 
-                if identical_before_rows > 0:
-                    top_dupes = before_eps_counts.most_common(3)
-                    logger.info(f"  - Sample duplicate groups (before epsilon): {top_dupes}")
-
-                    # Detailed sampling of repeated groups
-                    for dup_score, dup_count in top_dupes:
-                        if dup_count > 1:
-                            logger.info(f"    - Inspecting group collapsing to raw score {dup_score:.5f} ({dup_count} rows):")
-                            for idx_batch, score in enumerate(scores_before_eps):
-                                if abs(score - dup_score) < 1e-7:
-                                    row = working_df.iloc[idx_batch]
-                                    feat = inference_data.iloc[idx_batch]
-                                    kalshi_val = feat.get('kalshi_prob', 0.5)
-                                    mkt_prob = chosen_market_probs[idx_batch]
-                                    stale_flag = used_stale_features.iloc[idx_batch]
-
-                                    # Determine what was synthetic
-                                    synth_flags = []
-                                    if abs(feat.get('feature_home_oppg', 0.0)) < 1e-5: synth_flags.append('home_oppg')
-                                    if abs(feat.get('feature_away_rest_days', 0.0)) < 1e-5: synth_flags.append('away_rest')
-
-                                    stats_qual = row.get('stats_quality', 'UNKNOWN')
-                                    sanitized = row.get('sanitized_value', False)
-                                    logger.info(f"ML UNIQUENESS AUDIT:      [{row.get('league')}] {row.get('matchup_id')} | Pick: {row.get('market_type')} | Mkt: {mkt_prob:.3f} | Kalshi: {kalshi_val:.3f} | Stale: {stale_flag} | Synth: {synth_flags} | StatsQual: {stats_qual} | Sanitized: {sanitized}")
             else:
                 self._last_metrics["hybrid_override_triggered"] = False
                 logger.info(f"ML UNIQUENESS AUDIT: Variance looks good ({unique_count}/{total_count}). Hybrid fallback NOT triggered.")
 
             final_unique = len(set(final_probs))
             self._last_metrics["final_unique_count"] = final_unique
-            logger.info(f"PIPELINE TRACE: Final unique probabilities exiting predict_batch: {final_unique} out of {len(final_probs)}")
 
             # --- HEALTH SCORE / SUMMARY BLOCK ---
             logger.info("=" * 60)
