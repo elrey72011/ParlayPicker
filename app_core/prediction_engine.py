@@ -1387,6 +1387,7 @@ class PredictionEngine:
             # Contextual inputs checks (assuming columns exist in the subset)
             implied_home_default_count = 0
             kalshi_default_count = 0
+            market_probability_default_count = 0
             # Note: columns in inference_data typically do not have the 'feature_' prefix for probs, they match VERTEX_FEATURE_COLUMNS exact names.
             if 'implied_home_prob' in inference_data.columns:
                 implied_home_default_count = (inference_data['implied_home_prob'] == 0.5).sum()
@@ -1398,6 +1399,11 @@ class PredictionEngine:
             elif 'feature_kalshi_prob' in inference_data.columns:
                 kalshi_default_count = (inference_data['feature_kalshi_prob'] == 0.5).sum()
 
+            if 'market_probability' in inference_data.columns:
+                market_probability_default_count = (inference_data['market_probability'] == 0.5).sum()
+            elif 'feature_market_probability' in inference_data.columns:
+                market_probability_default_count = (inference_data['feature_market_probability'] == 0.5).sum()
+
             logger.info(f"--- MODEL INFERENCE DIAGNOSTICS ---")
             logger.info(f"Total rows entering model: {total_rows_entering_model}")
             logger.info(f"Unique feature-vector count: {unique_feature_vectors_count}")
@@ -1406,6 +1412,7 @@ class PredictionEngine:
             logger.info(f"Rows using stale/historical/default-filled features: {rows_using_stale_stats}")
             logger.info(f"Rows where implied_home_prob == 0.5: {implied_home_default_count}")
             logger.info(f"Rows where kalshi_prob == 0.5: {kalshi_default_count}")
+            logger.info(f"Rows where market_probability == 0.5: {market_probability_default_count}")
             logger.info(f"-----------------------------------")
 
             if isinstance(self.model, xgb.Booster):
@@ -1492,19 +1499,26 @@ class PredictionEngine:
                             logger.info(f"  --- Duplicate Row {sampled_count+1} ---")
                             logger.info(f"  League: {row.get('league')}, Matchup: {row.get('matchup_id')}, Market: {row.get('market_type')}")
                             logger.info(f"  Teams: {row.get('home_team')} vs {row.get('away_team')}")
-                            logger.info(f"  Implied Home Prob: {row.get('implied_home_prob')}, Kalshi Prob: {row.get('kalshi_prob')}")
+                            logger.info(f"  Implied Home Prob: {row.get('implied_home_prob')}, Kalshi Prob: {row.get('kalshi_prob')}, Market Prob: {row.get('market_probability')}")
                             logger.info(f"  Diff Win Pct: {feat_dict.get('feature_diff_win_pct')}, Diff PPG: {feat_dict.get('feature_diff_ppg')}, Diff Streak: {feat_dict.get('feature_diff_streak')}")
                             logger.info(f"  Stale Features Used: {used_stale_features.iloc[idx_batch]}")
                             logger.info(f"  Feature Vector Signature (Hash): {feat_hash}")
                             if is_duplicate:
-                                logger.info(f"  Input identical to previously sampled row: YES")
+                                logger.info(f"  Input identical to previously sampled row: YES (Exact duplicate inputs)")
                             else:
-                                logger.info(f"  Input identical to previously sampled row: NO (different inputs mapping to same output)")
+                                # Check if they are near-identical (e.g. contextual features are default filled)
+                                near_identical = False
+                                if feat_dict.get('implied_home_prob') == 0.5 and feat_dict.get('kalshi_prob') == 0.5:
+                                     near_identical = True
+                                if near_identical:
+                                     logger.info(f"  Input identical to previously sampled row: NO (Different inputs mapping to same output, but Contextual Features are DEFAULT/NEUTRAL)")
+                                else:
+                                     logger.info(f"  Input identical to previously sampled row: NO (Genuinely different inputs mapping to same coarse XGBoost bucket/leaf path)")
 
                             logger.info(f"  Feature Vector: {clean_feat}")
 
                             if leaves is not None:
-                                # Just log a hash or the first few tree leaves to show if they differ
+                                # Log a hash and the first few tree leaves to show if they differ
                                 row_leaves = leaves[idx_batch]
                                 leaf_hash = hashlib.md5(row_leaves.tobytes()).hexdigest()
                                 logger.info(f"  XGBoost Leaf Path Hash: {leaf_hash} (First 5 leaves: {row_leaves[:5].tolist()})")

@@ -2161,6 +2161,17 @@ def run_analysis_pipeline(
         live_odds_df["matchup_id"] = _matchup_id(live_odds_df)
 
     master_slate = _expand_live_odds_to_bet_rows(live_odds_df, theover_rows)
+
+    # Graceful fallback if Odds API fails or is empty: use theover_rows directly as the master slate.
+    if master_slate.empty and not theover_rows.empty:
+        logger.warning("Live odds expansion returned empty. Falling back to uploaded rows as master slate.")
+        master_slate = theover_rows.copy()
+        if "market_type" not in master_slate.columns:
+             master_slate["market_type"] = pd.NA
+        if "odds_american" not in master_slate.columns:
+             master_slate["odds_american"] = -110.0
+             master_slate["odds_source"] = "fallback_novig"
+
     if master_slate.empty:
         logger.warning("Master slate is empty after odds expansion. Falling back to an empty DataFrame.")
         master_slate = pd.DataFrame(columns=["league", "home_team", "away_team", "game_date", "matchup_id", "market_type", "odds_american", "odds_source"])
