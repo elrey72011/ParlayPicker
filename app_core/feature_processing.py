@@ -2485,11 +2485,16 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     # Step 1: Extract real market-derived probabilities first (Highest Priority)
     prob_series = pd.Series([np.nan]*len(df), index=df.index)
 
+    def _is_placeholder(val):
+        if pd.isna(val):
+            return True
+        return abs(float(val) - 0.5) <= 1e-6
+
     # 1. Existing de-vig/market prob
     if 'market_probability' in df.columns:
         mkt_probs = pd.to_numeric(df['market_probability'], errors='coerce')
         # only keep if not 0.5 exactly (often a default placeholder)
-        valid_mkt = mkt_probs[(mkt_probs.notna()) & (mkt_probs != 0.5)]
+        valid_mkt = mkt_probs[(mkt_probs.notna()) & (~mkt_probs.apply(_is_placeholder))]
         prob_series = prob_series.fillna(valid_mkt).infer_objects(copy=False)
 
     # 2. Compute from raw home/away odds if we have both sides
@@ -2539,7 +2544,7 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                 am = df.loc[idx, 'odds_american']
                 val = ml_to_prob(am)
 
-            if pd.notna(val) and 0.0 < val < 1.0 and val != 0.5:
+            if pd.notna(val) and 0.0 < val < 1.0 and not _is_placeholder(val):
                 if is_home_side:
                     prob_series.at[idx] = val
                 elif is_away_side:
@@ -2555,7 +2560,7 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
         features_data['market_probability'] = prob_series.fillna(0.5).infer_objects(copy=False)
     else:
         mkt_series = pd.to_numeric(df['market_probability'], errors='coerce')
-        valid_mkt_series = mkt_series.where(mkt_series != 0.5, np.nan)
+        valid_mkt_series = mkt_series.where(~mkt_series.apply(_is_placeholder), np.nan)
         features_data['market_probability'] = valid_mkt_series.fillna(prob_series).fillna(0.5).infer_objects(copy=False)
 
     # Step 4: Final fallback to 0.5 only if still NaN
@@ -2570,14 +2575,14 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     # 1. Real matched Kalshi prob
     if k_col:
         k_raw = pd.to_numeric(df[k_col], errors='coerce')
-        k_series = k_series.fillna(k_raw.where(k_raw != 0.5, np.nan)).infer_objects(copy=False)
+        k_series = k_series.fillna(k_raw.where(~k_raw.apply(_is_placeholder), np.nan)).infer_objects(copy=False)
 
     # 2. Logged proxy (market_probability / implied_home_prob)
     if k_series.isna().any():
         # Try market_probability first
         if 'market_probability' in features_data:
             mkt_probs_kalshi = features_data['market_probability']
-            fallback_mask = k_series.isna() & mkt_probs_kalshi.notna() & (mkt_probs_kalshi != 0.5)
+            fallback_mask = k_series.isna() & mkt_probs_kalshi.notna() & (~mkt_probs_kalshi.apply(_is_placeholder))
             if fallback_mask.any():
                 logger.info(f"Kalshi proxy: backfilled {fallback_mask.sum()} missing kalshi_prob with market_probability")
                 k_series = k_series.fillna(mkt_probs_kalshi.where(fallback_mask, np.nan)).infer_objects(copy=False)
@@ -2585,7 +2590,7 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
         # Try implied_home_prob next
         if k_series.isna().any() and 'implied_home_prob' in features_data:
             impl_probs_kalshi = features_data['implied_home_prob']
-            fallback_mask = k_series.isna() & impl_probs_kalshi.notna() & (impl_probs_kalshi != 0.5)
+            fallback_mask = k_series.isna() & impl_probs_kalshi.notna() & (~impl_probs_kalshi.apply(_is_placeholder))
             if fallback_mask.any():
                  logger.info(f"Kalshi proxy: backfilled {fallback_mask.sum()} missing kalshi_prob with implied_home_prob")
                  k_series = k_series.fillna(impl_probs_kalshi.where(fallback_mask, np.nan)).infer_objects(copy=False)

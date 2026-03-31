@@ -38,8 +38,10 @@ def test_sanitization_drops_extreme_odds(monkeypatch):
         sports=["NBA"], max_rows=10, use_ml=False, spreads_df=None, totals_df=None
     )
 
-    # Expect 1 row since the extreme one should be dropped
-    assert len(analysis_df) == 1
+    # We now patch extreme rows instead of dropping them
+    assert len(analysis_df) == 2
+    assert analysis_df.loc[0, "odds_american"] == -110.0
+    assert analysis_df.loc[0, "odds_source"] == "fallback_novig"
     assert analysis_df.iloc[0]["odds_american"] == -110.0
 
 def test_best_picks_keeps_negative_ev():
