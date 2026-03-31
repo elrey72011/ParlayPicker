@@ -1890,7 +1890,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
                 if count > 0:
                     logger.info(f"Validated branch: {status} ({count} rows)")
                 else:
-                    logger.info(f"Branch not exercised: {status} (0 rows)")
+                    logger.info(f"Branch not exercised explicitly logged: {status} (0 rows)")
 
         # Odds Source Counts
         if "odds_source" in best.columns:
