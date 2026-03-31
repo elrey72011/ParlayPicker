@@ -2482,42 +2482,41 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     # Identify implied probability column
     imp_col = next((c for c in df.columns if str(c).lower() in ['implied_prob', 'implied_home_prob', 'implied_prob_home']), None)
 
-    # Step 1: Initialize with existing column or NaNs
-    if imp_col:
-        # Use existing values, coerce errors to NaN
-        prob_series = pd.to_numeric(df[imp_col], errors='coerce')
-    else:
-        prob_series = pd.Series([np.nan]*len(df), index=df.index)
+    # Step 1: Extract real market-derived probabilities first (Highest Priority)
+    prob_series = pd.Series([np.nan]*len(df), index=df.index)
+    if 'market_probability' in df.columns:
+        mkt_probs = pd.to_numeric(df['market_probability'], errors='coerce')
+        prob_series = prob_series.fillna(mkt_probs).infer_objects(copy=False)
+    if 'decimal_odds' in df.columns and prob_series.isna().any():
+        dec_probs = 1 / pd.to_numeric(df['decimal_odds'], errors='coerce')
+        prob_series = prob_series.fillna(dec_probs).infer_objects(copy=False)
+    if 'odds_american' in df.columns and prob_series.isna().any():
+        am_probs = pd.to_numeric(df['odds_american'], errors='coerce').apply(ml_to_prob)
+        prob_series = prob_series.fillna(am_probs).infer_objects(copy=False)
 
-    # Step 2: Extract real market-derived probabilities first
-    if prob_series.isna().any():
-        if 'market_probability' in df.columns:
-            mkt_probs = pd.to_numeric(df['market_probability'], errors='coerce')
-            prob_series = prob_series.fillna(mkt_probs).infer_objects(copy=False)
-        if 'decimal_odds' in df.columns and prob_series.isna().any():
-            dec_probs = 1 / pd.to_numeric(df['decimal_odds'], errors='coerce')
-            prob_series = prob_series.fillna(dec_probs).infer_objects(copy=False)
-        if 'odds_american' in df.columns and prob_series.isna().any():
-            am_probs = pd.to_numeric(df['odds_american'], errors='coerce').apply(ml_to_prob)
-            prob_series = prob_series.fillna(am_probs).infer_objects(copy=False)
-        if 'Home_ML' in df.columns and prob_series.isna().any():
-            ml_probs = df['Home_ML'].apply(ml_to_prob)
-            prob_series = prob_series.fillna(ml_probs).infer_objects(copy=False)
+    # Step 2: Use existing implied_home_prob if available and not yet filled
+    if imp_col and prob_series.isna().any():
+        existing_imp_probs = pd.to_numeric(df[imp_col], errors='coerce')
+        prob_series = prob_series.fillna(existing_imp_probs).infer_objects(copy=False)
+
+    if 'Home_ML' in df.columns and prob_series.isna().any():
+        ml_probs = df['Home_ML'].apply(ml_to_prob)
+        prob_series = prob_series.fillna(ml_probs).infer_objects(copy=False)
 
     # CRITICAL INSTRUCTION: Do NOT backfill `implied_home_prob` from `ml_probability`.
     # Only use real market/de-vig probabilities, or existing valid side-specific implied probability.
 
+    # Check market_probability for excessive 0.5 use
+    if 'market_probability' not in df.columns:
+        # Default to neutral if entirely missing, or fallback to our derived implied prob
+        features_data['market_probability'] = prob_series.fillna(0.5).infer_objects(copy=False)
+    else:
+        mkt_series = pd.to_numeric(df['market_probability'], errors='coerce')
+        # If market_probability is missing, try to use implied_home_prob derived logic as a fallback before 0.5
+        features_data['market_probability'] = mkt_series.fillna(prob_series).fillna(0.5).infer_objects(copy=False)
+
     # Step 3: Final fallback to 0.5 only if still NaN
     features_data['implied_home_prob'] = prob_series.fillna(0.5).infer_objects(copy=False)
-
-    # Check market_probability for excessive 0.5 use
-    if 'market_probability' not in features_data and 'market_probability' not in df.columns:
-        # Default to neutral if entirely missing
-        features_data['market_probability'] = 0.5
-    elif 'market_probability' in df.columns:
-        mkt_series = pd.to_numeric(df['market_probability'], errors='coerce')
-        # If market_probability is missing, try to use implied_home_prob as a fallback before 0.5
-        features_data['market_probability'] = mkt_series.fillna(features_data['implied_home_prob']).infer_objects(copy=False)
 
     features_data['sentiment_diff'] = safe_numeric_fill(df.get('sentiment_diff'), 0.0)
 
