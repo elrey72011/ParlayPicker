@@ -42,7 +42,9 @@ def attach_results(master_df: pd.DataFrame, results_df: pd.DataFrame) -> pd.Data
     league_col = next((c for c in ['league', 'League'] if c in res_df.columns), None)
     date_col = next((c for c in ['date', 'commence', 'Commence (UTC)', 'Date'] if c in res_df.columns), None)
 
-    if not all([home_col, away_col, h_score_col, a_score_col, league_col]):
+    # Allow manual results (matchup_id, outcome) to bypass the column check
+    is_manual_check = 'matchup_id' in res_df.columns and 'outcome' in res_df.columns
+    if not is_manual_check and not all([home_col, away_col, h_score_col, a_score_col, league_col]):
         logger.error(f"results_df missing required columns. Found: {res_df.columns.tolist()}")
         return _add_empty_outcome_columns(df)
 
@@ -62,12 +64,39 @@ def attach_results(master_df: pd.DataFrame, results_df: pd.DataFrame) -> pd.Data
     else:
         res_df['_date_str'] = ""
 
-    # Initialize outcome columns
+# Initialize outcome columns
     df['actual_home_score'] = np.nan
     df['actual_away_score'] = np.nan
     df['spread_result'] = 'N/A'
     df['total_result'] = 'N/A'
     df['ml_result'] = 'N/A'
+    df['Pick_Outcome'] = 'N/A'
+
+    # Check if this is a "Manual Results" dataframe (has matchup_id and outcome, but no scores)
+    is_manual = 'matchup_id' in res_df.columns and 'outcome' in res_df.columns and h_score_col is None and a_score_col is None
+
+    if is_manual:
+        logger.info("Processing manual results based on matchup_id")
+        # Create a mapping dictionary for quick lookup
+        manual_map = dict(zip(res_df['matchup_id'], res_df['outcome']))
+
+        for idx, row in df.iterrows():
+            m_id = str(row.get('matchup_id', ''))
+            if m_id in manual_map:
+                outcome = str(manual_map[m_id]).upper().strip()
+                if outcome in ['WIN', 'LOSS', 'PUSH']:
+                    df.loc[idx, 'Pick_Outcome'] = outcome
+
+                    # Also populate specific results so determining outcome doesn't fail later
+                    best_pick_str = str(row.get('best_pick', '')).lower()
+                    if 'over' in best_pick_str or 'under' in best_pick_str:
+                        df.loc[idx, 'total_result'] = outcome
+                    elif '+' in best_pick_str or '-' in best_pick_str:
+                        df.loc[idx, 'spread_result'] = outcome
+                    else:
+                        df.loc[idx, 'ml_result'] = outcome
+
+        return df
 
     # Match and attach
     for idx, row in df.iterrows():
@@ -266,6 +295,7 @@ def _add_empty_outcome_columns(df: pd.DataFrame) -> pd.DataFrame:
     df['spread_result'] = 'N/A'
     df['total_result'] = 'N/A'
     df['ml_result'] = 'N/A'
+    df['Pick_Outcome'] = 'N/A'
     return df
 
 def _safefloat(val: Any) -> Optional[float]:
