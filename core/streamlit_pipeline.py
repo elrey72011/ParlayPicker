@@ -25,7 +25,8 @@ from core.schema.base_schema import ensure_base_schema
 from core.team_mapper import normalize_team_name, NBA_EXACT_MAP, NHL_EXACT_MAP
 from app_core.weights_config import (
     KALSHI_WEIGHT, MARKET_WEIGHT, ML_MODEL_WEIGHT, THEOVER_WEIGHT, SENTIMENT_WEIGHT,
-    FALLBACK_MARKET_WEIGHT, FALLBACK_ML_WEIGHT, FALLBACK_THEOVER_WEIGHT, FALLBACK_SENTIMENT_WEIGHT
+    FALLBACK_MARKET_WEIGHT, FALLBACK_ML_WEIGHT, FALLBACK_THEOVER_WEIGHT, FALLBACK_SENTIMENT_WEIGHT,
+    LOW_LIQUIDITY_KALSHI_WEIGHT, LOW_LIQUIDITY_ML_MODEL_WEIGHT
 )
 
 warnings.filterwarnings("ignore", category=FutureWarning, module="pandas")
@@ -971,7 +972,7 @@ def compute_blended_probability(
     sentiment = pd.to_numeric(p_sentiment, errors="coerce").fillna(0.5)
     m_type = pd.Series(market_type).fillna("").astype(str).str.lower()
 
-    def _blend_row(p_mkt, p_kal, p_ml, p_the, p_sen, m_typ):
+    def _blend_row(p_mkt, p_kal, p_ml, p_the, p_sen, m_typ, lg):
         if pd.isna(p_mkt):
             p_mkt = p_ml if pd.notna(p_ml) else 0.5
 
@@ -990,6 +991,11 @@ def compute_blended_probability(
             w_ml = ML_MODEL_WEIGHT
             w_the = THEOVER_WEIGHT
             w_sen = SENTIMENT_WEIGHT
+
+            # Market Maturity Overrides (MLB/NHL)
+            if lg and (lg.upper() == "MLB" or lg.upper() == "NHL"):
+                w_kalshi = LOW_LIQUIDITY_KALSHI_WEIGHT
+                w_ml = LOW_LIQUIDITY_ML_MODEL_WEIGHT
 
             # Re-normalize if ML is missing
             if pd.isna(p_ml):
@@ -1025,8 +1031,9 @@ def compute_blended_probability(
 
         return prob
 
-    blended = pd.Series([_blend_row(m, k, l, t, s, typ)
-                         for m, k, l, t, s, typ in zip(market, kalshi, ml, theover, sentiment, m_type)],
+    lg_series = pd.Series(league).fillna("").astype(str)
+    blended = pd.Series([_blend_row(m, k, l, t, s, typ, lg)
+                         for m, k, l, t, s, typ, lg in zip(market, kalshi, ml, theover, sentiment, m_type, lg_series)],
                         index=market.index)
 
     return pd.to_numeric(blended, errors="coerce").clip(0.01, 0.99)
@@ -1730,6 +1737,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
             status = "Fallback / Low Confidence"
         elif ev < 0.005 or edge < 0.01:
             status = "Below Threshold"
+        elif ev > 0.35:
+            status = "High Variance/Speculative"
         else:
             status = "Actionable"
 
@@ -1775,6 +1784,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     # Sort Phase: Use ordered categorical logic for exact ordering.
     status_order = [
         "Actionable",
+        "High Variance/Speculative",
         "Below Threshold",
         "Fallback / Low Confidence",
         "No Play",
@@ -1833,6 +1843,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     if not best.empty:
         status_order = [
             "Actionable",
+            "High Variance/Speculative",
             "Below Threshold",
             "Fallback / Low Confidence",
             "No Play",
