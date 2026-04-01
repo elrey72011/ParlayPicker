@@ -1735,10 +1735,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
             status = "No Play"
         elif is_fallback or is_fallback_odds:
             status = "Fallback / Low Confidence"
-        elif ev < 0.005 or edge < 0.01:
-            status = "Below Threshold"
         elif ev > 0.35:
             status = "High Variance/Speculative"
+        elif ev < 0.005 or edge < 0.01:
+            status = "Below Threshold"
         else:
             status = "Actionable"
 
