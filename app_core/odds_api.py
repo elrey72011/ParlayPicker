@@ -27,7 +27,7 @@ class OddsAPIAuthError(Exception):
 class TheOddsAPIClient:
     BASE_URL = "https://api.the-odds-api.com/v4"
 
-    def __init__(self, api_key: str, regions="us2,eu", markets="h2h,spreads,totals", bookmakers="novig,draftkings,fanduel,pinnacle", oddsFormat="american"):
+    def __init__(self, api_key: str, regions="us2,eu", markets="h2h,spreads,totals", bookmakers="novig,draftkings,fanduel,betmgm", oddsFormat="american"):
         if not api_key:
             raise ValueError("TheOddsAPI API key is required")
 
@@ -288,7 +288,7 @@ def export_raw_odds_api(odds_response: Dict, filename: str = None) -> str:
             for market in book.get('markets', []):
                 if market.get('key') == 'spreads':
                     for o in market.get('outcomes', []):
-                        prefix = f"{book_key}_" if book_key == "novig" else ""
+                        prefix = f"{book_key}_"
                         if o.get('name') == game.get('home_team'):
                             row[f'{prefix}home_point'] = o.get('point')
                             row[f'{prefix}home_price'] = o.get('price')
@@ -299,13 +299,21 @@ def export_raw_odds_api(odds_response: Dict, filename: str = None) -> str:
                 # Extract totals
                 elif market.get('key') == 'totals':
                     for o in market.get('outcomes', []):
-                        prefix = f"{book_key}_" if book_key == "novig" else ""
+                        prefix = f"{book_key}_"
                         if str(o.get('name')).lower() == 'over':
                             row[f'{prefix}over_point'] = o.get('point')
                             row[f'{prefix}over_price'] = o.get('price')
                         elif str(o.get('name')).lower() == 'under':
                             row[f'{prefix}under_point'] = o.get('point')
                             row[f'{prefix}under_price'] = o.get('price')
+                # Extract h2h
+                elif market.get('key') == 'h2h':
+                    for o in market.get('outcomes', []):
+                        prefix = f"{book_key}_"
+                        if o.get('name') == game.get('home_team'):
+                            row[f'{prefix}h2h_home_price'] = o.get('price')
+                        elif o.get('name') == game.get('away_team'):
+                            row[f'{prefix}h2h_away_price'] = o.get('price')
 
             rows.append(row)
 
