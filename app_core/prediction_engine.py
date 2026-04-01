@@ -1445,6 +1445,42 @@ class PredictionEngine:
             else:
                 probs = self.model.predict_proba(inference_data)[:, 1]
 
+            # League-Specific "Scoring Environment" Buffer (NBA/NHL "Under" Bias)
+            # If the current game's projected total is >5% higher than the league's average game total
+            # apply a 10% penalty to the model probability for "Under" picks.
+            from app_core.feature_processing import LEAGUE_AVERAGES
+
+            penalized_probs = []
+            for i, p in enumerate(probs):
+                idx = working_df.index[i]
+                row = working_df.loc[idx]
+                market_type = str(row.get('market_type', '')).lower()
+                league = str(row.get('league', '')).upper()
+
+                # We need to know if it's an under market
+                if market_type == 'total_under':
+                    # Find game total line
+                    total_line = row.get('total_line')
+                    if pd.isna(total_line):
+                        total_line = row.get('total')
+
+                    if pd.notna(total_line):
+                        total_line = float(total_line)
+
+                        # Get baseline for this league
+                        baseline = LEAGUE_AVERAGES.get(league, LEAGUE_AVERAGES["default"])
+                        # Baseline is per-team, so total is ppg * 2
+                        avg_game_total = baseline["ppg"] * 2.0
+
+                        if avg_game_total > 0 and total_line > avg_game_total * 1.05:
+                            # Total is >5% higher than average. Apply 10% penalty.
+                            # The model probability p is the probability of the pick hitting.
+                            # So we penalize it by 10%.
+                            p = float(p) * 0.90
+                penalized_probs.append(p)
+
+            probs = penalized_probs
+
             # Detailed Logging AFTER prediction (Issue #1)
             logger.debug(f"[MODEL_DEBUG] Raw prediction type: {type(probs)}")
             if hasattr(probs, "shape"):

@@ -46,9 +46,14 @@ def attach_results(master_df: pd.DataFrame, results_df: pd.DataFrame) -> pd.Data
         logger.error(f"results_df missing required columns. Found: {res_df.columns.tolist()}")
         return _add_empty_outcome_columns(df)
 
+    from app_core.feature_processing import robust_normalize_team
+    from app_core.prediction_engine import clean_team_name
+
     # Pre-compute normalized names
-    res_df['_norm_home'] = res_df[home_col].apply(lambda x: TeamNameMatcher.normalize(str(x)) if pd.notnull(x) else "")
-    res_df['_norm_away'] = res_df[away_col].apply(lambda x: TeamNameMatcher.normalize(str(x)) if pd.notnull(x) else "")
+    res_df['_norm_home'] = res_df[home_col].apply(lambda x: robust_normalize_team(str(x)).lower() if pd.notnull(x) else "")
+    res_df['_norm_away'] = res_df[away_col].apply(lambda x: robust_normalize_team(str(x)).lower() if pd.notnull(x) else "")
+    res_df['_clean_home'] = res_df[home_col].apply(lambda x: clean_team_name(str(x)) if pd.notnull(x) else "")
+    res_df['_clean_away'] = res_df[away_col].apply(lambda x: clean_team_name(str(x)) if pd.notnull(x) else "")
     res_df['_norm_league'] = res_df[league_col].apply(lambda x: str(x).upper().strip() if pd.notnull(x) else "")
 
     # Process date if available (for exact day matching)
@@ -58,8 +63,8 @@ def attach_results(master_df: pd.DataFrame, results_df: pd.DataFrame) -> pd.Data
         res_df['_date_str'] = ""
 
     # Initialize outcome columns
-    df['actual_home_score'] = pd.NA
-    df['actual_away_score'] = pd.NA
+    df['actual_home_score'] = np.nan
+    df['actual_away_score'] = np.nan
     df['spread_result'] = 'N/A'
     df['total_result'] = 'N/A'
     df['ml_result'] = 'N/A'
@@ -67,8 +72,10 @@ def attach_results(master_df: pd.DataFrame, results_df: pd.DataFrame) -> pd.Data
     # Match and attach
     for idx, row in df.iterrows():
         league = str(row.get('league', '')).upper().strip()
-        home = TeamNameMatcher.normalize(str(row.get('Home', '')))
-        away = TeamNameMatcher.normalize(str(row.get('Away', '')))
+        home = robust_normalize_team(str(row.get('Home', ''))).lower()
+        away = robust_normalize_team(str(row.get('Away', ''))).lower()
+        home_clean = clean_team_name(str(row.get('Home', '')))
+        away_clean = clean_team_name(str(row.get('Away', '')))
 
         # Get date string from master_df
         master_date_str = ""
@@ -81,20 +88,51 @@ def attach_results(master_df: pd.DataFrame, results_df: pd.DataFrame) -> pd.Data
 
         # Helper to check if string contains another string or if they are equal
         def match_name(target, candidates_series):
-             return candidates_series.apply(lambda x: target in x or x in target or target == x)
+            # We want token-based match or substring match that works both ways
+            # target = 'los angeles lakers' (master)
+            # candidate = 'lakers' (results)
+            # 'lakers' in 'los angeles lakers' -> True
+            # if candidate is empty, False
+            def is_match(c):
+                if pd.isna(c) or not c: return False
+                c = str(c)
+                # exact or substring
+                # also lower it again just in case
+                c = c.lower()
+                target_lower = target.lower()
+                if c == target_lower or c in target_lower or target_lower in c: return True
+                return False
 
-        # Find match
-        match_mask = (res_df['_norm_league'] == league) & \
-                     match_name(home, res_df['_norm_home']) & \
-                     match_name(away, res_df['_norm_away'])
+            return candidates_series.apply(is_match).fillna(False).astype(bool)
+
+        mask1 = (res_df['_norm_league'] == league).fillna(False).astype(bool)
+
+        # 1. Try robust normalize match
+        mask2 = match_name(home, res_df['_norm_home'])
+        mask3 = match_name(away, res_df['_norm_away'])
+        match_mask = mask1 & mask2 & mask3
+
+        # 2. Fallback to strict clean match (strips ALL spaces)
+        if not match_mask.any():
+            mask2_clean = match_name(home_clean, res_df['_clean_home'])
+            mask3_clean = match_name(away_clean, res_df['_clean_away'])
+            match_mask = mask1 & mask2_clean & mask3_clean
+
+        # 3. Last resort fallback: check raw names with original logic
+        if not match_mask.any():
+            raw_home = str(row.get('Home', '')).lower()
+            raw_away = str(row.get('Away', '')).lower()
+            mask2_raw = match_name(raw_home, res_df[home_col].fillna("").str.lower())
+            mask3_raw = match_name(raw_away, res_df[away_col].fillna("").str.lower())
+            match_mask = mask1 & mask2_raw & mask3_raw
 
         if master_date_str and date_col:
             # Try strict date match first
-            strict_mask = match_mask & (res_df['_date_str'] == master_date_str)
+            strict_mask = match_mask & (res_df['_date_str'] == master_date_str).fillna(False).astype(bool)
             if strict_mask.any():
                 match_mask = strict_mask
 
-        matches = res_df[match_mask]
+        matches = res_df[match_mask.fillna(False).astype(bool)]
 
         if len(matches) > 0:
             # Use first match
@@ -104,8 +142,8 @@ def attach_results(master_df: pd.DataFrame, results_df: pd.DataFrame) -> pd.Data
             a_score = _safefloat(match[a_score_col])
 
             if h_score is not None and a_score is not None:
-                df.at[idx, 'actual_home_score'] = h_score
-                df.at[idx, 'actual_away_score'] = a_score
+                df.loc[idx, 'actual_home_score'] = h_score
+                df.loc[idx, 'actual_away_score'] = a_score
 
                 # Calculate Spread Result
                 spread_line = _safefloat(row.get('spread_pick_line'))
@@ -135,20 +173,20 @@ def attach_results(master_df: pd.DataFrame, results_df: pd.DataFrame) -> pd.Data
                          # Home spread
                          margin = h_score - a_score
                          if margin + spread_line > 0:
-                             df.at[idx, 'spread_result'] = 'WIN'
+                             df.loc[idx, 'spread_result'] = 'WIN'
                          elif margin + spread_line < 0:
-                             df.at[idx, 'spread_result'] = 'LOSS'
+                             df.loc[idx, 'spread_result'] = 'LOSS'
                          else:
-                             df.at[idx, 'spread_result'] = 'PUSH'
+                             df.loc[idx, 'spread_result'] = 'PUSH'
                      elif pick_side == 'away':
                          # Away spread
                          margin = a_score - h_score
                          if margin + spread_line > 0:
-                             df.at[idx, 'spread_result'] = 'WIN'
+                             df.loc[idx, 'spread_result'] = 'WIN'
                          elif margin + spread_line < 0:
-                             df.at[idx, 'spread_result'] = 'LOSS'
+                             df.loc[idx, 'spread_result'] = 'LOSS'
                          else:
-                             df.at[idx, 'spread_result'] = 'PUSH'
+                             df.loc[idx, 'spread_result'] = 'PUSH'
 
                 # Calculate Total Result
                 total_line = _safefloat(row.get('total_pick_line'))
@@ -171,43 +209,44 @@ def attach_results(master_df: pd.DataFrame, results_df: pd.DataFrame) -> pd.Data
                     actual_total = h_score + a_score
                     if total_side == 'over':
                         if actual_total > total_line:
-                            df.at[idx, 'total_result'] = 'WIN'
+                            df.loc[idx, 'total_result'] = 'WIN'
                         elif actual_total < total_line:
-                            df.at[idx, 'total_result'] = 'LOSS'
+                            df.loc[idx, 'total_result'] = 'LOSS'
                         else:
-                            df.at[idx, 'total_result'] = 'PUSH'
+                            df.loc[idx, 'total_result'] = 'PUSH'
                     elif total_side == 'under':
                         if actual_total < total_line:
-                            df.at[idx, 'total_result'] = 'WIN'
+                            df.loc[idx, 'total_result'] = 'WIN'
                         elif actual_total > total_line:
-                            df.at[idx, 'total_result'] = 'LOSS'
+                            df.loc[idx, 'total_result'] = 'LOSS'
                         else:
-                            df.at[idx, 'total_result'] = 'PUSH'
+                            df.loc[idx, 'total_result'] = 'PUSH'
 
                 # Calculate ML result if best_pick_type is ML (optional fallback)
-                ml_pick_team = str(row.get('Pick', '')).replace(' ML', '')
-                norm_ml = TeamNameMatcher.normalize(ml_pick_team)
+                ml_pick_team = str(row.get('Pick', '')).replace(' ML', '').lower()
+                norm_ml_raw = robust_normalize_team(ml_pick_team).lower()
+                norm_ml_clean = clean_team_name(ml_pick_team)
 
                 if h_score > a_score:
                     # Home won
-                    if home in norm_ml or norm_ml in home:
-                        df.at[idx, 'ml_result'] = 'WIN'
+                    if home in norm_ml_raw or norm_ml_raw in home or home_clean in norm_ml_clean or norm_ml_clean in home_clean:
+                        df.loc[idx, 'ml_result'] = 'WIN'
                     else:
-                        df.at[idx, 'ml_result'] = 'LOSS'
+                        df.loc[idx, 'ml_result'] = 'LOSS'
                 elif a_score > h_score:
                     # Away won
-                    if away in norm_ml or norm_ml in away:
-                        df.at[idx, 'ml_result'] = 'WIN'
+                    if away in norm_ml_raw or norm_ml_raw in away or away_clean in norm_ml_clean or norm_ml_clean in away_clean:
+                        df.loc[idx, 'ml_result'] = 'WIN'
                     else:
-                        df.at[idx, 'ml_result'] = 'LOSS'
+                        df.loc[idx, 'ml_result'] = 'LOSS'
                 else:
-                    df.at[idx, 'ml_result'] = 'PUSH'
+                    df.loc[idx, 'ml_result'] = 'PUSH'
 
     return df
 
 def _add_empty_outcome_columns(df: pd.DataFrame) -> pd.DataFrame:
-    df['actual_home_score'] = pd.NA
-    df['actual_away_score'] = pd.NA
+    df['actual_home_score'] = np.nan
+    df['actual_away_score'] = np.nan
     df['spread_result'] = 'N/A'
     df['total_result'] = 'N/A'
     df['ml_result'] = 'N/A'

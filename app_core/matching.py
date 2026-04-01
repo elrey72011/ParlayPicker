@@ -94,13 +94,15 @@ def team_code_candidates(league: str, team_name: Any) -> List[str]:
 def normalize_market_text(text: str) -> str:
     if not text:
         return ""
+    from app_core.feature_processing import robust_normalize_team
+
+    # We want robust normalization but we also want to remove standard vs/at words
     text = text.lower()
-    # Remove common noise words in sports names, and 'vs'/'at' for clean tokenization
-    text = re.sub(r'\b(state|st\.|univ\.|university|bc|unlv|la|vs|at)\b', '', text)
-    # Remove apostrophes specifically to handle "John's" -> "johns"
-    text = text.replace("'", "")
-    # Keep alphanumeric AND spaces
-    return re.sub(r'[^a-z0-9 ]', '', text).strip()
+    text = re.sub(r'\b(vs\.|vs|v\.|at|@)\b', ' ', text)
+    text = robust_normalize_team(text).lower()
+
+    # Just in case, clean up extra spaces
+    return re.sub(r'\s+', ' ', text).strip()
 
 def filter_kalshi_game_markets(
     markets: List[Dict[str, Any]],
@@ -199,6 +201,20 @@ def filter_kalshi_game_markets(
                      # Fallback if rapidfuzz missing (simple partial matching)
                      if home_norm in market_title and away_norm in market_title:
                          is_match = True
+
+            # 3. Aggressive Stripping Fallback
+            if not is_match:
+                from app_core.prediction_engine import clean_team_name
+                h_clean = clean_team_name(home_team)
+                a_clean = clean_team_name(away_team)
+
+                # We need a cleaned up title and ticker to match against
+                title_clean = re.sub(r'[^a-z0-9]', '', str(m.get("title", "")).lower())
+                ticker_clean = re.sub(r'[^a-z0-9]', '', str(ticker).lower())
+
+                if (h_clean in title_clean or h_clean in ticker_clean) and \
+                   (a_clean in title_clean or a_clean in ticker_clean):
+                    is_match = True
 
             if is_match:
                 matched.append(m)

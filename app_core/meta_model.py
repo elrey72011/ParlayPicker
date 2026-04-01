@@ -15,7 +15,8 @@ META_FEATURES = [
     'theover_prob', 'theover_missing',
     'sentiment_adj', 'sentiment_missing',
     'is_spread', 'is_total',
-    'is_nfl', 'is_nba', 'is_nhl', 'is_ncaab', 'is_ncaaf'
+    'is_nfl', 'is_nba', 'is_nhl', 'is_ncaab', 'is_ncaaf',
+    'feature_diff_win_pct', 'feature_diff_ppg'
 ]
 
 def extract_meta_features(row: Dict[str, Any]) -> Dict[str, float]:
@@ -101,6 +102,19 @@ def extract_meta_features(row: Dict[str, Any]) -> Dict[str, float]:
     features['is_nhl'] = 1.0 if league == 'NHL' else 0.0
     features['is_ncaab'] = 1.0 if league == 'NCAAB' else 0.0
     features['is_ncaaf'] = 1.0 if league == 'NCAAF' else 0.0
+
+    # 8. Feature Differentials
+    diff_win_pct = row.get('feature_diff_win_pct')
+    if diff_win_pct is not None and not pd.isna(diff_win_pct):
+        features['feature_diff_win_pct'] = float(diff_win_pct)
+    else:
+        features['feature_diff_win_pct'] = 0.0
+
+    diff_ppg = row.get('feature_diff_ppg')
+    if diff_ppg is not None and not pd.isna(diff_ppg):
+        features['feature_diff_ppg'] = float(diff_ppg)
+    else:
+        features['feature_diff_ppg'] = 0.0
 
     return features
 

@@ -8,6 +8,10 @@ ML_MODEL_WEIGHT = 0.15    # Historical model
 THEOVER_WEIGHT = 0.125     # TheOver consensus
 SENTIMENT_WEIGHT = 0.05   # News sentiment
 
+# Market Maturity Overrides (MLB/NHL)
+LOW_LIQUIDITY_KALSHI_WEIGHT = 0.30
+LOW_LIQUIDITY_ML_MODEL_WEIGHT = 0.35
+
 # Tier 2: Fallback weights (Kalshi disagrees or unavailable)
 FALLBACK_MARKET_WEIGHT = 0.35
 FALLBACK_ML_WEIGHT = 0.35
