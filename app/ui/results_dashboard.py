@@ -7,7 +7,7 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
     restricted_leagues = st.session_state.get("restricted_leagues", set())
     if restricted_leagues:
         league_str = ", ".join(sorted(list(restricted_leagues)))
-        st.warning(f"Results fetching is currently restricted by the API provider for [{league_str}]. Straight picks and parlays for these leagues cannot be auto-verified at this time.")
+        st.warning(f"Results for [{league_str}] are currently unavailable due to API plan restrictions. These picks must be verified manually.")
 
     if picks_df is None or picks_df.empty:
         st.info("No picks data available for the previous day.")

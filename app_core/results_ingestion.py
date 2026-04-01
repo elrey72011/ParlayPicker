@@ -72,10 +72,14 @@ def attach_results(master_df: pd.DataFrame, results_df: pd.DataFrame) -> pd.Data
     # Match and attach
     for idx, row in df.iterrows():
         league = str(row.get('league', '')).upper().strip()
-        home = robust_normalize_team(str(row.get('Home', ''))).lower()
-        away = robust_normalize_team(str(row.get('Away', ''))).lower()
-        home_clean = clean_team_name(str(row.get('Home', '')))
-        away_clean = clean_team_name(str(row.get('Away', '')))
+        # Fallback names in case master_df has 'home_team' instead of 'Home'
+        home_name = str(row.get('home_team', row.get('Home', '')))
+        away_name = str(row.get('away_team', row.get('Away', '')))
+
+        home = robust_normalize_team(home_name).lower()
+        away = robust_normalize_team(away_name).lower()
+        home_clean = clean_team_name(home_name)
+        away_clean = clean_team_name(away_name)
 
         # Get date string from master_df
         master_date_str = ""
@@ -120,8 +124,8 @@ def attach_results(master_df: pd.DataFrame, results_df: pd.DataFrame) -> pd.Data
 
         # 3. Last resort fallback: check raw names with original logic
         if not match_mask.any():
-            raw_home = str(row.get('Home', '')).lower()
-            raw_away = str(row.get('Away', '')).lower()
+            raw_home = home_name.lower()
+            raw_away = away_name.lower()
             mask2_raw = match_name(raw_home, res_df[home_col].fillna("").str.lower())
             mask3_raw = match_name(raw_away, res_df[away_col].fillna("").str.lower())
             match_mask = mask1 & mask2_raw & mask3_raw
@@ -223,7 +227,7 @@ def attach_results(master_df: pd.DataFrame, results_df: pd.DataFrame) -> pd.Data
                             df.loc[idx, 'total_result'] = 'PUSH'
 
                 # Calculate ML result if best_pick_type is ML (optional fallback)
-                ml_pick_team = str(row.get('Pick', '')).replace(' ML', '').lower()
+                ml_pick_team = str(row.get('best_pick', row.get('Pick', ''))).replace(' ML', '').lower()
                 norm_ml_raw = robust_normalize_team(ml_pick_team).lower()
                 norm_ml_clean = clean_team_name(ml_pick_team)
 
@@ -241,6 +245,18 @@ def attach_results(master_df: pd.DataFrame, results_df: pd.DataFrame) -> pd.Data
                         df.loc[idx, 'ml_result'] = 'LOSS'
                 else:
                     df.loc[idx, 'ml_result'] = 'PUSH'
+
+                # Assign explicitly based on best_pick string
+                best_pick_str = str(row.get('best_pick', '')).lower()
+                if best_pick_str:
+                    if 'over' in best_pick_str or 'under' in best_pick_str:
+                        df.loc[idx, 'Pick_Outcome'] = df.loc[idx, 'total_result']
+                    elif '+' in best_pick_str or '-' in best_pick_str:
+                        df.loc[idx, 'Pick_Outcome'] = df.loc[idx, 'spread_result']
+                    else:
+                        df.loc[idx, 'Pick_Outcome'] = df.loc[idx, 'ml_result']
+                else:
+                    df.loc[idx, 'Pick_Outcome'] = 'N/A'
 
     return df
 
