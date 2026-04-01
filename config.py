@@ -233,3 +233,6 @@ VERTEX_CONFIG = {
 
 # Path to your master history file
 MASTER_DATA_FILE = DATA_DIR / 'master_all_sports.csv'
+
+# API-Sports Supported Leagues for Results Fetching
+SUPPORTED_RESULTS_LEAGUES = ["NBA", "NCAAB", "NHL", "MLB", "NFL"]

@@ -4,6 +4,11 @@ import streamlit as st
 def render_results_dashboard(picks_df: pd.DataFrame) -> None:
     st.subheader("Prior Day Performance")
 
+    restricted_leagues = st.session_state.get("restricted_leagues", set())
+    if restricted_leagues:
+        league_str = ", ".join(sorted(list(restricted_leagues)))
+        st.warning(f"Results fetching is currently restricted by the API provider for [{league_str}]. Straight picks and parlays for these leagues cannot be auto-verified at this time.")
+
     if picks_df is None or picks_df.empty:
         st.info("No picks data available for the previous day.")
         return
@@ -118,4 +123,4 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
               color = 'orange'
          return f'color: {color}'
 
-    st.dataframe(table_df.style.map(color_outcome, subset=['Outcome']), use_container_width=True)
+    st.dataframe(table_df.style.map(color_outcome, subset=['Outcome']), width="stretch")

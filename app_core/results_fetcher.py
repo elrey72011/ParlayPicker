@@ -1,10 +1,12 @@
 import pandas as pd
 import logging
+import streamlit as st
 from datetime import datetime, timedelta
 from typing import List, Dict
 
 from app_core.apisports import APISportsBasketballClient, APISportsHockeyClient, APISportsFootballClient, get_key
 from app_core.apisports_baseball import APISportsBaseballClient
+from config import SUPPORTED_RESULTS_LEAGUES
 
 logger = logging.getLogger(__name__)
 
@@ -16,10 +18,28 @@ def fetch_yesterdays_results(leagues: List[str]) -> pd.DataFrame:
     Returns a unified DataFrame suitable for attach_results:
     ['league', 'home_team', 'away_team', 'home_score', 'away_score', 'date']
     """
+    # Prune leagues using config and session state (Plan-Aware Resilience)
+    try:
+        restricted_leagues = st.session_state.get("restricted_leagues", set())
+    except Exception:
+        restricted_leagues = set()
+
+    active_leagues = [
+        l for l in leagues
+        if l in SUPPORTED_RESULTS_LEAGUES and l not in restricted_leagues
+    ]
+
+    if len(active_leagues) < len(leagues):
+        skipped = set(leagues) - set(active_leagues)
+        logger.info(f"Skipping restricted/unsupported leagues for results fetching: {skipped}")
+
     target_date = (datetime.now() - timedelta(days=1)).date()
-    logger.info(f"Fetching results for {target_date} for leagues: {leagues}")
+    logger.info(f"Fetching results for {target_date} for leagues: {active_leagues}")
 
     results = []
+
+    # Overwrite leagues with the pruned list
+    leagues = active_leagues
 
     # Basketball Client covers NBA and NCAAB
     bball_client = None

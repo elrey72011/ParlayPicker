@@ -247,6 +247,10 @@ class _APISportsBaseClient:
             if resp.status_code == 403:
                 self.last_error = "Plan Restriction (403)"
                 logger.error(f"API-Sports HTTP 403 Error: Plan Restriction / Forbidden on {path}")
+                if self.SPORT_NAME:
+                    restricted = st.session_state.setdefault("restricted_leagues", set())
+                    restricted.add(self.SPORT_NAME)
+                    logger.warning(f"Added {self.SPORT_NAME} to restricted_leagues session state.")
                 return {} # Return empty dict instead of None
 
             if resp.status_code == 429:
