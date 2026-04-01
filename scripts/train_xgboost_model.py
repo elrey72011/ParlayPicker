@@ -44,6 +44,33 @@ def build_features_from_master(df: pd.DataFrame) -> pd.DataFrame:
         "feature_away_rest_days": "feature_away_rest_days"
     }
 
+    # Determine the league for scaling if present
+    if "league" in df.columns:
+        is_nhl = df["league"].str.upper() == "NHL"
+        is_mlb = df["league"].str.upper() == "MLB"
+        is_ncaab = df["league"].str.upper() == "NCAAB"
+        is_ncaaf = df["league"].str.upper() == "NCAAF"
+    else:
+        is_nhl = pd.Series(False, index=df.index)
+        is_mlb = pd.Series(False, index=df.index)
+        is_ncaab = pd.Series(False, index=df.index)
+        is_ncaaf = pd.Series(False, index=df.index)
+
+    for col in ["home_ppg", "home_oppg", "away_ppg", "away_oppg"]:
+        if col in df.columns:
+            # Scale NHL by 35x
+            if is_nhl.any():
+                df[col] = df[col].mask(is_nhl, df[col] * 35.0)
+            # Scale MLB by 25x
+            if is_mlb.any():
+                df[col] = df[col].mask(is_mlb, df[col] * 25.0)
+            # Scale NCAAB by 1.55x
+            if is_ncaab.any():
+                df[col] = df[col].mask(is_ncaab, df[col] * 1.55)
+            # Scale NCAAF by 4.0x
+            if is_ncaaf.any():
+                df[col] = df[col].mask(is_ncaaf, df[col] * 4.0)
+
     # Calculate derived/synthetic columns if missing
     if "feature_diff_win_pct" not in df.columns:
         df["feature_diff_win_pct"] = df["home_win_pct"].fillna(0.5) - df["away_win_pct"].fillna(0.5)
