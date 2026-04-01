@@ -1940,14 +1940,14 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
     if not all_games:
         return pd.DataFrame()
 
-    rows = []
+    game_dict = {}
     for game in all_games:
-        for book in game.get('bookmakers', []):
-            book_key = book.get('key', '')
-            if book_key != 'novig':
-                continue
+        matchup_id = game.get('matchup_id')
+        if not matchup_id:
+            continue
 
-            row = {
+        if matchup_id not in game_dict:
+            game_dict[matchup_id] = {
                 'game_id': game.get('id'),
                 'league': game.get('sport_key', '').split('_')[-1].upper(),
                 'raw_home_team': game.get('home_team'),
@@ -1956,36 +1956,41 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
                 'away_team': game.get('away_team'),
                 'commence_time': game.get('commence_time'),
                 'commence_time_raw': game.get('commence_time'),
-                'matchup_id': game.get('matchup_id'),
-                'odds_source': book_key,
+                'matchup_id': matchup_id,
             }
+
+        row = game_dict[matchup_id]
+
+        for book in game.get('bookmakers', []):
+            book_key = book.get('key', '')
+            if book_key not in ['novig', 'fanduel', 'draftkings', 'betmgm']:
+                continue
 
             for market in book.get('markets', []):
                 if market.get('key') == 'spreads':
                     for o in market.get('outcomes', []):
                         if o.get('name') == game.get('home_team'):
-                            row['novig_home_point'] = o.get('point')
-                            row['novig_home_price'] = o.get('price')
+                            row[f'{book_key}_home_point'] = o.get('point')
+                            row[f'{book_key}_home_price'] = o.get('price')
                         elif o.get('name') == game.get('away_team'):
-                            row['novig_away_point'] = o.get('point')
-                            row['novig_away_price'] = o.get('price')
+                            row[f'{book_key}_away_point'] = o.get('point')
+                            row[f'{book_key}_away_price'] = o.get('price')
                 elif market.get('key') == 'totals':
                     for o in market.get('outcomes', []):
                         if str(o.get('name')).lower() == 'over':
-                            row['novig_over_point'] = o.get('point')
-                            row['novig_over_price'] = o.get('price')
+                            row[f'{book_key}_over_point'] = o.get('point')
+                            row[f'{book_key}_over_price'] = o.get('price')
                         elif str(o.get('name')).lower() == 'under':
-                            row['novig_under_point'] = o.get('point')
-                            row['novig_under_price'] = o.get('price')
+                            row[f'{book_key}_under_point'] = o.get('point')
+                            row[f'{book_key}_under_price'] = o.get('price')
                 elif market.get('key') == 'h2h':
                     for o in market.get('outcomes', []):
                         if o.get('name') == game.get('home_team'):
-                            row['novig_h2h_home_price'] = o.get('price')
+                            row[f'{book_key}_h2h_home_price'] = o.get('price')
                         elif o.get('name') == game.get('away_team'):
-                            row['novig_h2h_away_price'] = o.get('price')
-            rows.append(row)
+                            row[f'{book_key}_h2h_away_price'] = o.get('price')
 
-    return pd.DataFrame(rows)
+    return pd.DataFrame(list(game_dict.values()))
 
 def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.DataFrame | None = None) -> pd.DataFrame:
     """
@@ -2026,12 +2031,12 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
                     emit_h2h = "h2h_away"
 
         market_mappings = {
-            "spread_home": ("novig_home_price", "novig_home_point", "odds_source_spread"),
-            "spread_away": ("novig_away_price", "novig_away_point", "odds_source_spread"),
-            "total_over": ("novig_over_price", "novig_over_point", "odds_source_total"),
-            "total_under": ("novig_under_price", "novig_under_point", "odds_source_total"),
-            "h2h_home": ("novig_h2h_home_price", None, "odds_source_h2h"),
-            "h2h_away": ("novig_h2h_away_price", None, "odds_source_h2h")
+            "spread_home": ("home_price", "home_point"),
+            "spread_away": ("away_price", "away_point"),
+            "total_over": ("over_price", "over_point"),
+            "total_under": ("under_price", "under_point"),
+            "h2h_home": ("h2h_home_price", None),
+            "h2h_away": ("h2h_away_price", None)
         }
 
         # Consolidate to 2 rows: Side + Total. Use H2H for NHL, Spread for others.
@@ -2042,12 +2047,15 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
             side_market = emit_spread
 
         for market_type in [side_market, emit_total]:
-            price_col, point_col, source_col = market_mappings[market_type]
+            price_suffix, point_suffix = market_mappings[market_type]
             market_dict = base_dict.copy()
             market_dict["market_type"] = market_type
 
-            # Map pricing
-            price_val = pd.to_numeric(row.get(price_col), errors="coerce")
+            # Map pricing for novig (primary)
+            novig_price_col = f"novig_{price_suffix}"
+            novig_point_col = f"novig_{point_suffix}" if point_suffix else None
+
+            price_val = pd.to_numeric(row.get(novig_price_col), errors="coerce")
             if pd.isna(price_val):
                 market_dict["odds_american"] = -110.0
                 market_dict["odds_source"] = "fallback_novig"
@@ -2055,9 +2063,18 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
                 market_dict["odds_american"] = float(price_val)
                 market_dict["odds_source"] = "odds_api"
 
+            # Map pricing for other bookmakers
+            for book_key in ["fanduel", "draftkings", "betmgm"]:
+                book_price_col = f"{book_key}_{price_suffix}"
+                book_price_val = pd.to_numeric(row.get(book_price_col), errors="coerce")
+                if pd.notna(book_price_val):
+                    market_dict[f"odds_american_{book_key}"] = float(book_price_val)
+                else:
+                    market_dict[f"odds_american_{book_key}"] = pd.NA
+
             # Map lines based on market type
-            if point_col:
-                point_val = pd.to_numeric(row.get(point_col), errors="coerce")
+            if novig_point_col:
+                point_val = pd.to_numeric(row.get(novig_point_col), errors="coerce")
             else:
                 point_val = pd.NA
 
@@ -2892,11 +2909,27 @@ def run_analysis_pipeline(
 
 
 def generate_parlays(best_picks_df: pd.DataFrame, max_legs: int = 3) -> pd.DataFrame:
-    from core.kelly_optimizer import kelly_fraction
+    from core.kelly_optimizer import kelly_fraction, add_kelly_bet_sizing, apply_simultaneous_kelly
+    from core.smart_parlay_engine import generate_smart_parlays
+
+    # We now fully delegate to smart_parlay_engine
+    if best_picks_df is None or best_picks_df.empty:
+        return pd.DataFrame()
+
+    parlays_df = generate_smart_parlays(best_picks_df, num_rr_candidates=5)
+
+    if parlays_df.empty:
+        return parlays_df
+
+    # Assume a default $1000 bankroll for Kelly fractional sizing during export if not provided
+    parlays_df = add_kelly_bet_sizing(parlays_df, bankroll=1000.0, fraction=0.125) # 1/8th Kelly
+    parlays_df = apply_simultaneous_kelly(parlays_df, bankroll=1000.0, max_exposure=0.05)
+
+    return parlays_df
+
+    # Legacy code below:
     leg_game_cols = [f"leg{i}_game" for i in range(1, max_legs + 1)]
     cols = ["parlay_type", "parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "kelly_fraction_1_8", "legs", *leg_game_cols]
-    if best_picks_df is None or best_picks_df.empty:
-        return pd.DataFrame(columns=cols)
     df = best_picks_df.copy()
     df = df[_string_series(df, "best_pick").str.strip().str.len() > 0].copy()
 
@@ -3014,7 +3047,6 @@ def generate_parlays(best_picks_df: pd.DataFrame, max_legs: int = 3) -> pd.DataF
         if col not in out.columns:
             out[col] = pd.NA
     return out[cols]
-
 
 def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float = 1000.0) -> pd.DataFrame:
     if best_picks_df is None or best_picks_df.empty:
