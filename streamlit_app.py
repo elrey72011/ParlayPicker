@@ -943,11 +943,26 @@ def main() -> None:
             table_df = table_df[["Parlay", "combined_probability", "combined_decimal_odds", "parlay_ev", "kelly_fraction_1_8", "legs"]]
             st.write(table_df.to_html(escape=False, index=False), unsafe_allow_html=True)
 
-        parlay_csv = base_parlays_df.to_csv(index=False)
+        # Rearrange columns for the export
+        parlay_export_columns = [
+            "risk_tier", "group_id", "parlay_legs", "combined_probability", "combined_decimal_odds",
+            "parlay_ev", "legs", "combined_market_prob", "ev_boost_pct", "is_high_correlation",
+            "best_payout_book", "Conviction_Score", "kelly_fraction_1_8"
+        ]
+        export_parlays_df = base_parlays_df.copy()
+
+        # Ensure all columns exist before selecting
+        for col in parlay_export_columns:
+            if col not in export_parlays_df.columns:
+                export_parlays_df[col] = pd.NA
+
+        export_parlays_df = export_parlays_df[parlay_export_columns]
+
+        parlay_csv = export_parlays_df.to_csv(index=False, encoding="utf-8-sig")
         st.download_button(
-            "Download Parlays CSV",
+            "Export Strategic Parlays",
             parlay_csv,
-            "parlays_export.csv",
+            "smart_parlays_export.csv",
             mime="text/csv",
             key="download_parlays_csv",
         )

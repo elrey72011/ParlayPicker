@@ -40,43 +40,36 @@ def generate_smart_parlays(df: pd.DataFrame, num_rr_candidates: int = 5) -> pd.D
         for combo in combinations(candidate_bets.index, leg_count):
             legs = candidate_bets.loc[list(combo)]
 
-            # Default independent probability calculation
-            combined_probability = float(legs["calibrated_probability"].prod())
-            combined_market_prob = float(legs["market_probability"].prod())
-            combined_decimal_odds = float(legs["decimal_odds"].prod())
-
-            # Correlation adjustments
-            is_high_correlation = False
             unique_matchups = legs["matchup_id"].unique()
-            if len(unique_matchups) < leg_count:
-                is_high_correlation = True
+            is_high_correlation = len(unique_matchups) < leg_count
 
-                # Apply Power-Law Adjustment for correlated legs grouping by matchup_id
-                rho = 0.8
+            rho = 0.8
 
-                # Calculate adjusted model probability
-                adj_prob = 1.0
-                for matchup_id in unique_matchups:
-                    matchup_legs = legs[legs["matchup_id"] == matchup_id]
-                    if len(matchup_legs) > 1:
-                        p_prod = matchup_legs["calibrated_probability"].prod()
-                        p_min = matchup_legs["calibrated_probability"].min()
-                        adj_prob *= (p_prod ** (1 - rho)) * (p_min ** rho)
-                    else:
-                        adj_prob *= matchup_legs["calibrated_probability"].iloc[0]
-                combined_probability = float(adj_prob)
+            # Calculate adjusted model probability (Power-Law Adjustment for all)
+            adj_prob = 1.0
+            for matchup_id in unique_matchups:
+                matchup_legs = legs[legs["matchup_id"] == matchup_id]
+                if len(matchup_legs) > 1:
+                    p_prod = matchup_legs["calibrated_probability"].prod()
+                    p_min = matchup_legs["calibrated_probability"].min()
+                    adj_prob *= (p_prod ** (1 - rho)) * (p_min ** rho)
+                else:
+                    adj_prob *= matchup_legs["calibrated_probability"].iloc[0]
+            combined_probability = float(adj_prob)
 
-                # Calculate adjusted market probability using same correlation adjustment
-                adj_market_prob = 1.0
-                for matchup_id in unique_matchups:
-                    matchup_legs = legs[legs["matchup_id"] == matchup_id]
-                    if len(matchup_legs) > 1:
-                        p_prod = matchup_legs["market_probability"].prod()
-                        p_min = matchup_legs["market_probability"].min()
-                        adj_market_prob *= (p_prod ** (1 - rho)) * (p_min ** rho)
-                    else:
-                        adj_market_prob *= matchup_legs["market_probability"].iloc[0]
-                combined_market_prob = float(adj_market_prob)
+            # Calculate adjusted market probability (Power-Law Adjustment for all)
+            adj_market_prob = 1.0
+            for matchup_id in unique_matchups:
+                matchup_legs = legs[legs["matchup_id"] == matchup_id]
+                if len(matchup_legs) > 1:
+                    p_prod = matchup_legs["market_probability"].prod()
+                    p_min = matchup_legs["market_probability"].min()
+                    adj_market_prob *= (p_prod ** (1 - rho)) * (p_min ** rho)
+                else:
+                    adj_market_prob *= matchup_legs["market_probability"].iloc[0]
+            combined_market_prob = float(adj_market_prob)
+
+            combined_decimal_odds = float(legs["decimal_odds"].prod())
 
             # --- Line Shopping Logic ---
             best_book_name = "novig"
@@ -174,37 +167,34 @@ def generate_smart_parlays(df: pd.DataFrame, num_rr_candidates: int = 5) -> pd.D
             for combo in combinations(rr_candidates.index, leg_count):
                 legs = rr_candidates.loc[list(combo)]
 
-                # Default independent probability calculation
-                combined_probability = float(legs["calibrated_probability"].prod())
-                combined_market_prob = float(legs["market_probability"].prod())
-
-                # Correlation adjustments
-                is_high_correlation = False
                 unique_matchups = legs["matchup_id"].unique()
-                if len(unique_matchups) < leg_count:
-                    is_high_correlation = True
-                    rho = 0.8
-                    adj_prob = 1.0
-                    for matchup_id in unique_matchups:
-                        matchup_legs = legs[legs["matchup_id"] == matchup_id]
-                        if len(matchup_legs) > 1:
-                            p_prod = matchup_legs["calibrated_probability"].prod()
-                            p_min = matchup_legs["calibrated_probability"].min()
-                            adj_prob *= (p_prod ** (1 - rho)) * (p_min ** rho)
-                        else:
-                            adj_prob *= matchup_legs["calibrated_probability"].iloc[0]
-                    combined_probability = float(adj_prob)
+                is_high_correlation = len(unique_matchups) < leg_count
 
-                    adj_market_prob = 1.0
-                    for matchup_id in unique_matchups:
-                        matchup_legs = legs[legs["matchup_id"] == matchup_id]
-                        if len(matchup_legs) > 1:
-                            p_prod = matchup_legs["market_probability"].prod()
-                            p_min = matchup_legs["market_probability"].min()
-                            adj_market_prob *= (p_prod ** (1 - rho)) * (p_min ** rho)
-                        else:
-                            adj_market_prob *= matchup_legs["market_probability"].iloc[0]
-                    combined_market_prob = float(adj_market_prob)
+                rho = 0.8
+
+                # Calculate adjusted model probability (Power-Law Adjustment for all)
+                adj_prob = 1.0
+                for matchup_id in unique_matchups:
+                    matchup_legs = legs[legs["matchup_id"] == matchup_id]
+                    if len(matchup_legs) > 1:
+                        p_prod = matchup_legs["calibrated_probability"].prod()
+                        p_min = matchup_legs["calibrated_probability"].min()
+                        adj_prob *= (p_prod ** (1 - rho)) * (p_min ** rho)
+                    else:
+                        adj_prob *= matchup_legs["calibrated_probability"].iloc[0]
+                combined_probability = float(adj_prob)
+
+                # Calculate adjusted market probability (Power-Law Adjustment for all)
+                adj_market_prob = 1.0
+                for matchup_id in unique_matchups:
+                    matchup_legs = legs[legs["matchup_id"] == matchup_id]
+                    if len(matchup_legs) > 1:
+                        p_prod = matchup_legs["market_probability"].prod()
+                        p_min = matchup_legs["market_probability"].min()
+                        adj_market_prob *= (p_prod ** (1 - rho)) * (p_min ** rho)
+                    else:
+                        adj_market_prob *= matchup_legs["market_probability"].iloc[0]
+                combined_market_prob = float(adj_market_prob)
 
                 # Line Shopping
                 best_book_name = "novig"
