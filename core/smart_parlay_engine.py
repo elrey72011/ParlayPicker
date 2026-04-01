@@ -13,12 +13,12 @@ def generate_smart_parlays(df: pd.DataFrame, num_rr_candidates: int = 5) -> pd.D
     columns = [
         "parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev",
         "legs", "combined_market_prob", "ev_boost_pct", "is_high_correlation",
-        "risk_tier", "group_id", "best_payout_book"
+        "risk_tier", "group_id", "best_payout_book", "Conviction_Score"
     ]
     if df is None or df.empty:
         return pd.DataFrame(columns=columns)
 
-    needed = {"edge", "calibrated_probability", "decimal_odds", "market_probability", "matchup_id"}
+    needed = {"edge", "calibrated_probability", "decimal_odds", "market_probability", "matchup_id", "Conviction_Score"}
     if not needed.issubset(df.columns):
         return pd.DataFrame(columns=columns)
 
@@ -111,6 +111,9 @@ def generate_smart_parlays(df: pd.DataFrame, num_rr_candidates: int = 5) -> pd.D
 
             ev_boost_pct = (combined_probability - combined_market_prob) / combined_market_prob if combined_market_prob > 0 else 0.0
 
+            # Conviction Score calculation
+            parlay_conviction = float(legs["Conviction_Score"].mean()) if "Conviction_Score" in legs.columns else pd.NA
+
             labels: list[str] = []
             for _, row in legs.iterrows():
                 if "best_pick" in label_cols and pd.notna(row.get("best_pick")) and str(row.get("best_pick")).strip():
@@ -147,6 +150,7 @@ def generate_smart_parlays(df: pd.DataFrame, num_rr_candidates: int = 5) -> pd.D
                     "risk_tier": risk_tier,
                     "group_id": pd.NA,
                     "best_payout_book": best_book_name.capitalize() if best_book_name != "novig" else "Novig",
+                    "Conviction_Score": parlay_conviction,
                 }
             )
 
@@ -227,6 +231,9 @@ def generate_smart_parlays(df: pd.DataFrame, num_rr_candidates: int = 5) -> pd.D
 
                 ev_boost_pct = (combined_probability - combined_market_prob) / combined_market_prob if combined_market_prob > 0 else 0.0
 
+                # Conviction Score calculation
+                parlay_conviction = float(legs["Conviction_Score"].mean()) if "Conviction_Score" in legs.columns else pd.NA
+
                 labels: list[str] = []
                 for _, row in legs.iterrows():
                     if "best_pick" in label_cols and pd.notna(row.get("best_pick")) and str(row.get("best_pick")).strip():
@@ -253,6 +260,7 @@ def generate_smart_parlays(df: pd.DataFrame, num_rr_candidates: int = 5) -> pd.D
                         "risk_tier": "Round Robin",
                         "group_id": rr_group_id,
                         "best_payout_book": best_book_name.capitalize() if best_book_name != "novig" else "Novig",
+                        "Conviction_Score": parlay_conviction,
                     }
                 )
 

@@ -40,6 +40,13 @@ def render_parlays(parlays: pd.DataFrame) -> None:
             "High Correlation",
             help="Indicates if legs share a game, increasing true probability",
         ),
+        "Conviction_Score": st.column_config.ProgressColumn(
+            "Conviction",
+            help="High-reliability score based on historical calibration",
+            format="%.2f",
+            min_value=0.0,
+            max_value=1.0,
+        ),
         "best_payout_book": st.column_config.TextColumn(
             "Best Bookmaker",
             help="The bookmaker offering the best payout for this exact parlay",
