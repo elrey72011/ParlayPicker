@@ -1,0 +1,6 @@
+league,matchup_id,matchup,game_date,Pick_Status,best_pick,expected_value,edge,Combined_Model_Prob,Combined_Market_Prob,decimal_odds,american_odds,home_team,away_team
+NBA,NBA_LAL_BOS,Los Angeles Lakers @ Boston Celtics,2026-03-31,Actionable,Los Angeles Lakers,0.05,0.04,0.55,0.5,1.95,-105,Boston Celtics,Los Angeles Lakers
+NHL,NHL_NYR_NJD,New York Rangers @ New Jersey Devils,2026-03-31,Actionable,Under 5.5,0.08,0.06,0.58,0.5,1.95,-105,New Jersey Devils,New York Rangers
+NCAAB,NCAAB_DUKE_UNC,Duke Blue Devils @ North Carolina Tar Heels,2026-03-31,Actionable,Duke Blue Devils -3.5,0.03,0.02,0.53,0.5,1.9,-110,North Carolina Tar Heels,Duke Blue Devils
+MLB,MLB_NYY_BOS,New York Yankees @ Boston Red Sox,2026-03-31,High Variance,New York Yankees,0.06,0.05,0.56,0.5,2.05,105,Boston Red Sox,New York Yankees
+NFL,NFL_KC_SF,Kansas City Chiefs @ San Francisco 49ers,2026-03-31,Actionable,Over 47.5,0.02,0.01,0.52,0.5,1.9,-110,San Francisco 49ers,Kansas City Chiefs
