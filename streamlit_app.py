@@ -727,7 +727,20 @@ def main() -> None:
     with tab_performance:
         from app_core.performance_pipeline import run_performance_pipeline
         from app.ui.results_dashboard import render_results_dashboard
-        perf_df = run_performance_pipeline()
+
+        # Load the performance metrics
+        if "performance_df" not in st.session_state:
+             with st.spinner("Fetching yesterday's results..."):
+                  st.session_state["performance_df"] = run_performance_pipeline()
+
+        perf_df = st.session_state.get("performance_df")
+        if perf_df is None:
+             from datetime import datetime, timedelta
+             yesterday = (datetime.now() - timedelta(days=1)).date()
+             st.info(f"No export data found for {yesterday.strftime('%Y-%m-%d')}.")
+
+        # We still want to call render_results_dashboard to show the file uploader
+        # even if perf_df is None
         render_results_dashboard(perf_df)
 
     if analysis_df is None or analysis_df.empty:
@@ -925,24 +938,6 @@ def main() -> None:
                 "best_picks_export.csv",
                 mime="text/csv",
             )
-
-    with tab_performance:
-        from app.ui.results_dashboard import render_results_dashboard
-        from app_core.performance_pipeline import run_performance_pipeline
-
-        # Load the performance metrics
-        if "performance_df" not in st.session_state:
-             with st.spinner("Fetching yesterday's results..."):
-                  st.session_state["performance_df"] = run_performance_pipeline()
-
-        perf_df = st.session_state.get("performance_df")
-        if perf_df is None:
-             # Look up what the function `find_yesterdays_export` actually outputs for the error.
-             from datetime import datetime, timedelta
-             yesterday = (datetime.now() - timedelta(days=1)).date()
-             st.info(f"No export data found for {yesterday.strftime('%Y-%m-%d')}.")
-        else:
-             render_results_dashboard(perf_df)
 
     with tab4:
         st.subheader("Best Parlays")
