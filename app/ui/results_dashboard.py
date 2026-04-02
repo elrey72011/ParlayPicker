@@ -158,9 +158,7 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
          'home_team': 'Home',
          'away_team': 'Away',
          'best_pick': 'Pick Taken',
-         'Pick_Status': 'Status',
-         'actual_home_score': 'Actual Home Score',
-         'actual_away_score': 'Actual Away Score'
+         'Pick_Status': 'Status'
     }
 
     table_df = display_df[cols_to_show].rename(columns=rename_map)
@@ -171,10 +169,24 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
         width="stretch",
         disabled=["League", "Home", "Away", "Pick Taken", "Status"],
         column_config={
-            "Outcome": st.column_config.SelectColumn(
+            "actual_home_score": st.column_config.NumberColumn(
+                "Home Score",
+                min_value=0,
+                step=1,
+                format="%d",
+                required=True
+            ),
+            "actual_away_score": st.column_config.NumberColumn(
+                "Away Score",
+                min_value=0,
+                step=1,
+                format="%d",
+                required=True
+            ),
+            "Outcome": st.column_config.SelectboxColumn(
                 "Outcome",
                 options=["WIN", "LOSS", "PUSH", "N/A"],
-                required=False
+                required=True
             )
         },
         key="perf_data_editor"
