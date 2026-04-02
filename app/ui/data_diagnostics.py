@@ -134,4 +134,4 @@ def show_data_diagnostics(
         ],
     }
 
-    st.dataframe(data)
+    st.dataframe(data, width="stretch")

@@ -477,14 +477,6 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
         **empty_per_leg,
     }
 
-    tab1, tab2, tab3, tab_performance, tab4, tab5, tab6, tab7 = st.tabs(["Odds", "Analysis", "Best Picks", "Performance Recap", "Parlays", "Portfolio", "Debug", "Strategy Lab"])
-
-    with tab_performance:
-        from app_core.performance_pipeline import run_performance_pipeline
-        from app.ui.results_dashboard import render_results_dashboard
-        perf_df = run_performance_pipeline()
-        render_results_dashboard(perf_df)
-
     if analysis_df is None or analysis_df.empty:
         deferred_warnings.append("No rows found for the selected sports.")
         return empty_state, deferred_warnings, deferred_errors
@@ -836,7 +828,7 @@ def main() -> None:
 
         if display_df.empty:
             st.warning("⚠️ No games found.")
-            st.dataframe(display_df)
+            st.dataframe(display_df, width="stretch")
         else:
             st.success(f"✅ {len(display_df)} games found")
             rename_map = {

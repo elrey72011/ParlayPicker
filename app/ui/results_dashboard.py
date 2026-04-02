@@ -12,28 +12,36 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
         st.warning(f"Results for [{league_str}] are currently unavailable due to API plan restrictions. These picks must be verified manually.")
 
     # 1. File Uploader for Yesterday's Picks
-    uploaded_picks_file = st.file_uploader("Upload Yesterday's Best Picks Export", type=["csv"])
+    # The file uploader returns a file-like object directly.
+    # We should also check the session_state just in case.
+    uploaded_picks_file = st.file_uploader("Upload Yesterday's Best Picks Export", type=["csv"], key="perf_picks_uploader")
+
+    # Re-evaluate the source data based on the explicit uploader first
     if uploaded_picks_file is not None:
         try:
+            # We must reset the file pointer to 0 because the file might have been read before
+            uploaded_picks_file.seek(0)
             picks_df = pd.read_csv(uploaded_picks_file)
             st.success("Successfully loaded uploaded picks.")
         except Exception as e:
             st.error(f"Error reading uploaded picks file: {e}")
+            picks_df = None
 
     if picks_df is None or picks_df.empty:
         st.info("No picks data available for the previous day. Please upload a file above.")
         return
 
     # 2. Toggle to fetch scores from API
-    fetch_api = st.toggle("Fetch Scores from API", value=False)
+    fetch_api = st.toggle("Fetch Scores from API", value=False, key="perf_api_toggle")
 
     # 3. File Uploader for Manual Results
-    uploaded_manual_results = st.file_uploader("Upload Manual Results CSV (If API restricted)", type=["csv"])
+    uploaded_manual_results = st.file_uploader("Upload Manual Results CSV (If API restricted)", type=["csv"], key="perf_manual_results_uploader")
 
     has_results = False
 
     if uploaded_manual_results is not None:
         try:
+            uploaded_manual_results.seek(0)
             manual_results_df = pd.read_csv(uploaded_manual_results)
             picks_df = attach_results(picks_df, manual_results_df)
             st.success("Successfully applied manual results.")
