@@ -1695,37 +1695,33 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         edge = best.at[idx, "edge"]
         market_type = str(best.at[idx, "market_type"]) if "market_type" in best.columns else ""
 
+        # Calibrated/Win probability (ensure 0-1)
+        win_prob = best.at[idx, "calibrated_probability"] if "calibrated_probability" in best.columns else 0.5
+        win_prob = win_prob if pd.notna(win_prob) else 0.5
+
         # Check fallback indicators
         stale = bool(best.at[idx, "used_stale_features"]) if "used_stale_features" in best.columns and pd.notna(best.at[idx, "used_stale_features"]) else False
         odds_source = str(best.at[idx, "odds_source"]).lower() if "odds_source" in best.columns else ""
 
         # Additional row-specific fallback signals based on requirement
         is_live_data = bool(best.at[idx, "is_live_data"]) if "is_live_data" in best.columns and pd.notna(best.at[idx, "is_live_data"]) else True
-        stats_quality = str(best.at[idx, "stats_quality"]).lower() if "stats_quality" in best.columns else ""
 
-        is_fallback = (
-            stale or
-            not is_live_data or
-            "fallback" in stats_quality or
-            "degraded" in stats_quality or
-            "historical" in stats_quality or
-            "league_average" in stats_quality or
-            "hybrid rescue" in stats_quality or
-            "hybrid" in stats_quality
-        )
-
-        is_fallback_odds = ("fallback_novig" in odds_source)
+        is_fallback_or_stale = (stale or not is_live_data or "fallback_novig" in odds_source)
 
         # Determine status (strict precedence)
         is_missing_line = False
         if "(No Line)" in bp:
-            # market_type from _format_best_pick is spread_home, spread_away, total_over, total_under
-            # So if bp contains "(No Line)", it inherently means a required line is missing for a spread/total.
-            # Only trigger Missing Line for spreads/totals
-            if any(m in market_type.lower() for m in ["spread", "total"]):
+            is_missing_line = True
+
+        # Also literally check for missing numeric lines
+        if "spread" in market_type.lower():
+            if "spread_line" not in best.columns or pd.isna(best.at[idx, "spread_line"]):
                 is_missing_line = True
-            elif "h2h" in market_type.lower():
-                # For moneyline, a missing spread/total line isn't fatal unless odds are totally absent
+        elif "total" in market_type.lower():
+            if "total_line" not in best.columns or pd.isna(best.at[idx, "total_line"]):
+                is_missing_line = True
+        elif "h2h" in market_type.lower():
+            if "market_probability" in best.columns and "ml_probability" in best.columns:
                 if pd.isna(best.at[idx, "market_probability"]) and pd.isna(best.at[idx, "ml_probability"]):
                     is_missing_line = True
 
@@ -1733,11 +1729,11 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
             status = "Missing Line"
         elif not pd.isna(ev) and ev > 0.35:
             status = "High Variance/Speculative"
-        elif pd.isna(ev) or pd.isna(edge) or ev < 0 or edge < 0:
+        elif pd.isna(ev) or ev < 0 or win_prob < 0.40:
             status = "No Play"
-        elif is_fallback or is_fallback_odds:
+        elif is_fallback_or_stale:
             status = "Fallback / Low Confidence"
-        elif ev < 0.005 or edge < 0.01:
+        elif not pd.isna(ev) and not pd.isna(edge) and (ev < 0.01 or edge < 0.02):
             status = "Below Threshold"
         else:
             status = "Actionable"
