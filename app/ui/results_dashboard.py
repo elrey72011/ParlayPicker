@@ -91,21 +91,83 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
               display_df[col] = pd.NA
 
     def determine_display_outcome(row):
-            # SAFELY check for Outcome without triggering pd.NA boolean ambiguous errors
-            if 'Outcome' in row and pd.notna(row['Outcome']) and str(row['Outcome']) != 'N/A':
-                return row['Outcome']
-            if 'Pick_Outcome' in row and pd.notna(row['Pick_Outcome']) and str(row['Pick_Outcome']) != 'N/A':
-                return row['Pick_Outcome']
+        # 1. Respect explicit manual dropdown overrides
+        if 'Outcome' in row and pd.notna(row['Outcome']) and str(row['Outcome']) != 'N/A':
+            return row['Outcome']
+            
+        pick = str(row.get('best_pick', '')).lower().strip()
+        if not pick:
+             return 'N/A'
+             
+        # 2. Auto-grade based on scores if they exist in the grid
+        h_score = row.get('actual_home_score')
+        a_score = row.get('actual_away_score')
+        
+        if pd.notna(h_score) and pd.notna(a_score) and str(h_score).strip() != '' and str(a_score).strip() != '':
+            try:
+                h = float(h_score)
+                a = float(a_score)
+                
+                # Evaluate TOTALS (Over/Under)
+                if 'over' in pick or 'under' in pick:
+                    import re
+                    m = re.search(r'(over|under)\s*(\d+\.?\d*)', pick, re.IGNORECASE)
+                    if m:
+                        side = m.group(1).lower()
+                        line = float(m.group(2))
+                        total = h + a
+                        if side == 'over':
+                            return 'WIN' if total > line else ('LOSS' if total < line else 'PUSH')
+                        elif side == 'under':
+                            return 'WIN' if total < line else ('LOSS' if total > line else 'PUSH')
 
-            pick = str(row.get('best_pick', '')).lower()
-            if not pick:
-                 return 'N/A'
-            if 'over' in pick or 'under' in pick:
-                 return row.get('total_result', 'N/A')
-            elif '+' in pick or '-' in pick:
-                 return row.get('spread_result', 'N/A')
-            else:
-                 return row.get('ml_result', 'N/A')
+                # Evaluate SPREADS (+/-)
+                elif '+' in pick or '-' in pick:
+                    import re
+                    m = re.search(r'([+-]\d+\.?\d*)\s*(?:\(.*\))?$', pick)
+                    if m:
+                        line = float(m.group(1))
+                        pick_team = pick[:m.start()].strip()
+                        home_team = str(row.get('home_team', '')).lower()
+                        away_team = str(row.get('away_team', '')).lower()
+                        
+                        is_home = pick_team in home_team or home_team in pick_team
+                        is_away = pick_team in away_team or away_team in pick_team
+                        
+                        if is_home:
+                            margin = h - a
+                            return 'WIN' if margin + line > 0 else ('LOSS' if margin + line < 0 else 'PUSH')
+                        elif is_away:
+                            margin = a - h
+                            return 'WIN' if margin + line > 0 else ('LOSS' if margin + line < 0 else 'PUSH')
+
+                # Evaluate MONEYLINE
+                else:
+                    pick_team = pick.replace(' ml', '').strip()
+                    home_team = str(row.get('home_team', '')).lower()
+                    away_team = str(row.get('away_team', '')).lower()
+                    
+                    is_home = pick_team in home_team or home_team in pick_team
+                    is_away = pick_team in away_team or away_team in pick_team
+                    
+                    if is_home:
+                        return 'WIN' if h > a else ('LOSS' if h < a else 'PUSH')
+                    elif is_away:
+                        return 'WIN' if a > h else ('LOSS' if a < h else 'PUSH')
+                        
+            except Exception:
+                pass # If math fails, drop down to the fallback
+                
+        # 3. Fallback to ingestion logic (if no manual scores are entered yet)
+        if 'Pick_Outcome' in row and pd.notna(row['Pick_Outcome']) and str(row['Pick_Outcome']) != 'N/A':
+            return row['Pick_Outcome']
+            
+        if 'over' in pick or 'under' in pick:
+             return row.get('total_result', 'N/A')
+        elif '+' in pick or '-' in pick:
+             return row.get('spread_result', 'N/A')
+        else:
+             return row.get('ml_result', 'N/A')
 
     display_df['Outcome'] = display_df.apply(determine_display_outcome, axis=1)
 
