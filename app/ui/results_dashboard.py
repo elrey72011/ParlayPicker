@@ -148,6 +148,12 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
 
     st.divider()
 
+    # Ensure team columns map correctly if the export used capitalized 'Home'/'Away'
+    if 'Home' in display_df.columns and 'home_team' not in display_df.columns:
+        display_df = display_df.rename(columns={'Home': 'home_team'})
+    if 'Away' in display_df.columns and 'away_team' not in display_df.columns:
+        display_df = display_df.rename(columns={'Away': 'away_team'})
+    
     # Select columns to show
     cols_to_show = ['league', 'home_team', 'away_team', 'best_pick', 'actual_home_score', 'actual_away_score', 'Outcome', 'Pick_Status']
     # Filter to only existing columns
