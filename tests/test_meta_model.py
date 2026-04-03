@@ -22,7 +22,7 @@ class TestMetaModel(unittest.TestCase):
         self.assertEqual(features['kalshi_prob'], 0.65)
         self.assertEqual(features['kalshi_missing'], 0.0)
 
-        self.assertEqual(features['model_prob'], 0.5)
+        self.assertEqual(features['model_prob'], 0.6) # Fallback to implied_prob
         self.assertEqual(features['model_missing'], 1.0)
 
         self.assertEqual(features['theover_prob'], 0.7)
@@ -49,7 +49,7 @@ class TestMetaModel(unittest.TestCase):
         # We can't easily mock an XGBoost booster prediction behavior without actual training,
         # but we can test that extract_meta_features works and handles all missing gracefully.
         features = extract_meta_features(row)
-        self.assertEqual(features['kalshi_prob'], 0.5)
+        self.assertEqual(features['kalshi_prob'], 0.6) # Fallback to implied_prob
         self.assertEqual(features['kalshi_missing'], 1.0)
 
 if __name__ == '__main__':
