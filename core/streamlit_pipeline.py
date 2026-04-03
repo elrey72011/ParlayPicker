@@ -1942,71 +1942,75 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
     else:
         sport_keys = ["basketball_ncaab", "basketball_nba", "icehockey_nhl", "baseball_mlb"]
 
-    all_games = []
-    for sk in sport_keys:
-        games = client.get_odds(sk, date=date)
-        if not games:
-            continue
-        if isinstance(games, dict) and "message" in games:
-            logger.error(f"Odds API error for {sk}: {games.get('message')}")
-            continue
-        if games:
-            all_games.extend(games)
-
-    all_games = filter_games_today_only(all_games)
-
-    if not all_games:
-        return pd.DataFrame()
-
     game_dict = {}
-    for game in all_games:
-        matchup_id = game.get('matchup_id')
-        if not matchup_id:
-            continue
-
-        if matchup_id not in game_dict:
-            game_dict[matchup_id] = {
-                'game_id': game.get('id'),
-                'league': game.get('sport_key', '').split('_')[-1].upper(),
-                'raw_home_team': game.get('home_team'),
-                'raw_away_team': game.get('away_team'),
-                'home_team': game.get('home_team'),
-                'away_team': game.get('away_team'),
-                'commence_time': game.get('commence_time'),
-                'commence_time_raw': game.get('commence_time'),
-                'matchup_id': matchup_id,
-            }
-
-        row = game_dict[matchup_id]
-
-        for book in game.get('bookmakers', []):
-            book_key = book.get('key', '')
-            if book_key not in ['novig', 'fanduel', 'draftkings', 'betmgm']:
+    for sk in sport_keys:
+        try:
+            games = client.get_odds(sk, date=date)
+            if not games:
+                continue
+            if isinstance(games, dict) and "message" in games:
+                logger.error(f"Odds API error for {sk}: {games.get('message')}")
                 continue
 
-            for market in book.get('markets', []):
-                if market.get('key') == 'spreads':
-                    for o in market.get('outcomes', []):
-                        if _sanitize(o.get('name')) == _sanitize(game.get('home_team')):
-                            row[f'{book_key}_home_point'] = o.get('point')
-                            row[f'{book_key}_home_price'] = o.get('price')
-                        elif _sanitize(o.get('name')) == _sanitize(game.get('away_team')):
-                            row[f'{book_key}_away_point'] = o.get('point')
-                            row[f'{book_key}_away_price'] = o.get('price')
-                elif market.get('key') == 'totals':
-                    for o in market.get('outcomes', []):
-                        if str(o.get('name')).lower() == 'over':
-                            row[f'{book_key}_over_point'] = o.get('point')
-                            row[f'{book_key}_over_price'] = o.get('price')
-                        elif str(o.get('name')).lower() == 'under':
-                            row[f'{book_key}_under_point'] = o.get('point')
-                            row[f'{book_key}_under_price'] = o.get('price')
-                elif market.get('key') == 'h2h':
-                    for o in market.get('outcomes', []):
-                        if _sanitize(o.get('name')) == _sanitize(game.get('home_team')):
-                            row[f'{book_key}_h2h_home_price'] = o.get('price')
-                        elif _sanitize(o.get('name')) == _sanitize(game.get('away_team')):
-                            row[f'{book_key}_h2h_away_price'] = o.get('price')
+            sport_games = filter_games_today_only(games)
+            if not sport_games:
+                continue
+
+            for game in sport_games:
+                matchup_id = game.get('matchup_id')
+                if not matchup_id:
+                    continue
+
+                if matchup_id not in game_dict:
+                    game_dict[matchup_id] = {
+                        'game_id': game.get('id'),
+                        'league': game.get('sport_key', '').split('_')[-1].upper(),
+                        'raw_home_team': game.get('home_team'),
+                        'raw_away_team': game.get('away_team'),
+                        'home_team': game.get('home_team'),
+                        'away_team': game.get('away_team'),
+                        'commence_time': game.get('commence_time'),
+                        'commence_time_raw': game.get('commence_time'),
+                        'matchup_id': matchup_id,
+                    }
+
+                row = game_dict[matchup_id]
+
+                for book in game.get('bookmakers', []):
+                    book_key = book.get('key', '')
+                    if book_key not in ['novig', 'fanduel', 'draftkings', 'betmgm']:
+                        continue
+
+                    for market in book.get('markets', []):
+                        if market.get('key') == 'spreads':
+                            for o in market.get('outcomes', []):
+                                if _sanitize(o.get('name')) == _sanitize(game.get('home_team')):
+                                    row[f'{book_key}_home_point'] = o.get('point')
+                                    row[f'{book_key}_home_price'] = o.get('price')
+                                elif _sanitize(o.get('name')) == _sanitize(game.get('away_team')):
+                                    row[f'{book_key}_away_point'] = o.get('point')
+                                    row[f'{book_key}_away_price'] = o.get('price')
+                        elif market.get('key') == 'totals':
+                            for o in market.get('outcomes', []):
+                                if str(o.get('name')).lower() == 'over':
+                                    row[f'{book_key}_over_point'] = o.get('point')
+                                    row[f'{book_key}_over_price'] = o.get('price')
+                                elif str(o.get('name')).lower() == 'under':
+                                    row[f'{book_key}_under_point'] = o.get('point')
+                                    row[f'{book_key}_under_price'] = o.get('price')
+                        elif market.get('key') == 'h2h':
+                            for o in market.get('outcomes', []):
+                                if _sanitize(o.get('name')) == _sanitize(game.get('home_team')):
+                                    row[f'{book_key}_h2h_home_price'] = o.get('price')
+                                elif _sanitize(o.get('name')) == _sanitize(game.get('away_team')):
+                                    row[f'{book_key}_h2h_away_price'] = o.get('price')
+
+        except Exception as e:
+            logger.error(f"Network/API failure for {sk}: {e}")
+            continue
+
+    if not game_dict:
+        return pd.DataFrame()
 
     return pd.DataFrame(list(game_dict.values()))
 
@@ -2558,20 +2562,18 @@ def run_analysis_pipeline(
             import traceback
             logger.error(traceback.format_exc())
 
-            # Graceful fallback: if model inference aborted due to empty feature matrix,
-            # retry with statistical fallback probabilities so pipeline remains usable.
+            # Graceful fallback unconditionally applied
             fallback_applied = False
-            if "Feature matrix is empty due to schedule merge failure" in str(e):
-                try:
-                    engine = PredictionEngine()
-                    engine.use_fallback = True
-                    fallback_predictions = engine.predict_batch(merged)
-                    merged["ml_probability"] = pd.Series(fallback_predictions, index=merged.index, dtype="float64")
-                    merged["model_status"] = "Statistical Fallback"
-                    fallback_applied = True
-                    logger.warning("⚠️ ML DEBUG: Applied statistical fallback predictions after empty-feature validation failure.")
-                except Exception as fallback_err:
-                    logger.error(f"❌ Statistical fallback prediction failed: {fallback_err}")
+            try:
+                engine = PredictionEngine()
+                engine.use_fallback = True
+                fallback_predictions = engine.predict_batch(merged)
+                merged["ml_probability"] = pd.Series(fallback_predictions, index=merged.index, dtype="float64")
+                merged["model_status"] = "Statistical Fallback"
+                fallback_applied = True
+                logger.warning("⚠️ ML DEBUG: Applied statistical fallback predictions unconditionally after model failure.")
+            except Exception as fallback_err:
+                logger.error(f"❌ Statistical fallback prediction failed: {fallback_err}")
 
             if not fallback_applied:
                 if "ml_probability" not in merged.columns:
