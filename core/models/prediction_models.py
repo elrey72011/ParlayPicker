@@ -9,3 +9,5 @@ class Prediction(BaseModel):
     ai_probability: float = 0.5
     ml_probability: float = 0.5
     market_probability: float = 0.5
+    calibrated_probability: float = 0.5
+    odds_american: float | None = None

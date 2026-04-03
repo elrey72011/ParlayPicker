@@ -501,7 +501,7 @@ class PredictionEngine:
                     "Model fallback triggered. Returning statistical fallback probability %.4f",
                     fallback_prob,
                 )
-                return {"prob": float(fallback_prob), "note": "Statistical Fallback"}
+                return {"prob": float(fallback_prob), "note": "Statistical Fallback", "is_fallback": True}
 
             logger.info("[MODEL_ROUTING] Triggered XGBoost Inference")
 
@@ -550,13 +550,13 @@ class PredictionEngine:
             if any(abs(prob - val) < PLACEHOLDER_TOLERANCE for val in PLACEHOLDER_VALUES):
                  # Using fallback gracefully when placeholder detected
                  logger.debug(f"Placeholder detected ({prob:.4f}), triggering Statistical Fallback.")
-                 return {"prob": None, "note": "Fallback (Placeholder Detected)"}
+                 return {"prob": None, "note": "Fallback (Placeholder Detected)", "is_fallback": True}
 
-            return {"prob": float(prob), "note": "Local Inference"}
+            return {"prob": float(prob), "note": "Local Inference", "is_fallback": False}
         except Exception as e:
             logger.error(f"Prediction error: {e}. Using fallback.")
             logger.error(f"Exception details: {traceback.format_exc()}")
-            return {"prob": None, "note": f"Error Fallback: {str(e)[:20]}"}
+            return {"prob": None, "note": f"Error Fallback: {str(e)[:20]}", "is_fallback": True}
 
     def _calculate_statistical_prob(self, features: Dict[str, float], market_type: str = '') -> float:
         """

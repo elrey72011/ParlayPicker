@@ -10,8 +10,8 @@ def calibrate_probabilities(df: pd.DataFrame) -> pd.DataFrame:
 
     calibrated = df.copy()
     calibrated["calibrated_probability"] = (
-        pd.to_numeric(calibrated["model_probability"], errors="coerce").fillna(0.5) * 0.9
-        + pd.to_numeric(calibrated.get("market_probability", 0.5), errors="coerce").fillna(0.5) * 0.1
+        pd.to_numeric(calibrated["model_probability"], errors="coerce").fillna(0.5) * 0.3
+        + pd.to_numeric(calibrated.get("market_probability", 0.5), errors="coerce").fillna(0.5) * 0.7
     ).clip(0.0, 1.0)
 
     return calibrated
