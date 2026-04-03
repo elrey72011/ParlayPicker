@@ -502,11 +502,18 @@ def run_master_analysis(
     master["ai_probability"] = master["ai_probability"].fillna(0.5)
     master["ml_probability"] = master["ml_probability"].fillna(0.5)
 
-    # Use a weighted average: 70% Market Truth, 30% ML Model.
-    # Strip Vertex AI from the math to prevent LLM hallucinations from skewing the EV.
+    # Safely extract TheOver probability, handling alternate column names
+    if "theover_prob" not in master.columns:
+        if "theover_probability" in master.columns:
+            master["theover_prob"] = master["theover_probability"]
+        else:
+            master["theover_prob"] = master.get("market_probability", 0.5)
+
+    # Use a weighted 3-way average: 50% Market, 30% TheOver Consensus, 20% ML Model.
     master["consensus_prob"] = (
-        (master.get("market_probability", 0.5) * 0.70)
-        + (master.get("ml_probability", master.get("market_probability", 0.5)) * 0.30)
+        (master.get("market_probability", 0.5) * 0.50)
+        + (master.get("theover_prob", master.get("market_probability", 0.5)).fillna(master.get("market_probability", 0.5)) * 0.30)
+        + (master.get("ml_probability", master.get("market_probability", 0.5)).fillna(master.get("market_probability", 0.5)) * 0.20)
     )
 
     # Recalculate confidence levels
@@ -534,11 +541,11 @@ def run_master_analysis(
     if "ai_probability" not in master.columns:
         master["ai_probability"] = 0.5
 
-    # Use a weighted average: 70% Market Truth, 30% ML Model.
-    # Strip Vertex AI from the math to prevent LLM hallucinations from skewing the EV.
+    # Use a weighted 3-way average: 50% Market, 30% TheOver Consensus, 20% ML Model.
     master["consensus_prob"] = (
-        (master["market_probability"] * 0.70)
-        + (master["ml_probability"].fillna(master["market_probability"]) * 0.30)
+        (master.get("market_probability", 0.5) * 0.50)
+        + (master.get("theover_prob", master.get("market_probability", 0.5)).fillna(master.get("market_probability", 0.5)) * 0.30)
+        + (master.get("ml_probability", master.get("market_probability", 0.5)).fillna(master.get("market_probability", 0.5)) * 0.20)
     )
 
     master["expected_value"] = master.apply(
