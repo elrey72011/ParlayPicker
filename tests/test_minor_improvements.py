@@ -204,7 +204,7 @@ def test_build_best_picks_df_selects_best_per_game_across_markets_and_has_schema
             "ml_probability": [0.51, 0.55, 0.50, 0.50],
             "odds_american": [-110, -110, -110, -110],
             "odds_source": ["uploaded", "uploaded", "uploaded", "uploaded"],
-            "consensus_agreement": ["⚪ No Kalshi", "⚪ No Kalshi", "⚪ No Kalshi", "⚪ No Kalshi"],
+            "consensus_agreement": ["No Kalshi", "No Kalshi", "No Kalshi", "No Kalshi"],
             "kalshi_probability": [np.nan, np.nan, np.nan, np.nan],
             "kalshi_match_status": ["", "", "", ""],
             "kalshi_match_reason": ["", "", "", ""],
