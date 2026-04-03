@@ -60,7 +60,7 @@ def _get_odds_api_key() -> str:
     return key
 
 try:
-    from app_core.prediction_engine import PredictionEngine
+    from app_core.prediction_engine import PredictionEngine, get_cached_prediction_engine
     ML_AVAILABLE = True
 except Exception as e:
     logger.error(f"Failed to import PredictionEngine: {e}")
@@ -1795,7 +1795,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         "Missing Line"
     ]
     if "Pick_Status" in best.columns:
+        best["Pick_Status"] = best["Pick_Status"].astype(str).str.strip()
         best["Pick_Status"] = pd.Categorical(best["Pick_Status"], categories=status_order, ordered=True)
+        best["Pick_Status"] = best["Pick_Status"].fillna("No Play")
 
     if not best.empty:
         best["expected_value"] = pd.to_numeric(best["expected_value"], errors="coerce")
@@ -1853,7 +1855,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
             "No Play",
             "Missing Line"
         ]
+        best["Pick_Status"] = best["Pick_Status"].astype(str).str.strip()
         best["Pick_Status"] = pd.Categorical(best["Pick_Status"], categories=status_order, ordered=True)
+        best["Pick_Status"] = best["Pick_Status"].fillna("No Play")
         best["_rank_sort"] = pd.to_numeric(best["Triple_Filter_Rank"], errors="coerce")
         best["_ev_sort"] = pd.to_numeric(best["expected_value"], errors="coerce")
         best["_edge_sort"] = pd.to_numeric(best["edge"], errors="coerce")
@@ -1936,6 +1940,11 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
     all_games = []
     for sk in sport_keys:
         games = client.get_odds(sk, date=date)
+        if not games:
+            continue
+        if isinstance(games, dict) and "message" in games:
+            logger.error(f"Odds API error for {sk}: {games.get('message')}")
+            continue
         if games:
             all_games.extend(games)
 
@@ -2492,7 +2501,7 @@ def run_analysis_pipeline(
                 # Copy the enriched columns back into merged (or at least provide to predictor)
                 # Ensure the predictor runs on the enriched dataframe
 
-                engine = PredictionEngine()
+                engine = get_cached_prediction_engine()
                 ml_model_actually_loaded = not getattr(engine, "use_fallback", True)
 
                 # predict_batch expects a DataFrame, returns List[float]
