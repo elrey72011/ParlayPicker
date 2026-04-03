@@ -46,7 +46,7 @@ def extract_meta_features(row: Dict[str, Any]) -> Dict[str, float]:
         features['kalshi_prob'] = float(kp)
         features['kalshi_missing'] = 0.0
     else:
-        features['kalshi_prob'] = 0.5
+        features['kalshi_prob'] = features.get('implied_prob', 0.5)
         features['kalshi_missing'] = 1.0
 
     # 3. Model Probability
@@ -60,7 +60,7 @@ def extract_meta_features(row: Dict[str, Any]) -> Dict[str, float]:
         features['model_prob'] = float(mp)
         features['model_missing'] = 0.0
     else:
-        features['model_prob'] = 0.5
+        features['model_prob'] = features.get('implied_prob', 0.5)
         features['model_missing'] = 1.0
 
     # 4. TheOver Probability
@@ -72,7 +72,7 @@ def extract_meta_features(row: Dict[str, Any]) -> Dict[str, float]:
         features['theover_prob'] = float(to)
         features['theover_missing'] = 0.0
     else:
-        features['theover_prob'] = 0.5
+        features['theover_prob'] = features.get('implied_prob', 0.5)
         features['theover_missing'] = 1.0
 
     # 5. Sentiment Adjustment

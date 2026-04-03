@@ -502,11 +502,12 @@ def run_master_analysis(
     master["ai_probability"] = master["ai_probability"].fillna(0.5)
     master["ml_probability"] = master["ml_probability"].fillna(0.5)
 
+    # Use a weighted average: 70% Market Truth, 30% ML Model.
+    # Strip Vertex AI from the math to prevent LLM hallucinations from skewing the EV.
     master["consensus_prob"] = (
-        master.get("ai_probability", 0.5)
-        + master.get("ml_probability", 0.5)
-        + master.get("market_probability", 0.5)
-    ) / 3
+        (master.get("market_probability", 0.5) * 0.70)
+        + (master.get("ml_probability", master.get("market_probability", 0.5)) * 0.30)
+    )
 
     # Recalculate confidence levels
     master['edge'] = abs(master['consensus_prob'] - 0.5)
@@ -533,11 +534,12 @@ def run_master_analysis(
     if "ai_probability" not in master.columns:
         master["ai_probability"] = 0.5
 
+    # Use a weighted average: 70% Market Truth, 30% ML Model.
+    # Strip Vertex AI from the math to prevent LLM hallucinations from skewing the EV.
     master["consensus_prob"] = (
-        master["market_probability"]
-        + master["ml_probability"].fillna(0.5)
-        + master["ai_probability"].fillna(0.5)
-    ) / 3
+        (master["market_probability"] * 0.70)
+        + (master["ml_probability"].fillna(master["market_probability"]) * 0.30)
+    )
 
     master["expected_value"] = master.apply(
         lambda r: calculate_ev(
@@ -589,7 +591,7 @@ def compute_ev(prediction: Prediction) -> float:
 def compute_best_bets(
     master_results: pd.DataFrame,
     min_confidence: float = 0.53,
-    min_edge: float = 0.03,
+    min_edge: float = 0.05,  # Increased from 0.03 to require a 5% edge
     max_count: Optional[int] = None
 ) -> pd.DataFrame:
     """
