@@ -128,11 +128,13 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
                     if m:
                         line = float(m.group(1))
                         pick_team = pick[:m.start()].strip()
-                        home_team = str(row.get('home_team', '')).lower()
-                        away_team = str(row.get('away_team', '')).lower()
+                        # Safely get team names checking both 'home_team'/'away_team' and 'Home'/'Away'
+                        home_team = str(row.get('home_team', row.get('Home', ''))).lower()
+                        away_team = str(row.get('away_team', row.get('Away', ''))).lower()
                         
-                        is_home = pick_team in home_team or home_team in pick_team
-                        is_away = pick_team in away_team or away_team in pick_team
+                        # Ensure empty strings do not evaluate to True
+                        is_home = bool(home_team) and (pick_team in home_team or home_team in pick_team)
+                        is_away = bool(away_team) and (pick_team in away_team or away_team in pick_team)
                         
                         if is_home:
                             margin = h - a
@@ -144,11 +146,13 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
                 # Evaluate MONEYLINE
                 else:
                     pick_team = pick.replace(' ml', '').strip()
-                    home_team = str(row.get('home_team', '')).lower()
-                    away_team = str(row.get('away_team', '')).lower()
+                    # Safely get team names checking both 'home_team'/'away_team' and 'Home'/'Away'
+                    home_team = str(row.get('home_team', row.get('Home', ''))).lower()
+                    away_team = str(row.get('away_team', row.get('Away', ''))).lower()
                     
-                    is_home = pick_team in home_team or home_team in pick_team
-                    is_away = pick_team in away_team or away_team in pick_team
+                    # Ensure empty strings do not evaluate to True
+                    is_home = bool(home_team) and (pick_team in home_team or home_team in pick_team)
+                    is_away = bool(away_team) and (pick_team in away_team or away_team in pick_team)
                     
                     if is_home:
                         return 'WIN' if h > a else ('LOSS' if h < a else 'PUSH')
@@ -171,22 +175,17 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
 
     display_df['Outcome'] = display_df.apply(determine_display_outcome, axis=1)
 
-    # Only evaluate "Actionable" picks for top-line metrics based on current display_df
-    actionable_df = display_df[display_df.get('Pick_Status', '') == 'Actionable'].copy()
-
-    if actionable_df.empty:
-         st.info("No 'Actionable' picks were found in yesterday's export.")
-    else:
-        wins = len(actionable_df[actionable_df['Outcome'] == 'WIN'])
-        losses = len(actionable_df[actionable_df['Outcome'] == 'LOSS'])
-        pushes = len(actionable_df[actionable_df['Outcome'] == 'PUSH'])
+    def calculate_metrics(df):
+        wins = len(df[df['Outcome'] == 'WIN'])
+        losses = len(df[df['Outcome'] == 'LOSS'])
+        pushes = len(df[df['Outcome'] == 'PUSH'])
 
         total_decisions = wins + losses
         win_rate = (wins / total_decisions) if total_decisions > 0 else 0.0
 
         # Calculate Net Profit based on odds_american assuming 1 unit bet
         net_profit = 0.0
-        for idx, row in actionable_df.iterrows():
+        for idx, row in df.iterrows():
             outcome = row['Outcome']
             if outcome == 'WIN':
                  odds = pd.to_numeric(row.get('odds_american'), errors='coerce')
@@ -202,11 +201,29 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
             elif outcome == 'LOSS':
                  net_profit -= 1.0
 
+        return wins, losses, pushes, win_rate, net_profit
+
+    # Only evaluate "Actionable" picks for top-line metrics based on current display_df
+    actionable_df = display_df[display_df.get('Pick_Status', '') == 'Actionable'].copy()
+
+    if actionable_df.empty:
+         st.info("No 'Actionable' picks were found in yesterday's export.")
+    else:
+        wins_act, losses_act, pushes_act, win_rate_act, net_profit_act = calculate_metrics(actionable_df)
+
         # Assume 1 unit = 1 for the metric, maybe display in Units or $ assuming $100/u
         col1, col2, col3 = st.columns(3)
-        col1.metric("Overall Win Rate (Actionable)", f"{win_rate:.1%}", f"{wins}-{losses}-{pushes}")
-        col2.metric("Total Net Profit (Units)", f"{net_profit:+.2f}")
+        col1.metric("Overall Win Rate (Actionable)", f"{win_rate_act:.1%}", f"{wins_act}-{losses_act}-{pushes_act}")
+        col2.metric("Total Net Profit - Actionable (Units)", f"{net_profit_act:+.2f}")
         col3.metric("Actionable Picks Evaluated", len(actionable_df))
+
+    # Calculate metrics for all picks in display_df
+    wins_all, losses_all, pushes_all, win_rate_all, net_profit_all = calculate_metrics(display_df)
+
+    col4, col5, col6 = st.columns(3)
+    col4.metric("Overall Win Rate (All Picks)", f"{win_rate_all:.1%}", f"{wins_all}-{losses_all}-{pushes_all}")
+    col5.metric("Total Net Profit - All Picks (Units)", f"{net_profit_all:+.2f}")
+    col6.metric("Total Picks Evaluated", len(display_df))
 
     st.divider()
 
