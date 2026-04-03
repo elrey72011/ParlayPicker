@@ -124,6 +124,7 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
                 # Evaluate SPREADS (+/-)
                 elif '+' in pick or '-' in pick:
                     import re
+                    from difflib import SequenceMatcher
                     m = re.search(r'([+-]\d+\.?\d*)\s*(?:\(.*\))?$', pick)
                     if m:
                         line = float(m.group(1))
@@ -132,9 +133,11 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
                         home_team = str(row.get('home_team', row.get('Home', ''))).lower()
                         away_team = str(row.get('away_team', row.get('Away', ''))).lower()
                         
-                        # Ensure empty strings do not evaluate to True
-                        is_home = bool(home_team) and (pick_team in home_team or home_team in pick_team)
-                        is_away = bool(away_team) and (pick_team in away_team or away_team in pick_team)
+                        home_ratio = SequenceMatcher(None, pick_team, home_team).ratio() if home_team else 0.0
+                        away_ratio = SequenceMatcher(None, pick_team, away_team).ratio() if away_team else 0.0
+
+                        is_home = (home_ratio > away_ratio) and home_ratio > 0.6
+                        is_away = (away_ratio > home_ratio) and away_ratio > 0.6
                         
                         if is_home:
                             margin = h - a
@@ -145,14 +148,17 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
 
                 # Evaluate MONEYLINE
                 else:
+                    from difflib import SequenceMatcher
                     pick_team = pick.replace(' ml', '').strip()
                     # Safely get team names checking both 'home_team'/'away_team' and 'Home'/'Away'
                     home_team = str(row.get('home_team', row.get('Home', ''))).lower()
                     away_team = str(row.get('away_team', row.get('Away', ''))).lower()
                     
-                    # Ensure empty strings do not evaluate to True
-                    is_home = bool(home_team) and (pick_team in home_team or home_team in pick_team)
-                    is_away = bool(away_team) and (pick_team in away_team or away_team in pick_team)
+                    home_ratio = SequenceMatcher(None, pick_team, home_team).ratio() if home_team else 0.0
+                    away_ratio = SequenceMatcher(None, pick_team, away_team).ratio() if away_team else 0.0
+
+                    is_home = (home_ratio > away_ratio) and home_ratio > 0.6
+                    is_away = (away_ratio > home_ratio) and away_ratio > 0.6
                     
                     if is_home:
                         return 'WIN' if h > a else ('LOSS' if h < a else 'PUSH')
