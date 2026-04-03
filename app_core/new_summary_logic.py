@@ -14,19 +14,42 @@ logger = logging.getLogger("parlaypicker")
 
 def calculate_consensus_for_row(row: pd.Series, market_type: str = "Spread") -> tuple[float, str]:
     """
-    Calculates Consensus using weighted blend of Market, Kalshi, Model, TheOver, and Sentiment.
-    Uses static weights from app_core.weights_config.
-
-    Args:
-        row: The dataframe row containing probability columns
-        market_type: "Spread" or "Total"
-
-    Returns:
-        (consensus_prob, breakdown_string)
-        - consensus_prob: float 0-1
-        - breakdown_string: e.g. "56% (M55 / K59 / AI52)"
+    Calculates Consensus Math and determines Agreement Level.
+    STRIPPED of Emojis for cleaner CSV exports.
     """
-    # Helper to safely get float
+    try:
+        # 1. Grab base probabilities
+        if market_type.lower() == 'total':
+            market_prob = float(row.get('total_prob_market_based', 0.5))
+            model_prob = float(row.get('Model Total Prob', 0.5))
+            kalshi_prob = row.get('kalshi_prob_total', None)
+        else:
+            market_prob = float(row.get('spread_prob_market_based', 0.5))
+            model_prob = float(row.get('Model Spread Prob', 0.5))
+            kalshi_prob = row.get('kalshi_prob_spread', None)
+            
+        # 2. Clean probabilities
+        if pd.isna(market_prob): market_prob = 0.5
+        if pd.isna(model_prob): model_prob = 0.5
+        
+        # 3. Determine consensus agreement (No Emojis)
+        if kalshi_prob is None or pd.isna(kalshi_prob):
+            return 0.5, "No Kalshi"
+            
+        k_prob = float(kalshi_prob)
+        
+        # Check alignment relative to 0.5 (coin flip)
+        model_favors_home = model_prob > 0.5
+        kalshi_favors_home = k_prob > 0.5
+        
+        if model_favors_home == kalshi_favors_home:
+            return k_prob, "Agrees"
+        else:
+            return k_prob, "Disagrees"
+            
+    except Exception as e:
+        logger.warning(f"Error calculating consensus agreement: {e}")
+        return 0.5, "Error"
     def _get_f(key):
         val = row.get(key)
         try:
