@@ -1915,14 +1915,20 @@ class PredictionEngine:
             logger.error(f"Batch prediction failed: {e}", exc_info=True)
             return [None] * len(df)
 
+import streamlit as st
+
 # Global singleton instance
 _SHARED_ENGINE = None
+
+@st.cache_resource
+def get_cached_prediction_engine() -> PredictionEngine:
+    return PredictionEngine()
 
 def get_engine() -> PredictionEngine:
     """Get or create the shared PredictionEngine instance."""
     global _SHARED_ENGINE
     if _SHARED_ENGINE is None:
-        _SHARED_ENGINE = PredictionEngine()
+        _SHARED_ENGINE = get_cached_prediction_engine()
     return _SHARED_ENGINE
 
 # Global singleton or helper for single-row prediction

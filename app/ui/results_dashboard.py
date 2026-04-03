@@ -198,6 +198,9 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
                  if pd.isna(odds):
                       odds = -110 # default
 
+                 if abs(odds) < 1.0:
+                      odds = -110
+
                  # Calculate profit for 1 unit (e.g. $100 bet)
                  if odds < 0:
                       profit = 1.0 / (abs(odds) / 100.0)
