@@ -1725,14 +1725,17 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
                 if pd.isna(best.at[idx, "market_probability"]) and pd.isna(best.at[idx, "ml_probability"]):
                     is_missing_line = True
 
+        model_status_str = str(best.at[idx, "model_status"]) if "model_status" in best.columns else ""
+        is_model_failure = "Fallback" in model_status_str or "Failure" in model_status_str
+
         if is_missing_line:
             status = "Missing Line"
         elif not pd.isna(ev) and ev > 0.35:
             status = "High Variance/Speculative"
         elif pd.isna(ev) or ev < 0 or win_prob < 0.40:
             status = "No Play"
-        elif is_fallback_or_stale:
-            status = "Fallback / Low Confidence"
+        elif is_fallback_or_stale or is_model_failure:
+            status = "No Play"
         elif not pd.isna(ev) and not pd.isna(edge) and (ev < 0.01 or edge < 0.02):
             status = "Below Threshold"
         else:
