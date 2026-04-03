@@ -249,13 +249,13 @@ def _recompute_consensus_from_kalshi(df: pd.DataFrame, require_ml: bool = False)
 
     status = _safe_str_series(out, "kalshi_match_status").str.lower()
 
-    out["consensus_agreement"] = "⚪ No Kalshi"
+    out["consensus_agreement"] = "No Kalshi"
     valid_kalshi = (kalshi_prob.notna() & (kalshi_prob > 0.0)).fillna(False)
     gap = blended - kalshi_prob
 
-    out.loc[valid_kalshi, "consensus_agreement"] = "⚖️ Neutral"
-    out.loc[(valid_kalshi & gap.ge(0.03)).fillna(False), "consensus_agreement"] = "✅ Agrees"
-    out.loc[(valid_kalshi & gap.le(-0.03)).fillna(False), "consensus_agreement"] = "❌ Disagrees"
+    out.loc[valid_kalshi, "consensus_agreement"] = "Neutral"
+    out.loc[(valid_kalshi & gap.ge(0.03)).fillna(False), "consensus_agreement"] = "Agrees"
+    out.loc[(valid_kalshi & gap.le(-0.03)).fillna(False), "consensus_agreement"] = "Disagrees"
 
     # Debug log for probability blend verification (first 5 picks)
     if not out.empty and "market_probability" in out.columns:
@@ -760,7 +760,7 @@ def main() -> None:
     date_fill_rate = float(diagnostics.get("date_fill_success_rate", 0.0))
     positive_ev_rows = int(diagnostics.get("positive_ev_rows", 0))
     consensus_agrees = (
-        int(best_picks_df["consensus_agreement"].astype(str).eq("✅ Agrees").sum())
+        int(best_picks_df["consensus_agreement"].astype(str).eq("Agrees").sum())
         if isinstance(best_picks_df, pd.DataFrame) and "consensus_agreement" in best_picks_df.columns
         else 0
     )
@@ -865,7 +865,7 @@ def main() -> None:
             display_df = display_df.rename(columns=rename_map)
             if "kalshi_probability" in display_df.columns:
                 kalshi_display = pd.to_numeric(display_df["kalshi_probability"], errors="coerce")
-                display_df["kalshi_probability_display"] = kalshi_display.map(lambda x: "⚪ No Kalshi" if pd.isna(x) else f"{x:.4f}")
+                display_df["kalshi_probability_display"] = kalshi_display.map(lambda x: "No Kalshi" if pd.isna(x) else f"{x:.4f}")
             preferred = ["Pick_Status", "Triple Filter Rank", "Pick Quality", "parlay_rank", "League", "Home Team", "Away Team", "Game Date", "Game Time (ET)", "Best Pick", "Prob", "ML Prob", "Odds", "Source", "EV", "Edge", "Consensus", "Kalshi Status", "kalshi_probability_display"]
             ordered = [c for c in preferred if c in display_df.columns] + [c for c in display_df.columns if c not in preferred]
             display_df = display_df[ordered]

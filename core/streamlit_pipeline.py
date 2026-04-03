@@ -1759,10 +1759,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     edge_for_consensus = _numeric_series(best, "edge", 0.0)
 
     if "consensus_agreement" not in best.columns:
-        best["consensus_agreement"] = "⚪ No Kalshi"
+        best["consensus_agreement"] = "No Kalshi"
     else:
         # Fill any NA consensus_agreements that may have carried over
-        best["consensus_agreement"] = best["consensus_agreement"].fillna("⚪ No Kalshi")
+        best["consensus_agreement"] = best["consensus_agreement"].fillna("No Kalshi")
 
     kalshi_prob = _numeric_series(best, "kalshi_probability") if "kalshi_probability" in best.columns else pd.Series([pd.NA]*len(best), index=best.index)
     is_kalshi_available = ((~pd.isna(kalshi_prob)) & (kalshi_prob > 0.0)).fillna(False).astype(bool)
@@ -1773,9 +1773,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         gap = blended - kalshi_prob
         agrees_mask = (is_kalshi_available & gap.ge(0.03)).fillna(False).astype(bool)
         disagrees_mask = (is_kalshi_available & gap.le(-0.03)).fillna(False).astype(bool)
-        best.loc[is_kalshi_available, "consensus_agreement"] = "⚖️ Neutral"
-        best.loc[agrees_mask, "consensus_agreement"] = "✅ Agrees"
-        best.loc[disagrees_mask, "consensus_agreement"] = "❌ Disagrees"
+        best.loc[is_kalshi_available, "consensus_agreement"] = "Neutral"
+        best.loc[agrees_mask, "consensus_agreement"] = "Agrees"
+        best.loc[disagrees_mask, "consensus_agreement"] = "Disagrees"
 
     # Sort Phase: Use ordered categorical logic for exact ordering.
     status_order = [

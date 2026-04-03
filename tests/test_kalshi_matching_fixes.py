@@ -68,7 +68,7 @@ def test_best_picks_prefers_highest_expected_value_for_kalshi_spread_total_pair(
             "odds_source": ["test", "test"],
             "market_probability": [0.5, 0.5],
             "ml_probability": [0.55, 0.55],
-            "consensus_agreement": ["⚖️ Neutral", "⚖️ Neutral"],
+            "consensus_agreement": ["Neutral", "Neutral"],
             "used_stale_features": [False, False],
         }
     )
