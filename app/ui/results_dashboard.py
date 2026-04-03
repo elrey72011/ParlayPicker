@@ -91,9 +91,10 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
               display_df[col] = pd.NA
 
     def determine_display_outcome(row):
-            if 'Outcome' in row and pd.notnull(row['Outcome']) and row['Outcome'] != 'N/A' and row['Outcome'] != pd.NA:
+            # SAFELY check for Outcome without triggering pd.NA boolean ambiguous errors
+            if 'Outcome' in row and pd.notna(row['Outcome']) and str(row['Outcome']) != 'N/A':
                 return row['Outcome']
-            if 'Pick_Outcome' in row and pd.notnull(row['Pick_Outcome']) and row['Pick_Outcome'] != 'N/A' and row['Pick_Outcome'] != pd.NA:
+            if 'Pick_Outcome' in row and pd.notna(row['Pick_Outcome']) and str(row['Pick_Outcome']) != 'N/A':
                 return row['Pick_Outcome']
 
             pick = str(row.get('best_pick', '')).lower()
@@ -174,14 +175,14 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
                 min_value=0,
                 step=1,
                 format="%d",
-                required=True
+                required=False
             ),
             "actual_away_score": st.column_config.NumberColumn(
                 "Away Score",
                 min_value=0,
                 step=1,
                 format="%d",
-                required=True
+                required=False
             ),
             "Outcome": st.column_config.SelectboxColumn(
                 "Outcome",
