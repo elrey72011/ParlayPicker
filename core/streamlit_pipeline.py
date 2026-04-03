@@ -1914,6 +1914,11 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
     from app_core.odds_api import TheOddsAPIClient, filter_games_today_only
     import pandas as pd
 
+    def _sanitize(name):
+        # Standardize "St." or "St " to "saint " before stripping
+        clean_name = str(name).lower().replace("st. ", "saint ").replace("st ", "saint ")
+        return "".join(e for e in clean_name if e.isalnum())
+
     api_key = _get_odds_api_key()
     if not api_key:
         logger.error("No ODDS_API_KEY found.")
@@ -1982,10 +1987,10 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
             for market in book.get('markets', []):
                 if market.get('key') == 'spreads':
                     for o in market.get('outcomes', []):
-                        if o.get('name') == game.get('home_team'):
+                        if _sanitize(o.get('name')) == _sanitize(game.get('home_team')):
                             row[f'{book_key}_home_point'] = o.get('point')
                             row[f'{book_key}_home_price'] = o.get('price')
-                        elif o.get('name') == game.get('away_team'):
+                        elif _sanitize(o.get('name')) == _sanitize(game.get('away_team')):
                             row[f'{book_key}_away_point'] = o.get('point')
                             row[f'{book_key}_away_price'] = o.get('price')
                 elif market.get('key') == 'totals':
@@ -1998,9 +2003,9 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
                             row[f'{book_key}_under_price'] = o.get('price')
                 elif market.get('key') == 'h2h':
                     for o in market.get('outcomes', []):
-                        if o.get('name') == game.get('home_team'):
+                        if _sanitize(o.get('name')) == _sanitize(game.get('home_team')):
                             row[f'{book_key}_h2h_home_price'] = o.get('price')
-                        elif o.get('name') == game.get('away_team'):
+                        elif _sanitize(o.get('name')) == _sanitize(game.get('away_team')):
                             row[f'{book_key}_h2h_away_price'] = o.get('price')
 
     return pd.DataFrame(list(game_dict.values()))
@@ -2782,14 +2787,14 @@ def run_analysis_pipeline(
         "date_fill_success_rate": float(date_stats["date_fill_success_rate"]),
         "missing_game_date_rows": int(date_stats["missing_game_date_rows"]),
         "positive_ev_picks": int((_numeric_series(analysis_df, "expected_value", 0.0) > 0).sum()) if not analysis_df.empty else 0,
-        "market_type_counts": _string_series(analysis_df, "market_type").value_counts(dropna=False).to_dict() if not analysis_df.empty else {},
+        "market_type_counts": _string_series(analysis_df, "market_type").fillna("Missing").value_counts(dropna=False).to_dict() if not analysis_df.empty else {},
         "allowed_market_type_rows": int(_string_series(analysis_df, "market_type").isin(VALID_MARKETS).sum()) if not analysis_df.empty else 0,
         "positive_ev_rows": int((_numeric_series(analysis_df, "expected_value", 0.0) > 0).sum()) if not analysis_df.empty else 0,
         "spread_rows_missing_model_prob": int(((_string_series(analysis_df, "market_type").str.startswith("spread")) & (_numeric_series(analysis_df, "model_probability").isna())).sum()) if not analysis_df.empty else 0,
         "best_pick_nonempty_rows": int(_string_series(best_picks_df, "best_pick").str.strip().str.len().gt(0).sum()) if not best_picks_df.empty else 0,
         "best_picks_count": int(len(best_picks_df)),
         "odds_schedule_loaded": odds_schedule_loaded,
-        "odds_source_counts": _string_series(analysis_df, "odds_source").value_counts(dropna=False).to_dict() if not analysis_df.empty else {},
+        "odds_source_counts": _string_series(analysis_df, "odds_source").fillna("Missing").value_counts(dropna=False).to_dict() if not analysis_df.empty else {},
         "base_rows_loaded": int(len(base_df)),
         "stale_base_rows_removed": int(stale_base_rows_removed),
         "merge_keys_used": merge_keys,
@@ -2943,127 +2948,6 @@ def generate_parlays(best_picks_df: pd.DataFrame, max_legs: int = 3) -> pd.DataF
     parlays_df = apply_simultaneous_kelly(parlays_df, bankroll=1000.0, max_exposure=0.05)
 
     return parlays_df
-
-    # Legacy code below:
-    leg_game_cols = [f"leg{i}_game" for i in range(1, max_legs + 1)]
-    cols = ["parlay_type", "parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "kelly_fraction_1_8", "legs", *leg_game_cols]
-    df = best_picks_df.copy()
-    df = df[_string_series(df, "best_pick").str.strip().str.len() > 0].copy()
-
-    # Enforce minimum edge threshold for parlay components to prevent negative expected value from compounding
-    if "edge" in df.columns:
-        is_postseason = is_postseason_ncaab(df)
-        edge_thresholds = pd.Series(0.02, index=df.index)
-        edge_thresholds.loc[is_postseason] = 0.035
-        df = df[(pd.to_numeric(df["edge"], errors="coerce") >= edge_thresholds) & (pd.to_numeric(df.get("expected_value", 0.0), errors="coerce") >= 0.05)].copy()
-
-    if len(df) < 2:
-        return pd.DataFrame(columns=cols)
-
-    df["calibrated_probability"] = _numeric_series(df, "calibrated_probability", 0.5).clip(0.01, 0.99)
-    df["decimal_odds"] = _numeric_series(df, "decimal_odds").fillna(
-        _numeric_series(df, "odds_american", -110.0).apply(american_to_decimal)
-    )
-
-    # Increase candidate pool from 15 to 40 positive EV picks
-    df = df.sort_values(["calibrated_probability", "expected_value"], ascending=[False, False]).head(40).reset_index(drop=True)
-    df["league"] = _string_series(df, "league")
-    df["home_team"] = _string_series(df, "home_team")
-    df["away_team"] = _string_series(df, "away_team")
-    df["game_key_tuple"] = list(zip(df["league"], df["home_team"], df["away_team"]))
-    df["game_label"] = df["home_team"] + " vs " + df["away_team"]
-    df["leg_context"] = df["league"] + " " + df["game_label"] + " — " + _string_series(df, "best_pick")
-
-    def _record_from_legs(legs_df: pd.DataFrame, parlay_type: str) -> dict[str, Any] | None:
-        if legs_df.empty:
-            return None
-        if legs_df["game_key_tuple"].duplicated().any():
-            return None
-        prob = float(legs_df["calibrated_probability"].prod())
-        odds = float(legs_df["decimal_odds"].prod())
-        ev = prob * (odds - 1) - (1 - prob)
-
-        # Calculate 1/8th Kelly fraction due to high variance of parlays
-        kelly_frac = kelly_fraction(prob, odds)
-        fractional_kelly = max(0.0, float(kelly_frac / 8.0))
-
-        record: dict[str, Any] = {
-            "parlay_type": parlay_type,
-            "parlay_legs": " | ".join(legs_df["leg_context"].astype(str).tolist()),
-            "combined_probability": prob,
-            "combined_decimal_odds": odds,
-            "parlay_ev": ev,
-            "kelly_fraction_1_8": fractional_kelly,
-            "legs": int(len(legs_df)),
-        }
-        for leg_idx in range(1, max_legs + 1):
-            record[f"leg{leg_idx}_game"] = pd.NA
-        for leg_idx, game in enumerate(legs_df["game_label"].tolist(), start=1):
-            record[f"leg{leg_idx}_game"] = game
-        if record.get("leg1_game") == record.get("leg2_game"):
-            return None
-        return record
-
-    records: list[dict[str, Any]] = []
-    seen_combo_keys: set[tuple[int, frozenset[tuple[str, str, str]]]] = set()
-
-    # ranked parlays: sequential, non-overlapping by game key
-    for leg_count in range(2, min(max_legs, len(df)) + 1):
-        used_games: set[tuple[str, str, str]] = set()
-        remaining = df[~df["game_key_tuple"].isin(used_games)].copy()
-        start = 0
-        while start + leg_count <= len(remaining):
-            legs_df = remaining.iloc[start:start + leg_count]
-            if len(legs_df) < leg_count:
-                break
-            game_key_set = frozenset(legs_df["game_key_tuple"].tolist())
-            rec = _record_from_legs(legs_df, "ranked")
-            if rec is not None:
-                records.append(rec)
-                used_games.update(legs_df["game_key_tuple"].tolist())
-                seen_combo_keys.add((leg_count, game_key_set))
-                remaining = df[~df["game_key_tuple"].isin(used_games)].copy()
-                start = 0
-            else:
-                # IMPORTANT: advance window when first slice is invalid (e.g., duplicate game keys)
-                # to avoid an infinite loop on unchanged `remaining`.
-                start += 1
-
-    # top combinations: enforce one pick per game + dedupe by game set
-    top_combo_records: list[dict[str, Any]] = []
-    for leg_count in range(2, min(max_legs, len(df)) + 1):
-        count = 0
-        for combo in combinations(df.index.tolist(), leg_count):
-            if count >= _MAX_PARLAY_COMBOS_PER_LEG:
-                break
-            legs_df = df.loc[list(combo)]
-            if legs_df["game_key_tuple"].duplicated().any():
-                continue
-            game_key_set = frozenset(legs_df["game_key_tuple"].tolist())
-            dedup_key = (leg_count, game_key_set)
-            if dedup_key in seen_combo_keys:
-                continue
-            rec = _record_from_legs(legs_df, "top_combo")
-            if rec is None:
-                continue
-            top_combo_records.append(rec)
-            seen_combo_keys.add(dedup_key)
-            count += 1
-
-    if top_combo_records:
-        top_combo_df = pd.DataFrame(top_combo_records).sort_values("parlay_ev", ascending=False).head(10)
-        records.extend(top_combo_df.to_dict(orient="records"))
-
-    if not records:
-        return pd.DataFrame(columns=cols)
-
-    out = pd.DataFrame(records)
-    out = out[out["leg1_game"].ne(out["leg2_game"])].copy()
-    out = out.sort_values(["parlay_type", "parlay_ev"], ascending=[True, False]).reset_index(drop=True)
-    for col in cols:
-        if col not in out.columns:
-            out[col] = pd.NA
-    return out[cols]
 
 def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float = 1000.0) -> pd.DataFrame:
     if best_picks_df is None or best_picks_df.empty:
