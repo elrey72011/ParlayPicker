@@ -1050,10 +1050,13 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
     implied_prob = out["odds_american"].apply(american_to_prob)
 
     def _get_opposing_from_exchange(odds):
-        # We assume opposing line on exchange is essentially exactly mirrored (ignoring 20-cent vig)
         if pd.isna(odds):
             return pd.NA
-        return float(-odds)
+        odds_val = float(odds)
+        if odds_val <= 0:
+            return abs(odds_val) - 20.0
+        else:
+            return -(odds_val + 20.0)
 
     opposing_implied = out["odds_american"].apply(_get_opposing_from_exchange).apply(american_to_prob)
     out["market_probability"] = implied_prob / (implied_prob + opposing_implied)
@@ -1730,7 +1733,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
 
         if is_missing_line:
             status = "Missing Line"
-        elif not pd.isna(ev) and ev > 0.35:
+        elif not pd.isna(ev) and ev > 0.40:
+            status = "No Play"
+        elif not pd.isna(ev) and ev > 0.25:
             status = "High Variance/Speculative"
         elif pd.isna(ev) or ev < 0 or win_prob < 0.40:
             status = "No Play"
@@ -2383,7 +2388,11 @@ def run_analysis_pipeline(
     def _get_opposing_from_exchange(odds):
         if pd.isna(odds):
             return pd.NA
-        return float(-odds)
+        odds_val = float(odds)
+        if odds_val <= 0:
+            return abs(odds_val) - 20.0
+        else:
+            return -(odds_val + 20.0)
 
     # Fallback de-vig when midpoint inputs are unavailable.
     opposing_implied = merged["odds_american"].apply(_get_opposing_from_exchange).apply(american_to_prob)
