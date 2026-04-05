@@ -86,7 +86,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 
 BEST_PICK_COLUMNS = [
     "Triple_Filter_Rank", "parlay_rank",
-    "league", "home_team", "away_team", "game_date", "game_time_est", "market_type", "best_pick", "Pick_Status",
+    "league", "home_team", "away_team", "game_date", "game_time_est", "market_type", "best_pick", "Pick_Status", "Status_Reason",
     "calibrated_probability", "expected_value", "edge", "consensus_agreement",
     "odds_american", "odds_source", "market_probability", "ml_probability", "display_probability",
     "kalshi_probability", "kalshi_match_status", "kalshi_match_reason",
@@ -1693,6 +1693,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         best["Pick_Status"] = pd.Series([""] * len(best), index=best.index, dtype="string")
 
     for idx in best.index:
+        status_reason = "Unknown"
         bp = str(best.at[idx, "best_pick"])
         ev = best.at[idx, "expected_value"]
         edge = best.at[idx, "edge"]
@@ -1754,24 +1755,34 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
 
         if is_missing_line:
             status = "Missing Line"
+            status_reason = "Missing odds or numerical line"
         elif is_nba_extreme_spread:
             status = "No Play"
+            status_reason = "NBA spread > 12.0 (Resting/Tanking guardrail)"
         elif is_kalshi_divergence:
             status = "High Variance/Speculative"
+            status_reason = "ML and Kalshi probability diverge by > 20%"
         elif not pd.isna(ev) and ev > 0.40:
             status = "No Play"
+            status_reason = "EV > 40% (Suspended Line / Data Error guardrail)"
         elif not pd.isna(ev) and ev > 0.25:
             status = "High Variance/Speculative"
+            status_reason = "EV > 25% (High Variance)"
         elif pd.isna(ev) or ev < 0 or win_prob < 0.40:
             status = "No Play"
+            status_reason = "Negative EV or Base Win Prob < 40%"
         elif is_fallback_or_stale or is_model_failure:
             status = "No Play"
+            status_reason = "Using stale data or fallback model"
         elif not pd.isna(ev) and not pd.isna(edge) and (ev < 0.01 or edge < 0.02):
             status = "Below Threshold"
+            status_reason = "Fails minimum Edge (2%) or EV (1%) thresholds"
         else:
             status = "Actionable"
+            status_reason = "Passed all strict filters"
 
         best.at[idx, "Pick_Status"] = status
+        best.at[idx, "Status_Reason"] = status_reason
 
     # Legacy logging/metrics variables for reference
     valid_edge_mask = best["edge"] >= 0.01
