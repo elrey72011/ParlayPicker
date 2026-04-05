@@ -1697,6 +1697,11 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         ev = best.at[idx, "expected_value"]
         edge = best.at[idx, "edge"]
         market_type = str(best.at[idx, "market_type"]) if "market_type" in best.columns else ""
+        league = str(best.at[idx, "league"]).upper() if "league" in best.columns else ""
+
+        # Probabilities for divergence check
+        ml_prob = best.at[idx, "ml_probability"] if "ml_probability" in best.columns else pd.NA
+        kalshi_prob = best.at[idx, "kalshi_probability"] if "kalshi_probability" in best.columns else pd.NA
 
         # Calibrated/Win probability (ensure 0-1)
         win_prob = best.at[idx, "calibrated_probability"] if "calibrated_probability" in best.columns else 0.5
@@ -1728,11 +1733,31 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
                 if pd.isna(best.at[idx, "market_probability"]) and pd.isna(best.at[idx, "ml_probability"]):
                     is_missing_line = True
 
+        is_nba_extreme_spread = False
+        if league == "NBA" and "spread" in market_type.lower():
+            # Support spread_line or spread fallback
+            line_val = best.at[idx, "spread_line"] if "spread_line" in best.columns else pd.NA
+            if pd.isna(line_val) and "spread" in best.columns:
+                 line_val = best.at[idx, "spread"]
+
+            if pd.notna(line_val):
+                if abs(float(line_val)) > 12.0:
+                    is_nba_extreme_spread = True
+
+        is_kalshi_divergence = False
+        if pd.notna(ml_prob) and pd.notna(kalshi_prob):
+            if abs(float(ml_prob) - float(kalshi_prob)) > 0.20:
+                is_kalshi_divergence = True
+
         model_status_str = str(best.at[idx, "model_status"]) if "model_status" in best.columns else ""
         is_model_failure = "Fallback" in model_status_str or "Failure" in model_status_str
 
         if is_missing_line:
             status = "Missing Line"
+        elif is_nba_extreme_spread:
+            status = "No Play"
+        elif is_kalshi_divergence:
+            status = "High Variance/Speculative"
         elif not pd.isna(ev) and ev > 0.40:
             status = "No Play"
         elif not pd.isna(ev) and ev > 0.25:
