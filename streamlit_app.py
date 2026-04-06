@@ -531,6 +531,11 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
     from core.streamlit_pipeline import build_best_picks_df
     best_picks_df = build_best_picks_df(analysis_df)
 
+    # Safely extract selection diagnostics
+    selection_diag = best_picks_df.attrs.get("selection_diagnostics", {})
+    if selection_diag:
+        diagnostics["selection_diagnostics"] = selection_diag
+
     if "gemini_analysis" not in analysis_df.columns:
         analysis_df["gemini_analysis"] = ""
 
@@ -847,6 +852,31 @@ def main() -> None:
                 st.error(f"Found {len(missing_uploads)} uploaded games that did not make it into the final live slate.")
                 st.write("Missing Upload IDs:")
                 st.write(missing_uploads)
+
+            selection_diags = diagnostics.get("selection_diagnostics", {})
+            if selection_diags:
+                st.markdown("#### Market-Family Selection Diagnostics")
+                col1, col2, col3, col4, col5 = st.columns(5)
+                col1.metric("Raw Side", selection_diags.get("raw_counts", {}).get("side", 0))
+                col1.metric("Raw Total", selection_diags.get("raw_counts", {}).get("total", 0))
+
+                col2.metric("Finalist Side", selection_diags.get("finalist_counts", {}).get("side", 0))
+                col2.metric("Finalist Total", selection_diags.get("finalist_counts", {}).get("total", 0))
+
+                col3.metric("Winner Side", selection_diags.get("final_counts", {}).get("side", 0))
+                col3.metric("Winner Total", selection_diags.get("final_counts", {}).get("total", 0))
+
+                col4.metric("Actionable Side", selection_diags.get("actionable_counts", {}).get("side", 0))
+                col4.metric("Actionable Total", selection_diags.get("actionable_counts", {}).get("total", 0))
+
+                avg_scores = selection_diags.get("avg_scores", {})
+                col5.metric("Avg Score (Side)", f"{avg_scores.get('side', 0.0):.3f}")
+                col5.metric("Avg Score (Total)", f"{avg_scores.get('total', 0.0):.3f}")
+
+                preview_df = selection_diags.get("preview_df")
+                if preview_df is not None and not preview_df.empty:
+                    st.write("Side vs Total Finalist Preview:")
+                    st.dataframe(preview_df, use_container_width=True)
 
         display_df = best_picks_df.copy() if best_picks_df is not None else pd.DataFrame(columns=["league", "pick", "edge"])
         if not display_df.empty and "parlay_rank" in display_df.columns:
