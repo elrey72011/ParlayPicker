@@ -1,0 +1,2 @@
+league,home_team,away_team,game_date,market_type,best_pick,expected_value,edge,calibrated_probability,odds_american,Pick_Status
+NHL,New York Rangers,Boston Bruins,2023-10-25T00:00:00Z,spread_home,New York Rangers -1.5,0.05,0.02,0.55,-110,Actionable

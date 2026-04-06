@@ -15,7 +15,13 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
         st.warning(f"Results for [{league_str}] are currently unavailable due to API plan restrictions. These picks must be verified manually.")
 
     # Re-evaluate the source data based on the explicit uploader first
+    new_upload_detected = False
     if uploaded_picks_file is not None:
+        file_identifier = f"{uploaded_picks_file.name}_{uploaded_picks_file.size}"
+        if st.session_state.get("perf_picks_file_identifier") != file_identifier:
+            new_upload_detected = True
+            st.session_state["perf_picks_file_identifier"] = file_identifier
+
         try:
             # We must reset the file pointer to 0 because the file might have been read before
             uploaded_picks_file.seek(0)
@@ -29,8 +35,8 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
         st.info("No picks data available for the previous day. Please upload a file above.")
         return
 
-    # Initialize editable picks in session state if not present
-    if "perf_edited_picks" not in st.session_state:
+    # Initialize editable picks in session state if not present, OR if a new file was uploaded
+    if "perf_edited_picks" not in st.session_state or new_upload_detected:
         st.session_state["perf_edited_picks"] = picks_df.copy()
 
     # Get the latest dataframe state (could be edited previously)
