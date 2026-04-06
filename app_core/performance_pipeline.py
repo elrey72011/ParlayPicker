@@ -6,15 +6,20 @@ from app_core.results_ingestion import attach_results
 
 logger = logging.getLogger(__name__)
 
+_no_export_logged = False
+
 def run_performance_pipeline() -> pd.DataFrame | None:
     """
     Executes the pipeline to fetch yesterday's export, fetch final scores
     for the leagues in that export, and attach the scores to calculate outcomes.
     Returns the enriched DataFrame or None if no export was found.
     """
+    global _no_export_logged
     export_path = find_yesterdays_export()
     if not export_path:
-         logger.warning("No best picks export found for yesterday.")
+         if not _no_export_logged:
+             logger.info("No best picks export found for yesterday (only logging once per run).")
+             _no_export_logged = True
          return None
 
     try:

@@ -833,7 +833,20 @@ def main() -> None:
                 "positive_ev_rows": diagnostics.get("positive_ev_rows", 0),
                 "best_pick_nonempty_rows": diagnostics.get("best_pick_nonempty_rows", 0),
                 "bet_rows": diagnostics.get("bet_rows", 0),
+                "unmatched_live_games": diagnostics.get("unmatched_live_games", []),
+                "missing_uploaded_games": diagnostics.get("missing_uploaded_games", []),
             })
+
+            # Show specific mismatch reports if they exist
+            unmatched_live = diagnostics.get("unmatched_live_games", [])
+            missing_uploads = diagnostics.get("missing_uploaded_games", [])
+            if unmatched_live:
+                st.warning(f"Found {len(unmatched_live)} live games that couldn't be matched to uploaded data. Expand to see reasons.")
+                st.dataframe(pd.DataFrame(unmatched_live))
+            if missing_uploads:
+                st.error(f"Found {len(missing_uploads)} uploaded games that did not make it into the final live slate.")
+                st.write("Missing Upload IDs:")
+                st.write(missing_uploads)
 
         display_df = best_picks_df.copy() if best_picks_df is not None else pd.DataFrame(columns=["league", "pick", "edge"])
         if not display_df.empty and "parlay_rank" in display_df.columns:
@@ -897,6 +910,7 @@ def main() -> None:
             # We must preserve the primary Pick_Status > Triple_Filter_Rank > EV > Edge order
             status_order = [
                 "Actionable",
+                "High Variance/Speculative",
                 "Below Threshold",
                 "Fallback / Low Confidence",
                 "No Play",
