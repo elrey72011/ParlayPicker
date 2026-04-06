@@ -219,7 +219,7 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
         return wins, losses, pushes, win_rate, net_profit
 
     # Only evaluate "Actionable" picks for top-line metrics based on current display_df
-    actionable_df = display_df[display_df.get('Pick_Status', '') == 'Actionable'].copy()
+    actionable_df = display_df[display_df['Pick_Status'] == 'Actionable'].copy() if 'Pick_Status' in display_df.columns else pd.DataFrame()
 
     if actionable_df.empty:
          st.info("No 'Actionable' picks were found in yesterday's export.")
