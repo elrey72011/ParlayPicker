@@ -529,12 +529,10 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
 
 
     from core.streamlit_pipeline import build_best_picks_df
-    best_picks_df = build_best_picks_df(analysis_df)
 
-    # Safely extract selection diagnostics
-    selection_diag = best_picks_df.attrs.get("selection_diagnostics", {})
-    if selection_diag:
-        diagnostics["selection_diagnostics"] = selection_diag
+    # We pass the diagnostics dictionary so that selection metrics and preview_df
+    # can be injected without relying on pandas DataFrame.attrs serialization.
+    best_picks_df = build_best_picks_df(analysis_df, diagnostics_out=diagnostics)
 
     if "gemini_analysis" not in analysis_df.columns:
         analysis_df["gemini_analysis"] = ""
