@@ -86,7 +86,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 
 BEST_PICK_COLUMNS = [
     "Triple_Filter_Rank", "parlay_rank",
-    "league", "home_team", "away_team", "game_date", "game_time_est", "market_type", "candidate_source", "orientation_source", "best_pick", "Pick_Status", "Status_Reason",
+    "league", "home_team", "away_team", "game_date", "game_time_est", "market_type", "candidate_source", "orientation_source", "upload_match_reason", "best_pick", "Pick_Status", "Status_Reason",
     "calibrated_probability", "expected_value", "edge", "consensus_agreement",
     "odds_american", "odds_source", "market_probability", "ml_probability", "display_probability",
     "kalshi_probability", "kalshi_match_status", "kalshi_match_reason",
@@ -95,7 +95,7 @@ BEST_PICK_COLUMNS = [
 
 CANONICAL_BET_COLUMNS = [
     "league", "home_team", "away_team", "game_date", "game_time_est", "game_key",
-    "market_type", "candidate_source", "orientation_source", "spread_line", "total_line",
+    "market_type", "candidate_source", "orientation_source", "upload_match_reason", "spread_line", "total_line",
     "theover_probability", "odds_american", "odds_source", "market_probability",
     "ml_probability", "display_probability", "calibrated_probability", "expected_value", "edge", "best_pick", "used_stale_features", "matchup_id", "Conviction_Score",
 ]
@@ -2075,19 +2075,46 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
         "filtered": {"spread_home": 0, "spread_away": 0, "total_over": 0, "total_under": 0, "h2h_home": 0, "h2h_away": 0},
         "games_unmatched": 0,
         "games_matched_exact": 0,
-        "games_matched_fallback": 0,
+        "games_matched_canonical": 0,
+        "games_matched_fuzzy": 0,
         "rows_retained_unmatched": 0,
         "rows_dropped_by_join": 0,
     }
 
-    for _, row in live_odds_df.iterrows():
+    # Normalize dates and canonical keys ahead of the loop for efficiency and robustness
+    if has_theover:
+        theover_rows_with_canon = theover_rows.copy()
+        # Use existing date normalization helper to ensure ET day comparison
+        theover_rows_with_canon["_et_day"] = _et_day_string(_game_dates(theover_rows_with_canon))
+        theover_rows_with_canon["_canon_key"] = _canonical_matchup_key(theover_rows_with_canon)
+
+        canon_map = {}
+        for (canon_key, et_date), group in theover_rows_with_canon.groupby(["_canon_key", "_et_day"]):
+            canon_map[(canon_key, et_date)] = group["market_type"].tolist()
+
+        # Group by league and normalized ET date for fuzzy matching
+        fuzzy_pool = {}
+        for (league, et_date), group in theover_rows_with_canon.groupby([
+            theover_rows_with_canon["league"].astype(str).str.upper(),
+            theover_rows_with_canon["_et_day"]
+        ]):
+            fuzzy_pool[(league, et_date)] = group
+
+    # Pre-process live odds dates and canonical keys vectorially
+    live_odds_processed = live_odds_df.copy()
+    live_odds_processed["_et_day"] = _et_day_string(_game_dates(live_odds_processed))
+    live_odds_processed["_canon_key"] = _canonical_matchup_key(live_odds_processed)
+
+    for idx, row in live_odds_processed.iterrows():
         base_dict = {col: row.get(col) for col in id_cols}
         matchup_id = row.get("matchup_id")
+        live_canon_key = row.get("_canon_key")
 
         league_str = str(row.get("league", "")).upper()
-        home_team = str(row.get("home_team", "")).lower()
-        away_team = str(row.get("away_team", "")).lower()
+        home_team = str(row.get("home_team", ""))
+        away_team = str(row.get("away_team", ""))
         game_date = str(row.get("game_date", ""))
+        et_date = str(row.get("_et_day", ""))
 
         # Determine which markets to emit for the game
         # NHL gets H2H and Totals. Others get Spreads and Totals.
@@ -2112,38 +2139,81 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
         match_found = False
         orientation_source = "default"
         target_markets = []
+        upload_match_reason = ""
 
         if has_theover and matchup_id:
-            # Try exact match
+            # 1. Try exact matchup_id match
             matchup_mask = theover_rows["matchup_id"] == matchup_id
             if matchup_mask.any():
                 match_found = True
                 orientation_source = "exact_match"
                 target_markets = theover_rows.loc[matchup_mask, "market_type"].tolist()
+                upload_match_reason = "Matched by exact matchup_id"
             else:
-                # Try fallback matching: same league and teams and ET day string
-                fallback_mask = (
-                    (theover_rows["league"].astype(str).str.upper() == league_str) &
-                    (theover_rows["home_team"].astype(str).str.lower() == home_team) &
-                    (theover_rows["away_team"].astype(str).str.lower() == away_team)
-                )
-                if game_date and "game_date" in theover_rows.columns:
-                    fallback_mask = fallback_mask & (theover_rows["game_date"].astype(str) == game_date)
-
-                if fallback_mask.any():
+                # 2. Try canonical match (Sorted normalized teams + normalized league + ET Day)
+                if (live_canon_key, et_date) in canon_map:
                     match_found = True
-                    orientation_source = "fallback_match"
-                    target_markets = theover_rows.loc[fallback_mask, "market_type"].tolist()
+                    orientation_source = "canonical_match"
+                    target_markets = canon_map[(live_canon_key, et_date)]
+                    upload_match_reason = "Matched by canonical matchup key"
+
+                if not match_found:
+                    # 3. Try fuzzy match (Same league + ET Day, similarity >= 85)
+                    pool = fuzzy_pool.get((league_str, et_date))
+                    if pool is not None and not pool.empty:
+                        best_score = -1
+                        best_match_idx = None
+
+                        # We use _fuzzy_match_schedule_row logic manually to find the best match within the pool
+                        # We need to test against all unique match-ups in the pool
+                        unique_matchups = pool.drop_duplicates(["home_team", "away_team"])
+
+                        for idx, cand in unique_matchups.iterrows():
+                            c_home = str(cand.get("home_team", ""))
+                            c_away = str(cand.get("away_team", ""))
+
+                            direct_home = _team_similarity_score(home_team, c_home)
+                            direct_away = _team_similarity_score(away_team, c_away)
+                            direct_min = min(direct_home, direct_away)
+
+                            rev_home = _team_similarity_score(home_team, c_away)
+                            rev_away = _team_similarity_score(away_team, c_home)
+                            rev_min = min(rev_home, rev_away)
+
+                            cand_score = max(direct_min, rev_min)
+                            if cand_score > best_score:
+                                best_score = cand_score
+                                best_match_idx = idx
+
+                        if best_score >= 85 and best_match_idx is not None:
+                            match_found = True
+                            orientation_source = "fuzzy_match"
+                            best_match_home = pool.loc[best_match_idx, "home_team"]
+                            best_match_away = pool.loc[best_match_idx, "away_team"]
+                            matched_rows = pool[(pool["home_team"] == best_match_home) & (pool["away_team"] == best_match_away)]
+                            target_markets = matched_rows["market_type"].tolist()
+                            upload_match_reason = f"Matched by fuzzy team similarity (score={best_score})"
+                        else:
+                            upload_match_reason = "No fuzzy match > 85 similarity found"
+                    else:
+                        upload_match_reason = "Missing from upload (no games for this league/date)"
+        elif not has_theover:
+             upload_match_reason = "No uploaded theover_rows available"
+        else:
+             upload_match_reason = "Missing matchup_id for live game"
 
         if match_found:
             candidate_source = "upload_matched"
             if orientation_source == "exact_match":
                 diag_counts["games_matched_exact"] += 1
-            else:
-                diag_counts["games_matched_fallback"] += 1
+            elif orientation_source == "canonical_match":
+                diag_counts["games_matched_canonical"] += 1
+            elif orientation_source == "fuzzy_match":
+                diag_counts["games_matched_fuzzy"] += 1
         else:
             candidate_source = "live_unfiltered"
             diag_counts["games_unmatched"] += 1
+            logger.info(f"Unmatched game '{home_team} vs {away_team}' ({league_str} {game_date}). Reason: {upload_match_reason}")
 
         for market_type in candidate_markets:
             if match_found and market_type not in target_markets:
@@ -2159,6 +2229,7 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
             market_dict["market_type"] = market_type
             market_dict["candidate_source"] = candidate_source
             market_dict["orientation_source"] = orientation_source
+            market_dict["upload_match_reason"] = upload_match_reason
 
             # Map pricing for novig (primary)
             novig_price_col = f"novig_{price_suffix}"
@@ -2201,7 +2272,8 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
 
     logger.info("=== CANDIDATE GENERATION DIAGNOSTICS ===")
     logger.info(f"Games matched exact: {diag_counts['games_matched_exact']}")
-    logger.info(f"Games matched fallback: {diag_counts['games_matched_fallback']}")
+    logger.info(f"Games matched canonical: {diag_counts['games_matched_canonical']}")
+    logger.info(f"Games matched fuzzy: {diag_counts['games_matched_fuzzy']}")
     logger.info(f"Games unmatched (kept all candidates): {diag_counts['games_unmatched']}")
     logger.info(f"Generated candidates: {diag_counts['generated']}")
     logger.info(f"Rows dropped by join: {diag_counts['rows_dropped_by_join']}")
