@@ -1670,17 +1670,39 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
     # 2. Create the temporary sort column for EV
     pool["expected_value_sort"] = pd.to_numeric(pool["expected_value"], errors="coerce").fillna(-999)
 
-    # 3. Sort by Reliability (Tier) then Value (EV)
+    # Ensure market_type is available to distinguish sides vs totals
+    pool["_market_family"] = pool["market_type"].astype(str).str.lower().apply(
+        lambda x: "total" if "total" in x else "side"
+    )
+
+    # 3. Calculate Normalized EV (Z-score style relative score) within market families
+    # This prevents structural math inflation in totals from burying perfectly good side picks.
+    pool["_normalized_ev"] = pool["expected_value_sort"]
+    for family in ["total", "side"]:
+        family_mask = pool["_market_family"] == family
+        if family_mask.sum() > 1:
+            mean_ev = pool.loc[family_mask, "expected_value_sort"].mean()
+            std_ev = pool.loc[family_mask, "expected_value_sort"].std()
+            if std_ev > 0:
+                pool.loc[family_mask, "_normalized_ev"] = (pool.loc[family_mask, "expected_value_sort"] - mean_ev) / std_ev
+            else:
+                pool.loc[family_mask, "_normalized_ev"] = 0.0
+
+    # 4. Sort by Reliability (Tier) then Normalized Relative Value
     pool = pool.sort_values(
-        by=["tier_score", "expected_value_sort"],
+        by=["tier_score", "_normalized_ev"],
         ascending=[True, False],
         na_position="last"
     )
 
-    # 4. Keep the best pick for each game
+    # 5. Keep the best pick for each game
     best = pool.drop_duplicates(subset=["matchup_id"], keep="first").copy()
+
+    # Cleanup temporary columns
+    best = best.drop(columns=["_market_family", "_normalized_ev"])
+
     logger.info(f"BEST PICKS AUDIT: Rows after 'one-per-game' drop_duplicates: {len(best)} (started with {len(pool)})")
-    logger.info("BEST PICKS AUDIT: IMPORTANT - The one-per-game logic drops all but the highest-EV pick per game (e.g. discards the other side and the total).")
+    logger.info("BEST PICKS AUDIT: IMPORTANT - The one-per-game logic drops all but the relatively-highest EV pick per game (using normalized Z-scores across market families).")
 
     # Phase 5: Enforce Thresholds and Pick Status Labelling
     # MIN_EDGE_THRESHOLD of 0.01 for high-liquidity markets.
@@ -2214,6 +2236,12 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
             candidate_source = "live_unfiltered"
             diag_counts["games_unmatched"] += 1
             logger.info(f"Unmatched game '{home_team} vs {away_team}' ({league_str} {game_date}). Reason: {upload_match_reason}")
+            if "unmatched_live_games" not in diag_counts:
+                diag_counts["unmatched_live_games"] = []
+            diag_counts["unmatched_live_games"].append({
+                "league": league_str, "home_team": home_team, "away_team": away_team,
+                "game_date": game_date, "reason": upload_match_reason
+            })
 
         for market_type in candidate_markets:
             if match_found and market_type not in target_markets:
@@ -2279,6 +2307,20 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
     logger.info(f"Rows dropped by join: {diag_counts['rows_dropped_by_join']}")
     logger.info(f"Rows retained (unmatched): {diag_counts['rows_retained_unmatched']}")
     logger.info(f"Filtered (final) candidates: {diag_counts['filtered']}")
+
+    # Identify uploaded games that were missed entirely
+    if theover_rows is not None and not theover_rows.empty and "matchup_id" in theover_rows.columns:
+        uploaded_games = set(theover_rows["matchup_id"].unique())
+        matched_games = set()
+        for row in out_rows:
+            if row.get("candidate_source") == "upload_matched":
+                matched_games.add(row.get("matchup_id"))
+        missing_uploads = uploaded_games - matched_games
+        diag_counts["missing_uploaded_games"] = list(missing_uploads)
+        logger.info(f"Missing uploaded games count: {len(missing_uploads)}")
+        if missing_uploads:
+            logger.info(f"Missing uploaded games IDs: {list(missing_uploads)[:10]}")
+
     logger.info("========================================")
 
     expanded_df = pd.DataFrame(out_rows)
@@ -2464,7 +2506,11 @@ def run_analysis_pipeline(
         merged["odds_source"] = pd.NA
 
     uploaded_odds = _numeric_series(merged, "odds_american")
-    merged.loc[uploaded_odds.notna() & (uploaded_odds != -110), "odds_source"] = "uploaded"
+    # Avoid force overwriting odds_source to "uploaded" just because odds are not -110.
+    # Preserve true provenance from the live_odds expansion layer (e.g. odds_api).
+    # If a row has non-110 odds and no other odds_source, we can assign uploaded_only.
+    missing_source = _string_series(merged, "odds_source").isna() | _string_series(merged, "odds_source").eq("")
+    merged.loc[uploaded_odds.notna() & (uploaded_odds != -110) & missing_source, "odds_source"] = "uploaded_only"
 
     if not base_df.empty:
         base_schedule = base_df.copy()
@@ -2940,6 +2986,8 @@ def run_analysis_pipeline(
 
     diagnostics = {
         "candidate_generation_diagnostics": diag_counts,
+        "unmatched_live_games": diag_counts.get("unmatched_live_games", []),
+        "missing_uploaded_games": diag_counts.get("missing_uploaded_games", []),
         "total_rows": pre_filter_total_rows,
         "rows_with_game_date": int(pd.to_datetime(analysis_df.get("game_date"), errors="coerce", utc=True).notna().sum()) if not analysis_df.empty else 0,
         # Safely sort team names alphabetically to count unique actual physical games (matchups) across all markets
