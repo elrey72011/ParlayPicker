@@ -86,7 +86,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 
 BEST_PICK_COLUMNS = [
     "Triple_Filter_Rank", "parlay_rank",
-    "league", "home_team", "away_team", "game_date", "game_time_est", "market_type", "best_pick", "Pick_Status", "Status_Reason",
+    "league", "home_team", "away_team", "game_date", "game_time_est", "market_type", "candidate_source", "orientation_source", "best_pick", "Pick_Status", "Status_Reason",
     "calibrated_probability", "expected_value", "edge", "consensus_agreement",
     "odds_american", "odds_source", "market_probability", "ml_probability", "display_probability",
     "kalshi_probability", "kalshi_match_status", "kalshi_match_reason",
@@ -95,7 +95,7 @@ BEST_PICK_COLUMNS = [
 
 CANONICAL_BET_COLUMNS = [
     "league", "home_team", "away_team", "game_date", "game_time_est", "game_key",
-    "market_type", "spread_line", "total_line",
+    "market_type", "candidate_source", "orientation_source", "spread_line", "total_line",
     "theover_probability", "odds_american", "odds_source", "market_probability",
     "ml_probability", "display_probability", "calibrated_probability", "expected_value", "edge", "best_pick", "used_stale_features", "matchup_id", "Conviction_Score",
 ]
@@ -2048,13 +2048,16 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
 
     return pd.DataFrame(list(game_dict.values()))
 
-def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.DataFrame | None = None) -> pd.DataFrame:
+def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.DataFrame | None = None) -> tuple[pd.DataFrame, dict[str, Any]]:
     """
-    Expands the wide live_odds_df (1 row per game) into exactly 2 market rows per game
-    (1 Spread, 1 Total) based on the user's uploads in `theover_rows`.
+    Expands the wide live_odds_df (1 row per game) into up to 4 market rows per game
+    (e.g., spread_home, spread_away, total_over, total_under) and then filters them
+    based on the user's uploads in `theover_rows`. If no match, retains all candidates.
+
+    Returns a tuple of (expanded_df, diag_counts).
     """
     if live_odds_df is None or live_odds_df.empty:
-        return pd.DataFrame()
+        return pd.DataFrame(), {}
 
     out_rows = []
 
@@ -2066,25 +2069,35 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
 
     has_theover = theover_rows is not None and not theover_rows.empty and "market_type" in theover_rows.columns
 
+    # Diagnostic counters
+    diag_counts = {
+        "generated": {"spread_home": 0, "spread_away": 0, "total_over": 0, "total_under": 0, "h2h_home": 0, "h2h_away": 0},
+        "filtered": {"spread_home": 0, "spread_away": 0, "total_over": 0, "total_under": 0, "h2h_home": 0, "h2h_away": 0},
+        "games_unmatched": 0,
+        "games_matched_exact": 0,
+        "games_matched_fallback": 0,
+        "rows_retained_unmatched": 0,
+        "rows_dropped_by_join": 0,
+    }
+
     for _, row in live_odds_df.iterrows():
         base_dict = {col: row.get(col) for col in id_cols}
         matchup_id = row.get("matchup_id")
 
-        # Determine which markets to emit dynamically
-        emit_spread = "spread_home"
-        emit_total = "total_over"
-        emit_h2h = "h2h_home"
+        league_str = str(row.get("league", "")).upper()
+        home_team = str(row.get("home_team", "")).lower()
+        away_team = str(row.get("away_team", "")).lower()
+        game_date = str(row.get("game_date", ""))
 
-        if has_theover and matchup_id:
-            matchup_mask = theover_rows["matchup_id"] == matchup_id
-            if matchup_mask.any():
-                matchup_markets = theover_rows.loc[matchup_mask, "market_type"].tolist()
-                if "spread_away" in matchup_markets:
-                    emit_spread = "spread_away"
-                if "total_under" in matchup_markets:
-                    emit_total = "total_under"
-                if "h2h_away" in matchup_markets:
-                    emit_h2h = "h2h_away"
+        # Determine which markets to emit for the game
+        # NHL gets H2H and Totals. Others get Spreads and Totals.
+        if league_str == "NHL":
+            candidate_markets = ["h2h_home", "h2h_away", "total_over", "total_under"]
+        else:
+            candidate_markets = ["spread_home", "spread_away", "total_over", "total_under"]
+
+        for m in candidate_markets:
+            diag_counts["generated"][m] += 1
 
         market_mappings = {
             "spread_home": ("home_price", "home_point"),
@@ -2095,17 +2108,57 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
             "h2h_away": ("h2h_away_price", None)
         }
 
-        # Consolidate to 2 rows: Side + Total. Use H2H for NHL, Spread for others.
-        league_str = str(row.get("league", "")).upper()
-        if league_str == "NHL":
-            side_market = emit_h2h
-        else:
-            side_market = emit_spread
+        # Check for matches in the uploaded file
+        match_found = False
+        orientation_source = "default"
+        target_markets = []
 
-        for market_type in [side_market, emit_total]:
+        if has_theover and matchup_id:
+            # Try exact match
+            matchup_mask = theover_rows["matchup_id"] == matchup_id
+            if matchup_mask.any():
+                match_found = True
+                orientation_source = "exact_match"
+                target_markets = theover_rows.loc[matchup_mask, "market_type"].tolist()
+            else:
+                # Try fallback matching: same league and teams and ET day string
+                fallback_mask = (
+                    (theover_rows["league"].astype(str).str.upper() == league_str) &
+                    (theover_rows["home_team"].astype(str).str.lower() == home_team) &
+                    (theover_rows["away_team"].astype(str).str.lower() == away_team)
+                )
+                if game_date and "game_date" in theover_rows.columns:
+                    fallback_mask = fallback_mask & (theover_rows["game_date"].astype(str) == game_date)
+
+                if fallback_mask.any():
+                    match_found = True
+                    orientation_source = "fallback_match"
+                    target_markets = theover_rows.loc[fallback_mask, "market_type"].tolist()
+
+        if match_found:
+            candidate_source = "upload_matched"
+            if orientation_source == "exact_match":
+                diag_counts["games_matched_exact"] += 1
+            else:
+                diag_counts["games_matched_fallback"] += 1
+        else:
+            candidate_source = "live_unfiltered"
+            diag_counts["games_unmatched"] += 1
+
+        for market_type in candidate_markets:
+            if match_found and market_type not in target_markets:
+                diag_counts["rows_dropped_by_join"] += 1
+                continue # Skip markets not in the uploaded target set if we found a match
+
+            diag_counts["filtered"][market_type] += 1
+            if not match_found:
+                diag_counts["rows_retained_unmatched"] += 1
+
             price_suffix, point_suffix = market_mappings[market_type]
             market_dict = base_dict.copy()
             market_dict["market_type"] = market_type
+            market_dict["candidate_source"] = candidate_source
+            market_dict["orientation_source"] = orientation_source
 
             # Map pricing for novig (primary)
             novig_price_col = f"novig_{price_suffix}"
@@ -2146,8 +2199,18 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
 
             out_rows.append(market_dict)
 
+    logger.info("=== CANDIDATE GENERATION DIAGNOSTICS ===")
+    logger.info(f"Games matched exact: {diag_counts['games_matched_exact']}")
+    logger.info(f"Games matched fallback: {diag_counts['games_matched_fallback']}")
+    logger.info(f"Games unmatched (kept all candidates): {diag_counts['games_unmatched']}")
+    logger.info(f"Generated candidates: {diag_counts['generated']}")
+    logger.info(f"Rows dropped by join: {diag_counts['rows_dropped_by_join']}")
+    logger.info(f"Rows retained (unmatched): {diag_counts['rows_retained_unmatched']}")
+    logger.info(f"Filtered (final) candidates: {diag_counts['filtered']}")
+    logger.info("========================================")
+
     expanded_df = pd.DataFrame(out_rows)
-    return expanded_df
+    return expanded_df, diag_counts
 
 def run_analysis_pipeline(
     sports: list[str] | None = None,
@@ -2219,7 +2282,7 @@ def run_analysis_pipeline(
         live_odds_df["game_date"] = live_odds_df["game_date"].fillna(fallback_day).fillna(today_et_day)
         live_odds_df["matchup_id"] = _matchup_id(live_odds_df)
 
-    master_slate = _expand_live_odds_to_bet_rows(live_odds_df, theover_rows)
+    master_slate, diag_counts = _expand_live_odds_to_bet_rows(live_odds_df, theover_rows)
 
     # Graceful fallback if Odds API fails or is empty: use theover_rows directly as the master slate.
     if master_slate.empty and not theover_rows.empty:
@@ -2804,6 +2867,7 @@ def run_analysis_pipeline(
     base_coverage = float(_game_dates(base_df).notna().mean()) if not base_df.empty else 0.0
 
     diagnostics = {
+        "candidate_generation_diagnostics": diag_counts,
         "total_rows": pre_filter_total_rows,
         "rows_with_game_date": int(pd.to_datetime(analysis_df.get("game_date"), errors="coerce", utc=True).notna().sum()) if not analysis_df.empty else 0,
         # Safely sort team names alphabetically to count unique actual physical games (matchups) across all markets
