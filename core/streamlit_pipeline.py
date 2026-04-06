@@ -976,12 +976,10 @@ def compute_blended_probability(
         if pd.isna(p_mkt):
             p_mkt = p_ml if pd.notna(p_ml) else 0.5
 
-        # Orient Kalshi Probability (Kalshi is anchored to Home/Over)
+        # Kalshi Probability is already oriented to the pick side before this step
         k_oriented = None
         if pd.notna(p_kal):
             k_oriented = p_kal
-            if m_typ.endswith("away") or m_typ.endswith("under"):
-                k_oriented = 1.0 - k_oriented
 
         # Tier 1 vs Tier 2
         if k_oriented is not None and k_oriented >= 0.55:

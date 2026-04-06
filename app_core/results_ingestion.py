@@ -191,16 +191,33 @@ def attach_results(master_df: pd.DataFrame, results_df: pd.DataFrame) -> pd.Data
 
                 if spread_line is not None:
                      # Determine which team we picked
-                     pick_team = str(row.get('spread_pick_team') or row.get('Pick', '')).split(' ')[0] # naive fallback
+                     raw_pick_team = str(row.get('spread_pick_team') or row.get('Pick', ''))
+                     import re
+                     # Remove the spread line from the pick team string
+                     raw_pick_team = re.sub(r'([+-]?\d+\.?\d*)\s*(?:\(.*\))?$', '', raw_pick_team).strip()
+                     pick_team = raw_pick_team.lower()
                      pick_side = str(row.get('spread_pick_side') or '')
 
                      if not pick_side:
-                         # Infer from team name
-                         norm_pick = TeamNameMatcher.normalize(pick_team)
-                         if home in norm_pick or norm_pick in home:
+                         # Infer from team name using fuzzy matching or robust normalization
+                         from difflib import SequenceMatcher
+                         home_team = str(row.get('home_team', row.get('Home', ''))).lower()
+                         away_team = str(row.get('away_team', row.get('Away', ''))).lower()
+
+                         home_ratio = SequenceMatcher(None, pick_team, home_team).ratio() if home_team else 0.0
+                         away_ratio = SequenceMatcher(None, pick_team, away_team).ratio() if away_team else 0.0
+
+                         if home_ratio > away_ratio and home_ratio > 0.4:
                              pick_side = 'home'
-                         elif away in norm_pick or norm_pick in away:
+                         elif away_ratio > home_ratio and away_ratio > 0.4:
                              pick_side = 'away'
+                         else:
+                             # Fallback to normalized checking
+                             norm_pick = robust_normalize_team(pick_team).lower()
+                             if home in norm_pick or norm_pick in home:
+                                 pick_side = 'home'
+                             elif away in norm_pick or norm_pick in away:
+                                 pick_side = 'away'
 
                      if pick_side == 'home':
                          # Home spread
