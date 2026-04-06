@@ -1675,12 +1675,18 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
         lambda x: "total" if "total" in x else "side"
     )
 
-    # 3. Calculate Normalized EV (Z-score style relative score) within market families
-    # This prevents structural math inflation in totals from burying perfectly good side picks.
+    # 3. Calculate Normalized EV and Normalized Edge (Z-score style) within market families
     pool["_normalized_ev"] = pool["expected_value_sort"]
+    pool["_normalized_edge"] = pool["edge"]
+
+    # Store diagnostics
+    raw_counts = pool["_market_family"].value_counts().to_dict()
+    avg_scores = {}
+
     for family in ["total", "side"]:
         family_mask = pool["_market_family"] == family
         if family_mask.sum() > 1:
+            # EV
             mean_ev = pool.loc[family_mask, "expected_value_sort"].mean()
             std_ev = pool.loc[family_mask, "expected_value_sort"].std()
             if std_ev > 0:
@@ -1688,21 +1694,93 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
             else:
                 pool.loc[family_mask, "_normalized_ev"] = 0.0
 
-    # 4. Sort by Reliability (Tier) then Normalized Relative Value
+            # Edge
+            mean_edge = pool.loc[family_mask, "edge"].mean()
+            std_edge = pool.loc[family_mask, "edge"].std()
+            if std_edge > 0:
+                pool.loc[family_mask, "_normalized_edge"] = (pool.loc[family_mask, "edge"] - mean_edge) / std_edge
+            else:
+                pool.loc[family_mask, "_normalized_edge"] = 0.0
+        else:
+            pool.loc[family_mask, "_normalized_ev"] = 0.0
+            pool.loc[family_mask, "_normalized_edge"] = 0.0
+
+    # Calculate final family score (50/50 blend)
+    pool["final_family_score"] = 0.5 * pool["_normalized_ev"] + 0.5 * pool["_normalized_edge"]
+
+    for family in ["total", "side"]:
+        family_mask = pool["_market_family"] == family
+        avg_scores[family] = pool.loc[family_mask, "final_family_score"].mean() if family_mask.sum() > 0 else 0.0
+
+    # 4. Sort to prepare for finalist selection
     pool = pool.sort_values(
-        by=["tier_score", "_normalized_ev"],
-        ascending=[True, False],
+        by=["final_family_score", "tier_score", "expected_value_sort", "edge", "calibrated_probability"],
+        ascending=[False, True, False, False, False],
         na_position="last"
     )
 
-    # 5. Keep the best pick for each game
-    best = pool.drop_duplicates(subset=["matchup_id"], keep="first").copy()
+    # 5. First Stage: Best side finalist vs Best total finalist per game
+    # Group by matchup_id AND _market_family to get the best of each family per game
+    finalists = pool.drop_duplicates(subset=["matchup_id", "_market_family"], keep="first").copy()
+
+    finalist_counts = finalists["_market_family"].value_counts().to_dict()
+
+    # 6. Second Stage: Final winner per game
+    # Re-sort finalists just to be absolutely certain the highest final_family_score wins the game comparison
+    finalists = finalists.sort_values(
+        by=["final_family_score", "tier_score", "expected_value_sort", "edge", "calibrated_probability"],
+        ascending=[False, True, False, False, False],
+        na_position="last"
+    )
+
+    # Optional diagnostic: store the finalist comparisons
+    preview_rows = []
+    for matchup, group in finalists.groupby("matchup_id"):
+        side_row = group[group["_market_family"] == "side"]
+        total_row = group[group["_market_family"] == "total"]
+
+        side_pick = side_row["best_pick"].iloc[0] if not side_row.empty else "None"
+        side_ev = side_row["expected_value"].iloc[0] if not side_row.empty else 0.0
+        side_edge = side_row["edge"].iloc[0] if not side_row.empty else 0.0
+        side_score = side_row["final_family_score"].iloc[0] if not side_row.empty else 0.0
+
+        total_pick = total_row["best_pick"].iloc[0] if not total_row.empty else "None"
+        total_ev = total_row["expected_value"].iloc[0] if not total_row.empty else 0.0
+        total_edge = total_row["edge"].iloc[0] if not total_row.empty else 0.0
+        total_score = total_row["final_family_score"].iloc[0] if not total_row.empty else 0.0
+
+        winner_row = group.iloc[0]
+        winner_family = winner_row["_market_family"]
+        winner_pick = winner_row["best_pick"]
+        score_delta = abs(side_score - total_score) if not side_row.empty and not total_row.empty else 0.0
+
+        preview_rows.append({
+            "matchup_id": matchup,
+            "side_pick": side_pick,
+            "side_ev": side_ev,
+            "side_edge": side_edge,
+            "side_score": side_score,
+            "total_pick": total_pick,
+            "total_ev": total_ev,
+            "total_edge": total_edge,
+            "total_score": total_score,
+            "winner": winner_pick,
+            "winner_family": winner_family,
+            "score_delta": score_delta
+        })
+
+    preview_df = pd.DataFrame(preview_rows)
+
+    # Select final winner
+    best = finalists.drop_duplicates(subset=["matchup_id"], keep="first").copy()
+
+    final_counts = best["_market_family"].value_counts().to_dict()
 
     # Cleanup temporary columns
-    best = best.drop(columns=["_market_family", "_normalized_ev"])
+    best = best.drop(columns=["_market_family", "_normalized_ev", "_normalized_edge", "final_family_score"])
 
     logger.info(f"BEST PICKS AUDIT: Rows after 'one-per-game' drop_duplicates: {len(best)} (started with {len(pool)})")
-    logger.info("BEST PICKS AUDIT: IMPORTANT - The one-per-game logic drops all but the relatively-highest EV pick per game (using normalized Z-scores across market families).")
+    logger.info("BEST PICKS AUDIT: IMPORTANT - The one-per-game logic drops all but the relatively-highest final_family_score pick per game.")
 
     # Phase 5: Enforce Thresholds and Pick Status Labelling
     # MIN_EDGE_THRESHOLD of 0.01 for high-liquidity markets.
@@ -1963,7 +2041,19 @@ def build_best_picks_df(analysis_df: pd.DataFrame) -> pd.DataFrame:
                     filtered_counts = {k: v for k, v in counts.items() if v > 0}
                     logger.info(f"odds_source '{source}' -> {filtered_counts}")
 
-    return best[BEST_PICK_COLUMNS]
+    # Pack diagnostics in a custom attribute of the dataframe since Python doesn't allow returning 2 things seamlessly without changing the signature
+    # We will attach it as an attribute
+    final_best_df = best[BEST_PICK_COLUMNS].copy()
+    final_best_df.attrs["selection_diagnostics"] = {
+        "raw_counts": raw_counts,
+        "finalist_counts": finalist_counts,
+        "final_counts": final_counts,
+        "actionable_counts": final_best_df[final_best_df["Pick_Status"] == "Actionable"]["market_type"].astype(str).str.lower().apply(lambda x: "total" if "total" in x else "side").value_counts().to_dict(),
+        "avg_scores": avg_scores,
+        "preview_df": preview_df,
+    }
+
+    return final_best_df
 
 
 def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None = None) -> pd.DataFrame:
