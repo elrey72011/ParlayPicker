@@ -47,14 +47,14 @@ def test_two_stage_finalist_selection_logic():
     # Verify diagnostics dictionary was updated properly
     assert "selection_diagnostics" in diagnostics
     diags = diagnostics["selection_diagnostics"]
-    assert diags["raw_counts"]["side"] == 3
-    assert diags["raw_counts"]["total"] == 2
+    assert diags["raw_family_counts"]["side"] == 3
+    assert diags["raw_family_counts"]["total"] == 2
 
-    assert diags["finalist_counts"]["side"] == 2
-    assert diags["finalist_counts"]["total"] == 2
+    assert diags["finalist_family_counts"]["side"] == 2
+    assert diags["finalist_family_counts"]["total"] == 2
 
-    assert diags["final_counts"]["side"] == 1
-    assert diags["final_counts"]["total"] == 1
+    assert diags["final_family_counts"]["side"] == 1
+    assert diags["final_family_counts"]["total"] == 1
 
     preview_df = diags["preview_df"]
     assert not preview_df.empty
