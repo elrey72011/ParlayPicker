@@ -1683,6 +1683,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
 
     # Store diagnostics
     raw_counts = pool["_market_family"].value_counts().to_dict()
+    raw_market_type_counts = pool["market_type"].value_counts().to_dict()
     avg_scores = {}
 
     for family in ["total", "side"]:
@@ -1727,6 +1728,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     finalists = pool.drop_duplicates(subset=["matchup_id", "_market_family"], keep="first").copy()
 
     finalist_counts = finalists["_market_family"].value_counts().to_dict()
+    finalist_market_type_counts = finalists["market_type"].value_counts().to_dict()
 
     # 6. Second Stage: Compare the two finalists and choose exactly one final winner per game
     preview_rows = []
@@ -1741,11 +1743,15 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         side_ev = side_row["_ev_numeric"].iloc[0] if not side_row.empty else 0.0
         side_edge = side_row["_edge_numeric"].iloc[0] if not side_row.empty else 0.0
         side_score = side_row["final_family_score"].iloc[0] if not side_row.empty else 0.0
+        side_market_type = side_row["market_type"].iloc[0] if not side_row.empty else "None"
+        side_candidate_source = side_row["candidate_source"].iloc[0] if not side_row.empty and "candidate_source" in side_row.columns else "None"
 
         total_pick = total_row["best_pick"].iloc[0] if not total_row.empty else "None"
         total_ev = total_row["_ev_numeric"].iloc[0] if not total_row.empty else 0.0
         total_edge = total_row["_edge_numeric"].iloc[0] if not total_row.empty else 0.0
         total_score = total_row["final_family_score"].iloc[0] if not total_row.empty else 0.0
+        total_market_type = total_row["market_type"].iloc[0] if not total_row.empty else "None"
+        total_candidate_source = total_row["candidate_source"].iloc[0] if not total_row.empty and "candidate_source" in total_row.columns else "None"
 
         # Sort the finalists for this matchup to find the absolute winner
         group_sorted = group.sort_values(
@@ -1759,21 +1765,29 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
 
         winner_family = winner_row["_market_family"]
         winner_pick = winner_row["best_pick"]
+        winner_reason = winner_row.get("Status_Reason", "N/A (determined later)")
         score_delta = abs(side_score - total_score) if not side_row.empty and not total_row.empty else 0.0
 
         preview_rows.append({
             "matchup_id": matchup,
             "side_pick": side_pick,
+            "side_market_type": side_market_type,
+            "side_source": side_candidate_source,
             "side_ev": side_ev,
             "side_edge": side_edge,
             "side_score": side_score,
             "total_pick": total_pick,
+            "total_market_type": total_market_type,
+            "total_source": total_candidate_source,
             "total_ev": total_ev,
             "total_edge": total_edge,
             "total_score": total_score,
             "winner": winner_pick,
             "winner_family": winner_family,
-            "score_delta": score_delta
+            "score_delta": score_delta,
+            "winner_reason": winner_reason,
+            "has_side_finalist": not side_row.empty,
+            "has_total_finalist": not total_row.empty,
         })
 
     preview_df = pd.DataFrame(preview_rows)
@@ -1782,6 +1796,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     best = finalists.loc[final_winner_indices].copy()
 
     final_counts = best["_market_family"].value_counts().to_dict()
+    final_market_type_counts = best["market_type"].value_counts().to_dict()
 
     # Cleanup temporary columns
     best = best.drop(columns=["_market_family", "_normalized_ev", "_normalized_edge", "final_family_score", "_ev_numeric", "_edge_numeric"])
@@ -2050,11 +2065,19 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     final_best_df = best[BEST_PICK_COLUMNS].copy()
 
     if diagnostics_out is not None:
+        actionable_df = final_best_df[final_best_df["Pick_Status"] == "Actionable"]
+        actionable_family_counts = actionable_df["market_type"].astype(str).str.lower().apply(lambda x: "total" if "total" in x else "side").value_counts().to_dict()
+        actionable_market_type_counts = actionable_df["market_type"].value_counts().to_dict()
+
         diagnostics_out["selection_diagnostics"] = {
-            "raw_counts": raw_counts,
-            "finalist_counts": finalist_counts,
-            "final_counts": final_counts,
-            "actionable_counts": final_best_df[final_best_df["Pick_Status"] == "Actionable"]["market_type"].astype(str).str.lower().apply(lambda x: "total" if "total" in x else "side").value_counts().to_dict(),
+            "raw_family_counts": raw_counts,
+            "raw_market_type_counts": raw_market_type_counts,
+            "finalist_family_counts": finalist_counts,
+            "finalist_market_type_counts": finalist_market_type_counts,
+            "final_family_counts": final_counts,
+            "final_market_type_counts": final_market_type_counts,
+            "actionable_family_counts": actionable_family_counts,
+            "actionable_market_type_counts": actionable_market_type_counts,
             "avg_scores": avg_scores,
             "preview_df": preview_df,
         }
