@@ -27,7 +27,8 @@ def test_market_family_selection():
         'odds_source': ['odds_api'] * 6
     })
 
-    out = build_best_picks_df(df)
+    diagnostics_out = {}
+    out = build_best_picks_df(df, diagnostics_out=diagnostics_out)
 
     # Assert 1: one-pick-per-game preserved
     assert len(out) == 2, f"Expected 2 games in output, got {len(out)}"
@@ -40,12 +41,25 @@ def test_market_family_selection():
 
     print("Test passed: Best picks retains exactly one row per game and compares fairly across families.")
 
-    diag = out.attrs.get("selection_diagnostics")
-    if diag:
-        print("Diagnostics captured successfully:")
-        print(f"Raw Counts: {diag['raw_counts']}")
-        print(f"Finalist Counts: {diag['finalist_counts']}")
-        print(f"Final Counts: {diag['final_counts']}")
+    diag = diagnostics_out.get("selection_diagnostics")
+    assert diag is not None, "selection_diagnostics should be returned in diagnostics_out"
+
+    expected_keys = [
+        "raw_family_counts",
+        "raw_market_type_counts",
+        "finalist_family_counts",
+        "finalist_market_type_counts",
+        "final_family_counts",
+        "final_market_type_counts",
+        "actionable_family_counts",
+        "actionable_market_type_counts",
+        "avg_scores",
+        "preview_df",
+    ]
+    for key in expected_keys:
+        assert key in diag, f"Expected key {key} in selection_diagnostics"
+
+    print("Test passed: Diagnostics captured successfully with all expected keys.")
 
 if __name__ == "__main__":
     test_market_family_selection()
