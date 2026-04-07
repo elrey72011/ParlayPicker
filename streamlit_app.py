@@ -855,26 +855,30 @@ def main() -> None:
             if selection_diags:
                 st.markdown("#### Market-Family Selection Diagnostics")
                 col1, col2, col3, col4, col5 = st.columns(5)
-                col1.metric("Raw Side", selection_diags.get("raw_counts", {}).get("side", 0))
-                col1.metric("Raw Total", selection_diags.get("raw_counts", {}).get("total", 0))
+                col1.metric("Raw Side", selection_diags.get("raw_family_counts", {}).get("side", 0))
+                col1.metric("Raw Total", selection_diags.get("raw_family_counts", {}).get("total", 0))
 
-                col2.metric("Finalist Side", selection_diags.get("finalist_counts", {}).get("side", 0))
-                col2.metric("Finalist Total", selection_diags.get("finalist_counts", {}).get("total", 0))
+                col2.metric("Finalist Side", selection_diags.get("finalist_family_counts", {}).get("side", 0))
+                col2.metric("Finalist Total", selection_diags.get("finalist_family_counts", {}).get("total", 0))
 
-                col3.metric("Winner Side", selection_diags.get("final_counts", {}).get("side", 0))
-                col3.metric("Winner Total", selection_diags.get("final_counts", {}).get("total", 0))
+                col3.metric("Winner Side", selection_diags.get("final_family_counts", {}).get("side", 0))
+                col3.metric("Winner Total", selection_diags.get("final_family_counts", {}).get("total", 0))
 
-                col4.metric("Actionable Side", selection_diags.get("actionable_counts", {}).get("side", 0))
-                col4.metric("Actionable Total", selection_diags.get("actionable_counts", {}).get("total", 0))
+                col4.metric("Actionable Side", selection_diags.get("actionable_family_counts", {}).get("side", 0))
+                col4.metric("Actionable Total", selection_diags.get("actionable_family_counts", {}).get("total", 0))
 
                 avg_scores = selection_diags.get("avg_scores", {})
                 col5.metric("Avg Score (Side)", f"{avg_scores.get('side', 0.0):.3f}")
                 col5.metric("Avg Score (Total)", f"{avg_scores.get('total', 0.0):.3f}")
 
+                st.markdown("#### Market-Type Detail Counts")
+                st.write("**Actionable:**", selection_diags.get("actionable_market_type_counts", {}))
+                st.write("**Finalists:**", selection_diags.get("finalist_market_type_counts", {}))
+
                 preview_df = selection_diags.get("preview_df")
                 if preview_df is not None and not preview_df.empty:
                     st.write("Side vs Total Finalist Preview:")
-                    st.dataframe(preview_df, use_container_width=True)
+                    st.dataframe(preview_df, width="stretch")
 
         display_df = best_picks_df.copy() if best_picks_df is not None else pd.DataFrame(columns=["league", "pick", "edge"])
         if not display_df.empty and "parlay_rank" in display_df.columns:
