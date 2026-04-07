@@ -1037,6 +1037,15 @@ def compute_blended_probability(
     return pd.to_numeric(blended, errors="coerce").clip(0.01, 0.99)
 
 
+def get_opposing_odds_from_exchange(odds):
+    if pd.isna(odds):
+        return pd.NA
+    odds_val = float(odds)
+    if odds_val <= 0:
+        return abs(odds_val) - 20.0
+    else:
+        return -(odds_val + 20.0)
+
 def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
     out["odds_american"] = _numeric_series(out, "odds_american", pd.NA)
@@ -1047,16 +1056,7 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
     # We still perform a simple multiplicative normalization in case of minor bid-ask spread deviations
     implied_prob = out["odds_american"].apply(american_to_prob)
 
-    def _get_opposing_from_exchange(odds):
-        if pd.isna(odds):
-            return pd.NA
-        odds_val = float(odds)
-        if odds_val <= 0:
-            return abs(odds_val) - 20.0
-        else:
-            return -(odds_val + 20.0)
-
-    opposing_implied = out["odds_american"].apply(_get_opposing_from_exchange).apply(american_to_prob)
+    opposing_implied = out["odds_american"].apply(get_opposing_odds_from_exchange).apply(american_to_prob)
     out["market_probability"] = implied_prob / (implied_prob + opposing_implied)
 
     theover = _numeric_series(out, "theover_probability")
@@ -2737,17 +2737,8 @@ def run_analysis_pipeline(
 
     novig_midpoint = ((implied_back + implied_lay) / 2.0).clip(0.01, 0.99)
 
-    def _get_opposing_from_exchange(odds):
-        if pd.isna(odds):
-            return pd.NA
-        odds_val = float(odds)
-        if odds_val <= 0:
-            return abs(odds_val) - 20.0
-        else:
-            return -(odds_val + 20.0)
-
     # Fallback de-vig when midpoint inputs are unavailable.
-    opposing_implied = merged["odds_american"].apply(_get_opposing_from_exchange).apply(american_to_prob)
+    opposing_implied = merged["odds_american"].apply(get_opposing_odds_from_exchange).apply(american_to_prob)
     fallback_market_probability = (implied_prob / (implied_prob + opposing_implied)).clip(0.01, 0.99)
     merged["market_probability"] = novig_midpoint.where(novig_midpoint.notna(), fallback_market_probability)
 
