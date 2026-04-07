@@ -232,18 +232,29 @@ def _recompute_consensus_from_kalshi(df: pd.DataFrame, require_ml: bool = False)
             "Please check the ML engine logs for the specific missing features that caused the matrix to be mostly empty."
         )
 
-    decimal_odds = _safe_numeric_series(out, "decimal_odds")
-    if decimal_odds.isna().all() and "odds_american" in out.columns:
-        from core.streamlit_pipeline import american_to_decimal
-        # FIXED: No default -110, preserve NaN for missing odds
-        decimal_odds = _safe_numeric_series(out, "odds_american").apply(american_to_decimal)
+    from core.streamlit_pipeline import american_to_decimal, american_to_prob, get_opposing_odds_from_exchange
 
-        if decimal_odds.isna().all():
-            logger.warning("⚠️ All odds are missing - using default 1.91 (-110 equivalent)")
-            decimal_odds = pd.Series([1.91] * len(out), index=out.index)
+    # Always re-derive decimal_odds and market_probability from odds_american to ensure
+    # we don't carry stale values after odds patching (e.g. fallback_novig).
+    if "odds_american" in out.columns:
+        odds_american = _safe_numeric_series(out, "odds_american")
+        decimal_odds = odds_american.apply(american_to_decimal)
+
+        # Re-derive market_probability if needed for edge
+        implied_prob = odds_american.apply(american_to_prob)
+        opposing_implied = odds_american.apply(get_opposing_odds_from_exchange).apply(american_to_prob)
+        market_prob = implied_prob / (implied_prob + opposing_implied)
+        out["market_probability"] = market_prob
+    else:
+        decimal_odds = _safe_numeric_series(out, "decimal_odds")
+
+    if decimal_odds.isna().all():
+        logger.warning("⚠️ All odds are missing - using default 1.91 (-110 equivalent)")
+        decimal_odds = pd.Series([1.91] * len(out), index=out.index)
     # Row-level fallback: ensure every bet row has actionable decimal odds.
     decimal_odds = pd.to_numeric(decimal_odds, errors="coerce").fillna(1.91)
 
+    out["decimal_odds"] = decimal_odds
     out["expected_value"] = blended * (decimal_odds - 1) - (1 - blended)
     out["edge"] = blended - market_prob
 
@@ -826,6 +837,141 @@ def main() -> None:
 
     with tab3:
         st.subheader("Best Picks")
+
+        # Phase: Sweet Spot Filter Implementation
+        with st.expander("🎯 Sweet Spot Filter", expanded=False):
+            use_sweet_spot = st.checkbox("Enable Sweet Spot Filter", value=False, key="use_sweet_spot")
+
+            ss_col1, ss_col2, ss_col3 = st.columns(3)
+            with ss_col1:
+                include_fallback = st.checkbox("Include fallback_novig rows", value=False, key="ss_include_fallback")
+                ss_consensus = st.selectbox(
+                    "Consensus Requirement",
+                    options=["All", "Agrees Only", "Agrees or Neutral"],
+                    index=0,
+                    key="ss_consensus"
+                )
+            with ss_col2:
+                ss_min_prob = st.number_input("Min Win Probability", value=0.58, step=0.01, format="%.2f", key="ss_min_prob")
+                ss_max_prob = st.number_input("Max Win Probability", value=0.64, step=0.01, format="%.2f", key="ss_max_prob")
+                ss_min_edge = st.number_input("Min Edge", value=0.08, step=0.01, format="%.2f", key="ss_min_edge")
+            with ss_col3:
+                ss_max_edge = st.number_input("Max Edge", value=0.12, step=0.01, format="%.2f", key="ss_max_edge")
+                ss_min_ev = st.number_input("Min EV", value=0.10, step=0.01, format="%.2f", key="ss_min_ev")
+                ss_max_ev = st.number_input("Max EV", value=0.20, step=0.01, format="%.2f", key="ss_max_ev")
+
+            if use_sweet_spot and best_picks_df is not None and not best_picks_df.empty:
+                # Apply filters
+                sweet_spot_df = best_picks_df.copy()
+
+                # 1. Actionable
+                sweet_spot_df = sweet_spot_df[sweet_spot_df["Pick_Status"] == "Actionable"]
+                actionable_count = len(sweet_spot_df)
+
+                # 2. Odds Source
+                if not include_fallback:
+                    sweet_spot_df = sweet_spot_df[sweet_spot_df["odds_source"] != "fallback_novig"]
+                source_count = len(sweet_spot_df)
+
+                # 3. Probability Band
+                prob_mask = (sweet_spot_df["calibrated_probability"] >= ss_min_prob) & (sweet_spot_df["calibrated_probability"] <= ss_max_prob)
+                sweet_spot_df = sweet_spot_df[prob_mask]
+                prob_count = len(sweet_spot_df)
+
+                # 4. Edge Band
+                edge_mask = (sweet_spot_df["edge"] >= ss_min_edge) & (sweet_spot_df["edge"] <= ss_max_edge)
+                sweet_spot_df = sweet_spot_df[edge_mask]
+                edge_count = len(sweet_spot_df)
+
+                # 5. EV Band
+                ev_mask = (sweet_spot_df["expected_value"] >= ss_min_ev) & (sweet_spot_df["expected_value"] <= ss_max_ev)
+                sweet_spot_df = sweet_spot_df[ev_mask]
+                ev_count = len(sweet_spot_df)
+
+                # 6. Consensus Filter
+                if ss_consensus == "Agrees Only":
+                    sweet_spot_df = sweet_spot_df[sweet_spot_df["consensus_agreement"] == "Agrees"]
+                elif ss_consensus == "Agrees or Neutral":
+                    sweet_spot_df = sweet_spot_df[sweet_spot_df["consensus_agreement"].isin(["Agrees", "Neutral"])]
+                final_count = len(sweet_spot_df)
+
+                st.markdown("#### Diagnostics")
+                diag_col1, diag_col2, diag_col3, diag_col4 = st.columns(4)
+
+                diag_col1.metric("Total Best Picks", len(best_picks_df))
+                diag_col1.metric("Actionable Only", actionable_count)
+                diag_col1.metric("After Source Filter", source_count)
+
+                diag_col2.metric("After Prob Band", prob_count)
+                diag_col2.metric("After Edge Band", edge_count)
+                diag_col2.metric("After EV Band", ev_count)
+
+                diag_col3.metric("Final Sweet Spot", final_count)
+                avg_ev = sweet_spot_df["expected_value"].mean() if not sweet_spot_df.empty else 0.0
+                avg_edge = sweet_spot_df["edge"].mean() if not sweet_spot_df.empty else 0.0
+                diag_col3.metric("Avg EV", f"{avg_ev:.3f}")
+
+                diag_col4.metric("Avg Edge", f"{avg_edge:.3f}")
+                min_p = sweet_spot_df["calibrated_probability"].min() if not sweet_spot_df.empty else 0.0
+                max_p = sweet_spot_df["calibrated_probability"].max() if not sweet_spot_df.empty else 0.0
+                diag_col4.metric("Prob Range", f"{min_p:.2f} - {max_p:.2f}")
+
+                if not sweet_spot_df.empty:
+                    m_counts = sweet_spot_df["market_type"].value_counts().to_dict()
+                    st.write("**Market Types:**", m_counts)
+
+                    # Ensure export logic uses string columns for status and categorical to prevent issues
+                    target_export_cols = [
+                        "Pick_Status", "Status_Reason", "Triple_Filter_Rank", "Pick_Quality", "parlay_rank", "league", "Home", "Away", "Local Date",
+                        "Commence (Local)", "market_type", "candidate_source", "orientation_source", "upload_match_reason", "best_pick", "WinProbability", "expected_value",
+                        "edge", "Conviction_Score", "consensus_agreement", "odds_american", "odds_source", "market_probability",
+                        "kalshi_probability", "ml_probability", "gemini_explanation", "gemini_risk_notes"
+                    ]
+
+                    csv_rename_map = {
+                        "home_team": "Home",
+                        "away_team": "Away",
+                        "game_date": "Local Date",
+                        "game_time_est": "Commence (Local)",
+                        "calibrated_probability": "WinProbability"
+                    }
+                    export_prep_ss = sweet_spot_df.rename(columns=csv_rename_map)
+                    final_export_cols = [c for c in target_export_cols if c in export_prep_ss.columns]
+                    ss_export_csv = export_prep_ss[final_export_cols].to_csv(index=False, encoding="utf-8-sig")
+
+                    st.download_button(
+                        "Export Sweet Spot Card",
+                        ss_export_csv,
+                        "sweet_spot_export.csv",
+                        mime="text/csv",
+                    )
+
+                    st.markdown("#### Sweet Spot Picks")
+                    display_ss = sweet_spot_df.copy()
+                    display_ss = display_ss.rename(columns={
+                        "Triple_Filter_Rank": "Triple Filter Rank",
+                        "Pick_Quality": "Pick Quality",
+                        "league": "League",
+                        "away_team": "Away Team",
+                        "home_team": "Home Team",
+                        "game_date": "Game Date",
+                        "game_time_est": "Game Time (ET)",
+                        "best_pick": "Best Pick",
+                        "calibrated_probability": "Prob",
+                        "expected_value": "EV",
+                        "edge": "Edge",
+                        "odds_american": "Odds",
+                        "odds_source": "Source",
+                        "consensus_agreement": "Consensus",
+                        "kalshi_match_status": "Kalshi Status",
+                        "ml_probability": "ML Prob",
+                    })
+                    preferred = ["Pick_Status", "Triple Filter Rank", "Pick Quality", "League", "Home Team", "Away Team", "Game Date", "Game Time (ET)", "Best Pick", "Prob", "ML Prob", "Odds", "Source", "EV", "Edge", "Consensus", "Kalshi Status"]
+                    ordered = [c for c in preferred if c in display_ss.columns] + [c for c in display_ss.columns if c not in preferred]
+                    st.dataframe(display_ss[ordered], width="stretch")
+                else:
+                    st.info("No picks match the Sweet Spot criteria.")
+
         with st.expander("Pipeline Debug", expanded=False):
             st.json({
                 "kalshi_matches": diagnostics.get("kalshi_matches", 0),
