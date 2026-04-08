@@ -851,6 +851,12 @@ def main() -> None:
                     index=0,
                     key="ss_consensus"
                 )
+                ss_family = st.selectbox(
+                    "Market Family",
+                    options=["All", "Overs only", "Unders only", "Sides only"],
+                    index=0,
+                    key="ss_family"
+                )
             with ss_col2:
                 ss_min_prob = st.number_input("Min Win Probability", value=0.58, step=0.01, format="%.2f", key="ss_min_prob")
                 ss_max_prob = st.number_input("Max Win Probability", value=0.64, step=0.01, format="%.2f", key="ss_max_prob")
@@ -893,6 +899,16 @@ def main() -> None:
                     sweet_spot_df = sweet_spot_df[sweet_spot_df["consensus_agreement"] == "Agrees"]
                 elif ss_consensus == "Agrees or Neutral":
                     sweet_spot_df = sweet_spot_df[sweet_spot_df["consensus_agreement"].isin(["Agrees", "Neutral"])]
+
+                # 7. Family Filter
+                if not sweet_spot_df.empty:
+                    if ss_family == "Overs only":
+                        sweet_spot_df = sweet_spot_df[sweet_spot_df["market_type"] == "total_over"]
+                    elif ss_family == "Unders only":
+                        sweet_spot_df = sweet_spot_df[sweet_spot_df["market_type"] == "total_under"]
+                    elif ss_family == "Sides only":
+                        sweet_spot_df = sweet_spot_df[sweet_spot_df["market_type"].str.contains("spread|h2h", na=False)]
+
                 final_count = len(sweet_spot_df)
 
                 st.markdown("#### Diagnostics")
@@ -1018,8 +1034,33 @@ def main() -> None:
                 col5.metric("Avg Score (Total)", f"{avg_scores.get('total', 0.0):.3f}")
 
                 st.markdown("#### Market-Type Detail Counts")
-                st.write("**Actionable:**", selection_diags.get("actionable_market_type_counts", {}))
-                st.write("**Finalists:**", selection_diags.get("finalist_market_type_counts", {}))
+
+                # Show explicit detail counts per user request
+                type_counts = diagnostics.get("market_type_counts", {})
+                act_type_counts = diagnostics.get("actionable_market_type_counts", {})
+
+                detail_col1, detail_col2 = st.columns(2)
+                detail_col1.write("**Total by Family:**")
+                detail_col1.write(f"- Overs: {type_counts.get('total_over', 0)}")
+                detail_col1.write(f"- Unders: {type_counts.get('total_under', 0)}")
+                detail_col1.write(f"- Sides: {sum(v for k, v in type_counts.items() if 'spread' in k or 'h2h' in k)}")
+
+                detail_col2.write("**Actionable by Family:**")
+                detail_col2.write(f"- Actionable Overs: {act_type_counts.get('total_over', 0)}")
+                detail_col2.write(f"- Actionable Unders: {act_type_counts.get('total_under', 0)}")
+                detail_col2.write(f"- Actionable Sides: {sum(v for k, v in act_type_counts.items() if 'spread' in k or 'h2h' in k)}")
+
+                st.write("**Pick Status Counts:**")
+                if best_picks_df is not None and not best_picks_df.empty and "Pick_Status" in best_picks_df.columns:
+                    st.write(best_picks_df["Pick_Status"].value_counts().to_dict())
+
+                st.write("**Consensus Agreement Counts:**")
+                if best_picks_df is not None and not best_picks_df.empty and "consensus_agreement" in best_picks_df.columns:
+                    st.write(best_picks_df["consensus_agreement"].value_counts().to_dict())
+
+                st.write("**Odds Source Counts:**")
+                if best_picks_df is not None and not best_picks_df.empty and "odds_source" in best_picks_df.columns:
+                    st.write(best_picks_df["odds_source"].value_counts().to_dict())
 
                 preview_df = selection_diags.get("preview_df")
                 if preview_df is not None and not preview_df.empty:
