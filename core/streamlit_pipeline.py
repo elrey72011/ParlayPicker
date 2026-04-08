@@ -1893,9 +1893,27 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         elif is_fallback_or_stale or is_model_failure:
             status = "No Play"
             status_reason = "Using stale data or fallback model"
-        elif not pd.isna(ev) and not pd.isna(edge) and (ev < 0.01 or edge < 0.02):
-            status = "Below Threshold"
-            status_reason = "Fails minimum Edge (2%) or EV (1%) thresholds"
+        elif not pd.isna(ev) and not pd.isna(edge):
+            from app_core.weights_config import (
+                BASELINE_MIN_EV, BASELINE_MIN_EDGE,
+                TOTAL_OVER_MIN_EV, TOTAL_OVER_MIN_EDGE
+            )
+
+            # Apply stricter thresholds for total_over
+            if market_type == "total_over":
+                if ev < TOTAL_OVER_MIN_EV or edge < TOTAL_OVER_MIN_EDGE:
+                    status = "Below Threshold"
+                    status_reason = f"Fails stricter total_over threshold (Edge > {TOTAL_OVER_MIN_EDGE*100}%, EV > {TOTAL_OVER_MIN_EV*100}%)"
+                else:
+                    status = "Actionable"
+                    status_reason = "Passed all strict filters"
+            else:
+                if ev < BASELINE_MIN_EV or edge < BASELINE_MIN_EDGE:
+                    status = "Below Threshold"
+                    status_reason = f"Fails minimum Edge ({BASELINE_MIN_EDGE*100}%) or EV ({BASELINE_MIN_EV*100}%) thresholds"
+                else:
+                    status = "Actionable"
+                    status_reason = "Passed all strict filters"
         else:
             status = "Actionable"
             status_reason = "Passed all strict filters"
@@ -2068,6 +2086,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         actionable_df = final_best_df[final_best_df["Pick_Status"] == "Actionable"]
         actionable_family_counts = actionable_df["market_type"].astype(str).str.lower().apply(lambda x: "total" if "total" in x else "side").value_counts().to_dict()
         actionable_market_type_counts = actionable_df["market_type"].value_counts().to_dict()
+
+        diagnostics_out["market_type_counts"] = final_best_df["market_type"].value_counts().to_dict()
+        diagnostics_out["actionable_market_type_counts"] = actionable_market_type_counts
 
         diagnostics_out["selection_diagnostics"] = {
             "raw_family_counts": raw_counts,
@@ -2956,7 +2977,7 @@ def run_analysis_pipeline(
     model_probability = model_probability.where(~(goalie_impact & (merged["market_type"] == "spread_home")), model_probability - 0.065)
     model_probability = model_probability.where(~(goalie_impact & (merged["market_type"] == "spread_away")), model_probability + 0.065)
 
-    # Pace-Setter (NBA): Inflate "Over" probability by 4% when a high-usage star is active.
+    # Pace-Setter (NBA): Inflate "Over" probability when a high-usage star is active.
     # Check for feature_star_active column (1.0 = true)
     is_nba = merged["league"].str.upper() == "NBA"
     has_star_active = pd.Series([False] * len(merged), index=merged.index)
@@ -2964,8 +2985,14 @@ def run_analysis_pipeline(
         has_star_active = pd.to_numeric(merged["feature_star_active"], errors="coerce").fillna(0) == 1.0
 
     star_impact = is_nba & has_star_active
-    model_probability = model_probability.where(~(star_impact & (merged["market_type"] == "total_over")), model_probability + 0.04)
-    model_probability = model_probability.where(~(star_impact & (merged["market_type"] == "total_under")), model_probability - 0.04)
+    from app_core.weights_config import NBA_STAR_ACTIVE_TOTAL_OVER_BOOST, NBA_STAR_ACTIVE_TOTAL_UNDER_PENALTY
+
+    star_impact_rows = star_impact.sum()
+    if star_impact_rows > 0:
+        logger.info(f"Applying NBA star-active totals adjustment (boost={NBA_STAR_ACTIVE_TOTAL_OVER_BOOST}) to {star_impact_rows} games")
+
+    model_probability = model_probability.where(~(star_impact & (merged["market_type"] == "total_over")), model_probability + NBA_STAR_ACTIVE_TOTAL_OVER_BOOST)
+    model_probability = model_probability.where(~(star_impact & (merged["market_type"] == "total_under")), model_probability + NBA_STAR_ACTIVE_TOTAL_UNDER_PENALTY)
 
     # Tournament Efficiency Decay: Flat 4% reduction to final "Over" probability for all postseason games.
     is_postseason = is_postseason_ncaab(merged)
