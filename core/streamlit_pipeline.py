@@ -1864,10 +1864,24 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 if abs(float(line_val)) > 12.0:
                     is_nba_extreme_spread = True
 
+        from app_core.weights_config import (
+            BASELINE_MIN_EV, BASELINE_MIN_EDGE,
+            TOTAL_OVER_MIN_EV, TOTAL_OVER_MIN_EDGE,
+            TOTAL_MIN_WIN_PROB, NHL_TOTAL_MIN_WIN_PROB,
+            SPREAD_DIVERGENCE_OVERRIDE_MIN_PROB,
+            SPREAD_DIVERGENCE_OVERRIDE_MIN_EV,
+            SPREAD_DIVERGENCE_OVERRIDE_MIN_EDGE
+        )
+
         is_kalshi_divergence = False
+        is_spread_divergence_override = False
         if pd.notna(ml_prob) and pd.notna(kalshi_prob):
             if abs(float(ml_prob) - float(kalshi_prob)) > 0.20:
                 is_kalshi_divergence = True
+                if "spread" in market_type.lower() and not pd.isna(ev) and not pd.isna(edge):
+                    if win_prob >= SPREAD_DIVERGENCE_OVERRIDE_MIN_PROB and ev >= SPREAD_DIVERGENCE_OVERRIDE_MIN_EV and edge >= SPREAD_DIVERGENCE_OVERRIDE_MIN_EDGE:
+                        is_kalshi_divergence = False
+                        is_spread_divergence_override = True
 
         model_status_str = str(best.at[idx, "model_status"]) if "model_status" in best.columns else ""
         is_model_failure = "Fallback" in model_status_str or "Failure" in model_status_str
@@ -1894,26 +1908,37 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             status = "No Play"
             status_reason = "Using stale data or fallback model"
         elif not pd.isna(ev) and not pd.isna(edge):
-            from app_core.weights_config import (
-                BASELINE_MIN_EV, BASELINE_MIN_EDGE,
-                TOTAL_OVER_MIN_EV, TOTAL_OVER_MIN_EDGE
-            )
 
-            # Apply stricter thresholds for total_over
-            if market_type == "total_over":
-                if ev < TOTAL_OVER_MIN_EV or edge < TOTAL_OVER_MIN_EDGE:
+            if "total" in market_type.lower():
+                # Generic and NHL Total Win Probability floor
+                required_prob = NHL_TOTAL_MIN_WIN_PROB if league == "NHL" else TOTAL_MIN_WIN_PROB
+                if win_prob < required_prob:
                     status = "Below Threshold"
-                    status_reason = f"Fails stricter total_over threshold (Edge > {TOTAL_OVER_MIN_EDGE*100}%, EV > {TOTAL_OVER_MIN_EV*100}%)"
-                else:
-                    status = "Actionable"
-                    status_reason = "Passed all strict filters"
-            else:
+                    status_reason = f"Fails minimum Win Probability for {'NHL ' if league == 'NHL' else ''}Totals ({required_prob*100}%)"
+                # Apply stricter EV/Edge thresholds for total_over
+                elif market_type == "total_over":
+                    if ev < TOTAL_OVER_MIN_EV or edge < TOTAL_OVER_MIN_EDGE:
+                        status = "Below Threshold"
+                        status_reason = f"Fails stricter total_over threshold (Edge > {TOTAL_OVER_MIN_EDGE*100}%, EV > {TOTAL_OVER_MIN_EV*100}%)"
+                    else:
+                        status = "Actionable"
+                        status_reason = "Passed all strict filters"
+                else: # total_under
+                    if ev < BASELINE_MIN_EV or edge < BASELINE_MIN_EDGE:
+                        status = "Below Threshold"
+                        status_reason = f"Fails minimum Edge ({BASELINE_MIN_EDGE*100}%) or EV ({BASELINE_MIN_EV*100}%) thresholds"
+                    else:
+                        status = "Actionable"
+                        status_reason = "Passed all strict filters"
+            else: # Not a total (Sides, Spreads, etc.)
                 if ev < BASELINE_MIN_EV or edge < BASELINE_MIN_EDGE:
                     status = "Below Threshold"
                     status_reason = f"Fails minimum Edge ({BASELINE_MIN_EDGE*100}%) or EV ({BASELINE_MIN_EV*100}%) thresholds"
                 else:
                     status = "Actionable"
                     status_reason = "Passed all strict filters"
+                    if is_spread_divergence_override:
+                        status_reason = "Passed all strict filters (Spread divergence override applied)"
         else:
             status = "Actionable"
             status_reason = "Passed all strict filters"
@@ -2086,9 +2111,43 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         actionable_df = final_best_df[final_best_df["Pick_Status"] == "Actionable"]
         actionable_family_counts = actionable_df["market_type"].astype(str).str.lower().apply(lambda x: "total" if "total" in x else "side").value_counts().to_dict()
         actionable_market_type_counts = actionable_df["market_type"].value_counts().to_dict()
+        actionable_counts_by_league = actionable_df["league"].value_counts().to_dict() if "league" in actionable_df.columns else {}
+
+        # Collect additional requested debug metrics
+        nhl_totals_actionable = actionable_df[(actionable_df["league"].astype(str).str.upper() == "NHL") & (actionable_df["market_type"].astype(str).str.lower().str.contains("total"))].shape[0]
+
+        # Calculate spans from the logic above by parsing reasons
+        spreads_downgraded_by_divergence = final_best_df[
+            (final_best_df["Pick_Status"] == "High Variance/Speculative") &
+            (final_best_df["Status_Reason"].str.contains("diverge by > 20%", na=False)) &
+            (final_best_df["market_type"].astype(str).str.lower().str.contains("spread"))
+        ].shape[0]
+
+        spreads_rescued_by_divergence = actionable_df[
+            actionable_df["Status_Reason"].str.contains("Spread divergence override applied", na=False)
+        ].shape[0]
+
+        # Calculate totals below prob floor
+        from app_core.weights_config import NHL_TOTAL_MIN_WIN_PROB, TOTAL_MIN_WIN_PROB
+        totals_below_prob_floor = final_best_df[
+            (final_best_df["Pick_Status"] == "Below Threshold") &
+            (final_best_df["market_type"].astype(str).str.lower().str.contains("total")) &
+            (final_best_df["Status_Reason"].str.contains("Fails minimum Win Probability", na=False))
+        ].shape[0]
+
 
         diagnostics_out["market_type_counts"] = final_best_df["market_type"].value_counts().to_dict()
         diagnostics_out["actionable_market_type_counts"] = actionable_market_type_counts
+
+        # Add requested metrics directly to diagnostics_out
+        diagnostics_out["actionable_counts_by_league"] = actionable_counts_by_league
+        diagnostics_out["actionable_counts_by_market_type"] = actionable_market_type_counts
+        diagnostics_out["actionable_counts_by_family"] = actionable_family_counts
+        diagnostics_out["actionable_totals_below_floor"] = totals_below_prob_floor
+        diagnostics_out["nhl_totals_actionable"] = nhl_totals_actionable
+        diagnostics_out["spreads_downgraded_by_divergence"] = spreads_downgraded_by_divergence
+        diagnostics_out["spreads_rescued_by_divergence"] = spreads_rescued_by_divergence
+
 
         diagnostics_out["selection_diagnostics"] = {
             "raw_family_counts": raw_counts,

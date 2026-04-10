@@ -1050,6 +1050,22 @@ def main() -> None:
                 detail_col2.write(f"- Actionable Unders: {act_type_counts.get('total_under', 0)}")
                 detail_col2.write(f"- Actionable Sides: {sum(v for k, v in act_type_counts.items() if 'spread' in k or 'h2h' in k)}")
 
+                st.markdown("#### New Calibration Diagnostics")
+                cal_col1, cal_col2 = st.columns(2)
+
+                cal_col1.write("**Actionable by League:**")
+                league_counts = diagnostics.get("actionable_counts_by_league", {})
+                for l, count in league_counts.items():
+                    cal_col1.write(f"- {l}: {count}")
+
+                cal_col1.write(f"**NHL Totals Actionable:** {diagnostics.get('nhl_totals_actionable', 0)}")
+                cal_col1.write(f"**Totals Below Prob Floor:** {diagnostics.get('actionable_totals_below_floor', 0)}")
+
+                cal_col2.write("**Spread Divergence Override:**")
+                cal_col2.write(f"- Downgraded: {diagnostics.get('spreads_downgraded_by_divergence', 0)}")
+                cal_col2.write(f"- Rescued: {diagnostics.get('spreads_rescued_by_divergence', 0)}")
+
+
                 st.write("**Pick Status Counts:**")
                 if best_picks_df is not None and not best_picks_df.empty and "Pick_Status" in best_picks_df.columns:
                     st.write(best_picks_df["Pick_Status"].value_counts().to_dict())
