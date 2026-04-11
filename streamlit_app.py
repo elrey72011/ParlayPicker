@@ -1065,6 +1065,20 @@ def main() -> None:
                 cal_col2.write(f"- Downgraded: {diagnostics.get('spreads_downgraded_by_divergence', 0)}")
                 cal_col2.write(f"- Rescued: {diagnostics.get('spreads_rescued_by_divergence', 0)}")
 
+                st.markdown("#### Consensus & Side Floor Diagnostics")
+                con_col1, con_col2 = st.columns(2)
+
+                con_col1.write("**Actionable by Consensus:**")
+                consensus_counts = diagnostics.get("actionable_counts_by_consensus", {})
+                for c_type, count in consensus_counts.items():
+                    con_col1.write(f"- {c_type}: {count}")
+                con_col1.write(f"**Final Actionable Count:** {diagnostics.get('final_actionable_count', 0)}")
+
+                con_col2.write("**Downgraded Rows:**")
+                con_col2.write(f"- Neutral Thresholds: {diagnostics.get('neutral_downgrades', 0)}")
+                con_col2.write(f"- Disagrees Thresholds: {diagnostics.get('disagrees_downgrades', 0)}")
+                con_col2.write(f"- Side Prob Floor: {diagnostics.get('side_prob_floor_downgrades', 0)}")
+
 
                 st.write("**Pick Status Counts:**")
                 if best_picks_df is not None and not best_picks_df.empty and "Pick_Status" in best_picks_df.columns:

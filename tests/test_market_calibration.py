@@ -50,7 +50,7 @@ def test_total_over_strict_guardrails():
         "market_type": ["total_over", "total_over", "spread_home", "total_under"],
         "expected_value": [0.02, TOTAL_OVER_MIN_EV + 0.01, 0.02, 0.02],
         "edge": [0.03, TOTAL_OVER_MIN_EDGE + 0.01, 0.03, 0.03],
-        "calibrated_probability": [0.55, 0.55, 0.55, 0.55],
+        "calibrated_probability": [0.55, 0.59, 0.55, 0.59],
         "ml_probability": [0.55, 0.55, 0.55, 0.55],
         "theover_probability": [0.55, 0.55, 0.55, 0.55],
         "market_probability": [0.5, 0.5, 0.5, 0.5],
