@@ -17,7 +17,7 @@ class TestCalibrationUpdate(unittest.TestCase):
             "game_date": "2024-01-01T00:00:00Z",
             "model_probability": 0.60,
             "ml_probability": 0.60,
-            "kalshi_probability": 0.60,
+            "kalshi_probability": None,
             "calibrated_probability": 0.60,
             "is_live_data": True,
             "odds_source": "fanduel",
@@ -88,7 +88,7 @@ class TestCalibrationUpdate(unittest.TestCase):
             # Strong spread with divergence > 20% (Override applies)
             # ML=0.40, Kalshi=0.70 (diff=0.30)
             # win_prob=0.56, EV=0.04, Edge=0.05 (all >= override thresholds)
-            {"league": "NBA", "market_type": "spread_home", "expected_value": 0.04, "edge": 0.05, "calibrated_probability": 0.56, "ml_probability": 0.40, "kalshi_probability": 0.70, "best_pick": "Team A -3.5", "home_team": "Team A", "away_team": "Team B"},
+            {"league": "NBA", "market_type": "spread_home", "expected_value": 0.04, "edge": 0.05, "calibrated_probability": 0.61, "ml_probability": 0.40, "kalshi_probability": 0.70, "best_pick": "Team A -3.5", "home_team": "Team A", "away_team": "Team B"},
 
             # Weak spread with divergence > 20% (Downgrade applies)
             # EV=0.02, Edge=0.03 (meets baseline, but not override thresholds)
