@@ -1803,6 +1803,26 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
 
     logger.info(f"BEST PICKS AUDIT: Rows after two-stage finalist comparison: {len(best)} (started with {len(pool)})")
 
+    # Pre-compute consensus agreement before status labelling so overlays can use it
+    if "consensus_agreement" not in best.columns:
+        best["consensus_agreement"] = "No Kalshi"
+    else:
+        best["consensus_agreement"] = best["consensus_agreement"].fillna("No Kalshi")
+
+    kalshi_prob = _numeric_series(best, "kalshi_probability") if "kalshi_probability" in best.columns else pd.Series([pd.NA]*len(best), index=best.index)
+    is_kalshi_available = ((~pd.isna(kalshi_prob)) & (kalshi_prob > 0.0)).fillna(False).astype(bool)
+    best["is_kalshi_available"] = is_kalshi_available
+
+    if is_kalshi_available.any():
+        blended = best["calibrated_probability"]
+        gap = blended - kalshi_prob
+        agrees_mask = (is_kalshi_available & gap.ge(0.03)).fillna(False).astype(bool)
+        disagrees_mask = (is_kalshi_available & gap.le(-0.03)).fillna(False).astype(bool)
+        best.loc[is_kalshi_available, "consensus_agreement"] = "Neutral"
+        best.loc[agrees_mask, "consensus_agreement"] = "Agrees"
+        best.loc[disagrees_mask, "consensus_agreement"] = "Disagrees"
+
+
     # Phase 5: Enforce Thresholds and Pick Status Labelling
     # MIN_EDGE_THRESHOLD of 0.01 for high-liquidity markets.
     # Expected Value Floor of 0.005.
@@ -1870,7 +1890,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             TOTAL_MIN_WIN_PROB, NHL_TOTAL_MIN_WIN_PROB,
             SPREAD_DIVERGENCE_OVERRIDE_MIN_PROB,
             SPREAD_DIVERGENCE_OVERRIDE_MIN_EV,
-            SPREAD_DIVERGENCE_OVERRIDE_MIN_EDGE
+            SPREAD_DIVERGENCE_OVERRIDE_MIN_EDGE,
+            SIDE_MIN_WIN_PROB,
+            NEUTRAL_ACTIONABLE_MIN_PROB, NEUTRAL_ACTIONABLE_MIN_EV, NEUTRAL_ACTIONABLE_MIN_EDGE,
+            DISAGREES_ACTIONABLE_MIN_PROB, DISAGREES_ACTIONABLE_MIN_EV, DISAGREES_ACTIONABLE_MIN_EDGE
         )
 
         is_kalshi_divergence = False
@@ -1909,7 +1932,15 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             status_reason = "Using stale data or fallback model"
         elif not pd.isna(ev) and not pd.isna(edge):
 
-            if "total" in market_type.lower():
+            consensus_agr = str(best.at[idx, "consensus_agreement"]) if "consensus_agreement" in best.columns else "No Kalshi"
+
+            is_side_market = market_type in {"spread_home", "spread_away", "h2h_home", "h2h_away"}
+            is_total_market = "total" in market_type.lower()
+
+            if is_side_market and win_prob < SIDE_MIN_WIN_PROB:
+                status = "Below Threshold"
+                status_reason = f"Fails side minimum Win Probability ({SIDE_MIN_WIN_PROB*100}%)"
+            elif is_total_market:
                 # Generic and NHL Total Win Probability floor
                 required_prob = NHL_TOTAL_MIN_WIN_PROB if league == "NHL" else TOTAL_MIN_WIN_PROB
                 if win_prob < required_prob:
@@ -1939,6 +1970,17 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                     status_reason = "Passed all strict filters"
                     if is_spread_divergence_override:
                         status_reason = "Passed all strict filters (Spread divergence override applied)"
+
+            # Apply Consensus Overlay Logic
+            if status == "Actionable":
+                if consensus_agr == "Neutral":
+                    if win_prob < NEUTRAL_ACTIONABLE_MIN_PROB or ev < NEUTRAL_ACTIONABLE_MIN_EV or edge < NEUTRAL_ACTIONABLE_MIN_EDGE:
+                        status = "Below Threshold"
+                        status_reason = f"Fails stricter Neutral overlay (Prob >= {NEUTRAL_ACTIONABLE_MIN_PROB}, EV >= {NEUTRAL_ACTIONABLE_MIN_EV}, Edge >= {NEUTRAL_ACTIONABLE_MIN_EDGE})"
+                elif consensus_agr == "Disagrees":
+                    if win_prob < DISAGREES_ACTIONABLE_MIN_PROB or ev < DISAGREES_ACTIONABLE_MIN_EV or edge < DISAGREES_ACTIONABLE_MIN_EDGE:
+                        status = "High Variance/Speculative"
+                        status_reason = f"Fails stricter Disagrees overlay (Prob >= {DISAGREES_ACTIONABLE_MIN_PROB}, EV >= {DISAGREES_ACTIONABLE_MIN_EV}, Edge >= {DISAGREES_ACTIONABLE_MIN_EDGE})"
         else:
             status = "Actionable"
             status_reason = "Passed all strict filters"
@@ -1963,25 +2005,6 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
 
     best["calibrated_probability"] = _numeric_series(best, "calibrated_probability", 0.5)
     edge_for_consensus = _numeric_series(best, "edge", 0.0)
-
-    if "consensus_agreement" not in best.columns:
-        best["consensus_agreement"] = "No Kalshi"
-    else:
-        # Fill any NA consensus_agreements that may have carried over
-        best["consensus_agreement"] = best["consensus_agreement"].fillna("No Kalshi")
-
-    kalshi_prob = _numeric_series(best, "kalshi_probability") if "kalshi_probability" in best.columns else pd.Series([pd.NA]*len(best), index=best.index)
-    is_kalshi_available = ((~pd.isna(kalshi_prob)) & (kalshi_prob > 0.0)).fillna(False).astype(bool)
-    best["is_kalshi_available"] = is_kalshi_available
-
-    if is_kalshi_available.any():
-        blended = best["calibrated_probability"]
-        gap = blended - kalshi_prob
-        agrees_mask = (is_kalshi_available & gap.ge(0.03)).fillna(False).astype(bool)
-        disagrees_mask = (is_kalshi_available & gap.le(-0.03)).fillna(False).astype(bool)
-        best.loc[is_kalshi_available, "consensus_agreement"] = "Neutral"
-        best.loc[agrees_mask, "consensus_agreement"] = "Agrees"
-        best.loc[disagrees_mask, "consensus_agreement"] = "Disagrees"
 
     # Sort Phase: Use ordered categorical logic for exact ordering.
     status_order = [
@@ -2135,6 +2158,21 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             (final_best_df["Status_Reason"].str.contains("Fails minimum Win Probability", na=False))
         ].shape[0]
 
+        # Calculate new metrics
+        actionable_counts_by_consensus = actionable_df["consensus_agreement"].value_counts().to_dict() if "consensus_agreement" in actionable_df.columns else {}
+        downgraded_by_neutral = final_best_df[
+            (final_best_df["Pick_Status"] == "Below Threshold") &
+            (final_best_df["Status_Reason"].str.contains("Neutral overlay", na=False))
+        ].shape[0]
+        downgraded_by_disagrees = final_best_df[
+            (final_best_df["Pick_Status"] == "High Variance/Speculative") &
+            (final_best_df["Status_Reason"].str.contains("Disagrees overlay", na=False))
+        ].shape[0]
+        side_floor_failures = final_best_df[
+            (final_best_df["Pick_Status"] == "Below Threshold") &
+            (final_best_df["Status_Reason"].str.contains("side minimum Win Probability", na=False))
+        ].shape[0]
+
 
         diagnostics_out["market_type_counts"] = final_best_df["market_type"].value_counts().to_dict()
         diagnostics_out["actionable_market_type_counts"] = actionable_market_type_counts
@@ -2147,6 +2185,13 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         diagnostics_out["nhl_totals_actionable"] = nhl_totals_actionable
         diagnostics_out["spreads_downgraded_by_divergence"] = spreads_downgraded_by_divergence
         diagnostics_out["spreads_rescued_by_divergence"] = spreads_rescued_by_divergence
+
+        # Inject new metrics
+        diagnostics_out["actionable_counts_by_consensus"] = actionable_counts_by_consensus
+        diagnostics_out["downgraded_by_neutral"] = downgraded_by_neutral
+        diagnostics_out["downgraded_by_disagrees"] = downgraded_by_disagrees
+        diagnostics_out["side_floor_failures"] = side_floor_failures
+        diagnostics_out["final_actionable_count"] = len(actionable_df)
 
 
         diagnostics_out["selection_diagnostics"] = {

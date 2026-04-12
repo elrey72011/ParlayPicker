@@ -72,11 +72,13 @@ def test_total_over_strict_guardrails():
     # 1st row (A): total_over with 0.02 EV (fails strict 0.03 EV requirement) -> Below Threshold
     assert row_a["Pick_Status"] == "Below Threshold"
 
-    # 2nd row (B): total_over with passing EV/Edge -> Actionable
-    assert row_b["Pick_Status"] == "Actionable"
+    # 2nd row (B): total_over with passing EV/Edge -> Below Threshold (fails 0.56 TOTAL_MIN_WIN_PROB)
+    assert row_b["Pick_Status"] == "Below Threshold"
+    assert "Win Probability for Totals" in row_b["Status_Reason"]
 
-    # 3rd row (C): side with 0.02 EV/0.03 Edge (passes baseline 0.01/0.02) -> Actionable
+    # 3rd row (C): side with 0.02 EV/0.03 Edge (passes baseline 0.01/0.02) -> Actionable (0.55 passes 0.52 side floor)
     assert row_c["Pick_Status"] == "Actionable"
 
-    # 4th row (D): total_under with 0.02 EV/0.03 Edge (passes baseline 0.01/0.02) -> Actionable
-    assert row_d["Pick_Status"] == "Actionable"
+    # 4th row (D): total_under with 0.02 EV/0.03 Edge (passes baseline 0.01/0.02) -> Below Threshold (fails 0.56 TOTAL_MIN_WIN_PROB)
+    assert row_d["Pick_Status"] == "Below Threshold"
+    assert "Win Probability for Totals" in row_d["Status_Reason"]

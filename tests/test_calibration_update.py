@@ -36,8 +36,8 @@ class TestCalibrationUpdate(unittest.TestCase):
         df = self._build_df([
             # Weak over (EV/edge met, but win_prob too low)
             {"league": "NBA", "market_type": "total_over", "expected_value": 0.05, "edge": 0.05, "calibrated_probability": 0.55, "best_pick": "Over 220.5", "home_team": "Team A", "away_team": "Team B"},
-            # Strong over (EV/edge met, win_prob met)
-            {"league": "NBA", "market_type": "total_over", "expected_value": 0.05, "edge": 0.05, "calibrated_probability": 0.57, "best_pick": "Over 222.5", "home_team": "Team C", "away_team": "Team D"},
+            # Strong over (EV/edge met, win_prob met) -- Note: For Agrees, we make gap >= 0.03
+            {"league": "NBA", "market_type": "total_over", "expected_value": 0.05, "edge": 0.05, "calibrated_probability": 0.57, "kalshi_probability": 0.53, "best_pick": "Over 222.5", "home_team": "Team C", "away_team": "Team D"},
             # Weak under (EV/edge met, but win_prob too low)
             {"league": "NBA", "market_type": "total_under", "expected_value": 0.03, "edge": 0.03, "calibrated_probability": 0.55, "best_pick": "Under 220.5", "home_team": "Team E", "away_team": "Team F"},
         ])
@@ -63,10 +63,10 @@ class TestCalibrationUpdate(unittest.TestCase):
         df = self._build_df([
             # NHL total over at 0.56 (meets generic, fails NHL)
             {"league": "NHL", "market_type": "total_over", "expected_value": 0.05, "edge": 0.05, "calibrated_probability": 0.565, "best_pick": "Over 5.5", "home_team": "Team A", "away_team": "Team B"},
-            # NHL total over at 0.58 (meets NHL)
-            {"league": "NHL", "market_type": "total_over", "expected_value": 0.05, "edge": 0.05, "calibrated_probability": 0.58, "best_pick": "Over 5.5", "home_team": "Team C", "away_team": "Team D"},
-            # NBA total over at 0.565 (meets generic, would fail NHL if applied)
-            {"league": "NBA", "market_type": "total_over", "expected_value": 0.05, "edge": 0.05, "calibrated_probability": 0.565, "best_pick": "Over 220.5", "home_team": "Team E", "away_team": "Team F"},
+            # NHL total over at 0.58 (meets NHL) -- Note: For Agrees, we make gap >= 0.03
+            {"league": "NHL", "market_type": "total_over", "expected_value": 0.05, "edge": 0.05, "calibrated_probability": 0.58, "kalshi_probability": 0.54, "best_pick": "Over 5.5", "home_team": "Team C", "away_team": "Team D"},
+            # NBA total over at 0.565 (meets generic, would fail NHL if applied) -- Neutral overlay requires 0.58 probability, so let's use Agrees (gap >= 0.03)
+            {"league": "NBA", "market_type": "total_over", "expected_value": 0.05, "edge": 0.05, "calibrated_probability": 0.565, "kalshi_probability": 0.525, "best_pick": "Over 220.5", "home_team": "Team E", "away_team": "Team F"},
         ])
 
         best = build_best_picks_df(df)
@@ -87,8 +87,8 @@ class TestCalibrationUpdate(unittest.TestCase):
         df = self._build_df([
             # Strong spread with divergence > 20% (Override applies)
             # ML=0.40, Kalshi=0.70 (diff=0.30)
-            # win_prob=0.56, EV=0.04, Edge=0.05 (all >= override thresholds)
-            {"league": "NBA", "market_type": "spread_home", "expected_value": 0.04, "edge": 0.05, "calibrated_probability": 0.56, "ml_probability": 0.40, "kalshi_probability": 0.70, "best_pick": "Team A -3.5", "home_team": "Team A", "away_team": "Team B"},
+            # win_prob=0.60, EV=0.04, Edge=0.05 (all >= override thresholds and >= Disagree overlay threshold since Kalshi=0.70 implies gap=-0.1 < -0.03 => Disagrees => needs prob>=0.60)
+            {"league": "NBA", "market_type": "spread_home", "expected_value": 0.04, "edge": 0.05, "calibrated_probability": 0.60, "ml_probability": 0.40, "kalshi_probability": 0.70, "best_pick": "Team A -3.5", "home_team": "Team A", "away_team": "Team B"},
 
             # Weak spread with divergence > 20% (Downgrade applies)
             # EV=0.02, Edge=0.03 (meets baseline, but not override thresholds)
