@@ -1065,6 +1065,20 @@ def main() -> None:
                 cal_col2.write(f"- Downgraded: {diagnostics.get('spreads_downgraded_by_divergence', 0)}")
                 cal_col2.write(f"- Rescued: {diagnostics.get('spreads_rescued_by_divergence', 0)}")
 
+                st.markdown("#### Consensus & Tuning Diagnostics")
+                tun_col1, tun_col2 = st.columns(2)
+
+                tun_col1.write("**Actionable by Consensus:**")
+                cons_counts = diagnostics.get("actionable_counts_by_consensus", {})
+                for c_name, c_count in cons_counts.items():
+                    tun_col1.write(f"- {c_name}: {c_count}")
+                tun_col1.write(f"**Final Actionable Count:** {diagnostics.get('final_actionable_count', 0)}")
+
+                tun_col2.write("**Downgrades:**")
+                tun_col2.write(f"- Failed Neutral Overlay: {diagnostics.get('downgraded_by_neutral', 0)}")
+                tun_col2.write(f"- Failed Disagree Overlay: {diagnostics.get('downgraded_by_disagrees', 0)}")
+                tun_col2.write(f"- Failed Side Floor: {diagnostics.get('side_floor_failures', 0)}")
+
 
                 st.write("**Pick Status Counts:**")
                 if best_picks_df is not None and not best_picks_df.empty and "Pick_Status" in best_picks_df.columns:
