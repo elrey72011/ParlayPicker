@@ -1937,32 +1937,46 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             is_side_market = market_type in {"spread_home", "spread_away", "h2h_home", "h2h_away"}
             is_total_market = "total" in market_type.lower()
 
+            effective_ev = ev
+            if is_total_market:
+                from app_core.weights_config import FALLBACK_HEAVY_TOTAL_EV_MULTIPLIER
+                is_fallback_heavy = diagnostics_out.get("is_fallback_heavy", False) if diagnostics_out else False
+                if is_fallback_heavy and ev > 0:
+                    effective_ev = ev * FALLBACK_HEAVY_TOTAL_EV_MULTIPLIER
+
             if is_side_market and win_prob < SIDE_MIN_WIN_PROB:
                 status = "Below Threshold"
                 status_reason = f"Fails side minimum Win Probability ({SIDE_MIN_WIN_PROB*100}%)"
             elif is_total_market:
-                # Generic and NHL Total Win Probability floor
-                required_prob = NHL_TOTAL_MIN_WIN_PROB if league == "NHL" else TOTAL_MIN_WIN_PROB
+                from app_core.weights_config import NBA_TOTAL_MIN_WIN_PROB, NHL_TOTAL_MIN_WIN_PROB_STRICT
+                # Determine required probability floor
+                if league == "NHL":
+                    required_prob = NHL_TOTAL_MIN_WIN_PROB_STRICT
+                elif league == "NBA":
+                    required_prob = NBA_TOTAL_MIN_WIN_PROB
+                else:
+                    required_prob = TOTAL_MIN_WIN_PROB
+
                 if win_prob < required_prob:
                     status = "Below Threshold"
-                    status_reason = f"Fails minimum Win Probability for {'NHL ' if league == 'NHL' else ''}Totals ({required_prob*100}%)"
+                    status_reason = f"Fails minimum Win Probability for {'NHL ' if league == 'NHL' else 'NBA ' if league == 'NBA' else ''}Totals ({required_prob*100}%)"
                 # Apply stricter EV/Edge thresholds for total_over
                 elif market_type == "total_over":
-                    if ev < TOTAL_OVER_MIN_EV or edge < TOTAL_OVER_MIN_EDGE:
+                    if effective_ev < TOTAL_OVER_MIN_EV or edge < TOTAL_OVER_MIN_EDGE:
                         status = "Below Threshold"
-                        status_reason = f"Fails stricter total_over threshold (Edge > {TOTAL_OVER_MIN_EDGE*100}%, EV > {TOTAL_OVER_MIN_EV*100}%)"
+                        status_reason = f"Fails stricter total_over threshold (Edge > {TOTAL_OVER_MIN_EDGE*100}%, Effective EV > {TOTAL_OVER_MIN_EV*100}%)"
                     else:
                         status = "Actionable"
                         status_reason = "Passed all strict filters"
                 else: # total_under
-                    if ev < BASELINE_MIN_EV or edge < BASELINE_MIN_EDGE:
+                    if effective_ev < BASELINE_MIN_EV or edge < BASELINE_MIN_EDGE:
                         status = "Below Threshold"
-                        status_reason = f"Fails minimum Edge ({BASELINE_MIN_EDGE*100}%) or EV ({BASELINE_MIN_EV*100}%) thresholds"
+                        status_reason = f"Fails minimum Edge ({BASELINE_MIN_EDGE*100}%) or Effective EV ({BASELINE_MIN_EV*100}%) thresholds"
                     else:
                         status = "Actionable"
                         status_reason = "Passed all strict filters"
             else: # Not a total (Sides, Spreads, etc.)
-                if ev < BASELINE_MIN_EV or edge < BASELINE_MIN_EDGE:
+                if effective_ev < BASELINE_MIN_EV or edge < BASELINE_MIN_EDGE:
                     status = "Below Threshold"
                     status_reason = f"Fails minimum Edge ({BASELINE_MIN_EDGE*100}%) or EV ({BASELINE_MIN_EV*100}%) thresholds"
                 else:
@@ -1974,11 +1988,11 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             # Apply Consensus Overlay Logic
             if status == "Actionable":
                 if consensus_agr == "Neutral":
-                    if win_prob < NEUTRAL_ACTIONABLE_MIN_PROB or ev < NEUTRAL_ACTIONABLE_MIN_EV or edge < NEUTRAL_ACTIONABLE_MIN_EDGE:
+                    if win_prob < NEUTRAL_ACTIONABLE_MIN_PROB or effective_ev < NEUTRAL_ACTIONABLE_MIN_EV or edge < NEUTRAL_ACTIONABLE_MIN_EDGE:
                         status = "Below Threshold"
                         status_reason = f"Fails stricter Neutral overlay (Prob >= {NEUTRAL_ACTIONABLE_MIN_PROB}, EV >= {NEUTRAL_ACTIONABLE_MIN_EV}, Edge >= {NEUTRAL_ACTIONABLE_MIN_EDGE})"
                 elif consensus_agr == "Disagrees":
-                    if win_prob < DISAGREES_ACTIONABLE_MIN_PROB or ev < DISAGREES_ACTIONABLE_MIN_EV or edge < DISAGREES_ACTIONABLE_MIN_EDGE:
+                    if win_prob < DISAGREES_ACTIONABLE_MIN_PROB or effective_ev < DISAGREES_ACTIONABLE_MIN_EV or edge < DISAGREES_ACTIONABLE_MIN_EDGE:
                         status = "High Variance/Speculative"
                         status_reason = f"Fails stricter Disagrees overlay (Prob >= {DISAGREES_ACTIONABLE_MIN_PROB}, EV >= {DISAGREES_ACTIONABLE_MIN_EV}, Edge >= {DISAGREES_ACTIONABLE_MIN_EDGE})"
         else:
@@ -2193,6 +2207,18 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         diagnostics_out["side_floor_failures"] = side_floor_failures
         diagnostics_out["final_actionable_count"] = len(actionable_df)
 
+        if "market_type" in final_best_df.columns:
+            totals_mask = final_best_df["market_type"].astype(str).str.contains("total", case=False, na=False)
+            actionable_totals_df = final_best_df[(final_best_df["Pick_Status"] == "Actionable") & totals_mask]
+            diagnostics_out["actionable_totals_by_league"] = actionable_totals_df["league"].value_counts().to_dict() if "league" in actionable_totals_df.columns else {}
+
+            is_fallback_heavy = diagnostics_out.get("is_fallback_heavy", False) if diagnostics_out else False
+            if is_fallback_heavy:
+                diagnostics_out["ev_dampener_impact_count"] = len(final_best_df[totals_mask & (final_best_df["expected_value"] > 0)])
+            else:
+                diagnostics_out["ev_dampener_impact_count"] = 0
+
+            diagnostics_out["totals_rejected_by_new_guardrails"] = int(final_best_df["Status_Reason"].str.contains("Fails minimum Win Probability for.*Totals").sum())
 
         diagnostics_out["selection_diagnostics"] = {
             "raw_family_counts": raw_counts,
