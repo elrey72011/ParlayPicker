@@ -33,13 +33,14 @@ class TestCalibrationUpdate(unittest.TestCase):
 
     def test_generic_totals_below_prob_threshold(self):
         # Generic totals below TOTAL_MIN_WIN_PROB (0.56) should fail
+        # With new NBA rule, NBA is 0.58
         df = self._build_df([
             # Weak over (EV/edge met, but win_prob too low)
-            {"league": "NBA", "market_type": "total_over", "expected_value": 0.05, "edge": 0.05, "calibrated_probability": 0.55, "best_pick": "Over 220.5", "home_team": "Team A", "away_team": "Team B"},
+            {"league": "NFL", "market_type": "total_over", "expected_value": 0.05, "edge": 0.05, "calibrated_probability": 0.55, "best_pick": "Over 45.5", "home_team": "Team A", "away_team": "Team B"},
             # Strong over (EV/edge met, win_prob met) -- Note: For Agrees, we make gap >= 0.03
-            {"league": "NBA", "market_type": "total_over", "expected_value": 0.05, "edge": 0.05, "calibrated_probability": 0.57, "kalshi_probability": 0.53, "best_pick": "Over 222.5", "home_team": "Team C", "away_team": "Team D"},
+            {"league": "NFL", "market_type": "total_over", "expected_value": 0.05, "edge": 0.05, "calibrated_probability": 0.57, "kalshi_probability": 0.53, "best_pick": "Over 45.5", "home_team": "Team C", "away_team": "Team D"},
             # Weak under (EV/edge met, but win_prob too low)
-            {"league": "NBA", "market_type": "total_under", "expected_value": 0.03, "edge": 0.03, "calibrated_probability": 0.55, "best_pick": "Under 220.5", "home_team": "Team E", "away_team": "Team F"},
+            {"league": "NFL", "market_type": "total_under", "expected_value": 0.03, "edge": 0.03, "calibrated_probability": 0.55, "best_pick": "Under 45.5", "home_team": "Team E", "away_team": "Team F"},
         ])
 
         best = build_best_picks_df(df)
@@ -59,19 +60,22 @@ class TestCalibrationUpdate(unittest.TestCase):
 
 
     def test_nhl_totals_require_stricter_threshold(self):
-        # NHL totals require NHL_TOTAL_MIN_WIN_PROB (0.57)
+        # NHL totals require NHL_TOTAL_MIN_WIN_PROB_STRICT (0.58)
+        # NBA requires NBA_TOTAL_MIN_WIN_PROB (0.58)
         df = self._build_df([
-            # NHL total over at 0.56 (meets generic, fails NHL)
-            {"league": "NHL", "market_type": "total_over", "expected_value": 0.05, "edge": 0.05, "calibrated_probability": 0.565, "best_pick": "Over 5.5", "home_team": "Team A", "away_team": "Team B"},
-            # NHL total over at 0.58 (meets NHL) -- Note: For Agrees, we make gap >= 0.03
+            # NHL total over at 0.57 (meets old NHL, fails strict NHL 0.58)
+            {"league": "NHL", "market_type": "total_over", "expected_value": 0.05, "edge": 0.05, "calibrated_probability": 0.57, "best_pick": "Over 5.5", "home_team": "Team A", "away_team": "Team B"},
+            # NHL total over at 0.58 (meets strict NHL) -- Note: For Agrees, we make gap >= 0.03
             {"league": "NHL", "market_type": "total_over", "expected_value": 0.05, "edge": 0.05, "calibrated_probability": 0.58, "kalshi_probability": 0.54, "best_pick": "Over 5.5", "home_team": "Team C", "away_team": "Team D"},
-            # NBA total over at 0.565 (meets generic, would fail NHL if applied) -- Neutral overlay requires 0.58 probability, so let's use Agrees (gap >= 0.03)
-            {"league": "NBA", "market_type": "total_over", "expected_value": 0.05, "edge": 0.05, "calibrated_probability": 0.565, "kalshi_probability": 0.525, "best_pick": "Over 220.5", "home_team": "Team E", "away_team": "Team F"},
+            # NBA total over at 0.57 (meets generic, fails NBA 0.58)
+            {"league": "NBA", "market_type": "total_over", "expected_value": 0.05, "edge": 0.05, "calibrated_probability": 0.57, "kalshi_probability": 0.53, "best_pick": "Over 220.5", "home_team": "Team E", "away_team": "Team F"},
+            # NBA total over at 0.58 (meets NBA 0.58)
+            {"league": "NBA", "market_type": "total_over", "expected_value": 0.05, "edge": 0.05, "calibrated_probability": 0.58, "kalshi_probability": 0.54, "best_pick": "Over 220.5", "home_team": "Team G", "away_team": "Team H"},
         ])
 
         best = build_best_picks_df(df)
 
-        # Team A (NHL 0.565) -> Below Threshold
+        # Team A (NHL 0.57) -> Below Threshold
         nhl_weak = best[best["home_team"] == "Team A"].iloc[0]
         self.assertEqual(nhl_weak["Pick_Status"], "Below Threshold")
 
@@ -79,9 +83,33 @@ class TestCalibrationUpdate(unittest.TestCase):
         nhl_strong = best[best["home_team"] == "Team C"].iloc[0]
         self.assertEqual(nhl_strong["Pick_Status"], "Actionable")
 
-        # Team E (NBA 0.565) -> Actionable
-        nba_strong = best[best["home_team"] == "Team E"].iloc[0]
+        # Team E (NBA 0.57) -> Below Threshold
+        nba_weak = best[best["home_team"] == "Team E"].iloc[0]
+        self.assertEqual(nba_weak["Pick_Status"], "Below Threshold")
+
+        # Team G (NBA 0.58) -> Actionable
+        nba_strong = best[best["home_team"] == "Team G"].iloc[0]
         self.assertEqual(nba_strong["Pick_Status"], "Actionable")
+
+    def test_ev_dampener_on_fallback_heavy_slates(self):
+        # A total that barely meets EV threshold (e.g. 0.03 for total_over)
+        df = self._build_df([
+            # Over with exactly 0.03 EV and strong win prob
+            {"league": "NFL", "market_type": "total_over", "expected_value": 0.03, "edge": 0.04, "calibrated_probability": 0.60, "kalshi_probability": 0.55, "best_pick": "Over 45.5", "home_team": "Team A", "away_team": "Team B"},
+        ])
+
+        # 1. Normal slate -> Actionable
+        diags = {"is_fallback_heavy": False}
+        best_normal = build_best_picks_df(df.copy(), diagnostics_out=diags)
+        self.assertEqual(best_normal.iloc[0]["Pick_Status"], "Actionable")
+        self.assertEqual(diags.get("ev_dampener_impact_count"), 0)
+
+        # 2. Fallback-heavy slate -> Dampened EV is 0.03 * 0.85 = 0.0255 < 0.03, so Below Threshold
+        diags_heavy = {"is_fallback_heavy": True}
+        best_heavy = build_best_picks_df(df.copy(), diagnostics_out=diags_heavy)
+        self.assertEqual(best_heavy.iloc[0]["Pick_Status"], "Below Threshold")
+        self.assertEqual(diags_heavy.get("ev_dampener_impact_count"), 1)
+        self.assertEqual(best_heavy.iloc[0]["expected_value"], 0.03) # Must not overwrite the raw column
 
     def test_spread_divergence_override(self):
         df = self._build_df([

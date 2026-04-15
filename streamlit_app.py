@@ -1058,8 +1058,15 @@ def main() -> None:
                 for l, count in league_counts.items():
                     cal_col1.write(f"- {l}: {count}")
 
-                cal_col1.write(f"**NHL Totals Actionable:** {diagnostics.get('nhl_totals_actionable', 0)}")
-                cal_col1.write(f"**Totals Below Prob Floor:** {diagnostics.get('actionable_totals_below_floor', 0)}")
+                cal_col1.write("**Actionable Totals by League:**")
+                total_counts = diagnostics.get("actionable_totals_by_league", {})
+                for l, count in total_counts.items():
+                    cal_col1.write(f"- {l}: {count}")
+
+                cal_col1.write(f"**Rejected Totals (Prob Floor):** {diagnostics.get('totals_rejected_by_new_guardrails', 0)}")
+
+                cal_col2.write(f"**Fallback-Heavy Slate:** {diagnostics.get('is_fallback_heavy', False)}")
+                cal_col2.write(f"**EV Dampener Affected Totals:** {diagnostics.get('ev_dampener_impact_count', 0)}")
 
                 cal_col2.write("**Spread Divergence Override:**")
                 cal_col2.write(f"- Downgraded: {diagnostics.get('spreads_downgraded_by_divergence', 0)}")
