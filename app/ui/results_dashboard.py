@@ -26,6 +26,24 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
             # We must reset the file pointer to 0 because the file might have been read before
             uploaded_picks_file.seek(0)
             picks_df = pd.read_csv(uploaded_picks_file)
+
+            # Map common pretty/export columns to canonical names
+            if "League" in picks_df.columns and "league" not in picks_df.columns:
+                picks_df["league"] = picks_df["League"]
+            if "Home Team" in picks_df.columns and "home_team" not in picks_df.columns:
+                picks_df["home_team"] = picks_df["Home Team"]
+            elif "Home" in picks_df.columns and "home_team" not in picks_df.columns:
+                picks_df["home_team"] = picks_df["Home"]
+            if "Away Team" in picks_df.columns and "away_team" not in picks_df.columns:
+                picks_df["away_team"] = picks_df["Away Team"]
+            elif "Away" in picks_df.columns and "away_team" not in picks_df.columns:
+                picks_df["away_team"] = picks_df["Away"]
+
+            if "Pick Taken" in picks_df.columns and "best_pick" not in picks_df.columns:
+                picks_df["best_pick"] = picks_df["Pick Taken"]
+            elif "Best Pick" in picks_df.columns and "best_pick" not in picks_df.columns:
+                picks_df["best_pick"] = picks_df["Best Pick"]
+
             st.success("Successfully loaded uploaded picks.")
         except Exception as e:
             st.error(f"Error reading uploaded picks file: {e}")
