@@ -24,6 +24,7 @@ from core.probability_engine import american_to_prob
 from core.schema.base_schema import ensure_base_schema
 from core.team_mapper import normalize_team_name, NBA_EXACT_MAP, NHL_EXACT_MAP
 from app_core.weights_config import (
+    LOCK_UPLOAD_LINES_FOR_MATCHED_ROWS,
     KALSHI_WEIGHT, MARKET_WEIGHT, ML_MODEL_WEIGHT, THEOVER_WEIGHT, SENTIMENT_WEIGHT,
     FALLBACK_MARKET_WEIGHT, FALLBACK_ML_WEIGHT, FALLBACK_THEOVER_WEIGHT, FALLBACK_SENTIMENT_WEIGHT,
     LOW_LIQUIDITY_KALSHI_WEIGHT, LOW_LIQUIDITY_ML_MODEL_WEIGHT
@@ -91,6 +92,7 @@ BEST_PICK_COLUMNS = [
     "odds_american", "odds_source", "market_probability", "ml_probability", "display_probability",
     "kalshi_probability", "kalshi_match_status", "kalshi_match_reason",
     "gemini_explanation", "gemini_risk_notes", "used_stale_features", "Pick_Quality", "Conviction_Score",
+    "uploaded_spread_line", "uploaded_total_line", "live_spread_line", "live_total_line", "line_source", "line_delta", "upload_market_match",
 ]
 
 CANONICAL_BET_COLUMNS = [
@@ -98,6 +100,7 @@ CANONICAL_BET_COLUMNS = [
     "market_type", "candidate_source", "orientation_source", "upload_match_reason", "spread_line", "total_line",
     "theover_probability", "odds_american", "odds_source", "market_probability",
     "ml_probability", "display_probability", "calibrated_probability", "expected_value", "edge", "best_pick", "used_stale_features", "matchup_id", "Conviction_Score",
+    "uploaded_spread_line", "uploaded_total_line", "live_spread_line", "live_total_line", "line_source", "line_delta", "upload_market_match",
 ]
 
 _EXPORT_SIGNAL_COLS = {"market_type", "calibrated_probability", "expected_value", "edge"}
@@ -1885,6 +1888,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                     is_nba_extreme_spread = True
 
         from app_core.weights_config import (
+    LOCK_UPLOAD_LINES_FOR_MATCHED_ROWS,
             BASELINE_MIN_EV, BASELINE_MIN_EDGE,
             TOTAL_OVER_MIN_EV, TOTAL_OVER_MIN_EDGE,
             TOTAL_MIN_WIN_PROB, NHL_TOTAL_MIN_WIN_PROB,
@@ -2371,6 +2375,10 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
         "games_matched_fuzzy": 0,
         "rows_retained_unmatched": 0,
         "rows_dropped_by_join": 0,
+        "upload_matched_rows": 0,
+        "upload_matched_drifted_rows": 0,
+        "absolute_line_drifts": [],
+        "drift_breakdown": {"total_over": 0, "total_under": 0, "spread_home": 0, "spread_away": 0},
     }
 
     # Normalize dates and canonical keys ahead of the loop for efficiency and robustness
@@ -2513,6 +2521,17 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
                 "game_date": game_date, "reason": upload_match_reason
             })
 
+        # Determine the matched group if match_found
+        matched_group = None
+        if match_found:
+            if orientation_source == "exact_match":
+                matched_group = theover_rows[matchup_mask]
+            elif orientation_source == "canonical_match":
+                matched_group = theover_rows_with_canon[(theover_rows_with_canon["_canon_key"] == live_canon_key) & (theover_rows_with_canon["_et_day"] == et_date)]
+            elif orientation_source == "fuzzy_match":
+                matched_group = matched_rows
+
+
         for market_type in candidate_markets:
             if match_found and market_type not in target_markets:
                 diag_counts["rows_dropped_by_join"] += 1
@@ -2559,17 +2578,80 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
             if market_type.startswith("spread"):
                 market_dict["spread_line"] = float(point_val) if pd.notna(point_val) else pd.NA
                 market_dict["total_line"] = pd.NA
+                market_dict["live_spread_line"] = market_dict["spread_line"]
+                market_dict["live_total_line"] = pd.NA
             elif market_type.startswith("total"):
                 market_dict["spread_line"] = pd.NA
                 market_dict["total_line"] = float(point_val) if pd.notna(point_val) else pd.NA
+                market_dict["live_spread_line"] = pd.NA
+                market_dict["live_total_line"] = market_dict["total_line"]
             else:
                 market_dict["spread_line"] = pd.NA
                 market_dict["total_line"] = pd.NA
+                market_dict["live_spread_line"] = pd.NA
+                market_dict["live_total_line"] = pd.NA
+
+            market_dict["uploaded_spread_line"] = pd.NA
+            market_dict["uploaded_total_line"] = pd.NA
+            market_dict["line_source"] = "live_odds"
+            market_dict["line_delta"] = pd.NA
+            market_dict["upload_market_match"] = False
+
+            if match_found and matched_group is not None:
+                market_row = matched_group[matched_group["market_type"] == market_type]
+                if not market_row.empty:
+                    market_dict["upload_market_match"] = True
+                    diag_counts["upload_matched_rows"] += 1
+                    u_spread = market_row.iloc[0].get("spread_line")
+                    u_total = market_row.iloc[0].get("total_line")
+
+                    if market_type.startswith("spread"):
+                        market_dict["uploaded_spread_line"] = float(u_spread) if pd.notna(u_spread) else pd.NA
+                        if pd.notna(market_dict["live_spread_line"]) and pd.notna(market_dict["uploaded_spread_line"]):
+                            delta = market_dict["live_spread_line"] - market_dict["uploaded_spread_line"]
+                            market_dict["line_delta"] = delta
+                            if delta != 0.0:
+                                diag_counts["upload_matched_drifted_rows"] += 1
+                                diag_counts["absolute_line_drifts"].append(abs(delta))
+                                if market_type in diag_counts["drift_breakdown"]:
+                                    diag_counts["drift_breakdown"][market_type] += 1
+
+                        from app_core import weights_config
+                        if getattr(weights_config, 'LOCK_UPLOAD_LINES_FOR_MATCHED_ROWS', False) and pd.notna(market_dict["uploaded_spread_line"]):
+                            market_dict["spread_line"] = market_dict["uploaded_spread_line"]
+                            market_dict["line_source"] = "uploaded_theover"
+
+                    elif market_type.startswith("total"):
+                        market_dict["uploaded_total_line"] = float(u_total) if pd.notna(u_total) else pd.NA
+                        if pd.notna(market_dict["live_total_line"]) and pd.notna(market_dict["uploaded_total_line"]):
+                            delta = market_dict["live_total_line"] - market_dict["uploaded_total_line"]
+                            market_dict["line_delta"] = delta
+                            if delta != 0.0:
+                                diag_counts["upload_matched_drifted_rows"] += 1
+                                diag_counts["absolute_line_drifts"].append(abs(delta))
+                                if market_type in diag_counts["drift_breakdown"]:
+                                    diag_counts["drift_breakdown"][market_type] += 1
+
+                        from app_core import weights_config
+                        if getattr(weights_config, 'LOCK_UPLOAD_LINES_FOR_MATCHED_ROWS', False) and pd.notna(market_dict["uploaded_total_line"]):
+                            market_dict["total_line"] = market_dict["uploaded_total_line"]
+                            market_dict["line_source"] = "uploaded_theover"
 
             out_rows.append(market_dict)
 
+    # Calculate drift metrics
+    drift_mean = sum(diag_counts["absolute_line_drifts"]) / len(diag_counts["absolute_line_drifts"]) if diag_counts["absolute_line_drifts"] else 0.0
+    drift_max = max(diag_counts["absolute_line_drifts"]) if diag_counts["absolute_line_drifts"] else 0.0
+    diag_counts["drift_mean"] = drift_mean
+    diag_counts["drift_max"] = drift_max
+
     logger.info("=== CANDIDATE GENERATION DIAGNOSTICS ===")
     logger.info(f"Games matched exact: {diag_counts['games_matched_exact']}")
+    logger.info(f"Upload Matched Rows: {diag_counts['upload_matched_rows']}")
+    logger.info(f"Upload Matched Drifted Rows: {diag_counts['upload_matched_drifted_rows']}")
+    logger.info(f"Average Absolute Drift: {drift_mean:.2f}")
+    logger.info(f"Max Absolute Drift: {drift_max:.2f}")
+    logger.info(f"Drift Breakdown: {diag_counts['drift_breakdown']}")
     logger.info(f"Games matched canonical: {diag_counts['games_matched_canonical']}")
     logger.info(f"Games matched fuzzy: {diag_counts['games_matched_fuzzy']}")
     logger.info(f"Games unmatched (kept all candidates): {diag_counts['games_unmatched']}")
