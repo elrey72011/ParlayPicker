@@ -1072,6 +1072,29 @@ def main() -> None:
                 cal_col2.write(f"- Downgraded: {diagnostics.get('spreads_downgraded_by_divergence', 0)}")
                 cal_col2.write(f"- Rescued: {diagnostics.get('spreads_rescued_by_divergence', 0)}")
 
+                cal_col2.write("**New Guardrails:**")
+                cal_col2.write(f"- Blocked by total_under threshold: {diagnostics.get('blocked_by_total_under', 0)}")
+                cal_col2.write(f"- Blocked by NHL total penalty: {diagnostics.get('blocked_by_nhl_total', 0)}")
+
+                st.markdown("#### League + Market Calibration Diagnostics")
+                cal_lm_col1, cal_lm_col2 = st.columns(2)
+
+                cal_lm_col1.write("**Actionable by League + Market:**")
+                actionable_lm = diagnostics.get("actionable_counts_by_league_market", {})
+                if actionable_lm:
+                    for k, v in actionable_lm.items():
+                        cal_lm_col1.write(f"- {k}: {v}")
+                else:
+                    cal_lm_col1.write("- None")
+
+                cal_lm_col2.write("**Below Threshold by League + Market:**")
+                below_lm = diagnostics.get("below_threshold_counts_by_league_market", {})
+                if below_lm:
+                    for k, v in below_lm.items():
+                        cal_lm_col2.write(f"- {k}: {v}")
+                else:
+                    cal_lm_col2.write("- None")
+
                 st.markdown("#### Consensus & Tuning Diagnostics")
                 tun_col1, tun_col2 = st.columns(2)
 

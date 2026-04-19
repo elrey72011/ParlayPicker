@@ -24,6 +24,9 @@ from core.probability_engine import american_to_prob
 from core.schema.base_schema import ensure_base_schema
 from core.team_mapper import normalize_team_name, NBA_EXACT_MAP, NHL_EXACT_MAP
 from app_core.weights_config import (
+            TOTAL_UNDER_MIN_WIN_PROB, TOTAL_UNDER_MIN_EV, TOTAL_UNDER_MIN_EDGE,
+            NHL_TOTAL_EXTRA_EDGE_PENALTY, MLB_SPREAD_MIN_WIN_PROB,
+            MLB_SPREAD_ACTIONABLE_BONUS, MLB_TOTAL_ACTIONABLE_PENALTY, NBA_TOTAL_ACTIONABLE_PENALTY, NHL_TOTAL_ACTIONABLE_PENALTY,
     LOCK_UPLOAD_LINES_FOR_MATCHED_ROWS,
     KALSHI_WEIGHT, MARKET_WEIGHT, ML_MODEL_WEIGHT, THEOVER_WEIGHT, SENTIMENT_WEIGHT,
     FALLBACK_MARKET_WEIGHT, FALLBACK_ML_WEIGHT, FALLBACK_THEOVER_WEIGHT, FALLBACK_SENTIMENT_WEIGHT,
@@ -1888,6 +1891,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                     is_nba_extreme_spread = True
 
         from app_core.weights_config import (
+            TOTAL_UNDER_MIN_WIN_PROB, TOTAL_UNDER_MIN_EV, TOTAL_UNDER_MIN_EDGE,
+            NHL_TOTAL_EXTRA_EDGE_PENALTY, MLB_SPREAD_MIN_WIN_PROB,
+            MLB_SPREAD_ACTIONABLE_BONUS, MLB_TOTAL_ACTIONABLE_PENALTY, NBA_TOTAL_ACTIONABLE_PENALTY, NHL_TOTAL_ACTIONABLE_PENALTY,
     LOCK_UPLOAD_LINES_FOR_MATCHED_ROWS,
             BASELINE_MIN_EV, BASELINE_MIN_EDGE,
             TOTAL_OVER_MIN_EV, TOTAL_OVER_MIN_EDGE,
@@ -1948,41 +1954,56 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 if is_fallback_heavy and ev > 0:
                     effective_ev = ev * FALLBACK_HEAVY_TOTAL_EV_MULTIPLIER
 
-            if is_side_market and win_prob < SIDE_MIN_WIN_PROB:
-                status = "Below Threshold"
-                status_reason = f"Fails side minimum Win Probability ({SIDE_MIN_WIN_PROB*100}%)"
+            # Determine base thresholds with league + market calibration
+            req_prob = SIDE_MIN_WIN_PROB if is_side_market else TOTAL_MIN_WIN_PROB
+            req_ev = BASELINE_MIN_EV
+            req_edge = BASELINE_MIN_EDGE
+
+            # Apply League + Market specific calibration
+            if is_side_market:
+                if league == "MLB" and "spread" in market_type.lower():
+                    req_prob = MLB_SPREAD_MIN_WIN_PROB
+                    req_ev -= MLB_SPREAD_ACTIONABLE_BONUS
+                    req_edge -= MLB_SPREAD_ACTIONABLE_BONUS
             elif is_total_market:
                 from app_core.weights_config import NBA_TOTAL_MIN_WIN_PROB, NHL_TOTAL_MIN_WIN_PROB_STRICT
-                # Determine required probability floor
                 if league == "NHL":
-                    required_prob = NHL_TOTAL_MIN_WIN_PROB_STRICT
+                    req_prob = NHL_TOTAL_MIN_WIN_PROB_STRICT
+                    req_ev += NHL_TOTAL_ACTIONABLE_PENALTY
+                    req_edge += NHL_TOTAL_ACTIONABLE_PENALTY + NHL_TOTAL_EXTRA_EDGE_PENALTY
                 elif league == "NBA":
-                    required_prob = NBA_TOTAL_MIN_WIN_PROB
-                else:
-                    required_prob = TOTAL_MIN_WIN_PROB
+                    req_prob = NBA_TOTAL_MIN_WIN_PROB
+                    req_ev += NBA_TOTAL_ACTIONABLE_PENALTY
+                    req_edge += NBA_TOTAL_ACTIONABLE_PENALTY
+                elif league == "MLB":
+                    req_ev += MLB_TOTAL_ACTIONABLE_PENALTY
+                    req_edge += MLB_TOTAL_ACTIONABLE_PENALTY
 
-                if win_prob < required_prob:
-                    status = "Below Threshold"
-                    status_reason = f"Fails minimum Win Probability for {'NHL ' if league == 'NHL' else 'NBA ' if league == 'NBA' else ''}Totals ({required_prob*100}%)"
-                # Apply stricter EV/Edge thresholds for total_over
+                if market_type == "total_under":
+                    req_prob = max(req_prob, TOTAL_UNDER_MIN_WIN_PROB)
+                    req_ev = max(req_ev, TOTAL_UNDER_MIN_EV)
+                    req_edge = max(req_edge, TOTAL_UNDER_MIN_EDGE)
                 elif market_type == "total_over":
-                    if effective_ev < TOTAL_OVER_MIN_EV or edge < TOTAL_OVER_MIN_EDGE:
-                        status = "Below Threshold"
-                        status_reason = f"Fails stricter total_over threshold (Edge > {TOTAL_OVER_MIN_EDGE*100}%, Effective EV > {TOTAL_OVER_MIN_EV*100}%)"
-                    else:
-                        status = "Actionable"
-                        status_reason = "Passed all strict filters"
-                else: # total_under
-                    if effective_ev < BASELINE_MIN_EV or edge < BASELINE_MIN_EDGE:
-                        status = "Below Threshold"
-                        status_reason = f"Fails minimum Edge ({BASELINE_MIN_EDGE*100}%) or Effective EV ({BASELINE_MIN_EV*100}%) thresholds"
-                    else:
-                        status = "Actionable"
-                        status_reason = "Passed all strict filters"
-            else: # Not a total (Sides, Spreads, etc.)
-                if effective_ev < BASELINE_MIN_EV or edge < BASELINE_MIN_EDGE:
+                    req_ev = max(req_ev, TOTAL_OVER_MIN_EV)
+                    req_edge = max(req_edge, TOTAL_OVER_MIN_EDGE)
+
+            if is_side_market and win_prob < req_prob:
+                status = "Below Threshold"
+                status_reason = f"Fails side minimum Win Probability ({req_prob*100:.1f}%)"
+            elif is_total_market and win_prob < req_prob:
+                status = "Below Threshold"
+                status_reason = f"Fails minimum Win Probability for {'NHL ' if league == 'NHL' else 'NBA ' if league == 'NBA' else ''}Totals ({req_prob*100:.1f}%)"
+            else:
+                if effective_ev < req_ev or edge < req_edge:
                     status = "Below Threshold"
-                    status_reason = f"Fails minimum Edge ({BASELINE_MIN_EDGE*100}%) or EV ({BASELINE_MIN_EV*100}%) thresholds"
+                    if is_total_market and market_type == "total_under":
+                        status_reason = f"Fails stricter total_under threshold (Edge >= {req_edge*100:.1f}%, Effective EV >= {req_ev*100:.1f}%)"
+                    elif is_total_market and league == "NHL":
+                        status_reason = f"Fails NHL total penalty threshold (Edge >= {req_edge*100:.1f}%, Effective EV >= {req_ev*100:.1f}%)"
+                    elif is_total_market and market_type == "total_over":
+                        status_reason = f"Fails stricter total_over threshold (Edge >= {req_edge*100:.1f}%, Effective EV >= {req_ev*100:.1f}%)"
+                    else:
+                        status_reason = f"Fails minimum Edge ({req_edge*100:.1f}%) or Effective EV ({req_ev*100:.1f}%) thresholds"
                 else:
                     status = "Actionable"
                     status_reason = "Passed all strict filters"
@@ -2176,6 +2197,26 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             (final_best_df["Status_Reason"].str.contains("Fails minimum Win Probability", na=False))
         ].shape[0]
 
+        # Calculate new guardrail stats
+        blocked_by_total_under = final_best_df[
+            (final_best_df["Pick_Status"] == "Below Threshold") &
+            (final_best_df["Status_Reason"].str.contains("stricter total_under threshold", na=False))
+        ].shape[0]
+
+        blocked_by_nhl_total = final_best_df[
+            (final_best_df["Pick_Status"] == "Below Threshold") &
+            (final_best_df["Status_Reason"].str.contains("NHL total penalty threshold", na=False))
+        ].shape[0]
+
+        # League + Market calibration metrics
+        if "league" in final_best_df.columns and "market_type" in final_best_df.columns:
+            final_best_df["league_market"] = final_best_df["league"].astype(str) + " " + final_best_df["market_type"].astype(str)
+            actionable_counts_by_league_market = final_best_df[final_best_df["Pick_Status"] == "Actionable"]["league_market"].value_counts().to_dict()
+            below_threshold_counts_by_league_market = final_best_df[final_best_df["Pick_Status"] == "Below Threshold"]["league_market"].value_counts().to_dict()
+        else:
+            actionable_counts_by_league_market = {}
+            below_threshold_counts_by_league_market = {}
+
         # Calculate new metrics
         actionable_counts_by_consensus = actionable_df["consensus_agreement"].value_counts().to_dict() if "consensus_agreement" in actionable_df.columns else {}
         downgraded_by_neutral = final_best_df[
@@ -2205,6 +2246,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         diagnostics_out["spreads_rescued_by_divergence"] = spreads_rescued_by_divergence
 
         # Inject new metrics
+        diagnostics_out["blocked_by_total_under"] = blocked_by_total_under
+        diagnostics_out["blocked_by_nhl_total"] = blocked_by_nhl_total
+        diagnostics_out["actionable_counts_by_league_market"] = actionable_counts_by_league_market
+        diagnostics_out["below_threshold_counts_by_league_market"] = below_threshold_counts_by_league_market
         diagnostics_out["actionable_counts_by_consensus"] = actionable_counts_by_consensus
         diagnostics_out["downgraded_by_neutral"] = downgraded_by_neutral
         diagnostics_out["downgraded_by_disagrees"] = downgraded_by_disagrees
