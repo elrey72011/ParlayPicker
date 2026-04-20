@@ -29,7 +29,12 @@ class TestCalibrationUpdate(unittest.TestCase):
         }
 
     def _build_df(self, rows):
-        return pd.DataFrame([ {**self.base_row, **row} for row in rows ])
+        out = []
+        for i, row in enumerate(rows):
+            merged = {**self.base_row, **row}
+            merged["matchup_id"] = f"MOCK_{i}"
+            out.append(merged)
+        return pd.DataFrame(out)
 
     def test_generic_totals_below_prob_threshold(self):
         # Generic totals below TOTAL_MIN_WIN_PROB (0.56) should fail
@@ -61,19 +66,23 @@ class TestCalibrationUpdate(unittest.TestCase):
 
     def test_nhl_totals_require_stricter_threshold(self):
         # NHL totals require NHL_TOTAL_MIN_WIN_PROB_STRICT (0.58) and penalty
-        # NHL edge penalty adds to req_edge = 0.02 + 0.02 + 0.01 = 0.05
-        # NHL EV penalty adds to req_ev = 0.01 + 0.02 = 0.03
+        # For total_over: req_edge logic: max(BASELINE_MIN_EDGE + NHL_TOTAL_EXTRA_EDGE_PENALTY, TOTAL_OVER_MIN_EDGE) = max(0.02+0.01, 0.04) = 0.04. + NHL_TOTAL_OVER_ACTIONABLE_PENALTY (0.02) = 0.06.
+        # For total_over: req_ev logic: max(0.01, 0.03) = 0.03. + NHL_TOTAL_OVER_ACTIONABLE_PENALTY (0.02) = 0.05.
         df = self._build_df([
             # NHL total over at 0.57 (fails strict NHL 0.58)
-            {"league": "NHL", "market_type": "total_over", "expected_value": 0.05, "edge": 0.05, "calibrated_probability": 0.57, "best_pick": "Over 5.5", "home_team": "Team A", "away_team": "Team B"},
-            # NHL total over at 0.58 but fails new penalty edge requirement (0.04 is < 0.05)
-            {"league": "NHL", "market_type": "total_over", "expected_value": 0.05, "edge": 0.04, "calibrated_probability": 0.58, "kalshi_probability": 0.54, "best_pick": "Over 5.5", "home_team": "Team C", "away_team": "Team D"},
-            # NHL total over at 0.58 and meets penalty edge requirement (0.05 >= 0.05)
-            {"league": "NHL", "market_type": "total_over", "expected_value": 0.05, "edge": 0.05, "calibrated_probability": 0.58, "kalshi_probability": 0.54, "best_pick": "Over 5.5", "home_team": "Team I", "away_team": "Team J"},
+            {"league": "NHL", "market_type": "total_over", "expected_value": 0.05, "edge": 0.06, "calibrated_probability": 0.57, "best_pick": "Over 5.5", "home_team": "Team A", "away_team": "Team B"},
+            # NHL total over at 0.58 but fails new penalty edge requirement (0.05 is < 0.06)
+            {"league": "NHL", "market_type": "total_over", "expected_value": 0.05, "edge": 0.05, "calibrated_probability": 0.58, "kalshi_probability": 0.54, "best_pick": "Over 5.5", "home_team": "Team C", "away_team": "Team D"},
+            # NHL total over at 0.58 and meets penalty edge requirement (0.06 >= 0.06) and EV req (0.05 >= 0.05)
+            {"league": "NHL", "market_type": "total_over", "expected_value": 0.05, "edge": 0.06, "calibrated_probability": 0.58, "kalshi_probability": 0.54, "best_pick": "Over 5.5", "home_team": "Team I", "away_team": "Team J"},
             # NBA total over at 0.57 (fails NBA 0.58)
-            {"league": "NBA", "market_type": "total_over", "expected_value": 0.05, "edge": 0.05, "calibrated_probability": 0.57, "kalshi_probability": 0.53, "best_pick": "Over 220.5", "home_team": "Team E", "away_team": "Team F"},
-            # NBA total over at 0.58 (meets NBA 0.58)
-            {"league": "NBA", "market_type": "total_over", "expected_value": 0.05, "edge": 0.05, "calibrated_probability": 0.58, "kalshi_probability": 0.54, "best_pick": "Over 220.5", "home_team": "Team G", "away_team": "Team H"},
+            {"league": "NBA", "market_type": "total_over", "expected_value": 0.05, "edge": 0.06, "calibrated_probability": 0.57, "kalshi_probability": 0.53, "best_pick": "Over 220.5", "home_team": "Team E", "away_team": "Team F"},
+            # NBA total over at 0.58 (meets NBA 0.58), requires EV=0.03+0.02=0.05, Edge=0.04+0.02=0.06
+            {"league": "NBA", "market_type": "total_over", "expected_value": 0.05, "edge": 0.06, "calibrated_probability": 0.58, "kalshi_probability": 0.54, "best_pick": "Over 220.5", "home_team": "Team G", "away_team": "Team H"},
+        # MLB total under at 0.57 (meets TOTAL_UNDER_MIN_WIN_PROB 0.57), requires EV=0.02+0.02=0.04, Edge=0.03+0.02=0.05
+        {"league": "MLB", "market_type": "total_under", "expected_value": 0.04, "edge": 0.05, "calibrated_probability": 0.57, "kalshi_probability": 0.53, "best_pick": "Under 8.5", "home_team": "Team K", "away_team": "Team L"},
+        # MLB total under at 0.57 (meets TOTAL_UNDER_MIN_WIN_PROB 0.57), fails EV=0.02+0.02=0.04 (has 0.03)
+        {"league": "MLB", "market_type": "total_under", "expected_value": 0.03, "edge": 0.05, "calibrated_probability": 0.57, "kalshi_probability": 0.53, "best_pick": "Under 8.5", "home_team": "Team M", "away_team": "Team N"},
         ])
 
         best = build_best_picks_df(df)
@@ -82,11 +91,11 @@ class TestCalibrationUpdate(unittest.TestCase):
         nhl_weak = best[best["home_team"] == "Team A"].iloc[0]
         self.assertEqual(nhl_weak["Pick_Status"], "Below Threshold")
 
-        # Team C (NHL 0.58, but fails edge 0.05) -> Below Threshold
+        # Team C (NHL 0.58, but fails edge 0.06) -> Below Threshold
         nhl_edge_fail = best[best["home_team"] == "Team C"].iloc[0]
         self.assertEqual(nhl_edge_fail["Pick_Status"], "Below Threshold")
 
-        # Team I (NHL 0.58, meets edge 0.05) -> Actionable
+        # Team I (NHL 0.58, meets edge 0.06) -> Actionable
         nhl_strong = best[best["home_team"] == "Team I"].iloc[0]
         self.assertEqual(nhl_strong["Pick_Status"], "Actionable")
 
@@ -97,6 +106,14 @@ class TestCalibrationUpdate(unittest.TestCase):
         # Team G (NBA 0.58) -> Actionable
         nba_strong = best[best["home_team"] == "Team G"].iloc[0]
         self.assertEqual(nba_strong["Pick_Status"], "Actionable")
+
+        # Team K (MLB Under 0.57, meets EV 0.04, Edge 0.05) -> Actionable
+        mlb_strong_under = best[best["home_team"] == "Team K"].iloc[0]
+        self.assertEqual(mlb_strong_under["Pick_Status"], "Actionable")
+
+        # Team M (MLB Under 0.57, fails EV 0.04) -> Below Threshold
+        mlb_weak_under = best[best["home_team"] == "Team M"].iloc[0]
+        self.assertEqual(mlb_weak_under["Pick_Status"], "Below Threshold")
 
     def test_mlb_spreads_get_lighter_gate(self):
         # SIDE_MIN_WIN_PROB is 0.52 for normal spreads, MLB gets 0.50. Set Kalshi gap to trigger 'Agrees' (bypass overlays)
