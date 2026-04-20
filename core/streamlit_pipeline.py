@@ -26,7 +26,12 @@ from core.team_mapper import normalize_team_name, NBA_EXACT_MAP, NHL_EXACT_MAP
 from app_core.weights_config import (
             TOTAL_UNDER_MIN_WIN_PROB, TOTAL_UNDER_MIN_EV, TOTAL_UNDER_MIN_EDGE,
             NHL_TOTAL_EXTRA_EDGE_PENALTY, MLB_SPREAD_MIN_WIN_PROB,
-            MLB_SPREAD_ACTIONABLE_BONUS, MLB_TOTAL_ACTIONABLE_PENALTY, NBA_TOTAL_ACTIONABLE_PENALTY, NHL_TOTAL_ACTIONABLE_PENALTY,
+            MLB_SPREAD_ACTIONABLE_BONUS,
+            MLB_TOTAL_OVER_ACTIONABLE_PENALTY, MLB_TOTAL_UNDER_ACTIONABLE_PENALTY,
+            NBA_TOTAL_OVER_ACTIONABLE_PENALTY, NBA_TOTAL_UNDER_ACTIONABLE_PENALTY,
+            NHL_TOTAL_OVER_ACTIONABLE_PENALTY, NHL_TOTAL_UNDER_ACTIONABLE_PENALTY,
+            FALLBACK_HEAVY_TOTAL_EXTRA_PENALTY,
+            BEST_PICKS_PROFILE,
     LOCK_UPLOAD_LINES_FOR_MATCHED_ROWS,
     KALSHI_WEIGHT, MARKET_WEIGHT, ML_MODEL_WEIGHT, THEOVER_WEIGHT, SENTIMENT_WEIGHT,
     FALLBACK_MARKET_WEIGHT, FALLBACK_ML_WEIGHT, FALLBACK_THEOVER_WEIGHT, FALLBACK_SENTIMENT_WEIGHT,
@@ -1893,8 +1898,13 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         from app_core.weights_config import (
             TOTAL_UNDER_MIN_WIN_PROB, TOTAL_UNDER_MIN_EV, TOTAL_UNDER_MIN_EDGE,
             NHL_TOTAL_EXTRA_EDGE_PENALTY, MLB_SPREAD_MIN_WIN_PROB,
-            MLB_SPREAD_ACTIONABLE_BONUS, MLB_TOTAL_ACTIONABLE_PENALTY, NBA_TOTAL_ACTIONABLE_PENALTY, NHL_TOTAL_ACTIONABLE_PENALTY,
-    LOCK_UPLOAD_LINES_FOR_MATCHED_ROWS,
+            MLB_SPREAD_ACTIONABLE_BONUS,
+            MLB_TOTAL_OVER_ACTIONABLE_PENALTY, MLB_TOTAL_UNDER_ACTIONABLE_PENALTY,
+            NBA_TOTAL_OVER_ACTIONABLE_PENALTY, NBA_TOTAL_UNDER_ACTIONABLE_PENALTY,
+            NHL_TOTAL_OVER_ACTIONABLE_PENALTY, NHL_TOTAL_UNDER_ACTIONABLE_PENALTY,
+            FALLBACK_HEAVY_TOTAL_EXTRA_PENALTY,
+            BEST_PICKS_PROFILE,
+            LOCK_UPLOAD_LINES_FOR_MATCHED_ROWS,
             BASELINE_MIN_EV, BASELINE_MIN_EDGE,
             TOTAL_OVER_MIN_EV, TOTAL_OVER_MIN_EDGE,
             TOTAL_MIN_WIN_PROB, NHL_TOTAL_MIN_WIN_PROB,
@@ -1959,6 +1969,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             req_ev = BASELINE_MIN_EV
             req_edge = BASELINE_MIN_EDGE
 
+            is_fallback_heavy = diagnostics_out.get("is_fallback_heavy", False) if diagnostics_out else False
+
             # Apply League + Market specific calibration
             if is_side_market:
                 if league == "MLB" and "spread" in market_type.lower():
@@ -1969,23 +1981,43 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 from app_core.weights_config import NBA_TOTAL_MIN_WIN_PROB, NHL_TOTAL_MIN_WIN_PROB_STRICT
                 if league == "NHL":
                     req_prob = NHL_TOTAL_MIN_WIN_PROB_STRICT
-                    req_ev += NHL_TOTAL_ACTIONABLE_PENALTY
-                    req_edge += NHL_TOTAL_ACTIONABLE_PENALTY + NHL_TOTAL_EXTRA_EDGE_PENALTY
-                elif league == "NBA":
-                    req_prob = NBA_TOTAL_MIN_WIN_PROB
-                    req_ev += NBA_TOTAL_ACTIONABLE_PENALTY
-                    req_edge += NBA_TOTAL_ACTIONABLE_PENALTY
-                elif league == "MLB":
-                    req_ev += MLB_TOTAL_ACTIONABLE_PENALTY
-                    req_edge += MLB_TOTAL_ACTIONABLE_PENALTY
+                    req_edge += NHL_TOTAL_EXTRA_EDGE_PENALTY
 
-                if market_type == "total_under":
+                if market_type == "total_over":
+                    req_ev = max(req_ev, TOTAL_OVER_MIN_EV)
+                    req_edge = max(req_edge, TOTAL_OVER_MIN_EDGE)
+                elif market_type == "total_under":
                     req_prob = max(req_prob, TOTAL_UNDER_MIN_WIN_PROB)
                     req_ev = max(req_ev, TOTAL_UNDER_MIN_EV)
                     req_edge = max(req_edge, TOTAL_UNDER_MIN_EDGE)
-                elif market_type == "total_over":
-                    req_ev = max(req_ev, TOTAL_OVER_MIN_EV)
-                    req_edge = max(req_edge, TOTAL_OVER_MIN_EDGE)
+
+                if league == "NHL":
+                    if market_type == "total_over":
+                        req_ev += NHL_TOTAL_OVER_ACTIONABLE_PENALTY
+                        req_edge += NHL_TOTAL_OVER_ACTIONABLE_PENALTY
+                    elif market_type == "total_under":
+                        req_ev += NHL_TOTAL_UNDER_ACTIONABLE_PENALTY
+                        req_edge += NHL_TOTAL_UNDER_ACTIONABLE_PENALTY
+                elif league == "NBA":
+                    req_prob = max(req_prob, NBA_TOTAL_MIN_WIN_PROB)
+                    if market_type == "total_over":
+                        req_ev += NBA_TOTAL_OVER_ACTIONABLE_PENALTY
+                        req_edge += NBA_TOTAL_OVER_ACTIONABLE_PENALTY
+                    elif market_type == "total_under":
+                        req_ev += NBA_TOTAL_UNDER_ACTIONABLE_PENALTY
+                        req_edge += NBA_TOTAL_UNDER_ACTIONABLE_PENALTY
+                elif league == "MLB":
+                    if market_type == "total_over":
+                        req_ev += MLB_TOTAL_OVER_ACTIONABLE_PENALTY
+                        req_edge += MLB_TOTAL_OVER_ACTIONABLE_PENALTY
+                    elif market_type == "total_under":
+                        req_ev += MLB_TOTAL_UNDER_ACTIONABLE_PENALTY
+                        req_edge += MLB_TOTAL_UNDER_ACTIONABLE_PENALTY
+
+                if is_fallback_heavy:
+                    req_ev += FALLBACK_HEAVY_TOTAL_EXTRA_PENALTY
+                    req_edge += FALLBACK_HEAVY_TOTAL_EXTRA_PENALTY
+
 
             if is_side_market and win_prob < req_prob:
                 status = "Below Threshold"
@@ -1996,12 +2028,14 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             else:
                 if effective_ev < req_ev or edge < req_edge:
                     status = "Below Threshold"
-                    if is_total_market and market_type == "total_under":
-                        status_reason = f"Fails stricter total_under threshold (Edge >= {req_edge*100:.1f}%, Effective EV >= {req_ev*100:.1f}%)"
+                    if is_total_market and is_fallback_heavy and ((effective_ev < req_ev and effective_ev >= req_ev - FALLBACK_HEAVY_TOTAL_EXTRA_PENALTY) or (edge < req_edge and edge >= req_edge - FALLBACK_HEAVY_TOTAL_EXTRA_PENALTY)):
+                         status_reason = f"Fails due to fallback-heavy totals penalty (Edge >= {req_edge*100:.1f}%, Effective EV >= {req_ev*100:.1f}%)"
+                    elif is_total_market and market_type == "total_under":
+                        status_reason = f"Fails stricter total_under cold-market penalty (Edge >= {req_edge*100:.1f}%, Effective EV >= {req_ev*100:.1f}%)"
                     elif is_total_market and league == "NHL":
-                        status_reason = f"Fails NHL total penalty threshold (Edge >= {req_edge*100:.1f}%, Effective EV >= {req_ev*100:.1f}%)"
+                        status_reason = f"Fails NHL total cold-market penalty threshold (Edge >= {req_edge*100:.1f}%, Effective EV >= {req_ev*100:.1f}%)"
                     elif is_total_market and market_type == "total_over":
-                        status_reason = f"Fails stricter total_over threshold (Edge >= {req_edge*100:.1f}%, Effective EV >= {req_ev*100:.1f}%)"
+                        status_reason = f"Fails stricter total_over cold-market penalty (Edge >= {req_edge*100:.1f}%, Effective EV >= {req_ev*100:.1f}%)"
                     else:
                         status_reason = f"Fails minimum Edge ({req_edge*100:.1f}%) or Effective EV ({req_ev*100:.1f}%) thresholds"
                 else:
@@ -2010,8 +2044,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                     if is_spread_divergence_override:
                         status_reason = "Passed all strict filters (Spread divergence override applied)"
 
-            # Apply Consensus Overlay Logic
-            if status == "Actionable":
+            # Apply Consensus Overlay Logic ONLY if profile is STRICT
+            if status == "Actionable" and BEST_PICKS_PROFILE == 'STRICT':
                 if consensus_agr == "Neutral":
                     if win_prob < NEUTRAL_ACTIONABLE_MIN_PROB or effective_ev < NEUTRAL_ACTIONABLE_MIN_EV or edge < NEUTRAL_ACTIONABLE_MIN_EDGE:
                         status = "Below Threshold"
@@ -2198,14 +2232,24 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         ].shape[0]
 
         # Calculate new guardrail stats
+        blocked_by_cold_market = final_best_df[
+            (final_best_df["Pick_Status"] == "Below Threshold") &
+            (final_best_df["Status_Reason"].str.contains("cold-market penalty", na=False))
+        ].shape[0]
+
+        blocked_by_fallback_heavy_totals = final_best_df[
+            (final_best_df["Pick_Status"] == "Below Threshold") &
+            (final_best_df["Status_Reason"].str.contains("fallback-heavy totals penalty", na=False))
+        ].shape[0]
+
         blocked_by_total_under = final_best_df[
             (final_best_df["Pick_Status"] == "Below Threshold") &
-            (final_best_df["Status_Reason"].str.contains("stricter total_under threshold", na=False))
+            (final_best_df["Status_Reason"].str.contains("stricter total_under cold-market penalty", na=False))
         ].shape[0]
 
         blocked_by_nhl_total = final_best_df[
             (final_best_df["Pick_Status"] == "Below Threshold") &
-            (final_best_df["Status_Reason"].str.contains("NHL total penalty threshold", na=False))
+            (final_best_df["Status_Reason"].str.contains("NHL total cold-market penalty threshold", na=False))
         ].shape[0]
 
         # League + Market calibration metrics
@@ -2246,6 +2290,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         diagnostics_out["spreads_rescued_by_divergence"] = spreads_rescued_by_divergence
 
         # Inject new metrics
+        diagnostics_out["blocked_by_cold_market"] = blocked_by_cold_market
+        diagnostics_out["blocked_by_fallback_heavy_totals"] = blocked_by_fallback_heavy_totals
         diagnostics_out["blocked_by_total_under"] = blocked_by_total_under
         diagnostics_out["blocked_by_nhl_total"] = blocked_by_nhl_total
         diagnostics_out["actionable_counts_by_league_market"] = actionable_counts_by_league_market
