@@ -244,17 +244,36 @@ def normalize_team_for_stats(team_name: str, league: Optional[str]) -> str:
 
 
 def _build_stats_index_maps(stats_subset: pd.DataFrame, league: str) -> Dict[str, Dict[str, str]]:
+    """
+    Build strict, league-local matching maps for stats resolution.
+    This is the authoritative mapping path for stats enrichment.
+    """
     canonical_map: Dict[str, str] = {}
-    city_only_map: Dict[str, str] = {}
     for raw in stats_subset.index:
-        raw_str = str(raw)
-        norm_key = normalize_team_for_stats(raw_str, league).strip().lower()
-        if norm_key:
-            canonical_map[norm_key] = raw_str
-        city_key = robust_normalize_team(raw_str, league).strip().lower()
-        if city_key and len(city_key.split()) == 1:
-            city_only_map[city_key] = raw_str
-    return {"canonical": canonical_map, "city_only": city_only_map}
+        raw_str = str(raw).strip().lower()
+        if raw_str:
+            canonical_map[raw_str] = raw_str
+
+    league_key = str(league or "").upper().strip()
+    canonical_alias_map: Dict[str, str] = {}
+    city_only_alias_map: Dict[str, str] = {}
+
+    for alias, canonical in LEAGUE_TEAM_NAME_MAPPING.get(league_key, {}).items():
+        alias_key = normalize_team_for_stats(alias, league_key).strip().lower()
+        canonical_key = normalize_team_for_stats(canonical, league_key).strip().lower()
+        if alias_key and canonical_key in canonical_map:
+            canonical_alias_map[alias_key] = canonical_map[canonical_key]
+
+    for alias, canonical in LEAGUE_CITY_ONLY_ALIASES.get(league_key, {}).items():
+        alias_key = normalize_team_for_stats(alias, league_key).strip().lower()
+        canonical_key = normalize_team_for_stats(canonical, league_key).strip().lower()
+        if alias_key and canonical_key in canonical_map:
+            city_only_alias_map[alias_key] = canonical_map[canonical_key]
+
+    return {
+        "canonical": canonical_alias_map,
+        "city_only": city_only_alias_map,
+    }
 
 
 def resolve_stats_team_match(
@@ -263,19 +282,26 @@ def resolve_stats_team_match(
     stats_norm_map: Dict[str, str],
     canonical_alias_map: Dict[str, str],
     city_alias_map: Dict[str, str],
-) -> tuple[Optional[str], str]:
+) -> tuple[Optional[str], str, str]:
     """Layered match strategy: normalized -> canonical alias -> city alias -> fuzzy -> unresolved."""
+    if not str(team_name or "").strip():
+        return None, "unresolved", "before_canonicalization"
+
     t_norm = normalize_team_for_stats(team_name, league)
     key = t_norm.strip().lower()
+    if not key:
+        return None, "unresolved", "before_canonicalization"
 
     if key in stats_norm_map:
-        return stats_norm_map[key], "direct"
+        return stats_norm_map[key], "direct", "resolved"
     if key in canonical_alias_map:
-        return canonical_alias_map[key], "canonical_alias"
+        return canonical_alias_map[key], "canonical_alias", "resolved"
     if key in city_alias_map:
-        return city_alias_map[key], "city_alias"
+        return city_alias_map[key], "city_alias", "resolved"
 
     fuzzy_thresh = STATS_FUZZY_THRESHOLD_BY_LEAGUE.get(str(league).upper(), 70.0)
+    if not stats_norm_map:
+        return None, "unresolved", "stats_index_lookup"
     match_norm = fuzzy_match_team_robust(
         t_norm,
         list(stats_norm_map.keys()),
@@ -283,9 +309,9 @@ def resolve_stats_team_match(
         league=league,
     )
     if match_norm:
-        return stats_norm_map[match_norm], "fuzzy"
+        return stats_norm_map[match_norm], "fuzzy", "resolved"
 
-    return None, "unresolved"
+    return None, "unresolved", "after_fuzzy"
 
 def normalize_team(name: str) -> str:
     """
@@ -340,8 +366,9 @@ def normalize_team(name: str) -> str:
     return name
 
 # -------------------------------------------------------------------------
-# Pro League Mappings (100% Lookup Guarantee)
-# Maps full team names to the normalized keys used by stats libraries.
+# Legacy cross-league mappings (non-stats paths only).
+# Stats enrichment now uses normalize_team_for_stats + resolve_stats_team_match
+# as the single authoritative resolver path.
 # -------------------------------------------------------------------------
 TEAM_NAME_MAPPING = {
     # NBA: Usually unnecessary as stats match full names, but good for aliases
@@ -2276,14 +2303,24 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     # ------------------------------------------------------------
     home_matched_names = pd.Series([None] * len(df), index=df.index)
     away_matched_names = pd.Series([None] * len(df), index=df.index)
+    home_resolution_stage = pd.Series(["resolved"] * len(df), index=df.index, dtype="object")
+    away_resolution_stage = pd.Series(["resolved"] * len(df), index=df.index, dtype="object")
     global_stats_lookup = {}
+    resolution_stage_counts = Counter()
+    unresolved_after_canonicalization = 0
+    unresolved_after_alias = 0
+    unresolved_after_fuzzy = 0
 
     if not stats_df.empty:
         # Group stats_df by league_key
         stats_by_league = {}
         for lg in stats_df['league_key'].unique():
-            subset = stats_df[stats_df['league_key'] == lg]
-            stats_by_league[lg] = subset.drop_duplicates(subset=['team_norm']).set_index('team_norm')
+            subset = stats_df[stats_df['league_key'] == lg].copy()
+            subset["stats_team_key"] = subset["team_norm"].apply(
+                lambda raw: normalize_team_for_stats(str(raw), lg).strip().lower()
+            )
+            subset = subset[subset["stats_team_key"] != ""]
+            stats_by_league[lg] = subset.drop_duplicates(subset=["stats_team_key"]).set_index("stats_team_key")
 
         # Build global lookup dict: (league, team_norm) -> value
         for lg, s_df in stats_by_league.items():
@@ -2305,11 +2342,7 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
 
             stats_subset = stats_by_league[lg_key]
             # Build strict league-local stats indexes (no cross-league alias bleed).
-            stats_index_norm_map = {
-                normalize_team_for_stats(str(raw), lg_key).strip().lower(): raw
-                for raw in stats_subset.index
-            }
-            stats_index_norm_keys = list(stats_index_norm_map.keys())
+            stats_index_norm_map = {str(raw).strip().lower(): str(raw).strip().lower() for raw in stats_subset.index}
             alias_maps = _build_stats_index_maps(stats_subset, lg_key)
 
             if lg_key == "NFL":
@@ -2321,10 +2354,11 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
             # Process Home Teams
             current_home_teams = home_norm[lg_mask].unique()
             home_map_local = {}
+            home_stage_map_local = {}
             for t_norm in current_home_teams:
                 if not t_norm: continue
 
-                matched_name, reason = resolve_stats_team_match(
+                matched_name, reason, failure_stage = resolve_stats_team_match(
                     t_norm,
                     lg_key,
                     stats_index_norm_map,
@@ -2332,22 +2366,32 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                     alias_maps["city_only"],
                 )
                 home_map_local[t_norm] = matched_name
+                home_stage_map_local[t_norm] = failure_stage
                 if matched_name is None:
                     stats_log["miss"] += 1
+                    resolution_stage_counts[failure_stage] += 1
+                    if failure_stage != "before_canonicalization":
+                        unresolved_after_canonicalization += 1
+                    if failure_stage in {"after_alias", "after_fuzzy"}:
+                        unresolved_after_alias += 1
+                    if failure_stage == "after_fuzzy":
+                        unresolved_after_fuzzy += 1
                 elif reason in stats_log:
                     stats_log[reason] += 1
                 else:
                     stats_log["direct"] += 1
 
             home_matched_names[lg_mask] = home_norm[lg_mask].map(home_map_local)
+            home_resolution_stage[lg_mask] = home_norm[lg_mask].map(home_stage_map_local).fillna("resolved")
 
             # Process Away Teams
             current_away_teams = away_norm[lg_mask].unique()
             away_map_local = {}
+            away_stage_map_local = {}
             for t_norm in current_away_teams:
                 if not t_norm: continue
 
-                matched_name, reason = resolve_stats_team_match(
+                matched_name, reason, failure_stage = resolve_stats_team_match(
                     t_norm,
                     lg_key,
                     stats_index_norm_map,
@@ -2355,14 +2399,23 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                     alias_maps["city_only"],
                 )
                 away_map_local[t_norm] = matched_name
+                away_stage_map_local[t_norm] = failure_stage
                 if matched_name is None:
                     stats_log["miss"] += 1
+                    resolution_stage_counts[failure_stage] += 1
+                    if failure_stage != "before_canonicalization":
+                        unresolved_after_canonicalization += 1
+                    if failure_stage in {"after_alias", "after_fuzzy"}:
+                        unresolved_after_alias += 1
+                    if failure_stage == "after_fuzzy":
+                        unresolved_after_fuzzy += 1
                 elif reason in stats_log:
                     stats_log[reason] += 1
                 else:
                     stats_log["direct"] += 1
 
             away_matched_names[lg_mask] = away_norm[lg_mask].map(away_map_local)
+            away_resolution_stage[lg_mask] = away_norm[lg_mask].map(away_stage_map_local).fillna("resolved")
 
             # Updated Logging
             log_stats_match_summary(stats_log, lg_key)
@@ -2421,6 +2474,8 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     else:
         if not FREE_TIER_MODE:
             logger.warning("No stats fetched. Filling with defaults.")
+        home_resolution_stage[:] = "stats_index_lookup"
+        away_resolution_stage[:] = "stats_index_lookup"
 
     # Helper function moved to top level logic within enrich_with_model_features
     # Now explicitly uses arguments instead of closures where possible
@@ -2484,8 +2539,20 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     stats_source = pd.Series(["live"] * len(df), index=df.index, dtype="object")
     stats_resolution_status = pd.Series(["resolved"] * len(df), index=df.index, dtype="object")
     stats_fallback_reason = pd.Series([""] * len(df), index=df.index, dtype="object")
+    stats_resolution_stage_failure = pd.Series([""] * len(df), index=df.index, dtype="object")
 
     unresolved_mask = combined_fallback.copy()
+    stage_failure_values = []
+    for idx in df.index:
+        failed_stages = []
+        if bool(home_fallback.loc[idx]):
+            failed_stages.append(str(home_resolution_stage.loc[idx]))
+        if bool(away_fallback.loc[idx]):
+            failed_stages.append(str(away_resolution_stage.loc[idx]))
+        unique_stages = [s for s in dict.fromkeys(failed_stages) if s and s != "resolved"]
+        stage_failure_values.append("|".join(unique_stages))
+    stats_resolution_stage_failure = pd.Series(stage_failure_values, index=df.index, dtype="object")
+
     stats_resolution_status.loc[unresolved_mask] = "unresolved"
     stats_source.loc[unresolved_mask] = "fallback"
     stats_fallback_reason.loc[unresolved_mask] = "team_mapping_unresolved"
@@ -2502,6 +2569,7 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     features_data["stats_source"] = stats_source
     features_data["stats_resolution_status"] = stats_resolution_status
     features_data["stats_fallback_reason"] = stats_fallback_reason
+    features_data["stats_resolution_stage_failure"] = stats_resolution_stage_failure
     features_data["stats_fetch_retries_used"] = nba_fetch_diag.get("retries_used", 0)
     features_data["ml_feature_eligible"] = stats_resolution_status == "resolved"
 
@@ -2626,6 +2694,34 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
         s_home_s = s_home if isinstance(s_home, (pd.Series)) else pd.Series([s_home]*df_len, index=df.index)
         s_away_s = s_away if isinstance(s_away, (pd.Series)) else pd.Series([s_away]*df_len, index=df.index)
         features_data['feature_diff_streak'] = s_home_s - s_away_s
+
+    # Ensure unresolved stats rows cannot masquerade as fully enriched ML rows.
+    unresolved_feature_cols = [
+        "feature_home_win_pct",
+        "feature_home_home_win_pct",
+        "feature_home_last5_win_pct",
+        "feature_home_ppg",
+        "feature_home_oppg",
+        "feature_home_streak",
+        "feature_home_turnovers",
+        "feature_away_win_pct",
+        "feature_away_away_win_pct",
+        "feature_away_last5_win_pct",
+        "feature_away_ppg",
+        "feature_away_oppg",
+        "feature_away_streak",
+        "feature_away_turnovers",
+        "feature_diff_win_pct",
+        "feature_diff_ppg",
+        "feature_diff_oppg",
+        "feature_diff_last5",
+        "feature_diff_streak",
+    ]
+    for col in unresolved_feature_cols:
+        if col in features_data:
+            series = pd.Series(features_data[col], index=df.index)
+            series.loc[unresolved_mask] = np.nan
+            features_data[col] = series
     
     # 6. Map Remaining Features (Existing) using safe_numeric_fill
     
@@ -2633,13 +2729,30 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     fallback_counts_by_league = league_keys[combined_fallback].value_counts().to_dict()
     unresolved_counts_by_league = league_keys[stats_resolution_status == "unresolved"].value_counts().to_dict()
     source_counts = stats_source.value_counts(dropna=False).to_dict()
+    source_counts = {
+        "live": int(source_counts.get("live", 0)),
+        "cached": int(source_counts.get("cached", 0)),
+        "fallback": int(source_counts.get("fallback", 0)),
+        "failed": int(source_counts.get("failed", 0)),
+    }
     ml_excluded_by_league = league_keys[~features_data["ml_feature_eligible"]].value_counts().to_dict()
     features_data["stats_unresolved_count_by_league"] = int(sum(unresolved_counts_by_league.values()))
     features_data["stats_ml_excluded_rows"] = int((~features_data["ml_feature_eligible"]).sum())
     features_data["stats_source_counts"] = str(source_counts)
+    features_data["unresolved_after_canonicalization"] = int(unresolved_after_canonicalization)
+    features_data["unresolved_after_alias"] = int(unresolved_after_alias)
+    features_data["unresolved_after_fuzzy"] = int(unresolved_after_fuzzy)
+    features_data["stats_resolution_stage_failure_counts"] = str(dict(resolution_stage_counts))
 
     logger.info(f"STATS SOURCE COUNTS: {source_counts}")
     logger.info(f"STATS UNRESOLVED COUNT BY LEAGUE: {unresolved_counts_by_league}")
+    logger.info(
+        "STATS RESOLUTION FAILURE COUNTS: "
+        f"stage={dict(resolution_stage_counts)} "
+        f"after_canonicalization={unresolved_after_canonicalization} "
+        f"after_alias={unresolved_after_alias} "
+        f"after_fuzzy={unresolved_after_fuzzy}"
+    )
     logger.info(f"ROWS EXCLUDED FROM ML DUE TO UNRESOLVED STATS: {ml_excluded_by_league}")
 
     if fallback_counts_by_league:
