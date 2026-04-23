@@ -11,6 +11,7 @@ import re
 import time
 import requests
 import math
+from collections import Counter
 
 # -------------------------------------------------------------------------
 # Library Imports with Fail-Safe Wrappers
@@ -111,6 +112,100 @@ LEAGUE_AVERAGES = {
     "MLB": {"ppg": 4.5, "oppg": 4.5, "win_pct": 0.5, "last5_win_pct": 0.5},
     "default": {"ppg": 50.0, "oppg": 50.0, "win_pct": 0.5, "last5_win_pct": 0.5}
 }
+
+_NBA_STATS_RUNTIME_CACHE: Dict[int, List[Dict[str, Any]]] = {}
+_NBA_FETCH_DIAGNOSTICS: Dict[str, Any] = {
+    "status": "not_started",
+    "retries_used": 0,
+    "source": "none",
+    "last_error": "",
+}
+
+# League-specific team alias mapping for stats resolution. Keep keys normalized/lowercase.
+LEAGUE_TEAM_NAME_MAPPING: Dict[str, Dict[str, str]] = {
+    "NBA": {
+        "atlanta": "ATLANTA HAWKS",
+        "new york": "NEW YORK KNICKS",
+        "toronto": "TORONTO RAPTORS",
+        "cleveland": "CLEVELAND CAVALIERS",
+        "denver": "DENVER NUGGETS",
+        "minnesota": "MINNESOTA TIMBERWOLVES",
+        "phoenix": "PHOENIX SUNS",
+        "golden state": "GOLDEN STATE WARRIORS",
+        "sacramento": "SACRAMENTO KINGS",
+        "orlando": "ORLANDO MAGIC",
+        "detroit": "DETROIT PISTONS",
+        "new orleans": "NEW ORLEANS PELICANS",
+        "oklahoma city": "OKLAHOMA CITY THUNDER",
+        "portland": "PORTLAND TRAIL BLAZERS",
+        "utah": "UTAH JAZZ",
+        "washington": "WASHINGTON WIZARDS",
+        "indiana": "INDIANA PACERS",
+        "charlotte": "CHARLOTTE HORNETS",
+        "brooklyn": "BROOKLYN NETS",
+        "boston": "BOSTON CELTICS",
+        "milwaukee": "MILWAUKEE BUCKS",
+        "miami": "MIAMI HEAT",
+        "houston": "HOUSTON ROCKETS",
+        "dallas": "DALLAS MAVERICKS",
+        "memphis": "MEMPHIS GRIZZLIES",
+        "chicago": "CHICAGO BULLS",
+        "philadelphia": "PHILADELPHIA 76ERS",
+        "san antonio": "SAN ANTONIO SPURS",
+        "la clippers": "LOS ANGELES CLIPPERS",
+        "los angeles clippers": "LOS ANGELES CLIPPERS",
+        "la lakers": "LOS ANGELES LAKERS",
+        "los angeles lakers": "LOS ANGELES LAKERS",
+    },
+    "NHL": {
+        "minnesota": "MINNESOTA WILD",
+        "st louis": "ST LOUIS BLUES",
+        "florida": "FLORIDA PANTHERS",
+        "carolina": "CAROLINA HURRICANES",
+        "tampa bay": "TAMPA BAY LIGHTNING",
+        "new jersey": "NEW JERSEY DEVILS",
+        "san jose": "SAN JOSE SHARKS",
+        "vegas": "VEGAS GOLDEN KNIGHTS",
+        "dallas": "DALLAS STARS",
+        "washington": "WASHINGTON CAPITALS",
+    },
+    "NFL": {},
+    "MLB": {
+        "athletics": "OAKLAND",
+        "oakland athletics": "OAKLAND",
+    },
+    "NCAAB": {},
+    "NCAAF": {},
+}
+
+
+def get_nba_fetch_diagnostics() -> Dict[str, Any]:
+    """Expose current NBA fetch diagnostics for slate-level reporting."""
+    return dict(_NBA_FETCH_DIAGNOSTICS)
+
+
+def normalize_team_for_stats(team_name: str, league: Optional[str]) -> str:
+    """
+    League-aware stats normalization so aliases don't cross-pollute between sports.
+    """
+    def _simple_norm(value: str) -> str:
+        value = value.upper().replace("'", "").replace(".", "")
+        value = re.sub(r"[^A-Z0-9 ]", " ", value)
+        value = re.sub(r"\s+", " ", value).strip()
+        return value
+
+    lg = str(league or "").upper().strip()
+    raw = str(team_name or "").upper().strip()
+    raw = re.sub(r"\s*[\(\[][0-9]+[\)\]]\s*", " ", raw).strip()
+    raw = re.sub(r"\b(?:SAINT|ST\.?)(?!\w)", "ST", raw)
+    raw = re.sub(r"\bL\.?A\.?\b", "LOS ANGELES", raw)
+    raw = re.sub(r"\bN\.?Y\.?\b", "NEW YORK", raw)
+    normalized = _simple_norm(raw)
+    key = str(normalized).strip().lower()
+    league_map = LEAGUE_TEAM_NAME_MAPPING.get(lg, {})
+    if key in league_map:
+        return _simple_norm(league_map[key])
+    return normalized
 
 def normalize_team(name: str) -> str:
     """
@@ -1214,71 +1309,93 @@ def fetch_nba_stats(season_year: int) -> List[Dict[str, Any]]:
     """
     Fetch NBA stats using nba_api for the given season year (e.g. 2024 for 2024-25).
     """
+    if season_year in _NBA_STATS_RUNTIME_CACHE:
+        _NBA_FETCH_DIAGNOSTICS.update({
+            "status": "ok",
+            "retries_used": 0,
+            "source": "cached",
+            "last_error": "",
+        })
+        return _NBA_STATS_RUNTIME_CACHE[season_year]
+
     if leaguedashteamstats is None:
+        _NBA_FETCH_DIAGNOSTICS.update({
+            "status": "failed",
+            "retries_used": 0,
+            "source": "failed",
+            "last_error": "nba_api unavailable",
+        })
         return []
 
-    try:
-        # nba_api expects season format "YYYY-YY", e.g. "2024-25"
-        season_str = f"{season_year}-{str(season_year + 1)[-2:]}"
-        logger.info(f"Fetching NBA stats for season: {season_str}")
+    # nba_api expects season format "YYYY-YY", e.g. "2024-25"
+    season_str = f"{season_year}-{str(season_year + 1)[-2:]}"
+    max_attempts = 3
+    base_timeout = 6
+    last_exc = None
 
-        # MeasureType='Base' gives GP, W, L, W_PCT, PTS, PLUS_MINUS, TOV, etc.
-        # Added per_mode_detailed='PerGame' to get averaged stats directly as requested
-        dashboard = leaguedashteamstats.LeagueDashTeamStats(
-            season=season_str,
-            measure_type_detailed_defense='Base',
-            per_mode_detailed='PerGame'
-        )
-        df = dashboard.get_data_frames()[0]
+    for attempt in range(max_attempts):
+        try:
+            logger.info(f"Fetching NBA stats for season: {season_str} (attempt {attempt + 1}/{max_attempts})")
+            dashboard = leaguedashteamstats.LeagueDashTeamStats(
+                season=season_str,
+                measure_type_detailed_defense='Base',
+                per_mode_detailed='PerGame',
+                timeout=base_timeout,
+            )
+            df = dashboard.get_data_frames()[0]
 
-        stats = []
-        for _, row in df.iterrows():
-            # nba_api columns: TEAM_NAME, GP, W, L, W_PCT, PTS, PLUS_MINUS, TOV
-            team_name = str(row['TEAM_NAME'])
-            gp = float(row['GP'])
+            stats = []
+            for _, row in df.iterrows():
+                team_name = str(row['TEAM_NAME'])
+                gp = float(row['GP'])
+                pts = float(row['PTS'])
+                plus_minus = float(row['PLUS_MINUS'])
+                w_pct = float(row['W_PCT'])
+                tov = float(row['TOV']) if 'TOV' in row else 0.0
+                ast = float(row['AST']) if 'AST' in row else 0.0
+                reb = float(row['REB']) if 'REB' in row else 0.0
+                if abs(plus_minus) > 30 and gp > 0:
+                    plus_minus /= gp
+                oppg = (pts - plus_minus)
 
-            # With PerGame, these are already averages
-            pts = float(row['PTS']) # Points Per Game
-            plus_minus = float(row['PLUS_MINUS'])
-            w_pct = float(row['W_PCT'])
-            tov = float(row['TOV']) if 'TOV' in row else 0.0
-            ast = float(row['AST']) if 'AST' in row else 0.0
-            reb = float(row['REB']) if 'REB' in row else 0.0
+                stats.append({
+                    "team_norm": robust_normalize_team(team_name, league="NBA"),
+                    "league_key": "NBA",
+                    "win_pct": w_pct,
+                    "home_win_pct": w_pct,
+                    "away_win_pct": w_pct,
+                    "points_per_game": pts,
+                    "points_allowed_per_game": oppg,
+                    "assists_per_game": ast,
+                    "rebounds_per_game": reb,
+                    "turnovers": tov,
+                    "streak": 0.0,
+                    "last5_win_pct": w_pct
+                })
 
-            # Calculate metrics
-            ppg = pts
-
-            # Check if plus_minus looks like total (e.g. > 30 or < -30 on average)
-            # Per game is usually -15 to +15. Cumulative can be hundreds.
-            if abs(plus_minus) > 30 and gp > 0:
-                 plus_minus /= gp
-
-            # Opponent PTS approx: PTS - PLUS_MINUS = OPP_PTS (Plus Minus is also per game)
-            oppg = (pts - plus_minus)
-            avg_tov = tov
-            avg_ast = ast
-            avg_reb = reb
-
-            stats.append({
-                "team_norm": robust_normalize_team(team_name),
-                "league_key": "NBA",
-                "win_pct": w_pct,
-                "home_win_pct": w_pct, # Approximation
-                "away_win_pct": w_pct, # Approximation
-                "points_per_game": ppg,
-                "points_allowed_per_game": oppg,
-                "assists_per_game": avg_ast,
-                "rebounds_per_game": avg_reb,
-                "turnovers": avg_tov,
-                "streak": 0.0, # Not in base view easily
-                "last5_win_pct": w_pct # Approximation
+            _NBA_STATS_RUNTIME_CACHE[season_year] = stats
+            _NBA_FETCH_DIAGNOSTICS.update({
+                "status": "ok",
+                "retries_used": attempt,
+                "source": "live",
+                "last_error": "",
             })
+            logger.info(f"Successfully fetched NBA stats for {len(stats)} teams.")
+            return stats
+        except Exception as e:
+            last_exc = e
+            if attempt < max_attempts - 1:
+                time.sleep(0.75 * (attempt + 1))
+            continue
 
-        logger.info(f"Successfully fetched NBA stats for {len(stats)} teams.")
-        return stats
-    except Exception as e:
-        logger.error(f"Failed to fetch NBA stats via nba_api: {e}", exc_info=True)
-        return []
+    _NBA_FETCH_DIAGNOSTICS.update({
+        "status": "failed",
+        "retries_used": max_attempts - 1,
+        "source": "failed",
+        "last_error": str(last_exc) if last_exc else "unknown error",
+    })
+    logger.error(f"Failed to fetch NBA stats via nba_api after {max_attempts} attempts: {last_exc}", exc_info=True)
+    return []
 
 @st.cache_data(ttl=21600)
 def fetch_nfl_stats(season_year: int) -> List[Dict[str, Any]]:
@@ -2065,8 +2182,8 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
             h_name = resolve_nhl_ambiguity(h_name, a_name)
             a_name = resolve_nhl_ambiguity(a_name, h_name)
 
-        h_norm_str = robust_normalize_team(h_name, lk)
-        a_norm_str = robust_normalize_team(a_name, lk)
+        h_norm_str = normalize_team_for_stats(h_name, lk)
+        a_norm_str = normalize_team_for_stats(a_name, lk)
 
         home_norm.append(h_norm_str)
         away_norm.append(a_norm_str)
@@ -2135,15 +2252,12 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                 if lg_key == "NFL":
                     logger.debug(f"NFL match t_norm={t_norm!r} key={key!r}")
 
-                # 1. Try Mapping (TEAM_NAME_MAPPING)
-                # Task 5: TEAM_NAME_MAPPING keys are already lowercase, key is lowercase.
-                if key in TEAM_NAME_MAPPING:
-                    mapped = TEAM_NAME_MAPPING[key]
-                    mapped_norm = robust_normalize_team(mapped, lg_key).strip().lower()
-                    if mapped_norm in stats_index_norm_map:
-                        home_map_local[t_norm] = stats_index_norm_map[mapped_norm]
-                        stats_log["override"] += 1
-                        continue
+                # 1. League-specific mapping (cross-league safe)
+                resolved_norm = normalize_team_for_stats(t_norm, lg_key).strip().lower()
+                if resolved_norm in stats_index_norm_map:
+                    home_map_local[t_norm] = stats_index_norm_map[resolved_norm]
+                    stats_log["override"] += 1
+                    continue
 
                 # 2. Try Direct Match (Normalized)
                 if key in stats_index_norm_map:
@@ -2151,17 +2265,7 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                     stats_log["direct"] += 1
                     continue
 
-                # 3. Try Manual Overrides
-                # MANUAL_TEAM_OVERRIDES keys are UPPERCASE. We use t_norm (UPPER) for lookup.
-                if t_norm in MANUAL_TEAM_OVERRIDES:
-                    target = MANUAL_TEAM_OVERRIDES[t_norm]
-                    target_norm = robust_normalize_team(target, lg_key).strip().lower()
-                    if target_norm in stats_index_norm_map:
-                        home_map_local[t_norm] = stats_index_norm_map[target_norm]
-                        stats_log["override"] += 1
-                        continue
-
-                # 4. Fuzzy Match (Normalized Space) - Lower threshold for better recall
+                # 3. Fuzzy Match (Normalized Space) - Lower threshold for better recall
                 # Use even lower threshold for NCAAB/NCAAF where mascots cause noise
                 # Further reduced from 60.0 to 55.0 for NCAAB to improve matching
                 fuzzy_thresh = 55.0 if lg_key in ["NCAAB", "NCAAF"] else 65.0
@@ -2199,14 +2303,12 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                 if lg_key == "NFL":
                     logger.debug(f"NFL match t_norm={t_norm!r} key={key!r}")
 
-                # 1. Try Mapping (TEAM_NAME_MAPPING)
-                if key in TEAM_NAME_MAPPING:
-                    mapped = TEAM_NAME_MAPPING[key]
-                    mapped_norm = robust_normalize_team(mapped, lg_key).strip().lower()
-                    if mapped_norm in stats_index_norm_map:
-                        away_map_local[t_norm] = stats_index_norm_map[mapped_norm]
-                        stats_log["override"] += 1
-                        continue
+                # 1. League-specific mapping (cross-league safe)
+                resolved_norm = normalize_team_for_stats(t_norm, lg_key).strip().lower()
+                if resolved_norm in stats_index_norm_map:
+                    away_map_local[t_norm] = stats_index_norm_map[resolved_norm]
+                    stats_log["override"] += 1
+                    continue
 
                 # 2. Try Direct Match (Normalized)
                 if key in stats_index_norm_map:
@@ -2214,16 +2316,7 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                     stats_log["direct"] += 1
                     continue
 
-                # 3. Try Manual Overrides
-                if t_norm in MANUAL_TEAM_OVERRIDES:
-                    target = MANUAL_TEAM_OVERRIDES[t_norm]
-                    target_norm = robust_normalize_team(target, lg_key).strip().lower()
-                    if target_norm in stats_index_norm_map:
-                        away_map_local[t_norm] = stats_index_norm_map[target_norm]
-                        stats_log["override"] += 1
-                        continue
-
-                # 4. Fuzzy Match (Normalized Space) - Lower threshold for better recall
+                # 3. Fuzzy Match (Normalized Space) - Lower threshold for better recall
                 # Use even lower threshold for NCAAB/NCAAF where mascots cause noise
                 # Further reduced from 60.0 to 55.0 for NCAAB to improve matching
                 fuzzy_thresh = 55.0 if lg_key in ["NCAAB", "NCAAF"] else 65.0
@@ -2358,25 +2451,32 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     # is_live_data strictly evaluates to True only if stats_quality is REAL or ESPN
     features_data["is_live_data"] = quality_series.isin(["REAL", "ESPN"])
 
-    if combined_fallback.any():
-        fallback_indices = df.index[combined_fallback]
-        for idx in fallback_indices:
-            if _FALLBACK_LOG_COUNT < _FALLBACK_LOG_LIMIT:
-                try:
-                    league_str = df.loc[idx, league_col] if league_col else "Unknown"
-                    h_team = df.loc[idx, home_col]
-                    a_team = df.loc[idx, away_col]
-                    h_stat = "MISSING" if bool(home_fallback.loc[idx]) else "OK"
-                    a_stat = "MISSING" if bool(away_fallback.loc[idx]) else "OK"
-                    logger.warning(f"DEBUG Stats Fallback Used: {league_str} {h_team} ({h_stat}) vs {a_team} ({a_stat})")
-                except Exception:
-                    pass
-                _FALLBACK_LOG_COUNT += 1
-            elif _FALLBACK_LOG_COUNT == _FALLBACK_LOG_LIMIT:
-                logger.warning("DEBUG Stats Fallback Used: (further messages suppressed)")
-                _FALLBACK_LOG_COUNT += 1
-            else:
-                break
+    nba_fetch_diag = get_nba_fetch_diagnostics()
+    stats_source = pd.Series(["live"] * len(df), index=df.index, dtype="object")
+    stats_resolution_status = pd.Series(["resolved"] * len(df), index=df.index, dtype="object")
+    stats_fallback_reason = pd.Series([""] * len(df), index=df.index, dtype="object")
+
+    unresolved_mask = combined_fallback.copy()
+    stats_resolution_status.loc[unresolved_mask] = "unresolved"
+    stats_source.loc[unresolved_mask] = "fallback"
+    stats_fallback_reason.loc[unresolved_mask] = "team_mapping_unresolved"
+
+    nba_mask = league_keys == "NBA"
+    if nba_mask.any():
+        if nba_fetch_diag.get("source") == "cached":
+            stats_source.loc[nba_mask & ~unresolved_mask] = "cached"
+        elif nba_fetch_diag.get("status") == "failed":
+            stats_source.loc[nba_mask] = "failed"
+            stats_resolution_status.loc[nba_mask] = "unresolved"
+            stats_fallback_reason.loc[nba_mask] = "nba_stats_fetch_failed"
+
+    features_data["stats_source"] = stats_source
+    features_data["stats_resolution_status"] = stats_resolution_status
+    features_data["stats_fallback_reason"] = stats_fallback_reason
+    features_data["stats_fetch_retries_used"] = nba_fetch_diag.get("retries_used", 0)
+    features_data["ml_feature_eligible"] = ~(
+        (league_keys == "NBA") & (stats_resolution_status == "unresolved")
+    )
 
     # Mapping calls
     # Note: passing league_keys and global_stats_lookup explicitly
@@ -2502,29 +2602,28 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     
     # 6. Map Remaining Features (Existing) using safe_numeric_fill
     
-    # Add diagnostic tracking for fallback rows to trace exactly which features failed
+    # Aggregate fallback diagnostics to reduce log spam
     if combined_fallback.any():
-        fallback_indices = df.index[combined_fallback]
-        _fallback_tracked_count = 0
-        for idx in fallback_indices:
-            if _fallback_tracked_count < 20: # Log first 20 failure rows for debugging
-                try:
-                    league_str = df.loc[idx, league_col] if league_col else "Unknown"
-                    h_team = df.loc[idx, home_col]
-                    a_team = df.loc[idx, away_col]
-                    h_norm = home_norm.loc[idx]
-                    a_norm = away_norm.loc[idx]
-                    h_matched = home_matched_names.loc[idx]
-                    a_matched = away_matched_names.loc[idx]
+        fallback_counts_by_league = league_keys[combined_fallback].value_counts().to_dict()
+        logger.warning(f"STATS FALLBACK SUMMARY BY LEAGUE: {fallback_counts_by_league}")
 
-                    h_stat = f"MISSING (Tried '{h_norm}')" if bool(home_fallback.loc[idx]) else f"OK ('{h_matched}')"
-                    a_stat = f"MISSING (Tried '{a_norm}')" if bool(away_fallback.loc[idx]) else f"OK ('{a_matched}')"
-                    logger.warning(f"DEBUG Stats Enrichment Failed: {league_str} {h_team} -> {h_stat} vs {a_team} -> {a_stat}")
-                except Exception:
-                    pass
-                _fallback_tracked_count += 1
-            else:
-                break
+        nba_unresolved_mask = combined_fallback & (league_keys == "NBA")
+        if nba_unresolved_mask.any():
+            unresolved_pairs = Counter(
+                [
+                    f"{df.loc[idx, home_col]} vs {df.loc[idx, away_col]}"
+                    for idx in df.index[nba_unresolved_mask]
+                ]
+            )
+            unresolved_teams = Counter()
+            for idx in df.index[nba_unresolved_mask]:
+                if bool(home_fallback.loc[idx]):
+                    unresolved_teams[str(df.loc[idx, home_col])] += 1
+                if bool(away_fallback.loc[idx]):
+                    unresolved_teams[str(df.loc[idx, away_col])] += 1
+
+            logger.warning(f"NBA unresolved mappings by matchup: {dict(unresolved_pairs)}")
+            logger.warning(f"NBA unresolved mapping team counts: {dict(unresolved_teams)}")
 
     # Identify implied probability column
     imp_col = next((c for c in df.columns if str(c).lower() in ['implied_prob', 'implied_home_prob', 'implied_prob_home']), None)
