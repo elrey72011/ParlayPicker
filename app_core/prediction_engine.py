@@ -691,8 +691,16 @@ class PredictionEngine:
         LEAGUE_MAP = {"NCAAM": "NCAAB", "NCAAMB": "NCAAB", "NCAA MENS BASKETBALL": "NCAAB"}
 
         # Apply standard league mapping to original data immediately
+        df = df.copy()
         if "league" in df.columns:
-            df["league"] = df["league"].astype("string").fillna("").str.strip().str.upper().replace(LEAGUE_MAP)
+            df.loc[:, "league"] = (
+                df["league"]
+                .astype("string")
+                .fillna("")
+                .str.strip()
+                .str.upper()
+                .replace(LEAGUE_MAP)
+            )
 
         # Prevent inference on dates > 60 days from system date
         try:
@@ -1532,6 +1540,7 @@ class PredictionEngine:
             # using refined tiered logic as requested
             raw_unique_count = self._last_metrics.get("raw_unique_count", 0)
             is_flat = False
+            self._last_metrics["hybrid_fallback_triggered"] = False
 
             # Rule 1: Ratio-based rule for ALL slate sizes (must be >= 60% unique)
             raw_unique_ratio = raw_unique_count / total_count if total_count > 0 else 0
@@ -1574,6 +1583,7 @@ class PredictionEngine:
                     logger.warning(f"Low post-healing output variance detected: {unique_count} unique probabilities across {total_count} games.")
 
             if is_flat:
+                self._last_metrics["hybrid_fallback_triggered"] = True
                 logger.warning(f"ML UNIQUENESS AUDIT: XGBoost returned critically flat raw probabilities ({raw_unique_count}/{total_count}). Overriding with Hybrid Fallback Score.")
                 logger.info(f"PIPELINE TRACE: Flat probabilities detected. Overriding all {total_count} predictions with Hybrid Fallback.")
                 final_probs = []
