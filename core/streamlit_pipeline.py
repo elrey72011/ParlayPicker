@@ -3097,6 +3097,15 @@ def run_analysis_pipeline(
     # ML Prediction Enrichment [2026-03-08]
     ml_model_actually_loaded = False
     merged["model_status"] = "OK"
+    nba_stats_diag = {
+        "nba_stats_fetch_status": "not_started",
+        "nba_stats_fetch_retries_used": 0,
+        "nba_rows_live_stats": 0,
+        "nba_rows_cached_stats": 0,
+        "nba_rows_fallback_stats": 0,
+        "rows_unresolved_team_mapping": 0,
+        "rows_excluded_from_ml_unresolved_stats": 0,
+    }
     if use_ml and ML_AVAILABLE and PredictionEngine is not None:
         logger.warning("🔍 ML DEBUG: use_ml=True, attempting predictions...")
         logger.info(f"PIPELINE TRACE: Sending {len(merged)} rows into ML prediction logic.")
@@ -3132,6 +3141,33 @@ def run_analysis_pipeline(
                 from app_core.feature_processing import enrich_with_model_features
                 api_clients = {}  # Stub for backward compatibility if it expects dict
                 enriched_for_prediction = enrich_with_model_features(merged[needs_prediction].copy(), api_clients)
+                for col in ["stats_source", "stats_resolution_status", "stats_fallback_reason", "ml_feature_eligible"]:
+                    if col in enriched_for_prediction.columns:
+                        merged.loc[needs_prediction, col] = enriched_for_prediction[col]
+
+                if "League" in enriched_for_prediction.columns:
+                    nba_rows = enriched_for_prediction["League"].astype(str).str.upper().eq("NBA")
+                    nba_stats_diag["nba_rows_live_stats"] = int((nba_rows & enriched_for_prediction.get("stats_source", pd.Series(index=enriched_for_prediction.index, dtype="object")).astype(str).eq("live")).sum())
+                    nba_stats_diag["nba_rows_cached_stats"] = int((nba_rows & enriched_for_prediction.get("stats_source", pd.Series(index=enriched_for_prediction.index, dtype="object")).astype(str).eq("cached")).sum())
+                    nba_stats_diag["nba_rows_fallback_stats"] = int((nba_rows & enriched_for_prediction.get("stats_source", pd.Series(index=enriched_for_prediction.index, dtype="object")).astype(str).isin(["fallback", "failed"])).sum())
+                    nba_stats_diag["rows_unresolved_team_mapping"] = int(enriched_for_prediction.get("stats_resolution_status", pd.Series(index=enriched_for_prediction.index, dtype="object")).astype(str).eq("unresolved").sum())
+
+                fetch_status = (
+                    enriched_for_prediction["stats_source"].astype(str)
+                    if "stats_source" in enriched_for_prediction.columns else pd.Series([], dtype="object")
+                )
+                if not fetch_status.empty:
+                    nba_stats_diag["nba_stats_fetch_status"] = "failed" if (fetch_status == "failed").any() else "ok"
+                if "stats_fetch_retries_used" in enriched_for_prediction.columns and not enriched_for_prediction.empty:
+                    nba_stats_diag["nba_stats_fetch_retries_used"] = int(
+                        pd.to_numeric(enriched_for_prediction["stats_fetch_retries_used"], errors="coerce").fillna(0).max()
+                    )
+                if "ml_feature_eligible" in enriched_for_prediction.columns:
+                    ml_eligible = enriched_for_prediction["ml_feature_eligible"].fillna(True).astype(bool)
+                    excluded_count = int((~ml_eligible).sum())
+                    nba_stats_diag["rows_excluded_from_ml_unresolved_stats"] = excluded_count
+                    needs_prediction = needs_prediction & ml_eligible
+                    merged.loc[~ml_eligible, "model_status"] = "Stats Unresolved"
 
                 # DIAGNOSTICS & DEDUPLICATION: check for duplicate columns after feature enrichment
                 logger.info(f"Shape after enrich_with_model_features: {enriched_for_prediction.shape}")
@@ -3164,11 +3200,11 @@ def run_analysis_pipeline(
 
                 # predict_batch expects a DataFrame, returns List[float]
                 logger.info(f"PIPELINE AUDIT: [6/9] Rows actually sent into predict_batch: {len(enriched_for_prediction)}")
-                predictions_list = engine.predict_batch(enriched_for_prediction)
+                predictions_list = engine.predict_batch(enriched_for_prediction.loc[needs_prediction])
                 logger.info(f"PIPELINE AUDIT: [7/9] Rows returned from predict_batch: {len(predictions_list)}")
 
                 # Extra safeguard for assignment back to merged
-                num_needed = needs_prediction.sum()
+                num_needed = int(needs_prediction.sum())
                 if len(predictions_list) != num_needed:
                     error_msg = f"Prediction mismatch: predict_batch returned {len(predictions_list)} predictions, but {num_needed} were needed."
                     logger.error(error_msg)
@@ -3461,12 +3497,23 @@ def run_analysis_pipeline(
         "stale_base_schedule": stale,
         "base_date_coverage": base_coverage,
         "has_normalized_bet_rows": not analysis_df.empty,
+        "nba_stats_fetch_status": nba_stats_diag["nba_stats_fetch_status"],
+        "nba_stats_fetch_retries_used": nba_stats_diag["nba_stats_fetch_retries_used"],
+        "nba_rows_live_stats": nba_stats_diag["nba_rows_live_stats"],
+        "nba_rows_cached_stats": nba_stats_diag["nba_rows_cached_stats"],
+        "nba_rows_fallback_stats": nba_stats_diag["nba_rows_fallback_stats"],
+        "rows_unresolved_team_mapping": nba_stats_diag["rows_unresolved_team_mapping"],
+        "rows_excluded_from_ml_unresolved_stats": nba_stats_diag["rows_excluded_from_ml_unresolved_stats"],
+        "hybrid_fallback_triggered": False,
     }
 
     default_odds_ratio = float((_numeric_series(analysis_df, "odds_american") == -110).mean()) if not analysis_df.empty else 1.0
     diagnostics["odds_fallback_only"] = bool(default_odds_ratio >= 0.99)
     if diagnostics["odds_fallback_only"] and not analysis_df.empty:
         diagnostics["diagnostic_warning"] = "odds_american mostly fallback -110"
+    diagnostics["hybrid_fallback_triggered"] = bool(
+        _string_series(analysis_df, "model_status").isin(["Statistical Fallback", "Neutral Fallback"]).any()
+    ) if not analysis_df.empty else False
 
     # Jules: Fix Midnight Flattening by using raw UTC if available
     if not analysis_df.empty:
