@@ -122,6 +122,7 @@ _NBA_FETCH_DIAGNOSTICS: Dict[str, Any] = {
 }
 
 # League-specific team alias mapping for stats resolution. Keep keys normalized/lowercase.
+# Canonical aliases are full-name/team-name variants that should map exactly.
 LEAGUE_TEAM_NAME_MAPPING: Dict[str, Dict[str, str]] = {
     "NBA": {
         "atlanta": "ATLANTA HAWKS",
@@ -178,6 +179,37 @@ LEAGUE_TEAM_NAME_MAPPING: Dict[str, Dict[str, str]] = {
     "NCAAF": {},
 }
 
+LEAGUE_CITY_ONLY_ALIASES: Dict[str, Dict[str, str]] = {
+    "NBA": {
+        "toronto": "TORONTO RAPTORS",
+        "cleveland": "CLEVELAND CAVALIERS",
+        "denver": "DENVER NUGGETS",
+        "minnesota": "MINNESOTA TIMBERWOLVES",
+        "new york": "NEW YORK KNICKS",
+    },
+    "NHL": {
+        "colorado": "COLORADO AVALANCHE",
+        "minnesota": "MINNESOTA WILD",
+    },
+    "MLB": {
+        "colorado": "COLORADO ROCKIES",
+        "cleveland": "CLEVELAND GUARDIANS",
+        "toronto": "TORONTO BLUE JAYS",
+    },
+    "NFL": {},
+    "NCAAB": {},
+    "NCAAF": {},
+}
+
+STATS_FUZZY_THRESHOLD_BY_LEAGUE: Dict[str, float] = {
+    "NBA": 70.0,
+    "NHL": 72.0,
+    "MLB": 72.0,
+    "NFL": 70.0,
+    "NCAAB": 60.0,
+    "NCAAF": 60.0,
+}
+
 
 def get_nba_fetch_diagnostics() -> Dict[str, Any]:
     """Expose current NBA fetch diagnostics for slate-level reporting."""
@@ -205,7 +237,55 @@ def normalize_team_for_stats(team_name: str, league: Optional[str]) -> str:
     league_map = LEAGUE_TEAM_NAME_MAPPING.get(lg, {})
     if key in league_map:
         return _simple_norm(league_map[key])
+    city_map = LEAGUE_CITY_ONLY_ALIASES.get(lg, {})
+    if key in city_map:
+        return _simple_norm(city_map[key])
     return normalized
+
+
+def _build_stats_index_maps(stats_subset: pd.DataFrame, league: str) -> Dict[str, Dict[str, str]]:
+    canonical_map: Dict[str, str] = {}
+    city_only_map: Dict[str, str] = {}
+    for raw in stats_subset.index:
+        raw_str = str(raw)
+        norm_key = normalize_team_for_stats(raw_str, league).strip().lower()
+        if norm_key:
+            canonical_map[norm_key] = raw_str
+        city_key = robust_normalize_team(raw_str, league).strip().lower()
+        if city_key and len(city_key.split()) == 1:
+            city_only_map[city_key] = raw_str
+    return {"canonical": canonical_map, "city_only": city_only_map}
+
+
+def resolve_stats_team_match(
+    team_name: str,
+    league: str,
+    stats_norm_map: Dict[str, str],
+    canonical_alias_map: Dict[str, str],
+    city_alias_map: Dict[str, str],
+) -> tuple[Optional[str], str]:
+    """Layered match strategy: normalized -> canonical alias -> city alias -> fuzzy -> unresolved."""
+    t_norm = normalize_team_for_stats(team_name, league)
+    key = t_norm.strip().lower()
+
+    if key in stats_norm_map:
+        return stats_norm_map[key], "direct"
+    if key in canonical_alias_map:
+        return canonical_alias_map[key], "canonical_alias"
+    if key in city_alias_map:
+        return city_alias_map[key], "city_alias"
+
+    fuzzy_thresh = STATS_FUZZY_THRESHOLD_BY_LEAGUE.get(str(league).upper(), 70.0)
+    match_norm = fuzzy_match_team_robust(
+        t_norm,
+        list(stats_norm_map.keys()),
+        threshold=fuzzy_thresh,
+        league=league,
+    )
+    if match_norm:
+        return stats_norm_map[match_norm], "fuzzy"
+
+    return None, "unresolved"
 
 def normalize_team(name: str) -> str:
     """
@@ -1205,7 +1285,7 @@ def log_stats_match_summary(stats_log: Dict[str, int], league: str):
     if total == 0: return
 
     direct = stats_log.get("direct", 0)
-    override = stats_log.get("override", 0)
+    override = stats_log.get("canonical_alias", 0) + stats_log.get("city_alias", 0)
     fuzzy = stats_log.get("fuzzy", 0)
     miss = stats_log.get("miss", 0)
 
@@ -2224,21 +2304,19 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
             if not lg_mask.any(): continue
 
             stats_subset = stats_by_league[lg_key]
-            stats_teams_norm = stats_subset.index.tolist()
-
-            # Build normalized->raw index mapping for this league (CRITICAL)
-            # Ensure keys are strictly lowercased for lookup reliability
+            # Build strict league-local stats indexes (no cross-league alias bleed).
             stats_index_norm_map = {
-                robust_normalize_team(str(raw), lg_key).strip().lower(): raw
+                normalize_team_for_stats(str(raw), lg_key).strip().lower(): raw
                 for raw in stats_subset.index
             }
             stats_index_norm_keys = list(stats_index_norm_map.keys())
+            alias_maps = _build_stats_index_maps(stats_subset, lg_key)
 
             if lg_key == "NFL":
                 logger.debug(f"NFL stats index keys (sample): {list(stats_index_norm_map.keys())[:5]}")
 
             # Track match statistics
-            stats_log = {"direct": 0, "override": 0, "fuzzy": 0, "miss": 0}
+            stats_log = {"direct": 0, "canonical_alias": 0, "city_alias": 0, "fuzzy": 0, "miss": 0}
 
             # Process Home Teams
             current_home_teams = home_norm[lg_mask].unique()
@@ -2246,48 +2324,20 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
             for t_norm in current_home_teams:
                 if not t_norm: continue
 
-                # FIX: Force strict normalization key for lookup (Task 4/5)
-                key = str(t_norm).strip().lower()
-
-                if lg_key == "NFL":
-                    logger.debug(f"NFL match t_norm={t_norm!r} key={key!r}")
-
-                # 1. League-specific mapping (cross-league safe)
-                resolved_norm = normalize_team_for_stats(t_norm, lg_key).strip().lower()
-                if resolved_norm in stats_index_norm_map:
-                    home_map_local[t_norm] = stats_index_norm_map[resolved_norm]
-                    stats_log["override"] += 1
-                    continue
-
-                # 2. Try Direct Match (Normalized)
-                if key in stats_index_norm_map:
-                    home_map_local[t_norm] = stats_index_norm_map[key]
-                    stats_log["direct"] += 1
-                    continue
-
-                # 3. Fuzzy Match (Normalized Space) - Lower threshold for better recall
-                # Use even lower threshold for NCAAB/NCAAF where mascots cause noise
-                # Further reduced from 60.0 to 55.0 for NCAAB to improve matching
-                fuzzy_thresh = 55.0 if lg_key in ["NCAAB", "NCAAF"] else 65.0
-                match_norm = fuzzy_match_team_robust(t_norm, stats_index_norm_keys, threshold=fuzzy_thresh, league=lg_key)
-                if match_norm:
-                    # Map back to raw key
-                    home_map_local[t_norm] = stats_index_norm_map[match_norm]
-                    stats_log["fuzzy"] += 1
-                    if lg_key in ["NBA", "NCAAB"]:  # Log successful fuzzy matches for review
-                        logger.debug(f"Fuzzy match: '{t_norm}' -> '{match_norm}' ({lg_key})")
-                else:
-                    if lg_key != "default":
-                        # Enhanced logging for NCAAB failures
-                        if lg_key == "NCAAB":
-                             logger.warning(f"NCAAB MATCH FAIL: GameTeam='{t_norm}' (Key='{key}') not found in {len(stats_index_norm_keys)} stats keys.")
-                             # Find closest generic match for debug
-                             closest = process.extractOne(key, stats_index_norm_keys, scorer=fuzz.ratio) if rapidfuzz else "N/A"
-                             logger.warning(f"  -> Closest candidate: {closest}")
-                        else:
-                             logger.warning(f"TEAM MATCH FAILURE ({lg_key}): '{t_norm}' not found. Candidates: {stats_index_norm_keys[:5]}")
-                    home_map_local[t_norm] = None
+                matched_name, reason = resolve_stats_team_match(
+                    t_norm,
+                    lg_key,
+                    stats_index_norm_map,
+                    alias_maps["canonical"],
+                    alias_maps["city_only"],
+                )
+                home_map_local[t_norm] = matched_name
+                if matched_name is None:
                     stats_log["miss"] += 1
+                elif reason in stats_log:
+                    stats_log[reason] += 1
+                else:
+                    stats_log["direct"] += 1
 
             home_matched_names[lg_mask] = home_norm[lg_mask].map(home_map_local)
 
@@ -2297,46 +2347,20 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
             for t_norm in current_away_teams:
                 if not t_norm: continue
 
-                # FIX: Force strict normalization key for lookup
-                key = str(t_norm).strip().lower()
-
-                if lg_key == "NFL":
-                    logger.debug(f"NFL match t_norm={t_norm!r} key={key!r}")
-
-                # 1. League-specific mapping (cross-league safe)
-                resolved_norm = normalize_team_for_stats(t_norm, lg_key).strip().lower()
-                if resolved_norm in stats_index_norm_map:
-                    away_map_local[t_norm] = stats_index_norm_map[resolved_norm]
-                    stats_log["override"] += 1
-                    continue
-
-                # 2. Try Direct Match (Normalized)
-                if key in stats_index_norm_map:
-                    away_map_local[t_norm] = stats_index_norm_map[key]
-                    stats_log["direct"] += 1
-                    continue
-
-                # 3. Fuzzy Match (Normalized Space) - Lower threshold for better recall
-                # Use even lower threshold for NCAAB/NCAAF where mascots cause noise
-                # Further reduced from 60.0 to 55.0 for NCAAB to improve matching
-                fuzzy_thresh = 55.0 if lg_key in ["NCAAB", "NCAAF"] else 65.0
-                match_norm = fuzzy_match_team_robust(t_norm, stats_index_norm_keys, threshold=fuzzy_thresh, league=lg_key)
-                if match_norm:
-                    # Map back to raw key
-                    away_map_local[t_norm] = stats_index_norm_map[match_norm]
-                    stats_log["fuzzy"] += 1
-                    if lg_key in ["NBA", "NCAAB"]:  # Log successful fuzzy matches for review
-                        logger.debug(f"Fuzzy match: '{t_norm}' -> '{match_norm}' ({lg_key})")
-                else:
-                    if lg_key != "default":
-                        if lg_key == "NCAAB":
-                             logger.warning(f"NCAAB MATCH FAIL: GameTeam='{t_norm}' (Key='{key}') not found in {len(stats_index_norm_keys)} stats keys.")
-                             closest = process.extractOne(key, stats_index_norm_keys, scorer=fuzz.ratio) if rapidfuzz else "N/A"
-                             logger.warning(f"  -> Closest candidate: {closest}")
-                        else:
-                             logger.warning(f"TEAM MATCH FAILURE ({lg_key}): '{t_norm}' not found. Candidates: {stats_index_norm_keys[:5]}")
-                    away_map_local[t_norm] = None
+                matched_name, reason = resolve_stats_team_match(
+                    t_norm,
+                    lg_key,
+                    stats_index_norm_map,
+                    alias_maps["canonical"],
+                    alias_maps["city_only"],
+                )
+                away_map_local[t_norm] = matched_name
+                if matched_name is None:
                     stats_log["miss"] += 1
+                elif reason in stats_log:
+                    stats_log[reason] += 1
+                else:
+                    stats_log["direct"] += 1
 
             away_matched_names[lg_mask] = away_norm[lg_mask].map(away_map_local)
 
@@ -2357,7 +2381,12 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                         ncaab_match_stats["unmatched_teams"].extend(missing)
 
             # Explicit match rate log as requested
-            total_matches = stats_log.get('direct', 0) + stats_log.get('override', 0) + stats_log.get('fuzzy', 0)
+            total_matches = (
+                stats_log.get('direct', 0)
+                + stats_log.get('canonical_alias', 0)
+                + stats_log.get('city_alias', 0)
+                + stats_log.get('fuzzy', 0)
+            )
             total_attempts = total_matches + stats_log.get('miss', 0)
             if total_attempts > 0:
                 match_pct = (total_matches / total_attempts) * 100
@@ -2474,9 +2503,7 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     features_data["stats_resolution_status"] = stats_resolution_status
     features_data["stats_fallback_reason"] = stats_fallback_reason
     features_data["stats_fetch_retries_used"] = nba_fetch_diag.get("retries_used", 0)
-    features_data["ml_feature_eligible"] = ~(
-        (league_keys == "NBA") & (stats_resolution_status == "unresolved")
-    )
+    features_data["ml_feature_eligible"] = stats_resolution_status == "resolved"
 
     # Mapping calls
     # Note: passing league_keys and global_stats_lookup explicitly
@@ -2603,27 +2630,36 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     # 6. Map Remaining Features (Existing) using safe_numeric_fill
     
     # Aggregate fallback diagnostics to reduce log spam
-    if combined_fallback.any():
-        fallback_counts_by_league = league_keys[combined_fallback].value_counts().to_dict()
+    fallback_counts_by_league = league_keys[combined_fallback].value_counts().to_dict()
+    unresolved_counts_by_league = league_keys[stats_resolution_status == "unresolved"].value_counts().to_dict()
+    source_counts = stats_source.value_counts(dropna=False).to_dict()
+    ml_excluded_by_league = league_keys[~features_data["ml_feature_eligible"]].value_counts().to_dict()
+    features_data["stats_unresolved_count_by_league"] = int(sum(unresolved_counts_by_league.values()))
+    features_data["stats_ml_excluded_rows"] = int((~features_data["ml_feature_eligible"]).sum())
+    features_data["stats_source_counts"] = str(source_counts)
+
+    logger.info(f"STATS SOURCE COUNTS: {source_counts}")
+    logger.info(f"STATS UNRESOLVED COUNT BY LEAGUE: {unresolved_counts_by_league}")
+    logger.info(f"ROWS EXCLUDED FROM ML DUE TO UNRESOLVED STATS: {ml_excluded_by_league}")
+
+    if fallback_counts_by_league:
         logger.warning(f"STATS FALLBACK SUMMARY BY LEAGUE: {fallback_counts_by_league}")
 
-        nba_unresolved_mask = combined_fallback & (league_keys == "NBA")
-        if nba_unresolved_mask.any():
-            unresolved_pairs = Counter(
-                [
-                    f"{df.loc[idx, home_col]} vs {df.loc[idx, away_col]}"
-                    for idx in df.index[nba_unresolved_mask]
-                ]
-            )
-            unresolved_teams = Counter()
-            for idx in df.index[nba_unresolved_mask]:
-                if bool(home_fallback.loc[idx]):
-                    unresolved_teams[str(df.loc[idx, home_col])] += 1
-                if bool(away_fallback.loc[idx]):
-                    unresolved_teams[str(df.loc[idx, away_col])] += 1
-
-            logger.warning(f"NBA unresolved mappings by matchup: {dict(unresolved_pairs)}")
-            logger.warning(f"NBA unresolved mapping team counts: {dict(unresolved_teams)}")
+    if combined_fallback.any():
+        unresolved_pairs = Counter(
+            [
+                f"{league_keys.at[idx]} :: {df.loc[idx, home_col]} vs {df.loc[idx, away_col]}"
+                for idx in df.index[combined_fallback]
+            ]
+        )
+        unresolved_teams = Counter()
+        for idx in df.index[combined_fallback]:
+            if bool(home_fallback.loc[idx]):
+                unresolved_teams[f"{league_keys.at[idx]}::{str(df.loc[idx, home_col])}"] += 1
+            if bool(away_fallback.loc[idx]):
+                unresolved_teams[f"{league_keys.at[idx]}::{str(df.loc[idx, away_col])}"] += 1
+        logger.warning(f"UNRESOLVED STATS MATCHUPS: {dict(unresolved_pairs)}")
+        logger.warning(f"UNRESOLVED STATS TEAM COUNTS: {dict(unresolved_teams)}")
 
     # Identify implied probability column
     imp_col = next((c for c in df.columns if str(c).lower() in ['implied_prob', 'implied_home_prob', 'implied_prob_home']), None)

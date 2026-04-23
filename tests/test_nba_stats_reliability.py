@@ -15,9 +15,20 @@ def test_nba_new_york_resolves_correctly():
     assert fp.normalize_team_for_stats("New York", "NBA") == "NEW YORK KNICKS"
 
 
+def test_nba_toronto_cleveland_denver_resolve_correctly():
+    assert fp.normalize_team_for_stats("Toronto", "NBA") == "TORONTO RAPTORS"
+    assert fp.normalize_team_for_stats("Cleveland", "NBA") == "CLEVELAND CAVALIERS"
+    assert fp.normalize_team_for_stats("Denver", "NBA") == "DENVER NUGGETS"
+
+
 def test_league_specific_normalization_prevents_cross_league_alias_pollution():
     assert fp.normalize_team_for_stats("Minnesota", "NBA") != "MINNESOTA WILD"
     assert fp.normalize_team_for_stats("Minnesota", "NHL") == "MINNESOTA WILD"
+
+
+def test_colorado_resolves_differently_by_league():
+    assert fp.normalize_team_for_stats("Colorado", "NHL") == "COLORADO AVALANCHE"
+    assert fp.normalize_team_for_stats("Colorado", "MLB") == "COLORADO ROCKIES"
 
 
 def test_fetch_nba_stats_retries_before_fallback(monkeypatch):
@@ -112,3 +123,40 @@ def test_unresolved_nba_rows_marked_and_ml_ineligible(monkeypatch):
     assert enriched.loc[0, "stats_fallback_reason"] == "team_mapping_unresolved"
     assert bool(enriched.loc[0, "ml_feature_eligible"]) is False
     assert bool(enriched.loc[0, "feature_stats_fallback"]) is True
+
+
+def test_aggregated_stats_diagnostics_populate(monkeypatch):
+    def fake_fetch_team_stats(_api_clients, season_year=None):
+        return pd.DataFrame(
+            [
+                {
+                    "team_norm": "ATLANTA HAWKS",
+                    "league_key": "NBA",
+                    "win_pct": 0.6,
+                    "home_win_pct": 0.6,
+                    "away_win_pct": 0.6,
+                    "points_per_game": 115.0,
+                    "points_allowed_per_game": 110.0,
+                    "turnovers": 12.0,
+                    "streak": 0.0,
+                    "last5_win_pct": 0.6,
+                }
+            ]
+        )
+
+    monkeypatch.setattr(fp, "fetch_team_stats", fake_fetch_team_stats)
+
+    games = pd.DataFrame(
+        [
+            {"league": "NBA", "home_team": "Atlanta", "away_team": "New York", "market_type": "h2h_home", "decimal_odds": 1.91, "odds_american": -110},
+            {"league": "NBA", "home_team": "Atlanta", "away_team": "Unknown Team", "market_type": "h2h_home", "decimal_odds": 1.91, "odds_american": -110},
+        ]
+    )
+    enriched = fp.enrich_with_model_features(games, api_clients={})
+
+    assert "stats_unresolved_count_by_league" in enriched.columns
+    assert "stats_ml_excluded_rows" in enriched.columns
+    assert "stats_source_counts" in enriched.columns
+    assert int(enriched.loc[0, "stats_unresolved_count_by_league"]) >= 1
+    assert int(enriched.loc[0, "stats_ml_excluded_rows"]) >= 1
+    assert "fallback" in str(enriched.loc[0, "stats_source_counts"])
