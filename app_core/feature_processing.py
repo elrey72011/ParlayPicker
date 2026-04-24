@@ -160,6 +160,11 @@ LEAGUE_TEAM_NAME_MAPPING: Dict[str, Dict[str, str]] = {
     },
     "NHL": {
         "minnesota": "MINNESOTA WILD",
+        "montreal": "MONTREAL CANADIENS",
+        "anaheim": "ANAHEIM DUCKS",
+        "edmonton": "EDMONTON OILERS",
+        "utah": "UTAH HOCKEY CLUB",
+        "utah hockey club": "UTAH HOCKEY CLUB",
         "st louis": "ST LOUIS BLUES",
         "florida": "FLORIDA PANTHERS",
         "carolina": "CAROLINA HURRICANES",
@@ -174,6 +179,20 @@ LEAGUE_TEAM_NAME_MAPPING: Dict[str, Dict[str, str]] = {
     "MLB": {
         "athletics": "OAKLAND",
         "oakland athletics": "OAKLAND",
+        "houston": "HOUSTON ASTROS",
+        "detroit": "DETROIT TIGERS",
+        "baltimore": "BALTIMORE ORIOLES",
+        "boston": "BOSTON RED SOX",
+        "miami": "MIAMI MARLINS",
+        "washington": "WASHINGTON NATIONALS",
+        "st louis": "ST LOUIS CARDINALS",
+        "saint louis": "ST LOUIS CARDINALS",
+        "st. louis": "ST LOUIS CARDINALS",
+        "texas": "TEXAS RANGERS",
+        "milwaukee": "MILWAUKEE BREWERS",
+        "pittsburgh": "PITTSBURGH PIRATES",
+        "seattle": "SEATTLE MARINERS",
+        "atlanta": "ATLANTA BRAVES",
     },
     "NCAAB": {},
     "NCAAF": {},
@@ -190,11 +209,28 @@ LEAGUE_CITY_ONLY_ALIASES: Dict[str, Dict[str, str]] = {
     "NHL": {
         "colorado": "COLORADO AVALANCHE",
         "minnesota": "MINNESOTA WILD",
+        "montreal": "MONTREAL CANADIENS",
+        "anaheim": "ANAHEIM DUCKS",
+        "edmonton": "EDMONTON OILERS",
+        "utah": "UTAH HOCKEY CLUB",
     },
     "MLB": {
         "colorado": "COLORADO ROCKIES",
         "cleveland": "CLEVELAND GUARDIANS",
         "toronto": "TORONTO BLUE JAYS",
+        "houston": "HOUSTON ASTROS",
+        "detroit": "DETROIT TIGERS",
+        "baltimore": "BALTIMORE ORIOLES",
+        "boston": "BOSTON RED SOX",
+        "miami": "MIAMI MARLINS",
+        "washington": "WASHINGTON NATIONALS",
+        "st louis": "ST LOUIS CARDINALS",
+        "saint louis": "ST LOUIS CARDINALS",
+        "texas": "TEXAS RANGERS",
+        "milwaukee": "MILWAUKEE BREWERS",
+        "pittsburgh": "PITTSBURGH PIRATES",
+        "seattle": "SEATTLE MARINERS",
+        "atlanta": "ATLANTA BRAVES",
     },
     "NFL": {},
     "NCAAB": {},
@@ -257,6 +293,13 @@ def canonicalize_stats_team_index(stats_df: pd.DataFrame) -> pd.DataFrame:
     canonical["league_key"] = canonical["league_key"].astype(str).str.upper().str.strip()
     if "team_norm" not in canonical.columns:
         canonical["team_norm"] = ""
+    canonical["team_norm"] = canonical.apply(
+        lambda row: normalize_team_for_stats(
+            row.get("team_norm", "") or row.get("team_name_source", ""),
+            row.get("league_key", ""),
+        ),
+        axis=1,
+    )
     canonical["stats_team_key"] = canonical.apply(
         lambda row: normalize_team_for_stats(row.get("team_norm", ""), row.get("league_key", "")).strip().lower(),
         axis=1,
@@ -1915,8 +1958,11 @@ def fetch_nhl_stats(season_year: int) -> List[Dict[str, Any]]:
             l10_games = entry.get('l10GamesPlayed', 10)
             l10_win_pct = (l10_wins / l10_games) if l10_games > 0 else win_pct
             
+            team_norm = normalize_team_for_stats(full_name, league="NHL")
             stats.append({
-                "team_norm": normalize_team_for_stats(full_name, league="NHL"),
+                "team_norm": team_norm,
+                "stats_team_key": team_norm.strip().lower(),
+                "team_name_source": full_name,
                 "league_key": "NHL",
                 "win_pct": win_pct,
                 "home_win_pct": win_pct,
@@ -2109,6 +2155,8 @@ def fetch_from_espn_mlb(season_year: int) -> List[Dict[str, Any]]:
 
             stats.append({
                 "team_norm": team_norm,
+                "stats_team_key": team_norm.strip().lower(),
+                "team_name_source": team_name,
                 "league_key": "MLB",
                 "win_pct": win_pct,
                 "home_win_pct": win_pct,
@@ -2332,6 +2380,8 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     unresolved_after_canonicalization = 0
     unresolved_after_alias = 0
     unresolved_after_fuzzy = 0
+    stats_match_method_counts = Counter()
+    stats_binding_failures_by_league: Counter[str] = Counter()
 
     if not stats_df.empty:
         stats_df = canonicalize_stats_team_index(stats_df)
@@ -2389,6 +2439,7 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                 home_stage_map_local[t_norm] = failure_stage
                 if matched_name is None:
                     stats_log["miss"] += 1
+                    stats_binding_failures_by_league[lg_key] += 1
                     resolution_stage_counts[failure_stage] += 1
                     if failure_stage != "before_canonicalization":
                         unresolved_after_canonicalization += 1
@@ -2398,8 +2449,10 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                         unresolved_after_fuzzy += 1
                 elif reason in stats_log:
                     stats_log[reason] += 1
+                    stats_match_method_counts[reason] += 1
                 else:
                     stats_log["direct"] += 1
+                    stats_match_method_counts["direct"] += 1
 
             home_matched_names[lg_mask] = home_norm[lg_mask].map(home_map_local)
             home_resolution_stage[lg_mask] = home_norm[lg_mask].map(home_stage_map_local).fillna("resolved")
@@ -2422,6 +2475,7 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                 away_stage_map_local[t_norm] = failure_stage
                 if matched_name is None:
                     stats_log["miss"] += 1
+                    stats_binding_failures_by_league[lg_key] += 1
                     resolution_stage_counts[failure_stage] += 1
                     if failure_stage != "before_canonicalization":
                         unresolved_after_canonicalization += 1
@@ -2431,8 +2485,10 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                         unresolved_after_fuzzy += 1
                 elif reason in stats_log:
                     stats_log[reason] += 1
+                    stats_match_method_counts[reason] += 1
                 else:
                     stats_log["direct"] += 1
+                    stats_match_method_counts["direct"] += 1
 
             away_matched_names[lg_mask] = away_norm[lg_mask].map(away_map_local)
             away_resolution_stage[lg_mask] = away_norm[lg_mask].map(away_stage_map_local).fillna("resolved")
@@ -2472,6 +2528,7 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
                     missing_away = [t for t, m in away_map_local.items() if m is None]
                     missing = list(set(missing_home + missing_away))
                     logger.info(f"- Top Failed Lookups: {missing[:10]}")
+            stats_match_method_counts["unresolved"] += int(stats_log.get("miss", 0))
 
             if lg_key == "NCAAB":
                 ncaab_match_stats["total"] = total_attempts // 2 # Approximate games from teams
@@ -2766,6 +2823,18 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     features_data["stats_unresolved_count_by_league"] = int(sum(unresolved_counts_by_league.values()))
     features_data["stats_ml_excluded_rows"] = int((~features_data["ml_feature_eligible"]).sum())
     features_data["stats_source_counts"] = str(source_counts)
+    features_data["stats_binding_failures_by_league"] = str(
+        {str(k): int(v) for k, v in stats_binding_failures_by_league.items()}
+    )
+    features_data["stats_match_counts_by_method"] = str(
+        {
+            "direct": int(stats_match_method_counts.get("direct", 0)),
+            "canonical_alias": int(stats_match_method_counts.get("canonical_alias", 0)),
+            "city_alias": int(stats_match_method_counts.get("city_alias", 0)),
+            "fuzzy": int(stats_match_method_counts.get("fuzzy", 0)),
+            "unresolved": int(stats_match_method_counts.get("unresolved", 0)),
+        }
+    )
     features_data["unresolved_after_canonicalization"] = int(unresolved_after_canonicalization)
     features_data["unresolved_after_alias"] = int(unresolved_after_alias)
     features_data["unresolved_after_fuzzy"] = int(unresolved_after_fuzzy)
@@ -2773,6 +2842,8 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
 
     logger.info(f"STATS SOURCE COUNTS: {source_counts}")
     logger.info(f"STATS UNRESOLVED COUNT BY LEAGUE: {unresolved_counts_by_league}")
+    logger.info(f"STATS BINDING FAILURES BY LEAGUE: {dict(stats_binding_failures_by_league)}")
+    logger.info(f"STATS MATCH COUNTS BY METHOD: {dict(stats_match_method_counts)}")
     logger.info(
         "STATS RESOLUTION FAILURE COUNTS: "
         f"stage={dict(resolution_stage_counts)} "
