@@ -3192,6 +3192,7 @@ def run_analysis_pipeline(
         "ml_top_feature_nunique": {},
         "ml_flatness_root_cause_hint": "not_computed",
     }
+    ml_prediction_diag: dict[str, Any] = {}
     if use_ml and ML_AVAILABLE and PredictionEngine is not None:
         logger.warning("🔍 ML DEBUG: use_ml=True, attempting predictions...")
         logger.info(f"PIPELINE TRACE: Sending {len(merged)} rows into ML prediction logic.")
@@ -3301,6 +3302,8 @@ def run_analysis_pipeline(
                 # predict_batch expects a DataFrame, returns List[float]
                 logger.info(f"PIPELINE AUDIT: [6/9] Rows actually sent into predict_batch: {len(enriched_for_prediction)}")
                 predictions_list = engine.predict_batch(enriched_for_prediction.loc[needs_prediction])
+                if hasattr(engine, "_last_metrics") and isinstance(engine._last_metrics, dict):
+                    ml_prediction_diag = dict(engine._last_metrics)
                 logger.info(f"PIPELINE AUDIT: [7/9] Rows returned from predict_batch: {len(predictions_list)}")
 
                 # Extra safeguard for assignment back to merged
@@ -3612,7 +3615,22 @@ def run_analysis_pipeline(
         "ml_high_missingness_feature_count": int(ml_input_diag.get("ml_high_missingness_feature_count", 0)),
         "ml_top_missing_features": ml_input_diag.get("ml_top_missing_features", {}),
         "ml_top_feature_nunique": ml_input_diag.get("ml_top_feature_nunique", {}),
-        "ml_flatness_root_cause_hint": str(ml_input_diag.get("ml_flatness_root_cause_hint", "not_computed")),
+        "ml_flatness_root_cause_hint": str(
+            ml_prediction_diag.get(
+                "ml_flatness_root_cause_hint",
+                ml_input_diag.get("ml_flatness_root_cause_hint", "not_computed"),
+            )
+        ),
+        "ml_expected_feature_count": int(ml_prediction_diag.get("ml_expected_feature_count", 0)),
+        "ml_actual_feature_count": int(ml_prediction_diag.get("ml_actual_feature_count", 0)),
+        "ml_missing_feature_columns": ml_prediction_diag.get("ml_missing_feature_columns", []),
+        "ml_extra_feature_columns": ml_prediction_diag.get("ml_extra_feature_columns", []),
+        "schema_mismatch_detected": bool(ml_prediction_diag.get("schema_mismatch_detected", False)),
+        "rows_using_league_average_defaults": int(ml_prediction_diag.get("rows_using_league_average_defaults", 0)),
+        "rows_with_high_default_feature_share": int(ml_prediction_diag.get("rows_with_high_default_feature_share", 0)),
+        "rows_with_duplicate_feature_signature": int(ml_prediction_diag.get("rows_with_duplicate_feature_signature", 0)),
+        "top_duplicate_feature_signatures": ml_prediction_diag.get("top_duplicate_feature_signatures", []),
+        "raw_prediction_distribution": ml_prediction_diag.get("raw_prediction_distribution", {}),
         "hybrid_fallback_triggered": False,
     }
 

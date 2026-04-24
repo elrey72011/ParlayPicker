@@ -31,6 +31,17 @@ from config import VERTEX_CONFIG
 # Columns the XGBoost model expects. Order matters for DMatrix.
 VERTEX_FEATURE_COLUMNS: List[str] = VERTEX_CONFIG['feature_cols']
 
+
+def _validate_feature_schema(expected_cols: List[str], actual_cols: List[str]) -> tuple[list[str], list[str]]:
+    missing = [c for c in expected_cols if c not in actual_cols]
+    extra = [c for c in actual_cols if c not in expected_cols]
+    if actual_cols != expected_cols:
+        raise ValueError(
+            f"Feature schema/order mismatch. expected_head={expected_cols[:8]} actual_head={actual_cols[:8]} "
+            f"missing={missing[:10]} extra={extra[:10]}"
+        )
+    return missing, extra
+
 def _collapse_duplicate_columns(df: pd.DataFrame, critical_cols: Optional[List[str]] = None) -> pd.DataFrame:
     """
     Detects and collapses duplicate columns in a DataFrame row-wise, preferring non-null values.
@@ -1409,6 +1420,25 @@ class PredictionEngine:
             # Replace any remaining inf values
             inference_data = inference_data.replace([np.inf, -np.inf], 0.0).astype(float)
 
+            expected_feature_order = list(VERTEX_FEATURE_COLUMNS)
+            actual_feature_order = list(inference_data.columns)
+            missing_feature_columns = [c for c in expected_feature_order if c not in working_df.columns]
+            extra_feature_columns = [c for c in working_df.columns if c.startswith("feature_") and c not in expected_feature_order]
+            try:
+                _validate_feature_schema(expected_feature_order, actual_feature_order)
+            except ValueError as schema_err:
+                self._last_metrics["schema_mismatch_detected"] = True
+                self._last_metrics["schema_mismatch_details"] = {
+                    "expected_head": expected_feature_order[:8],
+                    "actual_head": actual_feature_order[:8],
+                }
+                raise ValueError(str(schema_err))
+            self._last_metrics["schema_mismatch_detected"] = False
+            self._last_metrics["ml_expected_feature_count"] = int(len(expected_feature_order))
+            self._last_metrics["ml_actual_feature_count"] = int(len(actual_feature_order))
+            self._last_metrics["ml_missing_feature_columns"] = missing_feature_columns[:15]
+            self._last_metrics["ml_extra_feature_columns"] = extra_feature_columns[:15]
+
             # Detailed Logging BEFORE prediction (Issue #1)
             logger.debug(f"[MODEL_DEBUG] Batch input shape: {inference_data.shape}")
             if not inference_data.empty:
@@ -1422,8 +1452,49 @@ class PredictionEngine:
             strict_model_input = inference_data[model_matrix_cols]
             unique_feature_vectors_count = strict_model_input.drop_duplicates().shape[0]
             exact_duplicate_vectors_count = total_rows_entering_model - unique_feature_vectors_count
+            duplicate_feature_ratio = exact_duplicate_vectors_count / max(total_rows_entering_model, 1)
             rows_using_live_stats = sum(~used_stale_features)
             rows_using_stale_stats = sum(used_stale_features)
+
+            feature_nunique = strict_model_input.nunique(dropna=False)
+            zero_variance_feature_count = int((feature_nunique <= 1).sum())
+            near_constant_feature_count = int((feature_nunique <= 2).sum())
+            feature_missingness = raw_numeric.reindex(columns=VERTEX_FEATURE_COLUMNS).isna().mean()
+            top_missingness = feature_missingness.sort_values(ascending=False).head(8)
+
+            default_share_per_row = (strict_model_input == 0.0).mean(axis=1)
+            rows_with_high_default_feature_share = int((default_share_per_row >= 0.60).sum())
+            if "feature_stats_fallback" in working_df.columns:
+                rows_using_league_average_defaults = int(
+                    pd.to_numeric(working_df["feature_stats_fallback"], errors="coerce").fillna(0).astype(bool).sum()
+                )
+            else:
+                rows_using_league_average_defaults = rows_using_stale_stats
+
+            if not strict_model_input.empty:
+                signatures = strict_model_input.round(6).astype(str).agg("|".join, axis=1)
+                sig_counts = signatures.value_counts()
+                top_duplicate_signatures = [
+                    {"count": int(cnt), "signature_prefix": str(sig)[:140]}
+                    for sig, cnt in sig_counts.head(3).items()
+                    if int(cnt) > 1
+                ]
+            else:
+                top_duplicate_signatures = []
+            rows_with_duplicate_feature_signature = exact_duplicate_vectors_count
+
+            self._last_metrics["ml_input_row_count"] = int(total_rows_entering_model)
+            self._last_metrics["ml_feature_column_count"] = int(len(model_matrix_cols))
+            self._last_metrics["ml_zero_variance_feature_count"] = zero_variance_feature_count
+            self._last_metrics["ml_near_constant_feature_count"] = near_constant_feature_count
+            self._last_metrics["rows_with_duplicate_feature_signature"] = int(rows_with_duplicate_feature_signature)
+            self._last_metrics["duplicate_feature_row_ratio"] = float(duplicate_feature_ratio)
+            self._last_metrics["rows_using_league_average_defaults"] = int(rows_using_league_average_defaults)
+            self._last_metrics["rows_with_high_default_feature_share"] = int(rows_with_high_default_feature_share)
+            self._last_metrics["top_duplicate_feature_signatures"] = top_duplicate_signatures
+            self._last_metrics["ml_feature_missingness_top"] = {
+                str(k): round(float(v), 3) for k, v in top_missingness.items()
+            }
 
             # Contextual inputs checks (must pull from working_df for non-model columns like market_probability)
             prob_cols = ['market_probability', 'implied_home_prob', 'kalshi_prob']
@@ -1443,6 +1514,12 @@ class PredictionEngine:
             logger.info(f"Exact duplicate vectors count: {exact_duplicate_vectors_count}")
             logger.info(f"Rows using true live stats: {rows_using_live_stats}")
             logger.info(f"Rows using stale/historical/default-filled features: {rows_using_stale_stats}")
+            logger.info(f"Zero-variance feature count: {zero_variance_feature_count}")
+            logger.info(f"Near-constant feature count: {near_constant_feature_count}")
+            logger.info(f"Duplicate feature-row ratio: {duplicate_feature_ratio:.1%}")
+            logger.info(f"Rows using league-average/default stats: {rows_using_league_average_defaults}")
+            logger.info(f"Rows with high default feature share (>=60%% zeros): {rows_with_high_default_feature_share}")
+            logger.info(f"Top feature missingness: {self._last_metrics['ml_feature_missingness_top']}")
             for col, count in prob_defaults.items():
                 logger.info(f"Rows where {col} == 0.5: {count}")
             logger.info(f"-----------------------------------")
@@ -1504,6 +1581,40 @@ class PredictionEngine:
             # ML Variance Diagnostic 1: Raw model output uniqueness
             raw_valid_probs = [p for p in raw_probs if p is not None]
             self._last_metrics["raw_unique_count"] = len(set(raw_valid_probs))
+            from collections import Counter
+            raw_counts = Counter(round(float(p), 6) for p in raw_valid_probs)
+            top_repeated_raw = [
+                {"value": float(v), "count": int(c)}
+                for v, c in raw_counts.most_common(5)
+            ]
+            raw_std = float(np.std(raw_valid_probs)) if raw_valid_probs else 0.0
+            rounded4 = [round(float(p), 4) for p in raw_valid_probs]
+            rounded3 = [round(float(p), 3) for p in raw_valid_probs]
+            rounded4_counts = Counter(rounded4)
+            rounded3_counts = Counter(rounded3)
+            same4_frac = (max(rounded4_counts.values()) / max(len(rounded4), 1)) if rounded4 else 0.0
+            same3_frac = (max(rounded3_counts.values()) / max(len(rounded3), 1)) if rounded3 else 0.0
+            self._last_metrics["raw_prediction_distribution"] = {
+                "unique_count": int(self._last_metrics["raw_unique_count"]),
+                "top_repeated": top_repeated_raw,
+                "min": float(min(raw_valid_probs)) if raw_valid_probs else 0.0,
+                "max": float(max(raw_valid_probs)) if raw_valid_probs else 0.0,
+                "mean": float(np.mean(raw_valid_probs)) if raw_valid_probs else 0.0,
+                "std": raw_std,
+                "same_to_4dp_fraction": float(same4_frac),
+                "same_to_3dp_fraction": float(same3_frac),
+            }
+            logger.info(
+                "ML RAW DISTRIBUTION: unique=%s min=%.4f max=%.4f mean=%.4f std=%.6f same4=%.1f%% same3=%.1f%% top=%s",
+                self._last_metrics["raw_prediction_distribution"]["unique_count"],
+                self._last_metrics["raw_prediction_distribution"]["min"],
+                self._last_metrics["raw_prediction_distribution"]["max"],
+                self._last_metrics["raw_prediction_distribution"]["mean"],
+                self._last_metrics["raw_prediction_distribution"]["std"],
+                self._last_metrics["raw_prediction_distribution"]["same_to_4dp_fraction"] * 100.0,
+                self._last_metrics["raw_prediction_distribution"]["same_to_3dp_fraction"] * 100.0,
+                top_repeated_raw[:3],
+            )
 
 
             # Jules: MANDATORY Blacklist and Statistical Healing recovery
@@ -1551,7 +1662,6 @@ class PredictionEngine:
             # Rule 2: Absolute repeat thresholds based on slate size
             if not is_flat and total_count > 0:
                 try:
-                    from collections import Counter
                     raw_counts = Counter(raw_valid_probs)
                     max_repeats = max(raw_counts.values()) if raw_counts else 0
 
@@ -1560,7 +1670,13 @@ class PredictionEngine:
                             logger.warning(f"ML RAW COMPRESSION AUDIT: Slate <= 30 rows and a raw probability repeated {max_repeats} times (threshold: 2+). Triggering intervention.")
                             is_flat = True
                     elif total_count <= 60:
-                        if max_repeats >= 3:
+                        # Narrower intervention: for medium slates, repeated values alone are not enough;
+                        # also require evidence of matrix collapse or distribution compression.
+                        if max_repeats >= 3 and (
+                            duplicate_feature_ratio >= 0.20
+                            or same3_frac >= 0.25
+                            or raw_std <= 0.012
+                        ):
                             logger.warning(f"ML RAW COMPRESSION AUDIT: Slate 31-60 rows and a raw probability repeated {max_repeats} times (threshold: 3+). Triggering intervention.")
                             is_flat = True
                     else:
@@ -1573,6 +1689,20 @@ class PredictionEngine:
                             is_flat = True
                 except Exception as e:
                     logger.error(f"Error during ML RAW COMPRESSION AUDIT tier check: {e}")
+
+            root_cause_hint = "mixed_or_model_specific"
+            if self._last_metrics.get("schema_mismatch_detected", False):
+                root_cause_hint = "feature_order_or_schema_mismatch"
+            elif duplicate_feature_ratio >= 0.30:
+                root_cause_hint = "duplicate_feature_rows"
+            elif rows_with_high_default_feature_share >= max(5, int(total_rows_entering_model * 0.20)):
+                root_cause_hint = "default_heavy_feature_engineering"
+            elif zero_variance_feature_count >= max(4, int(len(model_matrix_cols) * 0.25)):
+                root_cause_hint = "low_feature_variance"
+            elif raw_std <= 0.010:
+                root_cause_hint = "model_output_compression"
+            self._last_metrics["ml_flatness_root_cause_hint"] = root_cause_hint
+            logger.info(f"ML FLATNESS ROOT CAUSE HINT: {root_cause_hint}")
 
             # Log output variance for monitoring
             if total_count > 0:
