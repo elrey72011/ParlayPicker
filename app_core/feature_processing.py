@@ -2515,8 +2515,8 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     away_fallback = away_matched_names.isna()
     combined_fallback = home_fallback | away_fallback
 
-    # Make feature_stats_fallback truly per-row by strictly relying on combined_fallback
-    # (which indicates if a specific row failed to find team stats and used LEAGUE_AVERAGES)
+    # Seed feature_stats_fallback from team-level resolver misses.
+    # This can be expanded later for source-level failures (e.g., NBA fetch failure).
     features_data["feature_stats_fallback"] = combined_fallback
 
     # Task 2: Standardize stats_quality values (REAL/HISTORICAL/FALLBACK/MISSING)
@@ -2579,13 +2579,20 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
 
     nba_mask = league_keys == "NBA"
     if nba_mask.any():
+        nba_resolved_rows = (nba_mask & ~combined_fallback).sum()
+        nba_stats_available = False
+        if not stats_df.empty and "league_key" in stats_df.columns:
+            nba_stats_available = stats_df["league_key"].astype(str).str.upper().eq("NBA").any()
         if nba_fetch_diag.get("source") == "cached":
             stats_source.loc[nba_mask & ~unresolved_mask] = "cached"
-        elif nba_fetch_diag.get("status") == "failed":
+        elif nba_fetch_diag.get("status") == "failed" and nba_resolved_rows == 0 and not nba_stats_available:
             stats_source.loc[nba_mask] = "failed"
             stats_resolution_status.loc[nba_mask] = "unresolved"
             stats_fallback_reason.loc[nba_mask] = "nba_stats_fetch_failed"
+            stats_resolution_stage_failure.loc[nba_mask] = "nba_stats_fetch_failed"
+            unresolved_mask = unresolved_mask | nba_mask
 
+    features_data["feature_stats_fallback"] = unresolved_mask
     features_data["stats_source"] = stats_source
     features_data["stats_resolution_status"] = stats_resolution_status
     features_data["stats_fallback_reason"] = stats_fallback_reason
