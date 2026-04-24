@@ -205,3 +205,27 @@ def test_aggregated_stats_diagnostics_populate(monkeypatch):
     assert "fallback" in str(enriched.loc[0, "stats_source_counts"])
     assert "stats_resolution_stage_failure_counts" in enriched.columns
     assert "after_fuzzy" in str(enriched.loc[0, "stats_resolution_stage_failure_counts"]) or "stats_index_lookup" in str(enriched.loc[0, "stats_resolution_stage_failure_counts"])
+
+
+def test_nba_fetch_failure_marks_rows_unresolved_and_nans_features(monkeypatch):
+    def fake_fetch_team_stats(_api_clients, season_year=None):
+        return pd.DataFrame(columns=["team_norm", "league_key"])
+
+    monkeypatch.setattr(fp, "fetch_team_stats", fake_fetch_team_stats)
+    fp._NBA_FETCH_DIAGNOSTICS.update({"status": "failed", "source": "live", "retries_used": 3, "last_error": "timeout"})
+
+    games = pd.DataFrame(
+        [
+            {"league": "NBA", "home_team": "Atlanta", "away_team": "New York", "market_type": "h2h_home", "decimal_odds": 1.91, "odds_american": -110}
+        ]
+    )
+    enriched = fp.enrich_with_model_features(games, api_clients={})
+
+    assert enriched.loc[0, "stats_resolution_status"] == "unresolved"
+    assert enriched.loc[0, "stats_source"] == "failed"
+    assert enriched.loc[0, "stats_fallback_reason"] == "nba_stats_fetch_failed"
+    assert enriched.loc[0, "stats_resolution_stage_failure"] == "nba_stats_fetch_failed"
+    assert bool(enriched.loc[0, "feature_stats_fallback"]) is True
+    assert bool(enriched.loc[0, "ml_feature_eligible"]) is False
+    assert pd.isna(enriched.loc[0, "feature_home_win_pct"])
+    assert pd.isna(enriched.loc[0, "feature_away_win_pct"])

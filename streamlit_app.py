@@ -101,11 +101,29 @@ def _safe_str_series(df: pd.DataFrame, col: str, default: str = "") -> pd.Series
 
 
 
-def _should_run_pipeline(state: dict[str, Any], run_counter: int) -> bool:
-    """Run once per monotonically increasing sidebar run counter."""
+def _should_run_pipeline(state: dict[str, Any], run_counter: int, controls: dict[str, Any] | None = None) -> bool:
+    """Run once per monotonically increasing sidebar run counter.
+
+    Also guard against accidental duplicate reruns in the same click cycle by
+    de-duplicating identical control signatures for the same run counter.
+    """
     last_processed = int(state.get("last_processed_run_counter", 0))
     if run_counter <= last_processed:
         return False
+    if controls is not None:
+        signature = (
+            int(run_counter),
+            tuple(sorted(str(s) for s in controls.get("sports", []))),
+            bool(controls.get("use_ml")),
+            bool(controls.get("use_gemini")),
+            float(controls.get("bankroll", 0.0)),
+            bool(controls.get("theover_spreads") is not None),
+            bool(controls.get("theover_totals") is not None),
+        )
+        if signature == state.get("last_pipeline_signature"):
+            logger.info("PIPELINE DIAGNOSTIC: Suppressing duplicate pipeline invocation for identical run signature.")
+            return False
+        state["last_pipeline_signature"] = signature
     state["last_processed_run_counter"] = run_counter
     return True
 
@@ -691,7 +709,7 @@ def main() -> None:
     controls = render_sidebar()
 
     run_counter = int(controls.get("run_analysis_counter", 0))
-    should_run = _should_run_pipeline(st.session_state, run_counter)
+    should_run = _should_run_pipeline(st.session_state, run_counter, controls)
 
     # Only run pipeline once per button click; always reset flag on completion or crash
     if should_run and not st.session_state.get("pipeline_running", False):
