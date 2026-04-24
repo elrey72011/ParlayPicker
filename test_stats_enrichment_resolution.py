@@ -228,3 +228,21 @@ def test_unresolved_rows_remain_out_of_ml_and_emit_binding_diagnostics(monkeypat
     assert pd.isna(row["feature_away_win_pct"])
     assert "stats_binding_failures_by_league" in enriched.columns
     assert "stats_match_counts_by_method" in enriched.columns
+
+
+def test_utah_nhl_variant_stats_row_binds_without_fallback(monkeypatch):
+    stats_df = pd.DataFrame(
+        [
+            {"team_norm": "Utah HC", "league_key": "NHL", "win_pct": 0.50, "home_win_pct": 0.50, "away_win_pct": 0.50, "points_per_game": 2.9, "points_allowed_per_game": 3.0, "turnovers": 0.0, "streak": 0.0, "last5_win_pct": 0.5},
+            {"team_norm": "Vegas Golden Knights", "league_key": "NHL", "win_pct": 0.62, "home_win_pct": 0.62, "away_win_pct": 0.62, "points_per_game": 3.4, "points_allowed_per_game": 2.7, "turnovers": 0.0, "streak": 1.0, "last5_win_pct": 0.7},
+        ]
+    )
+    monkeypatch.setattr(fp, "fetch_team_stats", lambda *_args, **_kwargs: stats_df)
+
+    games = pd.DataFrame([{"Home": "Utah", "Away": "Vegas", "sport_title": "NHL"}])
+    enriched = fp.enrich_with_model_features(games, api_clients={}, season_year=2025)
+    row = enriched.iloc[0]
+
+    assert row["stats_resolution_status"] == "resolved"
+    assert bool(row["feature_stats_fallback"]) is False
+    assert bool(row["ml_feature_eligible"]) is True

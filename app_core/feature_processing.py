@@ -165,6 +165,8 @@ LEAGUE_TEAM_NAME_MAPPING: Dict[str, Dict[str, str]] = {
         "edmonton": "EDMONTON OILERS",
         "utah": "UTAH HOCKEY CLUB",
         "utah hockey club": "UTAH HOCKEY CLUB",
+        "utah hc": "UTAH HOCKEY CLUB",
+        "utah mammoth": "UTAH HOCKEY CLUB",
         "st louis": "ST LOUIS BLUES",
         "florida": "FLORIDA PANTHERS",
         "carolina": "CAROLINA HURRICANES",
@@ -213,6 +215,8 @@ LEAGUE_CITY_ONLY_ALIASES: Dict[str, Dict[str, str]] = {
         "anaheim": "ANAHEIM DUCKS",
         "edmonton": "EDMONTON OILERS",
         "utah": "UTAH HOCKEY CLUB",
+        "utah hc": "UTAH HOCKEY CLUB",
+        "utah mammoth": "UTAH HOCKEY CLUB",
     },
     "MLB": {
         "colorado": "COLORADO ROCKIES",
@@ -270,6 +274,8 @@ def normalize_team_for_stats(team_name: str, league: Optional[str]) -> str:
     raw = re.sub(r"\bN\.?Y\.?\b", "NEW YORK", raw)
     normalized = _simple_norm(raw)
     key = str(normalized).strip().lower()
+    if lg == "NHL" and key in {"utah", "utah hockey club", "utah hc", "utah mammoth"}:
+        return "UTAH HOCKEY CLUB"
     league_map = LEAGUE_TEAM_NAME_MAPPING.get(lg, {})
     if key in league_map:
         return _simple_norm(league_map[key])

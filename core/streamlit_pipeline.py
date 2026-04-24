@@ -2769,6 +2769,81 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
     expanded_df = pd.DataFrame(out_rows)
     return expanded_df, diag_counts
 
+def _compute_ml_input_flatness_diagnostics(
+    enriched_df: pd.DataFrame,
+    eligible_mask: pd.Series | None = None,
+) -> dict[str, Any]:
+    if enriched_df is None or enriched_df.empty:
+        return {
+            "ml_input_row_count": 0,
+            "ml_feature_eligible_row_count": 0,
+            "ml_rows_excluded_count": 0,
+            "ml_zero_variance_feature_count": 0,
+            "ml_near_constant_feature_count": 0,
+            "ml_high_missingness_feature_count": 0,
+            "ml_top_missing_features": {},
+            "ml_top_feature_nunique": {},
+            "ml_flatness_root_cause_hint": "no_rows",
+        }
+
+    feature_cols = [c for c in enriched_df.columns if c.startswith("feature_")]
+    feature_df = enriched_df.reindex(columns=feature_cols).apply(pd.to_numeric, errors="coerce") if feature_cols else pd.DataFrame(index=enriched_df.index)
+    row_count = int(len(enriched_df))
+    if eligible_mask is None:
+        eligible_mask = pd.Series([True] * row_count, index=enriched_df.index, dtype=bool)
+    else:
+        eligible_mask = eligible_mask.reindex(enriched_df.index).fillna(False).astype(bool)
+    eligible_count = int(eligible_mask.sum())
+    excluded_count = int((~eligible_mask).sum())
+
+    if feature_df.empty:
+        return {
+            "ml_input_row_count": row_count,
+            "ml_feature_eligible_row_count": eligible_count,
+            "ml_rows_excluded_count": excluded_count,
+            "ml_zero_variance_feature_count": 0,
+            "ml_near_constant_feature_count": 0,
+            "ml_high_missingness_feature_count": 0,
+            "ml_top_missing_features": {},
+            "ml_top_feature_nunique": {},
+            "ml_flatness_root_cause_hint": "no_feature_columns",
+        }
+
+    missingness = feature_df.isna().mean()
+    nunique = feature_df.nunique(dropna=True)
+    zero_variance_count = int((nunique <= 1).sum())
+    near_constant_count = int((nunique <= 2).sum())
+    high_missing_count = int((missingness >= 0.5).sum())
+
+    top_missing = missingness.sort_values(ascending=False).head(5)
+    top_nunique = nunique.sort_values().head(8)
+
+    if eligible_count < 8:
+        root_cause = "too_few_ml_eligible_rows"
+    elif high_missing_count >= max(3, int(len(feature_df.columns) * 0.25)):
+        root_cause = "high_feature_missingness"
+    elif zero_variance_count >= max(4, int(len(feature_df.columns) * 0.25)):
+        root_cause = "many_zero_variance_features"
+    elif near_constant_count >= max(6, int(len(feature_df.columns) * 0.35)):
+        root_cause = "many_near_constant_features"
+    elif excluded_count > 0 and (excluded_count / max(row_count, 1)) >= 0.25:
+        root_cause = "high_stats_exclusion_rate"
+    else:
+        root_cause = "mixed_or_model_specific"
+
+    return {
+        "ml_input_row_count": row_count,
+        "ml_feature_eligible_row_count": eligible_count,
+        "ml_rows_excluded_count": excluded_count,
+        "ml_zero_variance_feature_count": zero_variance_count,
+        "ml_near_constant_feature_count": near_constant_count,
+        "ml_high_missingness_feature_count": high_missing_count,
+        "ml_top_missing_features": {k: round(float(v), 3) for k, v in top_missing.items()},
+        "ml_top_feature_nunique": {k: int(v) for k, v in top_nunique.items()},
+        "ml_flatness_root_cause_hint": root_cause,
+    }
+
+
 def run_analysis_pipeline(
     sports: list[str] | None = None,
     max_rows: int = 1000,
@@ -3106,6 +3181,17 @@ def run_analysis_pipeline(
         "rows_unresolved_team_mapping": 0,
         "rows_excluded_from_ml_unresolved_stats": 0,
     }
+    ml_input_diag: dict[str, Any] = {
+        "ml_input_row_count": 0,
+        "ml_feature_eligible_row_count": 0,
+        "ml_rows_excluded_count": 0,
+        "ml_zero_variance_feature_count": 0,
+        "ml_near_constant_feature_count": 0,
+        "ml_high_missingness_feature_count": 0,
+        "ml_top_missing_features": {},
+        "ml_top_feature_nunique": {},
+        "ml_flatness_root_cause_hint": "not_computed",
+    }
     if use_ml and ML_AVAILABLE and PredictionEngine is not None:
         logger.warning("🔍 ML DEBUG: use_ml=True, attempting predictions...")
         logger.info(f"PIPELINE TRACE: Sending {len(merged)} rows into ML prediction logic.")
@@ -3168,6 +3254,20 @@ def run_analysis_pipeline(
                     nba_stats_diag["rows_excluded_from_ml_unresolved_stats"] = excluded_count
                     needs_prediction = needs_prediction & ml_eligible
                     merged.loc[~ml_eligible, "model_status"] = "Stats Unresolved"
+                else:
+                    ml_eligible = pd.Series([True] * len(enriched_for_prediction), index=enriched_for_prediction.index, dtype=bool)
+
+                ml_input_diag = _compute_ml_input_flatness_diagnostics(enriched_for_prediction, ml_eligible)
+                logger.info(
+                    "ML INPUT DIAGNOSTICS: rows=%s eligible=%s excluded=%s zero_var=%s near_const=%s high_missing=%s hint=%s",
+                    ml_input_diag["ml_input_row_count"],
+                    ml_input_diag["ml_feature_eligible_row_count"],
+                    ml_input_diag["ml_rows_excluded_count"],
+                    ml_input_diag["ml_zero_variance_feature_count"],
+                    ml_input_diag["ml_near_constant_feature_count"],
+                    ml_input_diag["ml_high_missingness_feature_count"],
+                    ml_input_diag["ml_flatness_root_cause_hint"],
+                )
 
                 # DIAGNOSTICS & DEDUPLICATION: check for duplicate columns after feature enrichment
                 logger.info(f"Shape after enrich_with_model_features: {enriched_for_prediction.shape}")
@@ -3504,6 +3604,15 @@ def run_analysis_pipeline(
         "nba_rows_fallback_stats": nba_stats_diag["nba_rows_fallback_stats"],
         "rows_unresolved_team_mapping": nba_stats_diag["rows_unresolved_team_mapping"],
         "rows_excluded_from_ml_unresolved_stats": nba_stats_diag["rows_excluded_from_ml_unresolved_stats"],
+        "ml_input_row_count": int(ml_input_diag.get("ml_input_row_count", 0)),
+        "ml_feature_eligible_row_count": int(ml_input_diag.get("ml_feature_eligible_row_count", 0)),
+        "ml_rows_excluded_count": int(ml_input_diag.get("ml_rows_excluded_count", 0)),
+        "ml_zero_variance_feature_count": int(ml_input_diag.get("ml_zero_variance_feature_count", 0)),
+        "ml_near_constant_feature_count": int(ml_input_diag.get("ml_near_constant_feature_count", 0)),
+        "ml_high_missingness_feature_count": int(ml_input_diag.get("ml_high_missingness_feature_count", 0)),
+        "ml_top_missing_features": ml_input_diag.get("ml_top_missing_features", {}),
+        "ml_top_feature_nunique": ml_input_diag.get("ml_top_feature_nunique", {}),
+        "ml_flatness_root_cause_hint": str(ml_input_diag.get("ml_flatness_root_cause_hint", "not_computed")),
         "hybrid_fallback_triggered": False,
     }
 
