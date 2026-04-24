@@ -31,6 +31,46 @@ def test_colorado_resolves_differently_by_league():
     assert fp.normalize_team_for_stats("Colorado", "MLB") == "COLORADO ROCKIES"
 
 
+def test_stats_index_canonicalization_and_resolver_matches_city_only_nba_mlb():
+    stats_df = pd.DataFrame(
+        [
+            {"team_norm": "Minnesota", "league_key": "NBA"},
+            {"team_norm": "Colorado", "league_key": "MLB"},
+        ]
+    )
+    canonical = fp.canonicalize_stats_team_index(stats_df)
+    nba_subset = canonical[canonical["league_key"] == "NBA"].set_index("stats_team_key")
+    mlb_subset = canonical[canonical["league_key"] == "MLB"].set_index("stats_team_key")
+
+    nba_maps = fp._build_stats_index_maps(nba_subset, "NBA")
+    mlb_maps = fp._build_stats_index_maps(mlb_subset, "MLB")
+
+    nba_direct = {idx: idx for idx in nba_subset.index}
+    mlb_direct = {idx: idx for idx in mlb_subset.index}
+
+    nba_match, nba_reason, nba_stage = fp.resolve_stats_team_match(
+        "MINNESOTA TIMBERWOLVES",
+        "NBA",
+        nba_direct,
+        nba_maps["canonical"],
+        nba_maps["city_only"],
+    )
+    mlb_match, mlb_reason, mlb_stage = fp.resolve_stats_team_match(
+        "COLORADO ROCKIES",
+        "MLB",
+        mlb_direct,
+        mlb_maps["canonical"],
+        mlb_maps["city_only"],
+    )
+
+    assert nba_match == "minnesota timberwolves"
+    assert nba_reason == "direct"
+    assert nba_stage == "resolved"
+    assert mlb_match == "colorado rockies"
+    assert mlb_reason == "direct"
+    assert mlb_stage == "resolved"
+
+
 def test_fetch_nba_stats_retries_before_fallback(monkeypatch):
     fp._NBA_STATS_RUNTIME_CACHE.clear()
 
@@ -123,6 +163,9 @@ def test_unresolved_nba_rows_marked_and_ml_ineligible(monkeypatch):
     assert enriched.loc[0, "stats_fallback_reason"] == "team_mapping_unresolved"
     assert bool(enriched.loc[0, "ml_feature_eligible"]) is False
     assert bool(enriched.loc[0, "feature_stats_fallback"]) is True
+    assert pd.isna(enriched.loc[0, "feature_home_win_pct"])
+    assert pd.isna(enriched.loc[0, "feature_away_win_pct"])
+    assert str(enriched.loc[0, "stats_resolution_stage_failure"]) != ""
 
 
 def test_aggregated_stats_diagnostics_populate(monkeypatch):
@@ -160,3 +203,5 @@ def test_aggregated_stats_diagnostics_populate(monkeypatch):
     assert int(enriched.loc[0, "stats_unresolved_count_by_league"]) >= 1
     assert int(enriched.loc[0, "stats_ml_excluded_rows"]) >= 1
     assert "fallback" in str(enriched.loc[0, "stats_source_counts"])
+    assert "stats_resolution_stage_failure_counts" in enriched.columns
+    assert "after_fuzzy" in str(enriched.loc[0, "stats_resolution_stage_failure_counts"]) or "stats_index_lookup" in str(enriched.loc[0, "stats_resolution_stage_failure_counts"])

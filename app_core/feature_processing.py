@@ -243,6 +243,28 @@ def normalize_team_for_stats(team_name: str, league: Optional[str]) -> str:
     return normalized
 
 
+def canonicalize_stats_team_index(stats_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Canonicalize stats team names for resolver matching using league-aware normalization.
+    Ensures all downstream stats-index lookups use the same authoritative normalization path.
+    """
+    if stats_df is None or stats_df.empty:
+        return pd.DataFrame()
+
+    canonical = stats_df.copy()
+    if "league_key" not in canonical.columns:
+        canonical["league_key"] = ""
+    canonical["league_key"] = canonical["league_key"].astype(str).str.upper().str.strip()
+    if "team_norm" not in canonical.columns:
+        canonical["team_norm"] = ""
+    canonical["stats_team_key"] = canonical.apply(
+        lambda row: normalize_team_for_stats(row.get("team_norm", ""), row.get("league_key", "")).strip().lower(),
+        axis=1,
+    )
+    canonical = canonical[canonical["stats_team_key"] != ""]
+    return canonical
+
+
 def _build_stats_index_maps(stats_subset: pd.DataFrame, league: str) -> Dict[str, Dict[str, str]]:
     """
     Build strict, league-local matching maps for stats resolution.
@@ -1466,7 +1488,7 @@ def fetch_nba_stats(season_year: int) -> List[Dict[str, Any]]:
                 oppg = (pts - plus_minus)
 
                 stats.append({
-                    "team_norm": robust_normalize_team(team_name, league="NBA"),
+                    "team_norm": normalize_team_for_stats(team_name, league="NBA"),
                     "league_key": "NBA",
                     "win_pct": w_pct,
                     "home_win_pct": w_pct,
@@ -1567,7 +1589,7 @@ def fetch_nfl_stats(season_year: int) -> List[Dict[str, Any]]:
             avg_tov = data['turnovers'] / games
 
             stats.append({
-                "team_norm": robust_normalize_team(str(team_code)),
+                "team_norm": normalize_team_for_stats(str(team_code), league="NFL"),
                 "league_key": "NFL",
                 "win_pct": w_pct,
                 "home_win_pct": w_pct,
@@ -1754,7 +1776,7 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
 
                 stats.append(
                     {
-                        "team_norm": robust_normalize_team(team, league="NCAAF"),
+                        "team_norm": normalize_team_for_stats(team, league="NCAAF"),
                         "wins": wins,
                         "losses": losses,
                         "win_pct": float(win_pct),
@@ -1796,7 +1818,7 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
                 win_pct = (wins / games_played) if games_played > 0 else 0.0
 
                 stats.append({
-                    "team_norm": robust_normalize_team(t, league="NCAAF"),
+                    "team_norm": normalize_team_for_stats(t, league="NCAAF"),
                     "wins": wins,
                     "losses": losses,
                     "win_pct": float(win_pct),
@@ -1894,7 +1916,7 @@ def fetch_nhl_stats(season_year: int) -> List[Dict[str, Any]]:
             l10_win_pct = (l10_wins / l10_games) if l10_games > 0 else win_pct
             
             stats.append({
-                "team_norm": robust_normalize_team(full_name, league="NHL"),
+                "team_norm": normalize_team_for_stats(full_name, league="NHL"),
                 "league_key": "NHL",
                 "win_pct": win_pct,
                 "home_win_pct": win_pct,
@@ -1945,7 +1967,7 @@ def fetch_from_espn_ncaaf(season_year: int) -> List[Dict[str, Any]]:
             team_name = team_info.get("displayName")
             if not team_name:
                 continue
-            team_norm = robust_normalize_team(team_name, "NCAAF")
+            team_norm = normalize_team_for_stats(team_name, "NCAAF")
 
             # Resilient stat extraction: Search keywords in both name and abbreviation
             wins, losses, gp, p_for, p_against = 0.0, 0.0, 0.0, 0.0, 0.0
@@ -2006,7 +2028,7 @@ def fetch_from_espn_ncaab(season_year: int) -> List[Dict[str, Any]]:
             team_name = team_info.get("displayName")
             if not team_name:
                 continue
-            team_norm = robust_normalize_team(team_name, "NCAAB")
+            team_norm = normalize_team_for_stats(team_name, "NCAAB")
 
             # Resilient stat extraction: Search keywords in both name and abbreviation
             wins, losses, gp, p_for, p_against = 0.0, 0.0, 0.0, 0.0, 0.0
@@ -2065,7 +2087,7 @@ def fetch_from_espn_mlb(season_year: int) -> List[Dict[str, Any]]:
             team_info = entry.get("team", {})
             team_name = team_info.get("displayName")
             if not team_name: continue
-            team_norm = robust_normalize_team(team_name, "MLB")
+            team_norm = normalize_team_for_stats(team_name, "MLB")
 
             # Resilient stat extraction: Search keywords in both name and abbreviation
             wins, losses, gp, p_for, p_against = 0.0, 0.0, 0.0, 0.0, 0.0
@@ -2312,13 +2334,11 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     unresolved_after_fuzzy = 0
 
     if not stats_df.empty:
+        stats_df = canonicalize_stats_team_index(stats_df)
         # Group stats_df by league_key
         stats_by_league = {}
         for lg in stats_df['league_key'].unique():
             subset = stats_df[stats_df['league_key'] == lg].copy()
-            subset["stats_team_key"] = subset["team_norm"].apply(
-                lambda raw: normalize_team_for_stats(str(raw), lg).strip().lower()
-            )
             subset = subset[subset["stats_team_key"] != ""]
             stats_by_league[lg] = subset.drop_duplicates(subset=["stats_team_key"]).set_index("stats_team_key")
 
