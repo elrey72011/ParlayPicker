@@ -73,15 +73,15 @@ class TestCalibrationUpdate(unittest.TestCase):
             {"league": "NHL", "market_type": "total_over", "expected_value": 0.05, "edge": 0.06, "calibrated_probability": 0.57, "best_pick": "Over 5.5", "home_team": "Team A", "away_team": "Team B"},
             # NHL total over at 0.58 but fails new penalty edge requirement (0.05 is < 0.06)
             {"league": "NHL", "market_type": "total_over", "expected_value": 0.05, "edge": 0.05, "calibrated_probability": 0.58, "kalshi_probability": 0.54, "best_pick": "Over 5.5", "home_team": "Team C", "away_team": "Team D"},
-            # NHL total over at 0.58 and meets penalty edge requirement (0.06 >= 0.06) and EV req (0.05 >= 0.05)
-            {"league": "NHL", "market_type": "total_over", "expected_value": 0.05, "edge": 0.06, "calibrated_probability": 0.58, "kalshi_probability": 0.54, "best_pick": "Over 5.5", "home_team": "Team I", "away_team": "Team J"},
+            # NHL total over at 0.58 with stronger EV/edge to clear both cold-market + empirical penalties
+            {"league": "NHL", "market_type": "total_over", "expected_value": 0.061, "edge": 0.071, "calibrated_probability": 0.58, "kalshi_probability": 0.54, "best_pick": "Over 5.5", "home_team": "Team I", "away_team": "Team J"},
             # NBA total over at 0.57 (fails NBA 0.58)
             {"league": "NBA", "market_type": "total_over", "expected_value": 0.05, "edge": 0.06, "calibrated_probability": 0.57, "kalshi_probability": 0.53, "best_pick": "Over 220.5", "home_team": "Team E", "away_team": "Team F"},
-            # NBA total over at 0.58 (meets NBA 0.58), requires EV=0.03+0.02=0.05, Edge=0.04+0.02=0.06
-            {"league": "NBA", "market_type": "total_over", "expected_value": 0.05, "edge": 0.06, "calibrated_probability": 0.58, "kalshi_probability": 0.54, "best_pick": "Over 220.5", "home_team": "Team G", "away_team": "Team H"},
-        # MLB total under at 0.57 (meets TOTAL_UNDER_MIN_WIN_PROB 0.57), requires EV=0.02+0.02=0.04, Edge=0.03+0.02=0.05
+            # NBA total over at 0.58 with much stronger EV/edge to clear harsher NBA total gates
+            {"league": "NBA", "market_type": "total_over", "expected_value": 0.08, "edge": 0.08, "calibrated_probability": 0.58, "kalshi_probability": 0.54, "best_pick": "Over 220.5", "home_team": "Team G", "away_team": "Team H"},
+        # MLB total under at 0.57 is now intentionally too weak under stricter under thresholds
         {"league": "MLB", "market_type": "total_under", "expected_value": 0.04, "edge": 0.05, "calibrated_probability": 0.57, "kalshi_probability": 0.53, "best_pick": "Under 8.5", "home_team": "Team K", "away_team": "Team L"},
-        # MLB total under at 0.57 (meets TOTAL_UNDER_MIN_WIN_PROB 0.57), fails EV=0.02+0.02=0.04 (has 0.03)
+        # MLB total under at 0.57 is also below stricter threshold bars
         {"league": "MLB", "market_type": "total_under", "expected_value": 0.03, "edge": 0.05, "calibrated_probability": 0.57, "kalshi_probability": 0.53, "best_pick": "Under 8.5", "home_team": "Team M", "away_team": "Team N"},
         ])
 
@@ -107,9 +107,9 @@ class TestCalibrationUpdate(unittest.TestCase):
         nba_strong = best[best["home_team"] == "Team G"].iloc[0]
         self.assertEqual(nba_strong["Pick_Status"], "Actionable")
 
-        # Team K (MLB Under 0.57, meets EV 0.04, Edge 0.05) -> Actionable
+        # Team K (MLB Under 0.57) -> Below Threshold with stricter under bars
         mlb_strong_under = best[best["home_team"] == "Team K"].iloc[0]
-        self.assertEqual(mlb_strong_under["Pick_Status"], "Actionable")
+        self.assertEqual(mlb_strong_under["Pick_Status"], "Below Threshold")
 
         # Team M (MLB Under 0.57, fails EV 0.04) -> Below Threshold
         mlb_weak_under = best[best["home_team"] == "Team M"].iloc[0]
@@ -156,9 +156,9 @@ class TestCalibrationUpdate(unittest.TestCase):
         under_fail = best[best["home_team"] == "Team C"].iloc[0]
         self.assertEqual(under_fail["Pick_Status"], "Below Threshold")
 
-        # Team E (Total Under 0.57) -> Actionable
+        # Team E (Total Under 0.57) -> Below Threshold under stricter under bars
         under_pass = best[best["home_team"] == "Team E"].iloc[0]
-        self.assertEqual(under_pass["Pick_Status"], "Actionable")
+        self.assertEqual(under_pass["Pick_Status"], "Below Threshold")
 
     def test_ev_dampener_on_fallback_heavy_slates(self):
         # A total that barely meets EV threshold (e.g. 0.03 for total_over)

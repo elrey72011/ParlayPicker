@@ -50,13 +50,13 @@ def test_side_floor_and_consensus_overlays():
         # 3. Neutral row failing the overlay (prob 0.57 < 0.58, EV/Edge passing baseline)
         create_row("E", "F", "total_over", 0.57, 0.035, 0.045, "Neutral"),
 
-        # 4. Neutral row passing the overlay (prob 0.58, EV 0.03, Edge 0.04)
+        # 4. Neutral row that used to pass overlays, but should now fail under stricter NBA total penalties
         create_row("G", "H", "total_over", 0.58, 0.035, 0.045, "Neutral"),
 
         # 5. Disagrees row failing the overlay (prob 0.59 < 0.60)
         create_row("I", "J", "total_over", 0.59, 0.045, 0.055, "Disagrees"),
 
-        # 6. Disagrees row passing the overlay (prob 0.61, EV 0.045, Edge 0.055)
+        # 6. Disagrees row with decent stats, but still below stricter NBA total thresholds
         create_row("K", "L", "total_over", 0.61, 0.045, 0.055, "Disagrees"),
 
         # 7. Agrees row remaining Actionable (passes baseline totals)
@@ -74,14 +74,14 @@ def test_side_floor_and_consensus_overlays():
     # 3. Neutral failing overlay -> Below Threshold
     assert best.loc[best["home_team"] == "E", "Pick_Status"].iloc[0] == "Below Threshold"
 
-    # 4. Neutral passing overlay -> Actionable
-    assert best.loc[best["home_team"] == "G", "Pick_Status"].iloc[0] == "Actionable"
+    # 4. Neutral NBA total now fails stricter total penalties -> Below Threshold
+    assert best.loc[best["home_team"] == "G", "Pick_Status"].iloc[0] == "Below Threshold"
 
-    # 5. Disagrees failing overlay -> High Variance/Speculative
-    assert best.loc[best["home_team"] == "I", "Pick_Status"].iloc[0] == "High Variance/Speculative"
+    # 5. Disagrees no longer has special STANDARD-mode promotion path -> Below Threshold
+    assert best.loc[best["home_team"] == "I", "Pick_Status"].iloc[0] == "Below Threshold"
 
-    # 6. Disagrees passing overlay -> Actionable
-    assert best.loc[best["home_team"] == "K", "Pick_Status"].iloc[0] == "Actionable"
+    # 6. Disagrees is also below stricter NBA total thresholds -> Below Threshold
+    assert best.loc[best["home_team"] == "K", "Pick_Status"].iloc[0] == "Below Threshold"
 
-    # 7. Agrees passing baseline -> Actionable
-    assert best.loc[best["home_team"] == "M", "Pick_Status"].iloc[0] == "Actionable"
+    # 7. Agrees does not bypass under-specific thresholds -> Below Threshold
+    assert best.loc[best["home_team"] == "M", "Pick_Status"].iloc[0] == "Below Threshold"

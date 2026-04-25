@@ -30,6 +30,9 @@ from app_core.weights_config import (
             MLB_TOTAL_OVER_ACTIONABLE_PENALTY, MLB_TOTAL_UNDER_ACTIONABLE_PENALTY,
             NBA_TOTAL_OVER_ACTIONABLE_PENALTY, NBA_TOTAL_UNDER_ACTIONABLE_PENALTY,
             NHL_TOTAL_OVER_ACTIONABLE_PENALTY, NHL_TOTAL_UNDER_ACTIONABLE_PENALTY,
+            NO_KALSHI_TOTAL_EXTRA_PENALTY, NO_KALSHI_TOTAL_UNDER_EXTRA_PENALTY,
+            TOTAL_UNDER_FINALIST_SCORE_PENALTY,
+            LEAGUE_MARKET_FAMILY_ACTIONABLE_PENALTIES,
             FALLBACK_HEAVY_TOTAL_EXTRA_PENALTY,
             BEST_PICKS_PROFILE,
     LOCK_UPLOAD_LINES_FOR_MATCHED_ROWS,
@@ -1727,6 +1730,15 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         family_mask = pool["_market_family"] == family
         avg_scores[family] = pool.loc[family_mask, "final_family_score"].mean() if family_mask.sum() > 0 else 0.0
 
+    # Small under-family adjustment so totals-under do not dominate cross-family finalists
+    # on generic EV/edge momentum alone.
+    pool["_family_selection_penalty"] = np.where(
+        pool["market_type"].astype(str).str.lower().eq("total_under"),
+        float(TOTAL_UNDER_FINALIST_SCORE_PENALTY),
+        0.0,
+    )
+    pool["final_family_score"] = pool["final_family_score"] - pool["_family_selection_penalty"]
+
     # 4. Sort to prepare for finalist selection within each family per game
     pool = pool.sort_values(
         by=["final_family_score", "tier_score", "_ev_numeric", "_edge_numeric", "calibrated_probability"],
@@ -1810,7 +1822,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     final_market_type_counts = best["market_type"].value_counts().to_dict()
 
     # Cleanup temporary columns
-    best = best.drop(columns=["_market_family", "_normalized_ev", "_normalized_edge", "final_family_score", "_ev_numeric", "_edge_numeric"])
+    best = best.drop(columns=["_market_family", "_normalized_ev", "_normalized_edge", "final_family_score", "_ev_numeric", "_edge_numeric", "_family_selection_penalty"])
 
     logger.info(f"BEST PICKS AUDIT: Rows after two-stage finalist comparison: {len(best)} (started with {len(pool)})")
 
@@ -1841,6 +1853,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     # Pick_Status logic setup
     if "Pick_Status" not in best.columns:
         best["Pick_Status"] = pd.Series([""] * len(best), index=best.index, dtype="string")
+
+    blocked_by_under_specific_thresholds = 0
+    blocked_by_nba_total_penalty = 0
+    blocked_by_no_kalshi_total_penalty = 0
 
     for idx in best.index:
         status_reason = "Unknown"
@@ -1902,6 +1918,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             MLB_TOTAL_OVER_ACTIONABLE_PENALTY, MLB_TOTAL_UNDER_ACTIONABLE_PENALTY,
             NBA_TOTAL_OVER_ACTIONABLE_PENALTY, NBA_TOTAL_UNDER_ACTIONABLE_PENALTY,
             NHL_TOTAL_OVER_ACTIONABLE_PENALTY, NHL_TOTAL_UNDER_ACTIONABLE_PENALTY,
+            NO_KALSHI_TOTAL_EXTRA_PENALTY, NO_KALSHI_TOTAL_UNDER_EXTRA_PENALTY,
+            LEAGUE_MARKET_FAMILY_ACTIONABLE_PENALTIES,
             FALLBACK_HEAVY_TOTAL_EXTRA_PENALTY,
             BEST_PICKS_PROFILE,
             LOCK_UPLOAD_LINES_FOR_MATCHED_ROWS,
@@ -1968,6 +1986,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             req_prob = SIDE_MIN_WIN_PROB if is_side_market else TOTAL_MIN_WIN_PROB
             req_ev = BASELINE_MIN_EV
             req_edge = BASELINE_MIN_EDGE
+            base_req_prob = req_prob
+            base_req_ev = req_ev
+            base_req_edge = req_edge
+            no_kalshi_penalty_applied = False
 
             is_fallback_heavy = diagnostics_out.get("is_fallback_heavy", False) if diagnostics_out else False
 
@@ -2018,6 +2040,34 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                     req_ev += FALLBACK_HEAVY_TOTAL_EXTRA_PENALTY
                     req_edge += FALLBACK_HEAVY_TOTAL_EXTRA_PENALTY
 
+                if consensus_agr == "No Kalshi":
+                    req_ev += NO_KALSHI_TOTAL_EXTRA_PENALTY
+                    req_edge += NO_KALSHI_TOTAL_EXTRA_PENALTY
+                    no_kalshi_penalty_applied = True
+                    if market_type == "total_under":
+                        req_ev += NO_KALSHI_TOTAL_UNDER_EXTRA_PENALTY
+                        req_edge += NO_KALSHI_TOTAL_UNDER_EXTRA_PENALTY
+
+            # Static empirical penalty hook (league + family), intentionally interpretable
+            # and ready for later recap-driven replacement.
+            family_key = "side"
+            if market_type == "total_over":
+                family_key = "over"
+            elif market_type == "total_under":
+                family_key = "under"
+            empirical_penalty = float(LEAGUE_MARKET_FAMILY_ACTIONABLE_PENALTIES.get((league, family_key), 0.0))
+            req_ev += empirical_penalty
+            req_edge += empirical_penalty
+
+            base_pass = (win_prob >= base_req_prob) and (effective_ev >= base_req_ev) and (edge >= base_req_edge)
+            final_pass = (win_prob >= req_prob) and (effective_ev >= req_ev) and (edge >= req_edge)
+            if base_pass and not final_pass:
+                if market_type == "total_under":
+                    blocked_by_under_specific_thresholds += 1
+                if league == "NBA" and is_total_market:
+                    blocked_by_nba_total_penalty += 1
+                if no_kalshi_penalty_applied and is_total_market:
+                    blocked_by_no_kalshi_total_penalty += 1
 
             if is_side_market and win_prob < req_prob:
                 status = "Below Threshold"
@@ -2284,6 +2334,16 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         diagnostics_out["actionable_counts_by_league"] = actionable_counts_by_league
         diagnostics_out["actionable_counts_by_market_type"] = actionable_market_type_counts
         diagnostics_out["actionable_counts_by_family"] = actionable_family_counts
+        if "league" in actionable_df.columns and "market_type" in actionable_df.columns:
+            actionable_league_family = actionable_df.copy()
+            actionable_league_family["market_family"] = actionable_league_family["market_type"].astype(str).str.lower().map(
+                lambda mt: "over" if mt == "total_over" else ("under" if mt == "total_under" else "side")
+            )
+            diagnostics_out["actionable_counts_by_league_family"] = (
+                actionable_league_family.groupby(["league", "market_family"]).size().to_dict()
+            )
+        else:
+            diagnostics_out["actionable_counts_by_league_family"] = {}
         diagnostics_out["actionable_totals_below_floor"] = totals_below_prob_floor
         diagnostics_out["nhl_totals_actionable"] = nhl_totals_actionable
         diagnostics_out["spreads_downgraded_by_divergence"] = spreads_downgraded_by_divergence
@@ -2300,7 +2360,29 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         diagnostics_out["downgraded_by_neutral"] = downgraded_by_neutral
         diagnostics_out["downgraded_by_disagrees"] = downgraded_by_disagrees
         diagnostics_out["side_floor_failures"] = side_floor_failures
+        diagnostics_out["blocked_by_under_specific_thresholds"] = blocked_by_under_specific_thresholds
+        diagnostics_out["blocked_by_nba_total_penalty"] = blocked_by_nba_total_penalty
+        diagnostics_out["blocked_by_no_kalshi_total_penalty"] = blocked_by_no_kalshi_total_penalty
         diagnostics_out["final_actionable_count"] = len(actionable_df)
+
+        current_card_df = final_best_df
+        overs_sides_df = final_best_df[~final_best_df["market_type"].astype(str).str.lower().eq("total_under")]
+        no_unders_df = final_best_df[~final_best_df["market_type"].astype(str).str.lower().eq("total_under")]
+        no_nba_totals_df = final_best_df[~(
+            final_best_df["league"].astype(str).str.upper().eq("NBA")
+            & final_best_df["market_type"].astype(str).str.lower().str.contains("total", na=False)
+        )]
+        no_kalshi_totals_df = final_best_df[~(
+            final_best_df["consensus_agreement"].astype(str).eq("No Kalshi")
+            & final_best_df["market_type"].astype(str).str.lower().str.contains("total", na=False)
+        )]
+        diagnostics_out["shadow_card_counts"] = {
+            "current_card": int(len(current_card_df)),
+            "overs_only_plus_sides_card": int(len(overs_sides_df)),
+            "no_unders_card": int(len(no_unders_df)),
+            "no_nba_totals_card": int(len(no_nba_totals_df)),
+            "no_kalshi_totals_card": int(len(no_kalshi_totals_df)),
+        }
 
         if "market_type" in final_best_df.columns:
             totals_mask = final_best_df["market_type"].astype(str).str.contains("total", case=False, na=False)
