@@ -32,9 +32,9 @@ NBA_STAR_ACTIVE_TOTAL_UNDER_PENALTY = -0.01
 
 # Total Win Probability Floors
 TOTAL_MIN_WIN_PROB = 0.56
-TOTAL_UNDER_MIN_WIN_PROB = 0.57
-TOTAL_UNDER_MIN_EV = 0.02
-TOTAL_UNDER_MIN_EDGE = 0.03
+TOTAL_UNDER_MIN_WIN_PROB = 0.62
+TOTAL_UNDER_MIN_EV = 0.18
+TOTAL_UNDER_MIN_EDGE = 0.10
 NHL_TOTAL_EXTRA_EDGE_PENALTY = 0.01
 NHL_TOTAL_MIN_WIN_PROB = 0.57
 NHL_TOTAL_MIN_WIN_PROB_STRICT = 0.58
@@ -57,11 +57,32 @@ MLB_SPREAD_ACTIONABLE_BONUS = 0.01
 
 # Cold-Market Penalty Layer (by League + Market Type)
 MLB_TOTAL_OVER_ACTIONABLE_PENALTY = 0.00
-MLB_TOTAL_UNDER_ACTIONABLE_PENALTY = 0.02
-NBA_TOTAL_OVER_ACTIONABLE_PENALTY = 0.02
-NBA_TOTAL_UNDER_ACTIONABLE_PENALTY = 0.01
+MLB_TOTAL_UNDER_ACTIONABLE_PENALTY = 0.03
+NBA_TOTAL_OVER_ACTIONABLE_PENALTY = 0.03
+NBA_TOTAL_UNDER_ACTIONABLE_PENALTY = 0.04
 NHL_TOTAL_OVER_ACTIONABLE_PENALTY = 0.02
 NHL_TOTAL_UNDER_ACTIONABLE_PENALTY = 0.03
+
+# No-Kalshi totals are treated as lower confidence in selection stage
+NO_KALSHI_TOTAL_EXTRA_PENALTY = 0.02
+NO_KALSHI_TOTAL_UNDER_EXTRA_PENALTY = 0.03
+
+# Cross-family selection nudge to avoid unders dominating finalists on EV/edge alone
+TOTAL_UNDER_FINALIST_SCORE_PENALTY = 0.10
+
+# Static empirical hooks (league + family) for later recap-driven calibration.
+# Values are additive threshold bumps applied to both EV and edge in selection gating.
+LEAGUE_MARKET_FAMILY_ACTIONABLE_PENALTIES = {
+    ("MLB", "over"): 0.00,
+    ("MLB", "under"): 0.01,
+    ("MLB", "side"): 0.00,
+    ("NBA", "over"): 0.01,
+    ("NBA", "under"): 0.02,
+    ("NBA", "side"): 0.00,
+    ("NHL", "over"): 0.01,
+    ("NHL", "under"): 0.02,
+    ("NHL", "side"): 0.00,
+}
 
 # Model-health guardrail for noisy slates
 FALLBACK_HEAVY_TOTAL_EXTRA_PENALTY = 0.01
