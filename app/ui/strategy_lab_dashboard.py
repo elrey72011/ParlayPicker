@@ -1,19 +1,16 @@
 import pandas as pd
 import streamlit as st
 
+from app_core.performance_pipeline import run_performance_pipeline
+from app_core.strategy_lab_realized import build_realized_strategy_lab
 
-def render_strategy_lab(
+
+def _render_theoretical_strategy_lab(
     analysis_df: pd.DataFrame,
     portfolio_df: pd.DataFrame,
     parlays_df: pd.DataFrame,
     simulation_results: dict,
 ) -> None:
-    st.subheader("Strategy Lab")
-
-    if analysis_df is None or analysis_df.empty:
-        st.info("Run analysis to populate Strategy Lab insights.")
-        return
-
     left, right = st.columns(2)
 
     with left:
@@ -55,3 +52,87 @@ def render_strategy_lab(
         st.dataframe(parlays_df.head(15), width="stretch")
     else:
         st.write("No positive EV parlays generated.")
+
+
+def _render_realized_strategy_lab(analysis_df: pd.DataFrame) -> None:
+    st.caption("Realized results are sourced from the same graded performance pipeline used by Prior Day Performance recap.")
+
+    graded_df = run_performance_pipeline()
+    if graded_df is None or graded_df.empty:
+        st.info("No graded recap source found from the performance pipeline.")
+        return
+
+    realized_df, summary, diagnostics = build_realized_strategy_lab(
+        graded_df=graded_df,
+        strategy_source_df=analysis_df,
+    )
+
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Total Staked", f"{summary['Total Staked']:.2f}")
+    col2.metric("Gross Returned", f"{summary['Gross Returned']:.2f}")
+    col3.metric("Net P/L", f"{summary['Net P/L']:+.2f}")
+    col4.metric("ROI", f"{summary['ROI']:.2%}")
+
+    col5, col6, col7, col8, col9 = st.columns(5)
+    col5.metric("Wins", int(summary["Win Count"]))
+    col6.metric("Losses", int(summary["Loss Count"]))
+    col7.metric("Pushes", int(summary["Push Count"]))
+    col8.metric("Hit Rate", f"{summary['Hit Rate']:.2%}")
+    col9.metric("Mismatches", int(summary["Mismatch Count"]))
+
+    st.markdown("**Realized bankroll rows**")
+    cols = [
+        "league",
+        "home_team",
+        "away_team",
+        "Strategy Pick",
+        "Recap Pick",
+        "Result",
+        "Stake",
+        "American Odds",
+        "Decimal Odds",
+        "Gross Return",
+        "Net Profit",
+        "Running Bankroll",
+        "Excluded Reason",
+    ]
+    show_cols = [c for c in cols if c in realized_df.columns]
+    st.dataframe(realized_df[show_cols], width="stretch")
+
+    with st.expander("Validation diagnostics"):
+        st.write({
+            "mismatch_count": len(diagnostics["pick_mismatches"]),
+            "pick_mismatch_rows": len(diagnostics["pick_mismatches"]),
+            "missing_scores_rows": len(diagnostics["missing_scores"]),
+            "missing_odds_rows": len(diagnostics["missing_odds"]),
+            "excluded_rows": len(diagnostics["excluded_rows"]),
+        })
+
+        if not diagnostics["pick_mismatches"].empty:
+            st.markdown("**Pick mismatches (excluded)**")
+            st.dataframe(diagnostics["pick_mismatches"], width="stretch")
+        if not diagnostics["missing_scores"].empty:
+            st.markdown("**Rows missing actual scores (excluded)**")
+            st.dataframe(diagnostics["missing_scores"], width="stretch")
+        if not diagnostics["missing_odds"].empty:
+            st.markdown("**Rows missing odds needed for payout (excluded)**")
+            st.dataframe(diagnostics["missing_odds"], width="stretch")
+
+
+def render_strategy_lab(
+    analysis_df: pd.DataFrame,
+    portfolio_df: pd.DataFrame,
+    parlays_df: pd.DataFrame,
+    simulation_results: dict,
+) -> None:
+    st.subheader("Strategy Lab")
+
+    if analysis_df is None or analysis_df.empty:
+        st.info("Run analysis to populate Strategy Lab insights.")
+        return
+
+    theoretical_tab, realized_tab = st.tabs(["Theoretical", "Realized"])
+    with theoretical_tab:
+        _render_theoretical_strategy_lab(analysis_df, portfolio_df, parlays_df, simulation_results)
+    with realized_tab:
+        _render_realized_strategy_lab(analysis_df)
