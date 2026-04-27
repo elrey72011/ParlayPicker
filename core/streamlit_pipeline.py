@@ -26,7 +26,6 @@ from core.team_mapper import normalize_team_name, NBA_EXACT_MAP, NHL_EXACT_MAP
 from app_core.weights_config import (
             TOTAL_UNDER_MIN_WIN_PROB, TOTAL_UNDER_MIN_EV, TOTAL_UNDER_MIN_EDGE,
             NHL_TOTAL_EXTRA_EDGE_PENALTY, MLB_SPREAD_MIN_WIN_PROB,
-            MLB_SPREAD_ACTIONABLE_BONUS, MLB_SPREAD_EXTRA_ACTIONABLE_PENALTY,
             MLB_SPREAD_ACTIONABLE_PENALTY, MLB_SPREAD_FINALIST_SCORE_PENALTY,
             NBA_SIDE_ACTIONABLE_BONUS, NBA_OVER_ACTIONABLE_BONUS,
             MLB_OVER_ACTIONABLE_MIN_PROB, MLB_OVER_ACTIONABLE_MIN_EV, MLB_OVER_ACTIONABLE_MIN_EDGE,
@@ -1942,7 +1941,6 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         from app_core.weights_config import (
             TOTAL_UNDER_MIN_WIN_PROB, TOTAL_UNDER_MIN_EV, TOTAL_UNDER_MIN_EDGE,
             NHL_TOTAL_EXTRA_EDGE_PENALTY, MLB_SPREAD_MIN_WIN_PROB,
-            MLB_SPREAD_ACTIONABLE_BONUS, MLB_SPREAD_EXTRA_ACTIONABLE_PENALTY,
             MLB_SPREAD_ACTIONABLE_PENALTY,
             NBA_SIDE_ACTIONABLE_BONUS, NBA_OVER_ACTIONABLE_BONUS,
             MLB_OVER_ACTIONABLE_MIN_PROB, MLB_OVER_ACTIONABLE_MIN_EV, MLB_OVER_ACTIONABLE_MIN_EDGE,
@@ -2025,6 +2023,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             nba_side_bonus_applied = False
             nba_over_bonus_applied = False
             mlb_over_gate_applied = False
+            pre_mlb_over_gate_req_prob = req_prob
+            pre_mlb_over_gate_req_ev = req_ev
+            pre_mlb_over_gate_req_edge = req_edge
 
             is_fallback_heavy = diagnostics_out.get("is_fallback_heavy", False) if diagnostics_out else False
 
@@ -2032,10 +2033,6 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             if is_side_market:
                 if league == "MLB" and "spread" in market_type.lower():
                     req_prob = MLB_SPREAD_MIN_WIN_PROB
-                    req_ev -= MLB_SPREAD_ACTIONABLE_BONUS
-                    req_edge -= MLB_SPREAD_ACTIONABLE_BONUS
-                    req_ev += MLB_SPREAD_EXTRA_ACTIONABLE_PENALTY
-                    req_edge += MLB_SPREAD_EXTRA_ACTIONABLE_PENALTY
                     req_ev += MLB_SPREAD_ACTIONABLE_PENALTY
                     req_edge += MLB_SPREAD_ACTIONABLE_PENALTY
                     mlb_spread_penalty_applied = True
@@ -2107,10 +2104,17 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             req_edge += empirical_penalty
 
             if league == "MLB" and market_type == "total_over":
+                pre_mlb_over_gate_req_prob = req_prob
+                pre_mlb_over_gate_req_ev = req_ev
+                pre_mlb_over_gate_req_edge = req_edge
                 req_prob = max(req_prob, MLB_OVER_ACTIONABLE_MIN_PROB)
                 req_ev = max(req_ev, MLB_OVER_ACTIONABLE_MIN_EV)
                 req_edge = max(req_edge, MLB_OVER_ACTIONABLE_MIN_EDGE)
-                mlb_over_gate_applied = True
+                mlb_over_gate_applied = (
+                    req_prob > pre_mlb_over_gate_req_prob
+                    or req_ev > pre_mlb_over_gate_req_ev
+                    or req_edge > pre_mlb_over_gate_req_edge
+                )
 
             base_pass = (win_prob >= base_req_prob) and (effective_ev >= base_req_ev) and (edge >= base_req_edge)
             final_pass = (win_prob >= req_prob) and (effective_ev >= req_ev) and (edge >= req_edge)
@@ -2138,10 +2142,13 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 )
             if mlb_over_gate_applied:
                 without_mlb_over_gate_pass = (
-                    (win_prob >= TOTAL_MIN_WIN_PROB)
-                    and (effective_ev >= req_ev)
-                    and (edge >= req_edge)
+                    (win_prob >= pre_mlb_over_gate_req_prob)
+                    and (effective_ev >= pre_mlb_over_gate_req_ev)
+                    and (edge >= pre_mlb_over_gate_req_edge)
                 )
+
+            blocked_by_mlb_spread_on_metrics = mlb_spread_penalty_applied and without_mlb_spread_penalty_pass and not final_pass
+            blocked_by_mlb_over_gate_on_thresholds = mlb_over_gate_applied and without_mlb_over_gate_pass and not final_pass
 
             if base_pass and not final_pass:
                 if market_type == "total_under":
@@ -2150,9 +2157,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                     blocked_by_nba_total_penalty += 1
                 if no_kalshi_penalty_applied and is_total_market:
                     blocked_by_no_kalshi_total_penalty += 1
-            if mlb_spread_penalty_applied and without_mlb_spread_penalty_pass and not final_pass:
+            if blocked_by_mlb_spread_on_metrics:
                 blocked_by_mlb_spread_penalty += 1
-            if mlb_over_gate_applied and without_mlb_over_gate_pass and not final_pass:
+            if blocked_by_mlb_over_gate_on_thresholds:
                 blocked_by_mlb_over_promotion_gate += 1
             if nba_side_bonus_applied and final_pass and not without_nba_side_bonus_pass:
                 promoted_by_nba_side_bonus += 1
@@ -2164,11 +2171,18 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 status_reason = f"Fails side minimum Win Probability ({req_prob*100:.1f}%)"
             elif is_total_market and win_prob < req_prob:
                 status = "Below Threshold"
-                status_reason = f"Fails minimum Win Probability for {'NHL ' if league == 'NHL' else 'NBA ' if league == 'NBA' else ''}Totals ({req_prob*100:.1f}%)"
+                if blocked_by_mlb_over_gate_on_thresholds:
+                    status_reason = f"Fails MLB over actionable gate (Prob >= {req_prob*100:.1f}%, Edge >= {req_edge*100:.1f}%, Effective EV >= {req_ev*100:.1f}%)"
+                else:
+                    status_reason = f"Fails minimum Win Probability for {'NHL ' if league == 'NHL' else 'NBA ' if league == 'NBA' else ''}Totals ({req_prob*100:.1f}%)"
             else:
                 if effective_ev < req_ev or edge < req_edge:
                     status = "Below Threshold"
-                    if is_total_market and is_fallback_heavy and ((effective_ev < req_ev and effective_ev >= req_ev - FALLBACK_HEAVY_TOTAL_EXTRA_PENALTY) or (edge < req_edge and edge >= req_edge - FALLBACK_HEAVY_TOTAL_EXTRA_PENALTY)):
+                    if blocked_by_mlb_spread_on_metrics:
+                        status_reason = f"Fails MLB spread actionable penalty (Edge >= {req_edge*100:.1f}%, Effective EV >= {req_ev*100:.1f}%)"
+                    elif blocked_by_mlb_over_gate_on_thresholds:
+                        status_reason = f"Fails MLB over actionable gate (Prob >= {req_prob*100:.1f}%, Edge >= {req_edge*100:.1f}%, Effective EV >= {req_ev*100:.1f}%)"
+                    elif is_total_market and is_fallback_heavy and ((effective_ev < req_ev and effective_ev >= req_ev - FALLBACK_HEAVY_TOTAL_EXTRA_PENALTY) or (edge < req_edge and edge >= req_edge - FALLBACK_HEAVY_TOTAL_EXTRA_PENALTY)):
                          status_reason = f"Fails due to fallback-heavy totals penalty (Edge >= {req_edge*100:.1f}%, Effective EV >= {req_ev*100:.1f}%)"
                     elif is_total_market and market_type == "total_under":
                         status_reason = f"Fails stricter total_under cold-market penalty (Edge >= {req_edge*100:.1f}%, Effective EV >= {req_ev*100:.1f}%)"

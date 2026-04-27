@@ -186,6 +186,7 @@ def test_mlb_over_explicit_actionable_gate_blocks_weak_over():
     diagnostics = {}
     out = build_best_picks_df(df, diagnostics_out=diagnostics).sort_values("home_team")
     assert out.iloc[0]["Pick_Status"] == "Below Threshold"
+    assert "MLB over actionable gate" in out.iloc[0]["Status_Reason"]
     assert out.iloc[1]["Pick_Status"] == "Actionable"
     assert diagnostics["blocked_by_mlb_over_promotion_gate"] >= 1
 
