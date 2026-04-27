@@ -26,7 +26,7 @@ from core.team_mapper import normalize_team_name, NBA_EXACT_MAP, NHL_EXACT_MAP
 from app_core.weights_config import (
             TOTAL_UNDER_MIN_WIN_PROB, TOTAL_UNDER_MIN_EV, TOTAL_UNDER_MIN_EDGE,
             NHL_TOTAL_EXTRA_EDGE_PENALTY, MLB_SPREAD_MIN_WIN_PROB,
-            MLB_SPREAD_ACTIONABLE_BONUS,
+            MLB_SPREAD_ACTIONABLE_BONUS, MLB_SPREAD_EXTRA_ACTIONABLE_PENALTY,
             MLB_TOTAL_OVER_ACTIONABLE_PENALTY, MLB_TOTAL_UNDER_ACTIONABLE_PENALTY,
             NBA_TOTAL_OVER_ACTIONABLE_PENALTY, NBA_TOTAL_UNDER_ACTIONABLE_PENALTY,
             NHL_TOTAL_OVER_ACTIONABLE_PENALTY, NHL_TOTAL_UNDER_ACTIONABLE_PENALTY,
@@ -1914,7 +1914,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         from app_core.weights_config import (
             TOTAL_UNDER_MIN_WIN_PROB, TOTAL_UNDER_MIN_EV, TOTAL_UNDER_MIN_EDGE,
             NHL_TOTAL_EXTRA_EDGE_PENALTY, MLB_SPREAD_MIN_WIN_PROB,
-            MLB_SPREAD_ACTIONABLE_BONUS,
+            MLB_SPREAD_ACTIONABLE_BONUS, MLB_SPREAD_EXTRA_ACTIONABLE_PENALTY,
             MLB_TOTAL_OVER_ACTIONABLE_PENALTY, MLB_TOTAL_UNDER_ACTIONABLE_PENALTY,
             NBA_TOTAL_OVER_ACTIONABLE_PENALTY, NBA_TOTAL_UNDER_ACTIONABLE_PENALTY,
             NHL_TOTAL_OVER_ACTIONABLE_PENALTY, NHL_TOTAL_UNDER_ACTIONABLE_PENALTY,
@@ -1999,6 +1999,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                     req_prob = MLB_SPREAD_MIN_WIN_PROB
                     req_ev -= MLB_SPREAD_ACTIONABLE_BONUS
                     req_edge -= MLB_SPREAD_ACTIONABLE_BONUS
+                    req_ev += MLB_SPREAD_EXTRA_ACTIONABLE_PENALTY
+                    req_edge += MLB_SPREAD_EXTRA_ACTIONABLE_PENALTY
             elif is_total_market:
                 from app_core.weights_config import NBA_TOTAL_MIN_WIN_PROB, NHL_TOTAL_MIN_WIN_PROB_STRICT
                 if league == "NHL":

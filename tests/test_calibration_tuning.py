@@ -53,10 +53,10 @@ def test_side_floor_and_consensus_overlays():
         # 4. Neutral row that used to pass overlays, but should now fail under stricter NBA total penalties
         create_row("G", "H", "total_over", 0.58, 0.035, 0.045, "Neutral"),
 
-        # 5. Disagrees row failing the overlay (prob 0.59 < 0.60)
+        # 5. Disagrees row now clears softened NBA total penalties in STANDARD profile
         create_row("I", "J", "total_over", 0.59, 0.045, 0.055, "Disagrees"),
 
-        # 6. Disagrees row with decent stats, but still below stricter NBA total thresholds
+        # 6. Disagrees row with decent stats should stay Actionable under the softer NBA pass
         create_row("K", "L", "total_over", 0.61, 0.045, 0.055, "Disagrees"),
 
         # 7. Agrees row remaining Actionable (passes baseline totals)
@@ -77,11 +77,11 @@ def test_side_floor_and_consensus_overlays():
     # 4. Neutral NBA total now fails stricter total penalties -> Below Threshold
     assert best.loc[best["home_team"] == "G", "Pick_Status"].iloc[0] == "Below Threshold"
 
-    # 5. Disagrees no longer has special STANDARD-mode promotion path -> Below Threshold
-    assert best.loc[best["home_team"] == "I", "Pick_Status"].iloc[0] == "Below Threshold"
+    # 5. Disagrees row remains Actionable in STANDARD when core thresholds are met
+    assert best.loc[best["home_team"] == "I", "Pick_Status"].iloc[0] == "Actionable"
 
-    # 6. Disagrees is also below stricter NBA total thresholds -> Below Threshold
-    assert best.loc[best["home_team"] == "K", "Pick_Status"].iloc[0] == "Below Threshold"
+    # 6. Higher-prob Disagrees row is also Actionable
+    assert best.loc[best["home_team"] == "K", "Pick_Status"].iloc[0] == "Actionable"
 
     # 7. Agrees does not bypass under-specific thresholds -> Below Threshold
     assert best.loc[best["home_team"] == "M", "Pick_Status"].iloc[0] == "Below Threshold"
