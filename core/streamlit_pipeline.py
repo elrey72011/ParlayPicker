@@ -1885,6 +1885,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     blocked_by_mlb_over_promotion_gate = 0
     promoted_by_nba_side_bonus = 0
     promoted_by_nba_over_bonus = 0
+    divergence_rows_preserved = 0
+    divergence_rows_blocked_by_viability_floor = 0
+    divergence_rows_negative_ev = 0
+    divergence_rows_negative_edge = 0
 
     if "suspicious_data_flag" not in best.columns:
         best["suspicious_data_flag"] = False
@@ -1969,6 +1973,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             SPREAD_DIVERGENCE_OVERRIDE_MIN_PROB,
             SPREAD_DIVERGENCE_OVERRIDE_MIN_EV,
             SPREAD_DIVERGENCE_OVERRIDE_MIN_EDGE,
+            DIVERGENCE_HIGH_VARIANCE_MIN_EV, DIVERGENCE_HIGH_VARIANCE_MIN_EDGE, DIVERGENCE_HIGH_VARIANCE_MIN_PROB,
             SIDE_MIN_WIN_PROB,
             NEUTRAL_ACTIONABLE_MIN_PROB, NEUTRAL_ACTIONABLE_MIN_EV, NEUTRAL_ACTIONABLE_MIN_EDGE,
             DISAGREES_ACTIONABLE_MIN_PROB, DISAGREES_ACTIONABLE_MIN_EV, DISAGREES_ACTIONABLE_MIN_EDGE
@@ -2021,6 +2026,13 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
 
         suspicious_data_flag = bool(suspicious_reasons)
         suspicious_reasons_str = "; ".join(dict.fromkeys(suspicious_reasons))
+        divergence_viability_pass = (
+            pd.notna(ev)
+            and pd.notna(edge)
+            and float(ev) >= DIVERGENCE_HIGH_VARIANCE_MIN_EV
+            and float(edge) >= DIVERGENCE_HIGH_VARIANCE_MIN_EDGE
+            and float(win_prob) >= DIVERGENCE_HIGH_VARIANCE_MIN_PROB
+        )
 
         if is_missing_line:
             status = "Missing Line"
@@ -2031,9 +2043,20 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             status_reason = "NBA spread > 12.0 (Resting/Tanking guardrail)"
             blocker_stage = "line_integrity_guardrail"
         elif is_kalshi_divergence:
-            status = "High Variance/Speculative"
-            status_reason = "ML and Kalshi probability diverge by > 20%"
-            blocker_stage = "variance_guardrail"
+            if divergence_viability_pass:
+                status = "High Variance/Speculative"
+                status_reason = "ML and Kalshi probability diverge by > 20%"
+                blocker_stage = "divergence_guardrail"
+                divergence_rows_preserved += 1
+            else:
+                status = "No Play"
+                status_reason = "No Play: divergence override denied due to negative EV/edge"
+                blocker_stage = "divergence_viability_floor"
+                divergence_rows_blocked_by_viability_floor += 1
+                if pd.isna(ev) or float(ev) < DIVERGENCE_HIGH_VARIANCE_MIN_EV:
+                    divergence_rows_negative_ev += 1
+                if pd.isna(edge) or float(edge) < DIVERGENCE_HIGH_VARIANCE_MIN_EDGE:
+                    divergence_rows_negative_edge += 1
         elif high_ev_guardrail and suspicious_data_flag:
             status = "No Play"
             status_reason = f"Blocked: suspicious_data_flag=true; {suspicious_reasons_str}"
@@ -2536,6 +2559,26 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         diagnostics_out["demoted_by_mlb_spread_finalist_score_penalty"] = demoted_by_mlb_spread_finalist_penalty
         diagnostics_out["blocked_by_suspicious_data"] = int(final_best_df.get("status_blocker_stage", pd.Series([], dtype=str)).astype(str).eq("suspicious_data_guardrail").sum())
         diagnostics_out["suspicious_data_flag_rows"] = int(final_best_df.get("suspicious_data_flag", pd.Series([], dtype=bool)).fillna(False).astype(bool).sum())
+        diagnostics_out["divergence_rows_preserved"] = int(divergence_rows_preserved)
+        diagnostics_out["divergence_rows_blocked_by_viability_floor"] = int(divergence_rows_blocked_by_viability_floor)
+        diagnostics_out["divergence_rows_negative_ev"] = int(divergence_rows_negative_ev)
+        diagnostics_out["divergence_rows_negative_edge"] = int(divergence_rows_negative_edge)
+        divergence_stage_mask = final_best_df.get("status_blocker_stage", pd.Series([], dtype=str)).astype(str).isin({"divergence_guardrail", "divergence_viability_floor"})
+        diagnostics_out["divergence_rows_by_pick_status"] = (
+            final_best_df.loc[divergence_stage_mask, "Pick_Status"].value_counts().to_dict()
+            if "Pick_Status" in final_best_df.columns
+            else {}
+        )
+        hidden_bad_rows = final_best_df[
+            (final_best_df["Pick_Status"] == "High Variance/Speculative")
+            & (
+                (pd.to_numeric(final_best_df["expected_value"], errors="coerce") <= 0)
+                | (pd.to_numeric(final_best_df["edge"], errors="coerce") <= 0)
+            )
+        ]
+        diagnostics_out["high_variance_non_positive_ev_edge_rows"] = hidden_bad_rows[
+            ["league", "home_team", "away_team", "market_type", "Pick_Status", "Status_Reason", "expected_value", "edge"]
+        ].to_dict("records")
         diagnostics_out["final_actionable_count"] = len(actionable_df)
 
         current_card_df = final_best_df

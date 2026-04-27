@@ -241,3 +241,64 @@ def test_suspicious_data_rows_still_blocked_with_explicit_reason_and_diagnostics
     assert "Blocked: suspicious_data_flag=true" in row["Status_Reason"]
     assert row["status_blocker_stage"] == "suspicious_data_guardrail"
     assert diagnostics["blocked_by_suspicious_data"] >= 1
+
+
+def test_divergence_cannot_preserve_negative_ev_row():
+    df = pd.DataFrame(
+        [
+            _row(idx=1, league="NBA", market_type="total_over", win_prob=0.56, ev=-0.01, edge=0.02, kalshi_probability=0.80),
+        ]
+    )
+    df.loc[0, "ml_probability"] = 0.50
+    out = build_best_picks_df(df)
+    row = out.iloc[0]
+    assert row["Pick_Status"] == "No Play"
+    assert "divergence override denied" in row["Status_Reason"]
+    assert row["status_blocker_stage"] == "divergence_viability_floor"
+
+
+def test_divergence_cannot_preserve_negative_edge_row():
+    df = pd.DataFrame(
+        [
+            _row(idx=1, league="NBA", market_type="total_over", win_prob=0.56, ev=0.03, edge=-0.01, kalshi_probability=0.80),
+        ]
+    )
+    df.loc[0, "ml_probability"] = 0.50
+    out = build_best_picks_df(df)
+    row = out.iloc[0]
+    assert row["Pick_Status"] == "No Play"
+    assert "divergence override denied" in row["Status_Reason"]
+    assert row["status_blocker_stage"] == "divergence_viability_floor"
+
+
+def test_divergence_can_preserve_minimally_viable_row():
+    df = pd.DataFrame(
+        [
+            _row(idx=1, league="NBA", market_type="total_over", win_prob=0.56, ev=0.01, edge=0.01, kalshi_probability=0.80),
+        ]
+    )
+    df.loc[0, "ml_probability"] = 0.50
+    out = build_best_picks_df(df)
+    row = out.iloc[0]
+    assert row["Pick_Status"] == "High Variance/Speculative"
+    assert "diverge by > 20%" in row["Status_Reason"]
+    assert row["status_blocker_stage"] == "divergence_guardrail"
+
+
+def test_divergence_viability_diagnostics_populate():
+    df = pd.DataFrame(
+        [
+            _row(idx=1, league="NBA", market_type="total_over", win_prob=0.56, ev=-0.01, edge=0.02, kalshi_probability=0.80),
+            _row(idx=2, league="NBA", market_type="total_over", win_prob=0.56, ev=0.03, edge=-0.01, kalshi_probability=0.80),
+            _row(idx=3, league="NBA", market_type="total_over", win_prob=0.56, ev=0.01, edge=0.01, kalshi_probability=0.80),
+        ]
+    )
+    df.loc[:, "ml_probability"] = 0.50
+    diagnostics = {}
+    out = build_best_picks_df(df, diagnostics_out=diagnostics)
+    assert not out.empty
+    assert diagnostics["divergence_rows_preserved"] >= 1
+    assert diagnostics["divergence_rows_blocked_by_viability_floor"] >= 2
+    assert diagnostics["divergence_rows_negative_ev"] >= 1
+    assert diagnostics["divergence_rows_negative_edge"] >= 1
+    assert "No Play" in diagnostics["divergence_rows_by_pick_status"]

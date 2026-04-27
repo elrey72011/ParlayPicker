@@ -1108,6 +1108,10 @@ def main() -> None:
                 cal_col2.write(f"- Promoted by NBA over bonus: {diagnostics.get('promoted_by_nba_over_bonus', 0)}")
                 cal_col2.write(f"- Blocked by suspicious-data guardrail: {diagnostics.get('blocked_by_suspicious_data', 0)}")
                 cal_col2.write(f"- Rows flagged suspicious_data_flag: {diagnostics.get('suspicious_data_flag_rows', 0)}")
+                cal_col2.write(f"- Divergence rows preserved: {diagnostics.get('divergence_rows_preserved', 0)}")
+                cal_col2.write(f"- Divergence rows blocked by viability floor: {diagnostics.get('divergence_rows_blocked_by_viability_floor', 0)}")
+                cal_col2.write(f"- Divergence rows with negative EV: {diagnostics.get('divergence_rows_negative_ev', 0)}")
+                cal_col2.write(f"- Divergence rows with negative edge: {diagnostics.get('divergence_rows_negative_edge', 0)}")
 
                 st.markdown("#### League + Market Calibration Diagnostics")
                 cal_lm_col1, cal_lm_col2 = st.columns(2)
@@ -1141,6 +1145,13 @@ def main() -> None:
                 tun_col2.write(f"- Failed Neutral Overlay: {diagnostics.get('downgraded_by_neutral', 0)}")
                 tun_col2.write(f"- Failed Disagree Overlay: {diagnostics.get('downgraded_by_disagrees', 0)}")
                 tun_col2.write(f"- Failed Side Floor: {diagnostics.get('side_floor_failures', 0)}")
+
+                st.markdown("#### Hidden Bad-Row Check (High Variance with EV<=0 or edge<=0)")
+                hidden_bad_rows = diagnostics.get("high_variance_non_positive_ev_edge_rows", [])
+                if hidden_bad_rows:
+                    st.dataframe(pd.DataFrame(hidden_bad_rows), width="stretch")
+                else:
+                    st.write("- None")
 
 
                 st.write("**Pick Status Counts:**")
