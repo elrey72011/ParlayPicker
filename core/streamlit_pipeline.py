@@ -26,7 +26,9 @@ from core.team_mapper import normalize_team_name, NBA_EXACT_MAP, NHL_EXACT_MAP
 from app_core.weights_config import (
             TOTAL_UNDER_MIN_WIN_PROB, TOTAL_UNDER_MIN_EV, TOTAL_UNDER_MIN_EDGE,
             NHL_TOTAL_EXTRA_EDGE_PENALTY, MLB_SPREAD_MIN_WIN_PROB,
-            MLB_SPREAD_ACTIONABLE_BONUS,
+            MLB_SPREAD_ACTIONABLE_PENALTY, MLB_SPREAD_FINALIST_SCORE_PENALTY,
+            NBA_SIDE_ACTIONABLE_BONUS, NBA_OVER_ACTIONABLE_BONUS,
+            MLB_OVER_ACTIONABLE_MIN_PROB, MLB_OVER_ACTIONABLE_MIN_EV, MLB_OVER_ACTIONABLE_MIN_EDGE,
             MLB_TOTAL_OVER_ACTIONABLE_PENALTY, MLB_TOTAL_UNDER_ACTIONABLE_PENALTY,
             NBA_TOTAL_OVER_ACTIONABLE_PENALTY, NBA_TOTAL_UNDER_ACTIONABLE_PENALTY,
             NHL_TOTAL_OVER_ACTIONABLE_PENALTY, NHL_TOTAL_UNDER_ACTIONABLE_PENALTY,
@@ -104,6 +106,7 @@ BEST_PICK_COLUMNS = [
     "kalshi_probability", "kalshi_match_status", "kalshi_match_reason",
     "gemini_explanation", "gemini_risk_notes", "used_stale_features", "Pick_Quality", "Conviction_Score",
     "uploaded_spread_line", "uploaded_total_line", "live_spread_line", "live_total_line", "line_source", "line_delta", "upload_market_match",
+    "suspicious_data_flag", "suspicious_data_reasons", "status_blocker_reason", "status_blocker_stage",
 ]
 
 CANONICAL_BET_COLUMNS = [
@@ -1732,12 +1735,20 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
 
     # Small under-family adjustment so totals-under do not dominate cross-family finalists
     # on generic EV/edge momentum alone.
-    pool["_family_selection_penalty"] = np.where(
+    pool["_under_selection_penalty"] = np.where(
         pool["market_type"].astype(str).str.lower().eq("total_under"),
         float(TOTAL_UNDER_FINALIST_SCORE_PENALTY),
         0.0,
     )
+    pool["_mlb_spread_finalist_penalty"] = np.where(
+        (pool["league"].astype(str).str.upper().eq("MLB"))
+        & (pool["market_type"].astype(str).str.lower().str.contains("spread", na=False)),
+        float(MLB_SPREAD_FINALIST_SCORE_PENALTY),
+        0.0,
+    )
+    pool["_family_selection_penalty"] = pool["_under_selection_penalty"] + pool["_mlb_spread_finalist_penalty"]
     pool["final_family_score"] = pool["final_family_score"] - pool["_family_selection_penalty"]
+    pool["final_family_score_no_mlb_spread_penalty"] = pool["final_family_score"] + pool["_mlb_spread_finalist_penalty"]
 
     # 4. Sort to prepare for finalist selection within each family per game
     pool = pool.sort_values(
@@ -1756,6 +1767,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     # 6. Second Stage: Compare the two finalists and choose exactly one final winner per game
     preview_rows = []
     final_winner_indices = []
+    demoted_by_mlb_spread_finalist_penalty = 0
 
     # Iterate over each unique game to do the direct comparison
     for matchup, group in finalists.groupby("matchup_id"):
@@ -1782,9 +1794,21 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             ascending=[False, True, False, False, False],
             na_position="last"
         )
+        group_sorted_no_mlb_spread_penalty = group.sort_values(
+            by=["final_family_score_no_mlb_spread_penalty", "tier_score", "_ev_numeric", "_edge_numeric", "calibrated_probability"],
+            ascending=[False, True, False, False, False],
+            na_position="last"
+        )
 
         winner_row = group_sorted.iloc[0]
+        winner_row_no_mlb_penalty = group_sorted_no_mlb_spread_penalty.iloc[0]
         final_winner_indices.append(winner_row.name)
+        if (
+            winner_row_no_mlb_penalty.name != winner_row.name
+            and str(winner_row_no_mlb_penalty.get("league", "")).upper() == "MLB"
+            and "spread" in str(winner_row_no_mlb_penalty.get("market_type", "")).lower()
+        ):
+            demoted_by_mlb_spread_finalist_penalty += 1
 
         winner_family = winner_row["_market_family"]
         winner_pick = winner_row["best_pick"]
@@ -1822,7 +1846,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     final_market_type_counts = best["market_type"].value_counts().to_dict()
 
     # Cleanup temporary columns
-    best = best.drop(columns=["_market_family", "_normalized_ev", "_normalized_edge", "final_family_score", "_ev_numeric", "_edge_numeric", "_family_selection_penalty"])
+    best = best.drop(columns=["_market_family", "_normalized_ev", "_normalized_edge", "final_family_score", "final_family_score_no_mlb_spread_penalty", "_ev_numeric", "_edge_numeric", "_family_selection_penalty", "_under_selection_penalty", "_mlb_spread_finalist_penalty"])
 
     logger.info(f"BEST PICKS AUDIT: Rows after two-stage finalist comparison: {len(best)} (started with {len(pool)})")
 
@@ -1857,9 +1881,27 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     blocked_by_under_specific_thresholds = 0
     blocked_by_nba_total_penalty = 0
     blocked_by_no_kalshi_total_penalty = 0
+    blocked_by_mlb_spread_penalty = 0
+    blocked_by_mlb_over_promotion_gate = 0
+    promoted_by_nba_side_bonus = 0
+    promoted_by_nba_over_bonus = 0
+    divergence_rows_preserved = 0
+    divergence_rows_blocked_by_viability_floor = 0
+    divergence_rows_negative_ev = 0
+    divergence_rows_negative_edge = 0
+
+    if "suspicious_data_flag" not in best.columns:
+        best["suspicious_data_flag"] = False
+    if "suspicious_data_reasons" not in best.columns:
+        best["suspicious_data_reasons"] = ""
+    if "status_blocker_reason" not in best.columns:
+        best["status_blocker_reason"] = ""
+    if "status_blocker_stage" not in best.columns:
+        best["status_blocker_stage"] = "none"
 
     for idx in best.index:
         status_reason = "Unknown"
+        blocker_stage = "none"
         bp = str(best.at[idx, "best_pick"])
         ev = best.at[idx, "expected_value"]
         edge = best.at[idx, "edge"]
@@ -1914,7 +1956,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         from app_core.weights_config import (
             TOTAL_UNDER_MIN_WIN_PROB, TOTAL_UNDER_MIN_EV, TOTAL_UNDER_MIN_EDGE,
             NHL_TOTAL_EXTRA_EDGE_PENALTY, MLB_SPREAD_MIN_WIN_PROB,
-            MLB_SPREAD_ACTIONABLE_BONUS,
+            MLB_SPREAD_ACTIONABLE_PENALTY,
+            NBA_SIDE_ACTIONABLE_BONUS, NBA_OVER_ACTIONABLE_BONUS,
+            MLB_OVER_ACTIONABLE_MIN_PROB, MLB_OVER_ACTIONABLE_MIN_EV, MLB_OVER_ACTIONABLE_MIN_EDGE,
             MLB_TOTAL_OVER_ACTIONABLE_PENALTY, MLB_TOTAL_UNDER_ACTIONABLE_PENALTY,
             NBA_TOTAL_OVER_ACTIONABLE_PENALTY, NBA_TOTAL_UNDER_ACTIONABLE_PENALTY,
             NHL_TOTAL_OVER_ACTIONABLE_PENALTY, NHL_TOTAL_UNDER_ACTIONABLE_PENALTY,
@@ -1929,6 +1973,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             SPREAD_DIVERGENCE_OVERRIDE_MIN_PROB,
             SPREAD_DIVERGENCE_OVERRIDE_MIN_EV,
             SPREAD_DIVERGENCE_OVERRIDE_MIN_EDGE,
+            DIVERGENCE_HIGH_VARIANCE_MIN_EV, DIVERGENCE_HIGH_VARIANCE_MIN_EDGE, DIVERGENCE_HIGH_VARIANCE_MIN_PROB,
             SIDE_MIN_WIN_PROB,
             NEUTRAL_ACTIONABLE_MIN_PROB, NEUTRAL_ACTIONABLE_MIN_EV, NEUTRAL_ACTIONABLE_MIN_EDGE,
             DISAGREES_ACTIONABLE_MIN_PROB, DISAGREES_ACTIONABLE_MIN_EV, DISAGREES_ACTIONABLE_MIN_EDGE
@@ -1947,27 +1992,87 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         model_status_str = str(best.at[idx, "model_status"]) if "model_status" in best.columns else ""
         is_model_failure = "Fallback" in model_status_str or "Failure" in model_status_str
 
+        suspicious_reasons: list[str] = []
+        high_ev_guardrail = (not pd.isna(ev)) and float(ev) > 0.40
+        if high_ev_guardrail:
+            if is_missing_line:
+                suspicious_reasons.append("missing_market_line")
+            if is_fallback_or_stale:
+                suspicious_reasons.append("stale_or_fallback_odds_source")
+            market_status = str(best.at[idx, "market_status"]).strip().lower() if "market_status" in best.columns else ""
+            if market_status in {"suspended", "closed", "invalid", "halted"}:
+                suspicious_reasons.append(f"market_status={market_status}")
+            if "line_source" in best.columns and pd.notna(best.at[idx, "line_source"]):
+                line_source = str(best.at[idx, "line_source"]).strip().lower()
+                if line_source in {"unknown", "synthetic"}:
+                    suspicious_reasons.append("malformed_or_synthetic_line_source")
+            if "line_delta" in best.columns and pd.notna(best.at[idx, "line_delta"]):
+                try:
+                    if abs(float(best.at[idx, "line_delta"])) >= 8.0:
+                        suspicious_reasons.append("line_source_mismatch")
+                except Exception:
+                    pass
+            market_prob_val = best.at[idx, "market_probability"] if "market_probability" in best.columns else pd.NA
+            if pd.notna(market_prob_val) and pd.notna(win_prob):
+                try:
+                    if abs(float(market_prob_val) - float(win_prob)) >= 0.25:
+                        suspicious_reasons.append("inconsistent_price_probability")
+                except Exception:
+                    pass
+            if "upload_market_match" in best.columns:
+                upload_market_match = str(best.at[idx, "upload_market_match"]).strip().lower()
+                if upload_market_match in {"false", "0", "mismatch"}:
+                    suspicious_reasons.append("upload_line_market_mismatch")
+
+        suspicious_data_flag = bool(suspicious_reasons)
+        suspicious_reasons_str = "; ".join(dict.fromkeys(suspicious_reasons))
+        divergence_viability_pass = (
+            pd.notna(ev)
+            and pd.notna(edge)
+            and float(ev) >= DIVERGENCE_HIGH_VARIANCE_MIN_EV
+            and float(edge) >= DIVERGENCE_HIGH_VARIANCE_MIN_EDGE
+            and float(win_prob) >= DIVERGENCE_HIGH_VARIANCE_MIN_PROB
+        )
+
         if is_missing_line:
             status = "Missing Line"
             status_reason = "Missing odds or numerical line"
+            blocker_stage = "line_integrity_guardrail"
         elif is_nba_extreme_spread:
             status = "No Play"
             status_reason = "NBA spread > 12.0 (Resting/Tanking guardrail)"
+            blocker_stage = "line_integrity_guardrail"
         elif is_kalshi_divergence:
-            status = "High Variance/Speculative"
-            status_reason = "ML and Kalshi probability diverge by > 20%"
-        elif not pd.isna(ev) and ev > 0.40:
+            if divergence_viability_pass:
+                status = "High Variance/Speculative"
+                status_reason = "ML and Kalshi probability diverge by > 20%"
+                blocker_stage = "divergence_guardrail"
+                divergence_rows_preserved += 1
+            else:
+                status = "No Play"
+                status_reason = "No Play: divergence override denied due to negative EV/edge"
+                blocker_stage = "divergence_viability_floor"
+                divergence_rows_blocked_by_viability_floor += 1
+                if pd.isna(ev) or float(ev) < DIVERGENCE_HIGH_VARIANCE_MIN_EV:
+                    divergence_rows_negative_ev += 1
+                if pd.isna(edge) or float(edge) < DIVERGENCE_HIGH_VARIANCE_MIN_EDGE:
+                    divergence_rows_negative_edge += 1
+        elif high_ev_guardrail and suspicious_data_flag:
             status = "No Play"
-            status_reason = "EV > 40% (Suspended Line / Data Error guardrail)"
+            status_reason = f"Blocked: suspicious_data_flag=true; {suspicious_reasons_str}"
+            blocker_stage = "suspicious_data_guardrail"
         elif not pd.isna(ev) and ev > 0.25:
             status = "High Variance/Speculative"
             status_reason = "EV > 25% (High Variance)"
+            blocker_stage = "variance_guardrail"
         elif pd.isna(ev) or ev < 0 or win_prob < 0.40:
             status = "No Play"
             status_reason = "Negative EV or Base Win Prob < 40%"
+            blocker_stage = "baseline_guardrail"
         elif is_fallback_or_stale or is_model_failure:
             status = "No Play"
             status_reason = "Using stale data or fallback model"
+            blocker_stage = "data_fallback_guardrail"
         elif not pd.isna(ev) and not pd.isna(edge):
 
             consensus_agr = str(best.at[idx, "consensus_agreement"]) if "consensus_agreement" in best.columns else "No Kalshi"
@@ -1990,6 +2095,13 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             base_req_ev = req_ev
             base_req_edge = req_edge
             no_kalshi_penalty_applied = False
+            mlb_spread_penalty_applied = False
+            nba_side_bonus_applied = False
+            nba_over_bonus_applied = False
+            mlb_over_gate_applied = False
+            pre_mlb_over_gate_req_prob = req_prob
+            pre_mlb_over_gate_req_ev = req_ev
+            pre_mlb_over_gate_req_edge = req_edge
 
             is_fallback_heavy = diagnostics_out.get("is_fallback_heavy", False) if diagnostics_out else False
 
@@ -1997,8 +2109,13 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             if is_side_market:
                 if league == "MLB" and "spread" in market_type.lower():
                     req_prob = MLB_SPREAD_MIN_WIN_PROB
-                    req_ev -= MLB_SPREAD_ACTIONABLE_BONUS
-                    req_edge -= MLB_SPREAD_ACTIONABLE_BONUS
+                    req_ev += MLB_SPREAD_ACTIONABLE_PENALTY
+                    req_edge += MLB_SPREAD_ACTIONABLE_PENALTY
+                    mlb_spread_penalty_applied = True
+                elif league == "NBA":
+                    req_ev -= NBA_SIDE_ACTIONABLE_BONUS
+                    req_edge -= NBA_SIDE_ACTIONABLE_BONUS
+                    nba_side_bonus_applied = True
             elif is_total_market:
                 from app_core.weights_config import NBA_TOTAL_MIN_WIN_PROB, NHL_TOTAL_MIN_WIN_PROB_STRICT
                 if league == "NHL":
@@ -2025,6 +2142,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                     if market_type == "total_over":
                         req_ev += NBA_TOTAL_OVER_ACTIONABLE_PENALTY
                         req_edge += NBA_TOTAL_OVER_ACTIONABLE_PENALTY
+                        req_ev -= NBA_OVER_ACTIONABLE_BONUS
+                        req_edge -= NBA_OVER_ACTIONABLE_BONUS
+                        nba_over_bonus_applied = True
                     elif market_type == "total_under":
                         req_ev += NBA_TOTAL_UNDER_ACTIONABLE_PENALTY
                         req_edge += NBA_TOTAL_UNDER_ACTIONABLE_PENALTY
@@ -2059,8 +2179,53 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             req_ev += empirical_penalty
             req_edge += empirical_penalty
 
+            if league == "MLB" and market_type == "total_over":
+                pre_mlb_over_gate_req_prob = req_prob
+                pre_mlb_over_gate_req_ev = req_ev
+                pre_mlb_over_gate_req_edge = req_edge
+                req_prob = max(req_prob, MLB_OVER_ACTIONABLE_MIN_PROB)
+                req_ev = max(req_ev, MLB_OVER_ACTIONABLE_MIN_EV)
+                req_edge = max(req_edge, MLB_OVER_ACTIONABLE_MIN_EDGE)
+                mlb_over_gate_applied = (
+                    req_prob > pre_mlb_over_gate_req_prob
+                    or req_ev > pre_mlb_over_gate_req_ev
+                    or req_edge > pre_mlb_over_gate_req_edge
+                )
+
             base_pass = (win_prob >= base_req_prob) and (effective_ev >= base_req_ev) and (edge >= base_req_edge)
             final_pass = (win_prob >= req_prob) and (effective_ev >= req_ev) and (edge >= req_edge)
+            without_mlb_spread_penalty_pass = final_pass
+            without_nba_side_bonus_pass = final_pass
+            without_nba_over_bonus_pass = final_pass
+            without_mlb_over_gate_pass = final_pass
+            if mlb_spread_penalty_applied:
+                without_mlb_spread_penalty_pass = (
+                    (win_prob >= req_prob)
+                    and (effective_ev >= (req_ev - MLB_SPREAD_ACTIONABLE_PENALTY))
+                    and (edge >= (req_edge - MLB_SPREAD_ACTIONABLE_PENALTY))
+                )
+            if nba_side_bonus_applied:
+                without_nba_side_bonus_pass = (
+                    (win_prob >= req_prob)
+                    and (effective_ev >= (req_ev + NBA_SIDE_ACTIONABLE_BONUS))
+                    and (edge >= (req_edge + NBA_SIDE_ACTIONABLE_BONUS))
+                )
+            if nba_over_bonus_applied:
+                without_nba_over_bonus_pass = (
+                    (win_prob >= req_prob)
+                    and (effective_ev >= (req_ev + NBA_OVER_ACTIONABLE_BONUS))
+                    and (edge >= (req_edge + NBA_OVER_ACTIONABLE_BONUS))
+                )
+            if mlb_over_gate_applied:
+                without_mlb_over_gate_pass = (
+                    (win_prob >= pre_mlb_over_gate_req_prob)
+                    and (effective_ev >= pre_mlb_over_gate_req_ev)
+                    and (edge >= pre_mlb_over_gate_req_edge)
+                )
+
+            blocked_by_mlb_spread_on_metrics = mlb_spread_penalty_applied and without_mlb_spread_penalty_pass and not final_pass
+            blocked_by_mlb_over_gate_on_thresholds = mlb_over_gate_applied and without_mlb_over_gate_pass and not final_pass
+
             if base_pass and not final_pass:
                 if market_type == "total_under":
                     blocked_by_under_specific_thresholds += 1
@@ -2068,17 +2233,34 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                     blocked_by_nba_total_penalty += 1
                 if no_kalshi_penalty_applied and is_total_market:
                     blocked_by_no_kalshi_total_penalty += 1
+            if blocked_by_mlb_spread_on_metrics:
+                blocked_by_mlb_spread_penalty += 1
+            if blocked_by_mlb_over_gate_on_thresholds:
+                blocked_by_mlb_over_promotion_gate += 1
+            if nba_side_bonus_applied and final_pass and not without_nba_side_bonus_pass:
+                promoted_by_nba_side_bonus += 1
+            if nba_over_bonus_applied and final_pass and not without_nba_over_bonus_pass:
+                promoted_by_nba_over_bonus += 1
 
             if is_side_market and win_prob < req_prob:
                 status = "Below Threshold"
                 status_reason = f"Fails side minimum Win Probability ({req_prob*100:.1f}%)"
+                blocker_stage = "actionable_threshold"
             elif is_total_market and win_prob < req_prob:
                 status = "Below Threshold"
-                status_reason = f"Fails minimum Win Probability for {'NHL ' if league == 'NHL' else 'NBA ' if league == 'NBA' else ''}Totals ({req_prob*100:.1f}%)"
+                if blocked_by_mlb_over_gate_on_thresholds:
+                    status_reason = f"Fails MLB over actionable gate (Prob >= {req_prob*100:.1f}%, Edge >= {req_edge*100:.1f}%, Effective EV >= {req_ev*100:.1f}%)"
+                else:
+                    status_reason = f"Fails minimum Win Probability for {'NHL ' if league == 'NHL' else 'NBA ' if league == 'NBA' else ''}Totals ({req_prob*100:.1f}%)"
+                blocker_stage = "actionable_threshold"
             else:
                 if effective_ev < req_ev or edge < req_edge:
                     status = "Below Threshold"
-                    if is_total_market and is_fallback_heavy and ((effective_ev < req_ev and effective_ev >= req_ev - FALLBACK_HEAVY_TOTAL_EXTRA_PENALTY) or (edge < req_edge and edge >= req_edge - FALLBACK_HEAVY_TOTAL_EXTRA_PENALTY)):
+                    if blocked_by_mlb_spread_on_metrics:
+                        status_reason = f"Fails MLB spread actionable penalty (Edge >= {req_edge*100:.1f}%, Effective EV >= {req_ev*100:.1f}%)"
+                    elif blocked_by_mlb_over_gate_on_thresholds:
+                        status_reason = f"Fails MLB over actionable gate (Prob >= {req_prob*100:.1f}%, Edge >= {req_edge*100:.1f}%, Effective EV >= {req_ev*100:.1f}%)"
+                    elif is_total_market and is_fallback_heavy and ((effective_ev < req_ev and effective_ev >= req_ev - FALLBACK_HEAVY_TOTAL_EXTRA_PENALTY) or (edge < req_edge and edge >= req_edge - FALLBACK_HEAVY_TOTAL_EXTRA_PENALTY)):
                          status_reason = f"Fails due to fallback-heavy totals penalty (Edge >= {req_edge*100:.1f}%, Effective EV >= {req_ev*100:.1f}%)"
                     elif is_total_market and market_type == "total_under":
                         status_reason = f"Fails stricter total_under cold-market penalty (Edge >= {req_edge*100:.1f}%, Effective EV >= {req_ev*100:.1f}%)"
@@ -2088,6 +2270,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                         status_reason = f"Fails stricter total_over cold-market penalty (Edge >= {req_edge*100:.1f}%, Effective EV >= {req_ev*100:.1f}%)"
                     else:
                         status_reason = f"Fails minimum Edge ({req_edge*100:.1f}%) or Effective EV ({req_ev*100:.1f}%) thresholds"
+                    blocker_stage = "actionable_threshold"
                 else:
                     status = "Actionable"
                     status_reason = "Passed all strict filters"
@@ -2100,16 +2283,22 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                     if win_prob < NEUTRAL_ACTIONABLE_MIN_PROB or effective_ev < NEUTRAL_ACTIONABLE_MIN_EV or edge < NEUTRAL_ACTIONABLE_MIN_EDGE:
                         status = "Below Threshold"
                         status_reason = f"Fails stricter Neutral overlay (Prob >= {NEUTRAL_ACTIONABLE_MIN_PROB}, EV >= {NEUTRAL_ACTIONABLE_MIN_EV}, Edge >= {NEUTRAL_ACTIONABLE_MIN_EDGE})"
+                        blocker_stage = "consensus_overlay"
                 elif consensus_agr == "Disagrees":
                     if win_prob < DISAGREES_ACTIONABLE_MIN_PROB or effective_ev < DISAGREES_ACTIONABLE_MIN_EV or edge < DISAGREES_ACTIONABLE_MIN_EDGE:
                         status = "High Variance/Speculative"
                         status_reason = f"Fails stricter Disagrees overlay (Prob >= {DISAGREES_ACTIONABLE_MIN_PROB}, EV >= {DISAGREES_ACTIONABLE_MIN_EV}, Edge >= {DISAGREES_ACTIONABLE_MIN_EDGE})"
+                        blocker_stage = "consensus_overlay"
         else:
             status = "Actionable"
             status_reason = "Passed all strict filters"
 
         best.at[idx, "Pick_Status"] = status
         best.at[idx, "Status_Reason"] = status_reason
+        best.at[idx, "suspicious_data_flag"] = suspicious_data_flag
+        best.at[idx, "suspicious_data_reasons"] = suspicious_reasons_str
+        best.at[idx, "status_blocker_reason"] = status_reason if status != "Actionable" else ""
+        best.at[idx, "status_blocker_stage"] = blocker_stage if status != "Actionable" else "none"
 
     # Legacy logging/metrics variables for reference
     valid_edge_mask = best["edge"] >= 0.01
@@ -2363,6 +2552,33 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         diagnostics_out["blocked_by_under_specific_thresholds"] = blocked_by_under_specific_thresholds
         diagnostics_out["blocked_by_nba_total_penalty"] = blocked_by_nba_total_penalty
         diagnostics_out["blocked_by_no_kalshi_total_penalty"] = blocked_by_no_kalshi_total_penalty
+        diagnostics_out["blocked_by_mlb_spread_penalty"] = blocked_by_mlb_spread_penalty
+        diagnostics_out["blocked_by_mlb_over_promotion_gate"] = blocked_by_mlb_over_promotion_gate
+        diagnostics_out["promoted_by_nba_side_bonus"] = promoted_by_nba_side_bonus
+        diagnostics_out["promoted_by_nba_over_bonus"] = promoted_by_nba_over_bonus
+        diagnostics_out["demoted_by_mlb_spread_finalist_score_penalty"] = demoted_by_mlb_spread_finalist_penalty
+        diagnostics_out["blocked_by_suspicious_data"] = int(final_best_df.get("status_blocker_stage", pd.Series([], dtype=str)).astype(str).eq("suspicious_data_guardrail").sum())
+        diagnostics_out["suspicious_data_flag_rows"] = int(final_best_df.get("suspicious_data_flag", pd.Series([], dtype=bool)).fillna(False).astype(bool).sum())
+        diagnostics_out["divergence_rows_preserved"] = int(divergence_rows_preserved)
+        diagnostics_out["divergence_rows_blocked_by_viability_floor"] = int(divergence_rows_blocked_by_viability_floor)
+        diagnostics_out["divergence_rows_negative_ev"] = int(divergence_rows_negative_ev)
+        diagnostics_out["divergence_rows_negative_edge"] = int(divergence_rows_negative_edge)
+        divergence_stage_mask = final_best_df.get("status_blocker_stage", pd.Series([], dtype=str)).astype(str).isin({"divergence_guardrail", "divergence_viability_floor"})
+        diagnostics_out["divergence_rows_by_pick_status"] = (
+            final_best_df.loc[divergence_stage_mask, "Pick_Status"].value_counts().to_dict()
+            if "Pick_Status" in final_best_df.columns
+            else {}
+        )
+        hidden_bad_rows = final_best_df[
+            (final_best_df["Pick_Status"] == "High Variance/Speculative")
+            & (
+                (pd.to_numeric(final_best_df["expected_value"], errors="coerce") <= 0)
+                | (pd.to_numeric(final_best_df["edge"], errors="coerce") <= 0)
+            )
+        ]
+        diagnostics_out["high_variance_non_positive_ev_edge_rows"] = hidden_bad_rows[
+            ["league", "home_team", "away_team", "market_type", "Pick_Status", "Status_Reason", "expected_value", "edge"]
+        ].to_dict("records")
         diagnostics_out["final_actionable_count"] = len(actionable_df)
 
         current_card_df = final_best_df
