@@ -209,3 +209,35 @@ def test_new_diagnostics_populate_without_regressing_existing_total_protections(
     assert diagnostics["promoted_by_nba_over_bonus"] >= 1
     assert diagnostics["blocked_by_no_kalshi_total_penalty"] >= 1
     assert diagnostics["blocked_by_under_specific_thresholds"] >= 1
+
+
+def test_high_ev_alone_is_not_auto_blocked_as_suspicious_data():
+    df = pd.DataFrame(
+        [
+            _row(idx=1, league="NBA", market_type="spread_home", win_prob=0.61, ev=0.41, edge=0.06, kalshi_probability=0.55),
+        ]
+    )
+    out = build_best_picks_df(df)
+    row = out.iloc[0]
+    assert row["Pick_Status"] == "High Variance/Speculative"
+    assert row["status_blocker_stage"] == "variance_guardrail"
+    assert row["suspicious_data_flag"] is False or row["suspicious_data_flag"] == False
+
+
+def test_suspicious_data_rows_still_blocked_with_explicit_reason_and_diagnostics():
+    df = pd.DataFrame(
+        [
+            _row(idx=1, league="MLB", market_type="spread_home", win_prob=0.62, ev=0.45, edge=0.07, kalshi_probability=0.55),
+        ]
+    )
+    df.loc[0, "line_source"] = "synthetic"
+    df.loc[0, "line_delta"] = 12.0
+    df.loc[0, "market_probability"] = 0.20
+    diagnostics = {}
+    out = build_best_picks_df(df, diagnostics_out=diagnostics)
+    row = out.iloc[0]
+    assert row["Pick_Status"] == "No Play"
+    assert row["suspicious_data_flag"] is True or row["suspicious_data_flag"] == True
+    assert "Blocked: suspicious_data_flag=true" in row["Status_Reason"]
+    assert row["status_blocker_stage"] == "suspicious_data_guardrail"
+    assert diagnostics["blocked_by_suspicious_data"] >= 1

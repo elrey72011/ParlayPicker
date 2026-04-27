@@ -106,6 +106,7 @@ BEST_PICK_COLUMNS = [
     "kalshi_probability", "kalshi_match_status", "kalshi_match_reason",
     "gemini_explanation", "gemini_risk_notes", "used_stale_features", "Pick_Quality", "Conviction_Score",
     "uploaded_spread_line", "uploaded_total_line", "live_spread_line", "live_total_line", "line_source", "line_delta", "upload_market_match",
+    "suspicious_data_flag", "suspicious_data_reasons", "status_blocker_reason", "status_blocker_stage",
 ]
 
 CANONICAL_BET_COLUMNS = [
@@ -1885,8 +1886,18 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     promoted_by_nba_side_bonus = 0
     promoted_by_nba_over_bonus = 0
 
+    if "suspicious_data_flag" not in best.columns:
+        best["suspicious_data_flag"] = False
+    if "suspicious_data_reasons" not in best.columns:
+        best["suspicious_data_reasons"] = ""
+    if "status_blocker_reason" not in best.columns:
+        best["status_blocker_reason"] = ""
+    if "status_blocker_stage" not in best.columns:
+        best["status_blocker_stage"] = "none"
+
     for idx in best.index:
         status_reason = "Unknown"
+        blocker_stage = "none"
         bp = str(best.at[idx, "best_pick"])
         ev = best.at[idx, "expected_value"]
         edge = best.at[idx, "edge"]
@@ -1976,27 +1987,69 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         model_status_str = str(best.at[idx, "model_status"]) if "model_status" in best.columns else ""
         is_model_failure = "Fallback" in model_status_str or "Failure" in model_status_str
 
+        suspicious_reasons: list[str] = []
+        high_ev_guardrail = (not pd.isna(ev)) and float(ev) > 0.40
+        if high_ev_guardrail:
+            if is_missing_line:
+                suspicious_reasons.append("missing_market_line")
+            if is_fallback_or_stale:
+                suspicious_reasons.append("stale_or_fallback_odds_source")
+            market_status = str(best.at[idx, "market_status"]).strip().lower() if "market_status" in best.columns else ""
+            if market_status in {"suspended", "closed", "invalid", "halted"}:
+                suspicious_reasons.append(f"market_status={market_status}")
+            if "line_source" in best.columns and pd.notna(best.at[idx, "line_source"]):
+                line_source = str(best.at[idx, "line_source"]).strip().lower()
+                if line_source in {"unknown", "synthetic"}:
+                    suspicious_reasons.append("malformed_or_synthetic_line_source")
+            if "line_delta" in best.columns and pd.notna(best.at[idx, "line_delta"]):
+                try:
+                    if abs(float(best.at[idx, "line_delta"])) >= 8.0:
+                        suspicious_reasons.append("line_source_mismatch")
+                except Exception:
+                    pass
+            market_prob_val = best.at[idx, "market_probability"] if "market_probability" in best.columns else pd.NA
+            if pd.notna(market_prob_val) and pd.notna(win_prob):
+                try:
+                    if abs(float(market_prob_val) - float(win_prob)) >= 0.25:
+                        suspicious_reasons.append("inconsistent_price_probability")
+                except Exception:
+                    pass
+            if "upload_market_match" in best.columns:
+                upload_market_match = str(best.at[idx, "upload_market_match"]).strip().lower()
+                if upload_market_match in {"false", "0", "mismatch"}:
+                    suspicious_reasons.append("upload_line_market_mismatch")
+
+        suspicious_data_flag = bool(suspicious_reasons)
+        suspicious_reasons_str = "; ".join(dict.fromkeys(suspicious_reasons))
+
         if is_missing_line:
             status = "Missing Line"
             status_reason = "Missing odds or numerical line"
+            blocker_stage = "line_integrity_guardrail"
         elif is_nba_extreme_spread:
             status = "No Play"
             status_reason = "NBA spread > 12.0 (Resting/Tanking guardrail)"
+            blocker_stage = "line_integrity_guardrail"
         elif is_kalshi_divergence:
             status = "High Variance/Speculative"
             status_reason = "ML and Kalshi probability diverge by > 20%"
-        elif not pd.isna(ev) and ev > 0.40:
+            blocker_stage = "variance_guardrail"
+        elif high_ev_guardrail and suspicious_data_flag:
             status = "No Play"
-            status_reason = "EV > 40% (Suspended Line / Data Error guardrail)"
+            status_reason = f"Blocked: suspicious_data_flag=true; {suspicious_reasons_str}"
+            blocker_stage = "suspicious_data_guardrail"
         elif not pd.isna(ev) and ev > 0.25:
             status = "High Variance/Speculative"
             status_reason = "EV > 25% (High Variance)"
+            blocker_stage = "variance_guardrail"
         elif pd.isna(ev) or ev < 0 or win_prob < 0.40:
             status = "No Play"
             status_reason = "Negative EV or Base Win Prob < 40%"
+            blocker_stage = "baseline_guardrail"
         elif is_fallback_or_stale or is_model_failure:
             status = "No Play"
             status_reason = "Using stale data or fallback model"
+            blocker_stage = "data_fallback_guardrail"
         elif not pd.isna(ev) and not pd.isna(edge):
 
             consensus_agr = str(best.at[idx, "consensus_agreement"]) if "consensus_agreement" in best.columns else "No Kalshi"
@@ -2169,12 +2222,14 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             if is_side_market and win_prob < req_prob:
                 status = "Below Threshold"
                 status_reason = f"Fails side minimum Win Probability ({req_prob*100:.1f}%)"
+                blocker_stage = "actionable_threshold"
             elif is_total_market and win_prob < req_prob:
                 status = "Below Threshold"
                 if blocked_by_mlb_over_gate_on_thresholds:
                     status_reason = f"Fails MLB over actionable gate (Prob >= {req_prob*100:.1f}%, Edge >= {req_edge*100:.1f}%, Effective EV >= {req_ev*100:.1f}%)"
                 else:
                     status_reason = f"Fails minimum Win Probability for {'NHL ' if league == 'NHL' else 'NBA ' if league == 'NBA' else ''}Totals ({req_prob*100:.1f}%)"
+                blocker_stage = "actionable_threshold"
             else:
                 if effective_ev < req_ev or edge < req_edge:
                     status = "Below Threshold"
@@ -2192,6 +2247,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                         status_reason = f"Fails stricter total_over cold-market penalty (Edge >= {req_edge*100:.1f}%, Effective EV >= {req_ev*100:.1f}%)"
                     else:
                         status_reason = f"Fails minimum Edge ({req_edge*100:.1f}%) or Effective EV ({req_ev*100:.1f}%) thresholds"
+                    blocker_stage = "actionable_threshold"
                 else:
                     status = "Actionable"
                     status_reason = "Passed all strict filters"
@@ -2204,16 +2260,22 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                     if win_prob < NEUTRAL_ACTIONABLE_MIN_PROB or effective_ev < NEUTRAL_ACTIONABLE_MIN_EV or edge < NEUTRAL_ACTIONABLE_MIN_EDGE:
                         status = "Below Threshold"
                         status_reason = f"Fails stricter Neutral overlay (Prob >= {NEUTRAL_ACTIONABLE_MIN_PROB}, EV >= {NEUTRAL_ACTIONABLE_MIN_EV}, Edge >= {NEUTRAL_ACTIONABLE_MIN_EDGE})"
+                        blocker_stage = "consensus_overlay"
                 elif consensus_agr == "Disagrees":
                     if win_prob < DISAGREES_ACTIONABLE_MIN_PROB or effective_ev < DISAGREES_ACTIONABLE_MIN_EV or edge < DISAGREES_ACTIONABLE_MIN_EDGE:
                         status = "High Variance/Speculative"
                         status_reason = f"Fails stricter Disagrees overlay (Prob >= {DISAGREES_ACTIONABLE_MIN_PROB}, EV >= {DISAGREES_ACTIONABLE_MIN_EV}, Edge >= {DISAGREES_ACTIONABLE_MIN_EDGE})"
+                        blocker_stage = "consensus_overlay"
         else:
             status = "Actionable"
             status_reason = "Passed all strict filters"
 
         best.at[idx, "Pick_Status"] = status
         best.at[idx, "Status_Reason"] = status_reason
+        best.at[idx, "suspicious_data_flag"] = suspicious_data_flag
+        best.at[idx, "suspicious_data_reasons"] = suspicious_reasons_str
+        best.at[idx, "status_blocker_reason"] = status_reason if status != "Actionable" else ""
+        best.at[idx, "status_blocker_stage"] = blocker_stage if status != "Actionable" else "none"
 
     # Legacy logging/metrics variables for reference
     valid_edge_mask = best["edge"] >= 0.01
@@ -2472,6 +2534,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         diagnostics_out["promoted_by_nba_side_bonus"] = promoted_by_nba_side_bonus
         diagnostics_out["promoted_by_nba_over_bonus"] = promoted_by_nba_over_bonus
         diagnostics_out["demoted_by_mlb_spread_finalist_score_penalty"] = demoted_by_mlb_spread_finalist_penalty
+        diagnostics_out["blocked_by_suspicious_data"] = int(final_best_df.get("status_blocker_stage", pd.Series([], dtype=str)).astype(str).eq("suspicious_data_guardrail").sum())
+        diagnostics_out["suspicious_data_flag_rows"] = int(final_best_df.get("suspicious_data_flag", pd.Series([], dtype=bool)).fillna(False).astype(bool).sum())
         diagnostics_out["final_actionable_count"] = len(actionable_df)
 
         current_card_df = final_best_df
