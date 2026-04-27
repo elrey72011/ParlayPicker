@@ -115,10 +115,10 @@ class TestCalibrationUpdate(unittest.TestCase):
         mlb_weak_under = best[best["home_team"] == "Team M"].iloc[0]
         self.assertEqual(mlb_weak_under["Pick_Status"], "Below Threshold")
 
-    def test_mlb_spreads_get_lighter_gate(self):
-        # SIDE_MIN_WIN_PROB is 0.52 for normal spreads, MLB gets 0.50. Set Kalshi gap to trigger 'Agrees' (bypass overlays)
+    def test_mlb_spreads_get_stricter_gate(self):
+        # MLB spreads now require a stricter floor than generic sides to reduce weak promotions.
         df = self._build_df([
-            # MLB Spread at 0.51 (meets lighter gate)
+            # MLB Spread at 0.51 should now fail stricter MLB spread gate
             {"league": "MLB", "market_type": "spread_home", "expected_value": 0.05, "edge": 0.05, "calibrated_probability": 0.51, "kalshi_probability": 0.45, "best_pick": "Team A -1.5", "home_team": "Team A", "away_team": "Team B"},
             # NBA Spread at 0.51 (fails normal 0.52 floor)
             {"league": "NBA", "market_type": "spread_home", "expected_value": 0.05, "edge": 0.05, "calibrated_probability": 0.51, "kalshi_probability": 0.45, "best_pick": "Team C -3.5", "home_team": "Team C", "away_team": "Team D"},
@@ -126,9 +126,10 @@ class TestCalibrationUpdate(unittest.TestCase):
 
         best = build_best_picks_df(df)
 
-        # Team A (MLB Spread 0.51) -> Actionable
+        # Team A (MLB Spread 0.51) -> Below Threshold
         mlb_spread = best[best["home_team"] == "Team A"].iloc[0]
-        self.assertEqual(mlb_spread["Pick_Status"], "Actionable")
+        self.assertEqual(mlb_spread["Pick_Status"], "Below Threshold")
+        self.assertIn("Fails side minimum Win Probability", mlb_spread["Status_Reason"])
 
         # Team C (NBA Spread 0.51) -> Below Threshold
         nba_spread = best[best["home_team"] == "Team C"].iloc[0]

@@ -52,14 +52,15 @@ SPREAD_DIVERGENCE_OVERRIDE_MIN_EDGE = 0.04
 
 # Side Minimum Win Probability
 SIDE_MIN_WIN_PROB = 0.52
-MLB_SPREAD_MIN_WIN_PROB = 0.50
-MLB_SPREAD_ACTIONABLE_BONUS = 0.01
+MLB_SPREAD_MIN_WIN_PROB = 0.53
+MLB_SPREAD_ACTIONABLE_BONUS = 0.00
+MLB_SPREAD_EXTRA_ACTIONABLE_PENALTY = 0.01
 
 # Cold-Market Penalty Layer (by League + Market Type)
 MLB_TOTAL_OVER_ACTIONABLE_PENALTY = 0.00
 MLB_TOTAL_UNDER_ACTIONABLE_PENALTY = 0.03
-NBA_TOTAL_OVER_ACTIONABLE_PENALTY = 0.03
-NBA_TOTAL_UNDER_ACTIONABLE_PENALTY = 0.04
+NBA_TOTAL_OVER_ACTIONABLE_PENALTY = 0.01
+NBA_TOTAL_UNDER_ACTIONABLE_PENALTY = 0.02
 NHL_TOTAL_OVER_ACTIONABLE_PENALTY = 0.02
 NHL_TOTAL_UNDER_ACTIONABLE_PENALTY = 0.03
 
@@ -73,11 +74,11 @@ TOTAL_UNDER_FINALIST_SCORE_PENALTY = 0.10
 # Static empirical hooks (league + family) for later recap-driven calibration.
 # Values are additive threshold bumps applied to both EV and edge in selection gating.
 LEAGUE_MARKET_FAMILY_ACTIONABLE_PENALTIES = {
-    ("MLB", "over"): 0.00,
+    ("MLB", "over"): 0.01,
     ("MLB", "under"): 0.01,
     ("MLB", "side"): 0.00,
-    ("NBA", "over"): 0.01,
-    ("NBA", "under"): 0.02,
+    ("NBA", "over"): 0.00,
+    ("NBA", "under"): 0.01,
     ("NBA", "side"): 0.00,
     ("NHL", "over"): 0.01,
     ("NHL", "under"): 0.02,
