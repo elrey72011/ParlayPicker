@@ -50,7 +50,7 @@ def test_side_floor_and_consensus_overlays():
         # 3. Neutral row failing the overlay (prob 0.57 < 0.58, EV/Edge passing baseline)
         create_row("E", "F", "total_over", 0.57, 0.035, 0.045, "Neutral"),
 
-        # 4. Neutral row that used to pass overlays, but should now fail under stricter NBA total penalties
+        # 4. Neutral row now clears with the explicit NBA total-over bonus calibration
         create_row("G", "H", "total_over", 0.58, 0.035, 0.045, "Neutral"),
 
         # 5. Disagrees row now clears softened NBA total penalties in STANDARD profile
@@ -74,8 +74,8 @@ def test_side_floor_and_consensus_overlays():
     # 3. Neutral failing overlay -> Below Threshold
     assert best.loc[best["home_team"] == "E", "Pick_Status"].iloc[0] == "Below Threshold"
 
-    # 4. Neutral NBA total now fails stricter total penalties -> Below Threshold
-    assert best.loc[best["home_team"] == "G", "Pick_Status"].iloc[0] == "Below Threshold"
+    # 4. Neutral NBA total now passes due NBA over bonus in STANDARD profile
+    assert best.loc[best["home_team"] == "G", "Pick_Status"].iloc[0] == "Actionable"
 
     # 5. Disagrees row remains Actionable in STANDARD when core thresholds are met
     assert best.loc[best["home_team"] == "I", "Pick_Status"].iloc[0] == "Actionable"

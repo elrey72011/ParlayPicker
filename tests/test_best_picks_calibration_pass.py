@@ -93,7 +93,7 @@ def test_agrees_does_not_auto_promote_in_standard_mode():
 def test_overs_and_sides_not_penalized_like_unders():
     df = pd.DataFrame(
         [
-            _row(idx=1, league="MLB", market_type="spread_home", win_prob=0.54, ev=0.03, edge=0.03, kalshi_probability=0.48),
+            _row(idx=1, league="MLB", market_type="spread_home", win_prob=0.54, ev=0.07, edge=0.07, kalshi_probability=0.48),
             _row(idx=2, league="MLB", market_type="total_over", win_prob=0.60, ev=0.05, edge=0.05, kalshi_probability=0.55),
             _row(idx=3, league="MLB", market_type="total_under", win_prob=0.60, ev=0.05, edge=0.05, kalshi_probability=0.55),
         ]
@@ -110,11 +110,11 @@ def test_diagnostics_blocked_rows_and_shadow_cards_populate():
             # Under-specific block: base would pass, stricter under bar blocks it.
             _row(idx=1, league="NFL", market_type="total_under", win_prob=0.60, ev=0.05, edge=0.05, kalshi_probability=0.55),
             # NBA total penalty block.
-            _row(idx=2, league="NBA", market_type="total_over", win_prob=0.58, ev=0.035, edge=0.045, kalshi_probability=0.54),
+            _row(idx=2, league="NBA", market_type="total_over", win_prob=0.58, ev=0.03, edge=0.039, kalshi_probability=0.54),
             # No Kalshi total penalty block.
             _row(idx=3, league="NFL", market_type="total_over", win_prob=0.60, ev=0.04, edge=0.05, kalshi_probability=None),
             # Actionable side to keep card non-empty with non-total representation.
-            _row(idx=4, league="MLB", market_type="spread_home", win_prob=0.54, ev=0.03, edge=0.03, kalshi_probability=0.48),
+            _row(idx=4, league="MLB", market_type="spread_home", win_prob=0.54, ev=0.07, edge=0.07, kalshi_probability=0.48),
         ]
     )
     diagnostics = {}
@@ -134,3 +134,77 @@ def test_diagnostics_blocked_rows_and_shadow_cards_populate():
     ]:
         assert key in shadow
     assert "actionable_counts_by_league_family" in diagnostics
+
+
+def test_mlb_spread_finalist_penalty_can_demote_weak_spread_winner():
+    matchup_id = "2026-04-24|home1|away1"
+    df = pd.DataFrame(
+        [
+            _row(idx=1, league="MLB", market_type="spread_home", win_prob=0.60, ev=0.20, edge=0.20, kalshi_probability=0.50),
+            _row(idx=1, league="MLB", market_type="total_over", win_prob=0.60, ev=0.19, edge=0.19, kalshi_probability=0.50),
+        ]
+    )
+    df["matchup_id"] = matchup_id
+    diagnostics = {}
+    out = build_best_picks_df(df, diagnostics_out=diagnostics)
+    assert len(out) == 1
+    assert out.iloc[0]["market_type"] == "total_over"
+    assert diagnostics["demoted_by_mlb_spread_finalist_score_penalty"] >= 1
+
+
+def test_nba_side_bonus_can_promote_borderline_side():
+    df = pd.DataFrame(
+        [
+            _row(idx=1, league="NBA", market_type="spread_home", win_prob=0.52, ev=0.01, edge=0.015, kalshi_probability=0.48),
+        ]
+    )
+    diagnostics = {}
+    out = build_best_picks_df(df, diagnostics_out=diagnostics)
+    assert out.iloc[0]["Pick_Status"] == "Actionable"
+    assert diagnostics["promoted_by_nba_side_bonus"] >= 1
+
+
+def test_nba_over_bonus_can_promote_borderline_over():
+    df = pd.DataFrame(
+        [
+            _row(idx=1, league="NBA", market_type="total_over", win_prob=0.58, ev=0.03, edge=0.04, kalshi_probability=0.55),
+        ]
+    )
+    diagnostics = {}
+    out = build_best_picks_df(df, diagnostics_out=diagnostics)
+    assert out.iloc[0]["Pick_Status"] == "Actionable"
+    assert diagnostics["promoted_by_nba_over_bonus"] >= 1
+
+
+def test_mlb_over_explicit_actionable_gate_blocks_weak_over():
+    df = pd.DataFrame(
+        [
+            _row(idx=1, league="MLB", market_type="total_over", win_prob=0.56, ev=0.05, edge=0.05, kalshi_probability=0.53),
+            _row(idx=2, league="MLB", market_type="total_over", win_prob=0.58, ev=0.05, edge=0.05, kalshi_probability=0.53),
+        ]
+    )
+    diagnostics = {}
+    out = build_best_picks_df(df, diagnostics_out=diagnostics).sort_values("home_team")
+    assert out.iloc[0]["Pick_Status"] == "Below Threshold"
+    assert out.iloc[1]["Pick_Status"] == "Actionable"
+    assert diagnostics["blocked_by_mlb_over_promotion_gate"] >= 1
+
+
+def test_new_diagnostics_populate_without_regressing_existing_total_protections():
+    df = pd.DataFrame(
+        [
+            _row(idx=1, league="MLB", market_type="spread_home", win_prob=0.53, ev=0.03, edge=0.03, kalshi_probability=0.48),
+            _row(idx=2, league="NBA", market_type="spread_home", win_prob=0.52, ev=0.01, edge=0.015, kalshi_probability=0.48),
+            _row(idx=3, league="NBA", market_type="total_over", win_prob=0.58, ev=0.03, edge=0.04, kalshi_probability=0.55),
+            _row(idx=4, league="NFL", market_type="total_over", win_prob=0.60, ev=0.04, edge=0.05, kalshi_probability=None),
+            _row(idx=5, league="NFL", market_type="total_under", win_prob=0.60, ev=0.05, edge=0.05, kalshi_probability=0.55),
+        ]
+    )
+    diagnostics = {}
+    out = build_best_picks_df(df, diagnostics_out=diagnostics)
+    assert not out.empty
+    assert diagnostics["blocked_by_mlb_spread_penalty"] >= 1
+    assert diagnostics["promoted_by_nba_side_bonus"] >= 1
+    assert diagnostics["promoted_by_nba_over_bonus"] >= 1
+    assert diagnostics["blocked_by_no_kalshi_total_penalty"] >= 1
+    assert diagnostics["blocked_by_under_specific_thresholds"] >= 1

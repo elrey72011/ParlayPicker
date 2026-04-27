@@ -1101,6 +1101,11 @@ def main() -> None:
                 cal_col2.write("**New Guardrails:**")
                 cal_col2.write(f"- Blocked by total_under threshold: {diagnostics.get('blocked_by_total_under', 0)}")
                 cal_col2.write(f"- Blocked by NHL total penalty: {diagnostics.get('blocked_by_nhl_total', 0)}")
+                cal_col2.write(f"- Blocked by MLB spread penalty: {diagnostics.get('blocked_by_mlb_spread_penalty', 0)}")
+                cal_col2.write(f"- Blocked by MLB over promotion gate: {diagnostics.get('blocked_by_mlb_over_promotion_gate', 0)}")
+                cal_col2.write(f"- Demoted by MLB spread finalist penalty: {diagnostics.get('demoted_by_mlb_spread_finalist_score_penalty', 0)}")
+                cal_col2.write(f"- Promoted by NBA side bonus: {diagnostics.get('promoted_by_nba_side_bonus', 0)}")
+                cal_col2.write(f"- Promoted by NBA over bonus: {diagnostics.get('promoted_by_nba_over_bonus', 0)}")
 
                 st.markdown("#### League + Market Calibration Diagnostics")
                 cal_lm_col1, cal_lm_col2 = st.columns(2)
