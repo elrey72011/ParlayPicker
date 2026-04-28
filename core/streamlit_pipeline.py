@@ -2274,12 +2274,14 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             else:
                 if effective_ev < req_ev or edge < req_edge:
                     status = "Below Threshold"
+                    blocked_by_fallback_heavy_guardrail = False
                     if blocked_by_mlb_spread_on_metrics:
                         status_reason = f"Fails MLB spread actionable penalty (Edge >= {req_edge*100:.1f}%, Effective EV >= {req_ev*100:.1f}%)"
                     elif blocked_by_mlb_over_gate_on_thresholds:
                         status_reason = f"Fails MLB over actionable gate (Prob >= {req_prob*100:.1f}%, Edge >= {req_edge*100:.1f}%, Effective EV >= {req_ev*100:.1f}%)"
                     elif is_total_market and is_fallback_heavy and ((effective_ev < req_ev and effective_ev >= req_ev - FALLBACK_HEAVY_TOTAL_EXTRA_PENALTY) or (edge < req_edge and edge >= req_edge - FALLBACK_HEAVY_TOTAL_EXTRA_PENALTY)):
-                         status_reason = f"Fails due to fallback-heavy totals penalty (Edge >= {req_edge*100:.1f}%, Effective EV >= {req_ev*100:.1f}%)"
+                        status_reason = f"Fails due to fallback-heavy totals penalty (Edge >= {req_edge*100:.1f}%, Effective EV >= {req_ev*100:.1f}%)"
+                        blocked_by_fallback_heavy_guardrail = True
                     elif is_total_market and market_type == "total_under":
                         status_reason = f"Fails stricter total_under cold-market penalty (Edge >= {req_edge*100:.1f}%, Effective EV >= {req_ev*100:.1f}%)"
                     elif is_total_market and league == "NHL":
@@ -2288,7 +2290,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                         status_reason = f"Fails stricter total_over cold-market penalty (Edge >= {req_edge*100:.1f}%, Effective EV >= {req_ev*100:.1f}%)"
                     else:
                         status_reason = f"Fails minimum Edge ({req_edge*100:.1f}%) or Effective EV ({req_ev*100:.1f}%) thresholds"
-                    blocker_stage = "actionable_threshold"
+                    blocker_stage = "fallback_heavy_guardrail" if blocked_by_fallback_heavy_guardrail else "actionable_threshold"
                 else:
                     status = "Actionable"
                     status_reason = "Passed all strict filters"

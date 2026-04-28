@@ -308,7 +308,7 @@ def test_divergence_viability_diagnostics_populate():
 def test_effective_metric_transparency_when_blocked_by_effective_thresholds():
     df = pd.DataFrame(
         [
-            _row(idx=1, league="NFL", market_type="total_over", win_prob=0.60, ev=0.032, edge=0.05, kalshi_probability=0.55),
+            _row(idx=1, league="NFL", market_type="total_over", win_prob=0.60, ev=0.036, edge=0.05, kalshi_probability=0.55),
         ]
     )
     diagnostics = {"is_fallback_heavy": True}
@@ -318,6 +318,7 @@ def test_effective_metric_transparency_when_blocked_by_effective_thresholds():
     assert row["status_metric_basis"] == "effective"
     assert float(row["effective_expected_value"]) < float(row["expected_value"])
     assert "Effective EV" in row["Status_Reason"]
+    assert row["status_blocker_stage"] == "fallback_heavy_guardrail"
     assert row["status_blocker_reason"] == row["Status_Reason"]
 
 
