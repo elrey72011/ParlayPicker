@@ -399,22 +399,21 @@ def test_high_variance_inflation_diagnostics_populate():
     assert "High Variance/Speculative" in diagnostics["final_pick_status_counts"]
 
 
-def test_side_balance_promotes_one_clean_side_when_actionable_is_totals_only():
+def test_side_balance_does_not_promote_side_blocked_by_degraded_subset_reason():
     df = pd.DataFrame(
         [
             _row(idx=30, league="NBA", market_type="total_over", win_prob=0.64, ev=0.08, edge=0.07, kalshi_probability=0.59),
             _row(idx=31, league="NBA", market_type="spread_home", win_prob=0.64, ev=0.45, edge=0.18, kalshi_probability=None),
         ]
     )
-    # Keep side in High Variance via uncertainty (No Kalshi + degraded subset),
-    # then verify side-balance promotion can lift one clean side.
+    # Side remains high variance due to degraded subset uncertainty and should not be balance-promoted.
     df.loc[df["market_type"] == "spread_home", "degraded_feature_subset_flag"] = True
     diagnostics = {}
     out = build_best_picks_df(df, diagnostics_out=diagnostics)
     actionable = out[out["Pick_Status"] == "Actionable"]
     assert not actionable.empty
-    assert actionable["market_type"].str.contains("spread|h2h", case=False, regex=True, na=False).any()
-    assert diagnostics["side_balance_promotions"] >= 1
+    assert actionable["market_type"].str.contains("spread|h2h", case=False, regex=True, na=False).sum() == 0
+    assert diagnostics["side_balance_promotions"] == 0
 
 
 def test_transparency_fields_are_populated_for_every_export_row():
@@ -441,3 +440,109 @@ def test_transparency_fields_are_populated_for_every_export_row():
     assert out["effective_edge"].notna().all()
     assert out["effective_win_probability"].notna().all()
     assert out["status_blocker_stage"].notna().all()
+
+from core.streamlit_pipeline import ensure_best_pick_export_columns, REQUIRED_BEST_PICK_EXPORT_COLUMNS
+
+
+def test_best_pick_export_guarantees_required_transparency_columns():
+    df = pd.DataFrame([_row(idx=501, league="NFL", market_type="total_over", win_prob=0.60, ev=0.05, edge=0.05, kalshi_probability=0.55)])
+    diagnostics = {}
+    out = build_best_picks_df(df, diagnostics_out=diagnostics)
+    for col in REQUIRED_BEST_PICK_EXPORT_COLUMNS:
+        assert col in out.columns
+    assert diagnostics["best_pick_export_required_columns_ok"] is True
+    assert diagnostics["best_pick_export_missing_columns"] == []
+
+
+def test_missing_export_columns_are_backfilled_and_logged(caplog):
+    partial = pd.DataFrame({"best_pick": ["Over 220.5"], "expected_value": [0.02]})
+    with caplog.at_level("WARNING"):
+        out = ensure_best_pick_export_columns(partial, diagnostics_out={})
+    for col in REQUIRED_BEST_PICK_EXPORT_COLUMNS:
+        assert col in out.columns
+    assert "best_pick_export_missing_columns" in caplog.text
+
+
+def test_side_balance_guard_promotes_viable_side_when_actionable_is_totals_only():
+    df = pd.DataFrame(
+        [
+            _row(idx=510, league="NBA", market_type="total_over", win_prob=0.58, ev=0.04, edge=0.04, kalshi_probability=0.56),
+            _row(idx=511, league="NBA", market_type="spread_home", win_prob=0.54, ev=0.03, edge=0.03, kalshi_probability=0.30),
+        ]
+    )
+    # Keep side out of initial Actionable via divergence cap, then allow balance guard promotion.
+    df.loc[df["market_type"] == "spread_home", "ml_probability"] = 0.64
+    diagnostics = {}
+    out = build_best_picks_df(df, diagnostics_out=diagnostics)
+    actionable = out[out["Pick_Status"].astype(str) == "Actionable"]
+    assert actionable["market_type"].astype(str).str.contains("spread|h2h", case=False, regex=True, na=False).any()
+    assert int(diagnostics["side_promoted_by_balance_guard_count"]) >= 1
+    assert diagnostics["side_balance_guard_reason"] == "promoted_viable_side_candidate"
+
+
+def test_side_balance_guard_does_not_promote_weak_sides():
+    df = pd.DataFrame(
+        [
+            _row(idx=520, league="NBA", market_type="total_over", win_prob=0.64, ev=0.08, edge=0.07, kalshi_probability=0.59),
+            _row(idx=521, league="NBA", market_type="spread_home", win_prob=0.51, ev=0.005, edge=0.005, kalshi_probability=0.58),
+        ]
+    )
+    diagnostics = {}
+    out = build_best_picks_df(df, diagnostics_out=diagnostics)
+    actionable = out[out["Pick_Status"].astype(str) == "Actionable"]
+    assert actionable["market_type"].astype(str).str.contains("spread|h2h", case=False, regex=True, na=False).sum() == 0
+    assert diagnostics["side_promoted_by_balance_guard_count"] == 0
+
+
+def test_totals_only_actionable_allowed_when_no_viable_sides_exist():
+    df = pd.DataFrame([
+        _row(idx=530, league="NBA", market_type="total_over", win_prob=0.64, ev=0.08, edge=0.07, kalshi_probability=0.59),
+        _row(idx=531, league="NBA", market_type="total_under", win_prob=0.62, ev=0.06, edge=0.06, kalshi_probability=0.57),
+    ])
+    diagnostics = {}
+    out = build_best_picks_df(df, diagnostics_out=diagnostics)
+    actionable = out[out["Pick_Status"].astype(str) == "Actionable"]
+    assert not actionable.empty
+    assert actionable["market_type"].astype(str).str.contains("total", case=False, regex=True, na=False).all()
+    assert diagnostics["viable_side_candidates_count"] == 0
+
+
+def test_degraded_nba_rows_keep_run_health_fields_in_final_export():
+    df = pd.DataFrame(
+        [
+            _row(idx=560, league="NBA", market_type="total_over", win_prob=0.57, ev=0.04, edge=0.04, kalshi_probability=0.55),
+            _row(idx=561, league="NBA", market_type="spread_home", win_prob=0.54, ev=0.02, edge=0.02, kalshi_probability=0.40),
+        ]
+    )
+    df["nba_stats_fetch_status"] = "failed"
+    df["nba_stats_fetch_source"] = "failed"
+    df["nba_stats_fetch_retries_used"] = 3
+    df["fallback_summary_by_league"] = "{'NBA': 2}"
+    df["fallback_heavy_slate_flag"] = True
+    df["run_health_warning"] = "Run health warning: fallback usage is elevated."
+    out = build_best_picks_df(df)
+    assert (out["nba_stats_fetch_status"].astype(str) == "failed").all()
+    assert (out["fallback_summary_by_league"].astype(str).str.contains("NBA", na=False)).all()
+    assert (out["run_health_warning"].astype(str).str.len() > 0).all()
+
+
+def test_no_regression_mlb_spread_suspicious_and_divergence_guardrails():
+    df = pd.DataFrame(
+        [
+            _row(idx=540, league="MLB", market_type="spread_home", win_prob=0.52, ev=0.02, edge=0.03, kalshi_probability=0.48),
+            _row(idx=541, league="NBA", market_type="total_over", win_prob=0.64, ev=0.50, edge=0.20, kalshi_probability=0.59),
+            _row(idx=542, league="NBA", market_type="spread_home", win_prob=0.50, ev=0.01, edge=0.01, kalshi_probability=0.80),
+        ]
+    )
+    # suspicious high EV total with bad market status should remain blocked.
+    df.loc[df["home_team"] == "Home541", "market_status"] = "suspended"
+    diagnostics = {}
+    out = build_best_picks_df(df, diagnostics_out=diagnostics)
+
+    mlb_spread_row = out[out["home_team"] == "Home540"].iloc[0]
+    suspicious_row = out[out["home_team"] == "Home541"].iloc[0]
+    divergence_row = out[out["home_team"] == "Home542"].iloc[0]
+
+    assert mlb_spread_row["Pick_Status"] != "Actionable"
+    assert suspicious_row["status_blocker_stage"] == "suspicious_data_guardrail"
+    assert divergence_row["status_blocker_stage"] in {"divergence_guardrail", "divergence_viability_floor"}
