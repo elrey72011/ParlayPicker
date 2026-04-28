@@ -2619,6 +2619,40 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         best = best.drop(columns=["_rank_sort", "_ev_sort", "_edge_sort"], errors="ignore")
 
     # 3. Assign parlay_rank AFTER the final sort pass so the exported numbers sequentially map 1 to N
+    if not best.empty:
+        final_actionable_mask = best["Pick_Status"].astype(str).eq("Actionable")
+        market_type_str = best["market_type"].astype(str).str.lower()
+        final_actionable_side_mask = final_actionable_mask & market_type_str.str.contains("spread|h2h", na=False)
+        final_actionable_total_mask = final_actionable_mask & market_type_str.str.contains("total", na=False)
+        if final_actionable_total_mask.any() and not final_actionable_side_mask.any():
+            weakest_ev = pd.to_numeric(best.loc[final_actionable_mask, "effective_expected_value"], errors="coerce").min(skipna=True)
+            weakest_edge = pd.to_numeric(best.loc[final_actionable_mask, "effective_edge"], errors="coerce").min(skipna=True)
+            weakest_prob = pd.to_numeric(best.loc[final_actionable_mask, "effective_win_probability"], errors="coerce").min(skipna=True)
+            post_rank_candidate_mask = (
+                best["Pick_Status"].astype(str).isin({"High Variance/Speculative", "Below Threshold"})
+                & market_type_str.str.contains("spread|h2h", na=False)
+                & pd.to_numeric(best["effective_expected_value"], errors="coerce").gt(0)
+                & pd.to_numeric(best["effective_edge"], errors="coerce").gt(0)
+                & pd.to_numeric(best["effective_win_probability"], errors="coerce").ge(SIDE_MIN_WIN_PROB)
+                & ~best.get("suspicious_data_flag", pd.Series(False, index=best.index)).fillna(False).astype(bool)
+                & ~best.get("status_blocker_reason", pd.Series("", index=best.index)).astype(str).str.contains("degraded|fallback-only", case=False, na=False)
+                & pd.to_numeric(best["effective_expected_value"], errors="coerce").ge(weakest_ev - 0.01)
+                & pd.to_numeric(best["effective_edge"], errors="coerce").ge(weakest_edge - 0.01)
+                & pd.to_numeric(best["effective_win_probability"], errors="coerce").ge(weakest_prob - 0.05)
+            )
+            if post_rank_candidate_mask.any():
+                promote_idx = (
+                    best.loc[post_rank_candidate_mask]
+                    .sort_values(by=["effective_expected_value", "effective_edge", "effective_win_probability"], ascending=[False, False, False])
+                    .index[0]
+                )
+                best.at[promote_idx, "Pick_Status"] = "Actionable"
+                best.at[promote_idx, "Status_Reason"] = "Actionable: post-rank side-balance guard promoted strongest viable side"
+                best.at[promote_idx, "status_blocker_reason"] = ""
+                best.at[promote_idx, "status_blocker_stage"] = "none"
+                side_balance_promotions += 1
+                side_balance_guard_reason = "promoted_viable_side_candidate_post_rank"
+
     best["parlay_rank"] = range(1, len(best) + 1) if not best.empty else pd.Series(dtype=int)
 
     # Final Validation Logs (Lightweight terminal/application logging)
@@ -3757,7 +3791,19 @@ def run_analysis_pipeline(
                 from app_core.feature_processing import enrich_with_model_features
                 api_clients = {}  # Stub for backward compatibility if it expects dict
                 enriched_for_prediction = enrich_with_model_features(merged[needs_prediction].copy(), api_clients)
-                for col in ["stats_source", "stats_resolution_status", "stats_fallback_reason", "ml_feature_eligible"]:
+                for col in [
+                    "stats_source",
+                    "stats_resolution_status",
+                    "stats_fallback_reason",
+                    "ml_feature_eligible",
+                    "nba_stats_fetch_status",
+                    "nba_stats_fetch_source",
+                    "nba_stats_fetch_retries_used",
+                    "fallback_summary_by_league",
+                    "fallback_heavy_slate_flag",
+                    "run_health_warning",
+                    "stats_source_counts",
+                ]:
                     if col in enriched_for_prediction.columns:
                         merged.loc[needs_prediction, col] = enriched_for_prediction[col]
 
@@ -3770,15 +3816,18 @@ def run_analysis_pipeline(
 
                 if "nba_stats_fetch_status" in enriched_for_prediction.columns and not enriched_for_prediction.empty:
                     status_series = enriched_for_prediction["nba_stats_fetch_status"].astype(str)
-                    nba_stats_diag["nba_stats_fetch_status"] = "failed" if status_series.str.lower().eq("failed").any() else "ok"
+                    if status_series.str.lower().eq("failed").any():
+                        nba_stats_diag["nba_stats_fetch_status"] = "failed"
+                    elif status_series.str.lower().eq("cached").any():
+                        nba_stats_diag["nba_stats_fetch_status"] = "cached"
+                    elif status_series.str.lower().eq("live").any():
+                        nba_stats_diag["nba_stats_fetch_status"] = "live"
+                    else:
+                        nba_stats_diag["nba_stats_fetch_status"] = "ok"
                 if "nba_stats_fetch_source" in enriched_for_prediction.columns and not enriched_for_prediction.empty:
                     source_series = enriched_for_prediction["nba_stats_fetch_source"].astype(str)
                     if source_series.str.lower().eq("live").any():
                         nba_stats_diag["nba_stats_fetch_source"] = "live"
-                    elif source_series.str.lower().eq("runtime_cache").any():
-                        nba_stats_diag["nba_stats_fetch_source"] = "runtime_cache"
-                    elif source_series.str.lower().eq("disk_cache").any():
-                        nba_stats_diag["nba_stats_fetch_source"] = "disk_cache"
                     elif source_series.str.lower().eq("cached").any():
                         nba_stats_diag["nba_stats_fetch_source"] = "cached"
                     elif source_series.str.lower().eq("failed").any():
@@ -4005,13 +4054,46 @@ def run_analysis_pipeline(
     merged["model_probability"] = model_probability
     merged["display_probability"] = model_probability.round(3)
     merged["calibrated_probability"] = calibrated_probability
-    merged["nba_stats_fetch_status"] = nba_stats_diag.get("nba_stats_fetch_status", "not_started")
-    merged["nba_stats_fetch_source"] = nba_stats_diag.get("nba_stats_fetch_source", "none")
-    merged["nba_stats_fetch_retries_used"] = int(nba_stats_diag.get("nba_stats_fetch_retries_used", 0))
+    if "nba_stats_fetch_status" in merged.columns:
+        merged["nba_stats_fetch_status"] = _string_series(merged, "nba_stats_fetch_status").replace({"": pd.NA}).fillna(
+            str(nba_stats_diag.get("nba_stats_fetch_status", "not_started"))
+        )
+    else:
+        merged["nba_stats_fetch_status"] = nba_stats_diag.get("nba_stats_fetch_status", "not_started")
+    if "nba_stats_fetch_source" in merged.columns:
+        merged["nba_stats_fetch_source"] = _string_series(merged, "nba_stats_fetch_source").replace({"": pd.NA}).fillna(
+            str(nba_stats_diag.get("nba_stats_fetch_source", "none"))
+        )
+    else:
+        merged["nba_stats_fetch_source"] = nba_stats_diag.get("nba_stats_fetch_source", "none")
+    if "nba_stats_fetch_retries_used" in merged.columns:
+        merged["nba_stats_fetch_retries_used"] = pd.to_numeric(
+            merged["nba_stats_fetch_retries_used"], errors="coerce"
+        ).fillna(int(nba_stats_diag.get("nba_stats_fetch_retries_used", 0))).astype(int)
+    else:
+        merged["nba_stats_fetch_retries_used"] = int(nba_stats_diag.get("nba_stats_fetch_retries_used", 0))
     degraded_reason = str(ml_prediction_diag.get("ml_schema_mismatch_reason", "")).strip()
     degraded_flag = "degraded_subset" in degraded_reason
     merged["degraded_feature_subset_flag"] = bool(degraded_flag)
     merged["degraded_feature_subset_reason"] = degraded_reason if degraded_flag else ""
+    if "fallback_summary_by_league" not in merged.columns:
+        merged["fallback_summary_by_league"] = ""
+    if "run_health_warning" not in merged.columns:
+        merged["run_health_warning"] = ""
+    fallback_summary_series = _string_series(merged, "fallback_summary_by_league")
+    if fallback_summary_series.str.strip().eq("").all() and "stats_source" in merged.columns:
+        fallback_rows = _string_series(merged, "stats_source").str.lower().isin({"fallback", "failed"})
+        if fallback_rows.any():
+            summary_by_league = _string_series(merged.loc[fallback_rows], "league").value_counts().to_dict()
+            merged["fallback_summary_by_league"] = str({str(k): int(v) for k, v in summary_by_league.items()})
+    run_warning_series = _string_series(merged, "run_health_warning")
+    if run_warning_series.str.strip().eq("").all():
+        fallback_rows = _string_series(merged, "stats_source").str.lower().isin({"fallback", "failed"})
+        fallback_heavy = float(fallback_rows.sum()) / float(max(len(merged), 1)) >= 0.25
+        if fallback_heavy or degraded_flag:
+            merged["run_health_warning"] = (
+                "Run health warning: fallback/degraded feature usage is elevated; card confidence may be reduced."
+            )
 
     # Phase 3: NCAAB Statistical Recalibration
     # If is_neutral == True for neutral-site and tournament games, compress margins to prevent false edges on tight spreads.

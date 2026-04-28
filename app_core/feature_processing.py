@@ -2745,8 +2745,19 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     features_data["stats_fallback_reason"] = stats_fallback_reason
     features_data["stats_resolution_stage_failure"] = stats_resolution_stage_failure
     features_data["stats_fetch_retries_used"] = nba_fetch_diag.get("retries_used", 0)
-    nba_fetch_source = str(nba_fetch_diag.get("source", "none"))
-    nba_fetch_status = str(nba_fetch_diag.get("status", "not_started"))
+    nba_fetch_source_raw = str(nba_fetch_diag.get("source", "none")).lower()
+    if nba_fetch_source_raw in {"runtime_cache", "disk_cache", "cached"}:
+        nba_fetch_status = "cached"
+        nba_fetch_source = "cached"
+    elif nba_fetch_source_raw == "live":
+        nba_fetch_status = "live"
+        nba_fetch_source = "live"
+    elif nba_fetch_source_raw == "failed":
+        nba_fetch_status = "failed"
+        nba_fetch_source = "failed"
+    else:
+        nba_fetch_status = "not_started"
+        nba_fetch_source = "none"
     features_data["nba_stats_fetch_status"] = nba_fetch_status
     features_data["nba_stats_fetch_source"] = nba_fetch_source
     features_data["nba_stats_fetch_retries_used"] = int(nba_fetch_diag.get("retries_used", 0))

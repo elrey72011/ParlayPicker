@@ -507,6 +507,25 @@ def test_totals_only_actionable_allowed_when_no_viable_sides_exist():
     assert diagnostics["viable_side_candidates_count"] == 0
 
 
+def test_degraded_nba_rows_keep_run_health_fields_in_final_export():
+    df = pd.DataFrame(
+        [
+            _row(idx=560, league="NBA", market_type="total_over", win_prob=0.57, ev=0.04, edge=0.04, kalshi_probability=0.55),
+            _row(idx=561, league="NBA", market_type="spread_home", win_prob=0.54, ev=0.02, edge=0.02, kalshi_probability=0.40),
+        ]
+    )
+    df["nba_stats_fetch_status"] = "failed"
+    df["nba_stats_fetch_source"] = "failed"
+    df["nba_stats_fetch_retries_used"] = 3
+    df["fallback_summary_by_league"] = "{'NBA': 2}"
+    df["fallback_heavy_slate_flag"] = True
+    df["run_health_warning"] = "Run health warning: fallback usage is elevated."
+    out = build_best_picks_df(df)
+    assert (out["nba_stats_fetch_status"].astype(str) == "failed").all()
+    assert (out["fallback_summary_by_league"].astype(str).str.contains("NBA", na=False)).all()
+    assert (out["run_health_warning"].astype(str).str.len() > 0).all()
+
+
 def test_no_regression_mlb_spread_suspicious_and_divergence_guardrails():
     df = pd.DataFrame(
         [

@@ -282,9 +282,47 @@ def test_nba_fetch_status_source_and_retries_reflect_final_source(monkeypatch):
     )
     enriched = fp.enrich_with_model_features(games, api_clients={})
 
-    assert enriched.loc[0, "nba_stats_fetch_status"] == "ok"
-    assert enriched.loc[0, "nba_stats_fetch_source"] == "disk_cache"
+    assert enriched.loc[0, "nba_stats_fetch_status"] == "cached"
+    assert enriched.loc[0, "nba_stats_fetch_source"] == "cached"
     assert int(enriched.loc[0, "nba_stats_fetch_retries_used"]) == 3
+
+
+def test_live_fail_cache_success_rows_show_cached_not_failed(monkeypatch):
+    def fake_fetch_team_stats(_api_clients, season_year=None):
+        return pd.DataFrame(
+            [
+                {"team_norm": "BOSTON CELTICS", "league_key": "NBA", "win_pct": 0.61, "home_win_pct": 0.61, "away_win_pct": 0.61, "points_per_game": 118.0, "points_allowed_per_game": 111.0, "turnovers": 12.0, "streak": 0.0, "last5_win_pct": 0.6},
+                {"team_norm": "ATLANTA HAWKS", "league_key": "NBA", "win_pct": 0.52, "home_win_pct": 0.52, "away_win_pct": 0.52, "points_per_game": 114.0, "points_allowed_per_game": 113.0, "turnovers": 12.0, "streak": 0.0, "last5_win_pct": 0.5},
+            ]
+        )
+
+    monkeypatch.setattr(fp, "fetch_team_stats", fake_fetch_team_stats)
+    fp._NBA_FETCH_DIAGNOSTICS.update({"status": "ok", "source": "runtime_cache", "retries_used": 3, "last_error": "timeout"})
+    games = pd.DataFrame(
+        [{"league": "NBA", "home_team": "Boston", "away_team": "Atlanta", "market_type": "h2h_home", "decimal_odds": 1.91, "odds_american": -110}]
+    )
+    enriched = fp.enrich_with_model_features(games, api_clients={})
+    assert enriched.loc[0, "nba_stats_fetch_status"] == "cached"
+    assert enriched.loc[0, "nba_stats_fetch_source"] == "cached"
+
+
+def test_live_fail_no_cache_rows_show_failed_with_warning(monkeypatch):
+    def fake_fetch_team_stats(_api_clients, season_year=None):
+        return pd.DataFrame(columns=["team_norm", "league_key"])
+
+    monkeypatch.setattr(fp, "fetch_team_stats", fake_fetch_team_stats)
+    fp._NBA_FETCH_DIAGNOSTICS.update({"status": "failed", "source": "failed", "retries_used": 3, "last_error": "timeout"})
+    games = pd.DataFrame(
+        [
+            {"league": "NBA", "home_team": "Boston", "away_team": "Philadelphia", "market_type": "h2h_home", "decimal_odds": 1.9, "odds_american": -110},
+            {"league": "NBA", "home_team": "New York", "away_team": "Atlanta", "market_type": "h2h_home", "decimal_odds": 1.9, "odds_american": -110},
+            {"league": "NBA", "home_team": "San Antonio", "away_team": "Portland", "market_type": "h2h_home", "decimal_odds": 1.9, "odds_american": -110},
+        ]
+    )
+    enriched = fp.enrich_with_model_features(games, api_clients={})
+    assert (enriched["nba_stats_fetch_status"].astype(str) == "failed").all()
+    assert "NBA" in str(enriched.loc[0, "fallback_summary_by_league"])
+    assert str(enriched.loc[0, "run_health_warning"]).strip() != ""
 
 
 def test_unresolved_nba_rows_marked_and_ml_ineligible(monkeypatch):
