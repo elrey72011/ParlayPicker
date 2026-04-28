@@ -115,6 +115,7 @@ LEAGUE_AVERAGES = {
 }
 
 _NBA_STATS_RUNTIME_CACHE: Dict[int, List[Dict[str, Any]]] = {}
+_NBA_STATS_RUNTIME_CACHE_DAY: Dict[int, str] = {}
 _NBA_STATS_SUCCESS_ARCHIVE: Dict[int, Dict[str, Any]] = {}
 _NBA_FETCH_DIAGNOSTICS: Dict[str, Any] = {
     "status": "not_started",
@@ -1530,57 +1531,30 @@ def fetch_nba_stats(season_year: int) -> List[Dict[str, Any]]:
     Fetch NBA stats using nba_api for the given season year (e.g. 2024 for 2024-25).
     """
     slate_day = datetime.utcnow().strftime("%Y-%m-%d")
-    if season_year in _NBA_STATS_RUNTIME_CACHE and _NBA_STATS_RUNTIME_CACHE[season_year]:
+    if (
+        season_year in _NBA_STATS_RUNTIME_CACHE
+        and _NBA_STATS_RUNTIME_CACHE[season_year]
+        and _NBA_STATS_RUNTIME_CACHE_DAY.get(season_year) == slate_day
+    ):
         _NBA_FETCH_DIAGNOSTICS.update({
             "status": "ok",
             "retries_used": 0,
-            "source": "cached",
-            "last_error": "",
-            "slate_day": slate_day,
-        })
-        return _NBA_STATS_RUNTIME_CACHE[season_year]
-
-    archived = _NBA_STATS_SUCCESS_ARCHIVE.get(season_year, {})
-    archived_stats = archived.get("stats", []) if isinstance(archived, dict) else []
-    if archived.get("slate_day") == slate_day and archived_stats:
-        _NBA_STATS_RUNTIME_CACHE[season_year] = list(archived_stats)
-        _NBA_FETCH_DIAGNOSTICS.update({
-            "status": "ok",
-            "retries_used": 0,
-            "source": "cached",
-            "last_error": "",
-            "slate_day": slate_day,
-        })
-        return _NBA_STATS_RUNTIME_CACHE[season_year]
-
-    disk_cached_stats = _load_nba_disk_cache(season_year, slate_day)
-    if disk_cached_stats:
-        _NBA_STATS_RUNTIME_CACHE[season_year] = list(disk_cached_stats)
-        _NBA_STATS_SUCCESS_ARCHIVE[season_year] = {"slate_day": slate_day, "stats": list(disk_cached_stats)}
-        _NBA_FETCH_DIAGNOSTICS.update({
-            "status": "ok",
-            "retries_used": 0,
-            "source": "cached",
+            "source": "runtime_cache",
             "last_error": "",
             "slate_day": slate_day,
         })
         return _NBA_STATS_RUNTIME_CACHE[season_year]
 
     if leaguedashteamstats is None:
-        _NBA_FETCH_DIAGNOSTICS.update({
-            "status": "failed",
-            "retries_used": 0,
-            "source": "failed",
-            "last_error": "nba_api unavailable",
-            "slate_day": slate_day,
-        })
-        return []
+        max_attempts = 0
+        last_exc = "nba_api unavailable"
+    else:
+        max_attempts = 3
+        last_exc = None
 
     # nba_api expects season format "YYYY-YY", e.g. "2024-25"
     season_str = f"{season_year}-{str(season_year + 1)[-2:]}"
-    max_attempts = 3
     base_timeout = 6
-    last_exc = None
 
     for attempt in range(max_attempts):
         try:
@@ -1623,6 +1597,7 @@ def fetch_nba_stats(season_year: int) -> List[Dict[str, Any]]:
                 })
 
             _NBA_STATS_RUNTIME_CACHE[season_year] = stats
+            _NBA_STATS_RUNTIME_CACHE_DAY[season_year] = slate_day
             _NBA_STATS_SUCCESS_ARCHIVE[season_year] = {
                 "slate_day": slate_day,
                 "stats": list(stats),
@@ -1643,28 +1618,31 @@ def fetch_nba_stats(season_year: int) -> List[Dict[str, Any]]:
                 time.sleep(0.75 * (attempt + 1))
             continue
 
+    # After live failure, recover in strict source order: runtime success archive -> disk -> failed
     archived = _NBA_STATS_SUCCESS_ARCHIVE.get(season_year, {})
     archived_stats = archived.get("stats", []) if isinstance(archived, dict) else []
     if archived.get("slate_day") == slate_day and archived_stats:
         _NBA_STATS_RUNTIME_CACHE[season_year] = list(archived_stats)
+        _NBA_STATS_RUNTIME_CACHE_DAY[season_year] = slate_day
         _NBA_FETCH_DIAGNOSTICS.update({
             "status": "ok",
             "retries_used": max_attempts - 1,
-            "source": "cached",
+            "source": "runtime_cache",
             "last_error": str(last_exc) if last_exc else "",
             "slate_day": slate_day,
         })
-        logger.warning("NBA live fetch failed; using same-slate cached NBA stats payload.")
+        logger.warning("NBA live fetch failed; using same-slate runtime-cache NBA stats payload.")
         return _NBA_STATS_RUNTIME_CACHE[season_year]
 
     disk_cached_stats = _load_nba_disk_cache(season_year, slate_day)
     if disk_cached_stats:
         _NBA_STATS_RUNTIME_CACHE[season_year] = list(disk_cached_stats)
+        _NBA_STATS_RUNTIME_CACHE_DAY[season_year] = slate_day
         _NBA_STATS_SUCCESS_ARCHIVE[season_year] = {"slate_day": slate_day, "stats": list(disk_cached_stats)}
         _NBA_FETCH_DIAGNOSTICS.update({
             "status": "ok",
             "retries_used": max_attempts - 1,
-            "source": "cached",
+            "source": "disk_cache",
             "last_error": str(last_exc) if last_exc else "",
             "slate_day": slate_day,
         })
@@ -2752,7 +2730,7 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
         nba_stats_available = False
         if not stats_df.empty and "league_key" in stats_df.columns:
             nba_stats_available = stats_df["league_key"].astype(str).str.upper().eq("NBA").any()
-        if nba_fetch_diag.get("source") == "cached":
+        if str(nba_fetch_diag.get("source", "")).lower() in {"runtime_cache", "disk_cache"}:
             stats_source.loc[nba_mask & ~unresolved_mask] = "cached"
         elif nba_fetch_diag.get("status") == "failed" and nba_resolved_rows == 0 and not nba_stats_available:
             stats_source.loc[nba_mask] = "failed"
@@ -2768,7 +2746,8 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     features_data["stats_resolution_stage_failure"] = stats_resolution_stage_failure
     features_data["stats_fetch_retries_used"] = nba_fetch_diag.get("retries_used", 0)
     nba_fetch_source = str(nba_fetch_diag.get("source", "none"))
-    features_data["nba_stats_fetch_status"] = nba_fetch_source
+    nba_fetch_status = str(nba_fetch_diag.get("status", "not_started"))
+    features_data["nba_stats_fetch_status"] = nba_fetch_status
     features_data["nba_stats_fetch_source"] = nba_fetch_source
     features_data["nba_stats_fetch_retries_used"] = int(nba_fetch_diag.get("retries_used", 0))
     features_data["ml_feature_eligible"] = stats_resolution_status == "resolved"
@@ -2926,7 +2905,7 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     # 6. Map Remaining Features (Existing) using safe_numeric_fill
     
     # Aggregate fallback diagnostics to reduce log spam
-    fallback_counts_by_league = league_keys[combined_fallback].value_counts().to_dict()
+    fallback_counts_by_league = league_keys[unresolved_mask].value_counts().to_dict()
     unresolved_counts_by_league = league_keys[stats_resolution_status == "unresolved"].value_counts().to_dict()
     source_counts = stats_source.value_counts(dropna=False).to_dict()
     source_counts = {
@@ -2963,7 +2942,7 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     features_data["stats_resolution_stage_failure_counts"] = str(dict(resolution_stage_counts))
 
     total_rows = max(len(df), 1)
-    fallback_ratio = float(combined_fallback.sum()) / float(total_rows)
+    fallback_ratio = float(unresolved_mask.sum()) / float(total_rows)
     nba_failed = str(nba_fetch_diag.get("source", "")).lower() == "failed"
     fallback_heavy = fallback_ratio >= 0.25 or int(sum(unresolved_counts_by_league.values())) >= 3
     run_health_warning = ""
@@ -2996,15 +2975,15 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     if fallback_counts_by_league:
         logger.warning(f"STATS FALLBACK SUMMARY BY LEAGUE: {fallback_counts_by_league}")
 
-    if combined_fallback.any():
+    if unresolved_mask.any():
         unresolved_pairs = Counter(
             [
                 f"{league_keys.at[idx]} :: {df.loc[idx, home_col]} vs {df.loc[idx, away_col]}"
-                for idx in df.index[combined_fallback]
+                for idx in df.index[unresolved_mask]
             ]
         )
         unresolved_teams = Counter()
-        for idx in df.index[combined_fallback]:
+        for idx in df.index[unresolved_mask]:
             if bool(home_fallback.loc[idx]):
                 unresolved_teams[f"{league_keys.at[idx]}::{str(df.loc[idx, home_col])}"] += 1
             if bool(away_fallback.loc[idx]):

@@ -150,7 +150,7 @@ def test_nba_fetch_failure_uses_same_day_cached_payload(monkeypatch):
     stats = fp.fetch_nba_stats(2025)
     diag = fp.get_nba_fetch_diagnostics()
     assert stats == cached_payload
-    assert diag["source"] == "cached"
+    assert diag["source"] == "runtime_cache"
     assert diag["status"] == "ok"
 
 
@@ -173,7 +173,7 @@ def test_nba_fetch_diagnostics_distinguish_live_cached_failed(monkeypatch, tmp_p
     assert fp.fetch_nba_stats(2025)
     assert fp.get_nba_fetch_diagnostics()["source"] == "live"
     assert fp.fetch_nba_stats(2025)
-    assert fp.get_nba_fetch_diagnostics()["source"] == "cached"
+    assert fp.get_nba_fetch_diagnostics()["source"] == "runtime_cache"
 
     fp._NBA_STATS_RUNTIME_CACHE.clear()
     fp._NBA_STATS_SUCCESS_ARCHIVE.clear()
@@ -234,8 +234,57 @@ def test_nba_fetch_failure_uses_same_day_disk_cache(monkeypatch, tmp_path):
     stats = fp.fetch_nba_stats(2025)
     diag = fp.get_nba_fetch_diagnostics()
     assert stats == disk_payload
-    assert diag["source"] == "cached"
+    assert diag["source"] == "disk_cache"
     assert diag["status"] == "ok"
+
+
+def test_cached_success_does_not_inflate_unresolved_or_fallback(monkeypatch):
+    def fake_fetch_team_stats(_api_clients, season_year=None):
+        return pd.DataFrame(
+            [
+                {"team_norm": "BOSTON CELTICS", "league_key": "NBA", "win_pct": 0.61, "home_win_pct": 0.61, "away_win_pct": 0.61, "points_per_game": 118.0, "points_allowed_per_game": 111.0, "turnovers": 12.0, "streak": 0.0, "last5_win_pct": 0.6},
+                {"team_norm": "PHILADELPHIA 76ERS", "league_key": "NBA", "win_pct": 0.58, "home_win_pct": 0.58, "away_win_pct": 0.58, "points_per_game": 114.0, "points_allowed_per_game": 109.0, "turnovers": 11.0, "streak": 0.0, "last5_win_pct": 0.6},
+            ]
+        )
+
+    monkeypatch.setattr(fp, "fetch_team_stats", fake_fetch_team_stats)
+    fp._NBA_FETCH_DIAGNOSTICS.update({"status": "ok", "source": "runtime_cache", "retries_used": 3, "last_error": "timeout"})
+
+    games = pd.DataFrame(
+        [
+            {"league": "NBA", "home_team": "Boston", "away_team": "Philadelphia", "market_type": "h2h_home", "decimal_odds": 1.91, "odds_american": -110}
+        ]
+    )
+    enriched = fp.enrich_with_model_features(games, api_clients={})
+
+    assert enriched.loc[0, "stats_resolution_status"] == "resolved"
+    assert enriched.loc[0, "stats_source"] == "cached"
+    assert enriched.loc[0, "fallback_summary_by_league"] in {"{}", "{ }"}
+    assert int(enriched.loc[0, "stats_unresolved_count_by_league"]) == 0
+
+
+def test_nba_fetch_status_source_and_retries_reflect_final_source(monkeypatch):
+    def fake_fetch_team_stats(_api_clients, season_year=None):
+        return pd.DataFrame(
+            [
+                {"team_norm": "BOSTON CELTICS", "league_key": "NBA", "win_pct": 0.61, "home_win_pct": 0.61, "away_win_pct": 0.61, "points_per_game": 118.0, "points_allowed_per_game": 111.0, "turnovers": 12.0, "streak": 0.0, "last5_win_pct": 0.6},
+                {"team_norm": "ATLANTA HAWKS", "league_key": "NBA", "win_pct": 0.52, "home_win_pct": 0.52, "away_win_pct": 0.52, "points_per_game": 114.0, "points_allowed_per_game": 113.0, "turnovers": 12.0, "streak": 0.0, "last5_win_pct": 0.5},
+            ]
+        )
+
+    monkeypatch.setattr(fp, "fetch_team_stats", fake_fetch_team_stats)
+    fp._NBA_FETCH_DIAGNOSTICS.update({"status": "ok", "source": "disk_cache", "retries_used": 3, "last_error": "timeout"})
+
+    games = pd.DataFrame(
+        [
+            {"league": "NBA", "home_team": "Boston", "away_team": "Atlanta", "market_type": "h2h_home", "decimal_odds": 1.91, "odds_american": -110}
+        ]
+    )
+    enriched = fp.enrich_with_model_features(games, api_clients={})
+
+    assert enriched.loc[0, "nba_stats_fetch_status"] == "ok"
+    assert enriched.loc[0, "nba_stats_fetch_source"] == "disk_cache"
+    assert int(enriched.loc[0, "nba_stats_fetch_retries_used"]) == 3
 
 
 def test_unresolved_nba_rows_marked_and_ml_ineligible(monkeypatch):
