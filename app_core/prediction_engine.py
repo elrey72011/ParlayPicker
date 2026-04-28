@@ -1755,14 +1755,26 @@ class PredictionEngine:
                             trigger_reasons.append("medium_slate_repeat_threshold_with_support")
                     else:
                         max_ratio = max_repeats / total_count if total_count > 0 else 0
-                        if max_repeats >= 4:
-                            logger.warning(f"ML RAW COMPRESSION AUDIT: Slate > 60 rows and a raw probability repeated {max_repeats} times (threshold: 4+). Triggering intervention.")
+                        large_slate_support = (
+                            duplicate_feature_ratio >= 0.20
+                            or same3_frac >= 0.30
+                            or raw_std <= 0.012
+                            or bool(self._last_metrics.get("schema_mismatch_detected", False))
+                        )
+                        if max_repeats >= 4 and large_slate_support:
+                            logger.warning(
+                                "ML RAW COMPRESSION AUDIT: Slate > 60 rows repeated value threshold hit (%s repeats) with supporting degradation signals. Triggering intervention.",
+                                max_repeats,
+                            )
                             is_flat = True
-                            trigger_reasons.append("large_slate_repeat_threshold")
-                        elif max_ratio >= 0.10:
-                            logger.warning(f"ML RAW COMPRESSION AUDIT: Slate > 60 rows and a raw probability covers {max_ratio:.1%} of rows (threshold: 10%+). Triggering intervention.")
+                            trigger_reasons.append("large_slate_repeat_threshold_with_support")
+                        elif max_ratio >= 0.10 and large_slate_support:
+                            logger.warning(
+                                "ML RAW COMPRESSION AUDIT: Slate > 60 rows repeat ratio threshold hit (%s) with supporting degradation signals. Triggering intervention.",
+                                f"{max_ratio:.1%}",
+                            )
                             is_flat = True
-                            trigger_reasons.append("large_slate_repeat_ratio_threshold")
+                            trigger_reasons.append("large_slate_repeat_ratio_threshold_with_support")
                 except Exception as e:
                     logger.error(f"Error during ML RAW COMPRESSION AUDIT tier check: {e}")
             self._last_metrics["hybrid_override_trigger_reasons"] = trigger_reasons

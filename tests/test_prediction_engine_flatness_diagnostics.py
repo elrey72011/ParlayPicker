@@ -40,6 +40,15 @@ class _MildClusterModel:
         return np.column_stack([1 - vals, vals])
 
 
+class _LargeSlateMildRepeatModel:
+    def predict_proba(self, df: pd.DataFrame):
+        n = len(df)
+        base = np.linspace(0.41, 0.69, num=max(n, 1), dtype=float)
+        if n >= 70:
+            base[:8] = 0.51  # ~11% repeats on a 70+ slate
+        return np.column_stack([1 - base[:n], base[:n]])
+
+
 def _build_input(rows: int = 10) -> pd.DataFrame:
     base = {col: 0.0 for col in VERTEX_FEATURE_COLUMNS}
     out = []
@@ -138,3 +147,20 @@ def test_degraded_subset_flags_populate_in_predict_path():
     assert metrics["ml_numeric_coercion_ok"] is True
     assert metrics["ml_all_constant_feature_count"] >= 1
     assert "degraded_subset" in metrics["ml_schema_mismatch_reason"]
+
+
+def test_large_slate_mild_repeat_without_support_does_not_force_hybrid_override():
+    engine = PredictionEngine(model_path="models/does_not_exist.json")
+    engine.model = _LargeSlateMildRepeatModel()
+    engine.use_fallback = False
+    df = _build_input(72)
+    for i in range(len(df)):
+        df.at[i, VERTEX_FEATURE_COLUMNS[0]] = float(i + 1)
+        df.at[i, VERTEX_FEATURE_COLUMNS[1]] = float((i % 13) + 1)
+        df.at[i, "feature_stats_fallback"] = False
+
+    probs = engine.predict_batch(df)
+    metrics = engine._last_metrics
+    assert len(probs) == 72
+    assert metrics["hybrid_fallback_triggered"] is False
+    assert "large_slate_repeat_ratio_threshold_with_support" not in metrics.get("hybrid_override_trigger_reasons", [])
