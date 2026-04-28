@@ -5,6 +5,7 @@ from typing import Dict, Any, List, Optional, Mapping
 import logging
 import warnings
 import os
+import json
 import threading
 import concurrent.futures
 import re
@@ -122,6 +123,37 @@ _NBA_FETCH_DIAGNOSTICS: Dict[str, Any] = {
     "last_error": "",
     "slate_day": "",
 }
+
+
+def _nba_cache_file_path(season_year: int, slate_day: str) -> str:
+    cache_dir = os.path.join("data", "cache")
+    os.makedirs(cache_dir, exist_ok=True)
+    return os.path.join(cache_dir, f"nba_stats_{season_year}_{slate_day}.json")
+
+
+def _load_nba_disk_cache(season_year: int, slate_day: str) -> List[Dict[str, Any]]:
+    path = _nba_cache_file_path(season_year, slate_day)
+    if not os.path.exists(path):
+        return []
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            payload = json.load(fh)
+        if isinstance(payload, list) and payload:
+            return payload
+    except Exception:
+        logger.warning("Failed reading NBA disk cache payload for season=%s slate_day=%s", season_year, slate_day)
+    return []
+
+
+def _save_nba_disk_cache(season_year: int, slate_day: str, stats: List[Dict[str, Any]]) -> None:
+    if not stats:
+        return
+    path = _nba_cache_file_path(season_year, slate_day)
+    try:
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(stats, fh)
+    except Exception:
+        logger.warning("Failed writing NBA disk cache payload for season=%s slate_day=%s", season_year, slate_day)
 
 # League-specific team alias mapping for stats resolution. Keep keys normalized/lowercase.
 # Canonical aliases are full-name/team-name variants that should map exactly.
@@ -1521,6 +1553,19 @@ def fetch_nba_stats(season_year: int) -> List[Dict[str, Any]]:
         })
         return _NBA_STATS_RUNTIME_CACHE[season_year]
 
+    disk_cached_stats = _load_nba_disk_cache(season_year, slate_day)
+    if disk_cached_stats:
+        _NBA_STATS_RUNTIME_CACHE[season_year] = list(disk_cached_stats)
+        _NBA_STATS_SUCCESS_ARCHIVE[season_year] = {"slate_day": slate_day, "stats": list(disk_cached_stats)}
+        _NBA_FETCH_DIAGNOSTICS.update({
+            "status": "ok",
+            "retries_used": 0,
+            "source": "cached",
+            "last_error": "",
+            "slate_day": slate_day,
+        })
+        return _NBA_STATS_RUNTIME_CACHE[season_year]
+
     if leaguedashteamstats is None:
         _NBA_FETCH_DIAGNOSTICS.update({
             "status": "failed",
@@ -1582,6 +1627,7 @@ def fetch_nba_stats(season_year: int) -> List[Dict[str, Any]]:
                 "slate_day": slate_day,
                 "stats": list(stats),
             }
+            _save_nba_disk_cache(season_year, slate_day, stats)
             _NBA_FETCH_DIAGNOSTICS.update({
                 "status": "ok",
                 "retries_used": attempt,
@@ -1609,6 +1655,20 @@ def fetch_nba_stats(season_year: int) -> List[Dict[str, Any]]:
             "slate_day": slate_day,
         })
         logger.warning("NBA live fetch failed; using same-slate cached NBA stats payload.")
+        return _NBA_STATS_RUNTIME_CACHE[season_year]
+
+    disk_cached_stats = _load_nba_disk_cache(season_year, slate_day)
+    if disk_cached_stats:
+        _NBA_STATS_RUNTIME_CACHE[season_year] = list(disk_cached_stats)
+        _NBA_STATS_SUCCESS_ARCHIVE[season_year] = {"slate_day": slate_day, "stats": list(disk_cached_stats)}
+        _NBA_FETCH_DIAGNOSTICS.update({
+            "status": "ok",
+            "retries_used": max_attempts - 1,
+            "source": "cached",
+            "last_error": str(last_exc) if last_exc else "",
+            "slate_day": slate_day,
+        })
+        logger.warning("NBA live fetch failed; using same-slate disk-cached NBA stats payload.")
         return _NBA_STATS_RUNTIME_CACHE[season_year]
 
     _NBA_FETCH_DIAGNOSTICS.update({

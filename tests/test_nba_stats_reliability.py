@@ -78,9 +78,10 @@ def test_stats_index_canonicalization_and_resolver_matches_city_only_nba_mlb():
     assert mlb_stage == "resolved"
 
 
-def test_fetch_nba_stats_retries_before_fallback(monkeypatch):
+def test_fetch_nba_stats_retries_before_fallback(monkeypatch, tmp_path):
     fp._NBA_STATS_RUNTIME_CACHE.clear()
     fp._NBA_STATS_SUCCESS_ARCHIVE.clear()
+    monkeypatch.chdir(tmp_path)
 
     class FakeEndpoint:
         calls = 0
@@ -153,9 +154,10 @@ def test_nba_fetch_failure_uses_same_day_cached_payload(monkeypatch):
     assert diag["status"] == "ok"
 
 
-def test_nba_fetch_diagnostics_distinguish_live_cached_failed(monkeypatch):
+def test_nba_fetch_diagnostics_distinguish_live_cached_failed(monkeypatch, tmp_path):
     fp._NBA_STATS_RUNTIME_CACHE.clear()
     fp._NBA_STATS_SUCCESS_ARCHIVE.clear()
+    monkeypatch.chdir(tmp_path)
 
     class SuccessEndpoint:
         def __init__(self, **kwargs):
@@ -187,6 +189,53 @@ def test_nba_fetch_diagnostics_distinguish_live_cached_failed(monkeypatch):
     monkeypatch.setattr(fp.time, "sleep", lambda *_args, **_kwargs: None)
     assert fp.fetch_nba_stats(2026) == []
     assert fp.get_nba_fetch_diagnostics()["source"] == "failed"
+
+
+def test_nba_fetch_failure_uses_same_day_disk_cache(monkeypatch, tmp_path):
+    fp._NBA_STATS_RUNTIME_CACHE.clear()
+    fp._NBA_STATS_SUCCESS_ARCHIVE.clear()
+    slate_day = "2026-04-28"
+    monkeypatch.chdir(tmp_path)
+
+    class FakeDateTime:
+        @staticmethod
+        def utcnow():
+            return pd.Timestamp(slate_day)
+
+    class FailEndpoint:
+        def __init__(self, **kwargs):
+            raise TimeoutError("down")
+
+    class FailModule:
+        LeagueDashTeamStats = FailEndpoint
+
+    disk_payload = [
+        {
+            "team_norm": "ATLANTA HAWKS",
+            "league_key": "NBA",
+            "win_pct": 0.55,
+            "home_win_pct": 0.55,
+            "away_win_pct": 0.55,
+            "points_per_game": 114.0,
+            "points_allowed_per_game": 111.0,
+            "assists_per_game": 24.0,
+            "rebounds_per_game": 44.0,
+            "turnovers": 12.0,
+            "streak": 0.0,
+            "last5_win_pct": 0.6,
+        }
+    ]
+    fp._save_nba_disk_cache(2025, slate_day, disk_payload)
+
+    monkeypatch.setattr(fp, "datetime", FakeDateTime)
+    monkeypatch.setattr(fp, "leaguedashteamstats", FailModule)
+    monkeypatch.setattr(fp.time, "sleep", lambda *_args, **_kwargs: None)
+
+    stats = fp.fetch_nba_stats(2025)
+    diag = fp.get_nba_fetch_diagnostics()
+    assert stats == disk_payload
+    assert diag["source"] == "cached"
+    assert diag["status"] == "ok"
 
 
 def test_unresolved_nba_rows_marked_and_ml_ineligible(monkeypatch):
