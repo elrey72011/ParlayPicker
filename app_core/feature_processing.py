@@ -2767,7 +2767,9 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     features_data["stats_fallback_reason"] = stats_fallback_reason
     features_data["stats_resolution_stage_failure"] = stats_resolution_stage_failure
     features_data["stats_fetch_retries_used"] = nba_fetch_diag.get("retries_used", 0)
-    features_data["nba_stats_fetch_status"] = str(nba_fetch_diag.get("source", "none"))
+    nba_fetch_source = str(nba_fetch_diag.get("source", "none"))
+    features_data["nba_stats_fetch_status"] = nba_fetch_source
+    features_data["nba_stats_fetch_source"] = nba_fetch_source
     features_data["nba_stats_fetch_retries_used"] = int(nba_fetch_diag.get("retries_used", 0))
     features_data["ml_feature_eligible"] = stats_resolution_status == "resolved"
 

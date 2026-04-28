@@ -280,6 +280,7 @@ def test_unresolved_nba_rows_marked_and_ml_ineligible(monkeypatch):
     assert "stats_fallback_reason" in enriched.columns
     assert "ml_feature_eligible" in enriched.columns
     assert "stats_fetch_retries_used" in enriched.columns
+    assert "nba_stats_fetch_source" in enriched.columns
 
     assert enriched.loc[0, "stats_resolution_status"] == "unresolved"
     assert enriched.loc[0, "stats_source"] == "fallback"
@@ -289,6 +290,7 @@ def test_unresolved_nba_rows_marked_and_ml_ineligible(monkeypatch):
     assert pd.isna(enriched.loc[0, "feature_home_win_pct"])
     assert pd.isna(enriched.loc[0, "feature_away_win_pct"])
     assert str(enriched.loc[0, "stats_resolution_stage_failure"]) != ""
+    assert str(enriched.loc[0, "nba_stats_fetch_source"]) == "live"
 
 
 def test_aggregated_stats_diagnostics_populate(monkeypatch):

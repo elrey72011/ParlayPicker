@@ -107,7 +107,8 @@ BEST_PICK_COLUMNS = [
     "gemini_explanation", "gemini_risk_notes", "used_stale_features", "Pick_Quality", "Conviction_Score",
     "uploaded_spread_line", "uploaded_total_line", "live_spread_line", "live_total_line", "line_source", "line_delta", "upload_market_match",
     "suspicious_data_flag", "suspicious_data_reasons", "status_metric_basis", "effective_expected_value", "effective_edge", "effective_win_probability", "status_blocker_reason", "status_blocker_stage",
-    "nba_stats_fetch_status", "nba_stats_fetch_retries_used", "stats_source_counts", "fallback_summary_by_league", "fallback_heavy_slate_flag", "run_health_warning",
+    "nba_stats_fetch_status", "nba_stats_fetch_source", "nba_stats_fetch_retries_used", "stats_source_counts", "fallback_summary_by_league", "fallback_heavy_slate_flag", "run_health_warning",
+    "degraded_feature_subset_flag", "degraded_feature_subset_reason",
 ]
 
 CANONICAL_BET_COLUMNS = [
@@ -3496,6 +3497,7 @@ def run_analysis_pipeline(
     merged["model_status"] = "OK"
     nba_stats_diag = {
         "nba_stats_fetch_status": "not_started",
+        "nba_stats_fetch_source": "none",
         "nba_stats_fetch_retries_used": 0,
         "nba_rows_live_stats": 0,
         "nba_rows_cached_stats": 0,
@@ -3567,6 +3569,10 @@ def run_analysis_pipeline(
                 )
                 if not fetch_status.empty:
                     nba_stats_diag["nba_stats_fetch_status"] = "failed" if (fetch_status == "failed").any() else "ok"
+                if "nba_stats_fetch_source" in enriched_for_prediction.columns and not enriched_for_prediction.empty:
+                    nba_stats_diag["nba_stats_fetch_source"] = str(enriched_for_prediction["nba_stats_fetch_source"].iloc[0])
+                elif "nba_stats_fetch_status" in enriched_for_prediction.columns and not enriched_for_prediction.empty:
+                    nba_stats_diag["nba_stats_fetch_source"] = str(enriched_for_prediction["nba_stats_fetch_status"].iloc[0])
                 if "stats_fetch_retries_used" in enriched_for_prediction.columns and not enriched_for_prediction.empty:
                     nba_stats_diag["nba_stats_fetch_retries_used"] = int(
                         pd.to_numeric(enriched_for_prediction["stats_fetch_retries_used"], errors="coerce").fillna(0).max()
@@ -3789,6 +3795,13 @@ def run_analysis_pipeline(
     merged["model_probability"] = model_probability
     merged["display_probability"] = model_probability.round(3)
     merged["calibrated_probability"] = calibrated_probability
+    merged["nba_stats_fetch_status"] = nba_stats_diag.get("nba_stats_fetch_status", "not_started")
+    merged["nba_stats_fetch_source"] = nba_stats_diag.get("nba_stats_fetch_source", "none")
+    merged["nba_stats_fetch_retries_used"] = int(nba_stats_diag.get("nba_stats_fetch_retries_used", 0))
+    degraded_reason = str(ml_prediction_diag.get("ml_schema_mismatch_reason", "")).strip()
+    degraded_flag = "degraded_subset" in degraded_reason
+    merged["degraded_feature_subset_flag"] = bool(degraded_flag)
+    merged["degraded_feature_subset_reason"] = degraded_reason if degraded_flag else ""
 
     # Phase 3: NCAAB Statistical Recalibration
     # If is_neutral == True for neutral-site and tournament games, compress margins to prevent false edges on tight spreads.
@@ -3923,6 +3936,7 @@ def run_analysis_pipeline(
         "base_date_coverage": base_coverage,
         "has_normalized_bet_rows": not analysis_df.empty,
         "nba_stats_fetch_status": nba_stats_diag["nba_stats_fetch_status"],
+        "nba_stats_fetch_source": nba_stats_diag["nba_stats_fetch_source"],
         "nba_stats_fetch_retries_used": nba_stats_diag["nba_stats_fetch_retries_used"],
         "nba_rows_live_stats": nba_stats_diag["nba_rows_live_stats"],
         "nba_rows_cached_stats": nba_stats_diag["nba_rows_cached_stats"],
@@ -3948,6 +3962,8 @@ def run_analysis_pipeline(
         "ml_missing_feature_columns": ml_prediction_diag.get("ml_missing_feature_columns", []),
         "ml_extra_feature_columns": ml_prediction_diag.get("ml_extra_feature_columns", []),
         "schema_mismatch_detected": bool(ml_prediction_diag.get("schema_mismatch_detected", False)),
+        "degraded_feature_subset_flag": bool("degraded_subset" in str(ml_prediction_diag.get("ml_schema_mismatch_reason", ""))),
+        "degraded_feature_subset_reason": str(ml_prediction_diag.get("ml_schema_mismatch_reason", "")),
         "rows_using_league_average_defaults": int(ml_prediction_diag.get("rows_using_league_average_defaults", 0)),
         "rows_with_high_default_feature_share": int(ml_prediction_diag.get("rows_with_high_default_feature_share", 0)),
         "rows_with_duplicate_feature_signature": int(ml_prediction_diag.get("rows_with_duplicate_feature_signature", 0)),

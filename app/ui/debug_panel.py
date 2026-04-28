@@ -30,6 +30,8 @@ def show_pipeline_debug(
     st.write("Positive EV picks:", (df["expected_value"] > 0).sum() if "expected_value" in df.columns else 0)
     if "nba_stats_fetch_status" in df.columns and not df.empty:
         st.write("NBA stats fetch status:", str(df["nba_stats_fetch_status"].iloc[0]))
+    if "nba_stats_fetch_source" in df.columns and not df.empty:
+        st.write("NBA stats fetch source:", str(df["nba_stats_fetch_source"].iloc[0]))
     if "nba_stats_fetch_retries_used" in df.columns and not df.empty:
         st.write("NBA stats fetch retries used:", int(df["nba_stats_fetch_retries_used"].iloc[0]))
     if "stats_source_counts" in df.columns and not df.empty:
@@ -42,6 +44,10 @@ def show_pipeline_debug(
         st.write("Fallback-heavy slate:", bool(df["fallback_heavy_slate_flag"].iloc[0]))
     if "run_health_warning" in df.columns and not df.empty and str(df["run_health_warning"].iloc[0]).strip():
         st.warning(str(df["run_health_warning"].iloc[0]))
+    if "degraded_feature_subset_flag" in df.columns and not df.empty:
+        st.write("Degraded feature subset:", bool(df["degraded_feature_subset_flag"].iloc[0]))
+    if "degraded_feature_subset_reason" in df.columns and not df.empty and str(df["degraded_feature_subset_reason"].iloc[0]).strip():
+        st.write("Degraded subset reason:", str(df["degraded_feature_subset_reason"].iloc[0]))
 
     if "expected_value" in df.columns:
         ev = pd.to_numeric(df["expected_value"], errors="coerce").dropna()

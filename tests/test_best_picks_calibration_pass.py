@@ -329,13 +329,19 @@ def test_run_health_fields_are_export_visible_when_present():
         ]
     )
     df["nba_stats_fetch_status"] = "cached"
+    df["nba_stats_fetch_source"] = "cached"
     df["nba_stats_fetch_retries_used"] = 3
     df["stats_source_counts"] = "{'live': 0, 'cached': 1, 'fallback': 0, 'failed': 0}"
     df["fallback_summary_by_league"] = "{'NBA': 12}"
     df["fallback_heavy_slate_flag"] = True
     df["run_health_warning"] = "Run health warning: fallback usage is elevated"
+    df["degraded_feature_subset_flag"] = True
+    df["degraded_feature_subset_reason"] = "degraded_subset:all_constant_feature_count=10"
     out = build_best_picks_df(df)
     row = out.iloc[0]
     assert row["nba_stats_fetch_status"] == "cached"
+    assert row["nba_stats_fetch_source"] == "cached"
     assert bool(row["fallback_heavy_slate_flag"]) is True
     assert "Run health warning" in row["run_health_warning"]
+    assert bool(row["degraded_feature_subset_flag"]) is True
+    assert "degraded_subset" in str(row["degraded_feature_subset_reason"])
