@@ -106,7 +106,8 @@ BEST_PICK_COLUMNS = [
     "kalshi_probability", "kalshi_match_status", "kalshi_match_reason",
     "gemini_explanation", "gemini_risk_notes", "used_stale_features", "Pick_Quality", "Conviction_Score",
     "uploaded_spread_line", "uploaded_total_line", "live_spread_line", "live_total_line", "line_source", "line_delta", "upload_market_match",
-    "suspicious_data_flag", "suspicious_data_reasons", "status_blocker_reason", "status_blocker_stage",
+    "suspicious_data_flag", "suspicious_data_reasons", "status_metric_basis", "effective_expected_value", "effective_edge", "effective_win_probability", "status_blocker_reason", "status_blocker_stage",
+    "nba_stats_fetch_status", "nba_stats_fetch_retries_used", "stats_source_counts", "fallback_summary_by_league", "fallback_heavy_slate_flag", "run_health_warning",
 ]
 
 CANONICAL_BET_COLUMNS = [
@@ -1898,6 +1899,14 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         best["status_blocker_reason"] = ""
     if "status_blocker_stage" not in best.columns:
         best["status_blocker_stage"] = "none"
+    if "status_metric_basis" not in best.columns:
+        best["status_metric_basis"] = "raw"
+    if "effective_expected_value" not in best.columns:
+        best["effective_expected_value"] = pd.NA
+    if "effective_edge" not in best.columns:
+        best["effective_edge"] = pd.NA
+    if "effective_win_probability" not in best.columns:
+        best["effective_win_probability"] = pd.NA
 
     for idx in best.index:
         status_reason = "Unknown"
@@ -1915,6 +1924,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         # Calibrated/Win probability (ensure 0-1)
         win_prob = best.at[idx, "calibrated_probability"] if "calibrated_probability" in best.columns else 0.5
         win_prob = win_prob if pd.notna(win_prob) else 0.5
+        effective_ev = ev
+        effective_edge = edge
+        effective_win_probability = win_prob
+        status_metric_basis = "raw"
 
         # Check fallback indicators
         stale = bool(best.at[idx, "used_stale_features"]) if "used_stale_features" in best.columns and pd.notna(best.at[idx, "used_stale_features"]) else False
@@ -2050,7 +2063,11 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 divergence_rows_preserved += 1
             else:
                 status = "No Play"
-                status_reason = "No Play: divergence override denied due to negative EV/edge"
+                status_reason = (
+                    "No Play: divergence override denied by raw viability floor "
+                    f"(EV >= {DIVERGENCE_HIGH_VARIANCE_MIN_EV:.2f}, Edge >= {DIVERGENCE_HIGH_VARIANCE_MIN_EDGE:.2f}, "
+                    f"Win Prob >= {DIVERGENCE_HIGH_VARIANCE_MIN_PROB:.2f})"
+                )
                 blocker_stage = "divergence_viability_floor"
                 divergence_rows_blocked_by_viability_floor += 1
                 if pd.isna(ev) or float(ev) < DIVERGENCE_HIGH_VARIANCE_MIN_EV:
@@ -2080,6 +2097,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             is_side_market = market_type in {"spread_home", "spread_away", "h2h_home", "h2h_away"}
             is_total_market = "total" in market_type.lower()
 
+            status_metric_basis = "effective"
             effective_ev = ev
             if is_total_market:
                 from app_core.weights_config import FALLBACK_HEAVY_TOTAL_EV_MULTIPLIER
@@ -2256,12 +2274,14 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             else:
                 if effective_ev < req_ev or edge < req_edge:
                     status = "Below Threshold"
+                    blocked_by_fallback_heavy_guardrail = False
                     if blocked_by_mlb_spread_on_metrics:
                         status_reason = f"Fails MLB spread actionable penalty (Edge >= {req_edge*100:.1f}%, Effective EV >= {req_ev*100:.1f}%)"
                     elif blocked_by_mlb_over_gate_on_thresholds:
                         status_reason = f"Fails MLB over actionable gate (Prob >= {req_prob*100:.1f}%, Edge >= {req_edge*100:.1f}%, Effective EV >= {req_ev*100:.1f}%)"
                     elif is_total_market and is_fallback_heavy and ((effective_ev < req_ev and effective_ev >= req_ev - FALLBACK_HEAVY_TOTAL_EXTRA_PENALTY) or (edge < req_edge and edge >= req_edge - FALLBACK_HEAVY_TOTAL_EXTRA_PENALTY)):
-                         status_reason = f"Fails due to fallback-heavy totals penalty (Edge >= {req_edge*100:.1f}%, Effective EV >= {req_ev*100:.1f}%)"
+                        status_reason = f"Fails due to fallback-heavy totals penalty (Edge >= {req_edge*100:.1f}%, Effective EV >= {req_ev*100:.1f}%)"
+                        blocked_by_fallback_heavy_guardrail = True
                     elif is_total_market and market_type == "total_under":
                         status_reason = f"Fails stricter total_under cold-market penalty (Edge >= {req_edge*100:.1f}%, Effective EV >= {req_ev*100:.1f}%)"
                     elif is_total_market and league == "NHL":
@@ -2270,7 +2290,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                         status_reason = f"Fails stricter total_over cold-market penalty (Edge >= {req_edge*100:.1f}%, Effective EV >= {req_ev*100:.1f}%)"
                     else:
                         status_reason = f"Fails minimum Edge ({req_edge*100:.1f}%) or Effective EV ({req_ev*100:.1f}%) thresholds"
-                    blocker_stage = "actionable_threshold"
+                    blocker_stage = "fallback_heavy_guardrail" if blocked_by_fallback_heavy_guardrail else "actionable_threshold"
                 else:
                     status = "Actionable"
                     status_reason = "Passed all strict filters"
@@ -2297,6 +2317,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         best.at[idx, "Status_Reason"] = status_reason
         best.at[idx, "suspicious_data_flag"] = suspicious_data_flag
         best.at[idx, "suspicious_data_reasons"] = suspicious_reasons_str
+        best.at[idx, "status_metric_basis"] = status_metric_basis
+        best.at[idx, "effective_expected_value"] = effective_ev
+        best.at[idx, "effective_edge"] = effective_edge
+        best.at[idx, "effective_win_probability"] = effective_win_probability
         best.at[idx, "status_blocker_reason"] = status_reason if status != "Actionable" else ""
         best.at[idx, "status_blocker_stage"] = blocker_stage if status != "Actionable" else "none"
 

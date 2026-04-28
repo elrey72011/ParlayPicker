@@ -5,6 +5,7 @@ from typing import Dict, Any, List, Optional, Mapping
 import logging
 import warnings
 import os
+import json
 import threading
 import concurrent.futures
 import re
@@ -114,12 +115,45 @@ LEAGUE_AVERAGES = {
 }
 
 _NBA_STATS_RUNTIME_CACHE: Dict[int, List[Dict[str, Any]]] = {}
+_NBA_STATS_SUCCESS_ARCHIVE: Dict[int, Dict[str, Any]] = {}
 _NBA_FETCH_DIAGNOSTICS: Dict[str, Any] = {
     "status": "not_started",
     "retries_used": 0,
     "source": "none",
     "last_error": "",
+    "slate_day": "",
 }
+
+
+def _nba_cache_file_path(season_year: int, slate_day: str) -> str:
+    cache_dir = os.path.join("data", "cache")
+    os.makedirs(cache_dir, exist_ok=True)
+    return os.path.join(cache_dir, f"nba_stats_{season_year}_{slate_day}.json")
+
+
+def _load_nba_disk_cache(season_year: int, slate_day: str) -> List[Dict[str, Any]]:
+    path = _nba_cache_file_path(season_year, slate_day)
+    if not os.path.exists(path):
+        return []
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            payload = json.load(fh)
+        if isinstance(payload, list) and payload:
+            return payload
+    except Exception:
+        logger.warning("Failed reading NBA disk cache payload for season=%s slate_day=%s", season_year, slate_day)
+    return []
+
+
+def _save_nba_disk_cache(season_year: int, slate_day: str, stats: List[Dict[str, Any]]) -> None:
+    if not stats:
+        return
+    path = _nba_cache_file_path(season_year, slate_day)
+    try:
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(stats, fh)
+    except Exception:
+        logger.warning("Failed writing NBA disk cache payload for season=%s slate_day=%s", season_year, slate_day)
 
 # League-specific team alias mapping for stats resolution. Keep keys normalized/lowercase.
 # Canonical aliases are full-name/team-name variants that should map exactly.
@@ -163,6 +197,8 @@ LEAGUE_TEAM_NAME_MAPPING: Dict[str, Dict[str, str]] = {
         "montreal": "MONTREAL CANADIENS",
         "anaheim": "ANAHEIM DUCKS",
         "edmonton": "EDMONTON OILERS",
+        "boston": "BOSTON BRUINS",
+        "buffalo": "BUFFALO SABRES",
         "pittsburgh": "PITTSBURGH PENGUINS",
         "utah": "UTAH HOCKEY CLUB",
         "utah hockey club": "UTAH HOCKEY CLUB",
@@ -182,6 +218,8 @@ LEAGUE_TEAM_NAME_MAPPING: Dict[str, Dict[str, str]] = {
     "MLB": {
         "athletics": "OAKLAND",
         "oakland athletics": "OAKLAND",
+        "arizona": "ARIZONA DIAMONDBACKS",
+        "arizona diamondbacks": "ARIZONA DIAMONDBACKS",
         "houston": "HOUSTON ASTROS",
         "detroit": "DETROIT TIGERS",
         "baltimore": "BALTIMORE ORIOLES",
@@ -215,6 +253,8 @@ LEAGUE_CITY_ONLY_ALIASES: Dict[str, Dict[str, str]] = {
         "montreal": "MONTREAL CANADIENS",
         "anaheim": "ANAHEIM DUCKS",
         "edmonton": "EDMONTON OILERS",
+        "boston": "BOSTON BRUINS",
+        "buffalo": "BUFFALO SABRES",
         "pittsburgh": "PITTSBURGH PENGUINS",
         "utah": "UTAH HOCKEY CLUB",
         "utah hc": "UTAH HOCKEY CLUB",
@@ -224,6 +264,7 @@ LEAGUE_CITY_ONLY_ALIASES: Dict[str, Dict[str, str]] = {
         "colorado": "COLORADO ROCKIES",
         "cleveland": "CLEVELAND GUARDIANS",
         "toronto": "TORONTO BLUE JAYS",
+        "arizona": "ARIZONA DIAMONDBACKS",
         "houston": "HOUSTON ASTROS",
         "detroit": "DETROIT TIGERS",
         "baltimore": "BALTIMORE ORIOLES",
@@ -1484,17 +1525,44 @@ def fuzzy_match_team_robust(target: str, choices: List[str], threshold: float = 
 # New Open-Source Stats Fetching Helpers
 # -------------------------------------------------------------------------
 
-@st.cache_data(ttl=21600)  # Cache for 6 hours
 def fetch_nba_stats(season_year: int) -> List[Dict[str, Any]]:
     """
     Fetch NBA stats using nba_api for the given season year (e.g. 2024 for 2024-25).
     """
-    if season_year in _NBA_STATS_RUNTIME_CACHE:
+    slate_day = datetime.utcnow().strftime("%Y-%m-%d")
+    if season_year in _NBA_STATS_RUNTIME_CACHE and _NBA_STATS_RUNTIME_CACHE[season_year]:
         _NBA_FETCH_DIAGNOSTICS.update({
             "status": "ok",
             "retries_used": 0,
             "source": "cached",
             "last_error": "",
+            "slate_day": slate_day,
+        })
+        return _NBA_STATS_RUNTIME_CACHE[season_year]
+
+    archived = _NBA_STATS_SUCCESS_ARCHIVE.get(season_year, {})
+    archived_stats = archived.get("stats", []) if isinstance(archived, dict) else []
+    if archived.get("slate_day") == slate_day and archived_stats:
+        _NBA_STATS_RUNTIME_CACHE[season_year] = list(archived_stats)
+        _NBA_FETCH_DIAGNOSTICS.update({
+            "status": "ok",
+            "retries_used": 0,
+            "source": "cached",
+            "last_error": "",
+            "slate_day": slate_day,
+        })
+        return _NBA_STATS_RUNTIME_CACHE[season_year]
+
+    disk_cached_stats = _load_nba_disk_cache(season_year, slate_day)
+    if disk_cached_stats:
+        _NBA_STATS_RUNTIME_CACHE[season_year] = list(disk_cached_stats)
+        _NBA_STATS_SUCCESS_ARCHIVE[season_year] = {"slate_day": slate_day, "stats": list(disk_cached_stats)}
+        _NBA_FETCH_DIAGNOSTICS.update({
+            "status": "ok",
+            "retries_used": 0,
+            "source": "cached",
+            "last_error": "",
+            "slate_day": slate_day,
         })
         return _NBA_STATS_RUNTIME_CACHE[season_year]
 
@@ -1504,6 +1572,7 @@ def fetch_nba_stats(season_year: int) -> List[Dict[str, Any]]:
             "retries_used": 0,
             "source": "failed",
             "last_error": "nba_api unavailable",
+            "slate_day": slate_day,
         })
         return []
 
@@ -1554,11 +1623,17 @@ def fetch_nba_stats(season_year: int) -> List[Dict[str, Any]]:
                 })
 
             _NBA_STATS_RUNTIME_CACHE[season_year] = stats
+            _NBA_STATS_SUCCESS_ARCHIVE[season_year] = {
+                "slate_day": slate_day,
+                "stats": list(stats),
+            }
+            _save_nba_disk_cache(season_year, slate_day, stats)
             _NBA_FETCH_DIAGNOSTICS.update({
                 "status": "ok",
                 "retries_used": attempt,
                 "source": "live",
                 "last_error": "",
+                "slate_day": slate_day,
             })
             logger.info(f"Successfully fetched NBA stats for {len(stats)} teams.")
             return stats
@@ -1568,11 +1643,40 @@ def fetch_nba_stats(season_year: int) -> List[Dict[str, Any]]:
                 time.sleep(0.75 * (attempt + 1))
             continue
 
+    archived = _NBA_STATS_SUCCESS_ARCHIVE.get(season_year, {})
+    archived_stats = archived.get("stats", []) if isinstance(archived, dict) else []
+    if archived.get("slate_day") == slate_day and archived_stats:
+        _NBA_STATS_RUNTIME_CACHE[season_year] = list(archived_stats)
+        _NBA_FETCH_DIAGNOSTICS.update({
+            "status": "ok",
+            "retries_used": max_attempts - 1,
+            "source": "cached",
+            "last_error": str(last_exc) if last_exc else "",
+            "slate_day": slate_day,
+        })
+        logger.warning("NBA live fetch failed; using same-slate cached NBA stats payload.")
+        return _NBA_STATS_RUNTIME_CACHE[season_year]
+
+    disk_cached_stats = _load_nba_disk_cache(season_year, slate_day)
+    if disk_cached_stats:
+        _NBA_STATS_RUNTIME_CACHE[season_year] = list(disk_cached_stats)
+        _NBA_STATS_SUCCESS_ARCHIVE[season_year] = {"slate_day": slate_day, "stats": list(disk_cached_stats)}
+        _NBA_FETCH_DIAGNOSTICS.update({
+            "status": "ok",
+            "retries_used": max_attempts - 1,
+            "source": "cached",
+            "last_error": str(last_exc) if last_exc else "",
+            "slate_day": slate_day,
+        })
+        logger.warning("NBA live fetch failed; using same-slate disk-cached NBA stats payload.")
+        return _NBA_STATS_RUNTIME_CACHE[season_year]
+
     _NBA_FETCH_DIAGNOSTICS.update({
         "status": "failed",
         "retries_used": max_attempts - 1,
         "source": "failed",
         "last_error": str(last_exc) if last_exc else "unknown error",
+        "slate_day": slate_day,
     })
     logger.error(f"Failed to fetch NBA stats via nba_api after {max_attempts} attempts: {last_exc}", exc_info=True)
     return []
@@ -2663,6 +2767,8 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     features_data["stats_fallback_reason"] = stats_fallback_reason
     features_data["stats_resolution_stage_failure"] = stats_resolution_stage_failure
     features_data["stats_fetch_retries_used"] = nba_fetch_diag.get("retries_used", 0)
+    features_data["nba_stats_fetch_status"] = str(nba_fetch_diag.get("source", "none"))
+    features_data["nba_stats_fetch_retries_used"] = int(nba_fetch_diag.get("retries_used", 0))
     features_data["ml_feature_eligible"] = stats_resolution_status == "resolved"
 
     # Mapping calls
@@ -2829,8 +2935,14 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     }
     ml_excluded_by_league = league_keys[~features_data["ml_feature_eligible"]].value_counts().to_dict()
     features_data["stats_unresolved_count_by_league"] = int(sum(unresolved_counts_by_league.values()))
+    features_data["stats_unresolved_count_by_league_detail"] = str(
+        {str(k): int(v) for k, v in unresolved_counts_by_league.items()}
+    )
     features_data["stats_ml_excluded_rows"] = int((~features_data["ml_feature_eligible"]).sum())
     features_data["stats_source_counts"] = str(source_counts)
+    features_data["fallback_summary_by_league"] = str(
+        {str(k): int(v) for k, v in fallback_counts_by_league.items()}
+    )
     features_data["stats_binding_failures_by_league"] = str(
         {str(k): int(v) for k, v in stats_binding_failures_by_league.items()}
     )
@@ -2847,6 +2959,24 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     features_data["unresolved_after_alias"] = int(unresolved_after_alias)
     features_data["unresolved_after_fuzzy"] = int(unresolved_after_fuzzy)
     features_data["stats_resolution_stage_failure_counts"] = str(dict(resolution_stage_counts))
+
+    total_rows = max(len(df), 1)
+    fallback_ratio = float(combined_fallback.sum()) / float(total_rows)
+    nba_failed = str(nba_fetch_diag.get("source", "")).lower() == "failed"
+    fallback_heavy = fallback_ratio >= 0.25 or int(sum(unresolved_counts_by_league.values())) >= 3
+    run_health_warning = ""
+    if nba_failed and fallback_heavy:
+        run_health_warning = (
+            "Run health warning: NBA stats fetch failed and fallback usage is elevated; card confidence may be reduced."
+        )
+    elif fallback_heavy:
+        run_health_warning = (
+            "Run health warning: fallback usage is elevated; verify unresolved team bindings before trusting the card."
+        )
+    elif nba_failed:
+        run_health_warning = "Run health warning: NBA stats fetch failed for this run."
+    features_data["fallback_heavy_slate_flag"] = bool(fallback_heavy)
+    features_data["run_health_warning"] = run_health_warning
 
     logger.info(f"STATS SOURCE COUNTS: {source_counts}")
     logger.info(f"STATS UNRESOLVED COUNT BY LEAGUE: {unresolved_counts_by_league}")
