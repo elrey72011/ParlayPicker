@@ -1,7 +1,23 @@
 import pandas as pd
 
-from app_core.strategy_lab_realized import build_realized_strategy_lab
+from app_core.strategy_lab_realized import (
+    REALIZED_MODE_ACTIONABLE_ONLY,
+    REALIZED_MODE_ACTIONABLE_PLUS_HIGH_VARIANCE,
+    REALIZED_MODE_ALL_GRADED,
+    build_realized_strategy_lab,
+)
 from app.ui import strategy_lab_dashboard as dash
+
+
+def _graded_with_statuses():
+    return pd.DataFrame(
+        [
+            {"league": "MLB", "home_team": "A", "away_team": "B", "Pick Taken": "Over 8.5", "Pick_Outcome": "WIN", "decimal_odds": 1.91, "Stake": 100, "actual_home_score": 5, "actual_away_score": 4, "Status": "Actionable"},
+            {"league": "MLB", "home_team": "C", "away_team": "D", "Pick Taken": "C -1.5", "Pick_Outcome": "LOSS", "decimal_odds": 2.00, "Stake": 50, "actual_home_score": 2, "actual_away_score": 5, "Status": "High Variance/Speculative"},
+            {"league": "MLB", "home_team": "E", "away_team": "F", "Pick Taken": "Under 7.5", "Pick_Outcome": "WIN", "decimal_odds": 2.00, "Stake": 25, "actual_home_score": 6, "actual_away_score": 4, "Status": "Below Threshold"},
+            {"league": "MLB", "home_team": "G", "away_team": "H", "Pick Taken": "G ML", "Pick_Outcome": "LOSS", "decimal_odds": 2.50, "Stake": 10, "actual_home_score": 1, "actual_away_score": 3, "Status": "No Play"},
+        ]
+    )
 
 
 def test_realized_pnl_computation_win_loss_push():
@@ -25,6 +41,73 @@ def test_realized_pnl_computation_win_loss_push():
     assert summary["Total Staked"] == 170
     assert summary["Gross Returned"] == 211
     assert summary["Net P/L"] == 41
+
+
+def test_default_realized_mode_is_actionable_only():
+    realized, summary, diagnostics = build_realized_strategy_lab(_graded_with_statuses())
+
+    assert summary["Strategy Mode"] == REALIZED_MODE_ACTIONABLE_ONLY
+    assert set(realized.loc[realized["Include In Totals"], "Status Bucket"]) == {"Actionable"}
+    assert diagnostics["outside_mode_count"] == 3
+
+
+def test_default_excludes_no_play_from_bankroll_and_summary():
+    realized, summary, _ = build_realized_strategy_lab(_graded_with_statuses())
+
+    no_play_row = realized[realized["Status Bucket"] == "No Play"].iloc[0]
+    assert not bool(no_play_row["Include In Totals"])
+    assert summary["Bet Count"] == 1
+    assert summary["Total Staked"] == 100
+
+
+def test_actionable_plus_high_variance_mode_selection():
+    realized, summary, _ = build_realized_strategy_lab(
+        _graded_with_statuses(),
+        strategy_mode=REALIZED_MODE_ACTIONABLE_PLUS_HIGH_VARIANCE,
+    )
+
+    included_statuses = set(realized.loc[realized["Include In Totals"], "Status Bucket"])
+    assert included_statuses == {"Actionable", "High Variance/Speculative"}
+    assert summary["Bet Count"] == 2
+
+
+def test_all_graded_mode_includes_all_status_buckets():
+    realized, summary, _ = build_realized_strategy_lab(
+        _graded_with_statuses(),
+        strategy_mode=REALIZED_MODE_ALL_GRADED,
+    )
+
+    assert summary["Bet Count"] == 4
+    assert realized["Include In Totals"].sum() == 4
+
+
+def test_status_bucket_summary_aggregates_each_bucket():
+    _, _, diagnostics = build_realized_strategy_lab(
+        _graded_with_statuses(),
+        strategy_mode=REALIZED_MODE_ACTIONABLE_ONLY,
+    )
+    summary_df = diagnostics["status_bucket_summary"].set_index("Status Bucket")
+
+    assert int(summary_df.loc["Actionable", "Bet Count"]) == 1
+    assert int(summary_df.loc["High Variance/Speculative", "Bet Count"]) == 1
+    assert int(summary_df.loc["Below Threshold", "Bet Count"]) == 1
+    assert int(summary_df.loc["No Play", "Bet Count"]) == 1
+    assert float(summary_df.loc["Actionable", "Net P/L"]) == 91
+    assert float(summary_df.loc["No Play", "Net P/L"]) == -10
+
+
+def test_roi_and_net_pl_change_by_mode():
+    _, actionable_summary, _ = build_realized_strategy_lab(
+        _graded_with_statuses(),
+        strategy_mode=REALIZED_MODE_ACTIONABLE_ONLY,
+    )
+    _, all_summary, _ = build_realized_strategy_lab(
+        _graded_with_statuses(),
+        strategy_mode=REALIZED_MODE_ALL_GRADED,
+    )
+
+    assert actionable_summary["Net P/L"] != all_summary["Net P/L"]
+    assert actionable_summary["ROI"] != all_summary["ROI"]
 
 
 def test_mismatched_picks_are_detected_and_excluded():
@@ -105,7 +188,19 @@ def test_strategy_lab_theoretical_render_still_works(monkeypatch):
             return DummyContext(), DummyContext()
 
         def columns(self, n):
-            return tuple(DummyContext() for _ in range(n))
+            class DummyCol(DummyContext):
+                def metric(self, *args, **kwargs):
+                    calls.append("metric")
+
+            return tuple(DummyCol() for _ in range(n))
+
+        def selectbox(self, label, options, index=0, help=None):
+            calls.append(("selectbox", label, options[index]))
+            return options[index]
+
+        def multiselect(self, *args, **kwargs):
+            calls.append("multiselect")
+            return []
 
         def markdown(self, *args, **kwargs):
             calls.append("markdown")
@@ -131,8 +226,30 @@ def test_strategy_lab_theoretical_render_still_works(monkeypatch):
         def expander(self, *args, **kwargs):
             return DummyContext()
 
+        def warning(self, *args, **kwargs):
+            calls.append("warning")
+
     monkeypatch.setattr(dash, "st", DummySt())
-    monkeypatch.setattr(dash, "run_performance_pipeline", lambda: pd.DataFrame())
+    monkeypatch.setattr(
+        dash,
+        "run_performance_pipeline",
+        lambda: pd.DataFrame(
+            [
+                {
+                    "league": "MLB",
+                    "home_team": "A",
+                    "away_team": "B",
+                    "Pick Taken": "Over 8.5",
+                    "Pick_Outcome": "WIN",
+                    "decimal_odds": 1.91,
+                    "Stake": 100,
+                    "actual_home_score": 5,
+                    "actual_away_score": 4,
+                    "Status": "Actionable",
+                }
+            ]
+        ),
+    )
 
     analysis_df = pd.DataFrame({"edge": [0.01, 0.02], "expected_value": [0.02, 0.03]})
     portfolio_df = pd.DataFrame({"recommended_bet": [10, 20]})
@@ -142,3 +259,59 @@ def test_strategy_lab_theoretical_render_still_works(monkeypatch):
 
     assert ("tabs", ("Theoretical", "Realized")) in calls
     assert "bar_chart" in calls
+    assert ("selectbox", "Realized strategy mode", "Actionable only") in calls
+
+
+def test_warning_for_broad_mode(monkeypatch):
+    warnings = []
+
+    class DummyContext:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class DummySt:
+        def caption(self, *args, **kwargs):
+            return None
+
+        def selectbox(self, *args, **kwargs):
+            return "All graded bets"
+
+        def multiselect(self, *args, **kwargs):
+            return []
+
+        def columns(self, n):
+            class DummyCol(DummyContext):
+                def metric(self, *args, **kwargs):
+                    return None
+
+            return tuple(DummyCol() for _ in range(n))
+
+        def metric(self, *args, **kwargs):
+            return None
+
+        def markdown(self, *args, **kwargs):
+            return None
+
+        def dataframe(self, *args, **kwargs):
+            return None
+
+        def expander(self, *args, **kwargs):
+            return DummyContext()
+
+        def write(self, *args, **kwargs):
+            return None
+
+        def warning(self, msg, *args, **kwargs):
+            warnings.append(msg)
+
+        def info(self, *args, **kwargs):
+            return None
+
+    monkeypatch.setattr(dash, "st", DummySt())
+    monkeypatch.setattr(dash, "run_performance_pipeline", _graded_with_statuses)
+    dash._render_realized_strategy_lab(pd.DataFrame())
+
+    assert any("broad exploratory strategy" in msg for msg in warnings)
