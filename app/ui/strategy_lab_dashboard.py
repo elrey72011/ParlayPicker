@@ -2,7 +2,15 @@ import pandas as pd
 import streamlit as st
 
 from app_core.performance_pipeline import run_performance_pipeline
-from app_core.strategy_lab_realized import build_realized_strategy_lab
+from app_core.strategy_lab_realized import (
+    REALIZED_MODE_ACTIONABLE_ONLY,
+    REALIZED_MODE_ACTIONABLE_PLUS_HIGH_VARIANCE,
+    REALIZED_MODE_ALL_GRADED,
+    REALIZED_MODE_CUSTOM,
+    REALIZED_STRATEGY_MODE_ORDER,
+    STATUS_BUCKET_ORDER,
+    build_realized_strategy_lab,
+)
 
 
 def _render_theoretical_strategy_lab(
@@ -62,10 +70,38 @@ def _render_realized_strategy_lab(analysis_df: pd.DataFrame) -> None:
         st.info("No graded recap source found from the performance pipeline.")
         return
 
+    selected_mode = st.selectbox(
+        "Realized strategy mode",
+        REALIZED_STRATEGY_MODE_ORDER,
+        index=0,
+        help="Default is Actionable only (core strategy). Broader modes include exploratory statuses.",
+    )
+    custom_statuses = None
+    if selected_mode == REALIZED_MODE_CUSTOM:
+        custom_statuses = st.multiselect(
+            "Custom statuses",
+            STATUS_BUCKET_ORDER,
+            default=[STATUS_BUCKET_ORDER[0]],
+        )
+
     realized_df, summary, diagnostics = build_realized_strategy_lab(
         graded_df=graded_df,
         strategy_source_df=analysis_df,
+        strategy_mode=selected_mode,
+        custom_statuses=custom_statuses,
     )
+
+    st.markdown("### Realized graded performance")
+    st.caption(f"Selected mode: **{summary['Strategy Mode']}**")
+    if selected_mode in {REALIZED_MODE_ALL_GRADED, REALIZED_MODE_CUSTOM}:
+        st.warning(
+            "You are viewing a broad exploratory strategy. Results include non-core bets and may not reflect the intended production card."
+        )
+    if selected_mode == REALIZED_MODE_CUSTOM and custom_statuses:
+        if any(status in {"No Play", "Below Threshold"} for status in custom_statuses):
+            st.warning(
+                "You are viewing a broad exploratory strategy. Results include non-core bets and may not reflect the intended production card."
+            )
 
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Total Staked", f"{summary['Total Staked']:.2f}")
@@ -80,6 +116,12 @@ def _render_realized_strategy_lab(analysis_df: pd.DataFrame) -> None:
     col8.metric("Hit Rate", f"{summary['Hit Rate']:.2%}")
     col9.metric("Mismatches", int(summary["Mismatch Count"]))
 
+    st.markdown("**Mode comparison (realized)**")
+    st.dataframe(diagnostics["mode_comparison"], width="stretch")
+
+    st.markdown("**Status bucket summary (realized)**")
+    st.dataframe(diagnostics["status_bucket_summary"], width="stretch")
+
     st.markdown("**Realized bankroll rows**")
     cols = [
         "league",
@@ -87,6 +129,7 @@ def _render_realized_strategy_lab(analysis_df: pd.DataFrame) -> None:
         "away_team",
         "Strategy Pick",
         "Recap Pick",
+        "Status Bucket",
         "Result",
         "Stake",
         "American Odds",
@@ -100,13 +143,15 @@ def _render_realized_strategy_lab(analysis_df: pd.DataFrame) -> None:
     st.dataframe(realized_df[show_cols], width="stretch")
 
     with st.expander("Validation diagnostics"):
-        st.write({
-            "mismatch_count": len(diagnostics["pick_mismatches"]),
-            "pick_mismatch_rows": len(diagnostics["pick_mismatches"]),
-            "missing_scores_rows": len(diagnostics["missing_scores"]),
-            "missing_odds_rows": len(diagnostics["missing_odds"]),
-            "excluded_rows": len(diagnostics["excluded_rows"]),
-        })
+        st.write(
+            {
+                "ungraded_rows": diagnostics["ungraded_count"],
+                "missing_odds_rows": diagnostics["missing_odds_count"],
+                "mismatch_rows": diagnostics["mismatch_count"],
+                "outside_selected_mode_rows": diagnostics["outside_mode_count"],
+                "excluded_rows": len(diagnostics["excluded_rows"]),
+            }
+        )
 
         if not diagnostics["pick_mismatches"].empty:
             st.markdown("**Pick mismatches (excluded)**")
@@ -117,6 +162,9 @@ def _render_realized_strategy_lab(analysis_df: pd.DataFrame) -> None:
         if not diagnostics["missing_odds"].empty:
             st.markdown("**Rows missing odds needed for payout (excluded)**")
             st.dataframe(diagnostics["missing_odds"], width="stretch")
+        if not diagnostics["outside_mode_rows"].empty:
+            st.markdown("**Rows excluded by strategy mode filter**")
+            st.dataframe(diagnostics["outside_mode_rows"], width="stretch")
 
 
 def render_strategy_lab(
