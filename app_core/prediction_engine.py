@@ -1417,8 +1417,14 @@ class PredictionEngine:
             # Store flag so calling code can retrieve it if needed
             self.last_batch_used_stale_features = used_stale_features.tolist()
             self.last_batch_used_neutral_fallback = False
-            # Replace any remaining inf values
-            inference_data = inference_data.replace([np.inf, -np.inf], 0.0).astype(float)
+            # Replace any remaining inf values and coerce numeric explicitly
+            inference_data = inference_data.replace([np.inf, -np.inf], 0.0)
+            numeric_before = inference_data.copy()
+            inference_data = inference_data.apply(pd.to_numeric, errors="coerce")
+            numeric_coercion_issue_count = int(inference_data.isna().sum().sum() - numeric_before.isna().sum().sum())
+            inference_data = inference_data.fillna(0.0).astype(float)
+            self._last_metrics["ml_numeric_coercion_ok"] = numeric_coercion_issue_count == 0
+            self._last_metrics["ml_numeric_coercion_issue_count"] = max(numeric_coercion_issue_count, 0)
 
             expected_feature_order = list(VERTEX_FEATURE_COLUMNS)
             actual_feature_order = list(inference_data.columns)
@@ -1470,6 +1476,8 @@ class PredictionEngine:
             rows_using_stale_stats = sum(used_stale_features)
 
             feature_nunique = strict_model_input.nunique(dropna=False)
+            all_nan_feature_count = int((strict_model_input.isna().all()).sum())
+            all_constant_feature_count = int((feature_nunique <= 1).sum())
             zero_variance_feature_count = int((feature_nunique <= 1).sum())
             near_constant_feature_count = int((feature_nunique <= 2).sum())
             zero_variance_cols = [str(c) for c in feature_nunique[feature_nunique <= 1].head(8).index.tolist()]
@@ -1505,6 +1513,8 @@ class PredictionEngine:
             self._last_metrics["ml_feature_count"] = int(len(model_matrix_cols))
             self._last_metrics["ml_zero_variance_feature_count"] = zero_variance_feature_count
             self._last_metrics["ml_near_constant_feature_count"] = near_constant_feature_count
+            self._last_metrics["ml_all_nan_feature_count"] = all_nan_feature_count
+            self._last_metrics["ml_all_constant_feature_count"] = all_constant_feature_count
             self._last_metrics["ml_high_missingness_feature_count"] = high_missingness_feature_count
             self._last_metrics["ml_duplicate_feature_row_count"] = int(exact_duplicate_vectors_count)
             self._last_metrics["rows_with_duplicate_feature_signature"] = int(rows_with_duplicate_feature_signature)
@@ -1520,6 +1530,14 @@ class PredictionEngine:
             self._last_metrics["ml_top_zero_variance_columns"] = zero_variance_cols
             self._last_metrics["ml_top_near_constant_columns"] = near_constant_cols
             self._last_metrics["ml_top_high_missingness_columns"] = high_missingness_cols
+            if all_nan_feature_count > 0 or all_constant_feature_count >= max(4, int(len(model_matrix_cols) * 0.30)):
+                warn_msg = (
+                    f"all_nan_feature_count={all_nan_feature_count} all_constant_feature_count={all_constant_feature_count}"
+                )
+                logger.warning("ML INPUT SUBSET DEGRADATION DETECTED: %s", warn_msg)
+                self._last_metrics["ml_schema_mismatch_reason"] = (
+                    str(self._last_metrics.get("ml_schema_mismatch_reason", "")) + f" | degraded_subset:{warn_msg}"
+                ).strip(" |")
 
             # Contextual inputs checks (must pull from working_df for non-model columns like market_probability)
             prob_cols = ['market_probability', 'implied_home_prob', 'kalshi_prob']

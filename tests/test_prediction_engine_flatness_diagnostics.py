@@ -123,3 +123,18 @@ def test_rescue_trigger_reasons_populate_and_mild_cluster_does_not_force_overrid
     assert len(probs) == 20
     assert metrics["hybrid_fallback_triggered"] is False
     assert metrics.get("hybrid_override_trigger_reasons", []) == []
+
+
+def test_degraded_subset_flags_populate_in_predict_path():
+    engine = PredictionEngine(model_path="models/does_not_exist.json")
+    engine.model = _DummyModel()
+    engine.use_fallback = False
+    df = _build_input(10)
+    df = df.drop(columns=[VERTEX_FEATURE_COLUMNS[0]])
+
+    probs = engine.predict_batch(df)
+    metrics = engine._last_metrics
+    assert len(probs) == 10
+    assert metrics["ml_numeric_coercion_ok"] is True
+    assert metrics["ml_all_constant_feature_count"] >= 1
+    assert "degraded_subset" in metrics["ml_schema_mismatch_reason"]
