@@ -466,18 +466,18 @@ def test_missing_export_columns_are_backfilled_and_logged(caplog):
 def test_side_balance_guard_promotes_viable_side_when_actionable_is_totals_only():
     df = pd.DataFrame(
         [
-            _row(idx=510, league="NBA", market_type="total_over", win_prob=0.60, ev=0.08, edge=0.07, kalshi_probability=0.56),
-            _row(idx=511, league="NBA", market_type="spread_home", win_prob=0.58, ev=0.08, edge=0.07, kalshi_probability=0.62),
+            _row(idx=510, league="NBA", market_type="total_over", win_prob=0.58, ev=0.04, edge=0.04, kalshi_probability=0.56),
+            _row(idx=511, league="NBA", market_type="spread_home", win_prob=0.54, ev=0.03, edge=0.03, kalshi_probability=0.30),
         ]
     )
-    # Keep side out of initial Actionable via divergence cap, but still near-threshold viable.
-    df.loc[df["market_type"] == "spread_home", "ml_probability"] = 0.30
+    # Keep side out of initial Actionable via divergence cap, then allow balance guard promotion.
+    df.loc[df["market_type"] == "spread_home", "ml_probability"] = 0.64
     diagnostics = {}
     out = build_best_picks_df(df, diagnostics_out=diagnostics)
     actionable = out[out["Pick_Status"].astype(str) == "Actionable"]
     assert actionable["market_type"].astype(str).str.contains("spread|h2h", case=False, regex=True, na=False).any()
-    assert "side_promoted_by_balance_guard_count" in diagnostics
-    assert "side_balance_guard_reason" in diagnostics
+    assert int(diagnostics["side_promoted_by_balance_guard_count"]) >= 1
+    assert diagnostics["side_balance_guard_reason"] == "promoted_viable_side_candidate"
 
 
 def test_side_balance_guard_does_not_promote_weak_sides():

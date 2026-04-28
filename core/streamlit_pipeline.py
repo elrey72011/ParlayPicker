@@ -3768,16 +3768,21 @@ def run_analysis_pipeline(
                     nba_stats_diag["nba_rows_fallback_stats"] = int((nba_rows & enriched_for_prediction.get("stats_source", pd.Series(index=enriched_for_prediction.index, dtype="object")).astype(str).isin(["fallback", "failed"])).sum())
                     nba_stats_diag["rows_unresolved_team_mapping"] = int(enriched_for_prediction.get("stats_resolution_status", pd.Series(index=enriched_for_prediction.index, dtype="object")).astype(str).eq("unresolved").sum())
 
-                fetch_status = (
-                    enriched_for_prediction["stats_source"].astype(str)
-                    if "stats_source" in enriched_for_prediction.columns else pd.Series([], dtype="object")
-                )
-                if not fetch_status.empty:
-                    nba_stats_diag["nba_stats_fetch_status"] = "failed" if (fetch_status == "failed").any() else "ok"
+                if "nba_stats_fetch_status" in enriched_for_prediction.columns and not enriched_for_prediction.empty:
+                    status_series = enriched_for_prediction["nba_stats_fetch_status"].astype(str)
+                    nba_stats_diag["nba_stats_fetch_status"] = "failed" if status_series.str.lower().eq("failed").any() else "ok"
                 if "nba_stats_fetch_source" in enriched_for_prediction.columns and not enriched_for_prediction.empty:
-                    nba_stats_diag["nba_stats_fetch_source"] = str(enriched_for_prediction["nba_stats_fetch_source"].iloc[0])
-                elif "nba_stats_fetch_status" in enriched_for_prediction.columns and not enriched_for_prediction.empty:
-                    nba_stats_diag["nba_stats_fetch_source"] = str(enriched_for_prediction["nba_stats_fetch_status"].iloc[0])
+                    source_series = enriched_for_prediction["nba_stats_fetch_source"].astype(str)
+                    if source_series.str.lower().eq("live").any():
+                        nba_stats_diag["nba_stats_fetch_source"] = "live"
+                    elif source_series.str.lower().eq("runtime_cache").any():
+                        nba_stats_diag["nba_stats_fetch_source"] = "runtime_cache"
+                    elif source_series.str.lower().eq("disk_cache").any():
+                        nba_stats_diag["nba_stats_fetch_source"] = "disk_cache"
+                    elif source_series.str.lower().eq("cached").any():
+                        nba_stats_diag["nba_stats_fetch_source"] = "cached"
+                    elif source_series.str.lower().eq("failed").any():
+                        nba_stats_diag["nba_stats_fetch_source"] = "failed"
                 if "stats_fetch_retries_used" in enriched_for_prediction.columns and not enriched_for_prediction.empty:
                     nba_stats_diag["nba_stats_fetch_retries_used"] = int(
                         pd.to_numeric(enriched_for_prediction["stats_fetch_retries_used"], errors="coerce").fillna(0).max()
