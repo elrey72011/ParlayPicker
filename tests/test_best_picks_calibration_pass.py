@@ -117,7 +117,7 @@ def test_diagnostics_blocked_rows_and_shadow_cards_populate():
             _row(idx=4, league="MLB", market_type="spread_home", win_prob=0.54, ev=0.07, edge=0.07, kalshi_probability=0.48),
         ]
     )
-    diagnostics = {}
+    diagnostics = {"is_fallback_heavy": True}
     out = build_best_picks_df(df, diagnostics_out=diagnostics)
     assert not out.empty
     assert diagnostics["blocked_by_under_specific_thresholds"] >= 1
@@ -219,8 +219,9 @@ def test_high_ev_alone_is_not_auto_blocked_as_suspicious_data():
     )
     out = build_best_picks_df(df)
     row = out.iloc[0]
-    assert row["Pick_Status"] == "High Variance/Speculative"
-    assert row["status_blocker_stage"] == "variance_guardrail"
+    assert row["Pick_Status"] == "Actionable"
+    assert "strong EV/edge" in row["Status_Reason"]
+    assert row["status_blocker_stage"] == "none"
     assert row["suspicious_data_flag"] is False or row["suspicious_data_flag"] == False
 
 
@@ -238,7 +239,7 @@ def test_suspicious_data_rows_still_blocked_with_explicit_reason_and_diagnostics
     row = out.iloc[0]
     assert row["Pick_Status"] == "No Play"
     assert row["suspicious_data_flag"] is True or row["suspicious_data_flag"] == True
-    assert "Blocked: suspicious_data_flag=true" in row["Status_Reason"]
+    assert "No Play: blocked due to suspicious data" in row["Status_Reason"]
     assert row["status_blocker_stage"] == "suspicious_data_guardrail"
     assert diagnostics["blocked_by_suspicious_data"] >= 1
 
@@ -282,7 +283,7 @@ def test_divergence_can_preserve_minimally_viable_row():
     out = build_best_picks_df(df)
     row = out.iloc[0]
     assert row["Pick_Status"] == "High Variance/Speculative"
-    assert "diverge by > 20%" in row["Status_Reason"]
+    assert "capped due to divergence" in row["Status_Reason"]
     assert row["status_blocker_stage"] == "divergence_guardrail"
 
 
@@ -345,3 +346,54 @@ def test_run_health_fields_are_export_visible_when_present():
     assert "Run health warning" in row["run_health_warning"]
     assert bool(row["degraded_feature_subset_flag"]) is True
     assert "degraded_subset" in str(row["degraded_feature_subset_reason"])
+
+
+def test_high_ev_clean_row_promotes_to_actionable_not_high_variance():
+    df = pd.DataFrame(
+        [
+            _row(idx=10, league="NBA", market_type="total_over", win_prob=0.64, ev=0.45, edge=0.18, kalshi_probability=0.59),
+        ]
+    )
+    diagnostics = {}
+    out = build_best_picks_df(df, diagnostics_out=diagnostics)
+    row = out.iloc[0]
+    assert row["Pick_Status"] == "Actionable"
+    assert "strong EV/edge" in row["Status_Reason"]
+    assert diagnostics["promoted_high_ev_to_actionable_no_uncertainty"] >= 1
+    assert diagnostics["high_variance_due_only_high_ev"] == 0
+
+
+def test_high_ev_can_be_capped_for_real_uncertainty_reason():
+    df = pd.DataFrame(
+        [
+            _row(idx=11, league="NBA", market_type="total_over", win_prob=0.64, ev=0.45, edge=0.18, kalshi_probability=None),
+        ]
+    )
+    df["degraded_feature_subset_flag"] = True
+    diagnostics = {}
+    out = build_best_picks_df(df, diagnostics_out=diagnostics)
+    row = out.iloc[0]
+    assert row["Pick_Status"] == "High Variance/Speculative"
+    assert "capped due to" in row["Status_Reason"]
+    assert row["status_blocker_stage"] == "variance_uncertainty_guardrail"
+
+
+def test_high_variance_inflation_diagnostics_populate():
+    df = pd.DataFrame(
+        [
+            _row(idx=21, league="NBA", market_type="total_over", win_prob=0.64, ev=0.45, edge=0.18, kalshi_probability=0.59),
+            _row(idx=22, league="NBA", market_type="total_over", win_prob=0.64, ev=0.45, edge=0.18, kalshi_probability=None),
+            _row(idx=23, league="NBA", market_type="total_over", win_prob=0.56, ev=0.01, edge=0.01, kalshi_probability=0.80),
+        ]
+    )
+    df.loc[df["home_team"] == "Home22", "degraded_feature_subset_flag"] = True
+    df.loc[df["home_team"] == "Home23", "ml_probability"] = 0.50
+    diagnostics = {}
+    out = build_best_picks_df(df, diagnostics_out=diagnostics)
+    assert not out.empty
+    assert diagnostics["high_variance_due_only_high_ev"] == 0
+    assert diagnostics["promoted_high_ev_to_actionable_no_uncertainty"] >= 1
+    assert diagnostics["high_variance_capped_due_to_degraded_subset"] >= 1
+    assert diagnostics["high_variance_capped_due_to_no_kalshi"] >= 1
+    assert diagnostics["high_variance_capped_due_to_divergence"] >= 1
+    assert "High Variance/Speculative" in diagnostics["final_pick_status_counts"]

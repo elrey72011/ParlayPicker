@@ -1891,6 +1891,13 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     divergence_rows_blocked_by_viability_floor = 0
     divergence_rows_negative_ev = 0
     divergence_rows_negative_edge = 0
+    high_variance_due_only_high_ev = 0
+    promoted_high_ev_to_actionable_no_uncertainty = 0
+    high_variance_capped_due_to_divergence = 0
+    high_variance_capped_due_to_no_kalshi = 0
+    high_variance_capped_due_to_suspicious_data = 0
+    high_variance_capped_due_to_degraded_subset = 0
+    high_variance_capped_due_to_fallback_heavy = 0
 
     if "suspicious_data_flag" not in best.columns:
         best["suspicious_data_flag"] = False
@@ -1933,6 +1940,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         # Check fallback indicators
         stale = bool(best.at[idx, "used_stale_features"]) if "used_stale_features" in best.columns and pd.notna(best.at[idx, "used_stale_features"]) else False
         odds_source = str(best.at[idx, "odds_source"]).lower() if "odds_source" in best.columns else ""
+        degraded_subset_flag = bool(best.at[idx, "degraded_feature_subset_flag"]) if "degraded_feature_subset_flag" in best.columns and pd.notna(best.at[idx, "degraded_feature_subset_flag"]) else False
 
         # Additional row-specific fallback signals based on requirement
         is_live_data = bool(best.at[idx, "is_live_data"]) if "is_live_data" in best.columns and pd.notna(best.at[idx, "is_live_data"]) else True
@@ -2059,9 +2067,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         elif is_kalshi_divergence:
             if divergence_viability_pass:
                 status = "High Variance/Speculative"
-                status_reason = "ML and Kalshi probability diverge by > 20%"
+                status_reason = "High Variance: capped due to divergence (ML and Kalshi probability diverge by > 20%)"
                 blocker_stage = "divergence_guardrail"
                 divergence_rows_preserved += 1
+                high_variance_capped_due_to_divergence += 1
             else:
                 status = "No Play"
                 status_reason = (
@@ -2077,12 +2086,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                     divergence_rows_negative_edge += 1
         elif high_ev_guardrail and suspicious_data_flag:
             status = "No Play"
-            status_reason = f"Blocked: suspicious_data_flag=true; {suspicious_reasons_str}"
+            status_reason = f"No Play: blocked due to suspicious data ({suspicious_reasons_str})"
             blocker_stage = "suspicious_data_guardrail"
-        elif not pd.isna(ev) and ev > 0.25:
-            status = "High Variance/Speculative"
-            status_reason = "EV > 25% (High Variance)"
-            blocker_stage = "variance_guardrail"
         elif pd.isna(ev) or ev < 0 or win_prob < 0.40:
             status = "No Play"
             status_reason = "Negative EV or Base Win Prob < 40%"
@@ -2297,6 +2302,34 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                     status_reason = "Passed all strict filters"
                     if is_spread_divergence_override:
                         status_reason = "Passed all strict filters (Spread divergence override applied)"
+
+                    if high_ev_guardrail:
+                        high_ev_uncertainty_reasons: list[str] = []
+                        if is_total_market and is_fallback_heavy:
+                            high_ev_uncertainty_reasons.append("fallback-heavy guardrail")
+                        if is_total_market and consensus_agr == "No Kalshi":
+                            high_ev_uncertainty_reasons.append("No Kalshi")
+                        if degraded_subset_flag:
+                            high_ev_uncertainty_reasons.append("degraded feature subset")
+                        if suspicious_data_flag:
+                            high_ev_uncertainty_reasons.append("suspicious data")
+
+                        if high_ev_uncertainty_reasons:
+                            status = "High Variance/Speculative"
+                            reason_label = ", ".join(dict.fromkeys(high_ev_uncertainty_reasons))
+                            status_reason = f"High Variance: strong EV but capped due to {reason_label}"
+                            blocker_stage = "variance_uncertainty_guardrail"
+                            if "No Kalshi" in high_ev_uncertainty_reasons:
+                                high_variance_capped_due_to_no_kalshi += 1
+                            if "fallback-heavy guardrail" in high_ev_uncertainty_reasons:
+                                high_variance_capped_due_to_fallback_heavy += 1
+                            if "degraded feature subset" in high_ev_uncertainty_reasons:
+                                high_variance_capped_due_to_degraded_subset += 1
+                            if "suspicious data" in high_ev_uncertainty_reasons:
+                                high_variance_capped_due_to_suspicious_data += 1
+                        else:
+                            promoted_high_ev_to_actionable_no_uncertainty += 1
+                            status_reason = "Actionable: strong EV/edge and passed all market/league filters"
 
             # Apply Consensus Overlay Logic ONLY if profile is STRICT
             if status == "Actionable" and BEST_PICKS_PROFILE == 'STRICT':
@@ -2594,6 +2627,14 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             if "Pick_Status" in final_best_df.columns
             else {}
         )
+        diagnostics_out["high_variance_due_only_high_ev"] = int(high_variance_due_only_high_ev)
+        diagnostics_out["promoted_high_ev_to_actionable_no_uncertainty"] = int(promoted_high_ev_to_actionable_no_uncertainty)
+        diagnostics_out["high_variance_capped_due_to_divergence"] = int(high_variance_capped_due_to_divergence)
+        diagnostics_out["high_variance_capped_due_to_no_kalshi"] = int(high_variance_capped_due_to_no_kalshi)
+        diagnostics_out["high_variance_capped_due_to_suspicious_data"] = int(high_variance_capped_due_to_suspicious_data)
+        diagnostics_out["high_variance_capped_due_to_degraded_subset"] = int(high_variance_capped_due_to_degraded_subset)
+        diagnostics_out["high_variance_capped_due_to_fallback_heavy"] = int(high_variance_capped_due_to_fallback_heavy)
+        diagnostics_out["final_pick_status_counts"] = final_best_df["Pick_Status"].value_counts().to_dict()
         hidden_bad_rows = final_best_df[
             (final_best_df["Pick_Status"] == "High Variance/Speculative")
             & (
