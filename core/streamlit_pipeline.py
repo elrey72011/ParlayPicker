@@ -1898,6 +1898,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     high_variance_capped_due_to_suspicious_data = 0
     high_variance_capped_due_to_degraded_subset = 0
     high_variance_capped_due_to_fallback_heavy = 0
+    side_balance_promotions = 0
 
     if "suspicious_data_flag" not in best.columns:
         best["suspicious_data_flag"] = False
@@ -2358,6 +2359,59 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         best.at[idx, "status_blocker_reason"] = status_reason if status != "Actionable" else ""
         best.at[idx, "status_blocker_stage"] = blocker_stage if status != "Actionable" else "none"
 
+    # Narrow card-balance fix: if Actionable has no sides but does have totals,
+    # promote one clean side from High Variance/Speculative.
+    actionable_mask = best["Pick_Status"].astype(str).eq("Actionable")
+    if actionable_mask.any():
+        market_type_str = best["market_type"].astype(str).str.lower()
+        actionable_side_mask = actionable_mask & market_type_str.str.contains("spread|h2h", na=False)
+        actionable_total_mask = actionable_mask & market_type_str.str.contains("total", na=False)
+        if actionable_total_mask.any() and not actionable_side_mask.any():
+            promotable_side_mask = (
+                best["Pick_Status"].astype(str).eq("High Variance/Speculative")
+                & market_type_str.str.contains("spread|h2h", na=False)
+                & pd.to_numeric(best["expected_value"], errors="coerce").gt(0)
+                & pd.to_numeric(best["edge"], errors="coerce").gt(0)
+                & ~best.get("suspicious_data_flag", pd.Series(False, index=best.index)).fillna(False).astype(bool)
+                & ~best.get("status_blocker_stage", pd.Series("", index=best.index)).astype(str).isin(
+                    {
+                        "divergence_guardrail",
+                        "divergence_viability_floor",
+                        "suspicious_data_guardrail",
+                        "data_fallback_guardrail",
+                        "line_integrity_guardrail",
+                    }
+                )
+            )
+            if promotable_side_mask.any():
+                promote_idx = (
+                    best.loc[promotable_side_mask]
+                    .sort_values(
+                        by=["expected_value", "edge", "calibrated_probability"],
+                        ascending=[False, False, False],
+                    )
+                    .index[0]
+                )
+                best.at[promote_idx, "Pick_Status"] = "Actionable"
+                best.at[promote_idx, "Status_Reason"] = "Actionable: side-balance promotion from High Variance (clean strongest side)"
+                best.at[promote_idx, "status_blocker_reason"] = ""
+                best.at[promote_idx, "status_blocker_stage"] = "none"
+                side_balance_promotions += 1
+
+    # Always keep transparency fields row-populated in export.
+    best["status_metric_basis"] = best["status_metric_basis"].fillna("raw")
+    best["effective_expected_value"] = pd.to_numeric(best["effective_expected_value"], errors="coerce").fillna(
+        pd.to_numeric(best.get("expected_value"), errors="coerce")
+    )
+    best["effective_edge"] = pd.to_numeric(best["effective_edge"], errors="coerce").fillna(
+        pd.to_numeric(best.get("edge"), errors="coerce")
+    )
+    best["effective_win_probability"] = pd.to_numeric(best["effective_win_probability"], errors="coerce").fillna(
+        pd.to_numeric(best.get("calibrated_probability"), errors="coerce")
+    )
+    best["status_blocker_reason"] = best["status_blocker_reason"].fillna("").astype(str)
+    best["status_blocker_stage"] = best["status_blocker_stage"].fillna("none").astype(str)
+
     # Legacy logging/metrics variables for reference
     valid_edge_mask = best["edge"] >= 0.01
     valid_ev_mask = best["expected_value"] >= 0.005
@@ -2634,6 +2688,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         diagnostics_out["high_variance_capped_due_to_suspicious_data"] = int(high_variance_capped_due_to_suspicious_data)
         diagnostics_out["high_variance_capped_due_to_degraded_subset"] = int(high_variance_capped_due_to_degraded_subset)
         diagnostics_out["high_variance_capped_due_to_fallback_heavy"] = int(high_variance_capped_due_to_fallback_heavy)
+        diagnostics_out["side_balance_promotions"] = int(side_balance_promotions)
         diagnostics_out["final_pick_status_counts"] = final_best_df["Pick_Status"].value_counts().to_dict()
         hidden_bad_rows = final_best_df[
             (final_best_df["Pick_Status"] == "High Variance/Speculative")

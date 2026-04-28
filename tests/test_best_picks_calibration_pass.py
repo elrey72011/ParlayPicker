@@ -397,3 +397,47 @@ def test_high_variance_inflation_diagnostics_populate():
     assert diagnostics["high_variance_capped_due_to_no_kalshi"] >= 1
     assert diagnostics["high_variance_capped_due_to_divergence"] >= 1
     assert "High Variance/Speculative" in diagnostics["final_pick_status_counts"]
+
+
+def test_side_balance_promotes_one_clean_side_when_actionable_is_totals_only():
+    df = pd.DataFrame(
+        [
+            _row(idx=30, league="NBA", market_type="total_over", win_prob=0.64, ev=0.08, edge=0.07, kalshi_probability=0.59),
+            _row(idx=31, league="NBA", market_type="spread_home", win_prob=0.64, ev=0.45, edge=0.18, kalshi_probability=None),
+        ]
+    )
+    # Keep side in High Variance via uncertainty (No Kalshi + degraded subset),
+    # then verify side-balance promotion can lift one clean side.
+    df.loc[df["market_type"] == "spread_home", "degraded_feature_subset_flag"] = True
+    diagnostics = {}
+    out = build_best_picks_df(df, diagnostics_out=diagnostics)
+    actionable = out[out["Pick_Status"] == "Actionable"]
+    assert not actionable.empty
+    assert actionable["market_type"].str.contains("spread|h2h", case=False, regex=True, na=False).any()
+    assert diagnostics["side_balance_promotions"] >= 1
+
+
+def test_transparency_fields_are_populated_for_every_export_row():
+    df = pd.DataFrame(
+        [
+            _row(idx=40, league="NFL", market_type="total_over", win_prob=0.60, ev=0.05, edge=0.05, kalshi_probability=0.55),
+            _row(idx=41, league="NFL", market_type="total_under", win_prob=0.56, ev=0.01, edge=0.01, kalshi_probability=0.80),
+        ]
+    )
+    df.loc[df["home_team"] == "Home41", "ml_probability"] = 0.50
+    out = build_best_picks_df(df)
+    required = [
+        "status_metric_basis",
+        "effective_expected_value",
+        "effective_edge",
+        "effective_win_probability",
+        "status_blocker_reason",
+        "status_blocker_stage",
+    ]
+    for col in required:
+        assert col in out.columns
+    assert out["status_metric_basis"].notna().all()
+    assert out["effective_expected_value"].notna().all()
+    assert out["effective_edge"].notna().all()
+    assert out["effective_win_probability"].notna().all()
+    assert out["status_blocker_stage"].notna().all()
