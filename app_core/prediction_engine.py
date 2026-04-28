@@ -1417,27 +1417,46 @@ class PredictionEngine:
             # Store flag so calling code can retrieve it if needed
             self.last_batch_used_stale_features = used_stale_features.tolist()
             self.last_batch_used_neutral_fallback = False
-            # Replace any remaining inf values
-            inference_data = inference_data.replace([np.inf, -np.inf], 0.0).astype(float)
+            # Replace any remaining inf values and coerce numeric explicitly
+            inference_data = inference_data.replace([np.inf, -np.inf], 0.0)
+            numeric_before = inference_data.copy()
+            inference_data = inference_data.apply(pd.to_numeric, errors="coerce")
+            numeric_coercion_issue_count = int(inference_data.isna().sum().sum() - numeric_before.isna().sum().sum())
+            inference_data = inference_data.fillna(0.0).astype(float)
+            self._last_metrics["ml_numeric_coercion_ok"] = numeric_coercion_issue_count == 0
+            self._last_metrics["ml_numeric_coercion_issue_count"] = max(numeric_coercion_issue_count, 0)
 
             expected_feature_order = list(VERTEX_FEATURE_COLUMNS)
             actual_feature_order = list(inference_data.columns)
             missing_feature_columns = [c for c in expected_feature_order if c not in working_df.columns]
             extra_feature_columns = [c for c in working_df.columns if c.startswith("feature_") and c not in expected_feature_order]
+            schema_mismatch_reason = ""
+            feature_order_match_ok = actual_feature_order == expected_feature_order
             try:
                 _validate_feature_schema(expected_feature_order, actual_feature_order)
+                self._last_metrics["schema_mismatch_detected"] = False
             except ValueError as schema_err:
+                schema_mismatch_reason = str(schema_err)
                 self._last_metrics["schema_mismatch_detected"] = True
                 self._last_metrics["schema_mismatch_details"] = {
                     "expected_head": expected_feature_order[:8],
                     "actual_head": actual_feature_order[:8],
                 }
-                raise ValueError(str(schema_err))
-            self._last_metrics["schema_mismatch_detected"] = False
+                logger.error("ML schema/order validation failed. %s", schema_mismatch_reason)
+                for col in expected_feature_order:
+                    if col not in inference_data.columns:
+                        inference_data[col] = 0.0
+                inference_data = inference_data.reindex(columns=expected_feature_order).fillna(0.0)
+                actual_feature_order = list(inference_data.columns)
+                feature_order_match_ok = actual_feature_order == expected_feature_order
             self._last_metrics["ml_expected_feature_count"] = int(len(expected_feature_order))
             self._last_metrics["ml_actual_feature_count"] = int(len(actual_feature_order))
+            self._last_metrics["ml_feature_count"] = int(len(actual_feature_order))
             self._last_metrics["ml_missing_feature_columns"] = missing_feature_columns[:15]
             self._last_metrics["ml_extra_feature_columns"] = extra_feature_columns[:15]
+            self._last_metrics["ml_feature_order_match_ok"] = bool(feature_order_match_ok)
+            self._last_metrics["ml_schema_match_ok"] = not bool(self._last_metrics.get("schema_mismatch_detected", False))
+            self._last_metrics["ml_schema_mismatch_reason"] = schema_mismatch_reason
 
             # Detailed Logging BEFORE prediction (Issue #1)
             logger.debug(f"[MODEL_DEBUG] Batch input shape: {inference_data.shape}")
@@ -1457,10 +1476,16 @@ class PredictionEngine:
             rows_using_stale_stats = sum(used_stale_features)
 
             feature_nunique = strict_model_input.nunique(dropna=False)
+            all_nan_feature_count = int((strict_model_input.isna().all()).sum())
+            all_constant_feature_count = int((feature_nunique <= 1).sum())
             zero_variance_feature_count = int((feature_nunique <= 1).sum())
             near_constant_feature_count = int((feature_nunique <= 2).sum())
+            zero_variance_cols = [str(c) for c in feature_nunique[feature_nunique <= 1].head(8).index.tolist()]
+            near_constant_cols = [str(c) for c in feature_nunique[(feature_nunique > 1) & (feature_nunique <= 2)].head(8).index.tolist()]
             feature_missingness = raw_numeric.reindex(columns=VERTEX_FEATURE_COLUMNS).isna().mean()
             top_missingness = feature_missingness.sort_values(ascending=False).head(8)
+            high_missingness_feature_count = int((feature_missingness >= 0.50).sum())
+            high_missingness_cols = [str(c) for c in feature_missingness[feature_missingness >= 0.50].sort_values(ascending=False).head(8).index.tolist()]
 
             default_share_per_row = (strict_model_input == 0.0).mean(axis=1)
             rows_with_high_default_feature_share = int((default_share_per_row >= 0.60).sum())
@@ -1485,16 +1510,34 @@ class PredictionEngine:
 
             self._last_metrics["ml_input_row_count"] = int(total_rows_entering_model)
             self._last_metrics["ml_feature_column_count"] = int(len(model_matrix_cols))
+            self._last_metrics["ml_feature_count"] = int(len(model_matrix_cols))
             self._last_metrics["ml_zero_variance_feature_count"] = zero_variance_feature_count
             self._last_metrics["ml_near_constant_feature_count"] = near_constant_feature_count
+            self._last_metrics["ml_all_nan_feature_count"] = all_nan_feature_count
+            self._last_metrics["ml_all_constant_feature_count"] = all_constant_feature_count
+            self._last_metrics["ml_high_missingness_feature_count"] = high_missingness_feature_count
+            self._last_metrics["ml_duplicate_feature_row_count"] = int(exact_duplicate_vectors_count)
             self._last_metrics["rows_with_duplicate_feature_signature"] = int(rows_with_duplicate_feature_signature)
             self._last_metrics["duplicate_feature_row_ratio"] = float(duplicate_feature_ratio)
+            self._last_metrics["ml_duplicate_feature_row_ratio"] = float(duplicate_feature_ratio)
             self._last_metrics["rows_using_league_average_defaults"] = int(rows_using_league_average_defaults)
             self._last_metrics["rows_with_high_default_feature_share"] = int(rows_with_high_default_feature_share)
+            self._last_metrics["ml_rows_with_high_default_feature_share"] = int(rows_with_high_default_feature_share)
             self._last_metrics["top_duplicate_feature_signatures"] = top_duplicate_signatures
             self._last_metrics["ml_feature_missingness_top"] = {
                 str(k): round(float(v), 3) for k, v in top_missingness.items()
             }
+            self._last_metrics["ml_top_zero_variance_columns"] = zero_variance_cols
+            self._last_metrics["ml_top_near_constant_columns"] = near_constant_cols
+            self._last_metrics["ml_top_high_missingness_columns"] = high_missingness_cols
+            if all_nan_feature_count > 0 or all_constant_feature_count >= max(4, int(len(model_matrix_cols) * 0.30)):
+                warn_msg = (
+                    f"all_nan_feature_count={all_nan_feature_count} all_constant_feature_count={all_constant_feature_count}"
+                )
+                logger.warning("ML INPUT SUBSET DEGRADATION DETECTED: %s", warn_msg)
+                self._last_metrics["ml_schema_mismatch_reason"] = (
+                    str(self._last_metrics.get("ml_schema_mismatch_reason", "")) + f" | degraded_subset:{warn_msg}"
+                ).strip(" |")
 
             # Contextual inputs checks (must pull from working_df for non-model columns like market_probability)
             prob_cols = ['market_probability', 'implied_home_prob', 'kalshi_prob']
@@ -1604,6 +1647,14 @@ class PredictionEngine:
                 "same_to_4dp_fraction": float(same4_frac),
                 "same_to_3dp_fraction": float(same3_frac),
             }
+            self._last_metrics["ml_raw_unique_prediction_count"] = int(self._last_metrics["raw_prediction_distribution"]["unique_count"])
+            self._last_metrics["ml_raw_prediction_min"] = float(self._last_metrics["raw_prediction_distribution"]["min"])
+            self._last_metrics["ml_raw_prediction_max"] = float(self._last_metrics["raw_prediction_distribution"]["max"])
+            self._last_metrics["ml_raw_prediction_mean"] = float(self._last_metrics["raw_prediction_distribution"]["mean"])
+            self._last_metrics["ml_raw_prediction_std"] = float(self._last_metrics["raw_prediction_distribution"]["std"])
+            self._last_metrics["ml_raw_top_repeated_values"] = top_repeated_raw
+            self._last_metrics["ml_raw_same_value_fraction_4dp"] = float(same4_frac)
+            self._last_metrics["ml_raw_same_value_fraction_3dp"] = float(same3_frac)
             logger.info(
                 "ML RAW DISTRIBUTION: unique=%s min=%.4f max=%.4f mean=%.4f std=%.6f same4=%.1f%% same3=%.1f%% top=%s",
                 self._last_metrics["raw_prediction_distribution"]["unique_count"],
@@ -1655,9 +1706,26 @@ class PredictionEngine:
 
             # Rule 1: Ratio-based rule for ALL slate sizes (must be >= 60% unique)
             raw_unique_ratio = raw_unique_count / total_count if total_count > 0 else 0
-            if total_count > 0 and raw_unique_ratio < 0.60:
-                logger.warning(f"ML RAW COMPRESSION AUDIT: Raw unique ratio ({raw_unique_ratio:.1%}) is below 60%. Triggering intervention.")
+            trigger_reasons: List[str] = []
+            if total_count > 0 and raw_unique_ratio < 0.45:
+                logger.warning(f"ML RAW COMPRESSION AUDIT: Raw unique ratio ({raw_unique_ratio:.1%}) is below 45%. Triggering intervention.")
                 is_flat = True
+                trigger_reasons.append("raw_unique_ratio_below_45pct")
+            elif total_count > 0 and raw_unique_ratio < 0.60:
+                mild_flatness_support = (
+                    duplicate_feature_ratio >= 0.30
+                    or same3_frac >= 0.40
+                    or raw_std <= 0.010
+                    or rows_with_high_default_feature_share >= max(5, int(total_rows_entering_model * 0.20))
+                    or bool(self._last_metrics.get("schema_mismatch_detected", False))
+                )
+                if mild_flatness_support:
+                    logger.warning(
+                        "ML RAW COMPRESSION AUDIT: Raw unique ratio (%s) is below 60%% with supporting degradation signals. Triggering intervention.",
+                        f"{raw_unique_ratio:.1%}",
+                    )
+                    is_flat = True
+                    trigger_reasons.append("raw_unique_ratio_below_60pct_with_supporting_signals")
 
             # Rule 2: Absolute repeat thresholds based on slate size
             if not is_flat and total_count > 0:
@@ -1666,9 +1734,14 @@ class PredictionEngine:
                     max_repeats = max(raw_counts.values()) if raw_counts else 0
 
                     if total_count <= 30:
-                        if max_repeats >= 2:
+                        if max_repeats >= 2 and (
+                            duplicate_feature_ratio >= 0.35
+                            or same3_frac >= 0.50
+                            or raw_std <= 0.010
+                        ):
                             logger.warning(f"ML RAW COMPRESSION AUDIT: Slate <= 30 rows and a raw probability repeated {max_repeats} times (threshold: 2+). Triggering intervention.")
                             is_flat = True
+                            trigger_reasons.append("small_slate_repeat_threshold")
                     elif total_count <= 60:
                         # Narrower intervention: for medium slates, repeated values alone are not enough;
                         # also require evidence of matrix collapse or distribution compression.
@@ -1679,16 +1752,32 @@ class PredictionEngine:
                         ):
                             logger.warning(f"ML RAW COMPRESSION AUDIT: Slate 31-60 rows and a raw probability repeated {max_repeats} times (threshold: 3+). Triggering intervention.")
                             is_flat = True
+                            trigger_reasons.append("medium_slate_repeat_threshold_with_support")
                     else:
                         max_ratio = max_repeats / total_count if total_count > 0 else 0
-                        if max_repeats >= 4:
-                            logger.warning(f"ML RAW COMPRESSION AUDIT: Slate > 60 rows and a raw probability repeated {max_repeats} times (threshold: 4+). Triggering intervention.")
+                        large_slate_support = (
+                            duplicate_feature_ratio >= 0.20
+                            or same3_frac >= 0.30
+                            or raw_std <= 0.012
+                            or bool(self._last_metrics.get("schema_mismatch_detected", False))
+                        )
+                        if max_repeats >= 4 and large_slate_support:
+                            logger.warning(
+                                "ML RAW COMPRESSION AUDIT: Slate > 60 rows repeated value threshold hit (%s repeats) with supporting degradation signals. Triggering intervention.",
+                                max_repeats,
+                            )
                             is_flat = True
-                        elif max_ratio >= 0.10:
-                            logger.warning(f"ML RAW COMPRESSION AUDIT: Slate > 60 rows and a raw probability covers {max_ratio:.1%} of rows (threshold: 10%+). Triggering intervention.")
+                            trigger_reasons.append("large_slate_repeat_threshold_with_support")
+                        elif max_ratio >= 0.10 and large_slate_support:
+                            logger.warning(
+                                "ML RAW COMPRESSION AUDIT: Slate > 60 rows repeat ratio threshold hit (%s) with supporting degradation signals. Triggering intervention.",
+                                f"{max_ratio:.1%}",
+                            )
                             is_flat = True
+                            trigger_reasons.append("large_slate_repeat_ratio_threshold_with_support")
                 except Exception as e:
                     logger.error(f"Error during ML RAW COMPRESSION AUDIT tier check: {e}")
+            self._last_metrics["hybrid_override_trigger_reasons"] = trigger_reasons
 
             root_cause_hint = "mixed_or_model_specific"
             if self._last_metrics.get("schema_mismatch_detected", False):
