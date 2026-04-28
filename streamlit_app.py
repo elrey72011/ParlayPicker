@@ -25,6 +25,8 @@ from core.streamlit_pipeline import (
     CANONICAL_BET_COLUMNS,
     VALID_MARKETS,
     MIN_EDGE_THRESHOLD,
+    ensure_best_pick_export_columns,
+    REQUIRED_BEST_PICK_EXPORT_COLUMNS,
 )
 from core.team_normalizer import normalize_team
 from core.theover_loader import load_theover_csv
@@ -1216,13 +1218,25 @@ def main() -> None:
                 "calibrated_probability": "WinProbability"
             }
             export_prep_df = export_prep_df.rename(columns=csv_rename_map)
+            export_prep_df = ensure_best_pick_export_columns(export_prep_df)
 
             target_export_cols = [
                 "Pick_Status", "Status_Reason", "Triple_Filter_Rank", "Pick_Quality", "parlay_rank", "league", "Home", "Away", "Local Date",
                 "Commence (Local)", "market_type", "candidate_source", "orientation_source", "upload_match_reason", "best_pick", "WinProbability", "expected_value",
                 "edge", "Conviction_Score", "consensus_agreement", "odds_american", "odds_source", "market_probability",
-                "kalshi_probability", "ml_probability", "gemini_explanation", "gemini_risk_notes"
+                "kalshi_probability", "ml_probability", "gemini_explanation", "gemini_risk_notes",
+                "status_metric_basis", "effective_expected_value", "effective_edge", "effective_win_probability",
+                "status_blocker_reason", "status_blocker_stage", "nba_stats_fetch_status", "fallback_summary_by_league",
+                "run_health_warning", "degraded_feature_subset_flag", "degraded_feature_subset_reason",
             ]
+            for col in REQUIRED_BEST_PICK_EXPORT_COLUMNS:
+                if col not in target_export_cols:
+                    target_export_cols.append(col)
+
+            missing_required_export_cols = [c for c in REQUIRED_BEST_PICK_EXPORT_COLUMNS if c not in export_prep_df.columns]
+            if missing_required_export_cols:
+                logger.warning("best_pick_export_missing_columns=%s", missing_required_export_cols)
+            logger.info("best_pick_export_required_columns_ok=%s", len(missing_required_export_cols) == 0)
 
             final_export_cols = [c for c in target_export_cols if c in export_prep_df.columns]
             best_picks_export = export_prep_df[final_export_cols].copy()

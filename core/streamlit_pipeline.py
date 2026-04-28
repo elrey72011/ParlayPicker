@@ -98,6 +98,71 @@ _NCAAB_LEAGUE_RECOVERY_KEYWORDS = {
 }
 _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball", "women\'s basketball"}
 
+
+REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
+    "status_metric_basis",
+    "effective_expected_value",
+    "effective_edge",
+    "effective_win_probability",
+    "status_blocker_reason",
+    "status_blocker_stage",
+    "nba_stats_fetch_status",
+    "fallback_summary_by_league",
+    "run_health_warning",
+    "degraded_feature_subset_flag",
+    "degraded_feature_subset_reason",
+]
+
+
+def ensure_best_pick_export_columns(
+    export_df: pd.DataFrame,
+    diagnostics_out: dict | None = None,
+    required_columns: list[str] | None = None,
+) -> pd.DataFrame:
+    """Guarantee required transparency columns exist on final best-picks export frame."""
+    if export_df is None:
+        export_df = pd.DataFrame()
+
+    out = export_df.copy()
+    req_cols = list(required_columns or REQUIRED_BEST_PICK_EXPORT_COLUMNS)
+    default_values: dict[str, object] = {
+        "status_metric_basis": "raw",
+        "effective_expected_value": pd.NA,
+        "effective_edge": pd.NA,
+        "effective_win_probability": pd.NA,
+        "status_blocker_reason": "",
+        "status_blocker_stage": "none",
+        "nba_stats_fetch_status": "",
+        "fallback_summary_by_league": "",
+        "run_health_warning": "",
+        "degraded_feature_subset_flag": False,
+        "degraded_feature_subset_reason": "",
+    }
+
+    missing_cols = [c for c in req_cols if c not in out.columns]
+    for col in missing_cols:
+        out[col] = default_values.get(col, pd.NA)
+
+    for col in req_cols:
+        if col in {"status_blocker_reason", "status_blocker_stage", "nba_stats_fetch_status", "fallback_summary_by_league", "run_health_warning", "degraded_feature_subset_reason", "status_metric_basis"}:
+            out[col] = out[col].fillna(default_values.get(col, "")).astype(str)
+
+    if "status_blocker_stage" in out.columns:
+        out["status_blocker_stage"] = out["status_blocker_stage"].replace({"": "none"})
+    if "degraded_feature_subset_flag" in out.columns:
+        out["degraded_feature_subset_flag"] = out["degraded_feature_subset_flag"].fillna(False).astype(bool)
+
+    required_ok = len(missing_cols) == 0
+    if missing_cols:
+        logger.warning("best_pick_export_missing_columns=%s", missing_cols)
+    logger.info("best_pick_export_required_columns_ok=%s", required_ok)
+
+    if diagnostics_out is not None:
+        diagnostics_out["best_pick_export_missing_columns"] = missing_cols
+        diagnostics_out["best_pick_export_required_columns_ok"] = bool(required_ok)
+
+    return out
+
 BEST_PICK_COLUMNS = [
     "Triple_Filter_Rank", "parlay_rank",
     "league", "home_team", "away_team", "game_date", "game_time_est", "market_type", "candidate_source", "orientation_source", "upload_match_reason", "best_pick", "Pick_Status", "Status_Reason",
@@ -2359,44 +2424,82 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         best.at[idx, "status_blocker_reason"] = status_reason if status != "Actionable" else ""
         best.at[idx, "status_blocker_stage"] = blocker_stage if status != "Actionable" else "none"
 
-    # Narrow card-balance fix: if Actionable has no sides but does have totals,
-    # promote one clean side from High Variance/Speculative.
+    from app_core.weights_config import SIDE_MIN_WIN_PROB
+
+    # Conservative anti-monoculture guard: only if Actionable is totals-only,
+    # and a side is near the weakest existing Actionable row on effective metrics.
     actionable_mask = best["Pick_Status"].astype(str).eq("Actionable")
+    actionable_family_counts: dict[str, int] = {}
+    totals_only_actionable_flag = False
+    viable_side_candidates_count = 0
+    side_balance_guard_reason = "not_evaluated"
     if actionable_mask.any():
         market_type_str = best["market_type"].astype(str).str.lower()
         actionable_side_mask = actionable_mask & market_type_str.str.contains("spread|h2h", na=False)
         actionable_total_mask = actionable_mask & market_type_str.str.contains("total", na=False)
-        if actionable_total_mask.any() and not actionable_side_mask.any():
-            promotable_side_mask = (
-                best["Pick_Status"].astype(str).eq("High Variance/Speculative")
+        actionable_family_counts = {
+            "total": int(actionable_total_mask.sum()),
+            "side": int(actionable_side_mask.sum()),
+        }
+        totals_only_actionable_flag = bool(actionable_total_mask.any() and not actionable_side_mask.any())
+
+        if totals_only_actionable_flag:
+            actionable_ev = pd.to_numeric(best.loc[actionable_mask, "effective_expected_value"], errors="coerce")
+            actionable_edge = pd.to_numeric(best.loc[actionable_mask, "effective_edge"], errors="coerce")
+            actionable_prob = pd.to_numeric(best.loc[actionable_mask, "effective_win_probability"], errors="coerce")
+            weakest_actionable_ev = actionable_ev.min(skipna=True)
+            weakest_actionable_edge = actionable_edge.min(skipna=True)
+            weakest_actionable_prob = actionable_prob.min(skipna=True)
+
+            ev_margin = 0.010
+            edge_margin = 0.010
+            prob_margin = 0.050
+
+            blocked_stages = {
+                "suspicious_data_guardrail",
+                "data_fallback_guardrail",
+                "line_integrity_guardrail",
+                "fallback_heavy_guardrail",
+            }
+
+            side_candidate_mask = (
+                best["Pick_Status"].astype(str).isin({"High Variance/Speculative", "Below Threshold"})
                 & market_type_str.str.contains("spread|h2h", na=False)
-                & pd.to_numeric(best["expected_value"], errors="coerce").gt(0)
-                & pd.to_numeric(best["edge"], errors="coerce").gt(0)
+                & pd.to_numeric(best["effective_expected_value"], errors="coerce").gt(0)
+                & pd.to_numeric(best["effective_edge"], errors="coerce").gt(0)
+                & pd.to_numeric(best["effective_win_probability"], errors="coerce").ge(SIDE_MIN_WIN_PROB)
                 & ~best.get("suspicious_data_flag", pd.Series(False, index=best.index)).fillna(False).astype(bool)
-                & ~best.get("status_blocker_stage", pd.Series("", index=best.index)).astype(str).isin(
-                    {
-                        "divergence_guardrail",
-                        "divergence_viability_floor",
-                        "suspicious_data_guardrail",
-                        "data_fallback_guardrail",
-                        "line_integrity_guardrail",
-                    }
-                )
+                & ~best.get("status_blocker_stage", pd.Series("", index=best.index)).astype(str).isin(blocked_stages)
+                & ~best.get("status_blocker_reason", pd.Series("", index=best.index)).astype(str).str.contains("degraded|fallback-only", case=False, na=False)
+                & pd.to_numeric(best["effective_expected_value"], errors="coerce").ge(weakest_actionable_ev - ev_margin)
+                & pd.to_numeric(best["effective_edge"], errors="coerce").ge(weakest_actionable_edge - edge_margin)
+                & pd.to_numeric(best["effective_win_probability"], errors="coerce").ge(weakest_actionable_prob - prob_margin)
             )
-            if promotable_side_mask.any():
+            viable_side_candidates_count = int(side_candidate_mask.sum())
+
+            if viable_side_candidates_count > 0:
                 promote_idx = (
-                    best.loc[promotable_side_mask]
+                    best.loc[side_candidate_mask]
                     .sort_values(
-                        by=["expected_value", "edge", "calibrated_probability"],
+                        by=["effective_expected_value", "effective_edge", "effective_win_probability"],
                         ascending=[False, False, False],
                     )
                     .index[0]
                 )
                 best.at[promote_idx, "Pick_Status"] = "Actionable"
-                best.at[promote_idx, "Status_Reason"] = "Actionable: side-balance promotion from High Variance (clean strongest side)"
+                best.at[promote_idx, "Status_Reason"] = (
+                    "Actionable: side-balance guard promoted strongest near-threshold side"
+                )
                 best.at[promote_idx, "status_blocker_reason"] = ""
                 best.at[promote_idx, "status_blocker_stage"] = "none"
                 side_balance_promotions += 1
+                side_balance_guard_reason = "promoted_viable_side_candidate"
+            else:
+                side_balance_guard_reason = "no_viable_side_candidate_within_margin"
+        else:
+            side_balance_guard_reason = "actionable_not_totals_only"
+    else:
+        side_balance_guard_reason = "no_actionable_rows"
 
     # Always keep transparency fields row-populated in export.
     best["status_metric_basis"] = best["status_metric_basis"].fillna("raw")
@@ -2553,6 +2656,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                     logger.info(f"odds_source '{source}' -> {filtered_counts}")
 
     final_best_df = best[BEST_PICK_COLUMNS].copy()
+    final_best_df = ensure_best_pick_export_columns(final_best_df, diagnostics_out=diagnostics_out)
 
     if diagnostics_out is not None:
         actionable_df = final_best_df[final_best_df["Pick_Status"] == "Actionable"]
@@ -2689,6 +2793,11 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         diagnostics_out["high_variance_capped_due_to_degraded_subset"] = int(high_variance_capped_due_to_degraded_subset)
         diagnostics_out["high_variance_capped_due_to_fallback_heavy"] = int(high_variance_capped_due_to_fallback_heavy)
         diagnostics_out["side_balance_promotions"] = int(side_balance_promotions)
+        diagnostics_out["actionable_family_counts"] = actionable_family_counts
+        diagnostics_out["totals_only_actionable_flag"] = bool(totals_only_actionable_flag)
+        diagnostics_out["viable_side_candidates_count"] = int(viable_side_candidates_count)
+        diagnostics_out["side_promoted_by_balance_guard_count"] = int(side_balance_promotions)
+        diagnostics_out["side_balance_guard_reason"] = side_balance_guard_reason
         diagnostics_out["final_pick_status_counts"] = final_best_df["Pick_Status"].value_counts().to_dict()
         hidden_bad_rows = final_best_df[
             (final_best_df["Pick_Status"] == "High Variance/Speculative")
