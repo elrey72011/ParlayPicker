@@ -254,6 +254,7 @@ def test_divergence_cannot_preserve_negative_ev_row():
     row = out.iloc[0]
     assert row["Pick_Status"] == "No Play"
     assert "divergence override denied" in row["Status_Reason"]
+    assert row["status_metric_basis"] == "raw"
     assert row["status_blocker_stage"] == "divergence_viability_floor"
 
 
@@ -302,3 +303,38 @@ def test_divergence_viability_diagnostics_populate():
     assert diagnostics["divergence_rows_negative_ev"] >= 1
     assert diagnostics["divergence_rows_negative_edge"] >= 1
     assert "No Play" in diagnostics["divergence_rows_by_pick_status"]
+
+
+def test_effective_metric_transparency_when_blocked_by_effective_thresholds():
+    df = pd.DataFrame(
+        [
+            _row(idx=1, league="NFL", market_type="total_over", win_prob=0.60, ev=0.032, edge=0.05, kalshi_probability=0.55),
+        ]
+    )
+    diagnostics = {"is_fallback_heavy": True}
+    out = build_best_picks_df(df, diagnostics_out=diagnostics)
+    row = out.iloc[0]
+    assert row["Pick_Status"] == "Below Threshold"
+    assert row["status_metric_basis"] == "effective"
+    assert float(row["effective_expected_value"]) < float(row["expected_value"])
+    assert "Effective EV" in row["Status_Reason"]
+    assert row["status_blocker_reason"] == row["Status_Reason"]
+
+
+def test_run_health_fields_are_export_visible_when_present():
+    df = pd.DataFrame(
+        [
+            _row(idx=1, league="MLB", market_type="total_over", win_prob=0.60, ev=0.05, edge=0.05, kalshi_probability=0.55),
+        ]
+    )
+    df["nba_stats_fetch_status"] = "cached"
+    df["nba_stats_fetch_retries_used"] = 3
+    df["stats_source_counts"] = "{'live': 0, 'cached': 1, 'fallback': 0, 'failed': 0}"
+    df["fallback_summary_by_league"] = "{'NBA': 12}"
+    df["fallback_heavy_slate_flag"] = True
+    df["run_health_warning"] = "Run health warning: fallback usage is elevated"
+    out = build_best_picks_df(df)
+    row = out.iloc[0]
+    assert row["nba_stats_fetch_status"] == "cached"
+    assert bool(row["fallback_heavy_slate_flag"]) is True
+    assert "Run health warning" in row["run_health_warning"]
