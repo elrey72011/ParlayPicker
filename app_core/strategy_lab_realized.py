@@ -5,6 +5,30 @@ import pandas as pd
 
 VALID_RESULTS = {"WIN", "LOSS", "PUSH"}
 
+STATUS_BUCKET_ACTIONABLE = "Actionable"
+STATUS_BUCKET_HIGH_VARIANCE = "High Variance/Speculative"
+STATUS_BUCKET_BELOW_THRESHOLD = "Below Threshold"
+STATUS_BUCKET_NO_PLAY = "No Play"
+
+REALIZED_MODE_ACTIONABLE_ONLY = "Actionable only"
+REALIZED_MODE_ACTIONABLE_PLUS_HIGH_VARIANCE = "Actionable + High Variance/Speculative"
+REALIZED_MODE_ALL_GRADED = "All graded bets"
+REALIZED_MODE_CUSTOM = "Custom status filter"
+
+REALIZED_STRATEGY_MODE_ORDER = [
+    REALIZED_MODE_ACTIONABLE_ONLY,
+    REALIZED_MODE_ACTIONABLE_PLUS_HIGH_VARIANCE,
+    REALIZED_MODE_ALL_GRADED,
+    REALIZED_MODE_CUSTOM,
+]
+
+STATUS_BUCKET_ORDER = [
+    STATUS_BUCKET_ACTIONABLE,
+    STATUS_BUCKET_HIGH_VARIANCE,
+    STATUS_BUCKET_BELOW_THRESHOLD,
+    STATUS_BUCKET_NO_PLAY,
+]
+
 
 def _first_present(row: pd.Series, columns: list[str]) -> Any:
     for col in columns:
@@ -38,12 +62,97 @@ def _american_to_decimal(odds: Any) -> float | None:
     return 1.0 + (100.0 / abs(val))
 
 
+def _normalize_status(value: Any) -> str:
+    text = _normalize_text(value)
+    if not text:
+        return STATUS_BUCKET_ACTIONABLE
+    if "actionable" in text:
+        return STATUS_BUCKET_ACTIONABLE
+    if "high variance" in text or "speculative" in text:
+        return STATUS_BUCKET_HIGH_VARIANCE
+    if "below" in text and "threshold" in text:
+        return STATUS_BUCKET_BELOW_THRESHOLD
+    if "no play" in text:
+        return STATUS_BUCKET_NO_PLAY
+    return STATUS_BUCKET_NO_PLAY
+
+
+def get_strategy_mode_statuses(mode: str, custom_statuses: list[str] | None = None) -> set[str]:
+    if mode == REALIZED_MODE_ACTIONABLE_ONLY:
+        return {STATUS_BUCKET_ACTIONABLE}
+    if mode == REALIZED_MODE_ACTIONABLE_PLUS_HIGH_VARIANCE:
+        return {STATUS_BUCKET_ACTIONABLE, STATUS_BUCKET_HIGH_VARIANCE}
+    if mode == REALIZED_MODE_ALL_GRADED:
+        return set(STATUS_BUCKET_ORDER)
+    if mode == REALIZED_MODE_CUSTOM:
+        return set(custom_statuses or [])
+    return {STATUS_BUCKET_ACTIONABLE}
+
+
+def _summarize_subset(df: pd.DataFrame) -> Dict[str, float]:
+    wins = int((df["Result"] == "WIN").sum())
+    losses = int((df["Result"] == "LOSS").sum())
+    pushes = int((df["Result"] == "PUSH").sum())
+    decisions = wins + losses
+    total_staked = float(df["Stake"].sum())
+    gross_returned = float(df["Gross Return"].sum())
+    net_pl = float(df["Net Profit"].sum())
+    hit_rate = (wins / decisions) if decisions > 0 else 0.0
+    roi = (net_pl / total_staked) if total_staked > 0 else 0.0
+    return {
+        "Bet Count": int(len(df)),
+        "Wins": wins,
+        "Losses": losses,
+        "Pushes": pushes,
+        "Hit Rate": hit_rate,
+        "Total Staked": total_staked,
+        "Gross Returned": gross_returned,
+        "Net P/L": net_pl,
+        "ROI": roi,
+    }
+
+
+def compute_status_bucket_summary(realized_df: pd.DataFrame) -> pd.DataFrame:
+    eligible = realized_df[realized_df["Excluded Reason"] == ""]
+    rows = []
+    for bucket in STATUS_BUCKET_ORDER:
+        subset = eligible[eligible["Status Bucket"] == bucket]
+        row = {"Status Bucket": bucket}
+        row.update(_summarize_subset(subset))
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def compute_mode_comparison(realized_df: pd.DataFrame) -> pd.DataFrame:
+    rows = []
+    for mode in [
+        REALIZED_MODE_ACTIONABLE_ONLY,
+        REALIZED_MODE_ACTIONABLE_PLUS_HIGH_VARIANCE,
+        REALIZED_MODE_ALL_GRADED,
+    ]:
+        mode_statuses = get_strategy_mode_statuses(mode)
+        subset = realized_df[(realized_df["Excluded Reason"] == "") & (realized_df["Status Bucket"].isin(mode_statuses))]
+        summary = _summarize_subset(subset)
+        rows.append(
+            {
+                "Mode": mode,
+                "Bet Count": summary["Bet Count"],
+                "Hit Rate": summary["Hit Rate"],
+                "Net P/L": summary["Net P/L"],
+                "ROI": summary["ROI"],
+            }
+        )
+    return pd.DataFrame(rows)
+
+
 def build_realized_strategy_lab(
     graded_df: pd.DataFrame,
     strategy_source_df: pd.DataFrame | None = None,
     *,
     default_stake: float = 1.0,
     starting_bankroll: float = 0.0,
+    strategy_mode: str = REALIZED_MODE_ACTIONABLE_ONLY,
+    custom_statuses: list[str] | None = None,
 ) -> Tuple[pd.DataFrame, Dict[str, float], Dict[str, pd.DataFrame | int]]:
     """
     Build realized Strategy Lab rows strictly from a graded source (same as recap),
@@ -92,6 +201,10 @@ def build_realized_strategy_lab(
 
     realized["Result"] = realized.get("Pick_Outcome", "N/A").astype(str).str.upper().str.strip()
     realized["Result"] = realized["Result"].where(realized["Result"].isin(VALID_RESULTS), "UNGRADED")
+    realized["Status Bucket"] = realized.apply(
+        lambda row: _normalize_status(_first_present(row, ["Status", "status", "Recommendation Tier", "recommendation_tier"])),
+        axis=1,
+    )
 
     realized["Pick Match"] = True
     strategy_pick_norm = realized["Strategy Pick"].map(_normalize_text)
@@ -114,15 +227,18 @@ def build_realized_strategy_lab(
     realized.loc[(score_missing) & (realized["Excluded Reason"] == ""), "Excluded Reason"] = "MISSING_SCORES"
     realized.loc[(realized["Result"] == "WIN") & (realized["Decimal Odds"].isna()) & (realized["Excluded Reason"] == ""), "Excluded Reason"] = "MISSING_ODDS"
 
-    realized["Include In Totals"] = realized["Excluded Reason"] == ""
+    core_eligible = realized["Excluded Reason"] == ""
+    selected_statuses = get_strategy_mode_statuses(strategy_mode, custom_statuses)
+    realized["Mode Included"] = realized["Status Bucket"].isin(selected_statuses)
+    realized["Include In Totals"] = core_eligible & realized["Mode Included"]
 
     realized["Gross Return"] = 0.0
     realized["Net Profit"] = 0.0
 
     include = realized["Include In Totals"]
-    win_mask = include & (realized["Result"] == "WIN")
-    loss_mask = include & (realized["Result"] == "LOSS")
-    push_mask = include & (realized["Result"] == "PUSH")
+    win_mask = core_eligible & (realized["Result"] == "WIN")
+    loss_mask = core_eligible & (realized["Result"] == "LOSS")
+    push_mask = core_eligible & (realized["Result"] == "PUSH")
 
     realized.loc[win_mask, "Gross Return"] = realized.loc[win_mask, "Stake"] * realized.loc[win_mask, "Decimal Odds"]
     realized.loc[win_mask, "Net Profit"] = realized.loc[win_mask, "Gross Return"] - realized.loc[win_mask, "Stake"]
@@ -135,28 +251,24 @@ def build_realized_strategy_lab(
     realized["Running Bankroll"] = starting_bankroll + running_net
 
     included_df = realized[include]
-    wins = int((included_df["Result"] == "WIN").sum())
-    losses = int((included_df["Result"] == "LOSS").sum())
-    pushes = int((included_df["Result"] == "PUSH").sum())
-    decisions = wins + losses
-
-    total_staked = float(included_df["Stake"].sum())
-    gross_returned = float(included_df["Gross Return"].sum())
-    net_pl = float(included_df["Net Profit"].sum())
-    roi = (net_pl / total_staked) if total_staked > 0 else 0.0
-    hit_rate = (wins / decisions) if decisions > 0 else 0.0
+    mode_summary = _summarize_subset(included_df)
 
     summary = {
-        "Total Staked": total_staked,
-        "Gross Returned": gross_returned,
-        "Net P/L": net_pl,
-        "ROI": roi,
-        "Win Count": wins,
-        "Loss Count": losses,
-        "Push Count": pushes,
-        "Hit Rate": hit_rate,
+        "Total Staked": mode_summary["Total Staked"],
+        "Gross Returned": mode_summary["Gross Returned"],
+        "Net P/L": mode_summary["Net P/L"],
+        "ROI": mode_summary["ROI"],
+        "Win Count": mode_summary["Wins"],
+        "Loss Count": mode_summary["Losses"],
+        "Push Count": mode_summary["Pushes"],
+        "Hit Rate": mode_summary["Hit Rate"],
+        "Bet Count": mode_summary["Bet Count"],
         "Mismatch Count": int((realized["Result"] == "MISMATCH").sum()),
+        "Strategy Mode": strategy_mode,
     }
+
+    status_summary = compute_status_bucket_summary(realized)
+    mode_comparison = compute_mode_comparison(realized)
 
     diagnostics = {
         "pick_mismatches": realized[realized["Result"] == "MISMATCH"].copy(),
@@ -164,6 +276,13 @@ def build_realized_strategy_lab(
         "missing_odds": realized[realized["Excluded Reason"] == "MISSING_ODDS"].copy(),
         "excluded_rows": realized[realized["Excluded Reason"] != ""].copy(),
         "excluded_count": int((realized["Excluded Reason"] != "").sum()),
+        "outside_mode_rows": realized[(realized["Excluded Reason"] == "") & (~realized["Mode Included"])].copy(),
+        "status_bucket_summary": status_summary,
+        "mode_comparison": mode_comparison,
+        "ungraded_count": int((realized["Result"] == "UNGRADED").sum()),
+        "missing_odds_count": int((realized["Excluded Reason"] == "MISSING_ODDS").sum()),
+        "mismatch_count": int((realized["Result"] == "MISMATCH").sum()),
+        "outside_mode_count": int(((realized["Excluded Reason"] == "") & (~realized["Mode Included"])).sum()),
     }
 
     return realized, summary, diagnostics

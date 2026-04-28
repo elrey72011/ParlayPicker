@@ -5,6 +5,7 @@ import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import app_core.feature_processing as fp
+from app_core import weights_config
 
 
 def test_nba_minnesota_resolves_to_timberwolves_not_wild():
@@ -29,6 +30,12 @@ def test_league_specific_normalization_prevents_cross_league_alias_pollution():
 def test_colorado_resolves_differently_by_league():
     assert fp.normalize_team_for_stats("Colorado", "NHL") == "COLORADO AVALANCHE"
     assert fp.normalize_team_for_stats("Colorado", "MLB") == "COLORADO ROCKIES"
+
+
+def test_nhl_boston_and_buffalo_and_mlb_arizona_normalize_to_expected_keys():
+    assert fp.normalize_team_for_stats("Boston", "NHL") == "BOSTON BRUINS"
+    assert fp.normalize_team_for_stats("Buffalo", "NHL") == "BUFFALO SABRES"
+    assert fp.normalize_team_for_stats("Arizona", "MLB") == "ARIZONA DIAMONDBACKS"
 
 
 def test_stats_index_canonicalization_and_resolver_matches_city_only_nba_mlb():
@@ -71,8 +78,10 @@ def test_stats_index_canonicalization_and_resolver_matches_city_only_nba_mlb():
     assert mlb_stage == "resolved"
 
 
-def test_fetch_nba_stats_retries_before_fallback(monkeypatch):
+def test_fetch_nba_stats_retries_before_fallback(monkeypatch, tmp_path):
     fp._NBA_STATS_RUNTIME_CACHE.clear()
+    fp._NBA_STATS_SUCCESS_ARCHIVE.clear()
+    monkeypatch.chdir(tmp_path)
 
     class FakeEndpoint:
         calls = 0
@@ -113,6 +122,120 @@ def test_fetch_nba_stats_retries_before_fallback(monkeypatch):
     assert FakeEndpoint.calls == 3
     assert diag["status"] == "ok"
     assert diag["retries_used"] == 2
+
+
+def test_nba_fetch_failure_uses_same_day_cached_payload(monkeypatch):
+    fp._NBA_STATS_RUNTIME_CACHE.clear()
+    fp._NBA_STATS_SUCCESS_ARCHIVE.clear()
+    slate_day = "2026-04-28"
+    cached_payload = [{"team_norm": "ATLANTA HAWKS", "league_key": "NBA", "win_pct": 0.55, "home_win_pct": 0.55, "away_win_pct": 0.55, "points_per_game": 114.0, "points_allowed_per_game": 111.0, "assists_per_game": 24.0, "rebounds_per_game": 44.0, "turnovers": 12.0, "streak": 0.0, "last5_win_pct": 0.6}]
+    fp._NBA_STATS_SUCCESS_ARCHIVE[2025] = {"slate_day": slate_day, "stats": cached_payload}
+
+    class AlwaysFailEndpoint:
+        def __init__(self, **kwargs):
+            raise TimeoutError("stats timeout")
+
+    class FakeModule:
+        LeagueDashTeamStats = AlwaysFailEndpoint
+
+    class FakeDateTime:
+        @staticmethod
+        def utcnow():
+            return pd.Timestamp(slate_day)
+
+    monkeypatch.setattr(fp, "leaguedashteamstats", FakeModule)
+    monkeypatch.setattr(fp, "datetime", FakeDateTime)
+    monkeypatch.setattr(fp.time, "sleep", lambda *_args, **_kwargs: None)
+
+    stats = fp.fetch_nba_stats(2025)
+    diag = fp.get_nba_fetch_diagnostics()
+    assert stats == cached_payload
+    assert diag["source"] == "cached"
+    assert diag["status"] == "ok"
+
+
+def test_nba_fetch_diagnostics_distinguish_live_cached_failed(monkeypatch, tmp_path):
+    fp._NBA_STATS_RUNTIME_CACHE.clear()
+    fp._NBA_STATS_SUCCESS_ARCHIVE.clear()
+    monkeypatch.chdir(tmp_path)
+
+    class SuccessEndpoint:
+        def __init__(self, **kwargs):
+            pass
+
+        def get_data_frames(self):
+            return [pd.DataFrame([{"TEAM_NAME": "Atlanta Hawks", "GP": 1, "PTS": 110, "PLUS_MINUS": 2, "W_PCT": 0.5, "TOV": 12, "AST": 20, "REB": 40}])]
+
+    class SuccessModule:
+        LeagueDashTeamStats = SuccessEndpoint
+
+    monkeypatch.setattr(fp, "leaguedashteamstats", SuccessModule)
+    assert fp.fetch_nba_stats(2025)
+    assert fp.get_nba_fetch_diagnostics()["source"] == "live"
+    assert fp.fetch_nba_stats(2025)
+    assert fp.get_nba_fetch_diagnostics()["source"] == "cached"
+
+    fp._NBA_STATS_RUNTIME_CACHE.clear()
+    fp._NBA_STATS_SUCCESS_ARCHIVE.clear()
+
+    class FailEndpoint:
+        def __init__(self, **kwargs):
+            raise TimeoutError("down")
+
+    class FailModule:
+        LeagueDashTeamStats = FailEndpoint
+
+    monkeypatch.setattr(fp, "leaguedashteamstats", FailModule)
+    monkeypatch.setattr(fp.time, "sleep", lambda *_args, **_kwargs: None)
+    assert fp.fetch_nba_stats(2026) == []
+    assert fp.get_nba_fetch_diagnostics()["source"] == "failed"
+
+
+def test_nba_fetch_failure_uses_same_day_disk_cache(monkeypatch, tmp_path):
+    fp._NBA_STATS_RUNTIME_CACHE.clear()
+    fp._NBA_STATS_SUCCESS_ARCHIVE.clear()
+    slate_day = "2026-04-28"
+    monkeypatch.chdir(tmp_path)
+
+    class FakeDateTime:
+        @staticmethod
+        def utcnow():
+            return pd.Timestamp(slate_day)
+
+    class FailEndpoint:
+        def __init__(self, **kwargs):
+            raise TimeoutError("down")
+
+    class FailModule:
+        LeagueDashTeamStats = FailEndpoint
+
+    disk_payload = [
+        {
+            "team_norm": "ATLANTA HAWKS",
+            "league_key": "NBA",
+            "win_pct": 0.55,
+            "home_win_pct": 0.55,
+            "away_win_pct": 0.55,
+            "points_per_game": 114.0,
+            "points_allowed_per_game": 111.0,
+            "assists_per_game": 24.0,
+            "rebounds_per_game": 44.0,
+            "turnovers": 12.0,
+            "streak": 0.0,
+            "last5_win_pct": 0.6,
+        }
+    ]
+    fp._save_nba_disk_cache(2025, slate_day, disk_payload)
+
+    monkeypatch.setattr(fp, "datetime", FakeDateTime)
+    monkeypatch.setattr(fp, "leaguedashteamstats", FailModule)
+    monkeypatch.setattr(fp.time, "sleep", lambda *_args, **_kwargs: None)
+
+    stats = fp.fetch_nba_stats(2025)
+    diag = fp.get_nba_fetch_diagnostics()
+    assert stats == disk_payload
+    assert diag["source"] == "cached"
+    assert diag["status"] == "ok"
 
 
 def test_unresolved_nba_rows_marked_and_ml_ineligible(monkeypatch):
@@ -157,6 +280,7 @@ def test_unresolved_nba_rows_marked_and_ml_ineligible(monkeypatch):
     assert "stats_fallback_reason" in enriched.columns
     assert "ml_feature_eligible" in enriched.columns
     assert "stats_fetch_retries_used" in enriched.columns
+    assert "nba_stats_fetch_source" in enriched.columns
 
     assert enriched.loc[0, "stats_resolution_status"] == "unresolved"
     assert enriched.loc[0, "stats_source"] == "fallback"
@@ -166,6 +290,7 @@ def test_unresolved_nba_rows_marked_and_ml_ineligible(monkeypatch):
     assert pd.isna(enriched.loc[0, "feature_home_win_pct"])
     assert pd.isna(enriched.loc[0, "feature_away_win_pct"])
     assert str(enriched.loc[0, "stats_resolution_stage_failure"]) != ""
+    assert str(enriched.loc[0, "nba_stats_fetch_source"]) == "live"
 
 
 def test_aggregated_stats_diagnostics_populate(monkeypatch):
@@ -203,6 +328,8 @@ def test_aggregated_stats_diagnostics_populate(monkeypatch):
     assert int(enriched.loc[0, "stats_unresolved_count_by_league"]) >= 1
     assert int(enriched.loc[0, "stats_ml_excluded_rows"]) >= 1
     assert "fallback" in str(enriched.loc[0, "stats_source_counts"])
+    assert "stats_unresolved_count_by_league_detail" in enriched.columns
+    assert "fallback_summary_by_league" in enriched.columns
     assert "stats_resolution_stage_failure_counts" in enriched.columns
     assert "after_fuzzy" in str(enriched.loc[0, "stats_resolution_stage_failure_counts"]) or "stats_index_lookup" in str(enriched.loc[0, "stats_resolution_stage_failure_counts"])
 
@@ -229,3 +356,51 @@ def test_nba_fetch_failure_marks_rows_unresolved_and_nans_features(monkeypatch):
     assert bool(enriched.loc[0, "ml_feature_eligible"]) is False
     assert pd.isna(enriched.loc[0, "feature_home_win_pct"])
     assert pd.isna(enriched.loc[0, "feature_away_win_pct"])
+
+
+def test_nhl_boston_buffalo_and_mlb_arizona_resolve_without_fallback(monkeypatch):
+    def fake_fetch_team_stats(_api_clients, season_year=None):
+        return pd.DataFrame(
+            [
+                {"team_norm": "Boston Bruins", "league_key": "NHL", "win_pct": 0.6, "home_win_pct": 0.6, "away_win_pct": 0.6, "points_per_game": 3.2, "points_allowed_per_game": 2.6, "turnovers": 0.0, "streak": 0.0, "last5_win_pct": 0.6},
+                {"team_norm": "Buffalo Sabres", "league_key": "NHL", "win_pct": 0.5, "home_win_pct": 0.5, "away_win_pct": 0.5, "points_per_game": 3.1, "points_allowed_per_game": 3.0, "turnovers": 0.0, "streak": 0.0, "last5_win_pct": 0.5},
+                {"team_norm": "Arizona Diamondbacks", "league_key": "MLB", "win_pct": 0.55, "home_win_pct": 0.55, "away_win_pct": 0.55, "points_per_game": 4.8, "points_allowed_per_game": 4.3, "turnovers": 0.0, "streak": 0.0, "last5_win_pct": 0.6},
+                {"team_norm": "Milwaukee Brewers", "league_key": "MLB", "win_pct": 0.52, "home_win_pct": 0.52, "away_win_pct": 0.52, "points_per_game": 4.6, "points_allowed_per_game": 4.4, "turnovers": 0.0, "streak": 0.0, "last5_win_pct": 0.5},
+            ]
+        )
+
+    monkeypatch.setattr(fp, "fetch_team_stats", fake_fetch_team_stats)
+    games = pd.DataFrame(
+        [
+            {"league": "NHL", "home_team": "Buffalo", "away_team": "Boston", "market_type": "h2h_home", "decimal_odds": 1.9, "odds_american": -110},
+            {"league": "MLB", "home_team": "Milwaukee", "away_team": "Arizona", "market_type": "h2h_home", "decimal_odds": 1.9, "odds_american": -110},
+        ]
+    )
+    enriched = fp.enrich_with_model_features(games, api_clients={})
+    assert (enriched["stats_resolution_status"] == "resolved").all()
+    assert not enriched["feature_stats_fallback"].any()
+
+
+def test_run_health_warning_on_fallback_heavy_slate(monkeypatch):
+    def fake_fetch_team_stats(_api_clients, season_year=None):
+        return pd.DataFrame(columns=["team_norm", "league_key"])
+
+    monkeypatch.setattr(fp, "fetch_team_stats", fake_fetch_team_stats)
+    fp._NBA_FETCH_DIAGNOSTICS.update({"status": "failed", "source": "failed", "retries_used": 3, "last_error": "timeout"})
+    games = pd.DataFrame(
+        [
+            {"league": "NBA", "home_team": "Boston", "away_team": "Philadelphia", "market_type": "h2h_home", "decimal_odds": 1.9, "odds_american": -110},
+            {"league": "NBA", "home_team": "New York", "away_team": "Atlanta", "market_type": "h2h_home", "decimal_odds": 1.9, "odds_american": -110},
+            {"league": "NHL", "home_team": "Buffalo", "away_team": "Boston", "market_type": "h2h_home", "decimal_odds": 1.9, "odds_american": -110},
+            {"league": "MLB", "home_team": "Milwaukee", "away_team": "Arizona", "market_type": "h2h_home", "decimal_odds": 1.9, "odds_american": -110},
+        ]
+    )
+    enriched = fp.enrich_with_model_features(games, api_clients={})
+    assert bool(enriched.loc[0, "fallback_heavy_slate_flag"]) is True
+    assert "Run health warning" in str(enriched.loc[0, "run_health_warning"])
+
+
+def test_best_picks_calibration_constants_unchanged():
+    assert weights_config.NBA_SIDE_ACTIONABLE_BONUS == 0.01
+    assert weights_config.NBA_OVER_ACTIONABLE_BONUS == 0.01
+    assert weights_config.MLB_OVER_ACTIONABLE_MIN_PROB == 0.57

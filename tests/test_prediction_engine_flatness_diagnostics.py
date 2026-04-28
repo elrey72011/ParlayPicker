@@ -23,6 +23,32 @@ class _DummyModel:
         return np.column_stack([1 - probs, probs])
 
 
+class _MildClusterModel:
+    def predict_proba(self, df: pd.DataFrame):
+        vals = np.array(
+            [
+                0.46, 0.47, 0.48, 0.49, 0.50,
+                0.51, 0.52, 0.53, 0.54, 0.55,
+                0.56, 0.57, 0.46, 0.47, 0.48,
+                0.49, 0.50, 0.51, 0.52, 0.53,
+            ],
+            dtype=float,
+        )
+        vals = vals[: len(df)]
+        if len(vals) < len(df):
+            vals = np.pad(vals, (0, len(df) - len(vals)), constant_values=0.50)
+        return np.column_stack([1 - vals, vals])
+
+
+class _LargeSlateMildRepeatModel:
+    def predict_proba(self, df: pd.DataFrame):
+        n = len(df)
+        base = np.linspace(0.41, 0.69, num=max(n, 1), dtype=float)
+        if n >= 70:
+            base[:8] = 0.51  # ~11% repeats on a 70+ slate
+        return np.column_stack([1 - base[:n], base[:n]])
+
+
 def _build_input(rows: int = 10) -> pd.DataFrame:
     base = {col: 0.0 for col in VERTEX_FEATURE_COLUMNS}
     out = []
@@ -55,12 +81,21 @@ def test_pre_and_post_prediction_flatness_diagnostics_populate():
 
     assert len(probs) == 10
     assert metrics["ml_input_row_count"] == 10
-    assert metrics["ml_feature_column_count"] == len(VERTEX_FEATURE_COLUMNS)
+    assert metrics["ml_feature_count"] == len(VERTEX_FEATURE_COLUMNS)
+    assert "ml_feature_order_match_ok" in metrics
+    assert "ml_schema_match_ok" in metrics
     assert metrics["ml_zero_variance_feature_count"] >= 1
     assert metrics["ml_near_constant_feature_count"] >= metrics["ml_zero_variance_feature_count"]
+    assert "ml_high_missingness_feature_count" in metrics
+    assert "ml_top_zero_variance_columns" in metrics
+    assert "ml_top_near_constant_columns" in metrics
+    assert "ml_top_high_missingness_columns" in metrics
     assert metrics["rows_with_duplicate_feature_signature"] >= 1
     assert "raw_prediction_distribution" in metrics
     assert metrics["raw_prediction_distribution"]["unique_count"] >= 1
+    assert "ml_raw_unique_prediction_count" in metrics
+    assert "ml_raw_same_value_fraction_4dp" in metrics
+    assert "ml_raw_top_repeated_values" in metrics
     assert "ml_flatness_root_cause_hint" in metrics
 
 
@@ -82,3 +117,50 @@ def test_schema_mismatch_is_detected_clearly():
     with pytest.raises(ValueError, match="Feature schema/order mismatch"):
         _validate_feature_schema(["a", "b", "c"], ["a", "c", "b"])
 
+
+def test_rescue_trigger_reasons_populate_and_mild_cluster_does_not_force_override():
+    engine = PredictionEngine(model_path="models/does_not_exist.json")
+    engine.model = _MildClusterModel()
+    engine.use_fallback = False
+    df = _build_input(20)
+    for i in range(len(df)):
+        df.at[i, VERTEX_FEATURE_COLUMNS[0]] = float(i + 1)
+        df.at[i, VERTEX_FEATURE_COLUMNS[1]] = float((i % 7) + 1)
+
+    probs = engine.predict_batch(df)
+    metrics = engine._last_metrics
+    assert len(probs) == 20
+    assert metrics["hybrid_fallback_triggered"] is False
+    assert metrics.get("hybrid_override_trigger_reasons", []) == []
+
+
+def test_degraded_subset_flags_populate_in_predict_path():
+    engine = PredictionEngine(model_path="models/does_not_exist.json")
+    engine.model = _DummyModel()
+    engine.use_fallback = False
+    df = _build_input(10)
+    df = df.drop(columns=[VERTEX_FEATURE_COLUMNS[0]])
+
+    probs = engine.predict_batch(df)
+    metrics = engine._last_metrics
+    assert len(probs) == 10
+    assert metrics["ml_numeric_coercion_ok"] is True
+    assert metrics["ml_all_constant_feature_count"] >= 1
+    assert "degraded_subset" in metrics["ml_schema_mismatch_reason"]
+
+
+def test_large_slate_mild_repeat_without_support_does_not_force_hybrid_override():
+    engine = PredictionEngine(model_path="models/does_not_exist.json")
+    engine.model = _LargeSlateMildRepeatModel()
+    engine.use_fallback = False
+    df = _build_input(72)
+    for i in range(len(df)):
+        df.at[i, VERTEX_FEATURE_COLUMNS[0]] = float(i + 1)
+        df.at[i, VERTEX_FEATURE_COLUMNS[1]] = float((i % 13) + 1)
+        df.at[i, "feature_stats_fallback"] = False
+
+    probs = engine.predict_batch(df)
+    metrics = engine._last_metrics
+    assert len(probs) == 72
+    assert metrics["hybrid_fallback_triggered"] is False
+    assert "large_slate_repeat_ratio_threshold_with_support" not in metrics.get("hybrid_override_trigger_reasons", [])

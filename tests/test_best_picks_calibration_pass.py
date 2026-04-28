@@ -117,7 +117,7 @@ def test_diagnostics_blocked_rows_and_shadow_cards_populate():
             _row(idx=4, league="MLB", market_type="spread_home", win_prob=0.54, ev=0.07, edge=0.07, kalshi_probability=0.48),
         ]
     )
-    diagnostics = {}
+    diagnostics = {"is_fallback_heavy": True}
     out = build_best_picks_df(df, diagnostics_out=diagnostics)
     assert not out.empty
     assert diagnostics["blocked_by_under_specific_thresholds"] >= 1
@@ -219,8 +219,9 @@ def test_high_ev_alone_is_not_auto_blocked_as_suspicious_data():
     )
     out = build_best_picks_df(df)
     row = out.iloc[0]
-    assert row["Pick_Status"] == "High Variance/Speculative"
-    assert row["status_blocker_stage"] == "variance_guardrail"
+    assert row["Pick_Status"] == "Actionable"
+    assert "strong EV/edge" in row["Status_Reason"]
+    assert row["status_blocker_stage"] == "none"
     assert row["suspicious_data_flag"] is False or row["suspicious_data_flag"] == False
 
 
@@ -238,7 +239,7 @@ def test_suspicious_data_rows_still_blocked_with_explicit_reason_and_diagnostics
     row = out.iloc[0]
     assert row["Pick_Status"] == "No Play"
     assert row["suspicious_data_flag"] is True or row["suspicious_data_flag"] == True
-    assert "Blocked: suspicious_data_flag=true" in row["Status_Reason"]
+    assert "No Play: blocked due to suspicious data" in row["Status_Reason"]
     assert row["status_blocker_stage"] == "suspicious_data_guardrail"
     assert diagnostics["blocked_by_suspicious_data"] >= 1
 
@@ -254,6 +255,7 @@ def test_divergence_cannot_preserve_negative_ev_row():
     row = out.iloc[0]
     assert row["Pick_Status"] == "No Play"
     assert "divergence override denied" in row["Status_Reason"]
+    assert row["status_metric_basis"] == "raw"
     assert row["status_blocker_stage"] == "divergence_viability_floor"
 
 
@@ -281,7 +283,7 @@ def test_divergence_can_preserve_minimally_viable_row():
     out = build_best_picks_df(df)
     row = out.iloc[0]
     assert row["Pick_Status"] == "High Variance/Speculative"
-    assert "diverge by > 20%" in row["Status_Reason"]
+    assert "capped due to divergence" in row["Status_Reason"]
     assert row["status_blocker_stage"] == "divergence_guardrail"
 
 
@@ -302,3 +304,140 @@ def test_divergence_viability_diagnostics_populate():
     assert diagnostics["divergence_rows_negative_ev"] >= 1
     assert diagnostics["divergence_rows_negative_edge"] >= 1
     assert "No Play" in diagnostics["divergence_rows_by_pick_status"]
+
+
+def test_effective_metric_transparency_when_blocked_by_effective_thresholds():
+    df = pd.DataFrame(
+        [
+            _row(idx=1, league="NFL", market_type="total_over", win_prob=0.60, ev=0.036, edge=0.05, kalshi_probability=0.55),
+        ]
+    )
+    diagnostics = {"is_fallback_heavy": True}
+    out = build_best_picks_df(df, diagnostics_out=diagnostics)
+    row = out.iloc[0]
+    assert row["Pick_Status"] == "Below Threshold"
+    assert row["status_metric_basis"] == "effective"
+    assert float(row["effective_expected_value"]) < float(row["expected_value"])
+    assert "Effective EV" in row["Status_Reason"]
+    assert row["status_blocker_stage"] == "fallback_heavy_guardrail"
+    assert row["status_blocker_reason"] == row["Status_Reason"]
+
+
+def test_run_health_fields_are_export_visible_when_present():
+    df = pd.DataFrame(
+        [
+            _row(idx=1, league="MLB", market_type="total_over", win_prob=0.60, ev=0.05, edge=0.05, kalshi_probability=0.55),
+        ]
+    )
+    df["nba_stats_fetch_status"] = "cached"
+    df["nba_stats_fetch_source"] = "cached"
+    df["nba_stats_fetch_retries_used"] = 3
+    df["stats_source_counts"] = "{'live': 0, 'cached': 1, 'fallback': 0, 'failed': 0}"
+    df["fallback_summary_by_league"] = "{'NBA': 12}"
+    df["fallback_heavy_slate_flag"] = True
+    df["run_health_warning"] = "Run health warning: fallback usage is elevated"
+    df["degraded_feature_subset_flag"] = True
+    df["degraded_feature_subset_reason"] = "degraded_subset:all_constant_feature_count=10"
+    out = build_best_picks_df(df)
+    row = out.iloc[0]
+    assert row["nba_stats_fetch_status"] == "cached"
+    assert row["nba_stats_fetch_source"] == "cached"
+    assert bool(row["fallback_heavy_slate_flag"]) is True
+    assert "Run health warning" in row["run_health_warning"]
+    assert bool(row["degraded_feature_subset_flag"]) is True
+    assert "degraded_subset" in str(row["degraded_feature_subset_reason"])
+
+
+def test_high_ev_clean_row_promotes_to_actionable_not_high_variance():
+    df = pd.DataFrame(
+        [
+            _row(idx=10, league="NBA", market_type="total_over", win_prob=0.64, ev=0.45, edge=0.18, kalshi_probability=0.59),
+        ]
+    )
+    diagnostics = {}
+    out = build_best_picks_df(df, diagnostics_out=diagnostics)
+    row = out.iloc[0]
+    assert row["Pick_Status"] == "Actionable"
+    assert "strong EV/edge" in row["Status_Reason"]
+    assert diagnostics["promoted_high_ev_to_actionable_no_uncertainty"] >= 1
+    assert diagnostics["high_variance_due_only_high_ev"] == 0
+
+
+def test_high_ev_can_be_capped_for_real_uncertainty_reason():
+    df = pd.DataFrame(
+        [
+            _row(idx=11, league="NBA", market_type="total_over", win_prob=0.64, ev=0.45, edge=0.18, kalshi_probability=None),
+        ]
+    )
+    df["degraded_feature_subset_flag"] = True
+    diagnostics = {}
+    out = build_best_picks_df(df, diagnostics_out=diagnostics)
+    row = out.iloc[0]
+    assert row["Pick_Status"] == "High Variance/Speculative"
+    assert "capped due to" in row["Status_Reason"]
+    assert row["status_blocker_stage"] == "variance_uncertainty_guardrail"
+
+
+def test_high_variance_inflation_diagnostics_populate():
+    df = pd.DataFrame(
+        [
+            _row(idx=21, league="NBA", market_type="total_over", win_prob=0.64, ev=0.45, edge=0.18, kalshi_probability=0.59),
+            _row(idx=22, league="NBA", market_type="total_over", win_prob=0.64, ev=0.45, edge=0.18, kalshi_probability=None),
+            _row(idx=23, league="NBA", market_type="total_over", win_prob=0.56, ev=0.01, edge=0.01, kalshi_probability=0.80),
+        ]
+    )
+    df.loc[df["home_team"] == "Home22", "degraded_feature_subset_flag"] = True
+    df.loc[df["home_team"] == "Home23", "ml_probability"] = 0.50
+    diagnostics = {}
+    out = build_best_picks_df(df, diagnostics_out=diagnostics)
+    assert not out.empty
+    assert diagnostics["high_variance_due_only_high_ev"] == 0
+    assert diagnostics["promoted_high_ev_to_actionable_no_uncertainty"] >= 1
+    assert diagnostics["high_variance_capped_due_to_degraded_subset"] >= 1
+    assert diagnostics["high_variance_capped_due_to_no_kalshi"] >= 1
+    assert diagnostics["high_variance_capped_due_to_divergence"] >= 1
+    assert "High Variance/Speculative" in diagnostics["final_pick_status_counts"]
+
+
+def test_side_balance_promotes_one_clean_side_when_actionable_is_totals_only():
+    df = pd.DataFrame(
+        [
+            _row(idx=30, league="NBA", market_type="total_over", win_prob=0.64, ev=0.08, edge=0.07, kalshi_probability=0.59),
+            _row(idx=31, league="NBA", market_type="spread_home", win_prob=0.64, ev=0.45, edge=0.18, kalshi_probability=None),
+        ]
+    )
+    # Keep side in High Variance via uncertainty (No Kalshi + degraded subset),
+    # then verify side-balance promotion can lift one clean side.
+    df.loc[df["market_type"] == "spread_home", "degraded_feature_subset_flag"] = True
+    diagnostics = {}
+    out = build_best_picks_df(df, diagnostics_out=diagnostics)
+    actionable = out[out["Pick_Status"] == "Actionable"]
+    assert not actionable.empty
+    assert actionable["market_type"].str.contains("spread|h2h", case=False, regex=True, na=False).any()
+    assert diagnostics["side_balance_promotions"] >= 1
+
+
+def test_transparency_fields_are_populated_for_every_export_row():
+    df = pd.DataFrame(
+        [
+            _row(idx=40, league="NFL", market_type="total_over", win_prob=0.60, ev=0.05, edge=0.05, kalshi_probability=0.55),
+            _row(idx=41, league="NFL", market_type="total_under", win_prob=0.56, ev=0.01, edge=0.01, kalshi_probability=0.80),
+        ]
+    )
+    df.loc[df["home_team"] == "Home41", "ml_probability"] = 0.50
+    out = build_best_picks_df(df)
+    required = [
+        "status_metric_basis",
+        "effective_expected_value",
+        "effective_edge",
+        "effective_win_probability",
+        "status_blocker_reason",
+        "status_blocker_stage",
+    ]
+    for col in required:
+        assert col in out.columns
+    assert out["status_metric_basis"].notna().all()
+    assert out["effective_expected_value"].notna().all()
+    assert out["effective_edge"].notna().all()
+    assert out["effective_win_probability"].notna().all()
+    assert out["status_blocker_stage"].notna().all()
