@@ -477,7 +477,8 @@ def test_side_balance_guard_promotes_viable_side_when_actionable_is_totals_only(
     actionable = out[out["Pick_Status"].astype(str) == "Actionable"]
     assert actionable["market_type"].astype(str).str.contains("spread|h2h", case=False, regex=True, na=False).any()
     assert int(diagnostics["side_promoted_by_balance_guard_count"]) >= 1
-    assert diagnostics["side_balance_guard_reason"] == "promoted_viable_side_candidate"
+    assert "Promoted strongest viable side" in str(diagnostics["side_balance_guard_reason"])
+    assert str(out.iloc[0]["actionable_family_counts"]).strip() not in {"", "{}", "MISSING_COMPUTATION"}
 
 
 def test_side_balance_guard_does_not_promote_weak_sides():
@@ -492,6 +493,7 @@ def test_side_balance_guard_does_not_promote_weak_sides():
     actionable = out[out["Pick_Status"].astype(str) == "Actionable"]
     assert actionable["market_type"].astype(str).str.contains("spread|h2h", case=False, regex=True, na=False).sum() == 0
     assert diagnostics["side_promoted_by_balance_guard_count"] == 0
+    assert "No viable side candidates within margin" in str(diagnostics["side_balance_guard_reason"])
 
 
 def test_totals_only_actionable_allowed_when_no_viable_sides_exist():
@@ -505,6 +507,8 @@ def test_totals_only_actionable_allowed_when_no_viable_sides_exist():
     assert not actionable.empty
     assert actionable["market_type"].astype(str).str.contains("total", case=False, regex=True, na=False).all()
     assert diagnostics["viable_side_candidates_count"] == 0
+    assert bool(diagnostics["totals_only_actionable_flag"]) is True
+    assert bool(out.iloc[0]["totals_only_actionable_flag"]) is True
 
 
 def test_degraded_nba_rows_keep_run_health_fields_in_final_export():
