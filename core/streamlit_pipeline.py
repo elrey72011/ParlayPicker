@@ -142,11 +142,11 @@ def ensure_best_pick_export_columns(
         "run_health_warning": "",
         "degraded_feature_subset_flag": False,
         "degraded_feature_subset_reason": "",
-        "actionable_family_counts": "{}",
+        "actionable_family_counts": "MISSING_COMPUTATION",
         "totals_only_actionable_flag": False,
-        "viable_side_candidates_count": 0,
-        "side_promoted_by_balance_guard_count": 0,
-        "side_balance_guard_reason": "",
+        "viable_side_candidates_count": -1,
+        "side_promoted_by_balance_guard_count": -1,
+        "side_balance_guard_reason": "MISSING_COMPUTATION",
     }
 
     initially_missing_cols = [c for c in req_cols if c not in out.columns]
@@ -168,6 +168,8 @@ def ensure_best_pick_export_columns(
         out["viable_side_candidates_count"] = pd.to_numeric(out["viable_side_candidates_count"], errors="coerce").fillna(0).astype(int)
     if "side_promoted_by_balance_guard_count" in out.columns:
         out["side_promoted_by_balance_guard_count"] = pd.to_numeric(out["side_promoted_by_balance_guard_count"], errors="coerce").fillna(0).astype(int)
+    if "side_balance_guard_reason" in out.columns:
+        out["side_balance_guard_reason"] = out["side_balance_guard_reason"].fillna("MISSING_COMPUTATION").astype(str)
 
     if diagnostics_out is not None:
         diag_status = str(diagnostics_out.get("nba_stats_fetch_status", "")).strip().lower()
@@ -202,6 +204,7 @@ BEST_PICK_COLUMNS = [
     "suspicious_data_flag", "suspicious_data_reasons", "status_metric_basis", "effective_expected_value", "effective_edge", "effective_win_probability", "status_blocker_reason", "status_blocker_stage",
     "nba_stats_fetch_status", "nba_stats_fetch_source", "nba_stats_fetch_retries_used", "stats_source_counts", "fallback_summary_by_league", "fallback_heavy_slate_flag", "run_health_warning",
     "degraded_feature_subset_flag", "degraded_feature_subset_reason",
+    "actionable_family_counts", "totals_only_actionable_flag", "viable_side_candidates_count", "side_promoted_by_balance_guard_count", "side_balance_guard_reason",
 ]
 
 CANONICAL_BET_COLUMNS = [
@@ -2460,7 +2463,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     actionable_family_counts: dict[str, int] = {}
     totals_only_actionable_flag = False
     viable_side_candidates_count = 0
-    side_balance_guard_reason = "not_evaluated"
+    side_balance_guard_reason = "Balance guard not evaluated"
     if actionable_mask.any():
         market_type_str = best["market_type"].astype(str).str.lower()
         actionable_side_mask = actionable_mask & market_type_str.str.contains("spread|h2h", na=False)
@@ -2521,13 +2524,13 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 best.at[promote_idx, "status_blocker_reason"] = ""
                 best.at[promote_idx, "status_blocker_stage"] = "none"
                 side_balance_promotions += 1
-                side_balance_guard_reason = "promoted_viable_side_candidate"
+                side_balance_guard_reason = "Promoted strongest viable side to avoid totals-only Actionable card"
             else:
-                side_balance_guard_reason = "no_viable_side_candidate_within_margin"
+                side_balance_guard_reason = "No viable side candidates within margin"
         else:
-            side_balance_guard_reason = "actionable_not_totals_only"
+            side_balance_guard_reason = "Actionable card already contains side and total families"
     else:
-        side_balance_guard_reason = "no_actionable_rows"
+        side_balance_guard_reason = "No Actionable rows available for balance guard"
 
     # Always keep transparency fields row-populated in export.
     best["status_metric_basis"] = best["status_metric_basis"].fillna("raw")
@@ -2679,7 +2682,25 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 best.at[promote_idx, "status_blocker_reason"] = ""
                 best.at[promote_idx, "status_blocker_stage"] = "none"
                 side_balance_promotions += 1
-                side_balance_guard_reason = "promoted_viable_side_candidate_post_rank"
+                side_balance_guard_reason = "Promoted strongest viable side to avoid totals-only Actionable card (post-rank)"
+
+        # Recompute final actionable family diagnostics after last promotion stage.
+        final_actionable_mask = best["Pick_Status"].astype(str).eq("Actionable")
+        final_market_type_str = best["market_type"].astype(str).str.lower()
+        final_actionable_side_mask = final_actionable_mask & final_market_type_str.str.contains("spread|h2h", na=False)
+        final_actionable_total_mask = final_actionable_mask & final_market_type_str.str.contains("total", na=False)
+        actionable_family_counts = {
+            "total": int(final_actionable_total_mask.sum()),
+            "side": int(final_actionable_side_mask.sum()),
+        }
+        totals_only_actionable_flag = bool(final_actionable_total_mask.any() and not final_actionable_side_mask.any())
+
+        # Ensure row-level export transparency fields are populated with final diagnostics.
+        best["actionable_family_counts"] = str(actionable_family_counts)
+        best["totals_only_actionable_flag"] = bool(totals_only_actionable_flag)
+        best["viable_side_candidates_count"] = int(viable_side_candidates_count)
+        best["side_promoted_by_balance_guard_count"] = int(side_balance_promotions)
+        best["side_balance_guard_reason"] = str(side_balance_guard_reason)
 
         # Recompute final actionable family diagnostics after last promotion stage.
         final_actionable_mask = best["Pick_Status"].astype(str).eq("Actionable")
