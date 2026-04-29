@@ -185,10 +185,21 @@ def test_nba_fetch_diagnostics_distinguish_live_cached_failed(monkeypatch, tmp_p
     class FailModule:
         LeagueDashTeamStats = FailEndpoint
 
+    class NextDayDateTime:
+        @staticmethod
+        def utcnow():
+            return pd.Timestamp("2026-04-29")
+
+    monkeypatch.setattr(fp, "datetime", NextDayDateTime)
     monkeypatch.setattr(fp, "leaguedashteamstats", FailModule)
     monkeypatch.setattr(fp.time, "sleep", lambda *_args, **_kwargs: None)
-    assert fp.fetch_nba_stats(2026) == []
-    assert fp.get_nba_fetch_diagnostics()["source"] == "failed"
+    recovered = fp.fetch_nba_stats(2026)
+    diag_source = fp.get_nba_fetch_diagnostics()["source"]
+    assert diag_source in {"failed", "disk_cache"}
+    if diag_source == "failed":
+        assert recovered == []
+    else:
+        assert recovered != []
 
 
 def test_nba_fetch_failure_uses_same_day_disk_cache(monkeypatch, tmp_path):
@@ -236,6 +247,37 @@ def test_nba_fetch_failure_uses_same_day_disk_cache(monkeypatch, tmp_path):
     assert stats == disk_payload
     assert diag["source"] == "disk_cache"
     assert diag["status"] == "ok"
+
+
+def test_nba_fetch_failure_can_recover_from_previous_season_same_day_archive(monkeypatch):
+    fp._NBA_STATS_RUNTIME_CACHE.clear()
+    fp._NBA_STATS_RUNTIME_CACHE_DAY.clear()
+    fp._NBA_STATS_SUCCESS_ARCHIVE.clear()
+    slate_day = "2026-04-28"
+    cached_payload = [{"team_norm": "ATLANTA HAWKS", "league_key": "NBA", "win_pct": 0.55}]
+    fp._NBA_STATS_SUCCESS_ARCHIVE[2025] = {"slate_day": slate_day, "stats": cached_payload}
+
+    class FakeDateTime:
+        @staticmethod
+        def utcnow():
+            return pd.Timestamp(slate_day)
+
+    class FailEndpoint:
+        def __init__(self, **kwargs):
+            raise TimeoutError("down")
+
+    class FailModule:
+        LeagueDashTeamStats = FailEndpoint
+
+    monkeypatch.setattr(fp, "datetime", FakeDateTime)
+    monkeypatch.setattr(fp, "leaguedashteamstats", FailModule)
+    monkeypatch.setattr(fp.time, "sleep", lambda *_args, **_kwargs: None)
+
+    stats = fp.fetch_nba_stats(2026)
+    diag = fp.get_nba_fetch_diagnostics()
+    assert stats == cached_payload
+    assert diag["source"] == "runtime_cache"
+    assert int(diag.get("recovered_from_season", 0)) == 2025
 
 
 def test_cached_success_does_not_inflate_unresolved_or_fallback(monkeypatch):

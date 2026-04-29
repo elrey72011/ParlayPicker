@@ -1618,10 +1618,17 @@ def fetch_nba_stats(season_year: int) -> List[Dict[str, Any]]:
                 time.sleep(0.75 * (attempt + 1))
             continue
 
-    # After live failure, recover in strict source order: runtime success archive -> disk -> failed
-    archived = _NBA_STATS_SUCCESS_ARCHIVE.get(season_year, {})
-    archived_stats = archived.get("stats", []) if isinstance(archived, dict) else []
-    if archived.get("slate_day") == slate_day and archived_stats:
+    # After live failure, recover in strict source order: runtime success archive -> disk -> failed.
+    # Include previous season as a same-day recovery candidate to handle season-key drift around boundaries.
+    recovery_seasons = [season_year]
+    if (season_year - 1) not in recovery_seasons:
+        recovery_seasons.append(season_year - 1)
+
+    for recovery_season in recovery_seasons:
+        archived = _NBA_STATS_SUCCESS_ARCHIVE.get(recovery_season, {})
+        archived_stats = archived.get("stats", []) if isinstance(archived, dict) else []
+        if archived.get("slate_day") != slate_day or not archived_stats:
+            continue
         _NBA_STATS_RUNTIME_CACHE[season_year] = list(archived_stats)
         _NBA_STATS_RUNTIME_CACHE_DAY[season_year] = slate_day
         _NBA_FETCH_DIAGNOSTICS.update({
@@ -1630,12 +1637,15 @@ def fetch_nba_stats(season_year: int) -> List[Dict[str, Any]]:
             "source": "runtime_cache",
             "last_error": str(last_exc) if last_exc else "",
             "slate_day": slate_day,
+            "recovered_from_season": int(recovery_season),
         })
-        logger.warning("NBA live fetch failed; using same-slate runtime-cache NBA stats payload.")
+        logger.warning("NBA live fetch failed; using same-slate runtime-cache NBA stats payload (recovery_season=%s).", recovery_season)
         return _NBA_STATS_RUNTIME_CACHE[season_year]
 
-    disk_cached_stats = _load_nba_disk_cache(season_year, slate_day)
-    if disk_cached_stats:
+    for recovery_season in recovery_seasons:
+        disk_cached_stats = _load_nba_disk_cache(recovery_season, slate_day)
+        if not disk_cached_stats:
+            continue
         _NBA_STATS_RUNTIME_CACHE[season_year] = list(disk_cached_stats)
         _NBA_STATS_RUNTIME_CACHE_DAY[season_year] = slate_day
         _NBA_STATS_SUCCESS_ARCHIVE[season_year] = {"slate_day": slate_day, "stats": list(disk_cached_stats)}
@@ -1645,8 +1655,9 @@ def fetch_nba_stats(season_year: int) -> List[Dict[str, Any]]:
             "source": "disk_cache",
             "last_error": str(last_exc) if last_exc else "",
             "slate_day": slate_day,
+            "recovered_from_season": int(recovery_season),
         })
-        logger.warning("NBA live fetch failed; using same-slate disk-cached NBA stats payload.")
+        logger.warning("NBA live fetch failed; using same-slate disk-cached NBA stats payload (recovery_season=%s).", recovery_season)
         return _NBA_STATS_RUNTIME_CACHE[season_year]
 
     _NBA_FETCH_DIAGNOSTICS.update({
