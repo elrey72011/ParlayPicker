@@ -111,6 +111,11 @@ REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
     "run_health_warning",
     "degraded_feature_subset_flag",
     "degraded_feature_subset_reason",
+    "actionable_family_counts",
+    "totals_only_actionable_flag",
+    "viable_side_candidates_count",
+    "side_promoted_by_balance_guard_count",
+    "side_balance_guard_reason",
 ]
 
 
@@ -137,11 +142,17 @@ def ensure_best_pick_export_columns(
         "run_health_warning": "",
         "degraded_feature_subset_flag": False,
         "degraded_feature_subset_reason": "",
+        "actionable_family_counts": "{}",
+        "totals_only_actionable_flag": False,
+        "viable_side_candidates_count": 0,
+        "side_promoted_by_balance_guard_count": 0,
+        "side_balance_guard_reason": "",
     }
 
-    missing_cols = [c for c in req_cols if c not in out.columns]
-    for col in missing_cols:
+    initially_missing_cols = [c for c in req_cols if c not in out.columns]
+    for col in initially_missing_cols:
         out[col] = default_values.get(col, pd.NA)
+    missing_cols = [c for c in req_cols if c not in out.columns]
 
     for col in req_cols:
         if col in {"status_blocker_reason", "status_blocker_stage", "nba_stats_fetch_status", "fallback_summary_by_league", "run_health_warning", "degraded_feature_subset_reason", "status_metric_basis"}:
@@ -151,10 +162,27 @@ def ensure_best_pick_export_columns(
         out["status_blocker_stage"] = out["status_blocker_stage"].replace({"": "none"})
     if "degraded_feature_subset_flag" in out.columns:
         out["degraded_feature_subset_flag"] = out["degraded_feature_subset_flag"].fillna(False).astype(bool)
+    if "totals_only_actionable_flag" in out.columns:
+        out["totals_only_actionable_flag"] = out["totals_only_actionable_flag"].fillna(False).astype(bool)
+    if "viable_side_candidates_count" in out.columns:
+        out["viable_side_candidates_count"] = pd.to_numeric(out["viable_side_candidates_count"], errors="coerce").fillna(0).astype(int)
+    if "side_promoted_by_balance_guard_count" in out.columns:
+        out["side_promoted_by_balance_guard_count"] = pd.to_numeric(out["side_promoted_by_balance_guard_count"], errors="coerce").fillna(0).astype(int)
 
-    required_ok = len(missing_cols) == 0
-    if missing_cols:
-        logger.warning("best_pick_export_missing_columns=%s", missing_cols)
+    if diagnostics_out is not None:
+        diag_status = str(diagnostics_out.get("nba_stats_fetch_status", "")).strip().lower()
+        if "nba_stats_fetch_status" in out.columns:
+            row_status = out["nba_stats_fetch_status"].astype(str).str.strip().str.lower()
+            if diag_status in {"live", "cached", "failed"}:
+                out["nba_stats_fetch_status"] = row_status.mask(~row_status.isin({"live", "cached", "failed"}), diag_status)
+        if "fallback_summary_by_league" in out.columns and not str(diagnostics_out.get("fallback_summary_by_league", "")).strip() == "":
+            out["fallback_summary_by_league"] = out["fallback_summary_by_league"].replace("", diagnostics_out.get("fallback_summary_by_league", ""))
+        if "run_health_warning" in out.columns and not str(diagnostics_out.get("run_health_warning", "")).strip() == "":
+            out["run_health_warning"] = out["run_health_warning"].replace("", diagnostics_out.get("run_health_warning", ""))
+
+    required_ok = all(col in out.columns for col in req_cols)
+    if initially_missing_cols:
+        logger.warning("best_pick_export_missing_columns=%s", initially_missing_cols)
     logger.info("best_pick_export_required_columns_ok=%s", required_ok)
 
     if diagnostics_out is not None:
@@ -2652,6 +2680,24 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 best.at[promote_idx, "status_blocker_stage"] = "none"
                 side_balance_promotions += 1
                 side_balance_guard_reason = "promoted_viable_side_candidate_post_rank"
+
+        # Recompute final actionable family diagnostics after last promotion stage.
+        final_actionable_mask = best["Pick_Status"].astype(str).eq("Actionable")
+        final_market_type_str = best["market_type"].astype(str).str.lower()
+        final_actionable_side_mask = final_actionable_mask & final_market_type_str.str.contains("spread|h2h", na=False)
+        final_actionable_total_mask = final_actionable_mask & final_market_type_str.str.contains("total", na=False)
+        actionable_family_counts = {
+            "total": int(final_actionable_total_mask.sum()),
+            "side": int(final_actionable_side_mask.sum()),
+        }
+        totals_only_actionable_flag = bool(final_actionable_total_mask.any() and not final_actionable_side_mask.any())
+
+        # Ensure row-level export transparency fields are populated with final diagnostics.
+        best["actionable_family_counts"] = str(actionable_family_counts)
+        best["totals_only_actionable_flag"] = bool(totals_only_actionable_flag)
+        best["viable_side_candidates_count"] = int(viable_side_candidates_count)
+        best["side_promoted_by_balance_guard_count"] = int(side_balance_promotions)
+        best["side_balance_guard_reason"] = str(side_balance_guard_reason)
 
     best["parlay_rank"] = range(1, len(best) + 1) if not best.empty else pd.Series(dtype=int)
 
