@@ -111,6 +111,11 @@ REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
     "run_health_warning",
     "degraded_feature_subset_flag",
     "degraded_feature_subset_reason",
+    "actionable_family_counts",
+    "totals_only_actionable_flag",
+    "viable_side_candidates_count",
+    "side_promoted_by_balance_guard_count",
+    "side_balance_guard_reason",
 ]
 
 
@@ -137,11 +142,17 @@ def ensure_best_pick_export_columns(
         "run_health_warning": "",
         "degraded_feature_subset_flag": False,
         "degraded_feature_subset_reason": "",
+        "actionable_family_counts": "MISSING_COMPUTATION",
+        "totals_only_actionable_flag": False,
+        "viable_side_candidates_count": -1,
+        "side_promoted_by_balance_guard_count": -1,
+        "side_balance_guard_reason": "MISSING_COMPUTATION",
     }
 
-    missing_cols = [c for c in req_cols if c not in out.columns]
-    for col in missing_cols:
+    initially_missing_cols = [c for c in req_cols if c not in out.columns]
+    for col in initially_missing_cols:
         out[col] = default_values.get(col, pd.NA)
+    missing_cols = [c for c in req_cols if c not in out.columns]
 
     for col in req_cols:
         if col in {"status_blocker_reason", "status_blocker_stage", "nba_stats_fetch_status", "fallback_summary_by_league", "run_health_warning", "degraded_feature_subset_reason", "status_metric_basis"}:
@@ -151,10 +162,29 @@ def ensure_best_pick_export_columns(
         out["status_blocker_stage"] = out["status_blocker_stage"].replace({"": "none"})
     if "degraded_feature_subset_flag" in out.columns:
         out["degraded_feature_subset_flag"] = out["degraded_feature_subset_flag"].fillna(False).astype(bool)
+    if "totals_only_actionable_flag" in out.columns:
+        out["totals_only_actionable_flag"] = out["totals_only_actionable_flag"].fillna(False).astype(bool)
+    if "viable_side_candidates_count" in out.columns:
+        out["viable_side_candidates_count"] = pd.to_numeric(out["viable_side_candidates_count"], errors="coerce").fillna(0).astype(int)
+    if "side_promoted_by_balance_guard_count" in out.columns:
+        out["side_promoted_by_balance_guard_count"] = pd.to_numeric(out["side_promoted_by_balance_guard_count"], errors="coerce").fillna(0).astype(int)
+    if "side_balance_guard_reason" in out.columns:
+        out["side_balance_guard_reason"] = out["side_balance_guard_reason"].fillna("MISSING_COMPUTATION").astype(str)
 
-    required_ok = len(missing_cols) == 0
-    if missing_cols:
-        logger.warning("best_pick_export_missing_columns=%s", missing_cols)
+    if diagnostics_out is not None:
+        diag_status = str(diagnostics_out.get("nba_stats_fetch_status", "")).strip().lower()
+        if "nba_stats_fetch_status" in out.columns:
+            row_status = out["nba_stats_fetch_status"].astype(str).str.strip().str.lower()
+            if diag_status in {"live", "cached", "failed"}:
+                out["nba_stats_fetch_status"] = row_status.mask(~row_status.isin({"live", "cached", "failed"}), diag_status)
+        if "fallback_summary_by_league" in out.columns and not str(diagnostics_out.get("fallback_summary_by_league", "")).strip() == "":
+            out["fallback_summary_by_league"] = out["fallback_summary_by_league"].replace("", diagnostics_out.get("fallback_summary_by_league", ""))
+        if "run_health_warning" in out.columns and not str(diagnostics_out.get("run_health_warning", "")).strip() == "":
+            out["run_health_warning"] = out["run_health_warning"].replace("", diagnostics_out.get("run_health_warning", ""))
+
+    required_ok = all(col in out.columns for col in req_cols)
+    if initially_missing_cols:
+        logger.warning("best_pick_export_missing_columns=%s", initially_missing_cols)
     logger.info("best_pick_export_required_columns_ok=%s", required_ok)
 
     if diagnostics_out is not None:
@@ -171,9 +201,12 @@ BEST_PICK_COLUMNS = [
     "kalshi_probability", "kalshi_match_status", "kalshi_match_reason",
     "gemini_explanation", "gemini_risk_notes", "used_stale_features", "Pick_Quality", "Conviction_Score",
     "uploaded_spread_line", "uploaded_total_line", "live_spread_line", "live_total_line", "line_source", "line_delta", "upload_market_match",
+    "market_line_used", "market_line_source", "market_line_source_detail", "matched_live_spread_line", "matched_live_total_line", "upload_spread_line", "upload_total_line", "base_spread_line", "base_total_line",
+    "line_consistency_flag", "line_consistency_reason", "line_provenance_warning",
     "suspicious_data_flag", "suspicious_data_reasons", "status_metric_basis", "effective_expected_value", "effective_edge", "effective_win_probability", "status_blocker_reason", "status_blocker_stage",
     "nba_stats_fetch_status", "nba_stats_fetch_source", "nba_stats_fetch_retries_used", "stats_source_counts", "fallback_summary_by_league", "fallback_heavy_slate_flag", "run_health_warning",
     "degraded_feature_subset_flag", "degraded_feature_subset_reason",
+    "actionable_family_counts", "totals_only_actionable_flag", "viable_side_candidates_count", "side_promoted_by_balance_guard_count", "side_balance_guard_reason",
 ]
 
 CANONICAL_BET_COLUMNS = [
@@ -1010,23 +1043,31 @@ def _format_best_pick(row: pd.Series) -> str:
     away_team = _safe_text(row.get("away_team"))
 
     if market == "spread_home":
-        line = pd.to_numeric(row.get("spread_line"), errors="coerce")
+        line = pd.to_numeric(row.get("market_line_used"), errors="coerce")
+        if pd.isna(line):
+            line = pd.to_numeric(row.get("spread_line"), errors="coerce")
         if pd.isna(line):
             line = pd.to_numeric(row.get("spread"), errors="coerce")
         return f"{home_team} {line:+.1f}" if pd.notna(line) else f"{home_team} (No Line)"
     if market == "spread_away":
-        line = pd.to_numeric(row.get("spread_line"), errors="coerce")
+        line = pd.to_numeric(row.get("market_line_used"), errors="coerce")
+        if pd.isna(line):
+            line = pd.to_numeric(row.get("spread_line"), errors="coerce")
         if pd.isna(line):
             line = pd.to_numeric(row.get("spread"), errors="coerce")
         return f"{away_team} {line:+.1f}" if pd.notna(line) else f"{away_team} (No Line)"
     if market == "total_over":
-        line = pd.to_numeric(row.get("total_line"), errors="coerce")
+        line = pd.to_numeric(row.get("market_line_used"), errors="coerce")
         # try fallback to 'total' if 'total_line' is missing
+        if pd.isna(line):
+            line = pd.to_numeric(row.get("total_line"), errors="coerce")
         if pd.isna(line):
             line = pd.to_numeric(row.get("total"), errors="coerce")
         return f"Over {line:.1f}" if pd.notna(line) else "Over (No Line)"
     if market == "total_under":
-        line = pd.to_numeric(row.get("total_line"), errors="coerce")
+        line = pd.to_numeric(row.get("market_line_used"), errors="coerce")
+        if pd.isna(line):
+            line = pd.to_numeric(row.get("total_line"), errors="coerce")
         if pd.isna(line):
             line = pd.to_numeric(row.get("total"), errors="coerce")
         return f"Under {line:.1f}" if pd.notna(line) else "Under (No Line)"
@@ -2432,7 +2473,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     actionable_family_counts: dict[str, int] = {}
     totals_only_actionable_flag = False
     viable_side_candidates_count = 0
-    side_balance_guard_reason = "not_evaluated"
+    side_balance_guard_reason = "Balance guard not evaluated"
     if actionable_mask.any():
         market_type_str = best["market_type"].astype(str).str.lower()
         actionable_side_mask = actionable_mask & market_type_str.str.contains("spread|h2h", na=False)
@@ -2493,13 +2534,13 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 best.at[promote_idx, "status_blocker_reason"] = ""
                 best.at[promote_idx, "status_blocker_stage"] = "none"
                 side_balance_promotions += 1
-                side_balance_guard_reason = "promoted_viable_side_candidate"
+                side_balance_guard_reason = "Promoted strongest viable side to avoid totals-only Actionable card"
             else:
-                side_balance_guard_reason = "no_viable_side_candidate_within_margin"
+                side_balance_guard_reason = "No viable side candidates within margin"
         else:
-            side_balance_guard_reason = "actionable_not_totals_only"
+            side_balance_guard_reason = "Actionable card already contains side and total families"
     else:
-        side_balance_guard_reason = "no_actionable_rows"
+        side_balance_guard_reason = "No Actionable rows available for balance guard"
 
     # Always keep transparency fields row-populated in export.
     best["status_metric_basis"] = best["status_metric_basis"].fillna("raw")
@@ -2651,7 +2692,25 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 best.at[promote_idx, "status_blocker_reason"] = ""
                 best.at[promote_idx, "status_blocker_stage"] = "none"
                 side_balance_promotions += 1
-                side_balance_guard_reason = "promoted_viable_side_candidate_post_rank"
+                side_balance_guard_reason = "Promoted strongest viable side to avoid totals-only Actionable card (post-rank)"
+
+        # Recompute final actionable family diagnostics after last promotion stage.
+        final_actionable_mask = best["Pick_Status"].astype(str).eq("Actionable")
+        final_market_type_str = best["market_type"].astype(str).str.lower()
+        final_actionable_side_mask = final_actionable_mask & final_market_type_str.str.contains("spread|h2h", na=False)
+        final_actionable_total_mask = final_actionable_mask & final_market_type_str.str.contains("total", na=False)
+        actionable_family_counts = {
+            "total": int(final_actionable_total_mask.sum()),
+            "side": int(final_actionable_side_mask.sum()),
+        }
+        totals_only_actionable_flag = bool(final_actionable_total_mask.any() and not final_actionable_side_mask.any())
+
+        # Ensure row-level export transparency fields are populated with final diagnostics.
+        best["actionable_family_counts"] = str(actionable_family_counts)
+        best["totals_only_actionable_flag"] = bool(totals_only_actionable_flag)
+        best["viable_side_candidates_count"] = int(viable_side_candidates_count)
+        best["side_promoted_by_balance_guard_count"] = int(side_balance_promotions)
+        best["side_balance_guard_reason"] = str(side_balance_guard_reason)
 
     best["parlay_rank"] = range(1, len(best) + 1) if not best.empty else pd.Series(dtype=int)
 
@@ -2688,6 +2747,50 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                     counts = best[source_mask]["Pick_Status"].value_counts().to_dict()
                     filtered_counts = {k: v for k, v in counts.items() if v > 0}
                     logger.info(f"odds_source '{source}' -> {filtered_counts}")
+
+    # Final line-fidelity/provenance normalization for export rows.
+    if not best.empty:
+        best["matched_live_spread_line"] = pd.to_numeric(best.get("live_spread_line"), errors="coerce")
+        best["matched_live_total_line"] = pd.to_numeric(best.get("live_total_line"), errors="coerce")
+        best["upload_spread_line"] = pd.to_numeric(best.get("uploaded_spread_line"), errors="coerce")
+        best["upload_total_line"] = pd.to_numeric(best.get("uploaded_total_line"), errors="coerce")
+        best["base_spread_line"] = pd.to_numeric(best.get("spread_line"), errors="coerce")
+        best["base_total_line"] = pd.to_numeric(best.get("total_line"), errors="coerce")
+
+        market_type_norm = best["market_type"].astype(str).str.lower()
+        is_spread = market_type_norm.isin({"spread_home", "spread_away"})
+        is_total = market_type_norm.isin({"total_over", "total_under"})
+        line_source_norm = best.get("line_source", pd.Series([""] * len(best), index=best.index)).astype(str).str.lower()
+        live_match = line_source_norm.str.contains("live", na=False)
+
+        best["market_line_source"] = np.where(live_match, "live", np.where(best["upload_spread_line"].notna() | best["upload_total_line"].notna(), "upload", "base"))
+        best["market_line_source_detail"] = np.where(live_match, line_source_norm.replace("", "live"), np.where(best["market_line_source"] == "upload", "uploaded_line", "base_generated_line"))
+
+        best["market_line_used"] = pd.NA
+        best.loc[is_spread & live_match, "market_line_used"] = best.loc[is_spread & live_match, "matched_live_spread_line"]
+        best.loc[is_spread & ~live_match & best["upload_spread_line"].notna(), "market_line_used"] = best.loc[is_spread & ~live_match & best["upload_spread_line"].notna(), "upload_spread_line"]
+        best.loc[is_spread & best["market_line_used"].isna(), "market_line_used"] = best.loc[is_spread & best["market_line_used"].isna(), "base_spread_line"]
+        best.loc[is_total & live_match, "market_line_used"] = best.loc[is_total & live_match, "matched_live_total_line"]
+        best.loc[is_total & ~live_match & best["upload_total_line"].notna(), "market_line_used"] = best.loc[is_total & ~live_match & best["upload_total_line"].notna(), "upload_total_line"]
+        best.loc[is_total & best["market_line_used"].isna(), "market_line_used"] = best.loc[is_total & best["market_line_used"].isna(), "base_total_line"]
+        best["market_line_used"] = pd.to_numeric(best["market_line_used"], errors="coerce")
+
+        # Rebuild best_pick from resolved market_line_used to prevent stale/base leak-through.
+        best["best_pick"] = best.apply(_format_best_pick, axis=1)
+
+        # Validate line consistency and annotate rows.
+        best["line_consistency_flag"] = True
+        best["line_consistency_reason"] = ""
+        best["line_provenance_warning"] = ""
+        expected_pick = best.apply(_format_best_pick, axis=1)
+        mismatch_mask = expected_pick.astype(str).str.strip() != best["best_pick"].astype(str).str.strip()
+        missing_line_mask = (is_spread | is_total) & best["market_line_used"].isna()
+        best.loc[mismatch_mask | missing_line_mask, "line_consistency_flag"] = False
+        best.loc[mismatch_mask, "line_consistency_reason"] = "best_pick_text_mismatch_with_market_line_used"
+        best.loc[missing_line_mask, "line_consistency_reason"] = best.loc[missing_line_mask, "line_consistency_reason"].replace("", "missing_market_line_used")
+        best.loc[(~live_match) & (is_spread | is_total), "line_provenance_warning"] = "Non-live line source used for best_pick"
+        if (mismatch_mask | missing_line_mask).any():
+            logger.warning("Line consistency issues detected rows=%s", int((mismatch_mask | missing_line_mask).sum()))
 
     final_best_df = best[BEST_PICK_COLUMNS].copy()
     final_best_df = ensure_best_pick_export_columns(final_best_df, diagnostics_out=diagnostics_out)

@@ -477,7 +477,8 @@ def test_side_balance_guard_promotes_viable_side_when_actionable_is_totals_only(
     actionable = out[out["Pick_Status"].astype(str) == "Actionable"]
     assert actionable["market_type"].astype(str).str.contains("spread|h2h", case=False, regex=True, na=False).any()
     assert int(diagnostics["side_promoted_by_balance_guard_count"]) >= 1
-    assert diagnostics["side_balance_guard_reason"] == "promoted_viable_side_candidate"
+    assert "Promoted strongest viable side" in str(diagnostics["side_balance_guard_reason"])
+    assert str(out.iloc[0]["actionable_family_counts"]).strip() not in {"", "{}", "MISSING_COMPUTATION"}
 
 
 def test_side_balance_guard_does_not_promote_weak_sides():
@@ -492,6 +493,7 @@ def test_side_balance_guard_does_not_promote_weak_sides():
     actionable = out[out["Pick_Status"].astype(str) == "Actionable"]
     assert actionable["market_type"].astype(str).str.contains("spread|h2h", case=False, regex=True, na=False).sum() == 0
     assert diagnostics["side_promoted_by_balance_guard_count"] == 0
+    assert "No viable side candidates within margin" in str(diagnostics["side_balance_guard_reason"])
 
 
 def test_totals_only_actionable_allowed_when_no_viable_sides_exist():
@@ -505,6 +507,8 @@ def test_totals_only_actionable_allowed_when_no_viable_sides_exist():
     assert not actionable.empty
     assert actionable["market_type"].astype(str).str.contains("total", case=False, regex=True, na=False).all()
     assert diagnostics["viable_side_candidates_count"] == 0
+    assert bool(diagnostics["totals_only_actionable_flag"]) is True
+    assert bool(out.iloc[0]["totals_only_actionable_flag"]) is True
 
 
 def test_degraded_nba_rows_keep_run_health_fields_in_final_export():
@@ -546,3 +550,33 @@ def test_no_regression_mlb_spread_suspicious_and_divergence_guardrails():
     assert mlb_spread_row["Pick_Status"] != "Actionable"
     assert suspicious_row["status_blocker_stage"] == "suspicious_data_guardrail"
     assert divergence_row["status_blocker_stage"] in {"divergence_guardrail", "divergence_viability_floor"}
+
+
+def test_line_fidelity_spread_orientation_uses_live_matched_line():
+    df = pd.DataFrame([
+        _row(idx=600, league="MLB", market_type="spread_away", win_prob=0.56, ev=0.05, edge=0.04, kalshi_probability=0.52)
+    ])
+    df.loc[0, "home_team"] = "Los Angeles"
+    df.loc[0, "away_team"] = "Chicago"
+    df.loc[0, "line_source"] = "live_matched"
+    df.loc[0, "live_spread_line"] = 1.5
+    out = build_best_picks_df(df)
+    row = out.iloc[0]
+    assert row["best_pick"] == "Chicago +1.5"
+    assert float(row["market_line_used"]) == 1.5
+    assert row["market_line_source"] == "live"
+
+
+def test_line_fidelity_totals_use_live_total_not_upload_or_base():
+    df = pd.DataFrame([
+        _row(idx=601, league="MLB", market_type="total_over", win_prob=0.57, ev=0.05, edge=0.04, kalshi_probability=0.52)
+    ])
+    df.loc[0, "line_source"] = "live_matched"
+    df.loc[0, "live_total_line"] = 6.5
+    df.loc[0, "uploaded_total_line"] = 12.5
+    df.loc[0, "total_line"] = 12.5
+    out = build_best_picks_df(df)
+    row = out.iloc[0]
+    assert row["best_pick"] == "Over 6.5"
+    assert float(row["market_line_used"]) == 6.5
+    assert bool(row["line_consistency_flag"]) is True
