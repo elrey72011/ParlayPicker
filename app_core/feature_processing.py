@@ -2746,12 +2746,25 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     features_data["stats_resolution_stage_failure"] = stats_resolution_stage_failure
     features_data["stats_fetch_retries_used"] = nba_fetch_diag.get("retries_used", 0)
     nba_fetch_source_raw = str(nba_fetch_diag.get("source", "none")).lower()
-    if nba_fetch_source_raw in {"runtime_cache", "disk_cache", "cached"}:
+    nba_row_sources = set(stats_source.loc[nba_mask].astype(str).str.lower().tolist()) if nba_mask.any() else set()
+    if "live" in nba_row_sources:
+        nba_fetch_status = "live"
+        nba_fetch_source = "live"
+    elif "cached" in nba_row_sources:
         nba_fetch_status = "cached"
-        nba_fetch_source = "cached"
+        if nba_fetch_source_raw in {"runtime_cache", "disk_cache"}:
+            nba_fetch_source = nba_fetch_source_raw
+        else:
+            nba_fetch_source = "cached"
+    elif "failed" in nba_row_sources:
+        nba_fetch_status = "failed"
+        nba_fetch_source = "failed"
     elif nba_fetch_source_raw == "live":
         nba_fetch_status = "live"
         nba_fetch_source = "live"
+    elif nba_fetch_source_raw in {"runtime_cache", "disk_cache", "cached"}:
+        nba_fetch_status = "cached"
+        nba_fetch_source = nba_fetch_source_raw if nba_fetch_source_raw in {"runtime_cache", "disk_cache"} else "cached"
     elif nba_fetch_source_raw == "failed":
         nba_fetch_status = "failed"
         nba_fetch_source = "failed"

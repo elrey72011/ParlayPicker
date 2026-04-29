@@ -283,8 +283,10 @@ def test_nba_fetch_status_source_and_retries_reflect_final_source(monkeypatch):
     enriched = fp.enrich_with_model_features(games, api_clients={})
 
     assert enriched.loc[0, "nba_stats_fetch_status"] == "cached"
-    assert enriched.loc[0, "nba_stats_fetch_source"] == "cached"
+    assert enriched.loc[0, "nba_stats_fetch_source"] == "disk_cache"
     assert int(enriched.loc[0, "nba_stats_fetch_retries_used"]) == 3
+    assert int(enriched.loc[0, "stats_unresolved_count_by_league"]) == 0
+    assert "NBA" not in str(enriched.loc[0, "fallback_summary_by_league"])
 
 
 def test_live_fail_cache_success_rows_show_cached_not_failed(monkeypatch):
@@ -303,7 +305,9 @@ def test_live_fail_cache_success_rows_show_cached_not_failed(monkeypatch):
     )
     enriched = fp.enrich_with_model_features(games, api_clients={})
     assert enriched.loc[0, "nba_stats_fetch_status"] == "cached"
-    assert enriched.loc[0, "nba_stats_fetch_source"] == "cached"
+    assert enriched.loc[0, "nba_stats_fetch_source"] == "runtime_cache"
+    assert int(enriched.loc[0, "stats_unresolved_count_by_league"]) == 0
+    assert "NBA" not in str(enriched.loc[0, "fallback_summary_by_league"])
 
 
 def test_live_fail_no_cache_rows_show_failed_with_warning(monkeypatch):

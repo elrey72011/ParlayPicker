@@ -2702,24 +2702,6 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         best["side_promoted_by_balance_guard_count"] = int(side_balance_promotions)
         best["side_balance_guard_reason"] = str(side_balance_guard_reason)
 
-        # Recompute final actionable family diagnostics after last promotion stage.
-        final_actionable_mask = best["Pick_Status"].astype(str).eq("Actionable")
-        final_market_type_str = best["market_type"].astype(str).str.lower()
-        final_actionable_side_mask = final_actionable_mask & final_market_type_str.str.contains("spread|h2h", na=False)
-        final_actionable_total_mask = final_actionable_mask & final_market_type_str.str.contains("total", na=False)
-        actionable_family_counts = {
-            "total": int(final_actionable_total_mask.sum()),
-            "side": int(final_actionable_side_mask.sum()),
-        }
-        totals_only_actionable_flag = bool(final_actionable_total_mask.any() and not final_actionable_side_mask.any())
-
-        # Ensure row-level export transparency fields are populated with final diagnostics.
-        best["actionable_family_counts"] = str(actionable_family_counts)
-        best["totals_only_actionable_flag"] = bool(totals_only_actionable_flag)
-        best["viable_side_candidates_count"] = int(viable_side_candidates_count)
-        best["side_promoted_by_balance_guard_count"] = int(side_balance_promotions)
-        best["side_balance_guard_reason"] = str(side_balance_guard_reason)
-
     best["parlay_rank"] = range(1, len(best) + 1) if not best.empty else pd.Series(dtype=int)
 
     # Final Validation Logs (Lightweight terminal/application logging)
