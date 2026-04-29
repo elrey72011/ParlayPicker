@@ -201,6 +201,8 @@ BEST_PICK_COLUMNS = [
     "kalshi_probability", "kalshi_match_status", "kalshi_match_reason",
     "gemini_explanation", "gemini_risk_notes", "used_stale_features", "Pick_Quality", "Conviction_Score",
     "uploaded_spread_line", "uploaded_total_line", "live_spread_line", "live_total_line", "line_source", "line_delta", "upload_market_match",
+    "market_line_used", "market_line_source", "market_line_source_detail", "matched_live_spread_line", "matched_live_total_line", "upload_spread_line", "upload_total_line", "base_spread_line", "base_total_line",
+    "line_consistency_flag", "line_consistency_reason", "line_provenance_warning",
     "suspicious_data_flag", "suspicious_data_reasons", "status_metric_basis", "effective_expected_value", "effective_edge", "effective_win_probability", "status_blocker_reason", "status_blocker_stage",
     "nba_stats_fetch_status", "nba_stats_fetch_source", "nba_stats_fetch_retries_used", "stats_source_counts", "fallback_summary_by_league", "fallback_heavy_slate_flag", "run_health_warning",
     "degraded_feature_subset_flag", "degraded_feature_subset_reason",
@@ -1041,23 +1043,31 @@ def _format_best_pick(row: pd.Series) -> str:
     away_team = _safe_text(row.get("away_team"))
 
     if market == "spread_home":
-        line = pd.to_numeric(row.get("spread_line"), errors="coerce")
+        line = pd.to_numeric(row.get("market_line_used"), errors="coerce")
+        if pd.isna(line):
+            line = pd.to_numeric(row.get("spread_line"), errors="coerce")
         if pd.isna(line):
             line = pd.to_numeric(row.get("spread"), errors="coerce")
         return f"{home_team} {line:+.1f}" if pd.notna(line) else f"{home_team} (No Line)"
     if market == "spread_away":
-        line = pd.to_numeric(row.get("spread_line"), errors="coerce")
+        line = pd.to_numeric(row.get("market_line_used"), errors="coerce")
+        if pd.isna(line):
+            line = pd.to_numeric(row.get("spread_line"), errors="coerce")
         if pd.isna(line):
             line = pd.to_numeric(row.get("spread"), errors="coerce")
         return f"{away_team} {line:+.1f}" if pd.notna(line) else f"{away_team} (No Line)"
     if market == "total_over":
-        line = pd.to_numeric(row.get("total_line"), errors="coerce")
+        line = pd.to_numeric(row.get("market_line_used"), errors="coerce")
         # try fallback to 'total' if 'total_line' is missing
+        if pd.isna(line):
+            line = pd.to_numeric(row.get("total_line"), errors="coerce")
         if pd.isna(line):
             line = pd.to_numeric(row.get("total"), errors="coerce")
         return f"Over {line:.1f}" if pd.notna(line) else "Over (No Line)"
     if market == "total_under":
-        line = pd.to_numeric(row.get("total_line"), errors="coerce")
+        line = pd.to_numeric(row.get("market_line_used"), errors="coerce")
+        if pd.isna(line):
+            line = pd.to_numeric(row.get("total_line"), errors="coerce")
         if pd.isna(line):
             line = pd.to_numeric(row.get("total"), errors="coerce")
         return f"Under {line:.1f}" if pd.notna(line) else "Under (No Line)"
@@ -2737,6 +2747,50 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                     counts = best[source_mask]["Pick_Status"].value_counts().to_dict()
                     filtered_counts = {k: v for k, v in counts.items() if v > 0}
                     logger.info(f"odds_source '{source}' -> {filtered_counts}")
+
+    # Final line-fidelity/provenance normalization for export rows.
+    if not best.empty:
+        best["matched_live_spread_line"] = pd.to_numeric(best.get("live_spread_line"), errors="coerce")
+        best["matched_live_total_line"] = pd.to_numeric(best.get("live_total_line"), errors="coerce")
+        best["upload_spread_line"] = pd.to_numeric(best.get("uploaded_spread_line"), errors="coerce")
+        best["upload_total_line"] = pd.to_numeric(best.get("uploaded_total_line"), errors="coerce")
+        best["base_spread_line"] = pd.to_numeric(best.get("spread_line"), errors="coerce")
+        best["base_total_line"] = pd.to_numeric(best.get("total_line"), errors="coerce")
+
+        market_type_norm = best["market_type"].astype(str).str.lower()
+        is_spread = market_type_norm.isin({"spread_home", "spread_away"})
+        is_total = market_type_norm.isin({"total_over", "total_under"})
+        line_source_norm = best.get("line_source", pd.Series([""] * len(best), index=best.index)).astype(str).str.lower()
+        live_match = line_source_norm.str.contains("live", na=False)
+
+        best["market_line_source"] = np.where(live_match, "live", np.where(best["upload_spread_line"].notna() | best["upload_total_line"].notna(), "upload", "base"))
+        best["market_line_source_detail"] = np.where(live_match, line_source_norm.replace("", "live"), np.where(best["market_line_source"] == "upload", "uploaded_line", "base_generated_line"))
+
+        best["market_line_used"] = pd.NA
+        best.loc[is_spread & live_match, "market_line_used"] = best.loc[is_spread & live_match, "matched_live_spread_line"]
+        best.loc[is_spread & ~live_match & best["upload_spread_line"].notna(), "market_line_used"] = best.loc[is_spread & ~live_match & best["upload_spread_line"].notna(), "upload_spread_line"]
+        best.loc[is_spread & best["market_line_used"].isna(), "market_line_used"] = best.loc[is_spread & best["market_line_used"].isna(), "base_spread_line"]
+        best.loc[is_total & live_match, "market_line_used"] = best.loc[is_total & live_match, "matched_live_total_line"]
+        best.loc[is_total & ~live_match & best["upload_total_line"].notna(), "market_line_used"] = best.loc[is_total & ~live_match & best["upload_total_line"].notna(), "upload_total_line"]
+        best.loc[is_total & best["market_line_used"].isna(), "market_line_used"] = best.loc[is_total & best["market_line_used"].isna(), "base_total_line"]
+        best["market_line_used"] = pd.to_numeric(best["market_line_used"], errors="coerce")
+
+        # Rebuild best_pick from resolved market_line_used to prevent stale/base leak-through.
+        best["best_pick"] = best.apply(_format_best_pick, axis=1)
+
+        # Validate line consistency and annotate rows.
+        best["line_consistency_flag"] = True
+        best["line_consistency_reason"] = ""
+        best["line_provenance_warning"] = ""
+        expected_pick = best.apply(_format_best_pick, axis=1)
+        mismatch_mask = expected_pick.astype(str).str.strip() != best["best_pick"].astype(str).str.strip()
+        missing_line_mask = (is_spread | is_total) & best["market_line_used"].isna()
+        best.loc[mismatch_mask | missing_line_mask, "line_consistency_flag"] = False
+        best.loc[mismatch_mask, "line_consistency_reason"] = "best_pick_text_mismatch_with_market_line_used"
+        best.loc[missing_line_mask, "line_consistency_reason"] = best.loc[missing_line_mask, "line_consistency_reason"].replace("", "missing_market_line_used")
+        best.loc[(~live_match) & (is_spread | is_total), "line_provenance_warning"] = "Non-live line source used for best_pick"
+        if (mismatch_mask | missing_line_mask).any():
+            logger.warning("Line consistency issues detected rows=%s", int((mismatch_mask | missing_line_mask).sum()))
 
     final_best_df = best[BEST_PICK_COLUMNS].copy()
     final_best_df = ensure_best_pick_export_columns(final_best_df, diagnostics_out=diagnostics_out)

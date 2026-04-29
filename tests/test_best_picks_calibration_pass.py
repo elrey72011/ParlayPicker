@@ -550,3 +550,33 @@ def test_no_regression_mlb_spread_suspicious_and_divergence_guardrails():
     assert mlb_spread_row["Pick_Status"] != "Actionable"
     assert suspicious_row["status_blocker_stage"] == "suspicious_data_guardrail"
     assert divergence_row["status_blocker_stage"] in {"divergence_guardrail", "divergence_viability_floor"}
+
+
+def test_line_fidelity_spread_orientation_uses_live_matched_line():
+    df = pd.DataFrame([
+        _row(idx=600, league="MLB", market_type="spread_away", win_prob=0.56, ev=0.05, edge=0.04, kalshi_probability=0.52)
+    ])
+    df.loc[0, "home_team"] = "Los Angeles"
+    df.loc[0, "away_team"] = "Chicago"
+    df.loc[0, "line_source"] = "live_matched"
+    df.loc[0, "live_spread_line"] = 1.5
+    out = build_best_picks_df(df)
+    row = out.iloc[0]
+    assert row["best_pick"] == "Chicago +1.5"
+    assert float(row["market_line_used"]) == 1.5
+    assert row["market_line_source"] == "live"
+
+
+def test_line_fidelity_totals_use_live_total_not_upload_or_base():
+    df = pd.DataFrame([
+        _row(idx=601, league="MLB", market_type="total_over", win_prob=0.57, ev=0.05, edge=0.04, kalshi_probability=0.52)
+    ])
+    df.loc[0, "line_source"] = "live_matched"
+    df.loc[0, "live_total_line"] = 6.5
+    df.loc[0, "uploaded_total_line"] = 12.5
+    df.loc[0, "total_line"] = 12.5
+    out = build_best_picks_df(df)
+    row = out.iloc[0]
+    assert row["best_pick"] == "Over 6.5"
+    assert float(row["market_line_used"]) == 6.5
+    assert bool(row["line_consistency_flag"]) is True
