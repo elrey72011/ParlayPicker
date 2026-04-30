@@ -482,6 +482,17 @@ def test_line_provenance_columns_are_required_for_export():
     assert required_line_cols.issubset(set(REQUIRED_BEST_PICK_EXPORT_COLUMNS))
 
 
+def test_line_event_identity_columns_are_required_for_export():
+    required_identity_cols = {
+        "line_event_identity_match_flag",
+        "line_event_identity_reason",
+        "live_event_match_key",
+        "line_candidate_count",
+        "selected_live_event_source",
+    }
+    assert required_identity_cols.issubset(set(REQUIRED_BEST_PICK_EXPORT_COLUMNS))
+
+
 def test_line_provenance_backfilled_and_diagnostics_set():
     partial = pd.DataFrame({"best_pick": ["Over 220.5"], "expected_value": [0.02]})
     diagnostics = {}
@@ -489,6 +500,8 @@ def test_line_provenance_backfilled_and_diagnostics_set():
     assert "market_line_used" in out.columns
     assert "line_consistency_flag" in out.columns
     assert "line_provenance_warning" in out.columns
+    assert "line_event_identity_match_flag" in out.columns
+    assert "line_event_identity_reason" in out.columns
     assert diagnostics["best_pick_export_line_columns_ok"] is False
     assert "market_line_used" in diagnostics["best_pick_export_missing_line_columns"]
 
