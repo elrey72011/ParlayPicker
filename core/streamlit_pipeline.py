@@ -2805,8 +2805,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
 
     # Final line-fidelity/provenance normalization for export rows.
     if not best.empty:
-        best["matched_live_spread_line"] = pd.to_numeric(best.get("live_spread_line"), errors="coerce")
-        best["matched_live_total_line"] = pd.to_numeric(best.get("live_total_line"), errors="coerce")
+        raw_live_spread_line = pd.to_numeric(best.get("live_spread_line"), errors="coerce")
+        raw_live_total_line = pd.to_numeric(best.get("live_total_line"), errors="coerce")
         best["upload_spread_line"] = pd.to_numeric(best.get("uploaded_spread_line"), errors="coerce")
         best["upload_total_line"] = pd.to_numeric(best.get("uploaded_total_line"), errors="coerce")
         best["base_spread_line"] = pd.to_numeric(best.get("spread_line"), errors="coerce")
@@ -2818,9 +2818,14 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         line_source_norm = best.get("line_source", pd.Series([""] * len(best), index=best.index)).astype(str).str.lower()
         live_match = line_source_norm.str.contains("live", na=False)
 
-        best["market_line_source"] = np.where(live_match, "live", np.where(best["upload_spread_line"].notna() | best["upload_total_line"].notna(), "upload", "base"))
-        best["market_line_source_detail"] = np.where(live_match, line_source_norm.replace("", "live"), np.where(best["market_line_source"] == "upload", "uploaded_line", "base_generated_line"))
-        best["selected_live_event_source"] = np.where(live_match, line_source_norm.replace("", "live"), "")
+        has_live_numeric = raw_live_spread_line.notna() | raw_live_total_line.notna()
+        trusted_live_match = live_match & has_live_numeric
+        best["matched_live_spread_line"] = np.where(trusted_live_match, raw_live_spread_line, np.nan)
+        best["matched_live_total_line"] = np.where(trusted_live_match, raw_live_total_line, np.nan)
+
+        best["market_line_source"] = np.where(trusted_live_match, "live", np.where(best["upload_spread_line"].notna() | best["upload_total_line"].notna(), "upload", "base"))
+        best["market_line_source_detail"] = np.where(trusted_live_match, line_source_norm.replace("", "live"), np.where(best["market_line_source"] == "upload", "uploaded_line", "base_generated_line"))
+        best["selected_live_event_source"] = np.where(trusted_live_match, line_source_norm.replace("", "live"), "")
         best["live_event_match_key"] = (
             best.get("league", pd.Series([""] * len(best), index=best.index)).astype(str).str.strip().str.upper()
             + "::" + best.get("home_team", pd.Series([""] * len(best), index=best.index)).astype(str).str.strip().str.lower()
@@ -2828,19 +2833,19 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             + "::" + best.get("game_date", pd.Series([""] * len(best), index=best.index)).astype(str).str.strip()
             + "::" + market_type_norm
         )
-        best["line_candidate_count"] = np.where(live_match, 1, 0)
+        best["line_candidate_count"] = np.where(trusted_live_match, 1, 0)
         best["line_event_identity_match_flag"] = True
         best["line_event_identity_reason"] = "exact_live_event_identity"
-        ambiguous_identity = live_match & best.get("orientation_source", pd.Series([""] * len(best), index=best.index)).astype(str).str.contains("fuzzy", case=False, na=False)
+        ambiguous_identity = trusted_live_match & best.get("orientation_source", pd.Series([""] * len(best), index=best.index)).astype(str).str.contains("fuzzy", case=False, na=False)
         best.loc[ambiguous_identity, "line_event_identity_match_flag"] = False
         best.loc[ambiguous_identity, "line_event_identity_reason"] = "ambiguous_live_event_identity_fuzzy_match"
         best.loc[ambiguous_identity, "line_candidate_count"] = 2
 
         best["market_line_used"] = pd.NA
-        best.loc[is_spread & live_match, "market_line_used"] = best.loc[is_spread & live_match, "matched_live_spread_line"]
+        best.loc[is_spread & trusted_live_match, "market_line_used"] = best.loc[is_spread & trusted_live_match, "matched_live_spread_line"]
         best.loc[is_spread & ~live_match & best["upload_spread_line"].notna(), "market_line_used"] = best.loc[is_spread & ~live_match & best["upload_spread_line"].notna(), "upload_spread_line"]
         best.loc[is_spread & best["market_line_used"].isna(), "market_line_used"] = best.loc[is_spread & best["market_line_used"].isna(), "base_spread_line"]
-        best.loc[is_total & live_match, "market_line_used"] = best.loc[is_total & live_match, "matched_live_total_line"]
+        best.loc[is_total & trusted_live_match, "market_line_used"] = best.loc[is_total & trusted_live_match, "matched_live_total_line"]
         best.loc[is_total & ~live_match & best["upload_total_line"].notna(), "market_line_used"] = best.loc[is_total & ~live_match & best["upload_total_line"].notna(), "upload_total_line"]
         best.loc[is_total & best["market_line_used"].isna(), "market_line_used"] = best.loc[is_total & best["market_line_used"].isna(), "base_total_line"]
         best["market_line_used"] = pd.to_numeric(best["market_line_used"], errors="coerce")
@@ -2906,7 +2911,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         best["live_event_match_key"] = np.where(suspicious_or_warned, strict_identity_key, best["live_event_match_key"])
         strict_candidate_count = best.groupby(strict_identity_key)["home_team"].transform("size")
         best.loc[suspicious_or_warned, "line_candidate_count"] = strict_candidate_count.loc[suspicious_or_warned].astype(int)
-        resolved_unambiguous = suspicious_or_warned & strict_candidate_count.eq(1) & live_match
+        resolved_unambiguous = suspicious_or_warned & strict_candidate_count.eq(1) & trusted_live_match
         unresolved_suspicious = suspicious_or_warned & ~resolved_unambiguous
 
         # For resolved rows, always use the selected live event's direct line values.
@@ -2931,7 +2936,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         blocked_viable_status = best["Pick_Status"].astype(str).isin({"Actionable", "High Variance/Speculative"})
         best.loc[unresolved_suspicious & blocked_viable_status, "Pick_Status"] = "No Play"
         best.loc[unresolved_suspicious, "status_blocker_stage"] = "line_provenance"
-        best.loc[unresolved_suspicious, "status_blocker_reason"] = "Suspicious live line delta could not be resolved"
+        best.loc[unresolved_suspicious, "status_blocker_reason"] = "Suspicious live spread could not be resolved to exact event"
         best.loc[unresolved_suspicious & best["Status_Reason"].astype(str).eq(""), "Status_Reason"] = "No Play: unresolved live line identity/consistency"
         if (mismatch_mask | missing_line_mask).any():
             logger.warning("Line consistency issues detected rows=%s", int((mismatch_mask | missing_line_mask).sum()))
