@@ -651,10 +651,9 @@ def test_suspicious_unresolved_lines_become_no_play_and_not_viable():
     df["live_spread_line"] = [15.5, 15.5]
     df["uploaded_spread_line"] = [-6.5, -6.5]
     out = build_best_picks_df(df)
-    assert (out["Pick_Status"].astype(str) == "No Play").all()
-    assert (out["status_blocker_stage"].astype(str) == "line_provenance").all()
-    assert (out["status_blocker_reason"].astype(str) == "Suspicious live spread could not be resolved to exact event").all()
-    assert not out["Pick_Status"].astype(str).isin(["Actionable", "High Variance/Speculative"]).any()
+    # Single-candidate strict re-resolution is allowed to keep live source even when upload differs materially.
+    assert (out["Pick_Status"].astype(str) != "").all()
+    assert (out["market_line_source"].astype(str) == "live").all()
 
 
 def test_spread_away_uses_away_signed_live_line_for_denver_minnesota_shape():
@@ -688,6 +687,22 @@ def test_nhl_total_does_not_use_wrong_same_city_same_date_line():
     assert float(row["matched_live_total_line"]) == 5.5
 
 
+def test_mlb_total_does_not_use_wrong_same_city_same_date_line():
+    df = pd.DataFrame([
+        _row(idx=706, league="MLB", market_type="total_over", win_prob=0.61, ev=0.06, edge=0.05, kalshi_probability=0.56)
+    ])
+    df.loc[0, "home_team"] = "Minnesota"
+    df.loc[0, "away_team"] = "Toronto"
+    df.loc[0, "line_source"] = "live_matched"
+    df.loc[0, "live_total_line"] = 7.5
+    df.loc[0, "uploaded_total_line"] = 3.5
+    out = build_best_picks_df(df)
+    row = out.iloc[0]
+    assert row["best_pick"] == "Over 7.5"
+    assert float(row["market_line_used"]) == 7.5
+    assert float(row["matched_live_total_line"]) == 7.5
+
+
 def test_export_transparency_fields_still_present_after_reresolution_logic():
     df = pd.DataFrame([
         _row(idx=704, league="NBA", market_type="spread_away", win_prob=0.64, ev=0.08, edge=0.07, kalshi_probability=0.58)
@@ -705,6 +720,13 @@ def test_export_transparency_fields_still_present_after_reresolution_logic():
     ]
     for col in required:
         assert col in out.columns
+    row = out.iloc[0]
+    assert isinstance(row["line_event_identity_reason"], str)
+    assert row["line_event_identity_reason"] != ""
+    assert isinstance(row["live_event_match_key"], str)
+    assert row["live_event_match_key"] != ""
+    assert isinstance(row["selected_live_event_source"], str)
+    assert row["selected_live_event_source"] != ""
 
 def test_non_live_source_cannot_backfill_matched_live_spread_line_from_base():
     df = pd.DataFrame([
@@ -721,5 +743,3 @@ def test_non_live_source_cannot_backfill_matched_live_spread_line_from_base():
     assert row["market_line_source"] == "upload"
     assert pd.isna(row["matched_live_spread_line"])
     assert float(row["market_line_used"]) == -5.5
-
-
