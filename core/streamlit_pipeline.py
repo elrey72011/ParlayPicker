@@ -116,6 +116,18 @@ REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
     "viable_side_candidates_count",
     "side_promoted_by_balance_guard_count",
     "side_balance_guard_reason",
+    "market_line_used",
+    "market_line_source",
+    "market_line_source_detail",
+    "matched_live_spread_line",
+    "matched_live_total_line",
+    "upload_spread_line",
+    "upload_total_line",
+    "base_spread_line",
+    "base_total_line",
+    "line_consistency_flag",
+    "line_consistency_reason",
+    "line_provenance_warning",
 ]
 
 
@@ -147,6 +159,18 @@ def ensure_best_pick_export_columns(
         "viable_side_candidates_count": -1,
         "side_promoted_by_balance_guard_count": -1,
         "side_balance_guard_reason": "MISSING_COMPUTATION",
+        "market_line_used": pd.NA,
+        "market_line_source": "",
+        "market_line_source_detail": "",
+        "matched_live_spread_line": pd.NA,
+        "matched_live_total_line": pd.NA,
+        "upload_spread_line": pd.NA,
+        "upload_total_line": pd.NA,
+        "base_spread_line": pd.NA,
+        "base_total_line": pd.NA,
+        "line_consistency_flag": True,
+        "line_consistency_reason": "",
+        "line_provenance_warning": "",
     }
 
     initially_missing_cols = [c for c in req_cols if c not in out.columns]
@@ -155,7 +179,7 @@ def ensure_best_pick_export_columns(
     missing_cols = [c for c in req_cols if c not in out.columns]
 
     for col in req_cols:
-        if col in {"status_blocker_reason", "status_blocker_stage", "nba_stats_fetch_status", "fallback_summary_by_league", "run_health_warning", "degraded_feature_subset_reason", "status_metric_basis"}:
+        if col in {"status_blocker_reason", "status_blocker_stage", "nba_stats_fetch_status", "fallback_summary_by_league", "run_health_warning", "degraded_feature_subset_reason", "status_metric_basis", "market_line_source", "market_line_source_detail", "line_consistency_reason", "line_provenance_warning"}:
             out[col] = out[col].fillna(default_values.get(col, "")).astype(str)
 
     if "status_blocker_stage" in out.columns:
@@ -170,6 +194,11 @@ def ensure_best_pick_export_columns(
         out["side_promoted_by_balance_guard_count"] = pd.to_numeric(out["side_promoted_by_balance_guard_count"], errors="coerce").fillna(0).astype(int)
     if "side_balance_guard_reason" in out.columns:
         out["side_balance_guard_reason"] = out["side_balance_guard_reason"].fillna("MISSING_COMPUTATION").astype(str)
+    for numeric_col in {"market_line_used", "matched_live_spread_line", "matched_live_total_line", "upload_spread_line", "upload_total_line", "base_spread_line", "base_total_line"}:
+        if numeric_col in out.columns:
+            out[numeric_col] = pd.to_numeric(out[numeric_col], errors="coerce")
+    if "line_consistency_flag" in out.columns:
+        out["line_consistency_flag"] = out["line_consistency_flag"].fillna(True).astype(bool)
 
     if diagnostics_out is not None:
         diag_status = str(diagnostics_out.get("nba_stats_fetch_status", "")).strip().lower()
@@ -185,11 +214,23 @@ def ensure_best_pick_export_columns(
     required_ok = all(col in out.columns for col in req_cols)
     if initially_missing_cols:
         logger.warning("best_pick_export_missing_columns=%s", initially_missing_cols)
+    line_cols = [
+        "market_line_used", "market_line_source", "market_line_source_detail",
+        "matched_live_spread_line", "matched_live_total_line", "upload_spread_line",
+        "upload_total_line", "base_spread_line", "base_total_line",
+        "line_consistency_flag", "line_consistency_reason", "line_provenance_warning",
+    ]
+    missing_line_cols = [c for c in line_cols if c in req_cols and c not in export_df.columns]
+    if missing_line_cols:
+        logger.warning("best_pick_export_missing_line_columns=%s", missing_line_cols)
+    logger.info("best_pick_export_line_columns_ok=%s", len(missing_line_cols) == 0)
     logger.info("best_pick_export_required_columns_ok=%s", required_ok)
 
     if diagnostics_out is not None:
         diagnostics_out["best_pick_export_missing_columns"] = missing_cols
         diagnostics_out["best_pick_export_required_columns_ok"] = bool(required_ok)
+        diagnostics_out["best_pick_export_missing_line_columns"] = missing_line_cols
+        diagnostics_out["best_pick_export_line_columns_ok"] = len(missing_line_cols) == 0
 
     return out
 

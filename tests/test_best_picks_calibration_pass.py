@@ -461,6 +461,36 @@ def test_missing_export_columns_are_backfilled_and_logged(caplog):
     for col in REQUIRED_BEST_PICK_EXPORT_COLUMNS:
         assert col in out.columns
     assert "best_pick_export_missing_columns" in caplog.text
+    assert "best_pick_export_missing_line_columns" in caplog.text
+
+
+def test_line_provenance_columns_are_required_for_export():
+    required_line_cols = {
+        "market_line_used",
+        "market_line_source",
+        "market_line_source_detail",
+        "matched_live_spread_line",
+        "matched_live_total_line",
+        "upload_spread_line",
+        "upload_total_line",
+        "base_spread_line",
+        "base_total_line",
+        "line_consistency_flag",
+        "line_consistency_reason",
+        "line_provenance_warning",
+    }
+    assert required_line_cols.issubset(set(REQUIRED_BEST_PICK_EXPORT_COLUMNS))
+
+
+def test_line_provenance_backfilled_and_diagnostics_set():
+    partial = pd.DataFrame({"best_pick": ["Over 220.5"], "expected_value": [0.02]})
+    diagnostics = {}
+    out = ensure_best_pick_export_columns(partial, diagnostics_out=diagnostics)
+    assert "market_line_used" in out.columns
+    assert "line_consistency_flag" in out.columns
+    assert "line_provenance_warning" in out.columns
+    assert diagnostics["best_pick_export_line_columns_ok"] is False
+    assert "market_line_used" in diagnostics["best_pick_export_missing_line_columns"]
 
 
 def test_side_balance_guard_promotes_viable_side_when_actionable_is_totals_only():
