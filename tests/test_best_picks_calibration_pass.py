@@ -721,6 +721,13 @@ def test_export_transparency_fields_still_present_after_reresolution_logic():
     ]
     for col in required:
         assert col in out.columns
+    row = out.iloc[0]
+    assert isinstance(row["line_event_identity_reason"], str)
+    assert row["line_event_identity_reason"] != ""
+    assert isinstance(row["live_event_match_key"], str)
+    assert row["live_event_match_key"] != ""
+    assert isinstance(row["selected_live_event_source"], str)
+    assert row["selected_live_event_source"] != ""
 
 def test_non_live_source_cannot_backfill_matched_live_spread_line_from_base():
     df = pd.DataFrame([
@@ -737,4 +744,3 @@ def test_non_live_source_cannot_backfill_matched_live_spread_line_from_base():
     assert row["market_line_source"] == "upload"
     assert pd.isna(row["matched_live_spread_line"])
     assert float(row["market_line_used"]) == -5.5
-
