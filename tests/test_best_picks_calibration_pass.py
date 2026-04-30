@@ -623,3 +623,85 @@ def test_line_fidelity_totals_use_live_total_not_upload_or_base():
     assert row["best_pick"] == "Over 6.5"
     assert float(row["market_line_used"]) == 6.5
     assert bool(row["line_consistency_flag"]) is True
+
+def test_suspicious_live_total_reresolves_and_uses_corrected_line():
+    df = pd.DataFrame([
+        _row(idx=700, league="NHL", market_type="total_over", win_prob=0.60, ev=0.06, edge=0.05, kalshi_probability=0.55)
+    ])
+    df.loc[0, "home_team"] = "Minnesota"
+    df.loc[0, "away_team"] = "Dallas"
+    df.loc[0, "line_source"] = "live_matched"
+    df.loc[0, "live_total_line"] = 5.5
+    df.loc[0, "uploaded_total_line"] = 8.5
+    df.loc[0, "total_line"] = 8.5
+    out = build_best_picks_df(df)
+    row = out.iloc[0]
+    assert float(row["market_line_used"]) == 5.5
+    assert row["best_pick"] == "Over 5.5"
+
+
+def test_suspicious_unresolved_lines_become_no_play_and_not_viable():
+    df = pd.DataFrame([
+        _row(idx=701, league="NBA", market_type="spread_away", win_prob=0.64, ev=0.08, edge=0.07, kalshi_probability=0.58),
+        _row(idx=701, league="NBA", market_type="spread_away", win_prob=0.64, ev=0.08, edge=0.07, kalshi_probability=0.58),
+    ])
+    df["home_team"] = "Minnesota"
+    df["away_team"] = "Denver"
+    df["line_source"] = "live_matched"
+    df["live_spread_line"] = [15.5, 15.5]
+    df["uploaded_spread_line"] = [-6.5, -6.5]
+    out = build_best_picks_df(df)
+    assert (out["Pick_Status"].astype(str) == "No Play").all()
+    assert (out["status_blocker_stage"].astype(str) == "line_provenance").all()
+    assert (out["status_blocker_reason"].astype(str) == "Suspicious live line delta could not be resolved").all()
+    assert not out["Pick_Status"].astype(str).isin(["Actionable", "High Variance/Speculative"]).any()
+
+
+def test_spread_away_uses_away_signed_live_line_for_denver_minnesota_shape():
+    df = pd.DataFrame([
+        _row(idx=702, league="NBA", market_type="spread_away", win_prob=0.60, ev=0.05, edge=0.05, kalshi_probability=0.56)
+    ])
+    df.loc[0, "home_team"] = "Minnesota"
+    df.loc[0, "away_team"] = "Denver"
+    df.loc[0, "line_source"] = "live_matched"
+    df.loc[0, "live_spread_line"] = -6.5
+    df.loc[0, "uploaded_spread_line"] = 15.5
+    out = build_best_picks_df(df)
+    row = out.iloc[0]
+    assert row["best_pick"] == "Denver -6.5"
+    assert float(row["market_line_used"]) == -6.5
+
+
+def test_nhl_total_does_not_use_wrong_same_city_same_date_line():
+    df = pd.DataFrame([
+        _row(idx=703, league="NHL", market_type="total_over", win_prob=0.61, ev=0.06, edge=0.05, kalshi_probability=0.56)
+    ])
+    df.loc[0, "home_team"] = "Minnesota"
+    df.loc[0, "away_team"] = "Dallas"
+    df.loc[0, "line_source"] = "live_matched"
+    df.loc[0, "live_total_line"] = 5.5
+    df.loc[0, "uploaded_total_line"] = 8.5
+    out = build_best_picks_df(df)
+    row = out.iloc[0]
+    assert row["best_pick"] == "Over 5.5"
+    assert float(row["market_line_used"]) == 5.5
+    assert float(row["matched_live_total_line"]) == 5.5
+
+
+def test_export_transparency_fields_still_present_after_reresolution_logic():
+    df = pd.DataFrame([
+        _row(idx=704, league="NBA", market_type="spread_away", win_prob=0.64, ev=0.08, edge=0.07, kalshi_probability=0.58)
+    ])
+    df.loc[0, "line_source"] = "live_matched"
+    df.loc[0, "live_spread_line"] = 15.5
+    df.loc[0, "uploaded_spread_line"] = -6.5
+    out = build_best_picks_df(df)
+    required = [
+        "market_line_used", "market_line_source", "market_line_source_detail",
+        "matched_live_spread_line", "matched_live_total_line", "line_consistency_flag",
+        "line_consistency_reason", "line_provenance_warning", "line_event_identity_match_flag",
+        "line_event_identity_reason", "live_event_match_key", "line_candidate_count",
+        "selected_live_event_source",
+    ]
+    for col in required:
+        assert col in out.columns
