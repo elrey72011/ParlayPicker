@@ -653,7 +653,7 @@ def test_suspicious_unresolved_lines_become_no_play_and_not_viable():
     out = build_best_picks_df(df)
     assert (out["Pick_Status"].astype(str) == "No Play").all()
     assert (out["status_blocker_stage"].astype(str) == "line_provenance").all()
-    assert (out["status_blocker_reason"].astype(str) == "Suspicious live line delta could not be resolved").all()
+    assert (out["status_blocker_reason"].astype(str) == "Suspicious live spread could not be resolved to exact event").all()
     assert not out["Pick_Status"].astype(str).isin(["Actionable", "High Variance/Speculative"]).any()
 
 
@@ -705,3 +705,21 @@ def test_export_transparency_fields_still_present_after_reresolution_logic():
     ]
     for col in required:
         assert col in out.columns
+
+def test_non_live_source_cannot_backfill_matched_live_spread_line_from_base():
+    df = pd.DataFrame([
+        _row(idx=705, league="NBA", market_type="spread_away", win_prob=0.60, ev=0.05, edge=0.05, kalshi_probability=0.56)
+    ])
+    df.loc[0, "home_team"] = "Minnesota"
+    df.loc[0, "away_team"] = "Denver"
+    df.loc[0, "line_source"] = "uploaded_theover"
+    df.loc[0, "spread_line"] = 15.5
+    df.loc[0, "live_spread_line"] = 15.5
+    df.loc[0, "uploaded_spread_line"] = -5.5
+    out = build_best_picks_df(df)
+    row = out.iloc[0]
+    assert row["market_line_source"] == "upload"
+    assert pd.isna(row["matched_live_spread_line"])
+    assert float(row["market_line_used"]) == -5.5
+
+
