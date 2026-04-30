@@ -116,6 +116,23 @@ REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
     "viable_side_candidates_count",
     "side_promoted_by_balance_guard_count",
     "side_balance_guard_reason",
+    "market_line_used",
+    "market_line_source",
+    "market_line_source_detail",
+    "matched_live_spread_line",
+    "matched_live_total_line",
+    "upload_spread_line",
+    "upload_total_line",
+    "base_spread_line",
+    "base_total_line",
+    "line_consistency_flag",
+    "line_consistency_reason",
+    "line_provenance_warning",
+    "line_event_identity_match_flag",
+    "line_event_identity_reason",
+    "live_event_match_key",
+    "line_candidate_count",
+    "selected_live_event_source",
 ]
 
 
@@ -147,6 +164,23 @@ def ensure_best_pick_export_columns(
         "viable_side_candidates_count": -1,
         "side_promoted_by_balance_guard_count": -1,
         "side_balance_guard_reason": "MISSING_COMPUTATION",
+        "market_line_used": pd.NA,
+        "market_line_source": "",
+        "market_line_source_detail": "",
+        "matched_live_spread_line": pd.NA,
+        "matched_live_total_line": pd.NA,
+        "upload_spread_line": pd.NA,
+        "upload_total_line": pd.NA,
+        "base_spread_line": pd.NA,
+        "base_total_line": pd.NA,
+        "line_consistency_flag": True,
+        "line_consistency_reason": "",
+        "line_provenance_warning": "",
+        "line_event_identity_match_flag": True,
+        "line_event_identity_reason": "",
+        "live_event_match_key": "",
+        "line_candidate_count": 0,
+        "selected_live_event_source": "",
     }
 
     initially_missing_cols = [c for c in req_cols if c not in out.columns]
@@ -155,7 +189,7 @@ def ensure_best_pick_export_columns(
     missing_cols = [c for c in req_cols if c not in out.columns]
 
     for col in req_cols:
-        if col in {"status_blocker_reason", "status_blocker_stage", "nba_stats_fetch_status", "fallback_summary_by_league", "run_health_warning", "degraded_feature_subset_reason", "status_metric_basis"}:
+        if col in {"status_blocker_reason", "status_blocker_stage", "nba_stats_fetch_status", "fallback_summary_by_league", "run_health_warning", "degraded_feature_subset_reason", "status_metric_basis", "market_line_source", "market_line_source_detail", "line_consistency_reason", "line_provenance_warning", "line_event_identity_reason", "live_event_match_key", "selected_live_event_source"}:
             out[col] = out[col].fillna(default_values.get(col, "")).astype(str)
 
     if "status_blocker_stage" in out.columns:
@@ -170,6 +204,15 @@ def ensure_best_pick_export_columns(
         out["side_promoted_by_balance_guard_count"] = pd.to_numeric(out["side_promoted_by_balance_guard_count"], errors="coerce").fillna(0).astype(int)
     if "side_balance_guard_reason" in out.columns:
         out["side_balance_guard_reason"] = out["side_balance_guard_reason"].fillna("MISSING_COMPUTATION").astype(str)
+    for numeric_col in {"market_line_used", "matched_live_spread_line", "matched_live_total_line", "upload_spread_line", "upload_total_line", "base_spread_line", "base_total_line"}:
+        if numeric_col in out.columns:
+            out[numeric_col] = pd.to_numeric(out[numeric_col], errors="coerce")
+    if "line_consistency_flag" in out.columns:
+        out["line_consistency_flag"] = out["line_consistency_flag"].fillna(True).astype(bool)
+    if "line_event_identity_match_flag" in out.columns:
+        out["line_event_identity_match_flag"] = out["line_event_identity_match_flag"].fillna(True).astype(bool)
+    if "line_candidate_count" in out.columns:
+        out["line_candidate_count"] = pd.to_numeric(out["line_candidate_count"], errors="coerce").fillna(0).astype(int)
 
     if diagnostics_out is not None:
         diag_status = str(diagnostics_out.get("nba_stats_fetch_status", "")).strip().lower()
@@ -185,11 +228,23 @@ def ensure_best_pick_export_columns(
     required_ok = all(col in out.columns for col in req_cols)
     if initially_missing_cols:
         logger.warning("best_pick_export_missing_columns=%s", initially_missing_cols)
+    line_cols = [
+        "market_line_used", "market_line_source", "market_line_source_detail",
+        "matched_live_spread_line", "matched_live_total_line", "upload_spread_line",
+        "upload_total_line", "base_spread_line", "base_total_line",
+        "line_consistency_flag", "line_consistency_reason", "line_provenance_warning",
+    ]
+    missing_line_cols = [c for c in line_cols if c in req_cols and c not in export_df.columns]
+    if missing_line_cols:
+        logger.warning("best_pick_export_missing_line_columns=%s", missing_line_cols)
+    logger.info("best_pick_export_line_columns_ok=%s", len(missing_line_cols) == 0)
     logger.info("best_pick_export_required_columns_ok=%s", required_ok)
 
     if diagnostics_out is not None:
         diagnostics_out["best_pick_export_missing_columns"] = missing_cols
         diagnostics_out["best_pick_export_required_columns_ok"] = bool(required_ok)
+        diagnostics_out["best_pick_export_missing_line_columns"] = missing_line_cols
+        diagnostics_out["best_pick_export_line_columns_ok"] = len(missing_line_cols) == 0
 
     return out
 
@@ -2765,6 +2820,21 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
 
         best["market_line_source"] = np.where(live_match, "live", np.where(best["upload_spread_line"].notna() | best["upload_total_line"].notna(), "upload", "base"))
         best["market_line_source_detail"] = np.where(live_match, line_source_norm.replace("", "live"), np.where(best["market_line_source"] == "upload", "uploaded_line", "base_generated_line"))
+        best["selected_live_event_source"] = np.where(live_match, line_source_norm.replace("", "live"), "")
+        best["live_event_match_key"] = (
+            best.get("league", pd.Series([""] * len(best), index=best.index)).astype(str).str.strip().str.upper()
+            + "::" + best.get("home_team", pd.Series([""] * len(best), index=best.index)).astype(str).str.strip().str.lower()
+            + "::" + best.get("away_team", pd.Series([""] * len(best), index=best.index)).astype(str).str.strip().str.lower()
+            + "::" + best.get("game_date", pd.Series([""] * len(best), index=best.index)).astype(str).str.strip()
+            + "::" + market_type_norm
+        )
+        best["line_candidate_count"] = np.where(live_match, 1, 0)
+        best["line_event_identity_match_flag"] = True
+        best["line_event_identity_reason"] = "exact_live_event_identity"
+        ambiguous_identity = live_match & best.get("orientation_source", pd.Series([""] * len(best), index=best.index)).astype(str).str.contains("fuzzy", case=False, na=False)
+        best.loc[ambiguous_identity, "line_event_identity_match_flag"] = False
+        best.loc[ambiguous_identity, "line_event_identity_reason"] = "ambiguous_live_event_identity_fuzzy_match"
+        best.loc[ambiguous_identity, "line_candidate_count"] = 2
 
         best["market_line_used"] = pd.NA
         best.loc[is_spread & live_match, "market_line_used"] = best.loc[is_spread & live_match, "matched_live_spread_line"]
@@ -2788,7 +2858,34 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         best.loc[mismatch_mask | missing_line_mask, "line_consistency_flag"] = False
         best.loc[mismatch_mask, "line_consistency_reason"] = "best_pick_text_mismatch_with_market_line_used"
         best.loc[missing_line_mask, "line_consistency_reason"] = best.loc[missing_line_mask, "line_consistency_reason"].replace("", "missing_market_line_used")
+        best.loc[~best["line_event_identity_match_flag"], "line_consistency_flag"] = False
+        best.loc[~best["line_event_identity_match_flag"], "line_consistency_reason"] = (
+            best.loc[~best["line_event_identity_match_flag"], "line_consistency_reason"]
+            .replace("", "line_event_identity_mismatch")
+        )
         best.loc[(~live_match) & (is_spread | is_total), "line_provenance_warning"] = "Non-live line source used for best_pick"
+        best.loc[~best["line_event_identity_match_flag"], "line_provenance_warning"] = (
+            best.loc[~best["line_event_identity_match_flag"], "line_provenance_warning"]
+            .replace("", "Ambiguous live event identity; manual review required")
+        )
+
+        # suspicious delta guardrails by league + market family
+        league_norm = best.get("league", pd.Series([""] * len(best), index=best.index)).astype(str).str.upper()
+        spread_delta = (best["matched_live_spread_line"] - best["upload_spread_line"]).abs()
+        total_delta = (best["matched_live_total_line"] - best["upload_total_line"]).abs()
+        suspicious_spread = is_spread & spread_delta.gt(3.0)
+        suspicious_total = (
+            (league_norm.eq("MLB") & is_total & total_delta.gt(2.0))
+            | (league_norm.eq("NHL") & is_total & total_delta.gt(1.5))
+            | (league_norm.eq("NBA") & is_total & total_delta.gt(8.0))
+        )
+        suspicious_line = suspicious_spread | suspicious_total
+        best.loc[suspicious_line, "line_consistency_flag"] = False
+        best.loc[suspicious_line, "line_consistency_reason"] = best.loc[suspicious_line, "line_consistency_reason"].replace("", "suspicious_live_line_delta")
+        best.loc[suspicious_line, "line_provenance_warning"] = best.loc[suspicious_line, "line_provenance_warning"].replace("", "Live line deviates materially from uploaded/base reference")
+        block_actionable = suspicious_line | (~best["line_event_identity_match_flag"])
+        best.loc[block_actionable & best["Pick_Status"].astype(str).eq("Actionable"), "Pick_Status"] = "No Play"
+        best.loc[block_actionable & best["Status_Reason"].astype(str).eq(""), "Status_Reason"] = "No Play: unresolved live line identity/consistency"
         if (mismatch_mask | missing_line_mask).any():
             logger.warning("Line consistency issues detected rows=%s", int((mismatch_mask | missing_line_mask).sum()))
 
