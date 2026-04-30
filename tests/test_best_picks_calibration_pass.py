@@ -651,9 +651,12 @@ def test_suspicious_unresolved_lines_become_no_play_and_not_viable():
     df["live_spread_line"] = [15.5, 15.5]
     df["uploaded_spread_line"] = [-6.5, -6.5]
     out = build_best_picks_df(df)
-    # Single-candidate strict re-resolution is allowed to keep live source even when upload differs materially.
-    assert (out["Pick_Status"].astype(str) != "").all()
-    assert (out["market_line_source"].astype(str) == "live").all()
+    assert (out["Pick_Status"].astype(str) == "No Play").all()
+    assert (out["market_line_source"].astype(str) == "rejected_live").all()
+    assert out["market_line_used"].isna().all()
+    assert out["matched_live_spread_line"].isna().all()
+    assert out["best_pick"].astype(str).str.contains("line unresolved", case=False, na=False).all()
+    assert not out["Pick_Status"].astype(str).isin(["Actionable", "High Variance/Speculative"]).any()
 
 
 def test_spread_away_uses_away_signed_live_line_for_denver_minnesota_shape():
@@ -664,11 +667,30 @@ def test_spread_away_uses_away_signed_live_line_for_denver_minnesota_shape():
     df.loc[0, "away_team"] = "Denver"
     df.loc[0, "line_source"] = "live_matched"
     df.loc[0, "live_spread_line"] = -6.5
-    df.loc[0, "uploaded_spread_line"] = 15.5
+    df.loc[0, "uploaded_spread_line"] = -6.5
     out = build_best_picks_df(df)
     row = out.iloc[0]
     assert row["best_pick"] == "Denver -6.5"
     assert float(row["market_line_used"]) == -6.5
+    assert row["market_line_source"] == "live"
+
+
+def test_suspicious_total_after_validation_is_forced_to_rejected_no_play():
+    df = pd.DataFrame([
+        _row(idx=708, league="NHL", market_type="total_over", win_prob=0.61, ev=0.06, edge=0.05, kalshi_probability=0.56)
+    ])
+    df.loc[0, "home_team"] = "Minnesota"
+    df.loc[0, "away_team"] = "Dallas"
+    df.loc[0, "line_source"] = "live_matched"
+    df.loc[0, "live_total_line"] = 8.5
+    df.loc[0, "uploaded_total_line"] = 5.5
+    out = build_best_picks_df(df)
+    row = out.iloc[0]
+    assert row["Pick_Status"] == "No Play"
+    assert row["market_line_source"] == "rejected_live"
+    assert pd.isna(row["market_line_used"])
+    assert pd.isna(row["matched_live_total_line"])
+    assert row["best_pick"] == "Total line unresolved"
 
 
 def test_nhl_total_does_not_use_wrong_same_city_same_date_line():
@@ -682,9 +704,27 @@ def test_nhl_total_does_not_use_wrong_same_city_same_date_line():
     df.loc[0, "uploaded_total_line"] = 8.5
     out = build_best_picks_df(df)
     row = out.iloc[0]
-    assert row["best_pick"] == "Over 5.5"
-    assert float(row["market_line_used"]) == 5.5
-    assert float(row["matched_live_total_line"]) == 5.5
+    assert row["Pick_Status"] == "No Play"
+    assert row["best_pick"] == "Total line unresolved"
+    assert pd.isna(row["market_line_used"])
+    assert pd.isna(row["matched_live_total_line"])
+
+
+def test_mlb_total_does_not_use_wrong_same_city_same_date_line():
+    df = pd.DataFrame([
+        _row(idx=706, league="MLB", market_type="total_over", win_prob=0.61, ev=0.06, edge=0.05, kalshi_probability=0.56)
+    ])
+    df.loc[0, "home_team"] = "Minnesota"
+    df.loc[0, "away_team"] = "Toronto"
+    df.loc[0, "line_source"] = "live_matched"
+    df.loc[0, "live_total_line"] = 7.5
+    df.loc[0, "uploaded_total_line"] = 3.5
+    out = build_best_picks_df(df)
+    row = out.iloc[0]
+    assert row["Pick_Status"] == "No Play"
+    assert row["best_pick"] == "Total line unresolved"
+    assert pd.isna(row["market_line_used"])
+    assert pd.isna(row["matched_live_total_line"])
 
 
 def test_mlb_total_does_not_use_wrong_same_city_same_date_line():

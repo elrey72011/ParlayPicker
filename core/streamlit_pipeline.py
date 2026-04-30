@@ -2955,6 +2955,33 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         )
         best.loc[unresolved_suspicious, "best_pick"] = pd.Series(unresolved_label, index=best.index).loc[unresolved_suspicious]
         best.loc[unresolved_suspicious, "market_line_used"] = np.nan
+
+        # Final hard enforcement: any row that still fails line validation must be rejected.
+        final_rejected_line = (
+            (~best["line_consistency_flag"])
+            | best["line_consistency_reason"].astype(str).str.contains("suspicious_live_line_delta", na=False)
+            | best["line_provenance_warning"].astype(str).str.contains("Live line deviates materially", case=False, na=False)
+            | (~best["line_event_identity_match_flag"])
+        )
+        best.loc[final_rejected_line, "Pick_Status"] = "No Play"
+        best.loc[final_rejected_line, "Status_Reason"] = "No Play: suspicious live line delta could not be resolved"
+        best.loc[final_rejected_line, "status_blocker_stage"] = "line_provenance"
+        best.loc[final_rejected_line, "status_blocker_reason"] = "Suspicious live line delta could not be resolved"
+        best.loc[final_rejected_line, "market_line_source"] = "rejected_live"
+        best.loc[final_rejected_line, "market_line_source_detail"] = "suspicious_live_line_rejected"
+        best.loc[final_rejected_line, "market_line_used"] = np.nan
+        best.loc[final_rejected_line, "matched_live_spread_line"] = np.nan
+        best.loc[final_rejected_line, "matched_live_total_line"] = np.nan
+        best.loc[final_rejected_line, "line_event_identity_match_flag"] = False
+        best.loc[final_rejected_line, "line_event_identity_reason"] = "suspicious_live_line_rejected_after_validation"
+        best.loc[final_rejected_line, "selected_live_event_source"] = "rejected_live"
+        rejected_label = np.where(
+            is_spread,
+            best.get("away_team", pd.Series([""] * len(best), index=best.index)).astype(str).str.strip().replace("", "Spread")
+            + " line unresolved",
+            "Total line unresolved",
+        )
+        best.loc[final_rejected_line, "best_pick"] = pd.Series(rejected_label, index=best.index).loc[final_rejected_line]
         if (mismatch_mask | missing_line_mask).any():
             logger.warning("Line consistency issues detected rows=%s", int((mismatch_mask | missing_line_mask).sum()))
 
