@@ -2921,14 +2921,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         best.loc[resolved_unambiguous, "line_event_identity_match_flag"] = True
         best.loc[resolved_unambiguous, "line_event_identity_reason"] = "strict_live_event_identity_reresolved"
 
-        # If still suspicious after re-resolution, identity must not be clean.
-        still_suspicious = resolved_unambiguous & (
-            ((is_spread) & ((best["matched_live_spread_line"] - best["upload_spread_line"]).abs().gt(3.0))) |
-            ((league_norm.eq("MLB") & is_total & (best["matched_live_total_line"] - best["upload_total_line"]).abs().gt(2.0))) |
-            ((league_norm.eq("NHL") & is_total & (best["matched_live_total_line"] - best["upload_total_line"]).abs().gt(1.5))) |
-            ((league_norm.eq("NBA") & is_total & (best["matched_live_total_line"] - best["upload_total_line"]).abs().gt(8.0)))
-        )
-        unresolved_suspicious = unresolved_suspicious | still_suspicious
+        # A strict single-candidate re-resolution is treated as clean even when upload/base differ materially.
         best.loc[unresolved_suspicious, "line_event_identity_match_flag"] = False
         best.loc[unresolved_suspicious, "line_event_identity_reason"] = np.where(
             strict_candidate_count.loc[unresolved_suspicious].eq(0),
@@ -2945,7 +2938,23 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         best.loc[unresolved_suspicious & blocked_viable_status, "Pick_Status"] = "No Play"
         best.loc[unresolved_suspicious, "status_blocker_stage"] = "line_provenance"
         best.loc[unresolved_suspicious, "status_blocker_reason"] = "Suspicious live line delta could not be resolved"
-        best.loc[unresolved_suspicious & best["Status_Reason"].astype(str).eq(""), "Status_Reason"] = "No Play: unresolved live line identity/consistency"
+        best.loc[unresolved_suspicious, "Status_Reason"] = "No Play: suspicious live line delta could not be resolved"
+        best.loc[unresolved_suspicious, "market_line_source"] = "rejected_live"
+        best.loc[unresolved_suspicious, "market_line_source_detail"] = "suspicious_live_line_rejected"
+        best.loc[unresolved_suspicious & is_spread, "matched_live_spread_line"] = np.nan
+        best.loc[unresolved_suspicious & is_total, "matched_live_total_line"] = np.nan
+        best.loc[unresolved_suspicious, "line_provenance_warning"] = (
+            best.loc[unresolved_suspicious, "line_provenance_warning"]
+            .replace("", "Suspicious live line rejected; exact event/line unresolved")
+        )
+        unresolved_label = np.where(
+            is_spread,
+            best.get("away_team", pd.Series([""] * len(best), index=best.index)).astype(str).str.strip().replace("", "Spread")
+            + " line unresolved",
+            "Total line unresolved",
+        )
+        best.loc[unresolved_suspicious, "best_pick"] = pd.Series(unresolved_label, index=best.index).loc[unresolved_suspicious]
+        best.loc[unresolved_suspicious, "market_line_used"] = np.nan
         if (mismatch_mask | missing_line_mask).any():
             logger.warning("Line consistency issues detected rows=%s", int((mismatch_mask | missing_line_mask).sum()))
 

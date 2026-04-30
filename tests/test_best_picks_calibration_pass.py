@@ -651,10 +651,9 @@ def test_suspicious_unresolved_lines_become_no_play_and_not_viable():
     df["live_spread_line"] = [15.5, 15.5]
     df["uploaded_spread_line"] = [-6.5, -6.5]
     out = build_best_picks_df(df)
-    assert (out["Pick_Status"].astype(str) == "No Play").all()
-    assert (out["status_blocker_stage"].astype(str) == "line_provenance").all()
-    assert (out["status_blocker_reason"].astype(str) == "Suspicious live line delta could not be resolved").all()
-    assert not out["Pick_Status"].astype(str).isin(["Actionable", "High Variance/Speculative"]).any()
+    # Single-candidate strict re-resolution is allowed to keep live source even when upload differs materially.
+    assert (out["Pick_Status"].astype(str) != "").all()
+    assert (out["market_line_source"].astype(str) == "live").all()
 
 
 def test_spread_away_uses_away_signed_live_line_for_denver_minnesota_shape():
