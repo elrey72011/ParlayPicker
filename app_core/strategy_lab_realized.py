@@ -13,12 +13,14 @@ STATUS_BUCKET_NO_PLAY = "No Play"
 REALIZED_MODE_ACTIONABLE_ONLY = "Actionable only"
 REALIZED_MODE_ACTIONABLE_PLUS_HIGH_VARIANCE = "Actionable + High Variance/Speculative"
 REALIZED_MODE_ALL_GRADED = "All graded bets"
+REALIZED_MODE_PRODUCTION_CARD = "Production Card"
 REALIZED_MODE_CUSTOM = "Custom status filter"
 
 REALIZED_STRATEGY_MODE_ORDER = [
     REALIZED_MODE_ACTIONABLE_ONLY,
     REALIZED_MODE_ACTIONABLE_PLUS_HIGH_VARIANCE,
     REALIZED_MODE_ALL_GRADED,
+    REALIZED_MODE_PRODUCTION_CARD,
     REALIZED_MODE_CUSTOM,
 ]
 
@@ -48,6 +50,85 @@ def _matchup_key(row: pd.Series) -> str:
     home = _normalize_text(_first_present(row, ["home_team", "Home", "Home Team"]))
     away = _normalize_text(_first_present(row, ["away_team", "Away", "Away Team"]))
     return f"{league}::{home}::{away}"
+
+
+def _first_numeric(row: pd.Series, columns: list[str]) -> float | None:
+    for col in columns:
+        if col in row:
+            val = pd.to_numeric(row[col], errors="coerce")
+            if pd.notna(val):
+                return float(val)
+    return None
+
+
+def _extract_market_profile(row: pd.Series, pick_value: Any) -> Dict[str, Any]:
+    pick_text = str(pick_value) if pd.notna(pick_value) else ""
+    pick_norm = _normalize_text(pick_text)
+    lower_pick = pick_text.lower()
+    home_norm = _normalize_text(_first_present(row, ["home_team", "Home", "Home Team"]))
+    away_norm = _normalize_text(_first_present(row, ["away_team", "Away", "Away Team"]))
+    line_value = _first_numeric(row, ["line_value", "Line", "line", "Total Line", "spread_line"])
+
+    market_family = "unknown"
+    market_type = "unknown"
+    direction = "unknown"
+
+    if "over" in lower_pick or "under" in lower_pick:
+        market_family = "total"
+        if "over" in lower_pick:
+            market_type = "total_over"
+            direction = "Over"
+        else:
+            market_type = "total_under"
+            direction = "Under"
+    elif " ml" in f" {lower_pick}" or lower_pick.endswith("ml"):
+        market_family = "moneyline"
+        market_type = "moneyline"
+        direction = "home_side" if home_norm and home_norm in pick_norm else "away_side"
+    elif any(ch.isdigit() for ch in pick_text) and ("+" in pick_text or "-" in pick_text):
+        market_family = "spread"
+        direction = "home_side" if home_norm and home_norm in pick_norm else "away_side"
+        market_type = "spread_home" if direction == "home_side" else "spread_away"
+
+    if line_value is None:
+        import re
+
+        match = re.search(r"([+-]?\d+(?:\.\d+)?)", pick_text)
+        if match:
+            line_value = float(match.group(1))
+
+    if line_value is not None:
+        line_value = round(line_value, 4)
+
+    return {
+        "market_family": market_family,
+        "market_type": market_type,
+        "pick_direction": direction,
+        "line_value": line_value,
+        "best_pick_normalized": pick_norm,
+    }
+
+
+def _canonical_pick_key(row: pd.Series, pick_col: str) -> str:
+    league = _normalize_text(_first_present(row, ["league", "League"]))
+    home = _normalize_text(_first_present(row, ["home_team", "Home", "Home Team"]))
+    away = _normalize_text(_first_present(row, ["away_team", "Away", "Away Team"]))
+    game_date = _normalize_text(_first_present(row, ["game_date", "Game Date", "date"]))
+    pick_value = _first_present(row, [pick_col])
+    market = _extract_market_profile(row, pick_value)
+    return "::".join(
+        [
+            league,
+            home,
+            away,
+            game_date,
+            market["market_family"],
+            market["market_type"],
+            market["pick_direction"],
+            str(market["line_value"]),
+            market["best_pick_normalized"],
+        ]
+    )
 
 
 def _american_to_decimal(odds: Any) -> float | None:
@@ -84,6 +165,8 @@ def get_strategy_mode_statuses(mode: str, custom_statuses: list[str] | None = No
         return {STATUS_BUCKET_ACTIONABLE, STATUS_BUCKET_HIGH_VARIANCE}
     if mode == REALIZED_MODE_ALL_GRADED:
         return set(STATUS_BUCKET_ORDER)
+    if mode == REALIZED_MODE_PRODUCTION_CARD:
+        return {STATUS_BUCKET_ACTIONABLE}
     if mode == REALIZED_MODE_CUSTOM:
         return set(custom_statuses or [])
     return {STATUS_BUCKET_ACTIONABLE}
@@ -194,7 +277,8 @@ def build_realized_strategy_lab(
             lambda row: _first_present(row, ["Pick Taken", "Best Pick", "best_pick", "Pick"]),
             axis=1,
         )
-        src = src[["matchup_key", "Strategy Pick"]].drop_duplicates(subset=["matchup_key"], keep="first")
+        src["strategy_pick_key"] = src.apply(lambda row: _canonical_pick_key(row, "Strategy Pick"), axis=1)
+        src = src[["matchup_key", "Strategy Pick", "strategy_pick_key"]].drop_duplicates(subset=["matchup_key"], keep="first")
         realized = realized.merge(src, on="matchup_key", how="left")
     else:
         realized["Strategy Pick"] = pd.NA
@@ -206,14 +290,55 @@ def build_realized_strategy_lab(
         axis=1,
     )
 
-    realized["Pick Match"] = True
-    strategy_pick_norm = realized["Strategy Pick"].map(_normalize_text)
-    recap_pick_norm = realized["Recap Pick"].map(_normalize_text)
-    has_strategy_pick = strategy_pick_norm != ""
-    realized.loc[has_strategy_pick, "Pick Match"] = strategy_pick_norm[has_strategy_pick] == recap_pick_norm[has_strategy_pick]
-    realized["Result"] = realized["Result"].where(realized["Pick Match"], "MISMATCH")
+    realized["recap_pick_taken"] = realized["Recap Pick"]
+    realized["strategy_lab_pick"] = realized["Strategy Pick"]
+    realized["recap_pick_key"] = realized.apply(lambda row: _canonical_pick_key(row, "Recap Pick"), axis=1)
+    if "strategy_pick_key" not in realized.columns:
+        realized["strategy_pick_key"] = ""
+    realized["pick_identity_match"] = realized["strategy_pick_key"] == realized["recap_pick_key"]
+    realized["pick_identity_match"] = realized["pick_identity_match"] | realized["Strategy Pick"].isna()
+    recap_profile = realized.apply(lambda row: _extract_market_profile(row, row["Recap Pick"]), axis=1, result_type="expand")
+    strategy_profile = realized.apply(lambda row: _extract_market_profile(row, row["Strategy Pick"]), axis=1, result_type="expand")
+    realized["line_match_flag"] = (recap_profile["line_value"] == strategy_profile["line_value"]) | realized["Strategy Pick"].isna()
+    realized["direction_match_flag"] = (recap_profile["pick_direction"] == strategy_profile["pick_direction"]) | realized["Strategy Pick"].isna()
+    realized["realized_grade_source"] = "performance_recap"
+    realized["grading_excluded_reason"] = ""
+    realized.loc[~realized["pick_identity_match"] & (~realized["line_match_flag"]), "grading_excluded_reason"] = (
+        "Line mismatch: Strategy Lab "
+        + realized["Strategy Pick"].fillna("").astype(str)
+        + " vs Recap "
+        + realized["Recap Pick"].fillna("").astype(str)
+    )
+    realized.loc[
+        ~realized["pick_identity_match"] & (realized["grading_excluded_reason"] == "") & (~realized["direction_match_flag"]),
+        "grading_excluded_reason",
+    ] = (
+        "Direction mismatch: Strategy Lab "
+        + realized["Strategy Pick"].fillna("").astype(str)
+        + " vs Recap "
+        + realized["Recap Pick"].fillna("").astype(str)
+    )
+    realized.loc[realized["pick_identity_match"], "grading_excluded_reason"] = "Exact pick match"
+    realized["Result"] = realized["Result"].where(realized["pick_identity_match"], "MISMATCH")
 
-    realized["Stake"] = pd.to_numeric(realized.get("Stake", realized.get("recommended_bet", default_stake)), errors="coerce").fillna(default_stake)
+    default_stake_by_status = {
+        STATUS_BUCKET_ACTIONABLE: default_stake,
+        STATUS_BUCKET_HIGH_VARIANCE: 0.0 if strategy_mode == REALIZED_MODE_PRODUCTION_CARD else default_stake,
+        STATUS_BUCKET_BELOW_THRESHOLD: 0.0,
+        STATUS_BUCKET_NO_PLAY: 0.0,
+    }
+    raw_stake_source = realized["Stake"] if "Stake" in realized.columns else realized.get("recommended_bet", pd.Series([pd.NA] * len(realized)))
+    raw_stake = pd.to_numeric(raw_stake_source, errors="coerce")
+    fallback_stake = realized["Status Bucket"].map(default_stake_by_status).fillna(default_stake)
+    realized["Stake"] = raw_stake.fillna(fallback_stake)
+    bankroll = max(float(starting_bankroll), 0.0)
+    max_slate = bankroll * 0.25
+    max_pick = bankroll * 0.04
+    if bankroll > 0:
+        realized["Stake"] = realized["Stake"].clip(upper=max_pick)
+        if realized["Stake"].sum() > max_slate:
+            scale = max_slate / realized["Stake"].sum()
+            realized["Stake"] = realized["Stake"] * scale
     realized["American Odds"] = pd.to_numeric(realized.get("American Odds", realized.get("odds_american", pd.NA)), errors="coerce")
     realized["Decimal Odds"] = pd.to_numeric(realized.get("Decimal Odds", realized.get("decimal_odds", pd.NA)), errors="coerce")
 
@@ -222,7 +347,7 @@ def build_realized_strategy_lab(
 
     realized["Excluded Reason"] = ""
     score_missing = realized.get("actual_home_score", pd.Series([pd.NA] * len(realized))).isna() | realized.get("actual_away_score", pd.Series([pd.NA] * len(realized))).isna()
-    realized.loc[realized["Result"] == "MISMATCH", "Excluded Reason"] = "MISMATCH"
+    realized.loc[realized["Result"] == "MISMATCH", "Excluded Reason"] = realized["grading_excluded_reason"]
     realized.loc[(realized["Result"] == "UNGRADED") & (realized["Excluded Reason"] == ""), "Excluded Reason"] = "UNGRADED"
     realized.loc[(score_missing) & (realized["Excluded Reason"] == ""), "Excluded Reason"] = "MISSING_SCORES"
     realized.loc[(realized["Result"] == "WIN") & (realized["Decimal Odds"].isna()) & (realized["Excluded Reason"] == ""), "Excluded Reason"] = "MISSING_ODDS"
@@ -269,6 +394,14 @@ def build_realized_strategy_lab(
 
     status_summary = compute_status_bucket_summary(realized)
     mode_comparison = compute_mode_comparison(realized)
+    by_league_family = (
+        realized[realized["Excluded Reason"] == ""]
+        .assign(market_family=recap_profile["market_family"])
+        .groupby(["league", "market_family"], dropna=False)
+        .apply(_summarize_subset)
+        .apply(pd.Series)
+        .reset_index()
+    )
 
     diagnostics = {
         "pick_mismatches": realized[realized["Result"] == "MISMATCH"].copy(),
@@ -279,6 +412,11 @@ def build_realized_strategy_lab(
         "outside_mode_rows": realized[(realized["Excluded Reason"] == "") & (~realized["Mode Included"])].copy(),
         "status_bucket_summary": status_summary,
         "mode_comparison": mode_comparison,
+        "league_market_family_summary": by_league_family,
+        "exact_matched_rows": int(realized["pick_identity_match"].sum()),
+        "mismatched_rows": int((~realized["pick_identity_match"]).sum()),
+        "excluded_stake_mismatch": float(realized.loc[~realized["pick_identity_match"], "Stake"].sum()),
+        "mismatches_by_reason": realized.loc[~realized["pick_identity_match"], "grading_excluded_reason"].value_counts().to_dict(),
         "ungraded_count": int((realized["Result"] == "UNGRADED").sum()),
         "missing_odds_count": int((realized["Excluded Reason"] == "MISSING_ODDS").sum()),
         "mismatch_count": int((realized["Result"] == "MISMATCH").sum()),
