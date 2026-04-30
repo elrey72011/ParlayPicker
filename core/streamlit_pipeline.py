@@ -2883,9 +2883,56 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         best.loc[suspicious_line, "line_consistency_flag"] = False
         best.loc[suspicious_line, "line_consistency_reason"] = best.loc[suspicious_line, "line_consistency_reason"].replace("", "suspicious_live_line_delta")
         best.loc[suspicious_line, "line_provenance_warning"] = best.loc[suspicious_line, "line_provenance_warning"].replace("", "Live line deviates materially from uploaded/base reference")
-        block_actionable = suspicious_line | (~best["line_event_identity_match_flag"])
-        best.loc[block_actionable & best["Pick_Status"].astype(str).eq("Actionable"), "Pick_Status"] = "No Play"
-        best.loc[block_actionable & best["Status_Reason"].astype(str).eq(""), "Status_Reason"] = "No Play: unresolved live line identity/consistency"
+
+        # Re-resolve suspicious/provenance rows using stricter identity keys before final status assignment.
+        suspicious_or_warned = (
+            (~best["line_consistency_flag"]) |
+            best["line_consistency_reason"].astype(str).str.contains("suspicious_live_line_delta", na=False) |
+            best["line_provenance_warning"].astype(str).str.strip().ne("")
+        )
+        strict_commence = best.get("commence_time", best.get("game_time_est", pd.Series(["" for _ in range(len(best))], index=best.index)))
+        strict_event_id = best.get("sportsbook_event_id", best.get("event_id", pd.Series(["" for _ in range(len(best))], index=best.index)))
+        strict_event_key = best.get("sportsbook_event_key", best.get("event_key", pd.Series(["" for _ in range(len(best))], index=best.index)))
+        strict_identity_key = (
+            best.get("league", pd.Series(["" for _ in range(len(best))], index=best.index)).astype(str).str.upper().str.strip()
+            + "::" + best.get("home_team", pd.Series(["" for _ in range(len(best))], index=best.index)).astype(str).str.lower().str.strip()
+            + "::" + best.get("away_team", pd.Series(["" for _ in range(len(best))], index=best.index)).astype(str).str.lower().str.strip()
+            + "::" + best.get("game_date", pd.Series(["" for _ in range(len(best))], index=best.index)).astype(str).str.strip()
+            + "::" + strict_commence.astype(str).str.strip()
+            + "::" + market_type_norm.astype(str)
+            + "::" + strict_event_id.astype(str).str.strip()
+            + "::" + strict_event_key.astype(str).str.strip()
+        )
+        best["live_event_match_key"] = np.where(suspicious_or_warned, strict_identity_key, best["live_event_match_key"])
+        strict_candidate_count = best.groupby(strict_identity_key)["home_team"].transform("size")
+        best.loc[suspicious_or_warned, "line_candidate_count"] = strict_candidate_count.loc[suspicious_or_warned].astype(int)
+        resolved_unambiguous = suspicious_or_warned & strict_candidate_count.eq(1) & live_match
+        unresolved_suspicious = suspicious_or_warned & ~resolved_unambiguous
+
+        # For resolved rows, always use the selected live event's direct line values.
+        best.loc[resolved_unambiguous & is_spread, "market_line_used"] = best.loc[resolved_unambiguous & is_spread, "matched_live_spread_line"]
+        best.loc[resolved_unambiguous & is_total, "market_line_used"] = best.loc[resolved_unambiguous & is_total, "matched_live_total_line"]
+        best.loc[resolved_unambiguous, "selected_live_event_source"] = "strict_live_reresolved"
+        best.loc[resolved_unambiguous, "line_event_identity_match_flag"] = True
+        best.loc[resolved_unambiguous, "line_event_identity_reason"] = "strict_live_event_identity_reresolved"
+
+        # If still suspicious after re-resolution, identity must not be clean.
+        still_suspicious = resolved_unambiguous & (
+            ((is_spread) & ((best["matched_live_spread_line"] - best["upload_spread_line"]).abs().gt(3.0))) |
+            ((league_norm.eq("MLB") & is_total & (best["matched_live_total_line"] - best["upload_total_line"]).abs().gt(2.0))) |
+            ((league_norm.eq("NHL") & is_total & (best["matched_live_total_line"] - best["upload_total_line"]).abs().gt(1.5))) |
+            ((league_norm.eq("NBA") & is_total & (best["matched_live_total_line"] - best["upload_total_line"]).abs().gt(8.0)))
+        )
+        unresolved_suspicious = unresolved_suspicious | still_suspicious
+        best.loc[unresolved_suspicious, "line_event_identity_match_flag"] = False
+        best.loc[unresolved_suspicious, "line_event_identity_reason"] = "suspicious_live_line_unresolved"
+
+        # Hard block unresolved suspicious lines from viable buckets.
+        blocked_viable_status = best["Pick_Status"].astype(str).isin({"Actionable", "High Variance/Speculative"})
+        best.loc[unresolved_suspicious & blocked_viable_status, "Pick_Status"] = "No Play"
+        best.loc[unresolved_suspicious, "status_blocker_stage"] = "line_provenance"
+        best.loc[unresolved_suspicious, "status_blocker_reason"] = "Suspicious live line delta could not be resolved"
+        best.loc[unresolved_suspicious & best["Status_Reason"].astype(str).eq(""), "Status_Reason"] = "No Play: unresolved live line identity/consistency"
         if (mismatch_mask | missing_line_mask).any():
             logger.warning("Line consistency issues detected rows=%s", int((mismatch_mask | missing_line_mask).sum()))
 
