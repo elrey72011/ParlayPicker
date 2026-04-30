@@ -727,6 +727,22 @@ def test_mlb_total_does_not_use_wrong_same_city_same_date_line():
     assert pd.isna(row["matched_live_total_line"])
 
 
+def test_mlb_total_does_not_use_wrong_same_city_same_date_line():
+    df = pd.DataFrame([
+        _row(idx=706, league="MLB", market_type="total_over", win_prob=0.61, ev=0.06, edge=0.05, kalshi_probability=0.56)
+    ])
+    df.loc[0, "home_team"] = "Minnesota"
+    df.loc[0, "away_team"] = "Toronto"
+    df.loc[0, "line_source"] = "live_matched"
+    df.loc[0, "live_total_line"] = 7.5
+    df.loc[0, "uploaded_total_line"] = 3.5
+    out = build_best_picks_df(df)
+    row = out.iloc[0]
+    assert row["best_pick"] == "Over 7.5"
+    assert float(row["market_line_used"]) == 7.5
+    assert float(row["matched_live_total_line"]) == 7.5
+
+
 def test_export_transparency_fields_still_present_after_reresolution_logic():
     df = pd.DataFrame([
         _row(idx=704, league="NBA", market_type="spread_away", win_prob=0.64, ev=0.08, edge=0.07, kalshi_probability=0.58)
