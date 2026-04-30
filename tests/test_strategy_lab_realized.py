@@ -4,6 +4,7 @@ from app_core.strategy_lab_realized import (
     REALIZED_MODE_ACTIONABLE_ONLY,
     REALIZED_MODE_ACTIONABLE_PLUS_HIGH_VARIANCE,
     REALIZED_MODE_ALL_GRADED,
+    REALIZED_MODE_PRODUCTION_CARD,
     build_realized_strategy_lab,
 )
 from app.ui import strategy_lab_dashboard as dash
@@ -164,6 +165,61 @@ def test_realized_outcome_comes_from_recap_source_not_strategy_override():
     assert realized.loc[0, "Result"] == "LOSS"
     assert summary["Loss Count"] == 1
     assert summary["Win Count"] == 0
+
+
+def test_same_matchup_different_total_line_is_not_auto_graded():
+    graded = pd.DataFrame([{"league": "MLB", "home_team": "Texas", "away_team": "New York", "Pick Taken": "Over 4.5", "Pick_Outcome": "WIN", "decimal_odds": 1.9, "actual_home_score": 5, "actual_away_score": 2}])
+    strategy = pd.DataFrame([{"league": "MLB", "home_team": "Texas", "away_team": "New York", "Pick Taken": "Over 9.5"}])
+    realized, summary, _ = build_realized_strategy_lab(graded, strategy)
+    assert realized.loc[0, "Result"] == "MISMATCH"
+    assert "Line mismatch" in realized.loc[0, "Excluded Reason"]
+    assert summary["Bet Count"] == 0
+
+
+def test_same_matchup_opposite_direction_is_not_auto_graded():
+    graded = pd.DataFrame([{"league": "NBA", "home_team": "Los Angeles", "away_team": "Houston", "Pick Taken": "Over 207.5", "Pick_Outcome": "LOSS", "decimal_odds": 1.9, "actual_home_score": 105, "actual_away_score": 98}])
+    strategy = pd.DataFrame([{"league": "NBA", "home_team": "Los Angeles", "away_team": "Houston", "Pick Taken": "Under 207.5"}])
+    realized, _, _ = build_realized_strategy_lab(graded, strategy)
+    assert realized.loc[0, "Result"] == "MISMATCH"
+    assert "Direction mismatch" in realized.loc[0, "Excluded Reason"]
+
+
+def test_exact_pick_identity_match_grades_normally():
+    graded = pd.DataFrame([{"league": "MLB", "home_team": "Toronto", "away_team": "Boston", "Pick Taken": "Over 7.5", "Pick_Outcome": "WIN", "decimal_odds": 2.0, "Stake": 10, "actual_home_score": 8, "actual_away_score": 4}])
+    strategy = pd.DataFrame([{"league": "MLB", "home_team": "Toronto", "away_team": "Boston", "Pick Taken": "Over 7.5"}])
+    realized, summary, _ = build_realized_strategy_lab(graded, strategy)
+    assert realized.loc[0, "pick_identity_match"]
+    assert realized.loc[0, "Result"] == "WIN"
+    assert summary["Bet Count"] == 1
+
+
+def test_no_play_defaults_to_zero_bet_amount():
+    graded = pd.DataFrame([{"league": "MLB", "home_team": "A", "away_team": "B", "Pick Taken": "Over 8.5", "Pick_Outcome": "WIN", "decimal_odds": 2.0, "actual_home_score": 6, "actual_away_score": 4, "Status": "No Play"}])
+    realized, _, _ = build_realized_strategy_lab(graded, strategy_mode=REALIZED_MODE_ALL_GRADED, default_stake=10)
+    assert realized.loc[0, "Stake"] == 0
+
+
+def test_high_variance_defaults_to_zero_in_production_card_mode():
+    graded = pd.DataFrame([{"league": "MLB", "home_team": "A", "away_team": "B", "Pick Taken": "Over 8.5", "Pick_Outcome": "WIN", "decimal_odds": 2.0, "actual_home_score": 6, "actual_away_score": 4, "Status": "High Variance/Speculative"}])
+    realized, _, _ = build_realized_strategy_lab(graded, strategy_mode=REALIZED_MODE_PRODUCTION_CARD, default_stake=10)
+    assert realized.loc[0, "Stake"] == 0
+
+
+def test_total_slate_exposure_cap_works():
+    graded = pd.DataFrame([{"league": "MLB", "home_team": f"H{i}", "away_team": f"A{i}", "Pick Taken": "Over 8.5", "Pick_Outcome": "WIN", "decimal_odds": 2.0, "actual_home_score": 6, "actual_away_score": 4, "Status": "Actionable"} for i in range(10)])
+    realized, _, _ = build_realized_strategy_lab(graded, strategy_mode=REALIZED_MODE_ALL_GRADED, default_stake=100, starting_bankroll=1000)
+    assert realized["Stake"].max() <= 40.0 + 1e-9
+    assert realized["Stake"].sum() <= 250.0 + 1e-9
+
+
+def test_realized_summary_by_league_market_family():
+    graded = pd.DataFrame([
+        {"league": "MLB", "home_team": "A", "away_team": "B", "Pick Taken": "Over 8.5", "Pick_Outcome": "WIN", "decimal_odds": 2.0, "Stake": 10, "actual_home_score": 6, "actual_away_score": 4, "Status": "Actionable"},
+        {"league": "MLB", "home_team": "C", "away_team": "D", "Pick Taken": "C ML", "Pick_Outcome": "LOSS", "decimal_odds": 2.0, "Stake": 10, "actual_home_score": 1, "actual_away_score": 3, "Status": "Actionable"},
+    ])
+    _, _, diagnostics = build_realized_strategy_lab(graded, strategy_mode=REALIZED_MODE_ALL_GRADED)
+    summary_df = diagnostics["league_market_family_summary"]
+    assert set(summary_df["market_family"]) >= {"total", "moneyline"}
 
 
 def test_strategy_lab_theoretical_render_still_works(monkeypatch):
