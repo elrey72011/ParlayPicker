@@ -257,7 +257,7 @@ BEST_PICK_COLUMNS = [
     "gemini_explanation", "gemini_risk_notes", "used_stale_features", "Pick_Quality", "Conviction_Score",
     "uploaded_spread_line", "uploaded_total_line", "live_spread_line", "live_total_line", "line_source", "line_delta", "upload_market_match",
     "market_line_used", "market_line_source", "market_line_source_detail", "matched_live_spread_line", "matched_live_total_line", "upload_spread_line", "upload_total_line", "base_spread_line", "base_total_line",
-    "line_consistency_flag", "line_consistency_reason", "line_provenance_warning",
+    "line_consistency_flag", "line_consistency_reason", "line_provenance_warning", "line_event_identity_match_flag", "line_event_identity_reason", "live_event_match_key", "line_candidate_count", "selected_live_event_source",
     "suspicious_data_flag", "suspicious_data_reasons", "status_metric_basis", "effective_expected_value", "effective_edge", "effective_win_probability", "status_blocker_reason", "status_blocker_stage",
     "nba_stats_fetch_status", "nba_stats_fetch_source", "nba_stats_fetch_retries_used", "stats_source_counts", "fallback_summary_by_league", "fallback_heavy_slate_flag", "run_health_warning",
     "degraded_feature_subset_flag", "degraded_feature_subset_reason",
@@ -2826,16 +2826,28 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         best["market_line_source"] = np.where(trusted_live_match, "live", np.where(best["upload_spread_line"].notna() | best["upload_total_line"].notna(), "upload", "base"))
         best["market_line_source_detail"] = np.where(trusted_live_match, line_source_norm.replace("", "live"), np.where(best["market_line_source"] == "upload", "uploaded_line", "base_generated_line"))
         best["selected_live_event_source"] = np.where(trusted_live_match, line_source_norm.replace("", "live"), "")
-        best["live_event_match_key"] = (
-            best.get("league", pd.Series([""] * len(best), index=best.index)).astype(str).str.strip().str.upper()
-            + "::" + best.get("home_team", pd.Series([""] * len(best), index=best.index)).astype(str).str.strip().str.lower()
-            + "::" + best.get("away_team", pd.Series([""] * len(best), index=best.index)).astype(str).str.strip().str.lower()
-            + "::" + best.get("game_date", pd.Series([""] * len(best), index=best.index)).astype(str).str.strip()
-            + "::" + market_type_norm
+        norm = lambda s: s.astype(str).str.lower().str.replace(r"[^a-z0-9]+", "", regex=True).str.strip()
+        league_key = best.get("league", pd.Series([""] * len(best), index=best.index)).astype(str).str.strip().str.upper()
+        home_key = norm(best.get("home_team", pd.Series([""] * len(best), index=best.index)))
+        away_key = norm(best.get("away_team", pd.Series([""] * len(best), index=best.index)))
+        game_date_key = best.get("game_date", pd.Series([""] * len(best), index=best.index)).astype(str).str.strip()
+        commence_key = best.get("commence_time", best.get("game_time_est", pd.Series([""] * len(best), index=best.index))).astype(str).str.strip()
+        family_key = np.where(is_total, "total", np.where(is_spread, "spread", "side"))
+        strict_event_id = best.get("sportsbook_event_id", best.get("event_id", pd.Series([""] * len(best), index=best.index))).astype(str).str.strip()
+        strict_event_key = best.get("sportsbook_event_key", best.get("event_key", pd.Series([""] * len(best), index=best.index))).astype(str).str.strip()
+        candidate_key = (
+            league_key + "::" + home_key + "::" + away_key + "::" + game_date_key + "::"
+            + commence_key + "::" + pd.Series(family_key, index=best.index).astype(str) + "::"
+            + market_type_norm.astype(str) + "::" + strict_event_id + "::" + strict_event_key
         )
-        best["line_candidate_count"] = np.where(trusted_live_match, 1, 0)
-        best["line_event_identity_match_flag"] = True
-        best["line_event_identity_reason"] = "exact_live_event_identity"
+        candidate_count = best.groupby(candidate_key)["home_team"].transform("size")
+        best["live_event_match_key"] = np.where(trusted_live_match, candidate_key, "")
+        best["line_candidate_count"] = np.where(trusted_live_match, candidate_count, 0).astype(int)
+        best["line_event_identity_match_flag"] = trusted_live_match & candidate_count.eq(1)
+        best["line_event_identity_reason"] = np.where(
+            ~trusted_live_match, "no_live_candidate_for_row",
+            np.where(candidate_count.eq(1), "exact_live_event_identity", "ambiguous_live_event_identity_multiple_candidates")
+        )
         ambiguous_identity = trusted_live_match & best.get("orientation_source", pd.Series([""] * len(best), index=best.index)).astype(str).str.contains("fuzzy", case=False, na=False)
         best.loc[ambiguous_identity, "line_event_identity_match_flag"] = False
         best.loc[ambiguous_identity, "line_event_identity_reason"] = "ambiguous_live_event_identity_fuzzy_match"
@@ -2895,19 +2907,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             best["line_consistency_reason"].astype(str).str.contains("suspicious_live_line_delta", na=False) |
             best["line_provenance_warning"].astype(str).str.strip().ne("")
         )
-        strict_commence = best.get("commence_time", best.get("game_time_est", pd.Series(["" for _ in range(len(best))], index=best.index)))
-        strict_event_id = best.get("sportsbook_event_id", best.get("event_id", pd.Series(["" for _ in range(len(best))], index=best.index)))
-        strict_event_key = best.get("sportsbook_event_key", best.get("event_key", pd.Series(["" for _ in range(len(best))], index=best.index)))
-        strict_identity_key = (
-            best.get("league", pd.Series(["" for _ in range(len(best))], index=best.index)).astype(str).str.upper().str.strip()
-            + "::" + best.get("home_team", pd.Series(["" for _ in range(len(best))], index=best.index)).astype(str).str.lower().str.strip()
-            + "::" + best.get("away_team", pd.Series(["" for _ in range(len(best))], index=best.index)).astype(str).str.lower().str.strip()
-            + "::" + best.get("game_date", pd.Series(["" for _ in range(len(best))], index=best.index)).astype(str).str.strip()
-            + "::" + strict_commence.astype(str).str.strip()
-            + "::" + market_type_norm.astype(str)
-            + "::" + strict_event_id.astype(str).str.strip()
-            + "::" + strict_event_key.astype(str).str.strip()
-        )
+        strict_identity_key = candidate_key
         best["live_event_match_key"] = np.where(suspicious_or_warned, strict_identity_key, best["live_event_match_key"])
         strict_candidate_count = best.groupby(strict_identity_key)["home_team"].transform("size")
         best.loc[suspicious_or_warned, "line_candidate_count"] = strict_candidate_count.loc[suspicious_or_warned].astype(int)
@@ -2930,13 +2930,21 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         )
         unresolved_suspicious = unresolved_suspicious | still_suspicious
         best.loc[unresolved_suspicious, "line_event_identity_match_flag"] = False
-        best.loc[unresolved_suspicious, "line_event_identity_reason"] = "suspicious_live_line_unresolved"
+        best.loc[unresolved_suspicious, "line_event_identity_reason"] = np.where(
+            strict_candidate_count.loc[unresolved_suspicious].eq(0),
+            "suspicious_live_line_unresolved_no_candidates",
+            np.where(
+                strict_candidate_count.loc[unresolved_suspicious].gt(1),
+                "suspicious_live_line_unresolved_ambiguous_candidates",
+                "suspicious_live_line_unresolved_delta_persists",
+            ),
+        )
 
         # Hard block unresolved suspicious lines from viable buckets.
         blocked_viable_status = best["Pick_Status"].astype(str).isin({"Actionable", "High Variance/Speculative"})
         best.loc[unresolved_suspicious & blocked_viable_status, "Pick_Status"] = "No Play"
         best.loc[unresolved_suspicious, "status_blocker_stage"] = "line_provenance"
-        best.loc[unresolved_suspicious, "status_blocker_reason"] = "Suspicious live spread could not be resolved to exact event"
+        best.loc[unresolved_suspicious, "status_blocker_reason"] = "Suspicious live line delta could not be resolved"
         best.loc[unresolved_suspicious & best["Status_Reason"].astype(str).eq(""), "Status_Reason"] = "No Play: unresolved live line identity/consistency"
         if (mismatch_mask | missing_line_mask).any():
             logger.warning("Line consistency issues detected rows=%s", int((mismatch_mask | missing_line_mask).sum()))
