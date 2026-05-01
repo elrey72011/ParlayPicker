@@ -29,3 +29,25 @@ def test_kelly_contains_raw_and_production_amounts():
     out = optimize_portfolio_allocation(_rows(), bankroll=1000.0)
     assert "raw_kelly_amount" in out.columns
     assert "production_bet_amount" in out.columns
+
+
+def test_higher_kelly_fraction_gets_higher_production_bet():
+    rows = pd.DataFrame([
+        {"league":"MLB","home_team":"A","away_team":"B","best_pick":"Over 8.5","Pick_Status":"Actionable","line_consistency_flag":True,"line_event_identity_match_flag":True,"market_line_source":"live","line_provenance_warning":"","market_line_used":8.5,"calibrated_probability":0.62,"decimal_odds":2.1,"expected_value":0.1,"edge":0.1},
+        {"league":"MLB","home_team":"C","away_team":"D","best_pick":"Over 8.5","Pick_Status":"Actionable","line_consistency_flag":True,"line_event_identity_match_flag":True,"market_line_source":"live","line_provenance_warning":"","market_line_used":8.5,"calibrated_probability":0.53,"decimal_odds":1.9,"expected_value":0.05,"edge":0.05},
+    ])
+    out = optimize_portfolio_allocation(rows, bankroll=1000.0).set_index("home_team")
+    assert out.loc["A", "kelly_fraction"] > out.loc["C", "kelly_fraction"]
+    assert out.loc["A", "production_bet_amount"] > out.loc["C", "production_bet_amount"] >= 0
+
+
+def test_kelly_weighting_columns_exist_and_not_flattened_when_uncapped():
+    rows = pd.DataFrame([
+        {"league":"MLB","home_team":"A","away_team":"B","best_pick":"Over 8.5","Pick_Status":"Actionable","line_consistency_flag":True,"line_event_identity_match_flag":True,"market_line_source":"live","line_provenance_warning":"","market_line_used":8.5,"calibrated_probability":0.58,"decimal_odds":1.9,"expected_value":0.1,"edge":0.1},
+        {"league":"MLB","home_team":"C","away_team":"D","best_pick":"Over 8.5","Pick_Status":"Actionable","line_consistency_flag":True,"line_event_identity_match_flag":True,"market_line_source":"live","line_provenance_warning":"","market_line_used":8.5,"calibrated_probability":0.56,"decimal_odds":1.9,"expected_value":0.08,"edge":0.08},
+        {"league":"MLB","home_team":"E","away_team":"F","best_pick":"Over 8.5","Pick_Status":"Actionable","line_consistency_flag":True,"line_event_identity_match_flag":True,"market_line_source":"live","line_provenance_warning":"","market_line_used":8.5,"calibrated_probability":0.54,"decimal_odds":1.9,"expected_value":0.06,"edge":0.06},
+    ])
+    out = optimize_portfolio_allocation(rows, bankroll=1000.0)
+    for col in ["kelly_probability_used", "kelly_decimal_odds", "kelly_fraction", "fractional_kelly_amount", "kelly_weight_share", "slate_scaled_amount", "kelly_allocation_method"]:
+        assert col in out.columns
+    assert out["production_bet_amount"].nunique() > 1

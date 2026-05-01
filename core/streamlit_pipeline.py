@@ -4784,30 +4784,56 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
     portfolio["decimal_odds"] = _numeric_series(portfolio, "decimal_odds").fillna(
         _numeric_series(portfolio, "odds_american", -110.0).apply(american_to_decimal)
     )
-    portfolio = add_kelly_bet_sizing(portfolio, bankroll=bankroll, fraction=0.25)
-    if "recommended_bet" not in portfolio.columns:
-        portfolio["recommended_bet"] = 0.0
-    portfolio["raw_kelly_amount"] = pd.to_numeric(portfolio["recommended_bet"], errors="coerce").fillna(0.0)
+    p = pd.to_numeric(portfolio.get("calibrated_probability", pd.NA), errors="coerce").fillna(0.0).clip(lower=0.0, upper=1.0)
+    b = (portfolio["decimal_odds"] - 1.0).clip(lower=0.0)
+    q = 1.0 - p
+    kelly_fraction = pd.Series(0.0, index=portfolio.index, dtype=float)
+    valid = b > 0
+    kelly_fraction.loc[valid] = (((b.loc[valid] * p.loc[valid]) - q.loc[valid]) / b.loc[valid]).clip(lower=0.0)
+    portfolio["kelly_probability_used"] = p
+    portfolio["kelly_decimal_odds"] = portfolio["decimal_odds"]
+    portfolio["kelly_fraction"] = kelly_fraction
+    portfolio["raw_kelly_amount"] = float(bankroll) * kelly_fraction
+    portfolio["fractional_kelly_amount"] = portfolio["raw_kelly_amount"] * 0.25
+    portfolio["recommended_bet"] = portfolio["fractional_kelly_amount"]
     portfolio.loc[~portfolio["production_eligible"], "recommended_bet"] = 0.0
 
     max_pick = float(bankroll) * 0.04
     max_slate = float(bankroll) * 0.25
-    pre_cap = portfolio["recommended_bet"].copy()
-    portfolio["recommended_bet"] = portfolio["recommended_bet"].clip(lower=0.0, upper=max_pick)
     portfolio["kelly_cap_reason"] = ""
     portfolio.loc[~portfolio["production_eligible"], "kelly_cap_reason"] = "Non-production row"
-    portfolio.loc[(pre_cap > max_pick) & portfolio["production_eligible"], "kelly_cap_reason"] = "Capped by pick exposure"
-    capped_total = float(portfolio["recommended_bet"].sum())
-    if capped_total > max_slate and capped_total > 0:
-        scale = max_slate / capped_total
-        portfolio.loc[portfolio["production_eligible"], "recommended_bet"] = portfolio.loc[portfolio["production_eligible"], "recommended_bet"] * scale
-        portfolio.loc[portfolio["production_eligible"], "kelly_cap_reason"] = portfolio.loc[portfolio["production_eligible"], "kelly_cap_reason"].replace("", "Scaled by slate exposure")
-    portfolio["production_bet_amount"] = portfolio["recommended_bet"]
+    eligible = portfolio["production_eligible"]
+    eligible_total = float(portfolio.loc[eligible, "recommended_bet"].sum())
+    scale = min(1.0, (max_slate / eligible_total) if eligible_total > 0 else 1.0)
+    portfolio["kelly_weight_share"] = 0.0
+    if eligible_total > 0:
+        portfolio.loc[eligible, "kelly_weight_share"] = portfolio.loc[eligible, "recommended_bet"] / eligible_total
+    portfolio["slate_scaled_amount"] = portfolio["recommended_bet"] * scale
+    portfolio.loc[(scale < 1.0) & eligible, "kelly_cap_reason"] = "Scaled by slate exposure"
+    pre_pick = portfolio["slate_scaled_amount"].copy()
+    portfolio["production_bet_amount"] = portfolio["slate_scaled_amount"].clip(upper=max_pick)
+    capped = eligible & (pre_pick > max_pick)
+    portfolio.loc[capped, "kelly_cap_reason"] = portfolio.loc[capped, "kelly_cap_reason"].replace("", "Capped by pick exposure")
+    portfolio["recommended_bet"] = portfolio["production_bet_amount"]
+    portfolio["kelly_allocation_method"] = "proportional_fractional_kelly"
+    positive = portfolio["production_bet_amount"] > 0
+    unique_positive = int(portfolio.loc[positive, "production_bet_amount"].round(6).nunique())
+    cap_hits = int(capped.sum())
+    portfolio["kelly_unique_positive_amount_count"] = unique_positive
+    portfolio["kelly_max_pick_cap_hits"] = cap_hits
+    portfolio["kelly_slate_scale_factor"] = scale
+    portfolio["kelly_total_raw_amount"] = float(portfolio["raw_kelly_amount"].sum())
+    portfolio["kelly_total_fractional_amount"] = float(portfolio["fractional_kelly_amount"].sum())
+    portfolio["kelly_total_production_amount"] = float(portfolio["production_bet_amount"].sum())
+    portfolio["kelly_flattening_detected"] = bool(unique_positive <= 1 and positive.any() and cap_hits >= int(positive.sum()))
 
     cols = [
         "league", "home_team", "away_team", "best_pick",
         "calibrated_probability", "expected_value", "edge",
         "decimal_odds", "raw_kelly_amount", "production_bet_amount", "recommended_bet", "kelly_cap_reason", "Pick_Status",
+        "kelly_probability_used", "kelly_decimal_odds", "kelly_fraction", "fractional_kelly_amount", "kelly_weight_share", "slate_scaled_amount",
+        "kelly_allocation_method", "kelly_flattening_detected", "kelly_unique_positive_amount_count", "kelly_total_raw_amount",
+        "kelly_total_fractional_amount", "kelly_total_production_amount", "kelly_max_pick_cap_hits", "kelly_slate_scale_factor",
         "market_line_used", "market_line_source", "line_consistency_flag", "line_event_identity_match_flag", "line_provenance_warning",
         "export_run_id", "pick_id", "canonical_pick_key", "production_eligible",
     ]
