@@ -38,6 +38,7 @@ from app_core.weights_config import (
             FALLBACK_HEAVY_TOTAL_EXTRA_PENALTY,
             BEST_PICKS_PROFILE,
     LOCK_UPLOAD_LINES_FOR_MATCHED_ROWS,
+    ALLOW_UPLOAD_TOTAL_FALLBACK_ACTIONABLE,
     KALSHI_WEIGHT, MARKET_WEIGHT, ML_MODEL_WEIGHT, THEOVER_WEIGHT, SENTIMENT_WEIGHT,
     FALLBACK_MARKET_WEIGHT, FALLBACK_ML_WEIGHT, FALLBACK_THEOVER_WEIGHT, FALLBACK_SENTIMENT_WEIGHT,
     LOW_LIQUIDITY_KALSHI_WEIGHT, LOW_LIQUIDITY_ML_MODEL_WEIGHT
@@ -2957,6 +2958,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         best.loc[suspicious_or_warned, "line_candidate_count"] = strict_candidate_count.loc[suspicious_or_warned].astype(int)
         resolved_unambiguous = suspicious_or_warned & strict_candidate_count.eq(1) & trusted_live_match
         unresolved_suspicious = suspicious_or_warned & ~resolved_unambiguous
+        unresolved_total_before_recovery = unresolved_suspicious & is_total
 
         # For resolved rows, always use the selected live event's direct line values.
         best.loc[resolved_unambiguous & is_spread, "market_line_used"] = best.loc[resolved_unambiguous & is_spread, "matched_live_spread_line"]
@@ -3000,13 +3002,62 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         best.loc[unresolved_suspicious, "best_pick"] = pd.Series(unresolved_label, index=best.index).loc[unresolved_suspicious]
         best.loc[unresolved_suspicious, "market_line_used"] = np.nan
 
+        # Conservative fallback: recover unresolved suspicious totals with plausible upload/reference totals.
+        upload_total_candidate = pd.to_numeric(
+            best.get("uploaded_total_line", best.get("upload_total_line", pd.Series([np.nan] * len(best), index=best.index))),
+            errors="coerce",
+        )
+        upload_total_candidate = upload_total_candidate.fillna(pd.to_numeric(best.get("upload_total_line", pd.Series([np.nan] * len(best), index=best.index)), errors="coerce"))
+        plausible_total = pd.Series(False, index=best.index)
+        plausible_total = plausible_total | (league_norm.eq("MLB") & upload_total_candidate.between(5.5, 13.5, inclusive="both"))
+        plausible_total = plausible_total | (league_norm.eq("NHL") & upload_total_candidate.between(4.5, 8.5, inclusive="both"))
+        plausible_total = plausible_total | (league_norm.eq("NBA") & upload_total_candidate.between(185, 255, inclusive="both"))
+        plausible_total = plausible_total | (league_norm.eq("NCAAB") & upload_total_candidate.between(115, 175, inclusive="both"))
+        plausible_total = plausible_total | (league_norm.eq("NFL") & upload_total_candidate.between(30, 60, inclusive="both"))
+        plausible_total = plausible_total | (league_norm.eq("NCAAF") & upload_total_candidate.between(35, 75, inclusive="both"))
+        has_team_identity = home_key.ne("") & away_key.ne("")
+        upload_recovery_candidate = (
+            is_total
+            & best["line_consistency_reason"].astype(str).str.contains("suspicious_live_line_delta", na=False)
+            & best["market_line_source"].astype(str).isin(["rejected_live", "live", "upload", "base"])
+            & has_team_identity
+            & upload_total_candidate.notna()
+        )
+        recover_with_upload_total = upload_recovery_candidate & plausible_total
+        rejected_upload_plausibility = upload_recovery_candidate & ~plausible_total
+
+        best.loc[recover_with_upload_total, "market_line_source"] = "upload"
+        best.loc[recover_with_upload_total, "market_line_source_detail"] = "upload_total_fallback_after_rejected_live"
+        best.loc[recover_with_upload_total, "market_line_used"] = upload_total_candidate.loc[recover_with_upload_total]
+        best.loc[recover_with_upload_total, "matched_live_total_line"] = np.nan
+        best.loc[recover_with_upload_total, "best_pick"] = best.loc[recover_with_upload_total].apply(_format_best_pick, axis=1)
+        best.loc[recover_with_upload_total, "line_consistency_flag"] = True
+        best.loc[recover_with_upload_total, "line_consistency_reason"] = "recovered_with_upload_total_after_rejected_live"
+        best.loc[recover_with_upload_total, "line_provenance_warning"] = "Live total rejected; using uploaded/reference total"
+        best.loc[recover_with_upload_total, "line_event_identity_match_flag"] = False
+        best.loc[recover_with_upload_total, "line_event_identity_reason"] = "upload_total_fallback_after_rejected_live"
+        best.loc[recover_with_upload_total, "status_blocker_stage"] = "line_provenance"
+        best.loc[recover_with_upload_total, "status_blocker_reason"] = "Upload total fallback used after rejected live total"
+        best.loc[recover_with_upload_total, "Pick_Status"] = "High Variance/Speculative"
+        best.loc[recover_with_upload_total, "Status_Reason"] = "High Variance/Speculative: Upload total fallback used after rejected live total"
+        best.loc[recover_with_upload_total, "Kelly_Bet_Size"] = 0.0
+        if not ALLOW_UPLOAD_TOTAL_FALLBACK_ACTIONABLE:
+            best.loc[recover_with_upload_total, "Pick_Status"] = "High Variance/Speculative"
+
+        if diagnostics_out is not None:
+            diagnostics_out["total_unresolved_count_before_upload_recovery"] = int(unresolved_total_before_recovery.sum())
+            diagnostics_out["total_upload_recovery_candidate_count"] = int(upload_recovery_candidate.sum())
+            diagnostics_out["total_upload_recovered_count"] = int(recover_with_upload_total.sum())
+            diagnostics_out["total_upload_recovery_rejected_plausibility_count"] = int(rejected_upload_plausibility.sum())
+
         # Final hard enforcement: any row that still fails line validation must be rejected.
+        recovered_upload_total_mask = best.get("market_line_source_detail", pd.Series([""] * len(best), index=best.index)).astype(str).eq("upload_total_fallback_after_rejected_live")
         final_rejected_line = (
             (~best["line_consistency_flag"])
             | best["line_consistency_reason"].astype(str).str.contains("suspicious_live_line_delta", na=False)
             | best["line_provenance_warning"].astype(str).str.contains("Live line deviates materially", case=False, na=False)
             | (~best["line_event_identity_match_flag"])
-        )
+        ) & ~recovered_upload_total_mask
         best.loc[final_rejected_line, "Pick_Status"] = "No Play"
         best.loc[final_rejected_line, "Status_Reason"] = "No Play: suspicious live line delta could not be resolved"
         best.loc[final_rejected_line, "status_blocker_stage"] = "line_provenance"
@@ -3026,6 +3077,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             "Total line unresolved",
         )
         best.loc[final_rejected_line, "best_pick"] = pd.Series(rejected_label, index=best.index).loc[final_rejected_line]
+        if diagnostics_out is not None:
+            recovered_mask = best.get("market_line_source_detail", pd.Series([""] * len(best), index=best.index)).astype(str).eq("upload_total_fallback_after_rejected_live")
+            diagnostics_out["total_upload_recovered_actionable_count"] = int((recovered_mask & best["Pick_Status"].astype(str).eq("Actionable")).sum())
+            diagnostics_out["total_upload_recovered_kelly_positive_count"] = int((recovered_mask & pd.to_numeric(best.get("Kelly_Bet_Size", 0), errors="coerce").fillna(0).gt(0)).sum())
         if (mismatch_mask | missing_line_mask).any():
             logger.warning("Line consistency issues detected rows=%s", int((mismatch_mask | missing_line_mask).sum()))
 

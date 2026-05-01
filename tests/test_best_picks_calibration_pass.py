@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 
 from core.streamlit_pipeline import build_best_picks_df
 
@@ -675,7 +676,7 @@ def test_spread_away_uses_away_signed_live_line_for_denver_minnesota_shape():
     assert row["market_line_source"] == "live"
 
 
-def test_suspicious_total_after_validation_is_forced_to_rejected_no_play():
+def test_suspicious_total_after_validation_can_recover_with_upload_fallback():
     df = pd.DataFrame([
         _row(idx=708, league="NHL", market_type="total_over", win_prob=0.61, ev=0.06, edge=0.05, kalshi_probability=0.56)
     ])
@@ -686,11 +687,11 @@ def test_suspicious_total_after_validation_is_forced_to_rejected_no_play():
     df.loc[0, "uploaded_total_line"] = 5.5
     out = build_best_picks_df(df)
     row = out.iloc[0]
-    assert row["Pick_Status"] == "No Play"
-    assert row["market_line_source"] == "rejected_live"
-    assert pd.isna(row["market_line_used"])
+    assert row["Pick_Status"] in {"High Variance/Speculative", "No Play"}
+    assert row["market_line_source"] == "upload"
+    assert float(row["market_line_used"]) == 5.5
     assert pd.isna(row["matched_live_total_line"])
-    assert row["best_pick"] == "Total line unresolved"
+    assert row["best_pick"] == "Over 5.5"
 
 
 def test_nhl_total_does_not_use_wrong_same_city_same_date_line():
@@ -783,3 +784,66 @@ def test_non_live_source_cannot_backfill_matched_live_spread_line_from_base():
     assert row["market_line_source"] == "upload"
     assert pd.isna(row["matched_live_spread_line"])
     assert float(row["market_line_used"]) == -5.5
+
+
+def test_total_upload_fallback_recovers_plausible_rejected_live_total_conservatively():
+    df = pd.DataFrame([
+        _row(idx=810, league="NHL", market_type="total_over", win_prob=0.62, ev=0.07, edge=0.06, kalshi_probability=0.56),
+    ])
+    df["home_team"] = ["A"]
+    df["away_team"] = ["E"]
+    df["line_source"] = "live_matched"
+    df["live_total_line"] = [8.5]
+    df["uploaded_total_line"] = [5.5]
+    df["upload_total_line"] = [5.5]
+    out = build_best_picks_df(df)
+
+    recovered = out.iloc[0]
+    assert recovered["market_line_source"] == "upload"
+    assert recovered["market_line_source_detail"] == "upload_total_fallback_after_rejected_live"
+    assert float(recovered["market_line_used"]) == 5.5
+    assert recovered["best_pick"] == "Over 5.5"
+    assert pd.isna(recovered["matched_live_total_line"])
+    assert recovered["line_consistency_reason"] == "recovered_with_upload_total_after_rejected_live"
+    assert recovered["line_provenance_warning"] == "Live total rejected; using uploaded/reference total"
+    assert recovered["Pick_Status"] in {"High Variance/Speculative", "No Play"}
+    assert recovered["Pick_Status"] != "Actionable"
+    assert float(recovered["Kelly_Bet_Size"]) == 0.0
+
+
+
+def test_total_upload_fallback_rejects_implausible_upload_total():
+    df = pd.DataFrame([
+        _row(idx=811, league="MLB", market_type="total_over", win_prob=0.62, ev=0.07, edge=0.06, kalshi_probability=0.56),
+    ])
+    df["line_source"] = "live_matched"
+    df["live_total_line"] = [16.5]
+    df["uploaded_total_line"] = [3.5]
+    df["upload_total_line"] = [3.5]
+    out = build_best_picks_df(df)
+    row = out.iloc[0]
+    assert row["market_line_source"] == "rejected_live"
+    assert row["best_pick"] == "Total line unresolved"
+
+
+def test_total_upload_fallback_does_not_affect_clean_live_total_or_spread():
+    total_df = pd.DataFrame([
+        _row(idx=812, league="NBA", market_type="total_over", win_prob=0.62, ev=0.07, edge=0.06, kalshi_probability=0.56),
+    ])
+    total_df["line_source"] = "live_matched"
+    total_df["live_total_line"] = [235.5]
+    total_df["uploaded_total_line"] = [236.0]
+    total_df["upload_total_line"] = [236.0]
+    total_out = build_best_picks_df(total_df).iloc[0]
+    assert total_out["market_line_source"] == "live"
+    assert float(total_out["market_line_used"]) == 235.5
+
+    spread_df = pd.DataFrame([
+        _row(idx=813, league="NBA", market_type="spread_away", win_prob=0.64, ev=0.08, edge=0.07, kalshi_probability=0.58),
+        _row(idx=813, league="NBA", market_type="spread_away", win_prob=0.64, ev=0.08, edge=0.07, kalshi_probability=0.58),
+    ])
+    spread_df["line_source"] = "live_matched"
+    spread_df["live_spread_line"] = [15.5, 15.5]
+    spread_df["uploaded_spread_line"] = [-6.5, -6.5]
+    spread_out = build_best_picks_df(spread_df)
+    assert (spread_out["market_line_source"] == "rejected_live").all()
