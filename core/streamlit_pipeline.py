@@ -133,7 +133,31 @@ REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
     "live_event_match_key",
     "line_candidate_count",
     "selected_live_event_source",
+    "export_run_id",
+    "pick_id",
+    "canonical_pick_key",
 ]
+
+
+def _normalize_pick_identity_text(value: object) -> str:
+    if pd.isna(value):
+        return ""
+    return " ".join(str(value).strip().lower().split())
+
+
+def _build_canonical_pick_key(row: pd.Series) -> str:
+    league = _normalize_pick_identity_text(row.get("league", ""))
+    home = _normalize_pick_identity_text(row.get("home_team", row.get("Home", "")))
+    away = _normalize_pick_identity_text(row.get("away_team", row.get("Away", "")))
+    game_date = _normalize_pick_identity_text(row.get("game_date", row.get("Game Date", "")))
+    market_type = _normalize_pick_identity_text(row.get("market_type", ""))
+    market_family = market_type.split("_")[0] if market_type else ""
+    best_pick = _normalize_pick_identity_text(row.get("best_pick", row.get("Best Pick", "")))
+    direction = "over" if best_pick.startswith("over ") else "under" if best_pick.startswith("under ") else ""
+    line_used = pd.to_numeric(row.get("market_line_used", pd.NA), errors="coerce")
+    line_text = "" if pd.isna(line_used) else f"{float(line_used):.4f}"
+    line_source = _normalize_pick_identity_text(row.get("market_line_source", ""))
+    return "::".join([league, home, away, game_date, market_type, market_family, direction, line_text, best_pick, line_text, line_source])
 
 
 def ensure_best_pick_export_columns(
@@ -181,6 +205,9 @@ def ensure_best_pick_export_columns(
         "live_event_match_key": "",
         "line_candidate_count": 0,
         "selected_live_event_source": "",
+        "export_run_id": "",
+        "pick_id": "",
+        "canonical_pick_key": "",
     }
 
     initially_missing_cols = [c for c in req_cols if c not in out.columns]
@@ -213,6 +240,18 @@ def ensure_best_pick_export_columns(
         out["line_event_identity_match_flag"] = out["line_event_identity_match_flag"].fillna(True).astype(bool)
     if "line_candidate_count" in out.columns:
         out["line_candidate_count"] = pd.to_numeric(out["line_candidate_count"], errors="coerce").fillna(0).astype(int)
+    if "export_run_id" in out.columns:
+        out["export_run_id"] = out["export_run_id"].fillna("").astype(str)
+    if "pick_id" in out.columns:
+        out["pick_id"] = out["pick_id"].fillna("").astype(str)
+    if "canonical_pick_key" in out.columns:
+        out["canonical_pick_key"] = out["canonical_pick_key"].fillna("").astype(str)
+    if "export_run_id" in out.columns and out["export_run_id"].eq("").all():
+        out["export_run_id"] = pd.Timestamp.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    if "pick_id" in out.columns and out["pick_id"].eq("").any():
+        out.loc[out["pick_id"].eq(""), "pick_id"] = out.index.to_series().map(lambda idx: f"pick_{int(idx) + 1:04d}")
+    if "canonical_pick_key" in out.columns and out["canonical_pick_key"].eq("").any():
+        out.loc[out["canonical_pick_key"].eq(""), "canonical_pick_key"] = out[out["canonical_pick_key"].eq("")].apply(_build_canonical_pick_key, axis=1)
 
     if diagnostics_out is not None:
         diag_status = str(diagnostics_out.get("nba_stats_fetch_status", "")).strip().lower()
@@ -250,7 +289,7 @@ def ensure_best_pick_export_columns(
 
 BEST_PICK_COLUMNS = [
     "Triple_Filter_Rank", "parlay_rank",
-    "league", "home_team", "away_team", "game_date", "game_time_est", "market_type", "candidate_source", "orientation_source", "upload_match_reason", "best_pick", "Pick_Status", "Status_Reason",
+    "league", "home_team", "away_team", "game_date", "game_time_est", "market_type", "candidate_source", "orientation_source", "upload_match_reason", "best_pick", "Kelly_Bet_Size", "Pick_Status", "Status_Reason",
     "calibrated_probability", "expected_value", "edge", "consensus_agreement",
     "odds_american", "odds_source", "market_probability", "ml_probability", "display_probability",
     "kalshi_probability", "kalshi_match_status", "kalshi_match_reason",
@@ -678,10 +717,15 @@ def _enforce_identity_string_dtype(df: pd.DataFrame, cols: list[str]) -> pd.Data
 
 
 def _string_series(df: pd.DataFrame, col: str, default: str = "") -> pd.Series:
-    if df is None or df.empty:
+    if df is None:
         return pd.Series(dtype="string")
+    if df.empty:
+        return pd.Series([default] * len(df), index=df.index, dtype="string")
     if col in df.columns:
-        return df[col].fillna(default).astype("string")
+        series = df[col]
+        if isinstance(series.dtype, pd.CategoricalDtype):
+            series = series.astype("object")
+        return series.astype("string").fillna(default)
     return pd.Series([default] * len(df), index=df.index, dtype="string")
 
 
@@ -4717,18 +4761,81 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
     portfolio = portfolio[_string_series(portfolio, "best_pick").str.strip().str.len() > 0].copy()
     if portfolio.empty:
         return pd.DataFrame()
+    if "Pick_Status" not in portfolio.columns:
+        portfolio["Pick_Status"] = ""
+    status = _string_series(portfolio, "Pick_Status").str.strip().str.lower()
+    line_source = _string_series(portfolio, "market_line_source").str.strip().str.lower()
+    line_warning = _string_series(portfolio, "line_provenance_warning").str.strip()
+    best_pick_norm = _string_series(portfolio, "best_pick").str.strip().str.lower()
+    line_used = pd.to_numeric(portfolio.get("market_line_used", pd.NA), errors="coerce")
+    line_consistent = pd.Series(portfolio.get("line_consistency_flag", True), index=portfolio.index).fillna(True).astype(bool)
+    event_identity_ok = pd.Series(portfolio.get("line_event_identity_match_flag", True), index=portfolio.index).fillna(True).astype(bool)
+    production_eligible = (
+        status.eq("actionable")
+        & line_source.eq("live")
+        & line_warning.eq("")
+        & line_used.notna()
+        & line_consistent
+        & event_identity_ok
+        & (~best_pick_norm.str.contains("unresolved", na=False))
+    )
+    portfolio["production_eligible"] = production_eligible
 
     portfolio["decimal_odds"] = _numeric_series(portfolio, "decimal_odds").fillna(
         _numeric_series(portfolio, "odds_american", -110.0).apply(american_to_decimal)
     )
-    portfolio = add_kelly_bet_sizing(portfolio, bankroll=bankroll, fraction=0.25)
-    if "recommended_bet" not in portfolio.columns:
-        portfolio["recommended_bet"] = 0.0
+    p = pd.to_numeric(portfolio.get("calibrated_probability", pd.NA), errors="coerce").fillna(0.0).clip(lower=0.0, upper=1.0)
+    b = (portfolio["decimal_odds"] - 1.0).clip(lower=0.0)
+    q = 1.0 - p
+    kelly_fraction = pd.Series(0.0, index=portfolio.index, dtype=float)
+    valid = b > 0
+    kelly_fraction.loc[valid] = (((b.loc[valid] * p.loc[valid]) - q.loc[valid]) / b.loc[valid]).clip(lower=0.0)
+    portfolio["kelly_probability_used"] = p
+    portfolio["kelly_decimal_odds"] = portfolio["decimal_odds"]
+    portfolio["kelly_fraction"] = kelly_fraction
+    portfolio["raw_kelly_amount"] = float(bankroll) * kelly_fraction
+    portfolio["fractional_kelly_amount"] = portfolio["raw_kelly_amount"] * 0.25
+    portfolio["recommended_bet"] = portfolio["fractional_kelly_amount"]
+    portfolio.loc[~portfolio["production_eligible"], "recommended_bet"] = 0.0
+
+    max_pick = float(bankroll) * 0.04
+    max_slate = float(bankroll) * 0.25
+    portfolio["kelly_cap_reason"] = ""
+    portfolio.loc[~portfolio["production_eligible"], "kelly_cap_reason"] = "Non-production row"
+    eligible = portfolio["production_eligible"]
+    eligible_total = float(portfolio.loc[eligible, "recommended_bet"].sum())
+    scale = min(1.0, (max_slate / eligible_total) if eligible_total > 0 else 1.0)
+    portfolio["kelly_weight_share"] = 0.0
+    if eligible_total > 0:
+        portfolio.loc[eligible, "kelly_weight_share"] = portfolio.loc[eligible, "recommended_bet"] / eligible_total
+    portfolio["slate_scaled_amount"] = portfolio["recommended_bet"] * scale
+    portfolio.loc[(scale < 1.0) & eligible, "kelly_cap_reason"] = "Scaled by slate exposure"
+    pre_pick = portfolio["slate_scaled_amount"].copy()
+    portfolio["production_bet_amount"] = portfolio["slate_scaled_amount"].clip(upper=max_pick)
+    capped = eligible & (pre_pick > max_pick)
+    portfolio.loc[capped, "kelly_cap_reason"] = portfolio.loc[capped, "kelly_cap_reason"].replace("", "Capped by pick exposure")
+    portfolio["recommended_bet"] = portfolio["production_bet_amount"]
+    portfolio["kelly_allocation_method"] = "proportional_fractional_kelly"
+    positive = portfolio["production_bet_amount"] > 0
+    unique_positive = int(portfolio.loc[positive, "production_bet_amount"].round(6).nunique())
+    cap_hits = int(capped.sum())
+    portfolio["kelly_unique_positive_amount_count"] = unique_positive
+    portfolio["kelly_max_pick_cap_hits"] = cap_hits
+    portfolio["kelly_slate_scale_factor"] = scale
+    portfolio["kelly_total_raw_amount"] = float(portfolio["raw_kelly_amount"].sum())
+    portfolio["kelly_total_fractional_amount"] = float(portfolio["fractional_kelly_amount"].sum())
+    portfolio["kelly_total_production_amount"] = float(portfolio["production_bet_amount"].sum())
+    portfolio["kelly_flattening_detected"] = bool(unique_positive <= 1 and positive.any() and cap_hits >= int(positive.sum()))
 
     cols = [
         "league", "home_team", "away_team", "best_pick",
         "calibrated_probability", "expected_value", "edge",
-        "decimal_odds", "recommended_bet",
+        "decimal_odds", "raw_kelly_amount", "production_bet_amount", "recommended_bet", "kelly_cap_reason", "Pick_Status",
+        "kelly_probability_used", "kelly_decimal_odds", "kelly_fraction", "fractional_kelly_amount", "kelly_weight_share", "slate_scaled_amount",
+        "kelly_allocation_method", "kelly_flattening_detected", "kelly_unique_positive_amount_count", "kelly_total_raw_amount",
+        "kelly_total_fractional_amount", "kelly_total_production_amount", "kelly_max_pick_cap_hits", "kelly_slate_scale_factor",
+        "market_line_used", "market_line_source", "line_consistency_flag", "line_event_identity_match_flag", "line_provenance_warning",
+        "export_run_id", "pick_id", "canonical_pick_key", "production_eligible",
     ]
     for col in cols:
         if col not in portfolio.columns:
