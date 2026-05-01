@@ -1434,6 +1434,7 @@ def main() -> None:
     with tab7:
         render_strategy_lab(
             analysis_df=analysis_df,
+            best_picks_df=best_picks_df,
             portfolio_df=portfolio_df if portfolio_df is not None else analysis_df.iloc[0:0],
             parlays_df=parlays_df if parlays_df is not None else analysis_df.iloc[0:0],
             simulation_results=simulation_results or {},

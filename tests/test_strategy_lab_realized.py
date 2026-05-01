@@ -176,6 +176,14 @@ def test_same_matchup_different_total_line_is_not_auto_graded():
     assert summary["Bet Count"] == 0
 
 
+def test_same_matchup_different_spread_line_is_not_auto_graded():
+    graded = pd.DataFrame([{"league": "NBA", "home_team": "LAL", "away_team": "BOS", "Pick Taken": "LAL -2.5", "Pick_Outcome": "WIN", "decimal_odds": 1.9, "actual_home_score": 110, "actual_away_score": 101}])
+    strategy = pd.DataFrame([{"league": "NBA", "home_team": "LAL", "away_team": "BOS", "Pick Taken": "LAL -6.5"}])
+    realized, summary, _ = build_realized_strategy_lab(graded, strategy)
+    assert realized.loc[0, "Result"] == "MISMATCH"
+    assert summary["ROI"] == 0
+
+
 def test_same_matchup_opposite_direction_is_not_auto_graded():
     graded = pd.DataFrame([{"league": "NBA", "home_team": "Los Angeles", "away_team": "Houston", "Pick Taken": "Over 207.5", "Pick_Outcome": "LOSS", "decimal_odds": 1.9, "actual_home_score": 105, "actual_away_score": 98}])
     strategy = pd.DataFrame([{"league": "NBA", "home_team": "Los Angeles", "away_team": "Houston", "Pick Taken": "Under 207.5"}])
@@ -193,6 +201,14 @@ def test_exact_pick_identity_match_grades_normally():
     assert summary["Bet Count"] == 1
 
 
+def test_export_run_id_mismatch_excludes_row_from_realized():
+    graded = pd.DataFrame([{"league": "MLB", "home_team": "Toronto", "away_team": "Boston", "Pick Taken": "Over 7.5", "Pick_Outcome": "WIN", "decimal_odds": 2.0, "Stake": 10, "actual_home_score": 8, "actual_away_score": 4, "export_run_id": "run_a"}])
+    strategy = pd.DataFrame([{"league": "MLB", "home_team": "Toronto", "away_team": "Boston", "Pick Taken": "Over 7.5", "export_run_id": "run_b"}])
+    realized, summary, _ = build_realized_strategy_lab(graded, strategy)
+    assert realized.loc[0, "Excluded Reason"] == "Export run mismatch"
+    assert summary["Bet Count"] == 0
+
+
 def test_no_play_defaults_to_zero_bet_amount():
     graded = pd.DataFrame([{"league": "MLB", "home_team": "A", "away_team": "B", "Pick Taken": "Over 8.5", "Pick_Outcome": "WIN", "decimal_odds": 2.0, "actual_home_score": 6, "actual_away_score": 4, "Status": "No Play"}])
     realized, _, _ = build_realized_strategy_lab(graded, strategy_mode=REALIZED_MODE_ALL_GRADED, default_stake=10)
@@ -203,6 +219,28 @@ def test_high_variance_defaults_to_zero_in_production_card_mode():
     graded = pd.DataFrame([{"league": "MLB", "home_team": "A", "away_team": "B", "Pick Taken": "Over 8.5", "Pick_Outcome": "WIN", "decimal_odds": 2.0, "actual_home_score": 6, "actual_away_score": 4, "Status": "High Variance/Speculative"}])
     realized, _, _ = build_realized_strategy_lab(graded, strategy_mode=REALIZED_MODE_PRODUCTION_CARD, default_stake=10)
     assert realized.loc[0, "Stake"] == 0
+
+
+def test_below_threshold_defaults_to_zero_in_production_card_mode():
+    graded = pd.DataFrame([{"league": "MLB", "home_team": "A", "away_team": "B", "Pick Taken": "Over 8.5", "Pick_Outcome": "WIN", "decimal_odds": 2.0, "actual_home_score": 6, "actual_away_score": 4, "Status": "Below Threshold"}])
+    realized, _, _ = build_realized_strategy_lab(graded, strategy_mode=REALIZED_MODE_PRODUCTION_CARD, default_stake=10)
+    assert realized.loc[0, "Stake"] == 0
+
+
+def test_manual_non_production_stake_is_flagged():
+    graded = pd.DataFrame([{"league": "MLB", "home_team": "A", "away_team": "B", "Pick Taken": "Over 8.5", "Pick_Outcome": "WIN", "decimal_odds": 2.0, "actual_home_score": 6, "actual_away_score": 4, "Status": "No Play", "Stake": 15}])
+    realized, _, _ = build_realized_strategy_lab(graded, strategy_mode=REALIZED_MODE_PRODUCTION_CARD, default_stake=10)
+    assert bool(realized.loc[0, "manual_non_production_stake_flag"]) is True
+    assert realized.loc[0, "stake_warning"] == "Non-production row has manual stake"
+
+
+def test_strategy_lab_preserves_pick_identity_fields():
+    graded = pd.DataFrame([{"league": "MLB", "home_team": "A", "away_team": "B", "Pick Taken": "Over 8.5", "Pick_Outcome": "WIN", "decimal_odds": 2.0, "actual_home_score": 6, "actual_away_score": 4}])
+    strategy = pd.DataFrame([{"league": "MLB", "home_team": "A", "away_team": "B", "Pick Taken": "Over 8.5", "pick_id": "pick-1", "canonical_pick_key": "k1", "market_line_used": 8.5, "market_line_source": "live", "line_consistency_flag": True, "line_event_identity_match_flag": True}])
+    realized, _, _ = build_realized_strategy_lab(graded, strategy)
+    assert realized.loc[0, "pick_id"] == "pick-1"
+    assert realized.loc[0, "canonical_pick_key"] == "k1"
+    assert float(realized.loc[0, "market_line_used"]) == 8.5
 
 
 def test_total_slate_exposure_cap_works():
@@ -311,7 +349,7 @@ def test_strategy_lab_theoretical_render_still_works(monkeypatch):
     portfolio_df = pd.DataFrame({"recommended_bet": [10, 20]})
     parlays_df = pd.DataFrame({"parlay": ["A+B"]})
 
-    dash.render_strategy_lab(analysis_df, portfolio_df, parlays_df, {"bankroll_curves": [[100, 101, 102]]})
+    dash.render_strategy_lab(analysis_df, analysis_df, portfolio_df, parlays_df, {"bankroll_curves": [[100, 101, 102]]})
 
     assert ("tabs", ("Theoretical", "Realized")) in calls
     assert "bar_chart" in calls
