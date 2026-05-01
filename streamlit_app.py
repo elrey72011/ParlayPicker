@@ -92,10 +92,15 @@ def _enrich_with_kalshi_safe(df: pd.DataFrame) -> tuple[pd.DataFrame, str | None
 
 
 def _safe_str_series(df: pd.DataFrame, col: str, default: str = "") -> pd.Series:
-    if df is None or df.empty:
+    if df is None:
         return pd.Series(dtype="string")
+    if df.empty:
+        return pd.Series(index=df.index, dtype="string")
     if col in df.columns:
-        return df[col].fillna(default).astype("string")
+        series = df[col]
+        if isinstance(series.dtype, pd.CategoricalDtype):
+            series = series.astype("object")
+        return series.astype("string").fillna(default)
     return pd.Series([default] * len(df), index=df.index, dtype="string")
 
 
