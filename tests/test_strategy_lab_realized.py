@@ -349,7 +349,7 @@ def test_strategy_lab_theoretical_render_still_works(monkeypatch):
     portfolio_df = pd.DataFrame({"recommended_bet": [10, 20]})
     parlays_df = pd.DataFrame({"parlay": ["A+B"]})
 
-    dash.render_strategy_lab(analysis_df, portfolio_df, parlays_df, {"bankroll_curves": [[100, 101, 102]]})
+    dash.render_strategy_lab(analysis_df, analysis_df, portfolio_df, parlays_df, {"bankroll_curves": [[100, 101, 102]]})
 
     assert ("tabs", ("Theoretical", "Realized")) in calls
     assert "bar_chart" in calls

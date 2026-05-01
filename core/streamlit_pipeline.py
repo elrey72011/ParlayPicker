@@ -4756,6 +4756,23 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
     portfolio = portfolio[_string_series(portfolio, "best_pick").str.strip().str.len() > 0].copy()
     if portfolio.empty:
         return pd.DataFrame()
+    status = _string_series(portfolio, "Pick_Status").str.strip().str.lower()
+    line_source = _string_series(portfolio, "market_line_source").str.strip().str.lower()
+    line_warning = _string_series(portfolio, "line_provenance_warning").str.strip()
+    best_pick_norm = _string_series(portfolio, "best_pick").str.strip().str.lower()
+    line_used = pd.to_numeric(portfolio.get("market_line_used", pd.NA), errors="coerce")
+    line_consistent = pd.Series(portfolio.get("line_consistency_flag", True), index=portfolio.index).fillna(True).astype(bool)
+    event_identity_ok = pd.Series(portfolio.get("line_event_identity_match_flag", True), index=portfolio.index).fillna(True).astype(bool)
+    production_eligible = (
+        status.eq("actionable")
+        & line_source.eq("live")
+        & line_warning.eq("")
+        & line_used.notna()
+        & line_consistent
+        & event_identity_ok
+        & (~best_pick_norm.str.contains("unresolved", na=False))
+    )
+    portfolio["production_eligible"] = production_eligible
 
     portfolio["decimal_odds"] = _numeric_series(portfolio, "decimal_odds").fillna(
         _numeric_series(portfolio, "odds_american", -110.0).apply(american_to_decimal)
@@ -4763,11 +4780,29 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
     portfolio = add_kelly_bet_sizing(portfolio, bankroll=bankroll, fraction=0.25)
     if "recommended_bet" not in portfolio.columns:
         portfolio["recommended_bet"] = 0.0
+    portfolio["raw_kelly_amount"] = pd.to_numeric(portfolio["recommended_bet"], errors="coerce").fillna(0.0)
+    portfolio.loc[~portfolio["production_eligible"], "recommended_bet"] = 0.0
+
+    max_pick = float(bankroll) * 0.04
+    max_slate = float(bankroll) * 0.25
+    pre_cap = portfolio["recommended_bet"].copy()
+    portfolio["recommended_bet"] = portfolio["recommended_bet"].clip(lower=0.0, upper=max_pick)
+    portfolio["kelly_cap_reason"] = ""
+    portfolio.loc[~portfolio["production_eligible"], "kelly_cap_reason"] = "Non-production row"
+    portfolio.loc[(pre_cap > max_pick) & portfolio["production_eligible"], "kelly_cap_reason"] = "Capped by pick exposure"
+    capped_total = float(portfolio["recommended_bet"].sum())
+    if capped_total > max_slate and capped_total > 0:
+        scale = max_slate / capped_total
+        portfolio.loc[portfolio["production_eligible"], "recommended_bet"] = portfolio.loc[portfolio["production_eligible"], "recommended_bet"] * scale
+        portfolio.loc[portfolio["production_eligible"], "kelly_cap_reason"] = portfolio.loc[portfolio["production_eligible"], "kelly_cap_reason"].replace("", "Scaled by slate exposure")
+    portfolio["production_bet_amount"] = portfolio["recommended_bet"]
 
     cols = [
         "league", "home_team", "away_team", "best_pick",
         "calibrated_probability", "expected_value", "edge",
-        "decimal_odds", "recommended_bet",
+        "decimal_odds", "raw_kelly_amount", "production_bet_amount", "recommended_bet", "kelly_cap_reason", "Pick_Status",
+        "market_line_used", "market_line_source", "line_consistency_flag", "line_event_identity_match_flag", "line_provenance_warning",
+        "export_run_id", "pick_id", "canonical_pick_key", "production_eligible",
     ]
     for col in cols:
         if col not in portfolio.columns:
