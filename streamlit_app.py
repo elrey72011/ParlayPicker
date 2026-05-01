@@ -459,6 +459,36 @@ def _sync_ml_probabilities(analysis_df: pd.DataFrame, pipeline_best_picks_df: pd
     merged = merged.drop(columns=[c for c in ["ml_probability_sync", "_merge_home", "_merge_away"] if c in merged.columns])
     return merged
 
+
+def _attach_kelly_to_best_picks(best_picks_df: pd.DataFrame, portfolio_df: pd.DataFrame | None, diagnostics: dict) -> pd.DataFrame:
+    if best_picks_df is None or best_picks_df.empty:
+        return best_picks_df
+    out = best_picks_df.copy()
+    kelly_map = pd.Series(dtype=float)
+    if portfolio_df is not None and not portfolio_df.empty and "canonical_pick_key" in portfolio_df.columns and "production_bet_amount" in portfolio_df.columns:
+        kelly_map = (
+            portfolio_df.dropna(subset=["canonical_pick_key"])
+            .drop_duplicates(subset=["canonical_pick_key"], keep="first")
+            .set_index("canonical_pick_key")["production_bet_amount"]
+        )
+    canonical_key = _safe_str_series(out, "canonical_pick_key").str.strip()
+    out["Kelly_Bet_Size"] = canonical_key.map(kelly_map).fillna(0.0)
+    status = _safe_str_series(out, "Pick_Status").str.strip()
+    line_source = _safe_str_series(out, "market_line_source").str.strip().str.lower()
+    line_consistent = pd.Series(out.get("line_consistency_flag", True), index=out.index).fillna(True).astype(bool)
+    event_ok = pd.Series(out.get("line_event_identity_match_flag", True), index=out.index).fillna(True).astype(bool)
+    pick_text = _safe_str_series(out, "best_pick").str.lower()
+    prod_eligible_col = pd.Series(out.get("production_eligible", True), index=out.index).fillna(True).astype(bool)
+    safe_mask = status.eq("Actionable") & prod_eligible_col & line_source.eq("live") & line_consistent & event_ok & (~pick_text.str.contains("unresolved", na=False))
+    out.loc[~safe_mask, "Kelly_Bet_Size"] = 0.0
+    out["Kelly_Bet_Size"] = pd.to_numeric(out["Kelly_Bet_Size"], errors="coerce").fillna(0.0).round(2)
+    diagnostics["kelly_attached_to_best_picks_count"] = int((out["Kelly_Bet_Size"] > 0).sum())
+    diagnostics["kelly_missing_key_count"] = int(canonical_key.eq("").sum())
+    diagnostics["kelly_positive_non_actionable_count"] = int(((out["Kelly_Bet_Size"] > 0) & (~status.eq("Actionable"))).sum())
+    diagnostics["kelly_best_picks_total_amount"] = float(out["Kelly_Bet_Size"].sum())
+    diagnostics["kelly_best_picks_max_amount"] = float(out["Kelly_Bet_Size"].max())
+    return out
+
 def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
     """Run the full analysis pipeline. Returns (state_updates, warnings, errors).
     Contains NO st.* calls.
@@ -629,6 +659,7 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
         per_leg[f"parlays_{lc}_df"] = parlay_slice[parlay_columns] if not parlay_slice.empty else pd.DataFrame(columns=parlay_columns)
 
     portfolio_df = optimize_portfolio_allocation(best_picks_df, bankroll=float(controls["bankroll"]))
+    best_picks_df = _attach_kelly_to_best_picks(best_picks_df, portfolio_df, diagnostics)
 
     required_portfolio_cols = {"calibrated_probability", "decimal_odds", "recommended_bet"}
     if portfolio_df is not None and not portfolio_df.empty and required_portfolio_cols.issubset(set(portfolio_df.columns)):
@@ -1222,7 +1253,7 @@ def main() -> None:
 
             target_export_cols = [
                 "Pick_Status", "Status_Reason", "Triple_Filter_Rank", "Pick_Quality", "parlay_rank", "league", "Home", "Away", "Local Date",
-                "Commence (Local)", "market_type", "candidate_source", "orientation_source", "upload_match_reason", "best_pick", "WinProbability", "expected_value",
+                "Commence (Local)", "market_type", "candidate_source", "orientation_source", "upload_match_reason", "best_pick", "Kelly_Bet_Size", "WinProbability", "expected_value",
                 "edge", "Conviction_Score", "consensus_agreement", "odds_american", "odds_source", "market_probability",
                 "kalshi_probability", "ml_probability", "gemini_explanation", "gemini_risk_notes",
                 "status_metric_basis", "effective_expected_value", "effective_edge", "effective_win_probability",

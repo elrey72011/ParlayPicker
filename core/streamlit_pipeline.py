@@ -289,7 +289,7 @@ def ensure_best_pick_export_columns(
 
 BEST_PICK_COLUMNS = [
     "Triple_Filter_Rank", "parlay_rank",
-    "league", "home_team", "away_team", "game_date", "game_time_est", "market_type", "candidate_source", "orientation_source", "upload_match_reason", "best_pick", "Pick_Status", "Status_Reason",
+    "league", "home_team", "away_team", "game_date", "game_time_est", "market_type", "candidate_source", "orientation_source", "upload_match_reason", "best_pick", "Kelly_Bet_Size", "Pick_Status", "Status_Reason",
     "calibrated_probability", "expected_value", "edge", "consensus_agreement",
     "odds_american", "odds_source", "market_probability", "ml_probability", "display_probability",
     "kalshi_probability", "kalshi_match_status", "kalshi_match_reason",
