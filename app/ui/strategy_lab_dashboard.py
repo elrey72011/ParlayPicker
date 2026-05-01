@@ -15,6 +15,7 @@ from app_core.strategy_lab_realized import (
 
 def _render_theoretical_strategy_lab(
     analysis_df: pd.DataFrame,
+    best_picks_df: pd.DataFrame,
     portfolio_df: pd.DataFrame,
     parlays_df: pd.DataFrame,
     simulation_results: dict,
@@ -29,8 +30,10 @@ def _render_theoretical_strategy_lab(
             st.write("No edge data available.")
 
     with right:
-        st.markdown("**Kelly bet sizes**")
-        if portfolio_df is not None and not portfolio_df.empty and "recommended_bet" in portfolio_df.columns:
+        st.markdown("**Kelly bet sizes (Production-capped by default)**")
+        if portfolio_df is not None and not portfolio_df.empty and "production_bet_amount" in portfolio_df.columns:
+            st.bar_chart(portfolio_df.set_index(portfolio_df.index.astype(str))["production_bet_amount"])
+        elif portfolio_df is not None and not portfolio_df.empty and "recommended_bet" in portfolio_df.columns:
             st.bar_chart(portfolio_df.set_index(portfolio_df.index.astype(str))["recommended_bet"])
         else:
             st.write("No Kelly sizing available.")
@@ -51,8 +54,28 @@ def _render_theoretical_strategy_lab(
     else:
         st.write("No simulation output available.")
 
-    st.markdown("**Top +EV bets**")
-    if "expected_value" in analysis_df.columns:
+    st.markdown("**Top +EV bets (final best picks only)**")
+    prod = best_picks_df.copy() if best_picks_df is not None else pd.DataFrame()
+    if not prod.empty:
+        prod["source_table"] = "final_best_picks"
+        pick_status = pd.Series(prod.get("Pick_Status", ""), index=prod.index).astype(str)
+        market_line_source = pd.Series(prod.get("market_line_source", ""), index=prod.index).astype(str)
+        line_warning = pd.Series(prod.get("line_provenance_warning", ""), index=prod.index).astype(str)
+        best_pick = pd.Series(prod.get("best_pick", ""), index=prod.index).astype(str)
+        market_line_used = pd.to_numeric(pd.Series(prod.get("market_line_used", pd.NA), index=prod.index), errors="coerce")
+        line_consistent = pd.Series(prod.get("line_consistency_flag", True), index=prod.index).fillna(True).astype(bool)
+        event_identity_ok = pd.Series(prod.get("line_event_identity_match_flag", True), index=prod.index).fillna(True).astype(bool)
+        prod = prod[
+            (pick_status == "Actionable")
+            & line_consistent
+            & event_identity_ok
+            & (market_line_source.str.lower() == "live")
+            & (line_warning.str.strip() == "")
+            & (market_line_used.notna())
+            & (~best_pick.str.lower().str.contains("unresolved", na=False))
+        ].copy()
+        st.dataframe(prod.nlargest(15, "expected_value"), width="stretch")
+    elif "expected_value" in analysis_df.columns:
         st.dataframe(analysis_df.nlargest(15, "expected_value"), width="stretch")
 
     st.markdown("**Best parlays**")
@@ -169,6 +192,7 @@ def _render_realized_strategy_lab(analysis_df: pd.DataFrame) -> None:
 
 def render_strategy_lab(
     analysis_df: pd.DataFrame,
+    best_picks_df: pd.DataFrame,
     portfolio_df: pd.DataFrame,
     parlays_df: pd.DataFrame,
     simulation_results: dict,
@@ -181,6 +205,6 @@ def render_strategy_lab(
 
     theoretical_tab, realized_tab = st.tabs(["Theoretical", "Realized"])
     with theoretical_tab:
-        _render_theoretical_strategy_lab(analysis_df, portfolio_df, parlays_df, simulation_results)
+        _render_theoretical_strategy_lab(analysis_df, best_picks_df, portfolio_df, parlays_df, simulation_results)
     with realized_tab:
         _render_realized_strategy_lab(analysis_df)
