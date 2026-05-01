@@ -133,7 +133,31 @@ REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
     "live_event_match_key",
     "line_candidate_count",
     "selected_live_event_source",
+    "export_run_id",
+    "pick_id",
+    "canonical_pick_key",
 ]
+
+
+def _normalize_pick_identity_text(value: object) -> str:
+    if pd.isna(value):
+        return ""
+    return " ".join(str(value).strip().lower().split())
+
+
+def _build_canonical_pick_key(row: pd.Series) -> str:
+    league = _normalize_pick_identity_text(row.get("league", ""))
+    home = _normalize_pick_identity_text(row.get("home_team", row.get("Home", "")))
+    away = _normalize_pick_identity_text(row.get("away_team", row.get("Away", "")))
+    game_date = _normalize_pick_identity_text(row.get("game_date", row.get("Game Date", "")))
+    market_type = _normalize_pick_identity_text(row.get("market_type", ""))
+    market_family = market_type.split("_")[0] if market_type else ""
+    best_pick = _normalize_pick_identity_text(row.get("best_pick", row.get("Best Pick", "")))
+    direction = "over" if best_pick.startswith("over ") else "under" if best_pick.startswith("under ") else ""
+    line_used = pd.to_numeric(row.get("market_line_used", pd.NA), errors="coerce")
+    line_text = "" if pd.isna(line_used) else f"{float(line_used):.4f}"
+    line_source = _normalize_pick_identity_text(row.get("market_line_source", ""))
+    return "::".join([league, home, away, game_date, market_type, market_family, direction, line_text, best_pick, line_text, line_source])
 
 
 def ensure_best_pick_export_columns(
@@ -181,6 +205,9 @@ def ensure_best_pick_export_columns(
         "live_event_match_key": "",
         "line_candidate_count": 0,
         "selected_live_event_source": "",
+        "export_run_id": "",
+        "pick_id": "",
+        "canonical_pick_key": "",
     }
 
     initially_missing_cols = [c for c in req_cols if c not in out.columns]
@@ -213,6 +240,18 @@ def ensure_best_pick_export_columns(
         out["line_event_identity_match_flag"] = out["line_event_identity_match_flag"].fillna(True).astype(bool)
     if "line_candidate_count" in out.columns:
         out["line_candidate_count"] = pd.to_numeric(out["line_candidate_count"], errors="coerce").fillna(0).astype(int)
+    if "export_run_id" in out.columns:
+        out["export_run_id"] = out["export_run_id"].fillna("").astype(str)
+    if "pick_id" in out.columns:
+        out["pick_id"] = out["pick_id"].fillna("").astype(str)
+    if "canonical_pick_key" in out.columns:
+        out["canonical_pick_key"] = out["canonical_pick_key"].fillna("").astype(str)
+    if "export_run_id" in out.columns and out["export_run_id"].eq("").all():
+        out["export_run_id"] = pd.Timestamp.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    if "pick_id" in out.columns and out["pick_id"].eq("").any():
+        out.loc[out["pick_id"].eq(""), "pick_id"] = out.index.to_series().map(lambda idx: f"pick_{int(idx) + 1:04d}")
+    if "canonical_pick_key" in out.columns and out["canonical_pick_key"].eq("").any():
+        out.loc[out["canonical_pick_key"].eq(""), "canonical_pick_key"] = out[out["canonical_pick_key"].eq("")].apply(_build_canonical_pick_key, axis=1)
 
     if diagnostics_out is not None:
         diag_status = str(diagnostics_out.get("nba_stats_fetch_status", "")).strip().lower()
