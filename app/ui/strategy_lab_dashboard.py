@@ -13,8 +13,53 @@ from app_core.strategy_lab_realized import (
 )
 
 
+def _build_production_top_ev(best_picks_df: pd.DataFrame, portfolio_df: pd.DataFrame | None = None) -> tuple[pd.DataFrame, dict]:
+    base = best_picks_df.copy() if best_picks_df is not None else pd.DataFrame()
+    if base.empty:
+        return pd.DataFrame(), {"top_ev_source_table": "final_best_picks", "top_ev_raw_candidate_count": 0, "top_ev_final_best_picks_count": 0}
+    out = base.copy()
+    out["source_table"] = "final_best_picks"
+    out["pick_status_norm"] = pd.Series(out.get("Pick_Status", ""), index=out.index).astype(str).str.strip()
+    out["market_line_source_norm"] = pd.Series(out.get("market_line_source", ""), index=out.index).astype(str).str.strip().str.lower()
+    out["line_warning_norm"] = pd.Series(out.get("line_provenance_warning", ""), index=out.index).astype(str).str.strip()
+    out["best_pick_norm"] = pd.Series(out.get("best_pick", ""), index=out.index).astype(str).str.strip().str.lower()
+    out["market_line_used_num"] = pd.to_numeric(pd.Series(out.get("market_line_used", pd.NA), index=out.index), errors="coerce")
+    out["line_consistent"] = pd.Series(out.get("line_consistency_flag", True), index=out.index).fillna(True).astype(bool)
+    out["event_identity_ok"] = pd.Series(out.get("line_event_identity_match_flag", True), index=out.index).fillna(True).astype(bool)
+    out["has_pick_id"] = pd.Series(out.get("pick_id", ""), index=out.index).astype(str).str.strip().ne("")
+    out["has_canonical_key"] = pd.Series(out.get("canonical_pick_key", ""), index=out.index).astype(str).str.strip().ne("")
+    out["production_eligible"] = (
+        out["pick_status_norm"].eq("Actionable")
+        & out["market_line_source_norm"].eq("live")
+        & out["line_consistent"]
+        & out["event_identity_ok"]
+        & out["market_line_used_num"].notna()
+        & out["line_warning_norm"].eq("")
+        & (~out["best_pick_norm"].str.contains("unresolved", na=False))
+        & out["has_pick_id"]
+        & out["has_canonical_key"]
+    )
+    merged = out
+    if portfolio_df is not None and not portfolio_df.empty and "canonical_pick_key" in portfolio_df.columns:
+        kcols = ["canonical_pick_key", "raw_kelly_amount", "production_bet_amount", "kelly_cap_reason", "production_eligible"]
+        kcols = [c for c in kcols if c in portfolio_df.columns]
+        merged = out.merge(portfolio_df[kcols], on="canonical_pick_key", how="left", suffixes=("", "_portfolio"))
+    final = merged[merged["production_eligible"]].copy()
+    diagnostics = {
+        "top_ev_source_table": "final_best_picks",
+        "top_ev_raw_candidate_count": int(len(base)),
+        "top_ev_final_best_picks_count": int(len(base)),
+        "top_ev_production_eligible_count": int(final.shape[0]),
+        "top_ev_excluded_non_actionable_count": int((out["pick_status_norm"] != "Actionable").sum()),
+        "top_ev_excluded_rejected_line_count": int((out["market_line_source_norm"] == "rejected_live").sum()),
+        "top_ev_missing_identity_count": int((~out["has_pick_id"] | ~out["has_canonical_key"]).sum()),
+    }
+    return final, diagnostics
+
+
 def _render_theoretical_strategy_lab(
     analysis_df: pd.DataFrame,
+    best_picks_df: pd.DataFrame,
     portfolio_df: pd.DataFrame,
     parlays_df: pd.DataFrame,
     simulation_results: dict,
@@ -29,8 +74,10 @@ def _render_theoretical_strategy_lab(
             st.write("No edge data available.")
 
     with right:
-        st.markdown("**Kelly bet sizes**")
-        if portfolio_df is not None and not portfolio_df.empty and "recommended_bet" in portfolio_df.columns:
+        st.markdown("**Kelly bet sizes (Production-capped by default)**")
+        if portfolio_df is not None and not portfolio_df.empty and "production_bet_amount" in portfolio_df.columns:
+            st.bar_chart(portfolio_df.set_index(portfolio_df.index.astype(str))["production_bet_amount"])
+        elif portfolio_df is not None and not portfolio_df.empty and "recommended_bet" in portfolio_df.columns:
             st.bar_chart(portfolio_df.set_index(portfolio_df.index.astype(str))["recommended_bet"])
         else:
             st.write("No Kelly sizing available.")
@@ -51,9 +98,23 @@ def _render_theoretical_strategy_lab(
     else:
         st.write("No simulation output available.")
 
-    st.markdown("**Top +EV bets**")
-    if "expected_value" in analysis_df.columns:
-        st.dataframe(analysis_df.nlargest(15, "expected_value"), width="stretch")
+    st.markdown("**Top +EV bets (final best picks only)**")
+    prod, top_ev_diag = _build_production_top_ev(best_picks_df, portfolio_df)
+    if not prod.empty:
+        st.dataframe(prod.nlargest(15, "expected_value"), width="stretch")
+    else:
+        st.info("No production-eligible Top +EV rows in final best picks.")
+    st.caption(
+        f"top_ev_source_table={top_ev_diag.get('top_ev_source_table','final_best_picks')} | "
+        f"top_ev_final_best_picks_count={top_ev_diag.get('top_ev_final_best_picks_count',0)} | "
+        f"top_ev_production_eligible_count={top_ev_diag.get('top_ev_production_eligible_count',0)}"
+    )
+    if portfolio_df is not None and not portfolio_df.empty:
+        st.caption(
+            f"kelly_chart_amount_basis=production_bet_amount | "
+            f"total_raw_kelly_amount={float(pd.to_numeric(portfolio_df.get('raw_kelly_amount', 0.0), errors='coerce').fillna(0.0).sum()):.2f} | "
+            f"total_production_bet_amount={float(pd.to_numeric(portfolio_df.get('production_bet_amount', 0.0), errors='coerce').fillna(0.0).sum()):.2f}"
+        )
 
     st.markdown("**Best parlays**")
     if parlays_df is not None and not parlays_df.empty:
@@ -169,6 +230,7 @@ def _render_realized_strategy_lab(analysis_df: pd.DataFrame) -> None:
 
 def render_strategy_lab(
     analysis_df: pd.DataFrame,
+    best_picks_df: pd.DataFrame,
     portfolio_df: pd.DataFrame,
     parlays_df: pd.DataFrame,
     simulation_results: dict,
@@ -181,6 +243,6 @@ def render_strategy_lab(
 
     theoretical_tab, realized_tab = st.tabs(["Theoretical", "Realized"])
     with theoretical_tab:
-        _render_theoretical_strategy_lab(analysis_df, portfolio_df, parlays_df, simulation_results)
+        _render_theoretical_strategy_lab(analysis_df, best_picks_df, portfolio_df, parlays_df, simulation_results)
     with realized_tab:
         _render_realized_strategy_lab(analysis_df)
