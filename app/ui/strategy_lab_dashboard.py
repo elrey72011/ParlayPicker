@@ -57,6 +57,58 @@ def _build_production_top_ev(best_picks_df: pd.DataFrame, portfolio_df: pd.DataF
     return final, diagnostics
 
 
+def _build_kelly_export(best_picks_df: pd.DataFrame, portfolio_df: pd.DataFrame | None = None) -> tuple[pd.DataFrame, dict]:
+    base = best_picks_df.copy() if best_picks_df is not None else pd.DataFrame()
+    if base.empty:
+        return pd.DataFrame(), {}
+    out = base.copy()
+    out["source_table"] = "final_best_picks"
+    for col in ["export_run_id", "pick_id", "canonical_pick_key", "market_type", "Pick_Status", "market_line_used", "market_line_source", "line_consistency_flag", "line_event_identity_match_flag", "best_pick"]:
+        if col not in out.columns:
+            out[col] = pd.NA
+    for col in ["raw_kelly_amount", "production_bet_amount", "kelly_cap_reason", "production_eligible"]:
+        if col not in out.columns:
+            out[col] = pd.NA
+    if portfolio_df is not None and not portfolio_df.empty:
+        p = portfolio_df.copy()
+        for col in ["canonical_pick_key", "pick_id", "raw_kelly_amount", "production_bet_amount", "kelly_cap_reason", "production_eligible"]:
+            if col not in p.columns:
+                p[col] = pd.NA
+        p_key = p.dropna(subset=["canonical_pick_key"]).drop_duplicates("canonical_pick_key", keep="first").set_index("canonical_pick_key")
+        for col in ["raw_kelly_amount", "production_bet_amount", "kelly_cap_reason", "production_eligible"]:
+            out[col] = pd.Series(out["canonical_pick_key"]).map(p_key[col]) if col in p_key.columns else out[col]
+        missing_key = out["production_bet_amount"].isna()
+        if missing_key.any():
+            p_id = p.dropna(subset=["pick_id"]).drop_duplicates("pick_id", keep="first").set_index("pick_id")
+            for col in ["raw_kelly_amount", "production_bet_amount", "kelly_cap_reason", "production_eligible"]:
+                if col in p_id.columns:
+                    out.loc[missing_key, col] = pd.Series(out.loc[missing_key, "pick_id"]).map(p_id[col]).values
+    # Final safety pass after alignment
+    status = pd.Series(out.get("Pick_Status", ""), index=out.index).astype(str).str.strip()
+    line_source = pd.Series(out.get("market_line_source", ""), index=out.index).astype(str).str.strip().str.lower()
+    line_consistent = pd.Series(out.get("line_consistency_flag", True), index=out.index).fillna(True).astype(bool)
+    event_ok = pd.Series(out.get("line_event_identity_match_flag", True), index=out.index).fillna(True).astype(bool)
+    pick_text = pd.Series(out.get("best_pick", ""), index=out.index).astype(str).str.lower()
+    eligible = pd.Series(out.get("production_eligible", False), index=out.index).fillna(False).astype(bool)
+    safety_ok = status.eq("Actionable") & eligible & line_source.eq("live") & line_consistent & event_ok & (~pick_text.str.contains("unresolved", na=False))
+    out["production_bet_amount"] = pd.to_numeric(pd.Series(out.get("production_bet_amount", 0.0), index=out.index), errors="coerce").fillna(0.0)
+    out.loc[~safety_ok, "production_bet_amount"] = 0.0
+    out["production_eligible"] = eligible
+    diag = {
+        "kelly_positive_non_actionable_count": int(((out["production_bet_amount"] > 0) & (~status.eq("Actionable"))).sum()),
+        "kelly_positive_rejected_line_count": int(((out["production_bet_amount"] > 0) & (~line_source.eq("live"))).sum()),
+        "kelly_positive_unresolved_count": int(((out["production_bet_amount"] > 0) & pick_text.str.contains("unresolved", na=False)).sum()),
+        "kelly_positive_missing_identity_count": int(((out["production_bet_amount"] > 0) & (pd.Series(out.get("canonical_pick_key", ""), index=out.index).astype(str).str.strip() == "")).sum()),
+    }
+    keep_cols = [
+        "source_table", "export_run_id", "pick_id", "canonical_pick_key", "league", "home_team", "away_team", "market_type", "best_pick",
+        "Pick_Status", "market_line_used", "market_line_source", "line_consistency_flag", "line_event_identity_match_flag", "production_eligible",
+        "raw_kelly_amount", "production_bet_amount", "kelly_cap_reason",
+    ]
+    keep_cols = [c for c in keep_cols if c in out.columns]
+    return out[keep_cols].copy(), diag
+
+
 def _render_theoretical_strategy_lab(
     analysis_df: pd.DataFrame,
     best_picks_df: pd.DataFrame,
@@ -75,10 +127,10 @@ def _render_theoretical_strategy_lab(
 
     with right:
         st.markdown("**Kelly bet sizes (Production-capped by default)**")
-        if portfolio_df is not None and not portfolio_df.empty and "production_bet_amount" in portfolio_df.columns:
-            st.bar_chart(portfolio_df.set_index(portfolio_df.index.astype(str))["production_bet_amount"])
-        elif portfolio_df is not None and not portfolio_df.empty and "recommended_bet" in portfolio_df.columns:
-            st.bar_chart(portfolio_df.set_index(portfolio_df.index.astype(str))["recommended_bet"])
+        kelly_export_df, kelly_diag = _build_kelly_export(best_picks_df, portfolio_df)
+        chart_df = kelly_export_df[kelly_export_df["production_bet_amount"] > 0].copy() if not kelly_export_df.empty else pd.DataFrame()
+        if not chart_df.empty:
+            st.bar_chart(chart_df.set_index("canonical_pick_key")["production_bet_amount"])
         else:
             st.write("No Kelly sizing available.")
 
@@ -114,6 +166,19 @@ def _render_theoretical_strategy_lab(
             f"kelly_chart_amount_basis=production_bet_amount | "
             f"total_raw_kelly_amount={float(pd.to_numeric(portfolio_df.get('raw_kelly_amount', 0.0), errors='coerce').fillna(0.0).sum()):.2f} | "
             f"total_production_bet_amount={float(pd.to_numeric(portfolio_df.get('production_bet_amount', 0.0), errors='coerce').fillna(0.0).sum()):.2f}"
+        )
+        st.caption(
+            f"kelly_positive_non_actionable_count={kelly_diag.get('kelly_positive_non_actionable_count',0)} | "
+            f"kelly_positive_rejected_line_count={kelly_diag.get('kelly_positive_rejected_line_count',0)} | "
+            f"kelly_positive_unresolved_count={kelly_diag.get('kelly_positive_unresolved_count',0)} | "
+            f"kelly_positive_missing_identity_count={kelly_diag.get('kelly_positive_missing_identity_count',0)}"
+        )
+        st.download_button(
+            "Export Kelly Bet Sizes",
+            kelly_export_df.to_csv(index=False),
+            "kelly_bet_sizes_export.csv",
+            mime="text/csv",
+            key="download_kelly_bet_sizes_csv",
         )
 
     st.markdown("**Best parlays**")
