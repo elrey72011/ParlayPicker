@@ -717,10 +717,15 @@ def _enforce_identity_string_dtype(df: pd.DataFrame, cols: list[str]) -> pd.Data
 
 
 def _string_series(df: pd.DataFrame, col: str, default: str = "") -> pd.Series:
-    if df is None or df.empty:
+    if df is None:
         return pd.Series(dtype="string")
+    if df.empty:
+        return pd.Series([default] * len(df), index=df.index, dtype="string")
     if col in df.columns:
-        return df[col].fillna(default).astype("string")
+        series = df[col]
+        if isinstance(series.dtype, pd.CategoricalDtype):
+            series = series.astype("object")
+        return series.astype("string").fillna(default)
     return pd.Series([default] * len(df), index=df.index, dtype="string")
 
 
@@ -4756,6 +4761,8 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
     portfolio = portfolio[_string_series(portfolio, "best_pick").str.strip().str.len() > 0].copy()
     if portfolio.empty:
         return pd.DataFrame()
+    if "Pick_Status" not in portfolio.columns:
+        portfolio["Pick_Status"] = ""
     status = _string_series(portfolio, "Pick_Status").str.strip().str.lower()
     line_source = _string_series(portfolio, "market_line_source").str.strip().str.lower()
     line_warning = _string_series(portfolio, "line_provenance_warning").str.strip()
