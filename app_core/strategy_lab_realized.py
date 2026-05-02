@@ -15,6 +15,7 @@ REALIZED_MODE_ACTIONABLE_PLUS_HIGH_VARIANCE = "Actionable + High Variance/Specul
 REALIZED_MODE_ALL_GRADED = "All graded bets"
 REALIZED_MODE_PRODUCTION_CARD = "Production Card"
 REALIZED_MODE_CUSTOM = "Custom status filter"
+PERFORMANCE_GUARD_ACTION_ZERO_KELLY_OR_WATCHLIST = "zero_kelly_or_watchlist"
 
 REALIZED_STRATEGY_MODE_ORDER = [
     REALIZED_MODE_ACTIONABLE_ONLY,
@@ -30,6 +31,7 @@ STATUS_BUCKET_ORDER = [
     STATUS_BUCKET_BELOW_THRESHOLD,
     STATUS_BUCKET_NO_PLAY,
 ]
+NON_PRODUCTION_BUCKETS = [STATUS_BUCKET_HIGH_VARIANCE, STATUS_BUCKET_BELOW_THRESHOLD, STATUS_BUCKET_NO_PLAY]
 
 
 def _first_present(row: pd.Series, columns: list[str]) -> Any:
@@ -231,6 +233,12 @@ def compute_mode_comparison(realized_df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _group_summary(df: pd.DataFrame, keys: list[str]) -> pd.DataFrame:
+    if df.empty:
+        return pd.DataFrame(columns=keys + ["Bet Count", "Wins", "Losses", "Pushes", "Hit Rate", "Total Staked", "Gross Returned", "Net P/L", "ROI"])
+    return df.groupby(keys, dropna=False).apply(_summarize_subset).apply(pd.Series).reset_index()
+
+
 def build_realized_strategy_lab(
     graded_df: pd.DataFrame,
     strategy_source_df: pd.DataFrame | None = None,
@@ -239,6 +247,11 @@ def build_realized_strategy_lab(
     starting_bankroll: float = 0.0,
     strategy_mode: str = REALIZED_MODE_ACTIONABLE_ONLY,
     custom_statuses: list[str] | None = None,
+    enable_performance_guard: bool = True,
+    min_guard_sample_size: int = 5,
+    performance_guard_min_win_rate: float = 0.50,
+    performance_guard_min_roi: float = 0.00,
+    performance_guard_action: str = PERFORMANCE_GUARD_ACTION_ZERO_KELLY_OR_WATCHLIST,
 ) -> Tuple[pd.DataFrame, Dict[str, float], Dict[str, pd.DataFrame | int]]:
     """
     Build realized Strategy Lab rows strictly from a graded source (same as recap),
@@ -272,6 +285,10 @@ def build_realized_strategy_lab(
         lambda row: _first_present(row, ["Pick Taken", "Best Pick", "best_pick", "Pick"]),
         axis=1,
     )
+    realized["recap_outcome"] = pd.Series(realized.get("Pick_Outcome", pd.NA), index=realized.index).astype(str).str.upper().str.strip()
+    realized["grading_match_source"] = "none"
+    realized["grading_conflict_flag"] = False
+    realized["grading_conflict_reason"] = ""
 
     if strategy_source_df is not None and not strategy_source_df.empty:
         src = strategy_source_df.copy()
@@ -289,7 +306,12 @@ def build_realized_strategy_lab(
     else:
         realized["Strategy Pick"] = pd.NA
 
-    realized["Result"] = realized.get("Pick_Outcome", "N/A").astype(str).str.upper().str.strip()
+    existing_result = pd.Series(realized.get("Result", pd.NA), index=realized.index).astype(str).str.upper().str.strip()
+    recap_result = realized["recap_outcome"]
+    conflict_mask = existing_result.isin(VALID_RESULTS) & recap_result.isin(VALID_RESULTS) & (existing_result != recap_result)
+    realized.loc[conflict_mask, "grading_conflict_flag"] = True
+    realized.loc[conflict_mask, "grading_conflict_reason"] = "Strategy Lab result disagreed with Performance Recap; overwritten."
+    realized["Result"] = recap_result
     realized["Result"] = realized["Result"].where(realized["Result"].isin(VALID_RESULTS), "UNGRADED")
     realized["Status Bucket"] = realized.apply(
         lambda row: _normalize_status(_first_present(row, ["Status", "status", "Recommendation Tier", "recommendation_tier"])),
@@ -307,6 +329,9 @@ def build_realized_strategy_lab(
     realized["strategy_pick_key"] = realized["canonical_pick_key"].where(realized["canonical_pick_key"].notna() & realized["canonical_pick_key"].astype(str).str.strip().ne(""), realized["strategy_pick_key"])
     realized["pick_identity_match"] = realized["strategy_pick_key"] == realized["recap_pick_key"]
     realized["pick_identity_match"] = realized["pick_identity_match"] | realized["Strategy Pick"].isna()
+    realized.loc[realized["pick_identity_match"], "grading_match_source"] = "canonical_pick_key_or_pick_identity"
+    fallback_match = (~realized["pick_identity_match"]) & (realized["Recap Pick"].astype(str).str.strip() == realized["Strategy Pick"].astype(str).str.strip())
+    realized.loc[fallback_match, "grading_match_source"] = "league+teams+exact_pick"
     recap_profile = realized.apply(lambda row: _extract_market_profile(row, row["Recap Pick"]), axis=1, result_type="expand")
     strategy_profile = realized.apply(lambda row: _extract_market_profile(row, row["Strategy Pick"]), axis=1, result_type="expand")
     realized["line_match_flag"] = (recap_profile["line_value"] == strategy_profile["line_value"]) | realized["Strategy Pick"].isna()
@@ -346,7 +371,7 @@ def build_realized_strategy_lab(
     fallback_stake = realized["Status Bucket"].map(default_stake_by_status).fillna(default_stake)
     realized["Stake"] = raw_stake.fillna(fallback_stake)
     default_for_row = realized["Status Bucket"].map(default_stake_by_status).fillna(default_stake)
-    non_prod_mask = realized["Status Bucket"].isin([STATUS_BUCKET_HIGH_VARIANCE, STATUS_BUCKET_BELOW_THRESHOLD, STATUS_BUCKET_NO_PLAY])
+    non_prod_mask = realized["Status Bucket"].isin(NON_PRODUCTION_BUCKETS)
     realized["manual_non_production_stake_flag"] = non_prod_mask & raw_stake.notna() & (raw_stake > default_for_row)
     realized["stake_warning"] = ""
     realized.loc[realized["manual_non_production_stake_flag"], "stake_warning"] = "Non-production row has manual stake"
@@ -376,6 +401,8 @@ def build_realized_strategy_lab(
     selected_statuses = get_strategy_mode_statuses(strategy_mode, custom_statuses)
     realized["Mode Included"] = realized["Status Bucket"].isin(selected_statuses)
     realized["Include In Totals"] = core_eligible & realized["Mode Included"]
+    realized["production_pnl_included"] = core_eligible & realized["Status Bucket"].eq(STATUS_BUCKET_ACTIONABLE)
+    realized["research_pnl_included"] = core_eligible & non_prod_mask
 
     realized["Gross Return"] = 0.0
     realized["Net Profit"] = 0.0
@@ -414,14 +441,39 @@ def build_realized_strategy_lab(
 
     status_summary = compute_status_bucket_summary(realized)
     mode_comparison = compute_mode_comparison(realized)
-    by_league_family = (
-        realized[realized["Excluded Reason"] == ""]
-        .assign(market_family=recap_profile["market_family"])
-        .groupby(["league", "market_family"], dropna=False)
-        .apply(_summarize_subset)
-        .apply(pd.Series)
-        .reset_index()
-    )
+    production_summary = _summarize_subset(realized[realized["production_pnl_included"]])
+    research_summary = _summarize_subset(realized[realized["research_pnl_included"]])
+    all_rows_summary = _summarize_subset(realized[core_eligible])
+    eligible_with_family = realized[realized["Excluded Reason"] == ""].assign(market_family=recap_profile["market_family"])
+    by_league_family = _group_summary(eligible_with_family, ["league", "market_family"])
+    by_pick_status = _group_summary(realized[realized["Excluded Reason"] == ""], ["Status Bucket"])
+    by_league = _group_summary(realized[realized["Excluded Reason"] == ""], ["league"])
+    by_market_family = _group_summary(eligible_with_family, ["market_family"])
+
+    guard_table = by_league_family.copy()
+    guard_table["performance_guard_warning"] = ""
+    guard_table["performance_guard_flag"] = False
+    guard_table["performance_guard_reason"] = ""
+    guard_table["production_eligible"] = True
+    if enable_performance_guard and not guard_table.empty:
+        insufficient = guard_table["Bet Count"] < min_guard_sample_size
+        guard_table.loc[insufficient, "performance_guard_warning"] = "Insufficient sample, monitor only"
+        failing = (~insufficient) & ((guard_table["Hit Rate"] < performance_guard_min_win_rate) | (guard_table["ROI"] < performance_guard_min_roi))
+        guard_table.loc[failing, "performance_guard_flag"] = True
+        guard_table.loc[failing, "performance_guard_reason"] = "Trailing league+market family performance below configured thresholds."
+        guard_table.loc[failing, "production_eligible"] = False
+        if performance_guard_action == PERFORMANCE_GUARD_ACTION_ZERO_KELLY_OR_WATCHLIST:
+            for _, row in guard_table[failing].iterrows():
+                mask = (realized["league"] == row["league"]) & (recap_profile["market_family"] == row["market_family"])
+                if "Kelly_Bet_Size" in realized.columns:
+                    realized.loc[mask, "Kelly_Bet_Size"] = 0.0
+                realized.loc[mask, "production_eligible"] = False
+                realized.loc[mask, "performance_guard_flag"] = True
+                realized.loc[mask, "performance_guard_reason"] = row["performance_guard_reason"]
+        warn_mask = insufficient
+        for _, row in guard_table[warn_mask].iterrows():
+            mask = (realized["league"] == row["league"]) & (recap_profile["market_family"] == row["market_family"])
+            realized.loc[mask, "performance_guard_warning"] = "Insufficient sample, monitor only"
 
     diagnostics = {
         "pick_mismatches": realized[realized["Result"] == "MISMATCH"].copy(),
@@ -433,6 +485,13 @@ def build_realized_strategy_lab(
         "status_bucket_summary": status_summary,
         "mode_comparison": mode_comparison,
         "league_market_family_summary": by_league_family,
+        "status_summary": by_pick_status,
+        "league_summary": by_league,
+        "market_family_summary": by_market_family,
+        "production_pnl_summary": production_summary,
+        "research_pnl_summary": research_summary,
+        "all_rows_pnl_summary": all_rows_summary,
+        "performance_guard_summary": guard_table,
         "exact_matched_rows": int(realized["pick_identity_match"].sum()),
         "mismatched_rows": int((~realized["pick_identity_match"]).sum()),
         "excluded_stake_mismatch": float(realized.loc[~realized["pick_identity_match"], "Stake"].sum()),
