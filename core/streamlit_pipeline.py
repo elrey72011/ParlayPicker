@@ -3084,6 +3084,24 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         if (mismatch_mask | missing_line_mask).any():
             logger.warning("Line consistency issues detected rows=%s", int((mismatch_mask | missing_line_mask).sum()))
 
+    # Final value safety guardrail: negative EV/edge rows cannot remain Actionable/High Variance.
+    eff_ev = pd.to_numeric(best.get("effective_expected_value", pd.Series([np.nan] * len(best), index=best.index)), errors="coerce")
+    eff_edge = pd.to_numeric(best.get("effective_edge", pd.Series([np.nan] * len(best), index=best.index)), errors="coerce")
+    base_ev = pd.to_numeric(best.get("expected_value", pd.Series([np.nan] * len(best), index=best.index)), errors="coerce")
+    base_edge = pd.to_numeric(best.get("edge", pd.Series([np.nan] * len(best), index=best.index)), errors="coerce")
+    negative_ev_mask = eff_ev.lt(0) | base_ev.lt(0)
+    negative_edge_mask = eff_edge.lt(0) | base_edge.lt(0)
+    negative_value_guardrail_mask = negative_ev_mask | negative_edge_mask
+    pre_status = best["Pick_Status"].astype(str).copy()
+    downgrade_viable_mask = negative_value_guardrail_mask & pre_status.isin({"Actionable", "High Variance/Speculative"})
+    downgraded_from_high_variance_mask = downgrade_viable_mask & pre_status.eq("High Variance/Speculative")
+    downgraded_from_actionable_mask = downgrade_viable_mask & pre_status.eq("Actionable")
+    best.loc[downgrade_viable_mask, "Pick_Status"] = "No Play"
+    best.loc[downgrade_viable_mask, "Status_Reason"] = "No Play: negative EV or negative edge after final line/status validation"
+    best.loc[downgrade_viable_mask, "status_blocker_stage"] = "value_guardrail"
+    best.loc[downgrade_viable_mask, "status_blocker_reason"] = "Negative EV or edge after final validation"
+    best.loc[downgrade_viable_mask, "Kelly_Bet_Size"] = 0.0
+
     final_best_df = best[BEST_PICK_COLUMNS].copy()
     final_best_df = ensure_best_pick_export_columns(final_best_df, diagnostics_out=diagnostics_out)
 
@@ -3228,6 +3246,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         diagnostics_out["side_promoted_by_balance_guard_count"] = int(side_balance_promotions)
         diagnostics_out["side_balance_guard_reason"] = side_balance_guard_reason
         diagnostics_out["final_pick_status_counts"] = final_best_df["Pick_Status"].value_counts().to_dict()
+        diagnostics_out["negative_ev_final_guardrail_count"] = int(negative_ev_mask.sum())
+        diagnostics_out["negative_edge_final_guardrail_count"] = int(negative_edge_mask.sum())
+        diagnostics_out["negative_ev_high_variance_downgraded_count"] = int(downgraded_from_high_variance_mask.sum())
+        diagnostics_out["negative_ev_actionable_downgraded_count"] = int(downgraded_from_actionable_mask.sum())
         hidden_bad_rows = final_best_df[
             (final_best_df["Pick_Status"] == "High Variance/Speculative")
             & (

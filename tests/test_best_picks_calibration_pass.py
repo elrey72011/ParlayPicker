@@ -847,3 +847,44 @@ def test_total_upload_fallback_does_not_affect_clean_live_total_or_spread():
     spread_df["uploaded_spread_line"] = [-6.5, -6.5]
     spread_out = build_best_picks_df(spread_df)
     assert (spread_out["market_line_source"] == "rejected_live").all()
+
+
+def test_negative_ev_row_cannot_remain_high_variance():
+    df = pd.DataFrame([_row(idx=900, league="MLB", market_type="total_over", win_prob=0.56, ev=-0.02, edge=0.01, kalshi_probability=0.52)])
+    out = build_best_picks_df(df)
+    row = out.iloc[0]
+    assert row["Pick_Status"] != "High Variance/Speculative"
+    assert row["Pick_Status"] != "Actionable"
+    assert row["Pick_Status"] == "No Play"
+
+
+def test_negative_edge_row_cannot_remain_high_variance():
+    df = pd.DataFrame([_row(idx=901, league="MLB", market_type="total_over", win_prob=0.56, ev=0.03, edge=-0.01, kalshi_probability=0.52)])
+    out = build_best_picks_df(df)
+    row = out.iloc[0]
+    assert row["Pick_Status"] != "High Variance/Speculative"
+    assert row["Pick_Status"] == "No Play"
+
+
+def test_negative_ev_upload_fallback_row_becomes_no_play_and_zero_kelly():
+    df = pd.DataFrame([_row(idx=902, league="NHL", market_type="total_over", win_prob=0.62, ev=-0.01, edge=0.03, kalshi_probability=0.56)])
+    df["line_source"] = "live_matched"
+    df["live_total_line"] = [8.5]
+    df["uploaded_total_line"] = [5.5]
+    df["upload_total_line"] = [5.5]
+    row = build_best_picks_df(df).iloc[0]
+    assert row["market_line_source"] == "upload"
+    assert row["Pick_Status"] == "No Play"
+    assert float(row["Kelly_Bet_Size"]) == 0.0
+
+
+def test_positive_ev_upload_fallback_row_can_remain_high_variance_with_zero_kelly():
+    df = pd.DataFrame([_row(idx=903, league="NHL", market_type="total_over", win_prob=0.62, ev=0.07, edge=0.06, kalshi_probability=0.56)])
+    df["line_source"] = "live_matched"
+    df["live_total_line"] = [8.5]
+    df["uploaded_total_line"] = [5.5]
+    df["upload_total_line"] = [5.5]
+    row = build_best_picks_df(df).iloc[0]
+    assert row["market_line_source"] == "upload"
+    assert row["Pick_Status"] in {"High Variance/Speculative", "No Play"}
+    assert float(row["Kelly_Bet_Size"]) == 0.0
