@@ -232,6 +232,7 @@ def test_manual_non_production_stake_is_flagged():
     realized, _, _ = build_realized_strategy_lab(graded, strategy_mode=REALIZED_MODE_PRODUCTION_CARD, default_stake=10)
     assert bool(realized.loc[0, "manual_non_production_stake_flag"]) is True
     assert realized.loc[0, "stake_warning"] == "Non-production row has manual stake"
+    assert not bool(realized.loc[0, "production_pnl_included"])
 
 
 def test_strategy_lab_preserves_pick_identity_fields():
@@ -258,6 +259,45 @@ def test_realized_summary_by_league_market_family():
     _, _, diagnostics = build_realized_strategy_lab(graded, strategy_mode=REALIZED_MODE_ALL_GRADED)
     summary_df = diagnostics["league_market_family_summary"]
     assert set(summary_df["market_family"]) >= {"total", "moneyline"}
+    assert "status_summary" in diagnostics
+    assert "league_summary" in diagnostics
+    assert "market_family_summary" in diagnostics
+
+
+def test_conflict_result_is_flagged_and_overwritten_from_recap():
+    graded = pd.DataFrame([{"league": "MLB", "home_team": "Tampa Bay", "away_team": "San Francisco", "Pick Taken": "Over 8.5", "Pick_Outcome": "WIN", "Result": "LOSS", "decimal_odds": 2.0, "Stake": 10, "actual_home_score": 6, "actual_away_score": 4}])
+    realized, _, _ = build_realized_strategy_lab(graded)
+    assert realized.loc[0, "Result"] == "WIN"
+    assert bool(realized.loc[0, "grading_conflict_flag"]) is True
+    assert "overwritten" in realized.loc[0, "grading_conflict_reason"].lower()
+
+
+def test_production_vs_research_pnl_are_separate():
+    graded = _graded_with_statuses()
+    _, _, diagnostics = build_realized_strategy_lab(graded, strategy_mode=REALIZED_MODE_ALL_GRADED)
+    assert diagnostics["production_pnl_summary"]["Bet Count"] == 1
+    assert diagnostics["research_pnl_summary"]["Bet Count"] == 3
+    assert diagnostics["all_rows_pnl_summary"]["Bet Count"] == 4
+
+
+def test_performance_guard_warns_without_block_when_sample_below_threshold():
+    graded = pd.DataFrame([
+        {"league": "NBA", "home_team": "A", "away_team": "B", "Pick Taken": "Over 210.5", "Pick_Outcome": "LOSS", "decimal_odds": 1.9, "Kelly_Bet_Size": 12, "actual_home_score": 90, "actual_away_score": 88, "Status": "Actionable"},
+        {"league": "NBA", "home_team": "C", "away_team": "D", "Pick Taken": "Over 211.5", "Pick_Outcome": "LOSS", "decimal_odds": 1.9, "Kelly_Bet_Size": 12, "actual_home_score": 91, "actual_away_score": 87, "Status": "Actionable"},
+    ])
+    realized, _, diagnostics = build_realized_strategy_lab(graded, min_guard_sample_size=5)
+    assert (diagnostics["performance_guard_summary"]["performance_guard_warning"] == "Insufficient sample, monitor only").any()
+    assert float(realized["Kelly_Bet_Size"].sum()) > 0
+
+
+def test_performance_guard_zeroes_kelly_when_thresholds_fail_and_sample_sufficient():
+    graded = pd.DataFrame([
+        {"league": "NHL", "home_team": f"H{i}", "away_team": f"A{i}", "Pick Taken": "Over 6.5", "Pick_Outcome": "LOSS", "decimal_odds": 1.9, "Kelly_Bet_Size": 20, "actual_home_score": 2, "actual_away_score": 1, "Status": "Actionable"}
+        for i in range(5)
+    ])
+    realized, _, diagnostics = build_realized_strategy_lab(graded, min_guard_sample_size=5, performance_guard_min_win_rate=0.5, performance_guard_min_roi=0.0)
+    assert (diagnostics["performance_guard_summary"]["performance_guard_flag"]).any()
+    assert float(realized["Kelly_Bet_Size"].sum()) == 0.0
 
 
 def test_strategy_lab_theoretical_render_still_works(monkeypatch):
