@@ -164,8 +164,8 @@ def _render_theoretical_strategy_lab(
     if portfolio_df is not None and not portfolio_df.empty:
         st.caption(
             f"kelly_chart_amount_basis=production_bet_amount | "
-            f"total_raw_kelly_amount={float(pd.to_numeric(portfolio_df.get('raw_kelly_amount', 0.0), errors='coerce').fillna(0.0).sum()):.2f} | "
-            f"total_production_bet_amount={float(pd.to_numeric(portfolio_df.get('production_bet_amount', 0.0), errors='coerce').fillna(0.0).sum()):.2f}"
+            f"total_raw_kelly_amount={float(pd.to_numeric(pd.Series(portfolio_df.get('raw_kelly_amount', 0.0)), errors='coerce').fillna(0.0).sum()):.2f} | "
+            f"total_production_bet_amount={float(pd.to_numeric(pd.Series(portfolio_df.get('production_bet_amount', 0.0)), errors='coerce').fillna(0.0).sum()):.2f}"
         )
         st.caption(
             f"kelly_positive_non_actionable_count={kelly_diag.get('kelly_positive_non_actionable_count',0)} | "
@@ -173,13 +173,14 @@ def _render_theoretical_strategy_lab(
             f"kelly_positive_unresolved_count={kelly_diag.get('kelly_positive_unresolved_count',0)} | "
             f"kelly_positive_missing_identity_count={kelly_diag.get('kelly_positive_missing_identity_count',0)}"
         )
-        st.download_button(
-            "Export Kelly Bet Sizes",
-            kelly_export_df.to_csv(index=False),
-            "kelly_bet_sizes_export.csv",
-            mime="text/csv",
-            key="download_kelly_bet_sizes_csv",
-        )
+        if hasattr(st, "download_button"):
+            st.download_button(
+                "Export Kelly Bet Sizes",
+                kelly_export_df.to_csv(index=False),
+                "kelly_bet_sizes_export.csv",
+                mime="text/csv",
+                key="download_kelly_bet_sizes_csv",
+            )
 
     st.markdown("**Best parlays**")
     if parlays_df is not None and not parlays_df.empty:
