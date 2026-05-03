@@ -3097,7 +3097,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     downgraded_from_high_variance_mask = downgrade_viable_mask & pre_status.eq("High Variance/Speculative")
     downgraded_from_actionable_mask = downgrade_viable_mask & pre_status.eq("Actionable")
     best.loc[downgrade_viable_mask, "Pick_Status"] = "No Play"
-    best.loc[downgrade_viable_mask, "Status_Reason"] = "No Play: negative EV or negative edge after final line/status validation"
+    best.loc[downgrade_viable_mask, "Status_Reason"] = "No Play: negative EV or negative edge after final validation"
     best.loc[downgrade_viable_mask, "status_blocker_stage"] = "value_guardrail"
     best.loc[downgrade_viable_mask, "status_blocker_reason"] = "Negative EV or edge after final validation"
     best.loc[downgrade_viable_mask, "Kelly_Bet_Size"] = 0.0
