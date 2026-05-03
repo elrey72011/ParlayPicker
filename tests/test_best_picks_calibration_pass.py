@@ -888,3 +888,44 @@ def test_positive_ev_upload_fallback_row_can_remain_high_variance_with_zero_kell
     assert row["market_line_source"] == "upload"
     assert row["Pick_Status"] in {"High Variance/Speculative", "No Play"}
     assert float(row["Kelly_Bet_Size"]) == 0.0
+
+def test_negative_ev_row_is_downgraded_by_value_guardrail_with_reason_and_zero_kelly():
+    diagnostics = {}
+    df = pd.DataFrame([_row(idx=904, league="NHL", market_type="total_over", win_prob=0.62, ev=-0.01, edge=0.06, kalshi_probability=0.56)])
+    df["line_source"] = "live_matched"
+    df["live_total_line"] = [8.5]
+    df["uploaded_total_line"] = [5.5]
+    df["upload_total_line"] = [5.5]
+    row = build_best_picks_df(df, diagnostics_out=diagnostics).iloc[0]
+    assert row["Pick_Status"] == "No Play"
+    assert row["status_blocker_stage"] == "value_guardrail"
+    assert row["status_blocker_reason"] == "Negative EV or edge after final validation"
+    assert row["Status_Reason"] == "No Play: negative EV or negative edge after final validation"
+    assert float(row["Kelly_Bet_Size"]) == 0.0
+    assert diagnostics["negative_ev_high_variance_downgraded_count"] >= 1
+
+
+def test_negative_value_guardrail_diagnostics_and_positive_upload_fallback_regression():
+    diagnostics = {}
+    df = pd.DataFrame([
+        _row(idx=905, league="NHL", market_type="total_over", win_prob=0.62, ev=-0.02, edge=0.03, kalshi_probability=0.56),
+        _row(idx=906, league="NHL", market_type="total_over", win_prob=0.62, ev=0.07, edge=0.06, kalshi_probability=0.56),
+    ])
+    df["line_source"] = "live_matched"
+    df["live_total_line"] = [8.5, 8.5]
+    df["uploaded_total_line"] = [5.5, 5.5]
+    df["upload_total_line"] = [5.5, 5.5]
+
+    out = build_best_picks_df(df, diagnostics_out=diagnostics).sort_values("expected_value")
+    neg_row = out.iloc[0]
+    pos_row = out.iloc[1]
+
+    assert neg_row["Pick_Status"] == "No Play"
+    assert float(neg_row["Kelly_Bet_Size"]) == 0.0
+    assert pos_row["market_line_source"] == "upload"
+    assert pos_row["Pick_Status"] in {"High Variance/Speculative", "No Play"}
+    assert float(pos_row["Kelly_Bet_Size"]) == 0.0
+
+    assert diagnostics["negative_ev_final_guardrail_count"] >= 1
+    assert diagnostics["negative_edge_final_guardrail_count"] >= 0
+    assert diagnostics["negative_ev_high_variance_downgraded_count"] >= 1
