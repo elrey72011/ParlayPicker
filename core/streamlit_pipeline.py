@@ -37,6 +37,17 @@ from app_core.weights_config import (
             LEAGUE_MARKET_FAMILY_ACTIONABLE_PENALTIES,
             FALLBACK_HEAVY_TOTAL_EXTRA_PENALTY,
             BEST_PICKS_PROFILE,
+            MAX_TOTAL_OVER_ACTIONABLE_SHARE,
+            MAX_TOTAL_OVER_ACTIONABLE_COUNT,
+            MAX_MLB_TOTAL_OVER_ACTIONABLE_COUNT,
+            TOTAL_OVER_PROB_SHRINK,
+            MLB_TOTAL_OVER_PROB_SHRINK,
+            MLB_TOTAL_OVER_MIN_PRODUCTION_WIN_PROB,
+            MLB_TOTAL_OVER_MIN_PRODUCTION_EV,
+            MLB_TOTAL_OVER_MIN_PRODUCTION_EDGE,
+            DEGRADED_FEATURE_KELLY_MULTIPLIER,
+            DEGRADED_FEATURE_MAX_SLATE_EXPOSURE_PCT,
+            DEGRADED_FEATURE_MAX_PICK_EXPOSURE_PCT,
     LOCK_UPLOAD_LINES_FOR_MATCHED_ROWS,
     ALLOW_UPLOAD_TOTAL_FALLBACK_ACTIONABLE,
     KALSHI_WEIGHT, MARKET_WEIGHT, ML_MODEL_WEIGHT, THEOVER_WEIGHT, SENTIMENT_WEIGHT,
@@ -302,6 +313,7 @@ BEST_PICK_COLUMNS = [
     "nba_stats_fetch_status", "nba_stats_fetch_source", "nba_stats_fetch_retries_used", "stats_source_counts", "fallback_summary_by_league", "fallback_heavy_slate_flag", "run_health_warning",
     "degraded_feature_subset_flag", "degraded_feature_subset_reason",
     "actionable_family_counts", "totals_only_actionable_flag", "viable_side_candidates_count", "side_promoted_by_balance_guard_count", "side_balance_guard_reason",
+    "production_win_probability", "production_expected_value", "production_edge", "probability_calibration_reason", "production_eligible",
 ]
 
 CANONICAL_BET_COLUMNS = [
@@ -3102,6 +3114,95 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     best.loc[downgrade_viable_mask, "status_blocker_reason"] = "Negative EV or edge after final validation"
     best.loc[downgrade_viable_mask, "Kelly_Bet_Size"] = 0.0
 
+    # Production-only probability calibration for totals-over overconfidence.
+    best["production_win_probability"] = pd.to_numeric(best.get("effective_win_probability", 0.5), errors="coerce").fillna(0.5)
+    best["probability_calibration_reason"] = "none"
+    mt_lower = _string_series(best, "market_type").str.lower()
+    league_upper = _string_series(best, "league").str.upper()
+    is_total_over = mt_lower.eq("total_over")
+    is_mlb_total_over = is_total_over & league_upper.eq("MLB")
+    total_over_shrink = np.where(is_mlb_total_over, float(MLB_TOTAL_OVER_PROB_SHRINK), float(TOTAL_OVER_PROB_SHRINK))
+    best.loc[is_total_over, "production_win_probability"] = 0.5 + total_over_shrink[is_total_over] * (best.loc[is_total_over, "production_win_probability"] - 0.5)
+    best.loc[is_total_over & ~is_mlb_total_over, "probability_calibration_reason"] = f"total_over_shrink={float(TOTAL_OVER_PROB_SHRINK):.2f}"
+    best.loc[is_mlb_total_over, "probability_calibration_reason"] = f"mlb_total_over_shrink={float(MLB_TOTAL_OVER_PROB_SHRINK):.2f}"
+
+    decimal_odds = pd.to_numeric(best.get("decimal_odds", pd.Series([np.nan] * len(best), index=best.index)), errors="coerce")
+    fallback_decimal = 1.0 / pd.to_numeric(best.get("market_probability", pd.Series([np.nan] * len(best), index=best.index)), errors="coerce")
+    decimal_odds = decimal_odds.fillna(fallback_decimal).clip(lower=1.01)
+    best["production_expected_value"] = (best["production_win_probability"] * decimal_odds) - 1.0
+    implied_prob = (1.0 / decimal_odds).replace([np.inf, -np.inf], np.nan)
+    best["production_edge"] = best["production_win_probability"] - implied_prob
+
+    # MLB totals-over stricter production gate after shrinkage.
+    mlb_over_fail = (
+        is_mlb_total_over
+        & (
+            best["production_win_probability"].lt(float(MLB_TOTAL_OVER_MIN_PRODUCTION_WIN_PROB))
+            | best["production_expected_value"].lt(float(MLB_TOTAL_OVER_MIN_PRODUCTION_EV))
+            | best["production_edge"].lt(float(MLB_TOTAL_OVER_MIN_PRODUCTION_EDGE))
+        )
+        & best["Pick_Status"].astype(str).eq("Actionable")
+    )
+    best.loc[mlb_over_fail, "Pick_Status"] = "High Variance/Speculative"
+    best.loc[mlb_over_fail, "production_eligible"] = False
+    best.loc[mlb_over_fail, "Kelly_Bet_Size"] = 0.0
+    best.loc[mlb_over_fail, "status_blocker_stage"] = "production_market_guard"
+    best.loc[mlb_over_fail, "status_blocker_reason"] = "MLB total-over production guard"
+
+    # Final production concentration guard: cap total_over and MLB total_over share/count.
+    actionable_mask = best["Pick_Status"].astype(str).eq("Actionable")
+    actionable_count = int(actionable_mask.sum())
+    actionable_type_counts = best.loc[actionable_mask, "market_type"].astype(str).str.lower().value_counts().to_dict()
+    actionable_total_over_count = int(actionable_type_counts.get("total_over", 0))
+    actionable_mlb_total_over_count = int((actionable_mask & is_mlb_total_over).sum())
+    over_share = (actionable_total_over_count / actionable_count) if actionable_count else 0.0
+    over_limit = min(
+        int(MAX_TOTAL_OVER_ACTIONABLE_COUNT),
+        int(np.floor(actionable_count * float(MAX_TOTAL_OVER_ACTIONABLE_SHARE))) if actionable_count else 0,
+    )
+    keep_total_over = max(0, min(actionable_total_over_count, over_limit))
+    concentration_reasons: list[str] = []
+    if actionable_total_over_count > int(MAX_TOTAL_OVER_ACTIONABLE_COUNT):
+        concentration_reasons.append("total_over_count_cap")
+    if over_share > float(MAX_TOTAL_OVER_ACTIONABLE_SHARE):
+        concentration_reasons.append("total_over_share_cap")
+    if actionable_mlb_total_over_count > int(MAX_MLB_TOTAL_OVER_ACTIONABLE_COUNT):
+        concentration_reasons.append("mlb_total_over_count_cap")
+    concentration_guard_active = len(concentration_reasons) > 0
+
+    if concentration_guard_active and actionable_total_over_count > keep_total_over:
+        total_over_candidates = best[actionable_mask & is_total_over].copy()
+        total_over_candidates["_rank_sort"] = pd.to_numeric(total_over_candidates.get("Triple_Filter_Rank"), errors="coerce").fillna(9999)
+        total_over_candidates = total_over_candidates.sort_values(
+            by=["_rank_sort", "production_expected_value", "production_edge", "production_win_probability"],
+            ascending=[True, False, False, False],
+            na_position="last",
+        )
+        keep_idx = set(total_over_candidates.head(keep_total_over).index.tolist())
+        downgrade_idx = [idx for idx in total_over_candidates.index if idx not in keep_idx]
+        if downgrade_idx:
+            best.loc[downgrade_idx, "Pick_Status"] = "High Variance/Speculative"
+            best.loc[downgrade_idx, "production_eligible"] = False
+            best.loc[downgrade_idx, "Kelly_Bet_Size"] = 0.0
+            best.loc[downgrade_idx, "status_blocker_stage"] = "production_concentration_guard"
+            best.loc[downgrade_idx, "status_blocker_reason"] = "Total over concentration guard"
+
+    # Degraded-feature Kelly reduction/caps for production safety.
+    degraded_run = bool(
+        best.get("degraded_feature_subset_flag", pd.Series([False] * len(best), index=best.index)).fillna(False).astype(bool).any()
+        or _string_series(best, "run_health_warning").str.contains("degraded", case=False, na=False).any()
+    )
+    if degraded_run:
+        kelly = pd.to_numeric(best.get("Kelly_Bet_Size", 0.0), errors="coerce").fillna(0.0)
+        best["Kelly_Bet_Size"] = (kelly * float(DEGRADED_FEATURE_KELLY_MULTIPLIER)).clip(lower=0.0)
+        best["Kelly_Bet_Size"] = best["Kelly_Bet_Size"].clip(upper=float(DEGRADED_FEATURE_MAX_PICK_EXPOSURE_PCT))
+        slate_sum = float(best["Kelly_Bet_Size"].sum())
+        if slate_sum > float(DEGRADED_FEATURE_MAX_SLATE_EXPOSURE_PCT) and slate_sum > 0:
+            best["Kelly_Bet_Size"] = best["Kelly_Bet_Size"] * (float(DEGRADED_FEATURE_MAX_SLATE_EXPOSURE_PCT) / slate_sum)
+        best["Kelly_Bet_Size"] = pd.to_numeric(best["Kelly_Bet_Size"], errors="coerce").fillna(0.0)
+    best.loc[~best["Pick_Status"].astype(str).eq("Actionable"), "Kelly_Bet_Size"] = 0.0
+    best["production_eligible"] = best["Pick_Status"].astype(str).eq("Actionable") & best["Kelly_Bet_Size"].gt(0)
+
     final_best_df = best[BEST_PICK_COLUMNS].copy()
     final_best_df = ensure_best_pick_export_columns(final_best_df, diagnostics_out=diagnostics_out)
 
@@ -3181,6 +3282,16 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
 
         diagnostics_out["market_type_counts"] = final_best_df["market_type"].value_counts().to_dict()
         diagnostics_out["actionable_market_type_counts"] = actionable_market_type_counts
+        diagnostics_out["actionable_total_over_count"] = int(actionable_market_type_counts.get("total_over", 0))
+        diagnostics_out["actionable_total_under_count"] = int(actionable_market_type_counts.get("total_under", 0))
+        diagnostics_out["actionable_side_count"] = int(sum(v for k, v in actionable_market_type_counts.items() if "spread" in str(k) or "h2h" in str(k)))
+        diagnostics_out["actionable_mlb_total_over_count"] = int(((actionable_df["league"].astype(str).str.upper() == "MLB") & (actionable_df["market_type"].astype(str).str.lower() == "total_over")).sum())
+        diagnostics_out["total_over_concentration_flag"] = bool(concentration_guard_active)
+        diagnostics_out["total_over_concentration_reason"] = ",".join(concentration_reasons) if concentration_reasons else "none"
+        diagnostics_out["degraded_feature_kelly_guard_active"] = bool(degraded_run)
+        diagnostics_out["degraded_feature_kelly_multiplier_applied"] = float(DEGRADED_FEATURE_KELLY_MULTIPLIER) if degraded_run else 1.0
+        diagnostics_out["degraded_feature_slate_cap_used"] = float(DEGRADED_FEATURE_MAX_SLATE_EXPOSURE_PCT) if degraded_run else 0.0
+        diagnostics_out["degraded_feature_pick_cap_used"] = float(DEGRADED_FEATURE_MAX_PICK_EXPOSURE_PCT) if degraded_run else 0.0
 
         # Add requested metrics directly to diagnostics_out
         diagnostics_out["actionable_counts_by_league"] = actionable_counts_by_league
