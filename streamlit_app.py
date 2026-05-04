@@ -476,8 +476,17 @@ def _attach_kelly_to_best_picks(best_picks_df: pd.DataFrame, portfolio_df: pd.Da
             .drop_duplicates(subset=["canonical_pick_key"], keep="first")
             .set_index("canonical_pick_key")["production_bet_amount"]
         )
+        for col in ["raw_kelly_amount", "production_bet_amount", "kelly_cap_reason", "production_eligible"]:
+            if col not in out.columns:
+                out[col] = pd.NA
+        detail_cols = portfolio_df.dropna(subset=["canonical_pick_key"]).drop_duplicates(subset=["canonical_pick_key"], keep="first").set_index("canonical_pick_key")
     canonical_key = _safe_str_series(out, "canonical_pick_key").str.strip()
     out["Kelly_Bet_Size"] = canonical_key.map(kelly_map).fillna(0.0)
+    if portfolio_df is not None and not portfolio_df.empty and "canonical_pick_key" in portfolio_df.columns:
+        out["raw_kelly_amount"] = canonical_key.map(detail_cols["raw_kelly_amount"]) if "raw_kelly_amount" in detail_cols.columns else 0.0
+        out["production_bet_amount"] = canonical_key.map(detail_cols["production_bet_amount"]) if "production_bet_amount" in detail_cols.columns else 0.0
+        out["kelly_cap_reason"] = canonical_key.map(detail_cols["kelly_cap_reason"]).fillna("") if "kelly_cap_reason" in detail_cols.columns else ""
+        out["production_eligible"] = canonical_key.map(detail_cols["production_eligible"]).fillna(out.get("production_eligible", False)) if "production_eligible" in detail_cols.columns else out.get("production_eligible", False)
     status = _safe_str_series(out, "Pick_Status").str.strip()
     line_source = _safe_str_series(out, "market_line_source").str.strip().str.lower()
     line_consistent = pd.Series(out.get("line_consistency_flag", True), index=out.index).fillna(True).astype(bool)
@@ -486,12 +495,25 @@ def _attach_kelly_to_best_picks(best_picks_df: pd.DataFrame, portfolio_df: pd.Da
     prod_eligible_col = pd.Series(out.get("production_eligible", True), index=out.index).fillna(True).astype(bool)
     safe_mask = status.eq("Actionable") & prod_eligible_col & line_source.eq("live") & line_consistent & event_ok & (~pick_text.str.contains("unresolved", na=False))
     out.loc[~safe_mask, "Kelly_Bet_Size"] = 0.0
+    out["kelly_zero_reason"] = ""
+    out.loc[status.ne("Actionable"), "kelly_zero_reason"] = "non_actionable_status"
+    out.loc[status.eq("Actionable") & (~prod_eligible_col), "kelly_zero_reason"] = "production_ineligible"
+    out.loc[status.eq("Actionable") & safe_mask & pd.to_numeric(out["Kelly_Bet_Size"], errors="coerce").fillna(0).le(0), "kelly_zero_reason"] = "zero_after_portfolio_caps"
     out["Kelly_Bet_Size"] = pd.to_numeric(out["Kelly_Bet_Size"], errors="coerce").fillna(0.0).round(2)
+    if "kelly_cap_reason" in out.columns:
+        out.loc[out["Kelly_Bet_Size"].le(0) & out["kelly_cap_reason"].eq(""), "kelly_cap_reason"] = out.loc[out["Kelly_Bet_Size"].le(0), "kelly_zero_reason"]
     diagnostics["kelly_attached_to_best_picks_count"] = int((out["Kelly_Bet_Size"] > 0).sum())
     diagnostics["kelly_missing_key_count"] = int(canonical_key.eq("").sum())
+    diagnostics["kelly_join_match_count"] = int(canonical_key.ne("").sum() - canonical_key[canonical_key.ne("")].map(kelly_map).isna().sum()) if len(canonical_key) else 0
+    diagnostics["kelly_join_missing_count"] = int(canonical_key[canonical_key.ne("")].map(kelly_map).isna().sum()) if len(canonical_key) else 0
     diagnostics["kelly_positive_non_actionable_count"] = int(((out["Kelly_Bet_Size"] > 0) & (~status.eq("Actionable"))).sum())
     diagnostics["kelly_best_picks_total_amount"] = float(out["Kelly_Bet_Size"].sum())
     diagnostics["kelly_best_picks_max_amount"] = float(out["Kelly_Bet_Size"].max())
+    actionable_zero = status.eq("Actionable") & pd.to_numeric(out["Kelly_Bet_Size"], errors="coerce").fillna(0).le(0)
+    diagnostics["actionable_rows_with_zero_kelly_count"] = int(actionable_zero.sum())
+    clean_mask = status.eq("Actionable") & line_source.eq("live") & line_consistent & event_ok & (~pick_text.str.contains("unresolved", na=False))
+    diagnostics["clean_actionable_rows_with_zero_kelly_count"] = int((clean_mask & pd.to_numeric(out["Kelly_Bet_Size"], errors="coerce").fillna(0).le(0)).sum())
+    diagnostics["kelly_zero_reason_counts"] = out.loc[pd.to_numeric(out["Kelly_Bet_Size"], errors="coerce").fillna(0).le(0), "kelly_zero_reason"].value_counts().to_dict()
     return out
 
 def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
@@ -595,10 +617,16 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
 
 
     from core.streamlit_pipeline import build_best_picks_df
+    from core.streamlit_pipeline import ensure_best_pick_export_columns
 
     # We pass the diagnostics dictionary so that selection metrics and preview_df
     # can be injected without relying on pandas DataFrame.attrs serialization.
     best_picks_df = build_best_picks_df(analysis_df, diagnostics_out=diagnostics)
+    best_picks_df = ensure_best_pick_export_columns(best_picks_df, diagnostics_out=diagnostics)
+    diagnostics["identity_columns_ready_before_portfolio"] = bool(
+        all(c in best_picks_df.columns for c in ["export_run_id", "pick_id", "canonical_pick_key"])
+        and best_picks_df["canonical_pick_key"].astype(str).str.strip().ne("").all()
+    )
 
     if "gemini_analysis" not in analysis_df.columns:
         analysis_df["gemini_analysis"] = ""
@@ -664,6 +692,8 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
         per_leg[f"parlays_{lc}_df"] = parlay_slice[parlay_columns] if not parlay_slice.empty else pd.DataFrame(columns=parlay_columns)
 
     portfolio_df = optimize_portfolio_allocation(best_picks_df, bankroll=float(controls["bankroll"]))
+    diagnostics["portfolio_rows_count"] = int(len(portfolio_df)) if isinstance(portfolio_df, pd.DataFrame) else 0
+    diagnostics["portfolio_positive_bet_count"] = int((pd.to_numeric(portfolio_df.get("production_bet_amount", 0), errors="coerce").fillna(0).gt(0)).sum()) if isinstance(portfolio_df, pd.DataFrame) and not portfolio_df.empty else 0
     best_picks_df = _attach_kelly_to_best_picks(best_picks_df, portfolio_df, diagnostics)
 
     required_portfolio_cols = {"calibrated_probability", "decimal_odds", "recommended_bet"}
