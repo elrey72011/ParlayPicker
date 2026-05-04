@@ -721,9 +721,13 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
         "actionable_family_counts": str(final_family_counts),
         "totals_only_actionable_flag": diagnostics["totals_only_actionable_flag"],
         "viable_side_candidates_count": diagnostics["viable_side_candidates_count"],
+        "final_actionable_count": diagnostics["final_actionable_count"],
+        "final_positive_kelly_count": diagnostics["final_positive_kelly_count"],
+        "production_card_empty_flag": diagnostics["production_card_empty_flag"],
+        "production_card_empty_reason": diagnostics["production_card_empty_reason"],
+        "clean_actionable_rows_with_zero_kelly_count": diagnostics.get("clean_actionable_rows_with_zero_kelly_count", 0),
     }.items():
-        if col in best_picks_df.columns:
-            best_picks_df[col] = val
+        best_picks_df[col] = val
 
     required_portfolio_cols = {"calibrated_probability", "decimal_odds", "recommended_bet"}
     if portfolio_df is not None and not portfolio_df.empty and required_portfolio_cols.issubset(set(portfolio_df.columns)):
@@ -1323,6 +1327,10 @@ def main() -> None:
                 "status_metric_basis", "effective_expected_value", "effective_edge", "effective_win_probability",
                 "status_blocker_reason", "status_blocker_stage", "nba_stats_fetch_status", "fallback_summary_by_league",
                 "run_health_warning", "degraded_feature_subset_flag", "degraded_feature_subset_reason",
+                "production_eligible", "production_win_probability", "production_expected_value", "production_edge",
+                "raw_kelly_amount", "production_bet_amount", "kelly_cap_reason", "kelly_zero_reason",
+                "final_actionable_count", "final_positive_kelly_count", "production_card_empty_flag", "production_card_empty_reason",
+                "clean_actionable_rows_with_zero_kelly_count",
             ]
             for col in REQUIRED_BEST_PICK_EXPORT_COLUMNS:
                 if col not in target_export_cols:

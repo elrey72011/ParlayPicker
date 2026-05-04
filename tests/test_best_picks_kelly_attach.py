@@ -92,3 +92,13 @@ def test_attach_kelly_carries_portfolio_audit_fields():
     assert float(out.loc[0, "production_bet_amount"]) == 22.0
     assert float(out.loc[0, "raw_kelly_amount"]) == 88.0
     assert out.loc[0, "kelly_cap_reason"] == "Scaled by slate exposure"
+
+
+def test_every_zero_kelly_row_has_reason():
+    best = pd.DataFrame([
+        {"canonical_pick_key": "k1", "best_pick": "Over 220.5", "Pick_Status": "No Play", "market_line_source": "live", "line_consistency_flag": True, "line_event_identity_match_flag": True},
+        {"canonical_pick_key": "k2", "best_pick": "Over 221.5", "Pick_Status": "High Variance/Speculative", "market_line_source": "live", "line_consistency_flag": True, "line_event_identity_match_flag": True},
+    ])
+    out = _attach_kelly_to_best_picks(best, pd.DataFrame(), {})
+    zeros = out[pd.to_numeric(out["Kelly_Bet_Size"], errors="coerce").fillna(0).eq(0)]
+    assert zeros["kelly_zero_reason"].astype(str).str.strip().ne("").all()

@@ -37,6 +37,8 @@ def test_identity_columns_ready_before_portfolio(monkeypatch):
     state, _warnings, _errors = app._run_pipeline(controls)
     assert state["diagnostics"]["identity_columns_ready_before_portfolio"] is True
     assert state["diagnostics"].get("best_pick_export_missing_columns", []) == []
+    required_audit = {"production_eligible", "raw_kelly_amount", "production_bet_amount", "kelly_cap_reason", "kelly_zero_reason", "final_actionable_count", "production_card_empty_flag"}
+    assert required_audit.issubset(set(state["best_picks_df"].columns))
 
 
 def test_empty_production_card_sets_final_empty_diagnostics(monkeypatch):
@@ -59,4 +61,5 @@ def test_empty_production_card_sets_final_empty_diagnostics(monkeypatch):
     state, _warnings, _errors = app._run_pipeline(controls)
     assert state["diagnostics"]["final_actionable_count"] == 0
     assert state["diagnostics"]["production_card_empty_flag"] is True
+    assert str(state["diagnostics"]["production_card_empty_reason"]).strip() != ""
     assert state["diagnostics"]["actionable_family_counts"] == {}
