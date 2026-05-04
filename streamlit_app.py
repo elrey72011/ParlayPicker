@@ -807,7 +807,6 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
     for col, val in {
         "actionable_family_counts": str(final_family_counts),
         "totals_only_actionable_flag": diagnostics["totals_only_actionable_flag"],
-        "viable_side_candidates_count": diagnostics["viable_side_candidates_count"],
         "final_actionable_count": diagnostics["final_actionable_count"],
         "final_positive_kelly_count": diagnostics["final_positive_kelly_count"],
         "production_card_empty_flag": diagnostics["production_card_empty_flag"],
