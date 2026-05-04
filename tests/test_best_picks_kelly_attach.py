@@ -65,3 +65,30 @@ def test_attach_kelly_does_not_crash_with_categorical_pick_status_and_maps_by_ke
     out = _attach_kelly_to_best_picks(best, portfolio, {})
     assert float(out.loc[out["canonical_pick_key"] == "k1", "Kelly_Bet_Size"].iloc[0]) == 12.34
     assert float(out.loc[out["canonical_pick_key"] == "k2", "Kelly_Bet_Size"].iloc[0]) == 0.0
+
+
+def test_clean_actionable_zero_kelly_gets_reason_and_diagnostics():
+    best = pd.DataFrame([
+        {"canonical_pick_key": "k1", "best_pick": "Over 220.5", "Pick_Status": "Actionable", "market_line_source": "live", "line_consistency_flag": True, "line_event_identity_match_flag": True, "production_eligible": True},
+    ])
+    portfolio = pd.DataFrame([
+        {"canonical_pick_key": "k1", "production_bet_amount": 0.0, "raw_kelly_amount": 50.0, "kelly_cap_reason": "", "production_eligible": True},
+    ])
+    diags = {}
+    out = _attach_kelly_to_best_picks(best, portfolio, diags)
+    assert out.loc[0, "kelly_zero_reason"] != ""
+    assert diags["actionable_rows_with_zero_kelly_count"] == 1
+    assert diags["clean_actionable_rows_with_zero_kelly_count"] == 1
+
+
+def test_attach_kelly_carries_portfolio_audit_fields():
+    best = pd.DataFrame([
+        {"canonical_pick_key": "k1", "best_pick": "Under 213.5", "Pick_Status": "Actionable", "market_line_source": "live", "line_consistency_flag": True, "line_event_identity_match_flag": True},
+    ])
+    portfolio = pd.DataFrame([
+        {"canonical_pick_key": "k1", "production_bet_amount": 22.0, "raw_kelly_amount": 88.0, "kelly_cap_reason": "Scaled by slate exposure", "production_eligible": True},
+    ])
+    out = _attach_kelly_to_best_picks(best, portfolio, {})
+    assert float(out.loc[0, "production_bet_amount"]) == 22.0
+    assert float(out.loc[0, "raw_kelly_amount"]) == 88.0
+    assert out.loc[0, "kelly_cap_reason"] == "Scaled by slate exposure"
