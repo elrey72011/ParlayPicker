@@ -695,6 +695,35 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
     diagnostics["portfolio_rows_count"] = int(len(portfolio_df)) if isinstance(portfolio_df, pd.DataFrame) else 0
     diagnostics["portfolio_positive_bet_count"] = int((pd.to_numeric(portfolio_df.get("production_bet_amount", 0), errors="coerce").fillna(0).gt(0)).sum()) if isinstance(portfolio_df, pd.DataFrame) and not portfolio_df.empty else 0
     best_picks_df = _attach_kelly_to_best_picks(best_picks_df, portfolio_df, diagnostics)
+    # Recompute final production-card diagnostics after all guards + Kelly attachment.
+    status_s = _safe_str_series(best_picks_df, "Pick_Status").str.strip()
+    mt_s = _safe_str_series(best_picks_df, "market_type").str.lower()
+    lg_s = _safe_str_series(best_picks_df, "league").str.upper()
+    final_actionable_mask = status_s.eq("Actionable")
+    final_actionable = best_picks_df[final_actionable_mask]
+    final_family_counts = final_actionable["market_type"].astype(str).str.lower().map(
+        lambda x: "total" if "total" in x else "side"
+    ).value_counts().to_dict() if not final_actionable.empty else {}
+    final_type_counts = final_actionable["market_type"].astype(str).str.lower().value_counts().to_dict() if not final_actionable.empty else {}
+    diagnostics["actionable_family_counts"] = final_family_counts
+    diagnostics["actionable_market_type_counts"] = final_type_counts
+    diagnostics["actionable_total_over_count"] = int(final_type_counts.get("total_over", 0))
+    diagnostics["actionable_total_under_count"] = int(final_type_counts.get("total_under", 0))
+    diagnostics["actionable_side_count"] = int(sum(v for k, v in final_type_counts.items() if "spread" in str(k) or "h2h" in str(k)))
+    diagnostics["actionable_mlb_total_over_count"] = int((final_actionable_mask & mt_s.eq("total_over") & lg_s.eq("MLB")).sum())
+    diagnostics["totals_only_actionable_flag"] = bool(len(final_actionable) > 0 and diagnostics["actionable_side_count"] == 0)
+    diagnostics["viable_side_candidates_count"] = int((mt_s.str.contains("spread|h2h", regex=True, na=False) & status_s.isin(["Actionable", "High Variance/Speculative"])).sum())
+    diagnostics["final_actionable_count"] = int(final_actionable_mask.sum())
+    diagnostics["final_positive_kelly_count"] = int(pd.to_numeric(best_picks_df.get("Kelly_Bet_Size", 0), errors="coerce").fillna(0).gt(0).sum())
+    diagnostics["production_card_empty_flag"] = bool(diagnostics["final_actionable_count"] == 0)
+    diagnostics["production_card_empty_reason"] = "No rows survived final production guards" if diagnostics["production_card_empty_flag"] else ""
+    for col, val in {
+        "actionable_family_counts": str(final_family_counts),
+        "totals_only_actionable_flag": diagnostics["totals_only_actionable_flag"],
+        "viable_side_candidates_count": diagnostics["viable_side_candidates_count"],
+    }.items():
+        if col in best_picks_df.columns:
+            best_picks_df[col] = val
 
     required_portfolio_cols = {"calibrated_probability", "decimal_odds", "recommended_bet"}
     if portfolio_df is not None and not portfolio_df.empty and required_portfolio_cols.issubset(set(portfolio_df.columns)):

@@ -53,6 +53,7 @@ def test_mlb_total_over_production_gate_downgrades_failures():
     if r["status_blocker_stage"] == "production_market_guard":
         assert r["Kelly_Bet_Size"] == 0
         assert r["production_eligible"] is False
+        assert "downgraded by MLB total-over production guard" in str(r["Status_Reason"])
 
 
 def test_degraded_feature_kelly_reduction_applies_and_non_actionable_zero_kelly():

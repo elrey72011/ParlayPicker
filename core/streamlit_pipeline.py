@@ -315,6 +315,7 @@ BEST_PICK_COLUMNS = [
     "actionable_family_counts", "totals_only_actionable_flag", "viable_side_candidates_count", "side_promoted_by_balance_guard_count", "side_balance_guard_reason",
     "production_win_probability", "production_expected_value", "production_edge", "probability_calibration_reason", "production_eligible",
     "raw_kelly_amount", "production_bet_amount", "kelly_cap_reason", "kelly_zero_reason",
+    "export_run_id", "pick_id", "canonical_pick_key",
 ]
 
 CANONICAL_BET_COLUMNS = [
@@ -3149,6 +3150,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     best.loc[mlb_over_fail, "Kelly_Bet_Size"] = 0.0
     best.loc[mlb_over_fail, "status_blocker_stage"] = "production_market_guard"
     best.loc[mlb_over_fail, "status_blocker_reason"] = "MLB total-over production guard"
+    best.loc[mlb_over_fail, "Status_Reason"] = "High Variance: downgraded by MLB total-over production guard"
 
     # Final production concentration guard: cap total_over and MLB total_over share/count.
     actionable_mask = best["Pick_Status"].astype(str).eq("Actionable")
@@ -3187,6 +3189,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             best.loc[downgrade_idx, "Kelly_Bet_Size"] = 0.0
             best.loc[downgrade_idx, "status_blocker_stage"] = "production_concentration_guard"
             best.loc[downgrade_idx, "status_blocker_reason"] = "Total over concentration guard"
+            best.loc[downgrade_idx, "Status_Reason"] = "High Variance: downgraded by total-over concentration guard"
 
     # Degraded-feature Kelly reduction/caps for production safety.
     degraded_run = bool(
