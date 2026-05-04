@@ -30,6 +30,18 @@ from core.streamlit_pipeline import (
 )
 from core.team_normalizer import normalize_team
 from core.theover_loader import load_theover_csv
+from app_core.weights_config import (
+    ENABLE_EMPTY_CARD_RECOVERY,
+    EMPTY_CARD_RECOVERY_MAX_PICKS,
+    EMPTY_CARD_RECOVERY_MIN_PRODUCTION_EV,
+    EMPTY_CARD_RECOVERY_MIN_PRODUCTION_EDGE,
+    EMPTY_CARD_RECOVERY_MIN_PRODUCTION_WIN_PROB,
+    EMPTY_CARD_RECOVERY_EXCLUDE_MARKET_TYPES,
+    EMPTY_CARD_RECOVERY_EXCLUDE_SOURCES,
+    EMPTY_CARD_RECOVERY_MAX_KELLY_TOTAL_PCT,
+    EMPTY_CARD_RECOVERY_MAX_KELLY_PER_PICK_PCT,
+    ALLOW_MLB_TOTAL_OVER_EMPTY_CARD_RECOVERY,
+)
 
 try:
     from app_core.kalshi_integrator import enrich_with_kalshi_markets as _enrich_kalshi_raw
@@ -695,6 +707,78 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
     diagnostics["portfolio_rows_count"] = int(len(portfolio_df)) if isinstance(portfolio_df, pd.DataFrame) else 0
     diagnostics["portfolio_positive_bet_count"] = int((pd.to_numeric(portfolio_df.get("production_bet_amount", 0), errors="coerce").fillna(0).gt(0)).sum()) if isinstance(portfolio_df, pd.DataFrame) and not portfolio_df.empty else 0
     best_picks_df = _attach_kelly_to_best_picks(best_picks_df, portfolio_df, diagnostics)
+    diagnostics["empty_card_recovery_enabled"] = bool(ENABLE_EMPTY_CARD_RECOVERY)
+    diagnostics["empty_card_recovery_triggered"] = False
+    diagnostics["production_card_empty_before_recovery_flag"] = bool(_safe_str_series(best_picks_df, "Pick_Status").eq("Actionable").sum() == 0)
+    diagnostics["empty_card_recovery_candidate_count"] = 0
+    diagnostics["empty_card_recovery_promoted_count"] = 0
+    diagnostics["empty_card_recovery_excluded_total_over_count"] = 0
+    diagnostics["empty_card_recovery_excluded_line_source_count"] = 0
+    diagnostics["empty_card_recovery_excluded_threshold_count"] = 0
+    diagnostics["empty_card_recovery_kelly_total"] = 0.0
+    diagnostics["production_card_recovery_reason"] = ""
+
+    if ENABLE_EMPTY_CARD_RECOVERY and diagnostics["production_card_empty_before_recovery_flag"]:
+        status_s0 = _safe_str_series(best_picks_df, "Pick_Status").str.strip()
+        mt0 = _safe_str_series(best_picks_df, "market_type").str.lower()
+        src0 = _safe_str_series(best_picks_df, "market_line_source").str.lower()
+        lg0 = _safe_str_series(best_picks_df, "league").str.upper()
+        pick0 = _safe_str_series(best_picks_df, "best_pick").str.lower()
+        line_ok0 = pd.Series(best_picks_df.get("line_consistency_flag", True), index=best_picks_df.index).fillna(True).astype(bool)
+        id_ok0 = pd.Series(best_picks_df.get("line_event_identity_match_flag", True), index=best_picks_df.index).fillna(True).astype(bool)
+        prod_ev0 = pd.to_numeric(best_picks_df.get("production_expected_value", best_picks_df.get("effective_expected_value", 0)), errors="coerce").fillna(-999)
+        prod_edge0 = pd.to_numeric(best_picks_df.get("production_edge", best_picks_df.get("effective_edge", 0)), errors="coerce").fillna(-999)
+        prod_prob0 = pd.to_numeric(best_picks_df.get("production_win_probability", best_picks_df.get("effective_win_probability", 0.5)), errors="coerce").fillna(0)
+        eff_ev0 = pd.to_numeric(best_picks_df.get("effective_expected_value", best_picks_df.get("expected_value", 0)), errors="coerce").fillna(-999)
+        eff_edge0 = pd.to_numeric(best_picks_df.get("effective_edge", best_picks_df.get("edge", 0)), errors="coerce").fillna(-999)
+        blocked_stage0 = _safe_str_series(best_picks_df, "status_blocker_stage").str.lower()
+        excluded_total_over = mt0.eq("total_over")
+        if ALLOW_MLB_TOTAL_OVER_EMPTY_CARD_RECOVERY:
+            excluded_total_over = mt0.eq("total_over") & ~lg0.eq("MLB")
+        diagnostics["empty_card_recovery_excluded_total_over_count"] = int(excluded_total_over.sum())
+        excluded_source = src0.isin([s.lower() for s in EMPTY_CARD_RECOVERY_EXCLUDE_SOURCES]) | ~src0.eq("live")
+        diagnostics["empty_card_recovery_excluded_line_source_count"] = int(excluded_source.sum())
+        threshold_fail = (prod_ev0 < float(EMPTY_CARD_RECOVERY_MIN_PRODUCTION_EV)) | (prod_edge0 < float(EMPTY_CARD_RECOVERY_MIN_PRODUCTION_EDGE)) | (prod_prob0 < float(EMPTY_CARD_RECOVERY_MIN_PRODUCTION_WIN_PROB))
+        diagnostics["empty_card_recovery_excluded_threshold_count"] = int(threshold_fail.sum())
+        recovery_mask = (
+            status_s0.isin(["High Variance/Speculative", "Below Threshold"])
+            & (~excluded_total_over)
+            & (~excluded_source)
+            & line_ok0 & id_ok0
+            & (~pick0.str.contains("unresolved", na=False))
+            & eff_ev0.gt(0) & eff_edge0.gt(0)
+            & (~blocked_stage0.isin(["line_provenance", "value_guardrail"]))
+            & (~threshold_fail)
+        )
+        diagnostics["empty_card_recovery_candidate_count"] = int(recovery_mask.sum())
+        if recovery_mask.any():
+            ranked = best_picks_df[recovery_mask].copy()
+            ranked["_rank"] = pd.to_numeric(ranked["Triple_Filter_Rank"], errors="coerce").fillna(9999) if "Triple_Filter_Rank" in ranked.columns else 9999
+            ranked["_ev"] = pd.to_numeric(ranked["production_expected_value"], errors="coerce").fillna(-999) if "production_expected_value" in ranked.columns else -999
+            ranked["_edge"] = pd.to_numeric(ranked["production_edge"], errors="coerce").fillna(-999) if "production_edge" in ranked.columns else -999
+            ranked["_prob"] = pd.to_numeric(ranked["production_win_probability"], errors="coerce").fillna(0) if "production_win_probability" in ranked.columns else 0
+            ranked = ranked.sort_values(by=["_rank", "_ev", "_edge", "_prob"], ascending=[True, False, False, False])
+            promote_idx = ranked.head(int(EMPTY_CARD_RECOVERY_MAX_PICKS)).index.tolist()
+            best_picks_df.loc[promote_idx, "Pick_Status"] = "Actionable"
+            best_picks_df.loc[promote_idx, "Status_Reason"] = "Actionable: recovered by empty-card recovery guard"
+            best_picks_df.loc[promote_idx, "status_blocker_stage"] = "empty_card_recovery"
+            best_picks_df.loc[promote_idx, "status_blocker_reason"] = "Recovered strongest clean non-over candidate after strict guards emptied card"
+            best_picks_df.loc[promote_idx, "production_eligible"] = True
+            best_picks_df.loc[promote_idx, "kelly_zero_reason"] = ""
+            portfolio_df2 = optimize_portfolio_allocation(best_picks_df, bankroll=float(controls["bankroll"]))
+            if portfolio_df2 is not None and not portfolio_df2.empty:
+                cap_total = float(controls["bankroll"]) * float(EMPTY_CARD_RECOVERY_MAX_KELLY_TOTAL_PCT)
+                cap_pick = float(controls["bankroll"]) * float(EMPTY_CARD_RECOVERY_MAX_KELLY_PER_PICK_PCT)
+                portfolio_df2["production_bet_amount"] = pd.to_numeric(portfolio_df2.get("production_bet_amount", 0), errors="coerce").fillna(0).clip(upper=cap_pick)
+                s = float(portfolio_df2["production_bet_amount"].sum())
+                if s > cap_total and s > 0:
+                    portfolio_df2["production_bet_amount"] = portfolio_df2["production_bet_amount"] * (cap_total / s)
+                portfolio_df = portfolio_df2
+                best_picks_df = _attach_kelly_to_best_picks(best_picks_df, portfolio_df, diagnostics)
+            diagnostics["empty_card_recovery_triggered"] = True
+            diagnostics["empty_card_recovery_promoted_count"] = int(len(promote_idx))
+            diagnostics["empty_card_recovery_kelly_total"] = float(pd.to_numeric(best_picks_df.get("Kelly_Bet_Size", 0), errors="coerce").fillna(0).sum())
+            diagnostics["production_card_recovery_reason"] = "Recovered strongest clean non-over candidates"
     # Recompute final production-card diagnostics after all guards + Kelly attachment.
     status_s = _safe_str_series(best_picks_df, "Pick_Status").str.strip()
     mt_s = _safe_str_series(best_picks_df, "market_type").str.lower()
@@ -716,7 +800,10 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
     diagnostics["final_actionable_count"] = int(final_actionable_mask.sum())
     diagnostics["final_positive_kelly_count"] = int(pd.to_numeric(best_picks_df.get("Kelly_Bet_Size", 0), errors="coerce").fillna(0).gt(0).sum())
     diagnostics["production_card_empty_flag"] = bool(diagnostics["final_actionable_count"] == 0)
+    diagnostics["production_card_empty_after_recovery_flag"] = bool(diagnostics["final_actionable_count"] == 0)
     diagnostics["production_card_empty_reason"] = "No rows survived final production guards" if diagnostics["production_card_empty_flag"] else ""
+    if diagnostics["production_card_empty_flag"] and diagnostics.get("empty_card_recovery_enabled"):
+        diagnostics["production_card_empty_reason"] = "All candidate rows downgraded by MLB total-over guard, concentration guard, degraded-feature guard, or threshold filters."
     for col, val in {
         "actionable_family_counts": str(final_family_counts),
         "totals_only_actionable_flag": diagnostics["totals_only_actionable_flag"],
@@ -726,6 +813,17 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
         "production_card_empty_flag": diagnostics["production_card_empty_flag"],
         "production_card_empty_reason": diagnostics["production_card_empty_reason"],
         "clean_actionable_rows_with_zero_kelly_count": diagnostics.get("clean_actionable_rows_with_zero_kelly_count", 0),
+        "empty_card_recovery_enabled": diagnostics.get("empty_card_recovery_enabled", False),
+        "empty_card_recovery_triggered": diagnostics.get("empty_card_recovery_triggered", False),
+        "empty_card_recovery_candidate_count": diagnostics.get("empty_card_recovery_candidate_count", 0),
+        "empty_card_recovery_promoted_count": diagnostics.get("empty_card_recovery_promoted_count", 0),
+        "empty_card_recovery_excluded_total_over_count": diagnostics.get("empty_card_recovery_excluded_total_over_count", 0),
+        "empty_card_recovery_excluded_line_source_count": diagnostics.get("empty_card_recovery_excluded_line_source_count", 0),
+        "empty_card_recovery_excluded_threshold_count": diagnostics.get("empty_card_recovery_excluded_threshold_count", 0),
+        "empty_card_recovery_kelly_total": diagnostics.get("empty_card_recovery_kelly_total", 0.0),
+        "production_card_empty_before_recovery_flag": diagnostics.get("production_card_empty_before_recovery_flag", False),
+        "production_card_empty_after_recovery_flag": diagnostics.get("production_card_empty_after_recovery_flag", False),
+        "production_card_recovery_reason": diagnostics.get("production_card_recovery_reason", ""),
     }.items():
         best_picks_df[col] = val
 
@@ -1331,6 +1429,11 @@ def main() -> None:
                 "raw_kelly_amount", "production_bet_amount", "kelly_cap_reason", "kelly_zero_reason",
                 "final_actionable_count", "final_positive_kelly_count", "production_card_empty_flag", "production_card_empty_reason",
                 "clean_actionable_rows_with_zero_kelly_count",
+                "empty_card_recovery_enabled", "empty_card_recovery_triggered", "empty_card_recovery_candidate_count",
+                "empty_card_recovery_promoted_count", "empty_card_recovery_excluded_total_over_count",
+                "empty_card_recovery_excluded_line_source_count", "empty_card_recovery_excluded_threshold_count",
+                "empty_card_recovery_kelly_total", "production_card_empty_before_recovery_flag",
+                "production_card_empty_after_recovery_flag", "production_card_recovery_reason",
             ]
             for col in REQUIRED_BEST_PICK_EXPORT_COLUMNS:
                 if col not in target_export_cols:
