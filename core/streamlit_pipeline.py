@@ -1234,7 +1234,11 @@ def compute_blended_probability(
                 w_kalshi = LOW_LIQUIDITY_KALSHI_WEIGHT
                 w_ml = LOW_LIQUIDITY_ML_MODEL_WEIGHT
 
-            # Re-normalize if ML is missing
+            # Re-normalize weights to sum to 1.0.
+            # The MLB/NHL override (LOW_LIQUIDITY_KALSHI_WEIGHT=0.30,
+            # LOW_LIQUIDITY_ML_MODEL_WEIGHT=0.35) shifts +0.025 vs the base
+            # weights, so without this step the blended probability is
+            # inflated by ~2.5% for every MLB/NHL Tier-1 pick.
             if pd.isna(p_ml):
                 total_w = w_kalshi + w_market + w_the + w_sen
                 w_kalshi /= total_w
@@ -1244,6 +1248,13 @@ def compute_blended_probability(
                 p_ml_val = 0.0
                 w_ml = 0.0
             else:
+                total_w = w_kalshi + w_market + w_ml + w_the + w_sen
+                if abs(total_w - 1.0) > 1e-9:
+                    w_kalshi /= total_w
+                    w_market /= total_w
+                    w_ml /= total_w
+                    w_the /= total_w
+                    w_sen /= total_w
                 p_ml_val = p_ml
 
             prob = (k_oriented * w_kalshi) + (p_mkt * w_market) + (p_ml_val * w_ml) + (p_the * w_the) + (p_sen * w_sen)
