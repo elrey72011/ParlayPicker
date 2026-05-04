@@ -314,6 +314,7 @@ BEST_PICK_COLUMNS = [
     "degraded_feature_subset_flag", "degraded_feature_subset_reason",
     "actionable_family_counts", "totals_only_actionable_flag", "viable_side_candidates_count", "side_promoted_by_balance_guard_count", "side_balance_guard_reason",
     "production_win_probability", "production_expected_value", "production_edge", "probability_calibration_reason", "production_eligible",
+    "raw_kelly_amount", "production_bet_amount", "kelly_cap_reason", "kelly_zero_reason",
 ]
 
 CANONICAL_BET_COLUMNS = [
