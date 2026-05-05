@@ -8,9 +8,17 @@ ML_MODEL_WEIGHT = 0.15    # Historical model
 THEOVER_WEIGHT = 0.125     # TheOver consensus
 SENTIMENT_WEIGHT = 0.05   # News sentiment
 
-# Market Maturity Overrides (MLB/NHL)
+# Market Maturity Overrides — MLB only (moderate Kalshi liquidity)
+# Reduces Kalshi weight, boosts ML to compensate for thinner market depth.
 LOW_LIQUIDITY_KALSHI_WEIGHT = 0.30
 LOW_LIQUIDITY_ML_MODEL_WEIGHT = 0.35
+
+# NHL Tier-1 overrides — Kalshi is least reliable for hockey; ML + market dominate.
+NHL_KALSHI_WEIGHT = 0.22
+NHL_ML_MODEL_WEIGHT = 0.42
+NHL_MARKET_WEIGHT = 0.22
+NHL_THEOVER_WEIGHT = 0.09
+NHL_SENTIMENT_WEIGHT = 0.05
 
 # Tier 2: Fallback weights (Kalshi disagrees or unavailable)
 FALLBACK_MARKET_WEIGHT = 0.35
@@ -45,13 +53,23 @@ NHL_TOTAL_MIN_EV_STRICT = 0.01
 NHL_TOTAL_MIN_EDGE_STRICT = 0.02
 FALLBACK_HEAVY_TOTAL_EV_MULTIPLIER = 0.85
 
-# Spread Divergence Overrides (for ML vs Kalshi diff > 20%)
+# Divergence guardrail thresholds — per league (ML vs Kalshi gap to trigger cap)
+# Thresholds reflect market liquidity: liquid markets (NBA) trust Kalshi more,
+# thin markets (NHL) tolerate larger gaps before capping as High Variance.
+KALSHI_DIVERGENCE_THRESHOLD = 0.20          # Default for unlisted leagues
+KALSHI_DIVERGENCE_THRESHOLD_NBA = 0.25      # Very liquid — tighter cap
+KALSHI_DIVERGENCE_THRESHOLD_MLB = 0.22      # Moderate liquidity
+KALSHI_DIVERGENCE_THRESHOLD_NHL = 0.30      # Thin market — ML more trusted
+
+# Spread divergence override (allows Actionable despite divergence if strong signal)
 SPREAD_DIVERGENCE_OVERRIDE_MIN_PROB = 0.55
 SPREAD_DIVERGENCE_OVERRIDE_MIN_EV = 0.03
 SPREAD_DIVERGENCE_OVERRIDE_MIN_EDGE = 0.04
-DIVERGENCE_HIGH_VARIANCE_MIN_EV = 0.00
-DIVERGENCE_HIGH_VARIANCE_MIN_EDGE = 0.00
-DIVERGENCE_HIGH_VARIANCE_MIN_PROB = 0.50
+
+# Divergent picks viability floor — min quality to surface as High Variance vs No Play
+DIVERGENCE_HIGH_VARIANCE_MIN_EV = 0.03
+DIVERGENCE_HIGH_VARIANCE_MIN_EDGE = 0.02
+DIVERGENCE_HIGH_VARIANCE_MIN_PROB = 0.53
 
 # Side Minimum Win Probability
 SIDE_MIN_WIN_PROB = 0.52

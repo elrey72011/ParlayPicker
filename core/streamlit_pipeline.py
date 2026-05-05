@@ -52,7 +52,10 @@ from app_core.weights_config import (
     ALLOW_UPLOAD_TOTAL_FALLBACK_ACTIONABLE,
     KALSHI_WEIGHT, MARKET_WEIGHT, ML_MODEL_WEIGHT, THEOVER_WEIGHT, SENTIMENT_WEIGHT,
     FALLBACK_MARKET_WEIGHT, FALLBACK_ML_WEIGHT, FALLBACK_THEOVER_WEIGHT, FALLBACK_SENTIMENT_WEIGHT,
-    LOW_LIQUIDITY_KALSHI_WEIGHT, LOW_LIQUIDITY_ML_MODEL_WEIGHT
+    LOW_LIQUIDITY_KALSHI_WEIGHT, LOW_LIQUIDITY_ML_MODEL_WEIGHT,
+    NHL_KALSHI_WEIGHT, NHL_ML_MODEL_WEIGHT, NHL_MARKET_WEIGHT, NHL_THEOVER_WEIGHT, NHL_SENTIMENT_WEIGHT,
+    KALSHI_DIVERGENCE_THRESHOLD, KALSHI_DIVERGENCE_THRESHOLD_NBA,
+    KALSHI_DIVERGENCE_THRESHOLD_MLB, KALSHI_DIVERGENCE_THRESHOLD_NHL,
 )
 
 warnings.filterwarnings("ignore", category=FutureWarning, module="pandas")
@@ -1229,8 +1232,14 @@ def compute_blended_probability(
             w_the = THEOVER_WEIGHT
             w_sen = SENTIMENT_WEIGHT
 
-            # Market Maturity Overrides (MLB/NHL)
-            if lg and (lg.upper() == "MLB" or lg.upper() == "NHL"):
+            # Market Maturity Overrides — league-specific Kalshi reliability
+            if lg and lg.upper() == "NHL":
+                w_kalshi = NHL_KALSHI_WEIGHT
+                w_market = NHL_MARKET_WEIGHT
+                w_ml = NHL_ML_MODEL_WEIGHT
+                w_the = NHL_THEOVER_WEIGHT
+                w_sen = NHL_SENTIMENT_WEIGHT
+            elif lg and lg.upper() == "MLB":
                 w_kalshi = LOW_LIQUIDITY_KALSHI_WEIGHT
                 w_ml = LOW_LIQUIDITY_ML_MODEL_WEIGHT
 
@@ -2236,7 +2245,13 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         is_kalshi_divergence = False
         is_spread_divergence_override = False
         if pd.notna(ml_prob) and pd.notna(kalshi_prob):
-            if abs(float(ml_prob) - float(kalshi_prob)) > 0.20:
+            _div_thresholds = {
+                "NBA": KALSHI_DIVERGENCE_THRESHOLD_NBA,
+                "MLB": KALSHI_DIVERGENCE_THRESHOLD_MLB,
+                "NHL": KALSHI_DIVERGENCE_THRESHOLD_NHL,
+            }
+            _div_threshold = _div_thresholds.get(str(league).upper(), KALSHI_DIVERGENCE_THRESHOLD)
+            if abs(float(ml_prob) - float(kalshi_prob)) > _div_threshold:
                 is_kalshi_divergence = True
                 if "spread" in market_type.lower() and not pd.isna(ev) and not pd.isna(edge):
                     if win_prob >= SPREAD_DIVERGENCE_OVERRIDE_MIN_PROB and ev >= SPREAD_DIVERGENCE_OVERRIDE_MIN_EV and edge >= SPREAD_DIVERGENCE_OVERRIDE_MIN_EDGE:
