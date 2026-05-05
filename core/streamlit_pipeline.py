@@ -3178,7 +3178,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     concentration_reasons: list[str] = []
     if actionable_total_over_count > int(MAX_TOTAL_OVER_ACTIONABLE_COUNT):
         concentration_reasons.append("total_over_count_cap")
-    if over_share > float(MAX_TOTAL_OVER_ACTIONABLE_SHARE):
+    if over_share > float(MAX_TOTAL_OVER_ACTIONABLE_SHARE) and actionable_count > actionable_total_over_count:
         concentration_reasons.append("total_over_share_cap")
     if actionable_mlb_total_over_count > int(MAX_MLB_TOTAL_OVER_ACTIONABLE_COUNT):
         concentration_reasons.append("mlb_total_over_count_cap")
