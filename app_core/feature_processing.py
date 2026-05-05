@@ -31,10 +31,11 @@ logger.info("==========================================================")
 logger.info("Initializing app_core.feature_processing: Checking live stats dependencies...")
 
 try:
-    from nba_api.stats.endpoints import leaguedashteamstats
+    from nba_api.stats.endpoints import leaguedashteamstats, leaguestandings as nba_leaguestandings
     logger.info("✅ nba_api loaded successfully.")
 except ImportError:
     leaguedashteamstats = None
+    nba_leaguestandings = None
     logger.error("❌ nba_api not installed. NBA stats fetching will fail.")
 
 try:
@@ -1567,6 +1568,41 @@ def fetch_nba_stats(season_year: int) -> List[Dict[str, Any]]:
             )
             df = dashboard.get_data_frames()[0]
 
+            # Fetch last-5 win% via separate call
+            last5_by_team: dict = {}
+            try:
+                dashboard_l5 = leaguedashteamstats.LeagueDashTeamStats(
+                    season=season_str,
+                    measure_type_detailed_defense='Base',
+                    per_mode_detailed='PerGame',
+                    last_n_games=5,
+                    timeout=base_timeout,
+                )
+                df_l5 = dashboard_l5.get_data_frames()[0]
+                for _, r in df_l5.iterrows():
+                    last5_by_team[str(r['TEAM_NAME'])] = float(r['W_PCT'])
+            except Exception as e_l5:
+                logger.warning(f"NBA last-5 fetch failed: {e_l5}")
+
+            # Fetch current streak via LeagueStandings
+            streak_by_team: dict = {}
+            try:
+                if nba_leaguestandings is not None:
+                    standings = nba_leaguestandings.LeagueStandings(season=season_str, timeout=base_timeout)
+                    sdf = standings.get_data_frames()[0]
+                    for _, r in sdf.iterrows():
+                        raw = str(r.get('strCurrentStreak', '') or '')
+                        # Format: "W 3" or "L 2"
+                        parts = raw.strip().split()
+                        if len(parts) == 2:
+                            try:
+                                val = int(parts[1])
+                                streak_by_team[str(r['TeamName'])] = float(val) if parts[0].upper() == 'W' else float(-val)
+                            except ValueError:
+                                pass
+            except Exception as e_st:
+                logger.warning(f"NBA standings/streak fetch failed: {e_st}")
+
             stats = []
             for _, row in df.iterrows():
                 team_name = str(row['TEAM_NAME'])
@@ -1580,6 +1616,8 @@ def fetch_nba_stats(season_year: int) -> List[Dict[str, Any]]:
                 if abs(plus_minus) > 30 and gp > 0:
                     plus_minus /= gp
                 oppg = (pts - plus_minus)
+                last5 = last5_by_team.get(team_name, w_pct)
+                streak = streak_by_team.get(team_name, 0.0)
 
                 stats.append({
                     "team_norm": normalize_team_for_stats(team_name, league="NBA"),
@@ -1592,8 +1630,8 @@ def fetch_nba_stats(season_year: int) -> List[Dict[str, Any]]:
                     "assists_per_game": ast,
                     "rebounds_per_game": reb,
                     "turnovers": tov,
-                    "streak": 0.0,
-                    "last5_win_pct": w_pct
+                    "streak": streak,
+                    "last5_win_pct": last5,
                 })
 
             _NBA_STATS_RUNTIME_CACHE[season_year] = stats
@@ -2218,8 +2256,60 @@ def fetch_from_espn_ncaab(season_year: int) -> List[Dict[str, Any]]:
 
 
 @st.cache_data(ttl=21600)
+def _fetch_mlb_standings_supplement(season_year: int) -> dict:
+    """
+    Fetch MLB streak and last-10 win% from MLB Stats API.
+    Returns dict keyed by normalized team name -> {streak, last10_win_pct}.
+    """
+    supplement: dict = {}
+    try:
+        url = (
+            f"https://statsapi.mlb.com/api/v1/standings"
+            f"?leagueId=103,104&season={season_year}&hydrate=streak,records,team"
+        )
+        resp = requests.get(url, timeout=8)
+        resp.raise_for_status()
+        data = resp.json()
+        for division in data.get("records", []):
+            for tr in division.get("teamRecords", []):
+                name = tr.get("team", {}).get("name", "")
+                if not name:
+                    continue
+                team_norm = normalize_team_for_stats(name, "MLB")
+                # Streak
+                streak_code = tr.get("streak", {}).get("streakCode", "")
+                streak = 0.0
+                if streak_code:
+                    try:
+                        val = int(streak_code[1:])
+                        streak = float(val) if streak_code[0].upper() == "W" else float(-val)
+                    except (ValueError, IndexError):
+                        pass
+                # Last-10 win%
+                last10_win_pct = None
+                for split in tr.get("records", {}).get("splitRecords", []):
+                    if split.get("type") == "lastTen":
+                        w10 = split.get("wins", 0)
+                        l10 = split.get("losses", 0)
+                        total10 = w10 + l10
+                        last10_win_pct = w10 / total10 if total10 > 0 else None
+                        break
+                supplement[team_norm] = {
+                    "streak": streak,
+                    "last10_win_pct": last10_win_pct,
+                }
+        logger.info(f"MLB Stats API supplement fetched for {len(supplement)} teams.")
+    except Exception as e:
+        logger.warning(f"MLB Stats API supplement fetch failed: {e}")
+    return supplement
+
+
+@st.cache_data(ttl=21600)
 def fetch_from_espn_mlb(season_year: int) -> List[Dict[str, Any]]:
-    """Fetch MLB stats from ESPN API by traversing Leagues and Divisions."""
+    """Fetch MLB stats from ESPN API, supplemented with streak + last-10 from MLB Stats API."""
+    # Fetch streak and last-10 supplement first (best-effort)
+    supplement = _fetch_mlb_standings_supplement(season_year)
+
     try:
         logger.info(f"Fetching MLB stats from ESPN for season: {season_year}")
         url = "https://site.api.espn.com/apis/v2/sports/baseball/mlb/standings"
@@ -2254,6 +2344,10 @@ def fetch_from_espn_mlb(season_year: int) -> List[Dict[str, Any]]:
             oppg = d_avg if d_avg > 0 else (p_against / games if games > 0 else 0.0)
             win_pct = (wins / games) if games > 0 else 0.5
 
+            supp = supplement.get(team_norm, {})
+            streak = supp.get("streak", 0.0)
+            last5_win_pct = supp.get("last10_win_pct") or win_pct
+
             stats.append({
                 "team_norm": team_norm,
                 "stats_team_key": team_norm.strip().lower(),
@@ -2265,8 +2359,8 @@ def fetch_from_espn_mlb(season_year: int) -> List[Dict[str, Any]]:
                 "points_per_game": ppg,
                 "points_allowed_per_game": oppg,
                 "turnovers": 0.0,
-                "streak": 0.0,
-                "last5_win_pct": win_pct,
+                "streak": streak,
+                "last5_win_pct": last5_win_pct,
                 "source": "ESPN"
             })
 
