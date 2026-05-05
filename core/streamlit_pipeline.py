@@ -3172,7 +3172,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     over_share = (actionable_total_over_count / actionable_count) if actionable_count else 0.0
     over_limit = min(
         int(MAX_TOTAL_OVER_ACTIONABLE_COUNT),
-        int(np.floor(actionable_count * float(MAX_TOTAL_OVER_ACTIONABLE_SHARE))) if actionable_count else 0,
+        int(np.ceil(actionable_count * float(MAX_TOTAL_OVER_ACTIONABLE_SHARE))) if actionable_count else 0,
     )
     keep_total_over = max(0, min(actionable_total_over_count, over_limit))
     concentration_reasons: list[str] = []
