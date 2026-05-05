@@ -1408,6 +1408,35 @@ def _build_spread_rows(normalized: pd.DataFrame) -> list[pd.DataFrame]:
     return [spread_home, spread_away]
 
 
+def _build_h2h_rows(normalized: pd.DataFrame) -> list[pd.DataFrame]:
+    """Build h2h_home and h2h_away rows from TheOver moneyline export."""
+    prob = _first_existing_numeric(normalized, ["theover_probability", "winprobability", "win_probability", "probability"])
+    odds = _first_existing_numeric(normalized, ["odds_american", "american_odds", "odds"], default=pd.NA)
+
+    base_cols = [c for c in ["league", "home_team", "away_team", "game_date", "game_time_est"] if c in normalized.columns]
+    base = normalized[base_cols].copy()
+
+    pick_team = _string_series(normalized, "pick_team")
+    home_team = _string_series(normalized, "home_team")
+    pick_is_home = pick_team.str.strip().str.lower() == home_team.str.strip().str.lower()
+
+    h2h_home = base.copy()
+    h2h_home["market_type"] = "h2h_home"
+    h2h_home["spread_line"] = pd.NA
+    h2h_home["total_line"] = pd.NA
+    h2h_home["theover_probability"] = prob.where(pick_is_home, (1 - prob).where(prob.notna(), pd.NA))
+    h2h_home["odds_american"] = odds
+
+    h2h_away = base.copy()
+    h2h_away["market_type"] = "h2h_away"
+    h2h_away["spread_line"] = pd.NA
+    h2h_away["total_line"] = pd.NA
+    h2h_away["theover_probability"] = (1 - prob).where(pick_is_home & prob.notna(), prob.where(prob.notna(), pd.NA))
+    h2h_away["odds_american"] = odds
+
+    return [h2h_home, h2h_away]
+
+
 def _build_total_rows(normalized: pd.DataFrame) -> list[pd.DataFrame]:
     """Expand a raw totals upload into total_over + total_under rows."""
     total_line = _first_existing_numeric(normalized, ["total_line", "total", "line", "points"])
@@ -1473,11 +1502,13 @@ def build_theover_bet_rows(
             continue
 
         normalized = _normalize_upload(upload_df)
-        # Drop moneyline rows from spreads file — TheOver exports NHL moneylines in the sides CSV
+        # TheOver exports moneylines in the sides CSV; route them to h2h builder
         if file_type == "spreads" and "market" in normalized.columns:
-            normalized = normalized[
-                normalized["market"].str.lower().str.strip().ne("moneyline")
-            ].copy()
+            is_moneyline = normalized["market"].str.lower().str.strip().eq("moneyline")
+            ml_rows = normalized[is_moneyline].copy()
+            normalized = normalized[~is_moneyline].copy()
+            if not ml_rows.empty:
+                pieces.extend(_build_h2h_rows(ml_rows))
         if normalized.empty:
             continue
 
