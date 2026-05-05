@@ -2632,9 +2632,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             weakest_actionable_edge = actionable_edge.min(skipna=True)
             weakest_actionable_prob = actionable_prob.min(skipna=True)
 
-            ev_margin = 0.010
-            edge_margin = 0.010
-            prob_margin = 0.050
+            ev_margin = 0.030
+            edge_margin = 0.025
+            prob_margin = 0.080
 
             blocked_stages = {
                 "suspicious_data_guardrail",
