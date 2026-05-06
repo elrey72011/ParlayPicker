@@ -2931,6 +2931,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         market_type_norm = best["market_type"].astype(str).str.lower()
         is_spread = market_type_norm.isin({"spread_home", "spread_away"})
         is_total = market_type_norm.isin({"total_over", "total_under"})
+        is_h2h = market_type_norm.isin({"h2h_home", "h2h_away"})
         line_source_norm = best.get("line_source", pd.Series([""] * len(best), index=best.index)).astype(str).str.lower()
         live_match = line_source_norm.str.contains("live", na=False)
 
@@ -2968,6 +2969,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         best.loc[ambiguous_identity, "line_event_identity_match_flag"] = False
         best.loc[ambiguous_identity, "line_event_identity_reason"] = "ambiguous_live_event_identity_fuzzy_match"
         best.loc[ambiguous_identity, "line_candidate_count"] = 2
+
+        # h2h picks have no spread/total line — identity check doesn't apply
+        best.loc[is_h2h, "line_event_identity_match_flag"] = True
+        best.loc[is_h2h, "line_event_identity_reason"] = "h2h_no_line_required"
 
         best["market_line_used"] = pd.NA
         best.loc[is_spread & trusted_live_match, "market_line_used"] = best.loc[is_spread & trusted_live_match, "matched_live_spread_line"]
