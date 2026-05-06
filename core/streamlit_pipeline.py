@@ -3308,6 +3308,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 best.loc[top.index, "Status_Reason"] = "Empty card recovery (promoted from: " + prev_status + ")"
                 best.loc[top.index, "status_blocker_stage"] = ""
                 kelly_vals = pd.to_numeric(best.loc[top.index, "Kelly_Bet_Size"], errors="coerce").fillna(0.0)
+                # Picks zeroed by concentration guard or other mechanisms get the cap as a floor
+                kelly_vals = kelly_vals.where(kelly_vals.gt(0), EMPTY_CARD_RECOVERY_MAX_KELLY_PER_PICK_PCT)
                 best.loc[top.index, "Kelly_Bet_Size"] = kelly_vals.clip(upper=EMPTY_CARD_RECOVERY_MAX_KELLY_PER_PICK_PCT)
                 # Cap total slate exposure for recovery picks
                 total_recovery_kelly = float(best.loc[top.index, "Kelly_Bet_Size"].sum())
@@ -3315,11 +3317,20 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                     best.loc[top.index, "Kelly_Bet_Size"] *= EMPTY_CARD_RECOVERY_MAX_KELLY_TOTAL_PCT / total_recovery_kelly
                 best["production_eligible"] = best["Pick_Status"].astype(str).eq("Actionable") & best["Kelly_Bet_Size"].gt(0)
                 logger.info(f"Empty card recovery: promoted {len(top)} pick(s) — {top['market_type'].tolist()}")
+                if diagnostics_out is not None:
+                    diagnostics_out["empty_card_recovery_triggered"] = True
+                    diagnostics_out["empty_card_recovery_promoted_count"] = len(top)
+                    diagnostics_out["empty_card_recovery_market_types"] = top["market_type"].tolist()
+                    diagnostics_out["empty_card_recovery_leagues"] = top["league"].tolist() if "league" in top.columns else []
 
     final_best_df = best[BEST_PICK_COLUMNS].copy()
     final_best_df = ensure_best_pick_export_columns(final_best_df, diagnostics_out=diagnostics_out)
 
     if diagnostics_out is not None:
+        diagnostics_out.setdefault("empty_card_recovery_triggered", False)
+        diagnostics_out.setdefault("empty_card_recovery_promoted_count", 0)
+        diagnostics_out.setdefault("empty_card_recovery_market_types", [])
+        diagnostics_out.setdefault("empty_card_recovery_leagues", [])
         actionable_df = final_best_df[final_best_df["Pick_Status"] == "Actionable"]
         actionable_family_counts = actionable_df["market_type"].astype(str).str.lower().apply(lambda x: "total" if "total" in x else "side").value_counts().to_dict()
         actionable_market_type_counts = actionable_df["market_type"].value_counts().to_dict()
