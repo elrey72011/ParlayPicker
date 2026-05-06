@@ -96,7 +96,7 @@ except Exception as e:
     ML_AVAILABLE = False
     PredictionEngine = None
 
-VALID_MARKETS = {"spread_home", "spread_away", "total_over", "total_under", "h2h_home", "h2h_away"}
+VALID_MARKETS = {"spread_home", "spread_away", "total_over", "total_under"}
 DATE_ALIASES = ["game_date", "game_date_est", "commence_time", "start_time", "time", "date", "event_date"]
 LEAGUE_ALIASES = {"NCAAM": "NCAAB", "NCAA MEN'S BASKETBALL": "NCAAB", "NCAA MENS BASKETBALL": "NCAAB"}
 _KNOWN_NCAAB_TEAM_TOKENS = {
@@ -1502,13 +1502,9 @@ def build_theover_bet_rows(
             continue
 
         normalized = _normalize_upload(upload_df)
-        # TheOver exports moneylines in the sides CSV; route them to h2h builder
+        # Drop moneylines from TheOver sides CSV — only spreads and totals are surfaced
         if file_type == "spreads" and "market" in normalized.columns:
-            is_moneyline = normalized["market"].str.lower().str.strip().eq("moneyline")
-            ml_rows = normalized[is_moneyline].copy()
-            normalized = normalized[~is_moneyline].copy()
-            if not ml_rows.empty:
-                pieces.extend(_build_h2h_rows(ml_rows))
+            normalized = normalized[~normalized["market"].str.lower().str.strip().eq("moneyline")].copy()
         if normalized.empty:
             continue
 
@@ -2231,11 +2227,6 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         elif "total" in market_type.lower():
             if "total_line" not in best.columns or pd.isna(best.at[idx, "total_line"]):
                 is_missing_line = True
-        elif "h2h" in market_type.lower():
-            if "market_probability" in best.columns and "ml_probability" in best.columns:
-                if pd.isna(best.at[idx, "market_probability"]) and pd.isna(best.at[idx, "ml_probability"]):
-                    is_missing_line = True
-
         is_nba_extreme_spread = False
         if league == "NBA" and "spread" in market_type.lower():
             # Support spread_line or spread fallback
@@ -2378,7 +2369,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
 
             consensus_agr = str(best.at[idx, "consensus_agreement"]) if "consensus_agreement" in best.columns else "No Kalshi"
 
-            is_side_market = market_type in {"spread_home", "spread_away", "h2h_home", "h2h_away"}
+            is_side_market = market_type in {"spread_home", "spread_away"}
             is_total_market = "total" in market_type.lower()
 
             status_metric_basis = "effective"
@@ -2647,7 +2638,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     side_balance_guard_reason = "Balance guard not evaluated"
     if actionable_mask.any():
         market_type_str = best["market_type"].astype(str).str.lower()
-        actionable_side_mask = actionable_mask & market_type_str.str.contains("spread|h2h", na=False)
+        actionable_side_mask = actionable_mask & market_type_str.str.contains("spread", na=False)
         actionable_total_mask = actionable_mask & market_type_str.str.contains("total", na=False)
         actionable_family_counts = {
             "total": int(actionable_total_mask.sum()),
@@ -2676,7 +2667,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
 
             side_candidate_mask = (
                 best["Pick_Status"].astype(str).isin({"High Variance/Speculative", "Below Threshold"})
-                & market_type_str.str.contains("spread|h2h", na=False)
+                & market_type_str.str.contains("spread", na=False)
                 & pd.to_numeric(best["effective_expected_value"], errors="coerce").gt(0)
                 & pd.to_numeric(best["effective_edge"], errors="coerce").gt(0)
                 & pd.to_numeric(best["effective_win_probability"], errors="coerce").ge(SIDE_MIN_WIN_PROB)
@@ -2834,7 +2825,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     if not best.empty:
         final_actionable_mask = best["Pick_Status"].astype(str).eq("Actionable")
         market_type_str = best["market_type"].astype(str).str.lower()
-        final_actionable_side_mask = final_actionable_mask & market_type_str.str.contains("spread|h2h", na=False)
+        final_actionable_side_mask = final_actionable_mask & market_type_str.str.contains("spread", na=False)
         final_actionable_total_mask = final_actionable_mask & market_type_str.str.contains("total", na=False)
         if final_actionable_total_mask.any() and not final_actionable_side_mask.any():
             weakest_ev = pd.to_numeric(best.loc[final_actionable_mask, "effective_expected_value"], errors="coerce").min(skipna=True)
@@ -2842,7 +2833,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             weakest_prob = pd.to_numeric(best.loc[final_actionable_mask, "effective_win_probability"], errors="coerce").min(skipna=True)
             post_rank_candidate_mask = (
                 best["Pick_Status"].astype(str).isin({"High Variance/Speculative", "Below Threshold"})
-                & market_type_str.str.contains("spread|h2h", na=False)
+                & market_type_str.str.contains("spread", na=False)
                 & pd.to_numeric(best["effective_expected_value"], errors="coerce").gt(0)
                 & pd.to_numeric(best["effective_edge"], errors="coerce").gt(0)
                 & pd.to_numeric(best["effective_win_probability"], errors="coerce").ge(SIDE_MIN_WIN_PROB)
@@ -2868,7 +2859,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         # Recompute final actionable family diagnostics after last promotion stage.
         final_actionable_mask = best["Pick_Status"].astype(str).eq("Actionable")
         final_market_type_str = best["market_type"].astype(str).str.lower()
-        final_actionable_side_mask = final_actionable_mask & final_market_type_str.str.contains("spread|h2h", na=False)
+        final_actionable_side_mask = final_actionable_mask & final_market_type_str.str.contains("spread", na=False)
         final_actionable_total_mask = final_actionable_mask & final_market_type_str.str.contains("total", na=False)
         actionable_family_counts = {
             "total": int(final_actionable_total_mask.sum()),
@@ -2931,7 +2922,6 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         market_type_norm = best["market_type"].astype(str).str.lower()
         is_spread = market_type_norm.isin({"spread_home", "spread_away"})
         is_total = market_type_norm.isin({"total_over", "total_under"})
-        is_h2h = market_type_norm.isin({"h2h_home", "h2h_away"})
         line_source_norm = best.get("line_source", pd.Series([""] * len(best), index=best.index)).astype(str).str.lower()
         live_match = line_source_norm.str.contains("live", na=False)
 
@@ -2969,10 +2959,6 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         best.loc[ambiguous_identity, "line_event_identity_match_flag"] = False
         best.loc[ambiguous_identity, "line_event_identity_reason"] = "ambiguous_live_event_identity_fuzzy_match"
         best.loc[ambiguous_identity, "line_candidate_count"] = 2
-
-        # h2h picks have no spread/total line — identity check doesn't apply
-        best.loc[is_h2h, "line_event_identity_match_flag"] = True
-        best.loc[is_h2h, "line_event_identity_reason"] = "h2h_no_line_required"
 
         best["market_line_used"] = pd.NA
         best.loc[is_spread & trusted_live_match, "market_line_used"] = best.loc[is_spread & trusted_live_match, "matched_live_spread_line"]
@@ -3348,7 +3334,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         diagnostics_out["actionable_market_type_counts"] = actionable_market_type_counts
         diagnostics_out["actionable_total_over_count"] = int(actionable_market_type_counts.get("total_over", 0))
         diagnostics_out["actionable_total_under_count"] = int(actionable_market_type_counts.get("total_under", 0))
-        diagnostics_out["actionable_side_count"] = int(sum(v for k, v in actionable_market_type_counts.items() if "spread" in str(k) or "h2h" in str(k)))
+        diagnostics_out["actionable_side_count"] = int(sum(v for k, v in actionable_market_type_counts.items() if "spread" in str(k)))
         diagnostics_out["actionable_mlb_total_over_count"] = int(((actionable_df["league"].astype(str).str.upper() == "MLB") & (actionable_df["market_type"].astype(str).str.lower() == "total_over")).sum())
         diagnostics_out["total_over_concentration_flag"] = bool(concentration_guard_active)
         diagnostics_out["total_over_concentration_reason"] = ",".join(concentration_reasons) if concentration_reasons else "none"
@@ -3612,8 +3598,8 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
 
     # Diagnostic counters
     diag_counts = {
-        "generated": {"spread_home": 0, "spread_away": 0, "total_over": 0, "total_under": 0, "h2h_home": 0, "h2h_away": 0},
-        "filtered": {"spread_home": 0, "spread_away": 0, "total_over": 0, "total_under": 0, "h2h_home": 0, "h2h_away": 0},
+        "generated": {"spread_home": 0, "spread_away": 0, "total_over": 0, "total_under": 0},
+        "filtered": {"spread_home": 0, "spread_away": 0, "total_over": 0, "total_under": 0},
         "games_unmatched": 0,
         "games_matched_exact": 0,
         "games_matched_canonical": 0,
@@ -3661,12 +3647,8 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
         game_date = str(row.get("game_date", ""))
         et_date = str(row.get("_et_day", ""))
 
-        # Determine which markets to emit for the game
-        # NHL gets H2H and Totals. Others get Spreads and Totals.
-        if league_str == "NHL":
-            candidate_markets = ["h2h_home", "h2h_away", "total_over", "total_under"]
-        else:
-            candidate_markets = ["spread_home", "spread_away", "total_over", "total_under"]
+        # All leagues use spreads and totals
+        candidate_markets = ["spread_home", "spread_away", "total_over", "total_under"]
 
         for m in candidate_markets:
             diag_counts["generated"][m] += 1
@@ -3676,8 +3658,6 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
             "spread_away": ("away_price", "away_point"),
             "total_over": ("over_price", "over_point"),
             "total_under": ("under_price", "under_point"),
-            "h2h_home": ("h2h_home_price", None),
-            "h2h_away": ("h2h_away_price", None)
         }
 
         # Check for matches in the uploaded file
@@ -4568,8 +4548,7 @@ def run_analysis_pipeline(
     total_model = (0.6 * theover_probability) + (0.4 * ml_probability)
     total_model = total_model.where(total_model.notna(), theover_probability.where(theover_probability.notna(), ml_probability))
 
-    # Group Spread and H2H (Moneyline) as 'Sides' for probability logic
-    is_side = market_type.str.contains("spread|h2h", case=False, na=False)
+    is_side = market_type.str.contains("spread", case=False, na=False)
     model_probability = pd.Series(
         np.where(is_side, spread_model, total_model),
         index=merged.index,
