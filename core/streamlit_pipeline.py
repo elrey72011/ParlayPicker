@@ -3303,7 +3303,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                     ["effective_expected_value", "effective_edge", "effective_win_probability"],
                     ascending=[False, False, False],
                 ).head(EMPTY_CARD_RECOVERY_MAX_PICKS)
-                prev_status = best.loc[top.index, "Pick_Status"].copy()
+                prev_status = best.loc[top.index, "Pick_Status"].astype(str).copy()
                 best.loc[top.index, "Pick_Status"] = "Actionable"
                 best.loc[top.index, "Status_Reason"] = "Empty card recovery (promoted from: " + prev_status + ")"
                 best.loc[top.index, "status_blocker_stage"] = ""
