@@ -1223,6 +1223,9 @@ def compute_blended_probability(
         if pd.notna(p_kal):
             k_oriented = p_kal
 
+        # Sentiment is only real when sentiment_diff != 0.0 (0.5 = default/no data)
+        has_real_sentiment = pd.notna(p_sen) and abs(p_sen - 0.5) > 1e-6
+
         # Tier 1 vs Tier 2
         if k_oriented is not None and k_oriented >= 0.55:
             # Tier 1
@@ -1230,7 +1233,7 @@ def compute_blended_probability(
             w_market = MARKET_WEIGHT
             w_ml = ML_MODEL_WEIGHT
             w_the = THEOVER_WEIGHT
-            w_sen = SENTIMENT_WEIGHT
+            w_sen = SENTIMENT_WEIGHT if has_real_sentiment else 0.0
 
             # Market Maturity Overrides — league-specific Kalshi reliability
             if lg and lg.upper() == "NHL":
@@ -1238,16 +1241,11 @@ def compute_blended_probability(
                 w_market = NHL_MARKET_WEIGHT
                 w_ml = NHL_ML_MODEL_WEIGHT
                 w_the = NHL_THEOVER_WEIGHT
-                w_sen = NHL_SENTIMENT_WEIGHT
+                w_sen = NHL_SENTIMENT_WEIGHT if has_real_sentiment else 0.0
             elif lg and lg.upper() == "MLB":
                 w_kalshi = LOW_LIQUIDITY_KALSHI_WEIGHT
                 w_ml = LOW_LIQUIDITY_ML_MODEL_WEIGHT
 
-            # Re-normalize weights to sum to 1.0.
-            # The MLB/NHL override (LOW_LIQUIDITY_KALSHI_WEIGHT=0.30,
-            # LOW_LIQUIDITY_ML_MODEL_WEIGHT=0.35) shifts +0.025 vs the base
-            # weights, so without this step the blended probability is
-            # inflated by ~2.5% for every MLB/NHL Tier-1 pick.
             if pd.isna(p_ml):
                 total_w = w_kalshi + w_market + w_the + w_sen
                 w_kalshi /= total_w
@@ -1266,25 +1264,33 @@ def compute_blended_probability(
                     w_sen /= total_w
                 p_ml_val = p_ml
 
-            prob = (k_oriented * w_kalshi) + (p_mkt * w_market) + (p_ml_val * w_ml) + (p_the * w_the) + (p_sen * w_sen)
+            p_sen_val = p_sen if has_real_sentiment else 0.0
+            prob = (k_oriented * w_kalshi) + (p_mkt * w_market) + (p_ml_val * w_ml) + (p_the * w_the) + (p_sen_val * w_sen)
         else:
             # Tier 2 Fallback (Kalshi disagrees or unavailable)
             w_market = FALLBACK_MARKET_WEIGHT
             w_ml = FALLBACK_ML_WEIGHT
             w_the = FALLBACK_THEOVER_WEIGHT
-            w_sen = FALLBACK_SENTIMENT_WEIGHT
+            w_sen = FALLBACK_SENTIMENT_WEIGHT if has_real_sentiment else 0.0
 
             if pd.isna(p_ml):
                 total_w = w_market + w_the + w_sen
                 w_market /= total_w
                 w_the /= total_w
-                w_sen /= total_w
+                w_sen /= total_w if w_sen > 0 else 1.0
                 p_ml_val = 0.0
                 w_ml = 0.0
             else:
+                total_w = w_market + w_ml + w_the + w_sen
+                if abs(total_w - 1.0) > 1e-9:
+                    w_market /= total_w
+                    w_ml /= total_w
+                    w_the /= total_w
+                    w_sen /= total_w
                 p_ml_val = p_ml
 
-            prob = (p_mkt * w_market) + (p_ml_val * w_ml) + (p_the * w_the) + (p_sen * w_sen)
+            p_sen_val = p_sen if has_real_sentiment else 0.0
+            prob = (p_mkt * w_market) + (p_ml_val * w_ml) + (p_the * w_the) + (p_sen_val * w_sen)
 
         return prob
 
@@ -3253,6 +3259,62 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     best.loc[~best["Pick_Status"].astype(str).eq("Actionable"), "Kelly_Bet_Size"] = 0.0
     best["production_eligible"] = best["Pick_Status"].astype(str).eq("Actionable") & best["Kelly_Bet_Size"].gt(0)
 
+    # Empty Card Recovery: when no Actionable picks survive all gates, surface the
+    # best High Variance or Below Threshold candidates under strict production floors.
+    from app_core.weights_config import (
+        ALLOW_EMPTY_CARD_RECOVERY,
+        EMPTY_CARD_RECOVERY_MAX_PICKS,
+        EMPTY_CARD_RECOVERY_MIN_PRODUCTION_EV,
+        EMPTY_CARD_RECOVERY_MIN_PRODUCTION_EDGE,
+        EMPTY_CARD_RECOVERY_MIN_PRODUCTION_WIN_PROB,
+        EMPTY_CARD_RECOVERY_EXCLUDE_MARKET_TYPES,
+        EMPTY_CARD_RECOVERY_EXCLUDE_SOURCES,
+        EMPTY_CARD_RECOVERY_MAX_KELLY_PER_PICK_PCT,
+        EMPTY_CARD_RECOVERY_MAX_KELLY_TOTAL_PCT,
+        ALLOW_MLB_TOTAL_OVER_EMPTY_CARD_RECOVERY,
+    )
+    if ALLOW_EMPTY_CARD_RECOVERY and not best.empty:
+        actionable_count = best["production_eligible"].sum()
+        if actionable_count == 0:
+            is_mlb_total_over = (
+                best["league"].astype(str).str.upper().eq("MLB")
+                & best["market_type"].astype(str).str.lower().eq("total_over")
+            )
+            recovery_mask = (
+                best["Pick_Status"].astype(str).isin({"High Variance/Speculative", "Below Threshold"})
+                & ~best["market_type"].astype(str).str.lower().isin(
+                    [m.lower() for m in EMPTY_CARD_RECOVERY_EXCLUDE_MARKET_TYPES]
+                )
+                & ~best.get("candidate_source", pd.Series("", index=best.index)).astype(str).isin(
+                    EMPTY_CARD_RECOVERY_EXCLUDE_SOURCES
+                )
+                & pd.to_numeric(best.get("effective_expected_value"), errors="coerce").ge(EMPTY_CARD_RECOVERY_MIN_PRODUCTION_EV)
+                & pd.to_numeric(best.get("effective_edge"), errors="coerce").ge(EMPTY_CARD_RECOVERY_MIN_PRODUCTION_EDGE)
+                & pd.to_numeric(best.get("effective_win_probability"), errors="coerce").ge(EMPTY_CARD_RECOVERY_MIN_PRODUCTION_WIN_PROB)
+                & ~best.get("suspicious_data_flag", pd.Series(False, index=best.index)).fillna(False).astype(bool)
+            )
+            if not ALLOW_MLB_TOTAL_OVER_EMPTY_CARD_RECOVERY:
+                recovery_mask = recovery_mask & ~is_mlb_total_over
+
+            recovery_candidates = best[recovery_mask]
+            if not recovery_candidates.empty:
+                top = recovery_candidates.sort_values(
+                    ["effective_expected_value", "effective_edge", "effective_win_probability"],
+                    ascending=[False, False, False],
+                ).head(EMPTY_CARD_RECOVERY_MAX_PICKS)
+                prev_status = best.loc[top.index, "Pick_Status"].copy()
+                best.loc[top.index, "Pick_Status"] = "Actionable"
+                best.loc[top.index, "Status_Reason"] = "Empty card recovery (promoted from: " + prev_status + ")"
+                best.loc[top.index, "status_blocker_stage"] = ""
+                kelly_vals = pd.to_numeric(best.loc[top.index, "Kelly_Bet_Size"], errors="coerce").fillna(0.0)
+                best.loc[top.index, "Kelly_Bet_Size"] = kelly_vals.clip(upper=EMPTY_CARD_RECOVERY_MAX_KELLY_PER_PICK_PCT)
+                # Cap total slate exposure for recovery picks
+                total_recovery_kelly = float(best.loc[top.index, "Kelly_Bet_Size"].sum())
+                if total_recovery_kelly > EMPTY_CARD_RECOVERY_MAX_KELLY_TOTAL_PCT and total_recovery_kelly > 0:
+                    best.loc[top.index, "Kelly_Bet_Size"] *= EMPTY_CARD_RECOVERY_MAX_KELLY_TOTAL_PCT / total_recovery_kelly
+                best["production_eligible"] = best["Pick_Status"].astype(str).eq("Actionable") & best["Kelly_Bet_Size"].gt(0)
+                logger.info(f"Empty card recovery: promoted {len(top)} pick(s) — {top['market_type'].tolist()}")
+
     final_best_df = best[BEST_PICK_COLUMNS].copy()
     final_best_df = ensure_best_pick_export_columns(final_best_df, diagnostics_out=diagnostics_out)
 
@@ -4594,6 +4656,27 @@ def run_analysis_pipeline(
     model_probability = model_probability.where(~(star_impact & (merged["market_type"] == "total_over")), model_probability + NBA_STAR_ACTIVE_TOTAL_OVER_BOOST)
     model_probability = model_probability.where(~(star_impact & (merged["market_type"] == "total_under")), model_probability + NBA_STAR_ACTIVE_TOTAL_UNDER_PENALTY)
 
+    # Injury Impact: adjust model probability based on key player availability.
+    # Populated by external_data_fetcher.py — defaults to 0 when no data provided.
+    home_injuries = pd.to_numeric(merged.get("injuries_home_count", 0), errors="coerce").fillna(0)
+    away_injuries = pd.to_numeric(merged.get("injuries_away_count", 0), errors="coerce").fillna(0)
+    from app_core.weights_config import INJURY_PROB_PENALTY_PER_KEY_PLAYER, INJURY_KEY_PLAYER_THRESHOLD
+    home_injury_penalty = (home_injuries.clip(upper=4) * INJURY_PROB_PENALTY_PER_KEY_PLAYER).where(home_injuries >= INJURY_KEY_PLAYER_THRESHOLD, 0.0)
+    away_injury_penalty = (away_injuries.clip(upper=4) * INJURY_PROB_PENALTY_PER_KEY_PLAYER).where(away_injuries >= INJURY_KEY_PLAYER_THRESHOLD, 0.0)
+    is_home_side = merged["market_type"].astype(str).eq("spread_home")
+    is_away_side = merged["market_type"].astype(str).eq("spread_away")
+    model_probability = model_probability.where(~is_home_side, (model_probability - home_injury_penalty + away_injury_penalty).clip(0.01, 0.99))
+    model_probability = model_probability.where(~is_away_side, (model_probability - away_injury_penalty + home_injury_penalty).clip(0.01, 0.99))
+
+    # Weather Impact (MLB outdoor games only): reduce total over probability in bad weather.
+    from app_core.weights_config import WEATHER_TOTAL_OVER_PENALTY
+    if "weather_flag" in merged.columns:
+        is_mlb_total_over = (merged["league"].astype(str).str.upper().eq("MLB")) & (merged["market_type"].astype(str).eq("total_over"))
+        is_mlb_total_under = (merged["league"].astype(str).str.upper().eq("MLB")) & (merged["market_type"].astype(str).eq("total_under"))
+        has_bad_weather = pd.to_numeric(merged["weather_flag"], errors="coerce").fillna(0).eq(1.0)
+        model_probability = model_probability.where(~(is_mlb_total_over & has_bad_weather), (model_probability - WEATHER_TOTAL_OVER_PENALTY).clip(0.01, 0.99))
+        model_probability = model_probability.where(~(is_mlb_total_under & has_bad_weather), (model_probability + WEATHER_TOTAL_OVER_PENALTY).clip(0.01, 0.99))
+
     # Tournament Efficiency Decay: Flat 4% reduction to final "Over" probability for all postseason games.
     is_postseason = is_postseason_ncaab(merged)
     model_probability = model_probability.where(~(is_postseason & (merged["market_type"] == "total_over")), model_probability - 0.04)
@@ -4608,6 +4691,13 @@ def run_analysis_pipeline(
     # Ensure probabilities are bounded
     model_probability = model_probability.clip(0.01, 0.99)
     # --- End Metadata Framework ---
+
+    # Enrich with external data (injuries, weather) before blending
+    try:
+        from app_core.external_data_fetcher import enrich_with_external_data
+        merged = enrich_with_external_data(merged)
+    except Exception as _ext_err:
+        logger.warning(f"External data enrichment skipped: {_ext_err}")
 
     kalshi_probability = _numeric_series(merged, "kalshi_probability") if "kalshi_probability" in merged.columns else pd.Series([pd.NA]*len(merged), index=merged.index)
     sentiment_series = _numeric_series(merged, "sentiment_diff", 0.0).apply(lambda x: 0.5 + (x * 0.5)) if "sentiment_diff" in merged.columns else pd.Series([0.5]*len(merged), index=merged.index)
