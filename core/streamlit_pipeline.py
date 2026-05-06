@@ -3283,6 +3283,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             )
             recovery_mask = (
                 best["Pick_Status"].astype(str).isin({"High Variance/Speculative", "Below Threshold"})
+                & best.get("status_metric_basis", pd.Series("", index=best.index)).astype(str).eq("effective")
                 & ~best["market_type"].astype(str).str.lower().isin(
                     [m.lower() for m in EMPTY_CARD_RECOVERY_EXCLUDE_MARKET_TYPES]
                 )
