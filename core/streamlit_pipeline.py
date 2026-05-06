@@ -1223,8 +1223,9 @@ def compute_blended_probability(
         if pd.notna(p_kal):
             k_oriented = p_kal
 
-        # Sentiment is only real when sentiment_diff != 0.0 (0.5 = default/no data)
-        has_real_sentiment = pd.notna(p_sen) and abs(p_sen - 0.5) > 1e-6
+        # Sentiment is only real when it deviates from neutral (0.5 in probability space).
+        # p_sen is already converted: 0.5 + sentiment_diff * 0.5, so 0.5 = no signal.
+        has_real_sentiment = pd.notna(p_sen) and abs(p_sen - 0.5) > 0.02
 
         # Tier 1 vs Tier 2
         if k_oriented is not None and k_oriented >= 0.55:
@@ -1338,7 +1339,7 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
         p_kalshi=kalshi_prob,
         p_ml=model_prob,
         p_theover=theover,  # Use existing variable
-        p_sentiment=_numeric_series(out, "sentiment_diff", default=0.5),
+        p_sentiment=_numeric_series(out, "sentiment_diff", default=0.0).apply(lambda x: 0.5 + x * 0.5),
         league=_string_series(out, "league"),
         market_type=_string_series(out, "market_type")
     )
@@ -4700,13 +4701,14 @@ def run_analysis_pipeline(
         logger.warning(f"External data enrichment skipped: {_ext_err}")
 
     kalshi_probability = _numeric_series(merged, "kalshi_probability") if "kalshi_probability" in merged.columns else pd.Series([pd.NA]*len(merged), index=merged.index)
-    sentiment_series = _numeric_series(merged, "sentiment_diff", 0.0).apply(lambda x: 0.5 + (x * 0.5)) if "sentiment_diff" in merged.columns else pd.Series([0.5]*len(merged), index=merged.index)
+    _raw_sentiment = _numeric_series(merged, "sentiment_diff", 0.0) if "sentiment_diff" in merged.columns else pd.Series([0.0]*len(merged), index=merged.index)
+    sentiment_prob = (0.5 + _raw_sentiment * 0.5).clip(0.0, 1.0)
     calibrated_probability = compute_blended_probability(
         p_market=merged["market_probability"],
         p_kalshi=kalshi_probability,
         p_ml=model_probability,
-        p_theover=theover_probability,  # Use existing variable
-        p_sentiment=_numeric_series(merged, "sentiment_diff", default=0.5),
+        p_theover=theover_probability,
+        p_sentiment=sentiment_prob,
         league=_string_series(merged, "league"),
         market_type=_string_series(merged, "market_type")
     )
