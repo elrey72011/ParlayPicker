@@ -708,10 +708,12 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
     diagnostics["portfolio_positive_bet_count"] = int((pd.to_numeric(portfolio_df.get("production_bet_amount", 0), errors="coerce").fillna(0).gt(0)).sum()) if isinstance(portfolio_df, pd.DataFrame) and not portfolio_df.empty else 0
     best_picks_df = _attach_kelly_to_best_picks(best_picks_df, portfolio_df, diagnostics)
     diagnostics["empty_card_recovery_enabled"] = bool(ENABLE_EMPTY_CARD_RECOVERY)
-    diagnostics["empty_card_recovery_triggered"] = False
+    # Preserve True if the pipeline's internal recovery already fired; only default to False
+    diagnostics.setdefault("empty_card_recovery_triggered", False)
     diagnostics["production_card_empty_before_recovery_flag"] = bool(_safe_str_series(best_picks_df, "Pick_Status").eq("Actionable").sum() == 0)
     diagnostics["empty_card_recovery_candidate_count"] = 0
-    diagnostics["empty_card_recovery_promoted_count"] = 0
+    # Preserve promoted count from pipeline recovery if already set
+    diagnostics.setdefault("empty_card_recovery_promoted_count", 0)
     diagnostics["empty_card_recovery_excluded_total_over_count"] = 0
     diagnostics["empty_card_recovery_excluded_line_source_count"] = 0
     diagnostics["empty_card_recovery_excluded_threshold_count"] = 0
