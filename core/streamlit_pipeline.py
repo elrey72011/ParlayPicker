@@ -1278,7 +1278,7 @@ def compute_blended_probability(
                 total_w = w_market + w_the + w_sen
                 w_market /= total_w
                 w_the /= total_w
-                w_sen /= total_w if w_sen > 0 else 1.0
+                w_sen /= total_w
                 p_ml_val = 0.0
                 w_ml = 0.0
             else:
@@ -4657,11 +4657,18 @@ def run_analysis_pipeline(
     model_probability = model_probability.where(~(star_impact & (merged["market_type"] == "total_over")), model_probability + NBA_STAR_ACTIVE_TOTAL_OVER_BOOST)
     model_probability = model_probability.where(~(star_impact & (merged["market_type"] == "total_under")), model_probability + NBA_STAR_ACTIVE_TOTAL_UNDER_PENALTY)
 
+    # Enrich with external data (injuries, weather) — must run before adjustments below
+    try:
+        from app_core.external_data_fetcher import enrich_with_external_data
+        merged = enrich_with_external_data(merged)
+        logger.info(f"External enrichment complete — injuries_home sum={merged.get('injuries_home_count', pd.Series([0])).sum()}, weather flags={merged.get('weather_flag', pd.Series([0.0])).sum()}")
+    except Exception as _ext_err:
+        logger.warning(f"External data enrichment skipped: {_ext_err}")
+
     # Injury Impact: adjust model probability based on key player availability.
-    # Populated by external_data_fetcher.py — defaults to 0 when no data provided.
+    from app_core.weights_config import INJURY_PROB_PENALTY_PER_KEY_PLAYER, INJURY_KEY_PLAYER_THRESHOLD
     home_injuries = pd.to_numeric(merged.get("injuries_home_count", 0), errors="coerce").fillna(0)
     away_injuries = pd.to_numeric(merged.get("injuries_away_count", 0), errors="coerce").fillna(0)
-    from app_core.weights_config import INJURY_PROB_PENALTY_PER_KEY_PLAYER, INJURY_KEY_PLAYER_THRESHOLD
     home_injury_penalty = (home_injuries.clip(upper=4) * INJURY_PROB_PENALTY_PER_KEY_PLAYER).where(home_injuries >= INJURY_KEY_PLAYER_THRESHOLD, 0.0)
     away_injury_penalty = (away_injuries.clip(upper=4) * INJURY_PROB_PENALTY_PER_KEY_PLAYER).where(away_injuries >= INJURY_KEY_PLAYER_THRESHOLD, 0.0)
     is_home_side = merged["market_type"].astype(str).eq("spread_home")
@@ -4692,13 +4699,6 @@ def run_analysis_pipeline(
     # Ensure probabilities are bounded
     model_probability = model_probability.clip(0.01, 0.99)
     # --- End Metadata Framework ---
-
-    # Enrich with external data (injuries, weather) before blending
-    try:
-        from app_core.external_data_fetcher import enrich_with_external_data
-        merged = enrich_with_external_data(merged)
-    except Exception as _ext_err:
-        logger.warning(f"External data enrichment skipped: {_ext_err}")
 
     kalshi_probability = _numeric_series(merged, "kalshi_probability") if "kalshi_probability" in merged.columns else pd.Series([pd.NA]*len(merged), index=merged.index)
     _raw_sentiment = _numeric_series(merged, "sentiment_diff", 0.0) if "sentiment_diff" in merged.columns else pd.Series([0.0]*len(merged), index=merged.index)
