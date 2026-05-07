@@ -1815,12 +1815,19 @@ def _apply_triple_filter_ranking(df: pd.DataFrame) -> pd.DataFrame:
 
     final_df = df.copy()
 
-    # 1. Edge Calculation (Brain vs Market)
+    # 1. Edge Calculation (Model vs Market — actual betting edge)
+    # Previously used ml_prob - theover_prob (inter-model disagreement), which ranked picks
+    # by how much ML diverges from TheOver rather than how much the blended model beats the
+    # market. Picks with large ML/TheOver disagreement are NOT systematically better; this
+    # was promoting overconfident ML predictions to S/A-Tier while better-calibrated picks
+    # with real market edges landed in lower tiers.
     ml_prob = pd.to_numeric(final_df.get('ml_probability'), errors='coerce')
     theover_prob = pd.to_numeric(final_df.get('theover_probability'), errors='coerce')
+    calibrated_prob = pd.to_numeric(final_df.get('calibrated_probability'), errors='coerce').fillna(0.5)
+    market_prob = pd.to_numeric(final_df.get('market_probability'), errors='coerce').fillna(0.5)
     expected_value = pd.to_numeric(final_df.get('expected_value', 0.0), errors='coerce').fillna(0.0)
 
-    triple_filter_edge = ml_prob - theover_prob
+    triple_filter_edge = calibrated_prob - market_prob
 
     # 2. Uniqueness Check (Against the high-precision blacklist)
     BLACKLIST = [0.623034656047821, 0.10671072453260422, 0.48637846, 0.31053704, 0.35, 0.562239, 0.559358, 0.633159]
@@ -2386,6 +2393,20 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 is_fallback_heavy = diagnostics_out.get("is_fallback_heavy", False) if diagnostics_out else False
                 if is_fallback_heavy and ev > 0:
                     effective_ev = ev * FALLBACK_HEAVY_TOTAL_EV_MULTIPLIER
+
+            # Apply the same over-probability shrinkage used in production calibration
+            # to the gating metrics BEFORE threshold comparison. Without this, the
+            # Actionable gate uses the raw inflated calibrated_probability, promoting
+            # overconfident ML picks that the shrinkage was designed to penalize.
+            if market_type == "total_over":
+                _shrink = float(MLB_TOTAL_OVER_PROB_SHRINK) if league == "MLB" else float(TOTAL_OVER_PROB_SHRINK)
+                win_prob = 0.5 + _shrink * (win_prob - 0.5)
+                if pd.notna(effective_ev) and effective_ev > 0:
+                    effective_ev = effective_ev * _shrink
+                if pd.notna(effective_edge):
+                    effective_edge = effective_edge * _shrink
+                effective_win_probability = win_prob
+                status_metric_basis = "shrunk"
 
             # Determine base thresholds with league + market calibration
             req_prob = SIDE_MIN_WIN_PROB if is_side_market else TOTAL_MIN_WIN_PROB
@@ -4988,7 +5009,18 @@ def run_analysis_pipeline(
                 current_prob = pd.to_numeric(prob_series, errors='coerce').fillna(0.5)
                 ev = pd.to_numeric(ev_series, errors='coerce').fillna(0.0)
 
-                return (0.5 + (current_prob - 0.5).abs() + (ev * 2.0).clip(-0.2, 0.2)).clip(0.01, 0.99)
+                # Market agreement factor: picks where the model diverges far from the
+                # bookmaker price get penalized. The old formula used |prob - 0.5| + EV
+                # which simply measured model confidence — picks the model was wrongly
+                # most confident about received the highest conviction scores.
+                if 'market_probability' in df.columns:
+                    mkt = pd.to_numeric(df['market_probability'], errors='coerce').fillna(0.5)
+                else:
+                    mkt = pd.Series(0.5, index=df.index)
+                divergence = (current_prob - mkt).abs()
+                market_agreement = (1.0 - (divergence / 0.30).clip(0.0, 1.0))
+                base = (current_prob - 0.5).abs() + (ev * 2.0).clip(-0.2, 0.2)
+                return (0.5 + base * market_agreement).clip(0.01, 0.99)
             except Exception as e:
                 logger.warning(f"Failed to compute deterministic conviction: {e}")
                 return pd.Series(0.5, index=df.index)
