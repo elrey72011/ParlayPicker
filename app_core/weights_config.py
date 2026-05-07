@@ -160,14 +160,24 @@ EMPTY_CARD_RECOVERY_MAX_KELLY_PER_PICK_PCT = 0.025
 ALLOW_MLB_TOTAL_OVER_EMPTY_CARD_RECOVERY = False
 
 # Kelly Bet Sizing — Tiered Bankroll Allocation
-# Actionable picks receive 70% of the Kelly budget; High Variance/Speculative and
-# Below Threshold picks share the remaining 30%. No Play is excluded entirely.
-# Non-Actionable Kelly uses a half-Kelly fraction (0.125 vs 0.25) and a tighter
-# per-pick bankroll cap to reflect lower conviction.
+# The 70/30 ratio means non-Actionable picks use 30% of the Kelly fraction
+# that an equivalent Actionable pick would use (not a slate-level budget cap).
+# This keeps per-pick amounts stable regardless of how many Actionable picks
+# are on a given slate, while still expressing the confidence differential.
+#
+# Actionable:     0.25x fractional Kelly, 4% bankroll cap per pick
+# High Variance:  0.075x fractional Kelly (30% of Actionable rate), 2% cap per pick
+# Below Threshold:0.050x fractional Kelly (20% of Actionable rate), 1.5% cap per pick
+# No Play:        $0
+#
+# Slate-level safety: non-Actionable total is capped at 30% of combined
+# (Actionable + non-Actionable) if it would otherwise exceed that share.
 ACTIONABLE_KELLY_SHARE = 0.70
 NON_ACTIONABLE_KELLY_SHARE = 0.30
-NON_ACTIONABLE_KELLY_FRACTION = 0.125    # Half of Actionable's 0.25 fractional Kelly
+HIGH_VARIANCE_KELLY_FRACTION = 0.075     # 30% of Actionable's 0.25
+BELOW_THRESHOLD_KELLY_FRACTION = 0.050  # 20% of Actionable's 0.25
 NON_ACTIONABLE_MAX_PICK_PCT = 0.02      # 2% bankroll ceiling per non-Actionable pick
+NON_ACTIONABLE_BELOW_THRESHOLD_MAX_PICK_PCT = 0.015  # 1.5% cap for Below Threshold
 
 # Injury & Weather Adjustments
 # Applied per key injured player to the side's model probability.
