@@ -2379,6 +2379,12 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             status = "No Play"
             status_reason = "Using stale data or fallback model"
             blocker_stage = "data_fallback_guardrail"
+        elif "total" in market_type.lower() and pd.notna(ml_prob) and float(ml_prob) < 0.50:
+            status = "No Play"
+            status_reason = (
+                f"No Play: ML probability {float(ml_prob):.1%} below 50% — model contradicts pick direction on total"
+            )
+            blocker_stage = "ml_contradiction_guardrail"
         elif not pd.isna(ev) and not pd.isna(edge):
 
             consensus_agr = str(best.at[idx, "consensus_agreement"]) if "consensus_agreement" in best.columns else "No Kalshi"
@@ -2627,6 +2633,15 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                         else:
                             promoted_high_ev_to_actionable_no_uncertainty += 1
                             status_reason = "Actionable: strong EV/edge and passed all market/league filters"
+
+            # No Kalshi NBA total guard: without prediction-market validation for
+            # NBA totals (thin liquidity sport + volatile lines), cap at High Variance
+            # rather than Actionable or Below Threshold.
+            if is_total_market and league == "NBA" and consensus_agr == "No Kalshi":
+                if status in ("Actionable", "Below Threshold"):
+                    status = "High Variance/Speculative"
+                    status_reason = "High Variance: NBA total without Kalshi market validation"
+                    blocker_stage = "no_kalshi_nba_guardrail"
 
             # Apply Consensus Overlay Logic
             # STRICT profile: full overlay on all market types.
