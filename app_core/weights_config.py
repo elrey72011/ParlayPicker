@@ -159,6 +159,16 @@ EMPTY_CARD_RECOVERY_MAX_KELLY_TOTAL_PCT = 0.05
 EMPTY_CARD_RECOVERY_MAX_KELLY_PER_PICK_PCT = 0.025
 ALLOW_MLB_TOTAL_OVER_EMPTY_CARD_RECOVERY = False
 
+# Kelly Bet Sizing — Tiered Bankroll Allocation
+# Actionable picks receive 70% of the Kelly budget; High Variance/Speculative and
+# Below Threshold picks share the remaining 30%. No Play is excluded entirely.
+# Non-Actionable Kelly uses a half-Kelly fraction (0.125 vs 0.25) and a tighter
+# per-pick bankroll cap to reflect lower conviction.
+ACTIONABLE_KELLY_SHARE = 0.70
+NON_ACTIONABLE_KELLY_SHARE = 0.30
+NON_ACTIONABLE_KELLY_FRACTION = 0.125    # Half of Actionable's 0.25 fractional Kelly
+NON_ACTIONABLE_MAX_PICK_PCT = 0.02      # 2% bankroll ceiling per non-Actionable pick
+
 # Injury & Weather Adjustments
 # Applied per key injured player to the side's model probability.
 INJURY_PROB_PENALTY_PER_KEY_PLAYER = 0.015   # 1.5% per key player out

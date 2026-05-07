@@ -506,9 +506,15 @@ def _attach_kelly_to_best_picks(best_picks_df: pd.DataFrame, portfolio_df: pd.Da
     pick_text = _safe_str_series(out, "best_pick").str.lower()
     prod_eligible_col = pd.Series(out.get("production_eligible", True), index=out.index).fillna(True).astype(bool)
     safe_mask = status.eq("Actionable") & prod_eligible_col & line_source.eq("live") & line_consistent & event_ok & (~pick_text.str.contains("unresolved", na=False))
-    out.loc[~safe_mask, "Kelly_Bet_Size"] = 0.0
+    # High Variance/Speculative and Below Threshold picks receive reduced Kelly from the
+    # portfolio (30% budget share). Preserve their values unless the line is rejected.
+    na_kelly_eligible = status.isin(["High Variance/Speculative", "Below Threshold"])
+    rejected_line_mask = line_source.eq("rejected_live") | pick_text.str.contains("unresolved", na=False)
+    preserve_na_kelly = na_kelly_eligible & ~rejected_line_mask
+    out.loc[~safe_mask & ~preserve_na_kelly, "Kelly_Bet_Size"] = 0.0
     out["kelly_zero_reason"] = ""
-    out.loc[status.ne("Actionable"), "kelly_zero_reason"] = "non_actionable_status"
+    out.loc[status.isin(["No Play", "Missing Line"]), "kelly_zero_reason"] = "non_actionable_status"
+    out.loc[na_kelly_eligible & rejected_line_mask, "kelly_zero_reason"] = "non_actionable_rejected_line"
     out.loc[status.eq("Actionable") & (~prod_eligible_col), "kelly_zero_reason"] = "production_ineligible"
     out.loc[status.eq("Actionable") & safe_mask & pd.to_numeric(out["Kelly_Bet_Size"], errors="coerce").fillna(0).le(0), "kelly_zero_reason"] = "zero_after_portfolio_caps"
     out["Kelly_Bet_Size"] = pd.to_numeric(out["Kelly_Bet_Size"], errors="coerce").fillna(0.0).round(2)
