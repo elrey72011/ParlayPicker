@@ -5213,24 +5213,34 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
     portfolio["recommended_bet"] = portfolio["production_bet_amount"]
     portfolio["kelly_allocation_method"] = "proportional_fractional_kelly"
 
-    # Non-Actionable Kelly: High Variance/Speculative + Below Threshold picks
-    # receive half-Kelly at a 30% budget share relative to the Actionable total.
+    # Non-Actionable Kelly: independent per-status fractions so bet sizes stay
+    # meaningful on thin slates (not tied to Actionable total).
+    # HV: 0.075x Kelly (30% of Actionable's 0.25), BT: 0.050x (20% of 0.25).
+    # Slate-level safety: if non-Actionable total > 30% of combined, scale down.
     from app_core.weights_config import (
-        NON_ACTIONABLE_KELLY_SHARE, NON_ACTIONABLE_KELLY_FRACTION, NON_ACTIONABLE_MAX_PICK_PCT,
+        NON_ACTIONABLE_KELLY_SHARE, HIGH_VARIANCE_KELLY_FRACTION,
+        BELOW_THRESHOLD_KELLY_FRACTION, NON_ACTIONABLE_MAX_PICK_PCT,
+        NON_ACTIONABLE_BELOW_THRESHOLD_MAX_PICK_PCT,
     )
-    na_eligible = status.isin(["high variance/speculative", "below threshold"])
+    is_hv = status.eq("high variance/speculative")
+    is_bt = status.eq("below threshold")
+    na_eligible = is_hv | is_bt
+
     na_kelly_frac = pd.Series(0.0, index=portfolio.index)
     na_valid = (b > 0) & na_eligible
     na_kelly_frac.loc[na_valid] = (
         ((b.loc[na_valid] * p.loc[na_valid]) - q.loc[na_valid]) / b.loc[na_valid]
     ).clip(lower=0.0)
-    na_raw = float(bankroll) * na_kelly_frac
-    na_frac_amount = na_raw * float(NON_ACTIONABLE_KELLY_FRACTION)
-    na_max_pick = float(bankroll) * float(NON_ACTIONABLE_MAX_PICK_PCT)
-    na_bet = na_frac_amount.clip(upper=na_max_pick)
-    na_bet.loc[~na_eligible] = 0.0
 
-    # Scale non-Actionable Kelly so it stays within the 30% budget share
+    na_raw = float(bankroll) * na_kelly_frac
+    hv_max = float(bankroll) * float(NON_ACTIONABLE_MAX_PICK_PCT)
+    bt_max = float(bankroll) * float(NON_ACTIONABLE_BELOW_THRESHOLD_MAX_PICK_PCT)
+
+    na_bet = pd.Series(0.0, index=portfolio.index)
+    na_bet.loc[is_hv] = (na_raw.loc[is_hv] * float(HIGH_VARIANCE_KELLY_FRACTION)).clip(upper=hv_max)
+    na_bet.loc[is_bt] = (na_raw.loc[is_bt] * float(BELOW_THRESHOLD_KELLY_FRACTION)).clip(upper=bt_max)
+
+    # Slate cap: non-Actionable total must not exceed 30% of combined total
     a_total = float(portfolio.loc[eligible, "production_bet_amount"].sum())
     na_total = float(na_bet.loc[na_eligible].sum())
     combined = a_total + na_total
@@ -5238,9 +5248,11 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
         target_na = combined * float(NON_ACTIONABLE_KELLY_SHARE)
         if na_total > target_na:
             na_bet = na_bet * (target_na / na_total)
+
     portfolio.loc[na_eligible, "production_bet_amount"] = na_bet.loc[na_eligible].round(2)
     portfolio.loc[na_eligible, "recommended_bet"] = na_bet.loc[na_eligible].round(2)
-    portfolio.loc[na_eligible & na_bet.gt(0), "kelly_cap_reason"] = "Non-Actionable Kelly (30% budget)"
+    portfolio.loc[is_hv & na_bet.gt(0), "kelly_cap_reason"] = "High Variance Kelly (0.075x)"
+    portfolio.loc[is_bt & na_bet.gt(0), "kelly_cap_reason"] = "Below Threshold Kelly (0.050x)"
     portfolio.loc[na_eligible, "kelly_weight_share"] = (
         na_bet.loc[na_eligible] / combined if combined > 0 else 0.0
     )
