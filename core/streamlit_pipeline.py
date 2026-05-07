@@ -2628,7 +2628,13 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                             promoted_high_ev_to_actionable_no_uncertainty += 1
                             status_reason = "Actionable: strong EV/edge and passed all market/league filters"
 
-            # Apply Consensus Overlay Logic ONLY if profile is STRICT
+            # Apply Consensus Overlay Logic
+            # STRICT profile: full overlay on all market types.
+            # STANDARD profile: apply the Disagrees overlay to side/spread bets only.
+            # Spread markets are liquid enough that Kalshi divergence is a reliable
+            # signal — if Kalshi is significantly more bullish than the model on a
+            # spread and the model's own confidence is still below the Disagrees floor,
+            # the pick is genuinely contested and should be flagged High Variance.
             if status == "Actionable" and BEST_PICKS_PROFILE == 'STRICT':
                 if consensus_agr == "Neutral":
                     if win_prob < NEUTRAL_ACTIONABLE_MIN_PROB or effective_ev < NEUTRAL_ACTIONABLE_MIN_EV or edge < NEUTRAL_ACTIONABLE_MIN_EDGE:
@@ -2640,6 +2646,14 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                         status = "High Variance/Speculative"
                         status_reason = f"Fails stricter Disagrees overlay (Prob >= {DISAGREES_ACTIONABLE_MIN_PROB}, EV >= {DISAGREES_ACTIONABLE_MIN_EV}, Edge >= {DISAGREES_ACTIONABLE_MIN_EDGE})"
                         blocker_stage = "consensus_overlay"
+            elif status == "Actionable" and consensus_agr == "Disagrees" and is_side_market:
+                if win_prob < DISAGREES_ACTIONABLE_MIN_PROB or effective_ev < DISAGREES_ACTIONABLE_MIN_EV or edge < DISAGREES_ACTIONABLE_MIN_EDGE:
+                    status = "High Variance/Speculative"
+                    status_reason = (
+                        f"High Variance: Kalshi disagrees on spread — model win prob {win_prob:.1%} below "
+                        f"Disagrees floor ({DISAGREES_ACTIONABLE_MIN_PROB:.0%}) or EV/edge insufficient"
+                    )
+                    blocker_stage = "consensus_overlay_spread"
         else:
             status = "Actionable"
             status_reason = "Passed all strict filters"
