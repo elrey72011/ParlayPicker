@@ -2379,6 +2379,12 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             status = "No Play"
             status_reason = "Using stale data or fallback model"
             blocker_stage = "data_fallback_guardrail"
+        elif "total" in market_type.lower() and pd.notna(ml_prob) and float(ml_prob) < 0.50:
+            status = "No Play"
+            status_reason = (
+                f"No Play: ML probability {float(ml_prob):.1%} below 50% — model contradicts pick direction on total"
+            )
+            blocker_stage = "ml_contradiction_guardrail"
         elif not pd.isna(ev) and not pd.isna(edge):
 
             consensus_agr = str(best.at[idx, "consensus_agreement"]) if "consensus_agreement" in best.columns else "No Kalshi"
@@ -2627,6 +2633,15 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                         else:
                             promoted_high_ev_to_actionable_no_uncertainty += 1
                             status_reason = "Actionable: strong EV/edge and passed all market/league filters"
+
+            # No Kalshi NBA total guard: without prediction-market validation for
+            # NBA totals (thin liquidity sport + volatile lines), cap at High Variance
+            # rather than Actionable or Below Threshold.
+            if is_total_market and league == "NBA" and consensus_agr == "No Kalshi":
+                if status in ("Actionable", "Below Threshold"):
+                    status = "High Variance/Speculative"
+                    status_reason = "High Variance: NBA total without Kalshi market validation"
+                    blocker_stage = "no_kalshi_nba_guardrail"
 
             # Apply Consensus Overlay Logic
             # STRICT profile: full overlay on all market types.
@@ -5197,6 +5212,40 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
     portfolio.loc[capped, "kelly_cap_reason"] = portfolio.loc[capped, "kelly_cap_reason"].replace("", "Capped by pick exposure")
     portfolio["recommended_bet"] = portfolio["production_bet_amount"]
     portfolio["kelly_allocation_method"] = "proportional_fractional_kelly"
+
+    # Non-Actionable Kelly: High Variance/Speculative + Below Threshold picks
+    # receive half-Kelly at a 30% budget share relative to the Actionable total.
+    from app_core.weights_config import (
+        NON_ACTIONABLE_KELLY_SHARE, NON_ACTIONABLE_KELLY_FRACTION, NON_ACTIONABLE_MAX_PICK_PCT,
+    )
+    na_eligible = status.isin(["high variance/speculative", "below threshold"])
+    na_kelly_frac = pd.Series(0.0, index=portfolio.index)
+    na_valid = (b > 0) & na_eligible
+    na_kelly_frac.loc[na_valid] = (
+        ((b.loc[na_valid] * p.loc[na_valid]) - q.loc[na_valid]) / b.loc[na_valid]
+    ).clip(lower=0.0)
+    na_raw = float(bankroll) * na_kelly_frac
+    na_frac_amount = na_raw * float(NON_ACTIONABLE_KELLY_FRACTION)
+    na_max_pick = float(bankroll) * float(NON_ACTIONABLE_MAX_PICK_PCT)
+    na_bet = na_frac_amount.clip(upper=na_max_pick)
+    na_bet.loc[~na_eligible] = 0.0
+
+    # Scale non-Actionable Kelly so it stays within the 30% budget share
+    a_total = float(portfolio.loc[eligible, "production_bet_amount"].sum())
+    na_total = float(na_bet.loc[na_eligible].sum())
+    combined = a_total + na_total
+    if combined > 0 and na_total > 0:
+        target_na = combined * float(NON_ACTIONABLE_KELLY_SHARE)
+        if na_total > target_na:
+            na_bet = na_bet * (target_na / na_total)
+    portfolio.loc[na_eligible, "production_bet_amount"] = na_bet.loc[na_eligible].round(2)
+    portfolio.loc[na_eligible, "recommended_bet"] = na_bet.loc[na_eligible].round(2)
+    portfolio.loc[na_eligible & na_bet.gt(0), "kelly_cap_reason"] = "Non-Actionable Kelly (30% budget)"
+    portfolio.loc[na_eligible, "kelly_weight_share"] = (
+        na_bet.loc[na_eligible] / combined if combined > 0 else 0.0
+    )
+    portfolio["non_actionable_eligible"] = na_eligible
+
     positive = portfolio["production_bet_amount"] > 0
     unique_positive = int(portfolio.loc[positive, "production_bet_amount"].round(6).nunique())
     cap_hits = int(capped.sum())
@@ -5216,7 +5265,7 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
         "kelly_allocation_method", "kelly_flattening_detected", "kelly_unique_positive_amount_count", "kelly_total_raw_amount",
         "kelly_total_fractional_amount", "kelly_total_production_amount", "kelly_max_pick_cap_hits", "kelly_slate_scale_factor",
         "market_line_used", "market_line_source", "line_consistency_flag", "line_event_identity_match_flag", "line_provenance_warning",
-        "export_run_id", "pick_id", "canonical_pick_key", "production_eligible",
+        "export_run_id", "pick_id", "canonical_pick_key", "production_eligible", "non_actionable_eligible",
     ]
     for col in cols:
         if col not in portfolio.columns:
