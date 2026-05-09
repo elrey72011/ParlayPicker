@@ -2634,14 +2634,20 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                             promoted_high_ev_to_actionable_no_uncertainty += 1
                             status_reason = "Actionable: strong EV/edge and passed all market/league filters"
 
-            # No Kalshi NBA total guard: without prediction-market validation for
-            # NBA totals (thin liquidity sport + volatile lines), cap at High Variance
+            # No Kalshi total guard: without prediction-market validation for
+            # NBA/NHL totals (thin liquidity sports + volatile lines), cap at High Variance
             # rather than Actionable or Below Threshold.
             if is_total_market and league == "NBA" and consensus_agr == "No Kalshi":
                 if status in ("Actionable", "Below Threshold"):
                     status = "High Variance/Speculative"
                     status_reason = "High Variance: NBA total without Kalshi market validation"
                     blocker_stage = "no_kalshi_nba_guardrail"
+
+            if is_total_market and league == "NHL" and consensus_agr == "No Kalshi":
+                if status in ("Actionable", "Below Threshold"):
+                    status = "High Variance/Speculative"
+                    status_reason = "High Variance: NHL total without Kalshi market validation"
+                    blocker_stage = "no_kalshi_nhl_guardrail"
 
             # Apply Consensus Overlay Logic
             # STRICT profile: full overlay on all market types.
