@@ -44,31 +44,18 @@ def enrich_with_consensus(df: pd.DataFrame, consensus_data: pd.DataFrame = None)
         df['ticket_pct'] = pd.to_numeric(df['ticket_pct'], errors='coerce').fillna(0.5)
         df['money_pct'] = pd.to_numeric(df['money_pct'], errors='coerce').fillna(0.5)
     else:
-        # Generate Mock Data as per memory instructions for "Active Code"
-        # In a real scenario, this would call SportsDataIO or similar endpoint.
-        # Logic: Random realistic values centered around 0.50 (50%)
-        # but deterministic based on team name hash to avoid flickering
-
-        def _generate_mock_splits(row):
-            # Seed with hash of Game ID or Team Names to be stable
-            seed_str = f"{row.get('Home')}{row.get('Away')}{row.get('Commence (UTC)')}"
-            seed = hash(seed_str) % 10000
-            rng = np.random.default_rng(seed)
-
-            # Ticket % usually 0.20 to 0.80
-            ticket = rng.uniform(0.20, 0.80)
-
-            # Money % correlates with Ticket % but diverges for "Sharp" action
-            # Divergence usually +/- 0.15
-            divergence = rng.normal(0.0, 0.10)
-            money = np.clip(ticket + divergence, 0.05, 0.95)
-
-            return ticket, money
-
-        # Apply mock generation
-        splits = df.apply(_generate_mock_splits, axis=1, result_type='expand')
-        df['ticket_pct'] = splits[0]
-        df['money_pct'] = splits[1]
+        # No real consensus data available. Use neutral 50/50 so the ensemble
+        # treats this signal as uninformative rather than injecting structured
+        # noise that looks like real sharp-action intelligence.
+        # Wire up a real splits API (e.g. SportsDataIO, ActionNetwork) here
+        # before re-enabling any weight on sharpness_delta in the ensemble.
+        logger.warning(
+            "No real consensus splits available — setting ticket_pct/money_pct to 0.50. "
+            "sharpness_delta will be 0.0 (no sharp-money signal). "
+            "Connect a real splits feed to restore this signal."
+        )
+        df['ticket_pct'] = 0.50
+        df['money_pct'] = 0.50
 
     # Calculate Sharpness Delta
     # Logic: sharpness_delta = Money % - Ticket %

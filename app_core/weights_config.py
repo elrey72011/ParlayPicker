@@ -81,11 +81,13 @@ MLB_SPREAD_FINALIST_SCORE_PENALTY = 0.05
 NBA_SIDE_ACTIONABLE_BONUS = 0.01
 NBA_OVER_ACTIONABLE_BONUS = 0.00
 # Checked against POST-SHRINKAGE win probability (shrinkage is now applied in the
-# gating loop before this threshold is evaluated). At MLB_TOTAL_OVER_PROB_SHRINK=0.70,
-# this 0.62 post-shrink threshold requires a raw calibrated_probability of ~0.674+.
-MLB_OVER_ACTIONABLE_MIN_PROB = 0.62
-MLB_OVER_ACTIONABLE_MIN_EV = 0.07
-MLB_OVER_ACTIONABLE_MIN_EDGE = 0.08
+# gating loop before this threshold is evaluated). At MLB_TOTAL_OVER_PROB_SHRINK=0.65,
+# this 0.65 post-shrink threshold requires a raw calibrated_probability of ~0.723+.
+# Raised from (0.62 / 0.07 / 0.08) after May-9 review: MLB Overs went 3-7 (30%)
+# — the prior thresholds were not tight enough to filter out pitcher-dominant slates.
+MLB_OVER_ACTIONABLE_MIN_PROB = 0.65
+MLB_OVER_ACTIONABLE_MIN_EV = 0.10
+MLB_OVER_ACTIONABLE_MIN_EDGE = 0.10
 
 # Cold-Market Penalty Layer (by League + Market Type)
 MLB_TOTAL_OVER_ACTIONABLE_PENALTY = 0.02
@@ -105,7 +107,10 @@ TOTAL_UNDER_FINALIST_SCORE_PENALTY = 0.10
 # Static empirical hooks (league + family) for later recap-driven calibration.
 # Values are additive threshold bumps applied to both EV and edge in selection gating.
 LEAGUE_MARKET_FAMILY_ACTIONABLE_PENALTIES = {
-    ("MLB", "over"): 0.02,
+    # MLB Over raised 0.02→0.04 after May-9 review (3-7, 30% hit rate).
+    # No pitcher-quality signal in feature set means Overs need a heavier
+    # structural penalty until starter ERA/WHIP features are wired in.
+    ("MLB", "over"): 0.04,
     ("MLB", "under"): 0.02,
     ("MLB", "side"): 0.00,
     ("NBA", "over"): 0.01,
@@ -136,14 +141,16 @@ LOCK_UPLOAD_LINES_FOR_MATCHED_ROWS = False
 ALLOW_UPLOAD_TOTAL_FALLBACK_ACTIONABLE = False
 
 # Production-card calibration guards (totals concentration + overconfidence control)
-MAX_TOTAL_OVER_ACTIONABLE_SHARE = 0.60
-MAX_TOTAL_OVER_ACTIONABLE_COUNT = 4
-MAX_MLB_TOTAL_OVER_ACTIONABLE_COUNT = 3
+# May-9 review: MLB Overs 3-7 (30%). Cap reduced 3→2; shrink tightened 0.70→0.65;
+# production thresholds raised to require stronger signal before an Over is Actionable.
+MAX_TOTAL_OVER_ACTIONABLE_SHARE = 0.50
+MAX_TOTAL_OVER_ACTIONABLE_COUNT = 3
+MAX_MLB_TOTAL_OVER_ACTIONABLE_COUNT = 2
 TOTAL_OVER_PROB_SHRINK = 0.60
-MLB_TOTAL_OVER_PROB_SHRINK = 0.70
-MLB_TOTAL_OVER_MIN_PRODUCTION_WIN_PROB = 0.59
-MLB_TOTAL_OVER_MIN_PRODUCTION_EV = 0.09
-MLB_TOTAL_OVER_MIN_PRODUCTION_EDGE = 0.06
+MLB_TOTAL_OVER_PROB_SHRINK = 0.65
+MLB_TOTAL_OVER_MIN_PRODUCTION_WIN_PROB = 0.62
+MLB_TOTAL_OVER_MIN_PRODUCTION_EV = 0.12
+MLB_TOTAL_OVER_MIN_PRODUCTION_EDGE = 0.08
 DEGRADED_FEATURE_KELLY_MULTIPLIER = 0.50
 DEGRADED_FEATURE_MAX_SLATE_EXPOSURE_PCT = 0.12
 DEGRADED_FEATURE_MAX_PICK_EXPOSURE_PCT = 0.02
