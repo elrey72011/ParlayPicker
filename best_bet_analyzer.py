@@ -68,25 +68,24 @@ class BestBetAnalyzer:
         away_team = game['away_team']
         
         # 1. Get team stats from SportsData.io
-        if self.sportsdata:
-            home_stats = self._get_team_stats(home_team, 'home')
-            away_stats = self._get_team_stats(away_team, 'away')
-            enriched.update(home_stats)
-            enriched.update(away_stats)
-        
+        # Always call so missing-client warnings are surfaced; None values are
+        # handled in build_features_for_prediction rather than silently using 0.5.
+        home_stats = self._get_team_stats(home_team, 'home')
+        away_stats = self._get_team_stats(away_team, 'away')
+        enriched.update({k: v for k, v in home_stats.items() if v is not None})
+        enriched.update({k: v for k, v in away_stats.items() if v is not None})
+
         # 2. Get recent form from API-Sports
-        if self.apisports:
-            home_form = self._get_recent_form(home_team)
-            away_form = self._get_recent_form(away_team)
-            enriched['home_last_5_wins'] = home_form.get('wins', 0)
-            enriched['away_last_5_wins'] = away_form.get('wins', 0)
-        
-        # 3. Get news sentiment
-        if self.sentiment:
-            home_sentiment = self._get_team_sentiment(home_team)
-            away_sentiment = self._get_team_sentiment(away_team)
-            enriched['home_sentiment'] = home_sentiment
-            enriched['away_sentiment'] = away_sentiment
+        home_form = self._get_recent_form(home_team)
+        away_form = self._get_recent_form(away_team)
+        if home_form.get('wins') is not None:
+            enriched['home_last_5_wins'] = home_form['wins']
+        if away_form.get('wins') is not None:
+            enriched['away_last_5_wins'] = away_form['wins']
+
+        # 3. Get news sentiment (neutral 0.0 when unavailable — correct prior)
+        enriched['home_sentiment'] = self._get_team_sentiment(home_team)
+        enriched['away_sentiment'] = self._get_team_sentiment(away_team)
         
         # 4. Calculate derived features
         enriched['odds_diff'] = abs(game.get('home_odds', 0) - game.get('away_odds', 0))
@@ -95,47 +94,86 @@ class BestBetAnalyzer:
         return enriched
     
     def _get_team_stats(self, team_name: str, prefix: str) -> Dict:
-        """Get team statistics"""
-        # Placeholder - implement based on your SportsData client
+        """Get team statistics from SportsData client.
+
+        Returns None values when no real client is wired up so that callers can
+        detect missing data rather than treating identical 0.5 placeholders as
+        real signal.  Wire self.sportsdata to a live SportsDataIO client to
+        populate these fields.
+        """
+        if self.sportsdata is None:
+            logger.warning(
+                f"No SportsData client configured — returning None stats for {team_name}. "
+                "Team stats will be omitted from the feature vector."
+            )
+            return {
+                f'{prefix}_win_pct': None,
+                f'{prefix}_ppg': None,
+                f'{prefix}_oppg': None,
+                f'{prefix}_home_win_pct': None,
+            }
+        # TODO: call self.sportsdata and return real values
         return {
-            f'{prefix}_win_pct': 0.5,
-            f'{prefix}_ppg': 0.5,
-            f'{prefix}_oppg': 0.5,
-            f'{prefix}_home_win_pct': 0.5 if prefix == 'home' else 0.45,
+            f'{prefix}_win_pct': None,
+            f'{prefix}_ppg': None,
+            f'{prefix}_oppg': None,
+            f'{prefix}_home_win_pct': None,
         }
-    
+
     def _get_recent_form(self, team_name: str) -> Dict:
-        """Get recent form (last 5 games)"""
-        # Placeholder
-        return {'wins': 3, 'losses': 2}
-    
+        """Get recent form (last 5 games) from API-Sports client.
+
+        Returns None values when no real client is wired up.
+        """
+        if self.apisports is None:
+            logger.warning(
+                f"No API-Sports client configured — returning None form for {team_name}."
+            )
+            return {'wins': None, 'losses': None}
+        # TODO: call self.apisports and return real values
+        return {'wins': None, 'losses': None}
+
     def _get_team_sentiment(self, team_name: str) -> float:
-        """Get news sentiment score (-1 to 1)"""
-        # Placeholder
+        """Get news sentiment score (-1 to 1).
+
+        Returns 0.0 (neutral) when no sentiment client is configured, which is
+        the correct uninformative prior rather than injecting a fake signal.
+        """
+        if self.sentiment is None:
+            return 0.0
+        # TODO: call self.sentiment and return real value
         return 0.0
     
     def build_features_for_prediction(self, enriched_game: Dict) -> List[float]:
         """
-        Build feature vector for Vertex AI prediction
-        
-        Returns: List of numerical features
+        Build feature vector for Vertex AI prediction.
+
+        Uses None-aware helper so that stats not populated by a real API client
+        fall back to a neutral prior (0.5 for rates, 0.0 for deltas) rather than
+        silently using a hardcoded placeholder that looks like real data.
         """
+        def _get(key, neutral):
+            val = enriched_game.get(key)
+            return neutral if val is None else float(val)
+
+        last5_home = enriched_game.get('home_last_5_wins')
+        last5_away = enriched_game.get('away_last_5_wins')
+
         features = [
-            enriched_game.get('home_win_pct', 0.5),
-            enriched_game.get('away_win_pct', 0.5),
-            enriched_game.get('home_ppg', 0.5),
-            enriched_game.get('away_ppg', 0.5),
-            enriched_game.get('home_oppg', 0.5),
-            enriched_game.get('away_oppg', 0.5),
-            enriched_game.get('home_last_5_wins', 0) / 5.0,
-            enriched_game.get('away_last_5_wins', 0) / 5.0,
-            enriched_game.get('home_sentiment', 0),
-            enriched_game.get('away_sentiment', 0),
-            enriched_game.get('odds_diff', 0) / 1000,
-            enriched_game.get('total_line', 0) / 200,
-            # Add more features as needed
+            _get('home_win_pct', 0.5),
+            _get('away_win_pct', 0.5),
+            _get('home_ppg', 0.5),
+            _get('away_ppg', 0.5),
+            _get('home_oppg', 0.5),
+            _get('away_oppg', 0.5),
+            (float(last5_home) / 5.0) if last5_home is not None else 0.5,
+            (float(last5_away) / 5.0) if last5_away is not None else 0.5,
+            _get('home_sentiment', 0.0),
+            _get('away_sentiment', 0.0),
+            _get('odds_diff', 0.0) / 1000,
+            _get('total_line', 0.0) / 200,
         ]
-        
+
         return features
     
     def analyze_all_games(self, csv_file) -> pd.DataFrame:

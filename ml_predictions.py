@@ -126,7 +126,7 @@ def get_vertex_ai_prediction(features_dict, game_context=None):
     """
     try:
         logger.debug(f"Vertex AI Payload Keys: {list(features_dict.keys())}")
-        # 1. Define the exact feature order your model expects 
+        # 1. Define the exact feature order your model expects
         # (Must match FEATURE_NAMES from train_vertex_model.py)
         expected_features = [
             "home_win_pct", "away_win_pct", "home_ppg", "away_ppg",
@@ -137,16 +137,64 @@ def get_vertex_ai_prediction(features_dict, game_context=None):
             "theover_probability", "implied_home_prob", "home_streak", "away_streak",
             "division_game", "back_to_back", "primetime_game"
         ]
-        
-        # 2. Convert dictionary to sorted list (XGBoost expects an array, not a dict)
+
+        # Neutral/uninformative defaults per feature type.
+        # Using 0.0 for probability-like features (public_betting_pct, implied_home_prob)
+        # caused the XGBoost model to receive impossible inputs it was never trained on,
+        # producing wildly overconfident predictions. Proper neutrals prevent this.
+        FEATURE_NEUTRALS = {
+            "home_win_pct": 0.5,
+            "away_win_pct": 0.5,
+            "home_ppg": 0.5,
+            "away_ppg": 0.5,
+            "home_oppg": 0.5,
+            "away_oppg": 0.5,
+            "spread_normalized": 0.0,
+            "home_last_5": 0.5,
+            "away_last_5": 0.5,
+            "home_home_record": 0.5,
+            "away_away_record": 0.5,
+            "head_to_head": 0.5,
+            "rest_advantage": 0.0,
+            "injuries_impact": 0.0,
+            "weather_factor": 0.0,
+            "public_betting_pct": 50.0,   # neutral: 50% public on home side
+            "sharp_money_indicator": 0.0,
+            "line_movement": 0.0,
+            "total_movement": 0.0,
+            "model_consensus": 0.5,
+            "theover_probability": 0.5,
+            "implied_home_prob": 0.5,
+            "home_streak": 0,
+            "away_streak": 0,
+            "division_game": 0,
+            "back_to_back": 0,
+            "primetime_game": 0,
+        }
+
+        # 2. Build instance and track feature coverage
         instance_list = []
+        missing_features = []
         for feature in expected_features:
-            # Default to 0.5 or 0 if feature is missing
-            val = features_dict.get(feature, 0.0)
-            try:
-                instance_list.append(float(val))
-            except:
-                instance_list.append(0.0)
+            if feature in features_dict and features_dict[feature] is not None:
+                try:
+                    instance_list.append(float(features_dict[feature]))
+                except (TypeError, ValueError):
+                    instance_list.append(float(FEATURE_NEUTRALS.get(feature, 0.0)))
+                    missing_features.append(feature)
+            else:
+                instance_list.append(float(FEATURE_NEUTRALS.get(feature, 0.0)))
+                missing_features.append(feature)
+
+        # Warn when most features are missing — predictions will be unreliable
+        coverage = 1.0 - len(missing_features) / len(expected_features)
+        if coverage < 0.5:
+            logger.warning(
+                f"Low feature coverage ({coverage:.0%}) for prediction"
+                f"{' — ' + game_context if game_context else ''}. "
+                f"Missing: {missing_features}. "
+                "Prediction will be shrunk toward 0.50 to avoid overconfidence."
+            )
 
         # 3. Initialize Endpoint
         endpoint = aiplatform.Endpoint(
@@ -155,18 +203,25 @@ def get_vertex_ai_prediction(features_dict, game_context=None):
 
         # 4. Make Prediction
         prediction = endpoint.predict(instances=[instance_list])
-        
+
         # Vertex usually returns [probability_class_0, probability_class_1]
         # Assuming class 1 is "Home Win"
-        probs = prediction.predictions[0] 
-        
-        # Handle different return formats (scalar vs list)
+        probs = prediction.predictions[0]
+
         if isinstance(probs, list):
-            home_win_prob = probs[1] # Probability of class 1
+            home_win_prob = probs[1]
         else:
-            home_win_prob = probs    # Scalar probability
-            
-        return float(home_win_prob)
+            home_win_prob = probs
+
+        home_win_prob = float(home_win_prob)
+
+        # 5. Shrink toward 0.50 proportional to how many features were missing.
+        # A model receiving mostly neutral defaults should not output extreme
+        # probabilities — blend toward the prior (0.50) based on data gap.
+        if coverage < 1.0:
+            home_win_prob = home_win_prob * coverage + 0.50 * (1.0 - coverage)
+
+        return home_win_prob
 
     except Exception as e:
         print(f"❌ Custom Model Prediction Failed: {e}")
