@@ -81,16 +81,17 @@ MLB_SPREAD_FINALIST_SCORE_PENALTY = 0.05
 NBA_SIDE_ACTIONABLE_BONUS = 0.01
 NBA_OVER_ACTIONABLE_BONUS = 0.00
 # Checked against POST-SHRINKAGE win probability (shrinkage is now applied in the
-# gating loop before this threshold is evaluated). At MLB_TOTAL_OVER_PROB_SHRINK=0.65,
-# this 0.65 post-shrink threshold requires a raw calibrated_probability of ~0.723+.
-# Raised from (0.62 / 0.07 / 0.08) after May-9 review: MLB Overs went 3-7 (30%)
-# — the prior thresholds were not tight enough to filter out pitcher-dominant slates.
-MLB_OVER_ACTIONABLE_MIN_PROB = 0.65
-MLB_OVER_ACTIONABLE_MIN_EV = 0.10
-MLB_OVER_ACTIONABLE_MIN_EDGE = 0.10
+# gating loop before this threshold is evaluated). At MLB_TOTAL_OVER_PROB_SHRINK=0.55,
+# this 0.68 post-shrink threshold requires a raw calibrated_probability of ~0.827+.
+# Raised from (0.62 / 0.07 / 0.08) after May-9 review: MLB Overs went 3-7 (30%).
+# Further raised from (0.65 / 0.10 / 0.10) after May-10 review: MLB Overs went 2-6 (25%)
+# — totals model has no pitcher ERA/WHIP signal; require very strong consensus before Actionable.
+MLB_OVER_ACTIONABLE_MIN_PROB = 0.68
+MLB_OVER_ACTIONABLE_MIN_EV = 0.14
+MLB_OVER_ACTIONABLE_MIN_EDGE = 0.12
 
 # Cold-Market Penalty Layer (by League + Market Type)
-MLB_TOTAL_OVER_ACTIONABLE_PENALTY = 0.02
+MLB_TOTAL_OVER_ACTIONABLE_PENALTY = 0.05
 MLB_TOTAL_UNDER_ACTIONABLE_PENALTY = 0.03
 NBA_TOTAL_OVER_ACTIONABLE_PENALTY = 0.02
 NBA_TOTAL_UNDER_ACTIONABLE_PENALTY = 0.02
@@ -108,9 +109,10 @@ TOTAL_UNDER_FINALIST_SCORE_PENALTY = 0.10
 # Values are additive threshold bumps applied to both EV and edge in selection gating.
 LEAGUE_MARKET_FAMILY_ACTIONABLE_PENALTIES = {
     # MLB Over raised 0.02→0.04 after May-9 review (3-7, 30% hit rate).
-    # No pitcher-quality signal in feature set means Overs need a heavier
+    # Further raised 0.04→0.07 after May-10 review (2-6, 25% hit rate).
+    # No pitcher-quality signal in feature set means Overs need a heavy
     # structural penalty until starter ERA/WHIP features are wired in.
-    ("MLB", "over"): 0.04,
+    ("MLB", "over"): 0.07,
     ("MLB", "under"): 0.02,
     ("MLB", "side"): 0.00,
     ("NBA", "over"): 0.01,
@@ -143,14 +145,16 @@ ALLOW_UPLOAD_TOTAL_FALLBACK_ACTIONABLE = False
 # Production-card calibration guards (totals concentration + overconfidence control)
 # May-9 review: MLB Overs 3-7 (30%). Cap reduced 3→2; shrink tightened 0.70→0.65;
 # production thresholds raised to require stronger signal before an Over is Actionable.
+# May-10 review: MLB Overs 2-6 (25%). Cap reduced 2→1; shrink tightened 0.65→0.55;
+# production thresholds raised further; gating thresholds raised across the board.
 MAX_TOTAL_OVER_ACTIONABLE_SHARE = 0.50
 MAX_TOTAL_OVER_ACTIONABLE_COUNT = 3
-MAX_MLB_TOTAL_OVER_ACTIONABLE_COUNT = 2
+MAX_MLB_TOTAL_OVER_ACTIONABLE_COUNT = 1
 TOTAL_OVER_PROB_SHRINK = 0.60
-MLB_TOTAL_OVER_PROB_SHRINK = 0.65
-MLB_TOTAL_OVER_MIN_PRODUCTION_WIN_PROB = 0.62
-MLB_TOTAL_OVER_MIN_PRODUCTION_EV = 0.12
-MLB_TOTAL_OVER_MIN_PRODUCTION_EDGE = 0.08
+MLB_TOTAL_OVER_PROB_SHRINK = 0.55
+MLB_TOTAL_OVER_MIN_PRODUCTION_WIN_PROB = 0.65
+MLB_TOTAL_OVER_MIN_PRODUCTION_EV = 0.15
+MLB_TOTAL_OVER_MIN_PRODUCTION_EDGE = 0.10
 DEGRADED_FEATURE_KELLY_MULTIPLIER = 0.50
 DEGRADED_FEATURE_MAX_SLATE_EXPOSURE_PCT = 0.12
 DEGRADED_FEATURE_MAX_PICK_EXPOSURE_PCT = 0.02
@@ -174,17 +178,21 @@ ALLOW_MLB_TOTAL_OVER_EMPTY_CARD_RECOVERY = False
 #
 # Actionable:     0.25x fractional Kelly, 4% bankroll cap per pick
 # High Variance:  0.075x fractional Kelly (30% of Actionable rate), 2% cap per pick
-# Below Threshold:0.050x fractional Kelly (20% of Actionable rate), 1.5% cap per pick
+# Below Threshold:0.025x fractional Kelly (10% of Actionable rate), 1% cap per pick
 # No Play:        $0
+#
+# Below Threshold fraction halved (0.050→0.025) and cap tightened (1.5%→1%) after
+# May-10 review: Below Threshold picks went 1-3; continuing to size them like
+# meaningful wagers compounds losses on picks that already failed confidence gating.
 #
 # Slate-level safety: non-Actionable total is capped at 30% of combined
 # (Actionable + non-Actionable) if it would otherwise exceed that share.
 ACTIONABLE_KELLY_SHARE = 0.70
 NON_ACTIONABLE_KELLY_SHARE = 0.30
 HIGH_VARIANCE_KELLY_FRACTION = 0.075     # 30% of Actionable's 0.25
-BELOW_THRESHOLD_KELLY_FRACTION = 0.050  # 20% of Actionable's 0.25
+BELOW_THRESHOLD_KELLY_FRACTION = 0.025  # 10% of Actionable's 0.25
 NON_ACTIONABLE_MAX_PICK_PCT = 0.02      # 2% bankroll ceiling per non-Actionable pick
-NON_ACTIONABLE_BELOW_THRESHOLD_MAX_PICK_PCT = 0.015  # 1.5% cap for Below Threshold
+NON_ACTIONABLE_BELOW_THRESHOLD_MAX_PICK_PCT = 0.010  # 1% cap for Below Threshold
 
 # Injury & Weather Adjustments
 # Applied per key injured player to the side's model probability.
