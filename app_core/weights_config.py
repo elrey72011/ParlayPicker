@@ -13,6 +13,22 @@ SENTIMENT_WEIGHT = 0.05    # News sentiment
 LOW_LIQUIDITY_KALSHI_WEIGHT = 0.30
 LOW_LIQUIDITY_ML_MODEL_WEIGHT = 0.35
 
+# MLB Totals blending overrides (Tier 1 and Tier 2).
+# TheOver already incorporates pitcher ERA/WHIP/matchup quality that the ML model
+# has no signal for. For totals, TheOver is the most contextually-aware source —
+# boost it significantly and drop ML to reflect what the model actually knows.
+MLB_TOTAL_THEOVER_WEIGHT = 0.35          # up from standard 0.20
+MLB_TOTAL_ML_WEIGHT = 0.15               # down from LOW_LIQUIDITY_ML (0.35)
+MLB_TOTAL_FALLBACK_THEOVER_WEIGHT = 0.45 # up from FALLBACK_THEOVER (0.20)
+MLB_TOTAL_FALLBACK_ML_WEIGHT = 0.15      # down from FALLBACK_ML (0.35)
+
+# NBA Totals blending overrides (Tier 1 and Tier 2).
+# TheOver incorporates pace, rest, defensive ratings the ML model lacks.
+NBA_TOTAL_THEOVER_WEIGHT = 0.30          # up from standard 0.20
+NBA_TOTAL_ML_WEIGHT = 0.12               # down from ML_MODEL_WEIGHT (0.15)
+NBA_TOTAL_FALLBACK_THEOVER_WEIGHT = 0.40 # up from FALLBACK_THEOVER (0.20)
+NBA_TOTAL_FALLBACK_ML_WEIGHT = 0.15      # down from FALLBACK_ML (0.35)
+
 # NHL Tier-1 overrides — Kalshi is least reliable for hockey; ML + market dominate.
 NHL_KALSHI_WEIGHT = 0.22
 NHL_ML_MODEL_WEIGHT = 0.42
