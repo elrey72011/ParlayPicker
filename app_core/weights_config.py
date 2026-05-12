@@ -192,6 +192,9 @@ EMPTY_CARD_RECOVERY_EXCLUDE_SOURCES = ["rejected_live"]
 EMPTY_CARD_RECOVERY_MAX_KELLY_TOTAL_PCT = 0.05
 EMPTY_CARD_RECOVERY_MAX_KELLY_PER_PICK_PCT = 0.025
 ALLOW_MLB_TOTAL_OVER_EMPTY_CARD_RECOVERY = False
+# NBA Unders 0-3 across May 9-11; no pace/defensive features in ML model means
+# weak Under signals shouldn't be promoted to Actionable on an empty card.
+ALLOW_NBA_TOTAL_UNDER_EMPTY_CARD_RECOVERY = False
 
 # Kelly Bet Sizing — Tiered Bankroll Allocation
 # The 70/30 ratio means non-Actionable picks use 30% of the Kelly fraction

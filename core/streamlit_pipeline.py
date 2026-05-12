@@ -3351,6 +3351,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         EMPTY_CARD_RECOVERY_MAX_KELLY_PER_PICK_PCT,
         EMPTY_CARD_RECOVERY_MAX_KELLY_TOTAL_PCT,
         ALLOW_MLB_TOTAL_OVER_EMPTY_CARD_RECOVERY,
+        ALLOW_NBA_TOTAL_UNDER_EMPTY_CARD_RECOVERY,
     )
     if ALLOW_EMPTY_CARD_RECOVERY and not best.empty:
         actionable_count = best["production_eligible"].sum()
@@ -3358,6 +3359,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             is_mlb_total_over = (
                 best["league"].astype(str).str.upper().eq("MLB")
                 & best["market_type"].astype(str).str.lower().eq("total_over")
+            )
+            is_nba_total_under = (
+                best["league"].astype(str).str.upper().eq("NBA")
+                & best["market_type"].astype(str).str.lower().eq("total_under")
             )
             recovery_mask = (
                 best["Pick_Status"].astype(str).isin({"High Variance/Speculative", "Below Threshold"})
@@ -3375,6 +3380,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             )
             if not ALLOW_MLB_TOTAL_OVER_EMPTY_CARD_RECOVERY:
                 recovery_mask = recovery_mask & ~is_mlb_total_over
+            if not ALLOW_NBA_TOTAL_UNDER_EMPTY_CARD_RECOVERY:
+                recovery_mask = recovery_mask & ~is_nba_total_under
 
             recovery_candidates = best[recovery_mask]
             if not recovery_candidates.empty:
