@@ -53,6 +53,10 @@ from app_core.weights_config import (
     KALSHI_WEIGHT, MARKET_WEIGHT, ML_MODEL_WEIGHT, THEOVER_WEIGHT, SENTIMENT_WEIGHT,
     FALLBACK_MARKET_WEIGHT, FALLBACK_ML_WEIGHT, FALLBACK_THEOVER_WEIGHT, FALLBACK_SENTIMENT_WEIGHT,
     LOW_LIQUIDITY_KALSHI_WEIGHT, LOW_LIQUIDITY_ML_MODEL_WEIGHT,
+    MLB_TOTAL_THEOVER_WEIGHT, MLB_TOTAL_ML_WEIGHT,
+    MLB_TOTAL_FALLBACK_THEOVER_WEIGHT, MLB_TOTAL_FALLBACK_ML_WEIGHT,
+    NBA_TOTAL_THEOVER_WEIGHT, NBA_TOTAL_ML_WEIGHT,
+    NBA_TOTAL_FALLBACK_THEOVER_WEIGHT, NBA_TOTAL_FALLBACK_ML_WEIGHT,
     NHL_KALSHI_WEIGHT, NHL_ML_MODEL_WEIGHT, NHL_MARKET_WEIGHT, NHL_THEOVER_WEIGHT, NHL_SENTIMENT_WEIGHT,
     KALSHI_DIVERGENCE_THRESHOLD, KALSHI_DIVERGENCE_THRESHOLD_NBA,
     KALSHI_DIVERGENCE_THRESHOLD_MLB, KALSHI_DIVERGENCE_THRESHOLD_NHL,
@@ -1246,6 +1250,15 @@ def compute_blended_probability(
             elif lg and lg.upper() == "MLB":
                 w_kalshi = LOW_LIQUIDITY_KALSHI_WEIGHT
                 w_ml = LOW_LIQUIDITY_ML_MODEL_WEIGHT
+                # For MLB totals, TheOver has pitcher ERA/WHIP context ML lacks —
+                # boost it and reduce ML proportionally.
+                if "total" in m_typ:
+                    w_the = MLB_TOTAL_THEOVER_WEIGHT
+                    w_ml = MLB_TOTAL_ML_WEIGHT
+            elif lg and lg.upper() == "NBA" and "total" in m_typ:
+                # NBA totals: TheOver has pace/defensive-rating context ML lacks.
+                w_the = NBA_TOTAL_THEOVER_WEIGHT
+                w_ml = NBA_TOTAL_ML_WEIGHT
 
             if pd.isna(p_ml):
                 total_w = w_kalshi + w_market + w_the + w_sen
@@ -1273,6 +1286,15 @@ def compute_blended_probability(
             w_ml = FALLBACK_ML_WEIGHT
             w_the = FALLBACK_THEOVER_WEIGHT
             w_sen = FALLBACK_SENTIMENT_WEIGHT if has_real_sentiment else 0.0
+            # For totals, TheOver's contextual signal (pitcher/pace) becomes the
+            # dominant source when Kalshi is absent — boost it, cut ML accordingly.
+            if lg and "total" in m_typ:
+                if lg.upper() == "MLB":
+                    w_the = MLB_TOTAL_FALLBACK_THEOVER_WEIGHT
+                    w_ml = MLB_TOTAL_FALLBACK_ML_WEIGHT
+                elif lg.upper() == "NBA":
+                    w_the = NBA_TOTAL_FALLBACK_THEOVER_WEIGHT
+                    w_ml = NBA_TOTAL_FALLBACK_ML_WEIGHT
 
             if pd.isna(p_ml):
                 total_w = w_market + w_the + w_sen

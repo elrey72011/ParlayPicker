@@ -13,6 +13,22 @@ SENTIMENT_WEIGHT = 0.05    # News sentiment
 LOW_LIQUIDITY_KALSHI_WEIGHT = 0.30
 LOW_LIQUIDITY_ML_MODEL_WEIGHT = 0.35
 
+# MLB Totals blending overrides (Tier 1 and Tier 2).
+# TheOver already incorporates pitcher ERA/WHIP/matchup quality that the ML model
+# has no signal for. For totals, TheOver is the most contextually-aware source —
+# boost it significantly and drop ML to reflect what the model actually knows.
+MLB_TOTAL_THEOVER_WEIGHT = 0.35          # up from standard 0.20
+MLB_TOTAL_ML_WEIGHT = 0.15               # down from LOW_LIQUIDITY_ML (0.35)
+MLB_TOTAL_FALLBACK_THEOVER_WEIGHT = 0.45 # up from FALLBACK_THEOVER (0.20)
+MLB_TOTAL_FALLBACK_ML_WEIGHT = 0.15      # down from FALLBACK_ML (0.35)
+
+# NBA Totals blending overrides (Tier 1 and Tier 2).
+# TheOver incorporates pace, rest, defensive ratings the ML model lacks.
+NBA_TOTAL_THEOVER_WEIGHT = 0.30          # up from standard 0.20
+NBA_TOTAL_ML_WEIGHT = 0.12               # down from ML_MODEL_WEIGHT (0.15)
+NBA_TOTAL_FALLBACK_THEOVER_WEIGHT = 0.40 # up from FALLBACK_THEOVER (0.20)
+NBA_TOTAL_FALLBACK_ML_WEIGHT = 0.15      # down from FALLBACK_ML (0.35)
+
 # NHL Tier-1 overrides — Kalshi is least reliable for hockey; ML + market dominate.
 NHL_KALSHI_WEIGHT = 0.22
 NHL_ML_MODEL_WEIGHT = 0.42
@@ -46,7 +62,9 @@ TOTAL_UNDER_MIN_EDGE = 0.10
 NHL_TOTAL_EXTRA_EDGE_PENALTY = 0.01
 NHL_TOTAL_MIN_WIN_PROB = 0.57
 NHL_TOTAL_MIN_WIN_PROB_STRICT = 0.58
-NBA_TOTAL_MIN_WIN_PROB = 0.62
+# Raised 0.62→0.65 after May-11 review: NBA Under 213.5 was Actionable and lost;
+# NBA Unders are 0-3 across May 9-11 with no defensive-pace signal in feature set.
+NBA_TOTAL_MIN_WIN_PROB = 0.65
 NBA_TOTAL_MIN_EV = 0.02
 NBA_TOTAL_MIN_EDGE = 0.03
 NHL_TOTAL_MIN_EV_STRICT = 0.01
@@ -92,9 +110,12 @@ MLB_OVER_ACTIONABLE_MIN_EDGE = 0.12
 
 # Cold-Market Penalty Layer (by League + Market Type)
 MLB_TOTAL_OVER_ACTIONABLE_PENALTY = 0.05
-MLB_TOTAL_UNDER_ACTIONABLE_PENALTY = 0.03
+# MLB Under raised 0.03→0.05 after May-11 review: LA/SF Under 9.5 reached High
+# Variance and lost badly (12 runs scored vs 9.5 line); no pitcher quality signal.
+MLB_TOTAL_UNDER_ACTIONABLE_PENALTY = 0.05
 NBA_TOTAL_OVER_ACTIONABLE_PENALTY = 0.02
-NBA_TOTAL_UNDER_ACTIONABLE_PENALTY = 0.02
+# NBA Under raised 0.02→0.05 after May-11 review: NBA Unders 0-3 across May 9-11.
+NBA_TOTAL_UNDER_ACTIONABLE_PENALTY = 0.05
 NHL_TOTAL_OVER_ACTIONABLE_PENALTY = 0.02
 NHL_TOTAL_UNDER_ACTIONABLE_PENALTY = 0.03
 
@@ -113,10 +134,12 @@ LEAGUE_MARKET_FAMILY_ACTIONABLE_PENALTIES = {
     # No pitcher-quality signal in feature set means Overs need a heavy
     # structural penalty until starter ERA/WHIP features are wired in.
     ("MLB", "over"): 0.07,
-    ("MLB", "under"): 0.02,
+    # MLB Under raised 0.02→0.04 after May-11 review (LA/SF Under 9.5, High Variance, LOSS).
+    ("MLB", "under"): 0.04,
     ("MLB", "side"): 0.00,
     ("NBA", "over"): 0.01,
-    ("NBA", "under"): 0.01,
+    # NBA Under raised 0.01→0.05 after May-11 review (0-3 across May 9-11).
+    ("NBA", "under"): 0.05,
     ("NBA", "side"): 0.00,
     ("NHL", "over"): 0.01,
     ("NHL", "under"): 0.02,
