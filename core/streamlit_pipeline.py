@@ -2297,7 +2297,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             DIVERGENCE_HIGH_VARIANCE_MIN_EV, DIVERGENCE_HIGH_VARIANCE_MIN_EDGE, DIVERGENCE_HIGH_VARIANCE_MIN_PROB,
             SIDE_MIN_WIN_PROB,
             NEUTRAL_ACTIONABLE_MIN_PROB, NEUTRAL_ACTIONABLE_MIN_EV, NEUTRAL_ACTIONABLE_MIN_EDGE,
-            DISAGREES_ACTIONABLE_MIN_PROB, DISAGREES_ACTIONABLE_MIN_EV, DISAGREES_ACTIONABLE_MIN_EDGE
+            DISAGREES_ACTIONABLE_MIN_PROB, DISAGREES_ACTIONABLE_MIN_EV, DISAGREES_ACTIONABLE_MIN_EDGE,
+            MLB_SPREAD_HIGH_EV_OVERRIDE_MIN_EV, MLB_SPREAD_HIGH_EV_OVERRIDE_MIN_EDGE,
+            MLB_SPREAD_HIGH_EV_MIN_WIN_PROB,
         )
 
         is_kalshi_divergence = False
@@ -2457,7 +2459,15 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             # Apply League + Market specific calibration
             if is_side_market:
                 if league == "MLB" and "spread" in market_type.lower():
-                    req_prob = MLB_SPREAD_MIN_WIN_PROB
+                    # High-EV underdog override: when the market is significantly
+                    # mispricing an MLB spread (EV > 0.20, edge > 0.08), lower the
+                    # win_prob floor to MLB_SPREAD_HIGH_EV_MIN_WIN_PROB instead of
+                    # MLB_SPREAD_MIN_WIN_PROB. The edge/EV signal outweighs raw prob.
+                    if (pd.notna(ev) and float(ev) >= float(MLB_SPREAD_HIGH_EV_OVERRIDE_MIN_EV)
+                            and pd.notna(edge) and float(edge) >= float(MLB_SPREAD_HIGH_EV_OVERRIDE_MIN_EDGE)):
+                        req_prob = float(MLB_SPREAD_HIGH_EV_MIN_WIN_PROB)
+                    else:
+                        req_prob = MLB_SPREAD_MIN_WIN_PROB
                     req_ev += MLB_SPREAD_ACTIONABLE_PENALTY
                     req_edge += MLB_SPREAD_ACTIONABLE_PENALTY
                     mlb_spread_penalty_applied = True
