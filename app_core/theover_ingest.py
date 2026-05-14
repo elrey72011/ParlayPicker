@@ -145,6 +145,28 @@ def _is_ambiguous_match(input_team: str, matched_team: str) -> bool:
 
 # League-specific team alias mappings to prevent cross-league contamination
 TEAM_ALIAS_MAP_BY_LEAGUE = {
+    "MLB": {
+        # Multi-team cities: city-only name must resolve to a specific team.
+        # Without this, "Chicago" is ambiguous between Cubs and White Sox,
+        # causing TheOver to cross-match (or fail to match) when both play the same day.
+        "Chicago Cubs": "Chicago Cubs", "Chicago White Sox": "Chicago White Sox",
+        "New York Yankees": "New York Yankees", "New York Mets": "New York Mets",
+        "Los Angeles Dodgers": "Los Angeles Dodgers", "Los Angeles Angels": "Los Angeles Angels",
+        # Standard city-name mappings for all 30 teams
+        "Arizona": "Arizona Diamondbacks", "Atlanta": "Atlanta Braves",
+        "Baltimore": "Baltimore Orioles", "Boston": "Boston Red Sox",
+        "Cincinnati": "Cincinnati Reds", "Cleveland": "Cleveland Guardians",
+        "Colorado": "Colorado Rockies", "Detroit": "Detroit Tigers",
+        "Houston": "Houston Astros", "Kansas City": "Kansas City Royals",
+        "Miami": "Miami Marlins", "Milwaukee": "Milwaukee Brewers",
+        "Minnesota": "Minnesota Twins", "Oakland": "Oakland Athletics",
+        "Philadelphia": "Philadelphia Phillies", "Pittsburgh": "Pittsburgh Pirates",
+        "San Diego": "San Diego Padres", "San Francisco": "San Francisco Giants",
+        "Seattle": "Seattle Mariners", "Saint Louis": "St. Louis Cardinals",
+        "St. Louis": "St. Louis Cardinals", "St Louis": "St. Louis Cardinals",
+        "Tampa Bay": "Tampa Bay Rays", "Texas": "Texas Rangers",
+        "Toronto": "Toronto Blue Jays", "Washington": "Washington Nationals",
+    },
     "NHL": {
         "Seattle": "Seattle Kraken", "New Jersey": "New Jersey Devils",
         "Buffalo": "Buffalo Sabres", "Philadelphia": "Philadelphia Flyers",
