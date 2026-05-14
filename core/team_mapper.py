@@ -451,6 +451,15 @@ TEAM_MAP.update({
 
 # Auto-injected exact mappings for Odds API full mascot names to standard names
 ODDS_API_EXACT_MAP = {
+    # MLB multi-team cities — must be looked up before suffix-stripping collapses
+    # "Chicago Cubs" and "Chicago White Sox" both to "Chicago".
+    # Same issue for New York (Yankees/Mets) and Los Angeles (Dodgers/Angels).
+    "chicago cubs": "Chicago Cubs",
+    "chicago white sox": "Chicago White Sox",
+    "new york yankees": "New York Yankees",
+    "new york mets": "New York Mets",
+    "los angeles dodgers": "Los Angeles Dodgers",
+    "los angeles angels": "Los Angeles Angels",
     "montreal": "Montreal",
     "san jose": "San Jose",
     "ny islanders": "New York",
