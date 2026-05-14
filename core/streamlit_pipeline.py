@@ -45,6 +45,7 @@ from app_core.weights_config import (
             MLB_TOTAL_OVER_MIN_PRODUCTION_WIN_PROB,
             MLB_TOTAL_OVER_MIN_PRODUCTION_EV,
             MLB_TOTAL_OVER_MIN_PRODUCTION_EDGE,
+            MLB_OVER_CALIBRATED_PROB_CAP,
             DEGRADED_FEATURE_KELLY_MULTIPLIER,
             DEGRADED_FEATURE_MAX_SLATE_EXPOSURE_PCT,
             DEGRADED_FEATURE_MAX_PICK_EXPOSURE_PCT,
@@ -54,7 +55,9 @@ from app_core.weights_config import (
     FALLBACK_MARKET_WEIGHT, FALLBACK_ML_WEIGHT, FALLBACK_THEOVER_WEIGHT, FALLBACK_SENTIMENT_WEIGHT,
     LOW_LIQUIDITY_KALSHI_WEIGHT, LOW_LIQUIDITY_ML_MODEL_WEIGHT,
     MLB_TOTAL_THEOVER_WEIGHT, MLB_TOTAL_ML_WEIGHT,
+    MLB_TOTAL_MARKET_WEIGHT, MLB_TOTAL_KALSHI_WEIGHT,
     MLB_TOTAL_FALLBACK_THEOVER_WEIGHT, MLB_TOTAL_FALLBACK_ML_WEIGHT,
+    MLB_TOTAL_FALLBACK_MARKET_WEIGHT,
     NBA_TOTAL_THEOVER_WEIGHT, NBA_TOTAL_ML_WEIGHT,
     NBA_TOTAL_FALLBACK_THEOVER_WEIGHT, NBA_TOTAL_FALLBACK_ML_WEIGHT,
     NHL_KALSHI_WEIGHT, NHL_ML_MODEL_WEIGHT, NHL_MARKET_WEIGHT, NHL_THEOVER_WEIGHT, NHL_SENTIMENT_WEIGHT,
@@ -1250,9 +1253,12 @@ def compute_blended_probability(
             elif lg and lg.upper() == "MLB":
                 w_kalshi = LOW_LIQUIDITY_KALSHI_WEIGHT
                 w_ml = LOW_LIQUIDITY_ML_MODEL_WEIGHT
-                # For MLB totals, TheOver has pitcher ERA/WHIP context ML lacks —
-                # boost it and reduce ML proportionally.
                 if "total" in m_typ:
+                    # Market-first weighting: bookmaker odds embed starting pitcher data;
+                    # TheOver is not game-specific (May-13 finding: same ~0.85 prob for
+                    # very different outcomes). Shift weight to market and Kalshi.
+                    w_kalshi = MLB_TOTAL_KALSHI_WEIGHT
+                    w_market = MLB_TOTAL_MARKET_WEIGHT
                     w_the = MLB_TOTAL_THEOVER_WEIGHT
                     w_ml = MLB_TOTAL_ML_WEIGHT
             elif lg and lg.upper() == "NBA" and "total" in m_typ:
@@ -1290,6 +1296,7 @@ def compute_blended_probability(
             # dominant source when Kalshi is absent — boost it, cut ML accordingly.
             if lg and "total" in m_typ:
                 if lg.upper() == "MLB":
+                    w_market = MLB_TOTAL_FALLBACK_MARKET_WEIGHT
                     w_the = MLB_TOTAL_FALLBACK_THEOVER_WEIGHT
                     w_ml = MLB_TOTAL_FALLBACK_ML_WEIGHT
                 elif lg.upper() == "NBA":
@@ -1365,6 +1372,16 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
         league=_string_series(out, "league"),
         market_type=_string_series(out, "market_type")
     )
+
+    # Cap calibrated probability for MLB total_over picks — TheOver inflates these
+    # because its data is not game-specific (May-13 finding: near-identical ~0.85
+    # probability regardless of starting pitcher matchup). Market is now primary signal.
+    mlb_over_mask = (
+        _string_series(out, "league").str.upper() == "MLB"
+    ) & (
+        _string_series(out, "market_type").str.lower() == "total_over"
+    )
+    calibrated = calibrated.where(~mlb_over_mask, calibrated.clip(upper=MLB_OVER_CALIBRATED_PROB_CAP))
 
     out["theover_probability"] = theover
     out["ml_probability"] = ml
@@ -4708,7 +4725,22 @@ def run_analysis_pipeline(
     market_type = _string_series(merged, "market_type").str.lower()
     spread_model = ml_probability.where(ml_probability.notna(), theover_probability)
 
-    total_model = (0.6 * theover_probability) + (0.4 * ml_probability)
+    # Non-MLB totals: pre-mix TheOver (60%) + ML (40%) since TheOver adds context ML lacks.
+    # MLB totals: use pure ML — TheOver is passed separately to compute_blended_probability
+    # and weighted via MLB_TOTAL_THEOVER_WEIGHT. Pre-mixing here caused double-counting:
+    # TheOver was effectively ~44% weight instead of the 10% in config.
+    is_mlb = _string_series(merged, "league").str.upper() == "MLB"
+    is_mlb_total = is_mlb & market_type.str.contains("total", case=False, na=False)
+
+    mixed_total_model = (0.6 * theover_probability) + (0.4 * ml_probability)
+    mixed_total_model = mixed_total_model.where(mixed_total_model.notna(), theover_probability.where(theover_probability.notna(), ml_probability))
+
+    # For MLB totals, pass raw ml_probability so TheOver isn't pre-baked into the "ML" input.
+    total_model = pd.Series(
+        np.where(is_mlb_total, ml_probability, mixed_total_model),
+        index=merged.index,
+        dtype="float64",
+    )
     total_model = total_model.where(total_model.notna(), theover_probability.where(theover_probability.notna(), ml_probability))
 
     is_side = market_type.str.contains("spread", case=False, na=False)
