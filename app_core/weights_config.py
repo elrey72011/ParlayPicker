@@ -14,13 +14,18 @@ LOW_LIQUIDITY_KALSHI_WEIGHT = 0.30
 LOW_LIQUIDITY_ML_MODEL_WEIGHT = 0.35
 
 # MLB Totals blending overrides (Tier 1 and Tier 2).
-# TheOver already incorporates pitcher ERA/WHIP/matchup quality that the ML model
-# has no signal for. For totals, TheOver is the most contextually-aware source —
-# boost it significantly and drop ML to reflect what the model actually knows.
-MLB_TOTAL_THEOVER_WEIGHT = 0.35          # up from standard 0.20
-MLB_TOTAL_ML_WEIGHT = 0.15               # down from LOW_LIQUIDITY_ML (0.35)
-MLB_TOTAL_FALLBACK_THEOVER_WEIGHT = 0.45 # up from FALLBACK_THEOVER (0.20)
-MLB_TOTAL_FALLBACK_ML_WEIGHT = 0.15      # down from FALLBACK_ML (0.35)
+# TheOver data is NOT game-specific (nearly identical probabilities across games
+# regardless of starting pitcher matchup). Market odds embed actual pitcher data
+# from bookmakers. Shift weight from TheOver → market and Kalshi accordingly.
+# May-13 review: TheOver was 44% effective weight (double-counted via pre-mix);
+# overs went 1-5. Market is the most reliable signal for MLB totals.
+MLB_TOTAL_THEOVER_WEIGHT = 0.10          # down from 0.35; data not game-specific
+MLB_TOTAL_ML_WEIGHT = 0.10               # down from 0.15
+MLB_TOTAL_MARKET_WEIGHT = 0.30           # up from 0.20; market has pitcher data
+MLB_TOTAL_KALSHI_WEIGHT = 0.40           # up from LOW_LIQUIDITY (0.30)
+MLB_TOTAL_FALLBACK_THEOVER_WEIGHT = 0.20 # down from 0.45
+MLB_TOTAL_FALLBACK_ML_WEIGHT = 0.15      # unchanged
+MLB_TOTAL_FALLBACK_MARKET_WEIGHT = 0.40  # up from FALLBACK_MARKET (0.35)
 
 # NBA Totals blending overrides (Tier 1 and Tier 2).
 # TheOver incorporates pace, rest, defensive ratings the ML model lacks.
@@ -109,13 +114,16 @@ NBA_OVER_ACTIONABLE_BONUS = 0.00
 # gating loop before this threshold is evaluated).
 # Raised from (0.62 / 0.07 / 0.08) after May-9 review: MLB Overs went 3-7 (30%).
 # Further raised from (0.65 / 0.10 / 0.10) after May-10 review: MLB Overs went 2-6 (25%).
-# Eased from (0.68 / 0.14 / 0.12) after May-12 recap: TheOver is now wired into
-# blending (last commit), which anchors pitcher-quality signal that was previously
-# missing. Below Threshold MLB Overs went 4-4 (50%) on May-12; over-correction was
-# systematically excluding legitimate winners. Shrink eased 0.55→0.85 for same reason.
-MLB_OVER_ACTIONABLE_MIN_PROB = 0.56
-MLB_OVER_ACTIONABLE_MIN_EV = 0.07
-MLB_OVER_ACTIONABLE_MIN_EDGE = 0.03
+# Eased from (0.68 / 0.14 / 0.12) after May-12 recap to (0.56 / 0.07 / 0.03).
+# Re-tightened to (0.63 / 0.09 / 0.05) after May-13 recap: overs went 1-5 (20%).
+# TheOver data is non-game-specific; market is now the primary signal in MLB totals.
+# The calibrated prob cap (MLB_OVER_CALIBRATED_PROB_CAP) prevents TheOver inflation.
+MLB_OVER_ACTIONABLE_MIN_PROB = 0.63
+MLB_OVER_ACTIONABLE_MIN_EV = 0.09
+MLB_OVER_ACTIONABLE_MIN_EDGE = 0.05
+# Hard cap on calibrated probability for MLB overs — prevents TheOver from inflating
+# blended probability above a reliable ceiling (even post double-counting fix).
+MLB_OVER_CALIBRATED_PROB_CAP = 0.67
 
 # Cold-Market Penalty Layer (by League + Market Type)
 MLB_TOTAL_OVER_ACTIONABLE_PENALTY = 0.00
@@ -187,8 +195,8 @@ MAX_TOTAL_OVER_ACTIONABLE_COUNT = 3
 MAX_MLB_TOTAL_OVER_ACTIONABLE_COUNT = 2
 TOTAL_OVER_PROB_SHRINK = 0.60
 MLB_TOTAL_OVER_PROB_SHRINK = 0.85
-MLB_TOTAL_OVER_MIN_PRODUCTION_WIN_PROB = 0.56
-MLB_TOTAL_OVER_MIN_PRODUCTION_EV = 0.07
+MLB_TOTAL_OVER_MIN_PRODUCTION_WIN_PROB = 0.63
+MLB_TOTAL_OVER_MIN_PRODUCTION_EV = 0.09
 MLB_TOTAL_OVER_MIN_PRODUCTION_EDGE = 0.05
 DEGRADED_FEATURE_KELLY_MULTIPLIER = 0.50
 DEGRADED_FEATURE_MAX_SLATE_EXPOSURE_PCT = 0.12
