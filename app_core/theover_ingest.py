@@ -146,12 +146,19 @@ def _is_ambiguous_match(input_team: str, matched_team: str) -> bool:
 # League-specific team alias mappings to prevent cross-league contamination
 TEAM_ALIAS_MAP_BY_LEAGUE = {
     "MLB": {
-        # Multi-team cities: city-only name must resolve to a specific team.
-        # Without this, "Chicago" is ambiguous between Cubs and White Sox,
-        # causing TheOver to cross-match (or fail to match) when both play the same day.
+        # Full official names (Odds API format)
         "Chicago Cubs": "Chicago Cubs", "Chicago White Sox": "Chicago White Sox",
         "New York Yankees": "New York Yankees", "New York Mets": "New York Mets",
         "Los Angeles Dodgers": "Los Angeles Dodgers", "Los Angeles Angels": "Los Angeles Angels",
+        # TheOver CSV abbreviated forms: "Chi. Cubs", "Chi. White Sox", "LA Dodgers" etc.
+        # After normalize_team_name strips punctuation these arrive as below.
+        "Chi Cubs": "Chicago Cubs", "Chi White Sox": "Chicago White Sox",
+        "Chi. Cubs": "Chicago Cubs", "Chi. White Sox": "Chicago White Sox",
+        "LA Dodgers": "Los Angeles Dodgers", "LA Angels": "Los Angeles Angels",
+        "NY Yankees": "New York Yankees", "NY Mets": "New York Mets",
+        # Athletics (team relocated; no city prefix in TheOver/Odds API)
+        "Athletics": "Athletics", "Oakland Athletics": "Athletics",
+        "Sacramento Athletics": "Athletics",
         # Standard city-name mappings for all 30 teams
         "Arizona": "Arizona Diamondbacks", "Atlanta": "Atlanta Braves",
         "Baltimore": "Baltimore Orioles", "Boston": "Boston Red Sox",
