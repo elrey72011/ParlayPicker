@@ -451,15 +451,27 @@ TEAM_MAP.update({
 
 # Auto-injected exact mappings for Odds API full mascot names to standard names
 ODDS_API_EXACT_MAP = {
-    # MLB multi-team cities — must be looked up before suffix-stripping collapses
-    # "Chicago Cubs" and "Chicago White Sox" both to "Chicago".
-    # Same issue for New York (Yankees/Mets) and Los Angeles (Dodgers/Angels).
+    # MLB multi-team cities — full official names from Odds API
     "chicago cubs": "Chicago Cubs",
     "chicago white sox": "Chicago White Sox",
     "new york yankees": "New York Yankees",
     "new york mets": "New York Mets",
     "los angeles dodgers": "Los Angeles Dodgers",
     "los angeles angels": "Los Angeles Angels",
+    # TheOver CSV abbreviated forms (e.g. "Chi. Cubs", "LA Dodgers", "NY Mets")
+    # Two variants needed: with punctuation (looked up before removal) and without.
+    "chi. cubs": "Chicago Cubs",
+    "chi. white sox": "Chicago White Sox",
+    "chi cubs": "Chicago Cubs",
+    "chi white sox": "Chicago White Sox",
+    "la dodgers": "Los Angeles Dodgers",
+    "la angels": "Los Angeles Angels",
+    "ny yankees": "New York Yankees",
+    "ny mets": "New York Mets",
+    # Athletics — team moved from Oakland; Odds API uses "Athletics" with no city
+    "athletics": "Athletics",
+    "oakland athletics": "Athletics",
+    "sacramento athletics": "Athletics",
     "montreal": "Montreal",
     "san jose": "San Jose",
     "ny islanders": "New York",
@@ -942,6 +954,16 @@ def normalize_team_name(name: str) -> str:
             return "Miami (FL)"
         if mapped_name.lower() in ("nc state", "nc state wolfpack", "ncsu"):
             return "NC State"
+        # MLB multi-team cities and relocated franchises — return immediately so the
+        # suffix-stripping loop cannot collapse "Chicago Cubs" → "Chicago" etc.
+        _mlb_preserve = {
+            "chicago cubs", "chicago white sox",
+            "new york yankees", "new york mets",
+            "los angeles dodgers", "los angeles angels",
+            "athletics",
+        }
+        if mapped_name.lower() in _mlb_preserve:
+            return mapped_name
 
         name = mapped_name
 
@@ -1086,7 +1108,6 @@ overrides = {
     "prairie view a&m panthers": "Prairie View A&M",
     "prairie view am": "Prairie View A&M",
     "nc state wolfpack": "NC State",
-    "athletics": "Oakland",
     "athletics mlb": "Oakland"
 }
 TEAM_MAP.update(overrides)
