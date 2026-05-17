@@ -1254,9 +1254,9 @@ def compute_blended_probability(
                 w_kalshi = LOW_LIQUIDITY_KALSHI_WEIGHT
                 w_ml = LOW_LIQUIDITY_ML_MODEL_WEIGHT
                 if "total" in m_typ:
-                    # Market-first weighting: bookmaker odds embed starting pitcher data;
-                    # TheOver is not game-specific (May-13 finding: same ~0.85 prob for
-                    # very different outcomes). Shift weight to market and Kalshi.
+                    # Balanced weighting: TheOver incorporates pitcher data (confirmed May-16);
+                    # flat probs on May-13 were caused by team name bugs, not bad data.
+                    # Kalshi still leads; TheOver and market share signal equally.
                     w_kalshi = MLB_TOTAL_KALSHI_WEIGHT
                     w_market = MLB_TOTAL_MARKET_WEIGHT
                     w_the = MLB_TOTAL_THEOVER_WEIGHT
@@ -2317,6 +2317,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             DISAGREES_ACTIONABLE_MIN_PROB, DISAGREES_ACTIONABLE_MIN_EV, DISAGREES_ACTIONABLE_MIN_EDGE,
             MLB_SPREAD_HIGH_EV_OVERRIDE_MIN_EV, MLB_SPREAD_HIGH_EV_OVERRIDE_MIN_EDGE,
             MLB_SPREAD_HIGH_EV_MIN_WIN_PROB,
+            MLB_TOTAL_UNDER_MIN_WIN_PROB,
+            MLB_HIGH_TOTAL_LINE_THRESHOLD, MLB_HIGH_TOTAL_LINE_OVER_PENALTY,
         )
 
         is_kalshi_divergence = False
@@ -2529,6 +2531,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                         req_ev += MLB_TOTAL_OVER_ACTIONABLE_PENALTY
                         req_edge += MLB_TOTAL_OVER_ACTIONABLE_PENALTY
                     elif market_type == "total_under":
+                        req_prob = max(req_prob, MLB_TOTAL_UNDER_MIN_WIN_PROB)
                         req_ev += MLB_TOTAL_UNDER_ACTIONABLE_PENALTY
                         req_edge += MLB_TOTAL_UNDER_ACTIONABLE_PENALTY
 
@@ -2562,6 +2565,13 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 req_prob = max(req_prob, MLB_OVER_ACTIONABLE_MIN_PROB)
                 req_ev = max(req_ev, MLB_OVER_ACTIONABLE_MIN_EV)
                 req_edge = max(req_edge, MLB_OVER_ACTIONABLE_MIN_EDGE)
+                # High total line penalty: very high lines (≥11.0) have repeatedly
+                # underperformed (COL/ARI Over 11.5 lost on both May-15 and May-16).
+                if "total_line" in best.columns:
+                    _tl = pd.to_numeric(best.at[idx, "total_line"], errors="coerce")
+                    if pd.notna(_tl) and float(_tl) >= MLB_HIGH_TOTAL_LINE_THRESHOLD:
+                        req_ev += MLB_HIGH_TOTAL_LINE_OVER_PENALTY
+                        req_edge += MLB_HIGH_TOTAL_LINE_OVER_PENALTY
                 mlb_over_gate_applied = (
                     req_prob > pre_mlb_over_gate_req_prob
                     or req_ev > pre_mlb_over_gate_req_ev

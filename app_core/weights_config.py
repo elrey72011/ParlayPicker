@@ -14,18 +14,18 @@ LOW_LIQUIDITY_KALSHI_WEIGHT = 0.30
 LOW_LIQUIDITY_ML_MODEL_WEIGHT = 0.35
 
 # MLB Totals blending overrides (Tier 1 and Tier 2).
-# TheOver data is NOT game-specific (nearly identical probabilities across games
-# regardless of starting pitcher matchup). Market odds embed actual pitcher data
-# from bookmakers. Shift weight from TheOver → market and Kalshi accordingly.
-# May-13 review: TheOver was 44% effective weight (double-counted via pre-mix);
-# overs went 1-5. Market is the most reliable signal for MLB totals.
-MLB_TOTAL_THEOVER_WEIGHT = 0.10          # down from 0.35; data not game-specific
-MLB_TOTAL_ML_WEIGHT = 0.10               # down from 0.15
-MLB_TOTAL_MARKET_WEIGHT = 0.30           # up from 0.20; market has pitcher data
-MLB_TOTAL_KALSHI_WEIGHT = 0.40           # up from LOW_LIQUIDITY (0.30)
-MLB_TOTAL_FALLBACK_THEOVER_WEIGHT = 0.20 # down from 0.45
+# May-13 review: TheOver was double-counted (pre-mix + separate weight); overs 1-5.
+# Fix: removed double-counting; reduced TheOver weight to 0.10 and raised market.
+# May-16 correction: TheOver DOES incorporate pitcher data — the flat ~0.85 probs
+# observed on May-13 were caused by team name cross-matching bugs (now fixed), not
+# bad data quality. Restoring TheOver to 0.25; market eased back to 0.25.
+MLB_TOTAL_THEOVER_WEIGHT = 0.25          # restored from 0.10; TheOver has pitcher data
+MLB_TOTAL_ML_WEIGHT = 0.10               # unchanged
+MLB_TOTAL_MARKET_WEIGHT = 0.25           # eased from 0.30; TheOver now shares signal
+MLB_TOTAL_KALSHI_WEIGHT = 0.40           # unchanged
+MLB_TOTAL_FALLBACK_THEOVER_WEIGHT = 0.30 # restored from 0.20; pitcher signal valuable in fallback
 MLB_TOTAL_FALLBACK_ML_WEIGHT = 0.15      # unchanged
-MLB_TOTAL_FALLBACK_MARKET_WEIGHT = 0.40  # up from FALLBACK_MARKET (0.35)
+MLB_TOTAL_FALLBACK_MARKET_WEIGHT = 0.35  # eased from 0.40
 
 # NBA Totals blending overrides (Tier 1 and Tier 2).
 # TheOver incorporates pace, rest, defensive ratings the ML model lacks.
@@ -62,8 +62,10 @@ NBA_STAR_ACTIVE_TOTAL_UNDER_PENALTY = -0.01
 # Total Win Probability Floors
 TOTAL_MIN_WIN_PROB = 0.54
 TOTAL_UNDER_MIN_WIN_PROB = 0.62
-TOTAL_UNDER_MIN_EV = 0.18
-TOTAL_UNDER_MIN_EDGE = 0.10
+TOTAL_UNDER_MIN_EV = 0.22           # raised 0.18→0.22 after May-16 review: both Actionable unders lost
+TOTAL_UNDER_MIN_EDGE = 0.13         # raised 0.10→0.13 after May-16 review
+# MLB-specific under win prob floor (MLB unders 0-2 Actionable on May-16; both lost badly)
+MLB_TOTAL_UNDER_MIN_WIN_PROB = 0.66  # raised above general 0.62
 NHL_TOTAL_EXTRA_EDGE_PENALTY = 0.01
 NHL_TOTAL_MIN_WIN_PROB = 0.57
 NHL_TOTAL_MIN_WIN_PROB_STRICT = 0.58
@@ -127,14 +129,19 @@ MLB_OVER_CALIBRATED_PROB_CAP = 0.67
 
 # Cold-Market Penalty Layer (by League + Market Type)
 MLB_TOTAL_OVER_ACTIONABLE_PENALTY = 0.00
-# MLB Under raised 0.03→0.05 after May-11 review: LA/SF Under 9.5 reached High
-# Variance and lost badly (12 runs scored vs 9.5 line); no pitcher quality signal.
-MLB_TOTAL_UNDER_ACTIONABLE_PENALTY = 0.05
+# MLB Under raised 0.03→0.05 after May-11 review: LA/SF Under 9.5 lost (12 runs scored).
+# Further raised 0.05→0.07 after May-16 review: both Actionable unders lost (11 runs each).
+MLB_TOTAL_UNDER_ACTIONABLE_PENALTY = 0.07
 NBA_TOTAL_OVER_ACTIONABLE_PENALTY = 0.02
 # NBA Under raised 0.02→0.05 after May-11 review: NBA Unders 0-3 across May 9-11.
 NBA_TOTAL_UNDER_ACTIONABLE_PENALTY = 0.05
 NHL_TOTAL_OVER_ACTIONABLE_PENALTY = 0.02
 NHL_TOTAL_UNDER_ACTIONABLE_PENALTY = 0.03
+
+# High total line penalty — MLB overs with a very high line (≥11.0) have consistently
+# underperformed: COL/ARI Over 11.5 lost on both May-15 and May-16 (6 and 10 runs scored).
+MLB_HIGH_TOTAL_LINE_THRESHOLD = 11.0
+MLB_HIGH_TOTAL_LINE_OVER_PENALTY = 0.03  # added to req_ev and req_edge
 
 # No-Kalshi totals are treated as lower confidence in selection stage
 NO_KALSHI_TOTAL_EXTRA_PENALTY = 0.02
@@ -152,7 +159,8 @@ LEAGUE_MARKET_FAMILY_ACTIONABLE_PENALTIES = {
     # TheOver is now wired into blending and carries the pitcher-quality signal.
     ("MLB", "over"): 0.01,
     # MLB Under raised 0.02→0.04 after May-11 review (LA/SF Under 9.5, High Variance, LOSS).
-    ("MLB", "under"): 0.04,
+    # Further raised 0.04→0.06 after May-16 review: both Actionable unders lost (11 runs each).
+    ("MLB", "under"): 0.06,
     ("MLB", "side"): 0.00,
     ("NBA", "over"): 0.01,
     # NBA Under raised 0.01→0.05 after May-11 review (0-3 across May 9-11).
