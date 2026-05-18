@@ -1530,7 +1530,11 @@ class PredictionEngine:
             self._last_metrics["ml_top_zero_variance_columns"] = zero_variance_cols
             self._last_metrics["ml_top_near_constant_columns"] = near_constant_cols
             self._last_metrics["ml_top_high_missingness_columns"] = high_missingness_cols
-            if all_nan_feature_count > 0 or all_constant_feature_count >= max(4, int(len(model_matrix_cols) * 0.30)):
+            # Threshold: NaN features (truly missing data) always trigger; constant features
+            # (same valid value across all rows) only trigger at 40% of features (8 of 21).
+            # The old 30% floor (6/21) was too sensitive — six constant features on a normal
+            # MLB slate (weather_flag=0, some zero-injury counts) capped strong picks at HV.
+            if all_nan_feature_count > 0 or all_constant_feature_count >= max(8, int(len(model_matrix_cols) * 0.40)):
                 warn_msg = (
                     f"all_nan_feature_count={all_nan_feature_count} all_constant_feature_count={all_constant_feature_count}"
                 )
