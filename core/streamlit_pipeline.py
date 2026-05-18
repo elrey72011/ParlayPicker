@@ -2319,6 +2319,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             MLB_SPREAD_HIGH_EV_MIN_WIN_PROB,
             MLB_TOTAL_UNDER_MIN_WIN_PROB,
             MLB_HIGH_TOTAL_LINE_THRESHOLD, MLB_HIGH_TOTAL_LINE_OVER_PENALTY,
+            MLB_UNDER_ACTIONABLE_CAP,
         )
 
         is_kalshi_divergence = False
@@ -2707,6 +2708,15 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                     status = "High Variance/Speculative"
                     status_reason = "High Variance: NHL total without Kalshi market validation"
                     blocker_stage = "no_kalshi_nhl_guardrail"
+
+            # MLB Under Actionable cap — MLB Unders went 0-4 at Actionable across
+            # May 16-17. The ML model has a systematic under bias on MLB totals that
+            # produces overconfident under picks. Cap at High Variance until resolved.
+            if MLB_UNDER_ACTIONABLE_CAP and league == "MLB" and market_type == "total_under":
+                if status == "Actionable":
+                    status = "High Variance/Speculative"
+                    status_reason = "High Variance: MLB under capped (0-4 Actionable record May 16-17; systematic ML under bias)"
+                    blocker_stage = "mlb_under_actionable_cap"
 
             # Apply Consensus Overlay Logic
             # STRICT profile: full overlay on all market types.
