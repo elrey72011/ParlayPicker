@@ -118,14 +118,20 @@ NBA_OVER_ACTIONABLE_BONUS = 0.00
 # Further raised from (0.65 / 0.10 / 0.10) after May-10 review: MLB Overs went 2-6 (25%).
 # Eased from (0.68 / 0.14 / 0.12) after May-12 recap to (0.56 / 0.07 / 0.03).
 # Re-tightened to (0.63 / 0.09 / 0.05) after May-13 recap: overs went 1-5 (20%).
-# TheOver data is non-game-specific; market is now the primary signal in MLB totals.
-# The calibrated prob cap (MLB_OVER_CALIBRATED_PROB_CAP) prevents TheOver inflation.
-MLB_OVER_ACTIONABLE_MIN_PROB = 0.63
-MLB_OVER_ACTIONABLE_MIN_EV = 0.09
-MLB_OVER_ACTIONABLE_MIN_EDGE = 0.05
+# Eased to (0.60 / 0.07 / 0.04) after May-17 recap: BT overs went 7-2 (78%) while
+# team-name bugs are now fixed and TheOver pitcher data flows correctly. Lower the bar
+# so strong overs can reach Actionable now that the signal is more reliable.
+MLB_OVER_ACTIONABLE_MIN_PROB = 0.60
+MLB_OVER_ACTIONABLE_MIN_EV = 0.07
+MLB_OVER_ACTIONABLE_MIN_EDGE = 0.04
 # Hard cap on calibrated probability for MLB overs — prevents TheOver from inflating
 # blended probability above a reliable ceiling (even post double-counting fix).
 MLB_OVER_CALIBRATED_PROB_CAP = 0.67
+
+# MLB Under Actionable cap — MLB Unders have gone 0-4 at Actionable across May 16-17.
+# Block them from reaching Actionable; cap at High Variance until the ML model's
+# under bias is better understood. Set False to re-enable if performance recovers.
+MLB_UNDER_ACTIONABLE_CAP = True
 
 # Cold-Market Penalty Layer (by League + Market Type)
 MLB_TOTAL_OVER_ACTIONABLE_PENALTY = 0.00
@@ -203,9 +209,9 @@ MAX_TOTAL_OVER_ACTIONABLE_COUNT = 3
 MAX_MLB_TOTAL_OVER_ACTIONABLE_COUNT = 2
 TOTAL_OVER_PROB_SHRINK = 0.60
 MLB_TOTAL_OVER_PROB_SHRINK = 0.85
-MLB_TOTAL_OVER_MIN_PRODUCTION_WIN_PROB = 0.63
-MLB_TOTAL_OVER_MIN_PRODUCTION_EV = 0.09
-MLB_TOTAL_OVER_MIN_PRODUCTION_EDGE = 0.05
+MLB_TOTAL_OVER_MIN_PRODUCTION_WIN_PROB = 0.60
+MLB_TOTAL_OVER_MIN_PRODUCTION_EV = 0.07
+MLB_TOTAL_OVER_MIN_PRODUCTION_EDGE = 0.04
 DEGRADED_FEATURE_KELLY_MULTIPLIER = 0.50
 DEGRADED_FEATURE_MAX_SLATE_EXPOSURE_PCT = 0.12
 DEGRADED_FEATURE_MAX_PICK_EXPOSURE_PCT = 0.02
