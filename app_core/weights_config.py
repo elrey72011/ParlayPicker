@@ -226,6 +226,10 @@ EMPTY_CARD_RECOVERY_EXCLUDE_SOURCES = ["rejected_live"]
 EMPTY_CARD_RECOVERY_MAX_KELLY_TOTAL_PCT = 0.05
 EMPTY_CARD_RECOVERY_MAX_KELLY_PER_PICK_PCT = 0.025
 ALLOW_MLB_TOTAL_OVER_EMPTY_CARD_RECOVERY = False
+# MLB unders bypassed the Actionable cap via empty card recovery on May-18
+# (NYY/TOR Under 8.5 and CHC/MIL Under 10.5 promoted despite MLB_UNDER_ACTIONABLE_CAP).
+# Block MLB unders from recovery just as overs are blocked above.
+ALLOW_MLB_TOTAL_UNDER_EMPTY_CARD_RECOVERY = False
 
 # Kelly Bet Sizing — Tiered Bankroll Allocation
 # The 70/30 ratio means non-Actionable picks use 30% of the Kelly fraction
