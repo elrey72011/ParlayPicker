@@ -96,6 +96,16 @@ DIVERGENCE_HIGH_VARIANCE_MIN_EV = 0.03
 DIVERGENCE_HIGH_VARIANCE_MIN_EDGE = 0.02
 DIVERGENCE_HIGH_VARIANCE_MIN_PROB = 0.53
 
+# ML contradiction guardrail — totals only
+# The XGBoost model predicts home win probability, which has no direct bearing on
+# total runs. The old threshold (50%) was blocking good over picks when the ML
+# simply predicted the away team to win (e.g., MIA/ATL: ML=40.8%, game went 12-0=12 total).
+# Only block a total_over when ML probability is extremely low (< 35%), signalling the
+# model strongly expects a low-scoring or blowout-type result.
+# Unders are not subject to this guardrail — a low home win prob says nothing about
+# whether the game stays under the total.
+TOTAL_ML_CONTRADICTION_OVER_MAX_PROB = 0.35
+
 # Side Minimum Win Probability
 SIDE_MIN_WIN_PROB = 0.52
 MLB_SPREAD_MIN_WIN_PROB = 0.53

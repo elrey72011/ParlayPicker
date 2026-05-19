@@ -2320,6 +2320,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             MLB_TOTAL_UNDER_MIN_WIN_PROB,
             MLB_HIGH_TOTAL_LINE_THRESHOLD, MLB_HIGH_TOTAL_LINE_OVER_PENALTY,
             MLB_UNDER_ACTIONABLE_CAP,
+            TOTAL_ML_CONTRADICTION_OVER_MAX_PROB,
         )
 
         is_kalshi_divergence = False
@@ -2423,10 +2424,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             status = "No Play"
             status_reason = "Using stale data or fallback model"
             blocker_stage = "data_fallback_guardrail"
-        elif "total" in market_type.lower() and pd.notna(ml_prob) and float(ml_prob) < 0.50:
+        elif market_type == "total_over" and pd.notna(ml_prob) and float(ml_prob) < TOTAL_ML_CONTRADICTION_OVER_MAX_PROB:
             status = "No Play"
             status_reason = (
-                f"No Play: ML probability {float(ml_prob):.1%} below 50% — model contradicts pick direction on total"
+                f"No Play: ML probability {float(ml_prob):.1%} extremely low — strong model signal against over"
             )
             blocker_stage = "ml_contradiction_guardrail"
         elif not pd.isna(ev) and not pd.isna(edge):
