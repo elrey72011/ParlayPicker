@@ -2431,15 +2431,6 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 f"No Play: ML probability {float(ml_prob):.1%} extremely low — strong model signal against over"
             )
             blocker_stage = "ml_contradiction_guardrail"
-        elif league == "MLB" and market_type == "total_over" and "total_line" in best.columns:
-            _tl_low = pd.to_numeric(best.at[idx, "total_line"], errors="coerce")
-            if pd.notna(_tl_low) and float(_tl_low) < MLB_OVER_MIN_TOTAL_LINE:
-                status = "No Play"
-                status_reason = (
-                    f"No Play: MLB over line {float(_tl_low)} below minimum {MLB_OVER_MIN_TOTAL_LINE} "
-                    f"— low-line overs are pitcher-friendly and consistently underperform"
-                )
-                blocker_stage = "low_line_over_guardrail"
         elif not pd.isna(ev) and not pd.isna(edge):
 
             consensus_agr = str(best.at[idx, "consensus_agreement"]) if "consensus_agreement" in best.columns else "No Kalshi"
@@ -2728,6 +2719,21 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                     status = "High Variance/Speculative"
                     status_reason = "High Variance: MLB under capped (0-4 Actionable record May 16-17; systematic ML under bias)"
                     blocker_stage = "mlb_under_actionable_cap"
+
+            # Low total line cap — MLB overs with a line below 8.0 are set on
+            # pitcher-friendly matchups where low-scoring shutouts are common.
+            # May 20: CHC/MIL Over 6.5 (5 total) and SD/LAD Over 7.5 (4 total) both lost.
+            # Surface as High Variance rather than hiding entirely so the pick is visible.
+            if league == "MLB" and market_type == "total_over" and "total_line" in best.columns:
+                _tl_low = pd.to_numeric(best.at[idx, "total_line"], errors="coerce")
+                if pd.notna(_tl_low) and float(_tl_low) < MLB_OVER_MIN_TOTAL_LINE:
+                    if status in ("Actionable", "Below Threshold"):
+                        status = "High Variance/Speculative"
+                        status_reason = (
+                            f"High Variance: MLB over line {float(_tl_low)} below {MLB_OVER_MIN_TOTAL_LINE} "
+                            f"— pitcher-friendly game, low-line overs underperform"
+                        )
+                        blocker_stage = "low_line_over_guardrail"
 
             # Apply Consensus Overlay Logic
             # STRICT profile: full overlay on all market types.

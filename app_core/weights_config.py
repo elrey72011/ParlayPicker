@@ -161,8 +161,8 @@ MLB_HIGH_TOTAL_LINE_OVER_PENALTY = 0.03  # added to req_ev and req_edge
 
 # Low total line floor — MLB overs with a line below 8.0 are pitcher-friendly games
 # where the over rarely hits. May 20 recap: CHC/MIL Over 6.5 (5 total), SD/LAD Over 7.5
-# (4 total), NYY/TOR Over 8.5 (3 total) all lost. Sub-8.0 MLB over lines produce
-# too many low-scoring shutouts to be worth surfacing above No Play.
+# (4 total) both lost. Sub-8.0 MLB over lines are capped at High Variance so the pick
+# remains visible but gets reduced Kelly sizing.
 MLB_OVER_MIN_TOTAL_LINE = 8.0
 
 # No-Kalshi totals are treated as lower confidence in selection stage
