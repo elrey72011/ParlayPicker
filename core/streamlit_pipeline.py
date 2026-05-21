@@ -2321,6 +2321,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             MLB_HIGH_TOTAL_LINE_THRESHOLD, MLB_HIGH_TOTAL_LINE_OVER_PENALTY,
             MLB_UNDER_ACTIONABLE_CAP,
             TOTAL_ML_CONTRADICTION_OVER_MAX_PROB,
+            MLB_OVER_MIN_TOTAL_LINE,
         )
 
         is_kalshi_divergence = False
@@ -2430,6 +2431,15 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 f"No Play: ML probability {float(ml_prob):.1%} extremely low — strong model signal against over"
             )
             blocker_stage = "ml_contradiction_guardrail"
+        elif league == "MLB" and market_type == "total_over" and "total_line" in best.columns:
+            _tl_low = pd.to_numeric(best.at[idx, "total_line"], errors="coerce")
+            if pd.notna(_tl_low) and float(_tl_low) < MLB_OVER_MIN_TOTAL_LINE:
+                status = "No Play"
+                status_reason = (
+                    f"No Play: MLB over line {float(_tl_low)} below minimum {MLB_OVER_MIN_TOTAL_LINE} "
+                    f"— low-line overs are pitcher-friendly and consistently underperform"
+                )
+                blocker_stage = "low_line_over_guardrail"
         elif not pd.isna(ev) and not pd.isna(edge):
 
             consensus_agr = str(best.at[idx, "consensus_agreement"]) if "consensus_agreement" in best.columns else "No Kalshi"
