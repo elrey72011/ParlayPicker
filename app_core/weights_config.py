@@ -143,6 +143,11 @@ MLB_OVER_CALIBRATED_PROB_CAP = 0.67
 # under bias is better understood. Set False to re-enable if performance recovers.
 MLB_UNDER_ACTIONABLE_CAP = True
 
+# NHL Under Actionable cap — CAR/MTL Under 5.5 went 8 total goals at Actionable on May 21.
+# Same pattern as MLB unders: model overconfident on unders in lower-scoring sport contexts.
+# Cap at High Variance until NHL under performance demonstrates reliability.
+NHL_UNDER_ACTIONABLE_CAP = True
+
 # Cold-Market Penalty Layer (by League + Market Type)
 MLB_TOTAL_OVER_ACTIONABLE_PENALTY = 0.00
 # MLB Under raised 0.03→0.05 after May-11 review: LA/SF Under 9.5 lost (12 runs scored).
@@ -158,6 +163,12 @@ NHL_TOTAL_UNDER_ACTIONABLE_PENALTY = 0.03
 # underperformed: COL/ARI Over 11.5 lost on both May-15 and May-16 (6 and 10 runs scored).
 MLB_HIGH_TOTAL_LINE_THRESHOLD = 11.0
 MLB_HIGH_TOTAL_LINE_OVER_PENALTY = 0.03  # added to req_ev and req_edge
+
+# Mid-range total line penalty — MLB overs in the 9.5–10.9 range have underperformed.
+# May 21: ARI/COL Over 9.5 went only 3 total runs at Actionable.
+# Adds a smaller penalty tier between the base gate and the ≥11.0 extreme-line penalty.
+MLB_MID_TOTAL_LINE_THRESHOLD = 9.5
+MLB_MID_TOTAL_LINE_OVER_PENALTY = 0.02  # added to req_ev and req_edge
 
 # Low total line floor — MLB overs with a line below 8.0 are pitcher-friendly games
 # where the over rarely hits. May 20 recap: CHC/MIL Over 6.5 (5 total), SD/LAD Over 7.5
@@ -246,6 +257,10 @@ ALLOW_MLB_TOTAL_OVER_EMPTY_CARD_RECOVERY = False
 # (NYY/TOR Under 8.5 and CHC/MIL Under 10.5 promoted despite MLB_UNDER_ACTIONABLE_CAP).
 # Block MLB unders from recovery just as overs are blocked above.
 ALLOW_MLB_TOTAL_UNDER_EMPTY_CARD_RECOVERY = False
+
+# NHL Under Actionable cap bypass prevention — same pattern as MLB unders.
+# Block NHL unders from being promoted by empty card recovery despite the cap.
+ALLOW_NHL_TOTAL_UNDER_EMPTY_CARD_RECOVERY = False
 
 # Kelly Bet Sizing — Tiered Bankroll Allocation
 # The 70/30 ratio means non-Actionable picks use 30% of the Kelly fraction
