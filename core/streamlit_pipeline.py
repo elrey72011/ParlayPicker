@@ -2319,7 +2319,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             MLB_SPREAD_HIGH_EV_MIN_WIN_PROB,
             MLB_TOTAL_UNDER_MIN_WIN_PROB,
             MLB_HIGH_TOTAL_LINE_THRESHOLD, MLB_HIGH_TOTAL_LINE_OVER_PENALTY,
+            MLB_MID_TOTAL_LINE_THRESHOLD, MLB_MID_TOTAL_LINE_OVER_PENALTY,
             MLB_UNDER_ACTIONABLE_CAP,
+            NHL_UNDER_ACTIONABLE_CAP,
             TOTAL_ML_CONTRADICTION_OVER_MAX_PROB,
             MLB_OVER_MIN_TOTAL_LINE,
         )
@@ -2570,11 +2572,16 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 req_edge = max(req_edge, MLB_OVER_ACTIONABLE_MIN_EDGE)
                 # High total line penalty: very high lines (≥11.0) have repeatedly
                 # underperformed (COL/ARI Over 11.5 lost on both May-15 and May-16).
+                # Mid-range penalty: lines in [9.5, 11.0) also underperform
+                # (ARI/COL Over 9.5 went 3 total runs at Actionable on May-21).
                 if "total_line" in best.columns:
                     _tl = pd.to_numeric(best.at[idx, "total_line"], errors="coerce")
                     if pd.notna(_tl) and float(_tl) >= MLB_HIGH_TOTAL_LINE_THRESHOLD:
                         req_ev += MLB_HIGH_TOTAL_LINE_OVER_PENALTY
                         req_edge += MLB_HIGH_TOTAL_LINE_OVER_PENALTY
+                    elif pd.notna(_tl) and float(_tl) >= MLB_MID_TOTAL_LINE_THRESHOLD:
+                        req_ev += MLB_MID_TOTAL_LINE_OVER_PENALTY
+                        req_edge += MLB_MID_TOTAL_LINE_OVER_PENALTY
                 mlb_over_gate_applied = (
                     req_prob > pre_mlb_over_gate_req_prob
                     or req_ev > pre_mlb_over_gate_req_ev
@@ -2719,6 +2726,14 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                     status = "High Variance/Speculative"
                     status_reason = "High Variance: MLB under capped (0-4 Actionable record May 16-17; systematic ML under bias)"
                     blocker_stage = "mlb_under_actionable_cap"
+
+            # NHL Under Actionable cap — CAR/MTL Under 5.5 went 8 total goals at Actionable
+            # on May 21. Same model overconfidence pattern as MLB unders. Cap at High Variance.
+            if NHL_UNDER_ACTIONABLE_CAP and league == "NHL" and market_type == "total_under":
+                if status == "Actionable":
+                    status = "High Variance/Speculative"
+                    status_reason = "High Variance: NHL under capped (CAR/MTL Under 5.5 went 8 goals May 21; model overconfident on NHL unders)"
+                    blocker_stage = "nhl_under_actionable_cap"
 
             # Low total line cap — MLB overs with a line below 8.0 are set on
             # pitcher-friendly matchups where low-scoring shutouts are common.
@@ -3416,6 +3431,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         EMPTY_CARD_RECOVERY_MAX_KELLY_TOTAL_PCT,
         ALLOW_MLB_TOTAL_OVER_EMPTY_CARD_RECOVERY,
         ALLOW_MLB_TOTAL_UNDER_EMPTY_CARD_RECOVERY,
+        ALLOW_NHL_TOTAL_UNDER_EMPTY_CARD_RECOVERY,
     )
     if ALLOW_EMPTY_CARD_RECOVERY and not best.empty:
         actionable_count = best["production_eligible"].sum()
@@ -3426,6 +3442,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             )
             is_mlb_total_under = (
                 best["league"].astype(str).str.upper().eq("MLB")
+                & best["market_type"].astype(str).str.lower().eq("total_under")
+            )
+            is_nhl_total_under = (
+                best["league"].astype(str).str.upper().eq("NHL")
                 & best["market_type"].astype(str).str.lower().eq("total_under")
             )
             recovery_mask = (
@@ -3446,6 +3466,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 recovery_mask = recovery_mask & ~is_mlb_total_over
             if not ALLOW_MLB_TOTAL_UNDER_EMPTY_CARD_RECOVERY:
                 recovery_mask = recovery_mask & ~is_mlb_total_under
+            if not ALLOW_NHL_TOTAL_UNDER_EMPTY_CARD_RECOVERY:
+                recovery_mask = recovery_mask & ~is_nhl_total_under
 
             recovery_candidates = best[recovery_mask]
             if not recovery_candidates.empty:
