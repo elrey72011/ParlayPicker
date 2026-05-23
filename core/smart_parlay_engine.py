@@ -56,13 +56,19 @@ def _adj_prob(legs: pd.DataFrame, prob_col: str, rho: float = 0.8) -> float:
 
 def _leg_labels(legs: pd.DataFrame, label_cols: list[str]) -> list[str]:
     labels: list[str] = []
+    has_teams = {"away_team", "home_team"}.issubset(set(label_cols))
     for _, row in legs.iterrows():
+        game_ctx = ""
+        if has_teams and pd.notna(row.get("away_team")) and pd.notna(row.get("home_team")):
+            game_ctx = f"{row['away_team']} @ {row['home_team']}"
+
         if "best_pick" in label_cols and pd.notna(row.get("best_pick")) and str(row.get("best_pick")).strip():
-            labels.append(str(row["best_pick"]))
+            pick = str(row["best_pick"])
+            labels.append(f"{game_ctx}: {pick}" if game_ctx else pick)
         elif "team" in label_cols and pd.notna(row.get("team")):
             labels.append(str(row["team"]))
-        elif {"away_team", "home_team"}.issubset(label_cols):
-            labels.append(f"{row['away_team']} vs {row['home_team']}")
+        elif game_ctx:
+            labels.append(game_ctx)
         elif "away_team" in label_cols:
             labels.append(str(row["away_team"]))
         else:
