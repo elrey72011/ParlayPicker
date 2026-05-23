@@ -1212,6 +1212,49 @@ def main() -> None:
                     preferred = ["Pick_Status", "Triple Filter Rank", "Pick Quality", "League", "Home Team", "Away Team", "Game Date", "Game Time (ET)", "Best Pick", "Prob", "ML Prob", "Odds", "Source", "EV", "Edge", "Consensus", "Kalshi Status"]
                     ordered = [c for c in preferred if c in display_ss.columns] + [c for c in display_ss.columns if c not in preferred]
                     st.dataframe(display_ss[ordered], width="stretch")
+
+                    # --- Sweet Spot Parlays ---
+                    st.markdown("---")
+                    st.markdown("#### 🎯 Sweet Spot Parlays")
+                    if len(sweet_spot_df) >= 2:
+                        try:
+                            from core.smart_parlay_engine import generate_smart_parlays
+                            ss_parlays = generate_smart_parlays(sweet_spot_df, num_rr_candidates=5)
+                            if ss_parlays is not None and not ss_parlays.empty:
+                                for leg_count in [2, 3]:
+                                    leg_df = ss_parlays[ss_parlays["legs"] == leg_count].head(5).copy()
+                                    if leg_df.empty:
+                                        continue
+                                    st.markdown(f"**Top {len(leg_df)} — {leg_count}-Leg Parlays**")
+                                    disp_cols = [c for c in ["parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "min_leg_prob", "best_payout_book", "Conviction_Score"] if c in leg_df.columns]
+                                    disp = leg_df[disp_cols].copy()
+                                    rename_map = {
+                                        "parlay_legs": "Parlay",
+                                        "combined_probability": "Hit %",
+                                        "combined_decimal_odds": "Payout",
+                                        "parlay_ev": "EV",
+                                        "min_leg_prob": "Weakest Leg",
+                                        "best_payout_book": "Book",
+                                        "Conviction_Score": "Conviction",
+                                    }
+                                    disp = disp.rename(columns={k: v for k, v in rename_map.items() if k in disp.columns})
+                                    if "Hit %" in disp.columns:
+                                        disp["Hit %"] = disp["Hit %"].apply(lambda x: f"{x:.1%}" if pd.notna(x) else "")
+                                    if "Payout" in disp.columns:
+                                        disp["Payout"] = disp["Payout"].apply(lambda x: f"{x:.2f}x" if pd.notna(x) else "")
+                                    if "EV" in disp.columns:
+                                        disp["EV"] = disp["EV"].apply(lambda x: f"{x:.3f}" if pd.notna(x) else "")
+                                    if "Weakest Leg" in disp.columns:
+                                        disp["Weakest Leg"] = disp["Weakest Leg"].apply(lambda x: f"{x:.1%}" if pd.notna(x) else "")
+                                    if "Conviction" in disp.columns:
+                                        disp["Conviction"] = disp["Conviction"].apply(lambda x: f"{x:.2f}" if pd.notna(x) else "")
+                                    st.dataframe(disp, use_container_width=True)
+                            else:
+                                st.info("No +EV parlays found from Sweet Spot picks — try loosening the filters.")
+                        except Exception as e:
+                            st.warning(f"Could not generate parlays: {e}")
+                    else:
+                        st.info("Need at least 2 Sweet Spot picks to build parlays.")
                 else:
                     st.info("No picks match the Sweet Spot criteria.")
 
