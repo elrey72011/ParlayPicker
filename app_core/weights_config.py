@@ -172,14 +172,18 @@ MLB_MID_TOTAL_LINE_OVER_PENALTY = 0.02  # added to req_ev and req_edge
 
 # Low total line floor — MLB overs with a line below 8.0 are pitcher-friendly games
 # where the over rarely hits. May 20: CHC/MIL Over 6.5 (5 total), SD/LAD Over 7.5
-# (4 total) both lost. May 22: MIA/NYM Over 7.5 (3 total), CHC/HOU Over 7.5 (6 total).
-# Changed from High Variance to No Play — these kept appearing in the pick list and losing.
+# (4 total) both lost. Sub-8.0 MLB over lines are capped at High Variance so the pick
+# remains visible but gets reduced Kelly sizing.
 MLB_OVER_MIN_TOTAL_LINE = 8.0
 
-# Low total line floor for MLB unders — Under 7.5 went 1-3 on May 22 (Angels, Boston,
-# SF all lost badly with 13-15 total runs; only Yankees 7.5 under held). Sub-8.0 under
-# lines sit in the dangerous mid-range where a few extra hits easily blow the total.
-MLB_UNDER_MIN_TOTAL_LINE = 8.0
+# TheOver direction conflict penalty — when TheOver's probability clearly disagrees
+# with the blended pick direction for an MLB total, apply this penalty to the
+# conflicting pick's final_family_score so the TheOver-aligned direction wins selection.
+# TheOver incorporates pitcher/rotation data that Kalshi + market can't fully price.
+# May 22: Over picks on Miami 7.5, Cubs 7.5 and Under picks on Angels 7.5, BOS 7.5,
+# SF 7.5 all lost; the model was following Kalshi/market while TheOver likely disagreed.
+MLB_THEOVER_CONFLICT_THRESHOLD = 0.46   # TheOver says other side has ≥54% probability
+MLB_THEOVER_CONFLICT_PENALTY = 0.25     # Subtracted from final_family_score to flip selection
 
 # No-Kalshi totals are treated as lower confidence in selection stage
 NO_KALSHI_TOTAL_EXTRA_PENALTY = 0.02
