@@ -184,6 +184,9 @@ def generate_smart_parlays(df: pd.DataFrame, num_rr_candidates: int = 5) -> pd.D
 
     result = pd.DataFrame(records)
 
+    # Drop duplicate combinations (same legs can appear in both standard and RR pools)
+    result = result.drop_duplicates(subset=["parlay_legs"]).copy()
+
     # Sort: highest EV first; use min_leg_prob as tiebreaker (stronger weakest leg wins)
     result = result.sort_values(
         ["parlay_ev", "min_leg_prob"],
