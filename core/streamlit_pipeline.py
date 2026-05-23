@@ -63,6 +63,7 @@ from app_core.weights_config import (
     NHL_KALSHI_WEIGHT, NHL_ML_MODEL_WEIGHT, NHL_MARKET_WEIGHT, NHL_THEOVER_WEIGHT, NHL_SENTIMENT_WEIGHT,
     KALSHI_DIVERGENCE_THRESHOLD, KALSHI_DIVERGENCE_THRESHOLD_NBA,
     KALSHI_DIVERGENCE_THRESHOLD_MLB, KALSHI_DIVERGENCE_THRESHOLD_NHL,
+    MLB_THEOVER_CONFLICT_THRESHOLD, MLB_THEOVER_CONFLICT_PENALTY,
 )
 
 warnings.filterwarnings("ignore", category=FutureWarning, module="pandas")
@@ -2346,8 +2347,6 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             NHL_UNDER_ACTIONABLE_CAP,
             TOTAL_ML_CONTRADICTION_OVER_MAX_PROB,
             MLB_OVER_MIN_TOTAL_LINE,
-            MLB_THEOVER_CONFLICT_THRESHOLD,
-            MLB_THEOVER_CONFLICT_PENALTY,
         )
 
         is_kalshi_divergence = False
