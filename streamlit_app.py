@@ -1082,20 +1082,23 @@ def main() -> None:
                     key="ss_family"
                 )
             with ss_col2:
-                ss_min_prob = st.number_input("Min Win Probability", value=0.58, step=0.01, format="%.2f", key="ss_min_prob")
-                ss_max_prob = st.number_input("Max Win Probability", value=0.64, step=0.01, format="%.2f", key="ss_max_prob")
-                ss_min_edge = st.number_input("Min Edge", value=0.08, step=0.01, format="%.2f", key="ss_min_edge")
+                ss_min_prob = st.number_input("Min Win Probability", value=0.54, step=0.01, format="%.2f", key="ss_min_prob")
+                ss_max_prob = st.number_input("Max Win Probability", value=0.70, step=0.01, format="%.2f", key="ss_max_prob")
+                ss_min_edge = st.number_input("Min Edge", value=0.03, step=0.01, format="%.2f", key="ss_min_edge")
             with ss_col3:
-                ss_max_edge = st.number_input("Max Edge", value=0.12, step=0.01, format="%.2f", key="ss_max_edge")
-                ss_min_ev = st.number_input("Min EV", value=0.10, step=0.01, format="%.2f", key="ss_min_ev")
-                ss_max_ev = st.number_input("Max EV", value=0.20, step=0.01, format="%.2f", key="ss_max_ev")
+                ss_max_edge = st.number_input("Max Edge", value=0.20, step=0.01, format="%.2f", key="ss_max_edge")
+                ss_min_ev = st.number_input("Min EV", value=0.04, step=0.01, format="%.2f", key="ss_min_ev")
+                ss_max_ev = st.number_input("Max EV", value=0.35, step=0.01, format="%.2f", key="ss_max_ev")
 
             if use_sweet_spot and best_picks_df is not None and not best_picks_df.empty:
                 # Apply filters
                 sweet_spot_df = best_picks_df.copy()
 
-                # 1. Actionable
-                sweet_spot_df = sweet_spot_df[sweet_spot_df["Pick_Status"] == "Actionable"]
+                # 1. Actionable + High Variance — Below Threshold explicitly failed
+                #    the confidence gate and shouldn't surface as a sweet spot pick.
+                sweet_spot_df = sweet_spot_df[
+                    sweet_spot_df["Pick_Status"].isin(["Actionable", "High Variance/Speculative"])
+                ]
                 actionable_count = len(sweet_spot_df)
 
                 # 2. Odds Source
@@ -1139,7 +1142,7 @@ def main() -> None:
                 diag_col1, diag_col2, diag_col3, diag_col4 = st.columns(4)
 
                 diag_col1.metric("Total Best Picks", len(best_picks_df))
-                diag_col1.metric("Actionable Only", actionable_count)
+                diag_col1.metric("Actionable + High Var", actionable_count)
                 diag_col1.metric("After Source Filter", source_count)
 
                 diag_col2.metric("After Prob Band", prob_count)
