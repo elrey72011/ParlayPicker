@@ -564,7 +564,7 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
         totals_df=totals_df,
     )
 
-    parlay_columns = ["parlay_type", "parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "kelly_fraction_1_8", "legs", "leg1_game", "leg2_game", "leg3_game"]
+    parlay_columns = ["parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "legs", "risk_tier", "group_id", "best_payout_book", "Conviction_Score", "min_leg_prob", "kelly_fraction", "recommended_bet"]
     empty_per_leg = {f"parlays_{lc}_df": pd.DataFrame(columns=parlay_columns) for lc in (2, 3)}
 
     empty_state: dict = {
@@ -707,7 +707,8 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
     per_leg: dict = {}
     for lc in (2, 3):
         parlay_slice = parlays_df[_safe_numeric_series(parlays_df, "legs").eq(lc)].copy()
-        per_leg[f"parlays_{lc}_df"] = parlay_slice[parlay_columns] if not parlay_slice.empty else pd.DataFrame(columns=parlay_columns)
+        avail = [c for c in parlay_columns if c in parlay_slice.columns]
+        per_leg[f"parlays_{lc}_df"] = parlay_slice[avail] if not parlay_slice.empty else pd.DataFrame(columns=parlay_columns)
 
     portfolio_df = optimize_portfolio_allocation(best_picks_df, bankroll=float(controls["bankroll"]))
     diagnostics["portfolio_rows_count"] = int(len(portfolio_df)) if isinstance(portfolio_df, pd.DataFrame) else 0
@@ -1551,43 +1552,42 @@ def main() -> None:
 
     with tab4:
         st.subheader("Best Parlays")
-        parlay_columns = ["parlay_type", "parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "kelly_fraction_1_8", "legs", "leg1_game", "leg2_game", "leg3_game"]
-        base_parlays_df = parlays_df if parlays_df is not None else pd.DataFrame(columns=parlay_columns)
+        base_parlays_df = parlays_df if parlays_df is not None and not parlays_df.empty else pd.DataFrame()
 
         view_mode = st.radio("Parlay View", ["Ranked Parlays", "Top Combinations"], horizontal=True)
-        selected_type = "ranked" if view_mode == "Ranked Parlays" else "top_combo"
-        filtered = base_parlays_df[_safe_str_series(base_parlays_df, "parlay_type").eq(selected_type)].copy()
 
-        if filtered.empty:
+        if base_parlays_df.empty:
             st.info("No parlays available for this view yet.")
-        elif selected_type == "ranked":
-            ranked = filtered.sort_values("parlay_ev", ascending=False).reset_index(drop=True)
+        elif view_mode == "Ranked Parlays":
+            ranked = base_parlays_df.sort_values("parlay_ev", ascending=False).reset_index(drop=True)
             for idx, row in ranked.iterrows():
-                st.markdown(f"### Parlay #{idx + 1} ({int(row.get('legs', 0))}-Leg)")
+                tier = row.get("risk_tier", "")
+                tier_label = f" — {tier}" if tier else ""
+                st.markdown(f"### Parlay #{idx + 1} ({int(row.get('legs', 0))}-Leg{tier_label})")
                 st.markdown(f"- **Combined Probability:** {float(row.get('combined_probability', 0.0)):.2%}")
                 st.markdown(f"- **Combined Decimal Odds:** {float(row.get('combined_decimal_odds', 0.0)):.3f}")
                 st.markdown(f"- **Parlay EV:** {float(row.get('parlay_ev', 0.0)):.3f}")
-                st.markdown(f"- **1/8th Kelly Sizing:** {float(row.get('kelly_fraction_1_8', 0.0)):.2%}")
+                kf = row.get("kelly_fraction", 0.0)
+                st.markdown(f"- **Kelly Fraction (1/8):** {float(kf) if pd.notna(kf) else 0.0:.2%}")
                 legs = [leg.strip() for leg in str(row.get("parlay_legs", "")).split("|") if leg.strip()]
                 for leg in legs:
                     st.markdown(f"- {leg}")
                 st.divider()
         else:
-            top_combo = filtered.sort_values("parlay_ev", ascending=False).head(10).reset_index(drop=True)
-            table_df = top_combo[["combined_probability", "combined_decimal_odds", "parlay_ev", "kelly_fraction_1_8", "legs"]].copy()
-            table_df["Parlay"] = ["<br>".join([leg.strip() for leg in str(v).split("|") if leg.strip()]) for v in top_combo["parlay_legs"]]
-            table_df = table_df[["Parlay", "combined_probability", "combined_decimal_odds", "parlay_ev", "kelly_fraction_1_8", "legs"]]
+            top_combo = base_parlays_df.sort_values("parlay_ev", ascending=False).head(10).reset_index(drop=True)
+            table_cols = [c for c in ["combined_probability", "combined_decimal_odds", "parlay_ev", "kelly_fraction", "legs", "risk_tier"] if c in top_combo.columns]
+            table_df = top_combo[table_cols].copy()
+            table_df.insert(0, "Parlay", ["<br>".join([leg.strip() for leg in str(v).split("|") if leg.strip()]) for v in top_combo["parlay_legs"]])
             st.write(table_df.to_html(escape=False, index=False), unsafe_allow_html=True)
 
         # Rearrange columns for the export
         parlay_export_columns = [
             "risk_tier", "group_id", "parlay_legs", "combined_probability", "combined_decimal_odds",
             "parlay_ev", "legs", "combined_market_prob", "ev_boost_pct", "is_high_correlation",
-            "best_payout_book", "Conviction_Score", "kelly_fraction_1_8"
+            "best_payout_book", "Conviction_Score", "min_leg_prob", "kelly_fraction", "recommended_bet"
         ]
-        export_parlays_df = base_parlays_df.copy()
+        export_parlays_df = base_parlays_df.copy() if not base_parlays_df.empty else pd.DataFrame(columns=parlay_export_columns)
 
-        # Ensure all columns exist before selecting
         for col in parlay_export_columns:
             if col not in export_parlays_df.columns:
                 export_parlays_df[col] = pd.NA
