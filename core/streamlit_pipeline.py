@@ -5290,10 +5290,9 @@ def run_analysis_pipeline(
 
 
 def generate_parlays(best_picks_df: pd.DataFrame, max_legs: int = 3) -> pd.DataFrame:
-    from core.kelly_optimizer import kelly_fraction, add_kelly_bet_sizing, apply_simultaneous_kelly
+    from core.kelly_optimizer import add_kelly_bet_sizing, apply_simultaneous_kelly
     from core.smart_parlay_engine import generate_smart_parlays
 
-    # We now fully delegate to smart_parlay_engine
     if best_picks_df is None or best_picks_df.empty:
         return pd.DataFrame()
 
@@ -5302,8 +5301,15 @@ def generate_parlays(best_picks_df: pd.DataFrame, max_legs: int = 3) -> pd.DataF
     if parlays_df.empty:
         return parlays_df
 
-    # Assume a default $1000 bankroll for Kelly fractional sizing during export if not provided
-    parlays_df = add_kelly_bet_sizing(parlays_df, bankroll=1000.0, fraction=0.125) # 1/8th Kelly
+    # Cap at top 10 per leg count so the UI stays readable.
+    # Already sorted by EV desc inside generate_smart_parlays, so head(10) = best 10.
+    parlays_df = (
+        parlays_df.groupby("legs", group_keys=False)
+        .apply(lambda g: g.head(10))
+        .reset_index(drop=True)
+    )
+
+    parlays_df = add_kelly_bet_sizing(parlays_df, bankroll=1000.0, fraction=0.125)
     parlays_df = apply_simultaneous_kelly(parlays_df, bankroll=1000.0, max_exposure=0.05)
 
     return parlays_df
