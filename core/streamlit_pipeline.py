@@ -2072,6 +2072,28 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     pool["final_family_score"] = pool["final_family_score"] - pool["_family_selection_penalty"]
     pool["final_family_score_no_mlb_spread_penalty"] = pool["final_family_score"] + pool["_mlb_spread_finalist_penalty"]
 
+    # TheOver direction conflict penalty — for MLB totals, if TheOver's probability
+    # clearly disagrees with the pick direction (theover_probability < threshold), the
+    # other direction is almost certainly better. Apply a scoring penalty so that
+    # drop_duplicates naturally selects the TheOver-aligned direction instead.
+    # theover_probability on an Over row = P(Over from TheOver); on an Under row = P(Under).
+    # If either is below MLB_THEOVER_CONFLICT_THRESHOLD, TheOver favors the other side.
+    if "theover_probability" in pool.columns:
+        _to_prob = pd.to_numeric(pool["theover_probability"], errors="coerce")
+        _is_mlb_total = (
+            pool["league"].astype(str).str.upper().eq("MLB")
+            & pool["market_type"].astype(str).str.lower().str.contains("total", na=False)
+        )
+        _theover_conflict = (
+            _is_mlb_total
+            & _to_prob.notna()
+            & (_to_prob < float(MLB_THEOVER_CONFLICT_THRESHOLD))
+        )
+        pool.loc[_theover_conflict, "final_family_score"] -= float(MLB_THEOVER_CONFLICT_PENALTY)
+        pool["_theover_conflict_penalty"] = np.where(_theover_conflict, float(MLB_THEOVER_CONFLICT_PENALTY), 0.0)
+    else:
+        pool["_theover_conflict_penalty"] = 0.0
+
     # 4. Sort to prepare for finalist selection within each family per game
     pool = pool.sort_values(
         by=["final_family_score", "tier_score", "_ev_numeric", "_edge_numeric", "calibrated_probability"],
@@ -2324,7 +2346,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             NHL_UNDER_ACTIONABLE_CAP,
             TOTAL_ML_CONTRADICTION_OVER_MAX_PROB,
             MLB_OVER_MIN_TOTAL_LINE,
-            MLB_UNDER_MIN_TOTAL_LINE,
+            MLB_THEOVER_CONFLICT_THRESHOLD,
+            MLB_THEOVER_CONFLICT_PENALTY,
         )
 
         is_kalshi_divergence = False
@@ -2736,48 +2759,20 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                     status_reason = "High Variance: NHL under capped (CAR/MTL Under 5.5 went 8 goals May 21; model overconfident on NHL unders)"
                     blocker_stage = "nhl_under_actionable_cap"
 
-            # Low total line hard cap — MLB overs below 8.0 are pitcher-friendly matchups
-            # where low-scoring shutouts are common and the over rarely hits.
-            # May 20: CHC/MIL 6.5 (5 total), SD/LAD 7.5 (4 total) both lost.
-            # May 22: MIA/NYM 7.5 (3 total), CHC/HOU 7.5 (6 total) both lost.
-            # Changed from High Variance to No Play — they kept appearing and losing.
+            # Low total line cap — MLB overs with a line below 8.0 are set on
+            # pitcher-friendly matchups where low-scoring shutouts are common.
+            # May 20: CHC/MIL Over 6.5 (5 total) and SD/LAD Over 7.5 (4 total) both lost.
+            # Surface as High Variance rather than hiding entirely so the pick is visible.
             if league == "MLB" and market_type == "total_over" and "total_line" in best.columns:
                 _tl_low = pd.to_numeric(best.at[idx, "total_line"], errors="coerce")
                 if pd.notna(_tl_low) and float(_tl_low) < MLB_OVER_MIN_TOTAL_LINE:
-                    status = "No Play"
-                    status_reason = (
-                        f"No Play: MLB over line {float(_tl_low)} below {MLB_OVER_MIN_TOTAL_LINE} "
-                        f"— pitcher-friendly game, low-line overs consistently underperform"
-                    )
-                    blocker_stage = "low_line_over_guardrail"
-
-            # Low total line hard cap — MLB unders below 8.0 sit in the dangerous
-            # mid-range where a few extra hits easily blow the total.
-            # May 22: Angels/Tex Under 7.5 (15 total), BOS/MIN Under 7.5 (14 total),
-            # SF/CWS Under 7.5 (13 total) all lost badly. Under 7.5 went 1-3 on the day.
-            if league == "MLB" and market_type == "total_under" and "total_line" in best.columns:
-                _tl_under = pd.to_numeric(best.at[idx, "total_line"], errors="coerce")
-                if pd.notna(_tl_under) and float(_tl_under) < MLB_UNDER_MIN_TOTAL_LINE:
-                    status = "No Play"
-                    status_reason = (
-                        f"No Play: MLB under line {float(_tl_under)} below {MLB_UNDER_MIN_TOTAL_LINE} "
-                        f"— mid-range lines easily blown; Under 7.5 went 1-3 on May 22"
-                    )
-                    blocker_stage = "low_line_under_guardrail"
-
-            # Very high total line hard cap — MLB overs at or above MLB_MID_TOTAL_LINE_THRESHOLD
-            # (9.5) have failed repeatedly: ARI/COL 9.5 went 3 total runs (May 21),
-            # CIN/STL 9.5 went 0-0 (May 22). These picks already get a threshold penalty
-            # but still surface as Below Threshold and get placed. Block entirely.
-            if league == "MLB" and market_type == "total_over" and "total_line" in best.columns:
-                _tl_high = pd.to_numeric(best.at[idx, "total_line"], errors="coerce")
-                if pd.notna(_tl_high) and float(_tl_high) >= MLB_MID_TOTAL_LINE_THRESHOLD:
-                    status = "No Play"
-                    status_reason = (
-                        f"No Play: MLB over line {float(_tl_high)} at or above {MLB_MID_TOTAL_LINE_THRESHOLD} "
-                        f"— high-line overs 0-2 across May 21-22 (ARI/COL 9.5, CIN/STL 9.5)"
-                    )
-                    blocker_stage = "high_line_over_guardrail"
+                    if status in ("Actionable", "Below Threshold"):
+                        status = "High Variance/Speculative"
+                        status_reason = (
+                            f"High Variance: MLB over line {float(_tl_low)} below {MLB_OVER_MIN_TOTAL_LINE} "
+                            f"— pitcher-friendly game, low-line overs underperform"
+                        )
+                        blocker_stage = "low_line_over_guardrail"
 
             # Apply Consensus Overlay Logic
             # STRICT profile: full overlay on all market types.
