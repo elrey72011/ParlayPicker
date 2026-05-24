@@ -182,8 +182,10 @@ MLB_OVER_MIN_TOTAL_LINE = 8.0
 # TheOver incorporates pitcher/rotation data that Kalshi + market can't fully price.
 # May 22: Over picks on Miami 7.5, Cubs 7.5 and Under picks on Angels 7.5, BOS 7.5,
 # SF 7.5 all lost; the model was following Kalshi/market while TheOver likely disagreed.
-MLB_THEOVER_CONFLICT_THRESHOLD = 0.46   # TheOver says other side has ≥54% probability
-MLB_THEOVER_CONFLICT_PENALTY = 0.25     # Subtracted from final_family_score to flip selection
+# May 23: All 5 MLB Over picks in High Variance lost (ATL, CHC, TOR, BOS, SD).
+# Tightened threshold to 0.50 and raised penalty to 0.35 to flip more conflicting Overs.
+MLB_THEOVER_CONFLICT_THRESHOLD = 0.50   # TheOver says other side has ≥50% probability
+MLB_THEOVER_CONFLICT_PENALTY = 0.35     # Subtracted from final_family_score to flip selection
 
 # No-Kalshi totals are treated as lower confidence in selection stage
 NO_KALSHI_TOTAL_EXTRA_PENALTY = 0.02
