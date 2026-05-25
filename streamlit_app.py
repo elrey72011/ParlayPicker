@@ -564,7 +564,7 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
         totals_df=totals_df,
     )
 
-    parlay_columns = ["parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "legs", "risk_tier", "group_id", "best_payout_book", "Conviction_Score", "min_leg_prob", "kelly_fraction", "recommended_bet"]
+    parlay_columns = ["parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "legs", "risk_tier", "group_id", "best_payout_book", "Conviction_Score", "min_leg_prob", "has_actionable_anchor", "kelly_fraction", "recommended_bet"]
     empty_per_leg = {f"parlays_{lc}_df": pd.DataFrame(columns=parlay_columns) for lc in (2, 3)}
 
     empty_state: dict = {
@@ -1227,7 +1227,7 @@ def main() -> None:
                                     if leg_df.empty:
                                         continue
                                     st.markdown(f"**Top {len(leg_df)} — {leg_count}-Leg Parlays**")
-                                    disp_cols = [c for c in ["parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "min_leg_prob", "best_payout_book", "Conviction_Score"] if c in leg_df.columns]
+                                    disp_cols = [c for c in ["parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "min_leg_prob", "has_actionable_anchor", "best_payout_book", "Conviction_Score"] if c in leg_df.columns]
                                     disp = leg_df[disp_cols].copy()
                                     rename_map = {
                                         "parlay_legs": "Parlay",
@@ -1235,6 +1235,7 @@ def main() -> None:
                                         "combined_decimal_odds": "Payout",
                                         "parlay_ev": "EV",
                                         "min_leg_prob": "Weakest Leg",
+                                        "has_actionable_anchor": "Has Actionable",
                                         "best_payout_book": "Book",
                                         "Conviction_Score": "Conviction",
                                     }
