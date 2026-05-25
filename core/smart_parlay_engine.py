@@ -10,23 +10,18 @@ import json
 # Below Threshold explicitly failed the confidence gate and shouldn't anchor a parlay.
 PARLAY_ELIGIBLE_STATUSES = {"Actionable", "High Variance/Speculative"}
 
-# Minimum calibrated probability per leg — legs below this floor drag down every
-# combo they touch. 0.54 keeps out borderline coin-flip picks.
+# Minimum calibrated probability per leg. Legs multiply in a parlay, so a weak leg
+# at 0.54 combined with two others at 0.65 produces ~0.23 hit rate — barely +EV.
+# Ranked by calibrated_probability (not edge) because legs multiply: a 0.65-prob leg
+# with modest edge beats a 0.57-prob leg with higher edge in a parlay context.
 MIN_LEG_PROBABILITY = 0.54
 
 # Minimum edge per leg — ensures each leg genuinely beats the market.
 MIN_LEG_EDGE = 0.02
 
-# --- Direction scoring (May 23-24 recaps: MLB Unders 14/16 = 87.5%; MLB Overs 3/12 = 25%) ---
-# Multipliers applied to edge when ranking parlay candidates. Doesn't change EV math.
-MLB_UNDER_PARLAY_BOOST = 1.15       # MLB Unders score 15% higher → rise in candidate pool
-MLB_OVER_LOW_LINE_PENALTY = 0.85    # MLB Overs at ≤8.5 lines score 15% lower → sink in pool
-MLB_OVER_LOW_LINE_THRESHOLD = 8.5   # Lines at or below this trigger the penalty
-
-# Colorado (Coors Field) is a structural high-run environment — exempt from Over penalty.
-COORS_FIELD_TEAMS = {"colorado", "rockies"}
-
-# Actionable picks are always force-included in the candidate pool as anchors.
+# Actionable picks are force-included in the candidate pool as anchors.
+# They represent the model's highest-confidence picks and have gone 4/4 (100%)
+# across May 22-24. Remaining slots fill from High Variance by calibrated_probability.
 MAX_ACTIONABLE_ANCHORS = 5
 
 
@@ -64,43 +59,6 @@ def _adj_prob(legs: pd.DataFrame, prob_col: str, rho: float = 0.8) -> float:
         else:
             result *= float(m_legs[prob_col].iloc[0])
     return float(result)
-
-
-def _direction_multiplier(row: pd.Series) -> float:
-    """Score multiplier based on pick direction and park factors.
-
-    MLB Unders have consistently outperformed (87.5% over May 23-24).
-    MLB Overs at low lines (≤8.5) have underperformed (25% over same period).
-    Colorado (Coors Field) is exempt — structural high-run environment.
-    """
-    league = str(row.get("league", "")).upper()
-    if league != "MLB":
-        return 1.0
-
-    pick = str(row.get("best_pick", "")).lower()
-    market = str(row.get("market_type", "")).lower()
-    is_under = "under" in pick or "total_under" in market
-    is_over = "over" in pick or "total_over" in market
-
-    if is_under:
-        return MLB_UNDER_PARLAY_BOOST
-
-    if is_over:
-        home = str(row.get("home_team", "")).lower()
-        away = str(row.get("away_team", "")).lower()
-        is_coors = any(t in home or t in away for t in COORS_FIELD_TEAMS)
-        if is_coors:
-            return 1.0  # Coors Field — structural Over environment, no penalty
-
-        best_pick_str = str(row.get("best_pick", ""))
-        try:
-            line = float(best_pick_str.split()[-1])
-            if line <= MLB_OVER_LOW_LINE_THRESHOLD:
-                return MLB_OVER_LOW_LINE_PENALTY
-        except (ValueError, IndexError):
-            pass
-
-    return 1.0
 
 
 def _leg_labels(legs: pd.DataFrame, label_cols: list[str]) -> list[str]:
@@ -168,7 +126,17 @@ def _build_record(legs: pd.DataFrame, label_cols: list[str], leg_count: int,
 
 
 def generate_smart_parlays(df: pd.DataFrame, num_rr_candidates: int = 5) -> pd.DataFrame:
-    """Generate +EV 2- and 3-leg parlays from quality-filtered candidates."""
+    """Generate +EV 2- and 3-leg parlays from quality-filtered candidates.
+
+    Candidate selection ranks by calibrated_probability, not edge. In a parlay
+    legs multiply, so a 0.65-prob leg with modest edge is strictly more valuable
+    than a 0.57-prob leg with higher edge — the product of probabilities is what
+    determines the combined hit rate. Edge governs single-game sizing; probability
+    governs parlay construction.
+
+    Actionable picks are force-anchored at the front of the pool. They represent
+    the model's full-signal consensus picks and sort to the top of results.
+    """
     columns = [
         "parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev",
         "legs", "combined_market_prob", "ev_boost_pct", "is_high_correlation",
@@ -198,13 +166,9 @@ def generate_smart_parlays(df: pd.DataFrame, num_rr_candidates: int = 5) -> pd.D
     if candidates.empty:
         return pd.DataFrame(columns=columns)
 
-    # Apply direction multiplier — Unders rise, low-line Overs sink (Coors exempt)
-    candidates = candidates.copy()
-    candidates["_parlay_score"] = candidates.apply(
-        lambda r: r["edge"] * _direction_multiplier(r), axis=1
-    )
-
-    # Actionable-first anchoring: force Actionable picks into the pool, then fill with best remaining
+    # Actionable-first anchoring: force Actionable picks into the pool so they
+    # always appear as legs, then fill remaining slots with best High Variance
+    # picks ranked by calibrated_probability (not edge — legs multiply in parlays).
     if "Pick_Status" in candidates.columns:
         actionable = candidates[candidates["Pick_Status"].astype(str).eq("Actionable")]
         speculative = candidates[candidates["Pick_Status"].astype(str).ne("Actionable")]
@@ -213,12 +177,12 @@ def generate_smart_parlays(df: pd.DataFrame, num_rr_candidates: int = 5) -> pd.D
         speculative = candidates
 
     top_actionable = (
-        actionable.nlargest(MAX_ACTIONABLE_ANCHORS, "_parlay_score")
+        actionable.nlargest(MAX_ACTIONABLE_ANCHORS, "calibrated_probability")
         if not actionable.empty else pd.DataFrame()
     )
     remaining_slots = max(0, 20 - len(top_actionable))
     top_speculative = (
-        speculative.nlargest(remaining_slots, "_parlay_score")
+        speculative.nlargest(remaining_slots, "calibrated_probability")
         if not speculative.empty and remaining_slots > 0 else pd.DataFrame()
     )
 
@@ -229,8 +193,8 @@ def generate_smart_parlays(df: pd.DataFrame, num_rr_candidates: int = 5) -> pd.D
     if candidate_bets.empty:
         return pd.DataFrame(columns=columns)
 
-    # RR pool: top candidates by parlay score (Actionable anchors already included)
-    rr_candidates = candidates.nlargest(num_rr_candidates, "_parlay_score").dropna(
+    # RR pool: top candidates by calibrated_probability
+    rr_candidates = candidates.nlargest(num_rr_candidates, "calibrated_probability").dropna(
         subset=["calibrated_probability", "decimal_odds"]
     ).copy()
 
