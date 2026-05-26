@@ -1425,6 +1425,61 @@ def main() -> None:
                     st.write("Side vs Total Finalist Preview:")
                     st.dataframe(preview_df, width="stretch")
 
+        with st.expander("📊 Performance Tracker", expanded=False):
+            st.markdown("Upload one or more performance recap CSVs to track win rates by status tier over time.")
+            recap_files = st.file_uploader(
+                "Upload recap CSV(s)",
+                type="csv",
+                accept_multiple_files=True,
+                key="perf_tracker_uploads",
+            )
+            if recap_files:
+                recap_frames = []
+                for f in recap_files:
+                    try:
+                        rdf = pd.read_csv(f)
+                        rdf.columns = [c.strip() for c in rdf.columns]
+                        recap_frames.append(rdf)
+                    except Exception:
+                        st.warning(f"Could not parse {f.name}")
+                if recap_frames:
+                    recap = pd.concat(recap_frames, ignore_index=True)
+                    recap["Outcome"] = recap["Outcome"].astype(str).str.strip().str.upper()
+                    recap["Status"] = recap["Status"].astype(str).str.strip()
+                    recap["Win"] = recap["Outcome"].eq("WIN")
+
+                    st.markdown(f"**{len(recap)} picks across {len(recap_frames)} recap file(s)**")
+
+                    # Win rate by status
+                    status_summary = (
+                        recap.groupby("Status")["Win"]
+                        .agg(Wins="sum", Total="count")
+                        .assign(WinPct=lambda x: x["Wins"] / x["Total"])
+                        .reset_index()
+                        .sort_values("WinPct", ascending=False)
+                    )
+                    status_summary["Win %"] = status_summary["WinPct"].map(lambda x: f"{x:.1%}")
+                    st.markdown("#### Win Rate by Status")
+                    st.dataframe(status_summary[["Status", "Wins", "Total", "Win %"]], use_container_width=True)
+
+                    # Win rate by direction (Over / Under / other)
+                    if "Pick Taken" in recap.columns:
+                        recap["Direction"] = recap["Pick Taken"].astype(str).apply(
+                            lambda p: "Over" if "over" in p.lower() else ("Under" if "under" in p.lower() else "Side")
+                        )
+                        dir_summary = (
+                            recap.groupby(["Direction", "League"])["Win"]
+                            .agg(Wins="sum", Total="count")
+                            .assign(WinPct=lambda x: x["Wins"] / x["Total"])
+                            .reset_index()
+                            .sort_values(["League", "Direction"])
+                        )
+                        dir_summary["Win %"] = dir_summary["WinPct"].map(lambda x: f"{x:.1%}")
+                        st.markdown("#### Win Rate by Direction & League")
+                        st.dataframe(dir_summary[["League", "Direction", "Wins", "Total", "Win %"]], use_container_width=True)
+            else:
+                st.info("No recap files uploaded yet.")
+
         display_df = best_picks_df.copy() if best_picks_df is not None else pd.DataFrame(columns=["league", "pick", "edge"])
         if not display_df.empty and "parlay_rank" in display_df.columns:
             display_df["parlay_rank"] = range(1, len(display_df) + 1)
@@ -1460,6 +1515,23 @@ def main() -> None:
             ordered = [c for c in preferred if c in display_df.columns] + [c for c in display_df.columns if c not in preferred]
             display_df = display_df[ordered]
             st.dataframe(display_df, width="stretch")
+
+            # Below Threshold warning — 44.4% win rate over May 23-25 (below break-even)
+            if "Pick_Status" in best_picks_df.columns:
+                bt_picks = best_picks_df[best_picks_df["Pick_Status"] == "Below Threshold"]
+                if not bt_picks.empty:
+                    bt_games = bt_picks[["away_team", "home_team", "best_pick"]].copy() if "best_pick" in bt_picks.columns else bt_picks[["away_team", "home_team"]].copy()
+                    bt_labels = [
+                        f"{r.get('away_team','?')} @ {r.get('home_team','?')}: {r.get('best_pick','')}"
+                        for _, r in bt_games.iterrows()
+                    ]
+                    st.warning(
+                        f"⛔ **Do Not Bet — {len(bt_picks)} Below Threshold pick(s):** "
+                        f"This tier has averaged 44% win rate over the last 3 days (below the ~52% break-even at -110). "
+                        f"These picks failed the confidence gate and should not be wagered.\n\n"
+                        + "\n".join(f"- {label}" for label in bt_labels)
+                    )
+
             export_prep_df = best_picks_df.copy()
 
             csv_rename_map = {
