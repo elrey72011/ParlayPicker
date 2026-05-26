@@ -1470,6 +1470,11 @@ def main() -> None:
                     else:
                         recap["Outcome"] = recap["Outcome"].astype(str).str.strip().str.upper()
                         recap["Status"] = recap["Status"].astype(str).str.strip()
+                        # Drop blank/header rows
+                        recap = recap[~recap["Status"].isin(["", "NAN", "STATUS", "NONE"])]
+                        recap = recap[recap["Outcome"].isin(["WIN", "LOSS", "W", "L"])]
+                        # Normalise W→WIN, L→LOSS
+                        recap["Outcome"] = recap["Outcome"].replace({"W": "WIN", "L": "LOSS"})
                         recap["Win"] = recap["Outcome"].eq("WIN")
 
                         st.markdown(f"**{len(recap)} picks across {len(recap_frames)} recap file(s)**")
