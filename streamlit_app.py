@@ -1452,6 +1452,8 @@ def main() -> None:
                     col_map = {c: c for c in recap.columns}
                     if "Pick_Status" in recap.columns and "Status" not in recap.columns:
                         recap = recap.rename(columns={"Pick_Status": "Status"})
+                    if "W/L" in recap.columns and "Outcome" not in recap.columns:
+                        recap = recap.rename(columns={"W/L": "Outcome"})
                     if "best_pick" in recap.columns and "Pick Taken" not in recap.columns:
                         recap = recap.rename(columns={"best_pick": "Pick Taken"})
                     if "league" in recap.columns and "League" not in recap.columns:
