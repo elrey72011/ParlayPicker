@@ -134,9 +134,12 @@ NBA_OVER_ACTIONABLE_BONUS = 0.00
 MLB_OVER_ACTIONABLE_MIN_PROB = 0.60
 MLB_OVER_ACTIONABLE_MIN_EV = 0.07
 MLB_OVER_ACTIONABLE_MIN_EDGE = 0.04
-# Hard cap on calibrated probability for MLB overs — prevents TheOver from inflating
-# blended probability above a reliable ceiling (even post double-counting fix).
-MLB_OVER_CALIBRATED_PROB_CAP = 0.67
+# Hard cap on calibrated probability for MLB overs — prevents residual TheOver
+# inflation above a reliable ceiling. Raised from 0.67 → 0.72 (May-26): the 0.67
+# cap was set when TheOver had a cross-matching bug producing flat ~0.85 probs.
+# That bug was fixed May-16. The shrinkage factor (0.85) handles general calibration;
+# the cap now only blocks genuine outliers, not normal high-confidence picks.
+MLB_OVER_CALIBRATED_PROB_CAP = 0.72
 
 # MLB Under Actionable cap — MLB Unders have gone 0-4 at Actionable across May 16-17.
 # Block them from reaching Actionable; cap at High Variance until the ML model's
