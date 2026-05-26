@@ -1447,39 +1447,58 @@ def main() -> None:
                         st.warning(f"Could not parse {f.name}: {e}")
                 if recap_frames:
                     recap = pd.concat(recap_frames, ignore_index=True)
-                    recap["Outcome"] = recap["Outcome"].astype(str).str.strip().str.upper()
-                    recap["Status"] = recap["Status"].astype(str).str.strip()
-                    recap["Win"] = recap["Outcome"].eq("WIN")
 
-                    st.markdown(f"**{len(recap)} picks across {len(recap_frames)} recap file(s)**")
+                    # Normalise column names — handle both recap format and export format
+                    col_map = {c: c for c in recap.columns}
+                    if "Pick_Status" in recap.columns and "Status" not in recap.columns:
+                        recap = recap.rename(columns={"Pick_Status": "Status"})
+                    if "best_pick" in recap.columns and "Pick Taken" not in recap.columns:
+                        recap = recap.rename(columns={"best_pick": "Pick Taken"})
+                    if "league" in recap.columns and "League" not in recap.columns:
+                        recap = recap.rename(columns={"league": "League"})
 
-                    # Win rate by status
-                    status_summary = (
-                        recap.groupby("Status")["Win"]
-                        .agg(Wins="sum", Total="count")
-                        .assign(WinPct=lambda x: x["Wins"] / x["Total"])
-                        .reset_index()
-                        .sort_values("WinPct", ascending=False)
-                    )
-                    status_summary["Win %"] = status_summary["WinPct"].map(lambda x: f"{x:.1%}")
-                    st.markdown("#### Win Rate by Status")
-                    st.dataframe(status_summary[["Status", "Wins", "Total", "Win %"]], use_container_width=True)
-
-                    # Win rate by direction (Over / Under / other)
-                    if "Pick Taken" in recap.columns:
-                        recap["Direction"] = recap["Pick Taken"].astype(str).apply(
-                            lambda p: "Over" if "over" in p.lower() else ("Under" if "under" in p.lower() else "Side")
+                    required = {"Outcome", "Status"}
+                    missing = required - set(recap.columns)
+                    if missing:
+                        st.error(
+                            f"Uploaded file(s) are missing required columns: {', '.join(sorted(missing))}. "
+                            f"Please upload the Performance Recap files (not the Best Picks export). "
+                            f"Detected columns: {', '.join(recap.columns.tolist()[:10])}"
                         )
-                        dir_summary = (
-                            recap.groupby(["Direction", "League"])["Win"]
+                    else:
+                        recap["Outcome"] = recap["Outcome"].astype(str).str.strip().str.upper()
+                        recap["Status"] = recap["Status"].astype(str).str.strip()
+                        recap["Win"] = recap["Outcome"].eq("WIN")
+
+                        st.markdown(f"**{len(recap)} picks across {len(recap_frames)} recap file(s)**")
+
+                        # Win rate by status
+                        status_summary = (
+                            recap.groupby("Status")["Win"]
                             .agg(Wins="sum", Total="count")
                             .assign(WinPct=lambda x: x["Wins"] / x["Total"])
                             .reset_index()
-                            .sort_values(["League", "Direction"])
+                            .sort_values("WinPct", ascending=False)
                         )
-                        dir_summary["Win %"] = dir_summary["WinPct"].map(lambda x: f"{x:.1%}")
-                        st.markdown("#### Win Rate by Direction & League")
-                        st.dataframe(dir_summary[["League", "Direction", "Wins", "Total", "Win %"]], use_container_width=True)
+                        status_summary["Win %"] = status_summary["WinPct"].map(lambda x: f"{x:.1%}")
+                        st.markdown("#### Win Rate by Status")
+                        st.dataframe(status_summary[["Status", "Wins", "Total", "Win %"]], use_container_width=True)
+
+                        # Win rate by direction (Over / Under / other)
+                        if "Pick Taken" in recap.columns:
+                            recap["Direction"] = recap["Pick Taken"].astype(str).apply(
+                                lambda p: "Over" if "over" in p.lower() else ("Under" if "under" in p.lower() else "Side")
+                            )
+                            dir_summary = (
+                                recap.groupby(["Direction", "League"])["Win"]
+                                .agg(Wins="sum", Total="count")
+                                .assign(WinPct=lambda x: x["Wins"] / x["Total"])
+                                .reset_index()
+                                .sort_values(["League", "Direction"])
+                            )
+                            dir_summary["Win %"] = dir_summary["WinPct"].map(lambda x: f"{x:.1%}")
+                            st.markdown("#### Win Rate by Direction & League")
+                            st.dataframe(dir_summary[["League", "Direction", "Wins", "Total", "Win %"]], use_container_width=True)
             else:
                 st.info("No recap files uploaded yet.")
 
