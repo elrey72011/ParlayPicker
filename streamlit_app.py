@@ -1426,10 +1426,10 @@ def main() -> None:
                     st.dataframe(preview_df, width="stretch")
 
         with st.expander("📊 Performance Tracker", expanded=False):
-            st.markdown("Upload one or more performance recap CSVs to track win rates by status tier over time.")
+            st.markdown("Upload one or more performance recap Excel files to track win rates by status tier over time.")
             recap_files = st.file_uploader(
-                "Upload recap CSV(s)",
-                type="csv",
+                "Upload recap Excel file(s)",
+                type=["xlsx", "xls"],
                 accept_multiple_files=True,
                 key="perf_tracker_uploads",
             )
@@ -1437,7 +1437,7 @@ def main() -> None:
                 recap_frames = []
                 for f in recap_files:
                     try:
-                        rdf = pd.read_csv(f)
+                        rdf = pd.read_excel(f)
                         rdf.columns = [c.strip() for c in rdf.columns]
                         recap_frames.append(rdf)
                     except Exception:
