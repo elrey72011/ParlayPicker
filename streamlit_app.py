@@ -1426,10 +1426,10 @@ def main() -> None:
                     st.dataframe(preview_df, width="stretch")
 
         with st.expander("📊 Performance Tracker", expanded=False):
-            st.markdown("Upload one or more performance recap Excel files to track win rates by status tier over time.")
+            st.markdown("Upload one or more performance recap files (CSV or Excel) to track win rates by status tier over time.")
             recap_files = st.file_uploader(
-                "Upload recap Excel file(s)",
-                type=["xlsx", "xls"],
+                "Upload recap file(s)",
+                type=["csv", "xlsx", "xls"],
                 accept_multiple_files=True,
                 key="perf_tracker_uploads",
             )
@@ -1437,11 +1437,14 @@ def main() -> None:
                 recap_frames = []
                 for f in recap_files:
                     try:
-                        rdf = pd.read_excel(f)
+                        if f.name.lower().endswith(".csv"):
+                            rdf = pd.read_csv(f)
+                        else:
+                            rdf = pd.read_excel(f, engine="openpyxl")
                         rdf.columns = [c.strip() for c in rdf.columns]
                         recap_frames.append(rdf)
-                    except Exception:
-                        st.warning(f"Could not parse {f.name}")
+                    except Exception as e:
+                        st.warning(f"Could not parse {f.name}: {e}")
                 if recap_frames:
                     recap = pd.concat(recap_frames, ignore_index=True)
                     recap["Outcome"] = recap["Outcome"].astype(str).str.strip().str.upper()
