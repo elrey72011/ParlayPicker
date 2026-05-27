@@ -10,11 +10,11 @@ import json
 # Below Threshold explicitly failed the confidence gate and shouldn't anchor a parlay.
 PARLAY_ELIGIBLE_STATUSES = {"Actionable", "High Variance/Speculative"}
 
-# Minimum calibrated probability per leg. Legs multiply in a parlay, so a weak leg
-# at 0.54 combined with two others at 0.65 produces ~0.23 hit rate — barely +EV.
-# Ranked by calibrated_probability (not edge) because legs multiply: a 0.65-prob leg
-# with modest edge beats a 0.57-prob leg with higher edge in a parlay context.
-MIN_LEG_PROBABILITY = 0.54
+# Minimum effective_win_probability per leg. Uses effective_win_probability (shrinkage-
+# adjusted) rather than calibrated_probability — for Overs this is lower than calibrated,
+# making it a better discriminator. Threshold of 0.58 corresponds to ~0.68 calibrated for
+# Overs (0.58 = 0.5 + 0.85*(0.68-0.5)), keeping quality high while allowing good Unders.
+MIN_LEG_PROBABILITY = 0.58
 
 # Minimum edge per leg — ensures each leg genuinely beats the market.
 MIN_LEG_EDGE = 0.02
@@ -128,11 +128,15 @@ def _build_record(legs: pd.DataFrame, label_cols: list[str], leg_count: int,
 def generate_smart_parlays(df: pd.DataFrame, num_rr_candidates: int = 5) -> pd.DataFrame:
     """Generate +EV 2- and 3-leg parlays from quality-filtered candidates.
 
-    Candidate selection ranks by calibrated_probability, not edge. In a parlay
-    legs multiply, so a 0.65-prob leg with modest edge is strictly more valuable
-    than a 0.57-prob leg with higher edge — the product of probabilities is what
-    determines the combined hit rate. Edge governs single-game sizing; probability
+    Candidate selection ranks by effective_win_probability (shrinkage-adjusted),
+    falling back to calibrated_probability if the column is absent. For Overs,
+    effective_win_probability < calibrated_probability, which makes it a better
+    discriminator of actual win rate. Edge governs single-game sizing; probability
     governs parlay construction.
+
+    Consensus gate: only "Agrees" picks qualify as legs. 4-day analysis shows
+    Agrees = 73% win rate vs Neutral = 56%. Falls back to Agrees+Neutral when
+    fewer than 3 Agrees candidates are available.
 
     Actionable picks are force-anchored at the front of the pool. They represent
     the model's full-signal consensus picks and sort to the top of results.
@@ -150,6 +154,11 @@ def generate_smart_parlays(df: pd.DataFrame, num_rr_candidates: int = 5) -> pd.D
     if not needed.issubset(df.columns):
         return pd.DataFrame(columns=columns)
 
+    # Use effective_win_probability as the ranking signal when available — it is
+    # shrinkage-adjusted for Overs, making it a better predictor of parlay leg win rate.
+    # Falls back to calibrated_probability for compatibility with older data.
+    rank_col = "effective_win_probability" if "effective_win_probability" in df.columns else "calibrated_probability"
+
     # Quality gate: only Actionable and High Variance picks as legs
     candidates = df.copy()
     if "Pick_Status" in candidates.columns:
@@ -157,9 +166,23 @@ def generate_smart_parlays(df: pd.DataFrame, num_rr_candidates: int = 5) -> pd.D
             candidates["Pick_Status"].astype(str).isin(PARLAY_ELIGIBLE_STATUSES)
         ]
 
-    # Per-leg probability and edge floor
+    # Consensus gate: only "Agrees" legs (Kalshi and model agree direction).
+    # 4-day data shows Agrees = 73% win rate vs Neutral = 56%.
+    # Falls back to all candidates if consensus_agreement column is absent.
+    if "consensus_agreement" in candidates.columns:
+        agrees_mask = candidates["consensus_agreement"].astype(str).isin(["Agrees"])
+        agrees_candidates = candidates[agrees_mask]
+        # Soft fallback: if fewer than 3 Agrees candidates remain, widen to include Neutral
+        if len(agrees_candidates) < 3:
+            candidates = candidates[
+                candidates["consensus_agreement"].astype(str).isin(["Agrees", "Neutral"])
+            ]
+        else:
+            candidates = agrees_candidates
+
+    # Per-leg effective_win_probability and edge floor
     candidates = candidates[
-        candidates["calibrated_probability"].ge(MIN_LEG_PROBABILITY)
+        candidates[rank_col].ge(MIN_LEG_PROBABILITY)
         & candidates["edge"].ge(MIN_LEG_EDGE)
     ]
 
@@ -168,7 +191,7 @@ def generate_smart_parlays(df: pd.DataFrame, num_rr_candidates: int = 5) -> pd.D
 
     # Actionable-first anchoring: force Actionable picks into the pool so they
     # always appear as legs, then fill remaining slots with best High Variance
-    # picks ranked by calibrated_probability (not edge — legs multiply in parlays).
+    # picks ranked by effective_win_probability (not edge — legs multiply in parlays).
     if "Pick_Status" in candidates.columns:
         actionable = candidates[candidates["Pick_Status"].astype(str).eq("Actionable")]
         speculative = candidates[candidates["Pick_Status"].astype(str).ne("Actionable")]
@@ -177,12 +200,12 @@ def generate_smart_parlays(df: pd.DataFrame, num_rr_candidates: int = 5) -> pd.D
         speculative = candidates
 
     top_actionable = (
-        actionable.nlargest(MAX_ACTIONABLE_ANCHORS, "calibrated_probability")
+        actionable.nlargest(MAX_ACTIONABLE_ANCHORS, rank_col)
         if not actionable.empty else pd.DataFrame()
     )
     remaining_slots = max(0, 20 - len(top_actionable))
     top_speculative = (
-        speculative.nlargest(remaining_slots, "calibrated_probability")
+        speculative.nlargest(remaining_slots, rank_col)
         if not speculative.empty and remaining_slots > 0 else pd.DataFrame()
     )
 
@@ -193,8 +216,8 @@ def generate_smart_parlays(df: pd.DataFrame, num_rr_candidates: int = 5) -> pd.D
     if candidate_bets.empty:
         return pd.DataFrame(columns=columns)
 
-    # RR pool: top candidates by calibrated_probability
-    rr_candidates = candidates.nlargest(num_rr_candidates, "calibrated_probability").dropna(
+    # RR pool: top candidates by effective_win_probability (or fallback)
+    rr_candidates = candidates.nlargest(num_rr_candidates, rank_col).dropna(
         subset=["calibrated_probability", "decimal_odds"]
     ).copy()
 
