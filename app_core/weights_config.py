@@ -65,7 +65,9 @@ TOTAL_UNDER_MIN_WIN_PROB = 0.62
 TOTAL_UNDER_MIN_EV = 0.22           # raised 0.18→0.22 after May-16 review: both Actionable unders lost
 TOTAL_UNDER_MIN_EDGE = 0.13         # raised 0.10→0.13 after May-16 review
 # MLB-specific under win prob floor (MLB unders 0-2 Actionable on May-16; both lost badly)
-MLB_TOTAL_UNDER_MIN_WIN_PROB = 0.66  # raised above general 0.62
+# Lowered 0.66→0.63 on May-28: S/A-Tier Agrees picks at 64-65% were blocked by 1-2% gap;
+# MLB_UNDER_ACTIONABLE_CAP already prevents these from reaching Actionable.
+MLB_TOTAL_UNDER_MIN_WIN_PROB = 0.63  # was 0.66
 NHL_TOTAL_EXTRA_EDGE_PENALTY = 0.01
 NHL_TOTAL_MIN_WIN_PROB = 0.57
 NHL_TOTAL_MIN_WIN_PROB_STRICT = 0.58
@@ -160,7 +162,10 @@ NHL_UNDER_ACTIONABLE_CAP = True
 MLB_TOTAL_OVER_ACTIONABLE_PENALTY = 0.00
 # MLB Under raised 0.03→0.05 after May-11 review: LA/SF Under 9.5 lost (12 runs scored).
 # Further raised 0.05→0.07 after May-16 review: both Actionable unders lost (11 runs each).
-MLB_TOTAL_UNDER_ACTIONABLE_PENALTY = 0.07
+# Lowered 0.07→0.03 on May-28: MLB_UNDER_ACTIONABLE_CAP=True already prevents Actionable;
+# stacking a 7% penalty on top of the cap created a 28% combined edge requirement that
+# blocked S-Tier Agrees picks with 19-20% edge — double-counting the same protection.
+MLB_TOTAL_UNDER_ACTIONABLE_PENALTY = 0.03
 NBA_TOTAL_OVER_ACTIONABLE_PENALTY = 0.02
 # NBA Under raised 0.02→0.05 after May-11 review: NBA Unders 0-3 across May 9-11.
 NBA_TOTAL_UNDER_ACTIONABLE_PENALTY = 0.05
