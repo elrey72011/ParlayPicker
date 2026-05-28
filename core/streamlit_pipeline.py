@@ -2345,6 +2345,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             MLB_HIGH_TOTAL_LINE_THRESHOLD, MLB_HIGH_TOTAL_LINE_OVER_PENALTY,
             MLB_MID_TOTAL_LINE_THRESHOLD, MLB_MID_TOTAL_LINE_OVER_PENALTY,
             MLB_UNDER_ACTIONABLE_CAP,
+            MLB_TOTAL_HV_MIN_WIN_PROB,
             NHL_UNDER_ACTIONABLE_CAP,
             TOTAL_ML_CONTRADICTION_OVER_MAX_PROB,
             MLB_OVER_MIN_TOTAL_LINE,
@@ -2758,6 +2759,18 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                     status = "High Variance/Speculative"
                     status_reason = "High Variance: NHL under capped (CAR/MTL Under 5.5 went 8 goals May 21; model overconfident on NHL unders)"
                     blocker_stage = "nhl_under_actionable_cap"
+
+            # MLB total HV floor — May 27: HV/Spec MLB totals 0-6 (BT was 6-2).
+            # Require effective_win_probability >= MLB_TOTAL_HV_MIN_WIN_PROB (0.62) for HV/Spec.
+            # Picks below this floor become Below Threshold — still visible at minimal sizing.
+            if league == "MLB" and is_total_market and status == "High Variance/Speculative":
+                if effective_win_probability < MLB_TOTAL_HV_MIN_WIN_PROB:
+                    status = "Below Threshold"
+                    status_reason = (
+                        f"Below Threshold: MLB total effective win prob {effective_win_probability:.1%} "
+                        f"below HV floor ({MLB_TOTAL_HV_MIN_WIN_PROB:.0%}); May 27 HV MLB totals 0-6"
+                    )
+                    blocker_stage = "mlb_total_hv_floor"
 
             # Low total line cap — MLB overs with a line below 8.0 are set on
             # pitcher-friendly matchups where low-scoring shutouts are common.

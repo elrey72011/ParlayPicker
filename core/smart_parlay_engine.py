@@ -24,6 +24,11 @@ MIN_LEG_EDGE = 0.02
 # across May 22-24. Remaining slots fill from High Variance by calibrated_probability.
 MAX_ACTIONABLE_ANCHORS = 5
 
+# MLB total picks in HV/Spec must clear a stricter floor for parlay legs.
+# May 27: MLB HV/Spec totals went 0-6 while Actionable MLB totals went 2-2 (100%).
+# Require effective_win_probability >= 0.62 — the Actionable-tier entry point.
+MLB_TOTAL_HV_PARLAY_MIN_PROB = 0.62
+
 
 def _amer_to_dec(odds: float) -> float:
     if pd.isna(odds) or odds == 0:
@@ -179,6 +184,23 @@ def generate_smart_parlays(df: pd.DataFrame, num_rr_candidates: int = 5) -> pd.D
             ]
         else:
             candidates = agrees_candidates
+
+    # MLB total HV/Spec picks require a stricter floor for parlay legs.
+    # May 27: MLB HV/Spec totals 0-6; only Actionable MLB totals reliably hit (2-2).
+    # Allow non-MLB-total HV/Spec picks at the standard floor; MLB HV totals need 0.62.
+    if (
+        "league" in candidates.columns
+        and "Pick_Status" in candidates.columns
+        and "best_pick" in candidates.columns
+    ):
+        is_mlb_hv_total = (
+            candidates["league"].astype(str).str.upper().eq("MLB")
+            & candidates["best_pick"].astype(str).str.lower().str.contains(r"over|under", regex=True, na=False)
+            & candidates["Pick_Status"].astype(str).eq("High Variance/Speculative")
+        )
+        candidates = candidates[
+            ~is_mlb_hv_total | candidates[rank_col].ge(MLB_TOTAL_HV_PARLAY_MIN_PROB)
+        ]
 
     # Per-leg effective_win_probability and edge floor
     candidates = candidates[
