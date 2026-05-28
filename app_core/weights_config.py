@@ -20,8 +20,8 @@ LOW_LIQUIDITY_ML_MODEL_WEIGHT = 0.35
 # observed on May-13 were caused by team name cross-matching bugs (now fixed), not
 # bad data quality. Restoring TheOver to 0.25; market eased back to 0.25.
 MLB_TOTAL_THEOVER_WEIGHT = 0.25          # restored from 0.10; TheOver has pitcher data
-MLB_TOTAL_ML_WEIGHT = 0.10               # unchanged
-MLB_TOTAL_MARKET_WEIGHT = 0.25           # eased from 0.30; TheOver now shares signal
+MLB_TOTAL_ML_WEIGHT = 0.05               # reduced 0.10→0.05; May 27: high ML% (73/70%) on unders that lost by 2-5 runs
+MLB_TOTAL_MARKET_WEIGHT = 0.30           # raised 0.25→0.30; absorbs ML weight reduction, keeps sum=1.00
 MLB_TOTAL_KALSHI_WEIGHT = 0.40           # unchanged
 MLB_TOTAL_FALLBACK_THEOVER_WEIGHT = 0.30 # restored from 0.20; pitcher signal valuable in fallback
 MLB_TOTAL_FALLBACK_ML_WEIGHT = 0.15      # unchanged
@@ -141,6 +141,11 @@ MLB_OVER_ACTIONABLE_MIN_EDGE = 0.04
 # the cap now only blocks genuine outliers, not normal high-confidence picks.
 MLB_OVER_CALIBRATED_PROB_CAP = 0.72
 
+# MLB total HV/Spec floor — May 27: HV/Spec MLB totals went 0-6 while BT went 6-2.
+# Picks with effective_win_probability below this value are demoted from HV/Spec
+# to Below Threshold (still visible, minimal Kelly sizing) rather than HV.
+MLB_TOTAL_HV_MIN_WIN_PROB = 0.62
+
 # MLB Under Actionable cap — MLB Unders have gone 0-4 at Actionable across May 16-17.
 # Block them from reaching Actionable; cap at High Variance until the ML model's
 # under bias is better understood. Set False to re-enable if performance recovers.
@@ -207,7 +212,8 @@ LEAGUE_MARKET_FAMILY_ACTIONABLE_PENALTIES = {
     ("MLB", "over"): 0.01,
     # MLB Under raised 0.02→0.04 after May-11 review (LA/SF Under 9.5, High Variance, LOSS).
     # Further raised 0.04→0.06 after May-16 review: both Actionable unders lost (11 runs each).
-    ("MLB", "under"): 0.06,
+    # Raised 0.06→0.08 after May-27 review: HV/Spec MLB unders went 0-3.
+    ("MLB", "under"): 0.08,
     ("MLB", "side"): 0.00,
     ("NBA", "over"): 0.01,
     # NBA Under raised 0.01→0.05 after May-11 review (0-3 across May 9-11).
