@@ -2344,7 +2344,6 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             MLB_TOTAL_UNDER_MIN_WIN_PROB,
             MLB_HIGH_TOTAL_LINE_THRESHOLD, MLB_HIGH_TOTAL_LINE_OVER_PENALTY,
             MLB_MID_TOTAL_LINE_THRESHOLD, MLB_MID_TOTAL_LINE_OVER_PENALTY,
-            MLB_UNDER_ACTIONABLE_CAP,
             MLB_TOTAL_HV_MIN_WIN_PROB,
             NHL_UNDER_ACTIONABLE_CAP,
             TOTAL_ML_CONTRADICTION_OVER_MAX_PROB,
@@ -2743,14 +2742,19 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                     status_reason = "High Variance: NHL total without Kalshi market validation"
                     blocker_stage = "no_kalshi_nhl_guardrail"
 
-            # MLB Under Actionable cap — MLB Unders went 0-4 at Actionable across
-            # May 16-17. The ML model has a systematic under bias on MLB totals that
-            # produces overconfident under picks. Cap at High Variance until resolved.
-            if MLB_UNDER_ACTIONABLE_CAP and league == "MLB" and market_type == "total_under":
-                if status == "Actionable":
+            # MLB Under consensus gate — replaces the blanket Actionable cap (removed May-28).
+            # Cap was set after May 16-17 (0-4), before TheOver conflict penalty and
+            # double-shrink fix. Unders have since outperformed overs (May 22-27 data).
+            # Now: only "Agrees" consensus MLB unders can be Actionable; Neutral/Disagrees
+            # are capped at High Variance — the same directional signal that predicts wins.
+            if league == "MLB" and market_type == "total_under" and status == "Actionable":
+                if consensus_agr not in ("Agrees",):
                     status = "High Variance/Speculative"
-                    status_reason = "High Variance: MLB under capped (0-4 Actionable record May 16-17; systematic ML under bias)"
-                    blocker_stage = "mlb_under_actionable_cap"
+                    status_reason = (
+                        f"High Variance: MLB under consensus '{consensus_agr}' — "
+                        f"only 'Agrees' unders qualify for Actionable"
+                    )
+                    blocker_stage = "mlb_under_consensus_gate"
 
             # NHL Under Actionable cap — CAR/MTL Under 5.5 went 8 total goals at Actionable
             # on May 21. Same model overconfidence pattern as MLB unders. Cap at High Variance.
