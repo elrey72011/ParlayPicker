@@ -148,10 +148,12 @@ MLB_OVER_CALIBRATED_PROB_CAP = 0.72
 # to Below Threshold (still visible, minimal Kelly sizing) rather than HV.
 MLB_TOTAL_HV_MIN_WIN_PROB = 0.62
 
-# MLB Under Actionable cap — MLB Unders have gone 0-4 at Actionable across May 16-17.
-# Block them from reaching Actionable; cap at High Variance until the ML model's
-# under bias is better understood. Set False to re-enable if performance recovers.
-MLB_UNDER_ACTIONABLE_CAP = True
+# MLB Under Actionable cap — was True after May 16-17 (0-4 Actionable record).
+# Removed May-28: unders have hit at a higher rate than overs across May 22-27
+# (BT unders 6-2 on May 27; Actionable unders 2-0; overs 0-4 on same slate).
+# The cap was set before the TheOver conflict penalty and double-shrink fix.
+# Replaced by a consensus gate in the pipeline: only "Agrees" MLB unders can be Actionable.
+MLB_UNDER_ACTIONABLE_CAP = False
 
 # NHL Under Actionable cap — CAR/MTL Under 5.5 went 8 total goals at Actionable on May 21.
 # Same pattern as MLB unders: model overconfident on unders in lower-scoring sport contexts.
