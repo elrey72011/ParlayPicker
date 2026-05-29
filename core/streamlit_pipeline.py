@@ -1486,21 +1486,10 @@ def _build_total_rows(normalized: pd.DataFrame) -> list[pd.DataFrame]:
 
     total_odds = _first_existing_numeric(normalized, ["odds_american", "american_odds", "odds"], default=pd.NA)
 
-    pick_text = _string_series(normalized, "pick").str.lower()
-    pick_text = pick_text.where(pick_text.str.len().gt(0), _string_series(normalized, "best_pick").str.lower())
-    under_selected = pick_text.str.contains("under", na=False)
-    over_selected = pick_text.str.contains("over", na=False)
-
+    # TheOver always outputs P(Over wins). Assign directly to over_prob and invert for under_prob.
+    # Do NOT re-invert based on pick direction — the M code's flip already handles Over/Under orientation.
     over_prob = total_prob
     under_prob = (1 - total_prob).where(total_prob.notna(), pd.NA)
-
-    # If uploaded probability is for an explicit UNDER pick, invert the assignment.
-    over_prob = over_prob.where(~under_selected, (1 - total_prob).where(total_prob.notna(), pd.NA))
-    under_prob = under_prob.where(~under_selected, total_prob)
-
-    # If explicit OVER pick is provided, keep default orientation (prob belongs to OVER).
-    over_prob = over_prob.where(~over_selected, total_prob)
-    under_prob = under_prob.where(~over_selected, (1 - total_prob).where(total_prob.notna(), pd.NA))
 
     base_cols = [c for c in ["league", "home_team", "away_team", "game_date", "game_time_est"] if c in normalized.columns]
     base = normalized[base_cols].copy()
