@@ -159,6 +159,17 @@ REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
     "export_run_id",
     "pick_id",
     "canonical_pick_key",
+    # Signal-transparency + backtest columns. These carry the exact, pick-side-
+    # oriented inputs the blend consumed so scripts/fit_blend_weights.py can fit
+    # weights from saved exports. Without them the download is a curated subset
+    # and the fitting data never reaches the file the user saves.
+    "theover_probability",
+    "display_probability",
+    "blend_in_kalshi",
+    "blend_in_market",
+    "blend_in_ml",
+    "blend_in_theover",
+    "blend_tier",
 ]
 
 
