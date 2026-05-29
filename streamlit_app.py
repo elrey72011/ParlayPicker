@@ -261,6 +261,19 @@ def _recompute_consensus_from_kalshi(df: pd.DataFrame, require_ml: bool = False)
     # Update core metrics
     out["calibrated_probability"] = blended
 
+    # Refresh blend-input metadata to reflect the final post-Kalshi blend.
+    # blend_in_* and blend_tier were recorded in run_analysis_pipeline before
+    # live Kalshi was available; now that kalshi_prob is populated, update them
+    # so the export/backtest columns accurately describe the actual blend used.
+    import numpy as _np
+    out["blend_in_kalshi"] = kalshi_prob
+    out["blend_in_market"] = market_prob
+    out["blend_in_ml"] = model_prob
+    out["blend_in_theover"] = theover_prob
+    out["blend_tier"] = _np.where(
+        kalshi_prob.fillna(0.0) >= 0.55, 1, 2
+    )
+
     # Check if the Hard Safety Net was used (e.g., probability is exactly 0.5 for all and there's a note)
     # Since ml_valid might be filled with 0.5 from fallback:
     if "ml_probability" in out.columns and (out["ml_probability"] == 0.5).all() and len(out) > 0:
