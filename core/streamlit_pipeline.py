@@ -4139,6 +4139,17 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
                 point_val = pd.NA
 
             if market_type.startswith("spread"):
+                if market_type == "spread_away":
+                    # Novig is a peer-to-peer exchange that lists both spread
+                    # outcomes under the home team's signed point (e.g. both
+                    # outcomes show -1.5 for a BAL -1.5 market). Using
+                    # novig_away_point directly produces the wrong sign for the
+                    # away team. Derive the away line as the mirror of the home
+                    # line instead, falling back to away_point only when the
+                    # home point is unavailable.
+                    home_point_raw = pd.to_numeric(row.get("novig_home_point"), errors="coerce")
+                    if pd.notna(home_point_raw):
+                        point_val = -home_point_raw
                 market_dict["spread_line"] = float(point_val) if pd.notna(point_val) else pd.NA
                 market_dict["total_line"] = pd.NA
                 market_dict["live_spread_line"] = market_dict["spread_line"]
