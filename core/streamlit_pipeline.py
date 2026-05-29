@@ -1219,7 +1219,10 @@ def compute_blended_probability(
     market = pd.to_numeric(p_market, errors="coerce")
     kalshi = pd.to_numeric(p_kalshi, errors="coerce")
     ml = pd.to_numeric(p_ml, errors="coerce")
-    theover = pd.to_numeric(p_theover, errors="coerce").fillna(0.5)
+    # Do NOT fill missing TheOver with 0.5 — a NaN signal must be dropped and its
+    # weight redistributed (handled in _blend_row), not injected as a neutral vote
+    # that drags every blended estimate toward the midpoint.
+    theover = pd.to_numeric(p_theover, errors="coerce")
     sentiment = pd.to_numeric(p_sentiment, errors="coerce").fillna(0.5)
     m_type = pd.Series(market_type).fillna("").astype(str).str.lower()
 
@@ -1268,26 +1271,22 @@ def compute_blended_probability(
                 w_the = NBA_TOTAL_THEOVER_WEIGHT
                 w_ml = NBA_TOTAL_ML_WEIGHT
 
-            if pd.isna(p_ml):
-                total_w = w_kalshi + w_market + w_the + w_sen
-                w_kalshi /= total_w
-                w_market /= total_w
-                w_the /= total_w
-                w_sen /= total_w
-                p_ml_val = 0.0
-                w_ml = 0.0
-            else:
-                total_w = w_kalshi + w_market + w_ml + w_the + w_sen
-                if abs(total_w - 1.0) > 1e-9:
-                    w_kalshi /= total_w
-                    w_market /= total_w
-                    w_ml /= total_w
-                    w_the /= total_w
-                    w_sen /= total_w
-                p_ml_val = p_ml
-
+            # Assemble only the signals that are actually present. A NaN signal
+            # (e.g. missing TheOver or ML) has its weight redistributed
+            # proportionally across the remaining signals, rather than being
+            # injected as a neutral 0.5 vote that silently drags every blended
+            # estimate toward the midpoint and disables the conflict penalty.
             p_sen_val = p_sen if has_real_sentiment else 0.0
-            prob = (k_oriented * w_kalshi) + (p_mkt * w_market) + (p_ml_val * w_ml) + (p_the * w_the) + (p_sen_val * w_sen)
+            signals = [
+                (k_oriented, w_kalshi),
+                (p_mkt, w_market),
+                (p_ml, w_ml),
+                (p_the, w_the),
+                (p_sen_val, w_sen),
+            ]
+            present = [(p, w) for p, w in signals if pd.notna(p) and w > 0]
+            total_w = sum(w for _, w in present)
+            prob = sum(p * (w / total_w) for p, w in present) if total_w > 0 else 0.5
         else:
             # Tier 2 Fallback (Kalshi disagrees or unavailable)
             w_market = FALLBACK_MARKET_WEIGHT
@@ -1305,24 +1304,19 @@ def compute_blended_probability(
                     w_the = NBA_TOTAL_FALLBACK_THEOVER_WEIGHT
                     w_ml = NBA_TOTAL_FALLBACK_ML_WEIGHT
 
-            if pd.isna(p_ml):
-                total_w = w_market + w_the + w_sen
-                w_market /= total_w
-                w_the /= total_w
-                w_sen /= total_w
-                p_ml_val = 0.0
-                w_ml = 0.0
-            else:
-                total_w = w_market + w_ml + w_the + w_sen
-                if abs(total_w - 1.0) > 1e-9:
-                    w_market /= total_w
-                    w_ml /= total_w
-                    w_the /= total_w
-                    w_sen /= total_w
-                p_ml_val = p_ml
-
+            # Same present-signal redistribution as Tier 1 (no Kalshi term in the
+            # fallback). Missing signals drop out and their weight is renormalized
+            # across what remains.
             p_sen_val = p_sen if has_real_sentiment else 0.0
-            prob = (p_mkt * w_market) + (p_ml_val * w_ml) + (p_the * w_the) + (p_sen_val * w_sen)
+            signals = [
+                (p_mkt, w_market),
+                (p_ml, w_ml),
+                (p_the, w_the),
+                (p_sen_val, w_sen),
+            ]
+            present = [(p, w) for p, w in signals if pd.notna(p) and w > 0]
+            total_w = sum(w for _, w in present)
+            prob = sum(p * (w / total_w) for p, w in present) if total_w > 0 else 0.5
 
         return prob
 
