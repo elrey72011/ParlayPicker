@@ -317,6 +317,11 @@ BEST_PICK_COLUMNS = [
     "decimal_odds", "matchup_id",
     "odds_american", "odds_source", "market_probability", "ml_probability", "theover_probability", "display_probability",
     "kalshi_probability", "kalshi_match_status", "kalshi_match_reason",
+    # Exact signal values fed to compute_blended_probability, oriented to the pick
+    # side. Persisted so the blend weights can be backtested/fitted from saved
+    # exports without having to re-derive orientation (which is ambiguous after
+    # the fact). See scripts/fit_blend_weights.py.
+    "blend_in_kalshi", "blend_in_market", "blend_in_ml", "blend_in_theover", "blend_tier",
     "gemini_explanation", "gemini_risk_notes", "used_stale_features", "Pick_Quality", "Conviction_Score",
     "uploaded_spread_line", "uploaded_total_line", "live_spread_line", "live_total_line", "line_source", "line_delta", "upload_market_match",
     "market_line_used", "market_line_source", "market_line_source_detail", "matched_live_spread_line", "matched_live_total_line", "upload_spread_line", "upload_total_line", "base_spread_line", "base_total_line",
@@ -4991,6 +4996,19 @@ def run_analysis_pipeline(
     merged["model_probability"] = model_probability
     merged["display_probability"] = model_probability.round(3)
     merged["calibrated_probability"] = calibrated_probability
+
+    # Persist the EXACT signal inputs the blend consumed (already oriented to the
+    # pick side). These are the values weight-fitting must train on; reconstructing
+    # them from the other export columns after the fact is unreliable because the
+    # native orientation of kalshi_probability is ambiguous. Tier mirrors the
+    # Kalshi>=0.55 split inside compute_blended_probability.
+    merged["blend_in_market"] = merged["market_probability"]
+    merged["blend_in_kalshi"] = kalshi_probability
+    merged["blend_in_ml"] = model_probability
+    merged["blend_in_theover"] = theover_probability
+    merged["blend_tier"] = np.where(
+        pd.to_numeric(kalshi_probability, errors="coerce").fillna(0.0) >= 0.55, 1, 2
+    )
     if "nba_stats_fetch_status" in merged.columns:
         merged["nba_stats_fetch_status"] = _string_series(merged, "nba_stats_fetch_status").replace({"": pd.NA}).fillna(
             str(nba_stats_diag.get("nba_stats_fetch_status", "not_started"))
