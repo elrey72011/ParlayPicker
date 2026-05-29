@@ -19,26 +19,21 @@ LOW_LIQUIDITY_ML_MODEL_WEIGHT = 0.35
 # May-16 correction: TheOver DOES incorporate pitcher data — the flat ~0.85 probs
 # observed on May-13 were caused by team name cross-matching bugs (now fixed), not
 # bad data quality. Restoring TheOver to 0.25; market eased back to 0.25.
-# May-29 reweight. Two principles:
-#  (1) Kalshi and Market (Novig de-vig) are ~85-90% correlated — both are "what money
-#      thinks." Linear pooling of two correlated forecasters double-counts a single
-#      underlying source, so the old 0.40+0.30=0.70 overstated its independent info.
-#      Shrunk Market 0.30→0.17 and lifted Kalshi to 0.43 (market complex 0.60, Kalshi-led).
-#  (2) ml_probability is the XGBoost HOME-WIN probability, which "has no direct bearing
-#      on total runs" (see TOTAL_ML_CONTRADICTION note below). For a totals blend it is
-#      not an independent signal but independent NOISE — adding weight only inflates
-#      variance. The May 26-28 recaps confirm it empirically: MLB unders with high
-#      ml_probability (>0.69) went 1-5, an INVERSE relationship. So ML stays small (0.05)
-#      and the relevant independent signal — TheOver (pitcher/rotation) — absorbs the
-#      weight (0.25→0.35). Sum = 1.00. Still not a backtest-fitted optimum; fit to
-#      Brier/log-loss once per-signal oriented inputs are persisted to prove the optimum.
-MLB_TOTAL_THEOVER_WEIGHT = 0.35          # raised 0.25→0.35; only total-relevant independent signal
-MLB_TOTAL_ML_WEIGHT = 0.05               # kept small; home-win prob is noise for totals (1-5 high-ml unders)
-MLB_TOTAL_MARKET_WEIGHT = 0.17           # cut 0.30→0.17; redundant with Kalshi (correlated)
-MLB_TOTAL_KALSHI_WEIGHT = 0.43           # raised 0.40→0.43; sharpest single market signal
-MLB_TOTAL_FALLBACK_THEOVER_WEIGHT = 0.45 # raised 0.30→0.45; without Kalshi, TheOver is the only total signal
-MLB_TOTAL_FALLBACK_ML_WEIGHT = 0.05      # cut 0.15→0.05; home-win prob is noise for totals
-MLB_TOTAL_FALLBACK_MARKET_WEIGHT = 0.30  # eased 0.35→0.30
+# May-29 reweight: Kalshi and Market (Novig de-vig) are ~85-90% correlated — both are
+# "what money thinks." Linear pooling of two correlated forecasters double-counts a
+# single underlying source, so the old 0.40+0.30=0.70 on the market complex overstated
+# its independent information. Shrunk Market 0.30→0.16 (market complex now 0.58,
+# Kalshi-dominant) and redistributed to the two INDEPENDENT signals: TheOver (pitcher
+# data) 0.25→0.30 and ML (team form) 0.05→0.12. Sum still 1.00. This is a variance-
+# reduction / redundancy fix, not a backtest-fitted optimum — fit to Brier/log-loss on
+# historical signal-vs-outcome data to prove the true optimum.
+MLB_TOTAL_THEOVER_WEIGHT = 0.30          # raised 0.25→0.30; only pitcher-aware independent signal
+MLB_TOTAL_ML_WEIGHT = 0.12               # raised 0.05→0.12; 0.05 was too small to move the blend
+MLB_TOTAL_MARKET_WEIGHT = 0.16           # cut 0.30→0.16; redundant with Kalshi (correlated)
+MLB_TOTAL_KALSHI_WEIGHT = 0.42           # raised 0.40→0.42; sharpest single market signal
+MLB_TOTAL_FALLBACK_THEOVER_WEIGHT = 0.30 # restored from 0.20; pitcher signal valuable in fallback
+MLB_TOTAL_FALLBACK_ML_WEIGHT = 0.15      # unchanged
+MLB_TOTAL_FALLBACK_MARKET_WEIGHT = 0.35  # eased from 0.40
 
 # NBA Totals blending overrides (Tier 1 and Tier 2).
 # TheOver incorporates pace, rest, defensive ratings the ML model lacks.
