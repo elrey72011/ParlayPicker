@@ -315,7 +315,7 @@ BEST_PICK_COLUMNS = [
     "league", "home_team", "away_team", "game_date", "game_time_est", "market_type", "candidate_source", "orientation_source", "upload_match_reason", "best_pick", "Kelly_Bet_Size", "Pick_Status", "Status_Reason",
     "calibrated_probability", "expected_value", "edge", "consensus_agreement",
     "decimal_odds", "matchup_id",
-    "odds_american", "odds_source", "market_probability", "ml_probability", "display_probability",
+    "odds_american", "odds_source", "market_probability", "ml_probability", "theover_probability", "display_probability",
     "kalshi_probability", "kalshi_match_status", "kalshi_match_reason",
     "gemini_explanation", "gemini_risk_notes", "used_stale_features", "Pick_Quality", "Conviction_Score",
     "uploaded_spread_line", "uploaded_total_line", "live_spread_line", "live_total_line", "line_source", "line_delta", "upload_market_match",
@@ -3095,6 +3095,38 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                     logger.info(f"Validated branch: {status} ({count} rows)")
                 else:
                     logger.info(f"Branch not exercised: {status} (0 rows)")
+
+        # TheOver coverage audit — the conflict penalty and 0.25 blend weight both
+        # depend on theover_probability being populated for MLB totals. If it is NaN,
+        # the direction-correction safety net is silently disabled (it defaults to a
+        # neutral 0.5 vote and the conflict penalty never fires). Surface the coverage.
+        if "market_type" in best.columns and "league" in best.columns:
+            _mlb_total_mask = (
+                best["league"].astype(str).str.upper().eq("MLB")
+                & best["market_type"].astype(str).str.lower().str.contains("total", na=False)
+            )
+            _mlb_total_count = int(_mlb_total_mask.sum())
+            if "theover_probability" in best.columns:
+                _to_numeric = pd.to_numeric(best.loc[_mlb_total_mask, "theover_probability"], errors="coerce")
+                _theover_populated = int(_to_numeric.notna().sum())
+                _theover_nan = _mlb_total_count - _theover_populated
+            else:
+                _theover_populated = 0
+                _theover_nan = _mlb_total_count
+            logger.info(
+                f"--- THEOVER COVERAGE (MLB totals) --- populated={_theover_populated} "
+                f"NaN={_theover_nan} of {_mlb_total_count} rows"
+            )
+            if _mlb_total_count > 0 and _theover_populated == 0:
+                logger.warning(
+                    "THEOVER SIGNAL MISSING: 0 of %d MLB total rows have theover_probability. "
+                    "Conflict penalty disabled; direction relies on Kalshi/Market/ML only.",
+                    _mlb_total_count,
+                )
+            if diagnostics_out is not None:
+                diagnostics_out["mlb_total_theover_populated_count"] = _theover_populated
+                diagnostics_out["mlb_total_theover_nan_count"] = _theover_nan
+                diagnostics_out["mlb_total_row_count"] = _mlb_total_count
 
         # Odds Source Counts
         if "odds_source" in best.columns:
