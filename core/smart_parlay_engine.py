@@ -173,14 +173,16 @@ def generate_smart_parlays(df: pd.DataFrame, num_rr_candidates: int = 5) -> pd.D
 
     # Consensus gate: only "Agrees" legs (Kalshi and model agree direction).
     # 4-day data shows Agrees = 73% win rate vs Neutral = 56%.
+    # "No Kalshi" is treated as Neutral — Kalshi simply has no market (all NBA totals,
+    # many niche games); absence of Kalshi is not a conflicting signal.
     # Falls back to all candidates if consensus_agreement column is absent.
     if "consensus_agreement" in candidates.columns:
         agrees_mask = candidates["consensus_agreement"].astype(str).isin(["Agrees"])
         agrees_candidates = candidates[agrees_mask]
-        # Soft fallback: if fewer than 3 Agrees candidates remain, widen to include Neutral
+        # Soft fallback: if fewer than 3 Agrees candidates remain, widen to include Neutral/No Kalshi
         if len(agrees_candidates) < 3:
             candidates = candidates[
-                candidates["consensus_agreement"].astype(str).isin(["Agrees", "Neutral"])
+                candidates["consensus_agreement"].astype(str).isin(["Agrees", "Neutral", "No Kalshi"])
             ]
         else:
             candidates = agrees_candidates
