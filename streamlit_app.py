@@ -1102,7 +1102,7 @@ def main() -> None:
             with ss_col3:
                 ss_max_edge = st.number_input("Max Edge", value=0.30, step=0.01, format="%.2f", key="ss_max_edge")
                 ss_min_ev = st.number_input("Min EV", value=0.04, step=0.01, format="%.2f", key="ss_min_ev")
-                ss_max_ev = st.number_input("Max EV", value=0.35, step=0.01, format="%.2f", key="ss_max_ev")
+                ss_max_ev = st.number_input("Max EV", value=0.50, step=0.01, format="%.2f", key="ss_max_ev")
 
             if use_sweet_spot and best_picks_df is not None and not best_picks_df.empty:
                 # Apply filters

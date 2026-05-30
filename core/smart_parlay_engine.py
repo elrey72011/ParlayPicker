@@ -279,8 +279,12 @@ def generate_smart_parlays(df: pd.DataFrame, num_rr_candidates: int = 5) -> pd.D
 
     result = pd.DataFrame(records)
 
-    # Drop duplicate combinations (same legs can appear in both standard and RR pools)
-    result = result.drop_duplicates(subset=["parlay_legs"]).copy()
+    # Drop duplicate combinations (same legs can appear in both standard and RR pools,
+    # potentially in different leg order). Deduplicate on a sorted canonical key.
+    result["_canonical_legs"] = result["parlay_legs"].apply(
+        lambda s: " | ".join(sorted(str(s).split(" | ")))
+    )
+    result = result.drop_duplicates(subset=["_canonical_legs"]).drop(columns=["_canonical_legs"]).copy()
 
     # Sort: Actionable-anchored combos first, then highest EV, then strongest weakest leg
     result = result.sort_values(
