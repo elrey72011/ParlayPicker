@@ -1097,10 +1097,10 @@ def main() -> None:
                 )
             with ss_col2:
                 ss_min_prob = st.number_input("Min Win Probability", value=0.54, step=0.01, format="%.2f", key="ss_min_prob")
-                ss_max_prob = st.number_input("Max Win Probability", value=0.70, step=0.01, format="%.2f", key="ss_max_prob")
+                ss_max_prob = st.number_input("Max Win Probability", value=0.85, step=0.01, format="%.2f", key="ss_max_prob")
                 ss_min_edge = st.number_input("Min Edge", value=0.03, step=0.01, format="%.2f", key="ss_min_edge")
             with ss_col3:
-                ss_max_edge = st.number_input("Max Edge", value=0.20, step=0.01, format="%.2f", key="ss_max_edge")
+                ss_max_edge = st.number_input("Max Edge", value=0.30, step=0.01, format="%.2f", key="ss_max_edge")
                 ss_min_ev = st.number_input("Min EV", value=0.04, step=0.01, format="%.2f", key="ss_min_ev")
                 ss_max_ev = st.number_input("Max EV", value=0.35, step=0.01, format="%.2f", key="ss_max_ev")
 
