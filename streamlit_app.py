@@ -1665,12 +1665,18 @@ def main() -> None:
                 mime="text/csv",
             )
 
-            # Compact export: only the columns needed to read picks left-to-right
-            # without horizontal scrolling, matching the Strategy Lab layout.
-            # Appends empty Win Amount / W/L / Total Amount columns for manual
-            # result tracking after games settle.
+            # Compact export (.xlsx): a readable Excel table with only the columns
+            # needed to scan a slate left-to-right, matching the Strategy Lab layout.
+            # Win Amount is auto-computed from the Kelly stake and odds; W/L is left
+            # blank for manual entry; Total Amount is a P&L formula that resolves
+            # once W/L is filled in (+Win Amount on a win, -stake on a loss).
+            from io import BytesIO
+            import openpyxl
+            from openpyxl.worksheet.table import Table, TableStyleInfo
+            from openpyxl.utils import get_column_letter
+
             compact_cols = [
-                "Triple_Filter_Rank", "parlay_rank", "WinProbability", "expected_value", "edge",
+                "WinProbability", "expected_value", "edge",
                 "Conviction_Score", "market_probability", "kalshi_probability", "ml_probability",
                 "effective_expected_value", "effective_edge", "effective_win_probability",
                 "consensus_agreement", "Pick_Status", "Pick_Quality", "league", "Home", "Away",
@@ -1679,30 +1685,89 @@ def main() -> None:
             available_compact_cols = [c for c in compact_cols if c in best_picks_export.columns]
             compact_export = best_picks_export[available_compact_cols].copy()
 
-            # Format probability/EV/edge columns as percentages for readability.
-            pct_cols = [
+            # Win Amount = potential profit from the Kelly stake at the pick's odds.
+            def _american_to_decimal(a):
+                a = pd.to_numeric(a, errors="coerce")
+                if pd.isna(a) or a == 0:
+                    return float("nan")
+                return 1 + (a / 100.0 if a > 0 else 100.0 / abs(a))
+
+            if "Kelly_Bet_Size" in best_picks_export.columns and "odds_american" in best_picks_export.columns:
+                stake = pd.to_numeric(best_picks_export["Kelly_Bet_Size"], errors="coerce")
+                dec = best_picks_export["odds_american"].apply(_american_to_decimal)
+                compact_export["Win Amount"] = (stake * (dec - 1)).round(0)
+            else:
+                compact_export["Win Amount"] = pd.NA
+            compact_export["W/L"] = ""
+            compact_export["Total Amount"] = ""  # filled with formulas below
+
+            final_cols = list(compact_export.columns)
+            pct_cols = {
                 "WinProbability", "expected_value", "edge", "Conviction_Score",
                 "market_probability", "kalshi_probability", "ml_probability",
                 "effective_expected_value", "effective_edge", "effective_win_probability",
-            ]
-            for col in pct_cols:
-                if col in compact_export.columns:
-                    numeric = pd.to_numeric(compact_export[col], errors="coerce")
-                    compact_export[col] = numeric.apply(
-                        lambda v: f"{v:.1%}" if pd.notna(v) else ""
-                    )
+            }
+            money_cols = {"Kelly_Bet_Size", "Win Amount", "Total Amount"}
 
-            # Manual result-tracking columns (left blank for the user to fill in).
-            compact_export["Win Amount"] = ""
-            compact_export["W/L"] = ""
-            compact_export["Total Amount"] = ""
+            def _col_num(x):
+                v = pd.to_numeric(x, errors="coerce")
+                return float(v) if pd.notna(v) else None
 
-            compact_csv = compact_export.to_csv(index=False, encoding="utf-8-sig")
+            def _letter(name):
+                return get_column_letter(final_cols.index(name) + 1)
+
+            wl_L = _letter("W/L")
+            win_L = _letter("Win Amount")
+            kelly_L = _letter("Kelly_Bet_Size") if "Kelly_Bet_Size" in final_cols else None
+
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "Best Picks"
+            ws.append(final_cols)
+
+            for i, (_, row) in enumerate(compact_export.iterrows()):
+                excel_row = i + 2  # row 1 is the header
+                values = []
+                for col in final_cols:
+                    if col == "Total Amount":
+                        values.append(
+                            f'=IF({wl_L}{excel_row}="W",{win_L}{excel_row},'
+                            f'IF({wl_L}{excel_row}="L",-{kelly_L}{excel_row},""))'
+                            if kelly_L else None
+                        )
+                    elif col == "W/L":
+                        values.append(None)
+                    elif col in pct_cols or col in money_cols:
+                        values.append(_col_num(row[col]))
+                    else:
+                        v = row[col]
+                        values.append(None if pd.isna(v) else v)
+                ws.append(values)
+
+            last_row = len(compact_export) + 1
+            for idx, col in enumerate(final_cols, start=1):
+                letter = get_column_letter(idx)
+                fmt = "0.0%" if col in pct_cols else ("#,##0" if col in money_cols else None)
+                if fmt:
+                    for r in range(2, last_row + 1):
+                        ws[f"{letter}{r}"].number_format = fmt
+                ws.column_dimensions[letter].width = max(12, min(30, len(col) + 2))
+
+            if len(compact_export) > 0:
+                ref = f"A1:{get_column_letter(len(final_cols))}{last_row}"
+                table = Table(displayName="BestPicks", ref=ref)
+                table.tableStyleInfo = TableStyleInfo(
+                    name="TableStyleMedium2", showRowStripes=True, showColumnStripes=False
+                )
+                ws.add_table(table)
+
+            buf = BytesIO()
+            wb.save(buf)
             st.download_button(
                 "Export Best Picks (Compact)",
-                compact_csv,
-                "best_picks_compact.csv",
-                mime="text/csv",
+                buf.getvalue(),
+                "best_picks_compact.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="export_best_picks_compact",
             )
 
