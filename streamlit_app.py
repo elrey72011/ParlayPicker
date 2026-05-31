@@ -1674,6 +1674,7 @@ def main() -> None:
             import openpyxl
             from openpyxl.worksheet.table import Table, TableStyleInfo
             from openpyxl.utils import get_column_letter
+            from openpyxl.styles import Font
 
             compact_cols = [
                 "WinProbability", "expected_value", "edge",
@@ -1685,21 +1686,11 @@ def main() -> None:
             available_compact_cols = [c for c in compact_cols if c in best_picks_export.columns]
             compact_export = best_picks_export[available_compact_cols].copy()
 
-            # Win Amount = potential profit from the Kelly stake at the pick's odds.
-            def _american_to_decimal(a):
-                a = pd.to_numeric(a, errors="coerce")
-                if pd.isna(a) or a == 0:
-                    return float("nan")
-                return 1 + (a / 100.0 if a > 0 else 100.0 / abs(a))
-
-            if "Kelly_Bet_Size" in best_picks_export.columns and "odds_american" in best_picks_export.columns:
-                stake = pd.to_numeric(best_picks_export["Kelly_Bet_Size"], errors="coerce")
-                dec = best_picks_export["odds_american"].apply(_american_to_decimal)
-                compact_export["Win Amount"] = (stake * (dec - 1)).round(0)
-            else:
-                compact_export["Win Amount"] = pd.NA
+            # Win Amount and W/L are left blank for manual entry. Total Amount is a
+            # per-row P&L formula (filled below) that resolves once they're entered.
+            compact_export["Win Amount"] = ""
             compact_export["W/L"] = ""
-            compact_export["Total Amount"] = ""  # filled with formulas below
+            compact_export["Total Amount"] = ""
 
             final_cols = list(compact_export.columns)
             pct_cols = {
@@ -1745,9 +1736,18 @@ def main() -> None:
                 ws.append(values)
 
             last_row = len(compact_export) + 1
+            money_fmt = "#,##0"
+            pnl_fmt = "#,##0;(#,##0)"  # negatives shown in parentheses, e.g. (2,500)
             for idx, col in enumerate(final_cols, start=1):
                 letter = get_column_letter(idx)
-                fmt = "0.0%" if col in pct_cols else ("#,##0" if col in money_cols else None)
+                if col in pct_cols:
+                    fmt = "0.0%"
+                elif col == "Total Amount":
+                    fmt = pnl_fmt
+                elif col in money_cols:
+                    fmt = money_fmt
+                else:
+                    fmt = None
                 if fmt:
                     for r in range(2, last_row + 1):
                         ws[f"{letter}{r}"].number_format = fmt
@@ -1760,6 +1760,55 @@ def main() -> None:
                     name="TableStyleMedium2", showRowStripes=True, showColumnStripes=False
                 )
                 ws.add_table(table)
+
+                # Summary rows below the table: "Actionable Totals" (Actionable tier
+                # only) and "Totals" (all picks). All values are live formulas over the
+                # data range, so they update as Win Amount / W/L are filled in. Net P&L
+                # counts a win as +Win Amount and anything not yet won as -stake (money
+                # at risk), matching the Strategy Lab convention.
+                label_col = "best_pick" if "best_pick" in final_cols else final_cols[0]
+                status_L = _letter("Pick_Status") if "Pick_Status" in final_cols else None
+                stake_rng = f"{kelly_L}2:{kelly_L}{last_row}"
+                win_rng = f"{win_L}2:{win_L}{last_row}"
+                wl_rng = f"{wl_L}2:{wl_L}{last_row}"
+
+                def _write_summary(excel_row, label, kelly_f, win_f, wl_f, tot_f):
+                    c = ws.cell(row=excel_row, column=final_cols.index(label_col) + 1, value=label)
+                    c.font = Font(bold=True)
+                    kc = ws.cell(row=excel_row, column=final_cols.index("Kelly_Bet_Size") + 1, value=kelly_f)
+                    kc.number_format = money_fmt
+                    kc.font = Font(bold=True)
+                    wc = ws.cell(row=excel_row, column=final_cols.index("Win Amount") + 1, value=win_f)
+                    wc.number_format = money_fmt
+                    wc.font = Font(bold=True)
+                    rc = ws.cell(row=excel_row, column=final_cols.index("W/L") + 1, value=wl_f)
+                    rc.font = Font(bold=True)
+                    tc = ws.cell(row=excel_row, column=final_cols.index("Total Amount") + 1, value=tot_f)
+                    tc.number_format = pnl_fmt
+                    tc.font = Font(bold=True)
+
+                if kelly_L and status_L:
+                    act = f'{status_L}2:{status_L}{last_row}'
+                    _write_summary(
+                        last_row + 2,
+                        "Actionable Totals",
+                        f'=SUMIF({act},"Actionable",{stake_rng})',
+                        f'=SUMIF({act},"Actionable",{win_rng})',
+                        f'=COUNTIFS({act},"Actionable",{wl_rng},"W")&"-"&COUNTIFS({act},"Actionable",{wl_rng},"L")',
+                        f'=SUMIFS({win_rng},{act},"Actionable",{wl_rng},"W")'
+                        f'-SUMIF({act},"Actionable",{stake_rng})'
+                        f'+SUMIFS({stake_rng},{act},"Actionable",{wl_rng},"W")',
+                    )
+
+                if kelly_L:
+                    _write_summary(
+                        last_row + 3,
+                        "Totals",
+                        f'=SUM({stake_rng})',
+                        f'=SUM({win_rng})',
+                        f'=COUNTIF({wl_rng},"W")&"-"&COUNTIF({wl_rng},"L")',
+                        f'=SUMIF({wl_rng},"W",{win_rng})-SUM({stake_rng})+SUMIF({wl_rng},"W",{stake_rng})',
+                    )
 
             buf = BytesIO()
             wb.save(buf)
