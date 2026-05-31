@@ -1665,6 +1665,47 @@ def main() -> None:
                 mime="text/csv",
             )
 
+            # Compact export: only the columns needed to read picks left-to-right
+            # without horizontal scrolling, matching the Strategy Lab layout.
+            # Appends empty Win Amount / W/L / Total Amount columns for manual
+            # result tracking after games settle.
+            compact_cols = [
+                "Triple_Filter_Rank", "parlay_rank", "WinProbability", "expected_value", "edge",
+                "Conviction_Score", "market_probability", "kalshi_probability", "ml_probability",
+                "effective_expected_value", "effective_edge", "effective_win_probability",
+                "consensus_agreement", "Pick_Status", "Pick_Quality", "league", "Home", "Away",
+                "Commence (Local)", "best_pick", "Kelly_Bet_Size",
+            ]
+            available_compact_cols = [c for c in compact_cols if c in best_picks_export.columns]
+            compact_export = best_picks_export[available_compact_cols].copy()
+
+            # Format probability/EV/edge columns as percentages for readability.
+            pct_cols = [
+                "WinProbability", "expected_value", "edge", "Conviction_Score",
+                "market_probability", "kalshi_probability", "ml_probability",
+                "effective_expected_value", "effective_edge", "effective_win_probability",
+            ]
+            for col in pct_cols:
+                if col in compact_export.columns:
+                    numeric = pd.to_numeric(compact_export[col], errors="coerce")
+                    compact_export[col] = numeric.apply(
+                        lambda v: f"{v:.1%}" if pd.notna(v) else ""
+                    )
+
+            # Manual result-tracking columns (left blank for the user to fill in).
+            compact_export["Win Amount"] = ""
+            compact_export["W/L"] = ""
+            compact_export["Total Amount"] = ""
+
+            compact_csv = compact_export.to_csv(index=False, encoding="utf-8-sig")
+            st.download_button(
+                "Export Best Picks (Compact)",
+                compact_csv,
+                "best_picks_compact.csv",
+                mime="text/csv",
+                key="export_best_picks_compact",
+            )
+
     with tab4:
         st.subheader("Best Parlays")
         base_parlays_df = parlays_df if parlays_df is not None and not parlays_df.empty else pd.DataFrame()
