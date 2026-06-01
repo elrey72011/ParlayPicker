@@ -2208,8 +2208,12 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     if is_kalshi_available.any():
         blended = best["calibrated_probability"]
         gap = blended - kalshi_prob
-        agrees_mask = (is_kalshi_available & gap.ge(0.03)).fillna(False).astype(bool)
-        disagrees_mask = (is_kalshi_available & gap.le(-0.03)).fillna(False).astype(bool)
+        # "Agrees": Kalshi also favors pick direction (P(pick) >= 50%) AND model is more confident.
+        # kalshi_probability is pre-oriented by kalshi_integrator (P(Under) for Under rows).
+        # A value < 0.50 means Kalshi says the OTHER side wins — that is Disagrees, not Agrees.
+        agrees_mask = (is_kalshi_available & gap.ge(0.03) & kalshi_prob.ge(0.50)).fillna(False).astype(bool)
+        # "Disagrees": Kalshi says other direction (P(pick) < 50%) OR Kalshi more confident than model.
+        disagrees_mask = (is_kalshi_available & (gap.le(-0.03) | kalshi_prob.lt(0.50))).fillna(False).astype(bool)
         best.loc[is_kalshi_available, "consensus_agreement"] = "Neutral"
         best.loc[agrees_mask, "consensus_agreement"] = "Agrees"
         best.loc[disagrees_mask, "consensus_agreement"] = "Disagrees"
@@ -2774,6 +2778,22 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                         f"below HV floor ({MLB_TOTAL_HV_MIN_WIN_PROB:.0%}); May 27 HV MLB totals 0-6"
                     )
                     blocker_stage = "mlb_total_hv_floor"
+
+            # MLB Under Kalshi direction cap — Kalshi probability is pre-oriented to the pick
+            # side (P(Under) for Under rows). When P(Under) < 0.50, Kalshi is saying the Over
+            # is more likely than the Under. Historical record: 0-4 on May 31, recurring on
+            # May 27-28. Cap these picks at Below Threshold (visible at minimal Kelly sizing)
+            # regardless of model/TheOver confidence; Kalshi's direction signal is the most
+            # reliable single indicator for MLB totals.
+            if (league == "MLB" and market_type == "total_under"
+                    and status in ("Actionable", "High Variance/Speculative")
+                    and pd.notna(kalshi_prob) and float(kalshi_prob) < 0.50):
+                status = "Below Threshold"
+                status_reason = (
+                    f"Below Threshold: MLB Under — Kalshi P(Under)={float(kalshi_prob):.1%} < 50%; "
+                    f"Kalshi prices the Over as more likely (0-4 pattern on such picks)"
+                )
+                blocker_stage = "mlb_under_kalshi_over_cap"
 
             # Low total line cap — MLB overs with a line below 8.0 are set on
             # pitcher-friendly matchups where low-scoring shutouts are common.

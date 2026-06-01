@@ -315,8 +315,13 @@ def _recompute_consensus_from_kalshi(df: pd.DataFrame, require_ml: bool = False)
     gap = blended - kalshi_prob
 
     out.loc[valid_kalshi, "consensus_agreement"] = "Neutral"
-    out.loc[(valid_kalshi & gap.ge(0.03)).fillna(False), "consensus_agreement"] = "Agrees"
-    out.loc[(valid_kalshi & gap.le(-0.03)).fillna(False), "consensus_agreement"] = "Disagrees"
+    # "Agrees": Kalshi also favors pick direction (P(pick) >= 50%) AND model is more confident.
+    # kalshi_probability is pre-oriented to the pick side (P(Under) for Under rows, P(Over)
+    # for Over rows) by kalshi_integrator. A value < 0.50 means Kalshi says the OTHER side
+    # is more likely — that is Disagrees, not Agrees, regardless of the probability gap.
+    out.loc[(valid_kalshi & gap.ge(0.03) & kalshi_prob.ge(0.50)).fillna(False), "consensus_agreement"] = "Agrees"
+    # "Disagrees": Kalshi says other direction (P(pick) < 50%) OR Kalshi more confident than model.
+    out.loc[(valid_kalshi & (gap.le(-0.03) | kalshi_prob.lt(0.50))).fillna(False), "consensus_agreement"] = "Disagrees"
 
     # Debug log for probability blend verification (first 5 picks)
     if not out.empty and "market_probability" in out.columns:
