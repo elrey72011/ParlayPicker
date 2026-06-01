@@ -2832,7 +2832,27 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             if league == "MLB" and market_type == "total_over" and "total_line" in best.columns:
                 _tl_low = pd.to_numeric(best.at[idx, "total_line"], errors="coerce")
                 if pd.notna(_tl_low) and float(_tl_low) < MLB_OVER_MIN_TOTAL_LINE:
-                    if status in ("Actionable", "Below Threshold"):
+                    # Conditioned escape hatch: a strong, Kalshi-aligned sub-8.0 over
+                    # keeps its Actionable status instead of being force-demoted.
+                    # Backtest-justified and provably excludes the documented losers
+                    # (see app_core/low_line_override + scripts/backtest_low_line_over.py).
+                    from app_core.low_line_override import low_line_over_override_applies
+                    _keep_actionable = low_line_over_override_applies(
+                        league=league,
+                        market_type=market_type,
+                        total_line=float(_tl_low),
+                        status=status,
+                        consensus=consensus_agr,
+                        effective_win_probability=effective_win_probability,
+                        effective_edge=effective_edge,
+                    )
+                    if _keep_actionable:
+                        status_reason = (
+                            f"Actionable: sub-{MLB_OVER_MIN_TOTAL_LINE} over override — "
+                            f"Agrees consensus, effective win {effective_win_probability:.1%}, "
+                            f"edge {effective_edge:.1%} (backtest-supported carve-out)"
+                        )
+                    elif status in ("Actionable", "Below Threshold"):
                         status = "High Variance/Speculative"
                         status_reason = (
                             f"High Variance: MLB over line {float(_tl_low)} below {MLB_OVER_MIN_TOTAL_LINE} "
