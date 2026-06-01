@@ -1251,6 +1251,12 @@ def compute_blended_probability(
         if pd.notna(p_kal):
             k_oriented = p_kal
 
+        # TheOver outputs exactly 0.5 (WinProbSource=default_0.5) when it has no real
+        # prediction. A no-information vote should not consume 30% blend weight — treat
+        # it as absent so weight redistributes to signals that have actual information.
+        if pd.notna(p_the) and abs(float(p_the) - 0.5) < 1e-9:
+            p_the = float('nan')
+
         # Sentiment is only real when it deviates from neutral (0.5 in probability space).
         # p_sen is already converted: 0.5 + sentiment_diff * 0.5, so 0.5 = no signal.
         has_real_sentiment = pd.notna(p_sen) and abs(p_sen - 0.5) > 0.02
@@ -2094,6 +2100,30 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         pool["_theover_conflict_penalty"] = np.where(_theover_conflict, float(MLB_THEOVER_CONFLICT_PENALTY), 0.0)
     else:
         pool["_theover_conflict_penalty"] = 0.0
+
+    # Kalshi direction conflict penalty for MLB totals.
+    # kalshi_probability is pre-oriented to the pick direction (P(Under) for Under rows,
+    # P(Over) for Over rows). When that value is < 0.50 Kalshi prices the OTHER direction
+    # as more likely. Penalize at the selection stage so the Kalshi-aligned direction row
+    # wins the family sort — the correct direction is then shown rather than merely having
+    # the wrong-direction pick demoted after selection.
+    if "kalshi_probability" in pool.columns:
+        _kalshi_prob_pool = pd.to_numeric(pool["kalshi_probability"], errors="coerce")
+        _is_mlb_total_kal = (
+            pool["league"].astype(str).str.upper().eq("MLB")
+            & pool["market_type"].astype(str).str.lower().str.contains("total", na=False)
+        )
+        _kalshi_direction_conflict = (
+            _is_mlb_total_kal
+            & _kalshi_prob_pool.notna()
+            & (_kalshi_prob_pool < 0.50)
+        )
+        pool.loc[_kalshi_direction_conflict, "final_family_score"] -= float(MLB_THEOVER_CONFLICT_PENALTY)
+        pool["_kalshi_direction_conflict_penalty"] = np.where(
+            _kalshi_direction_conflict, float(MLB_THEOVER_CONFLICT_PENALTY), 0.0
+        )
+    else:
+        pool["_kalshi_direction_conflict_penalty"] = 0.0
 
     # 4. Sort to prepare for finalist selection within each family per game
     pool = pool.sort_values(
