@@ -3585,8 +3585,15 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         ALLOW_NHL_TOTAL_UNDER_EMPTY_CARD_RECOVERY,
     )
     if ALLOW_EMPTY_CARD_RECOVERY and not best.empty:
-        actionable_count = best["production_eligible"].sum()
-        if actionable_count == 0:
+        # Emptiness must be status-based, NOT production_eligible-based. This runs
+        # inside build_best_picks_df, BEFORE Kelly is sized downstream in
+        # streamlit_app, so production_eligible (Actionable AND Kelly>0) is
+        # structurally all-False here — using it made the gate fire unconditionally
+        # and backfill a redundant pick even when a legitimate Actionable pick
+        # (e.g. a sub-8.0 over carve-out) was present. Matches the streamlit_app
+        # recovery's Pick_Status-based emptiness definition.
+        from app_core.card_recovery import actionable_card_is_empty
+        if actionable_card_is_empty(best):
             is_mlb_total_over = (
                 best["league"].astype(str).str.upper().eq("MLB")
                 & best["market_type"].astype(str).str.lower().eq("total_over")
