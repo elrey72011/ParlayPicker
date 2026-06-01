@@ -9,6 +9,10 @@ Format: header-driven (column order varies by day; some days use `%`, some use
 decimals). Each file embeds a `Totals` W-L row that the loader cross-checks
 against the parsed rows, printing a `[WARN]` on mismatch.
 
+Coverage: graded slates **20–31 May 2026** (11 days; 27 May excluded as
+ungraded). This is the sample behind the sub-8.0 over carve-out shipped in
+`app_core/low_line_override.py` (gated by `MLB_LOW_LINE_OVER_OVERRIDE_ENABLED`).
+
 Notes:
 - `2026-05-27` is intentionally omitted (slate was ungraded, 0-0).
 - `2026-05-24` trips the validation warning because that day's sheet had a

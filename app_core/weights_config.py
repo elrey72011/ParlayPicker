@@ -199,6 +199,23 @@ MLB_MID_TOTAL_LINE_OVER_PENALTY = 0.02  # added to req_ev and req_edge
 # remains visible but gets reduced Kelly sizing.
 MLB_OVER_MIN_TOTAL_LINE = 8.0
 
+# Sub-8.0 MLB over escape hatch (conditioned carve-out for the blanket
+# low_line_over_guardrail above). The guardrail force-demotes EVERY MLB over
+# with a line < MLB_OVER_MIN_TOTAL_LINE to High Variance regardless of quality.
+# Backtest (scripts/backtest_low_line_over.py, graded slates 20-31 May 2026):
+#   sub-8.0 overs overall ...... 20-16 (55.6%), +19.3% ROI  (beats >=8.0 overs)
+#   sub-8.0 overs, Agrees ...... 7-2  (77.8%), +45.5% ROI   <- carve-out target
+#   sub-8.0 overs, Neutral ..... 7-9  (43.8%),  -1.7% ROI   <- stay vetoed
+#   sub-8.0 overs, Disagrees ... 6-5  (54.5%), -11.6% ROI   <- stay vetoed
+# The losses that originally motivated the veto (May-20 CHC/MIL Over 6.5,
+# SD/LAD Over 7.5) were Neutral/Disagrees at effective win prob < 0.58, so they
+# are NOT promoted by this carve-out. Only an already-Actionable, Kalshi-Agrees
+# over with strong shrinkage-adjusted win prob and edge keeps its status.
+# Re-evaluate / retune as the graded sample grows (n=9 Agrees as of this commit).
+MLB_LOW_LINE_OVER_OVERRIDE_ENABLED = True
+MLB_LOW_LINE_OVER_OVERRIDE_MIN_WIN_PROB = 0.62
+MLB_LOW_LINE_OVER_OVERRIDE_MIN_EDGE = 0.08
+
 # TheOver direction conflict penalty — when TheOver's probability clearly disagrees
 # with the blended pick direction for an MLB total, apply this penalty to the
 # conflicting pick's final_family_score so the TheOver-aligned direction wins selection.
