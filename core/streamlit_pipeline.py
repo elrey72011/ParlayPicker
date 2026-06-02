@@ -1949,6 +1949,49 @@ def _apply_triple_filter_ranking(df: pd.DataFrame) -> pd.DataFrame:
 
     return final_df
 
+
+def _mlb_total_direction_conflict(
+    is_mlb_total: np.ndarray,
+    kalshi_probability: np.ndarray,
+    theover_probability: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Resolve MLB total Over/Under direction by "most-confident source wins".
+
+    ``kalshi_probability`` and ``theover_probability`` are oriented to each row's
+    pick direction: a value > 0.50 supports the row's direction, < 0.50 favors the
+    opposite side, and a source's directional confidence is its distance from 0.50.
+    A source at exactly 0.50 (TheOver's ``default_0.5`` "no read") or NaN is treated
+    as having no opinion and never decides direction.
+
+    A row is flagged as the losing direction when the strongest confidence *opposing*
+    it exceeds the strongest confidence *supporting* it. For the Over and Under rows
+    of the same game the opposing/supporting confidences swap, so exactly the losing
+    side is flagged (a confidence tie flags neither and defers to EV/edge). This
+    replaces the earlier pair of independent fixed penalties, which cancelled across
+    the family whenever Kalshi and TheOver disagreed on direction.
+
+    Returns ``(kalshi_opposes, theover_opposes, direction_conflict)`` boolean arrays,
+    where ``direction_conflict`` marks the row whose ``final_family_score`` should be
+    penalized so its counterpart wins the family sort.
+    """
+
+    def _opinion(prob: np.ndarray):
+        prob = np.asarray(prob, dtype=float)
+        has = ~np.isnan(prob) & (np.abs(prob - 0.5) > 1e-9)
+        conf = np.where(has, np.abs(prob - 0.5), -1.0)
+        return conf, has & (prob < 0.5), has & (prob > 0.5)
+
+    is_mlb_total = np.asarray(is_mlb_total, dtype=bool)
+    k_conf, k_opp, k_sup = _opinion(kalshi_probability)
+    t_conf, t_opp, t_sup = _opinion(theover_probability)
+
+    opp_conf = np.maximum(np.where(k_opp, k_conf, -1.0), np.where(t_opp, t_conf, -1.0))
+    sup_conf = np.maximum(np.where(k_sup, k_conf, -1.0), np.where(t_sup, t_conf, -1.0))
+
+    direction_conflict = is_mlb_total & (opp_conf > sup_conf)
+    return (k_opp & direction_conflict, t_opp & direction_conflict, direction_conflict)
+
+
 def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None = None) -> pd.DataFrame:
     logger.info(f"BEST PICKS AUDIT: Received analysis_df with {len(analysis_df)} rows")
     if analysis_df is None or analysis_df.empty:
@@ -2079,51 +2122,57 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     pool["final_family_score"] = pool["final_family_score"] - pool["_family_selection_penalty"]
     pool["final_family_score_no_mlb_spread_penalty"] = pool["final_family_score"] + pool["_mlb_spread_finalist_penalty"]
 
-    # TheOver direction conflict penalty — for MLB totals, if TheOver's probability
-    # clearly disagrees with the pick direction (theover_probability < threshold), the
-    # other direction is almost certainly better. Apply a scoring penalty so that
-    # drop_duplicates naturally selects the TheOver-aligned direction instead.
-    # theover_probability on an Over row = P(Over from TheOver); on an Under row = P(Under).
-    # If either is below MLB_THEOVER_CONFLICT_THRESHOLD, TheOver favors the other side.
-    if "theover_probability" in pool.columns:
-        _to_prob = pd.to_numeric(pool["theover_probability"], errors="coerce")
-        _is_mlb_total = (
-            pool["league"].astype(str).str.upper().eq("MLB")
-            & pool["market_type"].astype(str).str.lower().str.contains("total", na=False)
-        )
-        _theover_conflict = (
-            _is_mlb_total
-            & _to_prob.notna()
-            & (_to_prob < float(MLB_THEOVER_CONFLICT_THRESHOLD))
-        )
-        pool.loc[_theover_conflict, "final_family_score"] -= float(MLB_THEOVER_CONFLICT_PENALTY)
-        pool["_theover_conflict_penalty"] = np.where(_theover_conflict, float(MLB_THEOVER_CONFLICT_PENALTY), 0.0)
-    else:
-        pool["_theover_conflict_penalty"] = 0.0
-
-    # Kalshi direction conflict penalty for MLB totals.
-    # kalshi_probability is pre-oriented to the pick direction (P(Under) for Under rows,
-    # P(Over) for Over rows). When that value is < 0.50 Kalshi prices the OTHER direction
-    # as more likely. Penalize at the selection stage so the Kalshi-aligned direction row
-    # wins the family sort — the correct direction is then shown rather than merely having
-    # the wrong-direction pick demoted after selection.
-    if "kalshi_probability" in pool.columns:
-        _kalshi_prob_pool = pd.to_numeric(pool["kalshi_probability"], errors="coerce")
-        _is_mlb_total_kal = (
-            pool["league"].astype(str).str.upper().eq("MLB")
-            & pool["market_type"].astype(str).str.lower().str.contains("total", na=False)
-        )
-        _kalshi_direction_conflict = (
-            _is_mlb_total_kal
-            & _kalshi_prob_pool.notna()
-            & (_kalshi_prob_pool < 0.50)
-        )
-        pool.loc[_kalshi_direction_conflict, "final_family_score"] -= float(MLB_THEOVER_CONFLICT_PENALTY)
-        pool["_kalshi_direction_conflict_penalty"] = np.where(
-            _kalshi_direction_conflict, float(MLB_THEOVER_CONFLICT_PENALTY), 0.0
-        )
-    else:
-        pool["_kalshi_direction_conflict_penalty"] = 0.0
+    # MLB total direction resolution — "most-confident source wins".
+    #
+    # kalshi_probability and theover_probability are pre-oriented to each row's pick
+    # direction (P(Over) on Over rows, P(Under) on Under rows). A value < 0.50 means
+    # that source favors the OPPOSITE direction; > 0.50 means it supports this row.
+    #
+    # Previously TheOver and Kalshi each subtracted an independent fixed penalty. When
+    # the two sources DISAGREED on direction (e.g. TheOver leans Under, Kalshi leans
+    # Over) the penalties hit opposite rows and CANCELLED across the family — the Over
+    # row lost MLB_THEOVER_CONFLICT_PENALTY from TheOver and the Under row lost the same
+    # from Kalshi — collapsing the decision to raw EV/edge momentum. That is exactly how
+    # the 1 Jun slate flipped three winning Overs to losing Unders (TheOver had just
+    # published strong Under reads that inflated the Under EV while Kalshi still priced
+    # the Over). See app_core/weights_config.py for the opposing May 22/23 history where
+    # TheOver's pitcher read was the correct, more-confident side.
+    #
+    # We now resolve direction by confidence: each source's directional confidence is its
+    # distance from 0.50, and a row is penalized only when the MORE-CONFIDENT verdict
+    # opposes it. When the two sources agree, they reinforce; when they disagree, the
+    # source further from 0.50 dictates direction; a lone present source decides on its
+    # own. TheOver emits exactly 0.50 when it has no real pitcher-based read
+    # (default_0.5) — that, and NaN, are treated as "no opinion" so they never win.
+    _is_mlb_total = (
+        pool["league"].astype(str).str.upper().eq("MLB")
+        & pool["market_type"].astype(str).str.lower().str.contains("total", na=False)
+    ).to_numpy()
+    _kalshi_arr = (
+        pd.to_numeric(pool["kalshi_probability"], errors="coerce").to_numpy(dtype=float)
+        if "kalshi_probability" in pool.columns
+        else np.full(len(pool), np.nan)
+    )
+    _theover_arr = (
+        pd.to_numeric(pool["theover_probability"], errors="coerce").to_numpy(dtype=float)
+        if "theover_probability" in pool.columns
+        else np.full(len(pool), np.nan)
+    )
+    _kalshi_opp, _theover_opp, _direction_conflict = _mlb_total_direction_conflict(
+        _is_mlb_total, _kalshi_arr, _theover_arr
+    )
+    pool["_direction_conflict_penalty"] = np.where(
+        _direction_conflict, float(MLB_THEOVER_CONFLICT_PENALTY), 0.0
+    )
+    pool["final_family_score"] = pool["final_family_score"] - pool["_direction_conflict_penalty"]
+    # Back-compat: keep the legacy per-source columns populated for debug/transparency,
+    # attributing the penalty to whichever source(s) opposed the losing direction.
+    pool["_theover_conflict_penalty"] = np.where(
+        _direction_conflict & _theover_opp, float(MLB_THEOVER_CONFLICT_PENALTY), 0.0
+    )
+    pool["_kalshi_direction_conflict_penalty"] = np.where(
+        _direction_conflict & _kalshi_opp, float(MLB_THEOVER_CONFLICT_PENALTY), 0.0
+    )
 
     # 4. Sort to prepare for finalist selection within each family per game
     pool = pool.sort_values(
