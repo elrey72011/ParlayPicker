@@ -5053,6 +5053,26 @@ def run_analysis_pipeline(
 
     theover_probability = _numeric_series(merged, "theover_probability")
     theover_probability = theover_probability.where(theover_probability <= 1, theover_probability / 100.0)
+
+    # Blend-input TheOver: drop untrusted sources (e.g. model_hit_rate_flipped) for MLB
+    # totals, same treatment default_0.5 already gets inside _blend_row. A flipped
+    # hit-rate collapses to a flat ~0.30 P(Over); left in the blend it inflates the
+    # Under's win-prob/EV and keeps the wrong-direction Under winning selection even
+    # after the direction penalty. Dropping it redistributes weight to Kalshi/market/ML
+    # (the real direction signal). The raw value is preserved in merged["theover_probability"]
+    # for display/backtest; only the blend input is masked.
+    theover_blend_input = theover_probability.copy()
+    if "win_prob_source" in merged.columns and MLB_THEOVER_UNTRUSTED_DIRECTION_SOURCES:
+        _untrusted_theover_src = (
+            _string_series(merged, "win_prob_source").str.strip().str.lower()
+            .isin({s.lower() for s in MLB_THEOVER_UNTRUSTED_DIRECTION_SOURCES})
+        )
+        _is_mlb_total_blend = (
+            _string_series(merged, "league").str.upper().eq("MLB")
+            & _string_series(merged, "market_type").str.lower().str.contains("total", na=False)
+        )
+        theover_blend_input = theover_blend_input.mask(_untrusted_theover_src & _is_mlb_total_blend)
+
     ml_probability = _numeric_series(merged, "ml_probability")
 
     market_type = _string_series(merged, "market_type").str.lower()
@@ -5172,7 +5192,7 @@ def run_analysis_pipeline(
         p_market=merged["market_probability"],
         p_kalshi=kalshi_probability,
         p_ml=model_probability,
-        p_theover=theover_probability,
+        p_theover=theover_blend_input,
         p_sentiment=sentiment_prob,
         league=_string_series(merged, "league"),
         market_type=_string_series(merged, "market_type")
@@ -5191,7 +5211,7 @@ def run_analysis_pipeline(
     merged["blend_in_market"] = merged["market_probability"]
     merged["blend_in_kalshi"] = kalshi_probability
     merged["blend_in_ml"] = model_probability
-    merged["blend_in_theover"] = theover_probability
+    merged["blend_in_theover"] = theover_blend_input
     merged["blend_tier"] = np.where(
         pd.to_numeric(kalshi_probability, errors="coerce").fillna(0.0) >= 0.55, 1, 2
     )
