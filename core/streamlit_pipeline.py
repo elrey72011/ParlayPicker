@@ -123,7 +123,15 @@ _NCAAB_LEAGUE_RECOVERY_KEYWORDS = {
 _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball", "women\'s basketball"}
 
 
+# Build stamp emitted on every exported pick. Bump this string with any change that
+# should be observable in the export so a deployed app's code version is unambiguous:
+# if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
+# serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
+PIPELINE_BUILD = "2026-06-02b-theover-source-blend-gating"
+
+
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
+    "pipeline_build",
     "status_metric_basis",
     "effective_expected_value",
     "effective_edge",
@@ -327,6 +335,7 @@ def ensure_best_pick_export_columns(
     return out
 
 BEST_PICK_COLUMNS = [
+    "pipeline_build",
     "Triple_Filter_Rank", "parlay_rank",
     "league", "home_team", "away_team", "game_date", "game_time_est", "market_type", "candidate_source", "orientation_source", "upload_match_reason", "best_pick", "Kelly_Bet_Size", "Pick_Status", "Status_Reason",
     "calibrated_probability", "expected_value", "edge", "consensus_agreement",
@@ -3155,6 +3164,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         ).reset_index(drop=True)
 
         best = best.drop(columns=["_rank_sort", "_ev_sort", "_edge_sort"], errors="ignore")
+
+    # Stamp the running code version onto every pick so the export is self-identifying.
+    best["pipeline_build"] = PIPELINE_BUILD
 
     for col in BEST_PICK_COLUMNS:
         if col not in best.columns:
