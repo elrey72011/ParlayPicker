@@ -4586,8 +4586,10 @@ def run_analysis_pipeline(
         merged["game_date"] = merged["game_date"].fillna(fallback_merge_day)
         theover_rows["game_date"] = theover_rows["game_date"].fillna(fallback_merge_day)
 
-        # Merge theover enrichment columns
-        theover_cols_to_merge = ["matchup_id", "market_type", "theover_probability", "ml_probability"]
+        # Merge theover enrichment columns. win_prob_source rides along with
+        # theover_probability so the selection stage can discount untrusted TheOver
+        # sources (e.g. model_hit_rate_flipped) for the MLB total direction decision.
+        theover_cols_to_merge = ["matchup_id", "market_type", "theover_probability", "ml_probability", "win_prob_source"]
         # Only merge columns that exist
         theover_cols_to_merge = [c for c in theover_cols_to_merge if c in theover_rows.columns]
 
@@ -4629,6 +4631,9 @@ def run_analysis_pipeline(
 
                     if "ml_probability" in merged.columns and pd.isna(merged.at[idx, "ml_probability"]) and pd.notna(match.get("ml_probability")):
                         merged.at[idx, "ml_probability"] = match.get("ml_probability")
+
+                    if "win_prob_source" in merged.columns and pd.isna(merged.at[idx, "win_prob_source"]) and pd.notna(match.get("win_prob_source")):
+                        merged.at[idx, "win_prob_source"] = match.get("win_prob_source")
 
     # Ensure identity columns survive master-frame merges.
     if "league" not in merged.columns or _string_series(merged, "league").str.len().eq(0).all():
