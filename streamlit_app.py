@@ -41,6 +41,7 @@ from app_core.weights_config import (
     EMPTY_CARD_RECOVERY_MAX_KELLY_TOTAL_PCT,
     EMPTY_CARD_RECOVERY_MAX_KELLY_PER_PICK_PCT,
     ALLOW_MLB_TOTAL_OVER_EMPTY_CARD_RECOVERY,
+    MLB_THEOVER_UNTRUSTED_DIRECTION_SOURCES,
 )
 
 try:
@@ -248,11 +249,27 @@ def _recompute_consensus_from_kalshi(df: pd.DataFrame, require_ml: bool = False)
     theover_prob = _safe_numeric_series(out, "theover_probability")
     sentiment_prob = _safe_numeric_series(out, "sentiment_diff", default=0.5)
 
+    # Drop untrusted TheOver sources (e.g. model_hit_rate_flipped) from this re-blend
+    # for MLB totals — must mirror run_analysis_pipeline, otherwise this post-Kalshi
+    # refresh re-injects the flat ~0.30 P(Over) and overwrites the source-gated
+    # calibrated_probability/blend_in_theover with the un-gated value.
+    theover_prob_blend = theover_prob.copy()
+    if "win_prob_source" in out.columns and MLB_THEOVER_UNTRUSTED_DIRECTION_SOURCES:
+        _untrusted_src = (
+            _safe_str_series(out, "win_prob_source").str.strip().str.lower()
+            .isin({s.lower() for s in MLB_THEOVER_UNTRUSTED_DIRECTION_SOURCES})
+        )
+        _is_mlb_total = (
+            _safe_str_series(out, "league").str.upper().eq("MLB")
+            & _safe_str_series(out, "market_type").str.lower().str.contains("total", na=False)
+        )
+        theover_prob_blend = theover_prob_blend.mask(_untrusted_src & _is_mlb_total)
+
     blended = compute_blended_probability(
         p_market=market_prob,
         p_kalshi=kalshi_prob,
         p_ml=model_prob,
-        p_theover=theover_prob,
+        p_theover=theover_prob_blend,
         p_sentiment=sentiment_prob,
         league=_safe_str_series(out, "league"),
         market_type=_safe_str_series(out, "market_type")
@@ -269,7 +286,7 @@ def _recompute_consensus_from_kalshi(df: pd.DataFrame, require_ml: bool = False)
     out["blend_in_kalshi"] = kalshi_prob
     out["blend_in_market"] = market_prob
     out["blend_in_ml"] = model_prob
-    out["blend_in_theover"] = theover_prob
+    out["blend_in_theover"] = theover_prob_blend
     out["blend_tier"] = _np.where(
         kalshi_prob.fillna(0.0) >= 0.55, 1, 2
     )
