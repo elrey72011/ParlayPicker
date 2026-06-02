@@ -165,6 +165,10 @@ REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
     # weights from saved exports. Without them the download is a curated subset
     # and the fitting data never reaches the file the user saves.
     "theover_probability",
+    # TheOver WinProbSource tag, surfaced for transparency + as a deploy/version
+    # signal: if this column is absent or all-NaN in an export, the running app is
+    # not on the build that gates untrusted MLB-total direction sources.
+    "win_prob_source",
     "display_probability",
     "blend_in_kalshi",
     "blend_in_market",
@@ -327,7 +331,7 @@ BEST_PICK_COLUMNS = [
     "league", "home_team", "away_team", "game_date", "game_time_est", "market_type", "candidate_source", "orientation_source", "upload_match_reason", "best_pick", "Kelly_Bet_Size", "Pick_Status", "Status_Reason",
     "calibrated_probability", "expected_value", "edge", "consensus_agreement",
     "decimal_odds", "matchup_id",
-    "odds_american", "odds_source", "market_probability", "ml_probability", "theover_probability", "display_probability",
+    "odds_american", "odds_source", "market_probability", "ml_probability", "theover_probability", "win_prob_source", "display_probability",
     "kalshi_probability", "kalshi_match_status", "kalshi_match_reason",
     # Exact signal values fed to compute_blended_probability, oriented to the pick
     # side. Persisted so the blend weights can be backtested/fitted from saved
