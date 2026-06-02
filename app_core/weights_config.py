@@ -227,6 +227,17 @@ MLB_LOW_LINE_OVER_OVERRIDE_MIN_EDGE = 0.08
 MLB_THEOVER_CONFLICT_THRESHOLD = 0.50   # TheOver says other side has ≥50% probability
 MLB_THEOVER_CONFLICT_PENALTY = 0.35     # Subtracted from final_family_score to flip selection
 
+# TheOver tags each WinProbability with a WinProbSource describing how it was derived
+# (model_hit_rate, model_hit_rate_flipped, public_betting_pct, default_0.5). The
+# `_flipped` variant is a flipped hit-rate that empirically collapses to a near-constant
+# ~0.30 P(Over) across an entire slate (e.g. the 2 Jun upload: 8 of 10 totals tagged
+# model_hit_rate_flipped, all at P(Over) 0.286–0.30). That is not a real per-game read,
+# yet at 0.30 it carries enough directional confidence (|0.5-0.3|=0.20) to override Kalshi.
+# Sources listed here are treated as "no opinion" for the MLB total Over/Under DIRECTION
+# decision only (the blend still consumes the value). default_0.5 is handled separately by
+# its 0.50 value. Empty this set to restore full trust in every TheOver source.
+MLB_THEOVER_UNTRUSTED_DIRECTION_SOURCES = frozenset({"model_hit_rate_flipped"})
+
 # No-Kalshi totals are treated as lower confidence in selection stage
 NO_KALSHI_TOTAL_EXTRA_PENALTY = 0.02
 NO_KALSHI_TOTAL_UNDER_EXTRA_PENALTY = 0.03

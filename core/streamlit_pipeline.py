@@ -64,6 +64,7 @@ from app_core.weights_config import (
     KALSHI_DIVERGENCE_THRESHOLD, KALSHI_DIVERGENCE_THRESHOLD_NBA,
     KALSHI_DIVERGENCE_THRESHOLD_MLB, KALSHI_DIVERGENCE_THRESHOLD_NHL,
     MLB_THEOVER_CONFLICT_THRESHOLD, MLB_THEOVER_CONFLICT_PENALTY,
+    MLB_THEOVER_UNTRUSTED_DIRECTION_SOURCES,
 )
 
 warnings.filterwarnings("ignore", category=FutureWarning, module="pandas")
@@ -349,7 +350,7 @@ BEST_PICK_COLUMNS = [
 CANONICAL_BET_COLUMNS = [
     "league", "home_team", "away_team", "game_date", "game_time_est", "game_key",
     "market_type", "candidate_source", "orientation_source", "upload_match_reason", "spread_line", "total_line",
-    "theover_probability", "odds_american", "odds_source", "market_probability",
+    "theover_probability", "win_prob_source", "odds_american", "odds_source", "market_probability",
     "ml_probability", "display_probability", "calibrated_probability", "expected_value", "edge", "best_pick", "used_stale_features", "matchup_id", "Conviction_Score",
     "uploaded_spread_line", "uploaded_total_line", "live_spread_line", "live_total_line", "line_source", "line_delta", "upload_market_match",
 ]
@@ -375,6 +376,9 @@ _UPLOAD_COLUMN_ALIASES = {
     "pick team": "pick_team",
     "winprobability": "theover_probability",
     "win probability": "theover_probability",
+    "winprobsource": "win_prob_source",
+    "win prob source": "win_prob_source",
+    "win_prob_source": "win_prob_source",
     "league": "league",
     "sport": "league",
     "game date": "game_date",
@@ -1513,6 +1517,14 @@ def _build_total_rows(normalized: pd.DataFrame) -> list[pd.DataFrame]:
     over_prob = total_prob
     under_prob = (1 - total_prob).where(total_prob.notna(), pd.NA)
 
+    # WinProbSource describes how P(Over) was derived; it is the same for both
+    # orientations of a game. Carried through so the selection stage can discount
+    # low-confidence sources (e.g. model_hit_rate_flipped) for the direction decision.
+    if "win_prob_source" in normalized.columns:
+        win_prob_source = normalized["win_prob_source"].astype("string")
+    else:
+        win_prob_source = pd.Series(pd.NA, index=normalized.index, dtype="string")
+
     base_cols = [c for c in ["league", "home_team", "away_team", "game_date", "game_time_est"] if c in normalized.columns]
     base = normalized[base_cols].copy()
 
@@ -1521,6 +1533,7 @@ def _build_total_rows(normalized: pd.DataFrame) -> list[pd.DataFrame]:
     total_over["spread_line"] = pd.NA
     total_over["total_line"] = total_line
     total_over["theover_probability"] = over_prob
+    total_over["win_prob_source"] = win_prob_source
     total_over["odds_american"] = total_odds
 
     total_under = base.copy()
@@ -1528,6 +1541,7 @@ def _build_total_rows(normalized: pd.DataFrame) -> list[pd.DataFrame]:
     total_under["spread_line"] = pd.NA
     total_under["total_line"] = total_line
     total_under["theover_probability"] = under_prob
+    total_under["win_prob_source"] = win_prob_source
     total_under["odds_american"] = total_odds
 
     return [total_over, total_under]
@@ -1954,6 +1968,8 @@ def _mlb_total_direction_conflict(
     is_mlb_total: np.ndarray,
     kalshi_probability: np.ndarray,
     theover_probability: np.ndarray,
+    theover_source=None,
+    untrusted_sources=None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Resolve MLB total Over/Under direction by "most-confident source wins".
 
@@ -1962,6 +1978,12 @@ def _mlb_total_direction_conflict(
     opposite side, and a source's directional confidence is its distance from 0.50.
     A source at exactly 0.50 (TheOver's ``default_0.5`` "no read") or NaN is treated
     as having no opinion and never decides direction.
+
+    ``theover_source`` (optional) is the per-row ``win_prob_source`` tag from the
+    TheOver upload. When a row's source is in ``untrusted_sources`` (e.g.
+    ``model_hit_rate_flipped`` — a flipped hit-rate that collapses to a flat ~0.30
+    P(Over) across a slate), TheOver is blanked to "no opinion" for the direction
+    decision so a non-genuine read cannot override Kalshi. The blend is unaffected.
 
     A row is flagged as the losing direction when the strongest confidence *opposing*
     it exceeds the strongest confidence *supporting* it. For the Over and Under rows
@@ -1982,6 +2004,13 @@ def _mlb_total_direction_conflict(
         return conf, has & (prob < 0.5), has & (prob > 0.5)
 
     is_mlb_total = np.asarray(is_mlb_total, dtype=bool)
+    theover_probability = np.asarray(theover_probability, dtype=float)
+    if theover_source is not None and untrusted_sources:
+        _norm = {str(s).strip().lower() for s in untrusted_sources}
+        _src = pd.Series(theover_source).astype("string").str.strip().str.lower()
+        _untrusted = _src.isin(_norm).fillna(False).to_numpy()
+        theover_probability = np.where(_untrusted, np.nan, theover_probability)
+
     k_conf, k_opp, k_sup = _opinion(kalshi_probability)
     t_conf, t_opp, t_sup = _opinion(theover_probability)
 
@@ -2144,6 +2173,14 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     # source further from 0.50 dictates direction; a lone present source decides on its
     # own. TheOver emits exactly 0.50 when it has no real pitcher-based read
     # (default_0.5) — that, and NaN, are treated as "no opinion" so they never win.
+    #
+    # WinProbSource gating: some TheOver sources are not genuine per-game reads. The
+    # `model_hit_rate_flipped` source collapses to a near-constant ~0.30 P(Over) across
+    # a whole slate (8/10 totals on the 2 Jun upload), which at 0.30 would otherwise
+    # carry enough confidence to override Kalshi on every game. We blank TheOver to NaN
+    # ("no opinion") for the DIRECTION decision when its source is untrusted, so the
+    # direction defers to Kalshi/EV instead of a flat flipped hit-rate. The blend that
+    # produced WinProbability is left untouched.
     _is_mlb_total = (
         pool["league"].astype(str).str.upper().eq("MLB")
         & pool["market_type"].astype(str).str.lower().str.contains("total", na=False)
@@ -2158,8 +2195,11 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         if "theover_probability" in pool.columns
         else np.full(len(pool), np.nan)
     )
+    _theover_source = pool["win_prob_source"] if "win_prob_source" in pool.columns else None
     _kalshi_opp, _theover_opp, _direction_conflict = _mlb_total_direction_conflict(
-        _is_mlb_total, _kalshi_arr, _theover_arr
+        _is_mlb_total, _kalshi_arr, _theover_arr,
+        theover_source=_theover_source,
+        untrusted_sources=MLB_THEOVER_UNTRUSTED_DIRECTION_SOURCES,
     )
     pool["_direction_conflict_penalty"] = np.where(
         _direction_conflict, float(MLB_THEOVER_CONFLICT_PENALTY), 0.0

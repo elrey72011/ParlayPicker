@@ -96,6 +96,47 @@ def test_non_mlb_total_rows_never_flagged():
     assert not conflict.any()
 
 
+def test_untrusted_source_neutralizes_theover_kalshi_decides():
+    # 2 Jun pattern: TheOver leans Under via model_hit_rate_flipped (P(Over)=0.30 =>
+    # P(Under)=0.70), Kalshi leans Over (P(Under)=0.42). Untrusted source blanks
+    # TheOver, so Kalshi decides => the Under row is the loser.
+    kalshi = np.array([0.58, 0.42], dtype=float)   # Over row supports Over
+    theover = np.array([0.30, 0.70], dtype=float)  # Under row "supports" Under via flip
+    src = ["model_hit_rate_flipped", "model_hit_rate_flipped"]
+    is_mlb = np.array([True, True])
+    _k, _t, conflict = _mlb_total_direction_conflict(
+        is_mlb, kalshi, theover,
+        theover_source=src, untrusted_sources={"model_hit_rate_flipped"},
+    )
+    assert not conflict[0]  # Over kept
+    assert conflict[1]      # Under penalized (flips pick to Over, aligned with Kalshi)
+
+
+def test_trusted_source_keeps_theover_in_play():
+    # Identical numbers, but a genuine model_hit_rate read is trusted: TheOver
+    # (conf .20) beats Kalshi (conf .08) => the Over row is the loser, Under kept.
+    kalshi = np.array([0.58, 0.42], dtype=float)
+    theover = np.array([0.30, 0.70], dtype=float)
+    src = ["model_hit_rate", "model_hit_rate"]
+    is_mlb = np.array([True, True])
+    _k, _t, conflict = _mlb_total_direction_conflict(
+        is_mlb, kalshi, theover,
+        theover_source=src, untrusted_sources={"model_hit_rate_flipped"},
+    )
+    assert conflict[0]       # Over penalized
+    assert not conflict[1]   # Under kept
+
+
+def test_nan_theover_defers_to_kalshi():
+    # A blanked/absent TheOver (NaN) is no-opinion: a lone Kalshi favoring Over
+    # penalizes the Under row.
+    kalshi = np.array([0.58, 0.42], dtype=float)
+    theover = np.array([np.nan, np.nan], dtype=float)
+    is_mlb = np.array([True, True])
+    _k, _t, conflict = _mlb_total_direction_conflict(is_mlb, kalshi, theover)
+    assert not conflict[0] and conflict[1]
+
+
 def test_source_attribution_arrays():
     # When Kalshi opposes the losing (Over) row, the kalshi-opposes flag is set there.
     kalshi = np.array([0.40, 0.60], dtype=float)   # Over row: Kalshi favors Under
