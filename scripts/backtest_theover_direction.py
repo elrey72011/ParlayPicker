@@ -59,6 +59,17 @@ def run(picks: list[Pick]) -> None:
             sub = [p for p in totals if p.market_type == mt and p.consensus == c]
             _block(f"  {label} / {c}", sub)
 
+    # Sharper metric than the consensus label: kalshi_probability is oriented to the
+    # pick side, so < 0.50 means Kalshi prices the OTHER direction — a *true* market
+    # override (what the source-gating targets). The `consensus=Disagrees` tag is noisier:
+    # it also fires when Kalshi agrees on direction but is merely more confident than the
+    # model, which is not an override at all.
+    kal = [p for p in totals if p.kalshi_prob is not None]
+    print("\n-- by Kalshi direction (kalshi_probability oriented to pick side) --")
+    _block("  Kalshi OPPOSES pick (<0.50) = true market override", [p for p in kal if p.kalshi_prob < 0.50])
+    _block("  Kalshi favors pick (>=0.50) = market-aligned", [p for p in kal if p.kalshi_prob >= 0.50])
+    _block("  (no kalshi value on row)", [p for p in totals if p.kalshi_prob is None])
+
     print("\n-- spotlight: Unders where the market disagreed (the flipped-source analogue) --")
     flipped_like = [p for p in totals if p.market_type == "total_under" and p.consensus == "Disagrees"]
     _block("  Under / Disagrees", flipped_like)

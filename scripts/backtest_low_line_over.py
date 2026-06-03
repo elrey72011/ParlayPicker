@@ -66,6 +66,7 @@ class Pick:
     kelly: float
     win_amount: float | None
     result: str               # WIN | LOSS | PUSH | ""
+    kalshi_prob: float | None = None   # P(pick side) per Kalshi; < 0.50 => Kalshi opposes direction
 
     @property
     def graded(self) -> bool:
@@ -240,6 +241,7 @@ def _parse_txt(raw: str, source: str) -> list[Pick]:
                 kelly=_to_money(d.get("Kelly_Bet_Size")) or 0.0,
                 win_amount=_to_money(d.get("Win Amount")),
                 result=_norm_result(d.get("W/L")),
+                kalshi_prob=_to_prob(d.get("kalshi_probability")),
             )
         )
 
@@ -285,6 +287,7 @@ def _parse_tabular(path: Path) -> list[Pick]:
                 kelly=_to_money(g(row, "Kelly_Bet_Size")) or 0.0,
                 win_amount=_to_money(g(row, "Win Amount")),
                 result=_norm_result(g(row, "W/L", "Result")),
+                kalshi_prob=_to_prob(g(row, "kalshi_probability")),
             )
         )
     return picks
