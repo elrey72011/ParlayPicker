@@ -64,7 +64,7 @@ from app_core.weights_config import (
     KALSHI_DIVERGENCE_THRESHOLD, KALSHI_DIVERGENCE_THRESHOLD_NBA,
     KALSHI_DIVERGENCE_THRESHOLD_MLB, KALSHI_DIVERGENCE_THRESHOLD_NHL,
     MLB_THEOVER_CONFLICT_THRESHOLD, MLB_THEOVER_CONFLICT_PENALTY,
-    MLB_THEOVER_UNTRUSTED_DIRECTION_SOURCES,
+    MLB_THEOVER_FADE_SOURCES, MLB_THEOVER_FADE_SHRINK,
 )
 
 warnings.filterwarnings("ignore", category=FutureWarning, module="pandas")
@@ -127,7 +127,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-06-02c-reblend-source-gating-fix"
+PIPELINE_BUILD = "2026-06-03a-theover-under-fade"
 
 
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
@@ -1977,12 +1977,33 @@ def _apply_triple_filter_ranking(df: pd.DataFrame) -> pd.DataFrame:
     return final_df
 
 
+def _fade_theover(theover, win_prob_source, fade_sources, shrink):
+    """Shrink TheOver P(Over) toward 0.50 for faded WinProbSource rows.
+
+    ``model_hit_rate_flipped`` is a *genuine* TheOver Under pick (P(Over)=1-hit_rate),
+    not a fallback — but TheOver's Under model has been cold recently, so we temper its
+    influence rather than trust or discard it. ``shrink`` is the fraction of the
+    deviation-from-0.50 removed: 1.0 fully neutralizes (-> 0.50), 0.0 leaves it untouched.
+    Returns a float ndarray. NaN/absent values pass through unchanged.
+    """
+    theover = np.asarray(theover, dtype=float)
+    if win_prob_source is None or not fade_sources or shrink <= 0:
+        return theover
+    norm = {str(s).strip().lower() for s in fade_sources}
+    src = pd.Series(win_prob_source).astype("string").str.strip().str.lower()
+    faded = src.isin(norm).fillna(False).to_numpy()
+    out = theover.copy()
+    out[faded] = 0.5 + (theover[faded] - 0.5) * (1.0 - float(shrink))
+    return out
+
+
 def _mlb_total_direction_conflict(
     is_mlb_total: np.ndarray,
     kalshi_probability: np.ndarray,
     theover_probability: np.ndarray,
     theover_source=None,
-    untrusted_sources=None,
+    fade_sources=None,
+    fade_shrink: float = 0.0,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Resolve MLB total Over/Under direction by "most-confident source wins".
 
@@ -1992,11 +2013,11 @@ def _mlb_total_direction_conflict(
     A source at exactly 0.50 (TheOver's ``default_0.5`` "no read") or NaN is treated
     as having no opinion and never decides direction.
 
-    ``theover_source`` (optional) is the per-row ``win_prob_source`` tag from the
-    TheOver upload. When a row's source is in ``untrusted_sources`` (e.g.
-    ``model_hit_rate_flipped`` — a flipped hit-rate that collapses to a flat ~0.30
-    P(Over) across a slate), TheOver is blanked to "no opinion" for the direction
-    decision so a non-genuine read cannot override Kalshi. The blend is unaffected.
+    ``theover_source`` (optional) is the per-row ``win_prob_source`` tag. Rows whose
+    source is in ``fade_sources`` (e.g. ``model_hit_rate_flipped``, a genuine but
+    recently-cold TheOver Under pick) have their P(Over) shrunk toward 0.50 by
+    ``fade_shrink`` before the confidence comparison, so they pull direction less without
+    being silenced. shrink=1.0 reproduces the old "drop it" behavior; 0.0 = full trust.
 
     A row is flagged as the losing direction when the strongest confidence *opposing*
     it exceeds the strongest confidence *supporting* it. For the Over and Under rows
@@ -2017,12 +2038,7 @@ def _mlb_total_direction_conflict(
         return conf, has & (prob < 0.5), has & (prob > 0.5)
 
     is_mlb_total = np.asarray(is_mlb_total, dtype=bool)
-    theover_probability = np.asarray(theover_probability, dtype=float)
-    if theover_source is not None and untrusted_sources:
-        _norm = {str(s).strip().lower() for s in untrusted_sources}
-        _src = pd.Series(theover_source).astype("string").str.strip().str.lower()
-        _untrusted = _src.isin(_norm).fillna(False).to_numpy()
-        theover_probability = np.where(_untrusted, np.nan, theover_probability)
+    theover_probability = _fade_theover(theover_probability, theover_source, fade_sources, fade_shrink)
 
     k_conf, k_opp, k_sup = _opinion(kalshi_probability)
     t_conf, t_opp, t_sup = _opinion(theover_probability)
@@ -2212,7 +2228,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     _kalshi_opp, _theover_opp, _direction_conflict = _mlb_total_direction_conflict(
         _is_mlb_total, _kalshi_arr, _theover_arr,
         theover_source=_theover_source,
-        untrusted_sources=MLB_THEOVER_UNTRUSTED_DIRECTION_SOURCES,
+        fade_sources=MLB_THEOVER_FADE_SOURCES,
+        fade_shrink=MLB_THEOVER_FADE_SHRINK,
     )
     pool["_direction_conflict_penalty"] = np.where(
         _direction_conflict, float(MLB_THEOVER_CONFLICT_PENALTY), 0.0
@@ -5066,24 +5083,17 @@ def run_analysis_pipeline(
     theover_probability = _numeric_series(merged, "theover_probability")
     theover_probability = theover_probability.where(theover_probability <= 1, theover_probability / 100.0)
 
-    # Blend-input TheOver: drop untrusted sources (e.g. model_hit_rate_flipped) for MLB
-    # totals, same treatment default_0.5 already gets inside _blend_row. A flipped
-    # hit-rate collapses to a flat ~0.30 P(Over); left in the blend it inflates the
-    # Under's win-prob/EV and keeps the wrong-direction Under winning selection even
-    # after the direction penalty. Dropping it redistributes weight to Kalshi/market/ML
-    # (the real direction signal). The raw value is preserved in merged["theover_probability"]
-    # for display/backtest; only the blend input is masked.
-    theover_blend_input = theover_probability.copy()
-    if "win_prob_source" in merged.columns and MLB_THEOVER_UNTRUSTED_DIRECTION_SOURCES:
-        _untrusted_theover_src = (
-            _string_series(merged, "win_prob_source").str.strip().str.lower()
-            .isin({s.lower() for s in MLB_THEOVER_UNTRUSTED_DIRECTION_SOURCES})
-        )
-        _is_mlb_total_blend = (
-            _string_series(merged, "league").str.upper().eq("MLB")
-            & _string_series(merged, "market_type").str.lower().str.contains("total", na=False)
-        )
-        theover_blend_input = theover_blend_input.mask(_untrusted_theover_src & _is_mlb_total_blend)
+    # Blend-input TheOver: FADE (shrink toward 0.50), don't drop, the genuine-but-cold
+    # sources (model_hit_rate_flipped = TheOver's Under pick). Left at full weight, the
+    # flipped value inflates the Under's win-prob/EV; fully dropping it discards a real
+    # signal. Shrinking it tempers the influence proportionally to MLB_THEOVER_FADE_SHRINK.
+    # The raw value is preserved in merged["theover_probability"] for display/backtest.
+    _src_col = merged["win_prob_source"] if "win_prob_source" in merged.columns else None
+    theover_blend_input = pd.Series(
+        _fade_theover(theover_probability.to_numpy(dtype=float), _src_col,
+                      MLB_THEOVER_FADE_SOURCES, MLB_THEOVER_FADE_SHRINK),
+        index=theover_probability.index,
+    )
 
     ml_probability = _numeric_series(merged, "ml_probability")
 

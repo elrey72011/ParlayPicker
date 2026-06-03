@@ -227,16 +227,22 @@ MLB_LOW_LINE_OVER_OVERRIDE_MIN_EDGE = 0.08
 MLB_THEOVER_CONFLICT_THRESHOLD = 0.50   # TheOver says other side has ≥50% probability
 MLB_THEOVER_CONFLICT_PENALTY = 0.35     # Subtracted from final_family_score to flip selection
 
-# TheOver tags each WinProbability with a WinProbSource describing how it was derived
-# (model_hit_rate, model_hit_rate_flipped, public_betting_pct, default_0.5). The
-# `_flipped` variant is a flipped hit-rate that empirically collapses to a near-constant
-# ~0.30 P(Over) across an entire slate (e.g. the 2 Jun upload: 8 of 10 totals tagged
-# model_hit_rate_flipped, all at P(Over) 0.286–0.30). That is not a real per-game read,
-# yet at 0.30 it carries enough directional confidence (|0.5-0.3|=0.20) to override Kalshi.
-# Sources listed here are treated as "no opinion" for the MLB total Over/Under DIRECTION
-# decision only (the blend still consumes the value). default_0.5 is handled separately by
-# its 0.50 value. Empty this set to restore full trust in every TheOver source.
-MLB_THEOVER_UNTRUSTED_DIRECTION_SOURCES = frozenset({"model_hit_rate_flipped"})
+# TheOver tags each WinProbability with a WinProbSource (set by our own M-code scraper):
+#   model_hit_rate          -> TheOver's model picked the OVER; P(Over) = hit_rate
+#   model_hit_rate_flipped  -> TheOver's model picked the UNDER; P(Over) = 1 - hit_rate
+#   public_betting_pct      -> derived from public betting %
+#   default_0.5             -> no read (handled separately by its 0.50 value)
+# model_hit_rate_flipped is a GENUINE TheOver Under pick — the same signal as
+# model_hit_rate, just the Under side — NOT a fallback or low-quality value. However,
+# TheOver's Under model has underperformed on recent graded slates (1-2 Jun: its Unders
+# went ~3-8 while the market-aligned Over went ~8-3). So instead of trusting it fully or
+# discarding it, we FADE these sources: shrink their P(Over) toward 0.50 so they pull the
+# blend and the direction decision proportionally less. This is a tunable strategy bet,
+# not a data-quality filter. Lower MLB_THEOVER_FADE_SHRINK toward 0.0 (full trust) as the
+# Under model proves out on graded data; raise toward 1.0 (full neutralize) if it keeps
+# missing. Empty MLB_THEOVER_FADE_SOURCES to disable fading entirely.
+MLB_THEOVER_FADE_SOURCES = frozenset({"model_hit_rate_flipped"})
+MLB_THEOVER_FADE_SHRINK = 0.75   # fraction of (P-0.5) removed; 1.0=neutralized, 0.0=untouched
 
 # No-Kalshi totals are treated as lower confidence in selection stage
 NO_KALSHI_TOTAL_EXTRA_PENALTY = 0.02

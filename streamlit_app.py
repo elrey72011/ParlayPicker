@@ -41,7 +41,7 @@ from app_core.weights_config import (
     EMPTY_CARD_RECOVERY_MAX_KELLY_TOTAL_PCT,
     EMPTY_CARD_RECOVERY_MAX_KELLY_PER_PICK_PCT,
     ALLOW_MLB_TOTAL_OVER_EMPTY_CARD_RECOVERY,
-    MLB_THEOVER_UNTRUSTED_DIRECTION_SOURCES,
+    MLB_THEOVER_FADE_SOURCES, MLB_THEOVER_FADE_SHRINK,
 )
 
 try:
@@ -221,7 +221,7 @@ def _recompute_consensus_from_kalshi(df: pd.DataFrame, require_ml: bool = False)
     out = df.copy()
 
     # Recalculate blended probability and EV/Edge since we might have new Kalshi probabilities
-    from core.streamlit_pipeline import compute_blended_probability
+    from core.streamlit_pipeline import compute_blended_probability, _fade_theover
 
     kalshi_prob = _safe_numeric_series(out, "kalshi_probability")
     market_prob = _safe_numeric_series(out, "market_probability")
@@ -249,21 +249,16 @@ def _recompute_consensus_from_kalshi(df: pd.DataFrame, require_ml: bool = False)
     theover_prob = _safe_numeric_series(out, "theover_probability")
     sentiment_prob = _safe_numeric_series(out, "sentiment_diff", default=0.5)
 
-    # Drop untrusted TheOver sources (e.g. model_hit_rate_flipped) from this re-blend
-    # for MLB totals — must mirror run_analysis_pipeline, otherwise this post-Kalshi
-    # refresh re-injects the flat ~0.30 P(Over) and overwrites the source-gated
-    # calibrated_probability/blend_in_theover with the un-gated value.
-    theover_prob_blend = theover_prob.copy()
-    if "win_prob_source" in out.columns and MLB_THEOVER_UNTRUSTED_DIRECTION_SOURCES:
-        _untrusted_src = (
-            _safe_str_series(out, "win_prob_source").str.strip().str.lower()
-            .isin({s.lower() for s in MLB_THEOVER_UNTRUSTED_DIRECTION_SOURCES})
-        )
-        _is_mlb_total = (
-            _safe_str_series(out, "league").str.upper().eq("MLB")
-            & _safe_str_series(out, "market_type").str.lower().str.contains("total", na=False)
-        )
-        theover_prob_blend = theover_prob_blend.mask(_untrusted_src & _is_mlb_total)
+    # FADE genuine-but-cold TheOver sources (model_hit_rate_flipped) in this re-blend,
+    # mirroring run_analysis_pipeline. This post-Kalshi refresh recomputes
+    # calibrated_probability/EV/blend_in_theover, so it must apply the same fade or it
+    # would re-inject TheOver's full Under value and undo the tempering before selection.
+    _src_col = out["win_prob_source"] if "win_prob_source" in out.columns else None
+    theover_prob_blend = pd.Series(
+        _fade_theover(theover_prob.to_numpy(dtype=float), _src_col,
+                      MLB_THEOVER_FADE_SOURCES, MLB_THEOVER_FADE_SHRINK),
+        index=theover_prob.index,
+    )
 
     blended = compute_blended_probability(
         p_market=market_prob,
