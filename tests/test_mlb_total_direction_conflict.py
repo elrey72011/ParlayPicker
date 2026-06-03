@@ -96,24 +96,48 @@ def test_non_mlb_total_rows_never_flagged():
     assert not conflict.any()
 
 
-def test_untrusted_source_neutralizes_theover_kalshi_decides():
+def test_faded_source_lets_kalshi_decide():
     # 2 Jun pattern: TheOver leans Under via model_hit_rate_flipped (P(Over)=0.30 =>
-    # P(Under)=0.70), Kalshi leans Over (P(Under)=0.42). Untrusted source blanks
-    # TheOver, so Kalshi decides => the Under row is the loser.
-    kalshi = np.array([0.58, 0.42], dtype=float)   # Over row supports Over
-    theover = np.array([0.30, 0.70], dtype=float)  # Under row "supports" Under via flip
+    # conf .20), Kalshi leans Over (0.58, conf .08). With a strong fade (shrink 0.75),
+    # TheOver's 0.30 shrinks to 0.425 (conf .075) < Kalshi's .08, so Kalshi decides =>
+    # the Under row is the loser (pick flips to the Kalshi-aligned Over).
+    kalshi = np.array([0.58, 0.42], dtype=float)
+    theover = np.array([0.30, 0.70], dtype=float)
     src = ["model_hit_rate_flipped", "model_hit_rate_flipped"]
     is_mlb = np.array([True, True])
     _k, _t, conflict = _mlb_total_direction_conflict(
         is_mlb, kalshi, theover,
-        theover_source=src, untrusted_sources={"model_hit_rate_flipped"},
+        theover_source=src, fade_sources={"model_hit_rate_flipped"}, fade_shrink=0.75,
     )
     assert not conflict[0]  # Over kept
-    assert conflict[1]      # Under penalized (flips pick to Over, aligned with Kalshi)
+    assert conflict[1]      # Under penalized
+
+    # Full fade (shrink 1.0) reproduces the old "drop it" behavior identically.
+    _k, _t, conflict_full = _mlb_total_direction_conflict(
+        is_mlb, kalshi, theover,
+        theover_source=src, fade_sources={"model_hit_rate_flipped"}, fade_shrink=1.0,
+    )
+    assert not conflict_full[0] and conflict_full[1]
+
+
+def test_light_fade_still_lets_strong_theover_win():
+    # A light fade (shrink 0.25) keeps most of TheOver's conviction: 0.30 -> 0.35
+    # (conf .15) still beats Kalshi's .08, so TheOver's Under stands. This is the
+    # "respect the signal" end of the knob.
+    kalshi = np.array([0.58, 0.42], dtype=float)
+    theover = np.array([0.30, 0.70], dtype=float)
+    src = ["model_hit_rate_flipped", "model_hit_rate_flipped"]
+    is_mlb = np.array([True, True])
+    _k, _t, conflict = _mlb_total_direction_conflict(
+        is_mlb, kalshi, theover,
+        theover_source=src, fade_sources={"model_hit_rate_flipped"}, fade_shrink=0.25,
+    )
+    assert conflict[0]       # Over penalized -> Under stands (TheOver respected)
+    assert not conflict[1]
 
 
 def test_trusted_source_keeps_theover_in_play():
-    # Identical numbers, but a genuine model_hit_rate read is trusted: TheOver
+    # A genuine model_hit_rate read is never faded (not in fade_sources): TheOver
     # (conf .20) beats Kalshi (conf .08) => the Over row is the loser, Under kept.
     kalshi = np.array([0.58, 0.42], dtype=float)
     theover = np.array([0.30, 0.70], dtype=float)
@@ -121,7 +145,7 @@ def test_trusted_source_keeps_theover_in_play():
     is_mlb = np.array([True, True])
     _k, _t, conflict = _mlb_total_direction_conflict(
         is_mlb, kalshi, theover,
-        theover_source=src, untrusted_sources={"model_hit_rate_flipped"},
+        theover_source=src, fade_sources={"model_hit_rate_flipped"}, fade_shrink=0.75,
     )
     assert conflict[0]       # Over penalized
     assert not conflict[1]   # Under kept
