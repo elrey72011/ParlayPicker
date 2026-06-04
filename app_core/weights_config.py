@@ -233,14 +233,23 @@ MLB_THEOVER_CONFLICT_PENALTY = 0.35     # Subtracted from final_family_score to 
 #   public_betting_pct      -> derived from public betting %
 #   default_0.5             -> no read (handled separately by its 0.50 value)
 # model_hit_rate_flipped is a GENUINE TheOver Under pick — the same signal as
-# model_hit_rate, just the Under side — NOT a fallback or low-quality value. However,
-# TheOver's Under model has underperformed on recent graded slates (1-2 Jun: its Unders
-# went ~3-8 while the market-aligned Over went ~8-3). So instead of trusting it fully or
-# discarding it, we FADE these sources: shrink their P(Over) toward 0.50 so they pull the
-# blend and the direction decision proportionally less. This is a tunable strategy bet,
-# not a data-quality filter. Lower MLB_THEOVER_FADE_SHRINK toward 0.0 (full trust) as the
-# Under model proves out on graded data; raise toward 1.0 (full neutralize) if it keeps
-# missing. Empty MLB_THEOVER_FADE_SOURCES to disable fading entirely.
+# model_hit_rate, just the Under side — NOT a fallback or low-quality value. We FADE it:
+# shrink P(Over) toward 0.50 so it pulls the blend/direction proportionally less. This is
+# a tunable strategy bet (fade a cold model), not a data-quality filter.
+#
+# TUNING PROTOCOL — read before touching MLB_THEOVER_FADE_SHRINK:
+#   * The fade ONLY affects flipped games (TheOver picked Under). Judge it by the
+#     flipped-game counterfactual — on those games, did Over or Under actually hit? —
+#     NOT by the aggregate consensus/ROI buckets in scripts/backtest_theover_direction.py.
+#     Those buckets are STAKE-WEIGHTED and dominated by big Actionable Over hammers
+#     (genuine model_hit_rate/public picks, not flipped games), so they conflate the fade
+#     decision with hammer staking and will mislead you (they did once already).
+#   * Evidence to date — fading (i.e. picking the market Over on a flipped game) was right
+#     ~11-6 across 1-3 Jun (1 Jun 3-0, 2 Jun 5-3, 3 Jun 3-3). That supports the 0.75 setting.
+#   * Do NOT retune on one slate. Wait for >= ~6 graded slates from the current build, then
+#     move the knob toward 0.0 (full trust) only if flipped-game Unders start beating Overs,
+#     or toward 1.0 (full neutralize) if they keep missing. Empty MLB_THEOVER_FADE_SOURCES
+#     to disable fading entirely.
 MLB_THEOVER_FADE_SOURCES = frozenset({"model_hit_rate_flipped"})
 MLB_THEOVER_FADE_SHRINK = 0.75   # fraction of (P-0.5) removed; 1.0=neutralized, 0.0=untouched
 
