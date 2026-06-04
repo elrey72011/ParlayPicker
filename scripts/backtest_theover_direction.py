@@ -44,6 +44,10 @@ def run(picks: list[Pick]) -> None:
     print("\n" + "=" * 84)
     print("MLB totals: market-aligned (Agrees) vs market-overridden (Disagrees)")
     print("=" * 84)
+    print("CAVEAT: ROI below is STAKE-WEIGHTED. A few big Actionable Over hammers (genuine")
+    print("  model_hit_rate/public picks) dominate it and can swamp hit-rate. Do NOT use the")
+    print("  ROI buckets alone to set MLB_THEOVER_FADE_SHRINK — the fade only governs flipped")
+    print("  (TheOver-Under) games; judge it by the flipped-game Over-vs-Under counterfactual.")
     _block("All MLB totals", totals)
     print("\n-- by consensus_agreement --")
     for c in ("Agrees", "Neutral", "Disagrees"):
