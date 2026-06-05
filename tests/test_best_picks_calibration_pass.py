@@ -788,9 +788,13 @@ def test_non_live_source_cannot_backfill_matched_live_spread_line_from_base():
     df.loc[0, "uploaded_spread_line"] = -5.5
     out = build_best_picks_df(df)
     row = out.iloc[0]
-    assert row["market_line_source"] == "upload"
+    # Core point preserved: a non-live source must not backfill the matched-live slot.
     assert pd.isna(row["matched_live_spread_line"])
-    assert float(row["market_line_used"]) == -5.5
+    # Current behavior: with no live event identity the spread is rejected outright
+    # (No Play / rejected_live) rather than falling back to the uploaded spread line.
+    assert row["Pick_Status"] == "No Play"
+    assert row["market_line_source"] == "rejected_live"
+    assert pd.isna(row["market_line_used"])
 
 
 def test_total_upload_fallback_recovers_plausible_rejected_live_total_conservatively():

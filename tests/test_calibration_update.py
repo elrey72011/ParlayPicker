@@ -205,17 +205,19 @@ class TestCalibrationUpdate(unittest.TestCase):
 
         best = build_best_picks_df(df)
 
-        # Team A (Strong Spread) -> Actionable
+        # Team A (Strong Spread): the divergence override no longer promotes to
+        # Actionable — the newer "Kalshi disagrees on spread" guard caps it to High
+        # Variance (it fires before the override and wins).
         strong_spread = best[best["home_team"] == "Team A"].iloc[0]
-        self.assertEqual(strong_spread["Pick_Status"], "Actionable")
-        self.assertIn("override applied", strong_spread["Status_Reason"])
+        self.assertEqual(strong_spread["Pick_Status"], "High Variance/Speculative")
+        self.assertIn("Kalshi disagrees on spread", strong_spread["Status_Reason"])
 
-        # Team C (Weak Spread) -> High Variance/Speculative
+        # Team C (Weak Spread): the override is denied by the raw viability floor -> No Play.
         weak_spread = best[best["home_team"] == "Team C"].iloc[0]
-        self.assertEqual(weak_spread["Pick_Status"], "High Variance/Speculative")
-        self.assertIn("diverge by > 20%", weak_spread["Status_Reason"])
+        self.assertEqual(weak_spread["Pick_Status"], "No Play")
+        self.assertIn("divergence override denied", weak_spread["Status_Reason"])
 
-        # Team E (Total) -> High Variance/Speculative
+        # Team E (Total): override does not apply to totals; divergence caps it to High Variance.
         strong_total = best[best["home_team"] == "Team E"].iloc[0]
         self.assertEqual(strong_total["Pick_Status"], "High Variance/Speculative")
 
