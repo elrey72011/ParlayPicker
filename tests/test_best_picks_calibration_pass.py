@@ -73,8 +73,11 @@ def test_nba_totals_are_no_longer_overpenalized_vs_weak_mlb_spreads():
 def test_no_kalshi_totals_are_harder_than_kalshi_backed_totals():
     df = pd.DataFrame(
         [
-            _row(idx=1, league="NFL", market_type="total_over", win_prob=0.60, ev=0.04, edge=0.05, kalshi_probability=None),
-            _row(idx=2, league="NFL", market_type="total_over", win_prob=0.60, ev=0.04, edge=0.05, kalshi_probability=0.55),
+            # Bumped 0.60 -> 0.64 (ev/edge raised) so the Kalshi-backed row clears the
+            # current gates; the contrast (no-Kalshi cold-market penalty blocks the twin)
+            # is what this test verifies and still holds.
+            _row(idx=1, league="NFL", market_type="total_over", win_prob=0.64, ev=0.08, edge=0.07, kalshi_probability=None),
+            _row(idx=2, league="NFL", market_type="total_over", win_prob=0.64, ev=0.08, edge=0.07, kalshi_probability=0.59),
         ]
     )
     out = build_best_picks_df(df)
@@ -102,8 +105,12 @@ def test_agrees_does_not_auto_promote_in_standard_mode():
 def test_overs_and_sides_not_penalized_like_unders():
     df = pd.DataFrame(
         [
-            _row(idx=1, league="MLB", market_type="spread_home", win_prob=0.54, ev=0.07, edge=0.07, kalshi_probability=0.48),
-            _row(idx=2, league="MLB", market_type="total_over", win_prob=0.60, ev=0.05, edge=0.05, kalshi_probability=0.55),
+            # Kalshi 0.48 -> 0.55 so it agrees with the home spread; a disagreeing Kalshi
+            # now caps spreads at High Variance (deliberate guard the old fixture predated).
+            _row(idx=1, league="MLB", market_type="spread_home", win_prob=0.54, ev=0.07, edge=0.07, kalshi_probability=0.55),
+            # Over bumped 0.60 -> 0.68 to clear the raised MLB over gate; the point of the
+            # test (Overs/sides are not penalized the way Unders are) is unchanged.
+            _row(idx=2, league="MLB", market_type="total_over", win_prob=0.68, ev=0.12, edge=0.10, kalshi_probability=0.60),
             _row(idx=3, league="MLB", market_type="total_under", win_prob=0.60, ev=0.05, edge=0.05, kalshi_probability=0.55),
         ]
     )
@@ -189,7 +196,9 @@ def test_mlb_over_explicit_actionable_gate_blocks_weak_over():
     df = pd.DataFrame(
         [
             _row(idx=1, league="MLB", market_type="total_over", win_prob=0.56, ev=0.05, edge=0.05, kalshi_probability=0.53),
-            _row(idx=2, league="MLB", market_type="total_over", win_prob=0.58, ev=0.05, edge=0.05, kalshi_probability=0.53),
+            # Strong row bumped 0.58 -> 0.68 (k 0.60) to clear the raised MLB over gate;
+            # the weak 0.56 row is still blocked, which is what this test verifies.
+            _row(idx=2, league="MLB", market_type="total_over", win_prob=0.68, ev=0.12, edge=0.10, kalshi_probability=0.60),
         ]
     )
     diagnostics = {}
