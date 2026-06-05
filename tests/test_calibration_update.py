@@ -71,20 +71,21 @@ class TestCalibrationUpdate(unittest.TestCase):
 
 
     def test_nhl_totals_require_stricter_threshold(self):
-        # NHL totals require NHL_TOTAL_MIN_WIN_PROB_STRICT (0.58) and penalty
-        # For total_over: req_edge logic: max(BASELINE_MIN_EDGE + NHL_TOTAL_EXTRA_EDGE_PENALTY, TOTAL_OVER_MIN_EDGE) = max(0.02+0.01, 0.04) = 0.04. + NHL_TOTAL_OVER_ACTIONABLE_PENALTY (0.02) = 0.06.
-        # For total_over: req_ev logic: max(0.01, 0.03) = 0.03. + NHL_TOTAL_OVER_ACTIONABLE_PENALTY (0.02) = 0.05.
+        # NHL/NBA totals require stricter Actionable bars than generic totals. The weak
+        # rows are blocked; the positive-control rows must clear the *current* gates:
+        # NHL over needs ~0.72 calibrated with EV/edge ~0.12 (cold-market penalty + 0.60
+        # over-shrink), NBA over needs ~0.75 calibrated (0.60 over-shrink vs the 0.65 bar).
         df = self._build_df([
             # NHL total over at 0.57 (fails strict NHL 0.58)
             {"league": "NHL", "market_type": "total_over", "expected_value": 0.05, "edge": 0.06, "calibrated_probability": 0.57, "best_pick": "Over 5.5", "home_team": "Team A", "away_team": "Team B"},
             # NHL total over at 0.58 but fails new penalty edge requirement (0.05 is < 0.06)
             {"league": "NHL", "market_type": "total_over", "expected_value": 0.05, "edge": 0.05, "calibrated_probability": 0.58, "kalshi_probability": 0.54, "best_pick": "Over 5.5", "home_team": "Team C", "away_team": "Team D"},
-            # NHL total over at 0.58 with stronger EV/edge to clear both cold-market + empirical penalties
-            {"league": "NHL", "market_type": "total_over", "expected_value": 0.061, "edge": 0.071, "calibrated_probability": 0.58, "kalshi_probability": 0.54, "best_pick": "Over 5.5", "home_team": "Team I", "away_team": "Team J"},
+            # NHL total over: strong enough to clear cold-market + over-shrink penalties.
+            {"league": "NHL", "market_type": "total_over", "expected_value": 0.12, "edge": 0.12, "calibrated_probability": 0.72, "kalshi_probability": 0.54, "best_pick": "Over 5.5", "home_team": "Team I", "away_team": "Team J"},
             # NBA total over at 0.57 (fails NBA 0.58)
             {"league": "NBA", "market_type": "total_over", "expected_value": 0.05, "edge": 0.06, "calibrated_probability": 0.57, "kalshi_probability": 0.53, "best_pick": "Over 220.5", "home_team": "Team E", "away_team": "Team F"},
-            # NBA total over at 0.58 with much stronger EV/edge to clear harsher NBA total gates
-            {"league": "NBA", "market_type": "total_over", "expected_value": 0.08, "edge": 0.08, "calibrated_probability": 0.58, "kalshi_probability": 0.54, "best_pick": "Over 220.5", "home_team": "Team G", "away_team": "Team H"},
+            # NBA total over: strong enough to clear the harsher NBA total gates (0.60 shrink vs 0.65 bar).
+            {"league": "NBA", "market_type": "total_over", "expected_value": 0.12, "edge": 0.12, "calibrated_probability": 0.75, "kalshi_probability": 0.54, "best_pick": "Over 220.5", "home_team": "Team G", "away_team": "Team H"},
         # MLB total under at 0.57 is now intentionally too weak under stricter under thresholds
         {"league": "MLB", "market_type": "total_under", "expected_value": 0.04, "edge": 0.05, "calibrated_probability": 0.57, "kalshi_probability": 0.53, "best_pick": "Under 8.5", "home_team": "Team K", "away_team": "Team L"},
         # MLB total under at 0.57 is also below stricter threshold bars
