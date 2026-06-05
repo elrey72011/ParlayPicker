@@ -1,3 +1,4 @@
+import re
 import unittest
 import pandas as pd
 from core.streamlit_pipeline import build_best_picks_df
@@ -39,6 +40,20 @@ class TestCalibrationUpdate(unittest.TestCase):
         for i, row in enumerate(rows):
             merged = {**self.base_row, **row}
             merged["matchup_id"] = f"MOCK_{i}"
+            # Keep the (live) line consistent with the intended pick so build_best_picks_df
+            # rebuilds/evaluates against the line the test means, not the base_row default
+            # (e.g. an "Over 45.5" NFL pick should carry a 45.5 line, not 220.5 — which is
+            # also implausible for NFL and would trip the live-line plausibility guard).
+            mt = str(merged.get("market_type", ""))
+            m = re.search(r"(-?\d+(?:\.\d+)?)\s*$", str(merged.get("best_pick", "")))
+            if m:
+                val = float(m.group(1))
+                if "total" in mt:
+                    merged["total_line"] = abs(val)
+                    merged["live_total_line"] = abs(val)
+                elif "spread" in mt:
+                    merged["spread_line"] = val
+                    merged["live_spread_line"] = val
             out.append(merged)
         return pd.DataFrame(out)
 
@@ -146,17 +161,18 @@ class TestCalibrationUpdate(unittest.TestCase):
     def test_total_under_gets_stricter_gate(self):
         # TOTAL_UNDER_MIN_WIN_PROB is 0.57. Also we need kalshi gap >= 0.03 to be "Agrees" to bypass neutral overlay
         df = self._build_df([
-            # generic over at 0.56 (meets TOTAL_MIN_WIN_PROB 0.56), set Kalshi=0.50 so ML=0.56 implies gap=0.06 >= 0.03 (Agrees)
-            {"league": "NFL", "market_type": "total_over", "expected_value": 0.05, "edge": 0.05, "calibrated_probability": 0.56, "kalshi_probability": 0.50, "best_pick": "Over 45.5", "home_team": "Team A", "away_team": "Team B"},
-            # generic under at 0.56 (fails TOTAL_UNDER_MIN_WIN_PROB 0.57)
+            # Over at 0.60 clears the current total_over gate (0.56 no longer does after the
+            # over-shrink raise); the test's point is the stricter UNDER bar, unchanged.
+            {"league": "NFL", "market_type": "total_over", "expected_value": 0.05, "edge": 0.05, "calibrated_probability": 0.60, "kalshi_probability": 0.50, "best_pick": "Over 45.5", "home_team": "Team A", "away_team": "Team B"},
+            # generic under at 0.56 (fails the stricter under bar)
             {"league": "NFL", "market_type": "total_under", "expected_value": 0.05, "edge": 0.05, "calibrated_probability": 0.56, "kalshi_probability": 0.50, "best_pick": "Under 45.5", "home_team": "Team C", "away_team": "Team D"},
-            # generic under at 0.57 (meets TOTAL_UNDER_MIN_WIN_PROB 0.57)
+            # generic under at 0.57 (still below the stricter under bar)
             {"league": "NFL", "market_type": "total_under", "expected_value": 0.05, "edge": 0.05, "calibrated_probability": 0.57, "kalshi_probability": 0.50, "best_pick": "Under 45.5", "home_team": "Team E", "away_team": "Team F"},
         ])
 
         best = build_best_picks_df(df)
 
-        # Team A (Total Over 0.56) -> Actionable
+        # Team A (Total Over) -> Actionable
         over_pick = best[best["home_team"] == "Team A"].iloc[0]
         self.assertEqual(over_pick["Pick_Status"], "Actionable")
 
@@ -169,10 +185,10 @@ class TestCalibrationUpdate(unittest.TestCase):
         self.assertEqual(under_pass["Pick_Status"], "Below Threshold")
 
     def test_ev_dampener_on_fallback_heavy_slates(self):
-        # A total that barely meets EV threshold (e.g. 0.03 for total_over)
+        # A total that clears the gates normally but whose EV is pushed under the bar by the
+        # fallback-heavy dampener. Prob/edge are set comfortably so EV is the deciding factor.
         df = self._build_df([
-            # Over with exactly 0.03 EV and strong win prob
-            {"league": "NFL", "market_type": "total_over", "expected_value": 0.03, "edge": 0.04, "calibrated_probability": 0.60, "kalshi_probability": 0.55, "best_pick": "Over 45.5", "home_team": "Team A", "away_team": "Team B"},
+            {"league": "NFL", "market_type": "total_over", "expected_value": 0.05, "edge": 0.08, "calibrated_probability": 0.66, "kalshi_probability": 0.55, "best_pick": "Over 45.5", "home_team": "Team A", "away_team": "Team B"},
         ])
 
         # 1. Normal slate -> Actionable
@@ -181,12 +197,12 @@ class TestCalibrationUpdate(unittest.TestCase):
         self.assertEqual(best_normal.iloc[0]["Pick_Status"], "Actionable")
         self.assertEqual(diags.get("ev_dampener_impact_count"), 0)
 
-        # 2. Fallback-heavy slate -> Dampened EV is 0.03 * 0.85 = 0.0255 < 0.03, so Below Threshold
+        # 2. Fallback-heavy slate -> dampened EV (0.05 * 0.85 = 0.0425) drops below the bar -> Below Threshold
         diags_heavy = {"is_fallback_heavy": True}
         best_heavy = build_best_picks_df(df.copy(), diagnostics_out=diags_heavy)
         self.assertEqual(best_heavy.iloc[0]["Pick_Status"], "Below Threshold")
         self.assertEqual(diags_heavy.get("ev_dampener_impact_count"), 1)
-        self.assertEqual(best_heavy.iloc[0]["expected_value"], 0.03) # Must not overwrite the raw column
+        self.assertEqual(best_heavy.iloc[0]["expected_value"], 0.05) # Must not overwrite the raw column
 
     def test_spread_divergence_override(self):
         df = self._build_df([

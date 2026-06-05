@@ -3431,11 +3431,30 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         spread_delta = (best["matched_live_spread_line"] - best["upload_spread_line"]).abs()
         total_delta = (best["matched_live_total_line"] - best["upload_total_line"]).abs()
         suspicious_spread = is_spread & spread_delta.gt(3.0)
-        suspicious_total = (
+        raw_suspicious_total = (
             (league_norm.eq("MLB") & is_total & total_delta.gt(2.0))
             | (league_norm.eq("NHL") & is_total & total_delta.gt(1.5))
             | (league_norm.eq("NBA") & is_total & total_delta.gt(8.0))
         )
+        # Plausibility-gated live totals: a live total that deviates materially from the
+        # uploaded reference is only treated as suspicious when its OWN value is implausible
+        # for the league. The real risk is a bad live read (a mis-scraped number), not a
+        # live line that merely disagrees with a (often stale) uploaded reference — the live
+        # line is the more current source, so a plausible live total is trusted and used.
+        # Only a garbage live value falls through to the reject / upload-fallback path.
+        # Ranges mirror the upload-plausibility ranges used in the recovery step below.
+        plausible_live_total = (
+            (league_norm.eq("MLB") & raw_live_total_line.between(5.5, 13.5, inclusive="both"))
+            | (league_norm.eq("NHL") & raw_live_total_line.between(4.5, 8.5, inclusive="both"))
+            | (league_norm.eq("NBA") & raw_live_total_line.between(185, 255, inclusive="both"))
+            | (league_norm.eq("NCAAB") & raw_live_total_line.between(115, 175, inclusive="both"))
+            | (league_norm.eq("NFL") & raw_live_total_line.between(30, 60, inclusive="both"))
+            | (league_norm.eq("NCAAF") & raw_live_total_line.between(35, 75, inclusive="both"))
+        )
+        suspicious_total = raw_suspicious_total & ~plausible_live_total
+        if diagnostics_out is not None:
+            diagnostics_out["live_total_deviation_count"] = int(raw_suspicious_total.sum())
+            diagnostics_out["live_total_trusted_plausible_count"] = int((raw_suspicious_total & plausible_live_total).sum())
         suspicious_line = suspicious_spread | suspicious_total
         best.loc[suspicious_line, "line_consistency_flag"] = False
         best.loc[suspicious_line, "line_consistency_reason"] = best.loc[suspicious_line, "line_consistency_reason"].replace("", "suspicious_live_line_delta")

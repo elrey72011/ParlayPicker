@@ -706,7 +706,7 @@ def test_suspicious_total_after_validation_can_recover_with_upload_fallback():
     df.loc[0, "home_team"] = "Minnesota"
     df.loc[0, "away_team"] = "Dallas"
     df.loc[0, "line_source"] = "live_matched"
-    df.loc[0, "live_total_line"] = 8.5
+    df.loc[0, "live_total_line"] = 16.5  # implausible NHL total -> rejected, recover via upload
     df.loc[0, "uploaded_total_line"] = 5.5
     out = build_best_picks_df(df)
     row = out.iloc[0]
@@ -717,15 +717,18 @@ def test_suspicious_total_after_validation_can_recover_with_upload_fallback():
     assert row["best_pick"] == "Over 5.5"
 
 
-def test_nhl_total_does_not_use_wrong_same_city_same_date_line():
+def test_nhl_implausible_live_total_with_no_plausible_reference_is_no_play():
+    # Under plausibility-gated live totals, an implausible live total (a bad read or a
+    # wrong-game cross-match) is rejected; with no plausible uploaded reference to recover
+    # from, the row becomes No Play. (A plausible live total is trusted; see line_fidelity.)
     df = pd.DataFrame([
         _row(idx=703, league="NHL", market_type="total_over", win_prob=0.61, ev=0.06, edge=0.05, kalshi_probability=0.56)
     ])
     df.loc[0, "home_team"] = "Minnesota"
     df.loc[0, "away_team"] = "Dallas"
     df.loc[0, "line_source"] = "live_matched"
-    df.loc[0, "live_total_line"] = 5.5
-    df.loc[0, "uploaded_total_line"] = 8.5
+    df.loc[0, "live_total_line"] = 16.5   # implausible NHL total
+    df.loc[0, "uploaded_total_line"] = 2.5  # also implausible -> no recovery
     out = build_best_picks_df(df)
     row = out.iloc[0]
     assert row["Pick_Status"] == "No Play"
@@ -734,15 +737,16 @@ def test_nhl_total_does_not_use_wrong_same_city_same_date_line():
     assert pd.isna(row["matched_live_total_line"])
 
 
-def test_mlb_total_does_not_use_wrong_same_city_same_date_line():
+def test_mlb_implausible_live_total_with_no_plausible_reference_is_no_play():
+    # MLB counterpart: an implausible live total with no plausible reference -> No Play.
     df = pd.DataFrame([
         _row(idx=706, league="MLB", market_type="total_over", win_prob=0.61, ev=0.06, edge=0.05, kalshi_probability=0.56)
     ])
     df.loc[0, "home_team"] = "Minnesota"
     df.loc[0, "away_team"] = "Toronto"
     df.loc[0, "line_source"] = "live_matched"
-    df.loc[0, "live_total_line"] = 7.5
-    df.loc[0, "uploaded_total_line"] = 3.5
+    df.loc[0, "live_total_line"] = 22.5   # implausible MLB total
+    df.loc[0, "uploaded_total_line"] = 3.5  # also implausible -> no recovery
     out = build_best_picks_df(df)
     row = out.iloc[0]
     assert row["Pick_Status"] == "No Play"
@@ -804,7 +808,7 @@ def test_total_upload_fallback_recovers_plausible_rejected_live_total_conservati
     df["home_team"] = ["A"]
     df["away_team"] = ["E"]
     df["line_source"] = "live_matched"
-    df["live_total_line"] = [8.5]
+    df["live_total_line"] = [16.5]  # implausible NHL total -> rejected (triggers upload fallback)
     df["uploaded_total_line"] = [5.5]
     df["upload_total_line"] = [5.5]
     out = build_best_picks_df(df)
@@ -884,7 +888,7 @@ def test_negative_edge_row_cannot_remain_high_variance():
 def test_negative_ev_upload_fallback_row_becomes_no_play_and_zero_kelly():
     df = pd.DataFrame([_row(idx=902, league="NHL", market_type="total_over", win_prob=0.62, ev=-0.01, edge=0.03, kalshi_probability=0.56)])
     df["line_source"] = "live_matched"
-    df["live_total_line"] = [8.5]
+    df["live_total_line"] = [16.5]  # implausible NHL total -> rejected (triggers upload fallback)
     df["uploaded_total_line"] = [5.5]
     df["upload_total_line"] = [5.5]
     row = build_best_picks_df(df).iloc[0]
@@ -896,7 +900,7 @@ def test_negative_ev_upload_fallback_row_becomes_no_play_and_zero_kelly():
 def test_positive_ev_upload_fallback_row_can_remain_high_variance_with_zero_kelly():
     df = pd.DataFrame([_row(idx=903, league="NHL", market_type="total_over", win_prob=0.62, ev=0.07, edge=0.06, kalshi_probability=0.56)])
     df["line_source"] = "live_matched"
-    df["live_total_line"] = [8.5]
+    df["live_total_line"] = [16.5]  # implausible NHL total -> rejected (triggers upload fallback)
     df["uploaded_total_line"] = [5.5]
     df["upload_total_line"] = [5.5]
     row = build_best_picks_df(df).iloc[0]
@@ -908,7 +912,7 @@ def test_negative_ev_row_is_downgraded_by_value_guardrail_with_reason_and_zero_k
     diagnostics = {}
     df = pd.DataFrame([_row(idx=904, league="NHL", market_type="total_over", win_prob=0.62, ev=-0.01, edge=0.06, kalshi_probability=0.56)])
     df["line_source"] = "live_matched"
-    df["live_total_line"] = [8.5]
+    df["live_total_line"] = [16.5]  # implausible NHL total -> rejected (triggers upload fallback)
     df["uploaded_total_line"] = [5.5]
     df["upload_total_line"] = [5.5]
     row = build_best_picks_df(df, diagnostics_out=diagnostics).iloc[0]
@@ -927,7 +931,7 @@ def test_negative_value_guardrail_diagnostics_and_positive_upload_fallback_regre
         _row(idx=906, league="NHL", market_type="total_over", win_prob=0.62, ev=0.07, edge=0.06, kalshi_probability=0.56),
     ])
     df["line_source"] = "live_matched"
-    df["live_total_line"] = [8.5, 8.5]
+    df["live_total_line"] = [16.5, 16.5]  # implausible NHL totals -> rejected (upload fallback)
     df["uploaded_total_line"] = [5.5, 5.5]
     df["upload_total_line"] = [5.5, 5.5]
 
