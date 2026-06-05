@@ -162,6 +162,39 @@ def test_parlay_probability_and_generate_smart_parlays_formula():
     assert np.isclose(top["parlay_ev"], expected_ev)
 
 
+def test_smart_parlay_uses_effective_win_probability_for_combined_prob_and_ev():
+    """Combined prob/EV must use the de-biased effective_win_probability, not the
+    overconfident calibrated_probability. For Overs the calibrated prob is inflated
+    and compounds multiplicatively in a parlay; the EV>0 gate, the EV-desc sort, and
+    the displayed win prob all have to use the same shrunk field the engine ranks on.
+    """
+    bets = pd.DataFrame(
+        {
+            "best_pick": ["Over A", "Over B"],
+            "matchup_id": ["g1", "g2"],
+            "edge": [0.07, 0.06],
+            # calibrated is the inflated field; effective is the de-biased one the
+            # rest of the pipeline (gating, single-pick EV, Kelly) trusts.
+            "calibrated_probability": [0.66, 0.66],
+            "effective_win_probability": [0.60, 0.60],
+            "market_probability": [0.50, 0.50],
+            "decimal_odds": [2.0, 2.0],
+        }
+    )
+    parlays = generate_smart_parlays(bets)
+    assert not parlays.empty
+    top = parlays.iloc[0]
+
+    # Must equal the EFFECTIVE product (0.60 * 0.60 = 0.36), NOT the inflated
+    # calibrated product (0.66 * 0.66 = 0.4356).
+    assert np.isclose(top["combined_probability"], 0.36)
+    assert not np.isclose(top["combined_probability"], 0.66 * 0.66)
+    expected_ev = (0.36 * (4.0 - 1)) - (1 - 0.36)
+    assert np.isclose(top["parlay_ev"], expected_ev)
+    # min_leg_prob is reported on the same de-biased field.
+    assert np.isclose(top["min_leg_prob"], 0.60)
+
+
 def test_kelly_fraction_edge_cases():
     assert kelly_fraction(np.nan, 2.0) == 0.0
     assert kelly_fraction(0.55, np.nan) == 0.0

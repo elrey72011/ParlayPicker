@@ -89,9 +89,19 @@ def _leg_labels(legs: pd.DataFrame, label_cols: list[str]) -> list[str]:
 
 
 def _build_record(legs: pd.DataFrame, label_cols: list[str], leg_count: int,
-                  risk_tier: str, group_id=pd.NA) -> dict | None:
-    """Build a parlay record dict; returns None if EV is non-positive."""
-    combined_probability = _adj_prob(legs, "calibrated_probability")
+                  risk_tier: str, group_id=pd.NA, prob_col: str = "calibrated_probability") -> dict | None:
+    """Build a parlay record dict; returns None if EV is non-positive.
+
+    ``prob_col`` is the per-leg probability the combined win prob and EV are built
+    from. The engine passes ``effective_win_probability`` (shrinkage-adjusted) here:
+    for Overs that field is de-biased downward (calibrated is overconfident — predicts
+    ~62%, hits ~52% in the 0.60-0.65 band), and overconfidence COMPOUNDS multiplicatively
+    across legs (0.62**3 = 23.8% shown vs ~0.52**3 = 14.1% true). Gating, the EV>0 drop,
+    the EV-desc sort, and the displayed win prob must all use the same de-biased field
+    the rest of the pipeline trusts; ``calibrated_probability`` is the legacy fallback.
+    The market baseline stays on ``market_probability`` (no model bias to remove).
+    """
+    combined_probability = _adj_prob(legs, prob_col)
     combined_market_prob = _adj_prob(legs, "market_probability")
     combined_decimal_odds, best_book = _best_book_odds(legs)
 
@@ -105,7 +115,7 @@ def _build_record(legs: pd.DataFrame, label_cols: list[str], leg_count: int,
     )
     is_high_correlation = len(legs["matchup_id"].unique()) < leg_count
     parlay_conviction = float(legs["Conviction_Score"].mean()) if "Conviction_Score" in legs.columns else pd.NA
-    min_leg_prob = float(legs["calibrated_probability"].min())
+    min_leg_prob = float(legs[prob_col].min())
 
     has_actionable = (
         legs["Pick_Status"].astype(str).eq("Actionable").any()
@@ -145,6 +155,21 @@ def generate_smart_parlays(df: pd.DataFrame, num_rr_candidates: int = 5) -> pd.D
 
     Actionable picks are force-anchored at the front of the pool. They represent
     the model's full-signal consensus picks and sort to the top of results.
+
+    Combined probability + EV: ``_build_record`` builds these from the same
+    ``rank_col`` (effective_win_probability when present) used for ranking/gating, NOT
+    the raw ``calibrated_probability``. This matters most for Overs, where calibrated is
+    overconfident and the bias COMPOUNDS multiplicatively across legs — a 3-leg all-Over
+    parlay would otherwise show ~0.62**3 = 23.8% when the de-biased figure is lower and
+    the realized rate lower still. The EV>0 drop and the EV-desc sort therefore run on
+    the de-biased number, so inflated all-Over parlays no longer pass the gate and rank
+    first. Unders/spreads/MLs are unchanged (effective == calibrated for them).
+
+    Known limitation: across DIFFERENT games legs are combined as independent (only
+    SAME-game legs get the ``_adj_prob`` power-law penalty). Same-direction cross-game
+    legs (e.g. all-Over on a high-total slate) are positively correlated, so the joint
+    probability is still optimistic. Modeling that needs a calibrated cross-game factor
+    and is intentionally left out here rather than guessed at.
     """
     columns = [
         "parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev",
@@ -255,7 +280,7 @@ def generate_smart_parlays(df: pd.DataFrame, num_rr_candidates: int = 5) -> pd.D
         for combo in combinations(candidate_bets.index, leg_count):
             legs = candidate_bets.loc[list(combo)]
             risk_tier = "Bankroll Builder" if leg_count == 2 else "Standard"
-            rec = _build_record(legs, label_cols, leg_count, risk_tier)
+            rec = _build_record(legs, label_cols, leg_count, risk_tier, prob_col=rank_col)
             if rec is not None:
                 records.append(rec)
 
@@ -270,7 +295,7 @@ def generate_smart_parlays(df: pd.DataFrame, num_rr_candidates: int = 5) -> pd.D
                 continue
             for combo in combinations(rr_candidates.index, leg_count):
                 legs = rr_candidates.loc[list(combo)]
-                rec = _build_record(legs, label_cols, leg_count, "Round Robin", rr_group_id)
+                rec = _build_record(legs, label_cols, leg_count, "Round Robin", rr_group_id, prob_col=rank_col)
                 if rec is not None:
                     records.append(rec)
 
