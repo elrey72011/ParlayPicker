@@ -134,14 +134,17 @@ NBA_SIDE_ACTIONABLE_BONUS = 0.01
 NBA_OVER_ACTIONABLE_BONUS = 0.00
 # Checked against POST-SHRINKAGE win probability (shrinkage is now applied in the
 # gating loop before this threshold is evaluated).
-# Raised from (0.62 / 0.07 / 0.08) after May-9 review: MLB Overs went 3-7 (30%).
-# Further raised from (0.65 / 0.10 / 0.10) after May-10 review: MLB Overs went 2-6 (25%).
-# Eased from (0.68 / 0.14 / 0.12) after May-12 recap to (0.56 / 0.07 / 0.03).
-# Re-tightened to (0.63 / 0.09 / 0.05) after May-13 recap: overs went 1-5 (20%).
-# Eased to (0.60 / 0.07 / 0.04) after May-17 recap: BT overs went 7-2 (78%) while
-# team-name bugs are now fixed and TheOver pitcher data flows correctly. Lower the bar
-# so strong overs can reach Actionable now that the signal is more reliable.
-MLB_OVER_ACTIONABLE_MIN_PROB = 0.60
+# History of reactive 1-2 slate tweaks (do not continue this): 0.62 (May-9) -> 0.65
+# (May-10) -> 0.68 (May-12) -> 0.56 -> 0.63 (May-13) -> 0.60 (May-17).
+# Jun-5 AGGREGATE calibration (n=191 graded picks, not one slate): effective_win_prob
+# is well-calibrated at 0.65+ (predicts 68%, hits 64%) but OVERCONFIDENT in the 0.60-0.65
+# band (predicts 62%, hits 52% = coin flip). That band was driving the Actionable
+# "Hammers" that have been losing. Raise the gate to 0.65 so only the calibrated band gets
+# big Kelly; 0.60-0.65 picks fall to High Variance (small stake). This is set from the
+# aggregate, not a single slate -- judge future moves the same way, and prefer fixing
+# calibration (the middle-band miscalibration is non-linear, so a flat shrink won't do it)
+# over re-tuning this gate.
+MLB_OVER_ACTIONABLE_MIN_PROB = 0.65
 MLB_OVER_ACTIONABLE_MIN_EV = 0.07
 MLB_OVER_ACTIONABLE_MIN_EDGE = 0.04
 # Hard cap on calibrated probability for MLB overs — prevents residual TheOver
