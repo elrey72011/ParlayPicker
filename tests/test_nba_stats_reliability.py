@@ -534,6 +534,10 @@ def test_run_health_warning_on_fallback_heavy_slate(monkeypatch):
 
 
 def test_best_picks_calibration_constants_unchanged():
+    # Re-baselined to the current intended calibration. These changed deliberately:
+    # NBA_OVER_ACTIONABLE_BONUS was retired to 0.0 (Overs no longer get a side bonus),
+    # and MLB_OVER_ACTIONABLE_MIN_PROB was raised 0.57 -> 0.65 to fix Over overconfidence.
+    # The guard's job is to catch *accidental* drift from these values going forward.
     assert weights_config.NBA_SIDE_ACTIONABLE_BONUS == 0.01
-    assert weights_config.NBA_OVER_ACTIONABLE_BONUS == 0.01
-    assert weights_config.MLB_OVER_ACTIONABLE_MIN_PROB == 0.57
+    assert weights_config.NBA_OVER_ACTIONABLE_BONUS == 0.0
+    assert weights_config.MLB_OVER_ACTIONABLE_MIN_PROB == 0.65

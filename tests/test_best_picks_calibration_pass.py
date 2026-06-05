@@ -31,6 +31,14 @@ def _row(
         "odds_american": -110,
         "spread_line": -3.5 if "spread" in market_type else pd.NA,
         "total_line": 220.5 if "total" in market_type else pd.NA,
+        # Live-line provenance. build_best_picks_df now requires a trusted live line
+        # (line_source containing "live" AND a numeric live_*_line) or it rejects the
+        # row as "suspicious live line" -> No Play. Supply that here so these calibration
+        # tests exercise the status logic, not the line-provenance reject path. Tests
+        # that specifically exercise provenance override line_source (e.g. "synthetic").
+        "line_source": "live",
+        "live_spread_line": -3.5 if "spread" in market_type else pd.NA,
+        "live_total_line": 220.5 if "total" in market_type else pd.NA,
         "is_live_data": True,
         "used_stale_features": False,
         "odds_source": "odds_api",
@@ -65,8 +73,11 @@ def test_nba_totals_are_no_longer_overpenalized_vs_weak_mlb_spreads():
 def test_no_kalshi_totals_are_harder_than_kalshi_backed_totals():
     df = pd.DataFrame(
         [
-            _row(idx=1, league="NFL", market_type="total_over", win_prob=0.60, ev=0.04, edge=0.05, kalshi_probability=None),
-            _row(idx=2, league="NFL", market_type="total_over", win_prob=0.60, ev=0.04, edge=0.05, kalshi_probability=0.55),
+            # Bumped 0.60 -> 0.64 (ev/edge raised) so the Kalshi-backed row clears the
+            # current gates; the contrast (no-Kalshi cold-market penalty blocks the twin)
+            # is what this test verifies and still holds.
+            _row(idx=1, league="NFL", market_type="total_over", win_prob=0.64, ev=0.08, edge=0.07, kalshi_probability=None),
+            _row(idx=2, league="NFL", market_type="total_over", win_prob=0.64, ev=0.08, edge=0.07, kalshi_probability=0.59),
         ]
     )
     out = build_best_picks_df(df)
@@ -94,8 +105,12 @@ def test_agrees_does_not_auto_promote_in_standard_mode():
 def test_overs_and_sides_not_penalized_like_unders():
     df = pd.DataFrame(
         [
-            _row(idx=1, league="MLB", market_type="spread_home", win_prob=0.54, ev=0.07, edge=0.07, kalshi_probability=0.48),
-            _row(idx=2, league="MLB", market_type="total_over", win_prob=0.60, ev=0.05, edge=0.05, kalshi_probability=0.55),
+            # Kalshi 0.48 -> 0.55 so it agrees with the home spread; a disagreeing Kalshi
+            # now caps spreads at High Variance (deliberate guard the old fixture predated).
+            _row(idx=1, league="MLB", market_type="spread_home", win_prob=0.54, ev=0.07, edge=0.07, kalshi_probability=0.55),
+            # Over bumped 0.60 -> 0.68 to clear the raised MLB over gate; the point of the
+            # test (Overs/sides are not penalized the way Unders are) is unchanged.
+            _row(idx=2, league="MLB", market_type="total_over", win_prob=0.68, ev=0.12, edge=0.10, kalshi_probability=0.60),
             _row(idx=3, league="MLB", market_type="total_under", win_prob=0.60, ev=0.05, edge=0.05, kalshi_probability=0.55),
         ]
     )
@@ -165,7 +180,10 @@ def test_nba_side_bonus_can_promote_borderline_side():
     assert diagnostics["promoted_by_nba_side_bonus"] >= 1
 
 
-def test_nba_over_bonus_can_promote_borderline_over():
+def test_nba_over_bonus_is_retired_and_no_longer_promotes():
+    # NBA_OVER_ACTIONABLE_BONUS was retired to 0.0 (Overs no longer get a side-style
+    # promotion bonus). A borderline NBA over that the bonus used to lift to Actionable
+    # must now stay blocked, and the promotion must not fire.
     df = pd.DataFrame(
         [
             _row(idx=1, league="NBA", market_type="total_over", win_prob=0.58, ev=0.03, edge=0.04, kalshi_probability=0.55),
@@ -173,15 +191,17 @@ def test_nba_over_bonus_can_promote_borderline_over():
     )
     diagnostics = {}
     out = build_best_picks_df(df, diagnostics_out=diagnostics)
-    assert out.iloc[0]["Pick_Status"] == "Actionable"
-    assert diagnostics["promoted_by_nba_over_bonus"] >= 1
+    assert out.iloc[0]["Pick_Status"] != "Actionable"
+    assert diagnostics.get("promoted_by_nba_over_bonus", 0) == 0
 
 
 def test_mlb_over_explicit_actionable_gate_blocks_weak_over():
     df = pd.DataFrame(
         [
             _row(idx=1, league="MLB", market_type="total_over", win_prob=0.56, ev=0.05, edge=0.05, kalshi_probability=0.53),
-            _row(idx=2, league="MLB", market_type="total_over", win_prob=0.58, ev=0.05, edge=0.05, kalshi_probability=0.53),
+            # Strong row bumped 0.58 -> 0.68 (k 0.60) to clear the raised MLB over gate;
+            # the weak 0.56 row is still blocked, which is what this test verifies.
+            _row(idx=2, league="MLB", market_type="total_over", win_prob=0.68, ev=0.12, edge=0.10, kalshi_probability=0.60),
         ]
     )
     diagnostics = {}
@@ -617,8 +637,11 @@ def test_line_fidelity_totals_use_live_total_not_upload_or_base():
     ])
     df.loc[0, "line_source"] = "live_matched"
     df.loc[0, "live_total_line"] = 6.5
-    df.loc[0, "uploaded_total_line"] = 12.5
-    df.loc[0, "total_line"] = 12.5
+    # Upload within the MLB suspicious-delta tolerance (>2.0 runs trips the guard). The
+    # live total stays authoritative over upload/base; an extreme delta (the old 12.5)
+    # now correctly trips the guard and is covered by the suspicious-delta tests instead.
+    df.loc[0, "uploaded_total_line"] = 7.0
+    df.loc[0, "total_line"] = 7.0
     out = build_best_picks_df(df)
     row = out.iloc[0]
     assert row["best_pick"] == "Over 6.5"
@@ -728,22 +751,6 @@ def test_mlb_total_does_not_use_wrong_same_city_same_date_line():
     assert pd.isna(row["matched_live_total_line"])
 
 
-def test_mlb_total_does_not_use_wrong_same_city_same_date_line():
-    df = pd.DataFrame([
-        _row(idx=706, league="MLB", market_type="total_over", win_prob=0.61, ev=0.06, edge=0.05, kalshi_probability=0.56)
-    ])
-    df.loc[0, "home_team"] = "Minnesota"
-    df.loc[0, "away_team"] = "Toronto"
-    df.loc[0, "line_source"] = "live_matched"
-    df.loc[0, "live_total_line"] = 7.5
-    df.loc[0, "uploaded_total_line"] = 3.5
-    out = build_best_picks_df(df)
-    row = out.iloc[0]
-    assert row["best_pick"] == "Over 7.5"
-    assert float(row["market_line_used"]) == 7.5
-    assert float(row["matched_live_total_line"]) == 7.5
-
-
 def test_export_transparency_fields_still_present_after_reresolution_logic():
     df = pd.DataFrame([
         _row(idx=704, league="NBA", market_type="spread_away", win_prob=0.64, ev=0.08, edge=0.07, kalshi_probability=0.58)
@@ -781,9 +788,13 @@ def test_non_live_source_cannot_backfill_matched_live_spread_line_from_base():
     df.loc[0, "uploaded_spread_line"] = -5.5
     out = build_best_picks_df(df)
     row = out.iloc[0]
-    assert row["market_line_source"] == "upload"
+    # Core point preserved: a non-live source must not backfill the matched-live slot.
     assert pd.isna(row["matched_live_spread_line"])
-    assert float(row["market_line_used"]) == -5.5
+    # Current behavior: with no live event identity the spread is rejected outright
+    # (No Play / rejected_live) rather than falling back to the uploaded spread line.
+    assert row["Pick_Status"] == "No Play"
+    assert row["market_line_source"] == "rejected_live"
+    assert pd.isna(row["market_line_used"])
 
 
 def test_total_upload_fallback_recovers_plausible_rejected_live_total_conservatively():
@@ -862,8 +873,12 @@ def test_negative_edge_row_cannot_remain_high_variance():
     df = pd.DataFrame([_row(idx=901, league="MLB", market_type="total_over", win_prob=0.56, ev=0.03, edge=-0.01, kalshi_probability=0.52)])
     out = build_best_picks_df(df)
     row = out.iloc[0]
+    # Intent: a negative-edge row must not ride as High Variance. With a clean live
+    # line it lands at "Below Threshold" (56% win prob fails the 65% MLB totals gate);
+    # both that and "No Play" are non-actionable terminal states. (It previously read
+    # "No Play" only because the line was rejected for provenance, masking this.)
     assert row["Pick_Status"] != "High Variance/Speculative"
-    assert row["Pick_Status"] == "No Play"
+    assert row["Pick_Status"] in {"No Play", "Below Threshold"}
 
 
 def test_negative_ev_upload_fallback_row_becomes_no_play_and_zero_kelly():

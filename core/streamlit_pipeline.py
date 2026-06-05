@@ -1894,11 +1894,16 @@ def _apply_triple_filter_ranking(df: pd.DataFrame) -> pd.DataFrame:
     # market. Picks with large ML/TheOver disagreement are NOT systematically better; this
     # was promoting overconfident ML predictions to S/A-Tier while better-calibrated picks
     # with real market edges landed in lower tiers.
-    ml_prob = pd.to_numeric(final_df.get('ml_probability'), errors='coerce')
-    theover_prob = pd.to_numeric(final_df.get('theover_probability'), errors='coerce')
-    calibrated_prob = pd.to_numeric(final_df.get('calibrated_probability'), errors='coerce').fillna(0.5)
-    market_prob = pd.to_numeric(final_df.get('market_probability'), errors='coerce').fillna(0.5)
-    expected_value = pd.to_numeric(final_df.get('expected_value', 0.0), errors='coerce').fillna(0.0)
+    # Default missing columns to a NaN Series (not None/scalar) so the chained
+    # .fillna below never hits a numpy scalar — a minimal input lacking
+    # market_probability (derived from odds in production) should fall back to a
+    # 0.5 coin-flip, not raise. Mirrors the None-safe idiom used elsewhere here.
+    _idx = final_df.index
+    ml_prob = pd.to_numeric(final_df.get('ml_probability', pd.Series(np.nan, index=_idx)), errors='coerce')
+    theover_prob = pd.to_numeric(final_df.get('theover_probability', pd.Series(np.nan, index=_idx)), errors='coerce')
+    calibrated_prob = pd.to_numeric(final_df.get('calibrated_probability', pd.Series(np.nan, index=_idx)), errors='coerce').fillna(0.5)
+    market_prob = pd.to_numeric(final_df.get('market_probability', pd.Series(np.nan, index=_idx)), errors='coerce').fillna(0.5)
+    expected_value = pd.to_numeric(final_df.get('expected_value', pd.Series(0.0, index=_idx)), errors='coerce').fillna(0.0)
 
     triple_filter_edge = calibrated_prob - market_prob
 
