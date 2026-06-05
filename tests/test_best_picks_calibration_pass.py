@@ -634,8 +634,11 @@ def test_line_fidelity_totals_use_live_total_not_upload_or_base():
     ])
     df.loc[0, "line_source"] = "live_matched"
     df.loc[0, "live_total_line"] = 6.5
-    df.loc[0, "uploaded_total_line"] = 12.5
-    df.loc[0, "total_line"] = 12.5
+    # Upload within the MLB suspicious-delta tolerance (>2.0 runs trips the guard). The
+    # live total stays authoritative over upload/base; an extreme delta (the old 12.5)
+    # now correctly trips the guard and is covered by the suspicious-delta tests instead.
+    df.loc[0, "uploaded_total_line"] = 7.0
+    df.loc[0, "total_line"] = 7.0
     out = build_best_picks_df(df)
     row = out.iloc[0]
     assert row["best_pick"] == "Over 6.5"
