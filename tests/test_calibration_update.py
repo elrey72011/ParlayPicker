@@ -23,6 +23,12 @@ class TestCalibrationUpdate(unittest.TestCase):
             "odds_source": "fanduel",
             "spread_line": -3.5,
             "total_line": 220.5,
+            # Live-line provenance so build_best_picks_df accepts the line instead of
+            # rejecting it as a suspicious/non-live line ("No Play"). See note in
+            # test_best_picks_calibration_pass._row.
+            "line_source": "live",
+            "live_spread_line": -3.5,
+            "live_total_line": 220.5,
             "candidate_source": "ml",
             "orientation_source": "home",
             "upload_match_reason": "none",

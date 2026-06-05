@@ -31,6 +31,14 @@ def _row(
         "odds_american": -110,
         "spread_line": -3.5 if "spread" in market_type else pd.NA,
         "total_line": 220.5 if "total" in market_type else pd.NA,
+        # Live-line provenance. build_best_picks_df now requires a trusted live line
+        # (line_source containing "live" AND a numeric live_*_line) or it rejects the
+        # row as "suspicious live line" -> No Play. Supply that here so these calibration
+        # tests exercise the status logic, not the line-provenance reject path. Tests
+        # that specifically exercise provenance override line_source (e.g. "synthetic").
+        "line_source": "live",
+        "live_spread_line": -3.5 if "spread" in market_type else pd.NA,
+        "live_total_line": 220.5 if "total" in market_type else pd.NA,
         "is_live_data": True,
         "used_stale_features": False,
         "odds_source": "odds_api",
@@ -862,8 +870,12 @@ def test_negative_edge_row_cannot_remain_high_variance():
     df = pd.DataFrame([_row(idx=901, league="MLB", market_type="total_over", win_prob=0.56, ev=0.03, edge=-0.01, kalshi_probability=0.52)])
     out = build_best_picks_df(df)
     row = out.iloc[0]
+    # Intent: a negative-edge row must not ride as High Variance. With a clean live
+    # line it lands at "Below Threshold" (56% win prob fails the 65% MLB totals gate);
+    # both that and "No Play" are non-actionable terminal states. (It previously read
+    # "No Play" only because the line was rejected for provenance, masking this.)
     assert row["Pick_Status"] != "High Variance/Speculative"
-    assert row["Pick_Status"] == "No Play"
+    assert row["Pick_Status"] in {"No Play", "Below Threshold"}
 
 
 def test_negative_ev_upload_fallback_row_becomes_no_play_and_zero_kelly():
