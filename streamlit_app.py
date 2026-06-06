@@ -1698,10 +1698,15 @@ def main() -> None:
                 "Conviction_Score", "market_probability", "kalshi_probability", "ml_probability",
                 "effective_expected_value", "effective_edge", "effective_win_probability",
                 "consensus_agreement", "Pick_Status", "Pick_Quality", "league", "Home", "Away",
-                "Commence (Local)", "best_pick", "Kelly_Bet_Size",
+                "Commence (Local)", "odds_american", "best_pick", "Kelly_Bet_Size",
             ]
             available_compact_cols = [c for c in compact_cols if c in best_picks_export.columns]
             compact_export = best_picks_export[available_compact_cols].copy()
+            # Surface the Novig price for the pick as "Novig Line" (Novig is the odds source;
+            # the line/total itself is already encoded in best_pick). Sits between
+            # "Commence (Local)" and "best_pick" per its position in compact_cols above.
+            if "odds_american" in compact_export.columns:
+                compact_export = compact_export.rename(columns={"odds_american": "Novig Line"})
 
             # Win Amount and W/L are left blank for manual entry. Total Amount is a
             # per-row P&L formula (filled below) that resolves once they're entered.
@@ -1716,6 +1721,7 @@ def main() -> None:
                 "effective_expected_value", "effective_edge", "effective_win_probability",
             }
             money_cols = {"Kelly_Bet_Size", "Win Amount", "Total Amount"}
+            odds_cols = {"Novig Line"}  # American odds, shown with explicit sign (e.g. +109 / -114)
 
             def _col_num(x):
                 v = pd.to_numeric(x, errors="coerce")
@@ -1745,7 +1751,7 @@ def main() -> None:
                         )
                     elif col == "W/L":
                         values.append(None)
-                    elif col in pct_cols or col in money_cols:
+                    elif col in pct_cols or col in money_cols or col in odds_cols:
                         values.append(_col_num(row[col]))
                     else:
                         v = row[col]
@@ -1763,6 +1769,8 @@ def main() -> None:
                     fmt = pnl_fmt
                 elif col in money_cols:
                     fmt = money_fmt
+                elif col in odds_cols:
+                    fmt = "+0;-0"  # American odds: +109 / -114
                 else:
                     fmt = None
                 if fmt:
