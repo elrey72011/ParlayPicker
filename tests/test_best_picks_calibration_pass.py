@@ -212,6 +212,31 @@ def test_mlb_over_explicit_actionable_gate_blocks_weak_over():
     assert diagnostics["blocked_by_mlb_over_promotion_gate"] >= 1
 
 
+def test_low_line_over_guardrail_is_consensus_aware():
+    # Sub-8.0 MLB overs are not a uniformly weak bucket: graded slates show Neutral
+    # ~45% vs Disagrees ~60% / Agrees ~73%. The guardrail no longer hands every
+    # low-line over the elevated High Variance (0.075x) stake — Neutral low-line overs
+    # are held at Below Threshold, while Disagrees ones stay High Variance.
+    def _low_over(kalshi):
+        df = pd.DataFrame([
+            _row(idx=1, league="MLB", market_type="total_over", win_prob=0.60, ev=0.10, edge=0.10, kalshi_probability=kalshi)
+        ])
+        df.loc[0, "best_pick"] = "Over 7.5"
+        df.loc[0, "total_line"] = 7.5
+        df.loc[0, "live_total_line"] = 7.5
+        return build_best_picks_df(df).iloc[0]
+
+    neutral = _low_over(0.60)
+    assert neutral["consensus_agreement"] == "Neutral"
+    assert neutral["Pick_Status"] == "Below Threshold"
+    assert neutral["status_blocker_stage"] == "low_line_over_guardrail"
+
+    disagrees = _low_over(0.45)
+    assert disagrees["consensus_agreement"] == "Disagrees"
+    assert disagrees["Pick_Status"] == "High Variance/Speculative"
+    assert disagrees["status_blocker_stage"] == "low_line_over_guardrail"
+
+
 def test_new_diagnostics_populate_without_regressing_existing_total_protections():
     df = pd.DataFrame(
         [

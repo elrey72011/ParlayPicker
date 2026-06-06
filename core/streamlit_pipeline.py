@@ -2977,11 +2977,26 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                             f"edge {effective_edge:.1%} (backtest-supported carve-out)"
                         )
                     elif status in ("Actionable", "Below Threshold"):
-                        status = "High Variance/Speculative"
-                        status_reason = (
-                            f"High Variance: MLB over line {float(_tl_low)} below {MLB_OVER_MIN_TOTAL_LINE} "
-                            f"— pitcher-friendly game, low-line overs underperform"
-                        )
+                        # Consensus-aware low-line demotion. Sub-8.0 overs are NOT a
+                        # uniformly weak bucket — graded slates (20 May-5 Jun, n=51) show
+                        # Agrees 72.7% and Disagrees 60.0%, but Neutral only 45.0%. The
+                        # blanket rule surfaced ALL of them at High Variance (0.075x Kelly),
+                        # handing the 45% Neutral bucket the same elevated stake as the
+                        # profitable ones. Keep Disagrees/Agrees at High Variance; hold the
+                        # weak Neutral low-line overs at Below Threshold instead.
+                        if (consensus_agr or "").strip() == "Neutral":
+                            status = "Below Threshold"
+                            status_reason = (
+                                f"Below Threshold: MLB over line {float(_tl_low)} below {MLB_OVER_MIN_TOTAL_LINE} "
+                                f"with Neutral consensus — low-line Neutral overs hit ~45% (backtest), "
+                                f"held below High Variance"
+                            )
+                        else:
+                            status = "High Variance/Speculative"
+                            status_reason = (
+                                f"High Variance: MLB over line {float(_tl_low)} below {MLB_OVER_MIN_TOTAL_LINE} "
+                                f"— pitcher-friendly game, low-line overs underperform"
+                            )
                         blocker_stage = "low_line_over_guardrail"
 
             # Apply Consensus Overlay Logic

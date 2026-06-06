@@ -196,25 +196,25 @@ MLB_HIGH_TOTAL_LINE_OVER_PENALTY = 0.03  # added to req_ev and req_edge
 MLB_MID_TOTAL_LINE_THRESHOLD = 9.5
 MLB_MID_TOTAL_LINE_OVER_PENALTY = 0.02  # added to req_ev and req_edge
 
-# Low total line floor — MLB overs with a line below 8.0 are pitcher-friendly games
-# where the over rarely hits. May 20: CHC/MIL Over 6.5 (5 total), SD/LAD Over 7.5
-# (4 total) both lost. Sub-8.0 MLB over lines are capped at High Variance so the pick
-# remains visible but gets reduced Kelly sizing.
+# Low total line floor — MLB overs with a line below 8.0 are pitcher-friendly games.
+# May 20: CHC/MIL Over 6.5 (5 total), SD/LAD Over 7.5 (4 total) both lost. The
+# low_line_over_guardrail is now CONSENSUS-AWARE (see core/streamlit_pipeline.py):
+# Neutral low-line overs are held at Below Threshold, while Disagrees/Agrees low-line
+# overs are surfaced at High Variance (the strong Agrees ones keep Actionable via the
+# carve-out below). Sub-8.0 overs are not a uniformly weak bucket — see backtest.
 MLB_OVER_MIN_TOTAL_LINE = 8.0
 
-# Sub-8.0 MLB over escape hatch (conditioned carve-out for the blanket
-# low_line_over_guardrail above). The guardrail force-demotes EVERY MLB over
-# with a line < MLB_OVER_MIN_TOTAL_LINE to High Variance regardless of quality.
-# Backtest (scripts/backtest_low_line_over.py, graded slates 20-31 May 2026):
-#   sub-8.0 overs overall ...... 20-16 (55.6%), +19.3% ROI  (beats >=8.0 overs)
-#   sub-8.0 overs, Agrees ...... 7-2  (77.8%), +45.5% ROI   <- carve-out target
-#   sub-8.0 overs, Neutral ..... 7-9  (43.8%),  -1.7% ROI   <- stay vetoed
-#   sub-8.0 overs, Disagrees ... 6-5  (54.5%), -11.6% ROI   <- stay vetoed
-# The losses that originally motivated the veto (May-20 CHC/MIL Over 6.5,
-# SD/LAD Over 7.5) were Neutral/Disagrees at effective win prob < 0.58, so they
-# are NOT promoted by this carve-out. Only an already-Actionable, Kalshi-Agrees
-# over with strong shrinkage-adjusted win prob and edge keeps its status.
-# Re-evaluate / retune as the graded sample grows (n=9 Agrees as of this commit).
+# Sub-8.0 MLB over escape hatch (conditioned carve-out for the low_line_over_guardrail
+# above). Backtest (scripts/backtest_low_line_over.py, graded slates 20 May-5 Jun 2026,
+# n=51 sub-8.0 overs):
+#   sub-8.0 overs overall ...... 29-22 (56.9%), +19.2% ROI  (beats >=8.0 overs 53.8%)
+#   sub-8.0 overs, Agrees ...... 8-3  (72.7%), +44.9% ROI   <- carve-out -> Actionable
+#   sub-8.0 overs, Disagrees ... 12-8 (60.0%)               <- High Variance (profitable)
+#   sub-8.0 overs, Neutral ..... 9-11 (45.0%)               <- held at Below Threshold
+# The losses that originally motivated the veto (May-20 CHC/MIL Over 6.5, SD/LAD Over
+# 7.5) were Neutral/Disagrees at effective win prob < 0.58. Only an already-Actionable,
+# Kalshi-Agrees over with strong shrinkage-adjusted win prob and edge keeps Actionable.
+# Re-evaluate / retune as the graded sample grows.
 MLB_LOW_LINE_OVER_OVERRIDE_ENABLED = True
 MLB_LOW_LINE_OVER_OVERRIDE_MIN_WIN_PROB = 0.62
 MLB_LOW_LINE_OVER_OVERRIDE_MIN_EDGE = 0.08
