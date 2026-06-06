@@ -1702,11 +1702,17 @@ def main() -> None:
             ]
             available_compact_cols = [c for c in compact_cols if c in best_picks_export.columns]
             compact_export = best_picks_export[available_compact_cols].copy()
-            # Surface the Novig price for the pick as "Novig Line" (Novig is the odds source;
-            # the line/total itself is already encoded in best_pick). Sits between
-            # "Commence (Local)" and "best_pick" per its position in compact_cols above.
+            # Surface the Novig price for the pick as "Novig Line" (the line/total itself is
+            # already encoded in best_pick). Sits between "Commence (Local)" and "best_pick"
+            # per its position in compact_cols above. odds_american is the Novig price only
+            # when odds_source is a genuine Novig quote (odds_api / novig); for uploaded or
+            # synthetic-fallback (fallback_novig = -110) rows it is NOT a Novig price, so
+            # blank those cells rather than mislabel a non-Novig price as Novig.
             if "odds_american" in compact_export.columns:
                 compact_export = compact_export.rename(columns={"odds_american": "Novig Line"})
+                if "odds_source" in best_picks_export.columns:
+                    _is_novig = best_picks_export["odds_source"].astype(str).str.strip().str.lower().isin({"odds_api", "novig"})
+                    compact_export.loc[~_is_novig, "Novig Line"] = pd.NA
 
             # Win Amount and W/L are left blank for manual entry. Total Amount is a
             # per-row P&L formula (filled below) that resolves once they're entered.
