@@ -1,5 +1,5 @@
 import pandas as pd
-from core.streamlit_pipeline import build_best_picks_df
+from core.streamlit_pipeline import build_best_picks_df, _total_over_concentration_downgrades
 
 
 def _row(i, league="MLB", market_type="total_over", prob=0.68, ev=0.12, edge=0.10, odds=-110, degraded=False):
@@ -64,6 +64,30 @@ def test_degraded_feature_kelly_reduction_applies_and_non_actionable_zero_kelly(
     non_actionable = out[out["Pick_Status"] != "Actionable"]
     if not non_actionable.empty:
         assert (non_actionable["Kelly_Bet_Size"].fillna(0) == 0).all()
+
+
+def test_hv_concentration_downgrades_respect_overall_cap():
+    # Six total_over candidates (none MLB), overall cap 3 -> keep best 3, downgrade the
+    # lowest-ranked 3. Candidates are pre-sorted best-first (index 0 = best).
+    cands = pd.DataFrame({"_is_mlb_over": [False] * 6})
+    downgrades = _total_over_concentration_downgrades(cands, overall_cap=3, mlb_cap=2)
+    assert downgrades == [3, 4, 5]
+
+
+def test_hv_concentration_enforces_mlb_subcap_binds_first():
+    # Four MLB overs (the 6 Jun pattern) with MLB sub-cap 2: only the best 2 MLB overs
+    # survive even though the overall cap is 3. The 2 lowest-ranked MLB overs downgrade.
+    cands = pd.DataFrame({"_is_mlb_over": [True, True, True, True]})
+    downgrades = _total_over_concentration_downgrades(cands, overall_cap=3, mlb_cap=2)
+    assert downgrades == [2, 3]
+
+
+def test_hv_concentration_mixed_keeps_non_mlb_until_overall_cap():
+    # Best-first: MLB, MLB, MLB, NBA, NBA. MLB sub-cap 2 downgrades the 3rd (MLB) pick;
+    # the first NBA fills the 3rd overall slot, and the last NBA exceeds the overall cap.
+    cands = pd.DataFrame({"_is_mlb_over": [True, True, True, False, False]})
+    downgrades = _total_over_concentration_downgrades(cands, overall_cap=3, mlb_cap=2)
+    assert downgrades == [2, 4]
 
 
 def test_no_regression_kelly_column_order_and_line_provenance_present():

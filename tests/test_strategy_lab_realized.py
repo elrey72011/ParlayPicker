@@ -300,6 +300,43 @@ def test_performance_guard_zeroes_kelly_when_thresholds_fail_and_sample_sufficie
     assert float(realized["Kelly_Bet_Size"].sum()) == 0.0
 
 
+def test_performance_guard_is_direction_aware_for_totals():
+    # 5 MLB total_over losses + 3 MLB total_under wins. Pooled into one "total" family
+    # this is 3-8 and the old guard would zero BOTH directions. Direction-aware, only the
+    # losing Over bucket is flagged; the winning Under bucket keeps its Kelly.
+    over_rows = [
+        {"league": "MLB", "home_team": f"HO{i}", "away_team": f"AO{i}", "Pick Taken": "Over 8.5",
+         "Pick_Outcome": "LOSS", "decimal_odds": 1.9, "Kelly_Bet_Size": 10,
+         "actual_home_score": 1, "actual_away_score": 1, "Status": "Actionable"}
+        for i in range(5)
+    ]
+    under_rows = [
+        {"league": "MLB", "home_team": f"HU{i}", "away_team": f"AU{i}", "Pick Taken": "Under 8.5",
+         "Pick_Outcome": "WIN", "decimal_odds": 1.9, "Kelly_Bet_Size": 10,
+         "actual_home_score": 1, "actual_away_score": 1, "Status": "Actionable"}
+        for i in range(3)
+    ]
+    graded = pd.DataFrame(over_rows + under_rows)
+    realized, _, diagnostics = build_realized_strategy_lab(
+        graded,
+        min_guard_sample_size=5,
+        performance_guard_min_win_rate=0.5,
+        performance_guard_min_roi=0.0,
+    )
+
+    guard = diagnostics["performance_guard_summary"]
+    over_flagged = guard.loc[guard["market_direction"] == "total_over", "performance_guard_flag"]
+    under_flagged = guard.loc[guard["market_direction"] == "total_under", "performance_guard_flag"]
+    assert bool(over_flagged.any())
+    assert not bool(under_flagged.any())
+
+    is_over = realized["Recap Pick"].astype(str).str.contains("Over")
+    assert float(realized.loc[is_over, "Kelly_Bet_Size"].sum()) == 0.0
+    assert float(realized.loc[~is_over, "Kelly_Bet_Size"].sum()) > 0.0
+    # The direction-resolved summary is surfaced for diagnostics.
+    assert "league_market_direction_summary" in diagnostics
+
+
 def test_strategy_lab_theoretical_render_still_works(monkeypatch):
     calls = []
 

@@ -214,8 +214,15 @@ MLB_OVER_MIN_TOTAL_LINE = 8.0
 # The losses that originally motivated the veto (May-20 CHC/MIL Over 6.5, SD/LAD Over
 # 7.5) were Neutral/Disagrees at effective win prob < 0.58. Only an already-Actionable,
 # Kalshi-Agrees over with strong shrinkage-adjusted win prob and edge keeps Actionable.
-# Re-evaluate / retune as the graded sample grows.
-MLB_LOW_LINE_OVER_OVERRIDE_ENABLED = True
+#
+# DISABLED 6 Jun: fresh slates contradicted the backtest above. Low-line MLB "Over 7.5"
+# plays went 1-4 (5 Jun) then 0-4 (6 Jun) — the SAME matchups (SD/Mets, Texas/Cle,
+# Miami/TB) were re-served and missed on back-to-back nights, landing 5, 5, 7, 6 runs.
+# The model is still inflated on MLB overs (see the calibrated-prob cap in
+# streamlit_pipeline), so the 0.62/0.08 floors below clear on overconfidence rather than
+# real edge. Hold every sub-8.0 over at High Variance until the carve-out is re-tuned on
+# the post-6-Jun graded sample. Flip back to True to restore the carve-out.
+MLB_LOW_LINE_OVER_OVERRIDE_ENABLED = False
 MLB_LOW_LINE_OVER_OVERRIDE_MIN_WIN_PROB = 0.62
 MLB_LOW_LINE_OVER_OVERRIDE_MIN_EDGE = 0.08
 
@@ -315,6 +322,14 @@ ALLOW_UPLOAD_TOTAL_FALLBACK_ACTIONABLE = False
 MAX_TOTAL_OVER_ACTIONABLE_SHARE = 0.50
 MAX_TOTAL_OVER_ACTIONABLE_COUNT = 3
 MAX_MLB_TOTAL_OVER_ACTIONABLE_COUNT = 2
+# Speculative (High Variance/Speculative) concentration caps. The Actionable caps above
+# never protected the speculative surface, so the card could still collapse onto one
+# league+direction there: 6 Jun the HV tier held 4 MLB "Over 7.5" plays that all lost
+# together (0-4) while the benched Unders won. Cap how many total_over (and MLB
+# total_over) picks may surface as High Variance; the lowest-ranked excess is pushed to
+# Below Threshold so no single correlated Over bucket dominates the speculative card.
+MAX_TOTAL_OVER_HIGH_VARIANCE_COUNT = 3
+MAX_MLB_TOTAL_OVER_HIGH_VARIANCE_COUNT = 2
 TOTAL_OVER_PROB_SHRINK = 0.60
 MLB_TOTAL_OVER_PROB_SHRINK = 0.85
 MLB_TOTAL_OVER_MIN_PRODUCTION_WIN_PROB = 0.60
