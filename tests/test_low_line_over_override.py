@@ -11,8 +11,21 @@ blanket low_line_over_guardrail. These tests lock that it:
 """
 import importlib
 
+import pytest
+
 import app_core.weights_config as wc
+import app_core.low_line_override as llo
 from app_core.low_line_override import low_line_over_override_applies
+
+
+@pytest.fixture(autouse=True)
+def _enable_carveout(monkeypatch):
+    """The carve-out ships DISABLED after the 6 Jun low-line-over regression
+    (MLB_LOW_LINE_OVER_OVERRIDE_ENABLED=False). The tests below exercise the
+    predicate's conditional *logic*, which is only reachable when the flag is on,
+    so force-enable it here. The shipped default-off behavior is locked separately
+    in ``test_ships_disabled_by_default``."""
+    monkeypatch.setattr(llo, "MLB_LOW_LINE_OVER_OVERRIDE_ENABLED", True)
 
 
 def _strong_agrees(**overrides):
@@ -88,11 +101,19 @@ def test_missing_metrics_blocked():
 
 
 def test_feature_flag_disables_everything(monkeypatch):
-    monkeypatch.setattr(wc, "MLB_LOW_LINE_OVER_OVERRIDE_ENABLED", False)
-    import app_core.low_line_override as mod
-    importlib.reload(mod)
+    # Overrides the autouse-enabled flag: a disabled carve-out vetoes even a strong
+    # Agrees over. Patching the bound module global is enough (no reload needed).
+    monkeypatch.setattr(llo, "MLB_LOW_LINE_OVER_OVERRIDE_ENABLED", False)
+    assert low_line_over_override_applies(**_strong_agrees()) is False
+
+
+def test_ships_disabled_by_default():
+    # Lock the shipped default: the carve-out is OFF after the 6 Jun regression, so a
+    # freshly imported module honors the disabled flag regardless of the test fixture.
+    assert wc.MLB_LOW_LINE_OVER_OVERRIDE_ENABLED is False
+    mod = importlib.reload(llo)
     try:
+        assert mod.MLB_LOW_LINE_OVER_OVERRIDE_ENABLED is False
         assert mod.low_line_over_override_applies(**_strong_agrees()) is False
     finally:
-        monkeypatch.setattr(wc, "MLB_LOW_LINE_OVER_OVERRIDE_ENABLED", True)
-        importlib.reload(mod)
+        importlib.reload(llo)

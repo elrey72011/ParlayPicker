@@ -444,13 +444,23 @@ def build_realized_strategy_lab(
     production_summary = _summarize_subset(realized[realized["production_pnl_included"]])
     research_summary = _summarize_subset(realized[realized["research_pnl_included"]])
     all_rows_summary = _summarize_subset(realized[core_eligible])
-    eligible_with_family = realized[realized["Excluded Reason"] == ""].assign(market_family=recap_profile["market_family"])
+    eligible_with_family = realized[realized["Excluded Reason"] == ""].assign(
+        market_family=recap_profile["market_family"],
+        market_direction=recap_profile["market_type"],
+    )
     by_league_family = _group_summary(eligible_with_family, ["league", "market_family"])
     by_pick_status = _group_summary(realized[realized["Excluded Reason"] == ""], ["Status Bucket"])
     by_league = _group_summary(realized[realized["Excluded Reason"] == ""], ["league"])
     by_market_family = _group_summary(eligible_with_family, ["market_family"])
 
-    guard_table = by_league_family.copy()
+    # The performance guard groups by direction (market_type, e.g. total_over vs
+    # total_under) rather than by market_family (total). Pooling Over and Under into one
+    # "total" bucket let a bleeding Over bucket be masked by winning Unders, so a
+    # direction that is structurally failing (6 Jun MLB Overs 0-4) never tripped the
+    # guard while the Unders it was averaged with were winning. Direction granularity
+    # lets the guard zero exposure to the failing side alone.
+    by_league_direction = _group_summary(eligible_with_family, ["league", "market_direction"])
+    guard_table = by_league_direction.copy()
     guard_table["performance_guard_warning"] = ""
     guard_table["performance_guard_flag"] = False
     guard_table["performance_guard_reason"] = ""
@@ -464,7 +474,7 @@ def build_realized_strategy_lab(
         guard_table.loc[failing, "production_eligible"] = False
         if performance_guard_action == PERFORMANCE_GUARD_ACTION_ZERO_KELLY_OR_WATCHLIST:
             for _, row in guard_table[failing].iterrows():
-                mask = (realized["league"] == row["league"]) & (recap_profile["market_family"] == row["market_family"])
+                mask = (realized["league"] == row["league"]) & (recap_profile["market_type"] == row["market_direction"])
                 if "Kelly_Bet_Size" in realized.columns:
                     realized.loc[mask, "Kelly_Bet_Size"] = 0.0
                 realized.loc[mask, "production_eligible"] = False
@@ -472,7 +482,7 @@ def build_realized_strategy_lab(
                 realized.loc[mask, "performance_guard_reason"] = row["performance_guard_reason"]
         warn_mask = insufficient
         for _, row in guard_table[warn_mask].iterrows():
-            mask = (realized["league"] == row["league"]) & (recap_profile["market_family"] == row["market_family"])
+            mask = (realized["league"] == row["league"]) & (recap_profile["market_type"] == row["market_direction"])
             realized.loc[mask, "performance_guard_warning"] = "Insufficient sample, monitor only"
 
     diagnostics = {
@@ -485,6 +495,7 @@ def build_realized_strategy_lab(
         "status_bucket_summary": status_summary,
         "mode_comparison": mode_comparison,
         "league_market_family_summary": by_league_family,
+        "league_market_direction_summary": by_league_direction,
         "status_summary": by_pick_status,
         "league_summary": by_league,
         "market_family_summary": by_market_family,

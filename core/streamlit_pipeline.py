@@ -40,6 +40,8 @@ from app_core.weights_config import (
             MAX_TOTAL_OVER_ACTIONABLE_SHARE,
             MAX_TOTAL_OVER_ACTIONABLE_COUNT,
             MAX_MLB_TOTAL_OVER_ACTIONABLE_COUNT,
+            MAX_TOTAL_OVER_HIGH_VARIANCE_COUNT,
+            MAX_MLB_TOTAL_OVER_HIGH_VARIANCE_COUNT,
             TOTAL_OVER_PROB_SHRINK,
             MLB_TOTAL_OVER_PROB_SHRINK,
             MLB_TOTAL_OVER_MIN_PRODUCTION_WIN_PROB,
@@ -2055,6 +2057,30 @@ def _mlb_total_direction_conflict(
     return (k_opp & direction_conflict, t_opp & direction_conflict, direction_conflict)
 
 
+def _total_over_concentration_downgrades(candidates: pd.DataFrame, *, overall_cap: int, mlb_cap: int) -> list:
+    """Greedy keep of the best-ranked total_over picks under both an overall cap and an
+    MLB-specific sub-cap; return the indices of the lowest-ranked excess to downgrade.
+
+    ``candidates`` must already be sorted best-first and carry a boolean ``_is_mlb_over``
+    column. Used by the speculative (High Variance) concentration guard so the
+    selection logic is unit-testable in isolation.
+    """
+    kept_total = 0
+    kept_mlb = 0
+    downgrade_idx: list = []
+    for idx, is_mlb_over in candidates["_is_mlb_over"].items():
+        is_mlb_over = bool(is_mlb_over)
+        overall_ok = kept_total < int(overall_cap)
+        mlb_ok = (not is_mlb_over) or (kept_mlb < int(mlb_cap))
+        if overall_ok and mlb_ok:
+            kept_total += 1
+            if is_mlb_over:
+                kept_mlb += 1
+        else:
+            downgrade_idx.append(idx)
+    return downgrade_idx
+
+
 def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None = None) -> pd.DataFrame:
     logger.info(f"BEST PICKS AUDIT: Received analysis_df with {len(analysis_df)} rows")
     if analysis_df is None or analysis_df.empty:
@@ -3712,6 +3738,36 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             best.loc[downgrade_idx, "status_blocker_stage"] = "production_concentration_guard"
             best.loc[downgrade_idx, "status_blocker_reason"] = "Total over concentration guard"
             best.loc[downgrade_idx, "Status_Reason"] = "High Variance: downgraded by total-over concentration guard"
+
+    # Speculative concentration guard: the same correlated-Over bleed that hits the
+    # Actionable card also hits the High Variance/Speculative surface, which the cap
+    # above does not touch (6 Jun: 4 MLB "Over 7.5" plays in HV all lost together while
+    # benched Unders won). Cap the number of total_over (and MLB total_over) HV picks and
+    # downgrade the lowest-ranked excess to Below Threshold so the speculative card can't
+    # collapse onto one league+direction. Greedy keep respects both the overall and the
+    # MLB-specific cap, retaining best-ranked picks first.
+    hv_total_over_mask = best["Pick_Status"].astype(str).eq("High Variance/Speculative") & is_total_over
+    if int(hv_total_over_mask.sum()) > 0:
+        hv_candidates = best[hv_total_over_mask].copy()
+        hv_candidates["_rank_sort"] = pd.to_numeric(hv_candidates.get("Triple_Filter_Rank"), errors="coerce").fillna(9999)
+        hv_candidates["_is_mlb_over"] = is_mlb_total_over.reindex(hv_candidates.index).fillna(False).astype(bool)
+        hv_candidates = hv_candidates.sort_values(
+            by=["_rank_sort", "effective_expected_value", "effective_edge", "effective_win_probability"],
+            ascending=[True, False, False, False],
+            na_position="last",
+        )
+        hv_downgrade_idx = _total_over_concentration_downgrades(
+            hv_candidates,
+            overall_cap=int(MAX_TOTAL_OVER_HIGH_VARIANCE_COUNT),
+            mlb_cap=int(MAX_MLB_TOTAL_OVER_HIGH_VARIANCE_COUNT),
+        )
+        if hv_downgrade_idx:
+            best.loc[hv_downgrade_idx, "Pick_Status"] = "Below Threshold"
+            best.loc[hv_downgrade_idx, "production_eligible"] = False
+            best.loc[hv_downgrade_idx, "Kelly_Bet_Size"] = 0.0
+            best.loc[hv_downgrade_idx, "status_blocker_stage"] = "speculative_concentration_guard"
+            best.loc[hv_downgrade_idx, "status_blocker_reason"] = "High Variance total-over concentration guard"
+            best.loc[hv_downgrade_idx, "Status_Reason"] = "Below Threshold: downgraded by speculative total-over concentration guard"
 
     # Degraded-feature Kelly reduction/caps for production safety.
     degraded_run = bool(
