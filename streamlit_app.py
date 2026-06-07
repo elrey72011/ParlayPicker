@@ -41,7 +41,6 @@ from app_core.weights_config import (
     EMPTY_CARD_RECOVERY_MAX_KELLY_TOTAL_PCT,
     EMPTY_CARD_RECOVERY_MAX_KELLY_PER_PICK_PCT,
     ALLOW_MLB_TOTAL_OVER_EMPTY_CARD_RECOVERY,
-    MLB_THEOVER_FADE_SOURCES, MLB_THEOVER_FADE_SHRINK,
 )
 
 try:
@@ -221,7 +220,7 @@ def _recompute_consensus_from_kalshi(df: pd.DataFrame, require_ml: bool = False)
     out = df.copy()
 
     # Recalculate blended probability and EV/Edge since we might have new Kalshi probabilities
-    from core.streamlit_pipeline import compute_blended_probability, _fade_theover
+    from core.streamlit_pipeline import compute_blended_probability, _scoped_theover_blend_fade
 
     kalshi_prob = _safe_numeric_series(out, "kalshi_probability")
     market_prob = _safe_numeric_series(out, "market_probability")
@@ -254,10 +253,13 @@ def _recompute_consensus_from_kalshi(df: pd.DataFrame, require_ml: bool = False)
     # calibrated_probability/EV/blend_in_theover, so it must apply the same fade or it
     # would re-inject TheOver's full Under value and undo the tempering before selection.
     _src_col = out["win_prob_source"] if "win_prob_source" in out.columns else None
-    theover_prob_blend = pd.Series(
-        _fade_theover(theover_prob.to_numpy(dtype=float), _src_col,
-                      MLB_THEOVER_FADE_SOURCES, MLB_THEOVER_FADE_SHRINK),
-        index=theover_prob.index,
+    # Mirror run_analysis_pipeline: MLB-tuned fade shrink only on MLB totals (shared helper).
+    theover_prob_blend = _scoped_theover_blend_fade(
+        theover_prob.to_numpy(dtype=float),
+        _src_col,
+        _safe_str_series(out, "league"),
+        _safe_str_series(out, "market_type"),
+        theover_prob.index,
     )
 
     blended = compute_blended_probability(

@@ -269,6 +269,12 @@ MLB_THEOVER_CONFLICT_PENALTY = 0.35     # Subtracted from final_family_score to 
 #     MLB_THEOVER_FADE_SOURCES to disable fading entirely.
 MLB_THEOVER_FADE_SOURCES = frozenset({"model_hit_rate_flipped"})
 MLB_THEOVER_FADE_SHRINK = 0.25   # fraction of (P-0.5) removed; 1.0=neutralized, 0.0=untouched
+# SCOPE: the shrink above is MLB-tuned and the blend callers apply it ONLY to MLB-total
+# rows. Non-MLB totals (NBA/NHL) can also carry a faded WinProbSource, so they keep this
+# separate legacy default — held at the prior 0.75 so the MLB-only reduction (0.75 -> 0.25,
+# 6 Jun) does not silently change non-MLB calibrated probabilities. No evidence to retune
+# non-MLB; revisit separately if/when graded non-MLB flipped-game data warrants it.
+THEOVER_FADE_SHRINK_DEFAULT = 0.75
 
 # No-Kalshi totals are treated as lower confidence in selection stage
 NO_KALSHI_TOTAL_EXTRA_PENALTY = 0.02
