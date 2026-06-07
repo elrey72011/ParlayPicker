@@ -66,7 +66,7 @@ from app_core.weights_config import (
     KALSHI_DIVERGENCE_THRESHOLD, KALSHI_DIVERGENCE_THRESHOLD_NBA,
     KALSHI_DIVERGENCE_THRESHOLD_MLB, KALSHI_DIVERGENCE_THRESHOLD_NHL,
     MLB_THEOVER_CONFLICT_THRESHOLD, MLB_THEOVER_CONFLICT_PENALTY,
-    MLB_THEOVER_FADE_SOURCES, MLB_THEOVER_FADE_SHRINK,
+    MLB_THEOVER_FADE_SOURCES, MLB_THEOVER_FADE_SHRINK, THEOVER_FADE_SHRINK_DEFAULT,
 )
 
 warnings.filterwarnings("ignore", category=FutureWarning, module="pandas")
@@ -2002,6 +2002,33 @@ def _fade_theover(theover, win_prob_source, fade_sources, shrink):
     out = theover.copy()
     out[faded] = 0.5 + (theover[faded] - 0.5) * (1.0 - float(shrink))
     return out
+
+
+def _scoped_theover_blend_fade(theover_arr, win_prob_source, league, market_type, index):
+    """Fade TheOver's blend input with the MLB-tuned shrink on MLB totals and the
+    non-MLB default everywhere else.
+
+    ``MLB_THEOVER_FADE_SHRINK`` is tuned on MLB pitcher-friendly games, but a faded
+    WinProbSource (``model_hit_rate_flipped``) can ride on NBA/NHL totals too. Applying
+    the MLB shrink frame-wide would silently change those non-MLB calibrated
+    probabilities, so MLB totals get ``MLB_THEOVER_FADE_SHRINK`` while every other
+    league/market keeps ``THEOVER_FADE_SHRINK_DEFAULT``. Pure + shared by both blend
+    call sites (run_analysis_pipeline and the post-Kalshi re-blend) so the scoping is
+    unit-testable and cannot drift between them.
+    """
+    faded_mlb = pd.Series(
+        _fade_theover(theover_arr, win_prob_source, MLB_THEOVER_FADE_SOURCES, MLB_THEOVER_FADE_SHRINK),
+        index=index,
+    )
+    faded_default = pd.Series(
+        _fade_theover(theover_arr, win_prob_source, MLB_THEOVER_FADE_SOURCES, THEOVER_FADE_SHRINK_DEFAULT),
+        index=index,
+    )
+    is_mlb_total = (
+        pd.Series(league, index=index).astype(str).str.upper().eq("MLB")
+        & pd.Series(market_type, index=index).astype(str).str.lower().str.contains("total", na=False)
+    )
+    return faded_default.where(~is_mlb_total, faded_mlb)
 
 
 def _mlb_total_direction_conflict(
@@ -5184,10 +5211,14 @@ def run_analysis_pipeline(
     # signal. Shrinking it tempers the influence proportionally to MLB_THEOVER_FADE_SHRINK.
     # The raw value is preserved in merged["theover_probability"] for display/backtest.
     _src_col = merged["win_prob_source"] if "win_prob_source" in merged.columns else None
-    theover_blend_input = pd.Series(
-        _fade_theover(theover_probability.to_numpy(dtype=float), _src_col,
-                      MLB_THEOVER_FADE_SOURCES, MLB_THEOVER_FADE_SHRINK),
-        index=theover_probability.index,
+    # MLB-tuned fade shrink applies only to MLB totals; other leagues/markets keep the
+    # legacy default so the MLB tuning never silently changes NBA/NHL totals.
+    theover_blend_input = _scoped_theover_blend_fade(
+        theover_probability.to_numpy(dtype=float),
+        _src_col,
+        _string_series(merged, "league"),
+        _string_series(merged, "market_type"),
+        theover_probability.index,
     )
 
     ml_probability = _numeric_series(merged, "ml_probability")
