@@ -255,13 +255,20 @@ MLB_THEOVER_CONFLICT_PENALTY = 0.35     # Subtracted from final_family_score to 
 #     (genuine model_hit_rate/public picks, not flipped games), so they conflate the fade
 #     decision with hammer staking and will mislead you (they did once already).
 #   * Evidence to date — fading (i.e. picking the market Over on a flipped game) was right
-#     ~11-6 across 1-3 Jun (1 Jun 3-0, 2 Jun 5-3, 3 Jun 3-3). That supports the 0.75 setting.
+#     ~11-6 across 1-3 Jun (1 Jun 3-0, 2 Jun 5-3, 3 Jun 3-3). That supported the 0.75 setting.
+#   * REVERSAL (5-6 Jun): the flipped-game signal inverted. On 6 Jun the pipeline faded
+#     TheOver and forced the Over on 5 flipped games (Cubs/SF, Miami/TB, Texas/Cle, NYY/Bos,
+#     Houston/Ath) and those Overs went 1-4 — i.e. TheOver's faded Unders would have gone
+#     4-1. The 0.75 fade was now picking the losing side and producing all-Over, empty
+#     production cards. Eased 0.75 -> 0.25 ("respect the signal" end; see
+#     tests/test_mlb_total_direction_conflict.test_light_fade_still_lets_strong_theover_win)
+#     so strong TheOver Under reads (conf >> Kalshi) flip direction to the Under again.
 #   * Do NOT retune on one slate. Wait for >= ~6 graded slates from the current build, then
-#     move the knob toward 0.0 (full trust) only if flipped-game Unders start beating Overs,
-#     or toward 1.0 (full neutralize) if they keep missing. Empty MLB_THEOVER_FADE_SOURCES
-#     to disable fading entirely.
+#     move the knob toward 0.0 (full trust) only if flipped-game Unders keep beating Overs,
+#     or back toward 1.0 (full neutralize) if they start missing again. Empty
+#     MLB_THEOVER_FADE_SOURCES to disable fading entirely.
 MLB_THEOVER_FADE_SOURCES = frozenset({"model_hit_rate_flipped"})
-MLB_THEOVER_FADE_SHRINK = 0.75   # fraction of (P-0.5) removed; 1.0=neutralized, 0.0=untouched
+MLB_THEOVER_FADE_SHRINK = 0.25   # fraction of (P-0.5) removed; 1.0=neutralized, 0.0=untouched
 
 # No-Kalshi totals are treated as lower confidence in selection stage
 NO_KALSHI_TOTAL_EXTRA_PENALTY = 0.02
