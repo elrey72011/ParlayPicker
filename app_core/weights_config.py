@@ -196,6 +196,18 @@ MLB_HIGH_TOTAL_LINE_OVER_PENALTY = 0.03  # added to req_ev and req_edge
 MLB_MID_TOTAL_LINE_THRESHOLD = 9.5
 MLB_MID_TOTAL_LINE_OVER_PENALTY = 0.02  # added to req_ev and req_edge
 
+# Edge-based no-stake gates from graded MLB totals (20 May-7 Jun, n=182; see
+# scripts/edge_by_bucket.py). Two buckets bled below the -110 breakeven (52.4%) and are
+# held out of the production card rather than tuned:
+#   * Neutral-consensus totals — Over/Neutral hit 48.2% (n=56), the single largest losing
+#     cell; Agrees (61.4%) and Disagrees (63.2%) totals keep their edge.
+#   * Mid-line Overs (line in [MLB_OVER_MIN_TOTAL_LINE, MLB_MID_TOTAL_LINE_THRESHOLD), i.e.
+#     8.0-9.5) — hit 46.5% (n=43), while the Under on those same lines hit 65.4%.
+# Capped picks drop to Below Threshold (visible, unstaked). Flip either flag to False to
+# restore prior behavior; re-evaluate as the graded sample grows.
+MLB_TOTAL_NEUTRAL_NO_STAKE = True
+MLB_OVER_MID_LINE_NO_STAKE = True
+
 # Low total line floor — MLB overs with a line below 8.0 are pitcher-friendly games.
 # May 20: CHC/MIL Over 6.5 (5 total), SD/LAD Over 7.5 (4 total) both lost. The
 # low_line_over_guardrail is now CONSENSUS-AWARE (see core/streamlit_pipeline.py):
