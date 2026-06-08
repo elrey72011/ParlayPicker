@@ -2084,6 +2084,58 @@ def _mlb_total_direction_conflict(
     return (k_opp & direction_conflict, t_opp & direction_conflict, direction_conflict)
 
 
+def _edge_no_stake_demotion(
+    *,
+    league: str | None,
+    market_type: str | None,
+    consensus: str | None,
+    total_line: float | None,
+    status: str | None,
+    neutral_no_stake: bool,
+    mid_line_no_stake: bool,
+    mid_min: float,
+    mid_max: float,
+):
+    """Edge-based no-stake gates for MLB totals (graded 20 May-7 Jun, n=182).
+
+    Returns ``(new_status, reason, blocker_stage)`` when a currently-stakeable MLB total
+    falls in a bucket that bled below the -110 breakeven (52.4%), else ``(None, None,
+    None)``. Only acts on Actionable / High Variance rows — never promotes. Pure +
+    side-effect-free for unit testing (tests/test_edge_no_stake_gates.py).
+
+    Rule 1 — Neutral-consensus totals: Over/Neutral hit 48.2% (n=56), the single largest
+      losing cell, while Agrees (61.4%) and Disagrees (63.2%) totals keep their edge.
+    Rule 2 — mid-line Overs (``mid_min`` <= line < ``mid_max``, i.e. 8.0-9.5): 46.5%
+      (n=43), while the Under on those same lines hit 65.4%.
+    """
+    if (league or "").strip().upper() != "MLB":
+        return (None, None, None)
+    if status not in ("Actionable", "High Variance/Speculative"):
+        return (None, None, None)
+    mt = (market_type or "").strip().lower()
+    is_total = "total" in mt
+
+    if neutral_no_stake and is_total and (consensus or "").strip() == "Neutral":
+        return (
+            "Below Threshold",
+            "Below Threshold: Neutral-consensus MLB total — Neutral O/U hit ~48% "
+            "(graded n=56), no edge vs -110; only Agrees/Disagrees totals are staked",
+            "mlb_total_neutral_no_stake",
+        )
+
+    if (mid_line_no_stake and mt == "total_over" and total_line is not None
+            and float(mid_min) <= float(total_line) < float(mid_max)):
+        return (
+            "Below Threshold",
+            f"Below Threshold: MLB Over line {float(total_line)} in mid bucket "
+            f"[{mid_min}, {mid_max}) — mid-line Overs hit ~46% (graded n=43); "
+            f"the Under is the edge side here",
+            "mlb_over_mid_line_no_stake",
+        )
+
+    return (None, None, None)
+
+
 def _total_over_concentration_downgrades(candidates: pd.DataFrame, *, overall_cap: int, mlb_cap: int) -> list:
     """Greedy keep of the best-ranked total_over picks under both an overall cap and an
     MLB-specific sub-cap; return the indices of the lowest-ranked excess to downgrade.
@@ -2558,6 +2610,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             NHL_UNDER_ACTIONABLE_CAP,
             TOTAL_ML_CONTRADICTION_OVER_MAX_PROB,
             MLB_OVER_MIN_TOTAL_LINE,
+            MLB_TOTAL_NEUTRAL_NO_STAKE,
+            MLB_OVER_MID_LINE_NO_STAKE,
         )
 
         is_kalshi_divergence = False
@@ -3051,6 +3105,26 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                                 f"— pitcher-friendly game, low-line overs underperform"
                             )
                         blocker_stage = "low_line_over_guardrail"
+
+            # ── Edge-based no-stake gates (graded MLB totals, 20 May-7 Jun, n=182) ──
+            # Two buckets bled below the -110 breakeven (52.4%). Hold them out of the
+            # production card (Below Threshold = visible, unstaked). Pure helper
+            # _edge_no_stake_demotion is unit-tested in tests/test_edge_no_stake_gates.py;
+            # see scripts/edge_by_bucket.py for the data.
+            _ns_line = pd.to_numeric(best.at[idx, "total_line"], errors="coerce") if "total_line" in best.columns else None
+            _ns_status, _ns_reason, _ns_blocker = _edge_no_stake_demotion(
+                league=league,
+                market_type=market_type,
+                consensus=consensus_agr,
+                total_line=float(_ns_line) if _ns_line is not None and pd.notna(_ns_line) else None,
+                status=status,
+                neutral_no_stake=MLB_TOTAL_NEUTRAL_NO_STAKE,
+                mid_line_no_stake=MLB_OVER_MID_LINE_NO_STAKE,
+                mid_min=float(MLB_OVER_MIN_TOTAL_LINE),
+                mid_max=float(MLB_MID_TOTAL_LINE_THRESHOLD),
+            )
+            if _ns_status is not None:
+                status, status_reason, blocker_stage = _ns_status, _ns_reason, _ns_blocker
 
             # Apply Consensus Overlay Logic
             # STRICT profile: full overlay on all market types.
