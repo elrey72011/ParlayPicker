@@ -69,13 +69,23 @@ NBA_STAR_ACTIVE_TOTAL_UNDER_PENALTY = -0.01
 
 # Total Win Probability Floors
 TOTAL_MIN_WIN_PROB = 0.54
-TOTAL_UNDER_MIN_WIN_PROB = 0.62
+# Under win-prob floor lowered 0.62 -> 0.55 on 8 Jun. Graded MLB totals (n=212,
+# scripts/edge_by_bucket.py): Unders hit 60.6% vs Overs 52.5%, and the eff_win [0.55,0.60)
+# bucket hits 58.9% — i.e. Unders carry edge well below the old 0.62/0.63 floors. Relaxing
+# OVERS bled (46.7%, kept strict at MLB_OVER_ACTIONABLE_MIN_PROB=0.65); this lowers only the
+# UNDER floor. NBA/NHL unders are unaffected — NHL pins 0.58 (NHL_TOTAL_MIN_WIN_PROB_STRICT)
+# and NBA pins 0.65 (NBA_TOTAL_MIN_WIN_PROB) via their own max() floors downstream. The high
+# EV/edge floors below and the Agrees-only under gate stay, so this can only add high-quality
+# Agrees unders that were blocked by a small prob gap, never weak picks.
+TOTAL_UNDER_MIN_WIN_PROB = 0.55
 TOTAL_UNDER_MIN_EV = 0.22           # raised 0.18→0.22 after May-16 review: both Actionable unders lost
 TOTAL_UNDER_MIN_EDGE = 0.13         # raised 0.10→0.13 after May-16 review
 # MLB-specific under win prob floor (MLB unders 0-2 Actionable on May-16; both lost badly)
 # Lowered 0.66→0.63 on May-28: S/A-Tier Agrees picks at 64-65% were blocked by 1-2% gap;
 # MLB_UNDER_ACTIONABLE_CAP already prevents these from reaching Actionable.
-MLB_TOTAL_UNDER_MIN_WIN_PROB = 0.63  # was 0.66
+# Lowered 0.63→0.55 on 8 Jun (n=212): Unders are the edge side and hold at 0.55-0.63; the
+# EV(0.22)/edge(0.13)/Agrees gates remain the quality backstop. See TOTAL_UNDER_MIN_WIN_PROB.
+MLB_TOTAL_UNDER_MIN_WIN_PROB = 0.55  # was 0.63 (was 0.66)
 NHL_TOTAL_EXTRA_EDGE_PENALTY = 0.01
 NHL_TOTAL_MIN_WIN_PROB = 0.57
 NHL_TOTAL_MIN_WIN_PROB_STRICT = 0.58
