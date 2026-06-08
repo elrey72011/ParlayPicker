@@ -1,0 +1,16 @@
+league,Home,Away,best_pick,WinProbability,effective_win_probability,effective_edge,consensus_agreement,kalshi_probability,Kelly_Bet_Size,Win Amount,W/L
+MLB,Minnesota,Kansas City,Under 8.5,0.6115,0.6115,,Disagrees,0.385,13.37,,LOSS
+MLB,Texas,Cleveland,Under 7.5,0.587,0.587,,Disagrees,0.415,13.37,,LOSS
+MLB,Chicago Cubs,San Francisco,Over 12.5,0.691,0.691,,Disagrees,0.205,6.05,,LOSS
+MLB,Miami,Tampa Bay,Over 7.5,0.552,0.552,,Disagrees,0.655,1.76,,LOSS
+MLB,Houston,Athletics,Over 9.5,0.609,0.609,,Agrees,0.565,2.36,,LOSS
+MLB,Saint Louis,Cincinnati,Over 9.5,0.617,0.617,,Agrees,0.585,2.37,,LOSS
+MLB,Toronto,Baltimore,Over 8.5,0.607,0.607,,Agrees,0.555,2.03,4.16,WIN
+MLB,Atlanta,Pittsburgh,Over 8.5,0.596,0.596,,Neutral,0.605,1.64,,LOSS
+MLB,Detroit,Seattle,Over 8.5,0.618,0.618,,Agrees,0.605,1.73,3.29,WIN
+MLB,San Diego,New York Mets,Over 7.5,0.59,0.59,,Neutral,0.635,1.46,2.86,WIN
+MLB,New York Yankees,Boston,Over 8.5,0.555,0.555,,Neutral,0.555,1.25,,LOSS
+MLB,Los Angeles Dodgers,Los Angeles Angels,Over 8.5,0.569,0.569,,Neutral,0.575,1.24,2.49,WIN
+MLB,Arizona,Washington,Over 8.5,0.549,0.549,,Neutral,0.555,1.09,,LOSS
+MLB,Colorado,Milwaukee,Over 11.5,0.564,0.564,,Neutral,0.605,0.95,1.85,WIN
+MLB,Philadelphia,Chicago White Sox,Under 9.5,0.55,0.55,,Disagrees,0.415,0.02,,LOSS
