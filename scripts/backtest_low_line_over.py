@@ -67,10 +67,16 @@ class Pick:
     win_amount: float | None
     result: str               # WIN | LOSS | PUSH | ""
     kalshi_prob: float | None = None   # P(pick side) per Kalshi; < 0.50 => Kalshi opposes direction
+    ev: float | None = None            # effective_expected_value (fraction; may be negative)
 
     @property
     def graded(self) -> bool:
         return self.result in ("WIN", "LOSS")
+
+    @property
+    def kalshi_opposes(self) -> bool:
+        """Kalshi prices the OTHER side as more likely (a true market override)."""
+        return self.kalshi_prob is not None and self.kalshi_prob < 0.50
 
     @property
     def profit(self) -> float:
@@ -112,6 +118,23 @@ def _to_money(raw: str | float | None) -> float | None:
         return None
     neg = s.startswith("(") and s.endswith(")")
     s = s.strip("()").replace(",", "").replace("$", "").strip()
+    try:
+        v = float(s)
+    except ValueError:
+        return None
+    return -v if neg else v
+
+
+def _to_num(raw: str | float | None) -> float | None:
+    """Parse a plain numeric (EV/edge fraction). Like _to_money but no currency intent;
+    handles parens-as-negative and a trailing %, and does NOT auto-divide by 100."""
+    if raw is None:
+        return None
+    s = str(raw).strip()
+    if not s or s in {"-", "#REF!"}:
+        return None
+    neg = s.startswith("(") and s.endswith(")")
+    s = s.strip("()").replace(",", "").replace("$", "").replace("%", "").strip()
     try:
         v = float(s)
     except ValueError:
@@ -242,6 +265,7 @@ def _parse_txt(raw: str, source: str) -> list[Pick]:
                 win_amount=_to_money(d.get("Win Amount")),
                 result=_norm_result(d.get("W/L")),
                 kalshi_prob=_to_prob(d.get("kalshi_probability")),
+                ev=_to_num(d.get("effective_expected_value") or d.get("expected_value")),
             )
         )
 
@@ -288,6 +312,7 @@ def _parse_tabular(path: Path) -> list[Pick]:
                 win_amount=_to_money(g(row, "Win Amount")),
                 result=_norm_result(g(row, "W/L", "Result")),
                 kalshi_prob=_to_prob(g(row, "kalshi_probability")),
+                ev=_to_num(g(row, "effective_expected_value", "expected_value")),
             )
         )
     return picks
