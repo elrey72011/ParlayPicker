@@ -78,6 +78,33 @@ def run(picks: list[Pick]) -> None:
         _block(f"eff_win [{lo:.2f},{hi:.2f})",
                [p for p in tot if p.eff_win_prob is not None and lo <= p.eff_win_prob < hi])
 
+    has_ev = [p for p in tot if p.ev is not None]
+    print(f"\n=== by effective EV bucket  (EV available on {len(has_ev)}/{len(tot)}) ===")
+    for lo, hi in [(-1, 0.0), (0.0, 0.10), (0.10, 0.22), (0.22, 0.40), (0.40, 99)]:
+        _block(f"EV [{lo:.2f},{hi:.2f})", [p for p in has_ev if lo <= p.ev < hi])
+
+    # Decisive cells for relaxing the Agrees-only under gate + the Kalshi-under cap. The
+    # "Disagrees" unders are the market-override picks those gates hold out of the card;
+    # this asks whether they have edge AND would clear the EV>=0.22 under floor
+    # (TOTAL_UNDER_MIN_EV) if the gates were relaxed. NOTE: use the CONSENSUS LABEL, not raw
+    # kalshi<0.50 — see the orientation caveat on the Kalshi block below.
+    print("\n=== UNDERS by consensus (the gate-relaxation question) ===")
+    unders = [p for p in tot if p.market_type == "total_under"]
+    _block("all unders", unders)
+    for c in ("Agrees", "Disagrees", "Neutral"):
+        _block(f"  {c} unders", [p for p in unders if p.consensus == c])
+    _block("  Disagrees unders & EV>=0.22", [p for p in unders if p.consensus == "Disagrees" and p.ev is not None and p.ev >= 0.22])
+
+    # Kalshi-direction is orientation-sensitive: historical .txt exports store kalshi as
+    # P(over) even on Under rows (all graded unders show kalshi<0.50 regardless of
+    # consensus), so kalshi_opposes is NOT reliable there. grade_slate now captures the
+    # pick-oriented value from current exports, so this block becomes trustworthy as new
+    # slates accumulate. Reported for forward tracking; do not act on the historical mix.
+    print("\n=== by Kalshi direction (CAVEAT: only reliable on post-8-Jun grade_slate data) ===")
+    kal = [p for p in tot if p.kalshi_prob is not None]
+    _block("Kalshi opposes pick (<0.50)", [p for p in kal if p.kalshi_opposes])
+    _block("Kalshi favors pick (>=0.50)", [p for p in kal if not p.kalshi_opposes])
+
 
 def main() -> int:
     path = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("data/backtest_exports")

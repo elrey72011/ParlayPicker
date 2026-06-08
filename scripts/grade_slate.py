@@ -46,8 +46,8 @@ def _norm_result(v: object) -> str:
 
 OUT_COLS = [
     "league", "Home", "Away", "best_pick", "WinProbability",
-    "effective_win_probability", "effective_edge", "consensus_agreement",
-    "kalshi_probability", "Kelly_Bet_Size", "Win Amount", "W/L",
+    "effective_win_probability", "effective_edge", "effective_expected_value",
+    "consensus_agreement", "kalshi_probability", "Kelly_Bet_Size", "Win Amount", "W/L",
 ]
 
 
@@ -78,6 +78,7 @@ def grade(export_csv: Path, recap_csv: Path, out_csv: Path) -> None:
             "best_pick": e.get("best_pick"), "WinProbability": e.get("WinProbability"),
             "effective_win_probability": e.get("effective_win_probability"),
             "effective_edge": e.get("effective_edge"),
+            "effective_expected_value": e.get("effective_expected_value"),
             "consensus_agreement": e.get("consensus_agreement"),
             "kalshi_probability": e.get("kalshi_probability"),
             "Kelly_Bet_Size": kelly, "Win Amount": win_amt, "W/L": result,
