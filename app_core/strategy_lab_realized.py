@@ -211,6 +211,50 @@ def compute_status_bucket_summary(realized_df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def summarize_recap_tiers(recap_df: pd.DataFrame) -> pd.DataFrame:
+    """Tiered W/L summary of a graded Performance Recap, keyed to what is *staked*.
+
+    A single all-rows hit rate blends in the Below Threshold / No Play picks the system
+    declined to stake (which trend toward ~50% by construction), masking staked
+    performance. This reports the staked tiers separately so the headline reflects the
+    card you would actually bet:
+
+      * Actionable (production) — the staked card.
+      * Actionable + High Variance — staked + speculative.
+      * All graded rows — every graded pick incl. unstaked (reference only).
+
+    Accepts a recap frame with a ``Status`` column and either a boolean ``Win`` column or
+    an ``Outcome`` column (WIN/LOSS or W/L). Returns rows of
+    ``Tier, Wins, Losses, Total, Hit Rate`` (Hit Rate is a 0..1 float; 0.0 when empty).
+    """
+    df = recap_df.copy()
+    if "Win" in df.columns:
+        win = df["Win"].fillna(False).astype(bool)
+    else:
+        outcome = df.get("Outcome", pd.Series("", index=df.index)).astype(str).str.strip().str.upper()
+        graded = outcome.isin(["WIN", "LOSS", "W", "L"])
+        df = df[graded]
+        win = outcome[graded].isin(["WIN", "W"])
+
+    bucket = df.get("Status", pd.Series("", index=df.index)).apply(_normalize_status)
+    actionable = bucket.eq(STATUS_BUCKET_ACTIONABLE)
+    staked_spec = bucket.isin([STATUS_BUCKET_ACTIONABLE, STATUS_BUCKET_HIGH_VARIANCE])
+    all_rows = pd.Series(True, index=df.index)
+
+    def _rec(tier: str, mask: pd.Series) -> Dict[str, Any]:
+        w = int(win[mask].sum())
+        n = int(mask.sum())
+        return {"Tier": tier, "Wins": w, "Losses": n - w, "Total": n,
+                "Hit Rate": (w / n) if n else 0.0}
+
+    return pd.DataFrame([
+        _rec("Actionable (production)", actionable),
+        _rec("Actionable + High Variance", staked_spec),
+        _rec("All graded rows (incl. unstaked)", all_rows),
+    ])
+
+
+
 def compute_mode_comparison(realized_df: pd.DataFrame) -> pd.DataFrame:
     rows = []
     for mode in [

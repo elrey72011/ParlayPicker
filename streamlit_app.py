@@ -1511,6 +1511,27 @@ def main() -> None:
 
                         st.markdown(f"**{len(recap)} picks across {len(recap_frames)} recap file(s)**")
 
+                        # --- Staked performance by tier (the headline) ---
+                        # The all-rows hit rate blends in Below Threshold / No Play picks the
+                        # system declined to stake (≈50% by construction), masking the staked
+                        # card. Surface the staked tiers first so good staked days aren't read
+                        # as mediocre all-rows days.
+                        from app_core.strategy_lab_realized import summarize_recap_tiers
+                        tiers = summarize_recap_tiers(recap)
+                        st.markdown("#### Staked Performance by Tier")
+                        _tcols = st.columns(3)
+                        for _col, (_, _row) in zip(_tcols, tiers.iterrows()):
+                            _col.metric(
+                                _row["Tier"],
+                                f"{_row['Hit Rate']:.1%}",
+                                f"{int(_row['Wins'])}-{int(_row['Losses'])} ({int(_row['Total'])})",
+                            )
+                        st.caption(
+                            "Judge the system by the Actionable / Actionable+HV tiers. "
+                            "'All graded rows' includes Below Threshold and No Play picks that "
+                            "were not staked, so it trends toward ~50% by construction."
+                        )
+
                         # Win rate by status
                         status_summary = (
                             recap.groupby("Status")["Win"]
