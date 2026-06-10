@@ -1349,27 +1349,13 @@ def _transform_theover_df(df: pd.DataFrame, pick_type_default: str, games: List[
                 if match_spread:
                      line_val = float(match_spread.group(1))
 
-        # Fix Issue #2: Calculate probability for Spread picks if missing
-        if hit_rate is None and final_pick_type == "SIDE" and line_val is not None:
-             try:
-                 # Implement formula: raw_prob = 0.50 - (line_val / 100.0)
-                 # Example: -2.5 -> 0.5 - (-0.025) = 0.525 (52.5%)
-                 # Example: -9.5 -> 0.5 - (-0.095) = 0.595 (59.5%)
-                 # Example: +9.5 -> 0.5 - (0.095) = 0.405 (40.5%)
-
-                 line_float = float(line_val)
-                 raw_prob = 0.50 - (line_float / 100.0)
-
-                 # Apply edge boost (+0.07)
-                 adjusted_prob = raw_prob + 0.07
-
-                 # Clamp
-                 hit_rate = max(0.10, min(0.95, adjusted_prob))
-
-                 # Log if debugging enabled
-                 logger.debug(f"Calculated Spread Prob for {line_val}: {hit_rate:.3f} (Raw: {raw_prob:.3f})")
-             except Exception:
-                 pass
+        # Spread picks with no TheOver win probability are left as None (no-signal),
+        # NOT synthesized. The previous formula (0.50 - line/100, then +0.07) was unsound:
+        # it conflated game-win probability with against-the-spread cover probability (a
+        # cover is ~50% by construction regardless of the number) and the flat +0.07
+        # manufactured phantom edge. Leaving hit_rate=None lets the downstream blend drop
+        # the missing signal and redistribute its weight, instead of ingesting a fabricated
+        # probability that would inflate EV/edge on every priceless spread.
 
         # --- PICK VALIDATION (Fix DEN/DET confusion bug) ---
         # Validate that PICK matches either home_code or away_code for SIDE picks
@@ -1607,7 +1593,10 @@ def parse_theover_public_betting_text(raw_text: str, pick_type_hint: str = "UNKN
 
         if pick_type != "UNKNOWN":
             model_name = "TheOver"
-            hit_rate = 0.0
+            # Missing/unparsed probability is unknown, NOT 0.0. A 0.0 reads downstream as a
+            # maximally-confident signal AGAINST the pick rather than "no read"; None/NaN is
+            # dropped and its blend weight redistributed (matches the CSV path's NaN handling).
+            hit_rate = None
 
             if i + 1 < len(lines):
                 next_line = lines[i+1]
