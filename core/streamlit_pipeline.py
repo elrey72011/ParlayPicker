@@ -1389,7 +1389,13 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
     implied_prob = out["odds_american"].apply(american_to_prob)
 
     opposing_implied = out["odds_american"].apply(get_opposing_odds_from_exchange).apply(american_to_prob)
-    out["market_probability"] = implied_prob / (implied_prob + opposing_implied)
+    # Guard the de-vig denominator against 0/NaN (missing odds) and bound the result, as
+    # the parallel computation downstream does — a bare division here can emit NaN/inf that
+    # silently propagates into EV/edge/Kelly.
+    _market_denom = implied_prob + opposing_implied
+    out["market_probability"] = (
+        implied_prob.divide(_market_denom.where(_market_denom > 0))
+    ).clip(0.01, 0.99)
 
     theover = _numeric_series(out, "theover_probability")
     theover = theover.where(theover <= 1, theover / 100.0)
