@@ -3876,6 +3876,74 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             best.loc[hv_downgrade_idx, "status_blocker_reason"] = "High Variance total-over concentration guard"
             best.loc[hv_downgrade_idx, "Status_Reason"] = "Below Threshold: downgraded by speculative total-over concentration guard"
 
+    # Empirical tier overlay: final tier pass driven by realized bucket win rates
+    # + isotonic-calibrated probability (Jun 5-10: EV/edge tiers hit ~21%, Below
+    # Threshold 59% — stake followed inverted tiers). Runs AFTER every guard pass
+    # above so safety statuses are final; the existing degraded-feature scaling,
+    # non-Actionable Kelly zeroing, and empty-card recovery below all operate on
+    # the corrected tiers. Best-effort: any failure leaves legacy tiers in place.
+    from app_core.weights_config import EMPIRICAL_TIER_OVERLAY_ENABLED
+    if EMPIRICAL_TIER_OVERLAY_ENABLED and not best.empty:
+        try:
+            from core.empirical_tiers import assign_empirical_tiers, load_bucket_stats
+            from core.kelly_optimizer import kelly_fraction
+            from core.probability_calibration import load_calibration
+
+            _bucket_stats = load_bucket_stats()
+            if _bucket_stats:
+                _pre_actionable = int(best["Pick_Status"].astype(str).eq("Actionable").sum())
+                best = assign_empirical_tiers(best, _bucket_stats, load_calibration())
+
+                # Re-apply the Actionable total-over concentration caps to the
+                # post-overlay card so empirical promotions cannot exceed them.
+                _is_total_over = best["market_type"].astype(str).str.lower().eq("total_over")
+                _is_mlb_over = _is_total_over & best["league"].astype(str).str.upper().eq("MLB")
+                _act_over_mask = best["Pick_Status"].astype(str).eq("Actionable") & _is_total_over
+                if int(_act_over_mask.sum()) > 0:
+                    _cands = best[_act_over_mask].copy()
+                    _cands["_rank_sort"] = -pd.to_numeric(
+                        _cands.get("empirical_edge"), errors="coerce"
+                    ).fillna(-9.0)
+                    _cands["_is_mlb_over"] = _is_mlb_over.reindex(_cands.index).fillna(False).astype(bool)
+                    _cands = _cands.sort_values("_rank_sort")
+                    _excess = _total_over_concentration_downgrades(
+                        _cands,
+                        overall_cap=int(MAX_TOTAL_OVER_ACTIONABLE_COUNT),
+                        mlb_cap=int(MAX_MLB_TOTAL_OVER_ACTIONABLE_COUNT),
+                    )
+                    if _excess:
+                        best.loc[_excess, "Pick_Status"] = "High Variance/Speculative"
+                        best.loc[_excess, "status_blocker_stage"] = "empirical_tier_overlay_concentration"
+                        best.loc[_excess, "Status_Reason"] = (
+                            "High Variance: empirical promotion capped by total-over concentration guard"
+                        )
+
+                # Size Kelly for empirically promoted Actionable rows from the
+                # empirical probability at the pick's own odds (0.25x fractional
+                # Kelly, 4% bankroll cap — the Actionable convention). Demoted
+                # rows are zeroed by the non-Actionable Kelly pass below.
+                _kelly_now = pd.to_numeric(best.get("Kelly_Bet_Size"), errors="coerce").fillna(0.0)
+                _promoted = best["Pick_Status"].astype(str).eq("Actionable") & ~_kelly_now.gt(0)
+                for _idx in best.index[_promoted]:
+                    _dec = pd.to_numeric(best.at[_idx, "decimal_odds"] if "decimal_odds" in best.columns else None, errors="coerce")
+                    if pd.isna(_dec) or _dec <= 1.0:
+                        _amer = pd.to_numeric(best.at[_idx, "odds_american"] if "odds_american" in best.columns else None, errors="coerce")
+                        if pd.notna(_amer) and _amer != 0:
+                            _dec = 1 + _amer / 100.0 if _amer > 0 else 1 + 100.0 / abs(_amer)
+                    _p = pd.to_numeric(best.at[_idx, "empirical_win_probability"], errors="coerce")
+                    if pd.notna(_dec) and _dec > 1.0 and pd.notna(_p):
+                        best.at[_idx, "Kelly_Bet_Size"] = min(0.04, kelly_fraction(float(_p), float(_dec)) * 0.25)
+
+                if diagnostics_out is not None:
+                    diagnostics_out["empirical_tier_overlay"] = {
+                        "applied": True,
+                        "actionable_before": _pre_actionable,
+                        "actionable_after": int(best["Pick_Status"].astype(str).eq("Actionable").sum()),
+                        "bucket_stats_n": int(_bucket_stats["overall"]["n"]),
+                    }
+        except Exception as e:
+            logger.warning(f"Empirical tier overlay failed; keeping legacy tiers: {e}")
+
     # Degraded-feature Kelly reduction/caps for production safety.
     degraded_run = bool(
         best.get("degraded_feature_subset_flag", pd.Series([False] * len(best), index=best.index)).fillna(False).astype(bool).any()

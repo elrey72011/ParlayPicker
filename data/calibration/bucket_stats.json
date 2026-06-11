@@ -1,0 +1,82 @@
+{
+  "overall": {
+    "n": 237,
+    "win_rate": 0.5358649789029536
+  },
+  "buckets": {
+    "MLB:over:Agrees": {
+      "n": 36,
+      "wins": 20,
+      "win_rate": 0.5555555555555556
+    },
+    "MLB:over:Disagrees": {
+      "n": 40,
+      "wins": 21,
+      "win_rate": 0.525
+    },
+    "MLB:over:Neutral": {
+      "n": 65,
+      "wins": 33,
+      "win_rate": 0.5076923076923077
+    },
+    "MLB:side:Agrees": {
+      "n": 2,
+      "wins": 1,
+      "win_rate": 0.5
+    },
+    "MLB:side:Disagrees": {
+      "n": 3,
+      "wins": 1,
+      "win_rate": 0.3333333333333333
+    },
+    "MLB:under:Agrees": {
+      "n": 61,
+      "wins": 37,
+      "win_rate": 0.6065573770491803
+    },
+    "MLB:under:Disagrees": {
+      "n": 10,
+      "wins": 6,
+      "win_rate": 0.6
+    },
+    "NBA:over:Neutral": {
+      "n": 10,
+      "wins": 6,
+      "win_rate": 0.6
+    },
+    "NHL:over:Agrees": {
+      "n": 1,
+      "wins": 0,
+      "win_rate": 0.0
+    },
+    "NHL:over:Neutral": {
+      "n": 2,
+      "wins": 0,
+      "win_rate": 0.0
+    },
+    "NHL:side:Neutral": {
+      "n": 1,
+      "wins": 0,
+      "win_rate": 0.0
+    },
+    "NHL:under:Agrees": {
+      "n": 2,
+      "wins": 1,
+      "win_rate": 0.5
+    },
+    "NHL:under:Disagrees": {
+      "n": 2,
+      "wins": 0,
+      "win_rate": 0.0
+    },
+    "NHL:under:Neutral": {
+      "n": 2,
+      "wins": 1,
+      "win_rate": 0.5
+    }
+  },
+  "meta": {
+    "source": "data/backtest_exports",
+    "fitted_on": "2026-06-11"
+  }
+}

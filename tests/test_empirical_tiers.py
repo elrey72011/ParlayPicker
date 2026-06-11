@@ -1,0 +1,118 @@
+"""Tests for the empirical tier overlay (core/empirical_tiers.py)."""
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from core.empirical_tiers import (
+    assign_empirical_tiers,
+    bucket_key,
+    empirical_win_probability,
+    load_bucket_stats,
+    smoothed_bucket_rate,
+)
+
+# Overall 53%; Agrees unders proven hot (60%, n=60), Neutral overs cold (48%, n=60),
+# tiny bucket for shrink testing.
+STATS = {
+    "overall": {"n": 200, "win_rate": 0.53},
+    "buckets": {
+        "MLB:under:Agrees": {"n": 60, "wins": 36, "win_rate": 0.60},
+        "MLB:over:Neutral": {"n": 60, "wins": 29, "win_rate": 0.483},
+        "MLB:over:Agrees": {"n": 4, "wins": 4, "win_rate": 1.0},
+    },
+}
+
+
+def test_bucket_key_normalization():
+    assert bucket_key("mlb", "total_over", "Agrees") == "MLB:over:Agrees"
+    assert bucket_key("MLB", "total_under", "Disagrees") == "MLB:under:Disagrees"
+    assert bucket_key("NBA", "spread_home", "No Kalshi") == "NBA:side:Neutral"
+    assert bucket_key("NHL", "moneyline", "") == "NHL:side:Neutral"
+
+
+def test_empirical_probability_tilts_by_bucket_and_shrinks_small_samples():
+    p_hot = empirical_win_probability(0.55, "MLB:under:Agrees", STATS)
+    p_cold = empirical_win_probability(0.55, "MLB:over:Neutral", STATS)
+    p_unknown = empirical_win_probability(0.55, "NHL:side:Agrees", STATS)
+    assert p_hot > 0.55 > p_cold
+    assert p_unknown == 0.55  # no bucket -> calibrated value untouched
+
+    # A 4-0 bucket must NOT move the pick like a proven 60-pick bucket would:
+    # the shrink weight is 4/54 vs 60/110.
+    p_tiny = empirical_win_probability(0.55, "MLB:over:Agrees", STATS)
+    assert p_tiny - 0.55 < p_hot - 0.55 + 0.05
+    assert p_tiny < 0.60
+
+
+def test_smoothed_bucket_rate_laplace():
+    rate, n = smoothed_bucket_rate("MLB:under:Agrees", STATS)
+    assert n == 60
+    assert abs(rate - (36 + 0.53 * 10) / 70) < 1e-9
+    rate0, n0 = smoothed_bucket_rate("missing", STATS)
+    assert (rate0, n0) == (0.53, 0)
+
+
+def _frame():
+    return pd.DataFrame(
+        {
+            "league": ["MLB", "MLB", "MLB", "MLB"],
+            "market_type": ["total_under", "total_over", "total_under", "total_under"],
+            "consensus_agreement": ["Agrees", "Neutral", "Agrees", "Agrees"],
+            "best_pick": ["Under 7.5", "Over 8.5", "Under 8.5", "Under 9.5"],
+            "Pick_Status": ["Below Threshold", "Actionable", "Below Threshold", "No Play"],
+            "Status_Reason": ["old", "old", "old", "No Play: suspicious data"],
+            "status_blocker_stage": ["x", "x", "x", "suspicious_data_guardrail"],
+            "effective_win_probability": [0.62, 0.60, 0.50, 0.62],
+            "odds_american": [-110, -110, -110, -110],
+        }
+    )
+
+
+def test_overlay_promotes_proven_bucket_and_demotes_cold_one():
+    out = assign_empirical_tiers(_frame(), STATS, calibration=None)
+    # Agrees under at 0.62 + hot-bucket tilt: edge over 0.524 breakeven > 4% -> Actionable
+    assert out.loc[0, "Pick_Status"] == "Actionable"
+    assert "empirical" in str(out.loc[0, "Status_Reason"])
+    # Neutral over at 0.60 gets tilted DOWN by the cold bucket and loses Actionable
+    assert out.loc[1, "Pick_Status"] != "Actionable"
+    # Weak pick stays Below Threshold (negative empirical edge)
+    assert out.loc[2, "Pick_Status"] == "Below Threshold"
+
+
+def test_overlay_never_touches_safety_statuses():
+    out = assign_empirical_tiers(_frame(), STATS, calibration=None)
+    assert out.loc[3, "Pick_Status"] == "No Play"
+    assert out.loc[3, "Status_Reason"] == "No Play: suspicious data"
+
+
+def test_overlay_applies_calibration_before_bucket_tilt():
+    # Calibration maps everything to 0.50 -> even the hot bucket cannot reach
+    # the Actionable edge threshold at -110 (breakeven 0.524).
+    knots = [[0.4, 0.50], [0.9, 0.50]]
+    out = assign_empirical_tiers(_frame(), STATS, calibration=knots)
+    assert out.loc[0, "Pick_Status"] != "Actionable"
+
+
+def test_overlay_requires_proven_bucket_for_actionable():
+    # Strong calibrated number in the tiny 4-0 bucket: n=4 < 15 -> capped at HV.
+    df = _frame().iloc[[1]].copy()
+    df["consensus_agreement"] = ["Agrees"]
+    df["effective_win_probability"] = [0.68]
+    out = assign_empirical_tiers(df, STATS, calibration=None)
+    assert out.iloc[0]["Pick_Status"] == "High Variance/Speculative"
+
+
+def test_load_bucket_stats_missing_returns_none(tmp_path):
+    assert load_bucket_stats(tmp_path / "nope.json") is None
+
+
+def test_fitted_bucket_stats_file_is_loadable():
+    stats = load_bucket_stats(Path(__file__).resolve().parents[1] / "data/calibration/bucket_stats.json")
+    assert stats is not None
+    assert stats["overall"]["n"] >= 200
+    assert "MLB:under:Agrees" in stats["buckets"]
