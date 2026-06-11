@@ -56,9 +56,19 @@ def grade(export_csv: Path, recap_csv: Path, out_csv: Path) -> None:
     rec = pd.read_csv(recap_csv)
 
     # Recap pick column is "Pick Taken"; outcome is "Outcome".
+    # No Play / Missing Line rows and unresolved-line placeholders are excluded:
+    # they were never stakeable picks, and the 10 Jun recap showed an unresolved
+    # line graded LOSS — phantom losses that poison the calibration fit.
+    def _gradeable(r) -> bool:
+        status = str(r.get("Status", "")).strip().lower()
+        if status in ("no play", "missing line"):
+            return False
+        return "unresolved" not in _norm(r.get("Pick Taken"))
+
     rec_key = {
         (_norm(r.get("Home")), _norm(r.get("Away")), _norm(r.get("Pick Taken"))): _norm_result(r.get("Outcome"))
         for _, r in rec.iterrows()
+        if _gradeable(r)
     }
 
     rows, unmatched = [], []

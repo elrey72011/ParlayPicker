@@ -5796,12 +5796,16 @@ def run_analysis_pipeline(
 
 def generate_parlays(best_picks_df: pd.DataFrame, max_legs: int = 3) -> pd.DataFrame:
     from core.kelly_optimizer import add_kelly_bet_sizing, apply_simultaneous_kelly
+    from core.probability_calibration import load_calibration
     from core.smart_parlay_engine import generate_smart_parlays
 
     if best_picks_df is None or best_picks_df.empty:
         return pd.DataFrame()
 
-    parlays_df = generate_smart_parlays(best_picks_df, num_rr_candidates=5)
+    # Recap-fitted isotonic table (scripts/fit_calibration.py); None when absent,
+    # in which case legs use raw effective_win_probability as before.
+    calibration = load_calibration()
+    parlays_df = generate_smart_parlays(best_picks_df, num_rr_candidates=5, calibration=calibration)
 
     if parlays_df.empty:
         return parlays_df
@@ -5816,6 +5820,20 @@ def generate_parlays(best_picks_df: pd.DataFrame, max_legs: int = 3) -> pd.DataF
 
     parlays_df = add_kelly_bet_sizing(parlays_df, bankroll=1000.0, fraction=0.125)
     parlays_df = apply_simultaneous_kelly(parlays_df, bankroll=1000.0, max_exposure=0.05)
+
+    # Persist the day's recommended parlays so they can be graded alongside the
+    # slate. Recaps grade single picks only, so the parlay engine has never
+    # received realized feedback; this log is the input for that. Last run of the
+    # day wins, matching the card actually shown.
+    try:
+        log_dir = Path("data/parlay_log")
+        log_dir.mkdir(parents=True, exist_ok=True)
+        slate_date = pd.Timestamp.now().strftime("%Y-%m-%d")
+        logged = parlays_df.copy()
+        logged.insert(0, "generated_date", slate_date)
+        logged.to_csv(log_dir / f"{slate_date}.csv", index=False)
+    except Exception as e:
+        logger.warning(f"Failed to write parlay log: {e}")
 
     return parlays_df
 

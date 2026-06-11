@@ -32,6 +32,10 @@ historical_cache/
 *.pkl
 *.pickle
 
+# Recap-fitted probability calibration (production input for parlay generation;
+# refit with scripts/fit_calibration.py after grading each slate)
+!data/calibration/effective_prob_calibration.json
+
 # API Keys (IMPORTANT!)
 .env
 *.key

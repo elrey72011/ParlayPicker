@@ -3,6 +3,103 @@ import streamlit as st
 from app_core.results_fetcher import fetch_yesterdays_results
 from app_core.results_ingestion import attach_results
 
+
+def determine_display_outcome(row):
+    # 1. Respect explicit manual dropdown overrides
+    if 'Outcome' in row and pd.notna(row['Outcome']) and str(row['Outcome']) != 'N/A':
+        return row['Outcome']
+
+    pick = str(row.get('best_pick', '')).lower().strip()
+    if not pick:
+         return 'N/A'
+
+    # Unresolved-line placeholders (e.g. "Total line unresolved") carry no
+    # gradeable side/line — they must stay N/A, never WIN/LOSS. The 10 Jun
+    # recap graded one as LOSS, polluting downstream calibration data.
+    if 'unresolved' in pick:
+         return 'N/A'
+
+    # 2. Auto-grade based on scores if they exist in the grid
+    h_score = row.get('actual_home_score')
+    a_score = row.get('actual_away_score')
+
+    if pd.notna(h_score) and pd.notna(a_score) and str(h_score).strip() != '' and str(a_score).strip() != '':
+        try:
+            h = float(h_score)
+            a = float(a_score)
+
+            # Evaluate TOTALS (Over/Under)
+            if 'over' in pick or 'under' in pick:
+                import re
+                m = re.search(r'(over|under)\s*(\d+\.?\d*)', pick, re.IGNORECASE)
+                if m:
+                    side = m.group(1).lower()
+                    line = float(m.group(2))
+                    total = h + a
+                    if side == 'over':
+                        return 'WIN' if total > line else ('LOSS' if total < line else 'PUSH')
+                    elif side == 'under':
+                        return 'WIN' if total < line else ('LOSS' if total > line else 'PUSH')
+
+            # Evaluate SPREADS (+/-)
+            elif '+' in pick or '-' in pick:
+                import re
+                from difflib import SequenceMatcher
+                m = re.search(r'([+-]\d+\.?\d*)\s*(?:\(.*\))?$', pick)
+                if m:
+                    line = float(m.group(1))
+                    pick_team = pick[:m.start()].strip()
+                    # Safely get team names checking both 'home_team'/'away_team' and 'Home'/'Away'
+                    home_team = str(row.get('home_team', row.get('Home', ''))).lower()
+                    away_team = str(row.get('away_team', row.get('Away', ''))).lower()
+
+                    home_ratio = SequenceMatcher(None, pick_team, home_team).ratio() if home_team else 0.0
+                    away_ratio = SequenceMatcher(None, pick_team, away_team).ratio() if away_team else 0.0
+
+                    is_home = (home_ratio > away_ratio) and home_ratio > 0.6
+                    is_away = (away_ratio > home_ratio) and away_ratio > 0.6
+
+                    if is_home:
+                        margin = h - a
+                        return 'WIN' if margin + line > 0 else ('LOSS' if margin + line < 0 else 'PUSH')
+                    elif is_away:
+                        margin = a - h
+                        return 'WIN' if margin + line > 0 else ('LOSS' if margin + line < 0 else 'PUSH')
+
+            # Evaluate MONEYLINE
+            else:
+                from difflib import SequenceMatcher
+                pick_team = pick.replace(' ml', '').strip()
+                # Safely get team names checking both 'home_team'/'away_team' and 'Home'/'Away'
+                home_team = str(row.get('home_team', row.get('Home', ''))).lower()
+                away_team = str(row.get('away_team', row.get('Away', ''))).lower()
+
+                home_ratio = SequenceMatcher(None, pick_team, home_team).ratio() if home_team else 0.0
+                away_ratio = SequenceMatcher(None, pick_team, away_team).ratio() if away_team else 0.0
+
+                is_home = (home_ratio > away_ratio) and home_ratio > 0.6
+                is_away = (away_ratio > home_ratio) and away_ratio > 0.6
+
+                if is_home:
+                    return 'WIN' if h > a else ('LOSS' if h < a else 'PUSH')
+                elif is_away:
+                    return 'WIN' if a > h else ('LOSS' if a < h else 'PUSH')
+
+        except Exception:
+            pass # If math fails, drop down to the fallback
+
+    # 3. Fallback to ingestion logic (if no manual scores are entered yet)
+    if 'Pick_Outcome' in row and pd.notna(row['Pick_Outcome']) and str(row['Pick_Outcome']) != 'N/A':
+        return row['Pick_Outcome']
+
+    if 'over' in pick or 'under' in pick:
+         return row.get('total_result', 'N/A')
+    elif '+' in pick or '-' in pick:
+         return row.get('spread_result', 'N/A')
+    else:
+         return row.get('ml_result', 'N/A')
+
+
 def render_results_dashboard(picks_df: pd.DataFrame) -> None:
     # 1. File Uploader for Yesterday's Picks at the very top
     uploaded_picks_file = st.file_uploader("Upload Yesterday's Best Picks Export", type=["csv"], key="perf_picks_uploader")
@@ -113,95 +210,6 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
     for col in ['actual_home_score', 'actual_away_score', 'Outcome']:
          if col not in display_df.columns:
               display_df[col] = pd.NA
-
-    def determine_display_outcome(row):
-        # 1. Respect explicit manual dropdown overrides
-        if 'Outcome' in row and pd.notna(row['Outcome']) and str(row['Outcome']) != 'N/A':
-            return row['Outcome']
-            
-        pick = str(row.get('best_pick', '')).lower().strip()
-        if not pick:
-             return 'N/A'
-             
-        # 2. Auto-grade based on scores if they exist in the grid
-        h_score = row.get('actual_home_score')
-        a_score = row.get('actual_away_score')
-        
-        if pd.notna(h_score) and pd.notna(a_score) and str(h_score).strip() != '' and str(a_score).strip() != '':
-            try:
-                h = float(h_score)
-                a = float(a_score)
-                
-                # Evaluate TOTALS (Over/Under)
-                if 'over' in pick or 'under' in pick:
-                    import re
-                    m = re.search(r'(over|under)\s*(\d+\.?\d*)', pick, re.IGNORECASE)
-                    if m:
-                        side = m.group(1).lower()
-                        line = float(m.group(2))
-                        total = h + a
-                        if side == 'over':
-                            return 'WIN' if total > line else ('LOSS' if total < line else 'PUSH')
-                        elif side == 'under':
-                            return 'WIN' if total < line else ('LOSS' if total > line else 'PUSH')
-
-                # Evaluate SPREADS (+/-)
-                elif '+' in pick or '-' in pick:
-                    import re
-                    from difflib import SequenceMatcher
-                    m = re.search(r'([+-]\d+\.?\d*)\s*(?:\(.*\))?$', pick)
-                    if m:
-                        line = float(m.group(1))
-                        pick_team = pick[:m.start()].strip()
-                        # Safely get team names checking both 'home_team'/'away_team' and 'Home'/'Away'
-                        home_team = str(row.get('home_team', row.get('Home', ''))).lower()
-                        away_team = str(row.get('away_team', row.get('Away', ''))).lower()
-                        
-                        home_ratio = SequenceMatcher(None, pick_team, home_team).ratio() if home_team else 0.0
-                        away_ratio = SequenceMatcher(None, pick_team, away_team).ratio() if away_team else 0.0
-
-                        is_home = (home_ratio > away_ratio) and home_ratio > 0.6
-                        is_away = (away_ratio > home_ratio) and away_ratio > 0.6
-                        
-                        if is_home:
-                            margin = h - a
-                            return 'WIN' if margin + line > 0 else ('LOSS' if margin + line < 0 else 'PUSH')
-                        elif is_away:
-                            margin = a - h
-                            return 'WIN' if margin + line > 0 else ('LOSS' if margin + line < 0 else 'PUSH')
-
-                # Evaluate MONEYLINE
-                else:
-                    from difflib import SequenceMatcher
-                    pick_team = pick.replace(' ml', '').strip()
-                    # Safely get team names checking both 'home_team'/'away_team' and 'Home'/'Away'
-                    home_team = str(row.get('home_team', row.get('Home', ''))).lower()
-                    away_team = str(row.get('away_team', row.get('Away', ''))).lower()
-                    
-                    home_ratio = SequenceMatcher(None, pick_team, home_team).ratio() if home_team else 0.0
-                    away_ratio = SequenceMatcher(None, pick_team, away_team).ratio() if away_team else 0.0
-
-                    is_home = (home_ratio > away_ratio) and home_ratio > 0.6
-                    is_away = (away_ratio > home_ratio) and away_ratio > 0.6
-                    
-                    if is_home:
-                        return 'WIN' if h > a else ('LOSS' if h < a else 'PUSH')
-                    elif is_away:
-                        return 'WIN' if a > h else ('LOSS' if a < h else 'PUSH')
-                        
-            except Exception:
-                pass # If math fails, drop down to the fallback
-                
-        # 3. Fallback to ingestion logic (if no manual scores are entered yet)
-        if 'Pick_Outcome' in row and pd.notna(row['Pick_Outcome']) and str(row['Pick_Outcome']) != 'N/A':
-            return row['Pick_Outcome']
-            
-        if 'over' in pick or 'under' in pick:
-             return row.get('total_result', 'N/A')
-        elif '+' in pick or '-' in pick:
-             return row.get('spread_result', 'N/A')
-        else:
-             return row.get('ml_result', 'N/A')
 
     display_df['Outcome'] = display_df.apply(determine_display_outcome, axis=1)
 

@@ -6,9 +6,28 @@ import pandas as pd
 import hashlib
 import json
 
+from core.probability_calibration import apply_calibration
+
 # Only picks with these statuses qualify as parlay legs.
-# Below Threshold explicitly failed the confidence gate and shouldn't anchor a parlay.
-PARLAY_ELIGIBLE_STATUSES = {"Actionable", "High Variance/Speculative"}
+# Below Threshold added 11 Jun: across the graded Jun 5-10 recaps the staked tiers
+# went Actionable 1-4 and HV/Spec 3-11 (~21%) while Below Threshold went 29-20 (59%).
+# Status reflects the EV/edge promotion gates — which select for maximum model-vs-
+# market disagreement, not realized accuracy — so BT legs are admitted and every leg
+# must instead clear the probability/edge/consensus floors below on its own merits.
+PARLAY_ELIGIBLE_STATUSES = {"Actionable", "High Variance/Speculative", "Below Threshold"}
+
+# Maximum legs per parlay. Held at 2 until the realized single-leg hit rate clears
+# ~57-58%: at the ~50-55% the Jun 5-10 recaps show, 3-leg parlays are -EV after vig
+# regardless of construction (0.55**3 = 16.6% vs ~14.3% breakeven at +600 only with
+# perfectly fair odds; real books pay less). Restore 3 when calibrated legs earn it.
+MAX_PARLAY_LEGS = 2
+
+# At most this many totals legs sharing the same (league, over/under direction) per
+# parlay. Same-night same-direction totals are driven by shared factors (weather,
+# league-wide run/scoring environment, a shared model bias on Overs) and lose
+# together — 6 Jun: the HV tier's four MLB Overs went 0-4 as a block. The production
+# card already has concentration caps; this is the parlay-level equivalent.
+MAX_SAME_DIRECTION_TOTAL_LEGS = 1
 
 # Minimum effective_win_probability per leg. Uses effective_win_probability (shrinkage-
 # adjusted) rather than calibrated_probability — for Overs this is lower than calibrated,
@@ -19,14 +38,16 @@ MIN_LEG_PROBABILITY = 0.58
 # Minimum edge per leg — ensures each leg genuinely beats the market.
 MIN_LEG_EDGE = 0.02
 
-# Actionable picks are force-included in the candidate pool as anchors.
-# They represent the model's highest-confidence picks and have gone 4/4 (100%)
-# across May 22-24. Remaining slots fill from High Variance by calibrated_probability.
+# Actionable picks are force-included in the candidate pool (they still must pass
+# the per-leg floors). They no longer get sort priority: Actionable went 1-4 across
+# the graded Jun 5-10 recaps, so an Actionable anchor is not evidence a combo is
+# better — parlays rank purely on EV computed from calibrated leg probabilities.
 MAX_ACTIONABLE_ANCHORS = 5
 
-# MLB total picks in HV/Spec must clear a stricter floor for parlay legs.
+# Non-Actionable MLB total picks must clear a stricter floor for parlay legs.
 # May 27: MLB HV/Spec totals went 0-6 while Actionable MLB totals went 2-2 (100%).
 # Require effective_win_probability >= 0.62 — the Actionable-tier entry point.
+# Applied to Below Threshold MLB totals as well now that BT legs are eligible.
 MLB_TOTAL_HV_PARLAY_MIN_PROB = 0.62
 
 
@@ -64,6 +85,20 @@ def _adj_prob(legs: pd.DataFrame, prob_col: str, rho: float = 0.8) -> float:
         else:
             result *= float(m_legs[prob_col].iloc[0])
     return float(result)
+
+
+def _violates_direction_cap(legs: pd.DataFrame) -> bool:
+    """True when more than MAX_SAME_DIRECTION_TOTAL_LEGS totals legs share a
+    (league, over/under direction) bucket. Same-night same-direction totals are
+    correlated through weather/run environment and shared model bias — they lose
+    as a block (6 Jun: four MLB Overs in HV went 0-4 together)."""
+    if "best_pick" not in legs.columns or "league" not in legs.columns:
+        return False
+    pick = legs["best_pick"].astype(str).str.lower()
+    direction = pick.str.extract(r"\b(over|under)\b", expand=False)
+    bucket = (legs["league"].astype(str).str.upper() + ":" + direction).where(direction.notna())
+    counts = bucket.dropna().value_counts()
+    return bool((counts > MAX_SAME_DIRECTION_TOTAL_LEGS).any())
 
 
 def _leg_labels(legs: pd.DataFrame, label_cols: list[str]) -> list[str]:
@@ -140,8 +175,13 @@ def _build_record(legs: pd.DataFrame, label_cols: list[str], leg_count: int,
     }
 
 
-def generate_smart_parlays(df: pd.DataFrame, num_rr_candidates: int = 5) -> pd.DataFrame:
-    """Generate +EV 2- and 3-leg parlays from quality-filtered candidates.
+def generate_smart_parlays(
+    df: pd.DataFrame,
+    num_rr_candidates: int = 5,
+    calibration: list | None = None,
+) -> pd.DataFrame:
+    """Generate +EV parlays (2-leg by default; see MAX_PARLAY_LEGS) from
+    quality-filtered candidates.
 
     Candidate selection ranks by effective_win_probability (shrinkage-adjusted),
     falling back to calibrated_probability if the column is absent. For Overs,
@@ -149,27 +189,26 @@ def generate_smart_parlays(df: pd.DataFrame, num_rr_candidates: int = 5) -> pd.D
     discriminator of actual win rate. Edge governs single-game sizing; probability
     governs parlay construction.
 
-    Consensus gate: only "Agrees" picks qualify as legs. 4-day analysis shows
-    Agrees = 73% win rate vs Neutral = 56%. Falls back to Agrees+Neutral when
-    fewer than 3 Agrees candidates are available.
+    ``calibration`` is an optional recap-fitted isotonic table (see
+    scripts/fit_calibration.py / core.probability_calibration.load_calibration).
+    When provided, every leg probability is mapped predicted->realized BEFORE the
+    floors, ranking, combination math, and the EV>0 gate. This is the systemic fix
+    for the overconfidence that compounds multiplicatively across legs — fitted on
+    all graded slates instead of per-slate shrink knobs.
 
-    Actionable picks are force-anchored at the front of the pool. They represent
-    the model's full-signal consensus picks and sort to the top of results.
+    Consensus gate: only "Agrees" picks qualify as legs. Falls back to
+    Agrees+Neutral when fewer than 3 Agrees candidates are available.
+
+    Cross-game concentration: same-night totals legs sharing a league and direction
+    (e.g. two MLB Overs) win and lose together — shared weather/run environment and
+    shared model bias. Rather than pretending they are independent (or rewarding the
+    positive correlation with a higher joint probability), combos exceeding
+    MAX_SAME_DIRECTION_TOTAL_LEGS in any (league, direction) bucket are skipped.
 
     Combined probability + EV: ``_build_record`` builds these from the same
-    ``rank_col`` (effective_win_probability when present) used for ranking/gating, NOT
-    the raw ``calibrated_probability``. This matters most for Overs, where calibrated is
-    overconfident and the bias COMPOUNDS multiplicatively across legs — a 3-leg all-Over
-    parlay would otherwise show ~0.62**3 = 23.8% when the de-biased figure is lower and
-    the realized rate lower still. The EV>0 drop and the EV-desc sort therefore run on
-    the de-biased number, so inflated all-Over parlays no longer pass the gate and rank
-    first. Unders/spreads/MLs are unchanged (effective == calibrated for them).
-
-    Known limitation: across DIFFERENT games legs are combined as independent (only
-    SAME-game legs get the ``_adj_prob`` power-law penalty). Same-direction cross-game
-    legs (e.g. all-Over on a high-total slate) are positively correlated, so the joint
-    probability is still optimistic. Modeling that needs a calibrated cross-game factor
-    and is intentionally left out here rather than guessed at.
+    (calibrated) ``rank_col`` used for ranking/gating, NOT the raw
+    ``calibrated_probability``, so the EV>0 drop and the EV-desc sort run on the
+    de-biased number and inflated all-Over parlays no longer pass the gate.
     """
     columns = [
         "parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev",
@@ -189,15 +228,23 @@ def generate_smart_parlays(df: pd.DataFrame, num_rr_candidates: int = 5) -> pd.D
     # Falls back to calibrated_probability for compatibility with older data.
     rank_col = "effective_win_probability" if "effective_win_probability" in df.columns else "calibrated_probability"
 
-    # Quality gate: only Actionable and High Variance picks as legs
     candidates = df.copy()
+
+    # Recap-fitted isotonic calibration: map predicted -> realized win rate before
+    # any floor/gate/EV math. Opt-in via the caller so tests and raw consumers see
+    # unchanged behavior when no table is passed.
+    if calibration:
+        candidates["_parlay_leg_prob"] = apply_calibration(candidates[rank_col], calibration)
+        rank_col = "_parlay_leg_prob"
+
+    # Quality gate on pick status (see PARLAY_ELIGIBLE_STATUSES)
     if "Pick_Status" in candidates.columns:
         candidates = candidates[
             candidates["Pick_Status"].astype(str).isin(PARLAY_ELIGIBLE_STATUSES)
         ]
 
     # Consensus gate: only "Agrees" legs (Kalshi and model agree direction).
-    # 4-day data shows Agrees = 73% win rate vs Neutral = 56%.
+    # Graded 20 May-7 Jun MLB totals (n=182): Agrees hit 61.4% vs Neutral 48.2%.
     # "No Kalshi" is treated as Neutral — Kalshi simply has no market (all NBA totals,
     # many niche games); absence of Kalshi is not a conflicting signal.
     # Falls back to all candidates if consensus_agreement column is absent.
@@ -212,21 +259,21 @@ def generate_smart_parlays(df: pd.DataFrame, num_rr_candidates: int = 5) -> pd.D
         else:
             candidates = agrees_candidates
 
-    # MLB total HV/Spec picks require a stricter floor for parlay legs.
+    # Non-Actionable MLB total picks require a stricter floor for parlay legs.
     # May 27: MLB HV/Spec totals 0-6; only Actionable MLB totals reliably hit (2-2).
-    # Allow non-MLB-total HV/Spec picks at the standard floor; MLB HV totals need 0.62.
+    # Below Threshold MLB totals are held to the same stricter floor.
     if (
         "league" in candidates.columns
         and "Pick_Status" in candidates.columns
         and "best_pick" in candidates.columns
     ):
-        is_mlb_hv_total = (
+        is_mlb_nonactionable_total = (
             candidates["league"].astype(str).str.upper().eq("MLB")
             & candidates["best_pick"].astype(str).str.lower().str.contains(r"over|under", regex=True, na=False)
-            & candidates["Pick_Status"].astype(str).eq("High Variance/Speculative")
+            & candidates["Pick_Status"].astype(str).ne("Actionable")
         )
         candidates = candidates[
-            ~is_mlb_hv_total | candidates[rank_col].ge(MLB_TOTAL_HV_PARLAY_MIN_PROB)
+            ~is_mlb_nonactionable_total | candidates[rank_col].ge(MLB_TOTAL_HV_PARLAY_MIN_PROB)
         ]
 
     # Per-leg effective_win_probability and edge floor
@@ -273,12 +320,15 @@ def generate_smart_parlays(df: pd.DataFrame, num_rr_candidates: int = 5) -> pd.D
     label_cols = [c for c in ["best_pick", "team", "away_team", "home_team"] if c in candidate_bets.columns]
     records: list[dict] = []
 
-    # 2-leg and 3-leg parlays only
-    for leg_count in (2, 3):
+    leg_counts = tuple(range(2, MAX_PARLAY_LEGS + 1))
+
+    for leg_count in leg_counts:
         if len(candidate_bets) < leg_count:
             continue
         for combo in combinations(candidate_bets.index, leg_count):
             legs = candidate_bets.loc[list(combo)]
+            if _violates_direction_cap(legs):
+                continue
             risk_tier = "Bankroll Builder" if leg_count == 2 else "Standard"
             rec = _build_record(legs, label_cols, leg_count, risk_tier, prob_col=rank_col)
             if rec is not None:
@@ -290,11 +340,13 @@ def generate_smart_parlays(df: pd.DataFrame, num_rr_candidates: int = 5) -> pd.D
         group_hash = hashlib.md5(json.dumps(sorted(leg_names)).encode()).hexdigest()[:8]
         rr_group_id = f"RR_{group_hash}"
 
-        for leg_count in (2, 3):
+        for leg_count in leg_counts:
             if len(rr_candidates) < leg_count:
                 continue
             for combo in combinations(rr_candidates.index, leg_count):
                 legs = rr_candidates.loc[list(combo)]
+                if _violates_direction_cap(legs):
+                    continue
                 rec = _build_record(legs, label_cols, leg_count, "Round Robin", rr_group_id, prob_col=rank_col)
                 if rec is not None:
                     records.append(rec)
@@ -311,10 +363,12 @@ def generate_smart_parlays(df: pd.DataFrame, num_rr_candidates: int = 5) -> pd.D
     )
     result = result.drop_duplicates(subset=["_canonical_legs"]).drop(columns=["_canonical_legs"]).copy()
 
-    # Sort: Actionable-anchored combos first, then highest EV, then strongest weakest leg
+    # Sort: highest EV first, then strongest weakest leg. Actionable anchoring no
+    # longer grants sort priority (Actionable went 1-4 across Jun 5-10 recaps);
+    # has_actionable_anchor remains a display column only.
     result = result.sort_values(
-        ["has_actionable_anchor", "parlay_ev", "min_leg_prob"],
-        ascending=[False, False, False],
+        ["parlay_ev", "min_leg_prob"],
+        ascending=[False, False],
     ).reset_index(drop=True)
 
     return result

@@ -1251,8 +1251,11 @@ def main() -> None:
                     st.markdown("#### 🎯 Sweet Spot Parlays")
                     if len(sweet_spot_df) >= 2:
                         try:
+                            from core.probability_calibration import load_calibration
                             from core.smart_parlay_engine import generate_smart_parlays
-                            ss_parlays = generate_smart_parlays(sweet_spot_df, num_rr_candidates=5)
+                            ss_parlays = generate_smart_parlays(
+                                sweet_spot_df, num_rr_candidates=5, calibration=load_calibration()
+                            )
                             if ss_parlays is not None and not ss_parlays.empty:
                                 for leg_count in [2, 3]:
                                     leg_df = ss_parlays[ss_parlays["legs"] == leg_count].head(5).copy()
