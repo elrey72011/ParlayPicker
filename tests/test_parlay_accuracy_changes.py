@@ -230,6 +230,75 @@ def test_floors_are_mapped_through_calibration():
     assert np.isclose(parlays.iloc[0]["min_leg_prob"], 0.54)
 
 
+def test_agrees_same_direction_pair_allowed_and_flagged_correlated():
+    # Two MLB Overs, both Kalshi-Agrees: allowed to pair under the Agrees
+    # exception, but flagged is_high_correlation for stake downweighting.
+    bets = _bets(
+        best_pick=["Over 8.5", "Over 9.5", "Under 5.5"],
+        league=["MLB", "MLB", "NHL"],
+        consensus_agreement=["Agrees", "Agrees", "Agrees"],
+        effective_win_probability=[0.64, 0.64, 0.64],
+    )
+    parlays = generate_smart_parlays(bets)
+    over_pairs = parlays[
+        parlays["parlay_legs"].str.lower().str.count("over").eq(2)
+    ]
+    assert not over_pairs.empty
+    assert over_pairs["is_high_correlation"].all()
+
+    # The same pair with Neutral consensus stays blocked.
+    bets_neutral = bets.assign(consensus_agreement=["Neutral", "Neutral", "Neutral"])
+    parlays_neutral = generate_smart_parlays(bets_neutral)
+    if not parlays_neutral.empty:
+        assert (
+            parlays_neutral["parlay_legs"].str.lower().str.count("over").lt(2).all()
+        )
+
+
+def test_calibrated_ev_gate_supersedes_raw_mlb_floor():
+    # A Below Threshold MLB total at 0.60 raw would fail the 0.62 raw-space floor,
+    # but with calibration active the gate is calibrated prob vs the leg's own
+    # break-even + margin: 0.55 calibrated vs 1/2.1 + 0.03 = 0.506 -> passes.
+    bets = _bets(
+        best_pick=["Over 8.5", "Under 5.5"],
+        league=["MLB", "NHL"],
+        matchup_id=["g1", "g2"],
+        edge=[0.07, 0.06],
+        calibrated_probability=[0.60, 0.60],
+        effective_win_probability=[0.60, 0.60],
+        market_probability=[0.48, 0.48],
+        decimal_odds=[2.1, 2.1],
+        Pick_Status=["Below Threshold", "Below Threshold"],
+    )
+    knots = [[0.40, 0.55], [0.90, 0.55]]
+    parlays = generate_smart_parlays(bets, calibration=knots)
+    assert not parlays.empty
+
+    # And a leg below its break-even + margin is dropped: 0.50 calibrated vs
+    # 1/2.0 + 0.03 = 0.53 -> no parlays.
+    knots_low = [[0.40, 0.50], [0.90, 0.50]]
+    bets_even = bets.assign(decimal_odds=[2.0, 2.0])
+    assert generate_smart_parlays(bets_even, calibration=knots_low).empty
+
+
+def test_downweight_correlated_parlay_kelly():
+    from core.smart_parlay_engine import downweight_correlated_parlay_kelly
+
+    parlays = pd.DataFrame(
+        {
+            "parlay_legs": ["a | b", "c | d"],
+            "is_high_correlation": [True, False],
+            "kelly_fraction": [0.04, 0.04],
+            "recommended_bet": [10.0, 10.0],
+        }
+    )
+    out = downweight_correlated_parlay_kelly(parlays)
+    assert out.loc[0, "kelly_fraction"] == 0.02
+    assert out.loc[0, "recommended_bet"] == 5.0
+    assert out.loc[1, "kelly_fraction"] == 0.04
+    assert out.loc[1, "recommended_bet"] == 10.0
+
+
 def test_results_dashboard_grades_unresolved_pick_as_na():
     from app.ui.results_dashboard import determine_display_outcome
 

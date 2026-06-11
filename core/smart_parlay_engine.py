@@ -27,7 +27,30 @@ MAX_PARLAY_LEGS = 2
 # league-wide run/scoring environment, a shared model bias on Overs) and lose
 # together — 6 Jun: the HV tier's four MLB Overs went 0-4 as a block. The production
 # card already has concentration caps; this is the parlay-level equivalent.
+#
+# Exception: when EVERY leg in the bucket is Kalshi-Agrees, up to
+# MAX_SAME_DIRECTION_AGREES_TOTAL_LEGS may pair. The block-loss failure mode is
+# shared MODEL bias against the market (the 6 Jun 0-4 block was fade-forced Overs
+# where TheOver disagreed); Agrees legs have the market on their side and hit 61.4%
+# on graded MLB totals (n=182). Such combos are flagged is_high_correlation and
+# their Kelly stake is cut by CORRELATED_PARLAY_KELLY_MULTIPLIER — the correlation
+# is paid for in stake, not ignored.
 MAX_SAME_DIRECTION_TOTAL_LEGS = 1
+MAX_SAME_DIRECTION_AGREES_TOTAL_LEGS = 2
+
+# Stake multiplier for parlays flagged is_high_correlation (same-game legs or a
+# same-direction Agrees pair). Joint outcomes are positively correlated, so these
+# boom/bust as a unit; half stake keeps the EV exposure with half the block variance.
+CORRELATED_PARLAY_KELLY_MULTIPLIER = 0.5
+
+# When a calibration table is active, each leg must clear its own break-even price
+# by this margin on the CALIBRATED probability: p_cal >= 1/decimal_odds + margin.
+# This supersedes the raw-space MLB totals floor (MLB_TOTAL_HV_PARLAY_MIN_PROB)
+# in calibrated mode — that floor was a proxy for "real win rate high enough",
+# tuned on uncalibrated data; calibrated-EV-vs-price is the honest version of the
+# same protection (10 Jun replay: the floor blocked legs that were calibrated +EV
+# at their actual odds).
+MIN_LEG_EV_MARGIN = 0.03
 
 # Minimum effective_win_probability per leg. Uses effective_win_probability (shrinkage-
 # adjusted) rather than calibrated_probability — for Overs this is lower than calibrated,
@@ -87,18 +110,57 @@ def _adj_prob(legs: pd.DataFrame, prob_col: str, rho: float = 0.8) -> float:
     return float(result)
 
 
-def _violates_direction_cap(legs: pd.DataFrame) -> bool:
-    """True when more than MAX_SAME_DIRECTION_TOTAL_LEGS totals legs share a
-    (league, over/under direction) bucket. Same-night same-direction totals are
-    correlated through weather/run environment and shared model bias — they lose
-    as a block (6 Jun: four MLB Overs in HV went 0-4 together)."""
+def _direction_buckets(legs: pd.DataFrame) -> pd.Series:
+    """(league, over/under direction) bucket per totals leg; NA for non-totals."""
     if "best_pick" not in legs.columns or "league" not in legs.columns:
-        return False
+        return pd.Series(pd.NA, index=legs.index)
     pick = legs["best_pick"].astype(str).str.lower()
     direction = pick.str.extract(r"\b(over|under)\b", expand=False)
-    bucket = (legs["league"].astype(str).str.upper() + ":" + direction).where(direction.notna())
-    counts = bucket.dropna().value_counts()
-    return bool((counts > MAX_SAME_DIRECTION_TOTAL_LEGS).any())
+    return (legs["league"].astype(str).str.upper() + ":" + direction).where(direction.notna())
+
+
+def _violates_direction_cap(legs: pd.DataFrame) -> bool:
+    """True when a (league, over/under direction) totals bucket exceeds its cap.
+    Same-night same-direction totals are correlated through weather/run environment
+    and shared model bias — they lose as a block (6 Jun: four MLB Overs in HV went
+    0-4 together). All-Agrees buckets get the higher cap (see constants above)."""
+    buckets = _direction_buckets(legs)
+    if buckets.isna().all():
+        return False
+    consensus = (
+        legs["consensus_agreement"].astype(str)
+        if "consensus_agreement" in legs.columns
+        else pd.Series("", index=legs.index)
+    )
+    for bucket, count in buckets.dropna().value_counts().items():
+        all_agrees = consensus[buckets == bucket].eq("Agrees").all()
+        cap = MAX_SAME_DIRECTION_AGREES_TOTAL_LEGS if all_agrees else MAX_SAME_DIRECTION_TOTAL_LEGS
+        if count > cap:
+            return True
+    return False
+
+
+def _has_same_direction_pair(legs: pd.DataFrame) -> bool:
+    counts = _direction_buckets(legs).dropna().value_counts()
+    return bool((counts > 1).any())
+
+
+def downweight_correlated_parlay_kelly(
+    parlays: pd.DataFrame,
+    columns: tuple[str, ...] = ("kelly_fraction", "recommended_bet"),
+) -> pd.DataFrame:
+    """Halve the Kelly sizing of parlays flagged is_high_correlation. Positive
+    leg correlation concentrates outcomes (the combo booms or busts as a unit),
+    so the stake — not the EV estimate — absorbs the extra variance. Pure helper
+    so the policy is unit-testable outside the pipeline."""
+    if parlays is None or parlays.empty or "is_high_correlation" not in parlays.columns:
+        return parlays
+    out = parlays.copy()
+    mask = out["is_high_correlation"].fillna(False).astype(bool)
+    for col in columns:
+        if col in out.columns:
+            out.loc[mask, col] = out.loc[mask, col] * CORRELATED_PARLAY_KELLY_MULTIPLIER
+    return out
 
 
 def _leg_labels(legs: pd.DataFrame, label_cols: list[str]) -> list[str]:
@@ -148,7 +210,9 @@ def _build_record(legs: pd.DataFrame, label_cols: list[str], leg_count: int,
         (combined_probability - combined_market_prob) / combined_market_prob
         if combined_market_prob > 0 else 0.0
     )
-    is_high_correlation = len(legs["matchup_id"].unique()) < leg_count
+    is_high_correlation = (
+        len(legs["matchup_id"].unique()) < leg_count or _has_same_direction_pair(legs)
+    )
     parlay_conviction = float(legs["Conviction_Score"].mean()) if "Conviction_Score" in legs.columns else pd.NA
     min_leg_prob = float(legs[prob_col].min())
 
@@ -242,12 +306,20 @@ def generate_smart_parlays(
     mlb_total_min_prob = MLB_TOTAL_HV_PARLAY_MIN_PROB
     if calibration:
         candidates["_parlay_leg_prob"] = apply_calibration(candidates[rank_col], calibration)
-        floors = apply_calibration(
-            pd.Series([MIN_LEG_PROBABILITY, MLB_TOTAL_HV_PARLAY_MIN_PROB]), calibration
+        min_leg_probability = float(
+            apply_calibration(pd.Series([MIN_LEG_PROBABILITY]), calibration).iloc[0]
         )
-        min_leg_probability = float(floors.iloc[0])
-        mlb_total_min_prob = float(floors.iloc[1])
         rank_col = "_parlay_leg_prob"
+
+        # Honest per-leg EV gate (calibrated mode only): the calibrated probability
+        # must beat the leg's own break-even price by MIN_LEG_EV_MARGIN. This
+        # replaces the raw-space MLB totals floor below — same protection, priced
+        # against the leg's actual odds instead of a hand-tuned constant.
+        mlb_total_min_prob = None
+        if "decimal_odds" in candidates.columns:
+            dec = pd.to_numeric(candidates["decimal_odds"], errors="coerce")
+            breakeven = 1.0 / dec.where(dec > 1.0)
+            candidates = candidates[candidates[rank_col].ge(breakeven + MIN_LEG_EV_MARGIN)]
 
     # Quality gate on pick status (see PARLAY_ELIGIBLE_STATUSES)
     if "Pick_Status" in candidates.columns:
@@ -274,8 +346,11 @@ def generate_smart_parlays(
     # Non-Actionable MLB total picks require a stricter floor for parlay legs.
     # May 27: MLB HV/Spec totals 0-6; only Actionable MLB totals reliably hit (2-2).
     # Below Threshold MLB totals are held to the same stricter floor.
+    # In calibrated mode this raw-space floor is superseded by the per-leg EV gate
+    # above (mlb_total_min_prob is None).
     if (
-        "league" in candidates.columns
+        mlb_total_min_prob is not None
+        and "league" in candidates.columns
         and "Pick_Status" in candidates.columns
         and "best_pick" in candidates.columns
     ):
