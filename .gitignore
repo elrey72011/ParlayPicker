@@ -32,6 +32,13 @@ historical_cache/
 *.pkl
 *.pickle
 
+# Recap-fitted probability calibration (production input for parlay generation;
+# refit with scripts/fit_calibration.py after grading each slate)
+!data/calibration/effective_prob_calibration.json
+# Realized bucket win rates (production input for the empirical tier overlay;
+# refit with scripts/fit_bucket_stats.py after grading each slate)
+!data/calibration/bucket_stats.json
+
 # API Keys (IMPORTANT!)
 .env
 *.key

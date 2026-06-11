@@ -3876,6 +3876,74 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             best.loc[hv_downgrade_idx, "status_blocker_reason"] = "High Variance total-over concentration guard"
             best.loc[hv_downgrade_idx, "Status_Reason"] = "Below Threshold: downgraded by speculative total-over concentration guard"
 
+    # Empirical tier overlay: final tier pass driven by realized bucket win rates
+    # + isotonic-calibrated probability (Jun 5-10: EV/edge tiers hit ~21%, Below
+    # Threshold 59% — stake followed inverted tiers). Runs AFTER every guard pass
+    # above so safety statuses are final; the existing degraded-feature scaling,
+    # non-Actionable Kelly zeroing, and empty-card recovery below all operate on
+    # the corrected tiers. Best-effort: any failure leaves legacy tiers in place.
+    from app_core.weights_config import EMPIRICAL_TIER_OVERLAY_ENABLED
+    if EMPIRICAL_TIER_OVERLAY_ENABLED and not best.empty:
+        try:
+            from core.empirical_tiers import assign_empirical_tiers, load_bucket_stats
+            from core.kelly_optimizer import kelly_fraction
+            from core.probability_calibration import load_calibration
+
+            _bucket_stats = load_bucket_stats()
+            if _bucket_stats:
+                _pre_actionable = int(best["Pick_Status"].astype(str).eq("Actionable").sum())
+                best = assign_empirical_tiers(best, _bucket_stats, load_calibration())
+
+                # Re-apply the Actionable total-over concentration caps to the
+                # post-overlay card so empirical promotions cannot exceed them.
+                _is_total_over = best["market_type"].astype(str).str.lower().eq("total_over")
+                _is_mlb_over = _is_total_over & best["league"].astype(str).str.upper().eq("MLB")
+                _act_over_mask = best["Pick_Status"].astype(str).eq("Actionable") & _is_total_over
+                if int(_act_over_mask.sum()) > 0:
+                    _cands = best[_act_over_mask].copy()
+                    _cands["_rank_sort"] = -pd.to_numeric(
+                        _cands.get("empirical_edge"), errors="coerce"
+                    ).fillna(-9.0)
+                    _cands["_is_mlb_over"] = _is_mlb_over.reindex(_cands.index).fillna(False).astype(bool)
+                    _cands = _cands.sort_values("_rank_sort")
+                    _excess = _total_over_concentration_downgrades(
+                        _cands,
+                        overall_cap=int(MAX_TOTAL_OVER_ACTIONABLE_COUNT),
+                        mlb_cap=int(MAX_MLB_TOTAL_OVER_ACTIONABLE_COUNT),
+                    )
+                    if _excess:
+                        best.loc[_excess, "Pick_Status"] = "High Variance/Speculative"
+                        best.loc[_excess, "status_blocker_stage"] = "empirical_tier_overlay_concentration"
+                        best.loc[_excess, "Status_Reason"] = (
+                            "High Variance: empirical promotion capped by total-over concentration guard"
+                        )
+
+                # Size Kelly for empirically promoted Actionable rows from the
+                # empirical probability at the pick's own odds (0.25x fractional
+                # Kelly, 4% bankroll cap — the Actionable convention). Demoted
+                # rows are zeroed by the non-Actionable Kelly pass below.
+                _kelly_now = pd.to_numeric(best.get("Kelly_Bet_Size"), errors="coerce").fillna(0.0)
+                _promoted = best["Pick_Status"].astype(str).eq("Actionable") & ~_kelly_now.gt(0)
+                for _idx in best.index[_promoted]:
+                    _dec = pd.to_numeric(best.at[_idx, "decimal_odds"] if "decimal_odds" in best.columns else None, errors="coerce")
+                    if pd.isna(_dec) or _dec <= 1.0:
+                        _amer = pd.to_numeric(best.at[_idx, "odds_american"] if "odds_american" in best.columns else None, errors="coerce")
+                        if pd.notna(_amer) and _amer != 0:
+                            _dec = 1 + _amer / 100.0 if _amer > 0 else 1 + 100.0 / abs(_amer)
+                    _p = pd.to_numeric(best.at[_idx, "empirical_win_probability"], errors="coerce")
+                    if pd.notna(_dec) and _dec > 1.0 and pd.notna(_p):
+                        best.at[_idx, "Kelly_Bet_Size"] = min(0.04, kelly_fraction(float(_p), float(_dec)) * 0.25)
+
+                if diagnostics_out is not None:
+                    diagnostics_out["empirical_tier_overlay"] = {
+                        "applied": True,
+                        "actionable_before": _pre_actionable,
+                        "actionable_after": int(best["Pick_Status"].astype(str).eq("Actionable").sum()),
+                        "bucket_stats_n": int(_bucket_stats["overall"]["n"]),
+                    }
+        except Exception as e:
+            logger.warning(f"Empirical tier overlay failed; keeping legacy tiers: {e}")
+
     # Degraded-feature Kelly reduction/caps for production safety.
     degraded_run = bool(
         best.get("degraded_feature_subset_flag", pd.Series([False] * len(best), index=best.index)).fillna(False).astype(bool).any()
@@ -5796,12 +5864,16 @@ def run_analysis_pipeline(
 
 def generate_parlays(best_picks_df: pd.DataFrame, max_legs: int = 3) -> pd.DataFrame:
     from core.kelly_optimizer import add_kelly_bet_sizing, apply_simultaneous_kelly
-    from core.smart_parlay_engine import generate_smart_parlays
+    from core.probability_calibration import load_calibration
+    from core.smart_parlay_engine import downweight_correlated_parlay_kelly, generate_smart_parlays
 
     if best_picks_df is None or best_picks_df.empty:
         return pd.DataFrame()
 
-    parlays_df = generate_smart_parlays(best_picks_df, num_rr_candidates=5)
+    # Recap-fitted isotonic table (scripts/fit_calibration.py); None when absent,
+    # in which case legs use raw effective_win_probability as before.
+    calibration = load_calibration()
+    parlays_df = generate_smart_parlays(best_picks_df, num_rr_candidates=5, calibration=calibration)
 
     if parlays_df.empty:
         return parlays_df
@@ -5815,7 +5887,24 @@ def generate_parlays(best_picks_df: pd.DataFrame, max_legs: int = 3) -> pd.DataF
     )
 
     parlays_df = add_kelly_bet_sizing(parlays_df, bankroll=1000.0, fraction=0.125)
+    # Correlated combos (same-game legs or a same-direction Agrees pair) carry
+    # block variance — halve their stake before exposure caps are applied.
+    parlays_df = downweight_correlated_parlay_kelly(parlays_df)
     parlays_df = apply_simultaneous_kelly(parlays_df, bankroll=1000.0, max_exposure=0.05)
+
+    # Persist the day's recommended parlays so they can be graded alongside the
+    # slate. Recaps grade single picks only, so the parlay engine has never
+    # received realized feedback; this log is the input for that. Last run of the
+    # day wins, matching the card actually shown.
+    try:
+        log_dir = Path("data/parlay_log")
+        log_dir.mkdir(parents=True, exist_ok=True)
+        slate_date = pd.Timestamp.now().strftime("%Y-%m-%d")
+        logged = parlays_df.copy()
+        logged.insert(0, "generated_date", slate_date)
+        logged.to_csv(log_dir / f"{slate_date}.csv", index=False)
+    except Exception as e:
+        logger.warning(f"Failed to write parlay log: {e}")
 
     return parlays_df
 

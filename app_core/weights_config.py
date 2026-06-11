@@ -336,6 +336,17 @@ LEAGUE_MARKET_FAMILY_ACTIONABLE_PENALTIES = {
 # Model-health guardrail for noisy slates
 FALLBACK_HEAVY_TOTAL_EXTRA_PENALTY = 0.01
 
+# Empirical tier overlay — final tier pass that reassigns Actionable / High
+# Variance / Below Threshold from realized bucket performance (scripts/
+# fit_bucket_stats.py) + isotonic-calibrated probability (scripts/
+# fit_calibration.py), replacing model-vs-market EV/edge as the promotion
+# signal. Jun 5-10 graded recaps: EV/edge-promoted tiers hit ~21% (Actionable
+# 1-4, HV 3-11) while Below Threshold hit 59% — the 10 Jun slate went 10-5 and
+# still lost money because stake followed the inverted tiers. Safety statuses
+# (No Play / Missing Line) are never overridden. Flip False to restore the
+# legacy EV/edge tiers. See core/empirical_tiers.py for thresholds.
+EMPIRICAL_TIER_OVERLAY_ENABLED = True
+
 # Profiles
 BEST_PICKS_PROFILE = 'STANDARD'
 
