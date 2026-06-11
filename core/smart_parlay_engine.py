@@ -233,8 +233,20 @@ def generate_smart_parlays(
     # Recap-fitted isotonic calibration: map predicted -> realized win rate before
     # any floor/gate/EV math. Opt-in via the caller so tests and raw consumers see
     # unchanged behavior when no table is passed.
+    #
+    # The probability floors below are defined in RAW effective_win_probability
+    # space (0.58 raw ~ 0.54 realized on the fitted table), so when legs are
+    # calibrated the floors must be mapped through the same table — otherwise a
+    # 0.58 floor applied to calibrated values silently demands ~0.65 raw.
+    min_leg_probability = MIN_LEG_PROBABILITY
+    mlb_total_min_prob = MLB_TOTAL_HV_PARLAY_MIN_PROB
     if calibration:
         candidates["_parlay_leg_prob"] = apply_calibration(candidates[rank_col], calibration)
+        floors = apply_calibration(
+            pd.Series([MIN_LEG_PROBABILITY, MLB_TOTAL_HV_PARLAY_MIN_PROB]), calibration
+        )
+        min_leg_probability = float(floors.iloc[0])
+        mlb_total_min_prob = float(floors.iloc[1])
         rank_col = "_parlay_leg_prob"
 
     # Quality gate on pick status (see PARLAY_ELIGIBLE_STATUSES)
@@ -273,12 +285,12 @@ def generate_smart_parlays(
             & candidates["Pick_Status"].astype(str).ne("Actionable")
         )
         candidates = candidates[
-            ~is_mlb_nonactionable_total | candidates[rank_col].ge(MLB_TOTAL_HV_PARLAY_MIN_PROB)
+            ~is_mlb_nonactionable_total | candidates[rank_col].ge(mlb_total_min_prob)
         ]
 
     # Per-leg effective_win_probability and edge floor
     candidates = candidates[
-        candidates[rank_col].ge(MIN_LEG_PROBABILITY)
+        candidates[rank_col].ge(min_leg_probability)
         & candidates["edge"].ge(MIN_LEG_EDGE)
     ]
 

@@ -209,6 +209,27 @@ def test_grade_slate_excludes_no_play_and_unresolved(tmp_path):
     assert not graded["best_pick"].str.contains("unresolved").any()
 
 
+def test_floors_are_mapped_through_calibration():
+    # MIN_LEG_PROBABILITY (0.58) is defined in RAW prob space. With a calibration
+    # table that maps ~0.59 raw -> ~0.54, the leg must still pass because the floor
+    # is transformed through the same table (0.58 -> ~0.53), not applied raw.
+    bets = _bets(
+        best_pick=["Under 5.5", "A -1.5"],
+        league=["NHL", "NBA"],
+        matchup_id=["g1", "g2"],
+        edge=[0.07, 0.06],
+        calibrated_probability=[0.59, 0.59],
+        effective_win_probability=[0.59, 0.59],
+        market_probability=[0.45, 0.45],
+        decimal_odds=[2.2, 2.2],
+    )
+    knots = [[0.50, 0.45], [0.70, 0.65]]
+    parlays = generate_smart_parlays(bets, calibration=knots)
+    assert not parlays.empty
+    # 0.59 -> 0.45 + (0.09/0.20)*0.20 = 0.54 per leg
+    assert np.isclose(parlays.iloc[0]["min_leg_prob"], 0.54)
+
+
 def test_results_dashboard_grades_unresolved_pick_as_na():
     from app.ui.results_dashboard import determine_display_outcome
 
