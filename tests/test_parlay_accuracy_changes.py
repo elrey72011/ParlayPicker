@@ -299,6 +299,39 @@ def test_downweight_correlated_parlay_kelly():
     assert out.loc[1, "recommended_bet"] == 10.0
 
 
+def test_zero_zero_final_is_void_not_loss(tmp_path):
+    # 0-0 finals don't exist in MLB/NBA/NHL — postponed game. 6 Jun NYY/BOS and
+    # 11 Jun CWS/ATL were both graded LOSS at 0-0, poisoning calibration data.
+    from app.ui.results_dashboard import determine_display_outcome
+    from scripts.grade_slate import grade
+
+    row = pd.Series(
+        {"best_pick": "Over 8.5", "actual_home_score": 0, "actual_away_score": 0, "Outcome": pd.NA}
+    )
+    assert determine_display_outcome(row) == "N/A"
+
+    export = pd.DataFrame(
+        {
+            "league": ["MLB"], "Home": ["Chicago White Sox"], "Away": ["Atlanta"],
+            "best_pick": ["Over 8.5"], "WinProbability": [0.6],
+            "effective_win_probability": [0.6], "effective_edge": [0.1],
+            "consensus_agreement": ["Neutral"], "kalshi_probability": [0.6],
+            "Kelly_Bet_Size": [10], "odds_american": [-110],
+        }
+    )
+    recap = pd.DataFrame(
+        {
+            "Home": ["Chicago White Sox"], "Away": ["Atlanta"], "Pick Taken": ["Over 8.5"],
+            "actual_home_score": [0], "actual_away_score": [0],
+            "Outcome": ["LOSS"], "Status": ["Below Threshold"],
+        }
+    )
+    export.to_csv(tmp_path / "e.csv", index=False)
+    recap.to_csv(tmp_path / "r.csv", index=False)
+    grade(tmp_path / "e.csv", tmp_path / "r.csv", tmp_path / "g.csv")
+    assert len(pd.read_csv(tmp_path / "g.csv")) == 0
+
+
 def test_results_dashboard_grades_unresolved_pick_as_na():
     from app.ui.results_dashboard import determine_display_outcome
 

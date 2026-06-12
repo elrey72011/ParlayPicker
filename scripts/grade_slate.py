@@ -63,7 +63,14 @@ def grade(export_csv: Path, recap_csv: Path, out_csv: Path) -> None:
         status = str(r.get("Status", "")).strip().lower()
         if status in ("no play", "missing line"):
             return False
-        return "unresolved" not in _norm(r.get("Pick Taken"))
+        if "unresolved" in _norm(r.get("Pick Taken")):
+            return False
+        # 0-0 finals don't exist in MLB/NBA/NHL — postponed game, void it.
+        h = pd.to_numeric(r.get("actual_home_score"), errors="coerce")
+        a = pd.to_numeric(r.get("actual_away_score"), errors="coerce")
+        if pd.notna(h) and pd.notna(a) and float(h) == 0 and float(a) == 0:
+            return False
+        return True
 
     rec_key = {
         (_norm(r.get("Home")), _norm(r.get("Away")), _norm(r.get("Pick Taken"))): _norm_result(r.get("Outcome"))

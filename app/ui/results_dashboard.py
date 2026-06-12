@@ -28,6 +28,13 @@ def determine_display_outcome(row):
             h = float(h_score)
             a = float(a_score)
 
+            # A 0-0 final does not exist in MLB/NBA/NHL — it means the game was
+            # postponed or not played. Grading it WIN/LOSS poisons the
+            # calibration data (6 Jun NYY/BOS and 11 Jun CWS/ATL were both
+            # graded LOSS at 0-0). Void instead.
+            if h == 0 and a == 0:
+                return 'N/A'
+
             # Evaluate TOTALS (Over/Under)
             if 'over' in pick or 'under' in pick:
                 import re
