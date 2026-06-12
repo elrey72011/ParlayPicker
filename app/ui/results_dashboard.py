@@ -281,8 +281,12 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
     if 'Away' in display_df.columns and 'away_team' not in display_df.columns:
         display_df = display_df.rename(columns={'Away': 'away_team'})
     
-    # Select columns to show
-    cols_to_show = ['league', 'home_team', 'away_team', 'best_pick', 'actual_home_score', 'actual_away_score', 'Outcome', 'Pick_Status']
+    # Select columns to show. export_run_id is carried through so a downloaded
+    # recap stays traceable to the pipeline run that produced the card —
+    # scripts/grade_slate.py warns when a recap's run id doesn't match the
+    # export being graded (11 Jun: a recap built from a stale morning card
+    # graded lines the final card never played).
+    cols_to_show = ['league', 'home_team', 'away_team', 'best_pick', 'actual_home_score', 'actual_away_score', 'Outcome', 'Pick_Status', 'export_run_id']
     # Filter to only existing columns
     cols_to_show = [c for c in cols_to_show if c in display_df.columns]
 
@@ -301,7 +305,7 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
     edited_df = st.data_editor(
         table_df,
         width="stretch",
-        disabled=["League", "Home", "Away", "Pick Taken", "Status"],
+        disabled=["League", "Home", "Away", "Pick Taken", "Status", "export_run_id"],
         column_config={
             "actual_home_score": st.column_config.NumberColumn(
                 "Home Score",

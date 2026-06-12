@@ -51,9 +51,75 @@ OUT_COLS = [
 ]
 
 
+def _pick_family(pick: object) -> str:
+    """over / under / side — the comparable part of a pick string."""
+    p = _norm(pick)
+    if p.startswith("over"):
+        return "over"
+    if p.startswith("under"):
+        return "under"
+    return "side"
+
+
+def find_line_drift(exp: pd.DataFrame, rec: pd.DataFrame) -> list[dict]:
+    """Export rows whose matchup+direction matches a recap row but whose PICK
+    (line) differs — i.e. the recap was built from an earlier card than the
+    final export. The recap's graded outcome belongs to a DIFFERENT bet, so
+    these must be excluded, not silently dropped: on 11 Jun the recap graded
+    NYM/STL 'Under 5.5' LOSS while the final card's Under 10.5 WON."""
+    rec_by_game: dict[tuple, list] = {}
+    for _, r in rec.iterrows():
+        key = (_norm(r.get("Home")), _norm(r.get("Away")), _pick_family(r.get("Pick Taken")))
+        rec_by_game.setdefault(key, []).append(_norm(r.get("Pick Taken")))
+
+    drift = []
+    for _, e in exp.iterrows():
+        pick = _norm(e.get("best_pick"))
+        if "unresolved" in pick:
+            continue
+        key = (_norm(e.get("Home")), _norm(e.get("Away")), _pick_family(e.get("best_pick")))
+        recap_picks = rec_by_game.get(key, [])
+        if recap_picks and pick not in recap_picks:
+            drift.append({
+                "Home": e.get("Home"), "Away": e.get("Away"),
+                "export_pick": e.get("best_pick"), "recap_pick": recap_picks[0],
+            })
+    return drift
+
+
+def _run_id_mismatch(exp: pd.DataFrame, rec: pd.DataFrame) -> tuple[str, str] | None:
+    """(export_run_id, recap_run_id) when both frames carry run ids and they
+    differ — the recap was built from a different pipeline run than the export."""
+    if "export_run_id" not in exp.columns or "export_run_id" not in rec.columns:
+        return None
+    exp_ids = exp["export_run_id"].dropna().astype(str).unique()
+    rec_ids = rec["export_run_id"].dropna().astype(str).unique()
+    if len(exp_ids) != 1 or len(rec_ids) != 1:
+        return None
+    return None if exp_ids[0] == rec_ids[0] else (exp_ids[0], rec_ids[0])
+
+
 def grade(export_csv: Path, recap_csv: Path, out_csv: Path) -> None:
     exp = pd.read_csv(export_csv)
     rec = pd.read_csv(recap_csv)
+
+    mismatch = _run_id_mismatch(exp, rec)
+    if mismatch:
+        print(
+            f"  [WARN] RUN ID MISMATCH: recap was built from run {mismatch[1]} but the "
+            f"export is run {mismatch[0]} — recap outcomes may describe a stale card. "
+            f"Drifted lines below are excluded; re-grade from the matching export.",
+            file=sys.stderr,
+        )
+
+    drift = find_line_drift(exp, rec)
+    for d in drift:
+        print(
+            f"  [WARN] LINE DRIFT (excluded): {d['Home']} v {d['Away']} — export pick "
+            f"'{d['export_pick']}' vs recap pick '{d['recap_pick']}'. The recap graded a "
+            f"different line; grade this game from final scores instead.",
+            file=sys.stderr,
+        )
 
     # Recap pick column is "Pick Taken"; outcome is "Outcome".
     # No Play / Missing Line rows and unresolved-line placeholders are excluded:
@@ -78,12 +144,14 @@ def grade(export_csv: Path, recap_csv: Path, out_csv: Path) -> None:
         if _gradeable(r)
     }
 
+    drifted_games = {(_norm(d["Home"]), _norm(d["Away"])) for d in drift}
     rows, unmatched = [], []
     for _, e in exp.iterrows():
         key = (_norm(e.get("Home")), _norm(e.get("Away")), _norm(e.get("best_pick")))
         result = rec_key.get(key)
         if result is None:
-            unmatched.append(key)
+            if (key[0], key[1]) not in drifted_games:  # drift already reported above
+                unmatched.append(key)
             continue
         kelly = pd.to_numeric(e.get("Kelly_Bet_Size"), errors="coerce")
         odds = pd.to_numeric(e.get("odds_american"), errors="coerce")
