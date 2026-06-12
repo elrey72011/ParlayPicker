@@ -299,6 +299,101 @@ def test_downweight_correlated_parlay_kelly():
     assert out.loc[1, "recommended_bet"] == 10.0
 
 
+def test_zero_zero_final_is_void_not_loss(tmp_path):
+    # 0-0 finals don't exist in MLB/NBA/NHL — postponed game. 6 Jun NYY/BOS and
+    # 11 Jun CWS/ATL were both graded LOSS at 0-0, poisoning calibration data.
+    from app.ui.results_dashboard import determine_display_outcome
+    from scripts.grade_slate import grade
+
+    row = pd.Series(
+        {"best_pick": "Over 8.5", "actual_home_score": 0, "actual_away_score": 0, "Outcome": pd.NA}
+    )
+    assert determine_display_outcome(row) == "N/A"
+
+    export = pd.DataFrame(
+        {
+            "league": ["MLB"], "Home": ["Chicago White Sox"], "Away": ["Atlanta"],
+            "best_pick": ["Over 8.5"], "WinProbability": [0.6],
+            "effective_win_probability": [0.6], "effective_edge": [0.1],
+            "consensus_agreement": ["Neutral"], "kalshi_probability": [0.6],
+            "Kelly_Bet_Size": [10], "odds_american": [-110],
+        }
+    )
+    recap = pd.DataFrame(
+        {
+            "Home": ["Chicago White Sox"], "Away": ["Atlanta"], "Pick Taken": ["Over 8.5"],
+            "actual_home_score": [0], "actual_away_score": [0],
+            "Outcome": ["LOSS"], "Status": ["Below Threshold"],
+        }
+    )
+    export.to_csv(tmp_path / "e.csv", index=False)
+    recap.to_csv(tmp_path / "r.csv", index=False)
+    grade(tmp_path / "e.csv", tmp_path / "r.csv", tmp_path / "g.csv")
+    assert len(pd.read_csv(tmp_path / "g.csv")) == 0
+
+
+def test_line_drift_detection_and_exclusion(tmp_path, capsys):
+    # The 11 Jun failure mode: recap graded 'Under 5.5' (stale morning card)
+    # while the final export's pick was 'Under 10.5'. The drifted game must be
+    # excluded from the graded output and reported, while clean rows grade.
+    from scripts.grade_slate import find_line_drift, grade
+
+    export = pd.DataFrame(
+        {
+            "league": ["MLB", "MLB"],
+            "Home": ["New York Mets", "Baltimore"],
+            "Away": ["Saint Louis", "Seattle"],
+            "best_pick": ["Under 10.5", "Over 8.5"],
+            "WinProbability": [0.58, 0.63],
+            "effective_win_probability": [0.58, 0.63],
+            "effective_edge": [0.1, 0.1],
+            "consensus_agreement": ["Disagrees", "Agrees"],
+            "kalshi_probability": [0.33, 0.6],
+            "Kelly_Bet_Size": [7.77, 40.0],
+            "odds_american": [104, -104],
+            "export_run_id": ["20260611T191418Z", "20260611T191418Z"],
+        }
+    )
+    recap = pd.DataFrame(
+        {
+            "Home": ["New York Mets", "Baltimore"],
+            "Away": ["Saint Louis", "Seattle"],
+            "Pick Taken": ["Under 5.5", "Over 8.5"],
+            "Outcome": ["LOSS", "WIN"],
+            "Status": ["No Play", "Below Threshold"],
+            "export_run_id": ["20260611T080000Z", "20260611T080000Z"],
+        }
+    )
+
+    drift = find_line_drift(export, recap)
+    assert len(drift) == 1
+    assert drift[0]["export_pick"] == "Under 10.5"
+    assert drift[0]["recap_pick"] == "under 5.5"
+
+    export.to_csv(tmp_path / "e.csv", index=False)
+    recap.to_csv(tmp_path / "r.csv", index=False)
+    grade(tmp_path / "e.csv", tmp_path / "r.csv", tmp_path / "g.csv")
+    graded = pd.read_csv(tmp_path / "g.csv")
+    # Only the clean Baltimore row grades; the drifted Mets line is excluded.
+    assert len(graded) == 1
+    assert graded.iloc[0]["Home"] == "Baltimore"
+    err = capsys.readouterr().err
+    assert "LINE DRIFT" in err
+    assert "RUN ID MISMATCH" in err
+
+
+def test_run_id_match_produces_no_warning():
+    from scripts.grade_slate import _run_id_mismatch
+
+    exp = pd.DataFrame({"export_run_id": ["A", "A"]})
+    rec = pd.DataFrame({"export_run_id": ["A"]})
+    assert _run_id_mismatch(exp, rec) is None
+    rec2 = pd.DataFrame({"export_run_id": ["B"]})
+    assert _run_id_mismatch(exp, rec2) == ("A", "B")
+    # Missing column on either side -> no claim either way
+    assert _run_id_mismatch(exp, pd.DataFrame({"x": [1]})) is None
+
+
 def test_results_dashboard_grades_unresolved_pick_as_na():
     from app.ui.results_dashboard import determine_display_outcome
 
