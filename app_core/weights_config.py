@@ -374,6 +374,16 @@ ALLOW_UPLOAD_TOTAL_FALLBACK_ACTIONABLE = False
 MAX_TOTAL_OVER_ACTIONABLE_SHARE = 0.50
 MAX_TOTAL_OVER_ACTIONABLE_COUNT = 3
 MAX_MLB_TOTAL_OVER_ACTIONABLE_COUNT = 2
+# Same-direction UNDER Actionable caps — the mirror of the Over caps above.
+# 12 Jun: the empirical overlay staked 4-5 MLB Actionable Unders (Disagrees bucket);
+# the league went 10/15 games at 10+ runs and the Under block went 1-3 (am) / 1-4 (pm),
+# -$61.60 on the Actionable tier, while the (mostly-Over) Below Threshold tier went 4-2.
+# Same-direction totals share the night's run environment, so an unguarded Under block
+# busts together exactly as the 6 Jun Over block did (0-4). Cap how many total_under
+# (and MLB total_under) picks may be Actionable; the lowest-edge excess drops to High
+# Variance. The empirical overlay re-applies these after promotion.
+MAX_TOTAL_UNDER_ACTIONABLE_COUNT = 3
+MAX_MLB_TOTAL_UNDER_ACTIONABLE_COUNT = 2
 # Speculative (High Variance/Speculative) concentration caps. The Actionable caps above
 # never protected the speculative surface, so the card could still collapse onto one
 # league+direction there: 6 Jun the HV tier held 4 MLB "Over 7.5" plays that all lost

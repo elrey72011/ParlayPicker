@@ -42,7 +42,12 @@ HIGH_VARIANCE_MIN_EMPIRICAL_EDGE = 0.015
 # picks and a smoothed realized rate at/above break-even-plus. A great calibrated
 # number in a bucket that has bled (e.g. Neutral-consensus Overs, 48.2% n=56)
 # caps at High Variance until the bucket itself earns trust.
-ACTIONABLE_MIN_BUCKET_N = 15
+# Raised 15 -> 25 on 13 Jun: the MLB:under:Disagrees bucket promoted to Actionable at
+# n=16 (60%) and then went 1-3/1-4 on 12 Jun. 16 samples is too thin to trust a 60%
+# rate (95% CI roughly +/- 24pts), and it tilted enough Unders into Actionable to form
+# the correlated block the concentration cap now also guards. Require a sturdier sample
+# before a bucket can carry full Kelly.
+ACTIONABLE_MIN_BUCKET_N = 25
 ACTIONABLE_MIN_BUCKET_RATE = 0.55
 
 

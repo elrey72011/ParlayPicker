@@ -99,11 +99,32 @@ def test_overlay_applies_calibration_before_bucket_tilt():
 
 
 def test_overlay_requires_proven_bucket_for_actionable():
-    # Strong calibrated number in the tiny 4-0 bucket: n=4 < 15 -> capped at HV.
+    # Strong calibrated number in the tiny 4-0 bucket: n=4 < 25 -> capped at HV.
     df = _frame().iloc[[1]].copy()
     df["consensus_agreement"] = ["Agrees"]
     df["effective_win_probability"] = [0.68]
     out = assign_empirical_tiers(df, STATS, calibration=None)
+    assert out.iloc[0]["Pick_Status"] == "High Variance/Speculative"
+
+
+def test_thin_bucket_below_n25_floor_cannot_be_actionable():
+    # The exact 12 Jun case: MLB:under:Disagrees at 60% but only n=16. Strong edge,
+    # but the sample is too thin to carry Actionable under the raised n>=25 floor.
+    stats = {
+        "overall": {"n": 200, "win_rate": 0.53},
+        "buckets": {"MLB:under:Disagrees": {"n": 16, "wins": 10, "win_rate": 0.625}},
+    }
+    df = pd.DataFrame(
+        {
+            "league": ["MLB"], "market_type": ["total_under"],
+            "consensus_agreement": ["Disagrees"], "best_pick": ["Under 8.5"],
+            "Pick_Status": ["Below Threshold"], "Status_Reason": ["old"],
+            "status_blocker_stage": ["x"],
+            "effective_win_probability": [0.66], "odds_american": [-110],
+        }
+    )
+    out = assign_empirical_tiers(df, stats, calibration=None)
+    # Positive empirical edge -> at least High Variance, but NOT Actionable (n<25).
     assert out.iloc[0]["Pick_Status"] == "High Variance/Speculative"
 
 

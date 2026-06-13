@@ -40,6 +40,8 @@ from app_core.weights_config import (
             MAX_TOTAL_OVER_ACTIONABLE_SHARE,
             MAX_TOTAL_OVER_ACTIONABLE_COUNT,
             MAX_MLB_TOTAL_OVER_ACTIONABLE_COUNT,
+            MAX_TOTAL_UNDER_ACTIONABLE_COUNT,
+            MAX_MLB_TOTAL_UNDER_ACTIONABLE_COUNT,
             MAX_TOTAL_OVER_HIGH_VARIANCE_COUNT,
             MAX_MLB_TOTAL_OVER_HIGH_VARIANCE_COUNT,
             TOTAL_OVER_PROB_SHRINK,
@@ -2142,24 +2144,29 @@ def _edge_no_stake_demotion(
     return (None, None, None)
 
 
-def _total_over_concentration_downgrades(candidates: pd.DataFrame, *, overall_cap: int, mlb_cap: int) -> list:
-    """Greedy keep of the best-ranked total_over picks under both an overall cap and an
-    MLB-specific sub-cap; return the indices of the lowest-ranked excess to downgrade.
+def _total_over_concentration_downgrades(
+    candidates: pd.DataFrame, *, overall_cap: int, mlb_cap: int, flag_col: str = "_is_mlb_over"
+) -> list:
+    """Greedy keep of the best-ranked same-direction totals picks under both an overall
+    cap and an MLB-specific sub-cap; return the indices of the lowest-ranked excess to
+    downgrade.
 
-    ``candidates`` must already be sorted best-first and carry a boolean ``_is_mlb_over``
-    column. Used by the speculative (High Variance) concentration guard so the
-    selection logic is unit-testable in isolation.
+    ``candidates`` must already be sorted best-first and carry a boolean ``flag_col``
+    column (the MLB-specific membership flag). Direction-agnostic: the over guard passes
+    ``_is_mlb_over`` and the under guard passes ``_is_mlb_under``. Used by the speculative
+    (High Variance) and empirical-overlay concentration guards so the selection logic is
+    unit-testable in isolation.
     """
     kept_total = 0
     kept_mlb = 0
     downgrade_idx: list = []
-    for idx, is_mlb_over in candidates["_is_mlb_over"].items():
-        is_mlb_over = bool(is_mlb_over)
+    for idx, is_mlb in candidates[flag_col].items():
+        is_mlb = bool(is_mlb)
         overall_ok = kept_total < int(overall_cap)
-        mlb_ok = (not is_mlb_over) or (kept_mlb < int(mlb_cap))
+        mlb_ok = (not is_mlb) or (kept_mlb < int(mlb_cap))
         if overall_ok and mlb_ok:
             kept_total += 1
-            if is_mlb_over:
+            if is_mlb:
                 kept_mlb += 1
         else:
             downgrade_idx.append(idx)
@@ -3916,6 +3923,32 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                         best.loc[_excess, "status_blocker_stage"] = "empirical_tier_overlay_concentration"
                         best.loc[_excess, "Status_Reason"] = (
                             "High Variance: empirical promotion capped by total-over concentration guard"
+                        )
+
+                # Mirror cap for total_under (12 Jun: 4-5 Actionable Unders busted as a
+                # block on a leaguewide-over night). Keep the best-edge Unders up to the
+                # cap; drop the lowest-edge excess to High Variance.
+                _is_total_under = best["market_type"].astype(str).str.lower().eq("total_under")
+                _is_mlb_under = _is_total_under & best["league"].astype(str).str.upper().eq("MLB")
+                _act_under_mask = best["Pick_Status"].astype(str).eq("Actionable") & _is_total_under
+                if int(_act_under_mask.sum()) > 0:
+                    _candsu = best[_act_under_mask].copy()
+                    _candsu["_rank_sort"] = -pd.to_numeric(
+                        _candsu.get("empirical_edge"), errors="coerce"
+                    ).fillna(-9.0)
+                    _candsu["_is_mlb_under"] = _is_mlb_under.reindex(_candsu.index).fillna(False).astype(bool)
+                    _candsu = _candsu.sort_values("_rank_sort")
+                    _excess_u = _total_over_concentration_downgrades(
+                        _candsu,
+                        overall_cap=int(MAX_TOTAL_UNDER_ACTIONABLE_COUNT),
+                        mlb_cap=int(MAX_MLB_TOTAL_UNDER_ACTIONABLE_COUNT),
+                        flag_col="_is_mlb_under",
+                    )
+                    if _excess_u:
+                        best.loc[_excess_u, "Pick_Status"] = "High Variance/Speculative"
+                        best.loc[_excess_u, "status_blocker_stage"] = "empirical_tier_overlay_concentration"
+                        best.loc[_excess_u, "Status_Reason"] = (
+                            "High Variance: empirical promotion capped by total-under concentration guard"
                         )
 
                 # Size Kelly for empirically promoted Actionable rows from the
