@@ -9,9 +9,12 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import io
+
 from core.slate_quality import (
     slate_direction_imbalanced,
     theover_feed_degraded,
+    theover_upload_warning,
     totals_direction_share,
 )
 
@@ -86,3 +89,65 @@ def test_slate_imbalance_allows_real_lopsided_slate():
     # 9/12 over (75%) is a plausible hot slate, not a fault — must not fire.
     mt = ["total_over"] * 9 + ["total_under"] * 3
     assert slate_direction_imbalanced(mt)[0] is False
+
+
+# ---- upload-time content validation (theover_upload_warning) ----
+
+def _upload_df(probs):
+    teams = [(f"Home{i}", f"Away{i}") for i in range(len(probs))]
+    return pd.DataFrame(
+        {
+            "home_team": [h for h, _ in teams],
+            "away_team": [a for _, a in teams],
+            "winprobability": probs,
+            "total_line": [8.5] * len(probs),
+        }
+    )
+
+
+def test_upload_warning_flags_clustering():
+    # 5 identical reads among 7 real -> clustering warning at upload time.
+    w = theover_upload_warning(_upload_df([0.692, 0.706, 0.667, 0.692, 0.692, 0.692, 0.692]))
+    assert w is not None
+    assert "corrupt" in w.lower() and "0.692" in w
+
+
+def test_upload_warning_flags_nonnumeric_contamination():
+    # The column-shift: a text label sits in the probability column.
+    w = theover_upload_warning(_upload_df(["model_hit_rate", 0.61, 0.47, 0.55, 0.6, 0.52]))
+    assert w is not None
+    assert "non-numeric" in w.lower()
+
+
+def test_upload_warning_clean_file_is_none():
+    assert theover_upload_warning(_upload_df([0.58, 0.61, 0.47, 0.54, 0.63, 0.49, 0.52])) is None
+
+
+def test_upload_warning_no_prob_column_is_none():
+    assert theover_upload_warning(pd.DataFrame({"home_team": ["A"], "away_team": ["B"]})) is None
+
+
+def test_upload_warning_never_raises_on_garbage():
+    assert theover_upload_warning(None) is None
+    assert theover_upload_warning(pd.DataFrame()) is None
+
+
+def test_load_theover_csv_surfaces_warning_and_keeps_data():
+    from core.theover_loader import load_theover_csv
+
+    df = _upload_df([0.692, 0.706, 0.667, 0.692, 0.692, 0.692, 0.692])
+    buf = io.StringIO(df.to_csv(index=False))
+    loaded, msg = load_theover_csv(buf)
+    # Warning surfaced AND the data still loads (guards are the safety net).
+    assert msg is not None and "corrupt" in msg.lower()
+    assert not loaded.empty and len(loaded) == 7
+
+
+def test_load_theover_csv_clean_file_no_warning():
+    from core.theover_loader import load_theover_csv
+
+    df = _upload_df([0.58, 0.61, 0.47, 0.54, 0.63, 0.49, 0.52])
+    buf = io.StringIO(df.to_csv(index=False))
+    loaded, msg = load_theover_csv(buf)
+    assert msg is None
+    assert len(loaded) == 7

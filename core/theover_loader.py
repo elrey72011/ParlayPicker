@@ -101,8 +101,15 @@ def load_theover_csv(uploaded_file) -> tuple[pd.DataFrame, str | None]:
         df = pd.read_csv(uploaded_file)
         if df.empty:
             return pd.DataFrame(), "Uploaded TheOver CSV is empty."
+        # Content validation on the RAW upload (before normalize coerces the
+        # probability column): catches the column-shift and identical-value
+        # clustering that produced the 13 Jun all-Over card, and surfaces it as a
+        # warning at upload time. Non-fatal — the file still loads; the warning
+        # is returned in the message slot (callers treat it as a warning).
+        from core.slate_quality import theover_upload_warning
+        warning = theover_upload_warning(df)
         normalized = normalize_theover_df(df)
-        return _ensure_required_theover_columns(normalized), None
+        return _ensure_required_theover_columns(normalized), warning
     except pd.errors.EmptyDataError:
         return pd.DataFrame(), "Uploaded CSV contains no readable data."
     except Exception as e:  # pragma: no cover

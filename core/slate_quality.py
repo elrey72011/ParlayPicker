@@ -42,6 +42,57 @@ THEOVER_CLUSTER_ROUND = 3  # round reads to 3 dp before counting identical value
 DIRECTION_IMBALANCE_MIN_GAMES = 6
 DIRECTION_IMBALANCE_SHARE = 0.90
 
+# Column names a TheOver upload may use for its win-probability field, after
+# lowercasing and collapsing non-alphanumerics to underscores.
+_THEOVER_PROB_COLS = ("winprobability", "win_probability", "probability", "win_prob")
+
+
+def theover_upload_warning(raw_df) -> str | None:
+    """User-facing content check for a freshly-uploaded TheOver CSV.
+
+    Runs on the RAW upload (before numeric coercion) so it can see the two
+    corruptions behind the 13 Jun all-Over card that the downstream blend guard
+    cannot: a column-shift dropping non-numeric text into the probability field
+    (coercion would silently turn it into NaN), and the same probability value
+    repeated across many games. Returns a warning string to surface at upload
+    time, or None when the file looks clean. Never raises — a malformed frame
+    just yields None so the upload still proceeds (the blend/card guards remain
+    the safety net).
+    """
+    try:
+        if raw_df is None or len(raw_df) == 0:
+            return None
+        cols = {
+            str(c).strip().lower().replace(" ", "_"): c for c in raw_df.columns
+        }
+        prob_col = next((cols[k] for k in _THEOVER_PROB_COLS if k in cols), None)
+        if prob_col is None:
+            return None
+
+        raw = raw_df[prob_col].astype("string")
+        nonblank = raw.str.strip().fillna("").ne("")
+        numeric = pd.to_numeric(raw, errors="coerce")
+        contaminated = int((nonblank & numeric.isna()).sum())
+
+        msgs: list[str] = []
+        if contaminated >= 1:
+            msgs.append(
+                f"{contaminated} non-numeric value(s) in the win-probability "
+                f"column (likely a column-shift in the export)"
+            )
+        degraded, reason = theover_feed_degraded(numeric)
+        if degraded:
+            # reason already describes the identical-value clustering
+            msgs.append(reason.split(": ", 1)[-1])
+        if not msgs:
+            return None
+        return "TheOver upload looks corrupt — " + "; ".join(msgs) + (
+            ". Proceeding with TheOver dropped from the blend for affected "
+            "markets; re-export and re-upload a clean file if possible."
+        )
+    except Exception:
+        return None
+
 
 def theover_feed_degraded(
     over_probs,
