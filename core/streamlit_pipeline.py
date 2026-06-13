@@ -1403,6 +1403,27 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
     theover = theover.where(theover <= 1, theover / 100.0)
     ml = _numeric_series(out, "ml_probability")
 
+    # TheOver-feed degradation guard (13 Jun: 5 games shared an identical P(Over)
+    # of 0.692 and a column-shift put a text label in the numeric field, biasing
+    # every total to the Over). Judge the per-game reads on the total_over rows;
+    # if degenerately clustered, null TheOver for the slate's TOTALS so the blend
+    # falls back to market+Kalshi+ML (compute_blended_probability already drops a
+    # NaN TheOver and redistributes its weight). Spreads/H2H are left untouched.
+    try:
+        from core.slate_quality import theover_feed_degraded
+        _mt_lower = _string_series(out, "market_type").str.lower()
+        _over_reads = theover[_mt_lower.eq("total_over")]
+        _degraded, _reason = theover_feed_degraded(_over_reads)
+        if _degraded:
+            theover = theover.where(~_mt_lower.str.contains("total", na=False), other=pd.NA)
+            out["theover_feed_degraded_reason"] = _reason
+            existing_warn = _string_series(out, "run_health_warning")
+            out["run_health_warning"] = existing_warn.where(
+                existing_warn.str.len() > 0, _reason
+            )
+    except Exception as e:  # never let a guard break the pipeline
+        logger.warning(f"TheOver degradation guard skipped: {e}")
+
     # theover is a legacy column mapping we still ingest
     model_prob = ml.where(ml.notna(), theover)
     out["display_probability"] = model_prob.round(3)
@@ -3976,6 +3997,38 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                     }
         except Exception as e:
             logger.warning(f"Empirical tier overlay failed; keeping legacy tiers: {e}")
+
+    # Slate direction-balance backstop (13 Jun: a corrupt TheOver feed produced a
+    # 14-of-15 all-Over card with a staked Actionable). A near-unanimous totals
+    # direction across many games is a near-certain data/orientation fault, not a
+    # real read, so suspend big-Kelly staking: demote Actionable totals to High
+    # Variance and surface a loud run_health_warning. Conservative by design — it
+    # never fabricates the missing side, it just refuses to stake confidently on a
+    # slate whose direction signal can't be trusted. Catches ANY cause, not only
+    # TheOver. Runs after the overlay so it has the final tiers.
+    try:
+        from core.slate_quality import slate_direction_imbalanced
+        _imbalanced, _imb_reason = slate_direction_imbalanced(
+            _string_series(best, "market_type")
+        )
+        if _imbalanced:
+            _is_total = _string_series(best, "market_type").str.lower().str.contains("total", na=False)
+            _act_total = best["Pick_Status"].astype(str).eq("Actionable") & _is_total
+            best.loc[_act_total, "Pick_Status"] = "High Variance/Speculative"
+            best.loc[_act_total, "Kelly_Bet_Size"] = 0.0
+            best.loc[_act_total, "production_eligible"] = False
+            best.loc[_act_total, "status_blocker_stage"] = "slate_direction_imbalance_guard"
+            best.loc[_act_total, "Status_Reason"] = (
+                "High Variance: " + _imb_reason
+            )
+            existing_warn = _string_series(best, "run_health_warning")
+            best["run_health_warning"] = existing_warn.where(
+                existing_warn.str.len() > 0, _imb_reason
+            )
+            if diagnostics_out is not None:
+                diagnostics_out["slate_direction_imbalance"] = _imb_reason
+    except Exception as e:  # never let a guard break the pipeline
+        logger.warning(f"Slate direction-balance guard skipped: {e}")
 
     # Degraded-feature Kelly reduction/caps for production safety.
     degraded_run = bool(
