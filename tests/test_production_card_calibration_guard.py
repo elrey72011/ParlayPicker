@@ -90,6 +90,16 @@ def test_hv_concentration_mixed_keeps_non_mlb_until_overall_cap():
     assert downgrades == [2, 4]
 
 
+def test_under_concentration_uses_flag_col_and_binds_mlb_subcap():
+    # The 12 Jun pattern mirrored to Unders: 5 MLB Actionable Unders, MLB sub-cap 2 ->
+    # keep the best 2, downgrade the rest. The under guard passes flag_col="_is_mlb_under".
+    cands = pd.DataFrame({"_is_mlb_under": [True, True, True, True, True]})
+    downgrades = _total_over_concentration_downgrades(
+        cands, overall_cap=3, mlb_cap=2, flag_col="_is_mlb_under"
+    )
+    assert downgrades == [2, 3, 4]
+
+
 def test_no_regression_kelly_column_order_and_line_provenance_present():
     df = pd.DataFrame([_row(1, league="NBA", market_type="spread_home", prob=0.66, ev=0.11, edge=0.09)])
     out = build_best_picks_df(df)
