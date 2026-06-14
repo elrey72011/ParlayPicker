@@ -46,3 +46,40 @@ def test_debias_rebalances_real_jun14_card():
     overs = int((corrected > 0.5).sum())
     # Was 15/15 Over; only the genuinely strong overs survive the de-bias.
     assert overs <= 5
+
+
+# ---- regression: the post-Kalshi re-blend in streamlit_app must NOT undo the de-bias ----
+
+def test_recompute_consensus_reapplies_mlb_total_debias():
+    """_recompute_consensus_from_kalshi re-blends calibrated_probability/EV/edge from
+    scratch (the THIRD blend path). Before the fix it dropped the MLB total market
+    de-bias, so the production card on 14 Jun rebuilt on the raw over-lean and shipped
+    15/15 Over. The de-bias must be re-applied here so EV/edge/selection rebalance."""
+    from streamlit_app import _recompute_consensus_from_kalshi
+
+    # 8 MLB total_over games whose post-Kalshi blend sits systematically above the
+    # de-vig market (model over-lean) — exactly the 14 Jun pattern.
+    n = 8
+    df = pd.DataFrame({
+        "best_pick": [f"Over {i}" for i in range(n)],
+        "odds_american": [-110.0] * n,
+        "market_probability": [0.46] * n,
+        "kalshi_probability": [0.575] * n,   # tier 1
+        "ml_probability": [0.72] * n,
+        "model_probability": [0.72] * n,
+        "theover_probability": [float("nan")] * n,
+        "sentiment_diff": [0.5] * n,
+        "league": ["MLB"] * n,
+        "market_type": ["total_over"] * n,
+    })
+
+    out = _recompute_consensus_from_kalshi(df)
+
+    # The de-bias fired in THIS function (only place that could add the column here).
+    assert "mlb_total_market_debias" in out.columns
+    assert float(out["mlb_total_market_debias"].iloc[0]) > 0.0
+    # Over calibrated_probability was pulled down toward the market; the raw blend sat
+    # well above 0.5, so after de-bias the systematic over-lean is removed.
+    assert out["calibrated_probability"].mean() < 0.52
+    # edge recomputed from the de-biased probability (was the un-debiased gap before).
+    assert (out["edge"] < 0.10).all()
