@@ -215,3 +215,59 @@ def test_theover_not_degraded_when_magnitudes_vary():
     # mix of over- and under-leaning reads -> not degraded.
     over_rows = [0.62, 0.41, 0.58, 0.47, 0.66, 0.38, 0.55, 0.44]
     assert theover_feed_degraded(over_rows)[0] is False
+
+
+# ---- spread orientation guard (spread_moneyline_orientation_fault) ----
+
+from core.slate_quality import spread_moneyline_orientation_fault
+
+
+def test_orientation_fault_fires_on_flipped_away_spread():
+    # 14 Jun: away pick shown -1.5 (spread favorite) but the moneyline favors the
+    # home team (home -160, away +140) — the feed flipped the home/away spread.
+    fault, reason = spread_moneyline_orientation_fault(
+        "spread_away", -1.5, home_ml_price=-160, away_ml_price=140
+    )
+    assert fault is True
+    assert "spread_orientation_fault" in reason and "home" in reason
+
+
+def test_orientation_ok_when_spread_and_moneyline_agree():
+    # Away pick +1.5 (spread underdog) with the home team favored on the moneyline
+    # — consistent, no fault.
+    fault, reason = spread_moneyline_orientation_fault(
+        "spread_away", 1.5, home_ml_price=-160, away_ml_price=140
+    )
+    assert fault is False and reason is None
+
+
+def test_orientation_fault_fires_on_flipped_home_spread():
+    # Home pick -1.5 (spread favorite) but the away team is the moneyline favorite.
+    fault, reason = spread_moneyline_orientation_fault(
+        "spread_home", -1.5, home_ml_price=140, away_ml_price=-160
+    )
+    assert fault is True and "away" in reason
+
+
+def test_orientation_ok_for_home_favorite_consistent():
+    fault, _ = spread_moneyline_orientation_fault(
+        "spread_home", -1.5, home_ml_price=-160, away_ml_price=140
+    )
+    assert fault is False
+
+
+def test_orientation_no_fault_when_moneyline_missing():
+    assert spread_moneyline_orientation_fault("spread_away", -1.5, None, None)[0] is False
+    assert spread_moneyline_orientation_fault("spread_away", -1.5, -160, None)[0] is False
+
+
+def test_orientation_no_fault_on_pickem_moneyline():
+    # Near pick'em moneyline (-110/-110) is below the gap threshold, so even an
+    # ambiguous spread sign is not treated as a fault.
+    assert spread_moneyline_orientation_fault("spread_home", -1.5, -110, -110)[0] is False
+
+
+def test_orientation_ignores_non_spread_and_missing_line():
+    assert spread_moneyline_orientation_fault("total_over", -1.5, -160, 140)[0] is False
+    assert spread_moneyline_orientation_fault("spread_away", None, -160, 140)[0] is False
+    assert spread_moneyline_orientation_fault("spread_away", 0.0, -160, 140)[0] is False

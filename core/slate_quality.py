@@ -208,3 +208,68 @@ def market_anchored_over_bias(
         return 0.0
     bias = float((m[mask] - k[mask]).mean())
     return max(-float(max_shift), min(float(max_shift), bias))
+
+
+# Spread orientation guard. The team favored to win outright (the moneyline
+# favorite) is the team that lays points (negative spread). When a live feed
+# delivers a flipped home/away spread, the favorite's line and price get attached
+# to the wrong team — 14 Jun: Texas was shown "Texas -1.5" at +158 (a favorite
+# run line) while Texas was actually the +1.5 underdog. The spread/price pairing is
+# internally self-consistent, so only an independent reference — the moneyline —
+# exposes that the WRONG team is the favorite.
+SPREAD_ORIENTATION_MIN_ML_GAP = 0.08
+
+
+def _american_implied_prob(odds) -> float | None:
+    """Implied win probability of an American moneyline price (vig included).
+    None when the value is missing or zero."""
+    o = pd.to_numeric(pd.Series([odds]), errors="coerce").iloc[0]
+    if pd.isna(o) or float(o) == 0.0:
+        return None
+    o = float(o)
+    return (-o) / (-o + 100.0) if o < 0 else 100.0 / (o + 100.0)
+
+
+def spread_moneyline_orientation_fault(
+    market_type,
+    spread_line,
+    home_ml_price,
+    away_ml_price,
+    *,
+    min_ml_gap: float = SPREAD_ORIENTATION_MIN_ML_GAP,
+) -> tuple[bool, str | None]:
+    """True when a spread row's favorite contradicts the moneyline favorite.
+
+    ``market_type`` is spread_home/spread_away; ``spread_line`` is the line oriented
+    to the pick team (negative = pick is laying points = spread favorite); the
+    moneyline prices are the game's American h2h prices for the home and away teams.
+
+    The spread favorite must be the moneyline favorite. A disagreement means the
+    home/away spread was delivered flipped. Conservative: returns (False, None)
+    unless both moneyline prices are present and clearly separated (implied-prob gap
+    >= ``min_ml_gap``), so genuine pick'em games never trip it.
+    """
+    mt = str(market_type or "").strip().lower()
+    if mt not in ("spread_home", "spread_away"):
+        return (False, None)
+    line = pd.to_numeric(pd.Series([spread_line]), errors="coerce").iloc[0]
+    if pd.isna(line) or float(line) == 0.0:
+        return (False, None)
+    ph = _american_implied_prob(home_ml_price)
+    pa = _american_implied_prob(away_ml_price)
+    if ph is None or pa is None or abs(ph - pa) < float(min_ml_gap):
+        return (False, None)
+    pick_is_home = mt == "spread_home"
+    pick_ml_prob = ph if pick_is_home else pa
+    opp_ml_prob = pa if pick_is_home else ph
+    spread_says_favorite = float(line) < 0.0
+    ml_says_favorite = pick_ml_prob > opp_ml_prob
+    if spread_says_favorite != ml_says_favorite:
+        fav = "home" if ph > pa else "away"
+        return (
+            True,
+            f"spread_orientation_fault: {mt} line {float(line):+.1f} makes the pick the "
+            f"spread {'favorite' if spread_says_favorite else 'underdog'}, but the moneyline "
+            f"favors the {fav} team — flipped home/away spread from the live feed",
+        )
+    return (False, None)
