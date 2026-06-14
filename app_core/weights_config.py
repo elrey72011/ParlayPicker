@@ -347,6 +347,18 @@ FALLBACK_HEAVY_TOTAL_EXTRA_PENALTY = 0.01
 # legacy EV/edge tiers. See core/empirical_tiers.py for thresholds.
 EMPIRICAL_TIER_OVERLAY_ENABLED = True
 
+# Market-anchored over-bias correction for MLB totals. 13 Jun: Kalshi and ML both
+# sat 10-15 pts above the de-vig sportsbook market on P(over) for nearly every
+# game, producing a 14-of-15 all-Over card while the market sat at coin-flip. The
+# market is the sharp, unbiased anchor and graded MLB overs hit only ~52% (no edge
+# over it), so the systematic model-vs-market over-gap is bias, not signal. The
+# pipeline removes the slate-MEAN gap from each MLB total's blended P(over) (and
+# adds it to P(under)) so direction selection rebalances — per-game relative leans
+# and the market's own genuine lean are preserved. Flip False to disable.
+# MAX_SHIFT caps how much the correction can move any single game's probability.
+MLB_TOTAL_MARKET_DEBIAS_ENABLED = True
+MLB_TOTAL_MARKET_DEBIAS_MAX_SHIFT = 0.15
+
 # Profiles
 BEST_PICKS_PROFILE = 'STANDARD'
 
