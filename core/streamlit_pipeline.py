@@ -1449,6 +1449,42 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
     )
     calibrated = calibrated.where(~mlb_over_mask, calibrated.clip(upper=MLB_OVER_CALIBRATED_PROB_CAP))
 
+    # Market-anchored over-bias correction for MLB totals (13 Jun all-Over card).
+    # Kalshi+ML sit systematically above the de-vig market on P(over); that gap is
+    # bias (graded overs ~52%, no edge over the sharp market), so remove the slate-
+    # MEAN gap so direction selection rebalances. Over rows: P(over) -= bias; under
+    # rows: P(over) += bias (i.e. their P(under) -= bias) — symmetric, robust to
+    # non-complementarity. Per-game relative leans and the market's own lean are
+    # preserved (we anchor to the market mean, not to 0.5). Runs before EV/edge/
+    # direction selection. Guarded so it can never break the pipeline.
+    try:
+        from app_core.weights_config import (
+            MLB_TOTAL_MARKET_DEBIAS_ENABLED,
+            MLB_TOTAL_MARKET_DEBIAS_MAX_SHIFT,
+        )
+        if MLB_TOTAL_MARKET_DEBIAS_ENABLED:
+            from core.slate_quality import market_anchored_over_bias
+            _lg = _string_series(out, "league").str.upper()
+            _mt = _string_series(out, "market_type").str.lower()
+            _is_mlb_over = _lg.eq("MLB") & _mt.eq("total_over")
+            _is_mlb_under = _lg.eq("MLB") & _mt.eq("total_under")
+            if bool(_is_mlb_over.any()):
+                _bias = market_anchored_over_bias(
+                    calibrated[_is_mlb_over],
+                    out["market_probability"][_is_mlb_over],
+                    max_shift=float(MLB_TOTAL_MARKET_DEBIAS_MAX_SHIFT),
+                )
+                if abs(_bias) > 1e-9:
+                    calibrated = calibrated.mask(
+                        _is_mlb_over, (calibrated - _bias).clip(0.05, 0.95)
+                    )
+                    calibrated = calibrated.mask(
+                        _is_mlb_under, (calibrated + _bias).clip(0.05, 0.95)
+                    )
+                    out["mlb_total_market_debias"] = float(_bias)
+    except Exception as e:  # never let the correction break the pipeline
+        logger.warning(f"MLB total market de-bias skipped: {e}")
+
     out["theover_probability"] = theover
     out["ml_probability"] = ml
     out["calibrated_probability"] = calibrated

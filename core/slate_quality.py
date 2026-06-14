@@ -162,3 +162,40 @@ def slate_direction_imbalanced(
             f"orientation data fault; big-Kelly staking suspended",
         )
     return (False, None)
+
+
+# Market-anchored over-bias correction (MLB totals). The de-vig sportsbook line is
+# the sharpest, least-biased P(over) estimate; for an efficient market it sits ~0.5.
+MLB_DEBIAS_MIN_GAMES = 6
+MLB_DEBIAS_MAX_SHIFT = 0.15
+
+
+def market_anchored_over_bias(
+    model_over,
+    market_over,
+    *,
+    min_games: int = MLB_DEBIAS_MIN_GAMES,
+    max_shift: float = MLB_DEBIAS_MAX_SHIFT,
+) -> float:
+    """Slate-level systematic over-bias of the model vs the de-vig market.
+
+    ``model_over`` / ``market_over`` are the slate's per-game P(over): the blended
+    model probability and the de-vig sportsbook probability (pass the total_over
+    rows, one per game). When the model sits systematically above the market across
+    the slate (13 Jun: model mean ~0.56 vs market ~0.48 → a 14/0 all-Over card),
+    that gap is bias, not edge — graded MLB overs hit ~52%, no real edge over the
+    market. Returns the mean (model − market) gap to SUBTRACT from each game's
+    model P(over) (and add to P(under)), clamped to ±``max_shift``.
+
+    Only the slate-MEAN gap is removed, so per-game RELATIVE leans are preserved
+    (the games the model likes most still go over), and because the anchor is the
+    market — not 0.5 — a genuine market-wide over lean (hot slate) is preserved.
+    Returns 0.0 when there are too few games to estimate a stable bias.
+    """
+    m = pd.to_numeric(pd.Series(list(model_over)), errors="coerce")
+    k = pd.to_numeric(pd.Series(list(market_over)), errors="coerce")
+    mask = m.notna() & k.notna()
+    if int(mask.sum()) < int(min_games):
+        return 0.0
+    bias = float((m[mask] - k[mask]).mean())
+    return max(-float(max_shift), min(float(max_shift), bias))

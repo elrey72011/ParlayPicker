@@ -151,3 +151,49 @@ def test_load_theover_csv_clean_file_no_warning():
     loaded, msg = load_theover_csv(buf)
     assert msg is None
     assert len(loaded) == 7
+
+
+# ---- market-anchored over-bias correction (market_anchored_over_bias) ----
+
+from core.slate_quality import market_anchored_over_bias
+
+
+def test_over_bias_measures_mean_model_minus_market_gap():
+    model = [0.62, 0.58, 0.55, 0.60, 0.57, 0.59]   # mean 0.585
+    market = [0.50, 0.48, 0.47, 0.49, 0.46, 0.50]  # mean 0.483
+    bias = market_anchored_over_bias(model, market)
+    assert abs(bias - (0.585 - 0.483333)) < 1e-4
+
+
+def test_over_bias_clamped_to_max_shift():
+    model = [0.90] * 6
+    market = [0.40] * 6  # gap 0.50, far beyond cap
+    assert market_anchored_over_bias(model, market, max_shift=0.15) == 0.15
+
+
+def test_over_bias_zero_when_too_few_games():
+    assert market_anchored_over_bias([0.7, 0.7, 0.7], [0.4, 0.4, 0.4]) == 0.0
+
+
+def test_over_bias_preserves_genuine_market_lean():
+    # Model agrees with the market (no systematic gap) even though the market
+    # itself leans over -> bias ~0, so a real over-night is NOT flattened.
+    model = [0.66, 0.64, 0.62, 0.63, 0.65, 0.61]
+    market = [0.65, 0.64, 0.61, 0.64, 0.65, 0.60]
+    assert abs(market_anchored_over_bias(model, market)) < 0.02
+
+
+def test_over_bias_rebalances_jun13_card():
+    # Real 13 Jun blended P(over) vs de-vig market P(over) on the 14 totals.
+    model = [0.617, 0.576, 0.539, 0.592, 0.562, 0.549, 0.548, 0.570,
+             0.575, 0.524, 0.540, 0.527, 0.614, 0.540]
+    market = [0.494, 0.478, 0.438, 0.501, 0.459, 0.455, 0.463, 0.494,
+              0.476, 0.445, 0.468, 0.457, 0.535, 0.484]
+    bias = market_anchored_over_bias(model, market)
+    assert bias > 0.07  # a real systematic over-lean is detected
+    corrected = [p - bias for p in model]
+    overs = sum(1 for p in corrected if p > 0.5)
+    unders = len(corrected) - overs
+    # Was 14/0 all-Over; after de-bias the all-over pathology is broken and the
+    # card follows the (under-leaning) sharp market with a real spread of unders.
+    assert overs < 14 and unders >= 4
