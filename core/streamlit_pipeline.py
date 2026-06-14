@@ -1380,6 +1380,51 @@ def get_opposing_odds_from_exchange(odds):
     else:
         return -(odds_val + 20.0)
 
+def apply_mlb_total_market_debias(calibrated, df) -> tuple[pd.Series, float]:
+    """Market-anchored over-bias correction for MLB totals (13 Jun all-Over card).
+
+    Kalshi+ML sit systematically above the de-vig market on P(over); that gap is
+    bias (graded overs ~52%, no edge over the sharp market), so the slate-MEAN gap
+    is removed from MLB total P(over) so direction selection rebalances. Over rows:
+    P(over) -= bias; under rows: P(over) += bias (their P(under) -= bias) —
+    symmetric and robust to non-complementarity. Per-game relative leans and the
+    market's own lean are preserved (anchored to the market mean, not 0.5).
+
+    Returns ``(corrected_calibrated, bias)``; bias is 0.0 when not applied. Pure +
+    flag-checked + guarded so a single, tested implementation serves BOTH blend
+    paths (the Analysis tab and the production best-picks card) — wiring it into
+    only one of them was the #1919 bug.
+    """
+    try:
+        from app_core.weights_config import (
+            MLB_TOTAL_MARKET_DEBIAS_ENABLED,
+            MLB_TOTAL_MARKET_DEBIAS_MAX_SHIFT,
+        )
+        if not MLB_TOTAL_MARKET_DEBIAS_ENABLED:
+            return calibrated, 0.0
+        from core.slate_quality import market_anchored_over_bias
+
+        lg = _string_series(df, "league").str.upper()
+        mt = _string_series(df, "market_type").str.lower()
+        is_over = lg.eq("MLB") & mt.eq("total_over")
+        is_under = lg.eq("MLB") & mt.eq("total_under")
+        if not bool(is_over.any()):
+            return calibrated, 0.0
+        bias = market_anchored_over_bias(
+            calibrated[is_over],
+            df["market_probability"][is_over],
+            max_shift=float(MLB_TOTAL_MARKET_DEBIAS_MAX_SHIFT),
+        )
+        if abs(bias) <= 1e-9:
+            return calibrated, 0.0
+        corrected = calibrated.mask(is_over, (calibrated - bias).clip(0.05, 0.95))
+        corrected = corrected.mask(is_under, (corrected + bias).clip(0.05, 0.95))
+        return corrected, float(bias)
+    except Exception as e:  # never let the correction break the pipeline
+        logger.warning(f"MLB total market de-bias skipped: {e}")
+        return calibrated, 0.0
+
+
 def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
     out["odds_american"] = _numeric_series(out, "odds_american", pd.NA)
@@ -1449,41 +1494,10 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
     )
     calibrated = calibrated.where(~mlb_over_mask, calibrated.clip(upper=MLB_OVER_CALIBRATED_PROB_CAP))
 
-    # Market-anchored over-bias correction for MLB totals (13 Jun all-Over card).
-    # Kalshi+ML sit systematically above the de-vig market on P(over); that gap is
-    # bias (graded overs ~52%, no edge over the sharp market), so remove the slate-
-    # MEAN gap so direction selection rebalances. Over rows: P(over) -= bias; under
-    # rows: P(over) += bias (i.e. their P(under) -= bias) — symmetric, robust to
-    # non-complementarity. Per-game relative leans and the market's own lean are
-    # preserved (we anchor to the market mean, not to 0.5). Runs before EV/edge/
-    # direction selection. Guarded so it can never break the pipeline.
-    try:
-        from app_core.weights_config import (
-            MLB_TOTAL_MARKET_DEBIAS_ENABLED,
-            MLB_TOTAL_MARKET_DEBIAS_MAX_SHIFT,
-        )
-        if MLB_TOTAL_MARKET_DEBIAS_ENABLED:
-            from core.slate_quality import market_anchored_over_bias
-            _lg = _string_series(out, "league").str.upper()
-            _mt = _string_series(out, "market_type").str.lower()
-            _is_mlb_over = _lg.eq("MLB") & _mt.eq("total_over")
-            _is_mlb_under = _lg.eq("MLB") & _mt.eq("total_under")
-            if bool(_is_mlb_over.any()):
-                _bias = market_anchored_over_bias(
-                    calibrated[_is_mlb_over],
-                    out["market_probability"][_is_mlb_over],
-                    max_shift=float(MLB_TOTAL_MARKET_DEBIAS_MAX_SHIFT),
-                )
-                if abs(_bias) > 1e-9:
-                    calibrated = calibrated.mask(
-                        _is_mlb_over, (calibrated - _bias).clip(0.05, 0.95)
-                    )
-                    calibrated = calibrated.mask(
-                        _is_mlb_under, (calibrated + _bias).clip(0.05, 0.95)
-                    )
-                    out["mlb_total_market_debias"] = float(_bias)
-    except Exception as e:  # never let the correction break the pipeline
-        logger.warning(f"MLB total market de-bias skipped: {e}")
+    # Market-anchored over-bias correction for MLB totals (Analysis-tab path).
+    calibrated, _debias = apply_mlb_total_market_debias(calibrated, out)
+    if abs(_debias) > 1e-9:
+        out["mlb_total_market_debias"] = _debias
 
     out["theover_probability"] = theover
     out["ml_probability"] = ml
@@ -5615,6 +5629,14 @@ def run_analysis_pipeline(
         league=_string_series(merged, "league"),
         market_type=_string_series(merged, "market_type")
     )
+
+    # Market-anchored over-bias correction for MLB totals — PRODUCTION best-picks
+    # path (this is the blend the card is built from; #1919 applied it only to the
+    # Analysis-tab blend, so the card never rebalanced). Same shared helper, so the
+    # two paths cannot drift. Runs before EV/edge/direction selection below.
+    calibrated_probability, _prod_debias = apply_mlb_total_market_debias(calibrated_probability, merged)
+    if abs(_prod_debias) > 1e-9:
+        merged["mlb_total_market_debias"] = _prod_debias
 
     merged["theover_probability"] = theover_probability
     merged["model_probability"] = model_probability
