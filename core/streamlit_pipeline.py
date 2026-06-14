@@ -355,6 +355,11 @@ BEST_PICK_COLUMNS = [
     "uploaded_spread_line", "uploaded_total_line", "live_spread_line", "live_total_line", "line_source", "line_delta", "upload_market_match",
     "market_line_used", "market_line_source", "market_line_source_detail", "matched_live_spread_line", "matched_live_total_line", "upload_spread_line", "upload_total_line", "base_spread_line", "base_total_line",
     "line_consistency_flag", "line_consistency_reason", "line_provenance_warning", "line_event_identity_match_flag", "line_event_identity_reason", "live_event_match_key", "line_candidate_count", "selected_live_event_source",
+    # Moneyline (h2h) prices carried onto every bet row for the spread-orientation
+    # guard. Exported so we can see whether the guard actually has its inputs: real
+    # values mean the moneyline reached build_best_picks_df (guard can fire); blank
+    # on a spread row means there was no h2h to verify orientation against.
+    "game_home_ml_price", "game_away_ml_price",
     "suspicious_data_flag", "suspicious_data_reasons", "status_metric_basis", "effective_expected_value", "effective_edge", "effective_win_probability", "status_blocker_reason", "status_blocker_stage",
     "nba_stats_fetch_status", "nba_stats_fetch_source", "nba_stats_fetch_retries_used", "stats_source_counts", "fallback_summary_by_league", "fallback_heavy_slate_flag", "run_health_warning",
     "degraded_feature_subset_flag", "degraded_feature_subset_reason",
