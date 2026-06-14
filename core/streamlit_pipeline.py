@@ -2250,6 +2250,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         return pd.DataFrame(columns=BEST_PICK_COLUMNS)
     if "market_type" not in analysis_df.columns:
         raise ValueError("analysis_df missing market_type before best-pick construction")
+    from core.slate_quality import spread_moneyline_orientation_fault
 
     pool = analysis_df[_string_series(analysis_df, "market_type").isin(list(VALID_MARKETS))].copy()
     logger.info(f"BEST PICKS AUDIT: Rows after VALID_MARKETS filter: {len(pool)}")
@@ -2749,6 +2750,29 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 if upload_market_match in {"false", "0", "mismatch"}:
                     suspicious_reasons.append("upload_line_market_mismatch")
 
+        # Spread orientation fault (ungated by EV): the spread favorite must be the
+        # moneyline favorite. A mismatch means the live feed delivered a flipped
+        # home/away spread (14 Jun: Texas shown -1.5/+158 — a favorite line — when
+        # Texas was the +1.5 underdog). Block the row rather than ship the wrong side.
+        spread_orientation_fault_flag = False
+        spread_orientation_fault_reason = ""
+        _mt_row = str(best.at[idx, "market_type"]).strip().lower() if "market_type" in best.columns else ""
+        if _mt_row in {"spread_home", "spread_away"}:
+            _line_for_orient = next(
+                (best.at[idx, c] for c in ("market_line_used", "spread_line", "base_spread_line")
+                 if c in best.columns and pd.notna(best.at[idx, c])),
+                pd.NA,
+            )
+            _of, _of_reason = spread_moneyline_orientation_fault(
+                _mt_row,
+                _line_for_orient,
+                best.at[idx, "game_home_ml_price"] if "game_home_ml_price" in best.columns else pd.NA,
+                best.at[idx, "game_away_ml_price"] if "game_away_ml_price" in best.columns else pd.NA,
+            )
+            if _of:
+                spread_orientation_fault_flag = True
+                spread_orientation_fault_reason = _of_reason
+
         suspicious_data_flag = bool(suspicious_reasons)
         suspicious_reasons_str = "; ".join(dict.fromkeys(suspicious_reasons))
         divergence_viability_pass = (
@@ -2767,6 +2791,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             status = "No Play"
             status_reason = "NBA spread > 12.0 (Resting/Tanking guardrail)"
             blocker_stage = "line_integrity_guardrail"
+        elif spread_orientation_fault_flag:
+            status = "No Play"
+            status_reason = f"No Play: {spread_orientation_fault_reason}"
+            blocker_stage = "spread_orientation_guardrail"
         elif is_kalshi_divergence:
             if divergence_viability_pass:
                 status = "High Variance/Speculative"
@@ -4570,6 +4598,17 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
 
     for idx, row in live_odds_processed.iterrows():
         base_dict = {col: row.get(col) for col in id_cols}
+        # Carry the game's moneyline (h2h) prices onto every bet row so spread rows
+        # can be checked for a flipped home/away orientation downstream (the spread
+        # favorite must be the moneyline favorite). First book that priced the h2h.
+        for _ml_side in ("home", "away"):
+            _ml_price = pd.NA
+            for _ml_book in ("novig", "fanduel", "draftkings", "betmgm"):
+                _cand_ml = row.get(f"{_ml_book}_h2h_{_ml_side}_price")
+                if pd.notna(_cand_ml):
+                    _ml_price = _cand_ml
+                    break
+            base_dict[f"game_{_ml_side}_ml_price"] = _ml_price
         matchup_id = row.get("matchup_id")
         live_canon_key = row.get("_canon_key")
 
