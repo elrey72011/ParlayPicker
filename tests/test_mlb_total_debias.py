@@ -83,3 +83,43 @@ def test_recompute_consensus_reapplies_mlb_total_debias():
     assert out["calibrated_probability"].mean() < 0.52
     # edge recomputed from the de-biased probability (was the un-debiased gap before).
     assert (out["edge"] < 0.10).all()
+
+
+# ---- overshoot guard: the correction must not push a game past the market ----
+
+def test_debias_does_not_overshoot_market_over_games():
+    # Slate-mean over-bias is large (5 strongly over-leaning games), but one game's
+    # de-vig market actually favors Over (0.51) with only a small model lean. The old
+    # flat -bias shift pushed it UNDER (0.54-0.15=0.39); the market-floored correction
+    # keeps it on Over (floored at its 0.51 market) so the card follows the market
+    # instead of overshooting to all-Under.
+    mkt = [0.51, 0.46, 0.45, 0.44, 0.43, 0.42]
+    cal = [0.54, 0.60, 0.61, 0.62, 0.63, 0.64]
+    df = _df([("MLB", "total_over", m) for m in mkt])
+    corrected, bias = apply_mlb_total_market_debias(pd.Series(cal), df)
+    assert bias > 0.1
+    assert corrected.iloc[0] >= 0.51 - 1e-9   # market-over game stays Over
+    assert corrected.iloc[0] > 0.5
+    # No over row is pushed below its own market (no overshoot past the anchor).
+    assert bool((corrected.to_numpy() >= pd.Series(mkt).to_numpy() - 1e-9).all())
+
+
+def test_debias_preserves_genuine_under_read_on_over_row():
+    # An over row whose model already sits at/below the market (a genuine under read)
+    # is left untouched — the correction only removes OVER excess.
+    mkt = [0.50, 0.46, 0.45, 0.44, 0.43, 0.42]
+    cal = [0.40, 0.60, 0.61, 0.62, 0.63, 0.64]
+    df = _df([("MLB", "total_over", m) for m in mkt])
+    corrected, _ = apply_mlb_total_market_debias(pd.Series(cal), df)
+    assert abs(corrected.iloc[0] - 0.40) < 1e-9
+
+
+def test_debias_under_rows_raised_toward_market_but_capped():
+    over_rows = [("MLB", "total_over", 0.45)] * 6           # market P(over) 0.45
+    under_rows = [("MLB", "total_under", 0.55), ("MLB", "total_under", 0.55)]  # market P(under) 0.55
+    df = _df(over_rows + under_rows)
+    cal = pd.Series([0.58] * 6 + [0.48, 0.70])             # bias ~0.13 from the over rows
+    corrected, bias = apply_mlb_total_market_debias(cal, df)
+    assert bias > 0.1
+    assert 0.48 < corrected.iloc[6] <= 0.55 + 1e-9         # below-market under raised, capped at market
+    assert abs(corrected.iloc[7] - 0.70) < 1e-9           # genuine strong-under read untouched
