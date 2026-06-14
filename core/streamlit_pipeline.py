@@ -1385,10 +1385,18 @@ def apply_mlb_total_market_debias(calibrated, df) -> tuple[pd.Series, float]:
 
     Kalshi+ML sit systematically above the de-vig market on P(over); that gap is
     bias (graded overs ~52%, no edge over the sharp market), so the slate-MEAN gap
-    is removed from MLB total P(over) so direction selection rebalances. Over rows:
-    P(over) -= bias; under rows: P(over) += bias (their P(under) -= bias) —
-    symmetric and robust to non-complementarity. Per-game relative leans and the
-    market's own lean are preserved (anchored to the market mean, not 0.5).
+    is removed from MLB total P(over) so direction selection rebalances.
+
+    The correction is sign-preserving and FLOORED at the de-vig market, per game:
+    an over row that leans above the market has its P(over) pulled DOWN toward the
+    market by ``bias`` but never below it; an under row whose P(under) sits below the
+    market is pulled UP toward the market by ``bias`` but never above it. A flat
+    symmetric ±bias shift (the original form) overshot — it pushed games past the
+    sharp market into a model-manufactured UNDER lean, and the EV term in direction
+    selection amplified that into a near-unanimous all-Under card (14 Jun: a ~7-under
+    / 6-over de-vig market produced a 14/14 Under card). Flooring at the market keeps
+    a genuine market-over game on Over and leaves real under reads (already past the
+    market) untouched, so the card follows the market's own per-game lean.
 
     Returns ``(corrected_calibrated, bias)``; bias is 0.0 when not applied. Pure +
     flag-checked + guarded so a single, tested implementation serves BOTH blend
@@ -1417,8 +1425,30 @@ def apply_mlb_total_market_debias(calibrated, df) -> tuple[pd.Series, float]:
         )
         if abs(bias) <= 1e-9:
             return calibrated, 0.0
-        corrected = calibrated.mask(is_over, (calibrated - bias).clip(0.05, 0.95))
-        corrected = corrected.mask(is_under, (corrected + bias).clip(0.05, 0.95))
+        cal = pd.to_numeric(calibrated, errors="coerce").to_numpy(dtype=float)
+        mk = pd.to_numeric(df["market_probability"], errors="coerce").to_numpy(dtype=float)
+        has_mkt = ~np.isnan(mk)
+        # Over rows: shrink a positive over-edge (cal above the market) toward the
+        # market by bias, FLOORED at the market — never cross into a manufactured
+        # under lean. Rows at/below the market (a genuine under read), or with no
+        # market anchor, are left untouched.
+        over_corr = np.where(
+            has_mkt & (cal > mk),
+            np.maximum(cal - bias, np.where(has_mkt, mk, cal)),
+            cal,
+        )
+        # Under rows: the over-bias deflates P(under); raise a below-market under-edge
+        # toward the market by bias, CAPPED at the market. Genuine strong-under reads
+        # (already above the market) are untouched.
+        under_corr = np.where(
+            has_mkt & (cal < mk),
+            np.minimum(cal + bias, np.where(has_mkt, mk, cal)),
+            cal,
+        )
+        new_vals = cal.copy()
+        new_vals = np.where(is_over.to_numpy(dtype=bool), over_corr, new_vals)
+        new_vals = np.where(is_under.to_numpy(dtype=bool), under_corr, new_vals)
+        corrected = pd.Series(new_vals, index=calibrated.index).clip(0.05, 0.95)
         return corrected, float(bias)
     except Exception as e:  # never let the correction break the pipeline
         logger.warning(f"MLB total market de-bias skipped: {e}")
