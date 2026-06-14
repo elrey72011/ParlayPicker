@@ -197,3 +197,21 @@ def test_over_bias_rebalances_jun13_card():
     # Was 14/0 all-Over; after de-bias the all-over pathology is broken and the
     # card follows the (under-leaning) sharp market with a real spread of unders.
     assert overs < 14 and unders >= 4
+
+
+def test_theover_degraded_catches_flip_split_constant_hitrate():
+    # 14 Jun: TheOver applied a constant ~0.9 model hit-rate to every game. The
+    # over/under flip splits the total_over rows' P(over) into 0.9 (over-picked)
+    # and 0.1 (under-picked), which the old signed-value check missed (top value
+    # only 46%). Folding to |p-0.5| collapses both to 0.4 -> caught.
+    over_rows = [0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.1, 0.1, 0.1, 0.1, 0.1, 0.5, 0.5, 0.72, 0.75]
+    degraded, reason = theover_feed_degraded(over_rows)
+    assert degraded is True
+    assert "11/13" in reason  # eleven of thirteen real reads share |p-0.5|=0.4
+
+
+def test_theover_not_degraded_when_magnitudes_vary():
+    # A healthy feed has a real spread of confidence magnitudes, even with a
+    # mix of over- and under-leaning reads -> not degraded.
+    over_rows = [0.62, 0.41, 0.58, 0.47, 0.66, 0.38, 0.55, 0.44]
+    assert theover_feed_degraded(over_rows)[0] is False

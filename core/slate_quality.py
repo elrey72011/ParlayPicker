@@ -29,11 +29,16 @@ import pandas as pd
 NO_READ_TOL = 1e-6
 
 # TheOver is flagged degraded when, among real reads, the single most common
-# (rounded) value's share meets this threshold and there are at least this many
-# real reads. 13 Jun: 5 of 7 real reads were identical 0.692 (share 0.71).
+# CONFIDENCE MAGNITUDE |p - 0.5| meets this share with at least this many real
+# reads. Magnitude (not signed P(over)) is the right key because TheOver's
+# degeneracy is a constant model hit-rate: when the same ~0.9 hit-rate is applied
+# to every game, the over/under flip splits the total_over rows' P(over) into 0.9
+# and 0.1, which hides as two signed clusters (13 Jun was caught only because the
+# raw read 0.692 was un-flipped; 14 Jun's 0.9/0.1 split slipped through). Folding
+# to |p - 0.5| collapses 0.9 and 0.1 to the same 0.4, exposing the cluster.
 THEOVER_MIN_REAL_READS = 5
 THEOVER_MAX_CLUSTER_SHARE = 0.60
-THEOVER_CLUSTER_ROUND = 3  # round reads to 3 dp before counting identical values
+THEOVER_CLUSTER_ROUND = 3  # round magnitudes to 3 dp before counting
 
 # A totals slate is flagged one-sided when the dominant direction's share meets
 # this threshold across at least this many totals games. 13 Jun: 14/14 = 1.00.
@@ -100,29 +105,33 @@ def theover_feed_degraded(
     min_real_reads: int = THEOVER_MIN_REAL_READS,
     max_cluster_share: float = THEOVER_MAX_CLUSTER_SHARE,
 ) -> tuple[bool, str | None]:
-    """True when the per-game TheOver P(Over) reads are degenerately clustered.
+    """True when the per-game TheOver reads are degenerately clustered.
 
     ``over_probs`` is the slate's TheOver P(Over) values, one per totals game
     (pass the ``total_over`` rows' ``theover_probability``). Non-numeric values
     (e.g. a column-shifted text label) coerce to NaN and are ignored; values at
-    ~0.50 are "no read" and excluded. Among the remaining real reads, if the most
-    common rounded value's share >= ``max_cluster_share`` (with >= ``min_real_reads``
-    reads), the feed is treated as degraded.
+    ~0.50 are "no read" and excluded. Clustering is judged on the CONFIDENCE
+    MAGNITUDE ``|p - 0.5|`` rather than the signed P(over), so a constant model
+    hit-rate is caught regardless of the over/under flip (0.9 and 0.1 both fold to
+    0.4). If the most common rounded magnitude's share >= ``max_cluster_share``
+    (with >= ``min_real_reads`` real reads), the feed is treated as degraded.
     """
     s = pd.to_numeric(pd.Series(list(over_probs)), errors="coerce").dropna()
-    real = s[(s - 0.5).abs() > NO_READ_TOL]
-    n = int(real.shape[0])
+    mag = (s - 0.5).abs()
+    real_mag = mag[mag > NO_READ_TOL]
+    n = int(real_mag.shape[0])
     if n < int(min_real_reads):
         return (False, None)
-    counts = real.round(THEOVER_CLUSTER_ROUND).value_counts()
-    top_val = counts.index[0]
+    counts = real_mag.round(THEOVER_CLUSTER_ROUND).value_counts()
+    top_mag = float(counts.index[0])
     top_share = float(counts.iloc[0]) / n
     if top_share >= float(max_cluster_share):
         return (
             True,
             f"theover_feed_degraded: {counts.iloc[0]}/{n} real reads share the "
-            f"identical value {top_val:.3f} (share {top_share:.0%}) — feed not "
-            f"game-specific; dropped from blend for this slate",
+            f"identical confidence {top_mag:.3f} from 0.5 "
+            f"(P(over)≈{0.5 + top_mag:.3f}/{0.5 - top_mag:.3f}, share {top_share:.0%}) "
+            f"— feed not game-specific; dropped from blend for this slate",
         )
     return (False, None)
 
