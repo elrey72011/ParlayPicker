@@ -319,6 +319,21 @@ def _recompute_consensus_from_kalshi(df: pd.DataFrame, require_ml: bool = False)
     decimal_odds = pd.to_numeric(decimal_odds, errors="coerce").fillna(1.91)
 
     out["decimal_odds"] = decimal_odds
+
+    # Re-apply the market-anchored MLB total de-bias (#1919/#1921) here too. This
+    # post-Kalshi refresh re-blends calibrated_probability and recomputes EV/edge from
+    # scratch, so without re-running the correction it silently UNDOES the de-bias that
+    # run_analysis_pipeline applied — the card then rebuilds on the raw model over-lean
+    # and direction selection never rebalances (the 14 Jun all-Over card: model P(over)
+    # ~0.55 vs de-vig market ~0.46 across 15 games, de-bias 0.0747 never reaching the
+    # card). Same shared helper as both pipeline paths, so the three cannot drift. Runs
+    # before EV/edge/consensus below so all of them see the corrected probability.
+    from core.streamlit_pipeline import apply_mlb_total_market_debias
+    blended, _mlb_total_debias = apply_mlb_total_market_debias(blended, out)
+    out["calibrated_probability"] = blended
+    if abs(_mlb_total_debias) > 1e-9:
+        out["mlb_total_market_debias"] = _mlb_total_debias
+
     out["expected_value"] = blended * (decimal_odds - 1) - (1 - blended)
     out["edge"] = blended - market_prob
 
