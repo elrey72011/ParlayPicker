@@ -1486,16 +1486,25 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
     # TheOver-feed degradation guard (13 Jun: 5 games shared an identical P(Over)
     # of 0.692 and a column-shift put a text label in the numeric field, biasing
     # every total to the Over). Judge the per-game reads on the total_over rows;
-    # if degenerately clustered, null TheOver for the slate's TOTALS so the blend
-    # falls back to market+Kalshi+ML (compute_blended_probability already drops a
-    # NaN TheOver and redistributes its weight). Spreads/H2H are left untouched.
+    # if degenerately clustered, DOWN-WEIGHT (do not null) TheOver for the slate's
+    # TOTALS by shrinking each read toward neutral 0.50 by THEOVER_DEGRADED_FADE_SHRINK.
+    # Nulling outright was too blunt: it discarded legitimate slates where TheOver's
+    # model simply rated many games at a common confidence (15 Jun: six of eight reads
+    # at hit-rate 0.75 — magnitude 0.25 — folded over/under picks into one cluster and
+    # tripped the guard, dropping TheOver entirely and flipping 5 picks, incl. a 95%
+    # Over read on MIA@PHI graded to a No Play). Shrinking keeps a damped, game-specific
+    # signal in the blend on a false positive while still discounting a truly constant
+    # feed. Spreads/H2H are left untouched.
     try:
         from core.slate_quality import theover_feed_degraded
+        from app_core.weights_config import THEOVER_DEGRADED_FADE_SHRINK
         _mt_lower = _string_series(out, "market_type").str.lower()
         _over_reads = theover[_mt_lower.eq("total_over")]
         _degraded, _reason = theover_feed_degraded(_over_reads)
         if _degraded:
-            theover = theover.where(~_mt_lower.str.contains("total", na=False), other=pd.NA)
+            _totals_mask = _mt_lower.str.contains("total", na=False)
+            _shrunk = 0.5 + (1.0 - float(THEOVER_DEGRADED_FADE_SHRINK)) * (theover - 0.5)
+            theover = theover.where(~_totals_mask, _shrunk)
             out["theover_feed_degraded_reason"] = _reason
             existing_warn = _string_series(out, "run_health_warning")
             out["run_health_warning"] = existing_warn.where(
@@ -1503,6 +1512,7 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
             )
     except Exception as e:  # never let a guard break the pipeline
         logger.warning(f"TheOver degradation guard skipped: {e}")
+
 
     # theover is a legacy column mapping we still ingest
     model_prob = ml.where(ml.notna(), theover)

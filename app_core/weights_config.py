@@ -310,6 +310,17 @@ MLB_THEOVER_FADE_SHRINK = 0.25   # fraction of (P-0.5) removed; 1.0=neutralized,
 # non-MLB; revisit separately if/when graded non-MLB flipped-game data warrants it.
 THEOVER_FADE_SHRINK_DEFAULT = 0.75
 
+# Degraded-feed down-weight (see _apply_analysis_calculations' degradation guard).
+# When the slate's TheOver totals reads look degenerately clustered, shrink each
+# totals read toward neutral 0.50 by this fraction instead of nulling TheOver
+# outright. 1.0 = fully neutralized (equivalent to the old null behaviour),
+# 0.0 = untouched. Set to 0.50 (halve the directional signal) so a false positive
+# — TheOver legitimately rating many games at a common confidence — still
+# contributes a damped, game-specific read to the blend, while a genuinely
+# non-game-specific constant feed is still meaningfully discounted. Independent of
+# MLB_THEOVER_FADE_SHRINK (the per-row flipped-source fade), which still applies.
+THEOVER_DEGRADED_FADE_SHRINK = 0.50
+
 # No-Kalshi totals are treated as lower confidence in selection stage
 NO_KALSHI_TOTAL_EXTRA_PENALTY = 0.02
 NO_KALSHI_TOTAL_UNDER_EXTRA_PENALTY = 0.03
