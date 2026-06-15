@@ -1661,6 +1661,11 @@ def main() -> None:
                 "empty_card_recovery_excluded_line_source_count", "empty_card_recovery_excluded_threshold_count",
                 "empty_card_recovery_kelly_total", "production_card_empty_before_recovery_flag",
                 "production_card_empty_after_recovery_flag", "production_card_recovery_reason",
+                # Moneyline (h2h) prices for the spread-orientation diagnostic. These
+                # must be in the DOWNLOAD column list, not just BEST_PICK_COLUMNS — the
+                # export is rebuilt from target_export_cols here, which would otherwise
+                # drop them and leave the downloaded CSV without the diagnostic.
+                "game_home_ml_price", "game_away_ml_price",
             ]
             for col in REQUIRED_BEST_PICK_EXPORT_COLUMNS:
                 if col not in target_export_cols:
