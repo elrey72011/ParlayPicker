@@ -333,6 +333,45 @@ def test_divergence_can_preserve_minimally_viable_row():
     assert row["status_blocker_stage"] == "divergence_guardrail"
 
 
+def test_divergence_high_ev_override_preserves_sub_floor_win_prob_row():
+    # Mirrors the real 2026-06-15 slate: Houston Under 8.5 / St. Louis Under 8.5 carried
+    # strongly positive EV and edge on +money lines but win prob just below the 0.53
+    # divergence viability floor, so they were dropped to No Play. With the high-EV
+    # override they should be preserved as High Variance/Speculative instead.
+    df = pd.DataFrame(
+        [
+            _row(idx=1, league="MLB", market_type="total_under", win_prob=0.515, ev=0.10, edge=0.06, kalshi_probability=0.27),
+        ]
+    )
+    df.loc[0, "odds_american"] = 120  # +money: positive EV/edge despite sub-0.53 win prob
+    df.loc[0, "ml_probability"] = 0.515
+    out = build_best_picks_df(df)
+    row = out.iloc[0]
+    # The divergence floor no longer drops it to No Play. Final tier is then decided by the
+    # downstream empirical overlay (High Variance or Below Threshold), but the divergence-stage
+    # decision is retained in status_blocker_reason and must show the high-EV override.
+    assert row["Pick_Status"] != "No Play"
+    assert "high-EV override" in row["status_blocker_reason"]
+
+
+def test_divergence_high_ev_override_does_not_rescue_marginal_ev_row():
+    # A divergent pick that clears the base viability floor (EV >= 0.03) but not the
+    # high-EV override bar (EV >= 0.05) and is below the 0.53 win-prob floor must still
+    # be denied: the override is a high-conviction exception, not a blanket waiver.
+    df = pd.DataFrame(
+        [
+            _row(idx=1, league="MLB", market_type="total_under", win_prob=0.515, ev=0.03, edge=0.02, kalshi_probability=0.27),
+        ]
+    )
+    df.loc[0, "odds_american"] = -110  # near coin-flip price -> marginal EV at win prob 0.515
+    df.loc[0, "ml_probability"] = 0.515
+    out = build_best_picks_df(df)
+    row = out.iloc[0]
+    assert row["Pick_Status"] == "No Play"
+    assert "divergence override denied" in row["Status_Reason"]
+    assert row["status_blocker_stage"] == "divergence_viability_floor"
+
+
 def test_divergence_viability_diagnostics_populate():
     df = pd.DataFrame(
         [

@@ -116,6 +116,18 @@ DIVERGENCE_HIGH_VARIANCE_MIN_EV = 0.03
 DIVERGENCE_HIGH_VARIANCE_MIN_EDGE = 0.02
 DIVERGENCE_HIGH_VARIANCE_MIN_PROB = 0.53
 
+# High-EV divergence override — preserve a divergent pick as High Variance/Speculative
+# (rather than dropping it to No Play) when EV and edge are comfortably positive, even
+# if win probability falls just short of DIVERGENCE_HIGH_VARIANCE_MIN_PROB. Mirrors the
+# spread divergence/high-EV overrides already used for sides: when the market is clearly
+# mispricing the line, the EV/edge signal outweighs a sub-0.53 raw win prob. Without this,
+# clearly +EV picks like Houston Under 8.5 (EV +9.8%, edge +6.3%, prob 0.511) and
+# St. Louis Under 8.5 (EV +7.0%, edge +5.6%, prob 0.530) were denied solely by the floor.
+# The relaxed prob floor still requires the model to favor the pick (>= 0.50).
+DIVERGENCE_HIGH_EV_OVERRIDE_MIN_EV = 0.05
+DIVERGENCE_HIGH_EV_OVERRIDE_MIN_EDGE = 0.04
+DIVERGENCE_HIGH_EV_OVERRIDE_MIN_PROB = 0.50
+
 # ML contradiction guardrail — totals only
 # The XGBoost model predicts home win probability, which has no direct bearing on
 # total runs. The old threshold (50%) was blocking good over picks when the ML
