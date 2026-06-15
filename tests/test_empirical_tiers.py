@@ -137,3 +137,45 @@ def test_fitted_bucket_stats_file_is_loadable():
     assert stats is not None
     assert stats["overall"]["n"] >= 200
     assert "MLB:under:Agrees" in stats["buckets"]
+
+
+def test_actionable_requires_market_agreement():
+    # A non-Agrees bucket with a STRONG, well-sampled rate (60%, n=40) clears the
+    # edge, sample, and rate floors — but WITHOUT market agreement it can no longer
+    # carry a stake; it caps at High Variance instead of Actionable.
+    stats = {
+        "overall": {"n": 200, "win_rate": 0.53},
+        "buckets": {"MLB:under:Disagrees": {"n": 40, "wins": 24, "win_rate": 0.60}},
+    }
+    df = pd.DataFrame(
+        {
+            "league": ["MLB"], "market_type": ["total_under"],
+            "consensus_agreement": ["Disagrees"], "best_pick": ["Under 8.5"],
+            "Pick_Status": ["Below Threshold"], "Status_Reason": ["old"],
+            "status_blocker_stage": ["x"],
+            "effective_win_probability": [0.66], "odds_american": [-110],
+        }
+    )
+    out = assign_empirical_tiers(df, stats, calibration=None)
+    assert out.iloc[0]["Pick_Status"] == "High Variance/Speculative"
+
+
+def test_actionable_allows_agreement_bucket_with_same_metrics():
+    # Identical strong metrics, but in an Agrees bucket -> Actionable, and the reason
+    # cites market agreement.
+    stats = {
+        "overall": {"n": 200, "win_rate": 0.53},
+        "buckets": {"MLB:under:Agrees": {"n": 40, "wins": 24, "win_rate": 0.60}},
+    }
+    df = pd.DataFrame(
+        {
+            "league": ["MLB"], "market_type": ["total_under"],
+            "consensus_agreement": ["Agrees"], "best_pick": ["Under 8.5"],
+            "Pick_Status": ["Below Threshold"], "Status_Reason": ["old"],
+            "status_blocker_stage": ["x"],
+            "effective_win_probability": [0.66], "odds_american": [-110],
+        }
+    )
+    out = assign_empirical_tiers(df, stats, calibration=None)
+    assert out.iloc[0]["Pick_Status"] == "Actionable"
+    assert "agreement" in str(out.iloc[0]["Status_Reason"]).lower()
