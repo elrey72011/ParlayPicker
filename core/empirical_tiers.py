@@ -50,6 +50,19 @@ HIGH_VARIANCE_MIN_EMPIRICAL_EDGE = 0.015
 ACTIONABLE_MIN_BUCKET_N = 25
 ACTIONABLE_MIN_BUCKET_RATE = 0.55
 
+# Actionable ALSO requires market AGREEMENT. Across the graded history the only
+# slice that clears the -110 break-even (52.4%) by a real margin is the buckets
+# where Kalshi agrees with the model's direction: MLB over:Agrees 61% (n=41) and
+# under:Agrees 61% (n=61), versus 51-55% for Neutral/Disagrees. Two independent
+# estimates agreeing is a principled reason for higher confidence, not just a
+# fitted artifact, so full-Kelly staking is confined to agreement buckets and the
+# coin-flip buckets are refused. Honesty note: the Agrees-vs-rest gap is
+# suggestive, not statistically airtight (z~1.1 at n=232), which is why agreement
+# is REQUIRED to stake but stakes stay fractional (the Kelly fraction is small) and
+# non-agreement picks can still surface as High Variance/Speculative — they just
+# cannot carry a stake. Empty set disables the requirement.
+ACTIONABLE_PROVEN_CONSENSUS = {"Agrees"}
+
 
 def bucket_key(league: str, market_type: str, consensus: str) -> str:
     """Coarse empirical bucket: (league, over/under/side, consensus).
@@ -159,16 +172,20 @@ def assign_empirical_tiers(
 
     for idx in out.index[gradeable]:
         edge = float(out.at[idx, "empirical_edge"])
-        rate, n = smoothed_bucket_rate(out.at[idx, "empirical_bucket"], bucket_stats)
+        bucket = str(out.at[idx, "empirical_bucket"])
+        rate, n = smoothed_bucket_rate(bucket, bucket_stats)
+        consensus = bucket.rsplit(":", 1)[-1]
+        agreement_ok = (not ACTIONABLE_PROVEN_CONSENSUS) or (consensus in ACTIONABLE_PROVEN_CONSENSUS)
         if (
             edge >= ACTIONABLE_MIN_EMPIRICAL_EDGE
             and n >= ACTIONABLE_MIN_BUCKET_N
             and rate >= ACTIONABLE_MIN_BUCKET_RATE
+            and agreement_ok
         ):
             status = "Actionable"
             reason = (
                 f"Actionable (empirical): edge {edge:+.1%} vs break-even at own odds; "
-                f"bucket {out.at[idx, 'empirical_bucket']} hit {rate:.0%} (n={n})"
+                f"bucket {bucket} hit {rate:.0%} (n={n}) with market agreement"
             )
         elif edge >= HIGH_VARIANCE_MIN_EMPIRICAL_EDGE:
             status = "High Variance/Speculative"
