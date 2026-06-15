@@ -2718,6 +2718,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             SPREAD_DIVERGENCE_OVERRIDE_MIN_EV,
             SPREAD_DIVERGENCE_OVERRIDE_MIN_EDGE,
             DIVERGENCE_HIGH_VARIANCE_MIN_EV, DIVERGENCE_HIGH_VARIANCE_MIN_EDGE, DIVERGENCE_HIGH_VARIANCE_MIN_PROB,
+            DIVERGENCE_HIGH_EV_OVERRIDE_MIN_EV, DIVERGENCE_HIGH_EV_OVERRIDE_MIN_EDGE, DIVERGENCE_HIGH_EV_OVERRIDE_MIN_PROB,
             SIDE_MIN_WIN_PROB,
             NEUTRAL_ACTIONABLE_MIN_PROB, NEUTRAL_ACTIONABLE_MIN_EV, NEUTRAL_ACTIONABLE_MIN_EDGE,
             DISAGREES_ACTIONABLE_MIN_PROB, DISAGREES_ACTIONABLE_MIN_EV, DISAGREES_ACTIONABLE_MIN_EDGE,
@@ -2817,6 +2818,18 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             and float(edge) >= DIVERGENCE_HIGH_VARIANCE_MIN_EDGE
             and float(win_prob) >= DIVERGENCE_HIGH_VARIANCE_MIN_PROB
         )
+        # High-EV override: a strongly +EV, +edge divergent pick whose win prob falls just
+        # short of the 0.53 floor is preserved as High Variance/Speculative instead of being
+        # dropped to No Play, provided the model still favors the pick (win prob >= 0.50).
+        divergence_high_ev_override = (
+            pd.notna(ev)
+            and pd.notna(edge)
+            and float(ev) >= DIVERGENCE_HIGH_EV_OVERRIDE_MIN_EV
+            and float(edge) >= DIVERGENCE_HIGH_EV_OVERRIDE_MIN_EDGE
+            and float(win_prob) >= DIVERGENCE_HIGH_EV_OVERRIDE_MIN_PROB
+        )
+        if divergence_high_ev_override:
+            divergence_viability_pass = True
 
         if is_missing_line:
             status = "Missing Line"
@@ -2834,6 +2847,12 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             if divergence_viability_pass:
                 status = "High Variance/Speculative"
                 status_reason = "High Variance: capped due to divergence (ML and Kalshi probability diverge by > 20%)"
+                if divergence_high_ev_override and float(win_prob) < DIVERGENCE_HIGH_VARIANCE_MIN_PROB:
+                    status_reason = (
+                        "High Variance: capped due to divergence (ML and Kalshi probability diverge by > 20%); "
+                        f"preserved by high-EV override (EV >= {DIVERGENCE_HIGH_EV_OVERRIDE_MIN_EV:.2f}, "
+                        f"Edge >= {DIVERGENCE_HIGH_EV_OVERRIDE_MIN_EDGE:.2f}, Win Prob >= {DIVERGENCE_HIGH_EV_OVERRIDE_MIN_PROB:.2f})"
+                    )
                 blocker_stage = "divergence_guardrail"
                 divergence_rows_preserved += 1
                 high_variance_capped_due_to_divergence += 1
