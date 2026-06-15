@@ -131,7 +131,7 @@ def theover_feed_degraded(
             f"theover_feed_degraded: {counts.iloc[0]}/{n} real reads share the "
             f"identical confidence {top_mag:.3f} from 0.5 "
             f"(P(over)≈{0.5 + top_mag:.3f}/{0.5 - top_mag:.3f}, share {top_share:.0%}) "
-            f"— feed not game-specific; dropped from blend for this slate",
+            f"— feed not game-specific; down-weighted in blend for this slate",
         )
     return (False, None)
 
