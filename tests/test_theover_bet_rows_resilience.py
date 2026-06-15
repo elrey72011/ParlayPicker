@@ -107,3 +107,36 @@ def test_build_theover_bet_rows_empty_uploads_returns_stable_schema():
     assert out.empty
     for col in EXPECTED_COLUMNS:
         assert col in out.columns
+
+
+def test_degraded_theover_feed_is_down_weighted_not_nulled():
+    # 15 Jun MLB totals: TheOver legitimately rated six of eight games at hit-rate
+    # 0.75, which the degradation guard folds (over picks 0.75 and under picks
+    # P(over)=0.25 both map to magnitude 0.25) into one cluster and flags as
+    # "degraded." Previously this nulled TheOver for the whole slate, flipping
+    # picks. The guard now shrinks each totals read toward 0.50 by
+    # THEOVER_DEGRADED_FADE_SHRINK (0.50) instead — so the signal survives, damped.
+    totals_df = pd.DataFrame(
+        {
+            "League": ["MLB"] * 8,
+            "HomeTeam": ["A", "B", "C", "D", "E", "F", "G", "H"],
+            "AwayTeam": ["a", "b", "c", "d", "e", "f", "g", "h"],
+            "Pick": ["Over"] * 6 + ["Under"] * 2,
+            "Line": [8.5] * 8,
+            # P(Over): six clustered at 0.75 (-> magnitude 0.25), plus two genuine
+            # high-confidence reads so the slate is plausibly real, not constant.
+            "WinProbability": [0.75, 0.75, 0.75, 0.75, 0.95, 0.80, 0.25, 0.25],
+            "Market": ["Total"] * 8,
+        }
+    )
+
+    out = build_theover_bet_rows(None, totals_df, ["MLB"])
+    overs = out[out["market_type"] == "total_over"].reset_index(drop=True)
+
+    # Not nulled: every totals read retains a (damped) value.
+    assert overs["theover_probability"].notna().all()
+    # Shrunk toward 0.50 by 50%: a 0.95 read becomes 0.5 + 0.5*(0.95-0.5) = 0.725.
+    assert abs(float(overs.loc[4, "theover_probability"]) - 0.725) < 1e-6
+    # The 0.75 reads become 0.625, still a directional Over lean (> 0.5).
+    assert (overs["theover_probability"].dropna() != 0.5).any()
+    assert float(overs.loc[0, "theover_probability"]) > 0.5
