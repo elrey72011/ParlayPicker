@@ -486,7 +486,15 @@ ALLOW_NHL_TOTAL_UNDER_EMPTY_CARD_RECOVERY = False
 # Slate-level safety: non-Actionable total is capped at 30% of combined
 # (Actionable + non-Actionable) if it would otherwise exceed that share.
 ACTIONABLE_KELLY_SHARE = 0.70
-NON_ACTIONABLE_KELLY_SHARE = 0.30
+# 16 Jun: set to 0 — confine real production stakes to the PROVEN Actionable tier
+# (Agrees-bucket, ~61% realized) and stop staking High Variance / Below Threshold.
+# Across 13 graded slates (n=171) the non-Actionable tiers the portfolio was staking
+# ran sub-break-even (staked Act+HV 37%); the totals market the system is fed is
+# entirely Disagrees coin-flips, so any HV/BT stake is -EV. This also resolves an
+# inconsistency: the portfolio optimizer was staking HV/BT while other paths
+# (strategy lab, production-card guard) already zero non-Actionable rows. Raise above
+# 0 only if a non-Actionable tier earns a proven, out-of-sample edge. 0 disables.
+NON_ACTIONABLE_KELLY_SHARE = 0.0
 HIGH_VARIANCE_KELLY_FRACTION = 0.075     # 30% of Actionable's 0.25
 BELOW_THRESHOLD_KELLY_FRACTION = 0.025  # 10% of Actionable's 0.25
 NON_ACTIONABLE_MAX_PICK_PCT = 0.02      # 2% bankroll ceiling per non-Actionable pick

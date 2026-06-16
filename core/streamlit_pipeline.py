@@ -6260,37 +6260,48 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
     is_bt = status.eq("below threshold")
     na_eligible = is_hv | is_bt
 
-    na_kelly_frac = pd.Series(0.0, index=portfolio.index)
-    na_valid = (b > 0) & na_eligible
-    na_kelly_frac.loc[na_valid] = (
-        ((b.loc[na_valid] * p.loc[na_valid]) - q.loc[na_valid]) / b.loc[na_valid]
-    ).clip(lower=0.0)
+    if float(NON_ACTIONABLE_KELLY_SHARE) <= 0:
+        # Non-Actionable staking disabled (16 Jun): confine real stakes to the proven
+        # Actionable (Agrees-bucket) tier. High Variance / Below Threshold still surface
+        # for visibility but carry NO production stake — their production_bet_amount /
+        # recommended_bet are already 0 and kelly_cap_reason "Non-production row" from the
+        # eligibility pass above. Evidence: those tiers ran sub-break-even over graded
+        # history, so staking them (even fractionally) is -EV.
+        portfolio.loc[na_eligible, "production_bet_amount"] = 0.0
+        portfolio.loc[na_eligible, "recommended_bet"] = 0.0
+        portfolio["non_actionable_eligible"] = na_eligible
+    else:
+        na_kelly_frac = pd.Series(0.0, index=portfolio.index)
+        na_valid = (b > 0) & na_eligible
+        na_kelly_frac.loc[na_valid] = (
+            ((b.loc[na_valid] * p.loc[na_valid]) - q.loc[na_valid]) / b.loc[na_valid]
+        ).clip(lower=0.0)
 
-    na_raw = float(bankroll) * na_kelly_frac
-    hv_max = float(bankroll) * float(NON_ACTIONABLE_MAX_PICK_PCT)
-    bt_max = float(bankroll) * float(NON_ACTIONABLE_BELOW_THRESHOLD_MAX_PICK_PCT)
+        na_raw = float(bankroll) * na_kelly_frac
+        hv_max = float(bankroll) * float(NON_ACTIONABLE_MAX_PICK_PCT)
+        bt_max = float(bankroll) * float(NON_ACTIONABLE_BELOW_THRESHOLD_MAX_PICK_PCT)
 
-    na_bet = pd.Series(0.0, index=portfolio.index)
-    na_bet.loc[is_hv] = (na_raw.loc[is_hv] * float(HIGH_VARIANCE_KELLY_FRACTION)).clip(upper=hv_max)
-    na_bet.loc[is_bt] = (na_raw.loc[is_bt] * float(BELOW_THRESHOLD_KELLY_FRACTION)).clip(upper=bt_max)
+        na_bet = pd.Series(0.0, index=portfolio.index)
+        na_bet.loc[is_hv] = (na_raw.loc[is_hv] * float(HIGH_VARIANCE_KELLY_FRACTION)).clip(upper=hv_max)
+        na_bet.loc[is_bt] = (na_raw.loc[is_bt] * float(BELOW_THRESHOLD_KELLY_FRACTION)).clip(upper=bt_max)
 
-    # Slate cap: non-Actionable total must not exceed 30% of combined total
-    a_total = float(portfolio.loc[eligible, "production_bet_amount"].sum())
-    na_total = float(na_bet.loc[na_eligible].sum())
-    combined = a_total + na_total
-    if combined > 0 and na_total > 0:
-        target_na = combined * float(NON_ACTIONABLE_KELLY_SHARE)
-        if na_total > target_na:
-            na_bet = na_bet * (target_na / na_total)
+        # Slate cap: non-Actionable total must not exceed its share of combined total
+        a_total = float(portfolio.loc[eligible, "production_bet_amount"].sum())
+        na_total = float(na_bet.loc[na_eligible].sum())
+        combined = a_total + na_total
+        if combined > 0 and na_total > 0:
+            target_na = combined * float(NON_ACTIONABLE_KELLY_SHARE)
+            if na_total > target_na:
+                na_bet = na_bet * (target_na / na_total)
 
-    portfolio.loc[na_eligible, "production_bet_amount"] = na_bet.loc[na_eligible].round(2)
-    portfolio.loc[na_eligible, "recommended_bet"] = na_bet.loc[na_eligible].round(2)
-    portfolio.loc[is_hv & na_bet.gt(0), "kelly_cap_reason"] = "High Variance Kelly (0.075x)"
-    portfolio.loc[is_bt & na_bet.gt(0), "kelly_cap_reason"] = "Below Threshold Kelly (0.050x)"
-    portfolio.loc[na_eligible, "kelly_weight_share"] = (
-        na_bet.loc[na_eligible] / combined if combined > 0 else 0.0
-    )
-    portfolio["non_actionable_eligible"] = na_eligible
+        portfolio.loc[na_eligible, "production_bet_amount"] = na_bet.loc[na_eligible].round(2)
+        portfolio.loc[na_eligible, "recommended_bet"] = na_bet.loc[na_eligible].round(2)
+        portfolio.loc[is_hv & na_bet.gt(0), "kelly_cap_reason"] = "High Variance Kelly (0.075x)"
+        portfolio.loc[is_bt & na_bet.gt(0), "kelly_cap_reason"] = "Below Threshold Kelly (0.050x)"
+        portfolio.loc[na_eligible, "kelly_weight_share"] = (
+            na_bet.loc[na_eligible] / combined if combined > 0 else 0.0
+        )
+        portfolio["non_actionable_eligible"] = na_eligible
 
     positive = portfolio["production_bet_amount"] > 0
     unique_positive = int(portfolio.loc[positive, "production_bet_amount"].round(6).nunique())
