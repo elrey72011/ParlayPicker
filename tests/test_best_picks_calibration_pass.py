@@ -334,13 +334,14 @@ def test_divergence_can_preserve_minimally_viable_row():
 
 
 def test_divergence_high_ev_override_preserves_sub_floor_win_prob_row():
-    # Mirrors the real 2026-06-15 slate: Houston Under 8.5 / St. Louis Under 8.5 carried
-    # strongly positive EV and edge on +money lines but win prob just below the 0.53
-    # divergence viability floor, so they were dropped to No Play. With the high-EV
-    # override they should be preserved as High Variance/Speculative instead.
+    # A strongly +EV, +edge divergent pick on a +money line with win prob just below the
+    # 0.53 viability floor is preserved as High Variance instead of dropped to No Play.
+    # Uses a non-MLB-total market (NBA total_under): the override is scoped OFF MLB totals
+    # (divergence is anti-predictive there), so the mechanism is validated on a market that
+    # still keeps it.
     df = pd.DataFrame(
         [
-            _row(idx=1, league="MLB", market_type="total_under", win_prob=0.515, ev=0.10, edge=0.06, kalshi_probability=0.27),
+            _row(idx=1, league="NBA", market_type="total_under", win_prob=0.515, ev=0.10, edge=0.06, kalshi_probability=0.25),
         ]
     )
     df.loc[0, "odds_american"] = 120  # +money: positive EV/edge despite sub-0.53 win prob
@@ -348,10 +349,30 @@ def test_divergence_high_ev_override_preserves_sub_floor_win_prob_row():
     out = build_best_picks_df(df)
     row = out.iloc[0]
     # The divergence floor no longer drops it to No Play. Final tier is then decided by the
-    # downstream empirical overlay (High Variance or Below Threshold), but the divergence-stage
-    # decision is retained in status_blocker_reason and must show the high-EV override.
+    # downstream empirical overlay, but the divergence-stage decision is retained in
+    # status_blocker_reason and must show the high-EV override.
     assert row["Pick_Status"] != "No Play"
     assert "high-EV override" in row["status_blocker_reason"]
+
+
+def test_divergence_high_ev_override_excluded_for_mlb_totals():
+    # The override is scoped OFF MLB totals: the 13-slate recap study showed divergent
+    # MLB-total picks are negatively predictive (staked overs 33-39% vs near-market 54%),
+    # so a divergent +EV MLB total below the 0.53 floor must revert to No Play rather than
+    # be preserved into the staked tier. Same inputs as the NBA case above, only the
+    # league/market differ.
+    df = pd.DataFrame(
+        [
+            _row(idx=1, league="MLB", market_type="total_under", win_prob=0.515, ev=0.10, edge=0.06, kalshi_probability=0.27),
+        ]
+    )
+    df.loc[0, "odds_american"] = 120
+    df.loc[0, "ml_probability"] = 0.515
+    out = build_best_picks_df(df)
+    row = out.iloc[0]
+    assert row["Pick_Status"] == "No Play"
+    assert "divergence override denied" in row["Status_Reason"]
+    assert row["status_blocker_stage"] == "divergence_viability_floor"
 
 
 def test_divergence_high_ev_override_does_not_rescue_marginal_ev_row():

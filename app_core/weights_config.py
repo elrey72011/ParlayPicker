@@ -27,13 +27,26 @@ LOW_LIQUIDITY_ML_MODEL_WEIGHT = 0.35
 # data) 0.25→0.30 and ML (team form) 0.05→0.12. Sum still 1.00. This is a variance-
 # reduction / redundancy fix, not a backtest-fitted optimum — fit to Brier/log-loss on
 # historical signal-vs-outcome data to prove the true optimum.
-MLB_TOTAL_THEOVER_WEIGHT = 0.30          # raised 0.25→0.30; only pitcher-aware independent signal
-MLB_TOTAL_ML_WEIGHT = 0.12               # raised 0.05→0.12; 0.05 was too small to move the blend
-MLB_TOTAL_MARKET_WEIGHT = 0.16           # cut 0.30→0.16; redundant with Kalshi (correlated)
-MLB_TOTAL_KALSHI_WEIGHT = 0.42           # raised 0.40→0.42; sharpest single market signal
-MLB_TOTAL_FALLBACK_THEOVER_WEIGHT = 0.30 # restored from 0.20; pitcher signal valuable in fallback
-MLB_TOTAL_FALLBACK_ML_WEIGHT = 0.15      # unchanged
-MLB_TOTAL_FALLBACK_MARKET_WEIGHT = 0.35  # eased from 0.40
+MLB_TOTAL_THEOVER_WEIGHT = 0.17          # market-trust reweight (16 Jun): cut 0.30->0.17
+MLB_TOTAL_ML_WEIGHT = 0.08               # market-trust reweight (16 Jun): cut 0.12->0.08
+MLB_TOTAL_MARKET_WEIGHT = 0.27           # market-trust reweight (16 Jun): raised 0.16->0.27
+MLB_TOTAL_KALSHI_WEIGHT = 0.48           # market-trust reweight (16 Jun): raised 0.42->0.48
+MLB_TOTAL_FALLBACK_THEOVER_WEIGHT = 0.17 # market-trust reweight (16 Jun): cut 0.30->0.17
+MLB_TOTAL_FALLBACK_ML_WEIGHT = 0.08      # market-trust reweight (16 Jun): cut 0.15->0.08
+MLB_TOTAL_FALLBACK_MARKET_WEIGHT = 0.55  # market-trust reweight (16 Jun): raised 0.35->0.55
+# MARKET-TRUST REWEIGHT — MLB totals only (16 Jun). Evidence: across 13 graded slates
+# (1-15 Jun, n=171, latest run/day) the STAKED tiers were the worst performers and the
+# model's confidence was inverted — Actionable 32% / High Variance 39% / Below Threshold
+# 54% — and within Over picks the relationship was the same (Actionable/HV overs 33-39%
+# vs Below Threshold overs 59%). The gates promote the largest model-vs-market
+# divergence (highest EV/edge); on the efficient MLB totals market that divergence is
+# negatively predictive, so the model + TheOver signals were actively anti-predictive
+# while the market complex (Kalshi + Market, which Below Threshold picks track) sat near
+# the ~50% base rate. This reweight roughly HALVES the independent model+TheOver share
+# (Tier 1: 0.42 -> 0.25; market complex 0.58 -> 0.75) so calibrated_probability tracks
+# the market instead of chasing divergence. Expectation is "less bleed," NOT a winning
+# edge: even market-tracking is ~50%, below the 52.4% break-even at -110. Reversible;
+# revisit once scripts/fit_blend_weights.py is run on per-pick signal-vs-outcome data.
 
 # NBA Totals blending overrides (Tier 1 and Tier 2).
 # TheOver incorporates pace, rest, defensive ratings the ML model lacks.

@@ -375,6 +375,9 @@ CANONICAL_BET_COLUMNS = [
     "theover_probability", "win_prob_source", "odds_american", "odds_source", "market_probability",
     "ml_probability", "display_probability", "calibrated_probability", "expected_value", "edge", "best_pick", "used_stale_features", "matchup_id", "Conviction_Score",
     "uploaded_spread_line", "uploaded_total_line", "live_spread_line", "live_total_line", "line_source", "line_delta", "upload_market_match",
+    # Carried so a TheOver-feed degradation warning set by _apply_analysis_calculations
+    # survives the canonical reindex and reaches the production degraded-run Kelly guard.
+    "run_health_warning",
 ]
 
 _EXPORT_SIGNAL_COLS = {"market_type", "calibrated_probability", "expected_value", "edge"}
@@ -2831,8 +2834,17 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         # High-EV override: a strongly +EV, +edge divergent pick whose win prob falls just
         # short of the 0.53 floor is preserved as High Variance/Speculative instead of being
         # dropped to No Play, provided the model still favors the pick (win prob >= 0.50).
+        #
+        # SCOPE (16 Jun): NOT applied to MLB totals. On the efficient MLB totals market the
+        # 13-slate recap study (1-15 Jun, n=171) found model-vs-market divergence is
+        # negatively predictive — the staked divergent overs went 33-39% while near-market
+        # Below Threshold picks went 54%. Preserving divergent +EV MLB totals into the
+        # staked tier therefore adds losing exposure, so they revert to No Play here.
+        # Other leagues/markets keep the override.
+        _is_mlb_total = (league == "MLB") and ("total" in market_type.lower())
         divergence_high_ev_override = (
-            pd.notna(ev)
+            (not _is_mlb_total)
+            and pd.notna(ev)
             and pd.notna(edge)
             and float(ev) >= DIVERGENCE_HIGH_EV_OVERRIDE_MIN_EV
             and float(edge) >= DIVERGENCE_HIGH_EV_OVERRIDE_MIN_EDGE
@@ -5176,6 +5188,22 @@ def run_analysis_pipeline(
 
                     if "win_prob_source" in merged.columns and pd.isna(merged.at[idx, "win_prob_source"]) and pd.notna(match.get("win_prob_source")):
                         merged.at[idx, "win_prob_source"] = match.get("win_prob_source")
+
+        # Propagate any slate-level TheOver-feed degradation warning from the uploaded
+        # rows onto the master slate. The column-scoped merge above intentionally carries
+        # only the probability/source columns, so without this the run_health_warning set
+        # by the degradation guard is lost in the live-odds path and the production-stage
+        # degraded-run Kelly reduction never fires. Since we now down-weight (rather than
+        # null) a degraded feed, its damped signal still influences direction — so the
+        # de-staking safety must travel with it. Preserve any existing warning.
+        if "run_health_warning" in theover_rows.columns:
+            _theover_warn = _string_series(theover_rows, "run_health_warning")
+            _theover_warn = _theover_warn[_theover_warn.str.len() > 0]
+            if not _theover_warn.empty:
+                _existing_warn = _string_series(merged, "run_health_warning")
+                merged["run_health_warning"] = _existing_warn.where(
+                    _existing_warn.str.len() > 0, _theover_warn.iloc[0]
+                )
 
     # Ensure identity columns survive master-frame merges.
     if "league" not in merged.columns or _string_series(merged, "league").str.len().eq(0).all():

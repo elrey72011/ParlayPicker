@@ -140,3 +140,11 @@ def test_degraded_theover_feed_is_down_weighted_not_nulled():
     # The 0.75 reads become 0.625, still a directional Over lean (> 0.5).
     assert (overs["theover_probability"].dropna() != 0.5).any()
     assert float(overs.loc[0, "theover_probability"]) > 0.5
+
+    # The degradation warning must survive the canonical reindex so the downstream
+    # production degraded-run guard can halve Kelly: since we now retain (down-weight)
+    # the signal, the de-staking safety has to travel with it. The reason string
+    # contains "degraded", which is what the Kelly-reduction guard keys on.
+    warn = out["run_health_warning"].astype("string").fillna("")
+    assert (warn.str.len() > 0).any()
+    assert warn.str.contains("degraded", case=False).any()
