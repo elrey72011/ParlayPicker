@@ -2834,8 +2834,17 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         # High-EV override: a strongly +EV, +edge divergent pick whose win prob falls just
         # short of the 0.53 floor is preserved as High Variance/Speculative instead of being
         # dropped to No Play, provided the model still favors the pick (win prob >= 0.50).
+        #
+        # SCOPE (16 Jun): NOT applied to MLB totals. On the efficient MLB totals market the
+        # 13-slate recap study (1-15 Jun, n=171) found model-vs-market divergence is
+        # negatively predictive — the staked divergent overs went 33-39% while near-market
+        # Below Threshold picks went 54%. Preserving divergent +EV MLB totals into the
+        # staked tier therefore adds losing exposure, so they revert to No Play here.
+        # Other leagues/markets keep the override.
+        _is_mlb_total = (league == "MLB") and ("total" in market_type.lower())
         divergence_high_ev_override = (
-            pd.notna(ev)
+            (not _is_mlb_total)
+            and pd.notna(ev)
             and pd.notna(edge)
             and float(ev) >= DIVERGENCE_HIGH_EV_OVERRIDE_MIN_EV
             and float(edge) >= DIVERGENCE_HIGH_EV_OVERRIDE_MIN_EDGE
