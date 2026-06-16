@@ -251,26 +251,57 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
 
         return wins, losses, pushes, win_rate, net_profit
 
-    # Only evaluate "Actionable" picks for top-line metrics based on current display_df
-    actionable_df = display_df[display_df['Pick_Status'] == 'Actionable'].copy() if 'Pick_Status' in display_df.columns else pd.DataFrame()
+    # Headline the STAKED tiers (what the system actually recommended), not the all-rows
+    # blend. "No Play" and "Below Threshold" are explicit do-not-bet calls that trend
+    # toward ~50% by construction and mask staked performance — counting their outcomes
+    # as "our record" understates the system (15 Jun: all-rows read 40%, but the lone
+    # staked pick — Dodgers Under, High Variance — won 1/1, and the rest were games the
+    # system told you to skip). summarize_recap_tiers separates the staked card; it also
+    # correctly includes High Variance/Speculative picks, which carry a Kelly stake but
+    # were excluded by the old "Actionable-only" headline (so genuinely staked High
+    # Variance days showed "No Actionable picks" and fell back to the all-rows number).
+    from app_core.strategy_lab_realized import summarize_recap_tiers
+    _tier_src = display_df.rename(columns={"Pick_Status": "Status"}) if "Pick_Status" in display_df.columns else display_df
+    tiers = summarize_recap_tiers(_tier_src)
+    st.markdown("#### Staked Performance by Tier")
+    _tcols = st.columns(3)
+    for _col, (_, _row) in zip(_tcols, tiers.iterrows()):
+        _col.metric(
+            _row["Tier"],
+            f"{_row['Hit Rate']:.1%}",
+            f"{int(_row['Wins'])}-{int(_row['Losses'])} ({int(_row['Total'])})",
+        )
+    st.caption(
+        "Judge the system by the staked tiers (Actionable / Actionable + High Variance). "
+        "'All graded rows' includes Below Threshold and No Play picks that were never "
+        "staked, so it trends toward ~50% by construction and understates a good staked day."
+    )
 
-    if actionable_df.empty:
-         st.info("No 'Actionable' picks were found in yesterday's export.")
+    # Net profit on the staked card (Actionable or High Variance with a positive stake).
+    STAKED_STATUSES = {"Actionable", "High Variance/Speculative"}
+    if "Pick_Status" in display_df.columns:
+        _staked_mask = display_df["Pick_Status"].astype(str).isin(STAKED_STATUSES)
+        if "Kelly_Bet_Size" in display_df.columns:
+            _staked_mask &= pd.to_numeric(display_df["Kelly_Bet_Size"], errors="coerce").fillna(0) > 0
+        staked_df = display_df[_staked_mask].copy()
     else:
-        wins_act, losses_act, pushes_act, win_rate_act, net_profit_act = calculate_metrics(actionable_df)
+        staked_df = pd.DataFrame()
 
-        # Assume 1 unit = 1 for the metric, maybe display in Units or $ assuming $100/u
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Overall Win Rate (Actionable)", f"{win_rate_act:.1%}", f"{wins_act}-{losses_act}-{pushes_act}")
-        col2.metric("Total Net Profit - Actionable (Units)", f"{net_profit_act:+.2f}")
-        col3.metric("Actionable Picks Evaluated", len(actionable_df))
+    if staked_df.empty:
+        st.info("System recommended no bets for this slate (empty production card) — nothing was staked, so a losing all-rows number reflects skipped games, not placed bets.")
+    else:
+        wins_s, losses_s, pushes_s, win_rate_s, net_profit_s = calculate_metrics(staked_df)
+        scol1, scol2 = st.columns(2)
+        scol1.metric("Net Profit - Staked (Units)", f"{net_profit_s:+.2f}")
+        scol2.metric("Staked Picks Evaluated", len(staked_df))
 
     # Calculate metrics for all picks in display_df
     wins_all, losses_all, pushes_all, win_rate_all, net_profit_all = calculate_metrics(display_df)
 
+    st.markdown("###### Reference — All Candidates (incl. unstaked No Play / Below Threshold)")
     col4, col5, col6 = st.columns(3)
-    col4.metric("Overall Win Rate (All Picks)", f"{win_rate_all:.1%}", f"{wins_all}-{losses_all}-{pushes_all}")
-    col5.metric("Total Net Profit - All Picks (Units)", f"{net_profit_all:+.2f}")
+    col4.metric("Win Rate — All Candidates", f"{win_rate_all:.1%}", f"{wins_all}-{losses_all}-{pushes_all}")
+    col5.metric("Net Profit - All Candidates (Units)", f"{net_profit_all:+.2f}")
     col6.metric("Total Picks Evaluated", len(display_df))
 
     st.divider()
