@@ -2604,8 +2604,17 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         # kalshi_probability is pre-oriented by kalshi_integrator (P(Under) for Under rows).
         # A value < 0.50 means Kalshi says the OTHER side wins — that is Disagrees, not Agrees.
         agrees_mask = (is_kalshi_available & gap.ge(0.03) & kalshi_prob.ge(0.50)).fillna(False).astype(bool)
-        # "Disagrees": Kalshi says other direction (P(pick) < 50%) OR Kalshi more confident than model.
-        disagrees_mask = (is_kalshi_available & (gap.le(-0.03) | kalshi_prob.lt(0.50))).fillna(False).astype(bool)
+        # "Disagrees": Kalshi favors the OTHER side (P(pick) < 0.50) — a genuine
+        # DIRECTIONAL disagreement. NOTE (16 Jun): previously this also fired when the
+        # model was merely less confident than Kalshi on the SAME side (gap <= -0.03).
+        # That conflated "market more bullish than us" with "market on the other side":
+        # after the market-trust reweight pulled the model toward (and below) the more
+        # confident Kalshi number, every same-side pick read "Disagrees". A pick where
+        # Kalshi and the model both favor the side but the model isn't ahead is NOT a
+        # disagreement — it is Neutral (we just haven't found extra value). Agrees still
+        # requires the model to LEAD the market (gap >= 0.03), preserving the proven
+        # ~61% Agrees-bucket edge and the Actionable gate.
+        disagrees_mask = (is_kalshi_available & kalshi_prob.lt(0.50)).fillna(False).astype(bool)
         best.loc[is_kalshi_available, "consensus_agreement"] = "Neutral"
         best.loc[agrees_mask, "consensus_agreement"] = "Agrees"
         best.loc[disagrees_mask, "consensus_agreement"] = "Disagrees"

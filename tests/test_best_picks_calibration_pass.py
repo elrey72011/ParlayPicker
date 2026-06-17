@@ -237,6 +237,26 @@ def test_low_line_over_guardrail_is_consensus_aware():
     assert disagrees["status_blocker_stage"] == "low_line_over_guardrail"
 
 
+def test_consensus_same_side_model_lagging_is_neutral_not_disagrees():
+    # 16 Jun fix: a pick where Kalshi and the model favor the SAME side, but the model is
+    # LESS confident than Kalshi, is NOT a disagreement — it's Neutral. Previously the
+    # gap<=-0.03 clause tagged these "Disagrees", which (after the market-trust reweight
+    # pulled the model below Kalshi everywhere) made every line read "Disagrees".
+    def _consensus(win_prob, kalshi):
+        df = pd.DataFrame([
+            _row(idx=1, league="MLB", market_type="total_under", win_prob=win_prob,
+                 ev=0.04, edge=0.04, kalshi_probability=kalshi)
+        ])
+        return build_best_picks_df(df).iloc[0]["consensus_agreement"]
+
+    # Same side (both favor Under), model lagging Kalshi -> Neutral (was Disagrees).
+    assert _consensus(0.52, 0.60) == "Neutral"
+    # Model leads the market on the same side -> Agrees (unchanged).
+    assert _consensus(0.62, 0.55) == "Agrees"
+    # Kalshi favors the OTHER side -> genuine Disagrees (unchanged).
+    assert _consensus(0.60, 0.45) == "Disagrees"
+
+
 def test_new_diagnostics_populate_without_regressing_existing_total_protections():
     df = pd.DataFrame(
         [
