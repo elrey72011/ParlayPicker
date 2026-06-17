@@ -2914,6 +2914,27 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 if upload_market_match in {"false", "0", "mismatch"}:
                     suspicious_reasons.append("upload_line_market_mismatch")
 
+        # Corrupt-odds sanity (UNGATED — runs regardless of EV). A two-way totals or
+        # spread market whose de-vigged implied probability sits outside [0.05, 0.95]
+        # is almost certainly a bad odds value from the feed: e.g. the 17 Jun Dodgers
+        # Over 9.5 came in at +1983 (implied 4.8%), producing a nonsense +850% EV. Real
+        # totals/run-line prices live well inside that band, so block the row before
+        # the garbage EV reaches the card. Moneyline (heavy favorites/dogs) is exempt.
+        corrupt_odds_flag = False
+        corrupt_odds_reason = ""
+        _mt_lower = market_type.lower()
+        if _mt_lower.startswith("total") or _mt_lower.startswith("spread"):
+            _mp_val = pd.to_numeric(best.at[idx, "market_probability"], errors="coerce") if "market_probability" in best.columns else pd.NA
+            if pd.notna(_mp_val) and (float(_mp_val) < 0.05 or float(_mp_val) > 0.95):
+                corrupt_odds_flag = True
+                _odds_val = pd.to_numeric(best.at[idx, "odds_american"], errors="coerce") if "odds_american" in best.columns else pd.NA
+                corrupt_odds_reason = (
+                    f"corrupt odds (implied {float(_mp_val):.0%}"
+                    + (f", {int(_odds_val):+d}" if pd.notna(_odds_val) else "")
+                    + ") — line/price mismatch from feed"
+                )
+                suspicious_reasons.append(corrupt_odds_reason)
+
         # Spread orientation fault (ungated by EV): the spread favorite must be the
         # moneyline favorite. A mismatch means the live feed delivered a flipped
         # home/away spread (14 Jun: Texas shown -1.5/+158 — a favorite line — when
@@ -2980,6 +3001,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             status = "No Play"
             status_reason = f"No Play: {spread_orientation_fault_reason}"
             blocker_stage = "spread_orientation_guardrail"
+        elif corrupt_odds_flag:
+            status = "No Play"
+            status_reason = f"No Play: {corrupt_odds_reason}"
+            blocker_stage = "corrupt_odds_guardrail"
         elif is_kalshi_divergence:
             if divergence_viability_pass:
                 status = "High Variance/Speculative"
