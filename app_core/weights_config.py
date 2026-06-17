@@ -544,6 +544,16 @@ NON_ACTIONABLE_BELOW_THRESHOLD_MAX_PICK_PCT = 0.010  # 1% cap for Below Threshol
 DAILY_STAKE_FORCE_DEPLOY = True
 DAILY_STAKE_BUDGET = 5000.0
 ACTIONABLE_STAKE_SHARE = 0.60
+# Concentration controls — keep a thin/weak slate from dumping a whole tier budget
+# onto one marginal pick (17 Jun: a lone Below Threshold Under drew the full $2000).
+#  - Stake the non-Actionable 40% ONLY on High Variance picks; Below Threshold picks
+#    failed the thresholds outright and get no forced stake (True to include them).
+#  - Cap any single force-deployed pick at FORCE_DEPLOY_MAX_PICK_PCT of DAILY_STAKE_BUDGET;
+#    the excess is NOT redistributed, so a tier with too few picks UNDER-deploys by
+#    design rather than concentrating. At 0.15 ($750 on a $5000 budget) the full $3000
+#    Actionable share needs >=4 picks; fewer picks deploy proportionally less.
+FORCE_DEPLOY_NONACTIONABLE_INCLUDE_BELOW_THRESHOLD = False
+FORCE_DEPLOY_MAX_PICK_PCT = 0.15
 
 # Injury & Weather Adjustments
 # Applied per key injured player to the side's model probability.

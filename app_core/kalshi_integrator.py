@@ -574,11 +574,31 @@ def _event_match_score(event: dict[str, Any], home_team: str, away_team: str, le
     if away_tokens:
         score += min(25, 10 * len(away_tokens.intersection(combined_tokens)))
 
-    # Penalize one-sided matches to avoid false positives
-    has_home = (home_code and home_code in combined_upper) or (home_norm and home_norm in combined_norm) or bool(home_tokens.intersection(combined_tokens))
-    has_away = (away_code and away_code in combined_upper) or (away_norm and away_norm in combined_norm) or bool(away_tokens.intersection(combined_tokens))
+    # Penalize / reject one-sided matches to avoid false positives. A team counts as
+    # STRONGLY present only via its CODE or FULL normalized name — NOT a bare token
+    # overlap or the cleaned name, because both collide on the shared CITY across teams
+    # ("Los Angeles" Dodgers vs Angels; clean_team_name strips the mascot to the city).
+    home_strong = bool(
+        (home_code and home_code in combined_upper)
+        or (home_norm and home_norm in combined_norm)
+    )
+    away_strong = bool(
+        (away_code and away_code in combined_upper)
+        or (away_norm and away_norm in combined_norm)
+    )
+    has_home = home_strong or bool(home_tokens.intersection(combined_tokens))
+    has_away = away_strong or bool(away_tokens.intersection(combined_tokens))
 
     if has_home ^ has_away:
+        # Exactly one team present. If that lone team matched only by a weak token
+        # overlap (e.g. the shared city "los angeles" while the real opponent is
+        # absent — 17 Jun: Dodgers/Tampa Bay matched "Los Angeles A vs Arizona"),
+        # it's the WRONG game: reject it well below the floor so we take a Kalshi miss
+        # instead of another game's price. A strong (code/name) one-sided match is
+        # only penalized, not rejected — the opponent may just be coded differently.
+        present_is_strong = home_strong if has_home else away_strong
+        if not present_is_strong:
+            return -100
         score -= 30
 
     # Date affinity improves precision while still allowing missing date fields.

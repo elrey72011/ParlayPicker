@@ -2914,6 +2914,27 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 if upload_market_match in {"false", "0", "mismatch"}:
                     suspicious_reasons.append("upload_line_market_mismatch")
 
+        # Corrupt-odds sanity (UNGATED — runs regardless of EV). A two-way totals or
+        # spread market whose de-vigged implied probability sits outside [0.05, 0.95]
+        # is almost certainly a bad odds value from the feed: e.g. the 17 Jun Dodgers
+        # Over 9.5 came in at +1983 (implied 4.8%), producing a nonsense +850% EV. Real
+        # totals/run-line prices live well inside that band, so block the row before
+        # the garbage EV reaches the card. Moneyline (heavy favorites/dogs) is exempt.
+        corrupt_odds_flag = False
+        corrupt_odds_reason = ""
+        _mt_lower = market_type.lower()
+        if _mt_lower.startswith("total") or _mt_lower.startswith("spread"):
+            _mp_val = pd.to_numeric(best.at[idx, "market_probability"], errors="coerce") if "market_probability" in best.columns else pd.NA
+            if pd.notna(_mp_val) and (float(_mp_val) < 0.05 or float(_mp_val) > 0.95):
+                corrupt_odds_flag = True
+                _odds_val = pd.to_numeric(best.at[idx, "odds_american"], errors="coerce") if "odds_american" in best.columns else pd.NA
+                corrupt_odds_reason = (
+                    f"corrupt odds (implied {float(_mp_val):.0%}"
+                    + (f", {int(_odds_val):+d}" if pd.notna(_odds_val) else "")
+                    + ") — line/price mismatch from feed"
+                )
+                suspicious_reasons.append(corrupt_odds_reason)
+
         # Spread orientation fault (ungated by EV): the spread favorite must be the
         # moneyline favorite. A mismatch means the live feed delivered a flipped
         # home/away spread (14 Jun: Texas shown -1.5/+158 — a favorite line — when
@@ -2980,6 +3001,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             status = "No Play"
             status_reason = f"No Play: {spread_orientation_fault_reason}"
             blocker_stage = "spread_orientation_guardrail"
+        elif corrupt_odds_flag:
+            status = "No Play"
+            status_reason = f"No Play: {corrupt_odds_reason}"
+            blocker_stage = "corrupt_odds_guardrail"
         elif is_kalshi_divergence:
             if divergence_viability_pass:
                 status = "High Variance/Speculative"
@@ -6440,6 +6465,7 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
     try:
         from app_core.weights_config import (
             DAILY_STAKE_FORCE_DEPLOY, DAILY_STAKE_BUDGET, ACTIONABLE_STAKE_SHARE,
+            FORCE_DEPLOY_NONACTIONABLE_INCLUDE_BELOW_THRESHOLD, FORCE_DEPLOY_MAX_PICK_PCT,
         )
     except Exception:
         DAILY_STAKE_FORCE_DEPLOY = False
@@ -6454,7 +6480,15 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
             & (~best_pick_norm.str.contains("unresolved", na=False))
         )
         _act_tier = _data_safe & status.eq("actionable")
-        _nonact_tier = _data_safe & na_eligible  # High Variance + Below Threshold
+        # Non-Actionable staking tier: High Variance only by default. Below Threshold
+        # picks failed the thresholds outright, so they carry no forced stake unless
+        # explicitly opted in.
+        _nonact_status = na_eligible if FORCE_DEPLOY_NONACTIONABLE_INCLUDE_BELOW_THRESHOLD else is_hv
+        _nonact_tier = _data_safe & _nonact_status
+
+        # Per-pick concentration cap. Excess above the cap is NOT redistributed, so a
+        # tier with too few picks under-deploys instead of dumping the budget onto one.
+        _max_pick = float(DAILY_STAKE_BUDGET) * float(FORCE_DEPLOY_MAX_PICK_PCT)
 
         def _fill_budget(mask: pd.Series, budget: float) -> None:
             idx = portfolio.index[mask.fillna(False)]
@@ -6463,7 +6497,7 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
             w = pd.to_numeric(portfolio.loc[idx, "kelly_fraction"], errors="coerce").fillna(0.0).clip(lower=0.0)
             if float(w.sum()) <= 0:
                 w = pd.Series(1.0, index=idx)  # equal-weight when no positive Kelly
-            alloc = (w / float(w.sum())) * float(budget)
+            alloc = ((w / float(w.sum())) * float(budget)).clip(upper=_max_pick)
             portfolio.loc[idx, "production_bet_amount"] = alloc.round(2)
             portfolio.loc[idx, "recommended_bet"] = alloc.round(2)
 
