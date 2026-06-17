@@ -6,18 +6,20 @@ def test_side_floor_and_consensus_overlays():
     def create_row(home_team, away_team, market_type, win_prob, ev, edge, consensus_agreement="Agrees"):
         is_total = "total" in market_type.lower()
 
-        # In the pipeline, consensus_agreement is dynamically computed:
-        # gap = calibrated_probability - kalshi_probability
-        # Agrees: gap >= 0.03
-        # Disagrees: gap <= -0.03
-        # Neutral: otherwise
+        # In the pipeline, consensus_agreement is dynamically computed from the
+        # DIRECTIONAL Kalshi read (16 Jun): does Kalshi back the SAME side as the
+        # pick (kalshi_probability for our side > 0.50), regardless of which model
+        # is more confident?
+        #   Agrees:    kalshi_probability >= 0.52  (Kalshi backs our side)
+        #   Disagrees: kalshi_probability <= 0.48  (Kalshi backs the other side)
+        #   Neutral:   ~0.50
 
         if consensus_agreement == "Agrees":
-            k_prob = win_prob - 0.04
+            k_prob = 0.55
         elif consensus_agreement == "Disagrees":
-            k_prob = win_prob + 0.04
+            k_prob = 0.45
         else:
-            k_prob = win_prob
+            k_prob = 0.50
 
         return {
             "league": "NBA",

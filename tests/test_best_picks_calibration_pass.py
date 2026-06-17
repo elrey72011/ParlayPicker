@@ -226,7 +226,9 @@ def test_low_line_over_guardrail_is_consensus_aware():
         df.loc[0, "live_total_line"] = 7.5
         return build_best_picks_df(df).iloc[0]
 
-    neutral = _low_over(0.60)
+    # Neutral case uses a Kalshi pick'em (~0.50): under directional consensus a clear
+    # Kalshi lean (0.60) is Agrees, so the Neutral guardrail path is exercised at 0.50.
+    neutral = _low_over(0.50)
     assert neutral["consensus_agreement"] == "Neutral"
     assert neutral["Pick_Status"] == "Below Threshold"
     assert neutral["status_blocker_stage"] == "low_line_over_guardrail"
@@ -235,6 +237,28 @@ def test_low_line_over_guardrail_is_consensus_aware():
     assert disagrees["consensus_agreement"] == "Disagrees"
     assert disagrees["Pick_Status"] == "High Variance/Speculative"
     assert disagrees["status_blocker_stage"] == "low_line_over_guardrail"
+
+
+def test_consensus_is_directional_same_side_is_agrees():
+    # 16 Jun: consensus is DIRECTIONAL — Kalshi backing the same side as our pick is
+    # "Agrees" regardless of which side is more confident. (The old rule required the
+    # model to LEAD Kalshi, so after the market-trust reweight pulled the model below
+    # Kalshi every same-side pick mislabeled as "Disagrees".)
+    def _consensus(win_prob, kalshi):
+        df = pd.DataFrame([
+            _row(idx=1, league="MLB", market_type="total_under", win_prob=win_prob,
+                 ev=0.04, edge=0.04, kalshi_probability=kalshi)
+        ])
+        return build_best_picks_df(df).iloc[0]["consensus_agreement"]
+
+    # Kalshi backs our side but is MORE confident than the model -> Agrees (was Disagrees).
+    assert _consensus(0.52, 0.60) == "Agrees"
+    # Model leads the market on the same side -> still Agrees.
+    assert _consensus(0.62, 0.55) == "Agrees"
+    # Kalshi favors the OTHER side -> Disagrees.
+    assert _consensus(0.60, 0.45) == "Disagrees"
+    # Kalshi pick'em (within the neutral band) -> Neutral.
+    assert _consensus(0.60, 0.50) == "Neutral"
 
 
 def test_new_diagnostics_populate_without_regressing_existing_total_protections():
