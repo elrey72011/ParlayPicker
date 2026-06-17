@@ -6440,6 +6440,7 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
     try:
         from app_core.weights_config import (
             DAILY_STAKE_FORCE_DEPLOY, DAILY_STAKE_BUDGET, ACTIONABLE_STAKE_SHARE,
+            FORCE_DEPLOY_NONACTIONABLE_INCLUDE_BELOW_THRESHOLD, FORCE_DEPLOY_MAX_PICK_PCT,
         )
     except Exception:
         DAILY_STAKE_FORCE_DEPLOY = False
@@ -6454,7 +6455,15 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
             & (~best_pick_norm.str.contains("unresolved", na=False))
         )
         _act_tier = _data_safe & status.eq("actionable")
-        _nonact_tier = _data_safe & na_eligible  # High Variance + Below Threshold
+        # Non-Actionable staking tier: High Variance only by default. Below Threshold
+        # picks failed the thresholds outright, so they carry no forced stake unless
+        # explicitly opted in.
+        _nonact_status = na_eligible if FORCE_DEPLOY_NONACTIONABLE_INCLUDE_BELOW_THRESHOLD else is_hv
+        _nonact_tier = _data_safe & _nonact_status
+
+        # Per-pick concentration cap. Excess above the cap is NOT redistributed, so a
+        # tier with too few picks under-deploys instead of dumping the budget onto one.
+        _max_pick = float(DAILY_STAKE_BUDGET) * float(FORCE_DEPLOY_MAX_PICK_PCT)
 
         def _fill_budget(mask: pd.Series, budget: float) -> None:
             idx = portfolio.index[mask.fillna(False)]
@@ -6463,7 +6472,7 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
             w = pd.to_numeric(portfolio.loc[idx, "kelly_fraction"], errors="coerce").fillna(0.0).clip(lower=0.0)
             if float(w.sum()) <= 0:
                 w = pd.Series(1.0, index=idx)  # equal-weight when no positive Kelly
-            alloc = (w / float(w.sum())) * float(budget)
+            alloc = ((w / float(w.sum())) * float(budget)).clip(upper=_max_pick)
             portfolio.loc[idx, "production_bet_amount"] = alloc.round(2)
             portfolio.loc[idx, "recommended_bet"] = alloc.round(2)
 
