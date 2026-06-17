@@ -182,6 +182,21 @@ NBA_OVER_ACTIONABLE_BONUS = 0.00
 MLB_OVER_ACTIONABLE_MIN_PROB = 0.65
 MLB_OVER_ACTIONABLE_MIN_EV = 0.07
 MLB_OVER_ACTIONABLE_MIN_EDGE = 0.04
+# Earned relaxation of the strict MLB-over bar (17 Jun). The blanket 0.65 prob /
+# 0.07 EV gate above made the over-heavy slates produce zero Actionable picks: the
+# over-prob shrink + market-anchored debias pull every over's calibrated prob to
+# ~0.48-0.51, ~15pts under the gate, so nothing qualified regardless of how the
+# market/Kalshi/ML/TheOver signals lined up. These RELAXED requirements apply ONLY
+# to over picks where Kalshi AGREES (directional consensus) AND the realized
+# empirical bucket has EARNED trust (>=55% over >=25 graded picks, the same proof
+# the empirical overlay's Actionable promotion requires). Non-Agrees overs, and
+# Agrees overs in unproven/bleeding buckets, keep the strict 0.65/0.07/0.04 bar.
+# This is edge-gated volume, not loosened discipline: the proven-bucket condition
+# is the realized-performance backstop, and the empirical overlay still has the
+# final say on staking.
+MLB_OVER_AGREES_ACTIONABLE_MIN_PROB = 0.58
+MLB_OVER_AGREES_ACTIONABLE_MIN_EV = 0.03
+MLB_OVER_AGREES_ACTIONABLE_MIN_EDGE = 0.02
 # Hard cap on calibrated probability for MLB overs — prevents residual TheOver
 # inflation above a reliable ceiling. Raised from 0.67 → 0.72 (May-26): the 0.67
 # cap was set when TheOver had a cross-matching bug producing flat ~0.85 probs.

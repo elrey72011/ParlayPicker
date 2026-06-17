@@ -388,6 +388,43 @@ CANONICAL_BET_COLUMNS = [
 
 _EXPORT_SIGNAL_COLS = {"market_type", "calibrated_probability", "expected_value", "edge"}
 
+
+def _compute_signal_breakdown(df: pd.DataFrame) -> pd.Series:
+    """Readable per-signal win-% string for each row, e.g.
+    ``"Kalshi 58% | Market 46% | ML 64% | TheOver 60%"``.
+
+    Each piece is the exact, pick-side-oriented value that signal contributed to
+    the blend. We prefer the persisted ``blend_in_*`` inputs but fall back to the
+    raw signal columns, because ``blend_in_kalshi`` is stamped early in
+    run_analysis_pipeline (before Kalshi is merged onto live-odds bet rows) while
+    ``kalshi_probability`` is populated by the time the export is assembled — so
+    computing the string here, late, keeps the Kalshi piece from being dropped.
+    Signals absent for a row are omitted rather than shown as 0%.
+    """
+    pieces = (
+        ("Kalshi", "blend_in_kalshi", "kalshi_probability"),
+        ("Market", "blend_in_market", "market_probability"),
+        ("ML", "blend_in_ml", "ml_probability"),
+        ("TheOver", "blend_in_theover", "theover_probability"),
+    )
+    breakdown = pd.Series([""] * len(df), index=df.index)
+    for label, primary_col, fallback_col in pieces:
+        values = pd.Series([pd.NA] * len(df), index=df.index)
+        if primary_col in df.columns:
+            values = pd.to_numeric(df[primary_col], errors="coerce")
+        if fallback_col in df.columns:
+            values = values.fillna(pd.to_numeric(df[fallback_col], errors="coerce"))
+        piece = values.map(
+            lambda v, _l=label: f"{_l} {v * 100:.0f}%" if pd.notna(v) else ""
+        )
+        sep = pd.Series(
+            np.where((breakdown != "") & (piece != ""), " | ", ""),
+            index=df.index,
+        )
+        breakdown = breakdown + sep + piece
+    return breakdown
+
+
 # Cap combos per leg count to prevent combinatorial explosion
 _MAX_PARLAY_COMBOS_PER_LEG = 500
 
@@ -2624,6 +2661,12 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         best.loc[agrees_mask, "consensus_agreement"] = "Agrees"
         best.loc[disagrees_mask, "consensus_agreement"] = "Disagrees"
 
+    # Recompute the per-signal breakdown here, where Kalshi is merged onto every row.
+    # The copy stamped in run_analysis_pipeline runs before the live-odds bet rows get
+    # their Kalshi values, so it drops the Kalshi piece; refreshing it now keeps the
+    # exported string consistent with the blend_in_*/kalshi_probability columns.
+    best["signal_breakdown"] = _compute_signal_breakdown(best)
+
 
     # Phase 5: Enforce Thresholds and Pick Status Labelling
     # MIN_EDGE_THRESHOLD of 0.01 for high-liquidity markets.
@@ -2669,6 +2712,35 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         best["effective_edge"] = pd.NA
     if "effective_win_probability" not in best.columns:
         best["effective_win_probability"] = pd.NA
+
+    # Earned-Actionable relaxation gate for MLB overs (17 Jun): the strict 0.65 prob
+    # bar leaves over-heavy slates empty. We allow a lower bar for Agrees overs, but
+    # ONLY when the realized MLB:over:Agrees bucket has earned trust (>=55% over >=25
+    # graded picks) — the same proof the empirical overlay's Actionable promotion uses.
+    # Computed once here so the per-row gate is a cheap lookup. When no graded history
+    # exists yet (bucket stats unavailable) we treat the relaxation as available so the
+    # card is not permanently empty pre-calibration; once slates are graded the proven
+    # condition becomes the binding backstop.
+    _mlb_over_agrees_relax_ok = False
+    _mlb_over_agrees_bucket_stats_available = False
+    try:
+        from core.empirical_tiers import (
+            load_bucket_stats as _load_bucket_stats,
+            smoothed_bucket_rate as _smoothed_bucket_rate,
+            ACTIONABLE_MIN_BUCKET_N as _ACT_MIN_N,
+            ACTIONABLE_MIN_BUCKET_RATE as _ACT_MIN_RATE,
+        )
+        _bs = _load_bucket_stats()
+        if _bs:
+            _mlb_over_agrees_bucket_stats_available = True
+            _rate, _n = _smoothed_bucket_rate("MLB:over:Agrees", _bs)
+            _mlb_over_agrees_relax_ok = (_n >= _ACT_MIN_N) and (_rate >= _ACT_MIN_RATE)
+        else:
+            # No graded history yet — let the relaxed bar apply so over-heavy slates
+            # can surface Agrees overs; the empirical overlay (once fed) re-gates them.
+            _mlb_over_agrees_relax_ok = True
+    except Exception:
+        _mlb_over_agrees_relax_ok = False
 
     for idx in best.index:
         status_reason = "Unknown"
@@ -2730,6 +2802,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             MLB_SPREAD_ACTIONABLE_PENALTY,
             NBA_SIDE_ACTIONABLE_BONUS, NBA_OVER_ACTIONABLE_BONUS,
             MLB_OVER_ACTIONABLE_MIN_PROB, MLB_OVER_ACTIONABLE_MIN_EV, MLB_OVER_ACTIONABLE_MIN_EDGE,
+            MLB_OVER_AGREES_ACTIONABLE_MIN_PROB, MLB_OVER_AGREES_ACTIONABLE_MIN_EV, MLB_OVER_AGREES_ACTIONABLE_MIN_EDGE,
             MLB_TOTAL_OVER_ACTIONABLE_PENALTY, MLB_TOTAL_UNDER_ACTIONABLE_PENALTY,
             NBA_TOTAL_OVER_ACTIONABLE_PENALTY, NBA_TOTAL_UNDER_ACTIONABLE_PENALTY,
             NHL_TOTAL_OVER_ACTIONABLE_PENALTY, NHL_TOTAL_UNDER_ACTIONABLE_PENALTY,
@@ -3057,9 +3130,19 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 pre_mlb_over_gate_req_prob = req_prob
                 pre_mlb_over_gate_req_ev = req_ev
                 pre_mlb_over_gate_req_edge = req_edge
-                req_prob = max(req_prob, MLB_OVER_ACTIONABLE_MIN_PROB)
-                req_ev = max(req_ev, MLB_OVER_ACTIONABLE_MIN_EV)
-                req_edge = max(req_edge, MLB_OVER_ACTIONABLE_MIN_EDGE)
+                # Agrees overs in a PROVEN bucket earn the relaxed bar; everything
+                # else keeps the strict 0.65/0.07/0.04 gate. See weights_config.
+                if consensus_agr == "Agrees" and _mlb_over_agrees_relax_ok:
+                    _over_min_prob = MLB_OVER_AGREES_ACTIONABLE_MIN_PROB
+                    _over_min_ev = MLB_OVER_AGREES_ACTIONABLE_MIN_EV
+                    _over_min_edge = MLB_OVER_AGREES_ACTIONABLE_MIN_EDGE
+                else:
+                    _over_min_prob = MLB_OVER_ACTIONABLE_MIN_PROB
+                    _over_min_ev = MLB_OVER_ACTIONABLE_MIN_EV
+                    _over_min_edge = MLB_OVER_ACTIONABLE_MIN_EDGE
+                req_prob = max(req_prob, _over_min_prob)
+                req_ev = max(req_ev, _over_min_ev)
+                req_edge = max(req_edge, _over_min_edge)
                 # High total line penalty: very high lines (≥11.0) have repeatedly
                 # underperformed (COL/ARI Over 11.5 lost on both May-15 and May-16).
                 # Mid-range penalty: lines in [9.5, 11.0) also underperform
@@ -5802,28 +5885,9 @@ def run_analysis_pipeline(
     )
 
     # Human-readable breakdown of every separate signal feeding the blend, each
-    # oriented to the pick side and shown as its own win %. Lets a reader see at a
-    # glance which pieces (Kalshi / Market / ML / TheOver) drove the final
-    # WinProbability and where they disagree. Signals absent for a row are omitted
-    # rather than shown as 0%, so the string reflects only what actually fed the blend.
-    _signal_pieces = (
-        ("Kalshi", "blend_in_kalshi"),
-        ("Market", "blend_in_market"),
-        ("ML", "blend_in_ml"),
-        ("TheOver", "blend_in_theover"),
-    )
-    _signal_breakdown = pd.Series([""] * len(merged), index=merged.index)
-    for _label, _col in _signal_pieces:
-        _num = pd.to_numeric(merged[_col], errors="coerce")
-        _piece = _num.map(
-            lambda v, _l=_label: f"{_l} {v * 100:.0f}%" if pd.notna(v) else ""
-        )
-        _sep = pd.Series(
-            np.where((_signal_breakdown != "") & (_piece != ""), " | ", ""),
-            index=merged.index,
-        )
-        _signal_breakdown = _signal_breakdown + _sep + _piece
-    merged["signal_breakdown"] = _signal_breakdown
+    # oriented to the pick side and shown as its own win %. Recomputed authoritatively
+    # in build_best_picks_df once Kalshi is merged onto every row (see helper docstring).
+    merged["signal_breakdown"] = _compute_signal_breakdown(merged)
     if "nba_stats_fetch_status" in merged.columns:
         merged["nba_stats_fetch_status"] = _string_series(merged, "nba_stats_fetch_status").replace({"": pd.NA}).fillna(
             str(nba_stats_diag.get("nba_stats_fetch_status", "not_started"))
