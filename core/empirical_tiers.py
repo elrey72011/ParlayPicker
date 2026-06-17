@@ -176,15 +176,36 @@ def assign_empirical_tiers(
         rate, n = smoothed_bucket_rate(bucket, bucket_stats)
         consensus = bucket.rsplit(":", 1)[-1]
         agreement_ok = (not ACTIONABLE_PROVEN_CONSENSUS) or (consensus in ACTIONABLE_PROVEN_CONSENSUS)
-        if (
-            edge >= ACTIONABLE_MIN_EMPIRICAL_EDGE
-            and n >= ACTIONABLE_MIN_BUCKET_N
-            and rate >= ACTIONABLE_MIN_BUCKET_RATE
-            and agreement_ok
-        ):
+        proven_bucket = (
+            n >= ACTIONABLE_MIN_BUCKET_N and rate >= ACTIONABLE_MIN_BUCKET_RATE and agreement_ok
+        )
+        # The bucket's OWN realized edge (smoothed rate vs break-even at this pick's
+        # odds). For a PROVEN bucket this earned edge can carry the pick to Actionable
+        # even when the per-pick calibrated edge is dragged below the bar by the
+        # over-prob shrink / market debias — as long as the pick is not itself a
+        # negative-edge outlier. Without this, proven Agrees-over buckets could never
+        # promote, because the suppressed calibrated prob always fell short.
+        breakeven = float(out.at[idx, "empirical_win_probability"]) - edge
+        proven_edge = rate - breakeven
+        calibrated_actionable = edge >= ACTIONABLE_MIN_EMPIRICAL_EDGE
+        # Earned path: a proven bucket lifts a pick that already clears the High
+        # Variance edge bar (so it is a viable edge on its own, not a coin flip) up
+        # to Actionable on the strength of the bucket's realized edge. This fills the
+        # gap the MLB over-prob shrink / market debias open up, where a genuinely
+        # strong over is suppressed to a calibrated edge between HV and Actionable.
+        earned_actionable = (
+            proven_edge >= ACTIONABLE_MIN_EMPIRICAL_EDGE
+            and edge >= HIGH_VARIANCE_MIN_EMPIRICAL_EDGE
+        )
+        if proven_bucket and (calibrated_actionable or earned_actionable):
             status = "Actionable"
+            basis = (
+                f"edge {edge:+.1%} vs break-even at own odds"
+                if calibrated_actionable
+                else f"proven-bucket realized edge {proven_edge:+.1%} (calibrated {edge:+.1%})"
+            )
             reason = (
-                f"Actionable (empirical): edge {edge:+.1%} vs break-even at own odds; "
+                f"Actionable (empirical): {basis}; "
                 f"bucket {bucket} hit {rate:.0%} (n={n}) with market agreement"
             )
         elif edge >= HIGH_VARIANCE_MIN_EMPIRICAL_EDGE:

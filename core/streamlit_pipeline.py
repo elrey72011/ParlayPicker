@@ -2713,6 +2713,35 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     if "effective_win_probability" not in best.columns:
         best["effective_win_probability"] = pd.NA
 
+    # Earned-Actionable relaxation gate for MLB overs (17 Jun): the strict 0.65 prob
+    # bar leaves over-heavy slates empty. We allow a lower bar for Agrees overs, but
+    # ONLY when the realized MLB:over:Agrees bucket has earned trust (>=55% over >=25
+    # graded picks) — the same proof the empirical overlay's Actionable promotion uses.
+    # Computed once here so the per-row gate is a cheap lookup. When no graded history
+    # exists yet (bucket stats unavailable) we treat the relaxation as available so the
+    # card is not permanently empty pre-calibration; once slates are graded the proven
+    # condition becomes the binding backstop.
+    _mlb_over_agrees_relax_ok = False
+    _mlb_over_agrees_bucket_stats_available = False
+    try:
+        from core.empirical_tiers import (
+            load_bucket_stats as _load_bucket_stats,
+            smoothed_bucket_rate as _smoothed_bucket_rate,
+            ACTIONABLE_MIN_BUCKET_N as _ACT_MIN_N,
+            ACTIONABLE_MIN_BUCKET_RATE as _ACT_MIN_RATE,
+        )
+        _bs = _load_bucket_stats()
+        if _bs:
+            _mlb_over_agrees_bucket_stats_available = True
+            _rate, _n = _smoothed_bucket_rate("MLB:over:Agrees", _bs)
+            _mlb_over_agrees_relax_ok = (_n >= _ACT_MIN_N) and (_rate >= _ACT_MIN_RATE)
+        else:
+            # No graded history yet — let the relaxed bar apply so over-heavy slates
+            # can surface Agrees overs; the empirical overlay (once fed) re-gates them.
+            _mlb_over_agrees_relax_ok = True
+    except Exception:
+        _mlb_over_agrees_relax_ok = False
+
     for idx in best.index:
         status_reason = "Unknown"
         blocker_stage = "none"
@@ -2773,6 +2802,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             MLB_SPREAD_ACTIONABLE_PENALTY,
             NBA_SIDE_ACTIONABLE_BONUS, NBA_OVER_ACTIONABLE_BONUS,
             MLB_OVER_ACTIONABLE_MIN_PROB, MLB_OVER_ACTIONABLE_MIN_EV, MLB_OVER_ACTIONABLE_MIN_EDGE,
+            MLB_OVER_AGREES_ACTIONABLE_MIN_PROB, MLB_OVER_AGREES_ACTIONABLE_MIN_EV, MLB_OVER_AGREES_ACTIONABLE_MIN_EDGE,
             MLB_TOTAL_OVER_ACTIONABLE_PENALTY, MLB_TOTAL_UNDER_ACTIONABLE_PENALTY,
             NBA_TOTAL_OVER_ACTIONABLE_PENALTY, NBA_TOTAL_UNDER_ACTIONABLE_PENALTY,
             NHL_TOTAL_OVER_ACTIONABLE_PENALTY, NHL_TOTAL_UNDER_ACTIONABLE_PENALTY,
@@ -3100,9 +3130,19 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 pre_mlb_over_gate_req_prob = req_prob
                 pre_mlb_over_gate_req_ev = req_ev
                 pre_mlb_over_gate_req_edge = req_edge
-                req_prob = max(req_prob, MLB_OVER_ACTIONABLE_MIN_PROB)
-                req_ev = max(req_ev, MLB_OVER_ACTIONABLE_MIN_EV)
-                req_edge = max(req_edge, MLB_OVER_ACTIONABLE_MIN_EDGE)
+                # Agrees overs in a PROVEN bucket earn the relaxed bar; everything
+                # else keeps the strict 0.65/0.07/0.04 gate. See weights_config.
+                if consensus_agr == "Agrees" and _mlb_over_agrees_relax_ok:
+                    _over_min_prob = MLB_OVER_AGREES_ACTIONABLE_MIN_PROB
+                    _over_min_ev = MLB_OVER_AGREES_ACTIONABLE_MIN_EV
+                    _over_min_edge = MLB_OVER_AGREES_ACTIONABLE_MIN_EDGE
+                else:
+                    _over_min_prob = MLB_OVER_ACTIONABLE_MIN_PROB
+                    _over_min_ev = MLB_OVER_ACTIONABLE_MIN_EV
+                    _over_min_edge = MLB_OVER_ACTIONABLE_MIN_EDGE
+                req_prob = max(req_prob, _over_min_prob)
+                req_ev = max(req_ev, _over_min_ev)
+                req_edge = max(req_edge, _over_min_edge)
                 # High total line penalty: very high lines (≥11.0) have repeatedly
                 # underperformed (COL/ARI Over 11.5 lost on both May-15 and May-16).
                 # Mid-range penalty: lines in [9.5, 11.0) also underperform
