@@ -1566,6 +1566,15 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 )
             except Exception:
                 out.at[idx, "kalshi_matched_line"] = pd.NA
+            # Raw Kalshi contract fields, to confirm strike SEMANTICS (and rule out a
+            # half/full-run offset from the text-parse + integer "+0.5" in
+            # _extract_kalshi_line vs the structured floor/cap strike). If title says
+            # "more than N" / floor_strike=N while our matched_line is N+0.5 and the
+            # YES price is ~0.59, the over is being attributed to a line one run too high.
+            out.at[idx, "kalshi_floor_strike"] = _safe_float(best_market.get("floor_strike"))
+            out.at[idx, "kalshi_cap_strike"] = _safe_float(best_market.get("cap_strike"))
+            out.at[idx, "kalshi_yes_bid"] = _safe_float(best_market.get("yes_bid_dollars"))
+            out.at[idx, "kalshi_yes_ask"] = _safe_float(best_market.get("yes_ask_dollars"))
 
     # NA-safe columns to prevent ambiguous boolean evaluation downstream.
     out["kalshi_probability"] = pd.to_numeric(out.get("kalshi_probability"), errors="coerce")

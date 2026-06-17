@@ -197,6 +197,13 @@ REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
     "kalshi_matched_line",
     "kalshi_line_diff",
     "kalshi_raw_over_prob",
+    # Raw Kalshi contract fields — confirm strike semantics vs our matched_line, and
+    # let the YES bid/ask reveal any de-vig issue, straight from the export.
+    "kalshi_market_title",
+    "kalshi_floor_strike",
+    "kalshi_cap_strike",
+    "kalshi_yes_bid",
+    "kalshi_yes_ask",
 ]
 
 
@@ -360,6 +367,7 @@ BEST_PICK_COLUMNS = [
     # the pick line, and the raw P(over) before orientation/decay — for diagnosing a
     # systematic over-bias straight from the export.
     "kalshi_matched_line", "kalshi_line_diff", "kalshi_raw_over_prob",
+    "kalshi_market_title", "kalshi_floor_strike", "kalshi_cap_strike", "kalshi_yes_bid", "kalshi_yes_ask",
     # Exact signal values fed to compute_blended_probability, oriented to the pick
     # side. Persisted so the blend weights can be backtested/fitted from saved
     # exports without having to re-derive orientation (which is ambiguous after
