@@ -676,6 +676,23 @@ def _extract_kalshi_line(mkt: dict[str, Any], is_total: bool) -> float | None:
 
     val = None
 
+    # 0. Authoritative source for TOTALS: the structured Kalshi strike. A KXMLBTOTAL
+    # market resolves YES if the total is OVER floor_strike, so floor_strike IS the
+    # over line directly (e.g. floor_strike 6.5 -> "over 6.5", YES = P(over 6.5)).
+    # The text-parse + integer "+0.5" below was returning floor_strike + 1.0 (parsing
+    # the "7" in a "7 runs"/ticker label as 7 -> 7.5 for a 6.5-strike contract), so
+    # P(over 6.5) was mislabeled as the over-7.5 probability and every MLB over was
+    # inflated ~+0.09 (17 Jun all-Over cards). Confirmed from exported floor_strike.
+    if is_total:
+        for _strike in (mkt.get("floor_strike"), mkt.get("cap_strike")):
+            if _strike is not None:
+                try:
+                    _s = float(_strike)
+                except (TypeError, ValueError):
+                    continue
+                if _s > 0:
+                    return _s
+
     # 1. Primary: Strict Regex Match based on betting terminology
     match = re.search(r'(?:Over|Under|by over|by at least|more than)\s*(\d+(?:\.\d+)?)', combined_text, re.IGNORECASE)
     if match:
