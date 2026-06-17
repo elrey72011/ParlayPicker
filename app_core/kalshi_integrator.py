@@ -1551,6 +1551,21 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             out.at[idx, "kalshi_match_status"] = match_status
             out.at[idx, "kalshi_match_reason"] = match_reason
             out.at[idx, "kalshi_match_quality"] = "line_matched"
+            # Instrumentation (17 Jun): surface HOW each P(over) was derived so a
+            # systematic over-bias can be diagnosed from the export instead of guessed.
+            #   kalshi_raw_over_prob : Kalshi's P(over) BEFORE pick-side orientation and
+            #                          proxy decay (i.e. the raw matched-contract price).
+            #   kalshi_matched_line  : the Kalshi contract line actually used.
+            #   kalshi_line_diff     : |Kalshi line - pick line| (already set on match).
+            # If matched_line == pick line and raw_over_prob is still ~0.59 across the
+            # slate, the bias is in the Kalshi feed/de-vig, not our line-matching.
+            out.at[idx, "kalshi_raw_over_prob"] = round(float(final_prob), 4)
+            try:
+                out.at[idx, "kalshi_matched_line"] = _extract_kalshi_line(
+                    best_market, is_total=bool(is_totals_query)
+                )
+            except Exception:
+                out.at[idx, "kalshi_matched_line"] = pd.NA
 
     # NA-safe columns to prevent ambiguous boolean evaluation downstream.
     out["kalshi_probability"] = pd.to_numeric(out.get("kalshi_probability"), errors="coerce")

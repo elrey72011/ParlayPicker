@@ -80,6 +80,15 @@ def test_same_line_total_matches(monkeypatch):
     assert abs(float(out.loc[0, "kalshi_probability"]) - 0.50) < 0.05
 
 
+def test_match_emits_diagnostic_columns(monkeypatch):
+    # Instrumentation: a matched total exposes the contract line used, the line delta,
+    # and the raw P(over) before orientation/decay, so a systematic bias is visible.
+    out = _enrich(monkeypatch, 7.5, 0.50)
+    assert abs(float(out.loc[0, "kalshi_matched_line"]) - 7.5) < 1e-9
+    assert float(out.loc[0, "kalshi_line_diff"]) == 0.0
+    assert abs(float(out.loc[0, "kalshi_raw_over_prob"]) - 0.50) < 0.05
+
+
 def test_far_line_total_is_a_miss_not_an_inflated_proxy(monkeypatch):
     # Only a far 5.5 contract exists (delta 2.0 > MLB totals tolerance 1.0). Pre-fix
     # this proxied a ~0.70 P(over) down to ~0.62 and corrupted the blend; now it misses.
