@@ -529,6 +529,22 @@ BELOW_THRESHOLD_KELLY_FRACTION = 0.025  # 10% of Actionable's 0.25
 NON_ACTIONABLE_MAX_PICK_PCT = 0.02      # 2% bankroll ceiling per non-Actionable pick
 NON_ACTIONABLE_BELOW_THRESHOLD_MAX_PICK_PCT = 0.010  # 1% cap for Below Threshold
 
+# --- Force-deploy daily stake budget (17 Jun, user-directed) ------------------
+# When DAILY_STAKE_FORCE_DEPLOY is True, the day's eligible card is staked to SUM to
+# DAILY_STAKE_BUDGET, split by tier: Actionable gets ACTIONABLE_STAKE_SHARE of it and
+# the viable non-Actionable picks (High Variance / Below Threshold) split the rest.
+# Within a tier, bets are proportional to each pick's Kelly fraction (edge-weighted;
+# equal-weight only if every Kelly is 0) and normalized to FILL the tier budget —
+# OVERRIDING the per-pick (4%) and slate-% Kelly caps. A tier with no eligible picks
+# deploys nothing (its budget is NOT pushed onto the other tier, so a card with no
+# Actionable picks stakes only the 40%). Slates suspended by a health guard (e.g.
+# slate_direction_imbalance) and picks without a clean live line still stake $0.
+# This is an explicit, aggressive override of fractional-Kelly discipline; set
+# DAILY_STAKE_FORCE_DEPLOY = False to restore normal Kelly sizing.
+DAILY_STAKE_FORCE_DEPLOY = True
+DAILY_STAKE_BUDGET = 5000.0
+ACTIONABLE_STAKE_SHARE = 0.60
+
 # Injury & Weather Adjustments
 # Applied per key injured player to the side's model probability.
 INJURY_PROB_PENALTY_PER_KEY_PLAYER = 0.015   # 1.5% per key player out
