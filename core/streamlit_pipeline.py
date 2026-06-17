@@ -191,6 +191,12 @@ REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
     # (e.g. "Kalshi 35% | Market 46% | ML 74% | TheOver 75%"). Derived from the
     # blend_in_* columns above; absent signals are omitted.
     "signal_breakdown",
+    # Kalshi match instrumentation — diagnose a systematic over-bias from the export:
+    # the Kalshi contract line used, its distance from the pick line, and the raw
+    # P(over) before pick-side orientation / proxy decay.
+    "kalshi_matched_line",
+    "kalshi_line_diff",
+    "kalshi_raw_over_prob",
 ]
 
 
@@ -350,6 +356,10 @@ BEST_PICK_COLUMNS = [
     "decimal_odds", "matchup_id",
     "odds_american", "odds_source", "market_probability", "ml_probability", "theover_probability", "win_prob_source", "display_probability",
     "kalshi_probability", "kalshi_match_status", "kalshi_match_reason",
+    # Kalshi match instrumentation: the contract line actually used, its distance from
+    # the pick line, and the raw P(over) before orientation/decay — for diagnosing a
+    # systematic over-bias straight from the export.
+    "kalshi_matched_line", "kalshi_line_diff", "kalshi_raw_over_prob",
     # Exact signal values fed to compute_blended_probability, oriented to the pick
     # side. Persisted so the blend weights can be backtested/fitted from saved
     # exports without having to re-derive orientation (which is ambiguous after
