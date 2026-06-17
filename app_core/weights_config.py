@@ -194,7 +194,11 @@ MLB_OVER_ACTIONABLE_MIN_EDGE = 0.04
 # This is edge-gated volume, not loosened discipline: the proven-bucket condition
 # is the realized-performance backstop, and the empirical overlay still has the
 # final say on staking.
-MLB_OVER_AGREES_ACTIONABLE_MIN_PROB = 0.58
+# 0.55 (not 0.58): with the market-debias exemption for Kalshi-backed overs (below),
+# an un-suppressed Agrees-over consensus lands ~0.55-0.56, so a 0.58 bar would still
+# clip them. 0.55 vs the -110 break-even (0.524) is a thin but real +2.6% edge, and
+# the proven-bucket condition + the empirical overlay remain the quality backstops.
+MLB_OVER_AGREES_ACTIONABLE_MIN_PROB = 0.55
 MLB_OVER_AGREES_ACTIONABLE_MIN_EV = 0.03
 MLB_OVER_AGREES_ACTIONABLE_MIN_EDGE = 0.02
 # Hard cap on calibrated probability for MLB overs — prevents residual TheOver
@@ -409,6 +413,16 @@ EMPIRICAL_TIER_OVERLAY_ENABLED = True
 # MAX_SHIFT caps how much the correction can move any single game's probability.
 MLB_TOTAL_MARKET_DEBIAS_ENABLED = True
 MLB_TOTAL_MARKET_DEBIAS_MAX_SHIFT = 0.15
+# 17 Jun: exempt overs that Kalshi INDEPENDENTLY backs from the de-bias. The de-bias
+# strips a model-only over-lean the sharp market contradicts; but when the prediction
+# market (an independent source) ALSO leans over (kalshi P(over) >= this threshold),
+# the lean is corroborated, not model bias to remove. Debiasing those was pulling a
+# genuine Kalshi+ML+TheOver over-consensus down to the de-vig market (~0.48), turning
+# +EV overs into -EV No Plays. Non-Agrees overs are still debiased. Set threshold high
+# (>1.0) to disable the exemption and debias all overs as before.
+MLB_TOTAL_MARKET_DEBIAS_EXEMPT_AGREES_OVER = True
+MLB_TOTAL_MARKET_DEBIAS_AGREES_KALSHI_MIN = 0.52
+
 
 # Profiles
 BEST_PICKS_PROFILE = 'STANDARD'

@@ -38,6 +38,14 @@ if ls data/backtest_exports/*.csv >/dev/null 2>&1; then
   echo "📈 Refreshing empirical bucket stats from graded slates..."
   python scripts/fit_bucket_stats.py data/backtest_exports data/calibration/bucket_stats.json || \
     echo "   (bucket-stats refit skipped; non-fatal)"
+  # Refit the isotonic calibration table from the SAME graded slates. The empirical
+  # overlay reads both this AND the bucket stats; if only the buckets are refit they
+  # drift apart (a bucket can read >=55% while a stale calibration still maps those
+  # picks down — exactly the contradiction seen on the 17 Jun over slate), so refit
+  # them together to keep the earned-Actionable gate coherent.
+  echo "📈 Refreshing probability calibration from graded slates..."
+  python scripts/fit_calibration.py data/backtest_exports data/calibration/effective_prob_calibration.json || \
+    echo "   (calibration refit skipped; non-fatal)"
 else
   echo "📈 No graded slates in data/backtest_exports yet — skipping calibration refresh."
   echo "   Grade each slate the next day to feed the loop:"
