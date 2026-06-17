@@ -1,5 +1,6 @@
 import pandas as pd
 
+import app_core.weights_config as wc
 from core.streamlit_pipeline import optimize_portfolio_allocation
 
 
@@ -11,14 +12,19 @@ def _rows():
     ])
 
 
-def test_kelly_non_actionable_rows_are_zeroed_and_flagged():
+def test_kelly_non_actionable_rows_are_zeroed_and_flagged(monkeypatch):
+    # Conservative (non-force-deploy) path: non-Actionable rows carry no stake.
+    monkeypatch.setattr(wc, "DAILY_STAKE_FORCE_DEPLOY", False)
     out = optimize_portfolio_allocation(_rows(), bankroll=1000.0)
     non_actionable = out[out["Pick_Status"] != "Actionable"]
     assert (non_actionable["production_bet_amount"] == 0).all()
     assert non_actionable["kelly_cap_reason"].eq("Non-production row").all()
 
 
-def test_kelly_pick_and_slate_caps_are_enforced():
+def test_kelly_pick_and_slate_caps_are_enforced(monkeypatch):
+    # Conservative path: per-pick 4% and slate 25% caps hold. (Force-deploy mode,
+    # tested in test_force_deploy_staking.py, intentionally overrides these.)
+    monkeypatch.setattr(wc, "DAILY_STAKE_FORCE_DEPLOY", False)
     rows = pd.concat([_rows().iloc[[0]]] * 10, ignore_index=True)
     out = optimize_portfolio_allocation(rows, bankroll=1000.0)
     assert out["production_bet_amount"].max() <= 40.0 + 1e-9

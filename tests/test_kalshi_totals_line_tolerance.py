@@ -101,3 +101,22 @@ def test_far_line_total_is_a_miss_not_an_inflated_proxy(monkeypatch):
 def test_mlb_totals_tolerance_is_tight():
     assert ki.MAX_TOTAL_LINE_TOLERANCE["MLB"] <= 1.0
     assert ki.MAX_TOTAL_LINE_TOLERANCE["MLB"] < ki.MAX_LINE_TOLERANCE["MLB"]
+
+
+def test_total_line_uses_structured_floor_strike_not_text_plus_half():
+    # The 17 Jun bug: Kalshi floor_strike=6.5 ("over 6.5"), but the text label says
+    # "7 runs", so the old code parsed 7 and added 0.5 -> 7.5, one run too high.
+    # floor_strike is authoritative, so the line must be 6.5.
+    mkt = {
+        "title": "Tampa Bay vs Los Angeles D Total Runs?",
+        "subtitle": "7 runs",
+        "ticker": "KXMLBTOTAL-26JUN17TBLAD-T7",
+        "floor_strike": 6.5,
+    }
+    assert ki._extract_kalshi_line(mkt, is_total=True) == 6.5
+
+
+def test_total_line_falls_back_to_text_when_no_structured_strike():
+    # No floor/cap strike -> text parse still works (and integer gets the +0.5).
+    mkt = {"title": "Over 7 runs scored", "subtitle": "", "ticker": ""}
+    assert ki._extract_kalshi_line(mkt, is_total=True) == 7.5

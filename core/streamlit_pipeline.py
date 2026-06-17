@@ -6433,6 +6433,55 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
         )
         portfolio["non_actionable_eligible"] = na_eligible
 
+    # --- Force-deploy daily stake budget (user-directed) ----------------------
+    # Override the fractional-Kelly amounts so the day's card sums to a fixed dollar
+    # budget, split Actionable vs viable non-Actionable. See weights_config. Runs last
+    # so it supersedes both the Actionable slate/pick caps and the non-Actionable block.
+    try:
+        from app_core.weights_config import (
+            DAILY_STAKE_FORCE_DEPLOY, DAILY_STAKE_BUDGET, ACTIONABLE_STAKE_SHARE,
+        )
+    except Exception:
+        DAILY_STAKE_FORCE_DEPLOY = False
+    if DAILY_STAKE_FORCE_DEPLOY:
+        _health = _string_series(portfolio, "run_health_warning").str.lower()
+        _staking_suspended = bool(_health.str.contains("staking suspended", na=False).any())
+        # Data-integrity gate (same checks as production_eligible, minus the status
+        # requirement) so we never force a stake onto an unsafe/unresolved line.
+        _data_safe = (
+            line_source.eq("live") & line_warning.eq("") & line_used.notna()
+            & line_consistent & event_identity_ok
+            & (~best_pick_norm.str.contains("unresolved", na=False))
+        )
+        _act_tier = _data_safe & status.eq("actionable")
+        _nonact_tier = _data_safe & na_eligible  # High Variance + Below Threshold
+
+        def _fill_budget(mask: pd.Series, budget: float) -> None:
+            idx = portfolio.index[mask.fillna(False)]
+            if len(idx) == 0 or budget <= 0:
+                return
+            w = pd.to_numeric(portfolio.loc[idx, "kelly_fraction"], errors="coerce").fillna(0.0).clip(lower=0.0)
+            if float(w.sum()) <= 0:
+                w = pd.Series(1.0, index=idx)  # equal-weight when no positive Kelly
+            alloc = (w / float(w.sum())) * float(budget)
+            portfolio.loc[idx, "production_bet_amount"] = alloc.round(2)
+            portfolio.loc[idx, "recommended_bet"] = alloc.round(2)
+
+        if not _staking_suspended:
+            _fill_budget(_act_tier, float(DAILY_STAKE_BUDGET) * float(ACTIONABLE_STAKE_SHARE))
+            _fill_budget(_nonact_tier, float(DAILY_STAKE_BUDGET) * (1.0 - float(ACTIONABLE_STAKE_SHARE)))
+            _in_tier = (_act_tier | _nonact_tier).fillna(False)
+            portfolio.loc[~_in_tier, "production_bet_amount"] = 0.0
+            portfolio.loc[~_in_tier, "recommended_bet"] = 0.0
+            portfolio.loc[_act_tier, "kelly_cap_reason"] = "Force-deploy daily budget (Actionable 60%)"
+            portfolio.loc[_nonact_tier, "kelly_cap_reason"] = "Force-deploy daily budget (non-Actionable 40%)"
+        else:
+            # Health-suspended slate: deploy nothing, regardless of force-deploy.
+            portfolio["production_bet_amount"] = 0.0
+            portfolio["recommended_bet"] = 0.0
+            portfolio["kelly_cap_reason"] = "Force-deploy suspended (slate health guard)"
+        portfolio["kelly_allocation_method"] = "force_deploy_daily_budget"
+
     positive = portfolio["production_bet_amount"] > 0
     unique_positive = int(portfolio.loc[positive, "production_bet_amount"].round(6).nunique())
     cap_hits = int(capped.sum())
