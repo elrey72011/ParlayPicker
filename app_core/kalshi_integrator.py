@@ -105,6 +105,24 @@ MAX_LINE_TOLERANCE = {
     "NFL": 2.5,
 }
 
+# Totals need a MUCH tighter line-match than the generic MAX_LINE_TOLERANCE above.
+# A pick's total ("Over 7.5") must match a Kalshi contract at essentially the SAME
+# line — matching it to a contract several runs/points away pulls in a probability
+# for a different bet. MLB was the worst offender: the 8.5-run generic tolerance let
+# an "Over 7.5" pick match almost ANY Kalshi total for the game (e.g. an "Over 5.5"
+# contract at P(over)~0.70), systematically inflating Kalshi P(over) to 0.55-0.62 on
+# every game and producing all-Over cards (17 Jun). These are sized to each league's
+# total range and contract granularity. When no Kalshi contract is within tolerance,
+# the matcher reports a miss (Kalshi is simply absent from the blend) rather than
+# proxying a wrong-line probability.
+MAX_TOTAL_LINE_TOLERANCE = {
+    "NBA": 4.5,
+    "NCAAB": 6.5,
+    "NHL": 1.0,
+    "MLB": 1.0,
+    "NFL": 3.5,
+}
+
 def _normalize_league_for_kalshi(league: str) -> str:
     l_up = str(league or "").upper()
     if l_up in ["NCAAM", "NCAAMB", "NCAA MENS BASKETBALL"]:
@@ -1206,7 +1224,10 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 target_line_abs = abs(float(extracted_totals_line))
                 nearest = min(kalshi_lines, key=lambda x: abs(float(x[0]) - target_line_abs))
                 delta = abs(float(nearest[0]) - target_line_abs)
-                league_tolerance = MAX_LINE_TOLERANCE.get(league, 3.5)
+                # Totals use the tight per-league totals tolerance, not the loose
+                # generic one, so a pick only matches a Kalshi contract at (near) the
+                # SAME line. See MAX_TOTAL_LINE_TOLERANCE.
+                league_tolerance = MAX_TOTAL_LINE_TOLERANCE.get(league, 1.0)
 
                 if delta <= league_tolerance:
                     best_market = nearest[2]
@@ -1511,7 +1532,15 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             # PROXY DECAY (New Logic)
             delta = _safe_float(out.at[idx, "kalshi_line_diff"])
             if delta > 0:
-                tolerance = MAX_LINE_TOLERANCE.get(league, 3.5)
+                # Decay a proxy (non-exact line) match toward 0.5, scaled by the SAME
+                # tolerance the family was matched under, so a totals proxy decays on
+                # the tight totals scale rather than the loose generic one.
+                is_total_row = "total" in market_type_str or "over" in market_type_str or "under" in market_type_str
+                tolerance = (
+                    MAX_TOTAL_LINE_TOLERANCE.get(league, 1.0)
+                    if is_total_row
+                    else MAX_LINE_TOLERANCE.get(league, 3.5)
+                )
                 decay = min(0.4, delta / (tolerance * 1.5))
                 final_pick_prob = (final_pick_prob * (1 - decay)) + (0.5 * decay)
 
