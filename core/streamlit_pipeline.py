@@ -187,6 +187,10 @@ REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
     "blend_in_ml",
     "blend_in_theover",
     "blend_tier",
+    # One readable string of every signal feeding the blend, each as its own win %
+    # (e.g. "Kalshi 35% | Market 46% | ML 74% | TheOver 75%"). Derived from the
+    # blend_in_* columns above; absent signals are omitted.
+    "signal_breakdown",
 ]
 
 
@@ -351,6 +355,8 @@ BEST_PICK_COLUMNS = [
     # exports without having to re-derive orientation (which is ambiguous after
     # the fact). See scripts/fit_blend_weights.py.
     "blend_in_kalshi", "blend_in_market", "blend_in_ml", "blend_in_theover", "blend_tier",
+    # Readable per-signal win-% breakdown (Kalshi/Market/ML/TheOver) — see REQUIRED_BEST_PICK_EXPORT_COLUMNS.
+    "signal_breakdown",
     "gemini_explanation", "gemini_risk_notes", "used_stale_features", "Pick_Quality", "Conviction_Score",
     "uploaded_spread_line", "uploaded_total_line", "live_spread_line", "live_total_line", "line_source", "line_delta", "upload_market_match",
     "market_line_used", "market_line_source", "market_line_source_detail", "matched_live_spread_line", "matched_live_total_line", "upload_spread_line", "upload_total_line", "base_spread_line", "base_total_line",
@@ -5794,6 +5800,30 @@ def run_analysis_pipeline(
     merged["blend_tier"] = np.where(
         pd.to_numeric(kalshi_probability, errors="coerce").fillna(0.0) >= 0.55, 1, 2
     )
+
+    # Human-readable breakdown of every separate signal feeding the blend, each
+    # oriented to the pick side and shown as its own win %. Lets a reader see at a
+    # glance which pieces (Kalshi / Market / ML / TheOver) drove the final
+    # WinProbability and where they disagree. Signals absent for a row are omitted
+    # rather than shown as 0%, so the string reflects only what actually fed the blend.
+    _signal_pieces = (
+        ("Kalshi", "blend_in_kalshi"),
+        ("Market", "blend_in_market"),
+        ("ML", "blend_in_ml"),
+        ("TheOver", "blend_in_theover"),
+    )
+    _signal_breakdown = pd.Series([""] * len(merged), index=merged.index)
+    for _label, _col in _signal_pieces:
+        _num = pd.to_numeric(merged[_col], errors="coerce")
+        _piece = _num.map(
+            lambda v, _l=_label: f"{_l} {v * 100:.0f}%" if pd.notna(v) else ""
+        )
+        _sep = pd.Series(
+            np.where((_signal_breakdown != "") & (_piece != ""), " | ", ""),
+            index=merged.index,
+        )
+        _signal_breakdown = _signal_breakdown + _sep + _piece
+    merged["signal_breakdown"] = _signal_breakdown
     if "nba_stats_fetch_status" in merged.columns:
         merged["nba_stats_fetch_status"] = _string_series(merged, "nba_stats_fetch_status").replace({"": pd.NA}).fillna(
             str(nba_stats_diag.get("nba_stats_fetch_status", "not_started"))
