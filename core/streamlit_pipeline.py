@@ -388,6 +388,43 @@ CANONICAL_BET_COLUMNS = [
 
 _EXPORT_SIGNAL_COLS = {"market_type", "calibrated_probability", "expected_value", "edge"}
 
+
+def _compute_signal_breakdown(df: pd.DataFrame) -> pd.Series:
+    """Readable per-signal win-% string for each row, e.g.
+    ``"Kalshi 58% | Market 46% | ML 64% | TheOver 60%"``.
+
+    Each piece is the exact, pick-side-oriented value that signal contributed to
+    the blend. We prefer the persisted ``blend_in_*`` inputs but fall back to the
+    raw signal columns, because ``blend_in_kalshi`` is stamped early in
+    run_analysis_pipeline (before Kalshi is merged onto live-odds bet rows) while
+    ``kalshi_probability`` is populated by the time the export is assembled — so
+    computing the string here, late, keeps the Kalshi piece from being dropped.
+    Signals absent for a row are omitted rather than shown as 0%.
+    """
+    pieces = (
+        ("Kalshi", "blend_in_kalshi", "kalshi_probability"),
+        ("Market", "blend_in_market", "market_probability"),
+        ("ML", "blend_in_ml", "ml_probability"),
+        ("TheOver", "blend_in_theover", "theover_probability"),
+    )
+    breakdown = pd.Series([""] * len(df), index=df.index)
+    for label, primary_col, fallback_col in pieces:
+        values = pd.Series([pd.NA] * len(df), index=df.index)
+        if primary_col in df.columns:
+            values = pd.to_numeric(df[primary_col], errors="coerce")
+        if fallback_col in df.columns:
+            values = values.fillna(pd.to_numeric(df[fallback_col], errors="coerce"))
+        piece = values.map(
+            lambda v, _l=label: f"{_l} {v * 100:.0f}%" if pd.notna(v) else ""
+        )
+        sep = pd.Series(
+            np.where((breakdown != "") & (piece != ""), " | ", ""),
+            index=df.index,
+        )
+        breakdown = breakdown + sep + piece
+    return breakdown
+
+
 # Cap combos per leg count to prevent combinatorial explosion
 _MAX_PARLAY_COMBOS_PER_LEG = 500
 
@@ -2623,6 +2660,12 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         best.loc[is_kalshi_available, "consensus_agreement"] = "Neutral"
         best.loc[agrees_mask, "consensus_agreement"] = "Agrees"
         best.loc[disagrees_mask, "consensus_agreement"] = "Disagrees"
+
+    # Recompute the per-signal breakdown here, where Kalshi is merged onto every row.
+    # The copy stamped in run_analysis_pipeline runs before the live-odds bet rows get
+    # their Kalshi values, so it drops the Kalshi piece; refreshing it now keeps the
+    # exported string consistent with the blend_in_*/kalshi_probability columns.
+    best["signal_breakdown"] = _compute_signal_breakdown(best)
 
 
     # Phase 5: Enforce Thresholds and Pick Status Labelling
@@ -5802,28 +5845,9 @@ def run_analysis_pipeline(
     )
 
     # Human-readable breakdown of every separate signal feeding the blend, each
-    # oriented to the pick side and shown as its own win %. Lets a reader see at a
-    # glance which pieces (Kalshi / Market / ML / TheOver) drove the final
-    # WinProbability and where they disagree. Signals absent for a row are omitted
-    # rather than shown as 0%, so the string reflects only what actually fed the blend.
-    _signal_pieces = (
-        ("Kalshi", "blend_in_kalshi"),
-        ("Market", "blend_in_market"),
-        ("ML", "blend_in_ml"),
-        ("TheOver", "blend_in_theover"),
-    )
-    _signal_breakdown = pd.Series([""] * len(merged), index=merged.index)
-    for _label, _col in _signal_pieces:
-        _num = pd.to_numeric(merged[_col], errors="coerce")
-        _piece = _num.map(
-            lambda v, _l=_label: f"{_l} {v * 100:.0f}%" if pd.notna(v) else ""
-        )
-        _sep = pd.Series(
-            np.where((_signal_breakdown != "") & (_piece != ""), " | ", ""),
-            index=merged.index,
-        )
-        _signal_breakdown = _signal_breakdown + _sep + _piece
-    merged["signal_breakdown"] = _signal_breakdown
+    # oriented to the pick side and shown as its own win %. Recomputed authoritatively
+    # in build_best_picks_df once Kalshi is merged onto every row (see helper docstring).
+    merged["signal_breakdown"] = _compute_signal_breakdown(merged)
     if "nba_stats_fetch_status" in merged.columns:
         merged["nba_stats_fetch_status"] = _string_series(merged, "nba_stats_fetch_status").replace({"": pd.NA}).fillna(
             str(nba_stats_diag.get("nba_stats_fetch_status", "not_started"))
