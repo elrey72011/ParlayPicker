@@ -2598,23 +2598,22 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     best["is_kalshi_available"] = is_kalshi_available
 
     if is_kalshi_available.any():
-        blended = best["calibrated_probability"]
-        gap = blended - kalshi_prob
-        # "Agrees": Kalshi also favors pick direction (P(pick) >= 50%) AND model is more confident.
-        # kalshi_probability is pre-oriented by kalshi_integrator (P(Under) for Under rows).
-        # A value < 0.50 means Kalshi says the OTHER side wins — that is Disagrees, not Agrees.
-        agrees_mask = (is_kalshi_available & gap.ge(0.03) & kalshi_prob.ge(0.50)).fillna(False).astype(bool)
-        # "Disagrees": Kalshi favors the OTHER side (P(pick) < 0.50) — a genuine
-        # DIRECTIONAL disagreement. NOTE (16 Jun): previously this also fired when the
-        # model was merely less confident than Kalshi on the SAME side (gap <= -0.03).
-        # That conflated "market more bullish than us" with "market on the other side":
-        # after the market-trust reweight pulled the model toward (and below) the more
-        # confident Kalshi number, every same-side pick read "Disagrees". A pick where
-        # Kalshi and the model both favor the side but the model isn't ahead is NOT a
-        # disagreement — it is Neutral (we just haven't found extra value). Agrees still
-        # requires the model to LEAD the market (gap >= 0.03), preserving the proven
-        # ~61% Agrees-bucket edge and the Actionable gate.
-        disagrees_mask = (is_kalshi_available & kalshi_prob.lt(0.50)).fillna(False).astype(bool)
+        # DIRECTIONAL consensus (16 Jun): does Kalshi back the SAME side as our pick?
+        # kalshi_probability is pre-oriented to the pick (P(Under) on Under rows), so
+        # >= 0.50 means Kalshi favors our pick and < 0.50 means Kalshi favors the other
+        # side. The model's confidence MAGNITUDE relative to Kalshi no longer matters:
+        # if both favor the side they AGREE, even when Kalshi is the more confident of
+        # the two. (The old rule required the model to LEAD Kalshi by >= 0.03 to "Agree"
+        # and tagged everything else "Disagrees"; after the market-trust reweight pulled
+        # the model below the confident Kalshi number, that mislabeled every same-side
+        # pick as "Disagrees".) A small band around 0.50 is Neutral (Kalshi pick'em).
+        # Safety note: this broadens "Agrees", but actual staking stays gated by the
+        # realized empirical-bucket bar (>=55% over >=25 graded picks) in the tier
+        # overlay, which the daily loop refits — so the directional label routes picks
+        # into buckets, it does not by itself loosen the Actionable stake gate.
+        _CONSENSUS_NEUTRAL_BAND = 0.02
+        agrees_mask = (is_kalshi_available & kalshi_prob.ge(0.50 + _CONSENSUS_NEUTRAL_BAND)).fillna(False).astype(bool)
+        disagrees_mask = (is_kalshi_available & kalshi_prob.le(0.50 - _CONSENSUS_NEUTRAL_BAND)).fillna(False).astype(bool)
         best.loc[is_kalshi_available, "consensus_agreement"] = "Neutral"
         best.loc[agrees_mask, "consensus_agreement"] = "Agrees"
         best.loc[disagrees_mask, "consensus_agreement"] = "Disagrees"
