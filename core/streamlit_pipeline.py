@@ -1458,6 +1458,8 @@ def apply_mlb_total_market_debias(calibrated, df) -> tuple[pd.Series, float]:
         from app_core.weights_config import (
             MLB_TOTAL_MARKET_DEBIAS_ENABLED,
             MLB_TOTAL_MARKET_DEBIAS_MAX_SHIFT,
+            MLB_TOTAL_MARKET_DEBIAS_EXEMPT_AGREES_OVER,
+            MLB_TOTAL_MARKET_DEBIAS_AGREES_KALSHI_MIN,
         )
         if not MLB_TOTAL_MARKET_DEBIAS_ENABLED:
             return calibrated, 0.0
@@ -1496,6 +1498,14 @@ def apply_mlb_total_market_debias(calibrated, df) -> tuple[pd.Series, float]:
             np.minimum(cal + bias, np.where(has_mkt, mk, cal)),
             cal,
         )
+        # Exempt Kalshi-backed overs from the over correction: keep their blended
+        # value so an independently-corroborated over-consensus is not stripped.
+        if MLB_TOTAL_MARKET_DEBIAS_EXEMPT_AGREES_OVER and "kalshi_probability" in df.columns:
+            _kalshi_arr = pd.to_numeric(df["kalshi_probability"], errors="coerce").to_numpy(dtype=float)
+            _over_agrees_exempt = is_over.to_numpy(dtype=bool) & (
+                _kalshi_arr >= float(MLB_TOTAL_MARKET_DEBIAS_AGREES_KALSHI_MIN)
+            )
+            over_corr = np.where(_over_agrees_exempt, cal, over_corr)
         new_vals = cal.copy()
         new_vals = np.where(is_over.to_numpy(dtype=bool), over_corr, new_vals)
         new_vals = np.where(is_under.to_numpy(dtype=bool), under_corr, new_vals)
