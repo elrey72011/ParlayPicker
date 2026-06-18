@@ -554,6 +554,14 @@ ACTIONABLE_STAKE_SHARE = 0.60
 #    Actionable share needs >=4 picks; fewer picks deploy proportionally less.
 FORCE_DEPLOY_NONACTIONABLE_INCLUDE_BELOW_THRESHOLD = False
 FORCE_DEPLOY_MAX_PICK_PCT = 0.15
+# Consensus gate for the force-deploy non-Actionable (40%) tier (18 Jun). Never stake
+# AGAINST Kalshi: a "Disagrees" pick means Kalshi backs the OTHER side, the bucket the
+# graded history shows as a loser, so it is excluded from staking. "Neutral" (Kalshi
+# undecided, our model/TheOver lead) and "Agrees" remain stakeable. Set to ("Agrees",)
+# for the strict, market-confirmed-only posture (deploys far less while honest Kalshi
+# sits near 0.50). The Actionable 60% tier is already Agrees-only via the empirical
+# overlay (ACTIONABLE_PROVEN_CONSENSUS), so this only governs the speculative 40%.
+FORCE_DEPLOY_NONACTIONABLE_CONSENSUS = ("Agrees", "Neutral")
 
 # Injury & Weather Adjustments
 # Applied per key injured player to the side's model probability.

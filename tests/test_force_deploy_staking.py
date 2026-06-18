@@ -24,12 +24,13 @@ from app_core.weights_config import (
 MAX_PICK = DAILY_STAKE_BUDGET * FORCE_DEPLOY_MAX_PICK_PCT  # $750 on a $5000 budget
 
 
-def _row(pick, status, prob, odds=-110, health=""):
+def _row(pick, status, prob, odds=-110, health="", consensus="Agrees"):
     return {
         "best_pick": pick,
         "Pick_Status": status,
         "calibrated_probability": prob,
         "odds_american": odds,
+        "consensus_agreement": consensus,
         "market_line_source": "live",
         "line_provenance_warning": "",
         "market_line_used": 7.5,
@@ -85,6 +86,20 @@ def test_force_deploy_suspended_slate_stakes_nothing():
     ]
     out = optimize_portfolio_allocation(_df(rows), bankroll=1000.0)
     assert float(out["production_bet_amount"].sum()) == 0.0
+
+
+def test_force_deploy_non_actionable_excludes_disagrees():
+    # A High Variance pick where Kalshi DISAGREES (backs the other side) must not be
+    # staked — we never bet against the market on the speculative tier.
+    rows = [
+        _row("A Over 7.5", "High Variance/Speculative", 0.56, consensus="Disagrees"),
+        _row("B Over 8.5", "High Variance/Speculative", 0.56, consensus="Neutral"),
+    ]
+    out = optimize_portfolio_allocation(_df(rows), bankroll=1000.0)
+    dis = float(out.loc[out["best_pick"].eq("A Over 7.5"), "production_bet_amount"].iloc[0])
+    neu = float(out.loc[out["best_pick"].eq("B Over 8.5"), "production_bet_amount"].iloc[0])
+    assert dis == 0.0          # Disagrees gets nothing
+    assert neu > 0.0           # Neutral still staked
 
 
 def test_force_deploy_skips_unsafe_lines():

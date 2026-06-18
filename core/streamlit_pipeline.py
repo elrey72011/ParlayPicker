@@ -6466,6 +6466,7 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
         from app_core.weights_config import (
             DAILY_STAKE_FORCE_DEPLOY, DAILY_STAKE_BUDGET, ACTIONABLE_STAKE_SHARE,
             FORCE_DEPLOY_NONACTIONABLE_INCLUDE_BELOW_THRESHOLD, FORCE_DEPLOY_MAX_PICK_PCT,
+            FORCE_DEPLOY_NONACTIONABLE_CONSENSUS,
         )
     except Exception:
         DAILY_STAKE_FORCE_DEPLOY = False
@@ -6484,7 +6485,12 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
         # picks failed the thresholds outright, so they carry no forced stake unless
         # explicitly opted in.
         _nonact_status = na_eligible if FORCE_DEPLOY_NONACTIONABLE_INCLUDE_BELOW_THRESHOLD else is_hv
-        _nonact_tier = _data_safe & _nonact_status
+        # Never stake AGAINST Kalshi: gate the non-Actionable tier by consensus so
+        # "Disagrees" picks (Kalshi backs the other side) carry no forced stake. See
+        # FORCE_DEPLOY_NONACTIONABLE_CONSENSUS in weights_config.
+        _consensus = _string_series(portfolio, "consensus_agreement")
+        _consensus_ok = _consensus.isin(list(FORCE_DEPLOY_NONACTIONABLE_CONSENSUS))
+        _nonact_tier = _data_safe & _nonact_status & _consensus_ok
 
         # Per-pick concentration cap. Excess above the cap is NOT redistributed, so a
         # tier with too few picks under-deploys instead of dumping the budget onto one.
