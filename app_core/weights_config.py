@@ -149,7 +149,11 @@ DIVERGENCE_HIGH_EV_OVERRIDE_MIN_PROB = 0.50
 # model strongly expects a low-scoring or blowout-type result.
 # Unders are not subject to this guardrail — a low home win prob says nothing about
 # whether the game stays under the total.
-TOTAL_ML_CONTRADICTION_OVER_MAX_PROB = 0.35
+# 18 Jun: raised 0.35 -> 0.45 so we don't stake an OVER our own ML model leans against.
+# TheOver's coarse hit-rate was promoting overs to Actionable while ML sat below a coin
+# flip (Seattle Over: ML 0.474). An over the model rates < 0.45 is now a No Play
+# regardless of how hot TheOver runs.
+TOTAL_ML_CONTRADICTION_OVER_MAX_PROB = 0.45
 
 # Side Minimum Win Probability
 SIDE_MIN_WIN_PROB = 0.52
@@ -333,7 +337,12 @@ MLB_THEOVER_CONFLICT_PENALTY = 0.35     # Subtracted from final_family_score to 
 #     move the knob toward 0.0 (full trust) only if flipped-game Unders keep beating Overs,
 #     or back toward 1.0 (full neutralize) if they start missing again. Empty
 #     MLB_THEOVER_FADE_SOURCES to disable fading entirely.
-MLB_THEOVER_FADE_SOURCES = frozenset({"model_hit_rate_flipped"})
+# 18 Jun: added the OVER source ("model_hit_rate") alongside the flipped UNDER source.
+# Both are coarse, repeated hit-rate fractions (e.g. 7/8, 25/32) used as if they were
+# per-game probabilities, and fading only the under side structurally tilted the card
+# toward overs — TheOver alone was promoting overs the ML model leaned against (18 Jun
+# Seattle: ML 0.47 -> Actionable over on TheOver 0.88). Faded symmetrically now.
+MLB_THEOVER_FADE_SOURCES = frozenset({"model_hit_rate_flipped", "model_hit_rate"})
 MLB_THEOVER_FADE_SHRINK = 0.25   # fraction of (P-0.5) removed; 1.0=neutralized, 0.0=untouched
 # SCOPE: the shrink above is MLB-tuned and the blend callers apply it ONLY to MLB-total
 # rows. Non-MLB totals (NBA/NHL) can also carry a faded WinProbSource, so they keep this
