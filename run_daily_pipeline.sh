@@ -7,6 +7,20 @@ echo "🚀 Starting Daily ParlayPicker Pipeline..."
 echo "📊 Backfilling last 2 days of box scores..."
 python collect_historical_data.py --sports NCAAB NBA NHL --days 2
 
+# 1b. Auto-grade YESTERDAY's slate from final scores (ESPN) BEFORE today's picks are
+#     generated — at this point the most-recent export in app_exports/ is the prior
+#     run's card, whose games are now complete. This is the step that actually FEEDS
+#     the earned-Actionable loop: it writes data/backtest_exports/<date>.csv that the
+#     bucket/calibration refits below consume, so buckets can EARN Actionable from
+#     realized results. No manual recap needed; guarded so missing finals never break
+#     pick generation. (Idempotent: re-grading the same slate just overwrites its file.)
+PRIOR_EXPORT=$(ls -t app_exports/best_picks_export*.csv 2>/dev/null | head -1)
+if [ -n "$PRIOR_EXPORT" ]; then
+  echo "🧮 Auto-grading prior slate from final scores: $PRIOR_EXPORT ..."
+  python scripts/grade_from_scores.py "$PRIOR_EXPORT" || \
+    echo "   (auto-grade skipped — finals unavailable yet; non-fatal)"
+fi
+
 # 2. Run the main Streamlit application or pick generator
 echo "🎰 Generating Best Picks for Today..."
 # If running as a one-time script:
@@ -48,8 +62,8 @@ if ls data/backtest_exports/*.csv >/dev/null 2>&1; then
     echo "   (calibration refit skipped; non-fatal)"
 else
   echo "📈 No graded slates in data/backtest_exports yet — skipping calibration refresh."
-  echo "   Grade each slate the next day to feed the loop:"
-  echo "     python scripts/grade_slate.py <export.csv> <recap.csv> data/backtest_exports/<date>.csv"
+  echo "   This fills automatically as step 1b grades each day's finals. To backfill a"
+  echo "   past slate now:  python scripts/grade_from_scores.py <export.csv> [YYYY-MM-DD]"
 fi
 # ------------------------------------------------------------------------------
 
