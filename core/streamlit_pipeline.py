@@ -2919,9 +2919,19 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 except Exception:
                     pass
             if "upload_market_match" in best.columns:
-                upload_market_match = str(best.at[idx, "upload_market_match"]).strip().lower()
-                if upload_market_match in {"false", "0", "mismatch"}:
-                    suspicious_reasons.append("upload_line_market_mismatch")
+                # A genuine "upload_line_market_mismatch" is an upload that WAS matched to
+                # this market but whose line disagrees with the live line. The previous
+                # check fired on upload_market_match == False, which is the DEFAULT for
+                # every row with no uploaded counterpart (all live_unfiltered rows) — so
+                # every no-upload pick was mislabeled with this reason. Require an actual
+                # match plus a material line discrepancy instead.
+                upload_matched = str(best.at[idx, "upload_market_match"]).strip().lower() == "true"
+                if upload_matched and "line_delta" in best.columns and pd.notna(best.at[idx, "line_delta"]):
+                    try:
+                        if abs(float(best.at[idx, "line_delta"])) >= 1.0:
+                            suspicious_reasons.append("upload_line_market_mismatch")
+                    except Exception:
+                        pass
 
         # Corrupt-odds sanity (UNGATED — runs regardless of EV). A two-way totals or
         # spread market whose de-vigged implied probability sits outside [0.05, 0.95]
