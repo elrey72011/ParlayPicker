@@ -4796,6 +4796,31 @@ def _raw_book_odds_diag(row):
     return " | ".join(parts) if parts else pd.NA
 
 
+def _consistent_spread_book(row):
+    """Return the first book whose spread orientation agrees with its OWN moneyline
+    favorite, or None.
+
+    Some books (notably the P2P exchange novig, and sometimes fanduel) publish a run
+    line flipped relative to their own moneyline — e.g. HOU listed at +1.5 while their
+    moneyline has HOU at -115. Such a book's spread is untrustworthy. A book is
+    "consistent" when the side it makes the spread favorite (negative point) is also the
+    side its moneyline makes the favorite (more-negative American price). We source the
+    run line + price from the first consistent book so line and odds stay coherent; if
+    none is consistent the caller keeps its existing (guard-blocked) fallback.
+    """
+    for bk in ("novig", "fanduel", "draftkings", "betmgm"):
+        hp = pd.to_numeric(row.get(f"{bk}_home_point"), errors="coerce")
+        hml = pd.to_numeric(row.get(f"{bk}_h2h_home_price"), errors="coerce")
+        aml = pd.to_numeric(row.get(f"{bk}_h2h_away_price"), errors="coerce")
+        if pd.isna(hp) or pd.isna(hml) or pd.isna(aml) or float(hml) == float(aml):
+            continue
+        spread_home_fav = float(hp) < 0.0
+        ml_home_fav = float(hml) < float(aml)  # more-negative American odds = favorite
+        if spread_home_fav == ml_home_fav:
+            return bk
+    return None
+
+
 def _derive_spread_away_line(row):
     """Return the away team's run line, robust to the live feed's sign quirks.
 
@@ -5065,10 +5090,20 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
                 point_val = pd.NA
 
             if market_type.startswith("spread"):
-                if market_type == "spread_away":
-                    # away_line = -home_line; derived robustly across books because
-                    # Novig's away_point carries the home-signed value. See
-                    # _derive_spread_away_line for the full rationale.
+                side = "home" if market_type == "spread_home" else "away"
+                # Prefer a book whose spread agrees with its own moneyline; take BOTH
+                # its point and its price for this side so line and odds stay coherent.
+                cb = _consistent_spread_book(row)
+                cb_point = pd.to_numeric(row.get(f"{cb}_{side}_point"), errors="coerce") if cb else pd.NA
+                if cb is not None and pd.notna(cb_point):
+                    point_val = float(cb_point)
+                    cb_price = pd.to_numeric(row.get(f"{cb}_{side}_price"), errors="coerce")
+                    if pd.notna(cb_price):
+                        market_dict["odds_american"] = float(cb_price)
+                        market_dict["odds_source"] = "odds_api"
+                elif market_type == "spread_away":
+                    # No internally consistent book: fall back to the home-mirror
+                    # derivation (a flipped feed stays caught by the orientation guard).
                     point_val = _derive_spread_away_line(row)
                 market_dict["spread_line"] = float(point_val) if pd.notna(point_val) else pd.NA
                 market_dict["total_line"] = pd.NA
