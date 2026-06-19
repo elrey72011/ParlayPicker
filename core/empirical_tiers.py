@@ -63,6 +63,24 @@ ACTIONABLE_MIN_BUCKET_RATE = 0.55
 # cannot carry a stake. Empty set disables the requirement.
 ACTIONABLE_PROVEN_CONSENSUS = {"Agrees"}
 
+# Earned-path promotions (a proven bucket carrying a pick whose per-pick calibrated edge
+# fell below the +4% bar) still require a POSITIVE calibrated edge. The bucket's realized
+# edge is meant to fill the gap left by over-suppression/down-calibration — not to stake a
+# pick the calibrated number itself rates as negative-EV (19 Jun: NYY Over 9.0 promoted to
+# Actionable at calibrated -0.3% on the bucket's +8.8%). Set to a negative value to allow
+# any calibrated edge (the pre-19-Jun behavior).
+ACTIONABLE_EARNED_MIN_CALIBRATED_EDGE = 0.0
+
+# Directional "the OTHER side is the edge here" demotions come from a MORE-specific graded
+# bucket than the coarse (league, over/under, consensus) overlay bucket — so the overlay
+# must not re-promote a pick they demoted, or it stakes against its own better evidence
+# (19 Jun: Miami Over 8.0 re-promoted to Actionable while the mid-line-Over gate flagged
+# the Under as the edge side, n=43). Rows carrying one of these blocker stages are left as
+# demoted. Empty set disables.
+EDGE_NO_STAKE_BLOCKER_STAGES = frozenset(
+    {"mlb_over_mid_line_no_stake", "mlb_total_neutral_no_stake"}
+)
+
 
 def bucket_key(league: str, market_type: str, consensus: str) -> str:
     """Coarse empirical bucket: (league, over/under/side, consensus).
@@ -171,6 +189,15 @@ def assign_empirical_tiers(
     gradeable = viable & out["empirical_edge"].notna()
 
     for idx in out.index[gradeable]:
+        # A more-specific directional no-stake demotion ("the other side is the edge")
+        # outranks the coarse overlay bucket — never re-promote what it demoted.
+        prior_blocker = (
+            str(out.at[idx, "status_blocker_stage"])
+            if "status_blocker_stage" in out.columns
+            else ""
+        )
+        if prior_blocker in EDGE_NO_STAKE_BLOCKER_STAGES:
+            continue
         edge = float(out.at[idx, "empirical_edge"])
         bucket = str(out.at[idx, "empirical_bucket"])
         rate, n = smoothed_bucket_rate(bucket, bucket_stats)
@@ -207,12 +234,14 @@ def assign_empirical_tiers(
         earned_over = (
             is_over_family
             and proven_edge >= ACTIONABLE_MIN_EMPIRICAL_EDGE
+            and edge > ACTIONABLE_EARNED_MIN_CALIBRATED_EDGE  # never stake a calibrated-negative over
             and pd.notna(raw_prob)
             and float(raw_prob) >= breakeven
         )
         earned_other = (
             not is_over_family
             and proven_edge >= ACTIONABLE_MIN_EMPIRICAL_EDGE
+            and edge > ACTIONABLE_EARNED_MIN_CALIBRATED_EDGE
             and edge >= HIGH_VARIANCE_MIN_EMPIRICAL_EDGE
         )
         if proven_bucket and (calibrated_actionable or earned_over or earned_other):
