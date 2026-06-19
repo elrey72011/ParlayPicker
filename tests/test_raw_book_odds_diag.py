@@ -46,7 +46,7 @@ def test_diag_string_for_flipped_houston_cleveland():
         "novig_h2h_home_price": -120, "novig_h2h_away_price": 115,
     }
     s = _raw_book_odds_diag(row)
-    assert s == "novig: sp H=+1.5/A=-1.5 ml H=-120/A=+115"
+    assert s == "novig: sp H=+1.5/A=-1.5 ml H=-120/A=+115 tot O=·/U=·"
 
 
 def test_multiple_books_joined_and_empty_omitted():

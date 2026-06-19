@@ -131,7 +131,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-06-19-spread-orient-diag"
+PIPELINE_BUILD = "2026-06-19-total-consistent-book"
 
 
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
@@ -4780,20 +4780,50 @@ def _fmt_odds_token(v):
 
 
 def _raw_book_odds_diag(row):
-    """One verbatim string of every book's spread points and moneyline prices, e.g.
-    ``novig: sp H=-1.5/A=+1.5 ml H=-120/A=+115 | fanduel: ...``. Books with no data are
-    omitted. Lets a flipped-orientation case be diagnosed straight from the export."""
+    """One verbatim string of every book's spread points, moneyline prices, and total
+    points, e.g. ``novig: sp H=-1.5/A=+1.5 ml H=-120/A=+115 tot O=8.5/U=8.5 | fanduel:
+    ...``. Books with no data are omitted. Lets a flipped spread or an off-market total
+    be diagnosed straight from the export."""
     parts = []
     for bk in ("novig", "fanduel", "draftkings", "betmgm"):
         hp, ap = row.get(f"{bk}_home_point"), row.get(f"{bk}_away_point")
         hml, aml = row.get(f"{bk}_h2h_home_price"), row.get(f"{bk}_h2h_away_price")
-        if all(pd.isna(pd.to_numeric(v, errors="coerce")) for v in (hp, ap, hml, aml)):
+        op, up = row.get(f"{bk}_over_point"), row.get(f"{bk}_under_point")
+        if all(pd.isna(pd.to_numeric(v, errors="coerce")) for v in (hp, ap, hml, aml, op, up)):
             continue
         parts.append(
             f"{bk}: sp H={_fmt_odds_token(hp)}/A={_fmt_odds_token(ap)} "
-            f"ml H={_fmt_odds_token(hml)}/A={_fmt_odds_token(aml)}"
+            f"ml H={_fmt_odds_token(hml)}/A={_fmt_odds_token(aml)} "
+            f"tot O={_fmt_odds_token(op)}/U={_fmt_odds_token(up)}"
         )
     return " | ".join(parts) if parts else pd.NA
+
+
+def _consensus_total_line(row):
+    """Median total line across books (over/under share the line). Robust to one book —
+    e.g. the thin P2P exchange novig — posting a stale/off-market total."""
+    pts = []
+    for bk in ("novig", "fanduel", "draftkings", "betmgm"):
+        v = pd.to_numeric(row.get(f"{bk}_over_point"), errors="coerce")
+        if pd.isna(v):
+            v = pd.to_numeric(row.get(f"{bk}_under_point"), errors="coerce")
+        if pd.notna(v):
+            pts.append(float(v))
+    return float(pd.Series(pts).median()) if pts else pd.NA
+
+
+def _consistent_total_book(row, side):
+    """First book whose total line for ``side`` ("over"/"under") matches the cross-book
+    consensus, or None. A no-op for the common case where every book agrees (novig is
+    first and matches); only diverts off novig when it is the outlier."""
+    consensus = _consensus_total_line(row)
+    if pd.isna(consensus):
+        return None
+    for bk in ("novig", "fanduel", "draftkings", "betmgm"):
+        pt = pd.to_numeric(row.get(f"{bk}_{side}_point"), errors="coerce")
+        if pd.notna(pt) and abs(float(pt) - consensus) < 1e-9:
+            return bk
+    return None
 
 
 def _consistent_spread_book(row):
@@ -5110,6 +5140,17 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
                 market_dict["live_spread_line"] = market_dict["spread_line"]
                 market_dict["live_total_line"] = pd.NA
             elif market_type.startswith("total"):
+                t_side = "over" if market_type == "total_over" else "under"
+                # Prefer a book at the consensus total line (and take its price), so a
+                # thin exchange posting an off-market total can't set the line/odds.
+                cb = _consistent_total_book(row, t_side)
+                cb_point = pd.to_numeric(row.get(f"{cb}_{t_side}_point"), errors="coerce") if cb else pd.NA
+                if cb is not None and pd.notna(cb_point):
+                    point_val = float(cb_point)
+                    cb_price = pd.to_numeric(row.get(f"{cb}_{t_side}_price"), errors="coerce")
+                    if pd.notna(cb_price):
+                        market_dict["odds_american"] = float(cb_price)
+                        market_dict["odds_source"] = "odds_api"
                 market_dict["spread_line"] = pd.NA
                 market_dict["total_line"] = float(point_val) if pd.notna(point_val) else pd.NA
                 market_dict["live_spread_line"] = pd.NA
