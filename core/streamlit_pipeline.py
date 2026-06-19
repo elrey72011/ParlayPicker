@@ -131,7 +131,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-06-05b-plausible-live-lines"
+PIPELINE_BUILD = "2026-06-19-spread-orient-diag"
 
 
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
@@ -204,6 +204,12 @@ REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
     "kalshi_cap_strike",
     "kalshi_yes_bid",
     "kalshi_yes_ask",
+    # Raw per-book spread points + moneyline prices, verbatim from the live feed
+    # (e.g. "novig: sp H=-1.5/A=+1.5 ml H=-120/A=+115 | fanduel: ..."). Diagnostic for
+    # flipped-orientation cases: when a spread_away sign disagrees with the moneyline
+    # favorite, this shows whether the feed delivered the spread wrong-signed/swapped at
+    # the source (which the away-mirror derivation cannot repair) vs a parse bug.
+    "raw_book_odds_diag",
 ]
 
 
@@ -284,7 +290,7 @@ def ensure_best_pick_export_columns(
     missing_cols = [c for c in req_cols if c not in out.columns]
 
     for col in req_cols:
-        if col in {"status_blocker_reason", "status_blocker_stage", "nba_stats_fetch_status", "fallback_summary_by_league", "run_health_warning", "degraded_feature_subset_reason", "status_metric_basis", "market_line_source", "market_line_source_detail", "line_consistency_reason", "line_provenance_warning", "line_event_identity_reason", "live_event_match_key", "selected_live_event_source"}:
+        if col in {"status_blocker_reason", "status_blocker_stage", "nba_stats_fetch_status", "fallback_summary_by_league", "run_health_warning", "degraded_feature_subset_reason", "status_metric_basis", "market_line_source", "market_line_source_detail", "line_consistency_reason", "line_provenance_warning", "line_event_identity_reason", "live_event_match_key", "selected_live_event_source", "raw_book_odds_diag"}:
             out[col] = out[col].fillna(default_values.get(col, "")).astype(str)
 
     if "status_blocker_stage" in out.columns:
@@ -4761,6 +4767,32 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
 
     return pd.DataFrame(list(game_dict.values()))
 
+def _fmt_odds_token(v):
+    """Format a spread point or moneyline price for the raw-odds diagnostic string:
+    signed (+1.5, -1.5, -120, +115); '·' for missing values."""
+    n = pd.to_numeric(v, errors="coerce")
+    if pd.isna(n):
+        return "·"
+    return f"{float(n):+g}"
+
+
+def _raw_book_odds_diag(row):
+    """One verbatim string of every book's spread points and moneyline prices, e.g.
+    ``novig: sp H=-1.5/A=+1.5 ml H=-120/A=+115 | fanduel: ...``. Books with no data are
+    omitted. Lets a flipped-orientation case be diagnosed straight from the export."""
+    parts = []
+    for bk in ("novig", "fanduel", "draftkings", "betmgm"):
+        hp, ap = row.get(f"{bk}_home_point"), row.get(f"{bk}_away_point")
+        hml, aml = row.get(f"{bk}_h2h_home_price"), row.get(f"{bk}_h2h_away_price")
+        if all(pd.isna(pd.to_numeric(v, errors="coerce")) for v in (hp, ap, hml, aml)):
+            continue
+        parts.append(
+            f"{bk}: sp H={_fmt_odds_token(hp)}/A={_fmt_odds_token(ap)} "
+            f"ml H={_fmt_odds_token(hml)}/A={_fmt_odds_token(aml)}"
+        )
+    return " | ".join(parts) if parts else pd.NA
+
+
 def _derive_spread_away_line(row):
     """Return the away team's run line, robust to the live feed's sign quirks.
 
@@ -4864,6 +4896,9 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
                     _ml_price = _cand_ml
                     break
             base_dict[f"game_{_ml_side}_ml_price"] = _ml_price
+        # Verbatim per-book spread points + moneyline prices, so a flipped spread
+        # orientation can be diagnosed from the export (source corruption vs parse bug).
+        base_dict["raw_book_odds_diag"] = _raw_book_odds_diag(row)
         matchup_id = row.get("matchup_id")
         live_canon_key = row.get("_canon_key")
 
