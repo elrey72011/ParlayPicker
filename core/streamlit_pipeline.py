@@ -4761,6 +4761,35 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
 
     return pd.DataFrame(list(game_dict.values()))
 
+def _derive_spread_away_line(row):
+    """Return the away team's run line, robust to the live feed's sign quirks.
+
+    A point spread is an exact mirror: ``away_line == -home_line``. Novig is a
+    peer-to-peer exchange that lists BOTH spread outcomes under the home team's
+    signed point (e.g. both show -1.5 on a HOU -1.5 market), so ``novig_away_point``
+    carries the WRONG sign for the away team and must never be trusted directly
+    (this is what produced "Cleveland -1.5" when Cleveland was really +1.5).
+
+    Derivation order, safest first:
+      1. Negate the first available home point across books (the home point is
+         unambiguously signed for the home team, so -home is the away line).
+      2. If no book reports a home point, fall back to a STANDARD book's away
+         point — fanduel/draftkings/betmgm sign per-team correctly (unlike the
+         Novig P2P convention).
+      3. Otherwise NA, so the pick is dropped rather than emitted with a guessed
+         sign. (The spread_orientation guardrail remains the final backstop.)
+    """
+    for bk in ("novig", "fanduel", "draftkings", "betmgm"):
+        hp = pd.to_numeric(row.get(f"{bk}_home_point"), errors="coerce")
+        if pd.notna(hp):
+            return -float(hp)
+    for bk in ("fanduel", "draftkings", "betmgm"):
+        ap = pd.to_numeric(row.get(f"{bk}_away_point"), errors="coerce")
+        if pd.notna(ap):
+            return float(ap)
+    return pd.NA
+
+
 def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.DataFrame | None = None) -> tuple[pd.DataFrame, dict[str, Any]]:
     """
     Expands the wide live_odds_df (1 row per game) into up to 4 market rows per game
@@ -4999,16 +5028,10 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
 
             if market_type.startswith("spread"):
                 if market_type == "spread_away":
-                    # Novig is a peer-to-peer exchange that lists both spread
-                    # outcomes under the home team's signed point (e.g. both
-                    # outcomes show -1.5 for a BAL -1.5 market). Using
-                    # novig_away_point directly produces the wrong sign for the
-                    # away team. Derive the away line as the mirror of the home
-                    # line instead, falling back to away_point only when the
-                    # home point is unavailable.
-                    home_point_raw = pd.to_numeric(row.get("novig_home_point"), errors="coerce")
-                    if pd.notna(home_point_raw):
-                        point_val = -home_point_raw
+                    # away_line = -home_line; derived robustly across books because
+                    # Novig's away_point carries the home-signed value. See
+                    # _derive_spread_away_line for the full rationale.
+                    point_val = _derive_spread_away_line(row)
                 market_dict["spread_line"] = float(point_val) if pd.notna(point_val) else pd.NA
                 market_dict["total_line"] = pd.NA
                 market_dict["live_spread_line"] = market_dict["spread_line"]
