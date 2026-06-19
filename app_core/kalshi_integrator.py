@@ -977,6 +977,30 @@ def _infer_row_league(league: Any, home_team: Any, away_team: Any) -> str:
     return ""
 
 
+def orient_spread_kalshi_prob(raw_prob, subject_is_home, pick_is_home, pick_line):
+    """P(pick covers) from a run-line contract "S wins by over L" (raw_prob = P(S by >L)).
+
+    Such a contract prices exactly two outcomes: S -L (YES = raw_prob) and Opp(S) +L
+    (NO = 1 - raw_prob). The 1-run margin band sits between the two -L sides, so the
+    other two picks — an away/opponent favorite (Opp(S) -L) or the subject as underdog
+    (S +L) — are NOT 1 - raw_prob and cannot be derived from this contract. Return None
+    for those so the caller records a miss instead of a wrong number (19 Jun: Pittsburgh
+    -1.5 was priced 1 - P(Colorado by 2+) = 0.705 = P(PIT +1.5), a 70% phantom edge).
+
+    ``subject_is_home`` / ``pick_is_home`` identify the title's subject team and the
+    pick's team; ``pick_line`` is the pick's signed spread (negative = favorite).
+    """
+    if pd.isna(pick_line):
+        return None
+    pick_is_subject = bool(subject_is_home) == bool(pick_is_home)
+    pick_is_favorite = float(pick_line) < 0.0
+    if pick_is_subject and pick_is_favorite:
+        return float(raw_prob)            # pick == S -L (the YES side)
+    if (not pick_is_subject) and (not pick_is_favorite):
+        return 1.0 - float(raw_prob)      # pick == Opp(S) +L (the NO side)
+    return None                           # unpriceable from this contract
+
+
 def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
     if best_picks_df is None or best_picks_df.empty:
         return best_picks_df.copy() if isinstance(best_picks_df, pd.DataFrame) else pd.DataFrame()
@@ -1561,10 +1585,32 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 out.at[idx, "kalshi_probability"] = 0.0
                 continue
 
-            # 5. Save explicitly to dataframe
-            # Invert probability if the row represents an 'Away' or 'Under' outcome
-            is_away_or_under = any(x in market_type_str for x in ["away", "under"])
-            final_pick_prob = 1.0 - float(final_prob) if is_away_or_under else float(final_prob)
+            # 5. Orient to the pick side.
+            if "spread" in market_type_str:
+                # Run lines: a "S wins by over L" contract prices only S -L and Opp(S) +L;
+                # the other two sides are unpriceable (see orient_spread_kalshi_prob). The
+                # subject S is the first team named in the title.
+                _oriented = (
+                    None
+                    if home_idx == 999 and away_idx == 999
+                    else orient_spread_kalshi_prob(
+                        raw_prob,
+                        home_idx <= away_idx,
+                        "home" in market_type_str,
+                        pd.to_numeric(row.get("spread_line"), errors="coerce"),
+                    )
+                )
+                if _oriented is None:
+                    out.at[idx, "kalshi_match_status"] = "miss"
+                    out.at[idx, "kalshi_match_reason"] = "spread_side_unpriceable"
+                    out.at[idx, "kalshi_probability"] = 0.0
+                    continue
+                final_pick_prob = float(_oriented)
+            else:
+                # Totals (over/under) and moneyline are exact complements at the same line,
+                # so the away/under side is genuinely 1 - the over/home probability.
+                is_away_or_under = any(x in market_type_str for x in ["away", "under"])
+                final_pick_prob = 1.0 - float(final_prob) if is_away_or_under else float(final_prob)
 
             # PROXY DECAY (New Logic)
             delta = _safe_float(out.at[idx, "kalshi_line_diff"])
