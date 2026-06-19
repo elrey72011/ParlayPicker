@@ -390,6 +390,9 @@ BEST_PICK_COLUMNS = [
     # values mean the moneyline reached build_best_picks_df (guard can fire); blank
     # on a spread row means there was no h2h to verify orientation against.
     "game_home_ml_price", "game_away_ml_price",
+    # Verbatim per-book spread points + moneyline prices (see REQUIRED_BEST_PICK_EXPORT_COLUMNS);
+    # listed here so it survives the BEST_PICK_COLUMNS reindex into the export.
+    "raw_book_odds_diag",
     "suspicious_data_flag", "suspicious_data_reasons", "status_metric_basis", "effective_expected_value", "effective_edge", "effective_win_probability", "status_blocker_reason", "status_blocker_stage",
     "nba_stats_fetch_status", "nba_stats_fetch_source", "nba_stats_fetch_retries_used", "stats_source_counts", "fallback_summary_by_league", "fallback_heavy_slate_flag", "run_health_warning",
     "degraded_feature_subset_flag", "degraded_feature_subset_reason",

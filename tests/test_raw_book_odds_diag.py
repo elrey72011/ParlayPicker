@@ -12,7 +12,20 @@ import pandas as pd
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from core.streamlit_pipeline import _fmt_odds_token, _raw_book_odds_diag
+from core.streamlit_pipeline import (
+    _fmt_odds_token,
+    _raw_book_odds_diag,
+    BEST_PICK_COLUMNS,
+    REQUIRED_BEST_PICK_EXPORT_COLUMNS,
+)
+
+
+def test_diag_column_survives_to_export():
+    # Must be in BOTH lists: BEST_PICK_COLUMNS (internal reindex keeps it) and the
+    # export schema (final selection). Missing from BEST_PICK_COLUMNS silently drops
+    # it at the reindex and the export re-creates it empty (the 19 Jun symptom).
+    assert "raw_book_odds_diag" in BEST_PICK_COLUMNS
+    assert "raw_book_odds_diag" in REQUIRED_BEST_PICK_EXPORT_COLUMNS
 
 
 def test_fmt_signs_and_missing():
