@@ -480,6 +480,18 @@ MAX_TOTAL_OVER_HIGH_VARIANCE_COUNT = 3
 MAX_MLB_TOTAL_OVER_HIGH_VARIANCE_COUNT = 2
 TOTAL_OVER_PROB_SHRINK = 0.60
 MLB_TOTAL_OVER_PROB_SHRINK = 0.85
+
+# Run-line (spread) model probability is the moneyline P(win), but a run-line pays on
+# the MARGIN, not the win: a -1.5 favorite must win by 2+, a +1.5 dog covers unless it
+# loses by 2+. The two outcomes are separated by the 1-run band (~28% of MLB games are
+# decided by exactly 1 run), so P(win) systematically OVERSTATES a favorite's cover and
+# understates a dog's. 19 Jun: Pittsburgh -1.5 carried ml P(win)=0.54 as its cover prob;
+# it lost outright. Convert P(win) -> P(cover +-1.5) by shifting out the favorite's share
+# of the 1-run band: fav cover = P(win) - band, dog cover = P(win) + band. The shift is
+# symmetric so the two sides still sum to 1 (no push on a 1.5 line). MLB-only: NBA point
+# spreads and NHL puck lines have different margin distributions.
+MLB_RUNLINE_COVER_CONVERSION_ENABLED = True
+MLB_RUNLINE_ONE_RUN_BAND = 0.135  # P(favorite wins by exactly 1 run); ~half the ~28% 1-run rate
 MLB_TOTAL_OVER_MIN_PRODUCTION_WIN_PROB = 0.60
 MLB_TOTAL_OVER_MIN_PRODUCTION_EV = 0.07
 MLB_TOTAL_OVER_MIN_PRODUCTION_EDGE = 0.04

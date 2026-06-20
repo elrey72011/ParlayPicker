@@ -213,10 +213,12 @@ def test_mlb_over_explicit_actionable_gate_blocks_weak_over():
 
 
 def test_low_line_over_guardrail_is_consensus_aware():
-    # Sub-8.0 MLB overs are not a uniformly weak bucket: graded slates show Neutral
-    # ~45% vs Disagrees ~60% / Agrees ~73%. The guardrail no longer hands every
-    # low-line over the elevated High Variance (0.075x) stake — Neutral low-line overs
-    # are held at Below Threshold, while Disagrees ones stay High Variance.
+    # Sub-8.0 MLB overs are not a uniformly weak bucket, and consensus drives the call.
+    # The 20 Jun calibration refresh (graded through 18 Jun) puts Neutral (~50%) and
+    # Disagrees (~49%) low-line overs in the weak zone — both held at Below Threshold by
+    # the guardrail — while Agrees (~59%), the one over bucket with realized edge, is not
+    # blocked and promotes on its merits. (Earlier data read Disagrees ~60%, hence the old
+    # High Variance expectation; the refit corrected that bucket down to ~49%.)
     def _low_over(kalshi):
         df = pd.DataFrame([
             _row(idx=1, league="MLB", market_type="total_over", win_prob=0.60, ev=0.10, edge=0.10, kalshi_probability=kalshi)
@@ -235,8 +237,16 @@ def test_low_line_over_guardrail_is_consensus_aware():
 
     disagrees = _low_over(0.45)
     assert disagrees["consensus_agreement"] == "Disagrees"
-    assert disagrees["Pick_Status"] == "High Variance/Speculative"
-    assert disagrees["status_blocker_stage"] == "low_line_over_guardrail"
+    assert disagrees["Pick_Status"] == "Below Threshold"
+    # Refreshed Disagrees-over bucket (~49%) now benches this at the empirical tier overlay,
+    # a step before the low-line-over guardrail would; either way it is held Below Threshold.
+    assert disagrees["status_blocker_stage"] in {"low_line_over_guardrail", "empirical_tier_overlay"}
+
+    # Agrees low-line overs (the bucket with realized edge) are NOT held by the guardrail.
+    agrees = _low_over(0.60)
+    assert agrees["consensus_agreement"] == "Agrees"
+    assert agrees["Pick_Status"] != "Below Threshold"
+    assert agrees["status_blocker_stage"] != "low_line_over_guardrail"
 
 
 def test_consensus_is_directional_same_side_is_agrees():
@@ -930,7 +940,9 @@ def test_total_upload_fallback_recovers_plausible_rejected_live_total_conservati
     assert pd.isna(recovered["matched_live_total_line"])
     assert recovered["line_consistency_reason"] == "recovered_with_upload_total_after_rejected_live"
     assert recovered["line_provenance_warning"] == "Live total rejected; using uploaded/reference total"
-    assert recovered["Pick_Status"] in {"High Variance/Speculative", "No Play"}
+    # Subject is the conservative line recovery, not the exact tier: refreshed calibration
+    # (20 Jun) lands this Below Threshold rather than High Variance.
+    assert recovered["Pick_Status"] in {"High Variance/Speculative", "Below Threshold", "No Play"}
     assert recovered["Pick_Status"] != "Actionable"
     assert float(recovered["Kelly_Bet_Size"]) == 0.0
 
@@ -1014,7 +1026,9 @@ def test_positive_ev_upload_fallback_row_can_remain_high_variance_with_zero_kell
     df["upload_total_line"] = [5.5]
     row = build_best_picks_df(df).iloc[0]
     assert row["market_line_source"] == "upload"
-    assert row["Pick_Status"] in {"High Variance/Speculative", "No Play"}
+    # Subject is the line recovery + zero Kelly, not the exact non-actionable tier: the
+    # 20 Jun calibration refresh made this row Below Threshold rather than High Variance.
+    assert row["Pick_Status"] in {"High Variance/Speculative", "Below Threshold", "No Play"}
     assert float(row["Kelly_Bet_Size"]) == 0.0
 
 def test_negative_ev_row_is_downgraded_by_value_guardrail_with_reason_and_zero_kelly():
@@ -1051,9 +1065,31 @@ def test_negative_value_guardrail_diagnostics_and_positive_upload_fallback_regre
     assert neg_row["Pick_Status"] == "No Play"
     assert float(neg_row["Kelly_Bet_Size"]) == 0.0
     assert pos_row["market_line_source"] == "upload"
-    assert pos_row["Pick_Status"] in {"High Variance/Speculative", "No Play"}
+    # Non-actionable + zero Kelly is the contract; refreshed calibration (20 Jun) lands
+    # this Below Threshold rather than High Variance.
+    assert pos_row["Pick_Status"] in {"High Variance/Speculative", "Below Threshold", "No Play"}
     assert float(pos_row["Kelly_Bet_Size"]) == 0.0
 
     assert diagnostics["negative_ev_final_guardrail_count"] >= 1
     assert diagnostics["negative_edge_final_guardrail_count"] >= 0
     assert diagnostics["negative_ev_high_variance_downgraded_count"] >= 1
+
+
+def test_total_over_production_shrink_is_single_not_compounded():
+    # The production over-shrink must start from calibrated_probability, not the already-
+    # shrunk effective_win_probability, or it compounds shrink^2. The reset originally
+    # covered only MLB overs, so non-MLB (NBA/NHL) overs were silently double-shrunk to
+    # 0.60^2 = 0.36 instead of the intended single 0.60.
+    nhl = build_best_picks_df(pd.DataFrame([
+        _row(idx=950, league="NHL", market_type="total_over", win_prob=0.62, ev=0.08, edge=0.06, kalshi_probability=0.58)
+    ])).iloc[0]
+    calib = float(nhl["calibrated_probability"])
+    assert abs(float(nhl["production_win_probability"]) - (0.5 + 0.60 * (calib - 0.5))) < 1e-6
+    assert abs(float(nhl["production_win_probability"]) - (0.5 + 0.36 * (calib - 0.5))) > 1e-3  # not double-shrunk
+
+    # MLB overs were already correctly single-shrunk (0.85 from calibrated); unchanged.
+    mlb = build_best_picks_df(pd.DataFrame([
+        _row(idx=951, league="MLB", market_type="total_over", win_prob=0.62, ev=0.08, edge=0.06, kalshi_probability=0.58)
+    ])).iloc[0]
+    calib_m = float(mlb["calibrated_probability"])
+    assert abs(float(mlb["production_win_probability"]) - (0.5 + 0.85 * (calib_m - 0.5))) < 1e-6
