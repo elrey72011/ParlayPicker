@@ -215,7 +215,7 @@ def assign_empirical_tiers(
         breakeven = float(out.at[idx, "empirical_win_probability"]) - edge
         proven_edge = rate - breakeven
         family = bucket.split(":")[1] if ":" in bucket else "side"
-        is_over_family = family == "over"
+        is_directional = family in ("over", "under")
         # Pre-calibration probability (out[prob_col] is untouched; calibration was only
         # applied to the local p_cal used for the bucket tilt). Used as an outlier guard.
         raw_prob = pd.to_numeric(out.at[idx, prob_col], errors="coerce")
@@ -223,28 +223,31 @@ def assign_empirical_tiers(
         # Earned paths — a PROVEN bucket lifts a pick to Actionable on the strength of
         # the bucket's realized edge, filling the gap the over-prob shrink / market
         # debias / over-calibration open up:
-        #   * OVER family: overs are systematically suppressed AND a global calibration
-        #     maps the model's over predictions down, so the per-pick calibrated edge is
-        #     unreliable. Trust the proven bucket's realized edge, guarded only by the
-        #     pick's PRE-calibration probability still beating break-even (so a genuine
-        #     negative-signal over is not staked on the bucket's back). Volume here is
-        #     bounded downstream by the MLB total-over concentration cap.
-        #   * other families: keep per-pick discrimination — the pick must itself clear
-        #     the High Variance edge bar, not be a coin flip.
-        earned_over = (
-            is_over_family
+        #   * DIRECTIONAL totals (over AND under): the global calibration maps the
+        #     model's predicted prob DOWN regardless of side, so the per-pick calibrated
+        #     edge is unreliable for both. Trust the proven bucket's realized edge,
+        #     guarded only by the pick's PRE-calibration probability still beating
+        #     break-even (so a genuine negative-signal pick is not staked on the bucket's
+        #     back). Until the 20 Jun refit this earned path was over-only; the refreshed
+        #     global isotonic suppresses proven under:Agrees picks (61%, n=61) the same
+        #     way it does overs, so confining the escape hatch to overs was unjustified.
+        #     Over volume stays bounded downstream by the MLB total-over concentration cap.
+        #   * other families (side): keep per-pick discrimination — the pick must itself
+        #     clear the High Variance edge bar, not be a coin flip (tiny graded samples).
+        earned_directional = (
+            is_directional
             and proven_edge >= ACTIONABLE_MIN_EMPIRICAL_EDGE
-            and edge > ACTIONABLE_EARNED_MIN_CALIBRATED_EDGE  # never stake a calibrated-negative over
+            and edge > ACTIONABLE_EARNED_MIN_CALIBRATED_EDGE  # never stake a calibrated-negative pick
             and pd.notna(raw_prob)
             and float(raw_prob) >= breakeven
         )
         earned_other = (
-            not is_over_family
+            not is_directional
             and proven_edge >= ACTIONABLE_MIN_EMPIRICAL_EDGE
             and edge > ACTIONABLE_EARNED_MIN_CALIBRATED_EDGE
             and edge >= HIGH_VARIANCE_MIN_EMPIRICAL_EDGE
         )
-        if proven_bucket and (calibrated_actionable or earned_over or earned_other):
+        if proven_bucket and (calibrated_actionable or earned_directional or earned_other):
             status = "Actionable"
             basis = (
                 f"edge {edge:+.1%} vs break-even at own odds"
