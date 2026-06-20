@@ -4156,15 +4156,17 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     is_total_over = mt_lower.eq("total_over")
     is_mlb_total_over = is_total_over & league_upper.eq("MLB")
     total_over_shrink = np.where(is_mlb_total_over, float(MLB_TOTAL_OVER_PROB_SHRINK), float(TOTAL_OVER_PROB_SHRINK))
-    # MLB Overs: reset to calibrated_probability before shrinking to avoid double-shrink.
-    # The gating stage already applied shrinkage to effective_win_probability; using
-    # that as the base here would compound shrink^2 = 0.72x instead of 0.85x.
-    if is_mlb_total_over.any():
+    # ALL total-overs: reset to calibrated_probability before shrinking to avoid a
+    # double-shrink. The gating stage already shrank effective_win_probability, so using
+    # that as the base here compounds shrink^2 (MLB 0.85^2=0.72, non-MLB 0.60^2=0.36
+    # instead of the intended single 0.85 / 0.60). The reset previously covered only MLB
+    # overs, so non-MLB (NBA/NHL) overs were silently double-shrunk to 0.36x.
+    if is_total_over.any():
         calib_base = pd.to_numeric(
             best.get("calibrated_probability", pd.Series([np.nan] * len(best), index=best.index)),
             errors="coerce"
         ).fillna(0.5)
-        best.loc[is_mlb_total_over, "production_win_probability"] = calib_base[is_mlb_total_over]
+        best.loc[is_total_over, "production_win_probability"] = calib_base[is_total_over]
     best.loc[is_total_over, "production_win_probability"] = 0.5 + total_over_shrink[is_total_over] * (best.loc[is_total_over, "production_win_probability"] - 0.5)
     best.loc[is_total_over & ~is_mlb_total_over, "probability_calibration_reason"] = f"total_over_shrink={float(TOTAL_OVER_PROB_SHRINK):.2f}"
     best.loc[is_mlb_total_over, "probability_calibration_reason"] = f"mlb_total_over_shrink={float(MLB_TOTAL_OVER_PROB_SHRINK):.2f}_from_calibrated"

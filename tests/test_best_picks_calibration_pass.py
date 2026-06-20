@@ -1073,3 +1073,23 @@ def test_negative_value_guardrail_diagnostics_and_positive_upload_fallback_regre
     assert diagnostics["negative_ev_final_guardrail_count"] >= 1
     assert diagnostics["negative_edge_final_guardrail_count"] >= 0
     assert diagnostics["negative_ev_high_variance_downgraded_count"] >= 1
+
+
+def test_total_over_production_shrink_is_single_not_compounded():
+    # The production over-shrink must start from calibrated_probability, not the already-
+    # shrunk effective_win_probability, or it compounds shrink^2. The reset originally
+    # covered only MLB overs, so non-MLB (NBA/NHL) overs were silently double-shrunk to
+    # 0.60^2 = 0.36 instead of the intended single 0.60.
+    nhl = build_best_picks_df(pd.DataFrame([
+        _row(idx=950, league="NHL", market_type="total_over", win_prob=0.62, ev=0.08, edge=0.06, kalshi_probability=0.58)
+    ])).iloc[0]
+    calib = float(nhl["calibrated_probability"])
+    assert abs(float(nhl["production_win_probability"]) - (0.5 + 0.60 * (calib - 0.5))) < 1e-6
+    assert abs(float(nhl["production_win_probability"]) - (0.5 + 0.36 * (calib - 0.5))) > 1e-3  # not double-shrunk
+
+    # MLB overs were already correctly single-shrunk (0.85 from calibrated); unchanged.
+    mlb = build_best_picks_df(pd.DataFrame([
+        _row(idx=951, league="MLB", market_type="total_over", win_prob=0.62, ev=0.08, edge=0.06, kalshi_probability=0.58)
+    ])).iloc[0]
+    calib_m = float(mlb["calibrated_probability"])
+    assert abs(float(mlb["production_win_probability"]) - (0.5 + 0.85 * (calib_m - 0.5))) < 1e-6
