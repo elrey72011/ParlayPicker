@@ -492,6 +492,16 @@ MLB_TOTAL_OVER_PROB_SHRINK = 0.85
 # spreads and NHL puck lines have different margin distributions.
 MLB_RUNLINE_COVER_CONVERSION_ENABLED = True
 MLB_RUNLINE_ONE_RUN_BAND = 0.135  # P(favorite wins by exactly 1 run); ~half the ~28% 1-run rate
+
+# A MAIN total is priced near pick'em (both sides ~ -110), so its de-vigged implied
+# probability sits near 0.50. A totals pick whose de-vig falls OUTSIDE this band is almost
+# certainly an ALT line or a mis-scrape the live matcher latched onto instead of the main
+# number -- value alone can't distinguish e.g. an Over 12.5 alt from a real 12.5 (20 Jun:
+# NYY "Over 12.5" matched at +285 / de-vig 0.26 while the real line was ~9.5). Such lines
+# are routed to the rejected-live -> uploaded-reference fallback rather than priced off
+# garbage. Band kept generous so genuinely juiced-but-real main totals are still trusted.
+MAIN_TOTAL_MIN_DEVIG_PROB = 0.35
+MAIN_TOTAL_MAX_DEVIG_PROB = 0.65
 MLB_TOTAL_OVER_MIN_PRODUCTION_WIN_PROB = 0.60
 MLB_TOTAL_OVER_MIN_PRODUCTION_EV = 0.07
 MLB_TOTAL_OVER_MIN_PRODUCTION_EDGE = 0.04

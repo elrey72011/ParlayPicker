@@ -131,7 +131,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-06-20-proven-under-earned-path"
+PIPELINE_BUILD = "2026-06-20-altline-price-guard"
 
 
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
@@ -3983,10 +3983,24 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             | (league_norm.eq("NFL") & raw_live_total_line.between(30, 60, inclusive="both"))
             | (league_norm.eq("NCAAF") & raw_live_total_line.between(35, 75, inclusive="both"))
         )
-        suspicious_total = raw_suspicious_total & ~plausible_live_total
+        # A MAIN total is priced near pick'em; a totals pick whose de-vigged implied prob
+        # sits far from 0.50 is an ALT line / mis-scrape the matcher latched onto instead
+        # of the main number (20 Jun: NYY "Over 12.5" at +285 / de-vig 0.26 vs the real
+        # ~9.5). Value alone can't tell a 12.5-alt from a 12.5-real, so use the price shape.
+        # Suspicious regardless of delta, and NOT exempted by raw-value plausibility.
+        from app_core.weights_config import MAIN_TOTAL_MIN_DEVIG_PROB, MAIN_TOTAL_MAX_DEVIG_PROB
+        _total_devig = pd.to_numeric(
+            best.get("market_probability", pd.Series([np.nan] * len(best), index=best.index)),
+            errors="coerce",
+        )
+        alt_priced_total = is_total & _total_devig.notna() & ~_total_devig.between(
+            MAIN_TOTAL_MIN_DEVIG_PROB, MAIN_TOTAL_MAX_DEVIG_PROB
+        )
+        suspicious_total = (raw_suspicious_total & ~plausible_live_total) | alt_priced_total
         if diagnostics_out is not None:
             diagnostics_out["live_total_deviation_count"] = int(raw_suspicious_total.sum())
             diagnostics_out["live_total_trusted_plausible_count"] = int((raw_suspicious_total & plausible_live_total).sum())
+            diagnostics_out["alt_priced_total_count"] = int(alt_priced_total.sum())
         suspicious_line = suspicious_spread | suspicious_total
         best.loc[suspicious_line, "line_consistency_flag"] = False
         best.loc[suspicious_line, "line_consistency_reason"] = best.loc[suspicious_line, "line_consistency_reason"].replace("", "suspicious_live_line_delta")
@@ -4002,7 +4016,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         best["live_event_match_key"] = np.where(suspicious_or_warned, strict_identity_key, best["live_event_match_key"])
         strict_candidate_count = best.groupby(strict_identity_key)["home_team"].transform("size")
         best.loc[suspicious_or_warned, "line_candidate_count"] = strict_candidate_count.loc[suspicious_or_warned].astype(int)
-        resolved_unambiguous = suspicious_or_warned & strict_candidate_count.eq(1) & trusted_live_match
+        # Alt-priced totals are not an identity-ambiguity problem (re-resolving the event
+        # would just re-select the same alt line) — force them past resolution into the
+        # rejected-live -> uploaded-reference fallback below.
+        resolved_unambiguous = suspicious_or_warned & strict_candidate_count.eq(1) & trusted_live_match & ~alt_priced_total
         unresolved_suspicious = suspicious_or_warned & ~resolved_unambiguous
         unresolved_total_before_recovery = unresolved_suspicious & is_total
 

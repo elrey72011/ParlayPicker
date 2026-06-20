@@ -1093,3 +1093,43 @@ def test_total_over_production_shrink_is_single_not_compounded():
     ])).iloc[0]
     calib_m = float(mlb["calibrated_probability"])
     assert abs(float(mlb["production_win_probability"]) - (0.5 + 0.85 * (calib_m - 0.5))) < 1e-6
+
+
+def test_alt_priced_live_total_rejected_to_uploaded_reference():
+    # 20 Jun NYY case: the live matcher latched onto an ALT total (Over 12.5 at +285,
+    # de-vig ~0.26) instead of the ~9.5 main line. Its raw value (12.5) is "plausible"
+    # for MLB, so the value-only guard trusted it. The price shape (far from pick'em)
+    # now marks it as an alt/mis-scrape -> rejected to the uploaded reference, never
+    # staked off the garbage number.
+    df = pd.DataFrame([_row(idx=970, league="MLB", market_type="total_over",
+                            win_prob=0.68, ev=0.30, edge=0.09)])
+    df["odds_american"] = [285]
+    df["market_probability"] = [0.26]
+    df["best_pick"] = ["Over 12.5"]
+    df["total_line"] = [12.5]
+    df["live_total_line"] = [12.5]
+    df["uploaded_total_line"] = [9.5]
+    df["upload_total_line"] = [9.5]
+    row = build_best_picks_df(df).iloc[0]
+    assert row["Pick_Status"] != "Actionable"
+    assert float(row["Kelly_Bet_Size"]) == 0.0
+    # The garbage 12.5 alt line is dropped; the uploaded reference (9.5) is used instead.
+    assert float(row["market_line_used"]) == 9.5
+    assert row["best_pick"] == "Over 9.5"
+    assert row["market_line_source_detail"] == "upload_total_fallback_after_rejected_live"
+
+
+def test_juiced_but_real_main_total_not_alt_rejected():
+    # A real main total can be moderately juiced (de-vig ~0.57) and must NOT be mistaken
+    # for an alt line: the band is generous enough to keep trusting it.
+    df = pd.DataFrame([_row(idx=971, league="MLB", market_type="total_under",
+                            win_prob=0.60, ev=0.05, edge=0.04, kalshi_probability=0.58)])
+    df["odds_american"] = [-135]
+    df["market_probability"] = [0.574]
+    df["best_pick"] = ["Under 8.5"]
+    df["total_line"] = [8.5]
+    df["live_total_line"] = [8.5]
+    df["upload_total_line"] = [8.5]
+    row = build_best_picks_df(df).iloc[0]
+    assert str(row["market_line_source_detail"]) != "upload_total_fallback_after_rejected_live"
+    assert str(row["status_blocker_stage"]) != "line_provenance"
