@@ -91,11 +91,50 @@ def test_overlay_never_touches_safety_statuses():
 
 
 def test_overlay_applies_calibration_before_bucket_tilt():
-    # Calibration maps everything to 0.50 -> even the hot bucket cannot reach
-    # the Actionable edge threshold at -110 (breakeven 0.524).
+    # The calibration is applied to the probability BEFORE the bucket tilt, so a
+    # suppressing table lowers empirical_win_probability vs the uncalibrated run for
+    # the same row. (Tier outcome for a proven directional bucket is governed by the
+    # earned path, tested separately — this asserts the calibration mechanic itself.)
+    base = assign_empirical_tiers(_frame(), STATS, calibration=None)
     knots = [[0.4, 0.50], [0.9, 0.50]]
-    out = assign_empirical_tiers(_frame(), STATS, calibration=knots)
-    assert out.loc[0, "Pick_Status"] != "Actionable"
+    supp = assign_empirical_tiers(_frame(), STATS, calibration=knots)
+    assert supp.loc[0, "empirical_win_probability"] < base.loc[0, "empirical_win_probability"]
+
+
+# A harsh global calibration that drags probabilities toward ~0.50.
+_SUPPRESS_KNOTS = [[0.4, 0.40], [0.6, 0.50], [0.9, 0.80]]
+
+
+def test_proven_under_promotes_on_bucket_edge_when_calibration_suppresses():
+    # under:Agrees (60%, n=60) at pre-cal 0.60 — beats the -110 breakeven (0.524). The
+    # global calibration crushes 0.60 -> 0.50, dropping the per-pick CALIBRATED edge below
+    # the High Variance bar. Pre-20-Jun this earned path was over-only, so the under fell
+    # to Below Threshold; now it earns Actionable on the proven bucket's realized edge,
+    # guarded by its pre-calibration prob still beating breakeven (same as overs).
+    df = pd.DataFrame({
+        "league": ["MLB"], "market_type": ["total_under"],
+        "consensus_agreement": ["Agrees"], "best_pick": ["Under 8.5"],
+        "Pick_Status": ["Below Threshold"], "Status_Reason": ["old"],
+        "status_blocker_stage": ["x"],
+        "effective_win_probability": [0.60], "odds_american": [-110],
+    })
+    out = assign_empirical_tiers(df, STATS, calibration=_SUPPRESS_KNOTS)
+    assert out.iloc[0]["Pick_Status"] == "Actionable"
+    assert "realized edge" in str(out.iloc[0]["Status_Reason"]).lower()
+
+
+def test_earned_under_guards_precalibration_below_breakeven():
+    # Same proven bucket, but the pick's OWN pre-calibration prob (0.51) is below the
+    # -110 breakeven (0.524). The earned path must NOT stake it on the bucket's back.
+    df = pd.DataFrame({
+        "league": ["MLB"], "market_type": ["total_under"],
+        "consensus_agreement": ["Agrees"], "best_pick": ["Under 8.5"],
+        "Pick_Status": ["Below Threshold"], "Status_Reason": ["old"],
+        "status_blocker_stage": ["x"],
+        "effective_win_probability": [0.51], "odds_american": [-110],
+    })
+    out = assign_empirical_tiers(df, STATS, calibration=_SUPPRESS_KNOTS)
+    assert out.iloc[0]["Pick_Status"] != "Actionable"
 
 
 def test_overlay_requires_proven_bucket_for_actionable():
