@@ -895,6 +895,39 @@ def _numeric_series(df: pd.DataFrame, col: str, default: float | int | None = No
     return out
 
 
+def _apply_mlb_runline_cover(
+    spread_model: pd.Series,
+    league: pd.Series,
+    market_type: pd.Series,
+    best_pick: pd.Series,
+    band: float,
+) -> pd.Series:
+    """Convert an MLB run-line pick's moneyline P(win) into P(cover +-1.5).
+
+    A run line pays on the margin, not the win: a -1.5 favorite must win by 2+, a +1.5
+    dog covers unless it loses by 2+. The two are separated by the 1-run band, so P(win)
+    overstates the favorite's cover and understates the dog's. Shift P(win) by the
+    favorite's share of that band (``band`` ~= P(favorite wins by exactly 1 run)):
+    favorite (pick line < 0) cover = P(win) - band; dog (pick line > 0) = P(win) + band.
+    The shift is symmetric, so the two sides of a game still sum to 1 (no push on +-1.5).
+    Non-MLB and non-spread rows pass through unchanged.
+    """
+    is_mlb_spread = (league.str.upper() == "MLB") & market_type.str.lower().str.contains(
+        "spread", na=False
+    )
+    # Pick's signed line is embedded in best_pick ("Pittsburgh -1.5", "Colorado +1.5");
+    # negative = favorite, positive = underdog. No MLB team name contains a number.
+    pick_line = pd.to_numeric(
+        best_pick.astype(str).str.extract(r"([+-]?\d+(?:\.\d+)?)", expand=False),
+        errors="coerce",
+    )
+    return (
+        spread_model.mask(is_mlb_spread & (pick_line < 0), spread_model - band)
+        .mask(is_mlb_spread & (pick_line > 0), spread_model + band)
+        .clip(0.02, 0.98)
+    )
+
+
 def _shrink_to_market(model_prob: pd.Series, market_prob: pd.Series, model_weight: float | pd.Series = 0.35) -> pd.Series:
     """Shrink model probabilities toward market-implied probability to reduce overconfidence."""
     model = pd.to_numeric(model_prob, errors="coerce")
@@ -5937,6 +5970,22 @@ def run_analysis_pipeline(
 
     market_type = _string_series(merged, "market_type").str.lower()
     spread_model = ml_probability.where(ml_probability.notna(), theover_probability)
+
+    # Run lines pay on the MARGIN, not the win: convert moneyline P(win) -> P(cover +-1.5)
+    # for MLB spreads (see _apply_mlb_runline_cover / weights_config). 19 Jun: Pittsburgh
+    # -1.5 carried P(win)=0.54 as its cover prob and lost outright.
+    from app_core.weights_config import (
+        MLB_RUNLINE_COVER_CONVERSION_ENABLED,
+        MLB_RUNLINE_ONE_RUN_BAND,
+    )
+    if MLB_RUNLINE_COVER_CONVERSION_ENABLED:
+        spread_model = _apply_mlb_runline_cover(
+            spread_model,
+            _string_series(merged, "league"),
+            market_type,
+            _string_series(merged, "best_pick"),
+            MLB_RUNLINE_ONE_RUN_BAND,
+        )
 
     # Non-MLB totals: pre-mix TheOver (60%) + ML (40%) since TheOver adds context ML lacks.
     # MLB totals: use pure ML — TheOver is passed separately to compute_blended_probability
