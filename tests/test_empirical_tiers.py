@@ -28,6 +28,31 @@ STATS = {
 }
 
 
+def _line_provenance_row(blocker):
+    return pd.DataFrame({
+        "league": ["MLB"], "market_type": ["total_under"],
+        "consensus_agreement": ["Agrees"], "best_pick": ["Under 8.0"],
+        "Pick_Status": ["High Variance/Speculative"], "Status_Reason": ["recovered"],
+        "status_blocker_stage": [blocker],
+        "effective_win_probability": [0.66], "odds_american": [-110],
+    })
+
+
+def test_overlay_does_not_promote_line_provenance_rows():
+    # 21 Jun Miami Over 8.0: a live-rejected row recovered to the uploaded line still
+    # carries corrupt odds / a wrong-game Kalshi match, so the overlay must NOT re-promote
+    # it to Actionable off a bogus edge — even in a proven bucket (under:Agrees 60%).
+    out = assign_empirical_tiers(_line_provenance_row("line_provenance"), STATS, calibration=None)
+    assert out.iloc[0]["Pick_Status"] != "Actionable"
+
+
+def test_overlay_still_promotes_clean_proven_bucket_row():
+    # Control: identical numbers WITHOUT the line-provenance flag still promote, so the
+    # guard above is the line-provenance check, not a broken bucket path.
+    out = assign_empirical_tiers(_line_provenance_row("x"), STATS, calibration=None)
+    assert out.iloc[0]["Pick_Status"] == "Actionable"
+
+
 def test_bucket_key_normalization():
     assert bucket_key("mlb", "total_over", "Agrees") == "MLB:over:Agrees"
     assert bucket_key("MLB", "total_under", "Disagrees") == "MLB:under:Disagrees"

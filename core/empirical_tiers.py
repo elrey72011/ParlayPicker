@@ -77,8 +77,14 @@ ACTIONABLE_EARNED_MIN_CALIBRATED_EDGE = 0.0
 # (19 Jun: Miami Over 8.0 re-promoted to Actionable while the mid-line-Over gate flagged
 # the Under as the edge side, n=43). Rows carrying one of these blocker stages are left as
 # demoted. Empty set disables.
+#
+# "line_provenance" added 21 Jun: a row whose live line was rejected and recovered to the
+# uploaded reference still carries the CORRUPT live odds (and sometimes a wrong-game Kalshi
+# match), so its edge/EV is unreliable. The overlay was promoting such a row to Actionable
+# S-Tier off a bogus Kalshi 91% (Miami Over 8.0, +265, Kalshi market titled for a different
+# game). A line-provenance-flagged row must never be re-promoted, only displayed as demoted.
 EDGE_NO_STAKE_BLOCKER_STAGES = frozenset(
-    {"mlb_over_mid_line_no_stake", "mlb_total_neutral_no_stake"}
+    {"mlb_over_mid_line_no_stake", "mlb_total_neutral_no_stake", "line_provenance"}
 )
 
 
