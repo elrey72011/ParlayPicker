@@ -977,6 +977,25 @@ def _infer_row_league(league: Any, home_team: Any, away_team: Any) -> str:
     return ""
 
 
+def kalshi_total_spread_price_extreme(prob, market_type) -> bool:
+    """True when a TOTAL / run-line Kalshi price is implausibly extreme.
+
+    Books set totals and run lines near pick'em, so a de-vigged Kalshi price at near-
+    certainty (outside [KALSHI_TOTAL_SPREAD_MIN_PROB, MAX]) is a settled/illiquid/mis-
+    scraped market, not a confident read (20 Jun: "over 12.5 runs" at 0.995). Moneyline
+    is exempt — heavy favorites/dogs legitimately price near the edges.
+    """
+    if prob is None or pd.isna(prob):
+        return False
+    mt = str(market_type).lower()
+    if "moneyline" in mt or "h2h" in mt:
+        return False
+    if not ("total" in mt or "spread" in mt):
+        return False
+    from app_core.weights_config import KALSHI_TOTAL_SPREAD_MIN_PROB, KALSHI_TOTAL_SPREAD_MAX_PROB
+    return not (KALSHI_TOTAL_SPREAD_MIN_PROB <= float(prob) <= KALSHI_TOTAL_SPREAD_MAX_PROB)
+
+
 def orient_spread_kalshi_prob(raw_prob, subject_is_home, pick_is_home, pick_line):
     """P(pick covers) from a run-line contract "S wins by over L" (raw_prob = P(S by >L)).
 
@@ -1521,6 +1540,15 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             if kalshi_prob is None:
                 out.at[idx, "kalshi_match_status"] = "miss"
                 out.at[idx, "kalshi_match_reason"] = "illiquid_market"
+                continue
+
+            # Extreme-price guard: a totals/run-line contract at near-certainty is settled
+            # or illiquid, not a real read. Tight-spread settled markets (bid 0.99/ask 1.00)
+            # slip past the >0.40 spread guard above, so check the price itself.
+            if kalshi_total_spread_price_extreme(kalshi_prob, row.get("market_type")):
+                out.at[idx, "kalshi_match_status"] = "miss"
+                out.at[idx, "kalshi_match_reason"] = "extreme_implausible_price"
+                out.at[idx, "kalshi_probability"] = 0.0
                 continue
 
             from core.team_mapper import normalize_team_name as _global_normalize
