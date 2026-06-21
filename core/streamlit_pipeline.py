@@ -131,7 +131,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-06-21-recovered-row-cleanup"
+PIPELINE_BUILD = "2026-06-21-implausible-total-guard"
 
 
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
@@ -4078,11 +4078,20 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         alt_priced_total = is_total & _total_devig.notna() & ~_total_devig.between(
             MAIN_TOTAL_MIN_DEVIG_PROB, MAIN_TOTAL_MAX_DEVIG_PROB
         )
-        suspicious_total = (raw_suspicious_total & ~plausible_live_total) | alt_priced_total
+        # A live total OUTSIDE the league's plausible range is a bad read on its OWN value,
+        # even with no uploaded reference to diverge from (21 Jun: Arizona "Over 3.5" -- a 3.5
+        # MLB total with no upload -- headlined the card). Gated to leagues with a known range
+        # so a league without a defined range is never flagged.
+        _known_total_league = league_norm.isin(["MLB", "NHL", "NBA", "NCAAB", "NFL", "NCAAF"])
+        implausible_live_total = (
+            is_total & raw_live_total_line.notna() & _known_total_league & ~plausible_live_total
+        )
+        suspicious_total = (raw_suspicious_total & ~plausible_live_total) | alt_priced_total | implausible_live_total
         if diagnostics_out is not None:
             diagnostics_out["live_total_deviation_count"] = int(raw_suspicious_total.sum())
             diagnostics_out["live_total_trusted_plausible_count"] = int((raw_suspicious_total & plausible_live_total).sum())
             diagnostics_out["alt_priced_total_count"] = int(alt_priced_total.sum())
+            diagnostics_out["implausible_live_total_count"] = int(implausible_live_total.sum())
         suspicious_line = suspicious_spread | suspicious_total
         best.loc[suspicious_line, "line_consistency_flag"] = False
         best.loc[suspicious_line, "line_consistency_reason"] = best.loc[suspicious_line, "line_consistency_reason"].replace("", "suspicious_live_line_delta")
