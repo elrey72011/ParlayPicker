@@ -131,7 +131,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-06-21-line-provenance-no-promote"
+PIPELINE_BUILD = "2026-06-21-recovered-row-cleanup"
 
 
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
@@ -926,6 +926,42 @@ def _apply_mlb_runline_cover(
         .mask(is_mlb_spread & (pick_line > 0), spread_model + band)
         .clip(0.02, 0.98)
     )
+
+
+def _neutralize_recovered_row_value(df: pd.DataFrame) -> pd.DataFrame:
+    """Make upload-fallback-after-rejected-live rows honest in the export.
+
+    A recovered row swapped its line to the uploaded reference but KEPT the rejected live
+    odds (priced for the bad alt line), so its EV/edge are a line/odds mismatch -- a fake
+    number (21 Jun: Houston 'Over 8.5' showed +56% EV on +365 odds that belonged to the
+    rejected 3.5 line). Zero those fields and sort recovered rows to the BOTTOM of their
+    status tier so one can't display a fake edge or sit atop the card. Status and zero
+    stake are untouched.
+    """
+    if df is None or df.empty or "market_line_source_detail" not in df.columns:
+        return df
+    df = df.copy()
+    rec = df["market_line_source_detail"].astype(str).eq("upload_total_fallback_after_rejected_live")
+    if not rec.any():
+        return df
+    for c in ("expected_value", "edge", "effective_expected_value", "effective_edge",
+              "production_expected_value", "production_edge"):
+        if c in df.columns:
+            df.loc[rec, c] = 0.0
+    status_order = ["Actionable", "High Variance/Speculative", "Below Threshold",
+                    "Fallback / Low Confidence", "No Play", "Missing Line"]
+    df["_so"] = pd.Categorical(df["Pick_Status"].astype(str).str.strip(), categories=status_order, ordered=True)
+    df["_recflag"] = rec.astype(int).to_numpy()  # recovered rows sort last within a tier
+    df["_rk"] = pd.to_numeric(df.get("Triple_Filter_Rank"), errors="coerce")
+    df["_ev"] = pd.to_numeric(df["expected_value"], errors="coerce")
+    df = (
+        df.sort_values(["_so", "_recflag", "_rk", "_ev"], ascending=[True, True, True, False], na_position="last")
+        .drop(columns=["_so", "_recflag", "_rk", "_ev"])
+        .reset_index(drop=True)
+    )
+    if "parlay_rank" in df.columns:
+        df["parlay_rank"] = range(1, len(df) + 1)
+    return df
 
 
 def _enforce_moneyline_parlay_only(best: pd.DataFrame) -> pd.DataFrame:
@@ -4774,6 +4810,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     from app_core.weights_config import ENABLE_MONEYLINE_PARLAY_LEGS
     if ENABLE_MONEYLINE_PARLAY_LEGS:
         final_best_df = _enforce_moneyline_parlay_only(final_best_df)
+
+    # Recovered (rejected-live -> uploaded line) rows carry mismatched odds; zero their
+    # fake EV and drop them to the bottom of their tier so they can't headline the card.
+    final_best_df = _neutralize_recovered_row_value(final_best_df)
 
     return final_best_df
 
