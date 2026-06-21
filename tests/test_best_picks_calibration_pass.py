@@ -1058,9 +1058,11 @@ def test_negative_value_guardrail_diagnostics_and_positive_upload_fallback_regre
     df["uploaded_total_line"] = [5.5, 5.5]
     df["upload_total_line"] = [5.5, 5.5]
 
-    out = build_best_picks_df(df, diagnostics_out=diagnostics).sort_values("expected_value")
-    neg_row = out.iloc[0]
-    pos_row = out.iloc[1]
+    # Recovered rows now carry zeroed EV (their odds are unreliable), so the negative vs
+    # positive rows can no longer be told apart by expected_value -- select by team instead.
+    out = build_best_picks_df(df, diagnostics_out=diagnostics)
+    neg_row = out[out["home_team"] == "Home905"].iloc[0]
+    pos_row = out[out["home_team"] == "Home906"].iloc[0]
 
     assert neg_row["Pick_Status"] == "No Play"
     assert float(neg_row["Kelly_Bet_Size"]) == 0.0
