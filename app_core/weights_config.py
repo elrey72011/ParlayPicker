@@ -615,3 +615,16 @@ WEATHER_TOTAL_OVER_PENALTY = 0.025           # MLB outdoor bad weather suppresse
 # favorites/dogs legitimately price near the edges.
 KALSHI_TOTAL_SPREAD_MIN_PROB = 0.05
 KALSHI_TOTAL_SPREAD_MAX_PROB = 0.95
+
+# --- Moneyline parlay legs (21 Jun, user-directed) ----------------------------
+# Moneyline is the model's NATIVE output (XGBoost predicts P(win) directly, no margin/
+# cover conversion). Opened up as PARLAY-ONLY legs: they never surface as standalone
+# single bets, only combine into parlays. Off by default -- a core-pipeline change, so it
+# ships gated and is enabled deliberately. Moneyline has almost no graded history yet, so
+# it starts uncalibrated; parlay-only keeps it from drawing single stakes while it builds
+# a track record. Odds capped to a sane range (heavy favorites = low value / poor parlay
+# legs; longshots = variance) and a real edge over the implied price is required.
+ENABLE_MONEYLINE_PARLAY_LEGS = False
+MONEYLINE_PARLAY_MIN_ODDS = -250
+MONEYLINE_PARLAY_MAX_ODDS = 250
+MONEYLINE_PARLAY_MIN_EDGE = 0.03
