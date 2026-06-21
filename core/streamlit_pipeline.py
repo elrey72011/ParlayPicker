@@ -131,7 +131,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-06-20-altline-price-guard"
+PIPELINE_BUILD = "2026-06-20-extreme-divergence-guard"
 
 
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
@@ -3976,7 +3976,13 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         # Only a garbage live value falls through to the reject / upload-fallback path.
         # Ranges mirror the upload-plausibility ranges used in the recovery step below.
         plausible_live_total = (
-            (league_norm.eq("MLB") & raw_live_total_line.between(5.5, 13.5, inclusive="both"))
+            # MLB ceiling tightened 13.5 -> 13.0 (20 Jun): a live total >13.0 is an extreme
+            # outlier (real main totals top out ~12-13, even at Coors), so when it ALSO
+            # diverges materially from the reference it's treated as a bad read rather than
+            # trusted. Caught the Cubs "Over 13.5" (live 13.5 vs uploaded 9.0, +285) that
+            # was otherwise force-staked $750. A plausible mid-range live total (e.g. NHL
+            # 5.5 vs a stale 8.5 upload) still re-resolves to the current live line.
+            (league_norm.eq("MLB") & raw_live_total_line.between(5.5, 13.0, inclusive="both"))
             | (league_norm.eq("NHL") & raw_live_total_line.between(4.5, 8.5, inclusive="both"))
             | (league_norm.eq("NBA") & raw_live_total_line.between(185, 255, inclusive="both"))
             | (league_norm.eq("NCAAB") & raw_live_total_line.between(115, 175, inclusive="both"))
