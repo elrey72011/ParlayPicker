@@ -109,7 +109,7 @@ except Exception as e:
     ML_AVAILABLE = False
     PredictionEngine = None
 
-VALID_MARKETS = {"spread_home", "spread_away", "total_over", "total_under"}
+VALID_MARKETS = {"spread_home", "spread_away", "total_over", "total_under", "moneyline_home", "moneyline_away"}
 DATE_ALIASES = ["game_date", "game_date_est", "commence_time", "start_time", "time", "date", "event_date"]
 LEAGUE_ALIASES = {"NCAAM": "NCAAB", "NCAA MEN'S BASKETBALL": "NCAAB", "NCAA MENS BASKETBALL": "NCAAB"}
 _KNOWN_NCAAB_TEAM_TOKENS = {
@@ -131,7 +131,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-06-21-kalshi-extreme-guard"
+PIPELINE_BUILD = "2026-06-21-moneyline-parlay-legs"
 
 
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
@@ -926,6 +926,46 @@ def _apply_mlb_runline_cover(
         .mask(is_mlb_spread & (pick_line > 0), spread_model + band)
         .clip(0.02, 0.98)
     )
+
+
+def _enforce_moneyline_parlay_only(best: pd.DataFrame) -> pd.DataFrame:
+    """Moneyline picks are PARLAY-ONLY: never staked as singles, and only legs that clear
+    the odds-range + edge gate stay parlay-eligible (others -> No Play). Hard-forces zero
+    single stake regardless of tier, so even a future-calibrated moneyline can't draw a
+    single bet without an explicit policy change.
+    """
+    from app_core.moneyline_parlay import moneyline_leg_eligible
+
+    if best is None or best.empty or "market_type" not in best.columns:
+        return best
+    ml_mask = best["market_type"].astype(str).str.lower().str.contains("moneyline", na=False)
+    if not ml_mask.any():
+        return best
+    if "parlay_only" not in best.columns:
+        best["parlay_only"] = False
+    prob = pd.to_numeric(
+        best.get("effective_win_probability", best.get("WinProbability")), errors="coerce"
+    )
+    odds = pd.to_numeric(best.get("odds_american"), errors="coerce")
+    for idx in best.index[ml_mask]:
+        res = moneyline_leg_eligible(prob.get(idx), odds.get(idx))
+        best.at[idx, "parlay_only"] = True
+        best.at[idx, "Kelly_Bet_Size"] = 0.0
+        if "production_eligible" in best.columns:
+            best.at[idx, "production_eligible"] = False
+        if not res["eligible"]:
+            best.at[idx, "Pick_Status"] = "No Play"
+            best.at[idx, "Status_Reason"] = f"No Play (moneyline parlay gate): {res['reason']}"
+            if "status_blocker_stage" in best.columns:
+                best.at[idx, "status_blocker_stage"] = "moneyline_parlay_gate"
+        else:
+            # Eligible parlay leg -> force a parlay-eligible, non-single status. The singles
+            # threshold gates (e.g. side-minimum 53%) judge SINGLE bets and would bench a
+            # legit +150 value dog; a moneyline leg is judged by this odds/edge gate and the
+            # parlay engine instead. High Variance keeps it a leg, never a single (Kelly 0).
+            best.at[idx, "Pick_Status"] = "High Variance/Speculative"
+            best.at[idx, "Status_Reason"] = f"Parlay leg only: {res['reason']}"
+    return best
 
 
 def _shrink_to_market(model_prob: pd.Series, market_prob: pd.Series, model_weight: float | pd.Series = 0.35) -> pd.Series:
@@ -4731,6 +4771,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             "preview_df": preview_df,
         }
 
+    from app_core.weights_config import ENABLE_MONEYLINE_PARLAY_LEGS
+    if ENABLE_MONEYLINE_PARLAY_LEGS:
+        final_best_df = _enforce_moneyline_parlay_only(final_best_df)
+
     return final_best_df
 
 
@@ -4971,8 +5015,8 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
 
     # Diagnostic counters
     diag_counts = {
-        "generated": {"spread_home": 0, "spread_away": 0, "total_over": 0, "total_under": 0},
-        "filtered": {"spread_home": 0, "spread_away": 0, "total_over": 0, "total_under": 0},
+        "generated": {"spread_home": 0, "spread_away": 0, "total_over": 0, "total_under": 0, "moneyline_home": 0, "moneyline_away": 0},
+        "filtered": {"spread_home": 0, "spread_away": 0, "total_over": 0, "total_under": 0, "moneyline_home": 0, "moneyline_away": 0},
         "games_unmatched": 0,
         "games_matched_exact": 0,
         "games_matched_canonical": 0,
@@ -5036,6 +5080,11 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
 
         # All leagues use spreads and totals
         candidate_markets = ["spread_home", "spread_away", "total_over", "total_under"]
+        # Moneyline is the model's native output (ml_probability already = P(win)); opened
+        # up as PARLAY-ONLY legs behind a flag. Priced off the already-fetched h2h odds.
+        from app_core.weights_config import ENABLE_MONEYLINE_PARLAY_LEGS
+        if ENABLE_MONEYLINE_PARLAY_LEGS:
+            candidate_markets = candidate_markets + ["moneyline_home", "moneyline_away"]
 
         for m in candidate_markets:
             diag_counts["generated"][m] += 1
@@ -5045,6 +5094,9 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
             "spread_away": ("away_price", "away_point"),
             "total_over": ("over_price", "over_point"),
             "total_under": ("under_price", "under_point"),
+            # Moneyline has no line (point_suffix None); price is the h2h side price.
+            "moneyline_home": ("h2h_home_price", None),
+            "moneyline_away": ("h2h_away_price", None),
         }
 
         # Check for matches in the uploaded file
@@ -5145,7 +5197,9 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
 
 
         for market_type in candidate_markets:
-            if match_found and market_type not in target_markets:
+            # Moneyline legs come from the live h2h feed, never the TheOver upload, so the
+            # upload-target filter must not drop them on matched games.
+            if match_found and market_type not in target_markets and not market_type.startswith("moneyline"):
                 diag_counts["rows_dropped_by_join"] += 1
                 continue # Skip markets not in the uploaded target set if we found a match
 
@@ -6036,6 +6090,14 @@ def run_analysis_pipeline(
         index=merged.index,
         dtype="float64",
     )
+    # Moneyline is the model's NATIVE output: ml_probability already = P(pick team wins)
+    # (oriented to home/away upstream in prediction_engine), so use it as-is -- no run-line
+    # cover conversion, no totals blend. Falls back to total_model only if ML is missing.
+    is_moneyline = market_type.str.contains("moneyline", case=False, na=False)
+    if is_moneyline.any():
+        model_probability = model_probability.mask(
+            is_moneyline, ml_probability.where(ml_probability.notna(), model_probability)
+        )
 
     # Apply lowercase for clean fuzzy matching right before returning
     # merged['home_team'] = merged['home_team'].astype(str).str.lower()
