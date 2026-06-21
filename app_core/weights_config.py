@@ -572,7 +572,12 @@ NON_ACTIONABLE_BELOW_THRESHOLD_MAX_PICK_PCT = 0.010  # 1% cap for Below Threshol
 # slate_direction_imbalance) and picks without a clean live line still stake $0.
 # This is an explicit, aggressive override of fractional-Kelly discipline; set
 # DAILY_STAKE_FORCE_DEPLOY = False to restore normal Kelly sizing.
-DAILY_STAKE_FORCE_DEPLOY = True
+#
+# Turned OFF 20 Jun: on no-edge slates it hunted for the least-bad row and force-staked
+# it -- e.g. $750 on a corrupt-data "Cubs Over 13.5" -- which is exactly the posture that
+# cost the 19 Jun card. With it off, empty/weak slates stake $0 and only genuine edges
+# get normal fractional-Kelly stakes. Re-enable by setting this True.
+DAILY_STAKE_FORCE_DEPLOY = False
 DAILY_STAKE_BUDGET = 5000.0
 ACTIONABLE_STAKE_SHARE = 0.60
 # Concentration controls — keep a thin/weak slate from dumping a whole tier budget

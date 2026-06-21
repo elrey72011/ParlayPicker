@@ -1133,3 +1133,26 @@ def test_juiced_but_real_main_total_not_alt_rejected():
     row = build_best_picks_df(df).iloc[0]
     assert str(row["market_line_source_detail"]) != "upload_total_fallback_after_rejected_live"
     assert str(row["status_blocker_stage"]) != "line_provenance"
+
+
+def test_extreme_live_total_divergence_rejected_even_when_in_range():
+    # 20 Jun Cubs landmine: live total 13.5 vs uploaded 9.0 (4.5-run gap), force-staked
+    # $750 on Over 13.5. At -160 (de-vig 0.60) the alt-price guard missed it; the fix is
+    # the tightened MLB live-plausibility ceiling (13.5 > 13.0 = outlier) so the material
+    # divergence is no longer exempted -> rejected to the uploaded reference, losing
+    # live-source status so the force-deploy data-safety gate skips it ($0).
+    df = pd.DataFrame([_row(idx=981, league="MLB", market_type="total_over",
+                            win_prob=0.716, ev=0.16, edge=0.12, kalshi_probability=0.797)])
+    df["odds_american"] = [-160]
+    df["market_probability"] = [0.596]
+    df["best_pick"] = ["Over 13.5"]
+    df["total_line"] = [13.5]
+    df["live_total_line"] = [13.5]
+    df["uploaded_total_line"] = [9.0]
+    df["upload_total_line"] = [9.0]
+    row = build_best_picks_df(df).iloc[0]
+    assert float(row["market_line_used"]) == 9.0
+    assert row["best_pick"] == "Over 9.0"
+    assert str(row["market_line_source"]) != "live"          # force-deploy requires live source
+    assert str(row["line_provenance_warning"]) != ""         # ...and an empty provenance warning
+    assert float(row["Kelly_Bet_Size"]) == 0.0

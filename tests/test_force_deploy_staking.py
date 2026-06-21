@@ -11,15 +11,25 @@ import os
 import sys
 
 import pandas as pd
+import pytest
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from core.streamlit_pipeline import optimize_portfolio_allocation
+from app_core import weights_config
 from app_core.weights_config import (
     DAILY_STAKE_BUDGET,
     ACTIONABLE_STAKE_SHARE,
     FORCE_DEPLOY_MAX_PICK_PCT,
 )
+
+
+@pytest.fixture(autouse=True)
+def _enable_force_deploy(monkeypatch):
+    # Production default is now DAILY_STAKE_FORCE_DEPLOY=False (turned off 20 Jun after it
+    # force-staked corrupt-data rows on no-edge slates). These tests validate the
+    # force-deploy LOGIC for when it is explicitly re-enabled, so switch it on here.
+    monkeypatch.setattr(weights_config, "DAILY_STAKE_FORCE_DEPLOY", True)
 
 MAX_PICK = DAILY_STAKE_BUDGET * FORCE_DEPLOY_MAX_PICK_PCT  # $750 on a $5000 budget
 
