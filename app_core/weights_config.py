@@ -604,3 +604,14 @@ FORCE_DEPLOY_NONACTIONABLE_CONSENSUS = ("Agrees", "Neutral")
 INJURY_PROB_PENALTY_PER_KEY_PLAYER = 0.015   # 1.5% per key player out
 INJURY_KEY_PLAYER_THRESHOLD = 1              # minimum injuries to trigger adjustment
 WEATHER_TOTAL_OVER_PENALTY = 0.025           # MLB outdoor bad weather suppresses overs by 2.5%
+
+# --- Kalshi extreme-price guard (21 Jun) --------------------------------------
+# A pre-game TOTAL or run-line (SPREAD) Kalshi contract priced at a de-vigged near-
+# certainty is a settled/illiquid/mis-scraped market, not a confident read. 20 Jun: a
+# "Total Runs over 12.5" contract sat at yes_bid 0.99 / yes_ask 1.00 (mid 0.995) -- a
+# TIGHT spread, so the >0.40 illiquidity guard missed it -- and that 0.995 inflated a
+# blend to a fake 0.72 win prob behind the $750 Cubs landmine. Drop the Kalshi signal
+# when a totals/spread price falls outside this band. Moneyline is EXEMPT: heavy
+# favorites/dogs legitimately price near the edges.
+KALSHI_TOTAL_SPREAD_MIN_PROB = 0.05
+KALSHI_TOTAL_SPREAD_MAX_PROB = 0.95
