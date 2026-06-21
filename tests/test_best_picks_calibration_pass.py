@@ -16,6 +16,12 @@ def _row(
 ):
     home = f"Home{idx}"
     away = f"Away{idx}"
+    # League-appropriate placeholder total so the implausible-live-total guard (a live total
+    # outside the league's range is a bad read) doesn't reject fixtures using a default line.
+    _lt = (
+        {"MLB": 8.5, "NHL": 6.5, "NBA": 220.5, "NCAAB": 145.0, "NFL": 45.0, "NCAAF": 55.0}.get(str(league).upper(), 220.5)
+        if "total" in market_type else pd.NA
+    )
     return {
         "league": league,
         "home_team": home,
@@ -30,7 +36,7 @@ def _row(
         "model_probability": win_prob,
         "odds_american": -110,
         "spread_line": -3.5 if "spread" in market_type else pd.NA,
-        "total_line": 220.5 if "total" in market_type else pd.NA,
+        "total_line": _lt,
         # Live-line provenance. build_best_picks_df now requires a trusted live line
         # (line_source containing "live" AND a numeric live_*_line) or it rejects the
         # row as "suspicious live line" -> No Play. Supply that here so these calibration
@@ -38,7 +44,7 @@ def _row(
         # that specifically exercise provenance override line_source (e.g. "synthetic").
         "line_source": "live",
         "live_spread_line": -3.5 if "spread" in market_type else pd.NA,
-        "live_total_line": 220.5 if "total" in market_type else pd.NA,
+        "live_total_line": _lt,
         "is_live_data": True,
         "used_stale_features": False,
         "odds_source": "odds_api",
@@ -1158,3 +1164,29 @@ def test_extreme_live_total_divergence_rejected_even_when_in_range():
     assert str(row["market_line_source"]) != "live"          # force-deploy requires live source
     assert str(row["line_provenance_warning"]) != ""         # ...and an empty provenance warning
     assert float(row["Kelly_Bet_Size"]) == 0.0
+
+
+def test_implausible_live_total_without_upload_is_rejected():
+    # 21 Jun Arizona "Over 3.5": a 3.5 MLB total with NO uploaded reference to diverge from
+    # is a bad live read on its own value -> rejected (No Play), not headlining the card.
+    df = pd.DataFrame([_row(idx=991, league="MLB", market_type="total_over",
+                            win_prob=0.61, ev=0.11, edge=0.08, kalshi_probability=0.68)])
+    df["line_source"] = "live_matched"
+    df["live_total_line"] = [3.5]
+    df["total_line"] = [3.5]
+    df["best_pick"] = ["Over 3.5"]
+    row = build_best_picks_df(df).iloc[0]
+    assert row["Pick_Status"] == "No Play"
+    assert str(row["market_line_source"]) == "rejected_live"
+
+
+def test_plausible_live_total_without_upload_is_kept():
+    # Control: a plausible MLB total (8.5) with no upload is NOT flagged by the value check.
+    df = pd.DataFrame([_row(idx=992, league="MLB", market_type="total_over",
+                            win_prob=0.61, ev=0.08, edge=0.06, kalshi_probability=0.56)])
+    df["line_source"] = "live_matched"
+    df["live_total_line"] = [8.5]
+    df["total_line"] = [8.5]
+    df["best_pick"] = ["Over 8.5"]
+    row = build_best_picks_df(df).iloc[0]
+    assert str(row["market_line_source"]) == "live"
