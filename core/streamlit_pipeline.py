@@ -131,7 +131,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-06-21-implausible-total-guard"
+PIPELINE_BUILD = "2026-06-22-runline-cover-fix"
 
 
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
@@ -899,7 +899,7 @@ def _apply_mlb_runline_cover(
     spread_model: pd.Series,
     league: pd.Series,
     market_type: pd.Series,
-    best_pick: pd.Series,
+    pick_line: pd.Series,
     band: float,
 ) -> pd.Series:
     """Convert an MLB run-line pick's moneyline P(win) into P(cover +-1.5).
@@ -911,19 +911,19 @@ def _apply_mlb_runline_cover(
     favorite (pick line < 0) cover = P(win) - band; dog (pick line > 0) = P(win) + band.
     The shift is symmetric, so the two sides of a game still sum to 1 (no push on +-1.5).
     Non-MLB and non-spread rows pass through unchanged.
+
+    ``pick_line`` is the pick's SIGNED run line (the ``spread_line`` column: negative =
+    favorite, positive = underdog). It must be a column populated at call time -- an earlier
+    version read the sign from ``best_pick``, which is built downstream and was empty here,
+    so the conversion silently never fired.
     """
     is_mlb_spread = (league.str.upper() == "MLB") & market_type.str.lower().str.contains(
         "spread", na=False
     )
-    # Pick's signed line is embedded in best_pick ("Pittsburgh -1.5", "Colorado +1.5");
-    # negative = favorite, positive = underdog. No MLB team name contains a number.
-    pick_line = pd.to_numeric(
-        best_pick.astype(str).str.extract(r"([+-]?\d+(?:\.\d+)?)", expand=False),
-        errors="coerce",
-    )
+    pl = pd.to_numeric(pick_line, errors="coerce")
     return (
-        spread_model.mask(is_mlb_spread & (pick_line < 0), spread_model - band)
-        .mask(is_mlb_spread & (pick_line > 0), spread_model + band)
+        spread_model.mask(is_mlb_spread & (pl < 0), spread_model - band)
+        .mask(is_mlb_spread & (pl > 0), spread_model + band)
         .clip(0.02, 0.98)
     )
 
@@ -6111,7 +6111,7 @@ def run_analysis_pipeline(
             spread_model,
             _string_series(merged, "league"),
             market_type,
-            _string_series(merged, "best_pick"),
+            _numeric_series(merged, "spread_line"),
             MLB_RUNLINE_ONE_RUN_BAND,
         )
 
