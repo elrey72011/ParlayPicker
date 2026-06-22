@@ -511,18 +511,28 @@ DEGRADED_FEATURE_MAX_PICK_EXPOSURE_PCT = 0.02
 ALLOW_EMPTY_CARD_RECOVERY = True
 ENABLE_EMPTY_CARD_RECOVERY = True
 EMPTY_CARD_RECOVERY_MAX_PICKS = 2
-EMPTY_CARD_RECOVERY_MIN_PRODUCTION_EV = 0.07
-EMPTY_CARD_RECOVERY_MIN_PRODUCTION_EDGE = 0.05
-EMPTY_CARD_RECOVERY_MIN_PRODUCTION_WIN_PROB = 0.57
+# Speculative-lean tuning (22 Jun, user-directed): when the card is otherwise empty, surface
+# the best CLEAN positive-EV near-miss at SMALL size for daily action. The user accepted that
+# these thin edges bleed slowly to the vig; harm is limited by (a) positive EV/edge required,
+# (b) win-prob floor 0.50 (no outright dogs), (c) consensus must NOT be Disagrees -- never bet
+# AGAINST Kalshi, the losing bucket, (d) small Kelly caps below, (e) overs still excluded
+# (they bleed worst). Raise these back toward 0.07/0.05/0.57 to return to strict no-play.
+EMPTY_CARD_RECOVERY_MIN_PRODUCTION_EV = 0.02
+EMPTY_CARD_RECOVERY_MIN_PRODUCTION_EDGE = 0.02
+EMPTY_CARD_RECOVERY_MIN_PRODUCTION_WIN_PROB = 0.50
 EMPTY_CARD_RECOVERY_EXCLUDE_MARKET_TYPES = []
 EMPTY_CARD_RECOVERY_EXCLUDE_SOURCES = ["rejected_live"]
-EMPTY_CARD_RECOVERY_MAX_KELLY_TOTAL_PCT = 0.05
-EMPTY_CARD_RECOVERY_MAX_KELLY_PER_PICK_PCT = 0.025
+# Stake kept small because these are thin/speculative edges, not vetted Actionable plays.
+EMPTY_CARD_RECOVERY_MAX_KELLY_TOTAL_PCT = 0.03
+EMPTY_CARD_RECOVERY_MAX_KELLY_PER_PICK_PCT = 0.015
+# Consensus gate for speculative-lean recovery: only Agrees/Neutral picks. A "Disagrees"
+# pick means Kalshi backs the other side (the graded-loser bucket), so it is never recovered.
+EMPTY_CARD_RECOVERY_CONSENSUS = ("Agrees", "Neutral")
 ALLOW_MLB_TOTAL_OVER_EMPTY_CARD_RECOVERY = False
-# MLB unders bypassed the Actionable cap via empty card recovery on May-18
-# (NYY/TOR Under 8.5 and CHC/MIL Under 10.5 promoted despite MLB_UNDER_ACTIONABLE_CAP).
-# Block MLB unders from recovery just as overs are blocked above.
-ALLOW_MLB_TOTAL_UNDER_EMPTY_CARD_RECOVERY = False
+# Unders re-allowed into speculative recovery 22 Jun (user-directed thin-edge action): the
+# under side is the data-supported one (under:Agrees 61%), and the small-stake + positive-EV
+# + not-Disagrees guards above limit the downside. Overs stay blocked (they bleed worst).
+ALLOW_MLB_TOTAL_UNDER_EMPTY_CARD_RECOVERY = True
 
 # NHL Under Actionable cap bypass prevention — same pattern as MLB unders.
 # Block NHL unders from being promoted by empty card recovery despite the cap.

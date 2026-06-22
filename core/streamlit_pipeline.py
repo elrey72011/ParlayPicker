@@ -131,7 +131,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-06-22-runline-cover-fix"
+PIPELINE_BUILD = "2026-06-22-speculative-lean"
 
 
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
@@ -4522,6 +4522,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         EMPTY_CARD_RECOVERY_MIN_PRODUCTION_WIN_PROB,
         EMPTY_CARD_RECOVERY_EXCLUDE_MARKET_TYPES,
         EMPTY_CARD_RECOVERY_EXCLUDE_SOURCES,
+        EMPTY_CARD_RECOVERY_CONSENSUS,
         EMPTY_CARD_RECOVERY_MAX_KELLY_PER_PICK_PCT,
         EMPTY_CARD_RECOVERY_MAX_KELLY_TOTAL_PCT,
         ALLOW_MLB_TOTAL_OVER_EMPTY_CARD_RECOVERY,
@@ -4563,6 +4564,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 & pd.to_numeric(best.get("effective_edge"), errors="coerce").ge(EMPTY_CARD_RECOVERY_MIN_PRODUCTION_EDGE)
                 & pd.to_numeric(best.get("effective_win_probability"), errors="coerce").ge(EMPTY_CARD_RECOVERY_MIN_PRODUCTION_WIN_PROB)
                 & ~best.get("suspicious_data_flag", pd.Series(False, index=best.index)).fillna(False).astype(bool)
+                & best.get("consensus_agreement", pd.Series("", index=best.index)).astype(str).isin(
+                    list(EMPTY_CARD_RECOVERY_CONSENSUS)
+                )
             )
             if not ALLOW_MLB_TOTAL_OVER_EMPTY_CARD_RECOVERY:
                 recovery_mask = recovery_mask & ~is_mlb_total_over
