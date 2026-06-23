@@ -99,9 +99,36 @@ def _run_id_mismatch(exp: pd.DataFrame, rec: pd.DataFrame) -> tuple[str, str] | 
     return None if exp_ids[0] == rec_ids[0] else (exp_ids[0], rec_ids[0])
 
 
+def _clean_line_keys(exp: pd.DataFrame) -> set[tuple[str, str, str]]:
+    """(Home, Away, best_pick) keys whose EXPORT line passed every provenance/consistency
+    guard. A pick can be "No Play" for two very different reasons: (a) its edge was below
+    the stake threshold on a perfectly good line, or (b) its line was rejected/recovered/
+    suspicious. Case (a) is a valid directional (prediction, outcome) datapoint and belongs
+    in the calibration — excluding it biases the fit toward only the bets we were confident
+    enough to stake. Case (b) must stay excluded: the graded outcome may describe a different
+    bet than the one we'd have placed. This set marks the case-(a) rows so a clean below-stake
+    pick still grades, while corrupt-feed No Play rows (6-19/20/21-style) stay out even if a
+    corrupt slate is ever fed in."""
+    keys: set[tuple[str, str, str]] = set()
+    for _, e in exp.iterrows():
+        pick = _norm(e.get("best_pick"))
+        if not pick or "unresolved" in pick:
+            continue
+        warn = e.get("line_provenance_warning")
+        if pd.notna(warn) and str(warn).strip():
+            continue
+        consistent = e.get("line_consistency_flag")
+        if "line_consistency_flag" in exp.columns and consistent is not None \
+                and pd.notna(consistent) and not bool(consistent):
+            continue
+        keys.add((_norm(e.get("Home")), _norm(e.get("Away")), pick))
+    return keys
+
+
 def grade(export_csv: Path, recap_csv: Path, out_csv: Path) -> None:
     exp = pd.read_csv(export_csv)
     rec = pd.read_csv(recap_csv)
+    clean_keys = _clean_line_keys(exp)
 
     mismatch = _run_id_mismatch(exp, rec)
     if mismatch:
@@ -122,15 +149,22 @@ def grade(export_csv: Path, recap_csv: Path, out_csv: Path) -> None:
         )
 
     # Recap pick column is "Pick Taken"; outcome is "Outcome".
-    # No Play / Missing Line rows and unresolved-line placeholders are excluded:
-    # they were never stakeable picks, and the 10 Jun recap showed an unresolved
-    # line graded LOSS — phantom losses that poison the calibration fit.
+    # "Missing Line" rows and unresolved-line placeholders are always excluded: they were
+    # never resolvable picks, and the 10 Jun recap showed an unresolved line graded LOSS —
+    # phantom losses that poison the calibration fit. A "No Play" row is excluded ONLY when
+    # its line is not clean (rejected/recovered/suspicious); a No Play that was merely below
+    # the stake threshold on a clean line is a valid directional datapoint and is kept, so
+    # the calibration learns from the full slate, not just the bets we staked.
     def _gradeable(r) -> bool:
         status = str(r.get("Status", "")).strip().lower()
-        if status in ("no play", "missing line"):
+        if status == "missing line":
             return False
         if "unresolved" in _norm(r.get("Pick Taken")):
             return False
+        if status == "no play":
+            key = (_norm(r.get("Home")), _norm(r.get("Away")), _norm(r.get("Pick Taken")))
+            if key not in clean_keys:
+                return False
         # 0-0 finals don't exist in MLB/NBA/NHL — postponed game, void it.
         h = pd.to_numeric(r.get("actual_home_score"), errors="coerce")
         a = pd.to_numeric(r.get("actual_away_score"), errors="coerce")
