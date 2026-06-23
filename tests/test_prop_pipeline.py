@@ -13,10 +13,16 @@ _ACE = {"k_per_9": 11.0, "avg_innings": 6.0, "n_games": 5}
 _SOFT = {"k_per_9": 6.0, "avg_innings": 5.5, "n_games": 5}
 
 
+# Pick'em pricing on a mismatched line produces a large (>cap) synthetic edge; these
+# direction tests disable the implausible-edge cap to isolate the over/under logic. The
+# cap itself is covered by test_implausible_edge_is_suppressed.
+_NO_CAP = dict(max_plausible_edge=1.0)
+
+
 def test_ace_vs_low_line_recommends_over():
     # Ace projected ~7.3 Ks, line 5.5 priced near pick'em -> model loves the over.
     row = {"pitcher": "Ace", "line": 5.5, "over_odds": -110, "under_odds": -110}
-    s = score_strikeout_prop(row, _ACE)
+    s = score_strikeout_prop(row, _ACE, **_NO_CAP)
     assert s["recommendation"] == "over"
     assert s["best_edge"] >= 0.04
     assert s["best_ev"] > 0
@@ -25,7 +31,7 @@ def test_ace_vs_low_line_recommends_over():
 def test_soft_arm_high_line_recommends_under():
     # Soft starter ~3.7 Ks, line 6.5 priced near pick'em -> model loves the under.
     row = {"pitcher": "Soft", "line": 6.5, "over_odds": -110, "under_odds": -110}
-    s = score_strikeout_prop(row, _SOFT)
+    s = score_strikeout_prop(row, _SOFT, **_NO_CAP)
     assert s["recommendation"] == "under"
 
 
@@ -58,7 +64,7 @@ def test_evaluate_uses_lookups():
         {"pitcher": "Soft", "line": 6.5, "over_odds": -110, "under_odds": -110},
     ]
     forms = {"Ace": _ACE, "Soft": _SOFT}
-    scored = evaluate_strikeout_props(props, form_lookup=forms.get)
+    scored = evaluate_strikeout_props(props, form_lookup=forms.get, max_plausible_edge=1.0)
     recs = {r["pitcher"]: r["recommendation"] for r in scored}
     assert recs["Ace"] == "over"
     assert recs["Soft"] == "under"
@@ -66,7 +72,34 @@ def test_evaluate_uses_lookups():
 
 def test_high_k_opponent_raises_projection():
     row = {"pitcher": "Mid", "line": 5.5, "over_odds": -110, "under_odds": -110}
-    mid = {"k_per_9": 8.0, "avg_innings": 5.5}  # ~4.9 Ks neutral
+    mid = {"k_per_9": 8.0, "avg_innings": 5.5, "n_games": 5}  # ~4.9 Ks neutral
     base = score_strikeout_prop(row, mid)["expected_ks"]
     boosted = score_strikeout_prop(row, mid, opponent_k_rate=0.27)["expected_ks"]
     assert boosted > base
+
+
+def test_insufficient_starter_sample_is_no_data():
+    # Opener / thin sample: too few games or a reliever-shaped workload -> not projectable.
+    row = {"pitcher": "Opener", "line": 4.5, "over_odds": -110, "under_odds": -110}
+    thin = {"k_per_9": 9.0, "avg_innings": 1.2, "n_games": 2}  # ~1.2 Ks, opener
+    s = score_strikeout_prop(row, thin)
+    assert s["recommendation"] == "no_data"
+    assert "insufficient starter sample" in s["reason"]
+    assert s["best_edge"] is None
+
+
+def test_low_games_count_is_no_data():
+    row = {"pitcher": "Rookie", "line": 5.5, "over_odds": -110, "under_odds": -110}
+    # Starter-length innings but only one logged start -> sample too thin to trust.
+    one_start = {"k_per_9": 10.0, "avg_innings": 5.5, "n_games": 1}
+    s = score_strikeout_prop(row, one_start)
+    assert s["recommendation"] == "no_data"
+
+
+def test_implausible_edge_is_suppressed():
+    # Ace vs a pick'em-priced low line yields a >12% edge -> projection error, suppressed.
+    row = {"pitcher": "Ace", "line": 5.5, "over_odds": -110, "under_odds": -110}
+    s = score_strikeout_prop(row, _ACE)  # default cap (0.12) active
+    assert s["best_edge"] > 0.12
+    assert s["recommendation"] == "no_play"
+    assert "plausible cap" in s["reason"]
