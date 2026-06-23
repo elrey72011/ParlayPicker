@@ -75,6 +75,48 @@ def team_k_rate_from_stats(stat: dict) -> float | None:
     return k / pa
 
 
+def parse_schedule_probables(schedule_json: dict) -> list[dict]:
+    """Per-game probable starters + team ids from a StatsAPI schedule payload.
+
+    Resolves the strikeout-prop pieces the runner can't get from the Odds API: a pitcher's
+    StatsAPI id (to fetch form) and each team's id (to fetch the opposing-lineup K rate).
+    Returns one row per game with both sides' team id/name and probable-pitcher id/name; a
+    side with no announced starter yet carries ``pitcher_id=None``.
+    """
+    rows: list[dict] = []
+    for day in schedule_json.get("dates", []) if isinstance(schedule_json, dict) else []:
+        for game in day.get("games", []):
+            teams = game.get("teams", {}) if isinstance(game, dict) else {}
+            row: dict = {}
+            ok = True
+            for side in ("home", "away"):
+                blob = teams.get(side, {}) if isinstance(teams, dict) else {}
+                team = blob.get("team", {}) or {}
+                pitcher = blob.get("probablePitcher", {}) or {}
+                if not team.get("name"):
+                    ok = False
+                    break
+                row[f"{side}_team"] = team.get("name")
+                row[f"{side}_team_id"] = team.get("id")
+                row[f"{side}_pitcher"] = pitcher.get("fullName")
+                row[f"{side}_pitcher_id"] = pitcher.get("id")
+            if ok:
+                rows.append(row)
+    return rows
+
+
+def fetch_schedule_probables(date: str, sport_id: int = 1) -> list[dict]:
+    """Fetch the day's MLB schedule with probable pitchers. Returns [] on any failure."""
+    try:
+        url = f"{_BASE}/schedule"
+        params = {"sportId": sport_id, "date": date, "hydrate": "probablePitcher"}
+        resp = requests.get(url, params=params, timeout=_TIMEOUT)
+        resp.raise_for_status()
+        return parse_schedule_probables(resp.json())
+    except (requests.RequestException, ValueError, KeyError, IndexError):
+        return []
+
+
 def fetch_pitcher_form(pitcher_id: int, season: int, last_n: int = 5) -> dict | None:
     """Fetch a pitcher's recent form from StatsAPI. Returns None on any failure."""
     try:
