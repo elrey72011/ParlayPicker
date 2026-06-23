@@ -638,3 +638,19 @@ ENABLE_MONEYLINE_PARLAY_LEGS = False
 MONEYLINE_PARLAY_MIN_ODDS = -250
 MONEYLINE_PARLAY_MAX_ODDS = 250
 MONEYLINE_PARLAY_MIN_EDGE = 0.03
+
+# ── Pitcher-strikeout props (production) ──
+# MLB run totals are near-efficient — model and market agree to within a point or two, so
+# most picks are honest "no edge / No Play". Strikeout props are a softer market, so the
+# props slice is run daily to surface genuine edges. ENABLED to stake, but with a deliberate
+# caveat: the prop model has NO graded track record yet, so it is uncalibrated. To avoid
+# repeating the 19-Jun mistake (full stakes on an unproven signal) the per-pick and total
+# stake fractions are held SMALL until a calibration record exists; raise them once the
+# market has proven out. The +EV / min-edge discipline (PROP_MIN_EDGE) still gates every
+# pick, so only real edges bet.
+ENABLE_STRIKEOUT_PROPS_PRODUCTION = True
+# Fraction of bankroll per prop pick / across all prop picks. Small because uncalibrated.
+STRIKEOUT_PROP_KELLY_PER_PICK_PCT = 0.01
+STRIKEOUT_PROP_KELLY_TOTAL_PCT = 0.03
+# Kelly is staked fractionally (quarter-Kelly) on top of the cap — conservative sizing.
+STRIKEOUT_PROP_KELLY_FRACTION = 0.25

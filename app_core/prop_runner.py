@@ -125,3 +125,82 @@ def build_strikeout_card(
     )
     scored.sort(key=lambda r: (r.get("best_edge") is not None, r.get("best_edge") or 0.0), reverse=True)
     return scored
+
+
+def _decimal_odds(american: float) -> float:
+    a = float(american)
+    return 1.0 + (a / 100.0 if a > 0 else 100.0 / -a)
+
+
+def build_prop_card(
+    odds_client: Any,
+    date: str,
+    season: int,
+    bankroll: float,
+    *,
+    kelly_per_pick_pct: float,
+    kelly_total_pct: float,
+    kelly_fraction: float = 0.25,
+    min_edge: float = PROP_MIN_EDGE,
+    **card_kwargs: Any,
+):
+    """Production strikeout-prop card: the ACTIONABLE props with conservative stakes.
+
+    Scores the slate (:func:`build_strikeout_card`), keeps only the recommended over/under
+    picks (the +EV / min-edge gate already lives in scoring), and sizes each at fractional
+    Kelly capped at ``kelly_per_pick_pct`` of bankroll, with the slate total capped at
+    ``kelly_total_pct``. Sizing is deliberately small: the prop model is uncalibrated, so the
+    caps bound the downside until a graded record exists. Returns a DataFrame (empty when the
+    feed is missing or nothing clears the edge bar) so the caller can display + export it
+    without touching the main best-picks card. ``card_kwargs`` forward the injectable feeds to
+    :func:`build_strikeout_card` for offline testing.
+    """
+    import pandas as pd
+
+    scored = build_strikeout_card(
+        odds_client, date, season, min_edge=min_edge, **card_kwargs
+    )
+    rows = []
+    for r in scored:
+        side = r.get("best_side")
+        if r.get("recommendation") not in ("over", "under") or side not in ("over", "under"):
+            continue
+        odds = r.get("over_odds") if side == "over" else r.get("under_odds")
+        p_over = r.get("model_p_over")
+        if odds is None or p_over is None:
+            continue
+        p_side = float(p_over) if side == "over" else 1.0 - float(p_over)
+        dec = _decimal_odds(odds)
+        b = dec - 1.0
+        kelly_frac = ((p_side * dec) - 1.0) / b if b > 0 else 0.0
+        stake_pct = min(max(kelly_frac, 0.0) * kelly_fraction, kelly_per_pick_pct)
+        rows.append({
+            "league": "MLB",
+            "pitcher": r.get("pitcher"),
+            "matchup": f"{r.get('away_team', '')} @ {r.get('home_team', '')}".strip(" @"),
+            "market_type": f"pitcher_strikeouts_{side}",
+            "best_pick": f"{r.get('pitcher')} {side.capitalize()} {r.get('line')} Ks",
+            "line": r.get("line"),
+            "expected_ks": r.get("expected_ks"),
+            "WinProbability": round(p_side, 4),
+            "expected_value": r.get("best_ev"),
+            "edge": r.get("best_edge"),
+            "odds_american": odds,
+            "book": r.get("book"),
+            "Pick_Status": "Actionable",
+            "_stake_pct": stake_pct,
+        })
+
+    card = pd.DataFrame(rows)
+    if card.empty:
+        return card
+
+    bankroll = float(bankroll or 0.0)
+    card["Kelly_Bet_Size"] = (card["_stake_pct"] * bankroll).round(2)
+    total = float(card["Kelly_Bet_Size"].sum())
+    cap_total = kelly_total_pct * bankroll
+    if total > cap_total and total > 0:
+        card["Kelly_Bet_Size"] = (card["Kelly_Bet_Size"] * (cap_total / total)).round(2)
+    card = card.drop(columns=["_stake_pct"])
+    card = card.sort_values("edge", ascending=False).reset_index(drop=True)
+    return card
