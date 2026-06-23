@@ -907,9 +907,45 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
         else analysis_df.iloc[0:0]
     )
 
+    # Strikeout-prop card (separate from the main best-picks card so a prop-feed hiccup
+    # can never break it). Softer market than MLB run totals, so this is where the real
+    # edges live; staked at small caps because the prop model is still uncalibrated.
+    strikeout_prop_card = pd.DataFrame()
+    try:
+        from app_core.weights_config import (
+            ENABLE_STRIKEOUT_PROPS_PRODUCTION,
+            STRIKEOUT_PROP_KELLY_PER_PICK_PCT,
+            STRIKEOUT_PROP_KELLY_TOTAL_PCT,
+            STRIKEOUT_PROP_KELLY_FRACTION,
+        )
+        if ENABLE_STRIKEOUT_PROPS_PRODUCTION:
+            from datetime import datetime
+            import pytz
+            from app_core.odds_api import TheOddsAPIClient
+            from app_core.prop_runner import build_prop_card
+            from core.streamlit_pipeline import _get_odds_api_key
+
+            _prop_key = _get_odds_api_key()
+            if _prop_key:
+                _prop_date = datetime.now(pytz.timezone("America/New_York")).strftime("%Y-%m-%d")
+                strikeout_prop_card = build_prop_card(
+                    TheOddsAPIClient(api_key=_prop_key, markets="h2h"),
+                    _prop_date,
+                    int(_prop_date[:4]),
+                    float(controls["bankroll"]),
+                    kelly_per_pick_pct=STRIKEOUT_PROP_KELLY_PER_PICK_PCT,
+                    kelly_total_pct=STRIKEOUT_PROP_KELLY_TOTAL_PCT,
+                    kelly_fraction=STRIKEOUT_PROP_KELLY_FRACTION,
+                )
+                diagnostics["strikeout_prop_actionable_count"] = int(len(strikeout_prop_card))
+    except Exception as exc:  # never let the prop slice break the main card
+        logger.warning("strikeout prop card build failed: %s", exc)
+        diagnostics["strikeout_prop_error"] = str(exc)
+
     state_updates = {
         "pipeline_status": "using stored results",
         "pipeline_running": False,
+        "strikeout_prop_card": strikeout_prop_card,
         "analysis_df": analysis_df,
         "parlays_df": parlays_df,
         "portfolio_df": portfolio_df,
@@ -1722,6 +1758,27 @@ def main() -> None:
                 "best_picks_export.csv",
                 mime="text/csv",
             )
+
+            # ── Strikeout props (separate softer-market card) ──
+            prop_card = st.session_state.get("strikeout_prop_card")
+            if prop_card is not None and not prop_card.empty:
+                st.subheader("⚾ Pitcher Strikeout Props")
+                st.caption(
+                    "Softer market than run totals — these cleared the +EV / min-edge gate. "
+                    "Staked SMALL: the prop model is uncalibrated, so sizes are capped until it "
+                    "builds a graded record."
+                )
+                st.dataframe(prop_card, width="stretch")
+                st.download_button(
+                    "Export Strikeout Props",
+                    prop_card.to_csv(index=False, encoding="utf-8-sig"),
+                    "strikeout_props_export.csv",
+                    mime="text/csv",
+                )
+            elif st.session_state.get("diagnostics", {}).get("strikeout_prop_error"):
+                st.caption("⚾ Strikeout props unavailable this run (prop feed error).")
+            else:
+                st.caption("⚾ No strikeout props cleared the edge bar today.")
 
             # Compact export (.xlsx): a readable Excel table with only the columns
             # needed to scan a slate left-to-right, matching the Strategy Lab layout.
