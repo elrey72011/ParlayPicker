@@ -22,7 +22,14 @@ from app_core.mlb_pitcher_stats import (
     fetch_team_k_rate,
 )
 from app_core.prop_odds_ingest import fetch_strikeout_props
-from app_core.prop_pipeline import PROP_KS_DISPERSION, PROP_MIN_EDGE, evaluate_strikeout_props
+from app_core.prop_pipeline import (
+    PROP_KS_DISPERSION,
+    PROP_MAX_PLAUSIBLE_EDGE,
+    PROP_MIN_EDGE,
+    PROP_MIN_STARTER_AVG_INNINGS,
+    PROP_MIN_STARTER_GAMES,
+    evaluate_strikeout_props,
+)
 
 MLB_SPORT_KEY = "baseball_mlb"
 
@@ -88,6 +95,9 @@ def build_strikeout_card(
     sport_key: str = MLB_SPORT_KEY,
     dispersion: float = PROP_KS_DISPERSION,
     min_edge: float = PROP_MIN_EDGE,
+    min_starter_games: int = PROP_MIN_STARTER_GAMES,
+    min_starter_avg_innings: float = PROP_MIN_STARTER_AVG_INNINGS,
+    max_plausible_edge: float = PROP_MAX_PLAUSIBLE_EDGE,
     list_events: Callable | None = None,
     props_fetch: Callable = fetch_strikeout_props,
     schedule_fetch: Callable = fetch_schedule_probables,
@@ -121,7 +131,10 @@ def build_strikeout_card(
     )
 
     scored = evaluate_strikeout_props(
-        props, form_lookup, opp_k_lookup, dispersion=dispersion, min_edge=min_edge
+        props, form_lookup, opp_k_lookup, dispersion=dispersion, min_edge=min_edge,
+        min_starter_games=min_starter_games,
+        min_starter_avg_innings=min_starter_avg_innings,
+        max_plausible_edge=max_plausible_edge,
     )
     scored.sort(key=lambda r: (r.get("best_edge") is not None, r.get("best_edge") or 0.0), reverse=True)
     return scored

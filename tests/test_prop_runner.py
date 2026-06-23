@@ -12,6 +12,7 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from app_core.mlb_pitcher_stats import parse_schedule_probables
+from app_core.prop_pipeline import PROP_MAX_PLAUSIBLE_EDGE
 from app_core.prop_runner import build_prop_card, build_resolvers, build_strikeout_card
 
 
@@ -87,6 +88,7 @@ def test_build_card_end_to_end_offline_surfaces_actionable():
         odds_client=object(),
         date="2026-06-23",
         season=2026,
+        max_plausible_edge=1.0,  # isolate orchestration from the edge cap (tested in prop_pipeline)
         list_events=lambda c, sk, d: events,
         props_fetch=lambda c, sk, eid: [prop],
         schedule_fetch=lambda d: parse_schedule_probables(_SCHEDULE),
@@ -132,6 +134,7 @@ def _prop_card(prop, **overrides):
     events = [{"id": "e1", "home_team": "New York Yankees", "away_team": "Chicago White Sox"}]
     kwargs = dict(
         kelly_per_pick_pct=0.01, kelly_total_pct=0.03, kelly_fraction=0.25,
+        max_plausible_edge=1.0,  # isolate staking/cap tests from the edge-plausibility guard
         list_events=lambda c, sk, d: events,
         props_fetch=lambda c, sk, eid: [prop],
         schedule_fetch=lambda d: parse_schedule_probables(_SCHEDULE),
@@ -173,6 +176,7 @@ def test_prop_card_total_cap_scales_down_many_picks():
     card = build_prop_card(
         object(), "2026-06-23", 2026, 1000.0,
         kelly_per_pick_pct=0.01, kelly_total_pct=0.03, kelly_fraction=0.25,
+        max_plausible_edge=1.0,
         list_events=lambda c, sk, d: [{"id": "e1", "home_team": "New York Yankees", "away_team": "Chicago White Sox"}],
         props_fetch=lambda c, sk, eid: props,
         schedule_fetch=lambda d: parse_schedule_probables(sched),
@@ -189,4 +193,19 @@ def test_prop_card_empty_when_nothing_clears_edge():
         "book": "novig", "home_team": "New York Yankees", "away_team": "Chicago White Sox",
     }
     card = _prop_card(prop, form_fetch=lambda pid, season: None, team_k_fetch=lambda tid, season: None)
+    assert card.empty
+
+
+def test_prop_card_excludes_opener_and_implausible_edge_by_default():
+    # The live-slate failure shape: an opener (low avg innings) projects ~1.5 Ks, making
+    # Under 4.5 look like a 40% edge. With guards at production defaults the card is empty.
+    prop = {
+        "pitcher": "Gerrit Cole", "line": 4.5, "over_odds": -144, "under_odds": 120,
+        "book": "draftkings", "home_team": "New York Yankees", "away_team": "Chicago White Sox",
+    }
+    card = _prop_card(
+        prop,
+        form_fetch=lambda pid, season: {"k_per_9": 9.0, "avg_innings": 1.2, "n_games": 2},
+        max_plausible_edge=PROP_MAX_PLAUSIBLE_EDGE,  # production default -> guards active
+    )
     assert card.empty
