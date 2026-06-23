@@ -131,7 +131,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-06-23-all-games-lean"
+PIPELINE_BUILD = "2026-06-23-mlb-real-features"
 
 
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
@@ -5904,6 +5904,16 @@ def run_analysis_pipeline(
                 from app_core.feature_processing import enrich_with_model_features
                 api_clients = {}  # Stub for backward compatibility if it expects dict
                 enriched_for_prediction = enrich_with_model_features(merged[needs_prediction].copy(), api_clients)
+
+                # Genuine MLB team features: replace league-default stats (4.5 runs, .500) on
+                # MLB rows with real standings (win%/runs scored+allowed per game/streak/form)
+                # so the model has independent signal instead of echoing the market. Guarded:
+                # any failure leaves the rows on their prior defaults.
+                try:
+                    from app_core.mlb_team_stats import enrich_mlb_model_features
+                    enriched_for_prediction = enrich_mlb_model_features(enriched_for_prediction)
+                except Exception as _mlb_feat_exc:
+                    logger.warning("MLB feature enrichment skipped: %s", _mlb_feat_exc)
                 for col in [
                     "stats_source",
                     "stats_resolution_status",
