@@ -1759,6 +1759,31 @@ def main() -> None:
                 mime="text/csv",
             )
 
+            # ── All-games lean view: the model's read on EVERY game, tiered honestly ──
+            # Re-presents the same card (no new staking) so a bettor who wants the whole
+            # board sees the model's side + confidence + a straight risk label per game.
+            try:
+                from app_core.lean_card import build_all_games_lean_card
+                lean_card = build_all_games_lean_card(best_picks_export)
+                if not lean_card.empty:
+                    counts = lean_card["Tier"].value_counts().to_dict()
+                    st.subheader("🎯 All Games — Model Lean")
+                    st.caption(
+                        f"BET {counts.get('BET', 0)} · LEAN {counts.get('LEAN', 0)} · "
+                        f"AVOID {counts.get('AVOID', 0)}.  BET = priced edge the model stakes. "
+                        f"LEAN = the model's side but NOT a proven +EV bet (your call). "
+                        f"AVOID = negative-EV or fading Kalshi — the math says stay off."
+                    )
+                    st.dataframe(lean_card, width="stretch")
+                    st.download_button(
+                        "Export All-Games Lean",
+                        lean_card.to_csv(index=False, encoding="utf-8-sig"),
+                        "all_games_lean.csv",
+                        mime="text/csv",
+                    )
+            except Exception as exc:  # never let the lean view break the main card
+                logger.warning("all-games lean card failed: %s", exc)
+
             # ── Strikeout props (separate softer-market card) ──
             prop_card = st.session_state.get("strikeout_prop_card")
             if prop_card is not None and not prop_card.empty:
