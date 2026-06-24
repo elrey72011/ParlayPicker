@@ -73,9 +73,14 @@ def test_empty_card_recovery_promotes_clean_non_over_candidates(monkeypatch):
     def fake_build_best_picks_df(analysis_df, diagnostics_out=None):
         rows = []
         for i, mt in enumerate(["spread_home", "total_under", "total_over"]):
-            rows.append({"league":"NBA","home_team":f"H{i}","away_team":f"A{i}","game_date":"2026-05-03","market_type":mt,"best_pick":"Team -3.5" if "spread" in mt else ("Under 220.5" if mt=="total_under" else "Over 220.5"),"Pick_Status":"High Variance/Speculative","expected_value":0.2,"edge":0.2,"effective_expected_value":0.2,"effective_edge":0.2,"production_expected_value":0.12,"production_edge":0.08,"production_win_probability":0.62,"line_consistency_flag":True,"line_event_identity_match_flag":True,"market_line_source":"live","line_provenance_warning":"","market_line_used":220.5})
+            # consensus_agreement + odds_american + effective_win_probability are now required
+            # by the recovery guards (Neutral consensus, real price, calibrated win > break-even).
+            rows.append({"league":"NBA","home_team":f"H{i}","away_team":f"A{i}","game_date":"2026-05-03","market_type":mt,"best_pick":"Team -3.5" if "spread" in mt else ("Under 220.5" if mt=="total_under" else "Over 220.5"),"Pick_Status":"High Variance/Speculative","expected_value":0.2,"edge":0.2,"effective_expected_value":0.2,"effective_edge":0.2,"effective_win_probability":0.62,"consensus_agreement":"Neutral","odds_american":-110,"production_expected_value":0.12,"production_edge":0.08,"production_win_probability":0.62,"line_consistency_flag":True,"line_event_identity_match_flag":True,"market_line_source":"live","line_provenance_warning":"","market_line_used":220.5})
         return pd.DataFrame(rows)
 
+    # Pin the recovery calibration gate to raw mode (no table) so the test is deterministic and
+    # not coupled to the live fitted calibration: raw win 0.62 beats the -110 break-even (.524).
+    monkeypatch.setattr("core.probability_calibration.load_calibration", lambda *a, **k: None)
     monkeypatch.setattr(app, "run_analysis_pipeline", fake_run_analysis_pipeline)
     monkeypatch.setattr(sp, "build_best_picks_df", fake_build_best_picks_df)
     monkeypatch.setattr(app, "optimize_portfolio_allocation", lambda df, bankroll=1000.0: pd.DataFrame([{"canonical_pick_key": k, "production_bet_amount": 40.0, "raw_kelly_amount": 80.0, "kelly_cap_reason": "", "production_eligible": True} for k in df["canonical_pick_key"].tolist()]))
