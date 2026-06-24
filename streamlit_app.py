@@ -796,6 +796,28 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
         diagnostics["empty_card_recovery_excluded_line_source_count"] = int(excluded_source.sum())
         threshold_fail = (prod_ev0 < float(EMPTY_CARD_RECOVERY_MIN_PRODUCTION_EV)) | (prod_edge0 < float(EMPTY_CARD_RECOVERY_MIN_PRODUCTION_EDGE)) | (prod_prob0 < float(EMPTY_CARD_RECOVERY_MIN_PRODUCTION_WIN_PROB))
         diagnostics["empty_card_recovery_excluded_threshold_count"] = int(threshold_fail.sum())
+        # Consensus + calibration guards (parity with the build_best_picks_df recovery path):
+        # never recover a pick that fades Kalshi (Disagrees / No Kalshi) or whose CALIBRATED
+        # win can't beat break-even. Without these this path staked a Disagrees under and a
+        # calibrated-negative spread (24 Jun).
+        consensus0 = _safe_str_series(best_picks_df, "consensus_agreement").str.strip()
+        try:
+            from core.streamlit_pipeline import _calibrated_beats_breakeven
+            from core.probability_calibration import load_calibration as _load_cal
+            from app_core.weights_config import EMPTY_CARD_RECOVERY_CONSENSUS as _RECOVERY_CONSENSUS
+            _calib_gate0 = _calibrated_beats_breakeven(
+                best_picks_df.get("effective_win_probability", pd.Series(index=best_picks_df.index, dtype=float)),
+                best_picks_df.get("odds_american", pd.Series(index=best_picks_df.index, dtype=float)),
+                _load_cal(),
+            ).reindex(best_picks_df.index).fillna(False)
+        except Exception as _cal_exc:
+            logger.warning("recovery calibration gate unavailable: %s", _cal_exc)
+            _calib_gate0 = pd.Series(True, index=best_picks_df.index)
+            _RECOVERY_CONSENSUS = ("Agrees", "Neutral")
+        consensus_ok0 = consensus0.isin(_RECOVERY_CONSENSUS)
+        diagnostics["empty_card_recovery_excluded_calibration_count"] = int(
+            (status_s0.isin(["High Variance/Speculative", "Below Threshold"]) & ~_calib_gate0).sum()
+        )
         recovery_mask = (
             status_s0.isin(["High Variance/Speculative", "Below Threshold"])
             & (~excluded_total_over)
@@ -805,6 +827,8 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
             & eff_ev0.gt(0) & eff_edge0.gt(0)
             & (~blocked_stage0.isin(["line_provenance", "value_guardrail"]))
             & (~threshold_fail)
+            & consensus_ok0
+            & _calib_gate0
         )
         diagnostics["empty_card_recovery_candidate_count"] = int(recovery_mask.sum())
         if recovery_mask.any():

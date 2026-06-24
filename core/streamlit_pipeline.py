@@ -131,7 +131,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-06-24-calibrated-recovery-gate"
+PIPELINE_BUILD = "2026-06-24-recovery-gate-both-paths"
 
 
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
@@ -2488,8 +2488,13 @@ def _calibrated_beats_breakeven(eff_win, odds_american, calibration) -> "pd.Seri
     effective_win_probability is overconfident in the 0.50-0.55 band (327 graded picks:
     predicted .53, realized .43), so a positive RAW EV there is usually a negative CALIBRATED
     EV. Rows with no usable odds get break-even 1.0 (gate fails — don't stake blind). Mirrors
-    the all-games lean gate so the staked card and the view agree.
+    the all-games lean gate so the staked card and the view agree. Inputs are coerced to
+    Series so a missing column (scalar/None) can't crash the gate.
     """
+    if not isinstance(eff_win, pd.Series):
+        eff_win = pd.Series([] if eff_win is None else eff_win)
+    if not isinstance(odds_american, pd.Series):
+        odds_american = pd.Series([] if odds_american is None else odds_american)
     ew = pd.to_numeric(eff_win, errors="coerce")
     if calibration:
         try:
@@ -4606,7 +4611,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             except Exception:
                 _rec_cal = None
             _rec_calib_gate = _calibrated_beats_breakeven(
-                best.get("effective_win_probability"), best.get("odds_american"), _rec_cal
+                best.get("effective_win_probability", pd.Series(index=best.index, dtype=float)),
+                best.get("odds_american", pd.Series(index=best.index, dtype=float)),
+                _rec_cal,
             )
             _excluded_by_calibration = int((recovery_mask & ~_rec_calib_gate).sum())
             recovery_mask = recovery_mask & _rec_calib_gate
