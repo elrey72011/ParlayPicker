@@ -68,6 +68,47 @@ def apply_calibration(probs: pd.Series, table: list[list[float]] | None) -> pd.S
     return pd.to_numeric(probs, errors="coerce").map(_interp).clip(0.0, 1.0)
 
 
+def apply_bucket_calibration(
+    probs: pd.Series,
+    buckets,
+    table: list[list[float]] | None,
+    bucket_stats: dict | None,
+    shrink_n: int = 50,
+) -> pd.Series:
+    """Bucket-CONDITIONAL calibration: the global isotonic curve, then a per-bucket tilt.
+
+    The global ``table`` fixes the pooled predicted->realized mapping but averages away the
+    fact that accuracy varies a lot by bucket (e.g. MLB under:Agrees ~61% vs over:Neutral
+    ~49%). This adds the bucket's realized delta from the overall rate, Laplace-smoothed and
+    shrunk by sample size (``n/(n+shrink_n)``), so proven buckets aren't crushed by the pooled
+    curve and thin buckets barely move. Identical tilt math to
+    ``empirical_tiers.empirical_win_probability`` (pinned by test) — this is just the
+    vectorized form so the gates and the lean view share one bucket-aware number.
+
+    Falls back to the plain global calibration when ``bucket_stats`` is missing.
+    """
+    cal = apply_calibration(probs, table)
+    if not bucket_stats or not bucket_stats.get("buckets"):
+        return cal
+    overall = float(bucket_stats["overall"]["win_rate"])
+    bmap = bucket_stats["buckets"]
+    cal = pd.to_numeric(cal, errors="coerce")
+    bucket_list = list(buckets)
+
+    def _tilt(p, b):
+        if pd.isna(p):
+            return p
+        rec = bmap.get(b)
+        if not rec or int(rec.get("n", 0)) <= 0:
+            return float(p)
+        n = int(rec["n"])
+        smoothed = (int(rec["wins"]) + overall * 10.0) / (n + 10.0)
+        weight = n / (n + float(shrink_n))
+        return float(min(0.95, max(0.05, float(p) + weight * (smoothed - overall))))
+
+    return pd.Series([_tilt(p, b) for p, b in zip(cal, bucket_list)], index=cal.index)
+
+
 def save_calibration(table: list[list[float]], path: Path | str, meta: dict | None = None) -> None:
     payload = {"knots": table, "meta": meta or {}}
     path = Path(path)

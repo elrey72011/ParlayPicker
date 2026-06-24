@@ -96,11 +96,20 @@ def build_all_games_lean_card(best_picks_df: pd.DataFrame, *, calibration: objec
     odds = _first_col(df, "odds_american")
     kelly = pd.to_numeric(_first_col(df, "Kelly_Bet_Size"), errors="coerce").fillna(0.0)
 
-    # Calibrated win probability + break-even, for the LEAN gate and transparency.
+    # Calibrated win probability + break-even, for the LEAN gate and transparency. Bucket-
+    # conditional (global curve + per-bucket realized tilt) so a proven bucket (e.g.
+    # under:Agrees ~61%) isn't crushed below break-even by the pooled curve — same number the
+    # staking gate uses, so the view and the card agree.
     if calibration:
         try:
-            from core.probability_calibration import apply_calibration
-            calib_win = pd.to_numeric(apply_calibration(win, calibration), errors="coerce")
+            from core.probability_calibration import apply_bucket_calibration
+            from core.empirical_tiers import bucket_key, load_bucket_stats
+            league = _first_col(df, "league", "League")
+            market_type = _first_col(df, "market_type")
+            buckets = [bucket_key(l, m, c) for l, m, c in zip(league, market_type, consensus)]
+            calib_win = pd.to_numeric(
+                apply_bucket_calibration(win, buckets, calibration, load_bucket_stats()), errors="coerce"
+            )
         except Exception:
             calib_win = win
     else:
