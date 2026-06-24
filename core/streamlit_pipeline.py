@@ -131,7 +131,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-06-24-calibrated-lean-gate"
+PIPELINE_BUILD = "2026-06-24-calibrated-recovery-gate"
 
 
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
@@ -2481,6 +2481,29 @@ def _total_over_concentration_downgrades(
     return downgrade_idx
 
 
+def _calibrated_beats_breakeven(eff_win, odds_american, calibration) -> "pd.Series":
+    """Boolean Series: does each pick's CALIBRATED win probability beat its break-even price?
+
+    Gate for empty-card recovery so it never STAKES a calibrated-negative pick.
+    effective_win_probability is overconfident in the 0.50-0.55 band (327 graded picks:
+    predicted .53, realized .43), so a positive RAW EV there is usually a negative CALIBRATED
+    EV. Rows with no usable odds get break-even 1.0 (gate fails — don't stake blind). Mirrors
+    the all-games lean gate so the staked card and the view agree.
+    """
+    ew = pd.to_numeric(eff_win, errors="coerce")
+    if calibration:
+        try:
+            from core.probability_calibration import apply_calibration
+            cw = pd.to_numeric(apply_calibration(ew, calibration), errors="coerce")
+        except Exception:
+            cw = ew
+    else:
+        cw = ew
+    o = pd.to_numeric(odds_american, errors="coerce")
+    be = o.map(lambda x: (abs(x) / (abs(x) + 100.0) if x < 0 else 100.0 / (x + 100.0)) if pd.notna(x) else 1.0)
+    return cw.gt(be)
+
+
 def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None = None) -> pd.DataFrame:
     logger.info(f"BEST PICKS AUDIT: Received analysis_df with {len(analysis_df)} rows")
     if analysis_df is None or analysis_df.empty:
@@ -4574,6 +4597,21 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 recovery_mask = recovery_mask & ~is_mlb_total_under
             if not ALLOW_NHL_TOTAL_UNDER_EMPTY_CARD_RECOVERY:
                 recovery_mask = recovery_mask & ~is_nhl_total_under
+
+            # Calibration gate: never RECOVER (stake) a calibrated-negative pick. Mirrors the
+            # all-games lean gate so the staked card and the view agree.
+            try:
+                from core.probability_calibration import load_calibration
+                _rec_cal = load_calibration()
+            except Exception:
+                _rec_cal = None
+            _rec_calib_gate = _calibrated_beats_breakeven(
+                best.get("effective_win_probability"), best.get("odds_american"), _rec_cal
+            )
+            _excluded_by_calibration = int((recovery_mask & ~_rec_calib_gate).sum())
+            recovery_mask = recovery_mask & _rec_calib_gate
+            if diagnostics_out is not None:
+                diagnostics_out["empty_card_recovery_excluded_calibration_count"] = _excluded_by_calibration
 
             recovery_candidates = best[recovery_mask]
             if not recovery_candidates.empty:

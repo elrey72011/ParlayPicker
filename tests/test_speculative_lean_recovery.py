@@ -25,12 +25,15 @@ def _under(kalshi, win=0.512, ev=0.034, edge=0.038, line=7.5, idx=970):
     return build_best_picks_df(df).iloc[0]
 
 
-def test_thin_positive_ev_under_is_recovered_small():
-    # Below the 55% Actionable floor, but positive EV/edge + Agrees -> recovered at small size.
+def test_thin_raw_positive_but_calibrated_negative_under_not_recovered():
+    # Raw win 0.512 looks like a positive-EV near-miss, but it sits in the overconfident
+    # 0.50-0.55 band: calibrated it falls below break-even, so the calibration gate (24 Jun)
+    # blocks recovery rather than STAKE a calibrated-negative pick. This supersedes the old
+    # "recover the thin under at small size" behavior — the honest, user-chosen tradeoff is
+    # an empty card over a -EV stake.
     row = _under(kalshi=0.52)
-    assert row["Pick_Status"] == "Actionable"
-    assert 0.0 < float(row["Kelly_Bet_Size"]) <= EMPTY_CARD_RECOVERY_MAX_KELLY_PER_PICK_PCT + 1e-9
-    assert row["consensus_agreement"] != "Disagrees"
+    assert row["Pick_Status"] != "Actionable"
+    assert float(row["Kelly_Bet_Size"]) == 0.0
 
 
 def test_disagrees_under_not_recovered():
