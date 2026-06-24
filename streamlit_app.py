@@ -1771,8 +1771,10 @@ def main() -> None:
                     st.caption(
                         f"BET {counts.get('BET', 0)} · LEAN {counts.get('LEAN', 0)} · "
                         f"AVOID {counts.get('AVOID', 0)}.  BET = priced edge the model stakes. "
-                        f"LEAN = the model's side but NOT a proven +EV bet (your call). "
-                        f"AVOID = negative-EV or fading Kalshi — the math says stay off."
+                        f"LEAN = model's side AND its calibrated win beats break-even (your call). "
+                        f"AVOID = negative-EV, fading Kalshi, or calibrated win below break-even — "
+                        f"the math says stay off. Calib_Win% is the model's probability after the "
+                        f"isotonic calibration correction (overconfidence removed)."
                     )
                     st.dataframe(lean_card, width="stretch")
                     st.download_button(
