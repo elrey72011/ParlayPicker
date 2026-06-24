@@ -131,7 +131,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-06-24-recovery-gate-both-paths"
+PIPELINE_BUILD = "2026-06-24-bucket-conditional-calibration"
 
 
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
@@ -2481,7 +2481,7 @@ def _total_over_concentration_downgrades(
     return downgrade_idx
 
 
-def _calibrated_beats_breakeven(eff_win, odds_american, calibration) -> "pd.Series":
+def _calibrated_beats_breakeven(eff_win, odds_american, calibration, buckets=None, bucket_stats=None) -> "pd.Series":
     """Boolean Series: does each pick's CALIBRATED win probability beat its break-even price?
 
     Gate for empty-card recovery so it never STAKES a calibrated-negative pick.
@@ -2490,19 +2490,27 @@ def _calibrated_beats_breakeven(eff_win, odds_american, calibration) -> "pd.Seri
     EV. Rows with no usable odds get break-even 1.0 (gate fails — don't stake blind). Mirrors
     the all-games lean gate so the staked card and the view agree. Inputs are coerced to
     Series so a missing column (scalar/None) can't crash the gate.
+
+    When ``buckets`` + ``bucket_stats`` are supplied the calibration is BUCKET-CONDITIONAL
+    (global curve + per-bucket realized tilt), so a pick in a proven bucket (e.g. under:Agrees
+    ~61%) isn't crushed below break-even by the pooled curve. Without them it stays the plain
+    global calibration — backward compatible.
     """
     if not isinstance(eff_win, pd.Series):
         eff_win = pd.Series([] if eff_win is None else eff_win)
     if not isinstance(odds_american, pd.Series):
         odds_american = pd.Series([] if odds_american is None else odds_american)
     ew = pd.to_numeric(eff_win, errors="coerce")
-    if calibration:
-        try:
+    try:
+        if buckets is not None and bucket_stats:
+            from core.probability_calibration import apply_bucket_calibration
+            cw = pd.to_numeric(apply_bucket_calibration(ew, buckets, calibration, bucket_stats), errors="coerce")
+        elif calibration:
             from core.probability_calibration import apply_calibration
             cw = pd.to_numeric(apply_calibration(ew, calibration), errors="coerce")
-        except Exception:
+        else:
             cw = ew
-    else:
+    except Exception:
         cw = ew
     o = pd.to_numeric(odds_american, errors="coerce")
     be = o.map(lambda x: (abs(x) / (abs(x) + 100.0) if x < 0 else 100.0 / (x + 100.0)) if pd.notna(x) else 1.0)
@@ -4603,17 +4611,31 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             if not ALLOW_NHL_TOTAL_UNDER_EMPTY_CARD_RECOVERY:
                 recovery_mask = recovery_mask & ~is_nhl_total_under
 
-            # Calibration gate: never RECOVER (stake) a calibrated-negative pick. Mirrors the
-            # all-games lean gate so the staked card and the view agree.
+            # Calibration gate: never RECOVER (stake) a calibrated-negative pick. Bucket-aware
+            # (global curve + per-bucket realized tilt) so a proven bucket isn't crushed by the
+            # pooled curve. Mirrors the all-games lean gate so the staked card and view agree.
             try:
                 from core.probability_calibration import load_calibration
+                from core.empirical_tiers import bucket_key, load_bucket_stats
                 _rec_cal = load_calibration()
+                _rec_bstats = load_bucket_stats()
+                _rec_buckets = [
+                    bucket_key(l, m, c) for l, m, c in zip(
+                        best.get("league", pd.Series("", index=best.index)),
+                        best.get("market_type", pd.Series("", index=best.index)),
+                        best.get("consensus_agreement", pd.Series("", index=best.index)),
+                    )
+                ]
             except Exception:
                 _rec_cal = None
+                _rec_bstats = None
+                _rec_buckets = None
             _rec_calib_gate = _calibrated_beats_breakeven(
                 best.get("effective_win_probability", pd.Series(index=best.index, dtype=float)),
                 best.get("odds_american", pd.Series(index=best.index, dtype=float)),
                 _rec_cal,
+                buckets=_rec_buckets,
+                bucket_stats=_rec_bstats,
             )
             _excluded_by_calibration = int((recovery_mask & ~_rec_calib_gate).sum())
             recovery_mask = recovery_mask & _rec_calib_gate
