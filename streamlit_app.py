@@ -1720,6 +1720,7 @@ def main() -> None:
                 "edge", "Conviction_Score", "consensus_agreement", "odds_american", "odds_source", "market_probability",
                 "kalshi_probability", "ml_probability", "gemini_explanation", "gemini_risk_notes",
                 "status_metric_basis", "effective_expected_value", "effective_edge", "effective_win_probability",
+                "empirical_win_probability", "empirical_edge", "empirical_bucket",
                 "status_blocker_reason", "status_blocker_stage", "nba_stats_fetch_status", "fallback_summary_by_league",
                 "run_health_warning", "degraded_feature_subset_flag", "degraded_feature_subset_reason",
                 "production_eligible", "production_win_probability", "production_expected_value", "production_edge",
@@ -1759,19 +1760,23 @@ def main() -> None:
             if "Pick_Status" in best_picks_export.columns:
                 best_picks_export["Pick_Status"] = pd.Categorical(best_picks_export["Pick_Status"], categories=status_order, ordered=True)
 
-            best_picks_export["_rank_sort"] = pd.to_numeric(best_picks_export.get("Triple_Filter_Rank"), errors="coerce")
+            # Rank within each tier by EMPIRICAL edge (bucket-realized), not model EV/edge.
+            # Across 63 graded picks the model's EV ranking was anti-informative — its
+            # highest-EV/most-contrarian picks lost — while bucket-realized performance held.
+            # EV/edge stay as fallback tiebreakers (and when empirical_edge is absent).
+            best_picks_export["_emp_sort"] = pd.to_numeric(best_picks_export.get("empirical_edge"), errors="coerce")
             best_picks_export["_ev_sort"] = pd.to_numeric(best_picks_export.get("expected_value"), errors="coerce")
             best_picks_export["_edge_sort"] = pd.to_numeric(best_picks_export.get("edge"), errors="coerce")
 
-            sort_cols = ["Pick_Status", "_rank_sort", "_ev_sort", "_edge_sort"]
+            sort_cols = ["Pick_Status", "_emp_sort", "_ev_sort", "_edge_sort"]
             available_sort_cols = [c for c in sort_cols if c in best_picks_export.columns]
 
             if available_sort_cols:
-                asc = [True, True, False, False][:len(available_sort_cols)]
+                asc = [True, False, False, False][:len(available_sort_cols)]
                 best_picks_export = best_picks_export.sort_values(available_sort_cols, ascending=asc, na_position="last").reset_index(drop=True)
 
                 # Drop temporary sort columns
-                best_picks_export = best_picks_export.drop(columns=["_rank_sort", "_ev_sort", "_edge_sort"], errors="ignore")
+                best_picks_export = best_picks_export.drop(columns=["_emp_sort", "_ev_sort", "_edge_sort"], errors="ignore")
 
                 if "parlay_rank" in best_picks_export.columns:
                     best_picks_export["parlay_rank"] = range(1, len(best_picks_export) + 1)
@@ -1804,11 +1809,12 @@ def main() -> None:
                     st.subheader("🎯 All Games — Model Lean")
                     st.caption(
                         f"BET {counts.get('BET', 0)} · LEAN {counts.get('LEAN', 0)} · "
-                        f"AVOID {counts.get('AVOID', 0)}.  BET = priced edge the model stakes. "
-                        f"LEAN = model's side AND its calibrated win beats break-even (your call). "
-                        f"AVOID = negative-EV, fading Kalshi, or calibrated win below break-even — "
-                        f"the math says stay off. Calib_Win% is the model's probability after the "
-                        f"isotonic calibration correction (overconfidence removed)."
+                        f"AVOID {counts.get('AVOID', 0)}.  Ranked by Emp_Edge — the bucket-REALIZED "
+                        f"edge (calibrated win vs break-even), NOT model EV (which graded out "
+                        f"anti-informative). BET = priced edge the model stakes. LEAN = its "
+                        f"calibrated win beats break-even (your call). AVOID = negative-EV, fading "
+                        f"Kalshi, or calibrated win below break-even. Calib_Win% = the model's "
+                        f"probability after the bucket-conditional calibration correction."
                     )
                     st.dataframe(lean_card, width="stretch")
                     st.download_button(

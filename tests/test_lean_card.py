@@ -61,6 +61,38 @@ def test_lean_card_orders_and_labels_full_slate():
     assert float(card.iloc[2]["Suggested_Stake"]) == 0.0
 
 
+def test_ranks_by_empirical_edge_not_model_ev():
+    # Two LEAN picks, same -110 odds. Pick A has HIGHER model EV (raw win .60) but sits in a
+    # bad bucket (under:Disagrees); pick B has LOWER model EV (raw win .57) but a proven bucket
+    # (under:Agrees). Ranked by model EV, A wins; ranked by empirical edge, B must come first.
+    cal = [[0.50, 0.46], [0.57, 0.55], [0.60, 0.57], [0.65, 0.60]]
+    bstats = {
+        "overall": {"n": 342, "win_rate": 0.51},
+        "buckets": {
+            "MLB:under:Agrees": {"n": 65, "wins": 41, "win_rate": 0.631},
+            "MLB:under:Disagrees": {"n": 33, "wins": 14, "win_rate": 0.424},
+        },
+    }
+    df = _df([
+        {"league": "MLB", "home_team": "A", "away_team": "B", "best_pick": "Under 8.5",
+         "market_type": "total_under", "Pick_Status": "Below Threshold",
+         "effective_expected_value": 0.15, "effective_win_probability": 0.60,
+         "effective_edge": 0.08, "odds_american": -110, "consensus_agreement": "Disagrees",
+         "Kelly_Bet_Size": 0.0},
+        {"league": "MLB", "home_team": "C", "away_team": "D", "best_pick": "Under 7.5",
+         "market_type": "total_under", "Pick_Status": "Below Threshold",
+         "effective_expected_value": 0.06, "effective_win_probability": 0.57,
+         "effective_edge": 0.04, "odds_american": -110, "consensus_agreement": "Agrees",
+         "Kelly_Bet_Size": 0.0},
+    ])
+    card = build_all_games_lean_card(df, calibration=cal, bucket_stats=bstats)
+    # B (under:Agrees, lower EV) ranks ABOVE A (under:Disagrees, higher EV) by empirical edge.
+    assert card.iloc[0]["Pick"] == "Under 7.5"
+    assert card.iloc[0]["Consensus"] == "Agrees"
+    assert card.iloc[0]["Emp_Edge"] > card.iloc[1]["Emp_Edge"]
+    assert card.iloc[0]["EV"] < card.iloc[1]["EV"]   # ...even though its model EV is lower
+
+
 def test_lean_card_empty_when_no_games():
     assert build_all_games_lean_card(pd.DataFrame()).empty
     assert build_all_games_lean_card(None).empty
