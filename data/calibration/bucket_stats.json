@@ -1,23 +1,23 @@
 {
   "overall": {
-    "n": 313,
-    "win_rate": 0.5207667731629393
+    "n": 342,
+    "win_rate": 0.5087719298245614
   },
   "buckets": {
     "MLB:over:Agrees": {
-      "n": 45,
-      "wins": 26,
-      "win_rate": 0.5777777777777777
+      "n": 53,
+      "wins": 27,
+      "win_rate": 0.5094339622641509
     },
     "MLB:over:Disagrees": {
-      "n": 52,
-      "wins": 25,
-      "win_rate": 0.4807692307692308
+      "n": 54,
+      "wins": 26,
+      "win_rate": 0.48148148148148145
     },
     "MLB:over:Neutral": {
-      "n": 92,
-      "wins": 45,
-      "win_rate": 0.4891304347826087
+      "n": 98,
+      "wins": 49,
+      "win_rate": 0.5
     },
     "MLB:side:Agrees": {
       "n": 2,
@@ -30,19 +30,19 @@
       "win_rate": 0.5
     },
     "MLB:under:Agrees": {
-      "n": 62,
-      "wins": 38,
-      "win_rate": 0.6129032258064516
+      "n": 65,
+      "wins": 41,
+      "win_rate": 0.6307692307692307
     },
     "MLB:under:Disagrees": {
-      "n": 28,
+      "n": 33,
       "wins": 14,
-      "win_rate": 0.5
+      "win_rate": 0.42424242424242425
     },
     "MLB:under:Neutral": {
-      "n": 7,
-      "wins": 4,
-      "win_rate": 0.5714285714285714
+      "n": 12,
+      "wins": 6,
+      "win_rate": 0.5
     },
     "NBA:over:Neutral": {
       "n": 10,
@@ -86,7 +86,7 @@
     }
   },
   "meta": {
-    "source": "/home/user/ParlayPicker/data/backtest_exports",
-    "fitted_on": "2026-06-23"
+    "source": "data/backtest_exports",
+    "fitted_on": "2026-06-25"
   }
 }
