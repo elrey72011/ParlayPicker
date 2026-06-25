@@ -63,20 +63,28 @@ def _american_breakeven(odds: object):
 _UNSET = object()
 
 
-def build_all_games_lean_card(best_picks_df: pd.DataFrame, *, calibration: object = _UNSET) -> pd.DataFrame:
+def build_all_games_lean_card(best_picks_df: pd.DataFrame, *, calibration: object = _UNSET,
+                              bucket_stats: object = _UNSET) -> pd.DataFrame:
     """Derive the all-games lean card from the games best-picks frame.
 
     Pure and side-effect-free: reads the existing per-game pick/probability/EV columns,
-    assigns a tier, and returns a compact, sorted view (BET first, then by confidence).
-    Tolerant of the pre- and post-export column names (home_team/Home, etc.).
+    assigns a tier, and returns a compact view RANKED BY EMPIRICAL EDGE (bucket-realized),
+    not model EV. Tolerant of the pre- and post-export column names (home_team/Home, etc.).
 
-    The LEAN tier is gated by the isotonic calibration: a pick stays LEAN only if its
-    CALIBRATED win probability beats the break-even price. ``calibration`` defaults to the
-    fitted table on disk; pass ``None`` to disable the gate (raw-EV behavior), or an explicit
-    table to inject one (tests).
+    The LEAN tier is gated by bucket-conditional calibration: a pick stays LEAN only if its
+    calibrated win beats break-even. ``calibration`` / ``bucket_stats`` default to the fitted
+    tables on disk; pass ``None`` to disable (raw behavior) or explicit values to inject
+    (tests).
     """
     if best_picks_df is None or best_picks_df.empty:
         return pd.DataFrame()
+
+    if bucket_stats is _UNSET:
+        try:
+            from core.empirical_tiers import load_bucket_stats
+            bucket_stats = load_bucket_stats()
+        except Exception:
+            bucket_stats = None
 
     if calibration is _UNSET:
         try:
@@ -103,12 +111,12 @@ def build_all_games_lean_card(best_picks_df: pd.DataFrame, *, calibration: objec
     if calibration:
         try:
             from core.probability_calibration import apply_bucket_calibration
-            from core.empirical_tiers import bucket_key, load_bucket_stats
+            from core.empirical_tiers import bucket_key
             league = _first_col(df, "league", "League")
             market_type = _first_col(df, "market_type")
             buckets = [bucket_key(l, m, c) for l, m, c in zip(league, market_type, consensus)]
             calib_win = pd.to_numeric(
-                apply_bucket_calibration(win, buckets, calibration, load_bucket_stats()), errors="coerce"
+                apply_bucket_calibration(win, buckets, calibration, bucket_stats), errors="coerce"
             )
         except Exception:
             calib_win = win
@@ -121,12 +129,20 @@ def build_all_games_lean_card(best_picks_df: pd.DataFrame, *, calibration: objec
         for s, e, c, cw, be in zip(status, eff_ev, consensus, calib_win, breakeven)
     ]
 
+    # Empirical edge = bucket-aware calibrated win minus break-even. This — NOT model EV — is
+    # the predictive ranking signal: across 63 graded picks the model's EV ranking was
+    # inverted (its highest-EV/most-contrarian picks lost), while bucket-realized performance
+    # held up. So the card is ordered by Emp_Edge, best first, within each tier.
+    calib_num = pd.to_numeric(calib_win, errors="coerce")
+    emp_edge = calib_num - pd.to_numeric(breakeven, errors="coerce")
+
     out = pd.DataFrame({
         "League": _first_col(df, "league", "League"),
         "Matchup": (away + " @ " + home).str.strip(" @"),
         "Pick": _first_col(df, "best_pick"),
         "Win%": win,
-        "Calib_Win%": pd.to_numeric(calib_win, errors="coerce"),
+        "Calib_Win%": calib_num,
+        "Emp_Edge": emp_edge,
         "Edge": pd.to_numeric(edge, errors="coerce"),
         "EV": pd.to_numeric(eff_ev, errors="coerce"),
         "Consensus": consensus,
@@ -136,5 +152,9 @@ def build_all_games_lean_card(best_picks_df: pd.DataFrame, *, calibration: objec
         "Suggested_Stake": kelly.where(pd.Series(tier, index=df.index) == "BET", 0.0),
     })
     out["_t"] = out["Tier"].map(_TIER_ORDER).fillna(3)
-    out = out.sort_values(["_t", "Win%"], ascending=[True, False]).drop(columns="_t").reset_index(drop=True)
+    # Rank by empirical edge (bucket-proven), not model Win%/EV — the latter is anti-informative.
+    # Win% is the tiebreaker and the fallback when there's no calibration (Emp_Edge all NaN).
+    out = out.sort_values(
+        ["_t", "Emp_Edge", "Win%"], ascending=[True, False, False], na_position="last"
+    ).drop(columns="_t").reset_index(drop=True)
     return out
