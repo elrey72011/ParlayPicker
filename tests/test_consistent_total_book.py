@@ -50,8 +50,27 @@ def test_expand_uses_consensus_total_line_and_price():
     }
     out, _ = _expand_live_odds_to_bet_rows(pd.DataFrame([row]), None)
     over = out[out.market_type == "total_over"].iloc[0]
-    assert float(over["total_line"]) == 8.5        # consensus, not novig's 7.0
+    # novig's 7.0 is a WILD outlier (1.5 off the 8.5 median, > NOVIG_TOTAL_OUTLIER_TOL) -> a
+    # likely stale exchange posting, so fall back to the consensus book.
+    assert float(over["total_line"]) == 8.5        # consensus, not novig's outlier 7.0
     assert float(over["odds_american"]) == -105.0  # fanduel's price at the consensus line
+
+
+def test_expand_uses_novig_line_when_within_tolerance():
+    # The real 26-Jun bug: novig posts 8.5 while the field is at 9.0 (a normal 0.5 book
+    # disagreement). The user bets on novig, so its 8.5 — and its price — must be used.
+    row = {
+        "league": "MLB", "home_team": "Detroit", "away_team": "Houston",
+        "game_date": "2026-06-26", "matchup_id": "m2", "commence_time_raw": "2026-06-26T22:41:00Z",
+        "novig_over_point": 8.5, "novig_over_price": -106, "novig_under_point": 8.5, "novig_under_price": 104,
+        "fanduel_over_point": 9.0, "fanduel_over_price": -112, "fanduel_under_point": 9.0, "fanduel_under_price": -104,
+        "draftkings_over_point": 9.0, "draftkings_over_price": -115, "draftkings_under_point": 9.0, "draftkings_under_price": -105,
+        "betmgm_over_point": 9.0, "betmgm_over_price": -115, "betmgm_under_point": 9.0, "betmgm_under_price": -105,
+    }
+    out, _ = _expand_live_odds_to_bet_rows(pd.DataFrame([row]), None)
+    over = out[out.market_type == "total_over"].iloc[0]
+    assert float(over["total_line"]) == 8.5        # novig's real line, NOT the 9.0 consensus
+    assert float(over["odds_american"]) == -106.0  # and novig's own price
 
 
 def test_diag_includes_total_points():

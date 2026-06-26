@@ -132,7 +132,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-06-26-contrarian-public-fade"
+PIPELINE_BUILD = "2026-06-26-prefer-novig-total-line"
 
 
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
@@ -5057,6 +5057,14 @@ def _raw_book_odds_diag(row):
     return " | ".join(parts) if parts else pd.NA
 
 
+# Use Novig's own total line (the user transacts on Novig) unless it deviates from the
+# multi-book median by MORE than this many runs — a larger gap is likely a stale/illiquid
+# exchange posting, not a real bettable line, so fall back to the consensus book. 0.5-1.0 book
+# disagreement is normal and real; >1.0 is the outlier the original consensus guard protected
+# against. (26 Jun: scoring Det/Bal/StL/Min against the 9.0 consensus mis-priced Novig's 8.5.)
+NOVIG_TOTAL_OUTLIER_TOL = 1.0
+
+
 def _consensus_total_line(row):
     """Median total line across books (over/under share the line). Robust to one book —
     e.g. the thin P2P exchange novig — posting a stale/off-market total."""
@@ -5409,16 +5417,26 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
                 market_dict["live_total_line"] = pd.NA
             elif market_type.startswith("total"):
                 t_side = "over" if market_type == "total_over" else "under"
-                # Prefer a book at the consensus total line (and take its price), so a
-                # thin exchange posting an off-market total can't set the line/odds.
-                cb = _consistent_total_book(row, t_side)
-                cb_point = pd.to_numeric(row.get(f"{cb}_{t_side}_point"), errors="coerce") if cb else pd.NA
-                if cb is not None and pd.notna(cb_point):
-                    point_val = float(cb_point)
-                    cb_price = pd.to_numeric(row.get(f"{cb}_{t_side}_price"), errors="coerce")
-                    if pd.notna(cb_price):
-                        market_dict["odds_american"] = float(cb_price)
-                        market_dict["odds_source"] = "odds_api"
+                # The user bets on Novig, so Novig's posted total IS the line they actually get
+                # — prefer it (point_val + odds_american already default to Novig above). Only
+                # fall back to the consensus book when Novig has NO total OR is a WILD outlier
+                # (> NOVIG_TOTAL_OUTLIER_TOL off the median, i.e. a likely stale/illiquid
+                # exchange posting). This keeps the original off-market protection while not
+                # over-riding Novig's real 0.5-off lines (26 Jun: Det/Bal/StL/Min).
+                _cons_line = _consensus_total_line(row)
+                _novig_outlier = (
+                    pd.notna(point_val) and pd.notna(_cons_line)
+                    and abs(float(point_val) - float(_cons_line)) > NOVIG_TOTAL_OUTLIER_TOL
+                )
+                if pd.isna(point_val) or _novig_outlier:
+                    cb = _consistent_total_book(row, t_side)
+                    cb_point = pd.to_numeric(row.get(f"{cb}_{t_side}_point"), errors="coerce") if cb else pd.NA
+                    if cb is not None and pd.notna(cb_point):
+                        point_val = float(cb_point)
+                        cb_price = pd.to_numeric(row.get(f"{cb}_{t_side}_price"), errors="coerce")
+                        if pd.notna(cb_price):
+                            market_dict["odds_american"] = float(cb_price)
+                            market_dict["odds_source"] = "odds_api"
                 market_dict["spread_line"] = pd.NA
                 market_dict["total_line"] = float(point_val) if pd.notna(point_val) else pd.NA
                 market_dict["live_spread_line"] = pd.NA
