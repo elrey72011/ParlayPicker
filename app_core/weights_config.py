@@ -361,6 +361,17 @@ MLB_THEOVER_FADE_SHRINK = 1.0   # fraction of (P-0.5) removed; 1.0=neutralized, 
 # non-MLB; revisit separately if/when graded non-MLB flipped-game data warrants it.
 THEOVER_FADE_SHRINK_DEFAULT = 0.75
 
+# 26 Jun: with the constant model_hit_rate neutralized, the only per-game value TheOver still
+# emits is PublicBettingPct (the % of money/tickets on a side). Public money is a FADE signal,
+# not a follow one — heavy-public sides win LESS — so we CONTRARIAN-fade it instead of letting
+# the blend treat "88% on the Over" as "Over is 88% likely". The transform mirrors the
+# deviation from 0.50: P(Over)_new = 0.50 - STRENGTH * (P(Over) - 0.50). STRENGTH 0 = neutral
+# (ignore public), 1.0 = full mirror (1 - P), 0<s<1 = weak contrarian. Held weak: the
+# public-fade edge is real but small, and this rides at 17% blend weight on the few games that
+# even carry a public %. Scoped to MLB totals (the blend callers apply it only there).
+MLB_PUBLIC_BETTING_FADE_SOURCES = frozenset({"public_betting_pct"})
+MLB_PUBLIC_BETTING_FADE_STRENGTH = 0.5
+
 # Degraded-feed down-weight (see _apply_analysis_calculations' degradation guard).
 # When the slate's TheOver totals reads look degenerately clustered, shrink each
 # totals read toward neutral 0.50 by this fraction instead of nulling TheOver

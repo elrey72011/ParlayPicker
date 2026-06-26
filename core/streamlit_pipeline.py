@@ -69,6 +69,7 @@ from app_core.weights_config import (
     KALSHI_DIVERGENCE_THRESHOLD_MLB, KALSHI_DIVERGENCE_THRESHOLD_NHL,
     MLB_THEOVER_CONFLICT_THRESHOLD, MLB_THEOVER_CONFLICT_PENALTY,
     MLB_THEOVER_FADE_SOURCES, MLB_THEOVER_FADE_SHRINK, THEOVER_FADE_SHRINK_DEFAULT,
+    MLB_PUBLIC_BETTING_FADE_SOURCES, MLB_PUBLIC_BETTING_FADE_STRENGTH,
 )
 
 warnings.filterwarnings("ignore", category=FutureWarning, module="pandas")
@@ -131,7 +132,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-06-26-neutralize-constant-theover"
+PIPELINE_BUILD = "2026-06-26-contrarian-public-fade"
 
 
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
@@ -2321,6 +2322,25 @@ def _fade_theover(theover, win_prob_source, fade_sources, shrink):
     return out
 
 
+def _fade_contrarian_public(theover, win_prob_source, sources, strength):
+    """Contrarian-fade public-betting-% rows: P(Over)_new = 0.50 - strength*(P(Over)-0.50).
+
+    Public money is a FADE signal — heavy-public sides win LESS — so we invert its deviation
+    from 0.50 rather than follow it (an 88%-public Over becomes < 0.50, "less likely"). strength
+    0 = neutral (-> 0.50), 1.0 = full mirror (1-P), 0<s<1 = weak contrarian. NaN and
+    non-matching sources pass through unchanged. Returns a float ndarray.
+    """
+    theover = np.asarray(theover, dtype=float)
+    if win_prob_source is None or not sources or strength <= 0:
+        return theover
+    norm = {str(s).strip().lower() for s in sources}
+    src = pd.Series(win_prob_source).astype("string").str.strip().str.lower()
+    matched = src.isin(norm).fillna(False).to_numpy()
+    out = theover.copy()
+    out[matched] = 0.5 - float(strength) * (theover[matched] - 0.5)
+    return out
+
+
 def _scoped_theover_blend_fade(theover_arr, win_prob_source, league, market_type, index):
     """Fade TheOver's blend input with the MLB-tuned shrink on MLB totals and the
     non-MLB default everywhere else.
@@ -2332,11 +2352,16 @@ def _scoped_theover_blend_fade(theover_arr, win_prob_source, league, market_type
     league/market keeps ``THEOVER_FADE_SHRINK_DEFAULT``. Pure + shared by both blend
     call sites (run_analysis_pipeline and the post-Kalshi re-blend) so the scoping is
     unit-testable and cannot drift between them.
+
+    On MLB totals, ``public_betting_pct`` rows are additionally CONTRARIAN-faded
+    (``MLB_PUBLIC_BETTING_FADE_STRENGTH``): public money is a fade signal, so heavy-public
+    sides are pushed below 0.50 instead of followed.
     """
-    faded_mlb = pd.Series(
-        _fade_theover(theover_arr, win_prob_source, MLB_THEOVER_FADE_SOURCES, MLB_THEOVER_FADE_SHRINK),
-        index=index,
+    faded_mlb_arr = _fade_theover(theover_arr, win_prob_source, MLB_THEOVER_FADE_SOURCES, MLB_THEOVER_FADE_SHRINK)
+    faded_mlb_arr = _fade_contrarian_public(
+        faded_mlb_arr, win_prob_source, MLB_PUBLIC_BETTING_FADE_SOURCES, MLB_PUBLIC_BETTING_FADE_STRENGTH
     )
+    faded_mlb = pd.Series(faded_mlb_arr, index=index)
     faded_default = pd.Series(
         _fade_theover(theover_arr, win_prob_source, MLB_THEOVER_FADE_SOURCES, THEOVER_FADE_SHRINK_DEFAULT),
         index=index,
