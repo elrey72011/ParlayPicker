@@ -1,7 +1,7 @@
 {
   "overall": {
-    "n": 342,
-    "win_rate": 0.5087719298245614
+    "n": 350,
+    "win_rate": 0.5142857142857142
   },
   "buckets": {
     "MLB:over:Agrees": {
@@ -15,9 +15,9 @@
       "win_rate": 0.48148148148148145
     },
     "MLB:over:Neutral": {
-      "n": 98,
-      "wins": 49,
-      "win_rate": 0.5
+      "n": 100,
+      "wins": 51,
+      "win_rate": 0.51
     },
     "MLB:side:Agrees": {
       "n": 2,
@@ -35,13 +35,13 @@
       "win_rate": 0.6307692307692307
     },
     "MLB:under:Disagrees": {
-      "n": 33,
-      "wins": 14,
-      "win_rate": 0.42424242424242425
+      "n": 35,
+      "wins": 16,
+      "win_rate": 0.45714285714285713
     },
     "MLB:under:Neutral": {
-      "n": 12,
-      "wins": 6,
+      "n": 16,
+      "wins": 8,
       "win_rate": 0.5
     },
     "NBA:over:Neutral": {
@@ -87,6 +87,6 @@
   },
   "meta": {
     "source": "data/backtest_exports",
-    "fitted_on": "2026-06-25"
+    "fitted_on": "2026-06-27"
   }
 }
