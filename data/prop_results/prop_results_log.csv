@@ -1,0 +1,7 @@
+date,pitcher,pick,side,line,expected_ks,actual_ks,odds_american,stake,result,profit
+2026-06-26,Will Warren,Will Warren Under 4.5 Ks,under,4.5,4.41,0,116.0,5.0,WIN,5.8
+2026-06-26,Max Meyer,Max Meyer Over 5.5 Ks,over,5.5,6.27,5,104.0,5.0,LOSS,-5.0
+2026-06-26,Andrew Abbott,Andrew Abbott Over 4.5 Ks,over,4.5,5.59,6,-120.0,5.0,WIN,4.17
+2026-06-26,Joey Cantillo,Joey Cantillo Under 5.5 Ks,under,5.5,5.17,9,-104.0,5.0,LOSS,-5.0
+2026-06-26,Walker Buehler,Walker Buehler Over 4.5 Ks,over,4.5,4.5,5,153.0,5.0,WIN,7.65
+2026-06-26,Tomoyuki Sugano,Tomoyuki Sugano Over 3.5 Ks,over,3.5,3.58,2,144.0,5.0,LOSS,-5.0
