@@ -183,8 +183,18 @@ NBA_OVER_ACTIONABLE_BONUS = 0.00
 # aggregate, not a single slate -- judge future moves the same way, and prefer fixing
 # calibration (the middle-band miscalibration is non-linear, so a flat shrink won't do it)
 # over re-tuning this gate.
-MLB_OVER_ACTIONABLE_MIN_PROB = 0.65
-MLB_OVER_ACTIONABLE_MIN_EV = 0.07
+# 28 Jun: SYMMETRIZED with the under floor. The strict 0.65/0.07 over bar above was set in the
+# "overs bled 46.7%" era; the current graded buckets (n=350) show overs are now ~51% —
+# over:Agrees .509, over:Neutral .510 — no worse than under:Neutral (.500) or under:Disagrees
+# (.457). Direction is NOT the signal; the bucket is (only under:Agrees .631 is truly good).
+# The empirical-tier overlay already gates staking by PROVEN bucket, and no over bucket is
+# proven yet, so this opens no floodgate: overs at ~51% are still below the -110 break-even
+# and the overlay still blocks them. What it removes is the stale asymmetry — and it lets an
+# over bucket actually stake IF it ever proves out (>0.55), instead of the 0.65 floor blocking
+# it even then. (Per-line over guards — high/low total-line penalties — are kept; those are
+# line-environment effects, not the over/under bucket asymmetry.)
+MLB_OVER_ACTIONABLE_MIN_PROB = 0.55   # = MLB_TOTAL_UNDER_MIN_WIN_PROB (symmetric)
+MLB_OVER_ACTIONABLE_MIN_EV = 0.03     # = TOTAL_OVER_MIN_EV (symmetric)
 MLB_OVER_ACTIONABLE_MIN_EDGE = 0.04
 # Earned relaxation of the strict MLB-over bar (17 Jun). The blanket 0.65 prob /
 # 0.07 EV gate above made the over-heavy slates produce zero Actionable picks: the
