@@ -1,0 +1,95 @@
+date,matchup,pick,tier,outcome
+2026-06-19,Cincinnati @ New York Yankees,Over 8.5,Actionable,LOSS
+2026-06-19,Pittsburgh @ Colorado,Pittsburgh -1.5,Below/HV,LOSS
+2026-06-19,Cleveland @ Houston,Houston -1.5,Below/HV,WIN
+2026-06-19,San Francisco @ Miami,Over 8.5,Below/HV,LOSS
+2026-06-19,Baltimore @ Los Angeles Dodgers,Over 9.5,Below/HV,WIN
+2026-06-19,Toronto @ Chicago Cubs,Over 7.5,Below/HV,WIN
+2026-06-19,Minnesota @ Arizona,Under 8.5,Below/HV,LOSS
+2026-06-19,Milwaukee @ Atlanta,Over 7.5,Below/HV,LOSS
+2026-06-19,Boston @ Seattle,Under 6.5,Below/HV,LOSS
+2026-06-19,San Diego @ Texas,Under 7.5,No Play,LOSS
+2026-06-19,Washington @ Tampa Bay,Under 7.5,No Play,WIN
+2026-06-19,Saint Louis @ Kansas City,Under 9.5,No Play,LOSS
+2026-06-19,Los Angeles Angels @ Athletics,Over 9.5,No Play,WIN
+2026-06-19,Chicago White Sox @ Detroit,Under 8.5,No Play,WIN
+2026-06-22,Houston @ Toronto,Over 7.5,Below/HV,LOSS
+2026-06-22,Cleveland @ Chicago White Sox,Under 7.5,Below/HV,LOSS
+2026-06-22,Philadelphia @ Washington,Washington -1.5,No Play,WIN
+2026-06-22,Texas @ Miami,Over 8.5,No Play,LOSS
+2026-06-22,Kansas City @ Tampa Bay,Under 7.5,No Play,WIN
+2026-06-22,Baltimore @ Los Angeles Angels,Over 9.0,No Play,LOSS
+2026-06-22,Milwaukee @ Cincinnati,Over 9.5,No Play,LOSS
+2026-06-22,Los Angeles Dodgers @ Minnesota,Over 9.5,No Play,LOSS
+2026-06-22,Arizona @ Saint Louis,Under 8.5,No Play,WIN
+2026-06-22,New York Yankees @ Detroit,Under 8.5,No Play,WIN
+2026-06-22,Boston @ Colorado,Under 11.5,No Play,WIN
+2026-06-22,Atlanta @ San Diego,Under 7.5,No Play,WIN
+2026-06-23,Cleveland @ Chicago White Sox,Over 7.0,Below/HV,LOSS
+2026-06-23,Baltimore @ Los Angeles Angels,Over 9.0,Below/HV,LOSS
+2026-06-23,Texas @ Miami,Under 8.5,Below/HV,LOSS
+2026-06-23,Arizona @ Saint Louis,Under 8.5,Below/HV,WIN
+2026-06-23,Philadelphia @ Washington,Over 8.5,Below/HV,WIN
+2026-06-23,Kansas City @ Tampa Bay,Over 7.5,Below/HV,WIN
+2026-06-23,Seattle @ Pittsburgh,Over 8.5,Below/HV,LOSS
+2026-06-23,Boston @ Colorado,Over 10.5,No Play,LOSS
+2026-06-23,Atlanta @ San Diego,Under 8.5,No Play,LOSS
+2026-06-23,Chicago Cubs @ New York Mets,Over 8.5,No Play,WIN
+2026-06-23,Houston @ Toronto,Under 8.5,No Play,LOSS
+2026-06-23,Athletics @ San Francisco,Over 8.5,No Play,LOSS
+2026-06-23,Los Angeles Dodgers @ Minnesota,Under 9.0,No Play,LOSS
+2026-06-23,New York Yankees @ Detroit,Over 7.5,No Play,LOSS
+2026-06-23,Milwaukee @ Cincinnati,Over 9.5,No Play,LOSS
+2026-06-24,Arizona @ Saint Louis,Under 9.0,Below/HV,LOSS
+2026-06-24,Atlanta @ San Diego,Over 8.5,Below/HV,LOSS
+2026-06-24,Seattle @ Pittsburgh,Under 7.5,Below/HV,LOSS
+2026-06-24,Philadelphia @ Washington,Over 9.5,Below/HV,LOSS
+2026-06-24,Boston @ Colorado,Under 10.5,Below/HV,LOSS
+2026-06-24,Houston @ Toronto,Under 8.5,Below/HV,WIN
+2026-06-24,Texas @ Miami,Over 5.5,Below/HV,WIN
+2026-06-24,Kansas City @ Tampa Bay,Under 7.5,Below/HV,LOSS
+2026-06-24,Chicago Cubs @ New York Mets,Over 8.5,Below/HV,WIN
+2026-06-24,Baltimore @ Los Angeles Angels,Over 9.5,Below/HV,WIN
+2026-06-24,Milwaukee @ Cincinnati,Over 9.5,No Play,WIN
+2026-06-24,Cleveland @ Chicago White Sox,Under 8.5,No Play,WIN
+2026-06-24,New York Yankees @ Detroit,Under 7.5,No Play,WIN
+2026-06-24,Athletics @ San Francisco,Under 8.5,No Play,WIN
+2026-06-24,Los Angeles Dodgers @ Minnesota,Over 8.0,No Play,LOSS
+2026-06-25,Texas @ Toronto,Over 8.0,Below/HV,WIN
+2026-06-25,Seattle @ Pittsburgh,Under 8.5,Below/HV,WIN
+2026-06-25,Philadelphia @ Washington,Under 8.5,Below/HV,LOSS
+2026-06-25,Kansas City @ Tampa Bay,Under 8.5,No Play,LOSS
+2026-06-25,Chicago Cubs @ New York Mets,Under 8.5,No Play,WIN
+2026-06-25,Houston @ Detroit,Over 9.0,No Play,LOSS
+2026-06-25,Athletics @ San Francisco,Over 8.0,No Play,WIN
+2026-06-25,New York Yankees @ Boston,Over 7.5,No Play,WIN
+2026-06-26,Arizona @ Tampa Bay,Under 8.5,Below/HV,WIN
+2026-06-26,Cincinnati @ Pittsburgh,Under 7.5,Below/HV,LOSS
+2026-06-26,Washington @ Baltimore,Under 8.5,Below/HV,WIN
+2026-06-26,New York Yankees @ Boston,Under 8.5,Below/HV,WIN
+2026-06-26,Seattle @ Cleveland,Under 7.5,Below/HV,WIN
+2026-06-26,Colorado @ Minnesota,Under 9.5,No Play,LOSS
+2026-06-26,Philadelphia @ New York Mets,Under 8.5,No Play,WIN
+2026-06-26,Athletics @ Los Angeles Angels,Over 8.5,No Play,WIN
+2026-06-26,Texas @ Toronto,Over 8.5,No Play,WIN
+2026-06-26,Atlanta @ San Francisco,Under 8.5,No Play,WIN
+2026-06-26,Los Angeles Dodgers @ San Diego,Under 7.5,No Play,LOSS
+2026-06-26,Miami @ Saint Louis,Over 8.5,No Play,LOSS
+2026-06-26,Chicago Cubs @ Milwaukee,Over 7.5,No Play,WIN
+2026-06-26,Kansas City @ Chicago White Sox,Over 8.5,No Play,WIN
+2026-06-26,Houston @ Detroit,Under 8.5,No Play,WIN
+2026-06-27,Arizona @ Tampa Bay,Under 8.5,Below/HV,WIN
+2026-06-27,Chicago Cubs @ Milwaukee,Over 7.5,Below/HV,WIN
+2026-06-27,Cincinnati @ Pittsburgh,Under 7.5,Below/HV,LOSS
+2026-06-27,Colorado @ Minnesota,Under 9.5,Below/HV,LOSS
+2026-06-27,Miami @ Saint Louis,Under 8.5,Below/HV,WIN
+2026-06-27,Seattle @ Cleveland,Over 7.5,Below/HV,LOSS
+2026-06-27,Texas @ Toronto,Under 7.5,Below/HV,LOSS
+2026-06-27,Kansas City @ Chicago White Sox,Under 8.5,No Play,WIN
+2026-06-27,Athletics @ Los Angeles Angels,Over 8.5,No Play,LOSS
+2026-06-27,New York Yankees @ Boston,Under 8.5,No Play,WIN
+2026-06-27,Houston @ Detroit,Under 8.5,No Play,LOSS
+2026-06-27,Atlanta @ San Francisco,Under 7.5,No Play,WIN
+2026-06-27,Philadelphia @ New York Mets,Under 8.5,No Play,WIN
+2026-06-27,Washington @ Baltimore,Under 8.5,No Play,WIN
+2026-06-27,Los Angeles Dodgers @ San Diego,Under 7.5,No Play,LOSS
