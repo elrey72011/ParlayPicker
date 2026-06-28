@@ -1,19 +1,22 @@
-"""Under win-prob floor relaxation (8 Jun, graded n=212).
+"""MLB totals win-prob floor (28 Jun: symmetrized over/under).
 
-Unders are the edge side (60.6% vs Overs 52.5%) and hold edge well below the old
-0.62/0.63 floors, so the MLB under floor was lowered to 0.55 while OVERS stay strict
-(relaxing overs bled to 46.7%). NBA/NHL unders must stay protected by their own,
-higher league floors. See scripts/edge_by_bucket.py and weights_config.
+The MLB under floor sits at 0.55. The over floor USED to stay strict at 0.65 (set when overs
+bled 46.7%), but on the current graded sample (n=350) overs are ~51% — over:Agrees .509,
+over:Neutral .510 — no worse than under:Neutral (.500) or under:Disagrees (.457). Direction is
+no longer the signal (only under:Agrees .631 is truly good), and the empirical-tier overlay
+gates staking by PROVEN bucket, so the asymmetric over penalty was removed. NBA/NHL unders
+still keep their own higher league floors. See scripts/edge_by_bucket.py and weights_config.
 """
 from app_core import weights_config as wc
 
 
-def test_under_floor_relaxed_below_over_floor():
-    # The asymmetry is the whole point: unders relaxed, overs kept strict.
+def test_mlb_total_floor_is_symmetric_over_and_under():
+    # The over/under asymmetry was removed: both MLB floors are 0.55, and the bucket overlay
+    # (not a blanket over penalty) decides what actually stakes.
     assert wc.TOTAL_UNDER_MIN_WIN_PROB == 0.55
     assert wc.MLB_TOTAL_UNDER_MIN_WIN_PROB == 0.55
-    assert wc.MLB_OVER_ACTIONABLE_MIN_PROB == 0.65
-    assert wc.MLB_TOTAL_UNDER_MIN_WIN_PROB < wc.MLB_OVER_ACTIONABLE_MIN_PROB
+    assert wc.MLB_OVER_ACTIONABLE_MIN_PROB == 0.55
+    assert wc.MLB_OVER_ACTIONABLE_MIN_PROB == wc.MLB_TOTAL_UNDER_MIN_WIN_PROB
 
 
 def test_non_mlb_unders_keep_higher_floors():
