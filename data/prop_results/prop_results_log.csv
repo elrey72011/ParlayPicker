@@ -5,3 +5,12 @@ date,pitcher,pick,side,line,expected_ks,actual_ks,odds_american,stake,result,pro
 2026-06-26,Joey Cantillo,Joey Cantillo Under 5.5 Ks,under,5.5,5.17,9,-104.0,5.0,LOSS,-5.0
 2026-06-26,Walker Buehler,Walker Buehler Over 4.5 Ks,over,4.5,4.5,5,153.0,5.0,WIN,7.65
 2026-06-26,Tomoyuki Sugano,Tomoyuki Sugano Over 3.5 Ks,over,3.5,3.58,2,144.0,5.0,LOSS,-5.0
+2026-06-27,Jack Perkins,Jack Perkins Under 5.5 Ks,under,5.5,5.47,5,127.0,3.33,WIN,4.23
+2026-06-27,Bryce Elder,Bryce Elder Under 4.5 Ks,under,4.5,3.58,4,-153.0,3.33,WIN,2.18
+2026-06-27,Dylan Cease,Dylan Cease Over 8.5 Ks,over,8.5,8.76,10,130.0,3.33,WIN,4.33
+2026-06-27,Chase Burns,Chase Burns Over 6.5 Ks,over,6.5,8.18,10,-147.0,3.33,WIN,2.27
+2026-06-27,Michael Lorenzen,Michael Lorenzen Over 4.5 Ks,over,4.5,4.73,1,141.0,3.33,LOSS,-3.33
+2026-06-27,Slade Cecconi,Slade Cecconi Under 4.5 Ks,under,4.5,3.96,4,-130.0,3.33,WIN,2.56
+2026-06-27,Foster Griffin,Foster Griffin Over 6.5 Ks,over,6.5,6.38,9,147.0,3.33,WIN,4.9
+2026-06-27,Andre Pallante,Andre Pallante Under 4.5 Ks,under,4.5,4.21,4,-122.0,3.33,WIN,2.73
+2026-06-27,Yoshinobu Yamamoto,Yoshinobu Yamamoto Under 5.5 Ks,under,5.5,6.28,4,163.0,3.33,WIN,5.43
