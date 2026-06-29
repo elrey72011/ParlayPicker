@@ -27,6 +27,7 @@ from core.streamlit_pipeline import (
     MIN_EDGE_THRESHOLD,
     ensure_best_pick_export_columns,
     REQUIRED_BEST_PICK_EXPORT_COLUMNS,
+    apply_no_bet_pick_quality,
 )
 from core.team_normalizer import normalize_team
 from core.theover_loader import load_theover_csv
@@ -1653,6 +1654,8 @@ def main() -> None:
         display_df = best_picks_df.copy() if best_picks_df is not None else pd.DataFrame(columns=["league", "pick", "edge"])
         if not display_df.empty and "parlay_rank" in display_df.columns:
             display_df["parlay_rank"] = range(1, len(display_df) + 1)
+        # Same display hygiene as the CSV export: $0-stake picks read as "No Bet", not a tier.
+        display_df = apply_no_bet_pick_quality(display_df)
 
         if display_df.empty:
             st.warning("⚠️ No games found.")
@@ -1780,6 +1783,11 @@ def main() -> None:
 
                 if "parlay_rank" in best_picks_export.columns:
                     best_picks_export["parlay_rank"] = range(1, len(best_picks_export) + 1)
+
+            # Display hygiene: benched ($0-stake) picks keep their row but lose the
+            # "C-Tier (Value)" style label so the card can't read as a stack of ranked
+            # bets when only the staked rows carry money. No change to staking.
+            best_picks_export = apply_no_bet_pick_quality(best_picks_export)
 
             if "Home" in best_picks_export.columns and not best_picks_export.empty:
                 if not best_picks_export["Home"].notna().all():
