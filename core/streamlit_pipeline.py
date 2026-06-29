@@ -2543,6 +2543,29 @@ def _calibrated_beats_breakeven(eff_win, odds_american, calibration, buckets=Non
     return cw.gt(be)
 
 
+def apply_no_bet_pick_quality(df: pd.DataFrame) -> pd.DataFrame:
+    """Relabel ``Pick_Quality`` for rows the engine does not actually stake.
+
+    The S/A/B/C/D-Tier labels are scored from raw edge/EV and get stamped onto EVERY
+    candidate, including the dozens of picks that are benched (Below Threshold / No Play).
+    On a card that's mostly contrarian unders, that made a pile of $0-stake picks read as
+    ranked "C-Tier (Value)" bets when only the one proven-bucket play carries money. For any
+    row with no positive Kelly stake, overwrite the tier with a plain ``No Bet - <status>``
+    so the export can't be misread. Live bets (Kelly > 0) keep their tier. Display only:
+    nothing about what gets staked changes. Pure, no network; mutates and returns ``df``.
+    """
+    if df is None or getattr(df, "empty", True) or "Pick_Quality" not in df.columns:
+        return df
+    kelly = pd.to_numeric(df.get("Kelly_Bet_Size"), errors="coerce").fillna(0.0)
+    benched = ~kelly.gt(0)
+    if not benched.any():
+        return df
+    status = df.get("Pick_Status")
+    status = status.astype(str) if status is not None else pd.Series([""] * len(df), index=df.index)
+    df.loc[benched, "Pick_Quality"] = "No Bet - " + status[benched].where(status[benched].ne("nan"), "Benched")
+    return df
+
+
 def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None = None) -> pd.DataFrame:
     logger.info(f"BEST PICKS AUDIT: Received analysis_df with {len(analysis_df)} rows")
     if analysis_df is None or analysis_df.empty:
