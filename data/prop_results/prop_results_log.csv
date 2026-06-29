@@ -14,3 +14,9 @@ date,pitcher,pick,side,line,expected_ks,actual_ks,odds_american,stake,result,pro
 2026-06-27,Foster Griffin,Foster Griffin Over 6.5 Ks,over,6.5,6.38,9,147.0,3.33,WIN,4.9
 2026-06-27,Andre Pallante,Andre Pallante Under 4.5 Ks,under,4.5,4.21,4,-122.0,3.33,WIN,2.73
 2026-06-27,Yoshinobu Yamamoto,Yoshinobu Yamamoto Under 5.5 Ks,under,5.5,6.28,4,163.0,3.33,WIN,5.43
+2026-06-28,Brandon Woodruff,Brandon Woodruff Under 6.5 Ks,under,6.5,4.86,6,-233.0,5.0,WIN,2.15
+2026-06-28,Sonny Gray,Sonny Gray Over 5.5 Ks,over,5.5,6.75,9,-120.0,5.0,WIN,4.17
+2026-06-28,Kyle Leahy,Kyle Leahy Under 4.5 Ks,under,4.5,4.0,5,-127.0,5.0,LOSS,-5.0
+2026-06-28,Emmet Sheehan,Emmet Sheehan Under 5.5 Ks,under,5.5,5.21,5,-106.0,5.0,WIN,4.72
+2026-06-28,Brady Singer,Brady Singer Over 4.5 Ks,over,4.5,5.4,6,-127.0,5.0,WIN,3.94
+2026-06-28,Kumar Rocker,Kumar Rocker Over 4.5 Ks,over,4.5,4.15,5,178.0,5.0,WIN,8.9

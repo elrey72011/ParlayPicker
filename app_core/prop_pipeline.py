@@ -110,6 +110,23 @@ def score_strikeout_prop(
         if rec != "no_play"
         else f"edge {edge:+.1%} below {min_edge:.0%} bar or EV<=0"
     )
+    # Projection-side consistency gate (added 29 Jun after Kumar Rocker Over 4.5 staked while
+    # the model's own projection, 4.15 Ks, sat UNDER the line). When the market prices a side
+    # cheaper than the model's already-sub-50% probability for it, edge_over >= edge_under can
+    # select the side the point projection contradicts -- a positive-EV longshot that loses
+    # more often than it wins. Refuse to stake a side our own expected-Ks read points away
+    # from: an Over needs lam > line, an Under needs lam < line. Exactly on the line is not a
+    # contradiction (no side is favored), so it is left alone.
+    if rec != "no_play":
+        contradicts_projection = (side == "over" and lam < line) or (
+            side == "under" and lam > line
+        )
+        if contradicts_projection:
+            rec = "no_play"
+            reason = (
+                f"{side} contradicts projection (expected {lam:.2f} Ks vs line {line:g}); "
+                f"+EV only from price, suppressed"
+            )
     # Implausible-edge cap: a double-digit edge in a liquid prop market is the projection
     # being wrong, not the book. Suppress rather than stake until the model is calibrated.
     if rec != "no_play" and edge > max_plausible_edge:

@@ -96,6 +96,30 @@ def test_low_games_count_is_no_data():
     assert s["recommendation"] == "no_data"
 
 
+def test_over_contradicting_projection_is_no_play():
+    # Reproduces Kumar Rocker Over 4.5 (29 Jun): projection ~4.16 Ks sits UNDER the 4.5 line,
+    # but a +178 over price is cheaper than the model's sub-50% over prob, so edge_over wins
+    # the side selection. The projection-side gate must refuse to stake an Over the model's
+    # own expected-Ks read points away from.
+    row = {"pitcher": "Rocker", "line": 4.5, "over_odds": 178, "under_odds": -230}
+    soft = {"k_per_9": 6.8, "avg_innings": 5.5, "n_games": 5}  # ~4.16 Ks, under the line
+    s = score_strikeout_prop(row, soft, **_NO_CAP)
+    assert s["best_side"] == "over"
+    assert s["expected_ks"] < row["line"]
+    assert s["recommendation"] == "no_play"
+    assert "contradicts projection" in s["reason"]
+
+
+def test_projection_consistent_side_still_stakes():
+    # The gate must NOT touch picks where the side agrees with the projection: ace ~7.3 Ks,
+    # line 5.5, model loves the over and the projection (7.3) is above the line.
+    row = {"pitcher": "Ace", "line": 5.5, "over_odds": -110, "under_odds": -110}
+    s = score_strikeout_prop(row, _ACE, **_NO_CAP)
+    assert s["best_side"] == "over"
+    assert s["expected_ks"] > row["line"]
+    assert s["recommendation"] == "over"
+
+
 def test_implausible_edge_is_suppressed():
     # Ace vs a pick'em-priced low line yields a >12% edge -> projection error, suppressed.
     row = {"pitcher": "Ace", "line": 5.5, "over_odds": -110, "under_odds": -110}
