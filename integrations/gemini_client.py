@@ -43,6 +43,7 @@ def run_gemini_analysis(df: pd.DataFrame, session_state: Any = None) -> pd.DataF
 
         explanations = []
         risk_notes = []
+        picks = []
         for res in analyses_results:
             expl = res.get("explanation")
             if expl is None or expl == "":
@@ -53,11 +54,17 @@ def run_gemini_analysis(df: pd.DataFrame, session_state: Any = None) -> pd.DataF
                 # The user specified defaulting gemini_risk_notes to "Gemini analysis unavailable" if it's missing
                 risk = "Gemini analysis unavailable"
 
+            pick = res.get("recommended_bet")
+            if pick is None or pick == "":
+                pick = "No Gemini pick"
+
             explanations.append(str(expl))
             risk_notes.append(str(risk))
+            picks.append(str(pick))
 
         result["gemini_explanation"] = explanations
         result["gemini_risk_notes"] = risk_notes
+        result["gemini_pick"] = picks
 
     except Exception as exc:  # pragma: no cover
         import logging
@@ -65,5 +72,6 @@ def run_gemini_analysis(df: pd.DataFrame, session_state: Any = None) -> pd.DataF
         logger.error(f"Gemini integration mapping failed: {exc}", exc_info=True)
         result["gemini_explanation"] = "Gemini analysis unavailable"
         result["gemini_risk_notes"] = "Gemini analysis unavailable"
+        result["gemini_pick"] = "No Gemini pick"
 
     return result

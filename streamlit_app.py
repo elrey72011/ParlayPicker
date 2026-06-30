@@ -696,6 +696,8 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
 
     if "gemini_analysis" not in analysis_df.columns:
         analysis_df["gemini_analysis"] = ""
+    if "gemini_pick" not in analysis_df.columns:
+        analysis_df["gemini_pick"] = ""
 
     # Gemini Integration for Top Picks
     if controls.get("use_gemini") and not best_picks_df.empty:
@@ -711,6 +713,7 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
 
             for idx, row in best_picks_df.iterrows():
                 risks = str(row.get("gemini_risk_notes", ""))
+                pick = str(row.get("gemini_pick", "No Gemini pick"))
 
                 # Phase 4: Qualitative LLM Synergy
                 # Apply a 0.85 fractional discount to EV if bearish keywords are detected in the LLM risk notes
@@ -729,6 +732,7 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
                     analysis_df.loc[mask, "gemini_analysis"] = explanation
                     analysis_df.loc[mask, "gemini_explanation"] = explanation
                     analysis_df.loc[mask, "gemini_risk_notes"] = risks
+                    analysis_df.loc[mask, "gemini_pick"] = pick
 
         except Exception as e:
             deferred_warnings.append(f"Gemini analysis failed: {e}")
@@ -1287,7 +1291,7 @@ def main() -> None:
                         "Pick_Status", "Status_Reason", "Triple_Filter_Rank", "Pick_Quality", "parlay_rank", "league", "Home", "Away", "Local Date",
                         "Commence (Local)", "market_type", "candidate_source", "orientation_source", "upload_match_reason", "best_pick", "WinProbability", "expected_value",
                         "edge", "Conviction_Score", "consensus_agreement", "odds_american", "odds_source", "market_probability",
-                        "kalshi_probability", "ml_probability", "gemini_explanation", "gemini_risk_notes"
+                        "kalshi_probability", "ml_probability", "gemini_pick", "gemini_explanation", "gemini_risk_notes"
                     ]
 
                     csv_rename_map = {
@@ -1671,6 +1675,7 @@ def main() -> None:
                 "game_date": "Game Date",
                 "game_time_est": "Game Time (ET)",
                 "best_pick": "Best Pick",
+                "gemini_pick": "Gemini Pick",
                 "calibrated_probability": "Prob",
                 "expected_value": "EV",
                 "edge": "Edge",
@@ -1684,7 +1689,7 @@ def main() -> None:
             if "kalshi_probability" in display_df.columns:
                 kalshi_display = pd.to_numeric(display_df["kalshi_probability"], errors="coerce")
                 display_df["kalshi_probability_display"] = kalshi_display.map(lambda x: "No Kalshi" if pd.isna(x) else f"{x:.4f}")
-            preferred = ["Pick_Status", "Triple Filter Rank", "Pick Quality", "parlay_rank", "League", "Home Team", "Away Team", "Game Date", "Game Time (ET)", "Best Pick", "Prob", "ML Prob", "Odds", "Source", "EV", "Edge", "Consensus", "Kalshi Status", "kalshi_probability_display"]
+            preferred = ["Pick_Status", "Triple Filter Rank", "Pick Quality", "parlay_rank", "League", "Home Team", "Away Team", "Game Date", "Game Time (ET)", "Best Pick", "Gemini Pick", "Prob", "ML Prob", "Odds", "Source", "EV", "Edge", "Consensus", "Kalshi Status", "kalshi_probability_display"]
             ordered = [c for c in preferred if c in display_df.columns] + [c for c in display_df.columns if c not in preferred]
             display_df = display_df[ordered]
             st.dataframe(display_df, width="stretch")
@@ -1721,7 +1726,7 @@ def main() -> None:
                 "Pick_Status", "Status_Reason", "Triple_Filter_Rank", "Pick_Quality", "parlay_rank", "league", "Home", "Away", "Local Date",
                 "Commence (Local)", "market_type", "candidate_source", "orientation_source", "upload_match_reason", "best_pick", "Kelly_Bet_Size", "WinProbability", "expected_value",
                 "edge", "Conviction_Score", "consensus_agreement", "odds_american", "odds_source", "market_probability",
-                "kalshi_probability", "ml_probability", "gemini_explanation", "gemini_risk_notes",
+                "kalshi_probability", "ml_probability", "gemini_pick", "gemini_explanation", "gemini_risk_notes",
                 "status_metric_basis", "effective_expected_value", "effective_edge", "effective_win_probability",
                 "empirical_win_probability", "empirical_edge", "empirical_bucket",
                 "status_blocker_reason", "status_blocker_stage", "nba_stats_fetch_status", "fallback_summary_by_league",
@@ -1871,7 +1876,7 @@ def main() -> None:
                 "Conviction_Score", "market_probability", "kalshi_probability", "ml_probability",
                 "effective_expected_value", "effective_edge", "effective_win_probability",
                 "consensus_agreement", "Pick_Status", "Pick_Quality", "league", "Home", "Away",
-                "Commence (Local)", "odds_american", "best_pick", "Kelly_Bet_Size",
+                "Commence (Local)", "odds_american", "best_pick", "gemini_pick", "Kelly_Bet_Size",
             ]
             available_compact_cols = [c for c in compact_cols if c in best_picks_export.columns]
             compact_export = best_picks_export[available_compact_cols].copy()
