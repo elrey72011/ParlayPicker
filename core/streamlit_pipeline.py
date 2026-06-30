@@ -1567,7 +1567,13 @@ def get_opposing_odds_from_exchange(odds):
     if pd.isna(odds):
         return pd.NA
     odds_val = float(odds)
-    if odds_val <= 0:
+    if odds_val == 0.0:
+        # Zero is the explicit even-money/invalid-placeholder convention (see
+        # american_to_decimal), not a real negative-side price. The opposing
+        # side mirrors it so the de-vig stays at 0.5 rather than treating 0
+        # as a favorite and manufacturing a vig-skewed market_probability.
+        return 0.0
+    if odds_val < 0:
         return abs(odds_val) - 20.0
     else:
         return -(odds_val + 20.0)
