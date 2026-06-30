@@ -3,6 +3,25 @@ from __future__ import annotations
 from typing import Any
 import pandas as pd
 
+# Analytic inputs Gemini is allowed to see: market/model signals and game
+# identity only. Deliberately an ALLOWLIST, not a blocklist of date columns —
+# best_picks_df carries ~80 internal pipeline columns (Pick_Status,
+# Status_Reason, status_blocker_reason, production_*, kelly_*,
+# empty_card_recovery_*, Pick_Quality, Triple_Filter_Rank, ...) that state
+# this system's own verdict on the bet. Passing those through let Gemini see
+# "the system already rejected this" and simply echo that back as
+# recommended_bet: "none" instead of forming an independent judgment — every
+# non-Actionable row got a real explanation/risk_notes but no real pick. An
+# allowlist also means newly added verdict/diagnostic columns don't leak in
+# by default.
+LLM_PAYLOAD_COLUMNS = [
+    "game_id", "league", "home_team", "Home", "away_team", "Away",
+    "market_type", "best_pick", "odds_american",
+    "market_probability", "kalshi_probability", "ml_probability",
+    "theover_probability", "calibrated_probability", "WinProbability",
+    "expected_value", "edge", "consensus_agreement", "is_live_data",
+]
+
 
 def run_gemini_analysis(df: pd.DataFrame, session_state: Any = None) -> pd.DataFrame:
     """Best-effort Gemini annotation that preserves UI behavior when Gemini is unavailable."""
@@ -14,23 +33,28 @@ def run_gemini_analysis(df: pd.DataFrame, session_state: Any = None) -> pd.DataF
     try:
         from app_core.llm_assistant import generate_batch_confidence_explanation
 
-        # Clean data for LLM reasoning - scrub ALL potential date columns
-        cols_to_drop = ["Local Date", "Commence (Local)", "Commence (UTC)", "Commence UTC", "game_date", "game_time_est"]
-        llm_payload = result.drop(columns=cols_to_drop, errors="ignore")
+        # Derive is_live_data from the full result before narrowing to the
+        # allowlisted payload below (stats_quality/used_stale_features aren't
+        # themselves part of the analytic payload Gemini reasons over).
+        if "stats_quality" in result.columns:
+            result["is_live_data"] = result["stats_quality"].isin(["REAL", "ESPN"])
+        elif "used_stale_features" in result.columns:
+            result["is_live_data"] = ~result["used_stale_features"]
+        elif "is_live_data" not in result.columns:
+            result["is_live_data"] = False
+
+        # Restrict the LLM payload to analytic inputs (see LLM_PAYLOAD_COLUMNS) so
+        # Gemini reasons from the same raw signals a human would, not our own
+        # Pick_Status/Status_Reason verdict on those signals.
+        available_cols = [c for c in LLM_PAYLOAD_COLUMNS if c in result.columns]
+        llm_payload = result[available_cols].copy()
 
         # Inject a fallback game_id if one doesn't exist
         if "game_id" not in llm_payload.columns:
             llm_payload["game_id"] = [str(i) for i in range(len(llm_payload))]
 
-        # Ensure is_live_data exists in payload correctly derived from available fields
         if "is_live_data" not in llm_payload.columns:
             llm_payload["is_live_data"] = False
-
-        # Fix: fallback status should strictly check row-specific states
-        if "stats_quality" in llm_payload.columns:
-            llm_payload["is_live_data"] = llm_payload["stats_quality"].isin(["REAL", "ESPN"])
-        elif "used_stale_features" in llm_payload.columns:
-            llm_payload["is_live_data"] = ~llm_payload["used_stale_features"]
 
         games_list = llm_payload.to_dict('records') # Convert to List[Dict]
 
