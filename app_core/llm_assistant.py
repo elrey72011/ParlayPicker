@@ -339,17 +339,17 @@ def generate_batch_confidence_explanation(games_data: List[Dict[str, Any]], sess
 You are an independent sports betting analyst. For each game below you are given
 the market line, the de-vigged market probability, and this system's model
 probabilities (Kalshi/ML/TheOver) and edge/EV for one candidate side. Form your
-own judgment of whether that side is worth betting — do not assume any side has
-already been approved or rejected; some games here are ones the system declined,
-others are ones it bet, and you are not told which is which.
+own judgment of which side you believe is more likely to win — do not assume any
+side has already been approved or rejected; some games here are ones the system
+declined, others are ones it bet, and you are not told which is which.
 
 For each game, return a JSON object with:
 - game_id: The identifier provided in input
-- recommended_bet: Your own pick in the same format as best_pick (e.g. "Houston +1.5", "Under 7.5"), or 'none' if you would not bet either side of this market at the given price
-- confidence: HIGH/MEDIUM/LOW
-- explanation: Brief 1-sentence rationale for your pick or pass, grounded in the probabilities/edge given (max 240 chars)
-- risk_notes: Specific risks or reasons for caution (max 240 chars). If the 'is_live_data' flag is false, you must output the exact risk note: "Analysis used league-average fallbacks due to missing live stats."
-- flags: Array of short flag strings (e.g. "missing_odds", "contrarian")
+- recommended_bet: ALWAYS name a side, in the same format as best_pick (e.g. "Houston +1.5", "Under 7.5") — your own pick of the side you believe is more likely to win, even when the edge at this price is thin or negative. Only use 'none' if the game data given is genuinely too incomplete to form any opinion (e.g. odds or probabilities are missing).
+- confidence: HIGH/MEDIUM/LOW — and LOW (not 'none') is how you flag a side with little or no betting value at the given price
+- explanation: Brief 1-sentence rationale for the pick, grounded in the probabilities/edge given (max 240 chars)
+- risk_notes: Specific risks or reasons for caution (max 240 chars) — if the price doesn't justify a bet, say so here (e.g. "edge does not clear the vig at this price"). If the 'is_live_data' flag is false, you must output the exact risk note: "Analysis used league-average fallbacks due to missing live stats."
+- flags: Array of short flag strings (e.g. "missing_odds", "contrarian", "no_value_at_price")
 
 Games to analyze:
 {json.dumps(batch, indent=2, default=str)}
