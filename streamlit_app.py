@@ -705,8 +705,11 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
             logger.info(f"Firing Gemini API for {len(best_picks_df)} best picks...")
             from integrations.gemini_client import run_gemini_analysis
 
-            # Pass to Gemini wrapper with date columns automatically scrubbed
-            best_picks_df = run_gemini_analysis(best_picks_df, st.session_state)
+            # Pass to Gemini wrapper with date columns automatically scrubbed.
+            # analysis_df carries every candidate side (not just the winner), so
+            # each pick can be paired with its opposing side for a genuine
+            # head-to-head comparison instead of a one-sided audit.
+            best_picks_df = run_gemini_analysis(best_picks_df, st.session_state, analysis_df=analysis_df)
             logger.info("Gemini analysis payload unpacked successfully.")
 
             bearish_keywords = ["slow pace", "defensive struggle", "risk of blowout", "key player absences", "grind-it-out"]
