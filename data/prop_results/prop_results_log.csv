@@ -20,3 +20,5 @@ date,pitcher,pick,side,line,expected_ks,actual_ks,odds_american,stake,result,pro
 2026-06-28,Emmet Sheehan,Emmet Sheehan Under 5.5 Ks,under,5.5,5.21,5,-106.0,5.0,WIN,4.72
 2026-06-28,Brady Singer,Brady Singer Over 4.5 Ks,over,4.5,5.4,6,-127.0,5.0,WIN,3.94
 2026-06-28,Kumar Rocker,Kumar Rocker Over 4.5 Ks,over,4.5,4.15,5,178.0,5.0,WIN,8.9
+2026-06-29,Casey Mize,Casey Mize Under 5.5 Ks,under,5.5,4.87,10,-122.0,10.0,LOSS,-10.0
+2026-06-29,Miles Mikolas,Miles Mikolas Under 2.5 Ks,under,2.5,2.39,3,104.0,10.0,LOSS,-10.0
