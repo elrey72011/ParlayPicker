@@ -22,9 +22,50 @@ LLM_PAYLOAD_COLUMNS = [
     "expected_value", "edge", "consensus_agreement", "is_live_data",
 ]
 
+# Fields pulled into each side's sub-payload for a head-to-head comparison.
+# Excludes identity fields (those live at the top level of the game dict).
+SIDE_FIELDS = [
+    "best_pick", "odds_american", "market_probability", "kalshi_probability",
+    "ml_probability", "theover_probability", "calibrated_probability",
+    "expected_value", "edge", "consensus_agreement",
+]
 
-def run_gemini_analysis(df: pd.DataFrame, session_state: Any = None) -> pd.DataFrame:
-    """Best-effort Gemini annotation that preserves UI behavior when Gemini is unavailable."""
+# The other candidate row for the same game/market family — e.g. a
+# total_under row's opposing side is that same game's total_over row. Both
+# naming conventions seen in this codebase (h2h_*/moneyline_*) are mapped.
+OPPOSITE_MARKET_TYPE = {
+    "spread_home": "spread_away", "spread_away": "spread_home",
+    "total_over": "total_under", "total_under": "total_over",
+    "h2h_home": "h2h_away", "h2h_away": "h2h_home",
+    "moneyline_home": "moneyline_away", "moneyline_away": "moneyline_home",
+}
+
+
+def _opposing_side_lookup(analysis_df: pd.DataFrame) -> dict:
+    """matchup_id -> {market_type: {field: value}} for every analytic-relevant
+    row in analysis_df, so each candidate can be paired with its other side."""
+    if analysis_df is None or analysis_df.empty or "matchup_id" not in analysis_df.columns:
+        return {}
+    cols = [c for c in (["matchup_id", "market_type"] + SIDE_FIELDS) if c in analysis_df.columns]
+    sub = analysis_df[cols].copy()
+    lookup: dict = {}
+    for rec in sub.to_dict("records"):
+        mid = rec.get("matchup_id")
+        mtype = str(rec.get("market_type") or "").strip().lower()
+        if not mid or not mtype:
+            continue
+        lookup.setdefault(str(mid), {})[mtype] = {k: v for k, v in rec.items() if k in SIDE_FIELDS}
+    return lookup
+
+
+def run_gemini_analysis(df: pd.DataFrame, session_state: Any = None, analysis_df: pd.DataFrame | None = None) -> pd.DataFrame:
+    """Best-effort Gemini annotation that preserves UI behavior when Gemini is unavailable.
+
+    When analysis_df is provided, each candidate row is paired with its opposing
+    side from the same game/market (e.g. total_under paired with total_over) so
+    Gemini can do a genuine head-to-head comparison instead of only auditing the
+    one side this pipeline already selected.
+    """
     if df is None or df.empty:
         return pd.DataFrame() if df is None else df.copy()
 
@@ -57,6 +98,19 @@ def run_gemini_analysis(df: pd.DataFrame, session_state: Any = None) -> pd.DataF
             llm_payload["is_live_data"] = False
 
         games_list = llm_payload.to_dict('records') # Convert to List[Dict]
+
+        # Pair each candidate with its opposing side, when available, for a
+        # genuine head-to-head comparison rather than a one-sided audit.
+        opposing_lookup = _opposing_side_lookup(analysis_df)
+        if opposing_lookup and "matchup_id" in result.columns:
+            matchup_ids = result["matchup_id"].astype(str).tolist()
+            for game, mid in zip(games_list, matchup_ids):
+                mtype = str(game.get("market_type") or "").strip().lower()
+                opp_mtype = OPPOSITE_MARKET_TYPE.get(mtype)
+                side_a = {k: game.pop(k) for k in SIDE_FIELDS if k in game}
+                game["side_a"] = side_a
+                opp_row = opposing_lookup.get(mid, {}).get(opp_mtype) if opp_mtype else None
+                game["side_b"] = opp_row if opp_row else None
 
         # Call with session_state
         analyses = generate_batch_confidence_explanation(games_list, session_state)

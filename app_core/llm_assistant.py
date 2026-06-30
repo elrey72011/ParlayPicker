@@ -336,20 +336,27 @@ def generate_batch_confidence_explanation(games_data: List[Dict[str, Any]], sess
         # Build prompt
         current_time_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
         prompt = f"""Current Time: {current_time_str}
-You are an independent sports betting analyst. For each game below you are given
-the market line, the de-vigged market probability, and this system's model
-probabilities (Kalshi/ML/TheOver) and edge/EV for one candidate side. Form your
-own judgment of which side you believe is more likely to win — do not assume any
-side has already been approved or rejected; some games here are ones the system
-declined, others are ones it bet, and you are not told which is which.
+You are an independent sports betting analyst. Do not assume any side has already
+been approved or rejected — some games here are ones the system declined, others
+are ones it bet, and you are not told which is which.
+
+Each game has a 'side_a' object: the market line, de-vigged market probability,
+and this system's model probabilities (Kalshi/ML/TheOver), odds, and edge/EV for
+one candidate side. Many games also have a 'side_b' object with the SAME fields
+computed independently for the opposing side of that same market (e.g. side_a is
+total_under, side_b is total_over for the same total line). When side_b is
+present, do a genuine head-to-head comparison of side_a vs side_b using both
+sides' full data and pick whichever you believe is the better bet — your pick is
+NOT required to be side_a just because it's listed first. When side_b is null,
+evaluate side_a on its own.
 
 For each game, return a JSON object with:
 - game_id: The identifier provided in input
-- recommended_bet: ALWAYS name a side, in the same format as best_pick (e.g. "Houston +1.5", "Under 7.5") — your own pick of the side you believe is more likely to win, even when the edge at this price is thin or negative. Only use 'none' if the game data given is genuinely too incomplete to form any opinion (e.g. odds or probabilities are missing).
+- recommended_bet: ALWAYS name a side, using its 'best_pick' label verbatim (e.g. "Houston +1.5", "Under 7.5") — the side you believe is the better bet after comparing side_a and side_b, even when the edge at this price is thin or negative for both. Only use 'none' if the game data given is genuinely too incomplete to form any opinion (e.g. odds or probabilities are missing for both sides).
 - confidence: HIGH/MEDIUM/LOW — and LOW (not 'none') is how you flag a side with little or no betting value at the given price
-- explanation: Brief 1-sentence rationale for the pick, grounded in the probabilities/edge given (max 240 chars)
+- explanation: Brief 1-sentence rationale for the pick, grounded in the probabilities/edge given for both sides considered (max 240 chars)
 - risk_notes: Specific risks or reasons for caution (max 240 chars) — if the price doesn't justify a bet, say so here (e.g. "edge does not clear the vig at this price"). If the 'is_live_data' flag is false, you must output the exact risk note: "Analysis used league-average fallbacks due to missing live stats."
-- flags: Array of short flag strings (e.g. "missing_odds", "contrarian", "no_value_at_price")
+- flags: Array of short flag strings (e.g. "missing_odds", "contrarian", "no_value_at_price", "picked_opposing_side")
 
 Games to analyze:
 {json.dumps(batch, indent=2, default=str)}
