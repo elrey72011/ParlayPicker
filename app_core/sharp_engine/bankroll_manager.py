@@ -2,6 +2,9 @@
 
 
 def kelly_fraction(prob, odds):
+    if odds == 0:
+        return 0
+
     if odds > 0:
         b = odds / 100
     else:

@@ -18,173 +18,145 @@ def calculate_consensus_for_row(row: pd.Series, market_type: str = "Spread") -> 
     STRIPPED of Emojis for cleaner CSV exports.
     """
     try:
-        # 1. Grab base probabilities
-        if market_type.lower() == 'total':
-            market_prob = float(row.get('total_prob_market_based', 0.5))
-            model_prob = float(row.get('Model Total Prob', 0.5))
-            kalshi_prob = row.get('kalshi_prob_total', None)
+        def _get_f(key):
+            val = row.get(key)
+            try:
+                return float(val) if pd.notnull(val) and val != "" else None
+            except Exception:
+                return None
+
+        market_type = market_type.capitalize()
+
+        # 1. Map Columns based on Market Type
+        p_market = None
+        p_kalshi = None
+        p_model = None
+        p_theover = None
+        p_sentiment = None # Sentiment usually applied as adj, but we can try to extract a prob
+
+        if market_type == "Spread":
+            # Market
+            p_market = _get_f("spread_prob_pick_market")
+            if p_market is None: p_market = _get_f("spread_prob_market_based")
+            if p_market is None: p_market = _get_f("spread_prob_market")
+
+            # Kalshi — v99 FIX (Bug 1): ONLY use pick-side-adjusted Kalshi probability.
+            # NEVER fall back to raw kalshi_prob_spread which is on the YES-contract side,
+            # not the pick side. Using the raw value produces wrong-side blending.
+            p_kalshi = _get_f("spread_prob_pick_kalshi")
+
+            # AI
+            p_model = _get_f("model_spread_prob")
+
+            # TheOver
+            p_theover = _get_f("theover_spread_prob")
+
+        elif market_type == "Total":
+            # Market
+            p_market = _get_f("total_prob_pick_market")
+            if p_market is None: p_market = _get_f("total_prob_market_based")
+            if p_market is None: p_market = _get_f("total_prob_market")
+
+            # Kalshi — v99 FIX (Bug 1): ONLY use pick-side-adjusted Kalshi probability.
+            # NEVER fall back to raw kalshi_prob_total which is on the YES-contract side.
+            p_kalshi = _get_f("total_prob_pick_kalshi")
+
+            # AI
+            p_model = _get_f("model_total_prob")
+
+            # TheOver
+            p_theover = _get_f("theover_total_prob")
+
         else:
-            market_prob = float(row.get('spread_prob_market_based', 0.5))
-            model_prob = float(row.get('Model Spread Prob', 0.5))
-            kalshi_prob = row.get('kalshi_prob_spread', None)
-            
-        # 2. Clean probabilities
-        if pd.isna(market_prob): market_prob = 0.5
-        if pd.isna(model_prob): model_prob = 0.5
-        
-        # 3. Determine consensus agreement (No Emojis)
-        if kalshi_prob is None or pd.isna(kalshi_prob):
-            return 0.5, "No Kalshi"
-            
-        k_prob = float(kalshi_prob)
-        
-        # Check alignment relative to 0.5 (coin flip)
-        model_favors_home = model_prob > 0.5
-        kalshi_favors_home = k_prob > 0.5
-        
-        if model_favors_home == kalshi_favors_home:
-            return k_prob, "Agrees"
+            # Fallback for Moneyline or generic
+            p_market = _get_f("Implied_Prob")
+            p_kalshi = _get_f("kalshi_prob_for_pick")
+            p_model = _get_f("AI_Prob")
+            p_theover = _get_f("theover_prob") or _get_f("theover_prob_used")
+
+        # Common Fallbacks
+        if p_model is None: p_model = _get_f("AI_Prob")
+        if p_theover is None: p_theover = _get_f("theover_prob") or _get_f("theover_prob_used")
+
+        # Sentiment extraction (heuristic from adj)
+        # sentiment_adj is usually +/- 0.05. Base is 0.5.
+        # So p_sentiment ~ 0.5 + adj.
+        sent_adj = _get_f("sentiment_adj")
+        if sent_adj is not None:
+            p_sentiment = 0.5 + sent_adj
+
+        # 2. Build Sources List using Static Weights
+        # FIX: When a source is unavailable (None), set its weight to 0 instead of
+        # using 0.5 (neutral). This prevents missing sources from diluting the
+        # consensus toward 50%. Weights are redistributed proportionally to
+        # available sources via normalization (total_w division).
+        sources = []
+
+        # Market
+        w_m = MARKET_WEIGHT if p_market is not None else 0.0
+        val_m = p_market if p_market is not None else 0.0
+        sources.append(("M", val_m, w_m))
+
+        # Kalshi
+        w_k = KALSHI_WEIGHT if p_kalshi is not None else 0.0
+        val_k = p_kalshi if p_kalshi is not None else 0.0
+        sources.append(("K", val_k, w_k))
+
+        # Model
+        w_ml = ML_MODEL_WEIGHT if p_model is not None else 0.0
+        val_ml = p_model if p_model is not None else 0.0
+        sources.append(("AI", val_ml, w_ml))
+
+        # TheOver
+        w_to = THEOVER_WEIGHT if p_theover is not None else 0.0
+        val_to = p_theover if p_theover is not None else 0.0
+        sources.append(("TO", val_to, w_to))
+
+        # Sentiment
+        w_s = SENTIMENT_WEIGHT if p_sentiment is not None else 0.0
+        val_s = p_sentiment if p_sentiment is not None else 0.0
+        sources.append(("S", val_s, w_s))
+
+        # 3. Calculate Weighted Sum
+        # Normalize by total available weight to redistribute missing source weights proportionally
+        total_w = sum(s[2] for s in sources)
+        weighted_sum = sum(s[1] * s[2] for s in sources)
+
+        if total_w == 0:
+            return 0.5, "N/A"
+
+        consensus = weighted_sum / total_w
+        consensus = max(0.01, min(0.99, consensus))
+
+        # 4. Format
+        # Only show non-neutral/valid sources in string to keep it clean, or show all?
+        # User likes transparency. Let's show significant ones or all if valid.
+        parts = []
+        for code, val, w in sources:
+            # Only show if original value was not None (meaning we had data)
+            # We need to check the original variables again.
+            is_valid = False
+            if code == "M" and p_market is not None: is_valid = True
+            elif code == "K" and p_kalshi is not None: is_valid = True
+            elif code == "AI" and p_model is not None: is_valid = True
+            elif code == "TO" and p_theover is not None: is_valid = True
+            elif code == "S" and p_sentiment is not None: is_valid = True
+
+            if is_valid:
+                parts.append(f"{code}{int(val*100)}")
+
+        if not parts:
+            breakdown = "No Data"
         else:
-            return k_prob, "Disagrees"
-            
+            breakdown = " / ".join(parts)
+
+        formatted_str = f"{int(consensus*100)}% ({breakdown})"
+
+        return consensus, formatted_str
+
     except Exception as e:
         logger.warning(f"Error calculating consensus agreement: {e}")
         return 0.5, "Error"
-    def _get_f(key):
-        val = row.get(key)
-        try:
-            return float(val) if pd.notnull(val) and val != "" else None
-        except:
-            return None
-
-    market_type = market_type.capitalize()
-
-    # 1. Map Columns based on Market Type
-    p_market = None
-    p_kalshi = None
-    p_model = None
-    p_theover = None
-    p_sentiment = None # Sentiment usually applied as adj, but we can try to extract a prob
-
-    if market_type == "Spread":
-        # Market
-        p_market = _get_f("spread_prob_pick_market")
-        if p_market is None: p_market = _get_f("spread_prob_market_based")
-        if p_market is None: p_market = _get_f("spread_prob_market")
-
-        # Kalshi — v99 FIX (Bug 1): ONLY use pick-side-adjusted Kalshi probability.
-        # NEVER fall back to raw kalshi_prob_spread which is on the YES-contract side,
-        # not the pick side. Using the raw value produces wrong-side blending.
-        p_kalshi = _get_f("spread_prob_pick_kalshi")
-
-        # AI
-        p_model = _get_f("model_spread_prob")
-
-        # TheOver
-        p_theover = _get_f("theover_spread_prob")
-
-    elif market_type == "Total":
-        # Market
-        p_market = _get_f("total_prob_pick_market")
-        if p_market is None: p_market = _get_f("total_prob_market_based")
-        if p_market is None: p_market = _get_f("total_prob_market")
-
-        # Kalshi — v99 FIX (Bug 1): ONLY use pick-side-adjusted Kalshi probability.
-        # NEVER fall back to raw kalshi_prob_total which is on the YES-contract side.
-        p_kalshi = _get_f("total_prob_pick_kalshi")
-
-        # AI
-        p_model = _get_f("model_total_prob")
-
-        # TheOver
-        p_theover = _get_f("theover_total_prob")
-
-    else:
-        # Fallback for Moneyline or generic
-        p_market = _get_f("Implied_Prob")
-        p_kalshi = _get_f("kalshi_prob_for_pick")
-        p_model = _get_f("AI_Prob")
-        p_theover = _get_f("theover_prob") or _get_f("theover_prob_used")
-
-    # Common Fallbacks
-    if p_model is None: p_model = _get_f("AI_Prob")
-    if p_theover is None: p_theover = _get_f("theover_prob") or _get_f("theover_prob_used")
-
-    # Sentiment extraction (heuristic from adj)
-    # sentiment_adj is usually +/- 0.05. Base is 0.5.
-    # So p_sentiment ~ 0.5 + adj.
-    sent_adj = _get_f("sentiment_adj")
-    if sent_adj is not None:
-        p_sentiment = 0.5 + sent_adj
-
-    # 2. Build Sources List using Static Weights
-    # FIX: When a source is unavailable (None), set its weight to 0 instead of
-    # using 0.5 (neutral). This prevents missing sources from diluting the
-    # consensus toward 50%. Weights are redistributed proportionally to
-    # available sources via normalization (total_w division).
-    sources = []
-
-    # Market
-    w_m = MARKET_WEIGHT if p_market is not None else 0.0
-    val_m = p_market if p_market is not None else 0.0
-    sources.append(("M", val_m, w_m))
-
-    # Kalshi
-    w_k = KALSHI_WEIGHT if p_kalshi is not None else 0.0
-    val_k = p_kalshi if p_kalshi is not None else 0.0
-    sources.append(("K", val_k, w_k))
-
-    # Model
-    w_ml = ML_MODEL_WEIGHT if p_model is not None else 0.0
-    val_ml = p_model if p_model is not None else 0.0
-    sources.append(("AI", val_ml, w_ml))
-
-    # TheOver
-    w_to = THEOVER_WEIGHT if p_theover is not None else 0.0
-    val_to = p_theover if p_theover is not None else 0.0
-    sources.append(("TO", val_to, w_to))
-
-    # Sentiment
-    w_s = SENTIMENT_WEIGHT if p_sentiment is not None else 0.0
-    val_s = p_sentiment if p_sentiment is not None else 0.0
-    sources.append(("S", val_s, w_s))
-
-    # 3. Calculate Weighted Sum
-    # Normalize by total available weight to redistribute missing source weights proportionally
-    total_w = sum(s[2] for s in sources)
-    weighted_sum = sum(s[1] * s[2] for s in sources)
-
-    if total_w == 0:
-        return 0.5, "N/A"
-
-    consensus = weighted_sum / total_w
-    consensus = max(0.01, min(0.99, consensus))
-
-    # 4. Format
-    # Only show non-neutral/valid sources in string to keep it clean, or show all?
-    # User likes transparency. Let's show significant ones or all if valid.
-    parts = []
-    for code, val, w in sources:
-        # Only show if original value was not None (meaning we had data)
-        # We need to check the original variables again.
-        is_valid = False
-        if code == "M" and p_market is not None: is_valid = True
-        elif code == "K" and p_kalshi is not None: is_valid = True
-        elif code == "AI" and p_model is not None: is_valid = True
-        elif code == "TO" and p_theover is not None: is_valid = True
-        elif code == "S" and p_sentiment is not None: is_valid = True
-
-        if is_valid:
-            parts.append(f"{code}{int(val*100)}")
-
-    if not parts:
-        breakdown = "No Data"
-    else:
-        breakdown = " / ".join(parts)
-
-    formatted_str = f"{int(consensus*100)}% ({breakdown})"
-
-    return consensus, formatted_str
 
 def calculate_spread_consensus(row: pd.Series) -> tuple[float, str]:
     """Legacy wrapper for backward compatibility."""
