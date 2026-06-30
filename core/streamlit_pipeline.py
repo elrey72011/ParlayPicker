@@ -1552,7 +1552,10 @@ def compute_blended_probability(
 
         return prob
 
-    lg_series = pd.Series(league).fillna("").astype(str)
+    if league is None:
+        lg_series = pd.Series("", index=market.index)
+    else:
+        lg_series = pd.Series(league).fillna("").astype(str)
     blended = pd.Series([_blend_row(m, k, l, t, s, typ, lg)
                          for m, k, l, t, s, typ, lg in zip(market, kalshi, ml, theover, sentiment, m_type, lg_series)],
                         index=market.index)
