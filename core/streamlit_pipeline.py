@@ -384,6 +384,7 @@ BEST_PICK_COLUMNS = [
     # Readable per-signal win-% breakdown (Kalshi/Market/ML/TheOver) — see REQUIRED_BEST_PICK_EXPORT_COLUMNS.
     "signal_breakdown",
     "gemini_explanation", "gemini_risk_notes", "used_stale_features", "Pick_Quality", "Conviction_Score",
+    "game_already_started_flag",
     "uploaded_spread_line", "uploaded_total_line", "live_spread_line", "live_total_line", "line_source", "line_delta", "upload_market_match",
     "market_line_used", "market_line_source", "market_line_source_detail", "matched_live_spread_line", "matched_live_total_line", "upload_spread_line", "upload_total_line", "base_spread_line", "base_total_line",
     "line_consistency_flag", "line_consistency_reason", "line_provenance_warning", "line_event_identity_match_flag", "line_event_identity_reason", "live_event_match_key", "line_candidate_count", "selected_live_event_source",
@@ -4480,6 +4481,36 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             best.loc[hv_downgrade_idx, "status_blocker_reason"] = "High Variance total-over concentration guard"
             best.loc[hv_downgrade_idx, "Status_Reason"] = "Below Threshold: downgraded by speculative total-over concentration guard"
 
+    # In-progress game guard (1 Jul): a row whose odds-API commence time was already
+    # in the past at run time carries IN-GAME odds, not pre-game lines (the 1 Jul
+    # 4:40 PM ET run surfaced four games 1-3 hours underway, one with a 19.5 MLB
+    # "total" and -100000 moneylines). The line-provenance guard only catches these
+    # when the in-game line looks corrupt; a plausible-looking in-game line would
+    # sail through and could be staked as if it were a pre-game price. Hard-bench
+    # every started game to No Play — a safety status the empirical overlay never
+    # re-promotes and the parlay engine never admits.
+    if "game_already_started_flag" in best.columns and not best.empty:
+        _started = best["game_already_started_flag"].eq(True)
+        if _started.any():
+            best.loc[_started, "Pick_Status"] = "No Play"
+            best.loc[_started, "Status_Reason"] = (
+                "No Play: game already started at run time — live odds are in-game, not pre-game lines"
+            )
+            if "status_blocker_stage" in best.columns:
+                best.loc[_started, "status_blocker_stage"] = "game_already_started"
+            else:
+                best["status_blocker_stage"] = np.where(_started, "game_already_started", "")
+            if "status_blocker_reason" in best.columns:
+                best.loc[_started, "status_blocker_reason"] = "Game already started at run time"
+            else:
+                best["status_blocker_reason"] = np.where(_started, "Game already started at run time", "")
+            if "Kelly_Bet_Size" in best.columns:
+                best.loc[_started, "Kelly_Bet_Size"] = 0.0
+            logger.warning(
+                "IN-PROGRESS GUARD: benched %d row(s) whose commence time predates this run.",
+                int(_started.sum()),
+            )
+
     # Empirical tier overlay: final tier pass driven by realized bucket win rates
     # + isotonic-calibrated probability (Jun 5-10: EV/edge tiers hit ~21%, Below
     # Threshold 59% — stake followed inverted tiers). Runs AFTER every guard pass
@@ -6677,6 +6708,21 @@ def run_analysis_pipeline(
 
     # Jules: Fix Midnight Flattening by using raw UTC if available
     if not analysis_df.empty:
+        # In-progress guard input: an odds-API commence time already in the past at
+        # run time means the row's "live" odds are IN-GAME prices, not pre-game
+        # lines (1 Jul run: games 1-3 hours underway surfaced a 19.5 MLB "total"
+        # and -100000 moneylines). Flag here — where the raw timestamp is still
+        # available — and hard-bench in build_best_picks_df. Only a real parsed
+        # timestamp can flag: uploaded rows without a live commence time (date-only
+        # midnight game_date) are never flagged.
+        if "commence_time_raw" in analysis_df.columns:
+            _commence = pd.to_datetime(analysis_df["commence_time_raw"], errors="coerce", utc=True)
+            analysis_df["game_already_started_flag"] = (
+                _commence.notna() & (_commence <= pd.Timestamp.now(tz="UTC"))
+            )
+        else:
+            analysis_df["game_already_started_flag"] = False
+
         # 1. Identify best source for time
         src_col = "commence_time_raw" if "commence_time_raw" in analysis_df.columns else "game_date"
 
