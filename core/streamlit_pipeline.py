@@ -5768,6 +5768,17 @@ def run_analysis_pipeline(
         # Only merge columns that exist
         theover_cols_to_merge = [c for c in theover_cols_to_merge if c in theover_rows.columns]
 
+        # In the live-odds-empty fallback, master_slate IS theover_rows, so merged
+        # already carries these enrichment columns. Merging them again on top would
+        # suffix the collision to theover_probability_x/_y and leave the canonical
+        # column entirely NA — silently blanking TheOver/ML signal for the whole
+        # slate exactly when the pipeline is already degraded (odds API outage).
+        # Drop the pre-existing copies; the merge below re-attaches identical values
+        # under the canonical names. No-op on the normal path, where the expanded
+        # master slate never carries these columns.
+        _enrich_value_cols = [c for c in theover_cols_to_merge if c not in ("matchup_id", "market_type")]
+        merged = merged.drop(columns=[c for c in _enrich_value_cols if c in merged.columns], errors="ignore")
+
         merged = merged.merge(
             theover_rows[theover_cols_to_merge].drop_duplicates(["matchup_id", "market_type"]),
             on=["matchup_id", "market_type"],
