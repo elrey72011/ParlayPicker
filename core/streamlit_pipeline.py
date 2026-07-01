@@ -68,6 +68,7 @@ from app_core.weights_config import (
     KALSHI_DIVERGENCE_THRESHOLD, KALSHI_DIVERGENCE_THRESHOLD_NBA,
     KALSHI_DIVERGENCE_THRESHOLD_MLB, KALSHI_DIVERGENCE_THRESHOLD_NHL,
     MLB_THEOVER_CONFLICT_THRESHOLD, MLB_THEOVER_CONFLICT_PENALTY,
+    KALSHI_DIRECTION_CONFIDENCE_WEIGHT,
     MLB_THEOVER_FADE_SOURCES, MLB_THEOVER_FADE_SHRINK, THEOVER_FADE_SHRINK_DEFAULT,
     MLB_PUBLIC_BETTING_FADE_SOURCES, MLB_PUBLIC_BETTING_FADE_STRENGTH,
 )
@@ -2389,8 +2390,10 @@ def _mlb_total_direction_conflict(
     theover_source=None,
     fade_sources=None,
     fade_shrink: float = 0.0,
+    kalshi_confidence_weight: float = 1.0,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Resolve MLB total Over/Under direction by "most-confident source wins".
+    """Resolve MLB total Over/Under direction by "most-confident source wins",
+    with Kalshi's confidence weighted by ``kalshi_confidence_weight``.
 
     ``kalshi_probability`` and ``theover_probability`` are oriented to each row's
     pick direction: a value > 0.50 supports the row's direction, < 0.50 favors the
@@ -2404,12 +2407,20 @@ def _mlb_total_direction_conflict(
     ``fade_shrink`` before the confidence comparison, so they pull direction less without
     being silenced. shrink=1.0 reproduces the old "drop it" behavior; 0.0 = full trust.
 
-    A row is flagged as the losing direction when the strongest confidence *opposing*
-    it exceeds the strongest confidence *supporting* it. For the Over and Under rows
-    of the same game the opposing/supporting confidences swap, so exactly the losing
-    side is flagged (a confidence tie flags neither and defers to EV/edge). This
-    replaces the earlier pair of independent fixed penalties, which cancelled across
-    the family whenever Kalshi and TheOver disagreed on direction.
+    ``kalshi_confidence_weight`` scales Kalshi's directional confidence relative to
+    TheOver's before the comparison. The graded history (n=363,
+    data/calibration/bucket_stats.json) shows the pick LOST whenever it fought Kalshi
+    on an MLB total (over:Disagrees 46%, under:Disagrees 45%), i.e. Kalshi is the more
+    reliable direction signal — so at >1.0, TheOver must clear a proportionally higher
+    confidence bar before it can flip the pick away from Kalshi's side. 1.0 restores
+    the symmetric "most-confident-wins" behavior. This governs DIRECTION only; it does
+    not touch calibrated_probability, EV, edge, or any staking threshold.
+
+    A row is flagged as the losing direction when the strongest (weighted) confidence
+    *opposing* it exceeds the strongest *supporting* it. For the Over and Under rows of
+    the same game the opposing/supporting confidences swap, so exactly the losing side
+    is flagged. This replaces the earlier pair of independent fixed penalties, which
+    cancelled across the family whenever Kalshi and TheOver disagreed on direction.
 
     Returns ``(kalshi_opposes, theover_opposes, direction_conflict)`` boolean arrays,
     where ``direction_conflict`` marks the row whose ``final_family_score`` should be
@@ -2427,6 +2438,10 @@ def _mlb_total_direction_conflict(
 
     k_conf, k_opp, k_sup = _opinion(kalshi_probability)
     t_conf, t_opp, t_sup = _opinion(theover_probability)
+
+    # Weight Kalshi's real (non-sentinel) confidence; leave the -1.0 "no opinion"
+    # marker untouched so a silent Kalshi still never decides direction.
+    k_conf = np.where(k_conf >= 0.0, k_conf * float(kalshi_confidence_weight), k_conf)
 
     opp_conf = np.maximum(np.where(k_opp, k_conf, -1.0), np.where(t_opp, t_conf, -1.0))
     sup_conf = np.maximum(np.where(k_sup, k_conf, -1.0), np.where(t_sup, t_conf, -1.0))
@@ -2756,6 +2771,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         theover_source=_theover_source,
         fade_sources=MLB_THEOVER_FADE_SOURCES,
         fade_shrink=MLB_THEOVER_FADE_SHRINK,
+        kalshi_confidence_weight=KALSHI_DIRECTION_CONFIDENCE_WEIGHT,
     )
     pool["_direction_conflict_penalty"] = np.where(
         _direction_conflict, float(MLB_THEOVER_CONFLICT_PENALTY), 0.0
