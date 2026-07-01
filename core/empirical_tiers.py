@@ -325,6 +325,17 @@ def assign_empirical_tiers(
                 f"Below Threshold (empirical): edge {edge:+.1%} does not beat the "
                 f"vig at these odds"
             )
+        # The low-line-over guardrail demotes on LINE-SPECIFIC graded evidence
+        # (sub-8.0 Neutral overs ~45%) that the coarse (league, direction,
+        # consensus) bucket cannot see. The overlay may demote such a row further
+        # (the proven-losing suppression above already can), but must never
+        # promote it back above the guardrail's tier on the coarse bucket's
+        # strength — more-specific evidence outranks the aggregate.
+        if prior_blocker == "low_line_over_guardrail":
+            _rank = {"Below Threshold": 0, "High Variance/Speculative": 1, "Actionable": 2}
+            if _rank.get(status, 0) > _rank.get(str(out.at[idx, "Pick_Status"]), 0):
+                continue
+
         if str(out.at[idx, "Pick_Status"]) != status:
             out.at[idx, "Pick_Status"] = status
             out.at[idx, "Status_Reason"] = reason

@@ -1,92 +1,126 @@
 {
   "overall": {
     "n": 363,
-    "win_rate": 0.5068870523415978
+    "win_rate": 0.4835957589321826
   },
   "buckets": {
     "MLB:over:Agrees": {
-      "n": 54,
-      "wins": 28,
-      "win_rate": 0.5185185185185185
+      "n": 48,
+      "wins": 23,
+      "win_rate": 0.469782538958759,
+      "raw_n": 54,
+      "raw_wins": 28
     },
     "MLB:over:Disagrees": {
-      "n": 56,
-      "wins": 26,
-      "win_rate": 0.4642857142857143
+      "n": 50,
+      "wins": 21,
+      "win_rate": 0.4182476481900752,
+      "raw_n": 56,
+      "raw_wins": 26
     },
     "MLB:over:Neutral": {
-      "n": 101,
-      "wins": 52,
-      "win_rate": 0.5148514851485149
+      "n": 88,
+      "wins": 47,
+      "win_rate": 0.5314631456932318,
+      "raw_n": 101,
+      "raw_wins": 52
     },
     "MLB:side:Agrees": {
       "n": 2,
       "wins": 1,
-      "win_rate": 0.5
+      "win_rate": 0.4917489969334912,
+      "raw_n": 2,
+      "raw_wins": 1
     },
     "MLB:side:Disagrees": {
-      "n": 4,
+      "n": 3,
       "wins": 2,
-      "win_rate": 0.5
+      "win_rate": 0.5726673647774906,
+      "raw_n": 4,
+      "raw_wins": 2
     },
     "MLB:under:Agrees": {
-      "n": 66,
-      "wins": 41,
-      "win_rate": 0.6212121212121212
+      "n": 56,
+      "wins": 35,
+      "win_rate": 0.6256662562244715,
+      "raw_n": 66,
+      "raw_wins": 41
     },
     "MLB:under:Disagrees": {
-      "n": 38,
-      "wins": 17,
-      "win_rate": 0.4473684210526316
+      "n": 35,
+      "wins": 15,
+      "win_rate": 0.41915408113477554,
+      "raw_n": 38,
+      "raw_wins": 17
     },
     "MLB:under:Neutral": {
       "n": 21,
       "wins": 9,
-      "win_rate": 0.42857142857142855
+      "win_rate": 0.4219838837448391,
+      "raw_n": 21,
+      "raw_wins": 9
     },
     "NBA:over:Neutral": {
       "n": 10,
       "wins": 6,
-      "win_rate": 0.6
+      "win_rate": 0.5533735556610981,
+      "raw_n": 10,
+      "raw_wins": 6
     },
     "NHL:over:Agrees": {
       "n": 1,
       "wins": 0,
-      "win_rate": 0.0
+      "win_rate": 0.0,
+      "raw_n": 1,
+      "raw_wins": 0
     },
     "NHL:over:Disagrees": {
       "n": 1,
       "wins": 0,
-      "win_rate": 0.0
+      "win_rate": 0.0,
+      "raw_n": 1,
+      "raw_wins": 0
     },
     "NHL:over:Neutral": {
       "n": 2,
       "wins": 0,
-      "win_rate": 0.0
+      "win_rate": 0.0,
+      "raw_n": 2,
+      "raw_wins": 0
     },
     "NHL:side:Neutral": {
       "n": 1,
       "wins": 0,
-      "win_rate": 0.0
+      "win_rate": 0.0,
+      "raw_n": 1,
+      "raw_wins": 0
     },
     "NHL:under:Agrees": {
       "n": 2,
       "wins": 1,
-      "win_rate": 0.5
+      "win_rate": 0.5329591454925268,
+      "raw_n": 2,
+      "raw_wins": 1
     },
     "NHL:under:Disagrees": {
       "n": 2,
       "wins": 0,
-      "win_rate": 0.0
+      "win_rate": 0.0,
+      "raw_n": 2,
+      "raw_wins": 0
     },
     "NHL:under:Neutral": {
       "n": 2,
       "wins": 1,
-      "win_rate": 0.5
+      "win_rate": 0.49174899693349106,
+      "raw_n": 2,
+      "raw_wins": 1
     }
   },
   "meta": {
-    "source": "/home/user/ParlayPicker/data/backtest_exports",
-    "fitted_on": "2026-06-30"
+    "source": "data/backtest_exports",
+    "fitted_on": "2026-07-01",
+    "half_life_days": 21.0,
+    "recency_anchor": "2026-06-29"
   }
 }
