@@ -317,6 +317,24 @@ MLB_LOW_LINE_OVER_OVERRIDE_MIN_EDGE = 0.08
 MLB_THEOVER_CONFLICT_THRESHOLD = 0.50   # TheOver says other side has ≥50% probability
 MLB_THEOVER_CONFLICT_PENALTY = 0.35     # Subtracted from final_family_score to flip selection
 
+# Weight on Kalshi's DIRECTIONAL confidence relative to TheOver's when the two
+# disagree on an MLB total's over/under direction (used by
+# _mlb_total_direction_conflict). Motivation — the graded history (n=363,
+# data/calibration/bucket_stats.json) shows the pick LOST whenever it fought Kalshi
+# on an MLB total: over:Disagrees 46% (n=56), under:Disagrees 45% (n=38), while the
+# only proven-profitable total bucket is Kalshi-agreeing under:Agrees 62% (n=66).
+# Kalshi is therefore the more reliable direction signal, so it gets a moderate edge:
+# at 1.5 TheOver must be >1.5x as confident (distance from 0.50) as Kalshi to flip the
+# pick away from Kalshi's side. Genuinely strong TheOver pitcher reads (>1.5x) still
+# win — this only reclaims the marginal cases where a mildly-more-confident TheOver was
+# overriding Kalshi and losing. Governs DIRECTION selection only (which over/under row
+# is penalized in the family sort); does NOT change calibrated_probability, EV, edge,
+# or any staking threshold, so the calibration tables stay valid. 1.0 restores the
+# prior symmetric most-confident-wins behavior (fully reversible). NOT a fitted
+# optimum — a moderate, reversible lean toward the proven-more-reliable signal; fit to
+# Brier/log-loss on per-pick signal-vs-outcome data to prove the true value.
+KALSHI_DIRECTION_CONFIDENCE_WEIGHT = 1.5
+
 # TheOver tags each WinProbability with a WinProbSource (set by our own M-code scraper):
 #   model_hit_rate          -> TheOver's model picked the OVER; P(Over) = hit_rate
 #   model_hit_rate_flipped  -> TheOver's model picked the UNDER; P(Over) = 1 - hit_rate

@@ -68,14 +68,64 @@ def test_lone_source_decides_when_other_is_neutral_default():
     assert under_pen is False
 
 
-def test_confidence_tie_penalizes_neither():
-    # Exactly-equal opposing confidence (0.125, an exact float): Kalshi supports Over
-    # by .125, TheOver opposes Over by .125. Tie => defer to EV/edge, penalize neither.
+def test_equal_raw_confidence_breaks_toward_kalshi_when_weighted():
+    # Equal RAW confidence (0.125 each): Kalshi supports Over, TheOver supports Under.
+    # With the default Kalshi direction weight (>1), Kalshi's weighted confidence wins
+    # the otherwise-tied call, so the Under row is penalized and the Kalshi-aligned Over
+    # stands. This encodes the n=363 finding that Kalshi is the more reliable direction
+    # signal on MLB totals.
     kalshi = np.array([0.625, 0.375], dtype=float)   # Over row: Kalshi favors Over
     theover = np.array([0.375, 0.625], dtype=float)  # Over row: TheOver favors Under
     is_mlb = np.array([True, True])
-    _k, _t, conflict = _mlb_total_direction_conflict(is_mlb, kalshi, theover)
+    _k, _t, conflict = _mlb_total_direction_conflict(
+        is_mlb, kalshi, theover, kalshi_confidence_weight=1.5
+    )
+    assert not conflict[0]  # Over (Kalshi's side) kept
+    assert conflict[1]      # Under penalized
+
+
+def test_confidence_tie_penalizes_neither_at_unit_weight():
+    # With weight 1.0 (symmetric legacy behavior) an exact confidence tie defers to
+    # EV/edge and penalizes neither row.
+    kalshi = np.array([0.625, 0.375], dtype=float)
+    theover = np.array([0.375, 0.625], dtype=float)
+    is_mlb = np.array([True, True])
+    _k, _t, conflict = _mlb_total_direction_conflict(
+        is_mlb, kalshi, theover, kalshi_confidence_weight=1.0
+    )
     assert not conflict.any()
+
+
+def test_kalshi_weight_reclaims_marginally_stronger_theover():
+    # Kalshi mildly Over (0.60, raw conf .10) vs TheOver mildly Under (0.37, raw conf
+    # .13). Symmetric (weight 1.0): TheOver wins, Under stands (the losing Disagrees
+    # pick). Weighted 1.5: Kalshi's .15 > TheOver's .13, so the Under is penalized and
+    # the Kalshi-aligned Over stands — exactly the marginal case the weight reclaims.
+    kalshi = np.array([0.60, 0.40], dtype=float)
+    theover = np.array([0.37, 0.63], dtype=float)
+    is_mlb = np.array([True, True])
+    _k, _t, sym = _mlb_total_direction_conflict(
+        is_mlb, kalshi, theover, kalshi_confidence_weight=1.0
+    )
+    assert sym[0] and not sym[1]  # legacy: Over penalized, Under stands
+    _k, _t, weighted = _mlb_total_direction_conflict(
+        is_mlb, kalshi, theover, kalshi_confidence_weight=1.5
+    )
+    assert not weighted[0] and weighted[1]  # weighted: Under penalized, Kalshi's Over stands
+
+
+def test_kalshi_weight_does_not_override_decisively_stronger_theover():
+    # A genuinely strong TheOver pitcher read (0.30, conf .20) still beats a mildly
+    # confident Kalshi (0.58, conf .08) even weighted 1.5 (.12 < .20): TheOver's Under
+    # stands. The weight reclaims marginal calls, not decisive ones.
+    kalshi = np.array([0.58, 0.42], dtype=float)
+    theover = np.array([0.30, 0.70], dtype=float)
+    is_mlb = np.array([True, True])
+    _k, _t, conflict = _mlb_total_direction_conflict(
+        is_mlb, kalshi, theover, kalshi_confidence_weight=1.5
+    )
+    assert conflict[0]       # Over penalized -> TheOver's Under stands
+    assert not conflict[1]
 
 
 def test_both_neutral_or_missing_penalizes_neither():
