@@ -327,6 +327,16 @@ def generate_smart_parlays(
             candidates["Pick_Status"].astype(str).isin(PARLAY_ELIGIBLE_STATUSES)
         ]
 
+    # Exclude picks the empirical overlay flagged as belonging to a proven-losing
+    # bucket. The consensus gate below already keeps Disagrees legs out, but Neutral
+    # legs are admitted in the <3-Agrees fallback, and a proven-losing Neutral bucket
+    # (e.g. MLB:under:Neutral ~43%) would otherwise slip in on the model's inflated
+    # raw edge. The overlay tags these rows so the parlay path can drop them too.
+    if "status_blocker_stage" in candidates.columns:
+        candidates = candidates[
+            candidates["status_blocker_stage"].astype(str) != "empirical_proven_losing_bucket"
+        ]
+
     # Consensus gate: only "Agrees" legs (Kalshi and model agree direction).
     # Graded 20 May-7 Jun MLB totals (n=182): Agrees hit 61.4% vs Neutral 48.2%.
     # "No Kalshi" is treated as Neutral — Kalshi simply has no market (all NBA totals,

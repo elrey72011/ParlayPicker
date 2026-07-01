@@ -192,6 +192,72 @@ def test_thin_bucket_below_n25_floor_cannot_be_actionable():
     assert out.iloc[0]["Pick_Status"] == "High Variance/Speculative"
 
 
+def test_proven_losing_bucket_suppresses_overconfident_pick():
+    # MLB:over:Disagrees realized 46% over n=56 — a proven loser. A model-overconfident
+    # 0.70 pick in it would otherwise read a positive empirical edge (the shrunk tilt is
+    # too weak) and rank high. It must be floored to a NEGATIVE edge, demoted to Below
+    # Threshold, and tagged so the parlay path can drop it too.
+    stats = {
+        "overall": {"n": 363, "win_rate": 0.507},
+        "buckets": {"MLB:over:Disagrees": {"n": 56, "wins": 26, "win_rate": 0.464}},
+    }
+    df = pd.DataFrame(
+        {
+            "league": ["MLB"], "market_type": ["total_over"],
+            "consensus_agreement": ["Disagrees"], "best_pick": ["Over 9.5"],
+            "Pick_Status": ["Actionable"], "Status_Reason": ["old"],
+            "status_blocker_stage": [""],
+            "effective_win_probability": [0.70], "odds_american": [-110],
+        }
+    )
+    out = assign_empirical_tiers(df, stats, calibration=None)
+    assert out.iloc[0]["Pick_Status"] == "Below Threshold"
+    assert float(out.iloc[0]["empirical_edge"]) < 0
+    assert out.iloc[0]["status_blocker_stage"] == "empirical_proven_losing_bucket"
+
+
+def test_proven_losing_bucket_leaves_coinflip_bucket_untouched():
+    # A near-break-even bucket (MLB:over:Neutral, 51% n=101) is NOT a proven loser
+    # (within ~1pt of break-even), so suppression must not fire — the pick keeps its
+    # positive edge and is not tagged.
+    stats = {
+        "overall": {"n": 363, "win_rate": 0.507},
+        "buckets": {"MLB:over:Neutral": {"n": 101, "wins": 52, "win_rate": 0.515}},
+    }
+    df = pd.DataFrame(
+        {
+            "league": ["MLB"], "market_type": ["total_over"],
+            "consensus_agreement": ["Neutral"], "best_pick": ["Over 9.5"],
+            "Pick_Status": ["High Variance/Speculative"], "Status_Reason": ["old"],
+            "status_blocker_stage": [""],
+            "effective_win_probability": [0.62], "odds_american": [-110],
+        }
+    )
+    out = assign_empirical_tiers(df, stats, calibration=None)
+    assert out.iloc[0]["status_blocker_stage"] != "empirical_proven_losing_bucket"
+    assert float(out.iloc[0]["empirical_edge"]) > 0
+
+
+def test_proven_losing_bucket_respects_sample_floor():
+    # A cold rate but only n=12 (< PROVEN_LOSING_BUCKET_MIN_N): too thin to demote on,
+    # so suppression must NOT fire — mirrors the promotion side's small-sample caution.
+    stats = {
+        "overall": {"n": 200, "win_rate": 0.53},
+        "buckets": {"MLB:under:Disagrees": {"n": 12, "wins": 4, "win_rate": 0.333}},
+    }
+    df = pd.DataFrame(
+        {
+            "league": ["MLB"], "market_type": ["total_under"],
+            "consensus_agreement": ["Disagrees"], "best_pick": ["Under 8.5"],
+            "Pick_Status": ["High Variance/Speculative"], "Status_Reason": ["old"],
+            "status_blocker_stage": [""],
+            "effective_win_probability": [0.66], "odds_american": [-110],
+        }
+    )
+    out = assign_empirical_tiers(df, stats, calibration=None)
+    assert out.iloc[0]["status_blocker_stage"] != "empirical_proven_losing_bucket"
+
+
 def test_load_bucket_stats_missing_returns_none(tmp_path):
     assert load_bucket_stats(tmp_path / "nope.json") is None
 

@@ -50,6 +50,29 @@ HIGH_VARIANCE_MIN_EMPIRICAL_EDGE = 0.015
 ACTIONABLE_MIN_BUCKET_N = 25
 ACTIONABLE_MIN_BUCKET_RATE = 0.55
 
+# Symmetric counterpart to the earned_directional PROMOTION below: a directional
+# (over/under) bucket with enough graded picks whose smoothed realized rate sits
+# clearly BELOW break-even is a proven LOSER. The bucket tilt in
+# empirical_win_probability is a shrunk delta on the calibrated prob, so it is too
+# weak to stop a model-overconfident pick in such a bucket from still reporting a
+# positive edge (30 Jun refit: MLB:over:Disagrees realized 46% over n=56, yet a
+# model-70% pick reads +8% empirical edge). That inflated edge ranks the pick high
+# on the card and — for Neutral, which the parlay engine admits in its Agrees+Neutral
+# fallback — lets a proven loser leak into parlays. For these buckets, floor the
+# empirical probability at the bucket's own smoothed rate (so the reported edge
+# reflects the realized loss) and hold the pick at Below Threshold. A sample-size
+# floor keeps small-n noise from demoting, and the daily refit moves buckets in and
+# out of this set automatically. The floor is LOWER than the promotion floor
+# (ACTIONABLE_MIN_BUCKET_N=25) on purpose: promotion risks full Kelly on a bucket so
+# it demands a sturdier sample, whereas suppression only DEMOTES (drops a stake or a
+# parlay leg), whose false-positive cost is merely a skipped marginal pick — an
+# asymmetric cost that warrants an asymmetric bar. At 20 it captures the current
+# losers (MLB over:Disagrees n=56, under:Disagrees n=38, under:Neutral n=21) while
+# leaving the coin-flip buckets (over:Neutral n=101, over:Agrees n=54, both within
+# ~1pt of break-even) untouched.
+PROVEN_LOSING_BUCKET_MIN_N = 20
+PROVEN_LOSING_BUCKET_EDGE_MARGIN = 0.03
+
 # Actionable ALSO requires market AGREEMENT. Across the graded history the only
 # slice that clears the -110 break-even (52.4%) by a real margin is the buckets
 # where Kalshi agrees with the model's direction: MLB over:Agrees 61% (n=41) and
@@ -222,6 +245,32 @@ def assign_empirical_tiers(
         proven_edge = rate - breakeven
         family = bucket.split(":")[1] if ":" in bucket else "side"
         is_directional = family in ("over", "under")
+
+        # Proven-losing-bucket suppression — symmetric to the earned_directional
+        # promotion below. When a directional bucket has enough graded picks and its
+        # smoothed realized rate is clearly below break-even, the mild probability tilt
+        # leaves the pick with a spuriously positive edge. Floor the empirical
+        # probability at the bucket's own rate so the edge reflects the realized loss,
+        # and hold the pick at Below Threshold (unstaked; excluded from parlays).
+        if (
+            is_directional
+            and n >= PROVEN_LOSING_BUCKET_MIN_N
+            and proven_edge <= -PROVEN_LOSING_BUCKET_EDGE_MARGIN
+        ):
+            honest_p = min(float(out.at[idx, "empirical_win_probability"]), float(rate))
+            out.at[idx, "empirical_win_probability"] = honest_p
+            out.at[idx, "empirical_edge"] = honest_p - breakeven
+            if str(out.at[idx, "Pick_Status"]) != "Below Threshold":
+                out.at[idx, "Pick_Status"] = "Below Threshold"
+                out.at[idx, "Status_Reason"] = (
+                    f"Below Threshold (empirical): proven-losing bucket {bucket} "
+                    f"realized {rate:.0%} (n={n}), {proven_edge:+.1%} vs break-even; "
+                    f"model edge suppressed to the bucket's own rate"
+                )
+                if "status_blocker_stage" in out.columns:
+                    out.at[idx, "status_blocker_stage"] = "empirical_proven_losing_bucket"
+            continue
+
         # Pre-calibration probability (out[prob_col] is untouched; calibration was only
         # applied to the local p_cal used for the bucket tilt). Used as an outlier guard.
         raw_prob = pd.to_numeric(out.at[idx, prob_col], errors="coerce")
