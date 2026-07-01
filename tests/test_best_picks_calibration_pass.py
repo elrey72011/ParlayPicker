@@ -244,9 +244,14 @@ def test_low_line_over_guardrail_is_consensus_aware():
     disagrees = _low_over(0.45)
     assert disagrees["consensus_agreement"] == "Disagrees"
     assert disagrees["Pick_Status"] == "Below Threshold"
-    # Refreshed Disagrees-over bucket (~49%) now benches this at the empirical tier overlay,
-    # a step before the low-line-over guardrail would; either way it is held Below Threshold.
-    assert disagrees["status_blocker_stage"] in {"low_line_over_guardrail", "empirical_tier_overlay"}
+    # Refreshed Disagrees-over bucket (~46%, n=56) is now a PROVEN loser, so the empirical
+    # overlay's proven-losing-bucket guard benches it a step before the low-line-over
+    # guardrail would; either way it is held Below Threshold.
+    assert disagrees["status_blocker_stage"] in {
+        "low_line_over_guardrail",
+        "empirical_tier_overlay",
+        "empirical_proven_losing_bucket",
+    }
 
     # 24-Jun refit: over:Agrees fell to ~51% (n=53, was ~58%) — below the proven-bucket bar —
     # so NO MLB over bucket currently clears break-even-plus, and even Agrees low-line overs

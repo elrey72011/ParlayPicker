@@ -88,6 +88,23 @@ def test_no_three_leg_parlays_while_cap_is_two():
     assert set(parlays["legs"].unique()) == {2}
 
 
+def test_proven_losing_bucket_leg_is_excluded_from_parlays():
+    # A leg the empirical overlay flagged as a proven loser must not become a parlay
+    # leg even when its raw edge/prob clear the floors (the overlay tags it because
+    # its own bucket has bled below break-even). Two clean legs + one flagged: the
+    # flagged one must never appear.
+    bets = _bets(
+        best_pick=["Over 8.5", "Under 5.5", "Under 7.5"],
+        league=["MLB", "NHL", "MLB"],
+        matchup_id=["g1", "g2", "g3"],
+        status_blocker_stage=["", "", "empirical_proven_losing_bucket"],
+    )
+    parlays = generate_smart_parlays(bets)
+    assert not parlays.empty
+    for legs in parlays["parlay_legs"]:
+        assert "Under 7.5" not in legs
+
+
 def test_same_league_same_direction_totals_cannot_pair():
     # Two MLB Overs in different games + one NHL Under: the MLB Over pair is the
     # correlated block that must not form; each Over may still pair with the Under.
