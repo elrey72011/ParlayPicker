@@ -64,7 +64,10 @@ class TestCalibrationUpdate(unittest.TestCase):
             # Weak over (EV/edge met, but win_prob too low)
             {"league": "NFL", "market_type": "total_over", "expected_value": 0.05, "edge": 0.05, "calibrated_probability": 0.55, "best_pick": "Over 45.5", "home_team": "Team A", "away_team": "Team B"},
             # Strong over (EV/edge met, win_prob met) -- Note: For Agrees, we make gap >= 0.03
-            {"league": "NFL", "market_type": "total_over", "expected_value": 0.05, "edge": 0.05, "calibrated_probability": 0.57, "kalshi_probability": 0.53, "best_pick": "Over 45.5", "home_team": "Team C", "away_team": "Team D"},
+            # Raised 0.57 -> 0.70 for the owner win-probability stake floor (3 Jul): the
+            # floor demands >= 55% on the isotonic-calibrated number, and 0.70 raw maps
+            # to ~0.57 on the current fitted table.
+            {"league": "NFL", "market_type": "total_over", "expected_value": 0.05, "edge": 0.05, "calibrated_probability": 0.70, "kalshi_probability": 0.53, "best_pick": "Over 45.5", "home_team": "Team C", "away_team": "Team D"},
             # Weak under (EV/edge met, but win_prob too low)
             {"league": "NFL", "market_type": "total_under", "expected_value": 0.03, "edge": 0.03, "calibrated_probability": 0.55, "best_pick": "Under 45.5", "home_team": "Team E", "away_team": "Team F"},
         ])
@@ -163,7 +166,8 @@ class TestCalibrationUpdate(unittest.TestCase):
         df = self._build_df([
             # Over at 0.60 clears the current total_over gate (0.56 no longer does after the
             # over-shrink raise); the test's point is the stricter UNDER bar, unchanged.
-            {"league": "NFL", "market_type": "total_over", "expected_value": 0.05, "edge": 0.05, "calibrated_probability": 0.60, "kalshi_probability": 0.50, "best_pick": "Over 45.5", "home_team": "Team A", "away_team": "Team B"},
+            # Raised 0.60 -> 0.70 for the owner win-probability stake floor (3 Jul).
+            {"league": "NFL", "market_type": "total_over", "expected_value": 0.05, "edge": 0.05, "calibrated_probability": 0.70, "kalshi_probability": 0.50, "best_pick": "Over 45.5", "home_team": "Team A", "away_team": "Team B"},
             # generic under at 0.56 (fails the stricter under bar)
             {"league": "NFL", "market_type": "total_under", "expected_value": 0.05, "edge": 0.05, "calibrated_probability": 0.56, "kalshi_probability": 0.50, "best_pick": "Under 45.5", "home_team": "Team C", "away_team": "Team D"},
             # generic under at 0.57 (still below the stricter under bar)
@@ -188,7 +192,8 @@ class TestCalibrationUpdate(unittest.TestCase):
         # A total that clears the gates normally but whose EV is pushed under the bar by the
         # fallback-heavy dampener. Prob/edge are set comfortably so EV is the deciding factor.
         df = self._build_df([
-            {"league": "NFL", "market_type": "total_over", "expected_value": 0.05, "edge": 0.08, "calibrated_probability": 0.66, "kalshi_probability": 0.55, "best_pick": "Over 45.5", "home_team": "Team A", "away_team": "Team B"},
+            # Raised 0.66 -> 0.70 for the owner win-probability stake floor (3 Jul).
+            {"league": "NFL", "market_type": "total_over", "expected_value": 0.05, "edge": 0.08, "calibrated_probability": 0.70, "kalshi_probability": 0.55, "best_pick": "Over 45.5", "home_team": "Team A", "away_team": "Team B"},
         ])
 
         # 1. Normal slate -> Actionable

@@ -72,6 +72,21 @@ FALLBACK_SENTIMENT_WEIGHT = 0.10
 BASELINE_MIN_EV = 0.01
 BASELINE_MIN_EDGE = 0.02
 
+# ── Win-probability-first (owner preference, 3 Jul) ─────────────────────────
+# The owner optimizes for CHANCE OF WINNING, not ROI: "I don't want the highest
+# ROI, I want the best pick that has the highest chance of winning." Applied
+# across the board (props got the same treatment in prop_pipeline.py):
+#   * No stake below this win probability, PERIOD — it overrides the high-EV
+#     exception paths (MLB_SPREAD_HIGH_EV_MIN_WIN_PROB 0.44, the divergence
+#     high-EV override at 0.50) that deliberately staked longshots on price.
+#     Those rows stay visible but are held at High Variance with Kelly 0.
+#   * Card ranking and empty-card recovery select by win probability first,
+#     EV/edge as tiebreaks.
+# The +EV/edge eligibility gates all remain: a likely winner at a losing price
+# is still never staked. Probability basis is the most-calibrated column
+# available per row: empirical_win_probability, else effective_win_probability.
+MIN_STAKE_WIN_PROBABILITY = 0.55
+
 # Stricter Total Over Thresholds
 TOTAL_OVER_MIN_EV = 0.03
 TOTAL_OVER_MIN_EDGE = 0.04
