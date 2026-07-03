@@ -1771,23 +1771,27 @@ def main() -> None:
             if "Pick_Status" in best_picks_export.columns:
                 best_picks_export["Pick_Status"] = pd.Categorical(best_picks_export["Pick_Status"], categories=status_order, ordered=True)
 
-            # Rank within each tier by EMPIRICAL edge (bucket-realized), not model EV/edge.
-            # Across 63 graded picks the model's EV ranking was anti-informative — its
-            # highest-EV/most-contrarian picks lost — while bucket-realized performance held.
-            # EV/edge stay as fallback tiebreakers (and when empirical_edge is absent).
+            # Rank within each tier by WIN PROBABILITY first (owner preference, 3 Jul:
+            # the best pick is the one most likely to WIN, not the one that pays best).
+            # Probability basis: empirical_win_probability (bucket-realized) with
+            # effective_win_probability as fallback; empirical edge / EV / edge remain
+            # as tiebreakers only.
+            best_picks_export["_prob_sort"] = pd.to_numeric(
+                best_picks_export.get("empirical_win_probability"), errors="coerce"
+            ).fillna(pd.to_numeric(best_picks_export.get("effective_win_probability"), errors="coerce"))
             best_picks_export["_emp_sort"] = pd.to_numeric(best_picks_export.get("empirical_edge"), errors="coerce")
             best_picks_export["_ev_sort"] = pd.to_numeric(best_picks_export.get("expected_value"), errors="coerce")
             best_picks_export["_edge_sort"] = pd.to_numeric(best_picks_export.get("edge"), errors="coerce")
 
-            sort_cols = ["Pick_Status", "_emp_sort", "_ev_sort", "_edge_sort"]
+            sort_cols = ["Pick_Status", "_prob_sort", "_emp_sort", "_ev_sort", "_edge_sort"]
             available_sort_cols = [c for c in sort_cols if c in best_picks_export.columns]
 
             if available_sort_cols:
-                asc = [True, False, False, False][:len(available_sort_cols)]
+                asc = [True, False, False, False, False][:len(available_sort_cols)]
                 best_picks_export = best_picks_export.sort_values(available_sort_cols, ascending=asc, na_position="last").reset_index(drop=True)
 
                 # Drop temporary sort columns
-                best_picks_export = best_picks_export.drop(columns=["_emp_sort", "_ev_sort", "_edge_sort"], errors="ignore")
+                best_picks_export = best_picks_export.drop(columns=["_prob_sort", "_emp_sort", "_ev_sort", "_edge_sort"], errors="ignore")
 
                 if "parlay_rank" in best_picks_export.columns:
                     best_picks_export["parlay_rank"] = range(1, len(best_picks_export) + 1)

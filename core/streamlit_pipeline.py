@@ -133,7 +133,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-07-03b-title-guard-case-fix"
+PIPELINE_BUILD = "2026-07-03c-win-probability-first"
 
 
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
@@ -2298,13 +2298,24 @@ def _apply_triple_filter_ranking(df: pd.DataFrame) -> pd.DataFrame:
     # Mapping Logic for sorting
     final_df['Pick_Quality'] = final_df['tier_score'].map(TIER_LABELS)
 
-    # 4. Final Rank Generation
-    # Ensure expected_value is numeric and clean of missing values for sorting
+    # 4. Final Rank Generation — WIN PROBABILITY first within each tier (owner
+    # preference, 3 Jul: rank by chance of winning, not ROI), EV as tiebreak.
+    # Probability basis: the most-calibrated column available per row.
+    _prob_sort = pd.to_numeric(
+        final_df.get('empirical_win_probability', pd.Series(np.nan, index=final_df.index)),
+        errors='coerce',
+    )
+    _prob_sort = _prob_sort.fillna(
+        pd.to_numeric(final_df.get('effective_win_probability', pd.Series(np.nan, index=final_df.index)), errors='coerce')
+    ).fillna(calibrated_prob).fillna(-999)
+    final_df['_prob_sort_temp'] = _prob_sort
     ev_sort = pd.to_numeric(final_df['expected_value'], errors='coerce').fillna(-999)
     final_df['_ev_sort_temp'] = ev_sort
 
-    final_df = final_df.sort_values(by=['tier_score', '_ev_sort_temp'], ascending=[True, False]).reset_index(drop=True)
-    final_df = final_df.drop(columns=['_ev_sort_temp'])
+    final_df = final_df.sort_values(
+        by=['tier_score', '_prob_sort_temp', '_ev_sort_temp'], ascending=[True, False, False]
+    ).reset_index(drop=True)
+    final_df = final_df.drop(columns=['_prob_sort_temp', '_ev_sort_temp'])
     final_df['Triple_Filter_Rank'] = range(1, len(final_df) + 1)
 
     # Clean up temporary columns
@@ -3893,18 +3904,23 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         # 3) expected_value (descending as tie-breaker)
         # 4) edge (descending as tie-breaker)
 
-        # Cast to numeric so that sort logic is proper, missing goes to NaN
+        # Cast to numeric so that sort logic is proper, missing goes to NaN.
+        # Win-probability tiebreak first (owner preference): within equal rank,
+        # the pick more likely to WIN outranks the pick that pays better.
         best["_rank_sort"] = pd.to_numeric(best["Triple_Filter_Rank"], errors="coerce")
+        best["_prob_sort"] = pd.to_numeric(
+            best.get("empirical_win_probability", pd.Series(np.nan, index=best.index)), errors="coerce"
+        ).fillna(pd.to_numeric(best.get("effective_win_probability", pd.Series(np.nan, index=best.index)), errors="coerce"))
         best["_ev_sort"] = pd.to_numeric(best["expected_value"], errors="coerce")
         best["_edge_sort"] = pd.to_numeric(best["edge"], errors="coerce")
 
         best = best.sort_values(
-            by=["Pick_Status", "_rank_sort", "_ev_sort", "_edge_sort"],
-            ascending=[True, True, False, False],
+            by=["Pick_Status", "_rank_sort", "_prob_sort", "_ev_sort", "_edge_sort"],
+            ascending=[True, True, False, False, False],
             na_position="last"
         ).reset_index(drop=True)
 
-        best = best.drop(columns=["_rank_sort", "_ev_sort", "_edge_sort"], errors="ignore")
+        best = best.drop(columns=["_rank_sort", "_prob_sort", "_ev_sort", "_edge_sort"], errors="ignore")
 
     # Stamp the running code version onto every pick so the export is self-identifying.
     best["pipeline_build"] = PIPELINE_BUILD
@@ -4650,6 +4666,35 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         if slate_sum > float(DEGRADED_FEATURE_MAX_SLATE_EXPOSURE_PCT) and slate_sum > 0:
             best["Kelly_Bet_Size"] = best["Kelly_Bet_Size"] * (float(DEGRADED_FEATURE_MAX_SLATE_EXPOSURE_PCT) / slate_sum)
         best["Kelly_Bet_Size"] = pd.to_numeric(best["Kelly_Bet_Size"], errors="coerce").fillna(0.0)
+    # Global stake floor on win probability (owner preference, 3 Jul): no stake
+    # below MIN_STAKE_WIN_PROBABILITY regardless of EV — this is the terminal
+    # override of the high-EV exception paths (MLB spread high-EV underdogs at
+    # 0.44, divergence high-EV at 0.50) that deliberately staked longshots on
+    # price. Demote to High Variance (visible, unstaked) rather than hide; the
+    # empty-card recovery applies the same floor so it cannot re-stake them.
+    from app_core.weights_config import MIN_STAKE_WIN_PROBABILITY
+    if not best.empty:
+        _floor_prob = pd.to_numeric(
+            best.get("empirical_win_probability", pd.Series(np.nan, index=best.index)), errors="coerce"
+        ).fillna(pd.to_numeric(best.get("effective_win_probability", pd.Series(np.nan, index=best.index)), errors="coerce"))
+        _below_floor = (
+            best["Pick_Status"].astype(str).eq("Actionable")
+            & _floor_prob.notna()
+            & _floor_prob.lt(float(MIN_STAKE_WIN_PROBABILITY))
+        )
+        if _below_floor.any():
+            best.loc[_below_floor, "Pick_Status"] = "High Variance/Speculative"
+            best.loc[_below_floor, "Kelly_Bet_Size"] = 0.0
+            best.loc[_below_floor, "Status_Reason"] = (
+                "High Variance: win probability below the owner's stake floor ("
+                + _floor_prob[_below_floor].map(lambda p: f"{p:.1%}")
+                + f" < {float(MIN_STAKE_WIN_PROBABILITY):.0%}) — likely-to-win picks only, EV alone does not stake"
+            )
+            best.loc[_below_floor, "status_blocker_stage"] = "min_win_probability_floor"
+            best.loc[_below_floor, "status_blocker_reason"] = "Below owner minimum stake win probability"
+            logger.info("WIN-PROB FLOOR: unstaked %d Actionable pick(s) below %.0f%%.",
+                        int(_below_floor.sum()), float(MIN_STAKE_WIN_PROBABILITY) * 100)
+
     best.loc[~best["Pick_Status"].astype(str).eq("Actionable"), "Kelly_Bet_Size"] = 0.0
     best["production_eligible"] = best["Pick_Status"].astype(str).eq("Actionable") & best["Kelly_Bet_Size"].gt(0)
 
@@ -4692,8 +4737,14 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 best["league"].astype(str).str.upper().eq("NHL")
                 & best["market_type"].astype(str).str.lower().eq("total_under")
             )
+            # Owner win-probability floor applies to recovery too — a pick the
+            # stake floor just demoted must not re-enter through the back door.
+            _rec_floor_prob = pd.to_numeric(
+                best.get("empirical_win_probability", pd.Series(np.nan, index=best.index)), errors="coerce"
+            ).fillna(pd.to_numeric(best.get("effective_win_probability", pd.Series(np.nan, index=best.index)), errors="coerce"))
             recovery_mask = (
                 best["Pick_Status"].astype(str).isin({"High Variance/Speculative", "Below Threshold"})
+                & _rec_floor_prob.ge(float(MIN_STAKE_WIN_PROBABILITY))
                 & best.get("status_metric_basis", pd.Series("", index=best.index)).astype(str).eq("effective")
                 & ~best["market_type"].astype(str).str.lower().isin(
                     [m.lower() for m in EMPTY_CARD_RECOVERY_EXCLUDE_MARKET_TYPES]
@@ -4749,8 +4800,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
 
             recovery_candidates = best[recovery_mask]
             if not recovery_candidates.empty:
+                # Owner preference: recover the pick MOST LIKELY TO WIN, not the
+                # one that pays best; EV/edge only break ties.
                 top = recovery_candidates.sort_values(
-                    ["effective_expected_value", "effective_edge", "effective_win_probability"],
+                    ["effective_win_probability", "effective_expected_value", "effective_edge"],
                     ascending=[False, False, False],
                 ).head(EMPTY_CARD_RECOVERY_MAX_PICKS)
                 prev_status = best.loc[top.index, "Pick_Status"].astype(str).copy()
