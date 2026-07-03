@@ -28,6 +28,7 @@ from app_core.prop_pipeline import (
     PROP_MIN_EDGE,
     PROP_MIN_STARTER_AVG_INNINGS,
     PROP_MIN_STARTER_GAMES,
+    PROP_MIN_WIN_PROBABILITY,
     evaluate_strikeout_props,
 )
 
@@ -155,6 +156,7 @@ def build_prop_card(
     kelly_total_pct: float,
     kelly_fraction: float = 0.25,
     min_edge: float = PROP_MIN_EDGE,
+    min_win_probability: float = PROP_MIN_WIN_PROBABILITY,
     **card_kwargs: Any,
 ):
     """Production strikeout-prop card: the ACTIONABLE props with conservative stakes.
@@ -167,6 +169,12 @@ def build_prop_card(
     feed is missing or nothing clears the edge bar) so the caller can display + export it
     without touching the main best-picks card. ``card_kwargs`` forward the injectable feeds to
     :func:`build_strikeout_card` for offline testing.
+
+    Win-probability-first (owner preference, 3 Jul): picks must be genuine favorites on
+    the model's own number (``p_side >= min_win_probability``) and the card is ordered by
+    win probability, not edge — near-coin-flip plus-money price plays no longer make the
+    card even when their EV is the highest on the slate. The +EV/min-edge gate remains as
+    the eligibility floor so a likely winner at a losing price is still never staked.
     """
     import pandas as pd
 
@@ -183,6 +191,8 @@ def build_prop_card(
         if odds is None or p_over is None:
             continue
         p_side = float(p_over) if side == "over" else 1.0 - float(p_over)
+        if p_side < float(min_win_probability):
+            continue
         dec = _decimal_odds(odds)
         b = dec - 1.0
         kelly_frac = ((p_side * dec) - 1.0) / b if b > 0 else 0.0
@@ -215,5 +225,7 @@ def build_prop_card(
     if total > cap_total and total > 0:
         card["Kelly_Bet_Size"] = (card["Kelly_Bet_Size"] * (cap_total / total)).round(2)
     card = card.drop(columns=["_stake_pct"])
-    card = card.sort_values("edge", ascending=False).reset_index(drop=True)
+    card = card.sort_values(
+        ["WinProbability", "edge"], ascending=[False, False]
+    ).reset_index(drop=True)
     return card
