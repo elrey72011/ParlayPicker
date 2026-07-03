@@ -209,3 +209,48 @@ def test_prop_card_excludes_opener_and_implausible_edge_by_default():
         max_plausible_edge=PROP_MAX_PLAUSIBLE_EDGE,  # production default -> guards active
     )
     assert card.empty
+
+
+def test_prop_card_drops_coinflip_plus_money_picks():
+    # Owner preference (3 Jul): the card wants the highest CHANCE OF WINNING, not the
+    # highest ROI. A near-coin-flip pick whose value is in the plus-money price (the
+    # Rangel Over 50.3% / +125 shape) must not make the card even with a passing edge.
+    # min_win_probability=0.60 with a pick modeled ~0.55-0.58 -> excluded.
+    prop = {
+        "pitcher": "Gerrit Cole", "line": 6.5, "over_odds": 125, "under_odds": -145,
+        "book": "novig", "home_team": "New York Yankees", "away_team": "Chicago White Sox",
+    }
+    card = _prop_card(prop, min_win_probability=0.99)
+    assert card.empty
+
+
+def test_prop_card_keeps_favorite_and_orders_by_win_probability():
+    # Two qualifying picks: the higher-win-probability one must rank FIRST even when
+    # the other carries the larger edge/EV (plus-money price play).
+    props = [
+        # Strong favorite shape: high k_per_9 vs line 5.5 -> high p(over) at minus odds.
+        {"pitcher": "P0", "line": 5.5, "over_odds": -150, "under_odds": 130,
+         "book": "novig", "home_team": "New York Yankees", "away_team": "Chicago White Sox"},
+        # Price-play shape: same model read but at a higher line -> lower p(over), plus odds.
+        {"pitcher": "P1", "line": 7.5, "over_odds": 140, "under_odds": -160,
+         "book": "novig", "home_team": "New York Yankees", "away_team": "Chicago White Sox"},
+    ]
+    sched = {"dates": [{"games": [{"teams": {
+        "home": {"team": {"id": 147, "name": "New York Yankees"},
+                 "probablePitcher": {"id": 1, "fullName": "P0"}},
+        "away": {"team": {"id": 145, "name": "Chicago White Sox"},
+                 "probablePitcher": {"id": 2, "fullName": "P1"}},
+    }}]}]}
+    card = build_prop_card(
+        object(), "2026-06-23", 2026, 1000.0,
+        kelly_per_pick_pct=0.01, kelly_total_pct=0.03, kelly_fraction=0.25,
+        max_plausible_edge=1.0, min_win_probability=0.0,
+        list_events=lambda c, sk, d: [{"id": "e1", "home_team": "New York Yankees", "away_team": "Chicago White Sox"}],
+        props_fetch=lambda c, sk, eid: props,
+        schedule_fetch=lambda d: parse_schedule_probables(sched),
+        form_fetch=lambda pid, season: {"k_per_9": 12.5, "avg_innings": 6.5, "n_games": 5},
+        team_k_fetch=lambda tid, season: 0.29,
+    )
+    assert len(card) >= 2
+    probs = card["WinProbability"].tolist()
+    assert probs == sorted(probs, reverse=True), "card must be ordered by win probability"

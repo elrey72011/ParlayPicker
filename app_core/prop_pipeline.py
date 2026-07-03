@@ -18,6 +18,17 @@ PROP_KS_DISPERSION = 1.15
 # Discipline: no stake without a real edge over the de-vigged market price.
 PROP_MIN_EDGE = 0.04
 
+# Owner preference (3 Jul): the card optimizes for WIN PROBABILITY, not ROI. The
+# edge/EV gate had been admitting near-coin-flip plus-money picks (Rangel Over at
+# 50.3% / +125, Sasaki Over at 53.9% / +130) whose value is in the PRICE, not the
+# likelihood of cashing — mathematically sound, but not what the owner wants to
+# bet. Every staked prop must now be a genuine favorite on the model's own number:
+# p(win) >= this floor, and the card ranks by win probability (not edge). The
+# min-edge/+EV gate above still applies — a favorite at a losing price stays
+# unbettable — so this floor narrows the card to picks that are BOTH likely to
+# win AND fairly priced.
+PROP_MIN_WIN_PROBABILITY = 0.55
+
 # Projection sanity guards (added after the first live slate produced implausible picks).
 # The strikeout projection is only as good as its innings/role estimate. For openers,
 # relievers, rookies, and pitchers with thin or relief-skewed game logs, avg_innings
