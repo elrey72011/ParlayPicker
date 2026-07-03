@@ -133,7 +133,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-06-28-symmetric-mlb-totals-floor"
+PIPELINE_BUILD = "2026-07-03-kalshi-wrong-game-title-guard"
 
 
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
