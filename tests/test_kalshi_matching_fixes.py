@@ -49,7 +49,12 @@ def test_merge_kalshi_allows_plus_minus_one_day_date_drift():
     assert merged.loc[0, "kalshi_probability"] == 0.61
 
 
-def test_best_picks_prefers_highest_expected_value_for_kalshi_spread_total_pair():
+def test_best_picks_prefers_highest_win_probability_for_kalshi_spread_total_pair():
+    # Renamed from ..._prefers_highest_expected_value_... (3 Jul): the owner's
+    # win-probability-first policy inverted the finalist criterion. With a
+    # 54% / EV +0.03 spread against a 55% / EV +0.01 total for the same game,
+    # the LIKELIER pick (the total) must now win the cross-family finalist,
+    # where the old EV-first score chose the spread.
     analysis_df = pd.DataFrame(
         {
             "game_id": ["g1", "g1"],
@@ -76,5 +81,6 @@ def test_best_picks_prefers_highest_expected_value_for_kalshi_spread_total_pair(
     best = build_best_picks_df(analysis_df)
 
     assert len(best) == 1
-    # expected_value is overridden to -999 when sorted, let's just assert the highest EV pick was chosen
-    assert best.loc[0, "market_type"] == "spread_home"
+    # Win-probability-first: the 0.55 total outranks the 0.54 spread despite the
+    # spread's higher EV.
+    assert best.loc[0, "market_type"] == "total_over"
