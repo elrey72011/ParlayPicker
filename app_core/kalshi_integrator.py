@@ -1015,10 +1015,16 @@ def kalshi_title_references_matchup(norm_title: str, norm_home: str, norm_away: 
     True (trust) when the title is empty/unparseable: the guard only fires on
     positive evidence of a wrong game.
     """
-    title = f" {str(norm_title or '').strip()} "
+    # Case-insensitive throughout: the production normalizer (core.team_mapper.
+    # normalize_team_name) TITLE-CASES its output ("Boston Vs Los Angeles A Total
+    # Runs"), which silently defeated the first version of this guard — its
+    # lowercase " vs " split never matched "Vs", the title read as non-matchup
+    # format, and the wrong-game row was trusted (3 Jul 15:03Z run, on the new
+    # build stamp). Never assume the normalizer's casing.
+    title = f" {str(norm_title or '').strip().lower()} "
     if title.strip() == "":
         return True
-    teams = [str(norm_home or "").strip(), str(norm_away or "").strip()]
+    teams = [str(norm_home or "").strip().lower(), str(norm_away or "").strip().lower()]
     teams = [t for t in teams if t]
     if not teams:
         return True
@@ -1033,7 +1039,7 @@ def kalshi_title_references_matchup(norm_title: str, norm_home: str, norm_away: 
         if cut >= 0:
             body = body[:cut] + " "
             break
-    parts = re.split(r"\s+vs\.?\s+|\s+@\s+", body)
+    parts = re.split(r"\s+vs\.?\s+|\s+@\s+", body, flags=re.IGNORECASE)
     if len(parts) < 2:
         # Not a "TeamA vs TeamB" matchup-format title (e.g. "Over 7.5 runs
         # scored") — it cannot confirm OR deny the game. Trust it and leave

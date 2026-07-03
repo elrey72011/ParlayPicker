@@ -29,6 +29,27 @@ def test_wrong_game_title_is_rejected():
     assert _check("Boston vs Los Angeles A Total Runs?", "chicago cubs", "saint louis") is False
 
 
+def test_guard_works_with_the_REAL_production_normalizer():
+    # The first version of this guard passed its unit tests but failed in
+    # production (3 Jul 15:03Z, new-build stamp) because the tests fed it
+    # lowercase strings while core.team_mapper.normalize_team_name TITLE-CASES
+    # its output ("Boston Vs Los Angeles A Total Runs") — the lowercase " vs "
+    # split never matched "Vs" and the wrong-game title was trusted. This test
+    # pins the guard to the actual normalizer so casing drift can never
+    # silently disarm it again.
+    from core.team_mapper import normalize_team_name as n
+
+    raw_title = "Boston vs Los Angeles A Total Runs?"
+    norm_title = f" {n(raw_title)} "
+    # The landmine: Cubs/StL row must reject the Boston/LAA market title.
+    assert kalshi_title_references_matchup(norm_title, n("Chicago Cubs"), n("Saint Louis")) is False
+    # The genuine Angels/Boston row must keep it.
+    assert kalshi_title_references_matchup(norm_title, n("Los Angeles Angels"), n("Boston")) is True
+    # And a truncated legit pairing through the real normalizer.
+    t2 = f" {n('San Diego vs Los Angeles D Total Runs?')} "
+    assert kalshi_title_references_matchup(t2, n("Los Angeles Dodgers"), n("San Diego")) is True
+
+
 def test_every_truncated_title_format_from_the_3jul_slate_passes():
     # Real (title, home, away) pairs from the 3 Jul export — all legitimate
     # matches, several with Kalshi's truncated team names. None may be rejected.
