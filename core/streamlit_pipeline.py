@@ -133,7 +133,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-07-03c-win-probability-first"
+PIPELINE_BUILD = "2026-07-03d-direction-probability-first"
 
 
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
@@ -2678,8 +2678,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
 
     # 3. Calculate Normalized EV and Normalized Edge (Z-score style) within market families
     # Initialize normalized columns with NaN
+    pool["_prob_numeric"] = pd.to_numeric(pool["calibrated_probability"], errors="coerce").fillna(0.5)
     pool["_normalized_ev"] = pd.Series([np.nan] * len(pool), index=pool.index, dtype="float64")
     pool["_normalized_edge"] = pd.Series([np.nan] * len(pool), index=pool.index, dtype="float64")
+    pool["_normalized_prob"] = pd.Series([np.nan] * len(pool), index=pool.index, dtype="float64")
 
     # Store diagnostics
     raw_counts = pool["_market_family"].value_counts().to_dict()
@@ -2705,12 +2707,35 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 pool.loc[family_mask, "_normalized_edge"] = (pool.loc[family_mask, "_edge_numeric"] - mean_edge) / std_edge
             else:
                 pool.loc[family_mask, "_normalized_edge"] = 0.0
+            # Win-probability Z-score (same per-family normalization for scale
+            # comparability with the penalty magnitudes tuned on z-units)
+            mean_prob = pool.loc[family_mask, "_prob_numeric"].mean()
+            std_prob = pool.loc[family_mask, "_prob_numeric"].std()
+            if std_prob > 0:
+                pool.loc[family_mask, "_normalized_prob"] = (pool.loc[family_mask, "_prob_numeric"] - mean_prob) / std_prob
+            else:
+                pool.loc[family_mask, "_normalized_prob"] = 0.0
         elif count == 1:
             pool.loc[family_mask, "_normalized_ev"] = 0.0
             pool.loc[family_mask, "_normalized_edge"] = 0.0
+            pool.loc[family_mask, "_normalized_prob"] = 0.0
 
-    # Fill NaNs with 0.0 only at the scoring step for safely computing final_family_score
-    pool["final_family_score"] = 0.5 * pool["_normalized_ev"].fillna(0.0) + 0.5 * pool["_normalized_edge"].fillna(0.0)
+    # Finalist score — WIN PROBABILITY first (owner preference, 3 Jul: "the best
+    # pick is the one with the highest chance of winning, not the best payout").
+    # The audit that motivated this: with the old 0.5*EV + 0.5*edge score, a 47%
+    # Over at +150 (EV +17.5%) beat a 58% Under at -130 (EV +2.6%) for the same
+    # game — the DIRECTION choice was still optimizing payout even after ranking,
+    # staking, and recovery had moved to probability. The score is now the
+    # z-scored calibrated win probability, with a small EV/edge term (10% weight
+    # combined) retained strictly as a value tiebreak between near-equal
+    # probabilities. All graded-evidence penalties below (Kalshi direction
+    # conflict, under-selection nudge, MLB-spread handicap) are unchanged and
+    # still subtract in the same z-units they were tuned in.
+    pool["final_family_score"] = (
+        0.90 * pool["_normalized_prob"].fillna(0.0)
+        + 0.05 * pool["_normalized_ev"].fillna(0.0)
+        + 0.05 * pool["_normalized_edge"].fillna(0.0)
+    )
 
     for family in ["total", "side"]:
         family_mask = pool["_market_family"] == family
@@ -2800,7 +2825,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
 
     # 4. Sort to prepare for finalist selection within each family per game
     pool = pool.sort_values(
-        by=["final_family_score", "tier_score", "_ev_numeric", "_edge_numeric", "calibrated_probability"],
+        by=["final_family_score", "tier_score", "calibrated_probability", "_ev_numeric", "_edge_numeric"],
         ascending=[False, True, False, False, False],
         na_position="last"
     )
@@ -2838,12 +2863,12 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
 
         # Sort the finalists for this matchup to find the absolute winner
         group_sorted = group.sort_values(
-            by=["final_family_score", "tier_score", "_ev_numeric", "_edge_numeric", "calibrated_probability"],
+            by=["final_family_score", "tier_score", "calibrated_probability", "_ev_numeric", "_edge_numeric"],
             ascending=[False, True, False, False, False],
             na_position="last"
         )
         group_sorted_no_mlb_spread_penalty = group.sort_values(
-            by=["final_family_score_no_mlb_spread_penalty", "tier_score", "_ev_numeric", "_edge_numeric", "calibrated_probability"],
+            by=["final_family_score_no_mlb_spread_penalty", "tier_score", "calibrated_probability", "_ev_numeric", "_edge_numeric"],
             ascending=[False, True, False, False, False],
             na_position="last"
         )
