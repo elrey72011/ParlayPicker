@@ -996,6 +996,60 @@ def kalshi_total_spread_price_extreme(prob, market_type) -> bool:
     return not (KALSHI_TOTAL_SPREAD_MIN_PROB <= float(prob) <= KALSHI_TOTAL_SPREAD_MAX_PROB)
 
 
+def kalshi_title_references_matchup(norm_title: str, norm_home: str, norm_away: str) -> bool:
+    """True when a Kalshi market title plausibly belongs to the row's game.
+
+    Wrong-game guard (3 Jul): the event matcher paired a Cubs/Cardinals Under 10.5
+    with a market titled "Boston vs Los Angeles A Total Runs?" — a 10.5-strike
+    contract from a DIFFERENT game's ladder. Its bogus 73% P(Under) flipped
+    consensus to Agrees, inflated the blend to a fake +29% EV, and the empty-card
+    recovery staked it $40 at S-Tier. Spreads catch this implicitly (the subject-
+    orientation step misses and returns unpriceable); totals had no title check.
+
+    Inputs are already normalized (lowercased, space-padded title; normalized team
+    names). Kalshi truncates long names in titles ("Los Angeles D", "New York Y",
+    "Chicago WS"), so besides direct containment we accept a "vs"-fragment that is
+    a prefix of the team name (>= 4 chars, so a bare "a" can't match everything).
+    ANY-match: one referenced team is enough — this guard exists to catch titles
+    naming two entirely different teams, not to litigate abbreviations. Returns
+    True (trust) when the title is empty/unparseable: the guard only fires on
+    positive evidence of a wrong game.
+    """
+    title = f" {str(norm_title or '').strip()} "
+    if title.strip() == "":
+        return True
+    teams = [str(norm_home or "").strip(), str(norm_away or "").strip()]
+    teams = [t for t in teams if t]
+    if not teams:
+        return True
+    for team in teams:
+        if f" {team} " in title:
+            return True
+    # Fragment pass: split the title body on the "vs" separator and strip the
+    # market-name tail; a fragment that prefixes a team name is a match.
+    body = title.replace("?", " ")
+    for tail in (" total runs ", " total points ", " total goals ", " total "):
+        cut = body.find(tail)
+        if cut >= 0:
+            body = body[:cut] + " "
+            break
+    parts = re.split(r"\s+vs\.?\s+|\s+@\s+", body)
+    if len(parts) < 2:
+        # Not a "TeamA vs TeamB" matchup-format title (e.g. "Over 7.5 runs
+        # scored") — it cannot confirm OR deny the game. Trust it and leave
+        # identity to the other guards; only titles that positively name a
+        # different matchup are rejected.
+        return True
+    for frag in parts:
+        frag = frag.strip()
+        if len(frag) < 4:
+            continue
+        for team in teams:
+            if team.startswith(frag):
+                return True
+    return False
+
+
 def orient_spread_kalshi_prob(raw_prob, subject_is_home, pick_is_home, pick_line):
     """P(pick covers) from a run-line contract "S wins by over L" (raw_prob = P(S by >L)).
 
@@ -1584,6 +1638,16 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             # 4. First-Subject Orientation Logic
             market_type_str = str(row.get('market_type', '')).lower()
             if "total" in raw_title.lower() or "total" in norm_title or "total" in market_type_str:
+                # Wrong-game title guard: spreads implicitly reject a title that names
+                # neither team (subject orientation misses -> unpriceable), but totals
+                # took the price on faith. A same-strike contract from another game's
+                # ladder (3 Jul: Cubs/StL Under 10.5 priced off "Boston vs Los Angeles A
+                # Total Runs?" at 73%) must be a miss, not a 73% consensus flip.
+                if not kalshi_title_references_matchup(norm_title, pad_home.strip(), pad_away.strip()):
+                    out.at[idx, "kalshi_match_status"] = "miss"
+                    out.at[idx, "kalshi_match_reason"] = "wrong_game_title"
+                    out.at[idx, "kalshi_probability"] = 0.0
+                    continue
                 # Totals contracts always represent the OVER
                 final_prob = raw_prob
             else:
