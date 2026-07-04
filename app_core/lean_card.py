@@ -63,18 +63,15 @@ def _american_breakeven(odds: object):
 _UNSET = object()
 
 
-def build_all_games_lean_card(best_picks_df: pd.DataFrame, *, calibration: object = _UNSET,
-                              bucket_stats: object = _UNSET) -> pd.DataFrame:
-    """Derive the all-games lean card from the games best-picks frame.
+def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = _UNSET,
+                          bucket_stats: object = _UNSET) -> pd.DataFrame:
+    """Per-row lean scoring, INDEX-ALIGNED to the input frame (no sorting).
 
-    Pure and side-effect-free: reads the existing per-game pick/probability/EV columns,
-    assigns a tier, and returns a compact view RANKED BY EMPIRICAL EDGE (bucket-realized),
-    not model EV. Tolerant of the pre- and post-export column names (home_team/Home, etc.).
-
-    The LEAN tier is gated by bucket-conditional calibration: a pick stays LEAN only if its
-    calibrated win beats break-even. ``calibration`` / ``bucket_stats`` default to the fitted
-    tables on disk; pass ``None`` to disable (raw behavior) or explicit values to inject
-    (tests).
+    Shared core of the Play Card and the main-card tier columns: computes the
+    bucket-calibrated win probability, break-even, Emp_Edge, and BET/LEAN/AVOID
+    tier for every row of a best-picks frame. build_all_games_lean_card sorts
+    and formats this; the main Best Picks card joins it back by index so every
+    displayed row carries a tier and a playable stake.
     """
     if best_picks_df is None or best_picks_df.empty:
         return pd.DataFrame()
@@ -136,7 +133,15 @@ def build_all_games_lean_card(best_picks_df: pd.DataFrame, *, calibration: objec
     calib_num = pd.to_numeric(calib_win, errors="coerce")
     emp_edge = calib_num - pd.to_numeric(breakeven, errors="coerce")
 
-    out = pd.DataFrame({
+    # A started game is never playable at ANY size — pre-game lines are stale
+    # and the shown odds may be in-game. attach_play_stakes zeroes these rows.
+    started = _first_col(df, "game_already_started_flag").map(
+        lambda v: bool(v) if pd.notna(v) and v is not None else False
+    )
+    if "status_blocker_stage" in df.columns:
+        started = started | df["status_blocker_stage"].astype(str).eq("game_already_started")
+
+    return pd.DataFrame({
         "League": _first_col(df, "league", "League"),
         "Matchup": (away + " @ " + home).str.strip(" @"),
         "Pick": _first_col(df, "best_pick"),
@@ -147,10 +152,29 @@ def build_all_games_lean_card(best_picks_df: pd.DataFrame, *, calibration: objec
         "EV": pd.to_numeric(eff_ev, errors="coerce"),
         "Consensus": consensus,
         "Tier": tier,
+        "Started": started,
         # Stake only on the BET tier (the genuinely actionable picks); LEAN/AVOID are reads,
         # not staked, so the user decides any size themselves.
         "Suggested_Stake": kelly.where(pd.Series(tier, index=df.index) == "BET", 0.0),
-    })
+    }, index=df.index)
+
+
+def build_all_games_lean_card(best_picks_df: pd.DataFrame, *, calibration: object = _UNSET,
+                              bucket_stats: object = _UNSET) -> pd.DataFrame:
+    """Derive the all-games lean card from the games best-picks frame.
+
+    Pure and side-effect-free: reads the existing per-game pick/probability/EV columns,
+    assigns a tier, and returns a compact view RANKED BY EMPIRICAL EDGE (bucket-realized),
+    not model EV. Tolerant of the pre- and post-export column names (home_team/Home, etc.).
+
+    The LEAN tier is gated by bucket-conditional calibration: a pick stays LEAN only if its
+    calibrated win beats break-even. ``calibration`` / ``bucket_stats`` default to the fitted
+    tables on disk; pass ``None`` to disable (raw behavior) or explicit values to inject
+    (tests).
+    """
+    out = score_best_picks_rows(best_picks_df, calibration=calibration, bucket_stats=bucket_stats)
+    if out.empty:
+        return out
     out["_t"] = out["Tier"].map(_TIER_ORDER).fillna(3)
     # Rank by empirical edge (bucket-proven), not model Win%/EV — the latter is anti-informative.
     # Win% is the tiebreaker and the fallback when there's no calibration (Emp_Edge all NaN).
@@ -200,6 +224,14 @@ def attach_play_stakes(card: pd.DataFrame, unit: float = 5.0) -> pd.DataFrame:
     if "Suggested_Stake" in out.columns:
         kelly = pd.to_numeric(out["Suggested_Stake"], errors="coerce").fillna(0.0)
         stake = stake.where(~(tier.eq("BET") & kelly.gt(stake)), kelly)
+
+    # Started games are unplayable at any size: the pre-game line is gone.
+    if "Started" in out.columns:
+        started = out["Started"].fillna(False).astype(bool)
+        units = units.where(~started, 0.0)
+        stake = stake.where(~started, 0.0)
+        out.loc[started, "Tier"] = "STARTED"
+
     out["Play_Units"] = units
     out["Play_Stake"] = stake.round(2)
     return out
