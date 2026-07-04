@@ -350,6 +350,19 @@ MLB_THEOVER_CONFLICT_PENALTY = 0.35     # Subtracted from final_family_score to 
 # Brier/log-loss on per-pick signal-vs-outcome data to prove the true value.
 KALSHI_DIRECTION_CONFIDENCE_WEIGHT = 1.5
 
+# Kalshi direction VETO (4 Jul, from the graded archive, n=248 totals picks
+# Jun 2 - Jul 3): the model's lean hit 45.5% overall and 39% in its own most
+# confident band — while the side KALSHI favored (conviction >= 5 pts) hit
+# 54.0% (74/137) on the same games. Picks made AGAINST a convicted Kalshi hit
+# 43%. The 0.35 conflict penalty was a nudge the model's z-spread (~1.3 across
+# a family) could out-vote; when Kalshi's conviction clears the threshold
+# below, its opposition now subtracts a penalty no z-spread can survive, so
+# the family finalist IS Kalshi's side. Direction only — probabilities, EV,
+# and staking gates are untouched. Set the penalty to
+# MLB_THEOVER_CONFLICT_PENALTY to restore nudge behavior.
+KALSHI_DIRECTION_VETO_PENALTY = 2.0
+KALSHI_DIRECTION_VETO_MIN_CONVICTION = 0.05  # |P(kalshi) - 0.50| to arm the veto
+
 # TheOver tags each WinProbability with a WinProbSource (set by our own M-code scraper):
 #   model_hit_rate          -> TheOver's model picked the OVER; P(Over) = hit_rate
 #   model_hit_rate_flipped  -> TheOver's model picked the UNDER; P(Over) = 1 - hit_rate

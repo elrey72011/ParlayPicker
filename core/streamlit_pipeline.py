@@ -69,6 +69,7 @@ from app_core.weights_config import (
     KALSHI_DIVERGENCE_THRESHOLD_MLB, KALSHI_DIVERGENCE_THRESHOLD_NHL,
     MLB_THEOVER_CONFLICT_THRESHOLD, MLB_THEOVER_CONFLICT_PENALTY,
     KALSHI_DIRECTION_CONFIDENCE_WEIGHT,
+    KALSHI_DIRECTION_VETO_PENALTY, KALSHI_DIRECTION_VETO_MIN_CONVICTION,
     MLB_THEOVER_FADE_SOURCES, MLB_THEOVER_FADE_SHRINK, THEOVER_FADE_SHRINK_DEFAULT,
     MLB_PUBLIC_BETTING_FADE_SOURCES, MLB_PUBLIC_BETTING_FADE_STRENGTH,
 )
@@ -133,7 +134,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-07-04g-pitcher-prop-expansion"
+PIPELINE_BUILD = "2026-07-04h-kalshi-direction-veto"
 
 
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
@@ -2810,8 +2811,23 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         fade_shrink=MLB_THEOVER_FADE_SHRINK,
         kalshi_confidence_weight=KALSHI_DIRECTION_CONFIDENCE_WEIGHT,
     )
+    # Kalshi direction veto (4 Jul): when KALSHI itself opposes this row's
+    # direction with real conviction (>= KALSHI_DIRECTION_VETO_MIN_CONVICTION
+    # from 0.50), the penalty is decisive — no model z-spread can out-vote it,
+    # so the family finalist is Kalshi's side. Backtest, n=248 graded totals:
+    # model lean 45.5%, Kalshi's side 54.0%, model-vs-Kalshi picks 43%.
+    # TheOver-only conflicts keep the original nudge-sized penalty.
+    # Exact 0.0 / 1.0 are miss sentinels ("No Kalshi"), not prices — a real Kalshi
+    # quote is always strictly inside (0, 1). They must never arm the veto.
+    _kalshi_convicted = (
+        ~np.isnan(_kalshi_arr)
+        & (_kalshi_arr > 0.0) & (_kalshi_arr < 1.0)
+        & (np.abs(_kalshi_arr - 0.5) >= float(KALSHI_DIRECTION_VETO_MIN_CONVICTION))
+    )
     pool["_direction_conflict_penalty"] = np.where(
-        _direction_conflict, float(MLB_THEOVER_CONFLICT_PENALTY), 0.0
+        _direction_conflict & _kalshi_opp & _kalshi_convicted,
+        float(KALSHI_DIRECTION_VETO_PENALTY),
+        np.where(_direction_conflict, float(MLB_THEOVER_CONFLICT_PENALTY), 0.0),
     )
     pool["final_family_score"] = pool["final_family_score"] - pool["_direction_conflict_penalty"]
     # Back-compat: keep the legacy per-source columns populated for debug/transparency,
