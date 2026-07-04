@@ -161,7 +161,9 @@ def grade(export_csv: Path, recap_csv: Path, out_csv: Path) -> None:
             return False
         if "unresolved" in _norm(r.get("Pick Taken")):
             return False
-        if status == "no play":
+        # "no edge" is the user-facing export label for "no play" (4 Jul rename);
+        # recaps built from those exports carry it, so treat them as synonyms.
+        if status in ("no play", "no edge"):
             key = (_norm(r.get("Home")), _norm(r.get("Away")), _norm(r.get("Pick Taken")))
             if key not in clean_keys:
                 return False
