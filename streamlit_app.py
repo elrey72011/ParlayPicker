@@ -121,6 +121,35 @@ def _safe_str_series(df: pd.DataFrame, col: str, default: str = "") -> pd.Series
 
 
 
+_NO_BET_STAGE_REASONS = {
+    "game_already_started": "⏱️ Game already started — live odds, not pre-game lines",
+    "baseline_guardrail": "Market priced better — negative EV at this price",
+    "actionable_threshold": "Failed the confidence threshold",
+    "min_win_probability_floor": "Below the 55% win-probability floor",
+    "empirical_proven_losing_bucket": "Proven-losing bucket — history says pass",
+    "empirical_tier_overlay": "Small-sample bucket — not enough history to trust",
+    "divergence_viability_floor": "Signals diverge and the pick failed the viability floor",
+    "kalshi_wrong_game_title": "Kalshi data mismatch (wrong game)",
+    "line_provenance_unresolved": "Could not verify the betting line",
+    "extreme_price_guard": "Odds moved to an extreme price",
+}
+
+
+def _friendly_no_bet_reason(row: pd.Series | dict) -> str:
+    """One plain-English line for why a non-Actionable pick isn't bettable.
+
+    Display-only: collapses the status ladder (No Play / Below Threshold /
+    High Variance) into a single 'why', keyed on status_blocker_stage with the
+    raw Status_Reason as fallback. Exports and grading keep the raw statuses.
+    """
+    get = row.get if hasattr(row, "get") else lambda k, d="": d
+    stage = str(get("status_blocker_stage", "") or "").strip()
+    if stage in _NO_BET_STAGE_REASONS:
+        return _NO_BET_STAGE_REASONS[stage]
+    reason = str(get("Status_Reason", "") or get("status_blocker_reason", "") or "").strip()
+    return reason if reason and reason.lower() != "nan" else "Did not qualify"
+
+
 def _should_run_pipeline(state: dict[str, Any], run_counter: int, controls: dict[str, Any] | None = None) -> bool:
     """Run once per monotonically increasing sidebar run counter.
 
@@ -1703,7 +1732,6 @@ def main() -> None:
             st.warning("⚠️ No games found.")
             st.dataframe(display_df, width="stretch")
         else:
-            st.success(f"✅ {len(display_df)} games found")
             rename_map = {
                 "Triple_Filter_Rank": "Triple Filter Rank",
                 "Pick_Quality": "Pick Quality",
@@ -1730,22 +1758,41 @@ def main() -> None:
             preferred = ["Pick_Status", "Triple Filter Rank", "Pick Quality", "parlay_rank", "League", "Home Team", "Away Team", "Game Date", "Game Time (ET)", "Best Pick", "Gemini Pick", "Prob", "ML Prob", "Odds", "Source", "EV", "Edge", "Consensus", "Kalshi Status", "kalshi_probability_display"]
             ordered = [c for c in preferred if c in display_df.columns] + [c for c in display_df.columns if c not in preferred]
             display_df = display_df[ordered]
-            st.dataframe(display_df, width="stretch")
 
-            # Below Threshold warning — 44.4% win rate over May 23-25 (below break-even)
-            if "Pick_Status" in best_picks_df.columns:
-                bt_picks = best_picks_df[best_picks_df["Pick_Status"] == "Below Threshold"]
-                if not bt_picks.empty:
-                    bt_games = bt_picks[["away_team", "home_team", "best_pick"]].copy() if "best_pick" in bt_picks.columns else bt_picks[["away_team", "home_team"]].copy()
-                    bt_labels = [
-                        f"{r.get('away_team','?')} @ {r.get('home_team','?')}: {r.get('best_pick','')}"
-                        for _, r in bt_games.iterrows()
+            # Display-side cleanup (owner request, 4 Jul): one clear split instead
+            # of a wall of No Play / Below Threshold / High Variance statuses.
+            # Qualified (Actionable) picks get the table; everything else collapses
+            # into a single "No Edge" group with a plain-English reason. Exports
+            # and grading keep the raw statuses untouched.
+            _disp_status = display_df["Pick_Status"].astype(str).str.strip() if "Pick_Status" in display_df.columns else pd.Series("", index=display_df.index)
+            qualified_df = display_df[_disp_status.eq("Actionable")]
+            no_edge_df = display_df[~_disp_status.eq("Actionable")]
+
+            if not qualified_df.empty:
+                st.success(f"✅ {len(qualified_df)} qualified game pick(s) today")
+                st.dataframe(qualified_df, width="stretch")
+            else:
+                st.info(
+                    f"🚫 **No qualified game picks today** — the model has no edge on any of the "
+                    f"{len(display_df)} games at current prices. That's the system protecting your "
+                    f"bankroll, not a malfunction. Today's action: the 🏆 Pick of the Day above and "
+                    f"the ⚾ strikeout props below."
+                )
+
+            if not no_edge_df.empty:
+                with st.expander(f"🔍 No Edge — {len(no_edge_df)} game(s) the model isn't betting (tap for reasons)", expanded=False):
+                    no_edge_view = no_edge_df.copy()
+                    no_edge_view.insert(0, "Why No Bet", no_edge_df.apply(_friendly_no_bet_reason, axis=1))
+                    compact_cols = [
+                        c for c in [
+                            "Why No Bet", "League", "Away Team", "Home Team", "Game Time (ET)",
+                            "Best Pick", "Prob", "Odds", "EV", "Edge", "Consensus", "Pick_Status",
+                        ] if c in no_edge_view.columns
                     ]
-                    st.warning(
-                        f"⛔ **Do Not Bet — {len(bt_picks)} Below Threshold pick(s):** "
-                        f"This tier has averaged 44% win rate over the last 3 days (below the ~52% break-even at -110). "
-                        f"These picks failed the confidence gate and should not be wagered.\n\n"
-                        + "\n".join(f"- {label}" for label in bt_labels)
+                    st.dataframe(no_edge_view[compact_cols], width="stretch")
+                    st.caption(
+                        "The model's lean is still shown for reference, but these picks failed the "
+                        "profitability gates. Full detail on every row is in the exports."
                     )
 
             export_prep_df = best_picks_df.copy()
