@@ -236,7 +236,39 @@ KALSHI_TEAM_CODES = {
     "Vancouver Canucks": "VAN", "Vancouver": "VAN",
     "Vegas Golden Knights": "VGK", "Vegas": "VGK",
     "Washington Capitals": "WSH",
-    "Winnipeg Jets": "WPG", "Winnipeg": "WPG"
+    "Winnipeg Jets": "WPG", "Winnipeg": "WPG",
+    # MLB — codes as they appear in Kalshi event tickers (e.g.
+    # KXMLBTOTAL-26JUL042008STLCHC). Only 3+ char codes: the scorer ignores
+    # shorter codes for substring checks (see _event_match_score), because a
+    # guessed 2-letter code matching inside another game's ticker is exactly
+    # how Cubs/StL kept event-matching to "Boston vs Los Angeles A" (4 Jul:
+    # guessed code "SL" ⊂ ticker "...BOSLAA"). City-only keys are added only
+    # where they don't collide with an existing NBA/NHL mapping.
+    "New York Yankees": "NYY", "NY Yankees": "NYY",
+    "New York Mets": "NYM", "NY Mets": "NYM",
+    "Chicago Cubs": "CHC",
+    "Chicago White Sox": "CWS",
+    "Saint Louis": "STL",  # upload naming; "St. Louis"/"St Louis" already map above
+    "Los Angeles Dodgers": "LAD", "L.A. Dodgers": "LAD",
+    "Los Angeles Angels": "LAA", "L.A. Angels": "LAA",
+    "Athletics": "ATH", "Oakland Athletics": "ATH",
+    "Cincinnati": "CIN",
+    "Baltimore": "BAL",
+    "Texas": "TEX",
+    "Toronto": "TOR",
+    "Colorado": "COL",
+    "Cleveland Guardians": "CLE",
+    "Milwaukee Brewers": "MIL",
+    "Houston Astros": "HOU",
+    "Seattle Mariners": "SEA",
+    "San Francisco Giants": "SFG",
+    "Pittsburgh Pirates": "PIT",
+    "Philadelphia Phillies": "PHI",
+    "Detroit Tigers": "DET",
+    "Minnesota Twins": "MIN",
+    "Atlanta Braves": "ATL",
+    "Miami Marlins": "MIA",
+    "Boston Red Sox": "BOS",
 }
 
 _KALSHI_TEAM_CODES_NORMALIZED = {
@@ -531,10 +563,15 @@ def _event_match_score(event: dict[str, Any], home_team: str, away_team: str, le
 
     score = 0
 
-    # Strong signal: explicit Kalshi codes in ticker/title payload
-    if home_code and home_code in combined_upper:
+    # Strong signal: explicit Kalshi codes in ticker/title payload. Codes shorter
+    # than 3 chars are ignored: _guess_code invents initials for unmapped teams,
+    # and a 2-letter guess substring-matching inside another game's ticker is a
+    # false strong signal (4 Jul: "Saint Louis" guessed "SL" ⊂ "...BOSLAA", so
+    # Cubs/StL event-matched to Boston vs LA Angels every run — the wrong-game
+    # title guard then killed the price, leaving a permanent Kalshi miss).
+    if home_code and len(home_code) >= 3 and home_code in combined_upper:
         score += 60
-    if away_code and away_code in combined_upper:
+    if away_code and len(away_code) >= 3 and away_code in combined_upper:
         score += 60
 
     # Strong signal: canonical normalized names
@@ -579,15 +616,26 @@ def _event_match_score(event: dict[str, Any], home_team: str, away_team: str, le
     # overlap or the cleaned name, because both collide on the shared CITY across teams
     # ("Los Angeles" Dodgers vs Angels; clean_team_name strips the mascot to the city).
     home_strong = bool(
-        (home_code and home_code in combined_upper)
+        (home_code and len(home_code) >= 3 and home_code in combined_upper)
         or (home_norm and home_norm in combined_norm)
     )
     away_strong = bool(
-        (away_code and away_code in combined_upper)
+        (away_code and len(away_code) >= 3 and away_code in combined_upper)
         or (away_norm and away_norm in combined_norm)
     )
     has_home = home_strong or bool(home_tokens.intersection(combined_tokens))
     has_away = away_strong or bool(away_tokens.intersection(combined_tokens))
+
+    if not has_home and not has_away:
+        # No evidence of EITHER team. If the title positively names a DIFFERENT
+        # matchup ("Boston vs Los Angeles A: Total Runs" for a Cubs/StL row),
+        # reject outright — the +25 date affinity alone reaches the acceptance
+        # threshold (25), so any same-day event could otherwise match a game
+        # whose true event was missing from the fetch. A teamless generic title
+        # ("NBA Total") stays neutral: it can't confirm or deny the game, and
+        # the single-candidate fallback is allowed to keep it.
+        if not kalshi_title_references_matchup(f"{title} {subtitle}", norm_home, norm_away):
+            return -100
 
     if has_home ^ has_away:
         # Exactly one team present. If that lone team matched only by a weak token
@@ -994,6 +1042,35 @@ def kalshi_total_spread_price_extreme(prob, market_type) -> bool:
         return False
     from app_core.weights_config import KALSHI_TOTAL_SPREAD_MIN_PROB, KALSHI_TOTAL_SPREAD_MAX_PROB
     return not (KALSHI_TOTAL_SPREAD_MIN_PROB <= float(prob) <= KALSHI_TOTAL_SPREAD_MAX_PROB)
+
+
+def find_team_reference(norm_title: str, team_name: str) -> int:
+    """Index of a team reference in a normalized market title, or -1.
+
+    Kalshi truncates long team names in market titles ("New York Y wins by over
+    1.5 runs?", "Chicago C", "Los Angeles D"), so an exact-containment
+    ``title.find(" new york yankees ")`` misses the subject entirely — that made
+    every Yankees run-line unpriceable (4 Jul: kalshi_match_reason
+    spread_side_unpriceable on a liquid market). Besides the exact name, this
+    accepts any leading prefix of the team name (>= 4 chars, longest first) that
+    appears as a space-delimited fragment, mirroring the wrong-game guard's
+    truncation rule.
+    """
+    title = f" {str(norm_title or '').strip().lower()} "
+    team = str(team_name or "").strip().lower()
+    if not team or title.strip() == "":
+        return -1
+    idx = title.find(f" {team} ")
+    if idx >= 0:
+        return idx
+    for length in range(len(team) - 1, 3, -1):
+        frag = team[:length].strip()
+        if len(frag) < 4:
+            break
+        idx = title.find(f" {frag} ")
+        if idx >= 0:
+            return idx
+    return -1
 
 
 def kalshi_title_references_matchup(norm_title: str, norm_home: str, norm_away: str) -> bool:
@@ -1657,9 +1734,11 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 # Totals contracts always represent the OVER
                 final_prob = raw_prob
             else:
-                # Spread/Moneyline: The first team mentioned is the subject
-                home_idx = norm_title.find(pad_home) if pad_home.strip() else 999
-                away_idx = norm_title.find(pad_away) if pad_away.strip() else 999
+                # Spread/Moneyline: The first team mentioned is the subject.
+                # Prefix-tolerant: Kalshi truncates names in titles ("New York Y
+                # wins by over 1.5 runs?"), which exact containment can't see.
+                home_idx = find_team_reference(norm_title, pad_home.strip()) if pad_home.strip() else 999
+                away_idx = find_team_reference(norm_title, pad_away.strip()) if pad_away.strip() else 999
 
                 home_idx = 999 if home_idx == -1 else home_idx
                 away_idx = 999 if away_idx == -1 else away_idx
