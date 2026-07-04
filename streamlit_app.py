@@ -2014,7 +2014,7 @@ def main() -> None:
             # ── Strikeout props (separate softer-market card) ──
             prop_card = st.session_state.get("strikeout_prop_card")
             if prop_card is not None and not prop_card.empty:
-                st.subheader("⚾ Pitcher Strikeout Props")
+                st.subheader("⚾ Pitcher Props — Strikeouts · Outs · Walks")
                 st.caption(
                     "Softer market than run totals — these cleared the +EV / min-edge gate. "
                     "Staked SMALL: the prop model is uncalibrated, so sizes are capped until it "
@@ -2030,7 +2030,7 @@ def main() -> None:
             elif st.session_state.get("diagnostics", {}).get("strikeout_prop_error"):
                 st.caption("⚾ Strikeout props unavailable this run (prop feed error).")
             else:
-                st.caption("⚾ No strikeout props cleared the edge bar today.")
+                st.caption("⚾ No pitcher props cleared the edge bar today.")
 
             # Compact export (.xlsx): a readable Excel table with only the columns
             # needed to scan a slate left-to-right, matching the Strategy Lab layout.

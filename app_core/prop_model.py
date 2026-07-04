@@ -97,3 +97,17 @@ def project_expected_strikeouts(
     if opponent_k_rate is not None and league_k_rate > 0:
         opp_adj = float(np.clip(opponent_k_rate / league_k_rate, 0.80, 1.25))
     return max(0.1, base * opp_adj * float(park_factor))
+
+
+def project_expected_outs(avg_innings: float) -> float:
+    """Projected outs recorded = expected innings x 3.
+
+    Outs are driven almost entirely by workload/leash, which avg recent innings
+    already measures; no opponent adjustment in v1.
+    """
+    return max(0.1, float(avg_innings) * 3.0)
+
+
+def project_expected_walks(bb_per_9: float, expected_innings: float) -> float:
+    """Projected walks = recent BB/9 rate x expected innings. No opponent adj in v1."""
+    return max(0.1, (float(bb_per_9) / 9.0) * float(expected_innings))

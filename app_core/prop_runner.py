@@ -21,8 +21,9 @@ from app_core.mlb_pitcher_stats import (
     fetch_schedule_probables,
     fetch_team_k_rate,
 )
-from app_core.prop_odds_ingest import fetch_strikeout_props
+from app_core.prop_odds_ingest import fetch_pitcher_props, fetch_strikeout_props
 from app_core.prop_pipeline import (
+    PITCHER_PROP_SPECS,
     PROP_KS_DISPERSION,
     PROP_MAX_PLAUSIBLE_EDGE,
     PROP_MIN_EDGE,
@@ -100,7 +101,7 @@ def build_strikeout_card(
     min_starter_avg_innings: float = PROP_MIN_STARTER_AVG_INNINGS,
     max_plausible_edge: float = PROP_MAX_PLAUSIBLE_EDGE,
     list_events: Callable | None = None,
-    props_fetch: Callable = fetch_strikeout_props,
+    props_fetch: Callable = fetch_pitcher_props,
     schedule_fetch: Callable = fetch_schedule_probables,
     form_fetch: Callable = fetch_pitcher_form,
     team_k_fetch: Callable = fetch_team_k_rate,
@@ -193,6 +194,8 @@ def build_prop_card(
         p_side = float(p_over) if side == "over" else 1.0 - float(p_over)
         if p_side < float(min_win_probability):
             continue
+        market_key = str(r.get("market_key") or "pitcher_strikeouts")
+        label = PITCHER_PROP_SPECS.get(market_key, PITCHER_PROP_SPECS["pitcher_strikeouts"])["label"]
         dec = _decimal_odds(odds)
         b = dec - 1.0
         kelly_frac = ((p_side * dec) - 1.0) / b if b > 0 else 0.0
@@ -201,8 +204,8 @@ def build_prop_card(
             "league": "MLB",
             "pitcher": r.get("pitcher"),
             "matchup": f"{r.get('away_team', '')} @ {r.get('home_team', '')}".strip(" @"),
-            "market_type": f"pitcher_strikeouts_{side}",
-            "best_pick": f"{r.get('pitcher')} {side.capitalize()} {r.get('line')} Ks",
+            "market_type": f"{market_key}_{side}",
+            "best_pick": f"{r.get('pitcher')} {side.capitalize()} {r.get('line')} {label}",
             "line": r.get("line"),
             "expected_ks": r.get("expected_ks"),
             "WinProbability": round(p_side, 4),

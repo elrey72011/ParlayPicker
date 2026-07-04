@@ -57,8 +57,29 @@ def grade_side(side: str, line: float, actual_ks) -> str | None:
     return "WIN" if win else "LOSS"
 
 
+def _stat_for_market(market_type: object, best_pick: object) -> str:
+    """Which counted stat a prop row grades against: ks | walks | outs.
+
+    Order matters: "pitcher_strikeouts_*" contains the substring "outs", so
+    strikeouts must be checked first.
+    """
+    text = f"{market_type} {best_pick}".lower()
+    if "strikeout" in text or " ks" in text:
+        return "ks"
+    if "walk" in text or " bbs" in text:
+        return "walks"
+    if "outs" in text:
+        return "outs"
+    return "ks"
+
+
 def grade_card(card: pd.DataFrame, date: str, name_to_id: dict, actual_ks_fn) -> list[dict]:
-    """Grade a prop card DataFrame into result rows. ``actual_ks_fn(pitcher_id) -> int|None``."""
+    """Grade a prop card DataFrame into result rows.
+
+    ``actual_ks_fn(pitcher_id) -> int | dict | None``: an int is the strikeout
+    count (historic single-market form); a dict carries {"ks", "walks", "outs"}
+    and the row's market decides which stat grades it (4 Jul multi-market).
+    """
     rows = []
     for _, r in card.iterrows():
         if str(r.get("Pick_Status", "")).strip() != "Actionable":
@@ -69,7 +90,11 @@ def grade_card(card: pd.DataFrame, date: str, name_to_id: dict, actual_ks_fn) ->
         odds = float(r["odds_american"])
         stake = float(r.get("Kelly_Bet_Size") or 0.0)
         pid = name_to_id.get(name.lower())
-        ks = actual_ks_fn(pid) if pid is not None else None
+        actual = actual_ks_fn(pid) if pid is not None else None
+        if isinstance(actual, dict):
+            ks = actual.get(_stat_for_market(r.get("market_type"), r.get("best_pick")))
+        else:
+            ks = actual
         res = grade_side(side, line, ks)
         if res == "WIN":
             profit = stake * (_decimal(odds) - 1)
@@ -113,7 +138,19 @@ def append_log(rows: list[dict], log_path: Path = LOG_PATH) -> pd.DataFrame:
 
 
 # ── network (not unit-tested) ──
+def _ip_to_outs(ip) -> int | None:
+    """StatsAPI inningsPitched ("5.2") -> outs (17). The fraction digit IS the outs."""
+    try:
+        text = str(ip)
+        whole, _, frac = text.partition(".")
+        outs = int(frac) if frac in ("1", "2") else 0
+        return int(whole) * 3 + outs
+    except (TypeError, ValueError):
+        return None
+
+
 def fetch_actual_ks(pitcher_id, date: str, season: int, http_get=requests.get):
+    """Actual pitching counts for the date: {"ks", "walks", "outs"} (or None)."""
     try:
         resp = http_get(f"{_BASE}/people/{pitcher_id}/stats",
                         params={"stats": "gameLog", "group": "pitching", "season": season},
@@ -121,7 +158,12 @@ def fetch_actual_ks(pitcher_id, date: str, season: int, http_get=requests.get):
         resp.raise_for_status()
         for sp in resp.json()["stats"][0]["splits"]:
             if sp.get("date") == date:
-                return int(sp["stat"]["strikeOuts"])
+                stat = sp["stat"]
+                return {
+                    "ks": int(stat.get("strikeOuts", 0) or 0),
+                    "walks": int(stat.get("baseOnBalls", 0) or 0),
+                    "outs": _ip_to_outs(stat.get("inningsPitched")),
+                }
     except (requests.RequestException, ValueError, KeyError, IndexError, TypeError):
         return None
     return None
