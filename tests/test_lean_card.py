@@ -179,3 +179,88 @@ def test_bet_tier_keeps_larger_kelly_stake():
 def test_empty_card_is_safe():
     assert attach_play_stakes(pd.DataFrame()).empty
     assert attach_play_stakes(None).empty
+
+
+# ── score_best_picks_rows: index-aligned tiers for the MAIN card (owner, 4 Jul) ──
+from app_core.lean_card import score_best_picks_rows  # noqa: E402
+
+
+def test_score_rows_is_index_aligned_and_unsorted():
+    df = pd.DataFrame({
+        "league": ["MLB", "MLB"],
+        "home_team": ["Cincinnati", "Cleveland"],
+        "away_team": ["Baltimore", "Chicago White Sox"],
+        "Pick_Status": ["Below Threshold", "Actionable"],
+        "best_pick": ["Baltimore +1.5", "Chicago White Sox +1.5"],
+        "effective_expected_value": [0.03, 0.05],
+        "consensus_agreement": ["Agrees", "Agrees"],
+        "effective_win_probability": [0.58, 0.60],
+        "effective_edge": [0.02, 0.03],
+        "odds_american": [-110, -110],
+        "Kelly_Bet_Size": [0.0, 12.0],
+    }, index=[7, 3])
+    out = score_best_picks_rows(df, calibration=None, bucket_stats=None)
+    assert list(out.index) == [7, 3]          # aligned, original order kept
+    assert out.loc[3, "Tier"] == "BET"
+    assert out.loc[3, "Suggested_Stake"] == 12.0
+    assert out.loc[7, "Tier"] in ("LEAN", "AVOID")
+
+
+def test_score_rows_then_play_stakes_gives_every_main_card_row_a_stake():
+    df = pd.DataFrame({
+        "league": ["MLB"] * 3,
+        "home_team": ["A", "B", "C"],
+        "away_team": ["X", "Y", "Z"],
+        "Pick_Status": ["No Play", "Below Threshold", "High Variance/Speculative"],
+        "best_pick": ["Over 7.5", "Under 8.5", "X +1.5"],
+        "effective_expected_value": [-0.03, 0.02, 0.10],
+        "consensus_agreement": ["Agrees", "Agrees", "Neutral"],
+        "effective_win_probability": [0.51, 0.56, 0.63],
+        "effective_edge": [0.0, 0.02, 0.06],
+        "odds_american": [-110, -110, -140],
+        "Kelly_Bet_Size": [0.0, 0.0, 0.0],
+    })
+    staked = attach_play_stakes(score_best_picks_rows(df, calibration=None, bucket_stats=None), unit=5.0)
+    assert (staked["Play_Stake"] > 0).all()
+    assert list(staked.index) == list(df.index)
+
+
+def test_build_card_matches_row_scores():
+    df = pd.DataFrame({
+        "league": ["MLB", "MLB"],
+        "home_team": ["Cincinnati", "Cleveland"],
+        "away_team": ["Baltimore", "Chicago White Sox"],
+        "Pick_Status": ["Below Threshold", "No Play"],
+        "best_pick": ["Baltimore +1.5", "Chicago White Sox +1.5"],
+        "effective_expected_value": [0.03, -0.04],
+        "consensus_agreement": ["Agrees", "Agrees"],
+        "effective_win_probability": [0.58, 0.60],
+        "effective_edge": [0.02, -0.01],
+        "odds_american": [-110, -110],
+        "Kelly_Bet_Size": [0.0, 0.0],
+    })
+    rows = score_best_picks_rows(df, calibration=None, bucket_stats=None)
+    card = build_all_games_lean_card(df, calibration=None, bucket_stats=None)
+    assert sorted(card["Tier"]) == sorted(rows["Tier"])
+    assert set(card["Pick"]) == set(rows["Pick"])
+
+
+def test_started_games_get_zero_play_stake():
+    df = pd.DataFrame({
+        "league": ["MLB", "MLB"],
+        "home_team": ["New York Yankees", "Cincinnati"],
+        "away_team": ["Minnesota", "Baltimore"],
+        "Pick_Status": ["No Play", "No Play"],
+        "best_pick": ["Over 10.5", "Baltimore +1.5"],
+        "effective_expected_value": [0.0, -0.01],
+        "consensus_agreement": ["Agrees", "Agrees"],
+        "effective_win_probability": [0.57, 0.63],
+        "effective_edge": [0.0, 0.01],
+        "odds_american": [-130, -170],
+        "Kelly_Bet_Size": [0.0, 0.0],
+        "status_blocker_stage": ["game_already_started", "baseline_guardrail"],
+    })
+    out = attach_play_stakes(score_best_picks_rows(df, calibration=None, bucket_stats=None), unit=5.0)
+    assert out.iloc[0]["Play_Stake"] == 0.0
+    assert out.iloc[0]["Tier"] == "STARTED"
+    assert out.iloc[1]["Play_Stake"] > 0

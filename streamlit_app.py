@@ -1728,6 +1728,21 @@ def main() -> None:
         # Same display hygiene as the CSV export: $0-stake picks read as "No Bet", not a tier.
         display_df = apply_no_bet_pick_quality(display_df)
 
+        # Every row playable (owner, 4 Jul): join the Play Card tier + flat stake
+        # onto the MAIN card so "No Play"/"Below Threshold" is fine print, not the
+        # headline. Index-aligned scoring; production Kelly staking untouched.
+        if not display_df.empty:
+            try:
+                from app_core.lean_card import attach_play_stakes as _aps, score_best_picks_rows as _sbr
+
+                _row_unit = float(st.session_state.get("lean_play_unit", 5.0) or 5.0)
+                _scored = _aps(_sbr(best_picks_df), unit=_row_unit)
+                if not _scored.empty:
+                    display_df["Play Tier"] = _scored["Tier"]
+                    display_df["Play Stake"] = _scored["Play_Stake"]
+            except Exception as _tier_exc:  # tiers are additive; never break the card
+                logger.warning("main-card play tiers failed: %s", _tier_exc)
+
         if display_df.empty:
             st.warning("⚠️ No games found.")
             st.dataframe(display_df, width="stretch")
@@ -1755,7 +1770,7 @@ def main() -> None:
             if "kalshi_probability" in display_df.columns:
                 kalshi_display = pd.to_numeric(display_df["kalshi_probability"], errors="coerce")
                 display_df["kalshi_probability_display"] = kalshi_display.map(lambda x: "No Kalshi" if pd.isna(x) else f"{x:.4f}")
-            preferred = ["Pick_Status", "Triple Filter Rank", "Pick Quality", "parlay_rank", "League", "Home Team", "Away Team", "Game Date", "Game Time (ET)", "Best Pick", "Gemini Pick", "Prob", "ML Prob", "Odds", "Source", "EV", "Edge", "Consensus", "Kalshi Status", "kalshi_probability_display"]
+            preferred = ["Play Tier", "Play Stake", "Pick_Status", "Triple Filter Rank", "Pick Quality", "parlay_rank", "League", "Home Team", "Away Team", "Game Date", "Game Time (ET)", "Best Pick", "Gemini Pick", "Prob", "ML Prob", "Odds", "Source", "EV", "Edge", "Consensus", "Kalshi Status", "kalshi_probability_display"]
             ordered = [c for c in preferred if c in display_df.columns] + [c for c in display_df.columns if c not in preferred]
             display_df = display_df[ordered]
 
@@ -1773,29 +1788,43 @@ def main() -> None:
                 st.dataframe(qualified_df, width="stretch")
             else:
                 st.info(
-                    f"🚫 **No qualified game picks today** — the model has no edge on any of the "
-                    f"{len(display_df)} games at current prices. That's the system protecting your "
-                    f"bankroll, not a malfunction. Today's action: the 🏆 Pick of the Day above and "
-                    f"the ⚾ strikeout props below."
+                    f"🚫 **No production-staked game picks today** — the model has no proven edge "
+                    f"at current prices, so the Kelly bankroll sits out. Every game below still "
+                    f"carries a Play Tier and a flat Play Stake if you want the board. Best action: "
+                    f"the 🏆 Pick of the Day above and the ⚾ strikeout props below."
                 )
 
             if not no_edge_df.empty:
-                with st.expander(f"🔍 No Edge — {len(no_edge_df)} game(s) the model isn't betting (tap for reasons)", expanded=False):
+                _playable = no_edge_df
+                _n_lean = int((_playable.get("Play Tier", pd.Series(dtype=str)) == "LEAN").sum())
+                with st.expander(
+                    f"🎲 Playable Board — {len(no_edge_df)} game(s), {_n_lean} LEAN "
+                    f"(every row staked at play units; tap for reasons)",
+                    expanded=False,
+                ):
                     no_edge_view = no_edge_df.copy()
-                    no_edge_view.insert(0, "Why No Bet", no_edge_df.apply(_friendly_no_bet_reason, axis=1))
+                    no_edge_view.insert(0, "Why No Production Bet", no_edge_df.apply(_friendly_no_bet_reason, axis=1))
                     compact_cols = [
                         c for c in [
-                            "Why No Bet", "League", "Away Team", "Home Team", "Game Time (ET)",
-                            "Best Pick", "Prob", "Odds", "EV", "Edge", "Consensus", "Pick_Status",
+                            "Play Tier", "Play Stake", "Best Pick", "League", "Away Team", "Home Team",
+                            "Game Time (ET)", "Prob", "Odds", "EV", "Edge", "Consensus",
+                            "Why No Production Bet", "Pick_Status",
                         ] if c in no_edge_view.columns
                     ]
                     st.dataframe(no_edge_view[compact_cols], width="stretch")
                     st.caption(
-                        "The model's lean is still shown for reference, but these picks failed the "
-                        "profitability gates. Full detail on every row is in the exports."
+                        "Play Stake is the flat recreational sizing (unit set in the Play Card "
+                        "section below) — sized down as confidence drops. The production bankroll "
+                        "only stakes qualified picks; these rows failed those gates for the reason "
+                        "shown, and the model's lean stays visible for reference."
                     )
 
             export_prep_df = best_picks_df.copy()
+            # Play tier + flat stake ride along in the CSV export too, so the
+            # exported card never reads as all-No-Bet (owner, 4 Jul).
+            if "Play Tier" in display_df.columns:
+                export_prep_df["Play_Tier"] = display_df["Play Tier"]
+                export_prep_df["Play_Stake"] = display_df["Play Stake"]
 
             csv_rename_map = {
                 "home_team": "Home",
@@ -1808,6 +1837,7 @@ def main() -> None:
             export_prep_df = ensure_best_pick_export_columns(export_prep_df)
 
             target_export_cols = [
+                "Play_Tier", "Play_Stake",
                 "Pick_Status", "Status_Reason", "Triple_Filter_Rank", "Pick_Quality", "parlay_rank", "league", "Home", "Away", "Local Date",
                 "Commence (Local)", "market_type", "candidate_source", "orientation_source", "upload_match_reason", "best_pick", "Kelly_Bet_Size", "WinProbability", "expected_value",
                 "edge", "Conviction_Score", "consensus_agreement", "odds_american", "odds_source", "market_probability",
@@ -1980,7 +2010,7 @@ def main() -> None:
                 "WinProbability", "expected_value", "edge",
                 "Conviction_Score", "market_probability", "kalshi_probability", "ml_probability",
                 "effective_expected_value", "effective_edge", "effective_win_probability",
-                "consensus_agreement", "Pick_Status", "Pick_Quality", "league", "Home", "Away",
+                "consensus_agreement", "Play_Tier", "Play_Stake", "Pick_Status", "Pick_Quality", "league", "Home", "Away",
                 "Commence (Local)", "odds_american", "best_pick", "gemini_pick", "Kelly_Bet_Size",
             ]
             available_compact_cols = [c for c in compact_cols if c in best_picks_export.columns]
