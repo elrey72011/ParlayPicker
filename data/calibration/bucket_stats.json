@@ -1,21 +1,21 @@
 {
   "overall": {
-    "n": 398,
-    "win_rate": 0.47365318323685385
+    "n": 411,
+    "win_rate": 0.4629183134492862
   },
   "buckets": {
     "MLB:over:Agrees": {
-      "n": 48,
-      "wins": 23,
-      "win_rate": 0.4713667065089952,
-      "raw_n": 56,
+      "n": 49,
+      "wins": 21,
+      "win_rate": 0.4371345706908864,
+      "raw_n": 58,
       "raw_wins": 29
     },
     "MLB:over:Disagrees": {
-      "n": 51,
-      "wins": 22,
-      "win_rate": 0.4297405293601854,
-      "raw_n": 60,
+      "n": 52,
+      "wins": 21,
+      "win_rate": 0.40041596432270743,
+      "raw_n": 62,
       "raw_wins": 28
     },
     "MLB:over:Neutral": {
@@ -28,7 +28,7 @@
     "MLB:side:Agrees": {
       "n": 2,
       "wins": 1,
-      "win_rate": 0.4917489969334912,
+      "win_rate": 0.4917489969334911,
       "raw_n": 2,
       "raw_wins": 1
     },
@@ -49,28 +49,28 @@
     "MLB:under:Agrees": {
       "n": 57,
       "wins": 27,
-      "win_rate": 0.47984231294059854,
-      "raw_n": 79,
+      "win_rate": 0.4657170307173176,
+      "raw_n": 80,
       "raw_wins": 44
     },
     "MLB:under:Disagrees": {
-      "n": 39,
-      "wins": 19,
-      "win_rate": 0.4866911504112442,
-      "raw_n": 43,
-      "raw_wins": 21
+      "n": 41,
+      "wins": 21,
+      "win_rate": 0.5055194198809674,
+      "raw_n": 46,
+      "raw_wins": 23
     },
     "MLB:under:Neutral": {
-      "n": 28,
-      "wins": 12,
-      "win_rate": 0.42448841604419435,
-      "raw_n": 28,
-      "raw_wins": 12
+      "n": 32,
+      "wins": 13,
+      "win_rate": 0.4200230102504243,
+      "raw_n": 33,
+      "raw_wins": 14
     },
     "NBA:over:Neutral": {
       "n": 10,
       "wins": 6,
-      "win_rate": 0.5533735556610981,
+      "win_rate": 0.553373555661098,
       "raw_n": 10,
       "raw_wins": 6
     },
@@ -126,8 +126,8 @@
   },
   "meta": {
     "source": "data/backtest_exports",
-    "fitted_on": "2026-07-03",
+    "fitted_on": "2026-07-04",
     "half_life_days": 21.0,
-    "recency_anchor": "2026-07-02"
+    "recency_anchor": "2026-07-03"
   }
 }

@@ -22,3 +22,9 @@ date,pitcher,pick,side,line,expected_ks,actual_ks,odds_american,stake,result,pro
 2026-06-28,Kumar Rocker,Kumar Rocker Over 4.5 Ks,over,4.5,4.15,5,178.0,5.0,WIN,8.9
 2026-06-29,Casey Mize,Casey Mize Under 5.5 Ks,under,5.5,4.87,10,-122.0,10.0,LOSS,-10.0
 2026-06-29,Miles Mikolas,Miles Mikolas Under 2.5 Ks,under,2.5,2.39,3,104.0,10.0,LOSS,-10.0
+2026-07-03,Foster Griffin,Foster Griffin Over 5.5 Ks,over,5.5,7.23,2,-182.0,7.5,LOSS,-7.5
+2026-07-03,Trevor Rogers,Trevor Rogers Under 5.5 Ks,under,5.5,5.23,4,-117.0,7.5,WIN,6.41
+2026-07-03,Ryan Feltner,Ryan Feltner Under 3.5 Ks,under,3.5,2.99,9,-146.0,9.23,LOSS,-9.23
+2026-07-03,Christian Scott,Christian Scott Over 4.5 Ks,over,4.5,5.35,7,-150.0,2.31,WIN,1.54
+2026-07-03,Dylan Cease,Dylan Cease Over 8.5 Ks,over,8.5,9.23,9,113.0,9.23,WIN,10.43
+2026-07-03,Logan Webb,Logan Webb Over 5.5 Ks,over,5.5,6.08,2,115.0,9.23,LOSS,-9.23
