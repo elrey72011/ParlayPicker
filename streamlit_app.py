@@ -1188,6 +1188,41 @@ def main() -> None:
     with tab3:
         st.subheader("Best Picks")
 
+        # 🏆 Best Overall Pick of the Day — games and strikeout props ranked
+        # together by win probability, so a $0-stake games day still yields the
+        # single likeliest winner on the board (owner directive, 4 Jul).
+        try:
+            from app_core.pick_of_day import select_pick_of_the_day
+            from app_core.weights_config import MIN_STAKE_WIN_PROBABILITY
+
+            _potd = select_pick_of_the_day(
+                best_picks_df, st.session_state.get("strikeout_prop_card")
+            )
+        except Exception as _potd_exc:  # never let the banner break the tab
+            _potd = None
+            logger.warning("pick-of-the-day selection failed: %s", _potd_exc)
+        if _potd is not None:
+            _odds = _potd["odds_american"]
+            _odds_txt = "" if _odds is None else f" ({'+' if _odds > 0 else ''}{_odds:.0f})"
+            _src = "⚾ Strikeout Prop" if _potd["board"] == "prop" else f"🏟️ {_potd['league']} Game"
+            st.success(
+                f"🏆 **Best Overall Pick of the Day** — {_src}\n\n"
+                f"**{_potd['pick']}**{_odds_txt} · {_potd['detail']}\n\n"
+                f"Win probability **{_potd['win_probability']:.1%}** · suggested stake **${_potd['stake']:.2f}**"
+            )
+            if _potd["below_floor"]:
+                st.warning(
+                    f"⚠️ Nothing on the board cleared the {float(MIN_STAKE_WIN_PROBABILITY):.0%} "
+                    "win-probability floor today — this is the likeliest available winner, "
+                    "staked at the flat minimum. Bet light or pass."
+                )
+            _ru = _potd.get("runner_up")
+            if _ru is not None:
+                st.caption(
+                    f"Runner-up: {_ru['pick']} · {_ru['win_probability']:.1%} "
+                    f"({'prop' if _ru['board'] == 'prop' else _ru['league'] + ' game'})"
+                )
+
         # Phase: Sweet Spot Filter Implementation
         with st.expander("🎯 Sweet Spot Filter", expanded=False):
             use_sweet_spot = st.checkbox("Enable Sweet Spot Filter", value=False, key="use_sweet_spot")
@@ -2015,6 +2050,20 @@ def main() -> None:
                         f'-SUMIF({act},"Actionable",{stake_rng})'
                         f'+SUMIFS({stake_rng},{act},"Actionable",{wl_rng},"W")',
                     )
+
+                # 🏆 Pick of the Day line so the export carries the day's single
+                # best cross-board pick (games + props) alongside the table.
+                if _potd is not None:
+                    _potd_cell = ws.cell(
+                        row=last_row + 4 if kelly_L else last_row + 2,
+                        column=final_cols.index(label_col) + 1,
+                        value=(
+                            f"🏆 Pick of the Day: {_potd['pick']} "
+                            f"({_potd['win_probability']:.1%} win prob, ${_potd['stake']:.2f}"
+                            f"{', BELOW FLOOR — bet light' if _potd['below_floor'] else ''})"
+                        ),
+                    )
+                    _potd_cell.font = Font(bold=True)
 
                 if kelly_L:
                     _write_summary(
