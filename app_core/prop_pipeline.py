@@ -11,10 +11,41 @@ main best-picks card.
 """
 from __future__ import annotations
 
-from app_core.prop_model import project_expected_strikeouts, strikeout_pick_probability
+from app_core.prop_model import (
+    project_expected_outs,
+    project_expected_strikeouts,
+    project_expected_walks,
+    strikeout_pick_probability,
+)
 
 # Strikeouts are mildly overdispersed vs Poisson; NB with variance ~1.15x mean.
 PROP_KS_DISPERSION = 1.15
+
+# ── Pitcher-prop market specs (4 Jul expansion: outs + walks) ──
+# Each market is a count stat scored by the SAME engine (NB distribution, de-vig,
+# min-edge/+EV gate, starter guards, projection-consistency gate, implausible-edge
+# cap). Dispersion (variance/mean) is set conservatively per stat: wider variance
+# shrinks model probabilities toward 50%, which UNDERSTATES edges until a graded
+# record justifies tightening.
+#   * outs: leash/manager-driven; recent avg innings is the direct signal. 1.30.
+#   * walks: low-mean Poisson-ish count. 1.10.
+# Labels feed pick text ("Over 16.5 Outs"); market_type = f"{key}_{side}".
+PITCHER_PROP_SPECS = {
+    "pitcher_strikeouts": {"label": "Ks", "dispersion": PROP_KS_DISPERSION},
+    "pitcher_outs": {"label": "Outs", "dispersion": 1.30},
+    "pitcher_walks": {"label": "BBs", "dispersion": 1.10},
+}
+
+
+def _project_for_market(market_key: str, form: dict, opponent_k_rate: float | None):
+    """Expected count for one market from pitcher form, or None if unprojectable."""
+    if market_key == "pitcher_outs":
+        return project_expected_outs(form["avg_innings"])
+    if market_key == "pitcher_walks":
+        if not form.get("bb_per_9"):
+            return None
+        return project_expected_walks(form["bb_per_9"], form["avg_innings"])
+    return project_expected_strikeouts(form["k_per_9"], form["avg_innings"], opponent_k_rate)
 # Discipline: no stake without a real edge over the de-vigged market price.
 PROP_MIN_EDGE = 0.04
 
@@ -66,13 +97,22 @@ def score_strikeout_prop(
     min_starter_avg_innings: float = PROP_MIN_STARTER_AVG_INNINGS,
     max_plausible_edge: float = PROP_MAX_PLAUSIBLE_EDGE,
 ) -> dict:
-    """Score one strikeout prop. Returns the row enriched with model/market/edge/EV and a
+    """Score one pitcher prop. Returns the row enriched with model/market/edge/EV and a
     recommendation. With no pitcher form (no projection) it's a 'no_data' no-play. Two sanity
     guards keep projection errors off the card: a starter-sample floor (skip pitchers we
     can't credibly model as a starter) and an implausible-edge cap (a 20-40% edge in this
     market is a model error, not real value).
+
+    Multi-market (4 Jul): the row's ``market_key`` (default pitcher_strikeouts)
+    selects the projection + dispersion from PITCHER_PROP_SPECS; the historic
+    function/field names (score_strikeout_prop, expected_ks) are kept — expected_ks
+    holds the projected count for whichever stat the row prices.
     """
     out = dict(prop_row)
+    market_key = str(prop_row.get("market_key") or "pitcher_strikeouts")
+    spec = PITCHER_PROP_SPECS.get(market_key, PITCHER_PROP_SPECS["pitcher_strikeouts"])
+    if market_key != "pitcher_strikeouts":
+        dispersion = float(spec["dispersion"])
     line = float(prop_row["line"])
     over_odds = prop_row["over_odds"]
     under_odds = prop_row["under_odds"]
@@ -98,7 +138,10 @@ def score_strikeout_prop(
         )
         return out
 
-    lam = project_expected_strikeouts(form["k_per_9"], form["avg_innings"], opponent_k_rate)
+    lam = _project_for_market(market_key, form, opponent_k_rate)
+    if lam is None:
+        out.update(recommendation="no_data", reason=f"no form rate for {market_key}", best_edge=None, best_ev=None)
+        return out
     p_over = strikeout_pick_probability(lam, line, "over", dispersion)
     p_under = 1.0 - p_over
 
@@ -135,7 +178,7 @@ def score_strikeout_prop(
         if contradicts_projection:
             rec = "no_play"
             reason = (
-                f"{side} contradicts projection (expected {lam:.2f} Ks vs line {line:g}); "
+                f"{side} contradicts projection (expected {lam:.2f} {spec['label']} vs line {line:g}); "
                 f"+EV only from price, suppressed"
             )
     # Implausible-edge cap: a double-digit edge in a liquid prop market is the projection

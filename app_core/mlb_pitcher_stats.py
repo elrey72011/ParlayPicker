@@ -40,6 +40,7 @@ def pitcher_form_from_gamelog(splits: list[dict], last_n: int = 5) -> dict | Non
         return None
     recent = splits[-last_n:]
     total_k = 0
+    total_bb = 0
     total_ip = 0.0
     n = 0
     for sp in recent:
@@ -48,12 +49,15 @@ def pitcher_form_from_gamelog(splits: list[dict], last_n: int = 5) -> dict | Non
         if ip <= 0:
             continue
         total_k += int(stat.get("strikeOuts", 0) or 0)
+        total_bb += int(stat.get("baseOnBalls", 0) or 0)
         total_ip += ip
         n += 1
     if total_ip <= 0 or n == 0:
         return None
     return {
         "k_per_9": 9.0 * total_k / total_ip,
+        # Walks rate feeds the pitcher_walks prop projection (4 Jul expansion).
+        "bb_per_9": 9.0 * total_bb / total_ip,
         "avg_innings": total_ip / n,
         "n_games": n,
     }
