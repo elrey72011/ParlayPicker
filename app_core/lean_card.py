@@ -158,3 +158,48 @@ def build_all_games_lean_card(best_picks_df: pd.DataFrame, *, calibration: objec
         ["_t", "Emp_Edge", "Win%"], ascending=[True, False, False], na_position="last"
     ).drop(columns="_t").reset_index(drop=True)
     return out
+
+
+# Flat recreational units by tier for attach_play_stakes. AVOID splits on how far
+# the calibrated win sits from break-even: near-coin-flips get a full min unit,
+# clearly-losing prices get a half unit.
+PLAY_UNITS_BET = 2.0
+PLAY_UNITS_LEAN = 1.5
+PLAY_UNITS_AVOID_NEAR = 1.0   # Emp_Edge >= AVOID_NEAR_EDGE (thin miss)
+PLAY_UNITS_AVOID_FAR = 0.5    # everything worse
+AVOID_NEAR_EDGE = -0.05
+
+
+def attach_play_stakes(card: pd.DataFrame, unit: float = 5.0) -> pd.DataFrame:
+    """Give EVERY game a playable flat stake (owner request, 4 Jul).
+
+    The owner wants action on the whole slate even when nothing clears the
+    production gates. This does NOT touch the production Kelly staking — it adds
+    a recreational flat-stake column to the lean card, sized DOWN as confidence
+    drops, so the whole board is playable while the risk stays honest:
+
+      BET    2.0u (or the pick's own Kelly stake if larger — a real edge)
+      LEAN   1.5u
+      AVOID  1.0u when the calibrated win is within 5 points of break-even,
+             0.5u when it's clearly a losing price.
+
+    Pure: returns a copy with Play_Stake ($) and Play_Units columns.
+    """
+    if card is None or card.empty:
+        return pd.DataFrame() if card is None else card.copy()
+    out = card.copy()
+    tier = out.get("Tier", pd.Series("", index=out.index)).astype(str)
+    emp_edge = pd.to_numeric(out.get("Emp_Edge"), errors="coerce")
+
+    units = pd.Series(PLAY_UNITS_AVOID_FAR, index=out.index)
+    units[emp_edge.ge(AVOID_NEAR_EDGE)] = PLAY_UNITS_AVOID_NEAR
+    units[tier.eq("LEAN")] = PLAY_UNITS_LEAN
+    units[tier.eq("BET")] = PLAY_UNITS_BET
+
+    stake = units * float(unit)
+    if "Suggested_Stake" in out.columns:
+        kelly = pd.to_numeric(out["Suggested_Stake"], errors="coerce").fillna(0.0)
+        stake = stake.where(~(tier.eq("BET") & kelly.gt(stake)), kelly)
+    out["Play_Units"] = units
+    out["Play_Stake"] = stake.round(2)
+    return out

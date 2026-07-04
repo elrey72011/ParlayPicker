@@ -132,3 +132,50 @@ def test_build_applies_calibration_gate_end_to_end():
     assert by_pick["Over 8.5"] == "LEAN"     # calibrated still beats break-even
     # Calib_Win% is surfaced for transparency.
     assert (card["Calib_Win%"] < card["Win%"]).all()
+
+
+# ── Play stakes: every game playable at flat recreational units (owner, 4 Jul) ──
+from app_core.lean_card import (  # noqa: E402
+    AVOID_NEAR_EDGE,
+    PLAY_UNITS_AVOID_FAR,
+    PLAY_UNITS_AVOID_NEAR,
+    PLAY_UNITS_BET,
+    PLAY_UNITS_LEAN,
+    attach_play_stakes,
+)
+
+
+def _play_card():
+    return pd.DataFrame({
+        "Matchup": ["A @ B", "C @ D", "E @ F", "G @ H"],
+        "Tier": ["BET", "LEAN", "AVOID", "AVOID"],
+        "Emp_Edge": [0.04, 0.01, -0.02, -0.12],
+        "Suggested_Stake": [7.0, 0.0, 0.0, 0.0],
+    })
+
+
+def test_every_row_gets_a_positive_play_stake():
+    out = attach_play_stakes(_play_card(), unit=5.0)
+    assert (out["Play_Stake"] > 0).all()
+
+
+def test_units_scale_down_with_confidence():
+    out = attach_play_stakes(_play_card(), unit=5.0)
+    by_matchup = out.set_index("Matchup")["Play_Units"]
+    assert by_matchup["A @ B"] == PLAY_UNITS_BET
+    assert by_matchup["C @ D"] == PLAY_UNITS_LEAN
+    assert by_matchup["E @ F"] == PLAY_UNITS_AVOID_NEAR   # -0.02 >= -0.05: thin miss
+    assert by_matchup["G @ H"] == PLAY_UNITS_AVOID_FAR    # -0.12: clearly losing price
+    assert AVOID_NEAR_EDGE == -0.05
+
+
+def test_bet_tier_keeps_larger_kelly_stake():
+    card = _play_card()
+    card.loc[0, "Suggested_Stake"] = 25.0  # Kelly above 2u at $5
+    out = attach_play_stakes(card, unit=5.0)
+    assert out.set_index("Matchup").loc["A @ B", "Play_Stake"] == 25.0
+
+
+def test_empty_card_is_safe():
+    assert attach_play_stakes(pd.DataFrame()).empty
+    assert attach_play_stakes(None).empty
