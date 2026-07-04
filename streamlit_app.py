@@ -135,6 +135,35 @@ _NO_BET_STAGE_REASONS = {
 }
 
 
+# User-facing status vocabulary (owner, 4 Jul): "No Play" reads like the game is
+# off the board when it means "no edge at this price", and most of the card
+# carried it. Everything the user READS gets these labels; the internal gate
+# names ("No Play"/"Below Threshold"/...) stay untouched inside the pipeline,
+# where grading history and gate logic key off them.
+STATUS_DISPLAY_LABELS = {
+    "No Play": "No Edge",
+    "Below Threshold": "Near Miss",
+    "High Variance/Speculative": "Unproven",
+    "Fallback / Low Confidence": "Low Data",
+}
+
+
+def apply_status_display_labels(df: pd.DataFrame) -> pd.DataFrame:
+    """Map internal status names to the user-facing vocabulary (display/export only)."""
+    if df is None or df.empty:
+        return df
+    out = df.copy()
+    if "Pick_Status" in out.columns:
+        out["Pick_Status"] = out["Pick_Status"].astype(str).replace(STATUS_DISPLAY_LABELS)
+    for col in ("Pick_Quality", "Pick Quality"):
+        if col in out.columns:
+            s = out[col].astype(str)
+            for old, new in STATUS_DISPLAY_LABELS.items():
+                s = s.str.replace(old, new, regex=False)
+            out[col] = s
+    return out
+
+
 def _friendly_no_bet_reason(row: pd.Series | dict) -> str:
     """One plain-English line for why a non-Actionable pick isn't bettable.
 
@@ -1743,6 +1772,10 @@ def main() -> None:
             except Exception as _tier_exc:  # tiers are additive; never break the card
                 logger.warning("main-card play tiers failed: %s", _tier_exc)
 
+        # Relabel statuses for everything the user reads ("Actionable" is unchanged,
+        # so the qualified/no-edge split below still keys off it safely).
+        display_df = apply_status_display_labels(display_df)
+
         if display_df.empty:
             st.warning("⚠️ No games found.")
             st.dataframe(display_df, width="stretch")
@@ -1912,6 +1945,10 @@ def main() -> None:
             # "C-Tier (Value)" style label so the card can't read as a stack of ranked
             # bets when only the staked rows carry money. No change to staking.
             best_picks_export = apply_no_bet_pick_quality(best_picks_export)
+            # Exported statuses use the user-facing vocabulary (No Edge / Near Miss /
+            # Unproven); applied AFTER the categorical status sort above, which keys
+            # off the internal names.
+            best_picks_export = apply_status_display_labels(best_picks_export)
 
             if "Home" in best_picks_export.columns and not best_picks_export.empty:
                 if not best_picks_export["Home"].notna().all():
