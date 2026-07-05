@@ -264,3 +264,16 @@ def test_started_games_get_zero_play_stake():
     assert out.iloc[0]["Play_Stake"] == 0.0
     assert out.iloc[0]["Tier"] == "STARTED"
     assert out.iloc[1]["Play_Stake"] > 0
+
+
+def test_hopeless_prices_get_zero_play_stake():
+    # CWS +5.5 at -1718 (4 Jul): Emp_Edge -0.35 — no recreational stake at any size.
+    card = pd.DataFrame({
+        "Matchup": ["A @ B", "C @ D"],
+        "Tier": ["AVOID", "AVOID"],
+        "Emp_Edge": [-0.35, -0.10],
+        "Suggested_Stake": [0.0, 0.0],
+    })
+    out = attach_play_stakes(card, unit=5.0)
+    assert out.iloc[0]["Play_Stake"] == 0.0
+    assert out.iloc[1]["Play_Stake"] > 0

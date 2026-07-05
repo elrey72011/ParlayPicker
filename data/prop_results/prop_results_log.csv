@@ -28,3 +28,14 @@ date,pitcher,pick,side,line,expected_ks,actual_ks,odds_american,stake,result,pro
 2026-07-03,Christian Scott,Christian Scott Over 4.5 Ks,over,4.5,5.35,7,-150.0,2.31,WIN,1.54
 2026-07-03,Dylan Cease,Dylan Cease Over 8.5 Ks,over,8.5,9.23,9,113.0,9.23,WIN,10.43
 2026-07-03,Logan Webb,Logan Webb Over 5.5 Ks,over,5.5,6.08,2,115.0,9.23,LOSS,-9.23
+2026-07-04,Shota Imanaga,Shota Imanaga Under 5.5 Ks,under,5.5,4.2,8,-190.0,2.73,LOSS,-2.73
+2026-07-04,Kyle Leahy,Kyle Leahy Under 2.5 BBs,under,2.5,1.8,2,-208.0,2.73,WIN,1.31
+2026-07-04,Hunter Brown,Hunter Brown Over 1.5 BBs,over,1.5,2.6,4,-190.0,2.73,WIN,1.44
+2026-07-04,Robbie Ray,Robbie Ray Over 1.5 BBs,over,1.5,2.4,3,-163.0,2.73,WIN,1.67
+2026-07-04,Sandy Alcantara,Sandy Alcantara Over 17.5 Outs,over,17.5,20.0,24,-153.0,2.73,WIN,1.78
+2026-07-04,Aaron Civale,Aaron Civale Under 1.5 BBs,under,1.5,1.2,2,-150.0,2.73,LOSS,-2.73
+2026-07-04,Sean Manaea,Sean Manaea Under 1.5 BBs,under,1.5,1.2,1,-170.0,2.73,WIN,1.61
+2026-07-04,Drew Rasmussen,Drew Rasmussen Over 17.5 Outs,over,17.5,19.8,15,-141.0,2.73,LOSS,-2.73
+2026-07-04,Sandy Alcantara,Sandy Alcantara Over 4.5 Ks,over,4.5,5.51,8,-127.0,2.73,WIN,2.15
+2026-07-04,Sean Manaea,Sean Manaea Under 15.5 Outs,under,15.5,14.4,15,-127.0,2.73,WIN,2.15
+2026-07-04,Brandon Young,Brandon Young Over 16.5 Outs,over,16.5,17.6,15,-101.0,2.73,LOSS,-2.73

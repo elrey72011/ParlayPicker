@@ -192,6 +192,10 @@ PLAY_UNITS_LEAN = 1.5
 PLAY_UNITS_AVOID_NEAR = 1.0   # Emp_Edge >= AVOID_NEAR_EDGE (thin miss)
 PLAY_UNITS_AVOID_FAR = 0.5    # everything worse
 AVOID_NEAR_EDGE = -0.05
+# Hopeless-price floor: below this calibrated-win-vs-break-even edge, even the
+# minimum action unit is money on fire (4 Jul: CWS +5.5 at -1718, Emp_Edge
+# -0.35, drew a $2.50 play stake). No recreational stake at any size.
+PLAY_NO_PRICE_EDGE = -0.20
 
 
 def attach_play_stakes(card: pd.DataFrame, unit: float = 5.0) -> pd.DataFrame:
@@ -219,6 +223,9 @@ def attach_play_stakes(card: pd.DataFrame, unit: float = 5.0) -> pd.DataFrame:
     units[emp_edge.ge(AVOID_NEAR_EDGE)] = PLAY_UNITS_AVOID_NEAR
     units[tier.eq("LEAN")] = PLAY_UNITS_LEAN
     units[tier.eq("BET")] = PLAY_UNITS_BET
+    # Hopeless prices (deeply below break-even) get $0 at any tier except a
+    # genuine BET: paying -1700 juice for "action" isn't recreation, it's a fee.
+    units[emp_edge.lt(PLAY_NO_PRICE_EDGE) & ~tier.eq("BET")] = 0.0
 
     stake = units * float(unit)
     if "Suggested_Stake" in out.columns:
