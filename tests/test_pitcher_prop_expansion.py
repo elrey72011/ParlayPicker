@@ -147,3 +147,50 @@ def test_grading_int_actual_backwards_compatible():
     ])
     rows = grade_card(card, "2026-07-03", {"p": 1}, lambda pid: 7)
     assert rows[0]["result"] == "WIN"
+
+
+# ── Market probation (6 Jul): stakes follow each market's graded record ──
+from app_core.prop_runner import (  # noqa: E402
+    PROBATION_STAKE,
+    apply_market_probation,
+    market_records_from_log,
+)
+
+
+def test_market_records_classify_picks_from_log():
+    log = pd.DataFrame({
+        "pick": ["A Over 4.5 Ks", "B Under 16.5 Outs", "C Over 1.5 BBs", "D Under 15.5 Outs"],
+        "result": ["WIN", "LOSS", "WIN", "LOSS"],
+    })
+    rec = market_records_from_log(log)
+    assert rec["pitcher_strikeouts"] == (1, 0)
+    assert rec["pitcher_outs"] == (0, 2)
+    assert rec["pitcher_walks"] == (1, 0)
+
+
+def test_underwater_market_gets_probation_stake():
+    card = pd.DataFrame({
+        "market_type": ["pitcher_outs_under", "pitcher_strikeouts_over"],
+        "best_pick": ["May Under 15.5 Outs", "Buehler Over 3.5 Ks"],
+        "Kelly_Bet_Size": [7.5, 7.5],
+    })
+    records = {"pitcher_outs": (2, 5), "pitcher_strikeouts": (24, 12)}
+    out = apply_market_probation(card, records)
+    assert out.iloc[0]["Kelly_Bet_Size"] == PROBATION_STAKE   # outs capped
+    assert bool(out.iloc[0]["Market_Probation"])
+    assert out.iloc[1]["Kelly_Bet_Size"] == 7.5               # Ks untouched
+    assert not bool(out.iloc[1]["Market_Probation"])
+
+
+def test_small_samples_and_winning_markets_not_touched():
+    card = pd.DataFrame({
+        "market_type": ["pitcher_walks_over"],
+        "best_pick": ["X Over 1.5 BBs"],
+        "Kelly_Bet_Size": [5.0],
+    })
+    # walks 5-4 (55.6%) — above water, no probation
+    out = apply_market_probation(card, {"pitcher_walks": (5, 4)})
+    assert out.iloc[0]["Kelly_Bet_Size"] == 5.0
+    # tiny sample (n<6) — never judged
+    out2 = apply_market_probation(card, {"pitcher_walks": (1, 4)})
+    assert out2.iloc[0]["Kelly_Bet_Size"] == 5.0

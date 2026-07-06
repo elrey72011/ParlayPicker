@@ -228,7 +228,81 @@ def build_prop_card(
     if total > cap_total and total > 0:
         card["Kelly_Bet_Size"] = (card["Kelly_Bet_Size"] * (cap_total / total)).round(2)
     card = card.drop(columns=["_stake_pct"])
+    # Per-market probation: stakes follow the graded record (see module tail).
+    try:
+        card = apply_market_probation(card, market_records_from_log(load_prop_results_log()))
+    except Exception:
+        pass  # probation is protective, never card-breaking
     card = card.sort_values(
         ["WinProbability", "edge"], ascending=[False, False]
     ).reset_index(drop=True)
     return card
+
+
+# ── Market probation (6 Jul): stake follows each market's GRADED record ──
+# The outs market went 2-5 (28.6%) in its first week — the books price manager
+# leashes better than a recent-workload average. Rather than benching (which
+# would stop grading and freeze the record forever), an underwater market's
+# picks stay on the card at a flat probation stake: the model keeps taking its
+# swings and the ledger keeps filling, but the bleed is bounded until the
+# market re-proves itself. Strikeouts (24-12) are untouched.
+PROBATION_MIN_GRADED = 6      # need a real sample before judging a market
+PROBATION_MIN_RATE = 0.50     # below this graded win rate -> probation
+PROBATION_STAKE = 1.0         # flat $ per probation pick
+
+
+def _market_of_pick(text: object) -> str:
+    t = str(text or "").lower()
+    if "outs" in t and "strikeout" not in t:
+        return "pitcher_outs"
+    if "bb" in t or "walk" in t:
+        return "pitcher_walks"
+    return "pitcher_strikeouts"
+
+
+def market_records_from_log(log_df) -> dict:
+    """{market_key: (wins, losses)} from the graded prop results log."""
+    import pandas as pd
+    if log_df is None or len(log_df) == 0:
+        return {}
+    df = log_df[log_df["result"].isin(["WIN", "LOSS"])]
+    out: dict = {}
+    for _, r in df.iterrows():
+        mk = _market_of_pick(r.get("pick"))
+        w, l = out.get(mk, (0, 0))
+        out[mk] = (w + (1 if r["result"] == "WIN" else 0), l + (1 if r["result"] == "LOSS" else 0))
+    return out
+
+
+def apply_market_probation(card, records: dict,
+                           min_graded: int = PROBATION_MIN_GRADED,
+                           min_rate: float = PROBATION_MIN_RATE,
+                           probation_stake: float = PROBATION_STAKE):
+    """Cap stakes for markets whose graded record is underwater. Pure."""
+    if card is None or card.empty or not records:
+        return card
+    out = card.copy()
+    probation_markets = set()
+    for mk, (w, l) in records.items():
+        n = w + l
+        if n >= min_graded and (w / n) < min_rate:
+            probation_markets.add(mk)
+    if not probation_markets:
+        out["Market_Probation"] = False
+        return out
+    mk_col = out["market_type"].astype(str).str.replace(r"_(over|under)$", "", regex=True)
+    on_probation = mk_col.isin(probation_markets)
+    out["Market_Probation"] = on_probation
+    out.loc[on_probation, "Kelly_Bet_Size"] = out.loc[on_probation, "Kelly_Bet_Size"].clip(upper=float(probation_stake))
+    return out
+
+
+def load_prop_results_log():
+    """Best-effort read of the graded prop log; None when absent."""
+    import pandas as pd
+    from pathlib import Path
+    p = Path("data/prop_results/prop_results_log.csv")
+    try:
+        return pd.read_csv(p) if p.exists() else None
+    except Exception:
+        return None
