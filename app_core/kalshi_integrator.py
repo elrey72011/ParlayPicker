@@ -1626,7 +1626,36 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
                 if kalshi_lines:
                     target_line_abs = abs(float(target_line))
-                    nearest = min(kalshi_lines, key=lambda x: abs(float(x[0]) - target_line_abs))
+
+                    # Side-aware tie-break (7 Jul): a run-line event carries TWO
+                    # markets at the same strike — "Toronto wins by over 1.5" and
+                    # "San Francisco wins by over 1.5". A pick on SF +1.5 is only
+                    # priceable off the TORONTO-subject contract (its NO side);
+                    # picking the same-line market by list order chose the SF one
+                    # and orientation correctly refused it -> permanent
+                    # spread_side_unpriceable miss. Among equal-|Δline| candidates,
+                    # prefer a market whose subject makes the pick priceable.
+                    def _spread_unpriceable_rank(mkt) -> int:
+                        try:
+                            from core.team_mapper import normalize_team_name as _norm
+                            t = f" {_norm(str(mkt.get('title') or ''))} "
+                            h_idx = find_team_reference(t, str(_norm(str(row.get('home_team') or ''))))
+                            a_idx = find_team_reference(t, str(_norm(str(row.get('away_team') or ''))))
+                            if h_idx < 0 and a_idx < 0:
+                                return 1
+                            subj_is_home = h_idx >= 0 and (a_idx < 0 or h_idx <= a_idx)
+                            ok = orient_spread_kalshi_prob(
+                                0.5, subj_is_home, "home" in str(market_type).lower(),
+                                pd.to_numeric(row.get("spread_line"), errors="coerce"),
+                            )
+                            return 0 if ok is not None else 1
+                        except Exception:
+                            return 1
+
+                    nearest = min(
+                        kalshi_lines,
+                        key=lambda x: (abs(float(x[0]) - target_line_abs), _spread_unpriceable_rank(x[2])),
+                    )
                     delta = abs(float(nearest[0]) - target_line_abs)
                     league_tolerance = MAX_LINE_TOLERANCE.get(league, 3.5)
 
