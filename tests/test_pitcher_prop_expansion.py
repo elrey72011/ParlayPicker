@@ -194,3 +194,22 @@ def test_small_samples_and_winning_markets_not_touched():
     # tiny sample (n<6) — never judged
     out2 = apply_market_probation(card, {"pitcher_walks": (1, 4)})
     assert out2.iloc[0]["Kelly_Bet_Size"] == 5.0
+
+
+def test_stat_market_ignores_stat_words_in_pitcher_names():
+    # "Walker" contains "walk"; market_type must decide (6 Jul misgrade).
+    assert _stat_for_market("pitcher_outs_under", "Walker Buehler Under 15.5 Outs") == "outs"
+    assert _stat_for_market("pitcher_strikeouts_over", "Walker Buehler Over 3.5 Ks") == "ks"
+    # fallback path (no market_type) uses padded tokens, so names still can't collide
+    assert _stat_for_market("", "Walker Buehler Under 15.5 Outs") == "outs"
+
+
+def test_market_records_ignore_stat_words_in_names():
+    log = pd.DataFrame({
+        "pick": ["Walker Buehler Over 3.5 Ks", "Walker Buehler Under 15.5 Outs"],
+        "result": ["WIN", "WIN"],
+    })
+    rec = market_records_from_log(log)
+    assert rec.get("pitcher_strikeouts") == (1, 0)
+    assert rec.get("pitcher_outs") == (1, 0)
+    assert "pitcher_walks" not in rec

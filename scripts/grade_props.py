@@ -63,12 +63,24 @@ def _stat_for_market(market_type: object, best_pick: object) -> str:
     Order matters: "pitcher_strikeouts_*" contains the substring "outs", so
     strikeouts must be checked first.
     """
-    text = f"{market_type} {best_pick}".lower()
-    if "strikeout" in text or " ks" in text:
+    # market_type is authoritative and checked FIRST — pick text is a fallback
+    # only, with padded tokens. Two substring traps: "pitcher_strikeouts"
+    # contains "outs" (strikeouts before outs), and pitcher NAMES can contain
+    # stat words — "Walker Buehler Under 15.5 Outs" matched "walk" and graded
+    # his OUTS pick against his WALKS (6 Jul).
+    mt = str(market_type or "").lower()
+    if "strikeout" in mt:
         return "ks"
-    if "walk" in text or " bbs" in text:
+    if "walk" in mt:
         return "walks"
-    if "outs" in text:
+    if "out" in mt:
+        return "outs"
+    text = f" {str(best_pick or '').lower()} "
+    if " ks " in text:
+        return "ks"
+    if " bbs " in text:
+        return "walks"
+    if " outs " in text:
         return "outs"
     return "ks"
 
