@@ -79,3 +79,52 @@ def test_find_team_reference_needs_four_char_fragment():
     assert find_team_reference(" A Wins By Over 15 Runs ", "arizona diamondbacks") == -1
     assert find_team_reference("", "cincinnati") == -1
     assert find_team_reference(" Cincinnati Wins ", "") == -1
+
+
+def test_same_line_spread_pair_prefers_priceable_subject(monkeypatch):
+    """A run-line event has two markets at the same strike (one per subject).
+    A pick on HOME +1.5 is only priceable off the AWAY-subject contract; the
+    selector must prefer it over list order (7 Jul: SF +1.5 went
+    spread_side_unpriceable because the SF-subject market was picked)."""
+    import pandas as pd
+    import app_core.kalshi_integrator as ki
+
+    class FakeResponse:
+        def __init__(self, data, status_code=200):
+            self._d, self.status_code = data, status_code
+        def json(self):
+            return self._d
+
+    def fake_request(url, **kwargs):
+        if "/events" in url and "series_ticker" in str(kwargs.get("params", {})):
+            return FakeResponse({"events": [{
+                "event_ticker": "KXMLBSPREAD-26JUL072145TORSF",
+                "title": "Toronto vs San Francisco: Spread",
+                "close_time": "2026-07-08T05:00:00Z",
+            }]})
+        if "KXMLBSPREAD-26JUL072145TORSF" in url:
+            return FakeResponse({"event": {"markets": [
+                # SF-subject market FIRST so naive list order picks it
+                {"ticker": "KXMLBSPREAD-26JUL072145TORSF-SF2",
+                 "title": "San Francisco wins by over 1.5 runs?",
+                 "floor_strike": 1.5, "yes_bid_dollars": 0.30, "yes_ask_dollars": 0.32},
+                {"ticker": "KXMLBSPREAD-26JUL072145TORSF-TOR2",
+                 "title": "Toronto wins by over 1.5 runs?",
+                 "floor_strike": 1.5, "yes_bid_dollars": 0.38, "yes_ask_dollars": 0.39},
+            ]}})
+        return FakeResponse({}, 404)
+
+    if hasattr(ki.enrich_with_kalshi_markets, "series_cache"):
+        ki.enrich_with_kalshi_markets.series_cache.clear()
+    monkeypatch.setattr(ki, "_make_kalshi_request", fake_request)
+
+    df = pd.DataFrame([{
+        "league": "MLB", "home_team": "San Francisco", "away_team": "Toronto",
+        "game_date": "2026-07-08T01:46:00Z", "market_type": "spread_home",
+        "spread_line": 1.5, "best_pick": "San Francisco +1.5",
+        "pick_team": "San Francisco",
+    }])
+    out = ki.enrich_with_kalshi_markets(df)
+    assert out.loc[0, "kalshi_match_status"] == "matched"
+    assert "Toronto" in str(out.loc[0, "kalshi_market_title"])
+    assert abs(float(out.loc[0, "kalshi_probability"]) - 0.615) < 0.01
