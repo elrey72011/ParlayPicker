@@ -252,10 +252,12 @@ PROBATION_STAKE = 1.0         # flat $ per probation pick
 
 
 def _market_of_pick(text: object) -> str:
-    t = str(text or "").lower()
-    if "outs" in t and "strikeout" not in t:
+    # Padded tokens only: pitcher NAMES can contain stat words ("Walker
+    # Buehler Over 3.5 Ks" must not classify as a walks pick — 6 Jul).
+    t = f" {str(text or '').lower()} "
+    if " outs " in t:
         return "pitcher_outs"
-    if "bb" in t or "walk" in t:
+    if " bbs " in t:
         return "pitcher_walks"
     return "pitcher_strikeouts"
 
