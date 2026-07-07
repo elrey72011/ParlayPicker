@@ -48,7 +48,7 @@
   "meta": {
     "n_graded": 438,
     "source": "data/backtest_exports",
-    "fitted_on": "2026-07-06",
+    "fitted_on": "2026-07-07",
     "prob_col": "effective_win_probability (fallback WinProbability)"
   }
 }

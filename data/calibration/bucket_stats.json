@@ -126,7 +126,7 @@
   },
   "meta": {
     "source": "data/backtest_exports",
-    "fitted_on": "2026-07-06",
+    "fitted_on": "2026-07-07",
     "half_life_days": 21.0,
     "recency_anchor": "2026-07-05"
   }
