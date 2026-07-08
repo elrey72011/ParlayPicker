@@ -55,8 +55,12 @@ def build_best_duos(
     prop_card: pd.DataFrame | None,
     max_duos: int = 3,
     min_leg_probability: float = DUO_MIN_LEG_PROBABILITY,
+    require_mixed: bool = False,
 ) -> pd.DataFrame:
     """Top ``max_duos`` two-leg parlays, no shared games, no reused legs.
+
+    ``require_mixed=True`` restricts pairs to one GAME leg + one PROP leg
+    (owner request, 8 Jul: "a parlay with one game and one strikeout prop").
 
     Returns columns: leg1, leg2, leg1_prob, leg2_prob, combined_probability,
     combined_decimal, payout_per_10 (None when either leg lacks a price).
@@ -78,6 +82,8 @@ def build_best_duos(
         a, b = pool.iloc[i], pool.iloc[j]
         if a["_toks"] & b["_toks"]:
             continue  # same game (or same pitcher) — correlated, skip
+        if require_mixed and a["board"] == b["board"]:
+            continue  # one game leg + one prop leg only
         p = float(a["win_probability"]) * float(b["win_probability"])
         da, db = _decimal(a["odds_american"]), _decimal(b["odds_american"])
         dec = (da * db) if (da and db) else None
@@ -91,6 +97,7 @@ def build_best_duos(
             continue
         a, b = pool.iloc[i], pool.iloc[j]
         rows.append({
+            "boards": f"{a['board']}+{b['board']}",
             "leg1": f"{a['pick']} ({a['detail']})".strip(),
             "leg2": f"{b['pick']} ({b['detail']})".strip(),
             "leg1_prob": round(float(a["win_probability"]), 4),
