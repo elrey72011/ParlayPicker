@@ -1303,6 +1303,21 @@ def main() -> None:
                     f"**{_d['combined_probability']:.1%} combined** — "
                     f"{_d['leg1']} ({_d['leg1_prob']:.0%}) **+** {_d['leg2']} ({_d['leg2_prob']:.0%}){_pay}"
                 )
+            # Owner's ticket (8 Jul): one GAME leg + one PROP leg, best combo.
+            try:
+                _mixed = build_best_duos(
+                    best_picks_df, st.session_state.get("strikeout_prop_card"),
+                    max_duos=1, require_mixed=True,
+                )
+            except Exception:
+                _mixed = None
+            if _mixed is not None and not _mixed.empty:
+                _m = _mixed.iloc[0]
+                _mpay = f" · pays ${_m['payout_per_10']:.2f} per $10" if pd.notna(_m.get("payout_per_10")) else ""
+                st.markdown(
+                    f"🎯 **Best Game + Prop duo:** {_m['combined_probability']:.1%} combined — "
+                    f"{_m['leg1']} ({_m['leg1_prob']:.0%}) **+** {_m['leg2']} ({_m['leg2_prob']:.0%}){_mpay}"
+                )
             st.download_button(
                 "Export Best Duos",
                 _duos.to_csv(index=False, encoding="utf-8-sig"),

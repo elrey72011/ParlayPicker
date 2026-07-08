@@ -76,3 +76,15 @@ def test_floor_and_empty_safety():
     # one qualifying leg is not a parlay
     one = _props().head(1)
     assert build_best_duos(None, one).empty
+
+
+def test_require_mixed_pairs_one_game_with_one_prop():
+    duos = build_best_duos(_games(), _props(), max_duos=3, require_mixed=True)
+    assert not duos.empty
+    for _, d in duos.iterrows():
+        assert sorted(d["boards"].split("+")) == ["game", "prop"]
+    # The best legal mixed pair: SF +1.5 (62%) can't pair with Gausman (same
+    # game), so it takes the best non-overlapping prop.
+    top = duos.iloc[0]
+    joined = f"{top['leg1']} {top['leg2']}"
+    assert "+1.5" in joined or "Under 8.5" in joined  # contains a game leg
