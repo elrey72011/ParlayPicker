@@ -56,3 +56,11 @@ date,pitcher,pick,side,line,expected_ks,actual_ks,odds_american,stake,result,pro
 2026-07-06,Kevin Gausman,Kevin Gausman Under 5.5 Ks,under,5.5,4.9,8,-135.0,6.0,LOSS,-6.0
 2026-07-06,Walker Buehler,Walker Buehler Under 15.5 Outs,under,15.5,14.6,15,-134.0,1.0,WIN,0.75
 2026-07-06,Kyle Freeland,Kyle Freeland Over 16.5 Outs,over,16.5,17.4,15,-104.0,1.0,LOSS,-1.0
+2026-07-07,Tarik Skubal,Tarik Skubal Under 9.5 Ks,under,9.5,7.58,9,-228.0,3.75,WIN,1.64
+2026-07-07,Ian Seymour,Ian Seymour Under 1.5 BBs,under,1.5,1.2,0,-167.0,3.75,WIN,2.25
+2026-07-07,Will Warren,Will Warren Under 16.5 Outs,under,16.5,15.0,12,-125.0,1.0,WIN,0.8
+2026-07-07,Seth Lugo,Seth Lugo Under 16.5 Outs,under,16.5,15.2,13,-122.0,1.0,WIN,0.82
+2026-07-07,Andrew Abbott,Andrew Abbott Under 16.5 Outs,under,16.5,15.8,18,104.0,1.0,LOSS,-1.0
+2026-07-07,Payton Tolle,Payton Tolle Over 1.5 BBs,over,1.5,2.0,1,-111.0,3.75,LOSS,-3.75
+2026-07-07,Ian Seymour,Ian Seymour Under 15.5 Outs,under,15.5,15.0,16,-104.0,1.0,LOSS,-1.0
+2026-07-07,Andrew Alvarez,Andrew Alvarez Over 4.5 Ks,over,4.5,5.12,3,-115.0,3.75,LOSS,-3.75

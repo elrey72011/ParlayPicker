@@ -1281,6 +1281,36 @@ def main() -> None:
                     f"({'prop' if _ru['board'] == 'prop' else _ru['league'] + ' game'})"
                 )
 
+        # 🎫 Best Duos — likeliest 2-leg parlays across games + props, no shared
+        # games between legs, no leg reused across duos (owner request, 8 Jul).
+        try:
+            from app_core.best_duos import build_best_duos
+
+            _duos = build_best_duos(best_picks_df, st.session_state.get("strikeout_prop_card"))
+        except Exception as _duo_exc:  # additive; never break the tab
+            _duos = None
+            logger.warning("best duos failed: %s", _duo_exc)
+        if _duos is not None and not _duos.empty:
+            st.subheader("🎫 Best Duos — 2-Leg Parlays")
+            st.caption(
+                "Ranked by JOINT win probability (not payout), legs never share a game "
+                "(same-game correlation would silently break the math), and no pick is "
+                "reused across duos. Both legs clear the 55% floor individually."
+            )
+            for _, _d in _duos.iterrows():
+                _pay = f" · pays ${_d['payout_per_10']:.2f} per $10" if pd.notna(_d.get("payout_per_10")) else ""
+                st.markdown(
+                    f"**{_d['combined_probability']:.1%} combined** — "
+                    f"{_d['leg1']} ({_d['leg1_prob']:.0%}) **+** {_d['leg2']} ({_d['leg2_prob']:.0%}){_pay}"
+                )
+            st.download_button(
+                "Export Best Duos",
+                _duos.to_csv(index=False, encoding="utf-8-sig"),
+                "best_duos.csv",
+                mime="text/csv",
+                key="export_best_duos",
+            )
+
         # Phase: Sweet Spot Filter Implementation
         with st.expander("🎯 Sweet Spot Filter", expanded=False):
             use_sweet_spot = st.checkbox("Enable Sweet Spot Filter", value=False, key="use_sweet_spot")
