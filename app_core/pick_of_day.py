@@ -66,6 +66,14 @@ def _game_candidates(best_picks_df: pd.DataFrame | None) -> pd.DataFrame:
         + " @ "
         + df.get("home_team", pd.Series("", index=df.index)).astype(str)
     )
+    edge_source = next(
+        (c for c in ("empirical_edge", "effective_edge", "edge") if c in df.columns),
+        None,
+    )
+    ev_source = next(
+        (c for c in ("effective_expected_value", "expected_value") if c in df.columns),
+        None,
+    )
     out = pd.DataFrame(
         {
             "board": "game",
@@ -74,6 +82,8 @@ def _game_candidates(best_picks_df: pd.DataFrame | None) -> pd.DataFrame:
             "detail": matchup,
             "win_probability": prob,
             "odds_american": _num(df.get("odds_american")),
+            "edge": _num(df[edge_source]) if edge_source else pd.Series(np.nan, index=df.index),
+            "expected_value": _num(df[ev_source]) if ev_source else pd.Series(np.nan, index=df.index),
             "kelly_stake": _num(df.get("Kelly_Bet_Size"), default=0.0),
             "pick_status": df.get("Pick_Status", pd.Series("", index=df.index)).astype(str),
         }
@@ -92,6 +102,8 @@ def _prop_candidates(prop_card: pd.DataFrame | None) -> pd.DataFrame:
             "pick": df.get("best_pick", pd.Series("", index=df.index)).astype(str),
             "detail": df.get("matchup", pd.Series("", index=df.index)).astype(str),
             "win_probability": _num(df.get("WinProbability")),
+            "edge": _num(df.get("edge")),
+            "expected_value": _num(df.get("expected_value")),
             "odds_american": _num(df.get("odds_american")),
             "kelly_stake": _num(df.get("Kelly_Bet_Size"), default=0.0),
             "pick_status": df.get("Pick_Status", pd.Series("Actionable", index=df.index)).astype(str),
