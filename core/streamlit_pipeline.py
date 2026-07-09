@@ -7011,6 +7011,26 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
     line_used = pd.to_numeric(portfolio.get("market_line_used", pd.NA), errors="coerce")
     line_consistent = pd.Series(portfolio.get("line_consistency_flag", True), index=portfolio.index).fillna(True).astype(bool)
     event_identity_ok = pd.Series(portfolio.get("line_event_identity_match_flag", True), index=portfolio.index).fillna(True).astype(bool)
+    # Production betting is suspended for fallback/degraded model rows. A
+    # probability produced after model failure is a display diagnostic, not a
+    # bettable forecast. This gate is intentionally conservative: if the
+    # pipeline cannot prove the row came from the trained model with a clean
+    # feature path, Kelly receives zero.
+    model_status = _string_series(portfolio, "model_status").str.strip().str.lower()
+    stats_source = _string_series(portfolio, "stats_source").str.strip().str.lower()
+    fallback_summary = _string_series(portfolio, "fallback_summary_by_league").str.strip().str.lower()
+    health_warning = _string_series(portfolio, "run_health_warning").str.strip().str.lower()
+    degraded = pd.Series(
+        portfolio.get("degraded_feature_subset_flag", False),
+        index=portfolio.index,
+    ).fillna(False).astype(bool)
+    untrusted_model = (
+        model_status.isin({"statistical fallback", "neutral fallback", "model failure"})
+        | stats_source.isin({"fallback", "failed"})
+        | fallback_summary.ne("")
+        | health_warning.str.contains("fallback|degraded|staking suspended", regex=True, na=False)
+        | degraded
+    )
     production_eligible = (
         status.eq("actionable")
         & line_source.eq("live")
@@ -7019,6 +7039,7 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
         & line_consistent
         & event_identity_ok
         & (~best_pick_norm.str.contains("unresolved", na=False))
+        & (~untrusted_model)
     )
     portfolio["production_eligible"] = production_eligible
 

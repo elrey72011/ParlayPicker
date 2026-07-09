@@ -7,6 +7,11 @@ import hashlib
 import json
 
 from core.probability_calibration import apply_calibration
+from core.parlay_safety import (
+    conservative_joint_probability,
+    production_candidate_mask,
+    shares_game,
+)
 
 # Only picks with these statuses qualify as parlay legs.
 # Below Threshold added 11 Jun: across the graded Jun 5-10 recaps the staked tiers
@@ -72,6 +77,12 @@ MAX_ACTIONABLE_ANCHORS = 5
 # Require effective_win_probability >= 0.62 — the Actionable-tier entry point.
 # Applied to Below Threshold MLB totals as well now that BT legs are eligible.
 MLB_TOTAL_HV_PARLAY_MIN_PROB = 0.62
+
+# Production mode is enabled only when the pipeline supplies explicit production
+# metadata. Legacy/unit-test frames without that metadata retain compatibility;
+# real cards are held to the strict path below.
+STRICT_PRODUCTION_PARLAYS = True
+PARLAY_PROBABILITY_HAIRCUT = 0.97
 
 
 def _amer_to_dec(odds: float) -> float:
@@ -186,7 +197,8 @@ def _leg_labels(legs: pd.DataFrame, label_cols: list[str]) -> list[str]:
 
 
 def _build_record(legs: pd.DataFrame, label_cols: list[str], leg_count: int,
-                  risk_tier: str, group_id=pd.NA, prob_col: str = "calibrated_probability") -> dict | None:
+                  risk_tier: str, group_id=pd.NA, prob_col: str = "calibrated_probability",
+                  strict_mode: bool = False) -> dict | None:
     """Build a parlay record dict; returns None if EV is non-positive.
 
     ``prob_col`` is the per-leg probability the combined win prob and EV are built
@@ -199,6 +211,13 @@ def _build_record(legs: pd.DataFrame, label_cols: list[str], leg_count: int,
     The market baseline stays on ``market_probability`` (no model bias to remove).
     """
     combined_probability = _adj_prob(legs, prob_col)
+    if strict_mode:
+        # Unknown dependence and model error are paid for conservatively. We do
+        # not manufacture a correlation boost from a heuristic discount.
+        combined_probability = conservative_joint_probability(
+            [float(v) for v in legs[prob_col].tolist()],
+            haircut=PARLAY_PROBABILITY_HAIRCUT,
+        )
     combined_market_prob = _adj_prob(legs, "market_probability")
     combined_decimal_odds, best_book = _best_book_odds(legs)
 
@@ -236,6 +255,8 @@ def _build_record(legs: pd.DataFrame, label_cols: list[str], leg_count: int,
         "Conviction_Score": parlay_conviction,
         "min_leg_prob": min_leg_prob,
         "has_actionable_anchor": has_actionable,
+        "production_safety_mode": bool(strict_mode),
+        "model_risk_haircut": PARLAY_PROBABILITY_HAIRCUT if strict_mode else 1.0,
     }
 
 
@@ -278,7 +299,7 @@ def generate_smart_parlays(
         "parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev",
         "legs", "combined_market_prob", "ev_boost_pct", "is_high_correlation",
         "risk_tier", "group_id", "best_payout_book", "Conviction_Score", "min_leg_prob",
-        "has_actionable_anchor",
+        "has_actionable_anchor", "production_safety_mode", "model_risk_haircut",
     ]
     if df is None or df.empty:
         return pd.DataFrame(columns=columns)
@@ -293,6 +314,22 @@ def generate_smart_parlays(
     rank_col = "effective_win_probability" if "effective_win_probability" in df.columns else "calibrated_probability"
 
     candidates = df.copy()
+
+    # In production, only explicit Actionable rows with complete pricing and
+    # eligibility evidence may become parlay legs. Fallback, stale, degraded,
+    # or merely informational rows are not silently upgraded by this layer.
+    strict_mode = bool(
+        STRICT_PRODUCTION_PARLAYS
+        and "Pick_Status" in candidates.columns
+        and any(c in candidates.columns for c in (
+            "production_eligible", "is_fallback", "fallback_used",
+            "degraded_feature_subset_flag", "market_line_source",
+        ))
+    )
+    if strict_mode:
+        candidates = candidates[production_candidate_mask(candidates)].copy()
+        if candidates.empty:
+            return pd.DataFrame(columns=columns)
 
     # Recap-fitted isotonic calibration: map predicted -> realized win rate before
     # any floor/gate/EV math. Opt-in via the caller so tests and raw consumers see
@@ -426,8 +463,13 @@ def generate_smart_parlays(
             legs = candidate_bets.loc[list(combo)]
             if _violates_direction_cap(legs):
                 continue
+            if strict_mode and any(
+                shares_game(legs.iloc[a], legs.iloc[b])
+                for a, b in combinations(range(len(legs)), 2)
+            ):
+                continue
             risk_tier = "Bankroll Builder" if leg_count == 2 else "Standard"
-            rec = _build_record(legs, label_cols, leg_count, risk_tier, prob_col=rank_col)
+            rec = _build_record(legs, label_cols, leg_count, risk_tier, prob_col=rank_col, strict_mode=strict_mode)
             if rec is not None:
                 records.append(rec)
 
@@ -444,7 +486,12 @@ def generate_smart_parlays(
                 legs = rr_candidates.loc[list(combo)]
                 if _violates_direction_cap(legs):
                     continue
-                rec = _build_record(legs, label_cols, leg_count, "Round Robin", rr_group_id, prob_col=rank_col)
+                if strict_mode and any(
+                    shares_game(legs.iloc[a], legs.iloc[b])
+                    for a, b in combinations(range(len(legs)), 2)
+                ):
+                    continue
+                rec = _build_record(legs, label_cols, leg_count, "Round Robin", rr_group_id, prob_col=rank_col, strict_mode=strict_mode)
                 if rec is not None:
                     records.append(rec)
 
