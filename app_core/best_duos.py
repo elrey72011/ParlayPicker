@@ -21,9 +21,11 @@ import itertools
 import pandas as pd
 
 from app_core.pick_of_day import _game_candidates, _prop_candidates
+from core.parlay_safety import conservative_joint_probability, row_is_untrusted, shares_game
 
 DUO_MIN_LEG_PROBABILITY = 0.55   # same bar as everything else win-prob-first
 DUO_MAX_LEGS_CONSIDERED = 14     # top legs by probability; pairs are O(n^2)
+DUO_PROBABILITY_HAIRCUT = 0.97
 
 # Generic tokens that appear in many team names and must not create phantom
 # overlap ("New York Yankees" vs "New York Mets" DO overlap — that's the same
@@ -56,22 +58,61 @@ def build_best_duos(
     max_duos: int = 3,
     min_leg_probability: float = DUO_MIN_LEG_PROBABILITY,
     require_mixed: bool = False,
+    strict: bool = False,
 ) -> pd.DataFrame:
     """Top ``max_duos`` two-leg parlays, no shared games, no reused legs.
 
     ``require_mixed=True`` restricts pairs to one GAME leg + one PROP leg
     (owner request, 8 Jul: "a parlay with one game and one strikeout prop").
 
+    strict=True is the production path. It requires game rows to be
+    explicitly production-eligible, excludes probationary prop markets, rejects
+    fallback/degraded rows, applies a 3% model-risk haircut to the joint
+    probability, and drops parlays with non-positive post-haircut EV.
+
     Returns columns: leg1, leg2, leg1_prob, leg2_prob, combined_probability,
-    combined_decimal, payout_per_10 (None when either leg lacks a price).
+    combined_decimal, parlay_ev, payout_per_10.
     """
-    pool = pd.concat(
-        [_game_candidates(best_picks_df), _prop_candidates(prop_card)],
-        ignore_index=True,
-    )
+    if strict:
+        # Game candidates must have passed the main production portfolio gate.
+        # Props use the stricter Actionable-only path and probationary markets
+        # stay visible on the prop card but cannot enter parlays.
+        safe_games = best_picks_df
+        if safe_games is not None and not safe_games.empty:
+            if "production_eligible" in safe_games.columns:
+                safe_games = safe_games[
+                    safe_games["production_eligible"].fillna(False).astype(bool)
+                ]
+            else:
+                safe_games = safe_games.iloc[0:0]
+        safe_props = prop_card
+        if safe_props is not None and not safe_props.empty:
+            safe_props = safe_props[
+                safe_props.get(
+                    "Pick_Status",
+                    pd.Series("Actionable", index=safe_props.index),
+                ).astype(str).str.strip().eq("Actionable")
+            ].copy()
+            if "Market_Probation" in safe_props.columns:
+                safe_props = safe_props[
+                    ~safe_props["Market_Probation"].fillna(False).astype(bool)
+                ]
+            if not safe_props.empty:
+                safe_props = safe_props[
+                    ~safe_props.apply(row_is_untrusted, axis=1)
+                ]
+        game_pool = _game_candidates(safe_games)
+        prop_pool = _prop_candidates(safe_props)
+    else:
+        game_pool = _game_candidates(best_picks_df)
+        prop_pool = _prop_candidates(prop_card)
+
+    pool = pd.concat([game_pool, prop_pool], ignore_index=True)
     if pool.empty:
         return pd.DataFrame()
     pool = pool[pd.to_numeric(pool["win_probability"], errors="coerce").ge(float(min_leg_probability))]
+    if strict and "edge" in pool.columns:
+        pool = pool[pd.to_numeric(pool["edge"], errors="coerce").ge(0.02)]
     if len(pool) < 2:
         return pd.DataFrame()
     pool = pool.sort_values("win_probability", ascending=False).head(DUO_MAX_LEGS_CONSIDERED).reset_index(drop=True)
@@ -84,15 +125,24 @@ def build_best_duos(
             continue  # same game (or same pitcher) — correlated, skip
         if require_mixed and a["board"] == b["board"]:
             continue  # one game leg + one prop leg only
-        p = float(a["win_probability"]) * float(b["win_probability"])
+        if strict and shares_game(a, b):
+            continue
+        raw_p = float(a["win_probability"]) * float(b["win_probability"])
+        p = conservative_joint_probability(
+            [float(a["win_probability"]), float(b["win_probability"])],
+            haircut=DUO_PROBABILITY_HAIRCUT,
+        ) if strict else raw_p
         da, db = _decimal(a["odds_american"]), _decimal(b["odds_american"])
         dec = (da * db) if (da and db) else None
-        pairs.append((p, i, j, dec))
+        parlay_ev = (p * dec - 1.0) if dec else None
+        if strict and (parlay_ev is None or parlay_ev <= 0):
+            continue
+        pairs.append((p, i, j, dec, parlay_ev))
     pairs.sort(key=lambda x: x[0], reverse=True)
 
     used: set[int] = set()
     rows = []
-    for p, i, j, dec in pairs:
+    for p, i, j, dec, parlay_ev in pairs:
         if i in used or j in used:
             continue
         a, b = pool.iloc[i], pool.iloc[j]
@@ -104,7 +154,10 @@ def build_best_duos(
             "leg2_prob": round(float(b["win_probability"]), 4),
             "combined_probability": round(p, 4),
             "combined_decimal": round(dec, 3) if dec else None,
+            "parlay_ev": round(parlay_ev, 4) if parlay_ev is not None else None,
             "payout_per_10": round(10.0 * dec, 2) if dec else None,
+            "production_safety_mode": bool(strict),
+            "model_risk_haircut": DUO_PROBABILITY_HAIRCUT if strict else 1.0,
         })
         used.update((i, j))
         if len(rows) >= max_duos:
