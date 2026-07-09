@@ -1301,28 +1301,32 @@ def main() -> None:
         try:
             from app_core.best_duos import build_best_duos
 
-            _duos = build_best_duos(best_picks_df, st.session_state.get("strikeout_prop_card"))
+            _duos = build_best_duos(
+                best_picks_df,
+                st.session_state.get("strikeout_prop_card"),
+                strict=True,
+            )
         except Exception as _duo_exc:  # additive; never break the tab
             _duos = None
             logger.warning("best duos failed: %s", _duo_exc)
         if _duos is not None and not _duos.empty:
             st.subheader("🎫 Best Duos — 2-Leg Parlays")
             st.caption(
-                "Ranked by JOINT win probability (not payout), legs never share a game "
+                "Ranked by conservative post-haircut joint win probability (not payout), legs never share a game "
                 "(same-game correlation would silently break the math), and no pick is "
                 "reused across duos. Both legs clear the 55% floor individually."
             )
             for _, _d in _duos.iterrows():
                 _pay = f" · pays ${_d['payout_per_10']:.2f} per $10" if pd.notna(_d.get("payout_per_10")) else ""
                 st.markdown(
-                    f"**{_d['combined_probability']:.1%} combined** — "
+                    f"**{_d['combined_probability']:.1%} combined** · EV {_d.get('parlay_ev', 0.0):+.1%} — "
                     f"{_d['leg1']} ({_d['leg1_prob']:.0%}) **+** {_d['leg2']} ({_d['leg2_prob']:.0%}){_pay}"
                 )
             # Owner's ticket (8 Jul): one GAME leg + one PROP leg, best combo.
             try:
                 _mixed = build_best_duos(
                     best_picks_df, st.session_state.get("strikeout_prop_card"),
-                    max_duos=1, require_mixed=True,
+                    max_duos=1, require_mixed=True, strict=True,
                 )
             except Exception:
                 _mixed = None
@@ -1330,7 +1334,7 @@ def main() -> None:
                 _m = _mixed.iloc[0]
                 _mpay = f" · pays ${_m['payout_per_10']:.2f} per $10" if pd.notna(_m.get("payout_per_10")) else ""
                 st.markdown(
-                    f"🎯 **Best Game + Prop duo:** {_m['combined_probability']:.1%} combined — "
+                    f"🎯 **Best Game + Prop duo:** {_m['combined_probability']:.1%} combined · EV {_m.get('parlay_ev', 0.0):+.1%} — "
                     f"{_m['leg1']} ({_m['leg1_prob']:.0%}) **+** {_m['leg2']} ({_m['leg2_prob']:.0%}){_mpay}"
                 )
             st.download_button(
