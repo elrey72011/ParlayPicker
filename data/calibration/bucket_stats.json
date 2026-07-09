@@ -1,41 +1,41 @@
 {
   "overall": {
-    "n": 452,
-    "win_rate": 0.4839882853148355
+    "n": 467,
+    "win_rate": 0.48730670620172756
   },
   "buckets": {
     "MLB:over:Agrees": {
-      "n": 51,
+      "n": 52,
       "wins": 24,
-      "win_rate": 0.4791123813815923,
-      "raw_n": 62,
-      "raw_wins": 32
+      "win_rate": 0.46449245348609564,
+      "raw_n": 65,
+      "raw_wins": 33
     },
     "MLB:over:Disagrees": {
       "n": 52,
       "wins": 21,
-      "win_rate": 0.4004159643227074,
+      "win_rate": 0.40041596432270743,
       "raw_n": 62,
       "raw_wins": 28
     },
     "MLB:over:Neutral": {
       "n": 88,
-      "wins": 43,
-      "win_rate": 0.4840527757493559,
-      "raw_n": 111,
-      "raw_wins": 55
+      "wins": 44,
+      "win_rate": 0.49547544331949045,
+      "raw_n": 112,
+      "raw_wins": 56
     },
     "MLB:side:Agrees": {
-      "n": 6,
+      "n": 7,
       "wins": 3,
-      "win_rate": 0.5692597483648887,
-      "raw_n": 7,
+      "win_rate": 0.476768286258682,
+      "raw_n": 8,
       "raw_wins": 4
     },
     "MLB:side:Disagrees": {
       "n": 3,
       "wins": 2,
-      "win_rate": 0.5726673647774907,
+      "win_rate": 0.5726673647774906,
       "raw_n": 4,
       "raw_wins": 2
     },
@@ -47,30 +47,30 @@
       "raw_wins": 3
     },
     "MLB:under:Agrees": {
-      "n": 67,
-      "wins": 35,
-      "win_rate": 0.5296984122223806,
-      "raw_n": 95,
-      "raw_wins": 54
+      "n": 73,
+      "wins": 41,
+      "win_rate": 0.5645630245347257,
+      "raw_n": 103,
+      "raw_wins": 60
     },
     "MLB:under:Disagrees": {
       "n": 43,
       "wins": 22,
-      "win_rate": 0.5227056608362695,
+      "win_rate": 0.5227056608362696,
       "raw_n": 49,
       "raw_wins": 25
     },
     "MLB:under:Neutral": {
-      "n": 37,
+      "n": 39,
       "wins": 15,
-      "win_rate": 0.4147323641267099,
-      "raw_n": 38,
+      "win_rate": 0.3869371282513862,
+      "raw_n": 40,
       "raw_wins": 16
     },
     "NBA:over:Neutral": {
       "n": 10,
       "wins": 6,
-      "win_rate": 0.553373555661098,
+      "win_rate": 0.5533735556610979,
       "raw_n": 10,
       "raw_wins": 6
     },
@@ -105,7 +105,7 @@
     "NHL:under:Agrees": {
       "n": 2,
       "wins": 1,
-      "win_rate": 0.5329591454925268,
+      "win_rate": 0.5329591454925267,
       "raw_n": 2,
       "raw_wins": 1
     },
@@ -119,15 +119,15 @@
     "NHL:under:Neutral": {
       "n": 2,
       "wins": 1,
-      "win_rate": 0.4917489969334912,
+      "win_rate": 0.4917489969334911,
       "raw_n": 2,
       "raw_wins": 1
     }
   },
   "meta": {
     "source": "data/backtest_exports",
-    "fitted_on": "2026-07-08",
+    "fitted_on": "2026-07-09",
     "half_life_days": 21.0,
-    "recency_anchor": "2026-07-07"
+    "recency_anchor": "2026-07-08"
   }
 }
