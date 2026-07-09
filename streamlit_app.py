@@ -894,6 +894,18 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
         diagnostics["empty_card_recovery_excluded_calibration_count"] = int(
             (status_s0.isin(["High Variance/Speculative", "Below Threshold"]) & ~_calib_gate0).sum()
         )
+        # Owner win-probability floor (parity with the pipeline recovery path,
+        # 9 Jul): empirical-first probability must clear MIN_STAKE_WIN_PROBABILITY.
+        # Without this, Cincinnati +1.5 (empirical 54.9%, Kalshi 50.5%) re-entered
+        # through THIS door at $15 on the strength of the ML blend's 59.8%.
+        from app_core.weights_config import MIN_STAKE_WIN_PROBABILITY as _REC_MIN_PROB
+        _rec_floor_prob0 = pd.to_numeric(
+            best_picks_df.get("empirical_win_probability", pd.Series(index=best_picks_df.index, dtype=float)),
+            errors="coerce",
+        ).fillna(pd.to_numeric(
+            best_picks_df.get("effective_win_probability", pd.Series(index=best_picks_df.index, dtype=float)),
+            errors="coerce",
+        ))
         recovery_mask = (
             status_s0.isin(["High Variance/Speculative", "Below Threshold"])
             & (~excluded_total_over)
@@ -905,6 +917,7 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
             & (~threshold_fail)
             & consensus_ok0
             & _calib_gate0
+            & _rec_floor_prob0.ge(float(_REC_MIN_PROB))
         )
         diagnostics["empty_card_recovery_candidate_count"] = int(recovery_mask.sum())
         if recovery_mask.any():
@@ -913,7 +926,9 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
             ranked["_ev"] = pd.to_numeric(ranked["production_expected_value"], errors="coerce").fillna(-999) if "production_expected_value" in ranked.columns else -999
             ranked["_edge"] = pd.to_numeric(ranked["production_edge"], errors="coerce").fillna(-999) if "production_edge" in ranked.columns else -999
             ranked["_prob"] = pd.to_numeric(ranked["production_win_probability"], errors="coerce").fillna(0) if "production_win_probability" in ranked.columns else 0
-            ranked = ranked.sort_values(by=["_rank", "_ev", "_edge", "_prob"], ascending=[True, False, False, False])
+            # Win-probability-first (owner doctrine): the recovered pick is the
+            # LIKELIEST winner among candidates, not the best-paying one.
+            ranked = ranked.sort_values(by=["_prob", "_rank", "_ev", "_edge"], ascending=[False, True, False, False])
             promote_idx = ranked.head(int(EMPTY_CARD_RECOVERY_MAX_PICKS)).index.tolist()
             best_picks_df.loc[promote_idx, "Pick_Status"] = "Actionable"
             best_picks_df.loc[promote_idx, "Status_Reason"] = "Actionable: recovered by empty-card recovery guard"
