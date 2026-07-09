@@ -47,7 +47,7 @@ def test_strict_duos_apply_haircut_and_exclude_probation():
     assert len(out) == 1
     row = out.iloc[0]
     assert row["boards"] == "prop+prop"
-    assert row["production_safety_mode"] is True
+    assert bool(row["production_safety_mode"]) is True
     assert row["model_risk_haircut"] == 0.97
     assert row["combined_probability"] < 0.5087
     assert row["parlay_ev"] > 0
