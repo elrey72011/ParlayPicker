@@ -1051,11 +1051,14 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
                     kelly_per_pick_pct=STRIKEOUT_PROP_KELLY_PER_PICK_PCT,
                     kelly_total_pct=STRIKEOUT_PROP_KELLY_TOTAL_PCT,
                     kelly_fraction=STRIKEOUT_PROP_KELLY_FRACTION,
+                    diagnostics=diagnostics,
                 )
                 diagnostics["strikeout_prop_actionable_count"] = int(len(strikeout_prop_card))
     except Exception as exc:  # never let the prop slice break the main card
         logger.warning("strikeout prop card build failed: %s", exc)
         diagnostics["strikeout_prop_error"] = str(exc)
+        diagnostics["strikeout_prop_feed_status"] = "unexpected_error"
+        diagnostics["strikeout_prop_feed_error_type"] = type(exc).__name__
 
     state_updates = {
         "pipeline_status": "using stored results",
@@ -2092,7 +2095,21 @@ def main() -> None:
                     mime="text/csv",
                 )
             elif st.session_state.get("diagnostics", {}).get("strikeout_prop_error"):
-                st.caption("⚾ Strikeout props unavailable this run (prop feed error).")
+                _prop_err_type = st.session_state.get("diagnostics", {}).get(
+                    "strikeout_prop_feed_error_type", "unexpected error"
+                )
+                st.caption(
+                    f"⚾ Strikeout props unavailable after retry ({_prop_err_type}). "
+                    "Run the slate again; the game card remains valid."
+                )
+            elif st.session_state.get("diagnostics", {}).get("strikeout_prop_feed_status") in {
+                "event_list_failed", "prop_fetch_failed"
+            }:
+                _prop_stage = st.session_state.get("diagnostics", {}).get("strikeout_prop_feed_status")
+                st.caption(
+                    f"⚾ Pitcher-prop feed did not respond after retry ({_prop_stage}). "
+                    "Run the slate again; no stale props were used."
+                )
             else:
                 st.caption("⚾ No pitcher props cleared the edge bar today.")
 

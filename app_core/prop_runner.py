@@ -116,6 +116,8 @@ def build_strikeout_card(
     max_plausible_edge: float = PROP_MAX_PLAUSIBLE_EDGE,
     enabled_markets: tuple[str, ...] = PROP_DEFAULT_ENABLED_MARKETS,
     max_days_since_last_start: int | None = PROP_MAX_DAYS_SINCE_LAST_START,
+    diagnostics: dict | None = None,
+    event_list_attempts: int = 2,
     list_events: Callable | None = None,
     props_fetch: Callable = fetch_pitcher_props,
     schedule_fetch: Callable = fetch_schedule_probables,
@@ -133,17 +135,66 @@ def build_strikeout_card(
         def list_events(client, sk, d):  # noqa: ANN001
             return client.get_odds(sk, date=d) or []
 
-    events = list_events(odds_client, sport_key, date)
-    event_ids = [e.get("id") for e in events if isinstance(e, dict) and e.get("id")]
-
-    props: list[dict] = []
-    for event_id in event_ids:
-        props.extend(props_fetch(odds_client, sport_key, event_id) or [])
-
-    if not props:
+    # The main board may already be using cached odds while this separate prop
+    # slice makes a fresh request. A single transient timeout used to escape
+    # here and mark the entire prop card unavailable. Retry once and degrade to
+    # an empty, diagnosed card only when every attempt fails.
+    events = []
+    event_error = None
+    attempts = max(1, int(event_list_attempts))
+    for attempt in range(attempts):
+        try:
+            events = list_events(odds_client, sport_key, date) or []
+            event_error = None
+            if diagnostics is not None:
+                diagnostics["strikeout_prop_event_list_attempts"] = attempt + 1
+            # The shared client returns [] for HTTP failures such as 429/5xx,
+            # so an empty response also needs the bounded retry path.
+            if events or attempt + 1 >= attempts:
+                break
+        except Exception as exc:  # network clients do not share one exception hierarchy
+            event_error = exc
+    if event_error is not None:
+        if diagnostics is not None:
+            diagnostics["strikeout_prop_feed_status"] = "event_list_failed"
+            diagnostics["strikeout_prop_feed_error_type"] = type(event_error).__name__
+            diagnostics["strikeout_prop_event_list_attempts"] = attempts
         return []
 
-    schedule_rows = schedule_fetch(date) or []
+    event_ids = [e.get("id") for e in events if isinstance(e, dict) and e.get("id")]
+    if diagnostics is not None:
+        diagnostics["strikeout_prop_event_count"] = len(event_ids)
+    if not event_ids:
+        if diagnostics is not None:
+            diagnostics["strikeout_prop_feed_status"] = "no_events"
+        return []
+
+    props: list[dict] = []
+    prop_fetch_errors = 0
+    for event_id in event_ids:
+        try:
+            props.extend(props_fetch(odds_client, sport_key, event_id) or [])
+        except Exception:
+            # Keep the remaining games usable when one event endpoint fails.
+            prop_fetch_errors += 1
+
+    if not props:
+        if diagnostics is not None:
+            diagnostics["strikeout_prop_feed_status"] = (
+                "prop_fetch_failed" if prop_fetch_errors == len(event_ids) else "no_prop_markets"
+            )
+            diagnostics["strikeout_prop_event_fetch_errors"] = prop_fetch_errors
+        return []
+    if diagnostics is not None:
+        diagnostics["strikeout_prop_raw_count"] = len(props)
+        diagnostics["strikeout_prop_event_fetch_errors"] = prop_fetch_errors
+
+    try:
+        schedule_rows = schedule_fetch(date) or []
+    except Exception as exc:
+        schedule_rows = []
+        if diagnostics is not None:
+            diagnostics["strikeout_prop_schedule_error_type"] = type(exc).__name__
     form_lookup, opp_k_lookup = build_resolvers(
         schedule_rows, season, as_of_date=date,
         form_fetch=form_fetch, team_k_fetch=team_k_fetch
@@ -157,6 +208,9 @@ def build_strikeout_card(
         enabled_markets=enabled_markets,
         max_days_since_last_start=max_days_since_last_start,
     )
+    if diagnostics is not None:
+        diagnostics["strikeout_prop_feed_status"] = "ready"
+        diagnostics["strikeout_prop_scored_count"] = len(scored)
     scored.sort(key=lambda r: (r.get("best_edge") is not None, r.get("best_edge") or 0.0), reverse=True)
     return scored
 

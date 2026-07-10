@@ -1,3 +1,6 @@
+Exit code: 0
+Wall time: 0.7 seconds
+Output:
 """Odds API player-prop ingestion. v1: MLB pitcher strikeouts.
 
 Player props live on the per-event odds endpoint under market keys like
@@ -7,6 +10,7 @@ from the HTTP call so it's unit-tested on a fixture (no network / no API key).
 """
 from __future__ import annotations
 
+import time
 from typing import Any
 
 STRIKEOUT_MARKET_KEY = "pitcher_strikeouts"
@@ -16,6 +20,7 @@ STRIKEOUT_MARKET_KEY = "pitcher_strikeouts"
 # has no informational edge there.
 PITCHER_PROP_MARKET_KEYS = ("pitcher_strikeouts", "pitcher_outs", "pitcher_walks")
 _DEFAULT_BOOK_PRIORITY = ("novig", "draftkings", "fanduel", "betmgm")
+_PROP_FETCH_ATTEMPTS = 3
 
 
 def parse_strikeout_props(
@@ -122,8 +127,22 @@ def fetch_pitcher_props(
             "bookmakers": getattr(client, "bookmakers", ",".join(_DEFAULT_BOOK_PRIORITY)),
             "oddsFormat": "american",
         }
-        resp = requests.get(url, params=params, timeout=15)
-        if resp.status_code != 200:
+        resp = None
+        for attempt in range(_PROP_FETCH_ATTEMPTS):
+            try:
+                resp = requests.get(url, params=params, timeout=15)
+            except requests.RequestException:
+                if attempt + 1 >= _PROP_FETCH_ATTEMPTS:
+                    return []
+                time.sleep(0.2 * (2 ** attempt))
+                continue
+            if resp.status_code == 200:
+                break
+            if (resp.status_code == 429 or resp.status_code >= 500) and attempt + 1 < _PROP_FETCH_ATTEMPTS:
+                time.sleep(0.2 * (2 ** attempt))
+                continue
+            return []
+        if resp is None or resp.status_code != 200:
             return []
         payload = resp.json()
         rows: list[dict] = []
@@ -132,3 +151,4 @@ def fetch_pitcher_props(
         return rows
     except Exception:
         return []
+
