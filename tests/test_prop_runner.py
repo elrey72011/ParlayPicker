@@ -1,6 +1,3 @@
-Exit code: 0
-Wall time: 0.7 seconds
-Output:
 """Strikeout-prop orchestration: schedule parse + name<->id resolution + offline end-to-end.
 
 The runner is the network-facing wrapper around the (unit-tested, pure) scoring. These tests
