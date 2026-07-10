@@ -118,22 +118,27 @@ def test_batter_prop_grades_against_batting_result():
 
 def test_batter_probation_has_separate_aggregate_exposure_cap():
     card = pd.DataFrame({
-        "participant_type": ["batter", "batter", "batter", "pitcher"],
-        "market_type": [
-            "batter_hits_over", "batter_hits_under", "batter_total_bases_under",
-            "pitcher_strikeouts_under",
-        ],
-        "Market_Probation": [True, True, True, False],
-        "Kelly_Bet_Size": [4.0, 4.0, 4.0, 5.0],
+        "participant_type": ["batter"] * 10 + ["pitcher"],
+        "market_type": ["batter_hits_over"] * 10 + ["pitcher_strikeouts_under"],
+        "Market_Probation": [True] * 10 + [False],
+        "Kelly_Bet_Size": [0.51] * 10 + [5.0],
+        "WinProbability": [0.70 - i * 0.01 for i in range(10)] + [0.65],
+        "edge": [0.05] * 11,
     })
     out = apply_batter_probation_exposure_cap(card, bankroll=1000.0)
-    batter_total = out.loc[out["participant_type"].eq("batter"), "Kelly_Bet_Size"].sum()
-    assert batter_total <= 7.50
+    batter_stakes = out.loc[out["participant_type"].eq("batter"), "Kelly_Bet_Size"]
+    batter_total = batter_stakes.sum()
+    assert batter_total == 7.0
+    assert set(batter_stakes) == {0.0, 1.0}
+    assert batter_stakes.iloc[:7].eq(1.0).all()
+    assert batter_stakes.iloc[7:].eq(0.0).all()
     assert out.loc[out["participant_type"].eq("pitcher"), "Kelly_Bet_Size"].iloc[0] == 5.0
     assert bool(out["batter_probation_cap_applied"].iloc[0])
-    assert out["batter_probation_exposure_before"].iloc[0] == 12.0
+    assert out["batter_probation_exposure_before"].iloc[0] == 5.1
     assert out["batter_probation_exposure_cap"].iloc[0] == 7.5
     assert out["batter_probation_exposure_after"].iloc[0] == batter_total
+    assert out["batter_probation_minimum_bet"].iloc[0] == 1.0
+    assert out["batter_probation_selected_count"].iloc[0] == 7
 
 
 def test_batter_probation_cap_is_noop_below_limit():
