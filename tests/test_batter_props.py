@@ -3,7 +3,11 @@ import pandas as pd
 from app_core.batter_prop_pipeline import score_batter_prop
 from app_core.mlb_batter_stats import batter_form_from_gamelog
 from app_core.prop_odds_ingest import parse_pitcher_props
-from app_core.prop_runner import apply_batter_probation_exposure_cap, build_prop_card
+from app_core.prop_runner import (
+    apply_batter_probation_exposure_cap,
+    apply_novig_minimum_selection,
+    build_prop_card,
+)
 from scripts.grade_props import grade_card
 
 
@@ -151,4 +155,44 @@ def test_batter_probation_cap_is_noop_below_limit():
     out = apply_batter_probation_exposure_cap(card, bankroll=1000.0)
     assert out["Kelly_Bet_Size"].tolist() == [1.0, 5.0]
     assert not bool(out["batter_probation_cap_applied"].iloc[0])
+
+
+def test_novig_minimum_applies_to_every_positive_prop_family():
+    card = pd.DataFrame({
+        "market_type": [
+            "batter_hits_under", "pitcher_strikeouts_under",
+            "pitcher_walks_under", "pitcher_walks_over",
+        ],
+        "Market_Probation": [True, False, True, True],
+        "Kelly_Bet_Size": [1.0, 0.59, 0.59, 0.35],
+        "WinProbability": [0.76, 0.65, 0.60, 0.58],
+        "edge": [0.08, 0.11, 0.07, 0.05],
+    })
+    out = apply_novig_minimum_selection(
+        card, bankroll=1000.0, total_cap_pct=0.03
+    )
+    positive = out.loc[out["Kelly_Bet_Size"].gt(0), "Kelly_Bet_Size"]
+    assert positive.eq(1.0).all()
+    assert out["Kelly_Bet_Size"].sum() == 4.0
+    assert out["novig_minimum_applied"].iloc[0]
+    assert out["novig_selected_count"].iloc[0] == 4
+    assert out["novig_exposure_before"].iloc[0] == 2.53
+    assert out["novig_exposure_after"].iloc[0] == 4.0
+
+
+def test_novig_minimum_prioritizes_proven_markets_when_capacity_is_tight():
+    card = pd.DataFrame({
+        "market_type": [
+            "batter_hits_under", "pitcher_strikeouts_under", "pitcher_walks_under",
+        ],
+        "Market_Probation": [True, False, True],
+        "Kelly_Bet_Size": [0.5, 0.5, 0.5],
+        "WinProbability": [0.80, 0.60, 0.70],
+        "edge": [0.10, 0.05, 0.08],
+    })
+    out = apply_novig_minimum_selection(
+        card, bankroll=100.0, total_cap_pct=0.02
+    )
+    assert out["Kelly_Bet_Size"].tolist() == [1.0, 1.0, 0.0]
+    assert out["novig_exposure_after"].iloc[0] == 2.0
 
