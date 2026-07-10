@@ -1,6 +1,9 @@
+Exit code: 0
+Wall time: 0.9 seconds
+Output:
 """Pitcher-prop expansion (4 Jul): outs + walks join strikeouts on the SAME engine.
 
-Owner directive: more high-win-probability bets, built where the edge is proven â€”
+Owner directive: more high-win-probability bets, built where the edge is proven —
 the prop framework (19-10, 65.5% on strikeouts). Outs and walks are count stats
 projectable from the game logs we already fetch; hits/ERs are excluded
 (defense/BABIP-dominated). Every guard applies unchanged: starter-sample floor,
@@ -89,7 +92,7 @@ def test_walks_market_requires_bb_rate():
 def test_strikeout_rows_without_market_key_unchanged():
     row = {"pitcher": "P", "line": 5.5, "over_odds": -110, "under_odds": -110}
     out = score_strikeout_prop(row, _FORM)
-    assert out["expected_ks"] > 5.5  # 9.5/9 * 5.8 â‰ˆ 6.1, opponent-neutral
+    assert out["expected_ks"] > 5.5  # 9.5/9 * 5.8 ≈ 6.1, opponent-neutral
     assert out["recommendation"] in ("over", "under", "no_play")
 
 
@@ -172,7 +175,7 @@ def test_grading_int_actual_backwards_compatible():
     assert rows[0]["result"] == "WIN"
 
 
-# â”€â”€ Market probation (6 Jul): stakes follow each market's graded record â”€â”€
+# ── Market probation (6 Jul): stakes follow each market's graded record ──
 from app_core.prop_runner import (  # noqa: E402
     PROBATION_STAKE,
     apply_market_probation,
@@ -205,18 +208,32 @@ def test_underwater_market_gets_probation_stake():
     assert not bool(out.iloc[1]["Market_Probation"])
 
 
-def test_small_samples_and_winning_markets_not_touched():
+def test_unproven_market_stays_on_probation_until_sample_is_credible():
     card = pd.DataFrame({
         "market_type": ["pitcher_walks_over"],
         "best_pick": ["X Over 1.5 BBs"],
         "Kelly_Bet_Size": [5.0],
     })
-    # walks 5-4 (55.6%) â€” above water, no probation
+    # Nine graded bets are still too thin for full staking.
     out = apply_market_probation(card, {"pitcher_walks": (5, 4)})
-    assert out.iloc[0]["Kelly_Bet_Size"] == 5.0
-    # tiny sample (n<6) â€” never judged
+    assert out.iloc[0]["Kelly_Bet_Size"] == PROBATION_STAKE
+    assert bool(out.iloc[0]["Market_Probation"])
+    # Tiny samples and a missing record are also probationary.
     out2 = apply_market_probation(card, {"pitcher_walks": (1, 4)})
-    assert out2.iloc[0]["Kelly_Bet_Size"] == 5.0
+    assert out2.iloc[0]["Kelly_Bet_Size"] == PROBATION_STAKE
+    out3 = apply_market_probation(card, {})
+    assert out3.iloc[0]["Kelly_Bet_Size"] == PROBATION_STAKE
+
+
+def test_non_strikeout_market_earns_full_stake_after_good_record():
+    card = pd.DataFrame({
+        "market_type": ["pitcher_walks_over"],
+        "best_pick": ["X Over 1.5 BBs"],
+        "Kelly_Bet_Size": [5.0],
+    })
+    out = apply_market_probation(card, {"pitcher_walks": (12, 8)})
+    assert out.iloc[0]["Kelly_Bet_Size"] == 5.0
+    assert not bool(out.iloc[0]["Market_Probation"])
 
 
 def test_stat_market_ignores_stat_words_in_pitcher_names():
