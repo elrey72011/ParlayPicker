@@ -2110,7 +2110,8 @@ def main() -> None:
                     "Pitcher strikeouts plus batter hits/total bases that cleared the +EV and "
                     "minimum-edge gates. New batter markets stake only the highest-ranked "
                     "tickets at NoVig's $1 minimum, share a 0.75% bankroll exposure cap, and "
-                    "stay out of strict parlays until 20 graded results at 55%+."
+                    "stay out of strict parlays until 20 graded results at 55%+. Every positive "
+                    "prop recommendation is at least NoVig's $1 minimum."
                 )
                 st.dataframe(prop_card, width="stretch")
                 st.download_button(
