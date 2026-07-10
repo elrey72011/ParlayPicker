@@ -1,6 +1,3 @@
-Exit code: 0
-Wall time: 1 seconds
-Output:
 """End-to-end orchestration for the pitcher-strikeout prop slice.
 
 Wires the four standalone pieces into one runnable card:

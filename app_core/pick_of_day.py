@@ -1,6 +1,3 @@
-Exit code: 0
-Wall time: 1 seconds
-Output:
 """Best Overall Pick of the Day — one pick, every day, across the whole board.
 
 Owner directive (4 Jul): "I'd like the best overall pick of the day … we can't

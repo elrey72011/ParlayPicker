@@ -1,6 +1,3 @@
-Exit code: 0
-Wall time: 0.7 seconds
-Output:
 """Odds API pitcher-strikeout prop parsing (no network -- fixture only)."""
 import os
 import sys

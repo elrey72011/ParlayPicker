@@ -1,6 +1,3 @@
-Exit code: 0
-Wall time: 0.9 seconds
-Output:
 """Pitcher-prop expansion (4 Jul): outs + walks join strikeouts on the SAME engine.
 
 Owner directive: more high-win-probability bets, built where the edge is proven —

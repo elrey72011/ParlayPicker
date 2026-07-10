@@ -1,6 +1,3 @@
-Exit code: 0
-Wall time: 1 seconds
-Output:
 import pandas as pd
 
 from app_core.best_duos import build_best_duos, duos_to_smart_parlays

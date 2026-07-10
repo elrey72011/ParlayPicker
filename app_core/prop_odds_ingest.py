@@ -1,6 +1,3 @@
-Exit code: 0
-Wall time: 1 seconds
-Output:
 """Odds API player-prop ingestion. v1: MLB pitcher strikeouts.
 
 Player props live on the per-event odds endpoint under market keys like

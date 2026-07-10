@@ -1,6 +1,3 @@
-Exit code: 0
-Wall time: 1 seconds
-Output:
 """MLB StatsAPI batting form for conservative batter-prop projections."""
 from __future__ import annotations
 

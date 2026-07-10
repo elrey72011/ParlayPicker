@@ -1,6 +1,3 @@
-Exit code: 0
-Wall time: 1 seconds
-Output:
 import pandas as pd
 
 from app_core.batter_prop_pipeline import score_batter_prop
