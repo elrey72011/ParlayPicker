@@ -1,6 +1,3 @@
-Exit code: 0
-Wall time: 1.1 seconds
-Output:
 #!/usr/bin/env python3
 """Grade an MLB player-props card against actual results and append to the running log.
 
