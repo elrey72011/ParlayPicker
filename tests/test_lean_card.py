@@ -1,6 +1,3 @@
-Exit code: 0
-Wall time: 0.9 seconds
-Output:
 """All-games lean view: model's read on every game, tiered BET / LEAN / AVOID.
 
 Pins the honest tiering so a near-efficient slate (mostly Below Threshold / No Play) still
