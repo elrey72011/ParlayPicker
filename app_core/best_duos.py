@@ -1,6 +1,3 @@
-Exit code: 0
-Wall time: 1 seconds
-Output:
 """Best Duos — the likeliest 2-leg parlays across the whole board (owner, 8 Jul).
 
 "I really want the best 2 leg parlays without overlap despite the bet":
