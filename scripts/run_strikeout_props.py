@@ -3,7 +3,7 @@
 
 Lists the day's MLB events (Odds API), pulls strikeout props, resolves each starter's recent
 form + opponent K rate (StatsAPI), scores every prop, and prints the card with the actionable
-picks first. The model is the standalone prop slice — separate from the main best-picks card —
+picks first. The model is the standalone prop slice â€” separate from the main best-picks card â€”
 so it can be run and calibrated before any integration.
 
 Usage:
@@ -30,7 +30,8 @@ from app_core.prop_pipeline import PROP_MIN_EDGE  # noqa: E402
 from app_core.prop_runner import build_strikeout_card  # noqa: E402
 
 _CARD_COLS = [
-    "pitcher", "home_team", "away_team", "line", "expected_ks",
+    "pitcher", "home_team", "away_team", "market_type", "line", "expected_stat",
+    "expected_count", "expected_ks", "expected_walks", "expected_outs",
     "model_p_over", "market_p_over", "best_side", "best_edge", "best_ev",
     "recommendation", "book",
 ]
@@ -84,3 +85,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
