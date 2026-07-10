@@ -1,3 +1,6 @@
+Exit code: 0
+Wall time: 1 seconds
+Output:
 """Best Overall Pick of the Day — one pick, every day, across the whole board.
 
 Owner directive (4 Jul): "I'd like the best overall pick of the day … we can't
@@ -33,8 +36,13 @@ _GAME_DISQUALIFYING_STAGES = {
 }
 
 
-def _num(series_like, default=np.nan) -> pd.Series:
-    return pd.to_numeric(series_like, errors="coerce").fillna(default)
+def _num(series_like, default=np.nan, index=None) -> pd.Series:
+    """Numeric Series coercion that is safe for missing optional columns."""
+    if isinstance(series_like, pd.Series):
+        return pd.to_numeric(series_like, errors="coerce").fillna(default)
+    if series_like is None:
+        return pd.Series(default, index=index, dtype=float)
+    return pd.to_numeric(pd.Series(series_like, index=index), errors="coerce").fillna(default)
 
 
 def _game_candidates(best_picks_df: pd.DataFrame | None) -> pd.DataFrame:
@@ -81,10 +89,10 @@ def _game_candidates(best_picks_df: pd.DataFrame | None) -> pd.DataFrame:
             "pick": df["best_pick"].astype(str) if "best_pick" in df.columns else matchup,
             "detail": matchup,
             "win_probability": prob,
-            "odds_american": _num(df.get("odds_american")),
+            "odds_american": _num(df.get("odds_american"), index=df.index),
             "edge": _num(df[edge_source]) if edge_source else pd.Series(np.nan, index=df.index),
             "expected_value": _num(df[ev_source]) if ev_source else pd.Series(np.nan, index=df.index),
-            "kelly_stake": _num(df.get("Kelly_Bet_Size"), default=0.0),
+            "kelly_stake": _num(df.get("Kelly_Bet_Size"), default=0.0, index=df.index),
             "pick_status": df.get("Pick_Status", pd.Series("", index=df.index)).astype(str),
         }
     )
@@ -101,11 +109,11 @@ def _prop_candidates(prop_card: pd.DataFrame | None) -> pd.DataFrame:
             "league": df.get("league", pd.Series("MLB", index=df.index)).astype(str),
             "pick": df.get("best_pick", pd.Series("", index=df.index)).astype(str),
             "detail": df.get("matchup", pd.Series("", index=df.index)).astype(str),
-            "win_probability": _num(df.get("WinProbability")),
-            "edge": _num(df.get("edge")),
-            "expected_value": _num(df.get("expected_value")),
-            "odds_american": _num(df.get("odds_american")),
-            "kelly_stake": _num(df.get("Kelly_Bet_Size"), default=0.0),
+            "win_probability": _num(df.get("WinProbability"), index=df.index),
+            "edge": _num(df.get("edge"), index=df.index),
+            "expected_value": _num(df.get("expected_value"), index=df.index),
+            "odds_american": _num(df.get("odds_american"), index=df.index),
+            "kelly_stake": _num(df.get("Kelly_Bet_Size"), default=0.0, index=df.index),
             "pick_status": df.get("Pick_Status", pd.Series("Actionable", index=df.index)).astype(str),
         }
     )
@@ -151,3 +159,4 @@ def select_pick_of_the_day(
     top = _row_to_dict(pool.iloc[0])
     top["runner_up"] = _row_to_dict(pool.iloc[1]) if len(pool) > 1 else None
     return top
+

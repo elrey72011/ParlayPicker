@@ -1,3 +1,6 @@
+Exit code: 0
+Wall time: 0.7 seconds
+Output:
 """All-games lean view: the model's read on EVERY game, tiered honestly.
 
 The games card stakes only proven +EV picks, so on an efficient slate it looks empty even
@@ -184,13 +187,13 @@ def build_all_games_lean_card(best_picks_df: pd.DataFrame, *, calibration: objec
     return out
 
 
-# Flat recreational units by tier for attach_play_stakes. AVOID splits on how far
-# the calibrated win sits from break-even: near-coin-flips get a full min unit,
-# clearly-losing prices get a half unit.
+# Display units by tier for attach_play_stakes. Only a genuine BET receives a
+# stake. LEAN and AVOID remain useful reads, but assigning dollars to them
+# contradicts the production gate and makes an abstaining card look bettable.
 PLAY_UNITS_BET = 2.0
-PLAY_UNITS_LEAN = 1.5
-PLAY_UNITS_AVOID_NEAR = 1.0   # Emp_Edge >= AVOID_NEAR_EDGE (thin miss)
-PLAY_UNITS_AVOID_FAR = 0.5    # everything worse
+PLAY_UNITS_LEAN = 0.0
+PLAY_UNITS_AVOID_NEAR = 0.0
+PLAY_UNITS_AVOID_FAR = 0.0
 AVOID_NEAR_EDGE = -0.05
 # Hopeless-price floor: below this calibrated-win-vs-break-even edge, even the
 # minimum action unit is money on fire (4 Jul: CWS +5.5 at -1718, Emp_Edge
@@ -199,17 +202,15 @@ PLAY_NO_PRICE_EDGE = -0.20
 
 
 def attach_play_stakes(card: pd.DataFrame, unit: float = 5.0) -> pd.DataFrame:
-    """Give EVERY game a playable flat stake (owner request, 4 Jul).
+    """Attach a dollar stake only to production-quality BET rows.
 
-    The owner wants action on the whole slate even when nothing clears the
-    production gates. This does NOT touch the production Kelly staking — it adds
-    a recreational flat-stake column to the lean card, sized DOWN as confidence
-    drops, so the whole board is playable while the risk stays honest:
+    LEAN and AVOID rows remain visible so the model's full-board read is useful,
+    but they receive zero dollars. This keeps Play_Stake aligned with the app's
+    positive-EV production decision:
 
       BET    2.0u (or the pick's own Kelly stake if larger — a real edge)
-      LEAN   1.5u
-      AVOID  1.0u when the calibrated win is within 5 points of break-even,
-             0.5u when it's clearly a losing price.
+      LEAN   0u
+      AVOID  0u
 
     Pure: returns a copy with Play_Stake ($) and Play_Units columns.
     """
@@ -219,9 +220,7 @@ def attach_play_stakes(card: pd.DataFrame, unit: float = 5.0) -> pd.DataFrame:
     tier = out.get("Tier", pd.Series("", index=out.index)).astype(str)
     emp_edge = pd.to_numeric(out.get("Emp_Edge"), errors="coerce")
 
-    units = pd.Series(PLAY_UNITS_AVOID_FAR, index=out.index)
-    units[emp_edge.ge(AVOID_NEAR_EDGE)] = PLAY_UNITS_AVOID_NEAR
-    units[tier.eq("LEAN")] = PLAY_UNITS_LEAN
+    units = pd.Series(0.0, index=out.index)
     units[tier.eq("BET")] = PLAY_UNITS_BET
     # Hopeless prices (deeply below break-even) get $0 at any tier except a
     # genuine BET: paying -1700 juice for "action" isn't recreation, it's a fee.
@@ -242,3 +241,4 @@ def attach_play_stakes(card: pd.DataFrame, unit: float = 5.0) -> pd.DataFrame:
     out["Play_Units"] = units
     out["Play_Stake"] = stake.round(2)
     return out
+

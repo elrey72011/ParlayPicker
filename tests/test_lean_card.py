@@ -1,3 +1,6 @@
+Exit code: 0
+Wall time: 0.9 seconds
+Output:
 """All-games lean view: model's read on every game, tiered BET / LEAN / AVOID.
 
 Pins the honest tiering so a near-efficient slate (mostly Below Threshold / No Play) still
@@ -154,9 +157,10 @@ def _play_card():
     })
 
 
-def test_every_row_gets_a_positive_play_stake():
+def test_only_bet_rows_get_a_positive_play_stake():
     out = attach_play_stakes(_play_card(), unit=5.0)
-    assert (out["Play_Stake"] > 0).all()
+    assert out.loc[out["Tier"] == "BET", "Play_Stake"].gt(0).all()
+    assert out.loc[out["Tier"] != "BET", "Play_Stake"].eq(0).all()
 
 
 def test_units_scale_down_with_confidence():
@@ -206,7 +210,7 @@ def test_score_rows_is_index_aligned_and_unsorted():
     assert out.loc[7, "Tier"] in ("LEAN", "AVOID")
 
 
-def test_score_rows_then_play_stakes_gives_every_main_card_row_a_stake():
+def test_score_rows_then_play_stakes_keeps_non_bets_at_zero():
     df = pd.DataFrame({
         "league": ["MLB"] * 3,
         "home_team": ["A", "B", "C"],
@@ -221,7 +225,7 @@ def test_score_rows_then_play_stakes_gives_every_main_card_row_a_stake():
         "Kelly_Bet_Size": [0.0, 0.0, 0.0],
     })
     staked = attach_play_stakes(score_best_picks_rows(df, calibration=None, bucket_stats=None), unit=5.0)
-    assert (staked["Play_Stake"] > 0).all()
+    assert (staked["Play_Stake"] == 0).all()
     assert list(staked.index) == list(df.index)
 
 
@@ -263,7 +267,7 @@ def test_started_games_get_zero_play_stake():
     out = attach_play_stakes(score_best_picks_rows(df, calibration=None, bucket_stats=None), unit=5.0)
     assert out.iloc[0]["Play_Stake"] == 0.0
     assert out.iloc[0]["Tier"] == "STARTED"
-    assert out.iloc[1]["Play_Stake"] > 0
+    assert out.iloc[1]["Play_Stake"] == 0.0
 
 
 def test_hopeless_prices_get_zero_play_stake():
@@ -276,4 +280,5 @@ def test_hopeless_prices_get_zero_play_stake():
     })
     out = attach_play_stakes(card, unit=5.0)
     assert out.iloc[0]["Play_Stake"] == 0.0
-    assert out.iloc[1]["Play_Stake"] > 0
+    assert out.iloc[1]["Play_Stake"] == 0.0
+

@@ -1,3 +1,6 @@
+Exit code: 0
+Wall time: 0.7 seconds
+Output:
 """End-to-end orchestration for the pitcher-strikeout prop slice.
 
 Wires the four standalone pieces into one runnable card:
@@ -54,7 +57,7 @@ def build_resolvers(
 
     ``schedule_rows`` is :func:`mlb_pitcher_stats.parse_schedule_probables` output. A propped
     pitcher is matched by normalized name to his StatsAPI id (recent form) and to his
-    OPPONENT's team id â€” the lineup he's striking out, whose K rate drives the projection.
+    OPPONENT's team id — the lineup he's striking out, whose K rate drives the projection.
     Per-id results are memoized so a slate of N games costs at most N form + N team-rate
     fetches. ``form_fetch`` / ``team_k_fetch`` are injectable so the resolvers run offline.
     """
@@ -189,7 +192,7 @@ def build_prop_card(
 
     Win-probability-first (owner preference, 3 Jul): picks must be genuine favorites on
     the model's own number (``p_side >= min_win_probability``) and the card is ordered by
-    win probability, not edge â€” near-coin-flip plus-money price plays no longer make the
+    win probability, not edge — near-coin-flip plus-money price plays no longer make the
     card even when their EV is the highest on the slate. The +EV/min-edge gate remains as
     the eligibility floor so a likely winner at a losing price is still never staked.
     """
@@ -259,21 +262,22 @@ def build_prop_card(
     return card
 
 
-# â”€â”€ Market probation (6 Jul): stake follows each market's GRADED record â”€â”€
-# The outs market went 2-5 (28.6%) in its first week â€” the books price manager
+# ── Market probation (6 Jul): stake follows each market's GRADED record ──
+# The outs market went 2-5 (28.6%) in its first week — the books price manager
 # leashes better than a recent-workload average. Rather than benching (which
 # would stop grading and freeze the record forever), an underwater market's
 # picks stay on the card at a flat probation stake: the model keeps taking its
 # swings and the ledger keeps filling, but the bleed is bounded until the
 # market re-proves itself. Strikeouts (24-12) are untouched.
-PROBATION_MIN_GRADED = 6      # need a real sample before judging a market
-PROBATION_MIN_RATE = 0.50     # below this graded win rate -> probation
+PROBATION_MIN_GRADED = 20     # require a credible sample before full staking
+PROBATION_MIN_RATE = 0.55     # must clear typical vig, not merely break even
 PROBATION_STAKE = 1.0         # flat $ per probation pick
+PROVEN_PROP_MARKETS = frozenset({"pitcher_strikeouts"})
 
 
 def _market_of_pick(text: object) -> str:
     # Padded tokens only: pitcher NAMES can contain stat words ("Walker
-    # Buehler Over 3.5 Ks" must not classify as a walks pick â€” 6 Jul).
+    # Buehler Over 3.5 Ks" must not classify as a walks pick — 6 Jul).
     t = f" {str(text or '').lower()} "
     if " outs " in t:
         return "pitcher_outs"
@@ -301,18 +305,22 @@ def apply_market_probation(card, records: dict,
                            min_rate: float = PROBATION_MIN_RATE,
                            probation_stake: float = PROBATION_STAKE):
     """Cap stakes for markets whose graded record is underwater. Pure."""
-    if card is None or card.empty or not records:
+    if card is None or card.empty:
         return card
     out = card.copy()
     probation_markets = set()
-    for mk, (w, l) in records.items():
+    mk_col = out["market_type"].astype(str).str.replace(r"_(over|under)$", "", regex=True)
+    card_markets = set(mk_col.dropna().astype(str))
+    for mk in card_markets:
+        if mk in PROVEN_PROP_MARKETS:
+            continue
+        w, l = records.get(mk, (0, 0))
         n = w + l
-        if n >= min_graded and (w / n) < min_rate:
+        if n < min_graded or (w / n) < min_rate:
             probation_markets.add(mk)
     if not probation_markets:
         out["Market_Probation"] = False
         return out
-    mk_col = out["market_type"].astype(str).str.replace(r"_(over|under)$", "", regex=True)
     on_probation = mk_col.isin(probation_markets)
     out["Market_Probation"] = on_probation
     out.loc[on_probation, "Kelly_Bet_Size"] = out.loc[on_probation, "Kelly_Bet_Size"].clip(upper=float(probation_stake))
