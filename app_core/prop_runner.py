@@ -30,6 +30,8 @@ from app_core.prop_pipeline import (
     PROP_MIN_STARTER_AVG_INNINGS,
     PROP_MIN_STARTER_GAMES,
     PROP_MIN_WIN_PROBABILITY,
+    PROP_DEFAULT_ENABLED_MARKETS,
+    PROP_MAX_DAYS_SINCE_LAST_START,
     evaluate_strikeout_props,
 )
 
@@ -44,6 +46,7 @@ def build_resolvers(
     schedule_rows: list[dict],
     season: int,
     *,
+    as_of_date: str | None = None,
     form_fetch: Callable = fetch_pitcher_form,
     team_k_fetch: Callable = fetch_team_k_rate,
 ):
@@ -51,7 +54,7 @@ def build_resolvers(
 
     ``schedule_rows`` is :func:`mlb_pitcher_stats.parse_schedule_probables` output. A propped
     pitcher is matched by normalized name to his StatsAPI id (recent form) and to his
-    OPPONENT's team id — the lineup he's striking out, whose K rate drives the projection.
+    OPPONENT's team id â€” the lineup he's striking out, whose K rate drives the projection.
     Per-id results are memoized so a slate of N games costs at most N form + N team-rate
     fetches. ``form_fetch`` / ``team_k_fetch`` are injectable so the resolvers run offline.
     """
@@ -75,7 +78,15 @@ def build_resolvers(
         if pid is None:
             return None
         if pid not in form_cache:
-            form_cache[pid] = form_fetch(pid, season)
+            try:
+                import inspect
+                accepts_date = "as_of_date" in inspect.signature(form_fetch).parameters
+            except (TypeError, ValueError):
+                accepts_date = False
+            form_cache[pid] = (
+                form_fetch(pid, season, as_of_date=as_of_date)
+                if accepts_date else form_fetch(pid, season)
+            )
         return form_cache[pid]
 
     def opp_k_lookup(prop_row: dict) -> float | None:
@@ -100,6 +111,8 @@ def build_strikeout_card(
     min_starter_games: int = PROP_MIN_STARTER_GAMES,
     min_starter_avg_innings: float = PROP_MIN_STARTER_AVG_INNINGS,
     max_plausible_edge: float = PROP_MAX_PLAUSIBLE_EDGE,
+    enabled_markets: tuple[str, ...] = PROP_DEFAULT_ENABLED_MARKETS,
+    max_days_since_last_start: int | None = PROP_MAX_DAYS_SINCE_LAST_START,
     list_events: Callable | None = None,
     props_fetch: Callable = fetch_pitcher_props,
     schedule_fetch: Callable = fetch_schedule_probables,
@@ -129,7 +142,8 @@ def build_strikeout_card(
 
     schedule_rows = schedule_fetch(date) or []
     form_lookup, opp_k_lookup = build_resolvers(
-        schedule_rows, season, form_fetch=form_fetch, team_k_fetch=team_k_fetch
+        schedule_rows, season, as_of_date=date,
+        form_fetch=form_fetch, team_k_fetch=team_k_fetch
     )
 
     scored = evaluate_strikeout_props(
@@ -137,6 +151,8 @@ def build_strikeout_card(
         min_starter_games=min_starter_games,
         min_starter_avg_innings=min_starter_avg_innings,
         max_plausible_edge=max_plausible_edge,
+        enabled_markets=enabled_markets,
+        max_days_since_last_start=max_days_since_last_start,
     )
     scored.sort(key=lambda r: (r.get("best_edge") is not None, r.get("best_edge") or 0.0), reverse=True)
     return scored
@@ -173,7 +189,7 @@ def build_prop_card(
 
     Win-probability-first (owner preference, 3 Jul): picks must be genuine favorites on
     the model's own number (``p_side >= min_win_probability``) and the card is ordered by
-    win probability, not edge — near-coin-flip plus-money price plays no longer make the
+    win probability, not edge â€” near-coin-flip plus-money price plays no longer make the
     card even when their EV is the highest on the slate. The +EV/min-edge gate remains as
     the eligibility floor so a likely winner at a losing price is still never staked.
     """
@@ -207,7 +223,11 @@ def build_prop_card(
             "market_type": f"{market_key}_{side}",
             "best_pick": f"{r.get('pitcher')} {side.capitalize()} {r.get('line')} {label}",
             "line": r.get("line"),
-            "expected_ks": r.get("expected_ks"),
+            "expected_stat": r.get("expected_stat"),
+            "expected_count": r.get("expected_count"),
+            "expected_ks": r.get("expected_ks") if market_key == "pitcher_strikeouts" else None,
+            "expected_walks": r.get("expected_walks") if market_key == "pitcher_walks" else None,
+            "expected_outs": r.get("expected_outs") if market_key == "pitcher_outs" else None,
             "WinProbability": round(p_side, 4),
             "expected_value": r.get("best_ev"),
             "edge": r.get("best_edge"),
@@ -239,8 +259,8 @@ def build_prop_card(
     return card
 
 
-# ── Market probation (6 Jul): stake follows each market's GRADED record ──
-# The outs market went 2-5 (28.6%) in its first week — the books price manager
+# â”€â”€ Market probation (6 Jul): stake follows each market's GRADED record â”€â”€
+# The outs market went 2-5 (28.6%) in its first week â€” the books price manager
 # leashes better than a recent-workload average. Rather than benching (which
 # would stop grading and freeze the record forever), an underwater market's
 # picks stay on the card at a flat probation stake: the model keeps taking its
@@ -253,7 +273,7 @@ PROBATION_STAKE = 1.0         # flat $ per probation pick
 
 def _market_of_pick(text: object) -> str:
     # Padded tokens only: pitcher NAMES can contain stat words ("Walker
-    # Buehler Over 3.5 Ks" must not classify as a walks pick — 6 Jul).
+    # Buehler Over 3.5 Ks" must not classify as a walks pick â€” 6 Jul).
     t = f" {str(text or '').lower()} "
     if " outs " in t:
         return "pitcher_outs"
@@ -308,3 +328,4 @@ def load_prop_results_log():
         return pd.read_csv(p) if p.exists() else None
     except Exception:
         return None
+

@@ -21,7 +21,7 @@ from app_core.prop_model import (
 # Strikeouts are mildly overdispersed vs Poisson; NB with variance ~1.15x mean.
 PROP_KS_DISPERSION = 1.15
 
-# ── Pitcher-prop market specs (4 Jul expansion: outs + walks) ──
+# â”€â”€ Pitcher-prop market specs (4 Jul expansion: outs + walks) â”€â”€
 # Each market is a count stat scored by the SAME engine (NB distribution, de-vig,
 # min-edge/+EV gate, starter guards, projection-consistency gate, implausible-edge
 # cap). Dispersion (variance/mean) is set conservatively per stat: wider variance
@@ -31,10 +31,23 @@ PROP_KS_DISPERSION = 1.15
 #   * walks: low-mean Poisson-ish count. 1.10.
 # Labels feed pick text ("Over 16.5 Outs"); market_type = f"{key}_{side}".
 PITCHER_PROP_SPECS = {
-    "pitcher_strikeouts": {"label": "Ks", "dispersion": PROP_KS_DISPERSION},
-    "pitcher_outs": {"label": "Outs", "dispersion": 1.30},
-    "pitcher_walks": {"label": "BBs", "dispersion": 1.10},
+    "pitcher_strikeouts": {
+        "label": "Ks", "dispersion": PROP_KS_DISPERSION,
+        "rate_key": "k_per_9", "result_key": "ks",
+    },
+    "pitcher_outs": {
+        "label": "Outs", "dispersion": 1.30,
+        "rate_key": "avg_innings", "result_key": "outs",
+    },
+    "pitcher_walks": {
+        "label": "BBs", "dispersion": 1.10,
+        "rate_key": "bb_per_9", "result_key": "walks",
+    },
 }
+
+# Keep outs parsable and gradeable, but do not stake them by default. Recent innings
+# averages miss manager leash, pitch count, matchup, and return-from-absence restrictions.
+PROP_DEFAULT_ENABLED_MARKETS = ("pitcher_strikeouts", "pitcher_walks")
 
 
 def _project_for_market(market_key: str, form: dict, opponent_k_rate: float | None):
@@ -52,11 +65,11 @@ PROP_MIN_EDGE = 0.04
 # Owner preference (3 Jul): the card optimizes for WIN PROBABILITY, not ROI. The
 # edge/EV gate had been admitting near-coin-flip plus-money picks (Rangel Over at
 # 50.3% / +125, Sasaki Over at 53.9% / +130) whose value is in the PRICE, not the
-# likelihood of cashing — mathematically sound, but not what the owner wants to
+# likelihood of cashing â€” mathematically sound, but not what the owner wants to
 # bet. Every staked prop must now be a genuine favorite on the model's own number:
 # p(win) >= this floor, and the card ranks by win probability (not edge). The
-# min-edge/+EV gate above still applies — a favorite at a losing price stays
-# unbettable — so this floor narrows the card to picks that are BOTH likely to
+# min-edge/+EV gate above still applies â€” a favorite at a losing price stays
+# unbettable â€” so this floor narrows the card to picks that are BOTH likely to
 # win AND fairly priced.
 PROP_MIN_WIN_PROBABILITY = 0.55
 
@@ -64,17 +77,18 @@ PROP_MIN_WIN_PROBABILITY = 0.55
 # The strikeout projection is only as good as its innings/role estimate. For openers,
 # relievers, rookies, and pitchers with thin or relief-skewed game logs, avg_innings
 # collapses, the expected-K projection collapses with it, and every Under looks like a
-# lock — e.g. a starter the book prices at 4.5 Ks gets projected for 1.5 because the form
+# lock â€” e.g. a starter the book prices at 4.5 Ks gets projected for 1.5 because the form
 # sample has him at ~1 inning. Two guards keep these out of the card:
-#   * MIN_STARTER_GAMES / MIN_STARTER_AVG_INNINGS — don't project a pitcher we can't
+#   * MIN_STARTER_GAMES / MIN_STARTER_AVG_INNINGS â€” don't project a pitcher we can't
 #     credibly model as a starter (the book line assumes a start). Conservative: skip when
 #     the sample is too small or the workload looks like a reliever's.
-#   * MAX_PLAUSIBLE_EDGE — in a liquid market a real edge is a few points; a 20-40% "edge"
+#   * MAX_PLAUSIBLE_EDGE â€” in a liquid market a real edge is a few points; a 20-40% "edge"
 #     is the model being wrong, not the market. Suppress anything above the cap until the
 #     model has a graded record to justify trust. Set high to disable.
 PROP_MIN_STARTER_GAMES = 3
 PROP_MIN_STARTER_AVG_INNINGS = 4.0
 PROP_MAX_PLAUSIBLE_EDGE = 0.12
+PROP_MAX_DAYS_SINCE_LAST_START = 21
 
 
 def _american_to_implied(odds: float) -> float:
@@ -96,6 +110,8 @@ def score_strikeout_prop(
     min_starter_games: int = PROP_MIN_STARTER_GAMES,
     min_starter_avg_innings: float = PROP_MIN_STARTER_AVG_INNINGS,
     max_plausible_edge: float = PROP_MAX_PLAUSIBLE_EDGE,
+    enabled_markets: tuple[str, ...] | set[str] | None = None,
+    max_days_since_last_start: int | None = PROP_MAX_DAYS_SINCE_LAST_START,
 ) -> dict:
     """Score one pitcher prop. Returns the row enriched with model/market/edge/EV and a
     recommendation. With no pitcher form (no projection) it's a 'no_data' no-play. Two sanity
@@ -105,7 +121,7 @@ def score_strikeout_prop(
 
     Multi-market (4 Jul): the row's ``market_key`` (default pitcher_strikeouts)
     selects the projection + dispersion from PITCHER_PROP_SPECS; the historic
-    function/field names (score_strikeout_prop, expected_ks) are kept — expected_ks
+    function/field names (score_strikeout_prop, expected_ks) are kept â€” expected_ks
     holds the projected count for whichever stat the row prices.
     """
     out = dict(prop_row)
@@ -117,13 +133,24 @@ def score_strikeout_prop(
     over_odds = prop_row["over_odds"]
     under_odds = prop_row["under_odds"]
 
-    if not form or not form.get("k_per_9") or not form.get("avg_innings"):
+    if enabled_markets is not None and market_key not in set(enabled_markets):
+        out.update(
+            expected_count=None,
+            recommendation="no_play",
+            reason=f"{market_key} disabled pending market calibration",
+            best_edge=None,
+            best_ev=None,
+        )
+        return out
+
+    rate_key = spec["rate_key"]
+    if not form or not form.get(rate_key) or not form.get("avg_innings"):
         out.update(recommendation="no_data", reason="no pitcher form", best_edge=None, best_ev=None)
         return out
 
     # Starter-sample guard: the book line assumes a start, so a thin or reliever-shaped
     # sample (too few games, or avg innings below a starter's workload) means our projection
-    # is modeling the wrong role — its "edge" is an artifact, not a read on the market.
+    # is modeling the wrong role â€” its "edge" is an artifact, not a read on the market.
     n_games = int(form.get("n_games") or 0)
     avg_innings = float(form.get("avg_innings") or 0.0)
     if n_games < min_starter_games or avg_innings < min_starter_avg_innings:
@@ -132,6 +159,23 @@ def score_strikeout_prop(
             reason=(
                 f"insufficient starter sample (n_games={n_games}, ip/g={avg_innings:.1f}); "
                 f"projection unreliable for non-starter/thin workloads"
+            ),
+            best_edge=None,
+            best_ev=None,
+        )
+        return out
+
+    days_since_last_start = form.get("days_since_last_start")
+    if (
+        max_days_since_last_start is not None
+        and days_since_last_start is not None
+        and float(days_since_last_start) > float(max_days_since_last_start)
+    ):
+        out.update(
+            recommendation="no_data",
+            reason=(
+                f"long layoff ({int(days_since_last_start)} days since last start); "
+                "return-from-absence projection requires current workload confirmation"
             ),
             best_edge=None,
             best_ev=None,
@@ -186,11 +230,19 @@ def score_strikeout_prop(
     if rec != "no_play" and edge > max_plausible_edge:
         rec = "no_play"
         reason = (
-            f"edge {edge:+.1%} exceeds plausible cap {max_plausible_edge:.0%} — "
+            f"edge {edge:+.1%} exceeds plausible cap {max_plausible_edge:.0%} â€” "
             f"likely projection error, suppressed"
         )
+    projection_fields = {
+        # expected_ks remains for compatibility with older direct callers. The card
+        # export uses expected_count plus stat-specific fields below.
+        "expected_ks": round(lam, 2),
+        "expected_count": round(lam, 2),
+        "expected_stat": spec["result_key"],
+    }
+    projection_fields[f"expected_{spec['result_key']}"] = round(lam, 2)
     out.update(
-        expected_ks=round(lam, 2),
+        projection_fields,
         model_p_over=round(p_over, 4),
         market_p_over=round(mkt_over, 4),
         best_side=side,
@@ -211,6 +263,8 @@ def evaluate_strikeout_props(
     min_starter_games: int = PROP_MIN_STARTER_GAMES,
     min_starter_avg_innings: float = PROP_MIN_STARTER_AVG_INNINGS,
     max_plausible_edge: float = PROP_MAX_PLAUSIBLE_EDGE,
+    enabled_markets: tuple[str, ...] | set[str] | None = None,
+    max_days_since_last_start: int | None = PROP_MAX_DAYS_SINCE_LAST_START,
 ) -> list[dict]:
     """Score a list of parsed strikeout props.
 
@@ -225,5 +279,7 @@ def evaluate_strikeout_props(
         scored.append(score_strikeout_prop(
             row, form, opp_k, dispersion, min_edge,
             min_starter_games, min_starter_avg_innings, max_plausible_edge,
+            enabled_markets, max_days_since_last_start,
         ))
     return scored
+

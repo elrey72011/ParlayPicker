@@ -1,6 +1,6 @@
 """Pitcher-prop expansion (4 Jul): outs + walks join strikeouts on the SAME engine.
 
-Owner directive: more high-win-probability bets, built where the edge is proven —
+Owner directive: more high-win-probability bets, built where the edge is proven â€”
 the prop framework (19-10, 65.5% on strikeouts). Outs and walks are count stats
 projectable from the game logs we already fetch; hits/ERs are excluded
 (defense/BABIP-dominated). Every guard applies unchanged: starter-sample floor,
@@ -89,7 +89,7 @@ def test_walks_market_requires_bb_rate():
 def test_strikeout_rows_without_market_key_unchanged():
     row = {"pitcher": "P", "line": 5.5, "over_odds": -110, "under_odds": -110}
     out = score_strikeout_prop(row, _FORM)
-    assert out["expected_ks"] > 5.5  # 9.5/9 * 5.8 ≈ 6.1, opponent-neutral
+    assert out["expected_ks"] > 5.5  # 9.5/9 * 5.8 â‰ˆ 6.1, opponent-neutral
     assert out["recommendation"] in ("over", "under", "no_play")
 
 
@@ -106,6 +106,7 @@ def test_build_prop_card_labels_each_market():
         object(), "2026-07-04", 2026, 1000.0,
         kelly_per_pick_pct=0.01, kelly_total_pct=0.03,
         min_edge=0.0, min_win_probability=0.50,
+        enabled_markets=("pitcher_strikeouts", "pitcher_outs", "pitcher_walks"),
         max_plausible_edge=1.0,
         list_events=lambda c, s, d: [{"id": "e1"}],
         props_fetch=lambda c, s, e: props,
@@ -120,6 +121,28 @@ def test_build_prop_card_labels_each_market():
     types = set(card["market_type"])
     assert any(t.startswith("pitcher_outs_") for t in types)
     assert "Outs" in picks and ("Ks" in picks)
+
+
+def test_outs_are_not_production_staked_by_default():
+    props = [{
+        "pitcher": "Ace Guy", "line": 15.5, "over_odds": -120, "under_odds": -104,
+        "book": "draftkings", "home_team": "H", "away_team": "A",
+        "market_key": "pitcher_outs",
+    }]
+    card = build_prop_card(
+        object(), "2026-07-04", 2026, 1000.0,
+        kelly_per_pick_pct=0.01, kelly_total_pct=0.03,
+        min_edge=0.0, min_win_probability=0.50,
+        max_plausible_edge=1.0,
+        list_events=lambda c, s, d: [{"id": "e1"}],
+        props_fetch=lambda c, s, e: props,
+        schedule_fetch=lambda d: [{"home_pitcher": "Ace Guy", "home_pitcher_id": 1,
+                                   "away_pitcher": None, "away_pitcher_id": None,
+                                   "home_team_id": 10, "away_team_id": 11}],
+        form_fetch=lambda pid, season: _FORM,
+        team_k_fetch=lambda tid, season: 0.22,
+    )
+    assert card.empty
 
 
 def test_grading_selects_stat_by_market():
@@ -149,7 +172,7 @@ def test_grading_int_actual_backwards_compatible():
     assert rows[0]["result"] == "WIN"
 
 
-# ── Market probation (6 Jul): stakes follow each market's graded record ──
+# â”€â”€ Market probation (6 Jul): stakes follow each market's graded record â”€â”€
 from app_core.prop_runner import (  # noqa: E402
     PROBATION_STAKE,
     apply_market_probation,
@@ -188,10 +211,10 @@ def test_small_samples_and_winning_markets_not_touched():
         "best_pick": ["X Over 1.5 BBs"],
         "Kelly_Bet_Size": [5.0],
     })
-    # walks 5-4 (55.6%) — above water, no probation
+    # walks 5-4 (55.6%) â€” above water, no probation
     out = apply_market_probation(card, {"pitcher_walks": (5, 4)})
     assert out.iloc[0]["Kelly_Bet_Size"] == 5.0
-    # tiny sample (n<6) — never judged
+    # tiny sample (n<6) â€” never judged
     out2 = apply_market_probation(card, {"pitcher_walks": (1, 4)})
     assert out2.iloc[0]["Kelly_Bet_Size"] == 5.0
 
@@ -213,3 +236,4 @@ def test_market_records_ignore_stat_words_in_names():
     assert rec.get("pitcher_strikeouts") == (1, 0)
     assert rec.get("pitcher_outs") == (1, 0)
     assert "pitcher_walks" not in rec
+
