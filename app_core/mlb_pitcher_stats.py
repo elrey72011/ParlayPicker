@@ -11,6 +11,7 @@ StatsAPI endpoints used:
 """
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 import requests
@@ -30,15 +31,23 @@ def _innings_to_float(ip: Any) -> float:
         return 0.0
 
 
-def pitcher_form_from_gamelog(splits: list[dict], last_n: int = 5) -> dict | None:
-    """Compute {k_per_9, avg_innings, n_games} from a StatsAPI pitching gameLog.
+def pitcher_form_from_gamelog(
+    splits: list[dict], last_n: int = 5, as_of_date: str | None = None
+) -> dict | None:
+    """Compute recent starter form and optional rest-gap metadata.
 
     ``splits`` is the gameLog ``splits`` list (chronological). Uses the most recent
-    ``last_n`` starts. Returns None if there are no usable innings.
+    ``last_n`` usable appearances. ``as_of_date`` lets callers detect a long layoff
+    before a scheduled start.
     """
     if not splits:
         return None
-    recent = splits[-last_n:]
+    usable_splits = []
+    for sp in splits:
+        stat = sp.get("stat", {}) if isinstance(sp, dict) else {}
+        if _innings_to_float(stat.get("inningsPitched", 0)) > 0:
+            usable_splits.append(sp)
+    recent = usable_splits[-last_n:]
     total_k = 0
     total_bb = 0
     total_ip = 0.0
@@ -54,13 +63,28 @@ def pitcher_form_from_gamelog(splits: list[dict], last_n: int = 5) -> dict | Non
         n += 1
     if total_ip <= 0 or n == 0:
         return None
-    return {
+    result = {
         "k_per_9": 9.0 * total_k / total_ip,
         # Walks rate feeds the pitcher_walks prop projection (4 Jul expansion).
         "bb_per_9": 9.0 * total_bb / total_ip,
         "avg_innings": total_ip / n,
         "n_games": n,
     }
+    if as_of_date:
+        try:
+            target = datetime.strptime(str(as_of_date), "%Y-%m-%d").date()
+            game_dates = [
+                datetime.strptime(str(sp.get("date")), "%Y-%m-%d").date()
+                for sp in usable_splits
+                if sp.get("date")
+            ]
+            if game_dates:
+                last_date = max(game_dates)
+                result["last_game_date"] = last_date.isoformat()
+                result["days_since_last_start"] = max(0, (target - last_date).days)
+        except (TypeError, ValueError):
+            pass
+    return result
 
 
 def team_k_rate_from_stats(stat: dict) -> float | None:
@@ -121,7 +145,9 @@ def fetch_schedule_probables(date: str, sport_id: int = 1) -> list[dict]:
         return []
 
 
-def fetch_pitcher_form(pitcher_id: int, season: int, last_n: int = 5) -> dict | None:
+def fetch_pitcher_form(
+    pitcher_id: int, season: int, last_n: int = 5, as_of_date: str | None = None
+) -> dict | None:
     """Fetch a pitcher's recent form from StatsAPI. Returns None on any failure."""
     try:
         url = f"{_BASE}/people/{pitcher_id}/stats"
@@ -130,7 +156,7 @@ def fetch_pitcher_form(pitcher_id: int, season: int, last_n: int = 5) -> dict | 
         resp.raise_for_status()
         stats = resp.json().get("stats", [])
         splits = stats[0].get("splits", []) if stats else []
-        return pitcher_form_from_gamelog(splits, last_n=last_n)
+        return pitcher_form_from_gamelog(splits, last_n=last_n, as_of_date=as_of_date)
     except (requests.RequestException, ValueError, KeyError, IndexError):
         return None
 
@@ -148,3 +174,4 @@ def fetch_team_k_rate(team_id: int, season: int) -> float | None:
         return team_k_rate_from_stats(stat)
     except (requests.RequestException, ValueError, KeyError, IndexError):
         return None
+
