@@ -53,6 +53,15 @@ def _decimal(odds: object) -> float | None:
     return 1.0 + (o / 100.0 if o > 0 else 100.0 / -o)
 
 
+def _pick_direction(text: object) -> str:
+    value = f" {str(text or '').lower()} "
+    if " over " in value:
+        return "over"
+    if " under " in value:
+        return "under"
+    return ""
+
+
 def build_best_duos(
     best_picks_df: pd.DataFrame | None,
     prop_card: pd.DataFrame | None,
@@ -60,6 +69,8 @@ def build_best_duos(
     min_leg_probability: float = DUO_MIN_LEG_PROBABILITY,
     require_mixed: bool = False,
     strict: bool = False,
+    allow_probation: bool = False,
+    min_parlay_ev: float = 0.0,
 ) -> pd.DataFrame:
     """Top ``max_duos`` two-leg parlays, no shared games, no reused legs.
 
@@ -94,7 +105,7 @@ def build_best_duos(
                     pd.Series("Actionable", index=safe_props.index),
                 ).astype(str).str.strip().eq("Actionable")
             ].copy()
-            if "Market_Probation" in safe_props.columns:
+            if "Market_Probation" in safe_props.columns and not allow_probation:
                 safe_props = safe_props[
                     ~safe_props["Market_Probation"].fillna(False).astype(bool)
                 ]
@@ -131,6 +142,11 @@ def build_best_duos(
         a, b = pool.iloc[i], pool.iloc[j]
         if a["_toks"] & b["_toks"]:
             continue  # same game (or same pitcher) — correlated, skip
+        if allow_probation:
+            # Research parlays must diversify model-direction risk too.
+            direction_a, direction_b = _pick_direction(a["pick"]), _pick_direction(b["pick"])
+            if direction_a and direction_a == direction_b:
+                continue
         if require_mixed and a["board"] == b["board"]:
             continue  # one game leg + one prop leg only
         if strict and shares_game(a, b):
@@ -143,7 +159,11 @@ def build_best_duos(
         da, db = _decimal(a["odds_american"]), _decimal(b["odds_american"])
         dec = (da * db) if (da and db) else None
         parlay_ev = (p * dec - 1.0) if dec else None
-        if strict and (parlay_ev is None or parlay_ev <= 0):
+        if strict and (
+            parlay_ev is None
+            or parlay_ev <= 0
+            or parlay_ev < max(0.0, float(min_parlay_ev))
+        ):
             continue
         pairs.append((p, i, j, dec, parlay_ev))
     pairs.sort(key=lambda x: x[0], reverse=True)
@@ -168,7 +188,8 @@ def build_best_duos(
             "combined_decimal": round(dec, 3) if dec else None,
             "parlay_ev": round(parlay_ev, 4) if parlay_ev is not None else None,
             "payout_per_10": round(10.0 * dec, 2) if dec else None,
-            "production_safety_mode": bool(strict),
+            "production_safety_mode": bool(strict and not allow_probation),
+            "probation_parlay_mode": bool(strict and allow_probation),
             "model_risk_haircut": DUO_PROBABILITY_HAIRCUT if strict else 1.0,
         })
         used.update((i, j))
@@ -190,9 +211,13 @@ def duos_to_smart_parlays(duos: pd.DataFrame | None, bankroll: float = 1000.0) -
             continue
         full_kelly = max(0.0, (probability * decimal - 1.0) / (decimal - 1.0))
         fractional_kelly = full_kelly * 0.125
-        recommended = min(float(bankroll) * 0.0025, float(bankroll) * fractional_kelly)
+        probation_mode = bool(duo.get("probation_parlay_mode", False))
+        recommended = (
+            1.0 if probation_mode
+            else min(float(bankroll) * 0.0025, float(bankroll) * fractional_kelly)
+        )
         rows.append({
-            "risk_tier": "Controlled",
+            "risk_tier": "Probation / Research" if probation_mode else "Controlled",
             "group_id": f"strict_duo_{index + 1}",
             "parlay_legs": f"{duo.get('leg1')} | {duo.get('leg2')}",
             "combined_probability": probability,
@@ -208,6 +233,7 @@ def duos_to_smart_parlays(duos: pd.DataFrame | None, bankroll: float = 1000.0) -
             "kelly_fraction": fractional_kelly,
             "recommended_bet": round(recommended, 2),
             "production_safety_mode": bool(duo.get("production_safety_mode", True)),
+            "probation_parlay_mode": probation_mode,
             "model_risk_haircut": duo.get("model_risk_haircut"),
         })
     return pd.DataFrame(rows)
