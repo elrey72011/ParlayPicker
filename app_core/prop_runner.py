@@ -385,6 +385,7 @@ PROBATION_MIN_RATE = 0.55     # must clear typical vig, not merely break even
 PROBATION_STAKE = 1.0         # flat $ per probation pick
 PROVEN_PROP_MARKETS = frozenset({"pitcher_strikeouts"})
 BATTER_PROBATION_TOTAL_PCT = 0.0075  # max 0.75% bankroll across all unproven batter picks
+NOVIG_MINIMUM_BET = 1.0
 
 
 def _market_of_pick(text: object, market_type: object = None) -> str:
@@ -451,9 +452,9 @@ def apply_batter_probation_exposure_cap(
     card,
     bankroll: float,
     cap_pct: float = BATTER_PROBATION_TOTAL_PCT,
+    minimum_bet: float = NOVIG_MINIMUM_BET,
 ):
-    """Cap aggregate unproven batter exposure while preserving relative stakes."""
-    import math
+    """Select executable $1 batter tickets within the aggregate probation cap."""
     import pandas as pd
 
     if card is None or card.empty:
@@ -468,20 +469,40 @@ def apply_batter_probation_exposure_cap(
     stakes = pd.to_numeric(out.get("Kelly_Bet_Size"), errors="coerce").fillna(0.0)
     exposure_before = float(stakes[batter_probation].sum())
     exposure_cap = max(0.0, float(bankroll or 0.0) * float(cap_pct))
-    cap_applied = bool(exposure_before > exposure_cap and exposure_before > 0)
-    if cap_applied:
-        scale = exposure_cap / exposure_before
-        # Round down to cents so dozens of rows can never round back above the cap.
-        out.loc[batter_probation, "Kelly_Bet_Size"] = stakes[batter_probation].map(
-            lambda value: math.floor(float(value) * scale * 100.0 + 1e-9) / 100.0
-        )
+    minimum_bet = max(0.0, float(minimum_bet))
+    candidates = out.index[batter_probation & stakes.gt(0)]
+    max_tickets = int(exposure_cap // minimum_bet) if minimum_bet > 0 else 0
+    probability = pd.to_numeric(
+        out.get("WinProbability", pd.Series(0.0, index=out.index)), errors="coerce"
+    ).fillna(0.0)
+    edge = pd.to_numeric(
+        out.get("edge", pd.Series(0.0, index=out.index)), errors="coerce"
+    ).fillna(0.0)
+    ranked = pd.DataFrame({
+        "probability": probability.loc[candidates],
+        "edge": edge.loc[candidates],
+        "original_stake": stakes.loc[candidates],
+    }).sort_values(
+        ["probability", "edge", "original_stake"],
+        ascending=[False, False, False],
+    )
+    selected = ranked.head(max_tickets).index
+    out.loc[batter_probation, "Kelly_Bet_Size"] = 0.0
+    if len(selected):
+        out.loc[selected, "Kelly_Bet_Size"] = minimum_bet
     exposure_after = float(pd.to_numeric(
         out.loc[batter_probation, "Kelly_Bet_Size"], errors="coerce"
     ).fillna(0.0).sum())
+    cap_applied = bool(
+        (pd.to_numeric(out.loc[batter_probation, "Kelly_Bet_Size"], errors="coerce")
+         .fillna(0.0) - stakes[batter_probation]).abs().gt(1e-9).any()
+    )
     out["batter_probation_cap_applied"] = cap_applied
     out["batter_probation_exposure_cap"] = round(exposure_cap, 2)
     out["batter_probation_exposure_before"] = round(exposure_before, 2)
     out["batter_probation_exposure_after"] = round(exposure_after, 2)
+    out["batter_probation_minimum_bet"] = round(minimum_bet, 2)
+    out["batter_probation_selected_count"] = int(len(selected))
     return out
 
 
