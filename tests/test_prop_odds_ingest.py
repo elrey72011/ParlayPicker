@@ -1,10 +1,13 @@
+Exit code: 0
+Wall time: 0.7 seconds
+Output:
 """Odds API pitcher-strikeout prop parsing (no network -- fixture only)."""
 import os
 import sys
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from app_core.prop_odds_ingest import parse_strikeout_props
+from app_core.prop_odds_ingest import fetch_pitcher_props, parse_strikeout_props
 
 
 def _event(bookmakers):
@@ -69,3 +72,36 @@ def test_no_strikeout_market_returns_empty():
 def test_non_dict_input_is_safe():
     assert parse_strikeout_props(None) == []
     assert parse_strikeout_props([]) == []
+
+
+def test_prop_endpoint_retries_transient_timeout(monkeypatch):
+    import requests
+
+    calls = []
+
+    class Response:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return _event([_DK])
+
+    def flaky_get(*args, **kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            raise requests.Timeout("temporary timeout")
+        return Response()
+
+    monkeypatch.setattr(requests, "get", flaky_get)
+    monkeypatch.setattr("app_core.prop_odds_ingest.time.sleep", lambda _: None)
+
+    class Client:
+        BASE_URL = "https://example.test"
+        api_key = "test"
+        regions = "us"
+        bookmakers = "draftkings"
+
+    rows = fetch_pitcher_props(Client(), "baseball_mlb", "event-1", ("pitcher_strikeouts",))
+    assert len(calls) == 2
+    assert rows[0]["pitcher"] == "Framber Valdez"
+
