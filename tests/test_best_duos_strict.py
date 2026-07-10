@@ -108,3 +108,27 @@ def test_strict_duos_map_to_smart_parlay_export_with_capped_stake():
     assert 0 < out.iloc[0]["recommended_bet"] <= 2.5
     assert " | " in out.iloc[0]["parlay_legs"]
 
+
+
+def test_probation_parlay_fallback_is_labeled_and_staked_at_novig_minimum():
+    props = pd.DataFrame({
+        "league": ["MLB", "MLB"],
+        "matchup": ["New York Yankees @ Washington Nationals", "Milwaukee Brewers @ Pittsburgh Pirates"],
+        "best_pick": ["A Under 1.5 Hits", "B Over 0.5 Hits"],
+        "WinProbability": [0.72, 0.70],
+        "expected_value": [0.10, 0.10],
+        "edge": [0.08, 0.07],
+        "odds_american": [-110, -110],
+        "Pick_Status": ["Actionable", "Actionable"],
+        "Market_Probation": [True, True],
+    })
+    assert build_best_duos(None, props, strict=True).empty
+    duos = build_best_duos(None, props, strict=True, allow_probation=True,
+                           min_leg_probability=0.65, min_parlay_ev=0.05, max_duos=1)
+    assert len(duos) == 1
+    assert bool(duos.iloc[0]["probation_parlay_mode"])
+    assert not bool(duos.iloc[0]["production_safety_mode"])
+    exported = duos_to_smart_parlays(duos, bankroll=1000.0)
+    assert exported.iloc[0]["risk_tier"] == "Probation / Research"
+    assert exported.iloc[0]["recommended_bet"] == 1.0
+    assert bool(exported.iloc[0]["probation_parlay_mode"])
