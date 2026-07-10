@@ -1077,6 +1077,12 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
         diagnostics["strikeout_prop_error"] = str(exc)
         diagnostics["strikeout_prop_feed_status"] = "unexpected_error"
         diagnostics["strikeout_prop_feed_error_type"] = type(exc).__name__
+        _prop_error_detail = type(exc).__name__
+        if isinstance(exc, SyntaxError):
+            _syntax_file = str(getattr(exc, "filename", "") or "").replace("\\", "/").rsplit("/", 1)[-1]
+            _syntax_line = getattr(exc, "lineno", None)
+            _prop_error_detail = f"SyntaxError in {_syntax_file or 'unknown file'}:{_syntax_line or '?'}"
+        diagnostics["strikeout_prop_error_detail"] = _prop_error_detail
 
     state_updates = {
         "pipeline_status": "using stored results",
@@ -2114,10 +2120,13 @@ def main() -> None:
                 )
             elif st.session_state.get("diagnostics", {}).get("strikeout_prop_error"):
                 _prop_err_type = st.session_state.get("diagnostics", {}).get(
-                    "strikeout_prop_feed_error_type", "unexpected error"
+                    "strikeout_prop_error_detail",
+                    st.session_state.get("diagnostics", {}).get(
+                        "strikeout_prop_feed_error_type", "unexpected error"
+                    ),
                 )
                 st.caption(
-                    f"⚾ Strikeout props unavailable after retry ({_prop_err_type}). "
+                    f"⚾ MLB player props unavailable after retry ({_prop_err_type}). "
                     "Run the slate again; the game card remains valid."
                 )
             elif st.session_state.get("diagnostics", {}).get("strikeout_prop_feed_status") in {
