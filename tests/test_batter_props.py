@@ -3,7 +3,7 @@ import pandas as pd
 from app_core.batter_prop_pipeline import score_batter_prop
 from app_core.mlb_batter_stats import batter_form_from_gamelog
 from app_core.prop_odds_ingest import parse_pitcher_props
-from app_core.prop_runner import build_prop_card
+from app_core.prop_runner import apply_batter_probation_exposure_cap, build_prop_card
 from scripts.grade_props import grade_card
 
 
@@ -114,4 +114,36 @@ def test_batter_prop_grades_against_batting_result():
     assert rows[0]["stat"] == "total_bases"
     assert rows[0]["actual_value"] == 2
     assert rows[0]["result"] == "WIN"
+
+
+def test_batter_probation_has_separate_aggregate_exposure_cap():
+    card = pd.DataFrame({
+        "participant_type": ["batter", "batter", "batter", "pitcher"],
+        "market_type": [
+            "batter_hits_over", "batter_hits_under", "batter_total_bases_under",
+            "pitcher_strikeouts_under",
+        ],
+        "Market_Probation": [True, True, True, False],
+        "Kelly_Bet_Size": [4.0, 4.0, 4.0, 5.0],
+    })
+    out = apply_batter_probation_exposure_cap(card, bankroll=1000.0)
+    batter_total = out.loc[out["participant_type"].eq("batter"), "Kelly_Bet_Size"].sum()
+    assert batter_total <= 7.50
+    assert out.loc[out["participant_type"].eq("pitcher"), "Kelly_Bet_Size"].iloc[0] == 5.0
+    assert bool(out["batter_probation_cap_applied"].iloc[0])
+    assert out["batter_probation_exposure_before"].iloc[0] == 12.0
+    assert out["batter_probation_exposure_cap"].iloc[0] == 7.5
+    assert out["batter_probation_exposure_after"].iloc[0] == batter_total
+
+
+def test_batter_probation_cap_is_noop_below_limit():
+    card = pd.DataFrame({
+        "participant_type": ["batter", "pitcher"],
+        "market_type": ["batter_hits_over", "pitcher_strikeouts_under"],
+        "Market_Probation": [True, False],
+        "Kelly_Bet_Size": [1.0, 5.0],
+    })
+    out = apply_batter_probation_exposure_cap(card, bankroll=1000.0)
+    assert out["Kelly_Bet_Size"].tolist() == [1.0, 5.0]
+    assert not bool(out["batter_probation_cap_applied"].iloc[0])
 

@@ -366,6 +366,7 @@ def build_prop_card(
         card = apply_market_probation(card, market_records_from_log(load_prop_results_log()))
     except Exception:
         pass  # probation is protective, never card-breaking
+    card = apply_batter_probation_exposure_cap(card, bankroll)
     card = card.sort_values(
         ["WinProbability", "edge"], ascending=[False, False]
     ).reset_index(drop=True)
@@ -383,6 +384,7 @@ PROBATION_MIN_GRADED = 20     # require a credible sample before full staking
 PROBATION_MIN_RATE = 0.55     # must clear typical vig, not merely break even
 PROBATION_STAKE = 1.0         # flat $ per probation pick
 PROVEN_PROP_MARKETS = frozenset({"pitcher_strikeouts"})
+BATTER_PROBATION_TOTAL_PCT = 0.0075  # max 0.75% bankroll across all unproven batter picks
 
 
 def _market_of_pick(text: object, market_type: object = None) -> str:
@@ -442,6 +444,44 @@ def apply_market_probation(card, records: dict,
     on_probation = mk_col.isin(probation_markets)
     out["Market_Probation"] = on_probation
     out.loc[on_probation, "Kelly_Bet_Size"] = out.loc[on_probation, "Kelly_Bet_Size"].clip(upper=float(probation_stake))
+    return out
+
+
+def apply_batter_probation_exposure_cap(
+    card,
+    bankroll: float,
+    cap_pct: float = BATTER_PROBATION_TOTAL_PCT,
+):
+    """Cap aggregate unproven batter exposure while preserving relative stakes."""
+    import math
+    import pandas as pd
+
+    if card is None or card.empty:
+        return card
+    out = card.copy()
+    market_type = out.get("market_type", pd.Series("", index=out.index)).astype(str)
+    participant = out.get("participant_type", pd.Series("", index=out.index)).astype(str)
+    probation = out.get("Market_Probation", pd.Series(False, index=out.index)).fillna(False).astype(bool)
+    batter_probation = probation & (
+        participant.eq("batter") | market_type.str.startswith("batter_")
+    )
+    stakes = pd.to_numeric(out.get("Kelly_Bet_Size"), errors="coerce").fillna(0.0)
+    exposure_before = float(stakes[batter_probation].sum())
+    exposure_cap = max(0.0, float(bankroll or 0.0) * float(cap_pct))
+    cap_applied = bool(exposure_before > exposure_cap and exposure_before > 0)
+    if cap_applied:
+        scale = exposure_cap / exposure_before
+        # Round down to cents so dozens of rows can never round back above the cap.
+        out.loc[batter_probation, "Kelly_Bet_Size"] = stakes[batter_probation].map(
+            lambda value: math.floor(float(value) * scale * 100.0 + 1e-9) / 100.0
+        )
+    exposure_after = float(pd.to_numeric(
+        out.loc[batter_probation, "Kelly_Bet_Size"], errors="coerce"
+    ).fillna(0.0).sum())
+    out["batter_probation_cap_applied"] = cap_applied
+    out["batter_probation_exposure_cap"] = round(exposure_cap, 2)
+    out["batter_probation_exposure_before"] = round(exposure_before, 2)
+    out["batter_probation_exposure_after"] = round(exposure_after, 2)
     return out
 
 
