@@ -1,9 +1,9 @@
 Exit code: 0
-Wall time: 0.8 seconds
+Wall time: 1 seconds
 Output:
 import pandas as pd
 
-from app_core.best_duos import build_best_duos
+from app_core.best_duos import build_best_duos, duos_to_smart_parlays
 
 
 def _games():
@@ -100,4 +100,14 @@ def test_same_bet_direction_does_not_create_false_game_overlap():
     assert len(out) == 1
     assert "Hunter Brown" in out.iloc[0]["leg1"] + out.iloc[0]["leg2"]
     assert "Robbie Ray" in out.iloc[0]["leg1"] + out.iloc[0]["leg2"]
+
+
+def test_strict_duos_map_to_smart_parlay_export_with_capped_stake():
+    duos = build_best_duos(None, _props(), strict=True, max_duos=1)
+    out = duos_to_smart_parlays(duos, bankroll=1000.0)
+    assert len(out) == 1
+    assert out.iloc[0]["legs"] == 2
+    assert out.iloc[0]["production_safety_mode"]
+    assert 0 < out.iloc[0]["recommended_bet"] <= 2.5
+    assert " | " in out.iloc[0]["parlay_legs"]
 

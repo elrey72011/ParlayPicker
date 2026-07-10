@@ -1,5 +1,5 @@
 Exit code: 0
-Wall time: 0.7 seconds
+Wall time: 1 seconds
 Output:
 """End-to-end orchestration for the pitcher-strikeout prop slice.
 
@@ -19,12 +19,18 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
+from app_core.batter_prop_pipeline import (
+    BATTER_DEFAULT_ENABLED_MARKETS,
+    BATTER_PROP_SPECS,
+    evaluate_batter_props,
+)
+from app_core.mlb_batter_stats import fetch_batter_form
 from app_core.mlb_pitcher_stats import (
     fetch_pitcher_form,
     fetch_schedule_probables,
     fetch_team_k_rate,
 )
-from app_core.prop_odds_ingest import fetch_pitcher_props, fetch_strikeout_props
+from app_core.prop_odds_ingest import fetch_mlb_player_props, fetch_strikeout_props
 from app_core.prop_pipeline import (
     PITCHER_PROP_SPECS,
     PROP_KS_DISPERSION,
@@ -39,6 +45,7 @@ from app_core.prop_pipeline import (
 )
 
 MLB_SPORT_KEY = "baseball_mlb"
+MLB_PROP_DEFAULT_ENABLED_MARKETS = PROP_DEFAULT_ENABLED_MARKETS + BATTER_DEFAULT_ENABLED_MARKETS
 
 
 def _norm_name(s: object) -> str:
@@ -103,6 +110,34 @@ def build_resolvers(
     return form_lookup, opp_k_lookup
 
 
+def build_batter_form_lookup(
+    season: int,
+    *,
+    as_of_date: str | None = None,
+    form_fetch: Callable = fetch_batter_form,
+):
+    """Memoized batter-name -> form lookup for the supported batter markets."""
+    cache: dict[str, dict | None] = {}
+
+    def lookup(player: object) -> dict | None:
+        name = _norm_name(player)
+        if not name:
+            return None
+        if name not in cache:
+            try:
+                import inspect
+                accepts_date = "as_of_date" in inspect.signature(form_fetch).parameters
+            except (TypeError, ValueError):
+                accepts_date = False
+            cache[name] = (
+                form_fetch(player, season, as_of_date=as_of_date)
+                if accepts_date else form_fetch(player, season)
+            )
+        return cache[name]
+
+    return lookup
+
+
 def build_strikeout_card(
     odds_client: Any,
     date: str,
@@ -114,14 +149,15 @@ def build_strikeout_card(
     min_starter_games: int = PROP_MIN_STARTER_GAMES,
     min_starter_avg_innings: float = PROP_MIN_STARTER_AVG_INNINGS,
     max_plausible_edge: float = PROP_MAX_PLAUSIBLE_EDGE,
-    enabled_markets: tuple[str, ...] = PROP_DEFAULT_ENABLED_MARKETS,
+    enabled_markets: tuple[str, ...] = MLB_PROP_DEFAULT_ENABLED_MARKETS,
     max_days_since_last_start: int | None = PROP_MAX_DAYS_SINCE_LAST_START,
     diagnostics: dict | None = None,
     event_list_attempts: int = 2,
     list_events: Callable | None = None,
-    props_fetch: Callable = fetch_pitcher_props,
+    props_fetch: Callable = fetch_mlb_player_props,
     schedule_fetch: Callable = fetch_schedule_probables,
     form_fetch: Callable = fetch_pitcher_form,
+    batter_form_fetch: Callable = fetch_batter_form,
     team_k_fetch: Callable = fetch_team_k_rate,
 ) -> list[dict]:
     """Score every pitcher-strikeout prop on ``date`` into a card (best edge first).
@@ -200,14 +236,25 @@ def build_strikeout_card(
         form_fetch=form_fetch, team_k_fetch=team_k_fetch
     )
 
+    pitcher_props = [p for p in props if not str(p.get("market_key", "")).startswith("batter_")]
+    batter_props = [p for p in props if str(p.get("market_key", "")).startswith("batter_")]
     scored = evaluate_strikeout_props(
-        props, form_lookup, opp_k_lookup, dispersion=dispersion, min_edge=min_edge,
+        pitcher_props, form_lookup, opp_k_lookup, dispersion=dispersion, min_edge=min_edge,
         min_starter_games=min_starter_games,
         min_starter_avg_innings=min_starter_avg_innings,
         max_plausible_edge=max_plausible_edge,
         enabled_markets=enabled_markets,
         max_days_since_last_start=max_days_since_last_start,
     )
+    batter_lookup = build_batter_form_lookup(
+        season, as_of_date=date, form_fetch=batter_form_fetch
+    )
+    scored.extend(evaluate_batter_props(
+        batter_props,
+        batter_lookup,
+        min_edge=min_edge,
+        enabled_markets=enabled_markets,
+    ))
     if diagnostics is not None:
         diagnostics["strikeout_prop_feed_status"] = "ready"
         diagnostics["strikeout_prop_scored_count"] = len(scored)
@@ -268,23 +315,35 @@ def build_prop_card(
         if p_side < float(min_win_probability):
             continue
         market_key = str(r.get("market_key") or "pitcher_strikeouts")
-        label = PITCHER_PROP_SPECS.get(market_key, PITCHER_PROP_SPECS["pitcher_strikeouts"])["label"]
+        spec = BATTER_PROP_SPECS.get(market_key) or PITCHER_PROP_SPECS.get(
+            market_key, PITCHER_PROP_SPECS["pitcher_strikeouts"]
+        )
+        label = spec["label"]
+        player = r.get("player") or r.get("batter") or r.get("pitcher")
+        participant_type = r.get("participant_type") or (
+            "batter" if market_key.startswith("batter_") else "pitcher"
+        )
         dec = _decimal_odds(odds)
         b = dec - 1.0
         kelly_frac = ((p_side * dec) - 1.0) / b if b > 0 else 0.0
         stake_pct = min(max(kelly_frac, 0.0) * kelly_fraction, kelly_per_pick_pct)
         rows.append({
             "league": "MLB",
-            "pitcher": r.get("pitcher"),
+            "player": player,
+            "participant_type": participant_type,
+            "pitcher": player if participant_type == "pitcher" else None,
+            "batter": player if participant_type == "batter" else None,
             "matchup": f"{r.get('away_team', '')} @ {r.get('home_team', '')}".strip(" @"),
             "market_type": f"{market_key}_{side}",
-            "best_pick": f"{r.get('pitcher')} {side.capitalize()} {r.get('line')} {label}",
+            "best_pick": f"{player} {side.capitalize()} {r.get('line')} {label}",
             "line": r.get("line"),
             "expected_stat": r.get("expected_stat"),
             "expected_count": r.get("expected_count"),
             "expected_ks": r.get("expected_ks") if market_key == "pitcher_strikeouts" else None,
             "expected_walks": r.get("expected_walks") if market_key == "pitcher_walks" else None,
             "expected_outs": r.get("expected_outs") if market_key == "pitcher_outs" else None,
+            "expected_hits": r.get("expected_hits") if market_key == "batter_hits" else None,
+            "expected_total_bases": r.get("expected_total_bases") if market_key == "batter_total_bases" else None,
             "WinProbability": round(p_side, 4),
             "expected_value": r.get("best_ev"),
             "edge": r.get("best_edge"),
@@ -329,10 +388,18 @@ PROBATION_STAKE = 1.0         # flat $ per probation pick
 PROVEN_PROP_MARKETS = frozenset({"pitcher_strikeouts"})
 
 
-def _market_of_pick(text: object) -> str:
+def _market_of_pick(text: object, market_type: object = None) -> str:
     # Padded tokens only: pitcher NAMES can contain stat words ("Walker
     # Buehler Over 3.5 Ks" must not classify as a walks pick — 6 Jul).
+    mt = str(market_type or "").lower()
+    base = mt.removesuffix("_over").removesuffix("_under")
+    if base in {*PITCHER_PROP_SPECS, *BATTER_PROP_SPECS}:
+        return base
     t = f" {str(text or '').lower()} "
+    if " tb " in t or " total bases " in t:
+        return "batter_total_bases"
+    if " hits " in t:
+        return "batter_hits"
     if " outs " in t:
         return "pitcher_outs"
     if " bbs " in t:
@@ -348,7 +415,7 @@ def market_records_from_log(log_df) -> dict:
     df = log_df[log_df["result"].isin(["WIN", "LOSS"])]
     out: dict = {}
     for _, r in df.iterrows():
-        mk = _market_of_pick(r.get("pick"))
+        mk = _market_of_pick(r.get("pick"), r.get("market_type"))
         w, l = out.get(mk, (0, 0))
         out[mk] = (w + (1 if r["result"] == "WIN" else 0), l + (1 if r["result"] == "LOSS" else 0))
     return out

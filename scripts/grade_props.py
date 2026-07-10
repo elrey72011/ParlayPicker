@@ -1,11 +1,14 @@
+Exit code: 0
+Wall time: 1.1 seconds
+Output:
 #!/usr/bin/env python3
-"""Grade a pitcher-props card against actual results and append to the running log.
+"""Grade an MLB player-props card against actual results and append to the running log.
 
 Usage
 -----
     python3 scripts/grade_props.py <strikeout_props_export.csv> <YYYY-MM-DD>
 
-Fetches each pitcher's actual Ks, walks, and outs from the free MLB StatsAPI game log, grades every
+Fetches pitcher and batter results from the free MLB StatsAPI game log, grades every
 ``Actionable`` pick W/L, computes P&L at the staked Kelly, appends to
 ``data/prop_results/prop_results_log.csv`` (deduped by date+pitcher+pick), and prints the
 slate result plus the running cumulative record, P&L, and ROI.
@@ -16,6 +19,7 @@ touches the network.
 from __future__ import annotations
 
 import sys
+import inspect
 from pathlib import Path
 
 import pandas as pd
@@ -58,17 +62,18 @@ def grade_side(side: str, line: float, actual_ks) -> str | None:
 
 
 def _stat_for_market(market_type: object, best_pick: object) -> str:
-    """Which counted stat a prop row grades against: ks | walks | outs.
+    """Which counted stat a prop row grades against."""
 
-    Order matters: "pitcher_strikeouts_*" contains the substring "outs", so
-    strikeouts must be checked first.
-    """
-    # market_type is authoritative and checked FIRST â€” pick text is a fallback
+    # market_type is authoritative and checked FIRST — pick text is a fallback
     # only, with padded tokens. Two substring traps: "pitcher_strikeouts"
     # contains "outs" (strikeouts before outs), and pitcher NAMES can contain
-    # stat words â€” "Walker Buehler Under 15.5 Outs" matched "walk" and graded
+    # stat words — "Walker Buehler Under 15.5 Outs" matched "walk" and graded
     # his OUTS pick against his WALKS (6 Jul).
     mt = str(market_type or "").lower()
+    if "batter_total_bases" in mt:
+        return "total_bases"
+    if "batter_hits" in mt:
+        return "hits"
     if "strikeout" in mt:
         return "ks"
     if "walk" in mt:
@@ -76,6 +81,10 @@ def _stat_for_market(market_type: object, best_pick: object) -> str:
     if "out" in mt:
         return "outs"
     text = f" {str(best_pick or '').lower()} "
+    if " tb " in text or " total bases " in text:
+        return "total_bases"
+    if " hits " in text:
+        return "hits"
     if " ks " in text:
         return "ks"
     if " bbs " in text:
@@ -93,16 +102,25 @@ def grade_card(card: pd.DataFrame, date: str, name_to_id: dict, actual_ks_fn) ->
     and the row's market decides which stat grades it (4 Jul multi-market).
     """
     rows = []
+    try:
+        accepts_participant_type = len(inspect.signature(actual_ks_fn).parameters) >= 2
+    except (TypeError, ValueError):
+        accepts_participant_type = False
     for _, r in card.iterrows():
         if str(r.get("Pick_Status", "")).strip() != "Actionable":
             continue
-        name = str(r["pitcher"]).strip()
+        name = str(r.get("player") or r.get("batter") or r.get("pitcher") or "").strip()
+        participant_type = str(r.get("participant_type") or (
+            "batter" if str(r.get("market_type", "")).startswith("batter_") else "pitcher"
+        ))
         side = _side_from_market(r.get("market_type"), r.get("best_pick"))
         line = float(r["line"])
         odds = float(r["odds_american"])
         stake = float(r.get("Kelly_Bet_Size") or 0.0)
         pid = name_to_id.get(name.lower())
-        actual = actual_ks_fn(pid) if pid is not None else None
+        actual = (
+            actual_ks_fn(pid, participant_type) if accepts_participant_type else actual_ks_fn(pid)
+        ) if pid is not None else None
         stat_name = _stat_for_market(r.get("market_type"), r.get("best_pick"))
         if isinstance(actual, dict):
             actual_value = actual.get(stat_name)
@@ -118,7 +136,8 @@ def grade_card(card: pd.DataFrame, date: str, name_to_id: dict, actual_ks_fn) ->
         else:
             profit = None
         rows.append({
-            "date": date, "pitcher": name, "pick": r.get("best_pick"), "side": side,
+            "date": date, "player": name, "pitcher": name,
+            "participant_type": participant_type, "pick": r.get("best_pick"), "side": side,
             "market_type": r.get("market_type"), "stat": stat_name, "line": line,
             "expected_stat": r.get("expected_stat") or stat_name,
             "expected_count": r.get("expected_count"),
@@ -155,7 +174,7 @@ def append_log(rows: list[dict], log_path: Path = LOG_PATH) -> pd.DataFrame:
     return combined
 
 
-# â”€â”€ network (not unit-tested) â”€â”€
+# ── network (not unit-tested) ──
 def _ip_to_outs(ip) -> int | None:
     """StatsAPI inningsPitched ("5.2") -> outs (17). The fraction digit IS the outs."""
     try:
@@ -187,7 +206,26 @@ def fetch_actual_ks(pitcher_id, date: str, season: int, http_get=requests.get):
     return None
 
 
-def _build_name_to_id(date: str) -> dict:
+def fetch_actual_batter(batter_id, date: str, season: int, http_get=requests.get):
+    """Actual batting counts for the date: {hits, total_bases} (or None)."""
+    try:
+        resp = http_get(f"{_BASE}/people/{batter_id}/stats",
+                        params={"stats": "gameLog", "group": "hitting", "season": season},
+                        timeout=_TIMEOUT)
+        resp.raise_for_status()
+        for sp in resp.json()["stats"][0]["splits"]:
+            if sp.get("date") == date:
+                stat = sp["stat"]
+                return {
+                    "hits": int(stat.get("hits", 0) or 0),
+                    "total_bases": int(stat.get("totalBases", 0) or 0),
+                }
+    except (requests.RequestException, ValueError, KeyError, IndexError, TypeError):
+        return None
+    return None
+
+
+def _build_name_to_id(date: str, card: pd.DataFrame | None = None) -> dict:
     from app_core.mlb_pitcher_stats import fetch_schedule_probables
     ids = {}
     for g in fetch_schedule_probables(date) or []:
@@ -195,6 +233,18 @@ def _build_name_to_id(date: str) -> dict:
             n, i = g.get(s + "_pitcher"), g.get(s + "_pitcher_id")
             if n and i:
                 ids[str(n).strip().lower()] = i
+    if card is not None and not card.empty:
+        from app_core.mlb_batter_stats import resolve_batter_id
+        for _, row in card.iterrows():
+            if str(row.get("participant_type", "")) != "batter" and not str(
+                row.get("market_type", "")
+            ).startswith("batter_"):
+                continue
+            name = str(row.get("player") or row.get("batter") or "").strip()
+            if name and name.lower() not in ids:
+                player_id = resolve_batter_id(name)
+                if player_id is not None:
+                    ids[name.lower()] = player_id
     return ids
 
 
@@ -205,8 +255,17 @@ def main():
     card_path, date = sys.argv[1], sys.argv[2]
     season = int(date[:4])
     card = pd.read_csv(card_path)
-    name_to_id = _build_name_to_id(date)
-    rows = grade_card(card, date, name_to_id, lambda pid: fetch_actual_ks(pid, date, season))
+    name_to_id = _build_name_to_id(date, card)
+    rows = grade_card(
+        card,
+        date,
+        name_to_id,
+        lambda pid, participant_type: (
+            fetch_actual_batter(pid, date, season)
+            if participant_type == "batter"
+            else fetch_actual_ks(pid, date, season)
+        ),
+    )
 
     slate = pd.DataFrame(rows)
     sl = summarize(slate)

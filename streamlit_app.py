@@ -1022,7 +1022,7 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
         else analysis_df.iloc[0:0]
     )
 
-    # Strikeout-prop card (separate from the main best-picks card so a prop-feed hiccup
+    # MLB player-prop card (separate from the main best-picks card so a prop-feed hiccup
     # can never break it). Softer market than MLB run totals, so this is where the real
     # edges live; staked at small caps because the prop model is still uncalibrated.
     strikeout_prop_card = pd.DataFrame()
@@ -1054,6 +1054,24 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
                     diagnostics=diagnostics,
                 )
                 diagnostics["strikeout_prop_actionable_count"] = int(len(strikeout_prop_card))
+
+                # The legacy strategic-parlay engine only sees game picks. When
+                # that board correctly abstains, publish the same strict cross-
+                # board duos shown on Best Picks so the parlay export can still
+                # use proven player props. Probationary markets are excluded by
+                # build_best_duos(strict=True).
+                if parlays_df is None or parlays_df.empty:
+                    from app_core.best_duos import build_best_duos, duos_to_smart_parlays
+
+                    _strict_duos = build_best_duos(
+                        best_picks_df, strikeout_prop_card, strict=True
+                    )
+                    _prop_parlays = duos_to_smart_parlays(
+                        _strict_duos, bankroll=float(controls["bankroll"])
+                    )
+                    if not _prop_parlays.empty:
+                        parlays_df = _prop_parlays
+                        diagnostics["strict_prop_parlay_fallback_count"] = int(len(parlays_df))
     except Exception as exc:  # never let the prop slice break the main card
         logger.warning("strikeout prop card build failed: %s", exc)
         diagnostics["strikeout_prop_error"] = str(exc)
@@ -1280,7 +1298,7 @@ def main() -> None:
         if _potd is not None:
             _odds = _potd["odds_american"]
             _odds_txt = "" if _odds is None else f" ({'+' if _odds > 0 else ''}{_odds:.0f})"
-            _src = "⚾ Strikeout Prop" if _potd["board"] == "prop" else f"🏟️ {_potd['league']} Game"
+            _src = "⚾ MLB Player Prop" if _potd["board"] == "prop" else f"🏟️ {_potd['league']} Game"
             st.success(
                 f"🏆 **Best Overall Pick of the Day** — {_src}\n\n"
                 f"**{_potd['pick']}**{_odds_txt} · {_potd['detail']}\n\n"
@@ -1317,7 +1335,7 @@ def main() -> None:
             st.caption(
                 "Ranked by conservative post-haircut joint win probability (not payout), legs never share a game "
                 "(same-game correlation would silently break the math), and no pick is "
-                "reused across duos. Both legs clear the 55% floor individually."
+                "reused across duos. Both legs clear the 60% production floor individually."
             )
             for _, _d in _duos.iterrows():
                 _pay = f" · pays ${_d['payout_per_10']:.2f} per $10" if pd.notna(_d.get("payout_per_10")) else ""
@@ -2078,20 +2096,20 @@ def main() -> None:
             except Exception as exc:  # never let the lean view break the main card
                 logger.warning("all-games lean card failed: %s", exc)
 
-            # ── Strikeout props (separate softer-market card) ──
+            # ── MLB player props (separate softer-market card) ──
             prop_card = st.session_state.get("strikeout_prop_card")
             if prop_card is not None and not prop_card.empty:
-                st.subheader("⚾ Pitcher Props — Strikeouts · Outs · Walks")
+                st.subheader("⚾ MLB Player Props — Pitchers · Batters")
                 st.caption(
-                    "Softer market than run totals — these cleared the +EV / min-edge gate. "
-                    "Staked SMALL: the prop model is uncalibrated, so sizes are capped until it "
-                    "builds a graded record."
+                    "Pitcher strikeouts plus batter hits/total bases that cleared the +EV and "
+                    "minimum-edge gates. New batter markets start at a $1 maximum and stay out "
+                    "of strict parlays until 20 graded results at 55%+."
                 )
                 st.dataframe(prop_card, width="stretch")
                 st.download_button(
-                    "Export Strikeout Props",
+                    "Export MLB Player Props",
                     prop_card.to_csv(index=False, encoding="utf-8-sig"),
-                    "strikeout_props_export.csv",
+                    "mlb_player_props_export.csv",
                     mime="text/csv",
                 )
             elif st.session_state.get("diagnostics", {}).get("strikeout_prop_error"):
@@ -2111,7 +2129,7 @@ def main() -> None:
                     "Run the slate again; no stale props were used."
                 )
             else:
-                st.caption("⚾ No pitcher props cleared the edge bar today.")
+                st.caption("⚾ No MLB player props cleared the edge bar today.")
 
             # Compact export (.xlsx): a readable Excel table with only the columns
             # needed to scan a slate left-to-right, matching the Strategy Lab layout.

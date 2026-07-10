@@ -1,5 +1,5 @@
 Exit code: 0
-Wall time: 0.7 seconds
+Wall time: 1 seconds
 Output:
 """Best Duos — the likeliest 2-leg parlays across the whole board (owner, 8 Jul).
 
@@ -177,5 +177,41 @@ def build_best_duos(
         used.update((i, j))
         if len(rows) >= max_duos:
             break
+    return pd.DataFrame(rows)
+
+
+def duos_to_smart_parlays(duos: pd.DataFrame | None, bankroll: float = 1000.0) -> pd.DataFrame:
+    """Map strict Best Duos into the strategic-parlay export schema."""
+    if duos is None or duos.empty:
+        return pd.DataFrame()
+    rows = []
+    for index, duo in duos.reset_index(drop=True).iterrows():
+        probability = float(duo.get("combined_probability") or 0.0)
+        decimal = float(duo.get("combined_decimal") or 0.0)
+        ev = float(duo.get("parlay_ev") or 0.0)
+        if probability <= 0 or decimal <= 1 or ev <= 0:
+            continue
+        full_kelly = max(0.0, (probability * decimal - 1.0) / (decimal - 1.0))
+        fractional_kelly = full_kelly * 0.125
+        recommended = min(float(bankroll) * 0.0025, float(bankroll) * fractional_kelly)
+        rows.append({
+            "risk_tier": "Controlled",
+            "group_id": f"strict_duo_{index + 1}",
+            "parlay_legs": f"{duo.get('leg1')} | {duo.get('leg2')}",
+            "combined_probability": probability,
+            "combined_decimal_odds": decimal,
+            "parlay_ev": ev,
+            "legs": 2,
+            "combined_market_prob": None,
+            "ev_boost_pct": None,
+            "is_high_correlation": False,
+            "best_payout_book": "Best available",
+            "Conviction_Score": min(float(duo.get("leg1_prob") or 0.0), float(duo.get("leg2_prob") or 0.0)),
+            "min_leg_prob": min(float(duo.get("leg1_prob") or 0.0), float(duo.get("leg2_prob") or 0.0)),
+            "kelly_fraction": fractional_kelly,
+            "recommended_bet": round(recommended, 2),
+            "production_safety_mode": bool(duo.get("production_safety_mode", True)),
+            "model_risk_haircut": duo.get("model_risk_haircut"),
+        })
     return pd.DataFrame(rows)
 

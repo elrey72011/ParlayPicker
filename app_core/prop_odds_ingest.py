@@ -1,5 +1,5 @@
 Exit code: 0
-Wall time: 0.7 seconds
+Wall time: 1 seconds
 Output:
 """Odds API player-prop ingestion. v1: MLB pitcher strikeouts.
 
@@ -19,6 +19,8 @@ STRIKEOUT_MARKET_KEY = "pitcher_strikeouts"
 # Hits/earned-runs are deliberately excluded: defense/BABIP-dominated, the model
 # has no informational edge there.
 PITCHER_PROP_MARKET_KEYS = ("pitcher_strikeouts", "pitcher_outs", "pitcher_walks")
+BATTER_PROP_MARKET_KEYS = ("batter_hits", "batter_total_bases")
+MLB_PLAYER_PROP_MARKET_KEYS = PITCHER_PROP_MARKET_KEYS + BATTER_PROP_MARKET_KEYS
 _DEFAULT_BOOK_PRIORITY = ("novig", "draftkings", "fanduel", "betmgm")
 _PROP_FETCH_ATTEMPTS = 3
 
@@ -74,9 +76,13 @@ def parse_pitcher_props(
                 slot["over_odds"] = price
             elif side.startswith("u"):
                 slot["under_odds"] = price
+        participant_type = "batter" if str(market_key).startswith("batter_") else "pitcher"
         rows = [
             {
-                "pitcher": p,
+                "player": p,
+                "participant_type": participant_type,
+                "pitcher": p if participant_type == "pitcher" else None,
+                "batter": p if participant_type == "batter" else None,
                 "line": float(v["line"]),
                 "over_odds": int(v["over_odds"]),
                 "under_odds": int(v["under_odds"]),
@@ -151,4 +157,14 @@ def fetch_pitcher_props(
         return rows
     except Exception:
         return []
+
+
+def fetch_mlb_player_props(
+    client: Any,
+    sport_key: str,
+    event_id: str,
+    market_keys: tuple[str, ...] = MLB_PLAYER_PROP_MARKET_KEYS,
+) -> list[dict]:
+    """Fetch the supported pitcher + batter markets in one event request."""
+    return fetch_pitcher_props(client, sport_key, event_id, market_keys)
 
