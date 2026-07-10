@@ -2,7 +2,7 @@
 # Pinned tight to avoid pulling in snowflake, sports SDKs, and other heavy transitive deps
 
 # Core Streamlit
-streamlit==1.45.1
+streamlit==1.59.1
 
 # Data Processing
 pandas==2.2.3
