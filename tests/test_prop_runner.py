@@ -1,3 +1,6 @@
+Exit code: 0
+Wall time: 0.7 seconds
+Output:
 """Strikeout-prop orchestration: schedule parse + name<->id resolution + offline end-to-end.
 
 The runner is the network-facing wrapper around the (unit-tested, pure) scoring. These tests
@@ -101,6 +104,74 @@ def test_build_card_end_to_end_offline_surfaces_actionable():
     assert row["best_side"] == "over"
     assert row["recommendation"] == "over"
     assert row["expected_ks"] > 6.5
+
+
+def test_event_list_retries_once_after_transient_failure():
+    calls = []
+    diagnostics = {}
+
+    def flaky_events(client, sport_key, date):
+        calls.append(date)
+        if len(calls) == 1:
+            raise TimeoutError("temporary event-list timeout")
+        return [{"id": "evt1"}]
+
+    prop = {
+        "pitcher": "Gerrit Cole", "line": 6.5, "over_odds": -110, "under_odds": -110,
+        "book": "novig", "home_team": "New York Yankees", "away_team": "Chicago White Sox",
+    }
+    card = build_strikeout_card(
+        odds_client=object(), date="2026-06-23", season=2026,
+        diagnostics=diagnostics,
+        max_plausible_edge=1.0,
+        list_events=flaky_events,
+        props_fetch=lambda c, sk, eid: [prop],
+        schedule_fetch=lambda d: parse_schedule_probables(_SCHEDULE),
+        form_fetch=lambda pid, season: {"k_per_9": 12.0, "avg_innings": 6.5, "n_games": 5},
+        team_k_fetch=lambda tid, season: 0.28,
+    )
+    assert len(card) == 1
+    assert len(calls) == 2
+    assert diagnostics["strikeout_prop_event_list_attempts"] == 2
+    assert diagnostics["strikeout_prop_feed_status"] == "ready"
+
+
+def test_event_list_failure_is_diagnosed_without_raising():
+    diagnostics = {}
+
+    def failed_events(client, sport_key, date):
+        raise ConnectionError("feed unavailable")
+
+    card = build_strikeout_card(
+        odds_client=object(), date="2026-06-23", season=2026,
+        diagnostics=diagnostics,
+        list_events=failed_events,
+    )
+    assert card == []
+    assert diagnostics["strikeout_prop_feed_status"] == "event_list_failed"
+    assert diagnostics["strikeout_prop_event_list_attempts"] == 2
+    assert diagnostics["strikeout_prop_feed_error_type"] == "ConnectionError"
+
+
+def test_empty_event_response_is_retried():
+    calls = []
+    diagnostics = {}
+
+    def empty_then_ready(client, sport_key, date):
+        calls.append(1)
+        return [] if len(calls) == 1 else [{"id": "evt1"}]
+
+    card = build_strikeout_card(
+        odds_client=object(), date="2026-06-23", season=2026,
+        diagnostics=diagnostics,
+        list_events=empty_then_ready,
+        props_fetch=lambda c, sk, eid: [],
+        schedule_fetch=lambda d: [],
+    )
+    assert card == []
+    assert len(calls) == 2
+    assert diagnostics["strikeout_prop_event_count"] == 1
+    assert diagnostics["strikeout_prop_feed_status"] == "no_prop_markets"
 
 
 def test_build_card_no_form_is_no_data_not_crash():
@@ -254,3 +325,4 @@ def test_prop_card_keeps_favorite_and_orders_by_win_probability():
     assert len(card) >= 2
     probs = card["WinProbability"].tolist()
     assert probs == sorted(probs, reverse=True), "card must be ordered by win probability"
+
