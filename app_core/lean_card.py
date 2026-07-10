@@ -1,6 +1,3 @@
-Exit code: 0
-Wall time: 0.7 seconds
-Output:
 """All-games lean view: the model's read on EVERY game, tiered honestly.
 
 The games card stakes only proven +EV picks, so on an efficient slate it looks empty even
