@@ -1066,12 +1066,28 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
                     _strict_duos = build_best_duos(
                         best_picks_df, strikeout_prop_card, strict=True
                     )
+                    if _strict_duos.empty:
+                        _strict_duos = build_best_duos(
+                            best_picks_df,
+                            strikeout_prop_card,
+                            max_duos=1,
+                            min_leg_probability=0.65,
+                            strict=True,
+                            allow_probation=True,
+                            min_parlay_ev=0.05,
+                        )
                     _prop_parlays = duos_to_smart_parlays(
                         _strict_duos, bankroll=float(controls["bankroll"])
                     )
                     if not _prop_parlays.empty:
                         parlays_df = _prop_parlays
                         diagnostics["strict_prop_parlay_fallback_count"] = int(len(parlays_df))
+                        diagnostics["probation_parlay_fallback"] = bool(
+                            _prop_parlays.get(
+                                "probation_parlay_mode",
+                                pd.Series(False, index=_prop_parlays.index),
+                            ).fillna(False).astype(bool).any()
+                        )
     except Exception as exc:  # never let the prop slice break the main card
         logger.warning("strikeout prop card build failed: %s", exc)
         diagnostics["strikeout_prop_error"] = str(exc)
