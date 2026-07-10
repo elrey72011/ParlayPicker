@@ -1,3 +1,6 @@
+Exit code: 0
+Wall time: 0.7 seconds
+Output:
 """Best Duos — the likeliest 2-leg parlays across the whole board (owner, 8 Jul).
 
 "I really want the best 2 leg parlays without overlap despite the bet":
@@ -24,8 +27,9 @@ from app_core.pick_of_day import _game_candidates, _prop_candidates
 from core.parlay_safety import conservative_joint_probability, row_is_untrusted, shares_game
 
 DUO_MIN_LEG_PROBABILITY = 0.55   # same bar as everything else win-prob-first
+DUO_STRICT_MIN_LEG_PROBABILITY = 0.60
 DUO_MAX_LEGS_CONSIDERED = 14     # top legs by probability; pairs are O(n^2)
-DUO_PROBABILITY_HAIRCUT = 0.97
+DUO_PROBABILITY_HAIRCUT = 0.90
 
 # Generic tokens that appear in many team names and must not create phantom
 # overlap ("New York Yankees" vs "New York Mets" DO overlap — that's the same
@@ -67,7 +71,7 @@ def build_best_duos(
 
     strict=True is the production path. It requires game rows to be
     explicitly production-eligible, excludes probationary prop markets, rejects
-    fallback/degraded rows, applies a 3% model-risk haircut to the joint
+    fallback/degraded rows, applies a 10% model-risk haircut to the joint
     probability, and drops parlays with non-positive post-haircut EV.
 
     Returns columns: leg1, leg2, leg1_prob, leg2_prob, combined_probability,
@@ -110,13 +114,20 @@ def build_best_duos(
     pool = pd.concat([game_pool, prop_pool], ignore_index=True)
     if pool.empty:
         return pd.DataFrame()
-    pool = pool[pd.to_numeric(pool["win_probability"], errors="coerce").ge(float(min_leg_probability))]
+    probability_floor = (
+        max(float(min_leg_probability), DUO_STRICT_MIN_LEG_PROBABILITY)
+        if strict else float(min_leg_probability)
+    )
+    pool = pool[pd.to_numeric(pool["win_probability"], errors="coerce").ge(probability_floor)]
     if strict and "edge" in pool.columns:
         pool = pool[pd.to_numeric(pool["edge"], errors="coerce").ge(0.02)]
     if len(pool) < 2:
         return pd.DataFrame()
     pool = pool.sort_values("win_probability", ascending=False).head(DUO_MAX_LEGS_CONSIDERED).reset_index(drop=True)
-    pool["_toks"] = [_matchup_tokens(f"{d} {p}") for d, p in zip(pool["detail"], pool["pick"])]
+    # Match only on the game description. Including the pick text made generic
+    # betting words such as "Under" look like a shared game and incorrectly
+    # suppressed otherwise independent parlays.
+    pool["_toks"] = [_matchup_tokens(d) for d in pool["detail"]]
 
     pairs = []
     for i, j in itertools.combinations(range(len(pool)), 2):
@@ -146,6 +157,10 @@ def build_best_duos(
         if i in used or j in used:
             continue
         a, b = pool.iloc[i], pool.iloc[j]
+        # Keep mixed-parlay exports stable and human-readable regardless of
+        # probability sorting: game leg first, prop leg second.
+        if a["board"] == "prop" and b["board"] == "game":
+            a, b = b, a
         rows.append({
             "boards": f"{a['board']}+{b['board']}",
             "leg1": f"{a['pick']} ({a['detail']})".strip(),
@@ -163,3 +178,4 @@ def build_best_duos(
         if len(rows) >= max_duos:
             break
     return pd.DataFrame(rows)
+
