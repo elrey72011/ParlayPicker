@@ -1,6 +1,3 @@
-Exit code: 0
-Wall time: 1 seconds
-Output:
 """Conservative batter hits and total-bases prop scoring."""
 from __future__ import annotations
 
