@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Grade a strikeout-props card against actual results and append to the running log.
+"""Grade a pitcher-props card against actual results and append to the running log.
 
 Usage
 -----
     python3 scripts/grade_props.py <strikeout_props_export.csv> <YYYY-MM-DD>
 
-Fetches each pitcher's actual strikeouts from the free MLB StatsAPI game log, grades every
+Fetches each pitcher's actual Ks, walks, and outs from the free MLB StatsAPI game log, grades every
 ``Actionable`` pick W/L, computes P&L at the staked Kelly, appends to
 ``data/prop_results/prop_results_log.csv`` (deduped by date+pitcher+pick), and prints the
 slate result plus the running cumulative record, P&L, and ROI.
@@ -63,10 +63,10 @@ def _stat_for_market(market_type: object, best_pick: object) -> str:
     Order matters: "pitcher_strikeouts_*" contains the substring "outs", so
     strikeouts must be checked first.
     """
-    # market_type is authoritative and checked FIRST — pick text is a fallback
+    # market_type is authoritative and checked FIRST â€” pick text is a fallback
     # only, with padded tokens. Two substring traps: "pitcher_strikeouts"
     # contains "outs" (strikeouts before outs), and pitcher NAMES can contain
-    # stat words — "Walker Buehler Under 15.5 Outs" matched "walk" and graded
+    # stat words â€” "Walker Buehler Under 15.5 Outs" matched "walk" and graded
     # his OUTS pick against his WALKS (6 Jul).
     mt = str(market_type or "").lower()
     if "strikeout" in mt:
@@ -103,11 +103,12 @@ def grade_card(card: pd.DataFrame, date: str, name_to_id: dict, actual_ks_fn) ->
         stake = float(r.get("Kelly_Bet_Size") or 0.0)
         pid = name_to_id.get(name.lower())
         actual = actual_ks_fn(pid) if pid is not None else None
+        stat_name = _stat_for_market(r.get("market_type"), r.get("best_pick"))
         if isinstance(actual, dict):
-            ks = actual.get(_stat_for_market(r.get("market_type"), r.get("best_pick")))
+            actual_value = actual.get(stat_name)
         else:
-            ks = actual
-        res = grade_side(side, line, ks)
+            actual_value = actual
+        res = grade_side(side, line, actual_value)
         if res == "WIN":
             profit = stake * (_decimal(odds) - 1)
         elif res == "LOSS":
@@ -118,7 +119,12 @@ def grade_card(card: pd.DataFrame, date: str, name_to_id: dict, actual_ks_fn) ->
             profit = None
         rows.append({
             "date": date, "pitcher": name, "pick": r.get("best_pick"), "side": side,
-            "line": line, "expected_ks": r.get("expected_ks"), "actual_ks": ks,
+            "market_type": r.get("market_type"), "stat": stat_name, "line": line,
+            "expected_stat": r.get("expected_stat") or stat_name,
+            "expected_count": r.get("expected_count"),
+            "expected_ks": r.get("expected_ks") if stat_name == "ks" else None,
+            "actual_value": actual_value,
+            "actual_ks": actual_value if stat_name == "ks" else None,
             "odds_american": odds, "stake": round(stake, 2), "result": res,
             "profit": round(profit, 2) if profit is not None else None,
         })
@@ -149,7 +155,7 @@ def append_log(rows: list[dict], log_path: Path = LOG_PATH) -> pd.DataFrame:
     return combined
 
 
-# ── network (not unit-tested) ──
+# â”€â”€ network (not unit-tested) â”€â”€
 def _ip_to_outs(ip) -> int | None:
     """StatsAPI inningsPitched ("5.2") -> outs (17). The fraction digit IS the outs."""
     try:
@@ -206,9 +212,9 @@ def main():
     sl = summarize(slate)
     print(f"=== {date} slate ===")
     for r in rows:
-        ks = "??" if r["actual_ks"] is None else r["actual_ks"]
+        actual = "??" if r["actual_value"] is None else r["actual_value"]
         pl = "" if r["profit"] is None else f"${r['profit']:+.2f}"
-        print(f"  {r['pitcher']:18s} {r['side']:5s} {r['line']:>4} -> {str(ks):>3} Ks  {str(r['result']):4}  {pl}")
+        print(f"  {r['pitcher']:18s} {r['side']:5s} {r['line']:>4} -> {str(actual):>3} {r['stat']:5s}  {str(r['result']):4}  {pl}")
     print(f"  slate: {sl['wins']}-{sl['losses']}   P&L ${sl['pnl']:+.2f}   ROI {sl['roi']:+.1%}")
 
     full = append_log(rows)
@@ -221,3 +227,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
