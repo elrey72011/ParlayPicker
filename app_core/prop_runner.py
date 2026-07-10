@@ -367,6 +367,9 @@ def build_prop_card(
     except Exception:
         pass  # probation is protective, never card-breaking
     card = apply_batter_probation_exposure_cap(card, bankroll)
+    card = apply_novig_minimum_selection(
+        card, bankroll, total_cap_pct=kelly_total_pct
+    )
     card = card.sort_values(
         ["WinProbability", "edge"], ascending=[False, False]
     ).reset_index(drop=True)
@@ -503,6 +506,66 @@ def apply_batter_probation_exposure_cap(
     out["batter_probation_exposure_after"] = round(exposure_after, 2)
     out["batter_probation_minimum_bet"] = round(minimum_bet, 2)
     out["batter_probation_selected_count"] = int(len(selected))
+    return out
+
+
+def apply_novig_minimum_selection(
+    card,
+    bankroll: float,
+    total_cap_pct: float,
+    minimum_bet: float = NOVIG_MINIMUM_BET,
+):
+    """Make every positive prop stake executable without breaking total exposure."""
+    import pandas as pd
+
+    if card is None or card.empty:
+        return card
+    out = card.copy()
+    stakes = pd.to_numeric(out.get("Kelly_Bet_Size"), errors="coerce").fillna(0.0)
+    candidates = out.index[stakes.gt(0)]
+    exposure_before = float(stakes.sum())
+    exposure_cap = max(0.0, float(bankroll or 0.0) * float(total_cap_pct))
+    minimum_bet = max(0.0, float(minimum_bet))
+    probability = pd.to_numeric(
+        out.get("WinProbability", pd.Series(0.0, index=out.index)), errors="coerce"
+    ).fillna(0.0)
+    edge = pd.to_numeric(
+        out.get("edge", pd.Series(0.0, index=out.index)), errors="coerce"
+    ).fillna(0.0)
+    probation = out.get(
+        "Market_Probation", pd.Series(False, index=out.index)
+    ).fillna(False).astype(bool)
+    ranked = pd.DataFrame({
+        "proven": (~probation.loc[candidates]).astype(int),
+        "probability": probability.loc[candidates],
+        "edge": edge.loc[candidates],
+        "original_stake": stakes.loc[candidates],
+    }).sort_values(
+        ["proven", "probability", "edge", "original_stake"],
+        ascending=[False, False, False, False],
+    )
+    out.loc[candidates, "Kelly_Bet_Size"] = 0.0
+    remaining = exposure_cap
+    selected = []
+    for index, row in ranked.iterrows():
+        executable_stake = max(float(row["original_stake"]), minimum_bet)
+        if executable_stake <= remaining + 1e-9:
+            out.loc[index, "Kelly_Bet_Size"] = round(executable_stake, 2)
+            remaining -= executable_stake
+            selected.append(index)
+    exposure_after = float(pd.to_numeric(
+        out.get("Kelly_Bet_Size"), errors="coerce"
+    ).fillna(0.0).sum())
+    changed = bool(
+        (pd.to_numeric(out.get("Kelly_Bet_Size"), errors="coerce").fillna(0.0) - stakes)
+        .abs().gt(1e-9).any()
+    )
+    out["novig_minimum_applied"] = changed
+    out["novig_minimum_bet"] = round(minimum_bet, 2)
+    out["novig_total_exposure_cap"] = round(exposure_cap, 2)
+    out["novig_exposure_before"] = round(exposure_before, 2)
+    out["novig_exposure_after"] = round(exposure_after, 2)
+    out["novig_selected_count"] = int(len(selected))
     return out
 
 
