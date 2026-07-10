@@ -47,6 +47,16 @@ def test_form_skips_zero_inning_relief_lines():
     assert form["n_games"] == 3  # the 0 IP appearance is ignored
 
 
+def test_form_reports_long_layoff_before_scheduled_start():
+    splits = [
+        {"date": "2026-05-25", "stat": {"strikeOuts": 5, "inningsPitched": "5.0"}},
+        {"date": "2026-05-20", "stat": {"strikeOuts": 4, "inningsPitched": "5.0"}},
+    ]
+    form = pitcher_form_from_gamelog(splits, as_of_date="2026-07-09")
+    assert form["last_game_date"] == "2026-05-25"
+    assert form["days_since_last_start"] == 45
+
+
 def test_form_empty_returns_none():
     assert pitcher_form_from_gamelog([]) is None
     assert pitcher_form_from_gamelog([{"stat": {"strikeOuts": 0, "inningsPitched": "0.0"}}]) is None
@@ -58,3 +68,4 @@ def test_team_k_rate():
     assert abs(team_k_rate_from_stats({"strikeOuts": 150, "atBats": 600}) - 0.25) < 1e-9
     assert team_k_rate_from_stats({"strikeOuts": 5}) is None
     assert team_k_rate_from_stats({}) is None
+
