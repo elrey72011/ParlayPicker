@@ -2108,9 +2108,9 @@ def main() -> None:
                 st.subheader("⚾ MLB Player Props — Pitchers · Batters")
                 st.caption(
                     "Pitcher strikeouts plus batter hits/total bases that cleared the +EV and "
-                    "minimum-edge gates. New batter markets start at a $1 per-pick maximum, "
-                    "share a 0.75% bankroll exposure cap, and stay out of strict parlays until "
-                    "20 graded results at 55%+."
+                    "minimum-edge gates. New batter markets stake only the highest-ranked "
+                    "tickets at NoVig's $1 minimum, share a 0.75% bankroll exposure cap, and "
+                    "stay out of strict parlays until 20 graded results at 55%+."
                 )
                 st.dataframe(prop_card, width="stretch")
                 st.download_button(
