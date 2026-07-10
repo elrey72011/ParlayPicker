@@ -1,5 +1,14 @@
 from __future__ import annotations
 
+# Limit native math runtimes before NumPy/XGBoost are imported. Streamlit Cloud
+# otherwise allows several OpenMP/BLAS pools to compete in one small process,
+# which can terminate the interpreter with a segmentation fault.
+import os
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
+
 import traceback
 import warnings
 from typing import Any
