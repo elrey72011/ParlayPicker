@@ -367,6 +367,7 @@ def build_prop_card(
     except Exception:
         pass  # probation is protective, never card-breaking
     card = apply_batter_probation_exposure_cap(card, bankroll)
+    card = apply_probation_portfolio_guard(card, bankroll)
     card = apply_novig_minimum_selection(
         card, bankroll, total_cap_pct=kelly_total_pct
     )
@@ -388,6 +389,12 @@ PROBATION_MIN_RATE = 0.55     # must clear typical vig, not merely break even
 PROBATION_STAKE = 1.0         # flat $ per probation pick
 PROVEN_PROP_MARKETS = frozenset({"pitcher_strikeouts"})
 BATTER_PROBATION_TOTAL_PCT = 0.0075  # max 0.75% bankroll across all unproven batter picks
+PROBATION_PORTFOLIO_TOTAL_PCT = 0.008  # max eight $1 research tickets per $1,000
+PROBATION_MAX_PER_MARKET = 2
+PROBATION_MAX_PER_GAME = 1
+PROBATION_MIN_WIN_PROBABILITY = 0.62
+PROBATION_MIN_EXPECTED_VALUE = 0.05
+PROBATION_MIN_EDGE = 0.05
 NOVIG_MINIMUM_BET = 1.0
 
 
@@ -506,6 +513,77 @@ def apply_batter_probation_exposure_cap(
     out["batter_probation_exposure_after"] = round(exposure_after, 2)
     out["batter_probation_minimum_bet"] = round(minimum_bet, 2)
     out["batter_probation_selected_count"] = int(len(selected))
+    return out
+
+
+def apply_probation_portfolio_guard(
+    card,
+    bankroll: float,
+    cap_pct: float = PROBATION_PORTFOLIO_TOTAL_PCT,
+    max_per_market: int = PROBATION_MAX_PER_MARKET,
+    max_per_game: int = PROBATION_MAX_PER_GAME,
+    min_probability: float = PROBATION_MIN_WIN_PROBABILITY,
+    min_ev: float = PROBATION_MIN_EXPECTED_VALUE,
+    min_edge: float = PROBATION_MIN_EDGE,
+    minimum_bet: float = NOVIG_MINIMUM_BET,
+):
+    """Concentrate unproven props into a small, diversified research portfolio."""
+    import pandas as pd
+
+    if card is None or card.empty:
+        return card
+    out = card.copy()
+    probation = out.get(
+        "Market_Probation", pd.Series(False, index=out.index)
+    ).fillna(False).astype(bool)
+    stakes = pd.to_numeric(out.get("Kelly_Bet_Size"), errors="coerce").fillna(0.0)
+    probability = pd.to_numeric(out.get("WinProbability"), errors="coerce").fillna(0.0)
+    ev = pd.to_numeric(out.get("expected_value"), errors="coerce").fillna(0.0)
+    edge = pd.to_numeric(out.get("edge"), errors="coerce").fillna(0.0)
+    market = out.get("market_type", pd.Series("", index=out.index)).astype(str)
+    market_family = market.str.replace(r"_(over|under)$", "", regex=True)
+    matchup = out.get("matchup", pd.Series("", index=out.index)).astype(str).str.lower().str.strip()
+    eligible = (
+        probation & stakes.gt(0)
+        & probability.ge(float(min_probability))
+        & ev.ge(float(min_ev))
+        & edge.ge(float(min_edge))
+    )
+    ranked = pd.DataFrame({
+        "probability": probability[eligible],
+        "ev": ev[eligible],
+        "edge": edge[eligible],
+        "market_family": market_family[eligible],
+        "matchup": matchup[eligible],
+    }).sort_values(["probability", "ev", "edge"], ascending=False)
+
+    cap = max(0.0, float(bankroll or 0.0) * float(cap_pct))
+    max_tickets = int(cap // float(minimum_bet)) if minimum_bet > 0 else 0
+    selected = []
+    market_counts: dict[str, int] = {}
+    game_counts: dict[str, int] = {}
+    for index, row in ranked.iterrows():
+        family, game = str(row["market_family"]), str(row["matchup"])
+        if market_counts.get(family, 0) >= int(max_per_market):
+            continue
+        if game and game_counts.get(game, 0) >= int(max_per_game):
+            continue
+        selected.append(index)
+        market_counts[family] = market_counts.get(family, 0) + 1
+        if game:
+            game_counts[game] = game_counts.get(game, 0) + 1
+        if len(selected) >= max_tickets:
+            break
+
+    exposure_before = float(stakes[probation].sum())
+    out.loc[probation, "Kelly_Bet_Size"] = 0.0
+    if selected:
+        out.loc[selected, "Kelly_Bet_Size"] = float(minimum_bet)
+    out["probation_portfolio_cap"] = round(cap, 2)
+    out["probation_portfolio_exposure_before"] = round(exposure_before, 2)
+    out["probation_portfolio_exposure_after"] = round(float(len(selected)) * float(minimum_bet), 2)
+    out["probation_portfolio_selected_count"] = int(len(selected))
+    out["probation_portfolio_guard_applied"] = bool(probation.any())
     return out
 
 
