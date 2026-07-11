@@ -26,4 +26,7 @@ def test_series_cache_refreshes_when_slate_date_changes(monkeypatch):
     ki.enrich_with_kalshi_markets(pd.DataFrame({**base, "game_date": ["2026-07-10T00:00:00Z"]}))
     ki.enrich_with_kalshi_markets(pd.DataFrame({**base, "game_date": ["2026-07-11T00:00:00Z"]}))
 
-    assert calls == ["KXMLBTOTAL", "KXMLBTOTAL"]
+    assert calls == [
+        "KXMLBTOTAL", "KXMLBGAME",
+        "KXMLBTOTAL", "KXMLBGAME",
+    ]

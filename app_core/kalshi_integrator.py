@@ -1228,48 +1228,66 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             out.at[idx, "kalshi_match_reason"] = "missing_series"
             continue
 
+        # Kalshi's baseball page groups totals/spreads under parent KXMLBGAME
+        # events. Keep the dedicated family series as a fallback, then merge and
+        # deduplicate both event sources before applying strict game/line checks.
+        series_candidates = [series]
+        if clean_league == "MLB" and family in {"total", "spread"}:
+            parent_series = LEAGUE_SERIES_MAP["MLB"]["moneyline"]
+            if parent_series not in series_candidates:
+                series_candidates.append(parent_series)
+
         # Cache by series and slate date, with a short TTL. Streamlit sessions
-        # persist across reruns (and sometimes across dates); a series-only cache
-        # otherwise serves yesterday's MLB events to today's slate.
+        # persist across reruns (and sometimes across dates).
         if not hasattr(enrich_with_kalshi_markets, "series_cache"):
             enrich_with_kalshi_markets.series_cache = {}
         if not hasattr(enrich_with_kalshi_markets, "series_cache_meta"):
             enrich_with_kalshi_markets.series_cache_meta = {}
 
         now = time.monotonic()
-        cache_meta = enrich_with_kalshi_markets.series_cache_meta.get(series, {})
-        cache_stale = (
-            series not in enrich_with_kalshi_markets.series_cache
-            or cache_meta.get("date_code") != date_code
-            or now - float(cache_meta.get("fetched_at", 0.0)) >= KALSHI_SERIES_CACHE_TTL_SECONDS
-        )
-        if cache_stale:
-            fetched = _fetch_series_events(series)
-            from core.team_mapper import normalize_team_name
-            for e in fetched:
-                if str(league).upper() in ['NCAAB', 'NCAAM']:
-                    alias_map = {
-                        "queens nc": "queens university",
-                        "connecticut": "uconn",
-                        "wright st": "wright state",
-                        "liu": "long island university",
-                        "ucf": "central florida"
-                    }
-                    for key in ['title', 'sub_title', 'subtitle']:
-                        val = e.get(key)
-                        if val:
-                            score_string = f" {normalize_team_name(val)} "
-                            for k_alias, standard in alias_map.items():
-                                score_string = score_string.replace(f" {k_alias} ", f" {standard} ")
-                            e[key] = score_string.strip()
-            enrich_with_kalshi_markets.series_cache[series] = fetched
-            enrich_with_kalshi_markets.series_cache_meta[series] = {
-                "date_code": date_code,
-                "fetched_at": now,
-                "event_count": len(fetched),
-            }
+        combined_series_events: list[dict[str, Any]] = []
+        for event_series in series_candidates:
+            cache_meta = enrich_with_kalshi_markets.series_cache_meta.get(event_series, {})
+            cache_stale = (
+                event_series not in enrich_with_kalshi_markets.series_cache
+                or cache_meta.get("date_code") != date_code
+                or now - float(cache_meta.get("fetched_at", 0.0)) >= KALSHI_SERIES_CACHE_TTL_SECONDS
+            )
+            if cache_stale:
+                fetched = _fetch_series_events(event_series)
+                from core.team_mapper import normalize_team_name
+                for e in fetched:
+                    if str(league).upper() in ['NCAAB', 'NCAAM']:
+                        alias_map = {
+                            "queens nc": "queens university",
+                            "connecticut": "uconn",
+                            "wright st": "wright state",
+                            "liu": "long island university",
+                            "ucf": "central florida"
+                        }
+                        for key in ['title', 'sub_title', 'subtitle']:
+                            val = e.get(key)
+                            if val:
+                                score_string = f" {normalize_team_name(val)} "
+                                for k_alias, standard in alias_map.items():
+                                    score_string = score_string.replace(f" {k_alias} ", f" {standard} ")
+                                e[key] = score_string.strip()
+                enrich_with_kalshi_markets.series_cache[event_series] = fetched
+                enrich_with_kalshi_markets.series_cache_meta[event_series] = {
+                    "date_code": date_code,
+                    "fetched_at": now,
+                    "event_count": len(fetched),
+                }
+            combined_series_events.extend(
+                enrich_with_kalshi_markets.series_cache.get(event_series, [])
+            )
 
-        series_events = enrich_with_kalshi_markets.series_cache[series]
+        deduped_series_events: dict[str, dict[str, Any]] = {}
+        for event in combined_series_events:
+            ticker = str(event.get("event_ticker") or "").strip()
+            if ticker:
+                deduped_series_events[ticker] = event
+        series_events = list(deduped_series_events.values())
 
         if league == "NCAAB":
             fallback_key = "__NCAAB_FALLBACK_EVENTS__"
