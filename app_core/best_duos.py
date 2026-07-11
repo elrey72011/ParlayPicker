@@ -243,3 +243,32 @@ def duos_to_smart_parlays(duos: pd.DataFrame | None, bankroll: float = 1000.0) -
         })
     return pd.DataFrame(rows)
 
+
+
+def build_tiered_prop_parlays(
+    best_picks_df: pd.DataFrame | None,
+    prop_card: pd.DataFrame | None,
+    bankroll: float = 1000.0,
+) -> pd.DataFrame:
+    """Return one production duo plus one independent research duo when available."""
+    production_duos = build_best_duos(best_picks_df, prop_card, max_duos=1, strict=True)
+    production = duos_to_smart_parlays(production_duos, bankroll=bankroll)
+
+    probation_card = prop_card
+    if probation_card is not None and not probation_card.empty:
+        probation = probation_card.get(
+            "Market_Probation", pd.Series(False, index=probation_card.index)
+        ).fillna(False).astype(bool)
+        probation_card = probation_card[probation].copy()
+    research_duos = build_best_duos(
+        best_picks_df,
+        probation_card,
+        max_duos=1,
+        min_leg_probability=0.65,
+        strict=True,
+        allow_probation=True,
+        min_parlay_ev=0.05,
+    )
+    research = duos_to_smart_parlays(research_duos, bankroll=bankroll)
+    frames = [frame for frame in (production, research) if not frame.empty]
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
