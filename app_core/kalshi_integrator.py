@@ -96,6 +96,7 @@ API_BASE = "https://api.elections.kalshi.com/trade-api/v2"
 
 KALSHI_LINE_TOLERANCE_SPREAD = 3.0
 KALSHI_LINE_TOLERANCE_TOTAL = 3.0
+KALSHI_SERIES_CACHE_TTL_SECONDS = 300.0
 
 MAX_LINE_TOLERANCE = {
     "NBA": 5.5,
@@ -1227,11 +1228,22 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             out.at[idx, "kalshi_match_reason"] = "missing_series"
             continue
 
-        # Cache for series events
+        # Cache by series and slate date, with a short TTL. Streamlit sessions
+        # persist across reruns (and sometimes across dates); a series-only cache
+        # otherwise serves yesterday's MLB events to today's slate.
         if not hasattr(enrich_with_kalshi_markets, "series_cache"):
             enrich_with_kalshi_markets.series_cache = {}
+        if not hasattr(enrich_with_kalshi_markets, "series_cache_meta"):
+            enrich_with_kalshi_markets.series_cache_meta = {}
 
-        if series not in enrich_with_kalshi_markets.series_cache:
+        now = time.monotonic()
+        cache_meta = enrich_with_kalshi_markets.series_cache_meta.get(series, {})
+        cache_stale = (
+            series not in enrich_with_kalshi_markets.series_cache
+            or cache_meta.get("date_code") != date_code
+            or now - float(cache_meta.get("fetched_at", 0.0)) >= KALSHI_SERIES_CACHE_TTL_SECONDS
+        )
+        if cache_stale:
             fetched = _fetch_series_events(series)
             from core.team_mapper import normalize_team_name
             for e in fetched:
@@ -1251,6 +1263,11 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                                 score_string = score_string.replace(f" {k_alias} ", f" {standard} ")
                             e[key] = score_string.strip()
             enrich_with_kalshi_markets.series_cache[series] = fetched
+            enrich_with_kalshi_markets.series_cache_meta[series] = {
+                "date_code": date_code,
+                "fetched_at": now,
+                "event_count": len(fetched),
+            }
 
         series_events = enrich_with_kalshi_markets.series_cache[series]
 
