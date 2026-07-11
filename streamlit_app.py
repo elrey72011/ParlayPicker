@@ -1070,27 +1070,22 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
                 # use proven player props. Probationary markets are excluded by
                 # build_best_duos(strict=True).
                 if parlays_df is None or parlays_df.empty:
-                    from app_core.best_duos import build_best_duos, duos_to_smart_parlays
+                    from app_core.best_duos import build_tiered_prop_parlays
 
-                    _strict_duos = build_best_duos(
-                        best_picks_df, strikeout_prop_card, strict=True
-                    )
-                    if _strict_duos.empty:
-                        _strict_duos = build_best_duos(
-                            best_picks_df,
-                            strikeout_prop_card,
-                            max_duos=1,
-                            min_leg_probability=0.65,
-                            strict=True,
-                            allow_probation=True,
-                            min_parlay_ev=0.05,
-                        )
-                    _prop_parlays = duos_to_smart_parlays(
-                        _strict_duos, bankroll=float(controls["bankroll"])
+                    _prop_parlays = build_tiered_prop_parlays(
+                        best_picks_df,
+                        strikeout_prop_card,
+                        bankroll=float(controls["bankroll"]),
                     )
                     if not _prop_parlays.empty:
                         parlays_df = _prop_parlays
                         diagnostics["strict_prop_parlay_fallback_count"] = int(len(parlays_df))
+                        diagnostics["controlled_prop_parlay_count"] = int(
+                            _prop_parlays["risk_tier"].eq("Controlled").sum()
+                        )
+                        diagnostics["research_prop_parlay_count"] = int(
+                            _prop_parlays["risk_tier"].eq("Probation / Research").sum()
+                        )
                         diagnostics["probation_parlay_fallback"] = bool(
                             _prop_parlays.get(
                                 "probation_parlay_mode",
