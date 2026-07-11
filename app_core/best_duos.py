@@ -109,6 +109,11 @@ def build_best_duos(
                 safe_props = safe_props[
                     ~safe_props["Market_Probation"].fillna(False).astype(bool)
                 ]
+            if allow_probation and "Kelly_Bet_Size" in safe_props.columns:
+                safe_props = safe_props[
+                    pd.to_numeric(safe_props["Kelly_Bet_Size"], errors="coerce")
+                    .fillna(0.0).gt(0)
+                ]
             if not safe_props.empty:
                 safe_props = safe_props[
                     ~safe_props.apply(row_is_untrusted, axis=1)
