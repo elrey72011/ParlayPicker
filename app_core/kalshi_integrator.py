@@ -1100,6 +1100,13 @@ def kalshi_title_references_matchup(norm_title: str, norm_home: str, norm_away: 
     # format, and the wrong-game row was trusted (3 Jul 15:03Z run, on the new
     # build stamp). Never assume the normalizer's casing.
     title = f" {str(norm_title or '').strip().lower()} "
+    # Verified Kalshi MLB display aliases (11 Jul): the parent event uses
+    # "A's vs Chicago WS" while sportsbook rows use "Athletics" and
+    # "Chicago White Sox". Canonicalize only these explicit aliases before
+    # applying the wrong-game guard; do not weaken generic fuzzy matching.
+    title = re.sub(r"(?<![a-z0-9])a\s*['’]?\s*s(?![a-z0-9])", " athletics ", title)
+    title = re.sub(r"\bchicago\s+w(?:hite)?\s*s(?:ox)?\b", "chicago white sox", title)
+    title = re.sub(r"\s+", " ", title)
     if title.strip() == "":
         return True
     teams = [str(norm_home or "").strip().lower(), str(norm_away or "").strip().lower()]
