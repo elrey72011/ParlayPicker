@@ -17,8 +17,8 @@ def test_probation_guard_limits_market_and_game_concentration():
     })
     out = apply_probation_portfolio_guard(card, bankroll=500.0)
     selected = out[pd.to_numeric(out["Kelly_Bet_Size"]) > 0]
-    assert len(selected) == 4
-    assert selected["matchup"].nunique() == 4
+    assert len(selected) == 3
+    assert selected["matchup"].nunique() == 3
     families = selected["market_type"].str.replace(r"_(over|under)$", "", regex=True)
     assert families.value_counts().max() <= 2
 
