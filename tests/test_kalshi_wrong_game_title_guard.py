@@ -92,3 +92,13 @@ def test_teamless_title_is_trusted():
 def test_tiny_fragments_cannot_match_everything():
     # A sub-4-char fragment ("LA") must not satisfy the prefix rule.
     assert _check("LA vs NY Total Runs?", "los angeles dodgers", "new york mets") is False
+
+
+
+def test_verified_athletics_white_sox_title_aliases_match():
+    assert _match("A's vs Chicago WS Total Runs?", "Chicago White Sox", "Athletics")
+    assert _match("Athletics vs Chicago WS Total Runs?", "Chicago White Sox", "Athletics")
+
+
+def test_verified_aliases_do_not_weaken_wrong_game_guard():
+    assert not _match("A's vs Chicago WS Total Runs?", "Chicago Cubs", "Cincinnati")
