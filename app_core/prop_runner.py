@@ -371,6 +371,7 @@ def build_prop_card(
     card = apply_novig_minimum_selection(
         card, bankroll, total_cap_pct=kelly_total_pct
     )
+    card = apply_prop_stake_status(card)
     card = card.sort_values(
         ["WinProbability", "edge"], ascending=[False, False]
     ).reset_index(drop=True)
@@ -644,6 +645,44 @@ def apply_novig_minimum_selection(
     out["novig_exposure_before"] = round(exposure_before, 2)
     out["novig_exposure_after"] = round(exposure_after, 2)
     out["novig_selected_count"] = int(len(selected))
+    return out
+
+
+def apply_prop_stake_status(card):
+    """Separate model-qualified props from executable, funded tickets.
+
+    Pick_Status=Actionable is reserved for rows that survive every portfolio
+    and sportsbook-minimum guard with a positive stake. Qualified rows that lose
+    allocation because of exposure, diversification, or minimum-bet constraints
+    stay visible for research and grading without masquerading as bets.
+    """
+    import pandas as pd
+
+    if card is None or card.empty:
+        return card
+    out = card.copy()
+    status = out.get(
+        "Pick_Status", pd.Series("", index=out.index)
+    ).astype(str).str.strip()
+    stakes = pd.to_numeric(
+        out.get("Kelly_Bet_Size", pd.Series(0.0, index=out.index)),
+        errors="coerce",
+    ).fillna(0.0)
+    qualified = status.eq("Actionable")
+    funded = qualified & stakes.gt(0)
+    unfunded = qualified & ~funded
+
+    if "Status_Reason" not in out.columns:
+        out["Status_Reason"] = ""
+    out["Stake_Status"] = "Not Qualified"
+    out.loc[funded, "Stake_Status"] = "Funded"
+    out.loc[unfunded, "Stake_Status"] = "Qualified / No Stake"
+    out.loc[funded, "Status_Reason"] = "Qualified and funded after portfolio guards"
+    out.loc[unfunded, "Pick_Status"] = "Qualified / No Stake"
+    out.loc[unfunded, "Status_Reason"] = (
+        "Cleared model gates but was not selected after exposure, "
+        "diversification, and sportsbook-minimum guards"
+    )
     return out
 
 
