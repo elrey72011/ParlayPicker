@@ -110,6 +110,7 @@ def _prop_candidates(prop_card: pd.DataFrame | None) -> pd.DataFrame:
             "edge": _num(df.get("edge"), index=df.index),
             "expected_value": _num(df.get("expected_value"), index=df.index),
             "odds_american": _num(df.get("odds_american"), index=df.index),
+            "book": df.get("book", pd.Series("", index=df.index)).astype(str).str.lower().str.strip(),
             "kelly_stake": _num(df.get("Kelly_Bet_Size"), default=0.0, index=df.index),
             "pick_status": df.get("Pick_Status", pd.Series("Actionable", index=df.index)).astype(str),
         }
