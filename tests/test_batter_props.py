@@ -6,6 +6,7 @@ from app_core.prop_odds_ingest import parse_pitcher_props
 from app_core.prop_runner import (
     apply_batter_probation_exposure_cap,
     apply_novig_minimum_selection,
+    apply_prop_stake_status,
     build_prop_card,
 )
 from scripts.grade_props import grade_card
@@ -196,3 +197,16 @@ def test_novig_minimum_prioritizes_proven_markets_when_capacity_is_tight():
     assert out["Kelly_Bet_Size"].tolist() == [1.0, 1.0, 0.0]
     assert out["novig_exposure_after"].iloc[0] == 2.0
 
+
+
+
+def test_prop_stake_status_distinguishes_funded_from_unstaked_candidates():
+    card = pd.DataFrame({
+        "best_pick": ["Funded Over 0.5 Hits", "Capped Under 1.5 TB"],
+        "Pick_Status": ["Actionable", "Actionable"],
+        "Kelly_Bet_Size": [1.0, 0.0],
+    })
+    out = apply_prop_stake_status(card)
+    assert out["Pick_Status"].tolist() == ["Actionable", "Qualified / No Stake"]
+    assert out["Stake_Status"].tolist() == ["Funded", "Qualified / No Stake"]
+    assert "not selected" in out.loc[1, "Status_Reason"]
