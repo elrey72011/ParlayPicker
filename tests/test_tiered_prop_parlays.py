@@ -22,4 +22,6 @@ def test_tiered_parlay_menu_includes_production_and_research_duos():
     out = build_tiered_prop_parlays(None, props, bankroll=1000.0)
     assert len(out) == 2
     assert set(out["risk_tier"]) == {"Controlled", "Probation / Research"}
+    assert out["group_id"].is_unique
+    assert out["group_id"].tolist() == ["strict_duo_1", "strict_duo_2"]
     assert out.loc[out["risk_tier"].eq("Probation / Research"), "recommended_bet"].iloc[0] == 1.0

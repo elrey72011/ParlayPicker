@@ -271,4 +271,11 @@ def build_tiered_prop_parlays(
     )
     research = duos_to_smart_parlays(research_duos, bankroll=bankroll)
     frames = [frame for frame in (production, research) if not frame.empty]
-    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+    if not frames:
+        return pd.DataFrame()
+    out = pd.concat(frames, ignore_index=True)
+    # Production and research menus are built independently, so each starts its
+    # local index at one. Re-key after concatenation to keep export identities
+    # unique for UI selection, grading, and downstream joins.
+    out["group_id"] = [f"strict_duo_{index + 1}" for index in range(len(out))]
+    return out
