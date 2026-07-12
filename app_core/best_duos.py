@@ -27,6 +27,8 @@ DUO_MIN_LEG_PROBABILITY = 0.55   # same bar as everything else win-prob-first
 DUO_STRICT_MIN_LEG_PROBABILITY = 0.60
 DUO_MAX_LEGS_CONSIDERED = 14     # top legs by probability; pairs are O(n^2)
 DUO_PROBABILITY_HAIRCUT = 0.90
+DUO_STRICT_MIN_PARLAY_EV = 0.05
+PARLAY_MINIMUM_BET = 1.0
 
 # Generic tokens that appear in many team names and must not create phantom
 # overlap ("New York Yankees" vs "New York Mets" DO overlap — that's the same
@@ -141,10 +143,21 @@ def build_best_duos(
     # betting words such as "Under" look like a shared game and incorrectly
     # suppressed otherwise independent parlays.
     pool["_toks"] = [_matchup_tokens(d) for d in pool["detail"]]
+    required_parlay_ev = max(
+        float(min_parlay_ev),
+        DUO_STRICT_MIN_PARLAY_EV if strict else 0.0,
+    )
 
     pairs = []
     for i, j in itertools.combinations(range(len(pool)), 2):
         a, b = pool.iloc[i], pool.iloc[j]
+        common_book = ""
+        if strict:
+            book_a = str(a.get("book", "") or "").strip().lower()
+            book_b = str(b.get("book", "") or "").strip().lower()
+            if book_a in {"", "nan", "none"} or book_a != book_b:
+                continue  # cannot quote or place a cross-book parlay
+            common_book = book_a
         if a["_toks"] & b["_toks"]:
             continue  # same game (or same pitcher) — correlated, skip
         if allow_probation:
@@ -167,15 +180,15 @@ def build_best_duos(
         if strict and (
             parlay_ev is None
             or parlay_ev <= 0
-            or parlay_ev < max(0.0, float(min_parlay_ev))
+            or parlay_ev < required_parlay_ev
         ):
             continue
-        pairs.append((p, i, j, dec, parlay_ev))
+        pairs.append((p, i, j, dec, parlay_ev, common_book))
     pairs.sort(key=lambda x: x[0], reverse=True)
 
     used: set[int] = set()
     rows = []
-    for p, i, j, dec, parlay_ev in pairs:
+    for p, i, j, dec, parlay_ev, common_book in pairs:
         if i in used or j in used:
             continue
         a, b = pool.iloc[i], pool.iloc[j]
@@ -193,6 +206,7 @@ def build_best_duos(
             "combined_decimal": round(dec, 3) if dec else None,
             "parlay_ev": round(parlay_ev, 4) if parlay_ev is not None else None,
             "payout_per_10": round(10.0 * dec, 2) if dec else None,
+            "common_book": common_book or None,
             "production_safety_mode": bool(strict and not allow_probation),
             "probation_parlay_mode": bool(strict and allow_probation),
             "model_risk_haircut": DUO_PROBABILITY_HAIRCUT if strict else 1.0,
@@ -218,9 +232,14 @@ def duos_to_smart_parlays(duos: pd.DataFrame | None, bankroll: float = 1000.0) -
         fractional_kelly = full_kelly * 0.125
         probation_mode = bool(duo.get("probation_parlay_mode", False))
         recommended = (
-            1.0 if probation_mode
+            PARLAY_MINIMUM_BET if probation_mode
             else min(float(bankroll) * 0.0025, float(bankroll) * fractional_kelly)
         )
+        book_value = duo.get("common_book")
+        common_book = "" if pd.isna(book_value) else str(book_value).strip().lower()
+        if common_book in {"", "nan", "none"} or recommended + 1e-9 < PARLAY_MINIMUM_BET:
+            continue
+        book_display = "Novig" if common_book == "novig" else common_book.replace("_", " ").title()
         rows.append({
             "risk_tier": "Probation / Research" if probation_mode else "Controlled",
             "group_id": f"strict_duo_{index + 1}",
@@ -232,7 +251,7 @@ def duos_to_smart_parlays(duos: pd.DataFrame | None, bankroll: float = 1000.0) -
             "combined_market_prob": None,
             "ev_boost_pct": None,
             "is_high_correlation": False,
-            "best_payout_book": "Best available",
+            "best_payout_book": book_display,
             "Conviction_Score": min(float(duo.get("leg1_prob") or 0.0), float(duo.get("leg2_prob") or 0.0)),
             "min_leg_prob": min(float(duo.get("leg1_prob") or 0.0), float(duo.get("leg2_prob") or 0.0)),
             "kelly_fraction": fractional_kelly,
