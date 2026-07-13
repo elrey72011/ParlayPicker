@@ -80,3 +80,21 @@ def test_parlay_below_sportsbook_minimum_is_suppressed():
         "model_risk_haircut": 0.90,
     }])
     assert duos_to_smart_parlays(duos, bankroll=1000.0).empty
+
+
+def test_strict_parlay_rejects_two_markets_for_same_player():
+    props = pd.DataFrame({
+        "league": ["MLB", "MLB"],
+        "player": ["Shane Baz", "Shane Baz"],
+        "matchup": ["A @ B", "C @ D"],
+        "best_pick": ["Shane Baz Over 1.5 BBs", "Shane Baz Under 5.5 Ks"],
+        "WinProbability": [0.70, 0.69],
+        "expected_value": [0.10, 0.10],
+        "edge": [0.08, 0.08],
+        "odds_american": [-110, -110],
+        "book": ["novig", "novig"],
+        "Pick_Status": ["Actionable", "Actionable"],
+        "Market_Probation": [False, False],
+        "Kelly_Bet_Size": [1.0, 1.0],
+    })
+    assert build_tiered_prop_parlays(None, props, bankroll=1000.0).empty
