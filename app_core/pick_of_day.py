@@ -106,6 +106,9 @@ def _prop_candidates(prop_card: pd.DataFrame | None) -> pd.DataFrame:
             "league": df.get("league", pd.Series("MLB", index=df.index)).astype(str),
             "pick": df.get("best_pick", pd.Series("", index=df.index)).astype(str),
             "detail": df.get("matchup", pd.Series("", index=df.index)).astype(str),
+            "participant": df.get(
+                "player", pd.Series("", index=df.index)
+            ).fillna("").astype(str).str.lower().str.split().str.join(" "),
             "win_probability": _num(df.get("WinProbability"), index=df.index),
             "edge": _num(df.get("edge"), index=df.index),
             "expected_value": _num(df.get("expected_value"), index=df.index),
