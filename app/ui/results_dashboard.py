@@ -1,3 +1,5 @@
+from datetime import date, timedelta
+
 import pandas as pd
 import streamlit as st
 from app_core.results_fetcher import fetch_yesterdays_results
@@ -107,11 +109,165 @@ def determine_display_outcome(row):
          return row.get('ml_result', 'N/A')
 
 
+def funded_prop_rows(card: pd.DataFrame) -> pd.DataFrame:
+    """Return only player props the production card actually funded."""
+
+    if card is None or card.empty:
+        return pd.DataFrame(columns=[] if card is None else card.columns)
+
+    out = card.copy()
+    if "Stake_Status" in out.columns:
+        stake_status = out["Stake_Status"].fillna("").astype(str).str.strip()
+        if stake_status.ne("").any():
+            return out[stake_status.str.casefold().eq("funded")].copy()
+
+    pick_status = out.get("Pick_Status", pd.Series("", index=out.index))
+    status_mask = pick_status.fillna("").astype(str).str.strip().str.casefold().eq("actionable")
+    stake = pd.to_numeric(out.get("Kelly_Bet_Size", pd.Series(0.0, index=out.index)), errors="coerce").fillna(0.0)
+    return out[status_mask & stake.gt(0)].copy()
+
+
+def summarize_prop_results(results: pd.DataFrame) -> dict:
+    """Summarize funded prop results without counting unresolved rows."""
+
+    empty = {
+        "wins": 0, "losses": 0, "pushes": 0, "unresolved": 0,
+        "staked": 0.0, "pnl": 0.0, "roi": 0.0, "win_rate": 0.0,
+    }
+    if results is None or results.empty or "result" not in results.columns:
+        return empty
+
+    outcome = results["result"].fillna("").astype(str).str.upper()
+    settled_mask = outcome.isin(["WIN", "LOSS", "PUSH"])
+    settled = results[settled_mask]
+    settled_outcome = outcome[settled_mask]
+    stake = pd.to_numeric(settled.get("stake", pd.Series(0.0, index=settled.index)), errors="coerce").fillna(0.0)
+    profit = pd.to_numeric(settled.get("profit", pd.Series(0.0, index=settled.index)), errors="coerce").fillna(0.0)
+
+    wins = int(settled_outcome.eq("WIN").sum())
+    losses = int(settled_outcome.eq("LOSS").sum())
+    pushes = int(settled_outcome.eq("PUSH").sum())
+    decisions = wins + losses
+    staked = float(stake.sum())
+    pnl = float(profit.sum())
+    return {
+        "wins": wins,
+        "losses": losses,
+        "pushes": pushes,
+        "unresolved": int((~settled_mask).sum()),
+        "staked": staked,
+        "pnl": pnl,
+        "roi": (pnl / staked) if staked else 0.0,
+        "win_rate": (wins / decisions) if decisions else 0.0,
+    }
+
+
+def _render_prop_results_recap() -> None:
+    """Upload, grade, and recap the funded MLB player-prop card."""
+
+    st.markdown("#### Player Prop Performance")
+    uploaded = st.file_uploader(
+        "Upload Yesterday's MLB Player Props Export",
+        type=["csv"],
+        key="perf_props_uploader",
+    )
+    if uploaded is None:
+        st.caption("Upload the player-props export to grade only the bets marked Funded.")
+        return
+
+    file_identifier = f"{uploaded.name}_{uploaded.size}"
+    if st.session_state.get("perf_props_file_identifier") != file_identifier:
+        st.session_state["perf_props_file_identifier"] = file_identifier
+        st.session_state.pop("perf_props_results", None)
+
+    try:
+        uploaded.seek(0)
+        card = pd.read_csv(uploaded)
+    except Exception as exc:
+        st.error(f"Error reading player-props export: {exc}")
+        return
+
+    funded = funded_prop_rows(card)
+    st.caption(f"{len(funded)} funded prop(s) will be graded; unfunded research rows are excluded.")
+    game_date = st.date_input(
+        "Player-prop slate date",
+        value=date.today() - timedelta(days=1),
+        key="perf_props_date",
+    )
+
+    if st.button("Fetch MLB Player Prop Results", key="perf_props_fetch", disabled=funded.empty):
+        with st.spinner("Fetching MLB player results and grading the funded card..."):
+            try:
+                from scripts.grade_props import (
+                    _build_name_to_id,
+                    fetch_actual_batter,
+                    fetch_actual_ks,
+                    grade_card,
+                )
+
+                date_text = game_date.isoformat()
+                season = game_date.year
+                name_to_id = _build_name_to_id(date_text, funded)
+                rows = grade_card(
+                    funded,
+                    date_text,
+                    name_to_id,
+                    lambda player_id, participant_type: (
+                        fetch_actual_batter(player_id, date_text, season)
+                        if participant_type == "batter"
+                        else fetch_actual_ks(player_id, date_text, season)
+                    ),
+                )
+                st.session_state["perf_props_results"] = pd.DataFrame(rows)
+            except Exception as exc:
+                st.error(f"Error fetching or grading player props: {exc}")
+
+    results = st.session_state.get("perf_props_results")
+    if not isinstance(results, pd.DataFrame) or results.empty:
+        if funded.empty:
+            st.info("This export contains no funded player props.")
+        return
+
+    summary = summarize_prop_results(results)
+    cols = st.columns(4)
+    cols[0].metric("Funded Prop Record", f"{summary['wins']}-{summary['losses']}-{summary['pushes']}")
+    cols[1].metric("Funded Prop Win Rate", f"{summary['win_rate']:.1%}")
+    cols[2].metric("Funded Prop P&L", f"${summary['pnl']:+.2f}")
+    cols[3].metric("Funded Prop ROI", f"{summary['roi']:+.1%}", f"${summary['staked']:.2f} staked")
+
+    if summary["unresolved"]:
+        st.warning(
+            f"{summary['unresolved']} funded prop(s) could not be resolved from MLB StatsAPI "
+            "and are excluded from the record and ROI."
+        )
+
+    if "market_type" in results.columns and "result" in results.columns:
+        market_recap = pd.crosstab(
+            results["market_type"].fillna("unknown"),
+            results["result"].fillna("UNRESOLVED"),
+        ).reset_index()
+        st.markdown("##### Results by Prop Market")
+        st.dataframe(market_recap, width="stretch", hide_index=True)
+
+    st.dataframe(results, width="stretch", hide_index=True)
+    st.download_button(
+        "Download Player Prop Performance Recap",
+        data=results.to_csv(index=False).encode("utf-8"),
+        file_name="player_prop_performance_recap.csv",
+        mime="text/csv",
+        key="perf_props_download",
+    )
+
+
 def render_results_dashboard(picks_df: pd.DataFrame) -> None:
     # 1. File Uploader for Yesterday's Picks at the very top
     uploaded_picks_file = st.file_uploader("Upload Yesterday's Best Picks Export", type=["csv"], key="perf_picks_uploader")
 
     st.subheader("Prior Day Performance")
+
+    _render_prop_results_recap()
+    st.divider()
+    st.markdown("#### Game Performance")
 
     restricted_leagues = st.session_state.get("restricted_leagues", set())
     if restricted_leagues:
