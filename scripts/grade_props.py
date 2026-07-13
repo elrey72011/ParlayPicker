@@ -6,7 +6,7 @@ Usage
     python3 scripts/grade_props.py <strikeout_props_export.csv> <YYYY-MM-DD>
 
 Fetches pitcher and batter results from the free MLB StatsAPI game log, grades every
-``Actionable`` pick W/L, computes P&L at the staked Kelly, appends to
+``Funded`` pick W/L (falling back to legacy ``Actionable`` exports), computes P&L at the staked Kelly, appends to
 ``data/prop_results/prop_results_log.csv`` (deduped by date+pitcher+pick), and prints the
 slate result plus the running cumulative record, P&L, and ROI.
 
@@ -104,7 +104,12 @@ def grade_card(card: pd.DataFrame, date: str, name_to_id: dict, actual_ks_fn) ->
     except (TypeError, ValueError):
         accepts_participant_type = False
     for _, r in card.iterrows():
-        if str(r.get("Pick_Status", "")).strip() != "Actionable":
+        pick_status = str(r.get("Pick_Status", "")).strip()
+        stake_status = str(r.get("Stake_Status", "")).strip()
+        if stake_status:
+            if stake_status.casefold() != "funded":
+                continue
+        elif pick_status != "Actionable":
             continue
         name = str(r.get("player") or r.get("batter") or r.get("pitcher") or "").strip()
         participant_type = str(r.get("participant_type") or (
@@ -139,6 +144,13 @@ def grade_card(card: pd.DataFrame, date: str, name_to_id: dict, actual_ks_fn) ->
             "expected_stat": r.get("expected_stat") or stat_name,
             "expected_count": r.get("expected_count"),
             "expected_ks": r.get("expected_ks") if stat_name == "ks" else None,
+            "matchup": r.get("matchup"),
+            "book": r.get("book"),
+            "win_probability": r.get("WinProbability"),
+            "expected_value": r.get("expected_value"),
+            "edge": r.get("edge"),
+            "market_probation": bool(r.get("Market_Probation", False)),
+            "stake_status": r.get("Stake_Status"),
             "actual_value": actual_value,
             "actual_ks": actual_value if stat_name == "ks" else None,
             "odds_american": odds, "stake": round(stake, 2), "result": res,
