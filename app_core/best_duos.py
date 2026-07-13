@@ -159,7 +159,12 @@ def build_best_duos(
                 continue  # cannot quote or place a cross-book parlay
             common_book = book_a
         if a["_toks"] & b["_toks"]:
-            continue  # same game (or same pitcher) — correlated, skip
+            continue  # same game — correlated, skip
+        if a["board"] == "prop" and b["board"] == "prop":
+            participant_a = str(a.get("participant", "") or "").strip()
+            participant_b = str(b.get("participant", "") or "").strip()
+            if participant_a and participant_a == participant_b:
+                continue  # never parlay two markets on the same player
         if allow_probation:
             # Research parlays must diversify model-direction risk too.
             direction_a, direction_b = _pick_direction(a["pick"]), _pick_direction(b["pick"])
