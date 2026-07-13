@@ -368,9 +368,11 @@ def build_prop_card(
         pass  # probation is protective, never card-breaking
     card = apply_batter_probation_exposure_cap(card, bankroll)
     card = apply_probation_portfolio_guard(card, bankroll)
+    card = apply_prop_participant_guard(card)
     card = apply_novig_minimum_selection(
         card, bankroll, total_cap_pct=kelly_total_pct
     )
+    card = apply_probation_share_guard(card)
     card = apply_prop_stake_status(card)
     card = card.sort_values(
         ["WinProbability", "edge"], ascending=[False, False]
@@ -393,6 +395,9 @@ BATTER_PROBATION_TOTAL_PCT = 0.0075  # max 0.75% bankroll across all unproven ba
 PROBATION_PORTFOLIO_TOTAL_PCT = 0.008  # max eight $1 research tickets per $1,000
 PROBATION_MAX_PER_MARKET = 2
 PROBATION_MAX_PER_GAME = 1
+PROBATION_MAX_FUNDED_TICKETS = 2
+PROBATION_MAX_PORTFOLIO_SHARE = 0.25
+PROP_MAX_FUNDED_PER_PLAYER = 1
 PROBATION_MIN_WIN_PROBABILITY = 0.62
 PROBATION_MIN_EXPECTED_VALUE = 0.05
 PROBATION_MIN_EDGE = 0.05
@@ -477,7 +482,10 @@ def apply_batter_probation_exposure_cap(
     batter_probation = probation & (
         participant.eq("batter") | market_type.str.startswith("batter_")
     )
-    stakes = pd.to_numeric(out.get("Kelly_Bet_Size"), errors="coerce").fillna(0.0)
+    stakes = pd.to_numeric(
+        out.get("Kelly_Bet_Size", pd.Series(0.0, index=out.index)),
+        errors="coerce",
+    ).fillna(0.0)
     exposure_before = float(stakes[batter_probation].sum())
     exposure_cap = max(0.0, float(bankroll or 0.0) * float(cap_pct))
     minimum_bet = max(0.0, float(minimum_bet))
@@ -523,6 +531,7 @@ def apply_probation_portfolio_guard(
     cap_pct: float = PROBATION_PORTFOLIO_TOTAL_PCT,
     max_per_market: int = PROBATION_MAX_PER_MARKET,
     max_per_game: int = PROBATION_MAX_PER_GAME,
+    max_funded_tickets: int = PROBATION_MAX_FUNDED_TICKETS,
     min_probability: float = PROBATION_MIN_WIN_PROBABILITY,
     min_ev: float = PROBATION_MIN_EXPECTED_VALUE,
     min_edge: float = PROBATION_MIN_EDGE,
@@ -537,10 +546,22 @@ def apply_probation_portfolio_guard(
     probation = out.get(
         "Market_Probation", pd.Series(False, index=out.index)
     ).fillna(False).astype(bool)
-    stakes = pd.to_numeric(out.get("Kelly_Bet_Size"), errors="coerce").fillna(0.0)
-    probability = pd.to_numeric(out.get("WinProbability"), errors="coerce").fillna(0.0)
-    ev = pd.to_numeric(out.get("expected_value"), errors="coerce").fillna(0.0)
-    edge = pd.to_numeric(out.get("edge"), errors="coerce").fillna(0.0)
+    stakes = pd.to_numeric(
+        out.get("Kelly_Bet_Size", pd.Series(0.0, index=out.index)),
+        errors="coerce",
+    ).fillna(0.0)
+    probability = pd.to_numeric(
+        out.get("WinProbability", pd.Series(0.0, index=out.index)),
+        errors="coerce",
+    ).fillna(0.0)
+    ev = pd.to_numeric(
+        out.get("expected_value", pd.Series(0.0, index=out.index)),
+        errors="coerce",
+    ).fillna(0.0)
+    edge = pd.to_numeric(
+        out.get("edge", pd.Series(0.0, index=out.index)),
+        errors="coerce",
+    ).fillna(0.0)
     market = out.get("market_type", pd.Series("", index=out.index)).astype(str)
     market_family = market.str.replace(r"_(over|under)$", "", regex=True)
     matchup = out.get("matchup", pd.Series("", index=out.index)).astype(str).str.lower().str.strip()
@@ -559,11 +580,14 @@ def apply_probation_portfolio_guard(
     }).sort_values(["probability", "ev", "edge"], ascending=False)
 
     cap = max(0.0, float(bankroll or 0.0) * float(cap_pct))
-    max_tickets = int(cap // float(minimum_bet)) if minimum_bet > 0 else 0
+    cap_tickets = int(cap // float(minimum_bet)) if minimum_bet > 0 else 0
+    max_tickets = min(cap_tickets, max(0, int(max_funded_tickets)))
     selected = []
     market_counts: dict[str, int] = {}
     game_counts: dict[str, int] = {}
     for index, row in ranked.iterrows():
+        if len(selected) >= max_tickets:
+            break
         family, game = str(row["market_family"]), str(row["matchup"])
         if market_counts.get(family, 0) >= int(max_per_market):
             continue
@@ -573,9 +597,6 @@ def apply_probation_portfolio_guard(
         market_counts[family] = market_counts.get(family, 0) + 1
         if game:
             game_counts[game] = game_counts.get(game, 0) + 1
-        if len(selected) >= max_tickets:
-            break
-
     exposure_before = float(stakes[probation].sum())
     out.loc[probation, "Kelly_Bet_Size"] = 0.0
     if selected:
@@ -585,6 +606,153 @@ def apply_probation_portfolio_guard(
     out["probation_portfolio_exposure_after"] = round(float(len(selected)) * float(minimum_bet), 2)
     out["probation_portfolio_selected_count"] = int(len(selected))
     out["probation_portfolio_guard_applied"] = bool(probation.any())
+    return out
+
+
+def apply_prop_participant_guard(
+    card,
+    max_funded_per_player: int = PROP_MAX_FUNDED_PER_PLAYER,
+):
+    """Keep at most one funded prop for each player on a slate.
+
+    Multiple markets on the same participant are not independent bankroll
+    decisions. Rank the player's qualified rows by proven-market status, win
+    probability, EV, edge, and original stake; retain only the strongest row.
+    """
+    import pandas as pd
+
+    if card is None or card.empty:
+        return card
+    out = card.copy()
+    stakes = pd.to_numeric(
+        out.get("Kelly_Bet_Size", pd.Series(0.0, index=out.index)),
+        errors="coerce",
+    ).fillna(0.0)
+    candidates = out.index[stakes.gt(0)]
+    if len(candidates) == 0:
+        return out
+    player = out.get("player", pd.Series("", index=out.index)).fillna("").astype(str)
+    batter = out.get("batter", pd.Series("", index=out.index)).fillna("").astype(str)
+    pitcher = out.get("pitcher", pd.Series("", index=out.index)).fillna("").astype(str)
+    participant = player.where(player.str.strip().ne(""), batter)
+    participant = participant.where(participant.str.strip().ne(""), pitcher)
+    participant = participant.str.lower().str.split().str.join(" ")
+    probation = out.get(
+        "Market_Probation", pd.Series(False, index=out.index)
+    ).fillna(False).astype(bool)
+    probability = pd.to_numeric(
+        out.get("WinProbability", pd.Series(0.0, index=out.index)),
+        errors="coerce",
+    ).fillna(0.0)
+    ev = pd.to_numeric(
+        out.get("expected_value", pd.Series(0.0, index=out.index)),
+        errors="coerce",
+    ).fillna(0.0)
+    edge = pd.to_numeric(
+        out.get("edge", pd.Series(0.0, index=out.index)),
+        errors="coerce",
+    ).fillna(0.0)
+    ranked = pd.DataFrame({
+        "participant": participant.loc[candidates],
+        "proven": (~probation.loc[candidates]).astype(int),
+        "probability": probability.loc[candidates],
+        "ev": ev.loc[candidates],
+        "edge": edge.loc[candidates],
+        "stake": stakes.loc[candidates],
+    }).sort_values(
+        ["proven", "probability", "ev", "edge", "stake"],
+        ascending=[False, False, False, False, False],
+    )
+
+    selected = []
+    counts: dict[str, int] = {}
+    limit = max(0, int(max_funded_per_player))
+    for index, row in ranked.iterrows():
+        key = str(row["participant"]).strip() or f"__row_{index}"
+        if counts.get(key, 0) >= limit:
+            continue
+        selected.append(index)
+        counts[key] = counts.get(key, 0) + 1
+    out.loc[candidates, "Kelly_Bet_Size"] = 0.0
+    if selected:
+        out.loc[selected, "Kelly_Bet_Size"] = stakes.loc[selected]
+    out["participant_exposure_guard_applied"] = len(selected) < len(candidates)
+    out["participant_funded_before"] = int(len(candidates))
+    out["participant_funded_after"] = int(len(selected))
+    out["participant_max_funded"] = limit
+    return out
+
+
+def apply_probation_share_guard(
+    card,
+    max_share: float = PROBATION_MAX_PORTFOLIO_SHARE,
+    max_funded_tickets: int = PROBATION_MAX_FUNDED_TICKETS,
+):
+    """Cap probation exposure at 25% of the final funded prop portfolio.
+
+    The share equation is solved against proven exposure, so removing excess
+    research tickets cannot leave probation above the requested final share.
+    Sportsbook minimums are already applied before this guard runs.
+    """
+    import pandas as pd
+
+    if card is None or card.empty:
+        return card
+    out = card.copy()
+    stakes = pd.to_numeric(
+        out.get("Kelly_Bet_Size", pd.Series(0.0, index=out.index)),
+        errors="coerce",
+    ).fillna(0.0)
+    probation = out.get(
+        "Market_Probation", pd.Series(False, index=out.index)
+    ).fillna(False).astype(bool)
+    candidates = out.index[probation & stakes.gt(0)]
+    proven_exposure = float(stakes[~probation & stakes.gt(0)].sum())
+    share = min(max(float(max_share), 0.0), 0.999999)
+    share_cap = proven_exposure * share / (1.0 - share) if share > 0 else 0.0
+    probability = pd.to_numeric(
+        out.get("WinProbability", pd.Series(0.0, index=out.index)),
+        errors="coerce",
+    ).fillna(0.0)
+    ev = pd.to_numeric(
+        out.get("expected_value", pd.Series(0.0, index=out.index)),
+        errors="coerce",
+    ).fillna(0.0)
+    edge = pd.to_numeric(
+        out.get("edge", pd.Series(0.0, index=out.index)),
+        errors="coerce",
+    ).fillna(0.0)
+    ranked = pd.DataFrame({
+        "probability": probability.loc[candidates],
+        "ev": ev.loc[candidates],
+        "edge": edge.loc[candidates],
+        "stake": stakes.loc[candidates],
+    }).sort_values(
+        ["probability", "ev", "edge", "stake"],
+        ascending=[False, False, False, False],
+    )
+
+    selected = []
+    selected_exposure = 0.0
+    for index, row in ranked.iterrows():
+        if len(selected) >= max(0, int(max_funded_tickets)):
+            break
+        candidate_stake = float(row["stake"])
+        if selected_exposure + candidate_stake <= share_cap + 1e-9:
+            selected.append(index)
+            selected_exposure += candidate_stake
+    out.loc[candidates, "Kelly_Bet_Size"] = 0.0
+    if selected:
+        out.loc[selected, "Kelly_Bet_Size"] = stakes.loc[selected]
+    final_exposure = proven_exposure + selected_exposure
+    out["probation_share_guard_applied"] = len(selected) < len(candidates)
+    out["probation_max_portfolio_share"] = round(share, 4)
+    out["probation_share_exposure_cap"] = round(share_cap, 2)
+    out["probation_share_exposure_after"] = round(selected_exposure, 2)
+    out["probation_share_after"] = round(
+        selected_exposure / final_exposure if final_exposure > 0 else 0.0, 4
+    )
+    out["probation_share_selected_count"] = int(len(selected))
     return out
 
 
@@ -600,7 +768,10 @@ def apply_novig_minimum_selection(
     if card is None or card.empty:
         return card
     out = card.copy()
-    stakes = pd.to_numeric(out.get("Kelly_Bet_Size"), errors="coerce").fillna(0.0)
+    stakes = pd.to_numeric(
+        out.get("Kelly_Bet_Size", pd.Series(0.0, index=out.index)),
+        errors="coerce",
+    ).fillna(0.0)
     candidates = out.index[stakes.gt(0)]
     exposure_before = float(stakes.sum())
     exposure_cap = max(0.0, float(bankroll or 0.0) * float(total_cap_pct))
@@ -636,7 +807,10 @@ def apply_novig_minimum_selection(
         out.get("Kelly_Bet_Size"), errors="coerce"
     ).fillna(0.0).sum())
     changed = bool(
-        (pd.to_numeric(out.get("Kelly_Bet_Size"), errors="coerce").fillna(0.0) - stakes)
+        (pd.to_numeric(
+        out.get("Kelly_Bet_Size", pd.Series(0.0, index=out.index)),
+        errors="coerce",
+    ).fillna(0.0) - stakes)
         .abs().gt(1e-9).any()
     )
     out["novig_minimum_applied"] = changed
