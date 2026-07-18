@@ -1875,7 +1875,7 @@ def main() -> None:
             try:
                 from app_core.lean_card import attach_play_stakes as _aps, score_best_picks_rows as _sbr
 
-                _row_unit = float(st.session_state.get("lean_play_unit", 5.0) or 5.0)
+                _row_unit = float(st.session_state.get("lean_play_unit", 1.0) or 1.0)
                 _scored = _aps(_sbr(best_picks_df), unit=_row_unit)
                 if not _scored.empty:
                     display_df["Play Tier"] = _scored["Tier"]
@@ -2094,20 +2094,23 @@ def main() -> None:
                         f"anti-informative). BET = priced edge the model stakes. LEAN = its "
                         f"calibrated win beats break-even (your call). AVOID = negative-EV, fading "
                         f"Kalshi, or calibrated win below break-even. Calib_Win% = the model's "
-                        f"probability after the bucket-conditional calibration correction."
+                        f"probability after the bucket-conditional calibration correction. Every valid "
+                        f"pregame row is the Best Available pick and receives a tier-scaled "
+                        f"play stake; STARTED, UNAVAILABLE, and hopeless-price rows stay at $0."
                     )
                     # Every game playable (owner request, 4 Jul): flat recreational
                     # stakes sized down by tier — 2u BET / 1.5u LEAN / 1u near-miss
                     # AVOID / 0.5u clear AVOID. Separate money from production Kelly.
                     play_unit = st.number_input(
                         "Play unit ($) — flat recreational stake per unit",
-                        min_value=1.0, max_value=100.0, value=5.0, step=1.0,
+                        min_value=1.0, max_value=100.0, value=1.0, step=1.0,
                         key="lean_play_unit",
                     )
                     lean_card = attach_play_stakes(lean_card, unit=float(play_unit))
                     _play_total = float(lean_card["Play_Stake"].sum())
+                    _play_count = int(pd.to_numeric(lean_card["Play_Stake"], errors="coerce").fillna(0).gt(0).sum())
                     st.caption(
-                        f"🎲 Play_Stake puts ${_play_total:.2f} across all {len(lean_card)} games "
+                        f"🎲 Play_Stake puts ${_play_total:.2f} across {_play_count}/{len(lean_card)} valid games "
                         f"at a ${play_unit:.0f} unit. This is entertainment sizing, not Kelly: on "
                         f"AVOID rows the math expects you to pay the vig — that's why they get the "
                         f"smallest units. The production bankroll only ever bets the BET tier."
