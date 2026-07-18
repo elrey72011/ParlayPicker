@@ -407,15 +407,28 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
 
         return wins, losses, pushes, win_rate, net_profit
 
-    # Headline the STAKED tiers (what the system actually recommended), not the all-rows
-    # blend. "No Play" and "Below Threshold" are explicit do-not-bet calls that trend
-    # toward ~50% by construction and mask staked performance — counting their outcomes
-    # as "our record" understates the system (15 Jun: all-rows read 40%, but the lone
-    # staked pick — Dodgers Under, High Variance — won 1/1, and the rest were games the
-    # system told you to skip). summarize_recap_tiers separates the staked card; it also
-    # correctly includes High Variance/Speculative picks, which carry a Kelly stake but
-    # were excluded by the old "Actionable-only" headline (so genuinely staked High
-    # Variance days showed "No Actionable picks" and fell back to the all-rows number).
+    # Owner bets every valid game row, so the all-row settled record is the
+    # production headline. N/A/postponed rows are excluded from the denominator.
+    wins_all, losses_all, pushes_all, win_rate_all, net_profit_all = calculate_metrics(display_df)
+    settled_all = wins_all + losses_all + pushes_all
+    st.markdown("#### All-Row Betting Performance")
+    _all_cols = st.columns(4)
+    _all_cols[0].metric(
+        "Settled Record",
+        f"{wins_all}-{losses_all}-{pushes_all}",
+    )
+    _all_cols[1].metric("All-Row Win Rate", f"{win_rate_all:.1%}")
+    _all_cols[2].metric("Estimated Flat-Bet P&L (Units)", f"{net_profit_all:+.2f}")
+    _all_cols[3].metric("Rows Settled", f"{settled_all}/{len(display_df)}")
+    st.caption(
+        "This is the headline because every valid game row is bet. N/A, postponed, "
+        "started, and unresolved-line rows do not count as settled decisions. P&L uses "
+        "the exported odds when present and -110 only as a fallback when odds are missing."
+    )
+
+    # Keep strict production-edge tiers as a diagnostic beneath the owner's
+    # all-row headline. They show where the model had genuine priced edge versus
+    # where the full-board policy forced the best available valid selection.
     from app_core.strategy_lab_realized import summarize_recap_tiers
     _tier_src = display_df.rename(columns={"Pick_Status": "Status"}) if "Pick_Status" in display_df.columns else display_df
     tiers = summarize_recap_tiers(_tier_src)
@@ -444,21 +457,21 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
         staked_df = pd.DataFrame()
 
     if staked_df.empty:
-        st.info("System recommended no bets for this slate (empty production card) — nothing was staked, so a losing all-rows number reflects skipped games, not placed bets.")
+        st.info(
+            "No rows cleared the strict production-edge stake gate. The all-row "
+            "best-available record above still represents the owner's placed bets."
+        )
     else:
         wins_s, losses_s, pushes_s, win_rate_s, net_profit_s = calculate_metrics(staked_df)
         scol1, scol2 = st.columns(2)
         scol1.metric("Net Profit - Staked (Units)", f"{net_profit_s:+.2f}")
         scol2.metric("Staked Picks Evaluated", len(staked_df))
 
-    # Calculate metrics for all picks in display_df
-    wins_all, losses_all, pushes_all, win_rate_all, net_profit_all = calculate_metrics(display_df)
-
-    st.markdown("###### Reference — All Candidates (incl. unstaked No Play / Below Threshold)")
-    col4, col5, col6 = st.columns(3)
-    col4.metric("Win Rate — All Candidates", f"{win_rate_all:.1%}", f"{wins_all}-{losses_all}-{pushes_all}")
-    col5.metric("Net Profit - All Candidates (Units)", f"{net_profit_all:+.2f}")
-    col6.metric("Total Picks Evaluated", len(display_df))
+    st.markdown("###### Production-Edge Reference")
+    st.caption(
+        "The tier metrics above remain useful for comparing strict modeled edges with "
+        "forced best-available rows, but they no longer replace the all-row headline."
+    )
 
     st.divider()
 

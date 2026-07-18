@@ -154,10 +154,10 @@ def _play_card():
     })
 
 
-def test_only_bet_rows_get_a_positive_play_stake():
+def test_every_valid_best_available_row_gets_a_positive_play_stake():
     out = attach_play_stakes(_play_card(), unit=5.0)
-    assert out.loc[out["Tier"] == "BET", "Play_Stake"].gt(0).all()
-    assert out.loc[out["Tier"] != "BET", "Play_Stake"].eq(0).all()
+    assert out["Play_Stake"].gt(0).all()
+    assert out["All_Row_Bet"].all()
 
 
 def test_units_scale_down_with_confidence():
@@ -207,7 +207,7 @@ def test_score_rows_is_index_aligned_and_unsorted():
     assert out.loc[7, "Tier"] in ("LEAN", "AVOID")
 
 
-def test_score_rows_then_play_stakes_keeps_non_bets_at_zero():
+def test_score_rows_then_play_stakes_funds_all_valid_rows():
     df = pd.DataFrame({
         "league": ["MLB"] * 3,
         "home_team": ["A", "B", "C"],
@@ -222,7 +222,7 @@ def test_score_rows_then_play_stakes_keeps_non_bets_at_zero():
         "Kelly_Bet_Size": [0.0, 0.0, 0.0],
     })
     staked = attach_play_stakes(score_best_picks_rows(df, calibration=None, bucket_stats=None), unit=5.0)
-    assert (staked["Play_Stake"] == 0).all()
+    assert staked["Play_Stake"].gt(0).all()
     assert list(staked.index) == list(df.index)
 
 
@@ -264,7 +264,7 @@ def test_started_games_get_zero_play_stake():
     out = attach_play_stakes(score_best_picks_rows(df, calibration=None, bucket_stats=None), unit=5.0)
     assert out.iloc[0]["Play_Stake"] == 0.0
     assert out.iloc[0]["Tier"] == "STARTED"
-    assert out.iloc[1]["Play_Stake"] == 0.0
+    assert out.iloc[1]["Play_Stake"] > 0.0
 
 
 def test_hopeless_prices_get_zero_play_stake():
@@ -277,5 +277,38 @@ def test_hopeless_prices_get_zero_play_stake():
     })
     out = attach_play_stakes(card, unit=5.0)
     assert out.iloc[0]["Play_Stake"] == 0.0
-    assert out.iloc[1]["Play_Stake"] == 0.0
+    assert out.iloc[1]["Play_Stake"] > 0.0
 
+
+
+def test_unresolved_line_is_unavailable_and_never_staked():
+    df = pd.DataFrame({
+        "league": ["MLB"],
+        "home_team": ["A"],
+        "away_team": ["B"],
+        "Pick_Status": ["No Play"],
+        "best_pick": ["Total line unresolved"],
+        "effective_expected_value": [0.02],
+        "consensus_agreement": ["Agrees"],
+        "effective_win_probability": [0.60],
+        "effective_edge": [0.03],
+        "odds_american": [-110],
+        "Kelly_Bet_Size": [0.0],
+    })
+    out = attach_play_stakes(
+        score_best_picks_rows(df, calibration=None, bucket_stats=None),
+        unit=1.0,
+    )
+    assert out.iloc[0]["Tier"] == "UNAVAILABLE"
+    assert out.iloc[0]["Play_Stake"] == 0.0
+
+
+def test_far_avoid_respects_one_dollar_sportsbook_minimum():
+    card = pd.DataFrame({
+        "Matchup": ["A @ B"],
+        "Tier": ["AVOID"],
+        "Emp_Edge": [-0.10],
+        "Suggested_Stake": [0.0],
+    })
+    out = attach_play_stakes(card, unit=1.0)
+    assert out.iloc[0]["Play_Stake"] == 1.0

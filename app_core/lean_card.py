@@ -5,14 +5,15 @@ though the model has a directional read on every game. This view re-presents the
 (it adds no staking and changes no guard) so a bettor who wants action across the board can
 see, per game: the model's side, its confidence, and an honest tier —
 
-  * BET   — the pick the system would actually stake (Actionable: a real, priced edge).
-  * LEAN  — the model has a positive-EV side but below the stake bar, and it is not fading
-            Kalshi. A read worth knowing; NOT a proven +EV bet. Bet at your own risk.
-  * AVOID — negative EV at the price, or the model is fading consensus (Disagrees). The
-            board the math says to stay off.
+  * BET   — the strongest best-available pick and a production-quality priced edge.
+  * LEAN  — the best available pick clears directional/value checks but misses the strict
+            production stake bar.
+  * AVOID — still the best available valid pick for that game, but at a negative or weak
+            empirical edge; it receives the smallest all-row stake.
 
-The tiers are the point: they let the user bet the whole slate WITH the model's read and a
-straight risk label, without the tool pretending coin-flips are +EV.
+Every valid pregame row receives a tier-scaled play stake because the owner bets the full
+board. Started games, unresolved lines, and extreme hopeless prices remain hard-blocked.
+The tier remains an honest risk label and never turns a forced pick into a claimed +EV bet.
 """
 from __future__ import annotations
 
@@ -140,6 +141,11 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
     )
     if "status_blocker_stage" in df.columns:
         started = started | df["status_blocker_stage"].astype(str).eq("game_already_started")
+    pick_text = _first_col(df, "best_pick").fillna("").astype(str)
+    unavailable_line = pick_text.str.lower().str.contains(
+        r"unresolved|\(no line\)|missing line|rejected", regex=True, na=False
+    )
+    playable = ~(started | unavailable_line)
 
     return pd.DataFrame({
         "League": _first_col(df, "league", "League"),
@@ -153,8 +159,10 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
         "Consensus": consensus,
         "Tier": tier,
         "Started": started,
-        # Stake only on the BET tier (the genuinely actionable picks); LEAN/AVOID are reads,
-        # not staked, so the user decides any size themselves.
+        "Playable": playable,
+        "Selection_Mode": "Best Available",
+        # Production Kelly remains limited to BET rows. The all-row play stake is attached
+        # separately so forced-action sizing never masquerades as model Kelly.
         "Suggested_Stake": kelly.where(pd.Series(tier, index=df.index) == "BET", 0.0),
     }, index=df.index)
 
@@ -184,13 +192,14 @@ def build_all_games_lean_card(best_picks_df: pd.DataFrame, *, calibration: objec
     return out
 
 
-# Display units by tier for attach_play_stakes. Only a genuine BET receives a
-# stake. LEAN and AVOID remain useful reads, but assigning dollars to them
-# contradicts the production gate and makes an abstaining card look bettable.
+# Full-board units for attach_play_stakes. Production Kelly remains BET-only,
+# while the owner's separate all-row policy sizes every valid best-available
+# pick down by risk tier.
 PLAY_UNITS_BET = 2.0
-PLAY_UNITS_LEAN = 0.0
-PLAY_UNITS_AVOID_NEAR = 0.0
-PLAY_UNITS_AVOID_FAR = 0.0
+PLAY_UNITS_LEAN = 1.5
+PLAY_UNITS_AVOID_NEAR = 1.0
+PLAY_UNITS_AVOID_FAR = 0.5
+PLAY_MINIMUM_BET = 1.0
 AVOID_NEAR_EDGE = -0.05
 # Hopeless-price floor: below this calibrated-win-vs-break-even edge, even the
 # minimum action unit is money on fire (4 Jul: CWS +5.5 at -1718, Emp_Edge
@@ -198,37 +207,55 @@ AVOID_NEAR_EDGE = -0.05
 PLAY_NO_PRICE_EDGE = -0.20
 
 
-def attach_play_stakes(card: pd.DataFrame, unit: float = 5.0) -> pd.DataFrame:
-    """Attach a dollar stake only to production-quality BET rows.
+def attach_play_stakes(card: pd.DataFrame, unit: float = 1.0) -> pd.DataFrame:
+    """Attach tier-scaled stakes to every valid best-available game pick.
 
-    LEAN and AVOID rows remain visible so the model's full-board read is useful,
-    but they receive zero dollars. This keeps Play_Stake aligned with the app's
-    positive-EV production decision:
+    This is the owner's full-board betting policy, separate from production
+    Kelly staking:
 
-      BET    2.0u (or the pick's own Kelly stake if larger — a real edge)
-      LEAN   0u
-      AVOID  0u
+      BET         2.0u (or the pick's larger production Kelly stake)
+      LEAN        1.5u
+      AVOID near  1.0u
+      AVOID far   0.5u, floored to the sportsbook's $1 minimum
 
-    Pure: returns a copy with Play_Stake ($) and Play_Units columns.
+    Started games, unresolved/missing lines, and extreme hopeless prices remain
+    at $0. Risk tiers stay visible so forced action is never presented as +EV.
     """
     if card is None or card.empty:
         return pd.DataFrame() if card is None else card.copy()
     out = card.copy()
     tier = out.get("Tier", pd.Series("", index=out.index)).astype(str)
-    emp_edge = pd.to_numeric(out.get("Emp_Edge"), errors="coerce")
+    emp_edge = pd.to_numeric(
+        out.get("Emp_Edge", pd.Series(float("nan"), index=out.index)),
+        errors="coerce",
+    )
 
     units = pd.Series(0.0, index=out.index)
     units[tier.eq("BET")] = PLAY_UNITS_BET
-    # Hopeless prices (deeply below break-even) get $0 at any tier except a
-    # genuine BET: paying -1700 juice for "action" isn't recreation, it's a fee.
-    units[emp_edge.lt(PLAY_NO_PRICE_EDGE) & ~tier.eq("BET")] = 0.0
+    units[tier.eq("LEAN")] = PLAY_UNITS_LEAN
+    near_avoid = tier.eq("AVOID") & emp_edge.ge(AVOID_NEAR_EDGE)
+    far_avoid = tier.eq("AVOID") & ~near_avoid
+    units[near_avoid] = PLAY_UNITS_AVOID_NEAR
+    units[far_avoid] = PLAY_UNITS_AVOID_FAR
+
+    # Deeply negative price edge is not a valid forced-action ticket.
+    hopeless = emp_edge.lt(PLAY_NO_PRICE_EDGE) & ~tier.eq("BET")
+    units[hopeless] = 0.0
 
     stake = units * float(unit)
+    positive_below_minimum = stake.gt(0) & stake.lt(PLAY_MINIMUM_BET)
+    stake.loc[positive_below_minimum] = PLAY_MINIMUM_BET
+
     if "Suggested_Stake" in out.columns:
         kelly = pd.to_numeric(out["Suggested_Stake"], errors="coerce").fillna(0.0)
         stake = stake.where(~(tier.eq("BET") & kelly.gt(stake)), kelly)
 
-    # Started games are unplayable at any size: the pre-game line is gone.
+    if "Playable" in out.columns:
+        playable = out["Playable"].fillna(False).astype(bool)
+        units = units.where(playable, 0.0)
+        stake = stake.where(playable, 0.0)
+        out.loc[~playable, "Tier"] = "UNAVAILABLE"
+
     if "Started" in out.columns:
         started = out["Started"].fillna(False).astype(bool)
         units = units.where(~started, 0.0)
@@ -237,5 +264,6 @@ def attach_play_stakes(card: pd.DataFrame, unit: float = 5.0) -> pd.DataFrame:
 
     out["Play_Units"] = units
     out["Play_Stake"] = stake.round(2)
+    out["All_Row_Bet"] = stake.gt(0)
     return out
 
