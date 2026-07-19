@@ -1,11 +1,11 @@
-"""Best Duos — the likeliest 2-leg parlays across the whole board (owner, 8 Jul).
+"""Best Duos â€” the likeliest 2-leg parlays across the whole board (owner, 8 Jul).
 
 "I really want the best 2 leg parlays without overlap despite the bet":
-  * Legs come from EVERYTHING bettable — game picks and pitcher props — on the
+  * Legs come from EVERYTHING bettable â€” game picks and pitcher props â€” on the
     same honest probability basis the Pick of the Day uses (empirical ->
     effective for games, model WinProbability for props), with the same hard
     disqualifiers (started games, wrong-game Kalshi, proven-losing buckets).
-  * "Without overlap": two legs from the same GAME are never paired — a prop on
+  * "Without overlap": two legs from the same GAME are never paired â€” a prop on
     a pitcher is correlated with that game's total/run-line, and same-game
     correlation quietly turns a "70% x 65%" parlay into something worse.
     Duos in the ranked list also never reuse a leg, so the top-3 are nine... six
@@ -31,7 +31,7 @@ DUO_STRICT_MIN_PARLAY_EV = 0.05
 PARLAY_MINIMUM_BET = 1.0
 
 # Generic tokens that appear in many team names and must not create phantom
-# overlap ("New York Yankees" vs "New York Mets" DO overlap — that's the same
+# overlap ("New York Yankees" vs "New York Mets" DO overlap â€” that's the same
 # city but different games are fine; the token that matters is the club token).
 _GENERIC_TOKENS = {"new", "los", "las", "san", "st", "st.", "saint", "city", "bay", "blue", "red", "white", "sox"}
 
@@ -101,6 +101,14 @@ def build_best_duos(
                 safe_games = safe_games.iloc[0:0]
         safe_props = prop_card
         if safe_props is not None and not safe_props.empty:
+            if "production_eligible" in safe_props.columns:
+                safe_props = safe_props[
+                    safe_props["production_eligible"].fillna(False).astype(bool)
+                ]
+            if "Stake_Status" in safe_props.columns:
+                safe_props = safe_props[
+                    safe_props["Stake_Status"].astype(str).str.strip().eq("Funded")
+                ]
             safe_props = safe_props[
                 safe_props.get(
                     "Pick_Status",
@@ -111,7 +119,7 @@ def build_best_duos(
                 safe_props = safe_props[
                     ~safe_props["Market_Probation"].fillna(False).astype(bool)
                 ]
-            if allow_probation and "Kelly_Bet_Size" in safe_props.columns:
+            if "Kelly_Bet_Size" in safe_props.columns:
                 safe_props = safe_props[
                     pd.to_numeric(safe_props["Kelly_Bet_Size"], errors="coerce")
                     .fillna(0.0).gt(0)
@@ -159,7 +167,7 @@ def build_best_duos(
                 continue  # cannot quote or place a cross-book parlay
             common_book = book_a
         if a["_toks"] & b["_toks"]:
-            continue  # same game — correlated, skip
+            continue  # same game â€” correlated, skip
         if a["board"] == "prop" and b["board"] == "prop":
             participant_a = str(a.get("participant", "") or "").strip()
             participant_b = str(b.get("participant", "") or "").strip()
@@ -274,32 +282,11 @@ def build_tiered_prop_parlays(
     prop_card: pd.DataFrame | None,
     bankroll: float = 1000.0,
 ) -> pd.DataFrame:
-    """Return one production duo plus one independent research duo when available."""
-    production_duos = build_best_duos(best_picks_df, prop_card, max_duos=1, strict=True)
-    production = duos_to_smart_parlays(production_duos, bankroll=bankroll)
+    """Return the best independently priced production duo when available.
 
-    probation_card = prop_card
-    if probation_card is not None and not probation_card.empty:
-        probation = probation_card.get(
-            "Market_Probation", pd.Series(False, index=probation_card.index)
-        ).fillna(False).astype(bool)
-        probation_card = probation_card[probation].copy()
-    research_duos = build_best_duos(
-        best_picks_df,
-        probation_card,
-        max_duos=1,
-        min_leg_probability=0.65,
-        strict=True,
-        allow_probation=True,
-        min_parlay_ev=0.05,
-    )
-    research = duos_to_smart_parlays(research_duos, bankroll=bankroll)
-    frames = [frame for frame in (production, research) if not frame.empty]
-    if not frames:
-        return pd.DataFrame()
-    out = pd.concat(frames, ignore_index=True)
-    # Production and research menus are built independently, so each starts its
-    # local index at one. Re-key after concatenation to keep export identities
-    # unique for UI selection, grading, and downstream joins.
-    out["group_id"] = [f"strict_duo_{index + 1}" for index in range(len(out))]
-    return out
+    Research/probation props remain gradeable on their separate card but never
+    become a recommended parlay ticket.
+    """
+    production_duos = build_best_duos(best_picks_df, prop_card, max_duos=1, strict=True)
+    return duos_to_smart_parlays(production_duos, bankroll=bankroll)
+
