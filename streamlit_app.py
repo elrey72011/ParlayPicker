@@ -1062,7 +1062,15 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
                     kelly_fraction=STRIKEOUT_PROP_KELLY_FRACTION,
                     diagnostics=diagnostics,
                 )
-                diagnostics["strikeout_prop_actionable_count"] = int(len(strikeout_prop_card))
+                _prop_stake_status = strikeout_prop_card.get(
+                    "Stake_Status", pd.Series("", index=strikeout_prop_card.index)
+                ).astype(str).str.strip()
+                diagnostics["strikeout_prop_actionable_count"] = int(
+                    _prop_stake_status.eq("Funded").sum()
+                )
+                diagnostics["strikeout_prop_research_count"] = int(
+                    _prop_stake_status.eq("Qualified / No Stake").sum()
+                )
 
                 # The legacy strategic-parlay engine only sees game picks. When
                 # that board correctly abstains, publish the same strict cross-
@@ -2128,21 +2136,46 @@ def main() -> None:
             # ── MLB player props (separate softer-market card) ──
             prop_card = st.session_state.get("strikeout_prop_card")
             if prop_card is not None and not prop_card.empty:
-                st.subheader("⚾ MLB Player Props — Pitchers · Batters")
+                _prop_status = prop_card.get(
+                    "Stake_Status", pd.Series("", index=prop_card.index)
+                ).astype(str).str.strip()
+                funded_prop_card = prop_card[_prop_status.eq("Funded")].copy()
+                research_prop_card = prop_card[~_prop_status.eq("Funded")].copy()
+
+                st.subheader("⚾ MLB Player Props — Production Picks")
                 st.caption(
-                    "Pitcher strikeouts plus batter hits/total bases that cleared the +EV and "
-                    "minimum-edge gates. New batter markets stake only the highest-ranked "
-                    "tickets at NoVig's $1 minimum, share a 0.75% bankroll exposure cap, and "
-                    "stay out of strict parlays until 20 graded results at 55%+. Every positive "
-                    "prop recommendation is at least NoVig's $1 minimum."
+                    "Only validated, non-probation props with at least 3% expected value appear "
+                    "here. NoVig's $1 minimum rounds an already-qualified ticket; it never "
+                    "promotes a marginal pick. Batter total-base Unders remain research-only "
+                    "until that market is recalibrated. Parlays use funded production rows only."
                 )
-                st.dataframe(prop_card, width="stretch")
-                st.download_button(
-                    "Export MLB Player Props",
-                    prop_card.to_csv(index=False, encoding="utf-8-sig"),
-                    "mlb_player_props_export.csv",
-                    mime="text/csv",
-                )
+                if funded_prop_card.empty:
+                    st.info("No player props qualify for a production wager today.")
+                else:
+                    st.dataframe(funded_prop_card, width="stretch")
+                    st.download_button(
+                        "Export Funded MLB Player Props",
+                        funded_prop_card.to_csv(index=False, encoding="utf-8-sig"),
+                        "mlb_player_props_export.csv",
+                        mime="text/csv",
+                    )
+
+                if not research_prop_card.empty:
+                    with st.expander(
+                        f"Research-only props — do not bet ({len(research_prop_card)})",
+                        expanded=False,
+                    ):
+                        st.caption(
+                            "These rows remain available for grading and calibration. They are "
+                            "not funded and cannot enter recommended parlays."
+                        )
+                        st.dataframe(research_prop_card, width="stretch")
+                        st.download_button(
+                            "Export Research-Only MLB Props",
+                            research_prop_card.to_csv(index=False, encoding="utf-8-sig"),
+                            "mlb_player_props_research_export.csv",
+                            mime="text/csv",
+                        )
             elif st.session_state.get("diagnostics", {}).get("strikeout_prop_error"):
                 _prop_err_type = st.session_state.get("diagnostics", {}).get(
                     "strikeout_prop_error_detail",

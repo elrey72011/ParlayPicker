@@ -101,6 +101,14 @@ def build_best_duos(
                 safe_games = safe_games.iloc[0:0]
         safe_props = prop_card
         if safe_props is not None and not safe_props.empty:
+            if "production_eligible" in safe_props.columns:
+                safe_props = safe_props[
+                    safe_props["production_eligible"].fillna(False).astype(bool)
+                ]
+            if "Stake_Status" in safe_props.columns:
+                safe_props = safe_props[
+                    safe_props["Stake_Status"].astype(str).str.strip().eq("Funded")
+                ]
             safe_props = safe_props[
                 safe_props.get(
                     "Pick_Status",
@@ -111,7 +119,7 @@ def build_best_duos(
                 safe_props = safe_props[
                     ~safe_props["Market_Probation"].fillna(False).astype(bool)
                 ]
-            if allow_probation and "Kelly_Bet_Size" in safe_props.columns:
+            if "Kelly_Bet_Size" in safe_props.columns:
                 safe_props = safe_props[
                     pd.to_numeric(safe_props["Kelly_Bet_Size"], errors="coerce")
                     .fillna(0.0).gt(0)
@@ -274,32 +282,10 @@ def build_tiered_prop_parlays(
     prop_card: pd.DataFrame | None,
     bankroll: float = 1000.0,
 ) -> pd.DataFrame:
-    """Return one production duo plus one independent research duo when available."""
-    production_duos = build_best_duos(best_picks_df, prop_card, max_duos=1, strict=True)
-    production = duos_to_smart_parlays(production_duos, bankroll=bankroll)
+    """Return the best independently priced production duo when available.
 
-    probation_card = prop_card
-    if probation_card is not None and not probation_card.empty:
-        probation = probation_card.get(
-            "Market_Probation", pd.Series(False, index=probation_card.index)
-        ).fillna(False).astype(bool)
-        probation_card = probation_card[probation].copy()
-    research_duos = build_best_duos(
-        best_picks_df,
-        probation_card,
-        max_duos=1,
-        min_leg_probability=0.65,
-        strict=True,
-        allow_probation=True,
-        min_parlay_ev=0.05,
-    )
-    research = duos_to_smart_parlays(research_duos, bankroll=bankroll)
-    frames = [frame for frame in (production, research) if not frame.empty]
-    if not frames:
-        return pd.DataFrame()
-    out = pd.concat(frames, ignore_index=True)
-    # Production and research menus are built independently, so each starts its
-    # local index at one. Re-key after concatenation to keep export identities
-    # unique for UI selection, grading, and downstream joins.
-    out["group_id"] = [f"strict_duo_{index + 1}" for index in range(len(out))]
-    return out
+    Research/probation props remain gradeable on their separate card but never
+    become a recommended parlay ticket.
+    """
+    production_duos = build_best_duos(best_picks_df, prop_card, max_duos=1, strict=True)
+    return duos_to_smart_parlays(production_duos, bankroll=bankroll)

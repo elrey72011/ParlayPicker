@@ -369,6 +369,7 @@ def build_prop_card(
     card = apply_batter_probation_exposure_cap(card, bankroll)
     card = apply_probation_portfolio_guard(card, bankroll)
     card = apply_prop_participant_guard(card)
+    card = apply_production_prop_gate(card)
     card = apply_novig_minimum_selection(
         card, bankroll, total_cap_pct=kelly_total_pct
     )
@@ -402,6 +403,9 @@ PROBATION_MIN_WIN_PROBABILITY = 0.62
 PROBATION_MIN_EXPECTED_VALUE = 0.05
 PROBATION_MIN_EDGE = 0.05
 NOVIG_MINIMUM_BET = 1.0
+PROP_PRODUCTION_MIN_EXPECTED_VALUE = 0.03
+PROP_PRODUCTION_BLOCKED_MARKETS = frozenset({"batter_total_bases_under"})
+PROP_REQUIRED_IDENTITY_FIELDS = ("player", "matchup", "market_type", "best_pick")
 
 
 def _market_of_pick(text: object, market_type: object = None) -> str:
@@ -683,6 +687,82 @@ def apply_prop_participant_guard(
     return out
 
 
+def apply_production_prop_gate(
+    card,
+    min_expected_value: float = PROP_PRODUCTION_MIN_EXPECTED_VALUE,
+    blocked_markets: frozenset[str] = PROP_PRODUCTION_BLOCKED_MARKETS,
+):
+    """Fund only validated, proven props with a meaningful projected edge.
+
+    Model-qualified rows remain on the research card, but a sportsbook minimum
+    may only round a ticket that survives this gate.  Probation markets and the
+    empirically weak batter-total-bases Under family therefore cannot be
+    promoted into production or parlays by the $1 minimum rule.
+    """
+    import pandas as pd
+
+    if card is None or card.empty:
+        return card
+    out = card.copy()
+    index = out.index
+
+    identity_valid = pd.Series(True, index=index)
+    for field in PROP_REQUIRED_IDENTITY_FIELDS:
+        values = out.get(field, pd.Series("", index=index)).fillna("").astype(str).str.strip()
+        identity_valid &= values.ne("") & ~values.str.lower().isin({"nan", "none"})
+    identity_valid &= pd.to_numeric(
+        out.get("line", pd.Series(float("nan"), index=index)), errors="coerce"
+    ).notna()
+    odds = pd.to_numeric(
+        out.get("odds_american", pd.Series(float("nan"), index=index)), errors="coerce"
+    )
+    identity_valid &= odds.notna() & odds.ne(0)
+
+    market = out.get("market_type", pd.Series("", index=index)).fillna("").astype(str)
+    market_allowed = ~market.isin(set(blocked_markets))
+    probation = out.get(
+        "Market_Probation", pd.Series(False, index=index)
+    ).fillna(False).astype(bool)
+    expected_value = pd.to_numeric(
+        out.get("expected_value", pd.Series(float("nan"), index=index)), errors="coerce"
+    )
+    qualified = out.get(
+        "Pick_Status", pd.Series("Actionable", index=index)
+    ).astype(str).str.strip().eq("Actionable")
+    production_eligible = (
+        qualified & identity_valid & market_allowed & ~probation
+        & expected_value.ge(float(min_expected_value))
+    )
+
+    reason = pd.Series("Production qualified", index=index, dtype="object")
+    reason.loc[~identity_valid] = "Rejected: missing or invalid prop identity, line, or odds"
+    reason.loc[identity_valid & ~market_allowed] = (
+        "Research only: batter total-base Unders are production-disabled pending recalibration"
+    )
+    reason.loc[identity_valid & market_allowed & probation] = (
+        "Research only: market is still on probation"
+    )
+    reason.loc[
+        identity_valid & market_allowed & ~probation
+        & ~expected_value.ge(float(min_expected_value))
+    ] = f"Research only: expected value is below {float(min_expected_value):.1%}"
+
+    stakes = pd.to_numeric(
+        out.get("Kelly_Bet_Size", pd.Series(0.0, index=index)), errors="coerce"
+    ).fillna(0.0)
+    out["production_identity_valid"] = identity_valid
+    out["production_market_allowed"] = market_allowed
+    out["production_min_expected_value"] = float(min_expected_value)
+    out["production_eligible"] = production_eligible
+    out["production_gate_reason"] = reason
+    out.loc[~production_eligible, "Kelly_Bet_Size"] = 0.0
+    out.loc[~identity_valid, "Pick_Status"] = "Rejected"
+    if "Status_Reason" not in out.columns:
+        out["Status_Reason"] = ""
+    out.loc[~production_eligible, "Status_Reason"] = reason.loc[~production_eligible]
+    return out
+
+
 def apply_probation_share_guard(
     card,
     max_share: float = PROBATION_MAX_PORTFOLIO_SHARE,
@@ -772,7 +852,11 @@ def apply_novig_minimum_selection(
         out.get("Kelly_Bet_Size", pd.Series(0.0, index=out.index)),
         errors="coerce",
     ).fillna(0.0)
-    candidates = out.index[stakes.gt(0)]
+    production_eligible = out.get(
+        "production_eligible", pd.Series(True, index=out.index)
+    ).fillna(False).astype(bool)
+    candidates = out.index[stakes.gt(0) & production_eligible]
+    out.loc[stakes.gt(0) & ~production_eligible, "Kelly_Bet_Size"] = 0.0
     exposure_before = float(stakes.sum())
     exposure_cap = max(0.0, float(bankroll or 0.0) * float(total_cap_pct))
     minimum_bet = max(0.0, float(minimum_bet))
@@ -853,9 +937,15 @@ def apply_prop_stake_status(card):
     out.loc[unfunded, "Stake_Status"] = "Qualified / No Stake"
     out.loc[funded, "Status_Reason"] = "Qualified and funded after portfolio guards"
     out.loc[unfunded, "Pick_Status"] = "Qualified / No Stake"
-    out.loc[unfunded, "Status_Reason"] = (
+    generic_unfunded_reason = (
         "Cleared model gates but was not selected after exposure, "
         "diversification, and sportsbook-minimum guards"
+    )
+    gate_reason = out.get(
+        "production_gate_reason", pd.Series("", index=out.index)
+    ).fillna("").astype(str).str.strip()
+    out.loc[unfunded, "Status_Reason"] = gate_reason.loc[unfunded].where(
+        gate_reason.loc[unfunded].ne(""), generic_unfunded_reason
     )
     return out
 
@@ -869,4 +959,3 @@ def load_prop_results_log():
         return pd.read_csv(p) if p.exists() else None
     except Exception:
         return None
-
