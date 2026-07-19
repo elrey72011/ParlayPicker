@@ -36,10 +36,12 @@ def parse_pitcher_props(
 ) -> list[dict]:
     """Extract per-pitcher over/under lines for ONE prop market from an event payload.
 
-    Returns one row per pitcher: ``{pitcher, line, over_odds, under_odds, book,
-    home_team, away_team, market_key}``. Uses the first book in ``book_priority`` that
-    prices the market (falls back to any book that does). Pitchers missing a complete
-    over+under pair at a single line are skipped.
+    Returns one row per player: ``{pitcher, line, over_odds, under_odds, book,
+    home_team, away_team, market_key}``. For each player, uses the first complete
+    over/under quote in ``book_priority`` and fills players absent from that book from
+    later books. This preserves the preferred-book policy without allowing a partial
+    NoVig board to hide players available at DraftKings/FanDuel/BetMGM. Players missing
+    a complete over+under pair at a single line are skipped.
     """
     if not isinstance(event_json, dict):
         return []
@@ -50,6 +52,7 @@ def parse_pitcher_props(
     ordered = [books[k] for k in book_priority if k in books]
     ordered += [b for k, b in books.items() if k not in book_priority]
 
+    selected_by_player: dict[str, dict] = {}
     for book in ordered:
         market = next(
             (m for m in book.get("markets", []) if m.get("key") == market_key),
@@ -74,27 +77,26 @@ def parse_pitcher_props(
             elif side.startswith("u"):
                 slot["under_odds"] = price
         participant_type = "batter" if str(market_key).startswith("batter_") else "pitcher"
-        rows = [
-            {
-                "player": p,
+        for player, quote in by_pitcher.items():
+            if "over_odds" not in quote or "under_odds" not in quote:
+                continue
+            player_key = " ".join(str(player).strip().lower().split())
+            if not player_key or player_key in selected_by_player:
+                continue
+            selected_by_player[player_key] = {
+                "player": player,
                 "participant_type": participant_type,
-                "pitcher": p if participant_type == "pitcher" else None,
-                "batter": p if participant_type == "batter" else None,
-                "line": float(v["line"]),
-                "over_odds": int(v["over_odds"]),
-                "under_odds": int(v["under_odds"]),
+                "pitcher": player if participant_type == "pitcher" else None,
+                "batter": player if participant_type == "batter" else None,
+                "line": float(quote["line"]),
+                "over_odds": int(quote["over_odds"]),
+                "under_odds": int(quote["under_odds"]),
                 "book": book.get("key"),
                 "home_team": home,
                 "away_team": away,
                 "market_key": market_key,
             }
-            for p, v in by_pitcher.items()
-            if "over_odds" in v and "under_odds" in v
-        ]
-        if rows:
-            return rows
-    return []
-
+    return list(selected_by_player.values())
 
 def fetch_strikeout_props(client: Any, sport_key: str, event_id: str) -> list[dict]:
     """Fetch + parse pitcher-strikeout props for one event via the Odds API event endpoint.
