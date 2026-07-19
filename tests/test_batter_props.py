@@ -275,4 +275,3 @@ def test_prop_stake_status_distinguishes_funded_from_unstaked_candidates():
     assert out["Pick_Status"].tolist() == ["Actionable", "Qualified / No Stake"]
     assert out["Stake_Status"].tolist() == ["Funded", "Qualified / No Stake"]
     assert "not selected" in out.loc[1, "Status_Reason"]
-
