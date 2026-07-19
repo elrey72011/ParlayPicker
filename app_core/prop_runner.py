@@ -61,7 +61,7 @@ def build_resolvers(
 
     ``schedule_rows`` is :func:`mlb_pitcher_stats.parse_schedule_probables` output. A propped
     pitcher is matched by normalized name to his StatsAPI id (recent form) and to his
-    OPPONENT's team id â€” the lineup he's striking out, whose K rate drives the projection.
+    OPPONENT's team id — the lineup he's striking out, whose K rate drives the projection.
     Per-id results are memoized so a slate of N games costs at most N form + N team-rate
     fetches. ``form_fetch`` / ``team_k_fetch`` are injectable so the resolvers run offline.
     """
@@ -290,7 +290,7 @@ def build_prop_card(
 
     Win-probability-first (owner preference, 3 Jul): picks must be genuine favorites on
     the model's own number (``p_side >= min_win_probability``) and the card is ordered by
-    win probability, not edge â€” near-coin-flip plus-money price plays no longer make the
+    win probability, not edge — near-coin-flip plus-money price plays no longer make the
     card even when their EV is the highest on the slate. The +EV/min-edge gate remains as
     the eligibility floor so a likely winner at a losing price is still never staked.
     """
@@ -381,8 +381,8 @@ def build_prop_card(
     return card
 
 
-# â”€â”€ Market probation (6 Jul): stake follows each market's GRADED record â”€â”€
-# The outs market went 2-5 (28.6%) in its first week â€” the books price manager
+# ── Market probation (6 Jul): stake follows each market's GRADED record ──
+# The outs market went 2-5 (28.6%) in its first week — the books price manager
 # leashes better than a recent-workload average. Rather than benching (which
 # would stop grading and freeze the record forever), an underwater market's
 # picks stay on the card at a flat probation stake: the model keeps taking its
@@ -410,7 +410,7 @@ PROP_REQUIRED_IDENTITY_FIELDS = ("player", "matchup", "market_type", "best_pick"
 
 def _market_of_pick(text: object, market_type: object = None) -> str:
     # Padded tokens only: pitcher NAMES can contain stat words ("Walker
-    # Buehler Over 3.5 Ks" must not classify as a walks pick â€” 6 Jul).
+    # Buehler Over 3.5 Ks" must not classify as a walks pick — 6 Jul).
     mt = str(market_type or "").lower()
     base = mt.removesuffix("_over").removesuffix("_under")
     if base in {*PITCHER_PROP_SPECS, *BATTER_PROP_SPECS}:
@@ -959,4 +959,3 @@ def load_prop_results_log():
         return pd.read_csv(p) if p.exists() else None
     except Exception:
         return None
-
