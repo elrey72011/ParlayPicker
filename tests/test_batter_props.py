@@ -6,6 +6,7 @@ from app_core.prop_odds_ingest import parse_pitcher_props
 from app_core.prop_runner import (
     apply_batter_probation_exposure_cap,
     apply_novig_minimum_selection,
+    apply_production_prop_gate,
     apply_prop_stake_status,
     build_prop_card,
 )
@@ -70,7 +71,7 @@ def test_batter_hits_scoring_requires_real_price_edge():
     assert 0.04 <= scored["best_edge"] <= 0.10
 
 
-def test_batter_card_is_actionable_but_starts_on_probation():
+def test_batter_card_stays_research_only_while_on_probation():
     prop = parse_pitcher_props(_event(), "batter_hits")[0]
     card = build_prop_card(
         object(), "2026-07-10", 2026, 1000.0,
@@ -92,7 +93,11 @@ def test_batter_card_is_actionable_but_starts_on_probation():
     assert row["market_type"] == "batter_hits_over"
     assert row["best_pick"] == "Juan Soto Over 0.5 Hits"
     assert bool(row["Market_Probation"])
-    assert row["Kelly_Bet_Size"] <= 1.0
+    assert not bool(row["production_eligible"])
+    assert row["Kelly_Bet_Size"] == 0.0
+    assert row["Pick_Status"] == "Qualified / No Stake"
+    assert row["Stake_Status"] == "Qualified / No Stake"
+    assert "probation" in row["Status_Reason"].lower()
 
 
 def test_batter_prop_grades_against_batting_result():
@@ -198,6 +203,66 @@ def test_novig_minimum_prioritizes_proven_markets_when_capacity_is_tight():
     assert out["novig_exposure_after"].iloc[0] == 2.0
 
 
+def test_production_gate_requires_proven_three_percent_ev_and_allowed_market():
+    card = pd.DataFrame({
+        "player": ["Zack Littell", "Jared Jones", "Ty France", "Weak TB"],
+        "matchup": ["A @ B", "C @ D", "E @ F", "G @ H"],
+        "market_type": [
+            "pitcher_strikeouts_over",
+            "pitcher_strikeouts_under",
+            "batter_hits_under",
+            "batter_total_bases_under",
+        ],
+        "best_pick": ["A", "B", "C", "D"],
+        "line": [2.5, 5.5, 1.5, 1.5],
+        "odds_american": [-169, -150, -264, -120],
+        "expected_value": [0.1238, 0.0038, 0.0624, 0.10],
+        "Market_Probation": [False, False, True, False],
+        "Pick_Status": ["Actionable"] * 4,
+        "Kelly_Bet_Size": [0.55] * 4,
+    })
+    out = apply_production_prop_gate(card)
+    assert out["production_eligible"].tolist() == [True, False, False, False]
+    assert out["Kelly_Bet_Size"].tolist() == [0.55, 0.0, 0.0, 0.0]
+    assert "below 3.0%" in out.loc[1, "production_gate_reason"]
+    assert "probation" in out.loc[2, "production_gate_reason"]
+    assert "production-disabled" in out.loc[3, "production_gate_reason"]
+
+
+def test_production_gate_rejects_malformed_identity():
+    card = pd.DataFrame({
+        "player": ["Trevor Rogers"],
+        "matchup": [None],
+        "market_type": [None],
+        "best_pick": [None],
+        "line": [1.5],
+        "odds_american": [-153],
+        "expected_value": [0.10],
+        "Market_Probation": [False],
+        "Pick_Status": ["Actionable"],
+        "Kelly_Bet_Size": [1.0],
+    })
+    out = apply_production_prop_gate(card)
+    assert not bool(out.loc[0, "production_identity_valid"])
+    assert not bool(out.loc[0, "production_eligible"])
+    assert out.loc[0, "Kelly_Bet_Size"] == 0.0
+    assert out.loc[0, "Pick_Status"] == "Rejected"
+
+
+def test_novig_minimum_never_promotes_production_ineligible_row():
+    card = pd.DataFrame({
+        "market_type": ["pitcher_strikeouts_over", "pitcher_strikeouts_under"],
+        "Market_Probation": [False, False],
+        "production_eligible": [True, False],
+        "Kelly_Bet_Size": [0.55, 0.75],
+        "WinProbability": [0.70, 0.75],
+        "edge": [0.08, 0.10],
+    })
+    out = apply_novig_minimum_selection(card, bankroll=1000.0, total_cap_pct=0.03)
+    assert out["Kelly_Bet_Size"].tolist() == [1.0, 0.0]
+    assert out["novig_selected_count"].iloc[0] == 1
+
+
 
 
 def test_prop_stake_status_distinguishes_funded_from_unstaked_candidates():
@@ -210,3 +275,4 @@ def test_prop_stake_status_distinguishes_funded_from_unstaked_candidates():
     assert out["Pick_Status"].tolist() == ["Actionable", "Qualified / No Stake"]
     assert out["Stake_Status"].tolist() == ["Funded", "Qualified / No Stake"]
     assert "not selected" in out.loc[1, "Status_Reason"]
+
