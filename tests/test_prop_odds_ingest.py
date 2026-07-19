@@ -61,6 +61,46 @@ def test_book_priority_prefers_first_available():
     assert all(r["book"] == "draftkings" for r in rows)
 
 
+def test_later_books_fill_players_missing_from_preferred_book():
+    novig = {
+        "key": "novig",
+        "markets": [{"key": "pitcher_strikeouts", "outcomes": [
+            {"name": "Over", "description": "Framber Valdez", "point": 6.5, "price": -118},
+            {"name": "Under", "description": "Framber Valdez", "point": 6.5, "price": -112},
+        ]}],
+    }
+    fanduel = {
+        "key": "fanduel",
+        "markets": [{"key": "pitcher_strikeouts", "outcomes": [
+            {"name": "Over", "description": "Framber Valdez", "point": 6.5, "price": -125},
+            {"name": "Under", "description": "Framber Valdez", "point": 6.5, "price": -105},
+            {"name": "Over", "description": "Tanner Bibee", "point": 5.5, "price": 100},
+            {"name": "Under", "description": "Tanner Bibee", "point": 5.5, "price": -130},
+        ]}],
+    }
+
+    rows = parse_strikeout_props(_event([fanduel, novig]))
+    by_player = {row["player"]: row for row in rows}
+
+    assert set(by_player) == {"Framber Valdez", "Tanner Bibee"}
+    assert by_player["Framber Valdez"]["book"] == "novig"
+    assert by_player["Tanner Bibee"]["book"] == "fanduel"
+
+
+def test_incomplete_preferred_quote_does_not_hide_complete_later_quote():
+    novig = {
+        "key": "novig",
+        "markets": [{"key": "pitcher_strikeouts", "outcomes": [
+            {"name": "Over", "description": "Tanner Bibee", "point": 5.5, "price": 105},
+        ]}],
+    }
+
+    rows = parse_strikeout_props(_event([novig, _DK]))
+    by_player = {row["player"]: row for row in rows}
+
+    assert by_player["Tanner Bibee"]["book"] == "draftkings"
+    assert by_player["Tanner Bibee"]["over_odds"] == 100
+
 def test_no_strikeout_market_returns_empty():
     book = {"key": "draftkings", "markets": [{"key": "totals", "outcomes": []}]}
     assert parse_strikeout_props(_event([book])) == []
