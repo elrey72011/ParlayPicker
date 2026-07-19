@@ -136,4 +136,3 @@ def test_probation_props_never_enter_recommended_tiered_parlays():
         "Kelly_Bet_Size": [0.0, 0.0],
     })
     assert build_tiered_prop_parlays(None, props, bankroll=1000.0).empty
-
