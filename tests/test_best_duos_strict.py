@@ -1,6 +1,10 @@
 import pandas as pd
 
-from app_core.best_duos import build_best_duos, duos_to_smart_parlays
+from app_core.best_duos import (
+    build_best_duos,
+    build_tiered_prop_parlays,
+    duos_to_smart_parlays,
+)
 
 
 def _games():
@@ -37,8 +41,12 @@ def _props():
         "expected_value": [0.0752, 0.1152, 0.1211],
         "edge": [0.0805, 0.1003, 0.0828],
         "odds_american": [-217, -163, -115],
+        "book": ["novig", "novig", "novig"],
         "Pick_Status": ["Actionable"] * 3,
         "Market_Probation": [False, False, True],
+        "production_eligible": [True, True, False],
+        "Stake_Status": ["Funded", "Funded", "Qualified / No Stake"],
+        "Kelly_Bet_Size": [1.0, 1.0, 0.0],
     })
 
 
@@ -61,12 +69,9 @@ def test_strict_duos_require_sixty_percent_legs():
     assert out.empty
 
 
-def test_strict_mixed_duo_requires_production_game():
+def test_strict_mixed_duo_requires_placeable_common_book():
     out = build_best_duos(_games(), _props(), strict=True, require_mixed=True, max_duos=5)
-    assert len(out) == 1
-    row = out.iloc[0]
-    assert row["boards"] == "game+prop"
-    assert bool(row["production_safety_mode"]) is True
+    assert out.empty
 
 
 def test_strict_mode_rejects_nonproduction_game():
@@ -90,8 +95,12 @@ def test_same_bet_direction_does_not_create_false_game_overlap():
         "expected_value": [0.10, 0.10],
         "edge": [0.1024, 0.1063],
         "odds_american": [-170, -127],
+        "book": ["novig", "novig"],
         "Pick_Status": ["Actionable", "Actionable"],
         "Market_Probation": [False, False],
+        "production_eligible": [True, True],
+        "Stake_Status": ["Funded", "Funded"],
+        "Kelly_Bet_Size": [1.0, 1.0],
     })
     out = build_best_duos(None, props, strict=True)
     assert len(out) == 1
@@ -110,7 +119,7 @@ def test_strict_duos_map_to_smart_parlay_export_with_capped_stake():
 
 
 
-def test_probation_parlay_fallback_is_labeled_and_staked_at_novig_minimum():
+def test_probation_props_never_enter_recommended_tiered_parlays():
     props = pd.DataFrame({
         "league": ["MLB", "MLB"],
         "matchup": ["New York Yankees @ Washington Nationals", "Milwaukee Brewers @ Pittsburgh Pirates"],
@@ -119,16 +128,12 @@ def test_probation_parlay_fallback_is_labeled_and_staked_at_novig_minimum():
         "expected_value": [0.10, 0.10],
         "edge": [0.08, 0.07],
         "odds_american": [-110, -110],
+        "book": ["novig", "novig"],
         "Pick_Status": ["Actionable", "Actionable"],
         "Market_Probation": [True, True],
+        "production_eligible": [False, False],
+        "Stake_Status": ["Qualified / No Stake", "Qualified / No Stake"],
+        "Kelly_Bet_Size": [0.0, 0.0],
     })
-    assert build_best_duos(None, props, strict=True).empty
-    duos = build_best_duos(None, props, strict=True, allow_probation=True,
-                           min_leg_probability=0.65, min_parlay_ev=0.05, max_duos=1)
-    assert len(duos) == 1
-    assert bool(duos.iloc[0]["probation_parlay_mode"])
-    assert not bool(duos.iloc[0]["production_safety_mode"])
-    exported = duos_to_smart_parlays(duos, bankroll=1000.0)
-    assert exported.iloc[0]["risk_tier"] == "Probation / Research"
-    assert exported.iloc[0]["recommended_bet"] == 1.0
-    assert bool(exported.iloc[0]["probation_parlay_mode"])
+    assert build_tiered_prop_parlays(None, props, bankroll=1000.0).empty
+
