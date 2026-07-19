@@ -103,4 +103,3 @@ def test_strict_parlay_rejects_two_markets_for_same_player():
         "Kelly_Bet_Size": [1.0, 1.0],
     })
     assert build_tiered_prop_parlays(None, props, bankroll=1000.0).empty
-
