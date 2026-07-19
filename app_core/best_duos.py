@@ -1,11 +1,11 @@
-"""Best Duos â€” the likeliest 2-leg parlays across the whole board (owner, 8 Jul).
+"""Best Duos — the likeliest 2-leg parlays across the whole board (owner, 8 Jul).
 
 "I really want the best 2 leg parlays without overlap despite the bet":
-  * Legs come from EVERYTHING bettable â€” game picks and pitcher props â€” on the
+  * Legs come from EVERYTHING bettable — game picks and pitcher props — on the
     same honest probability basis the Pick of the Day uses (empirical ->
     effective for games, model WinProbability for props), with the same hard
     disqualifiers (started games, wrong-game Kalshi, proven-losing buckets).
-  * "Without overlap": two legs from the same GAME are never paired â€” a prop on
+  * "Without overlap": two legs from the same GAME are never paired — a prop on
     a pitcher is correlated with that game's total/run-line, and same-game
     correlation quietly turns a "70% x 65%" parlay into something worse.
     Duos in the ranked list also never reuse a leg, so the top-3 are nine... six
@@ -31,7 +31,7 @@ DUO_STRICT_MIN_PARLAY_EV = 0.05
 PARLAY_MINIMUM_BET = 1.0
 
 # Generic tokens that appear in many team names and must not create phantom
-# overlap ("New York Yankees" vs "New York Mets" DO overlap â€” that's the same
+# overlap ("New York Yankees" vs "New York Mets" DO overlap — that's the same
 # city but different games are fine; the token that matters is the club token).
 _GENERIC_TOKENS = {"new", "los", "las", "san", "st", "st.", "saint", "city", "bay", "blue", "red", "white", "sox"}
 
@@ -167,7 +167,7 @@ def build_best_duos(
                 continue  # cannot quote or place a cross-book parlay
             common_book = book_a
         if a["_toks"] & b["_toks"]:
-            continue  # same game â€” correlated, skip
+            continue  # same game — correlated, skip
         if a["board"] == "prop" and b["board"] == "prop":
             participant_a = str(a.get("participant", "") or "").strip()
             participant_b = str(b.get("participant", "") or "").strip()
@@ -289,4 +289,3 @@ def build_tiered_prop_parlays(
     """
     production_duos = build_best_duos(best_picks_df, prop_card, max_duos=1, strict=True)
     return duos_to_smart_parlays(production_duos, bankroll=bankroll)
-
