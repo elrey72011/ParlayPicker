@@ -143,6 +143,10 @@ from app_core.lean_card import (  # noqa: E402
     PLAY_UNITS_LEAN,
     attach_play_stakes,
 )
+from app_core.weights_config import (  # noqa: E402
+    ALLOW_EMPTY_CARD_RECOVERY,
+    ENABLE_EMPTY_CARD_RECOVERY,
+)
 
 
 def _play_card():
@@ -155,6 +159,14 @@ def _play_card():
 
 
 def test_every_valid_best_available_row_gets_a_positive_play_stake():
+    out = attach_play_stakes(_play_card(), unit=5.0)
+    assert out["Play_Stake"].gt(0).all()
+    assert out["All_Row_Bet"].all()
+
+
+def test_all_games_stay_playable_without_production_recovery():
+    assert ALLOW_EMPTY_CARD_RECOVERY is False
+    assert ENABLE_EMPTY_CARD_RECOVERY is False
     out = attach_play_stakes(_play_card(), unit=5.0)
     assert out["Play_Stake"].gt(0).all()
     assert out["All_Row_Bet"].all()
