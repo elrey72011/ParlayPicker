@@ -2144,12 +2144,12 @@ def main() -> None:
 
                 st.subheader("⚾ MLB Player Props — Production Picks")
                 st.caption(
-                    "Only validated, non-probation props with at least 62% win probability, "
-                    "3% expected value, and a 0.50-stat model advantage appear here. At most "
-                    "one production prop is funded per game. NoVig's $1 minimum rounds an "
-                    "already-qualified ticket; it never promotes a marginal pick. Batter "
-                    "total-base Unders remain research-only until that market is recalibrated. "
-                    "Parlays use funded production rows only."
+                    "Core props require at least 62% win probability; Extended props cover "
+                    "the 60–62% band at a flat $1. Both tiers require at least 3% expected "
+                    "value, a 0.50-stat model advantage, valid odds, and a non-probation "
+                    "market. The card funds at most two props per game and five total. "
+                    "Batter total-base Unders remain research-only until recalibrated. "
+                    "Parlays use funded Core and Extended rows only."
                 )
                 if funded_prop_card.empty:
                     st.info("No player props qualify for a production wager today.")
