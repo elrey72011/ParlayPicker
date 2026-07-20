@@ -371,9 +371,11 @@ def build_prop_card(
     card = apply_prop_participant_guard(card)
     card = apply_production_prop_gate(card)
     card = apply_prop_game_guard(card)
+    card = apply_prop_slate_guard(card)
     card = apply_novig_minimum_selection(
         card, bankroll, total_cap_pct=kelly_total_pct
     )
+    card = apply_extended_prop_stake_cap(card)
     card = apply_probation_share_guard(card)
     card = apply_prop_stake_status(card)
     card = card.sort_values(
@@ -406,8 +408,11 @@ PROBATION_MIN_EDGE = 0.05
 NOVIG_MINIMUM_BET = 1.0
 PROP_PRODUCTION_MIN_EXPECTED_VALUE = 0.03
 PROP_PRODUCTION_MIN_WIN_PROBABILITY = 0.62
+PROP_EXTENDED_MIN_WIN_PROBABILITY = 0.60
 PROP_PRODUCTION_MIN_PROJECTION_CUSHION = 0.50
-PROP_MAX_FUNDED_PER_GAME = 1
+PROP_MAX_FUNDED_PER_GAME = 2
+PROP_MAX_FUNDED_PER_SLATE = 5
+PROP_EXTENDED_FLAT_STAKE = 1.0
 PROP_PRODUCTION_BLOCKED_MARKETS = frozenset({"batter_total_bases_under"})
 PROP_REQUIRED_IDENTITY_FIELDS = ("player", "matchup", "market_type", "best_pick")
 
@@ -695,6 +700,7 @@ def apply_production_prop_gate(
     card,
     min_expected_value: float = PROP_PRODUCTION_MIN_EXPECTED_VALUE,
     min_win_probability: float = PROP_PRODUCTION_MIN_WIN_PROBABILITY,
+    extended_min_win_probability: float = PROP_EXTENDED_MIN_WIN_PROBABILITY,
     min_projection_cushion: float = PROP_PRODUCTION_MIN_PROJECTION_CUSHION,
     blocked_markets: frozenset[str] = PROP_PRODUCTION_BLOCKED_MARKETS,
 ):
@@ -755,14 +761,22 @@ def apply_production_prop_gate(
     qualified = out.get(
         "Pick_Status", pd.Series("Actionable", index=index)
     ).astype(str).str.strip().eq("Actionable")
-    production_eligible = (
+    common_eligible = (
         qualified & identity_valid & market_allowed & ~probation
-        & win_probability.ge(float(min_win_probability))
         & projection_cushion.ge(float(min_projection_cushion))
         & expected_value.ge(float(min_expected_value))
     )
+    core_eligible = common_eligible & win_probability.ge(float(min_win_probability))
+    extended_eligible = (
+        common_eligible
+        & win_probability.ge(float(extended_min_win_probability))
+        & ~core_eligible
+    )
+    production_eligible = core_eligible | extended_eligible
 
-    reason = pd.Series("Production qualified", index=index, dtype="object")
+    reason = pd.Series("Research only", index=index, dtype="object")
+    reason.loc[core_eligible] = "Core production qualified"
+    reason.loc[extended_eligible] = "Extended production qualified"
     reason.loc[~identity_valid] = "Rejected: missing or invalid prop identity, line, or odds"
     reason.loc[identity_valid & ~market_allowed] = (
         "Research only: batter total-base Unders are production-disabled pending recalibration"
@@ -772,11 +786,14 @@ def apply_production_prop_gate(
     )
     reason.loc[
         identity_valid & market_allowed & ~probation
-        & ~win_probability.ge(float(min_win_probability))
-    ] = f"Research only: win probability is below {float(min_win_probability):.0%}"
+        & ~win_probability.ge(float(extended_min_win_probability))
+    ] = (
+        "Research only: win probability is below "
+        f"{float(extended_min_win_probability):.0%}"
+    )
     reason.loc[
         identity_valid & market_allowed & ~probation
-        & win_probability.ge(float(min_win_probability))
+        & win_probability.ge(float(extended_min_win_probability))
         & ~projection_cushion.ge(float(min_projection_cushion))
     ] = (
         "Research only: model projection advantage is below "
@@ -784,7 +801,7 @@ def apply_production_prop_gate(
     )
     reason.loc[
         identity_valid & market_allowed & ~probation
-        & win_probability.ge(float(min_win_probability))
+        & win_probability.ge(float(extended_min_win_probability))
         & projection_cushion.ge(float(min_projection_cushion))
         & ~expected_value.ge(float(min_expected_value))
     ] = f"Research only: expected value is below {float(min_expected_value):.1%}"
@@ -796,8 +813,12 @@ def apply_production_prop_gate(
     out["production_market_allowed"] = market_allowed
     out["production_min_expected_value"] = float(min_expected_value)
     out["production_min_win_probability"] = float(min_win_probability)
+    out["extended_min_win_probability"] = float(extended_min_win_probability)
     out["production_projection_cushion"] = projection_cushion
     out["production_min_projection_cushion"] = float(min_projection_cushion)
+    out["Prop_Tier"] = "Research"
+    out.loc[core_eligible, "Prop_Tier"] = "Core"
+    out.loc[extended_eligible, "Prop_Tier"] = "Extended"
     out["production_eligible"] = production_eligible
     out["production_gate_reason"] = reason
     out.loc[~production_eligible, "Kelly_Bet_Size"] = 0.0
@@ -889,6 +910,105 @@ def apply_prop_game_guard(
         out.loc[dropped, "Status_Reason"] = research_reason
     out["game_exposure_guard_applied"] = bool(len(dropped))
     out["game_funded_after"] = int(len(selected))
+    return out
+
+
+def apply_prop_slate_guard(
+    card,
+    max_funded_per_slate: int = PROP_MAX_FUNDED_PER_SLATE,
+):
+    """Fund at most five props, ranking Core ahead of Extended."""
+    import pandas as pd
+
+    if card is None or card.empty:
+        return card
+    out = card.copy()
+    index = out.index
+    stakes = pd.to_numeric(
+        out.get("Kelly_Bet_Size", pd.Series(0.0, index=index)), errors="coerce"
+    ).fillna(0.0)
+    eligible = out.get(
+        "production_eligible", pd.Series(False, index=index)
+    ).fillna(False).astype(bool)
+    candidates = out.index[eligible & stakes.gt(0)]
+    limit = max(0, int(max_funded_per_slate))
+    out["slate_guard_applied"] = False
+    out["slate_funded_before"] = int(len(candidates))
+    out["slate_funded_after"] = int(len(candidates))
+    out["slate_max_funded"] = limit
+    if len(candidates) <= limit:
+        return out
+
+    tier = out.get("Prop_Tier", pd.Series("Research", index=index)).astype(str)
+    tier_rank = tier.map({"Core": 2, "Extended": 1}).fillna(0)
+    probability = pd.to_numeric(
+        out.get("WinProbability", pd.Series(0.0, index=index)), errors="coerce"
+    ).fillna(0.0)
+    cushion = pd.to_numeric(
+        out.get("production_projection_cushion", pd.Series(0.0, index=index)),
+        errors="coerce",
+    ).fillna(0.0)
+    ev = pd.to_numeric(
+        out.get("expected_value", pd.Series(0.0, index=index)), errors="coerce"
+    ).fillna(0.0)
+    edge = pd.to_numeric(
+        out.get("edge", pd.Series(0.0, index=index)), errors="coerce"
+    ).fillna(0.0)
+    ranked = pd.DataFrame({
+        "tier": tier_rank.loc[candidates],
+        "probability": probability.loc[candidates],
+        "cushion": cushion.loc[candidates],
+        "ev": ev.loc[candidates],
+        "edge": edge.loc[candidates],
+        "stake": stakes.loc[candidates],
+    }).sort_values(
+        ["tier", "probability", "cushion", "ev", "edge", "stake"],
+        ascending=[False, False, False, False, False, False],
+    )
+    selected = ranked.head(limit).index
+    dropped = candidates.difference(selected)
+    research_reason = "Research only: outside the top five funded props on this slate"
+    out.loc[dropped, "Kelly_Bet_Size"] = 0.0
+    out.loc[dropped, "production_eligible"] = False
+    out.loc[dropped, "production_gate_reason"] = research_reason
+    out.loc[dropped, "Prop_Tier"] = "Research"
+    if "Status_Reason" not in out.columns:
+        out["Status_Reason"] = ""
+    out.loc[dropped, "Status_Reason"] = research_reason
+    out["slate_guard_applied"] = bool(len(dropped))
+    out["slate_funded_after"] = int(len(selected))
+    return out
+
+
+def apply_extended_prop_stake_cap(
+    card,
+    flat_stake: float = PROP_EXTENDED_FLAT_STAKE,
+):
+    """Use a flat $1 stake for the lower-confidence Extended tier."""
+    import pandas as pd
+
+    if card is None or card.empty:
+        return card
+    out = card.copy()
+    stakes = pd.to_numeric(
+        out.get("Kelly_Bet_Size", pd.Series(0.0, index=out.index)),
+        errors="coerce",
+    ).fillna(0.0)
+    tier = out.get(
+        "Prop_Tier", pd.Series("Research", index=out.index)
+    ).fillna("Research").astype(str)
+    eligible = out.get(
+        "production_eligible", pd.Series(False, index=out.index)
+    ).fillna(False).astype(bool)
+    extended = tier.eq("Extended") & eligible & stakes.gt(0)
+    out.loc[extended, "Kelly_Bet_Size"] = round(max(0.0, float(flat_stake)), 2)
+    if "novig_exposure_after" in out.columns:
+        exposure_after = pd.to_numeric(
+            out["Kelly_Bet_Size"], errors="coerce"
+        ).fillna(0.0).sum()
+        out["novig_exposure_after"] = round(float(exposure_after), 2)
+    out["extended_flat_stake"] = round(max(0.0, float(flat_stake)), 2)
+    out["extended_stake_cap_applied"] = bool(extended.any())
     return out
 
 
