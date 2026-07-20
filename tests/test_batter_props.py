@@ -7,6 +7,7 @@ from app_core.prop_runner import (
     apply_batter_probation_exposure_cap,
     apply_novig_minimum_selection,
     apply_production_prop_gate,
+    apply_prop_game_guard,
     apply_prop_stake_status,
     build_prop_card,
 )
@@ -216,6 +217,8 @@ def test_production_gate_requires_proven_three_percent_ev_and_allowed_market():
         "best_pick": ["A", "B", "C", "D"],
         "line": [2.5, 5.5, 1.5, 1.5],
         "odds_american": [-169, -150, -264, -120],
+        "WinProbability": [0.70, 0.70, 0.70, 0.70],
+        "expected_count": [3.2, 4.8, 0.8, 0.8],
         "expected_value": [0.1238, 0.0038, 0.0624, 0.10],
         "Market_Probation": [False, False, True, False],
         "Pick_Status": ["Actionable"] * 4,
@@ -227,6 +230,49 @@ def test_production_gate_requires_proven_three_percent_ev_and_allowed_market():
     assert "below 3.0%" in out.loc[1, "production_gate_reason"]
     assert "probation" in out.loc[2, "production_gate_reason"]
     assert "production-disabled" in out.loc[3, "production_gate_reason"]
+
+def test_production_gate_requires_probability_and_directional_projection_cushion():
+    card = pd.DataFrame({
+        "player": ["Strong Under", "Strong Over", "Low Probability", "Thin Cushion"],
+        "matchup": ["A @ B", "C @ D", "E @ F", "G @ H"],
+        "market_type": ["pitcher_strikeouts_under", "pitcher_strikeouts_over",
+                        "pitcher_strikeouts_under", "pitcher_strikeouts_under"],
+        "best_pick": ["Under 5.5", "Over 4.5", "Under 5.5", "Under 5.5"],
+        "line": [5.5, 4.5, 5.5, 5.5],
+        "expected_count": [4.8, 5.2, 4.7, 5.2],
+        "odds_american": [-120, -115, -120, -120],
+        "WinProbability": [0.66, 0.65, 0.61, 0.66],
+        "expected_value": [0.08, 0.08, 0.08, 0.08],
+        "Market_Probation": [False] * 4,
+        "Pick_Status": ["Actionable"] * 4,
+        "Kelly_Bet_Size": [1.0] * 4,
+    })
+    out = apply_production_prop_gate(card)
+    assert out["production_eligible"].tolist() == [True, True, False, False]
+    assert out["production_projection_cushion"].round(2).tolist() == [0.7, 0.7, 0.8, 0.3]
+    assert "below 62%" in out.loc[2, "production_gate_reason"]
+    assert "below 0.50" in out.loc[3, "production_gate_reason"]
+
+
+def test_game_guard_funds_only_highest_ranked_prop_per_matchup():
+    card = pd.DataFrame({
+        "matchup": ["A @ B", "A @ B", "C @ D"],
+        "WinProbability": [0.68, 0.65, 0.64],
+        "production_projection_cushion": [0.6, 1.0, 0.7],
+        "expected_value": [0.08, 0.12, 0.07],
+        "edge": [0.06, 0.10, 0.05],
+        "Kelly_Bet_Size": [1.0, 1.0, 1.0],
+        "production_eligible": [True, True, True],
+        "production_gate_reason": ["Production qualified"] * 3,
+        "Pick_Status": ["Actionable"] * 3,
+    })
+    out = apply_prop_game_guard(card)
+    assert out["Kelly_Bet_Size"].tolist() == [1.0, 0.0, 1.0]
+    assert out["production_eligible"].tolist() == [True, False, True]
+    assert "ranked higher" in out.loc[1, "production_gate_reason"]
+    assert out.loc[0, "game_funded_before"] == 3
+    assert out.loc[0, "game_funded_after"] == 2
+
 
 
 def test_production_gate_rejects_malformed_identity():
