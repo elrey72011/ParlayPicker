@@ -370,6 +370,7 @@ def build_prop_card(
     card = apply_probation_portfolio_guard(card, bankroll)
     card = apply_prop_participant_guard(card)
     card = apply_production_prop_gate(card)
+    card = apply_prop_game_guard(card)
     card = apply_novig_minimum_selection(
         card, bankroll, total_cap_pct=kelly_total_pct
     )
@@ -404,6 +405,9 @@ PROBATION_MIN_EXPECTED_VALUE = 0.05
 PROBATION_MIN_EDGE = 0.05
 NOVIG_MINIMUM_BET = 1.0
 PROP_PRODUCTION_MIN_EXPECTED_VALUE = 0.03
+PROP_PRODUCTION_MIN_WIN_PROBABILITY = 0.62
+PROP_PRODUCTION_MIN_PROJECTION_CUSHION = 0.50
+PROP_MAX_FUNDED_PER_GAME = 1
 PROP_PRODUCTION_BLOCKED_MARKETS = frozenset({"batter_total_bases_under"})
 PROP_REQUIRED_IDENTITY_FIELDS = ("player", "matchup", "market_type", "best_pick")
 
@@ -690,6 +694,8 @@ def apply_prop_participant_guard(
 def apply_production_prop_gate(
     card,
     min_expected_value: float = PROP_PRODUCTION_MIN_EXPECTED_VALUE,
+    min_win_probability: float = PROP_PRODUCTION_MIN_WIN_PROBABILITY,
+    min_projection_cushion: float = PROP_PRODUCTION_MIN_PROJECTION_CUSHION,
     blocked_markets: frozenset[str] = PROP_PRODUCTION_BLOCKED_MARKETS,
 ):
     """Fund only validated, proven props with a meaningful projected edge.
@@ -697,7 +703,9 @@ def apply_production_prop_gate(
     Model-qualified rows remain on the research card, but a sportsbook minimum
     may only round a ticket that survives this gate.  Probation markets and the
     empirically weak batter-total-bases Under family therefore cannot be
-    promoted into production or parlays by the $1 minimum rule.
+    promoted into production or parlays by the $1 minimum rule. Production
+    tickets must also clear a probability floor and beat the posted line by a
+    meaningful model-projection cushion.
     """
     import pandas as pd
 
@@ -726,11 +734,31 @@ def apply_production_prop_gate(
     expected_value = pd.to_numeric(
         out.get("expected_value", pd.Series(float("nan"), index=index)), errors="coerce"
     )
+    win_probability = pd.to_numeric(
+        out.get("WinProbability", pd.Series(float("nan"), index=index)), errors="coerce"
+    )
+    line = pd.to_numeric(
+        out.get("line", pd.Series(float("nan"), index=index)), errors="coerce"
+    )
+    expected_count = pd.to_numeric(
+        out.get("expected_count", pd.Series(float("nan"), index=index)), errors="coerce"
+    )
+    is_under = market.str.lower().str.endswith("_under")
+    is_over = market.str.lower().str.endswith("_over")
+    projection_cushion = pd.Series(float("nan"), index=index, dtype="float64")
+    projection_cushion.loc[is_under] = (
+        line.loc[is_under] - expected_count.loc[is_under]
+    )
+    projection_cushion.loc[is_over] = (
+        expected_count.loc[is_over] - line.loc[is_over]
+    )
     qualified = out.get(
         "Pick_Status", pd.Series("Actionable", index=index)
     ).astype(str).str.strip().eq("Actionable")
     production_eligible = (
         qualified & identity_valid & market_allowed & ~probation
+        & win_probability.ge(float(min_win_probability))
+        & projection_cushion.ge(float(min_projection_cushion))
         & expected_value.ge(float(min_expected_value))
     )
 
@@ -744,6 +772,20 @@ def apply_production_prop_gate(
     )
     reason.loc[
         identity_valid & market_allowed & ~probation
+        & ~win_probability.ge(float(min_win_probability))
+    ] = f"Research only: win probability is below {float(min_win_probability):.0%}"
+    reason.loc[
+        identity_valid & market_allowed & ~probation
+        & win_probability.ge(float(min_win_probability))
+        & ~projection_cushion.ge(float(min_projection_cushion))
+    ] = (
+        "Research only: model projection advantage is below "
+        f"{float(min_projection_cushion):.2f}"
+    )
+    reason.loc[
+        identity_valid & market_allowed & ~probation
+        & win_probability.ge(float(min_win_probability))
+        & projection_cushion.ge(float(min_projection_cushion))
         & ~expected_value.ge(float(min_expected_value))
     ] = f"Research only: expected value is below {float(min_expected_value):.1%}"
 
@@ -753,6 +795,9 @@ def apply_production_prop_gate(
     out["production_identity_valid"] = identity_valid
     out["production_market_allowed"] = market_allowed
     out["production_min_expected_value"] = float(min_expected_value)
+    out["production_min_win_probability"] = float(min_win_probability)
+    out["production_projection_cushion"] = projection_cushion
+    out["production_min_projection_cushion"] = float(min_projection_cushion)
     out["production_eligible"] = production_eligible
     out["production_gate_reason"] = reason
     out.loc[~production_eligible, "Kelly_Bet_Size"] = 0.0
@@ -760,6 +805,90 @@ def apply_production_prop_gate(
     if "Status_Reason" not in out.columns:
         out["Status_Reason"] = ""
     out.loc[~production_eligible, "Status_Reason"] = reason.loc[~production_eligible]
+    return out
+
+
+def apply_prop_game_guard(
+    card,
+    max_funded_per_game: int = PROP_MAX_FUNDED_PER_GAME,
+):
+    """Keep only the strongest production prop from each matchup.
+
+    Props within one game share lineup, weather, bullpen, and game-state risk.
+    Rows displaced by this guard stay visible on the research card and cannot
+    be promoted again by NoVig's sportsbook-minimum rule.
+    """
+    import pandas as pd
+
+    if card is None or card.empty:
+        return card
+    out = card.copy()
+    index = out.index
+    stakes = pd.to_numeric(
+        out.get("Kelly_Bet_Size", pd.Series(0.0, index=index)), errors="coerce"
+    ).fillna(0.0)
+    eligible = out.get(
+        "production_eligible", pd.Series(False, index=index)
+    ).fillna(False).astype(bool)
+    candidates = out.index[eligible & stakes.gt(0)]
+    limit = max(0, int(max_funded_per_game))
+
+    out["game_exposure_guard_applied"] = False
+    out["game_funded_before"] = int(len(candidates))
+    out["game_funded_after"] = int(len(candidates))
+    out["game_max_funded"] = limit
+    if len(candidates) == 0:
+        return out
+
+    matchup = out.get("matchup", pd.Series("", index=index)).fillna("").astype(str)
+    matchup = matchup.str.lower().str.split().str.join(" ")
+    probability = pd.to_numeric(
+        out.get("WinProbability", pd.Series(0.0, index=index)), errors="coerce"
+    ).fillna(0.0)
+    cushion = pd.to_numeric(
+        out.get("production_projection_cushion", pd.Series(0.0, index=index)),
+        errors="coerce",
+    ).fillna(0.0)
+    ev = pd.to_numeric(
+        out.get("expected_value", pd.Series(0.0, index=index)), errors="coerce"
+    ).fillna(0.0)
+    edge = pd.to_numeric(
+        out.get("edge", pd.Series(0.0, index=index)), errors="coerce"
+    ).fillna(0.0)
+    ranked = pd.DataFrame({
+        "matchup": matchup.loc[candidates],
+        "probability": probability.loc[candidates],
+        "cushion": cushion.loc[candidates],
+        "ev": ev.loc[candidates],
+        "edge": edge.loc[candidates],
+        "stake": stakes.loc[candidates],
+    }).sort_values(
+        ["probability", "cushion", "ev", "edge", "stake"],
+        ascending=[False, False, False, False, False],
+    )
+
+    selected = []
+    counts: dict[str, int] = {}
+    for row_index, row in ranked.iterrows():
+        key = str(row["matchup"]).strip() or f"__row_{row_index}"
+        if counts.get(key, 0) >= limit:
+            continue
+        selected.append(row_index)
+        counts[key] = counts.get(key, 0) + 1
+
+    dropped = candidates.difference(pd.Index(selected))
+    if len(dropped):
+        research_reason = (
+            "Research only: another production prop from this game ranked higher"
+        )
+        out.loc[dropped, "Kelly_Bet_Size"] = 0.0
+        out.loc[dropped, "production_eligible"] = False
+        out.loc[dropped, "production_gate_reason"] = research_reason
+        if "Status_Reason" not in out.columns:
+            out["Status_Reason"] = ""
+        out.loc[dropped, "Status_Reason"] = research_reason
+    out["game_exposure_guard_applied"] = bool(len(dropped))
+    out["game_funded_after"] = int(len(selected))
     return out
 
 
