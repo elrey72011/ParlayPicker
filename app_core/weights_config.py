@@ -585,8 +585,11 @@ MLB_TOTAL_OVER_MIN_PRODUCTION_EDGE = 0.04
 DEGRADED_FEATURE_KELLY_MULTIPLIER = 0.50
 DEGRADED_FEATURE_MAX_SLATE_EXPOSURE_PCT = 0.12
 DEGRADED_FEATURE_MAX_PICK_EXPOSURE_PCT = 0.02
-ALLOW_EMPTY_CARD_RECOVERY = True
-ENABLE_EMPTY_CARD_RECOVERY = True
+# Keep the production record honest: the all-games Best Available card remains
+# fully playable, but a thin near-miss may not be relabeled as Actionable merely
+# because the qualified production card is empty.
+ALLOW_EMPTY_CARD_RECOVERY = False
+ENABLE_EMPTY_CARD_RECOVERY = False
 EMPTY_CARD_RECOVERY_MAX_PICKS = 2
 # Speculative-lean tuning (22 Jun, user-directed): when the card is otherwise empty, surface
 # the best CLEAN positive-EV near-miss at SMALL size for daily action. The user accepted that
