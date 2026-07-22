@@ -129,6 +129,12 @@ def score_strikeout_prop(
     spec = PITCHER_PROP_SPECS.get(market_key, PITCHER_PROP_SPECS["pitcher_strikeouts"])
     if market_key != "pitcher_strikeouts":
         dispersion = float(spec["dispersion"])
+    empirical_dispersion_key = {
+        "pitcher_strikeouts": "k_dispersion",
+        "pitcher_walks": "walks_dispersion",
+    }.get(market_key)
+    if empirical_dispersion_key and form:
+        dispersion = float(form.get(empirical_dispersion_key) or dispersion)
     line = float(prop_row["line"])
     over_odds = prop_row["over_odds"]
     under_odds = prop_row["under_odds"]
@@ -239,6 +245,7 @@ def score_strikeout_prop(
         "expected_ks": round(lam, 2),
         "expected_count": round(lam, 2),
         "expected_stat": spec["result_key"],
+        "model_dispersion": round(float(dispersion), 3),
     }
     projection_fields[f"expected_{spec['result_key']}"] = round(lam, 2)
     out.update(
