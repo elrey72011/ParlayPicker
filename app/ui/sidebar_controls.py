@@ -6,9 +6,10 @@ import streamlit as st
 FALLBACK_SPORTS = ["NBA", "NHL", "NCAAB", "NFL", "MLB"]
 
 
+
+
 def _request_run_analysis(state: MutableMapping[str, object]) -> None:
     state["run_analysis_counter"] = int(state.get("run_analysis_counter", 0)) + 1
-
 
 def _resolve_sports_options(dynamic_sports: list[str] | None = None) -> list[str]:
     if dynamic_sports:
@@ -27,6 +28,8 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
     if not sports_options:
         sports_options = FALLBACK_SPORTS.copy()
 
+    # Initialise once — do NOT pass default= to a keyed widget; Streamlit owns
+    # the value after first render and the mismatch causes an infinite rerun.
     if "selected_sports" not in st.session_state:
         st.session_state["selected_sports"] = sports_options.copy()
 
@@ -38,29 +41,21 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
     if not sports:
         sports = sports_options.copy()
 
-    bankroll = st.sidebar.number_input(
-        "Bankroll", min_value=100.0, value=1000.0, step=50.0, key="bankroll"
-    )
+    bankroll = st.sidebar.number_input("Bankroll", min_value=100.0, value=1000.0, step=50.0, key="bankroll")
 
     st.sidebar.subheader("Analysis Engines")
+
     use_ml = st.sidebar.checkbox("Enable ML Predictions", True, key="use_ml")
     use_gemini = st.sidebar.checkbox("Enable Gemini Analysis", key="use_gemini")
 
     st.sidebar.subheader("Diagnostics")
-    show_debug = st.sidebar.checkbox(
-        "Display Debug Information", value=False, key="show_debug"
-    )
-    show_kalshi_diagnostics = st.sidebar.checkbox(
-        "Show Kalshi Diagnostics", value=False, key="show_kalshi_diagnostics"
-    )
+    show_debug = st.sidebar.checkbox("Display Debug Information", value=False, key="show_debug")
+    show_kalshi_diagnostics = st.sidebar.checkbox("Show Kalshi Diagnostics", value=False, key="show_kalshi_diagnostics")
 
     st.sidebar.subheader("Data Uploads")
-    theover_spreads = st.sidebar.file_uploader(
-        "Upload TheOver Spreads CSV", type=["csv"], key="theover_spreads"
-    )
-    theover_totals = st.sidebar.file_uploader(
-        "Upload TheOver Totals CSV", type=["csv"], key="theover_totals"
-    )
+
+    theover_spreads = st.sidebar.file_uploader("Upload TheOver Spreads CSV", type=["csv"], key="theover_spreads")
+    theover_totals = st.sidebar.file_uploader("Upload TheOver Totals CSV", type=["csv"], key="theover_totals")
     prop_results_log = st.sidebar.file_uploader(
         "Upload Graded Player Props CSV",
         type=["csv"],
@@ -77,17 +72,17 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
         on_click=_request_run_analysis,
         args=(st.session_state,),
     )
+
     run_counter = int(st.session_state.get("run_analysis_counter", 0))
 
     st.sidebar.markdown("---")
-    st.sidebar.subheader("ðŸ› ï¸ Data Maintenance")
-    if st.sidebar.button("ðŸ”„ Sync Historical Rosters"):
+    st.sidebar.subheader("🛠️ Data Maintenance")
+    if st.sidebar.button("🔄 Sync Historical Rosters"):
         with st.spinner("Syncing rosters from The Odds API..."):
             try:
                 from collect_historical_data import run_backfill
-
                 run_backfill(sports=sports, days=2)
-                st.sidebar.success("âœ… Database Synced!")
+                st.sidebar.success("✅ Database Synced!")
             except Exception as e:
                 st.sidebar.error(f"Sync failed: {e}")
 
@@ -103,4 +98,3 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
         "prop_results_log": prop_results_log,
         "run_analysis_counter": run_counter,
     }
-
