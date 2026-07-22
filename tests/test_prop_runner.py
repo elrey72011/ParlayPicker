@@ -9,6 +9,8 @@ surfaces as actionable while a no-form pitcher degrades to no_data.
 import os
 import sys
 
+import pandas as pd
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from app_core.mlb_pitcher_stats import parse_schedule_probables
@@ -213,19 +215,47 @@ def _prop_card(prop, **overrides):
     return build_prop_card(object(), "2026-06-23", 2026, 1000.0, **kwargs)
 
 
+def _proven_strikeout_over_log():
+    return pd.DataFrame({
+        "market_type": ["pitcher_strikeouts_over"] * 200,
+        "pick": ["Historical Pitcher Over 5.5 Ks"] * 200,
+        "result": ["WIN"] * 150 + ["LOSS"] * 50,
+        "raw_probability": [0.70] * 200,
+        "odds_american": [-110] * 200,
+        "game_date": ["2026-06-01"] * 200,
+    })
+
+
 def test_prop_card_stakes_actionable_pick_within_caps():
     prop = {
         "pitcher": "Gerrit Cole", "line": 6.5, "over_odds": -115, "under_odds": -105,
         "book": "novig", "home_team": "New York Yankees", "away_team": "Chicago White Sox",
     }
-    card = _prop_card(prop)
+    card = _prop_card(prop, prop_results_log=_proven_strikeout_over_log())
     assert len(card) == 1
     row = card.iloc[0]
     assert row["Pick_Status"] == "Actionable"
     assert row["market_type"] == "pitcher_strikeouts_over"
     assert "Gerrit Cole Over 6.5 Ks" == row["best_pick"]
+    assert row["CalibrationSource"] == "directional"
+    assert row["WinProbability"] <= row["CalibratedProbability"]
     # Per-pick cap is 1% of a 1000 bankroll -> never exceeds $10.
     assert 0.0 < float(row["Kelly_Bet_Size"]) <= 10.0 + 1e-9
+
+
+def test_prop_card_without_graded_ledger_is_research_only():
+    prop = {
+        "pitcher": "Gerrit Cole", "line": 6.5,
+        "over_odds": -115, "under_odds": -105,
+        "book": "novig", "home_team": "New York Yankees",
+        "away_team": "Chicago White Sox",
+    }
+    card = _prop_card(prop, prop_results_log=None)
+    row = card.iloc[0]
+    assert row["CalibrationSource"] == "market_blend_fallback"
+    assert not bool(row["production_eligible"])
+    assert row["Kelly_Bet_Size"] == 0.0
+    assert "calibration" in row["Status_Reason"].lower()
 
 
 def test_prop_card_total_cap_scales_down_many_picks():
