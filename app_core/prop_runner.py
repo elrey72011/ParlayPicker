@@ -333,6 +333,7 @@ def build_prop_card(
         stake_pct = min(max(kelly_frac, 0.0) * kelly_fraction, kelly_per_pick_pct)
         rows.append({
             "league": "MLB",
+            "game_date": date,
             "player": player,
             "participant_type": participant_type,
             "pitcher": player if participant_type == "pitcher" else None,
@@ -366,7 +367,12 @@ def build_prop_card(
         try:
             import streamlit as st
 
-            uploaded_results = st.session_state.get("prop_results_log")
+            generated_results = st.session_state.get("generated_prop_results_log")
+            uploaded_results = (
+                generated_results
+                if generated_results is not None
+                else st.session_state.get("prop_results_log")
+            )
         except (ImportError, RuntimeError, AttributeError):
             uploaded_results = None
     results_history = (

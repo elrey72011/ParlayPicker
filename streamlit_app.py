@@ -2144,10 +2144,10 @@ def main() -> None:
 
                 st.subheader("⚾ MLB Player Props — Production Picks")
                 st.caption(
-                    "Core props require at least 62% win probability; Extended props cover "
+                    "Core props require at least 62% conservative calibrated win probability; Extended props cover "
                     "the 60–62% band at a flat $1. Both tiers require at least 3% expected "
                     "value, a 0.50-stat model advantage, valid odds, and a non-probation "
-                    "market. The card funds at most two props per game and five total. "
+                    "market with sufficient graded directional history. The card funds at most two props per game and five total. "
                     "Batter total-base Unders remain research-only until recalibrated. "
                     "Parlays use funded Core and Extended rows only."
                 )
@@ -2161,6 +2161,14 @@ def main() -> None:
                         "mlb_player_props_export.csv",
                         mime="text/csv",
                     )
+
+                st.download_button(
+                    "Export All MLB Player Props for Next-Day Grading",
+                    prop_card.to_csv(index=False, encoding="utf-8-sig"),
+                    "mlb_player_props_all_export.csv",
+                    mime="text/csv",
+                    key="download_all_mlb_props_for_grading",
+                )
 
                 if not research_prop_card.empty:
                     with st.expander(
