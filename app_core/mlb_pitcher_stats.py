@@ -47,28 +47,57 @@ def pitcher_form_from_gamelog(
         stat = sp.get("stat", {}) if isinstance(sp, dict) else {}
         if _innings_to_float(stat.get("inningsPitched", 0)) > 0:
             usable_splits.append(sp)
-    recent = usable_splits[-last_n:]
-    total_k = 0
-    total_bb = 0
-    total_ip = 0.0
-    n = 0
-    for sp in recent:
-        stat = sp.get("stat", {}) if isinstance(sp, dict) else {}
-        ip = _innings_to_float(stat.get("inningsPitched", 0))
-        if ip <= 0:
-            continue
-        total_k += int(stat.get("strikeOuts", 0) or 0)
-        total_bb += int(stat.get("baseOnBalls", 0) or 0)
-        total_ip += ip
-        n += 1
-    if total_ip <= 0 or n == 0:
+    recent = usable_splits[-max(1, int(last_n)):]
+
+    def aggregate(rows: list[dict]) -> dict[str, Any]:
+        total_k = total_bb = 0.0
+        total_ip = 0.0
+        strikeouts: list[float] = []
+        walks: list[float] = []
+        for sp in rows:
+            stat = sp.get("stat", {}) if isinstance(sp, dict) else {}
+            ip = _innings_to_float(stat.get("inningsPitched", 0))
+            if ip <= 0:
+                continue
+            ks = float(stat.get("strikeOuts", 0) or 0)
+            bbs = float(stat.get("baseOnBalls", 0) or 0)
+            total_k += ks
+            total_bb += bbs
+            total_ip += ip
+            strikeouts.append(ks)
+            walks.append(bbs)
+        return {
+            "k_per_9": 9.0 * total_k / total_ip if total_ip else 0.0,
+            "bb_per_9": 9.0 * total_bb / total_ip if total_ip else 0.0,
+            "avg_innings": total_ip / len(strikeouts) if strikeouts else 0.0,
+            "n": len(strikeouts),
+            "strikeouts": strikeouts,
+            "walks": walks,
+        }
+
+    def dispersion(values: list[float], default: float, maximum: float) -> float:
+        if len(values) < 5:
+            return default
+        mean = sum(values) / len(values)
+        if mean <= 0:
+            return default
+        variance = sum((value - mean) ** 2 for value in values) / (len(values) - 1)
+        return min(maximum, max(1.05, variance / mean))
+
+    season_form = aggregate(usable_splits)
+    recent_form = aggregate(recent)
+    n = int(recent_form["n"])
+    if season_form["avg_innings"] <= 0 or n == 0:
         return None
+    season_weight, recent_weight = 0.65, 0.35
     result = {
-        "k_per_9": 9.0 * total_k / total_ip,
-        # Walks rate feeds the pitcher_walks prop projection (4 Jul expansion).
-        "bb_per_9": 9.0 * total_bb / total_ip,
-        "avg_innings": total_ip / n,
+        "k_per_9": season_weight * season_form["k_per_9"] + recent_weight * recent_form["k_per_9"],
+        "bb_per_9": season_weight * season_form["bb_per_9"] + recent_weight * recent_form["bb_per_9"],
+        "avg_innings": season_weight * season_form["avg_innings"] + recent_weight * recent_form["avg_innings"],
         "n_games": n,
+        "season_games": int(season_form["n"]),
+        "k_dispersion": dispersion(season_form["strikeouts"], 1.15, 1.75),
+        "walks_dispersion": dispersion(season_form["walks"], 1.10, 1.60),
     }
     if as_of_date:
         try:
