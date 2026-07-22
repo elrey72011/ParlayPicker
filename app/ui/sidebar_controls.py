@@ -1,5 +1,7 @@
 from typing import MutableMapping
+from datetime import date, timedelta
 
+import pandas as pd
 import streamlit as st
 
 
@@ -57,7 +59,7 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
     theover_spreads = st.sidebar.file_uploader("Upload TheOver Spreads CSV", type=["csv"], key="theover_spreads")
     theover_totals = st.sidebar.file_uploader("Upload TheOver Totals CSV", type=["csv"], key="theover_totals")
     prop_results_log = st.sidebar.file_uploader(
-        "Upload Graded Player Props CSV",
+        "Upload Cumulative Graded Prop Ledger (optional)",
         type=["csv"],
         key="prop_results_log",
         help=(
@@ -65,6 +67,83 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
             "Without this ledger, props remain research-only."
         ),
     )
+
+    previous_prop_exports = st.sidebar.file_uploader(
+        "Upload Yesterday's Player-Prop Export(s)",
+        type=["csv"],
+        accept_multiple_files=True,
+        key="previous_prop_exports",
+        help=(
+            "Upload the all-props export. For older slates, upload both the funded "
+            "and research exports so every prediction can be graded."
+        ),
+    )
+    previous_prop_date = st.sidebar.date_input(
+        "Prop Slate Date",
+        value=date.today() - timedelta(days=1),
+        max_value=date.today(),
+        key="previous_prop_date",
+    )
+    if st.sidebar.button("Grade Uploaded Player Props", key="grade_previous_props"):
+        if not previous_prop_exports:
+            st.sidebar.error("Upload at least one previous player-prop export first.")
+        else:
+            try:
+                from app_core.prop_grading import (
+                    grade_prop_export,
+                    grading_summary,
+                    merge_prop_ledgers,
+                )
+
+                cards = []
+                for uploaded in previous_prop_exports:
+                    uploaded.seek(0)
+                    cards.append(pd.read_csv(uploaded))
+                previous_card = pd.concat(cards, ignore_index=True, sort=False)
+                previous_card = previous_card.drop_duplicates(
+                    subset=[
+                        column
+                        for column in ("market_type", "best_pick", "pick", "line")
+                        if column in previous_card.columns
+                    ],
+                    keep="last",
+                )
+                inferred_date = None
+                if "game_date" in previous_card.columns:
+                    dates = (
+                        previous_card["game_date"]
+                        .dropna().astype(str).str[:10].unique()
+                    )
+                    if len(dates) == 1:
+                        inferred_date = dates[0]
+                grade_date = inferred_date or previous_prop_date.isoformat()
+
+                prior_ledger = st.session_state.get("generated_prop_results_log")
+                if prop_results_log is not None:
+                    prop_results_log.seek(0)
+                    prior_ledger = pd.read_csv(prop_results_log)
+                with st.spinner(f"Grading MLB player props for {grade_date}..."):
+                    graded = grade_prop_export(previous_card, grade_date)
+                    ledger = merge_prop_ledgers(prior_ledger, graded)
+                st.session_state["generated_prop_results_log"] = ledger
+                summary = grading_summary(graded)
+                st.sidebar.success(
+                    f"Graded {summary['graded']} props: "
+                    f"{summary['wins']}-{summary['losses']} "
+                    f"({summary['unresolved']} unresolved)."
+                )
+            except Exception as exc:
+                st.sidebar.error(f"Player-prop grading failed: {exc}")
+
+    generated_ledger = st.session_state.get("generated_prop_results_log")
+    if isinstance(generated_ledger, pd.DataFrame) and not generated_ledger.empty:
+        st.sidebar.download_button(
+            "Download Updated Graded Prop Ledger",
+            generated_ledger.to_csv(index=False, encoding="utf-8-sig"),
+            "prop_results_log.csv",
+            mime="text/csv",
+            key="download_prop_results_log",
+        )
 
     st.sidebar.button(
         "Run Master Analysis",
