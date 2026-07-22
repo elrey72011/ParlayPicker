@@ -28,6 +28,12 @@ from app_core.mlb_pitcher_stats import (
     fetch_team_k_rate,
 )
 from app_core.prop_odds_ingest import fetch_mlb_player_props, fetch_strikeout_props
+from app_core.prop_calibration import (
+    apply_prop_calibration,
+    directional_market_key,
+    load_prop_results_log,
+    normalize_prop_results,
+)
 from app_core.prop_pipeline import (
     PITCHER_PROP_SPECS,
     PROP_KS_DISPERSION,
@@ -61,7 +67,7 @@ def build_resolvers(
 
     ``schedule_rows`` is :func:`mlb_pitcher_stats.parse_schedule_probables` output. A propped
     pitcher is matched by normalized name to his StatsAPI id (recent form) and to his
-    OPPONENT's team id — the lineup he's striking out, whose K rate drives the projection.
+    OPPONENT's team id â€” the lineup he's striking out, whose K rate drives the projection.
     Per-id results are memoized so a slate of N games costs at most N form + N team-rate
     fetches. ``form_fetch`` / ``team_k_fetch`` are injectable so the resolvers run offline.
     """
@@ -275,6 +281,7 @@ def build_prop_card(
     kelly_fraction: float = 0.25,
     min_edge: float = PROP_MIN_EDGE,
     min_win_probability: float = PROP_MIN_WIN_PROBABILITY,
+    prop_results_log=None,
     **card_kwargs: Any,
 ):
     """Production strikeout-prop card: the ACTIONABLE props with conservative stakes.
@@ -290,7 +297,7 @@ def build_prop_card(
 
     Win-probability-first (owner preference, 3 Jul): picks must be genuine favorites on
     the model's own number (``p_side >= min_win_probability``) and the card is ordered by
-    win probability, not edge — near-coin-flip plus-money price plays no longer make the
+    win probability, not edge â€” near-coin-flip plus-money price plays no longer make the
     card even when their EV is the highest on the slate. The +EV/min-edge gate remains as
     the eligibility floor so a likely winner at a losing price is still never staked.
     """
@@ -354,6 +361,40 @@ def build_prop_card(
     if card.empty:
         return card
 
+    uploaded_results = prop_results_log
+    if uploaded_results is None:
+        try:
+            import streamlit as st
+
+            uploaded_results = st.session_state.get("prop_results_log")
+        except (ImportError, RuntimeError, AttributeError):
+            uploaded_results = None
+    results_history = (
+        uploaded_results
+        if isinstance(uploaded_results, pd.DataFrame)
+        else load_prop_results_log(uploaded=uploaded_results)
+    )
+    card = apply_prop_calibration(card, results_history, as_of_date=date)
+
+    # Re-size from the conservative probability. Raw-model Kelly is intentionally
+    # discarded so an overconfident projection cannot survive downstream caps.
+    def _calibrated_stake_pct(row) -> float:
+        try:
+            probability = float(row["WinProbability"])
+            decimal = _decimal_odds(float(row["odds_american"]))
+            profit_multiple = decimal - 1.0
+            full_kelly = (
+                ((probability * decimal) - 1.0) / profit_multiple
+                if profit_multiple > 0 else 0.0
+            )
+            return min(
+                max(full_kelly, 0.0) * float(kelly_fraction),
+                float(kelly_per_pick_pct),
+            )
+        except (KeyError, TypeError, ValueError, ZeroDivisionError):
+            return 0.0
+
+    card["_stake_pct"] = card.apply(_calibrated_stake_pct, axis=1)
     bankroll = float(bankroll or 0.0)
     card["Kelly_Bet_Size"] = (card["_stake_pct"] * bankroll).round(2)
     total = float(card["Kelly_Bet_Size"].sum())
@@ -363,9 +404,20 @@ def build_prop_card(
     card = card.drop(columns=["_stake_pct"])
     # Per-market probation: stakes follow the graded record (see module tail).
     try:
-        card = apply_market_probation(card, market_records_from_log(load_prop_results_log()))
+        card = apply_market_probation(
+            card, market_records_from_log(results_history, detailed=True)
+        )
     except Exception:
         pass  # probation is protective, never card-breaking
+    diagnostics = card_kwargs.get("diagnostics")
+    if diagnostics is not None:
+        clean_history = normalize_prop_results(results_history, as_of_date=date)
+        diagnostics["prop_calibration_graded_count"] = int(len(clean_history))
+        diagnostics["prop_calibration_status"] = (
+            "ready"
+            if card["CalibrationSource"].isin(["directional", "pooled"]).any()
+            else "needs_graded_results"
+        )
     card = apply_batter_probation_exposure_cap(card, bankroll)
     card = apply_probation_portfolio_guard(card, bankroll)
     card = apply_prop_participant_guard(card)
@@ -384,8 +436,8 @@ def build_prop_card(
     return card
 
 
-# ── Market probation (6 Jul): stake follows each market's GRADED record ──
-# The outs market went 2-5 (28.6%) in its first week — the books price manager
+# â”€â”€ Market probation (6 Jul): stake follows each market's GRADED record â”€â”€
+# The outs market went 2-5 (28.6%) in its first week â€” the books price manager
 # leashes better than a recent-workload average. Rather than benching (which
 # would stop grading and freeze the record forever), an underwater market's
 # picks stay on the card at a flat probation stake: the model keeps taking its
@@ -394,7 +446,7 @@ def build_prop_card(
 PROBATION_MIN_GRADED = 20     # require a credible sample before full staking
 PROBATION_MIN_RATE = 0.55     # must clear typical vig, not merely break even
 PROBATION_STAKE = 1.0         # flat $ per probation pick
-PROVEN_PROP_MARKETS = frozenset({"pitcher_strikeouts"})
+PROVEN_PROP_MARKETS = frozenset()
 BATTER_PROBATION_TOTAL_PCT = 0.0075  # max 0.75% bankroll across all unproven batter picks
 PROBATION_PORTFOLIO_TOTAL_PCT = 0.008  # max eight $1 research tickets per $1,000
 PROBATION_MAX_PER_MARKET = 2
@@ -419,7 +471,7 @@ PROP_REQUIRED_IDENTITY_FIELDS = ("player", "matchup", "market_type", "best_pick"
 
 def _market_of_pick(text: object, market_type: object = None) -> str:
     # Padded tokens only: pitcher NAMES can contain stat words ("Walker
-    # Buehler Over 3.5 Ks" must not classify as a walks pick — 6 Jul).
+    # Buehler Over 3.5 Ks" must not classify as a walks pick â€” 6 Jul).
     mt = str(market_type or "").lower()
     base = mt.removesuffix("_over").removesuffix("_under")
     if base in {*PITCHER_PROP_SPECS, *BATTER_PROP_SPECS}:
@@ -436,18 +488,72 @@ def _market_of_pick(text: object, market_type: object = None) -> str:
     return "pitcher_strikeouts"
 
 
-def market_records_from_log(log_df) -> dict:
-    """{market_key: (wins, losses)} from the graded prop results log."""
+def market_records_from_log(log_df, *, detailed: bool = False) -> dict:
+    """Directional and pooled market records from settled prop results.
+
+    The default ``(wins, losses)`` shape remains compatible with older callers.
+    ``detailed=True`` also includes flat-stake ROI so full staking requires a
+    market to beat its actual prices, not merely an arbitrary hit-rate target.
+    """
     import pandas as pd
+
     if log_df is None or len(log_df) == 0:
         return {}
-    df = log_df[log_df["result"].isin(["WIN", "LOSS"])]
-    out: dict = {}
-    for _, r in df.iterrows():
-        mk = _market_of_pick(r.get("pick"), r.get("market_type"))
-        w, l = out.get(mk, (0, 0))
-        out[mk] = (w + (1 if r["result"] == "WIN" else 0), l + (1 if r["result"] == "LOSS" else 0))
-    return out
+    clean = log_df.copy()
+    result_col = next(
+        (column for column in ("result", "Outcome", "outcome") if column in clean.columns),
+        None,
+    )
+    if result_col is None:
+        return {}
+    clean["result"] = clean[result_col].astype(str).str.upper().str.strip()
+    clean = clean[clean["result"].isin(["WIN", "LOSS"])].copy()
+    if clean.empty:
+        return {}
+    market_type = clean.get("market_type", pd.Series("", index=clean.index))
+    pick = clean.get("pick", clean.get("best_pick", pd.Series("", index=clean.index)))
+    clean["directional_market"] = [
+        directional_market_key(market, selection)
+        for market, selection in zip(market_type, pick)
+    ]
+    clean["outcome"] = clean["result"].eq("WIN").astype(int)
+    clean["odds_american"] = pd.to_numeric(
+        clean.get("odds_american", pd.Series(float("nan"), index=clean.index)),
+        errors="coerce",
+    )
+    accum: dict[str, dict[str, float]] = {}
+    for _, row in clean.iterrows():
+        directional = str(row["directional_market"])
+        family = directional.removesuffix("_over").removesuffix("_under")
+        for key in {directional, family}:
+            rec = accum.setdefault(
+                key, {"wins": 0, "losses": 0, "profit": 0.0, "priced": 0}
+            )
+            won = int(row["outcome"]) == 1
+            rec["wins" if won else "losses"] += 1
+            try:
+                decimal = _decimal_odds(float(row["odds_american"]))
+                rec["profit"] += decimal - 1.0 if won else -1.0
+                rec["priced"] += 1
+            except (TypeError, ValueError, ZeroDivisionError):
+                pass
+    if not detailed:
+        return {
+            key: (int(rec["wins"]), int(rec["losses"]))
+            for key, rec in accum.items()
+        }
+    return {
+        key: {
+            "wins": int(rec["wins"]),
+            "losses": int(rec["losses"]),
+            "n": int(rec["wins"] + rec["losses"]),
+            "roi": (
+                float(rec["profit"] / rec["priced"])
+                if rec["priced"] else None
+            ),
+        }
+        for key, rec in accum.items()
+    }
 
 
 def apply_market_probation(card, records: dict,
@@ -459,14 +565,38 @@ def apply_market_probation(card, records: dict,
         return card
     out = card.copy()
     probation_markets = set()
-    mk_col = out["market_type"].astype(str).str.replace(r"_(over|under)$", "", regex=True)
+    mk_col = out.apply(
+        lambda row: directional_market_key(
+            row.get("market_type"), row.get("best_pick")
+        ),
+        axis=1,
+    )
     card_markets = set(mk_col.dropna().astype(str))
     for mk in card_markets:
         if mk in PROVEN_PROP_MARKETS:
             continue
-        w, l = records.get(mk, (0, 0))
+        family = mk.removesuffix("_over").removesuffix("_under")
+        record = records.get(mk)
+        if record is None:
+            family_record = records.get(family, (0, 0))
+            # Detailed records came from the current ledger parser and therefore
+            # preserve direction. Do not let a pooled family record prove an
+            # ungraded side. Tuple-only inputs are legacy callers and retain the
+            # historic family fallback.
+            record = (0, 0) if isinstance(family_record, dict) else family_record
+        if isinstance(record, dict):
+            w = int(record.get("wins", 0) or 0)
+            l = int(record.get("losses", 0) or 0)
+            roi = record.get("roi")
+        else:
+            w, l = record
+            roi = None
         n = w + l
-        if n < min_graded or (w / n) < min_rate:
+        if (
+            n < min_graded
+            or (w / n) < min_rate
+            or (roi is not None and float(roi) <= 0.0)
+        ):
             probation_markets.add(mk)
     if not probation_markets:
         out["Market_Probation"] = False
@@ -761,8 +891,23 @@ def apply_production_prop_gate(
     qualified = out.get(
         "Pick_Status", pd.Series("Actionable", index=index)
     ).astype(str).str.strip().eq("Actionable")
+    if "CalibrationSource" in out.columns:
+        calibration_source = out["CalibrationSource"].fillna("").astype(str)
+        calibration_sample = pd.to_numeric(
+            out.get("CalibrationSampleSize", pd.Series(0, index=index)),
+            errors="coerce",
+        ).fillna(0)
+        calibration_ready = (
+            calibration_source.eq("directional") & calibration_sample.ge(20)
+        )
+    else:
+        # Keep the pure gate backward-compatible for callers that supply an
+        # already-calibrated card without the new audit columns.
+        calibration_source = pd.Series("external", index=index)
+        calibration_sample = pd.Series(float("nan"), index=index)
+        calibration_ready = pd.Series(True, index=index)
     common_eligible = (
-        qualified & identity_valid & market_allowed & ~probation
+        qualified & identity_valid & market_allowed & ~probation & calibration_ready
         & projection_cushion.ge(float(min_projection_cushion))
         & expected_value.ge(float(min_expected_value))
     )
@@ -805,12 +950,18 @@ def apply_production_prop_gate(
         & projection_cushion.ge(float(min_projection_cushion))
         & ~expected_value.ge(float(min_expected_value))
     ] = f"Research only: expected value is below {float(min_expected_value):.1%}"
+    reason.loc[identity_valid & market_allowed & ~calibration_ready] = (
+        "Research only: directional prop calibration needs at least 20 graded results"
+    )
 
     stakes = pd.to_numeric(
         out.get("Kelly_Bet_Size", pd.Series(0.0, index=index)), errors="coerce"
     ).fillna(0.0)
     out["production_identity_valid"] = identity_valid
     out["production_market_allowed"] = market_allowed
+    out["production_calibration_ready"] = calibration_ready
+    out["production_calibration_source"] = calibration_source
+    out["production_calibration_sample"] = calibration_sample
     out["production_min_expected_value"] = float(min_expected_value)
     out["production_min_win_probability"] = float(min_win_probability)
     out["extended_min_win_probability"] = float(extended_min_win_probability)
@@ -1198,13 +1349,3 @@ def apply_prop_stake_status(card):
     )
     return out
 
-
-def load_prop_results_log():
-    """Best-effort read of the graded prop log; None when absent."""
-    import pandas as pd
-    from pathlib import Path
-    p = Path("data/prop_results/prop_results_log.csv")
-    try:
-        return pd.read_csv(p) if p.exists() else None
-    except Exception:
-        return None

@@ -100,7 +100,10 @@ def test_batter_card_stays_research_only_while_on_probation():
     assert row["Kelly_Bet_Size"] == 0.0
     assert row["Pick_Status"] == "Qualified / No Stake"
     assert row["Stake_Status"] == "Qualified / No Stake"
-    assert "probation" in row["Status_Reason"].lower()
+    assert any(
+        word in row["Status_Reason"].lower()
+        for word in ("probation", "calibration")
+    )
 
 
 def test_batter_prop_grades_against_batting_result():
@@ -233,6 +236,7 @@ def test_production_gate_requires_proven_three_percent_ev_and_allowed_market():
     assert "probation" in out.loc[2, "production_gate_reason"]
     assert "production-disabled" in out.loc[3, "production_gate_reason"]
 
+
 def test_production_gate_requires_probability_and_directional_projection_cushion():
     card = pd.DataFrame({
         "player": ["Strong Under", "Strong Over", "Extended", "Low Probability", "Thin Cushion"],
@@ -307,7 +311,6 @@ def test_extended_props_are_flat_one_dollar_after_novig_selection():
     assert bool(out["extended_stake_cap_applied"].iloc[0])
 
 
-
 def test_production_gate_rejects_malformed_identity():
     card = pd.DataFrame({
         "player": ["Trevor Rogers"],
@@ -354,3 +357,4 @@ def test_prop_stake_status_distinguishes_funded_from_unstaked_candidates():
     assert out["Pick_Status"].tolist() == ["Actionable", "Qualified / No Stake"]
     assert out["Stake_Status"].tolist() == ["Funded", "Qualified / No Stake"]
     assert "not selected" in out.loc[1, "Status_Reason"]
+

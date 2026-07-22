@@ -68,7 +68,13 @@ def score_batter_prop(
         return out
     line = float(prop_row["line"])
     over_odds, under_odds = float(prop_row["over_odds"]), float(prop_row["under_odds"])
-    p_over = strikeout_pick_probability(expected, line, "over", float(spec["dispersion"]))
+    dispersion_key = (
+        "total_bases_dispersion"
+        if market_key == "batter_total_bases"
+        else "hits_dispersion"
+    )
+    empirical_dispersion = float(form.get(dispersion_key) or spec["dispersion"])
+    p_over = strikeout_pick_probability(expected, line, "over", empirical_dispersion)
     p_under = 1.0 - p_over
     io, iu = _implied(over_odds), _implied(under_odds)
     mkt_over = io / (io + iu)
@@ -89,6 +95,7 @@ def score_batter_prop(
     out.update(
         expected_stat=result_key,
         expected_count=round(expected, 2),
+        model_dispersion=round(empirical_dispersion, 3),
         **{f"expected_{result_key}": round(expected, 2)},
         model_p_over=round(p_over, 4),
         market_p_over=round(mkt_over, 4),

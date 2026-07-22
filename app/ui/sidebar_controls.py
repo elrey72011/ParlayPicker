@@ -56,6 +56,15 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
 
     theover_spreads = st.sidebar.file_uploader("Upload TheOver Spreads CSV", type=["csv"], key="theover_spreads")
     theover_totals = st.sidebar.file_uploader("Upload TheOver Totals CSV", type=["csv"], key="theover_totals")
+    prop_results_log = st.sidebar.file_uploader(
+        "Upload Graded Player Props CSV",
+        type=["csv"],
+        key="prop_results_log",
+        help=(
+            "Settled WIN/LOSS rows calibrate each prop market and direction. "
+            "Without this ledger, props remain research-only."
+        ),
+    )
 
     st.sidebar.button(
         "Run Master Analysis",
@@ -86,5 +95,6 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
         "show_kalshi_diagnostics": show_kalshi_diagnostics,
         "theover_spreads": theover_spreads,
         "theover_totals": theover_totals,
+        "prop_results_log": prop_results_log,
         "run_analysis_counter": run_counter,
     }
