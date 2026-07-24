@@ -95,3 +95,24 @@ def test_pooled_calibration_can_rank_but_cannot_fund_an_unproven_direction():
     assert out["production_eligible"].tolist() == [False, True]
     assert "calibration" in out.loc[0, "production_gate_reason"].lower()
 
+
+def test_pooled_calibration_is_shrink_only_and_uses_directional_uncertainty():
+    ledger = pd.DataFrame({
+        "market_type": ["batter_total_bases_over"] * 100,
+        "result": ["WIN"] * 90 + ["LOSS"] * 10,
+        "raw_probability": [0.65] * 100,
+        "odds_american": [-110] * 100,
+        "game_date": ["2026-07-22"] * 100,
+    })
+    out = apply_prop_calibration(
+        _card("pitcher_strikeouts_over", probability=0.72),
+        ledger,
+        as_of_date="2026-07-23",
+    )
+    row = out.iloc[0]
+    assert row["CalibrationSource"] == "pooled"
+    assert row["CalibrationSampleSize"] == 0
+    assert row["DirectionalCalibrationSampleSize"] == 0
+    assert row["CalibrationProfileSampleSize"] == 100
+    assert row["CalibratedProbability"] <= row["RawWinProbability"]
+    assert row["ConservativeWinProbability"] < row["CalibratedProbability"]
