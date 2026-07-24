@@ -1,6 +1,4 @@
-"""Best Overall Pick of the Day (owner directive, 4 Jul): one pick every day,
-games and strikeout props ranked together by win probability. A $0-stake games
-day must still produce the likeliest winner on the board (usually a prop)."""
+"""Best Overall Pick of the Day ranks funded production tickets only."""
 from __future__ import annotations
 
 import sys
@@ -10,7 +8,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app_core.pick_of_day import BELOW_FLOOR_ACTION_STAKE, select_pick_of_the_day
+from app_core.pick_of_day import select_pick_of_the_day
 
 
 def _games(**overrides) -> pd.DataFrame:
@@ -21,6 +19,7 @@ def _games(**overrides) -> pd.DataFrame:
         "best_pick": ["Over 8.5"],
         "market_type": ["total_over"],
         "Pick_Status": ["Below Threshold"],
+        "production_eligible": [False],
         "Kelly_Bet_Size": [0.0],
         "odds_american": [-110],
         "empirical_win_probability": [0.49],
@@ -42,6 +41,8 @@ def _props(**overrides) -> pd.DataFrame:
         "WinProbability": [0.6487],
         "odds_american": [-146],
         "Pick_Status": ["Actionable"],
+        "production_eligible": [True],
+        "Stake_Status": ["Funded"],
         "Kelly_Bet_Size": [9.23],
     }
     base.update(overrides)
@@ -63,6 +64,7 @@ def test_game_wins_when_it_is_the_likelier_pick():
     games = _games(
         empirical_win_probability=[0.67],
         Pick_Status=["Actionable"],
+        production_eligible=[True],
         Kelly_Bet_Size=[12.0],
     )
     potd = select_pick_of_the_day(games, _props())
@@ -71,16 +73,36 @@ def test_game_wins_when_it_is_the_likelier_pick():
     assert potd["runner_up"]["board"] == "prop"
 
 
-def test_no_zero_dollar_day_below_floor():
-    # Whole board under the 55% floor: still name the likeliest pick, flagged,
-    # at the flat minimum action stake — never $0, never silence.
+def test_unfunded_research_board_returns_none():
     games = _games(empirical_win_probability=[0.51])
-    props = _props(WinProbability=[0.53], Kelly_Bet_Size=[0.0])
+    props = _props(
+        WinProbability=[0.89],
+        Kelly_Bet_Size=[0.0],
+        Pick_Status=["Qualified / No Stake"],
+        Stake_Status=["Qualified / No Stake"],
+        production_eligible=[False],
+    )
     potd = select_pick_of_the_day(games, props)
-    assert potd is not None
-    assert potd["below_floor"]
-    assert potd["stake"] == BELOW_FLOOR_ACTION_STAKE
-    assert potd["win_probability"] == 0.53  # prop still likelier than the game
+    assert potd is None
+
+
+def test_unfunded_high_confidence_prop_cannot_displace_funded_game():
+    games = _games(
+        empirical_win_probability=[0.61],
+        Pick_Status=["Actionable"],
+        production_eligible=[True],
+        Kelly_Bet_Size=[8.0],
+    )
+    props = _props(
+        WinProbability=[0.89],
+        Kelly_Bet_Size=[0.0],
+        Pick_Status=["Qualified / No Stake"],
+        Stake_Status=["Qualified / No Stake"],
+        production_eligible=[False],
+    )
+    potd = select_pick_of_the_day(games, props)
+    assert potd["board"] == "game"
+    assert potd["stake"] == 8.0
 
 
 def test_disqualified_games_never_surface():
@@ -113,6 +135,9 @@ def test_probability_basis_prefers_empirical_over_calibrated():
         empirical_win_probability=[0.49],
         effective_win_probability=[0.50],
         calibrated_probability=[0.60],
+        Pick_Status=["Actionable"],
+        production_eligible=[True],
+        Kelly_Bet_Size=[4.0],
     )
     props = _props(WinProbability=[0.55])
     potd = select_pick_of_the_day(games, props)
