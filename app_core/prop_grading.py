@@ -11,6 +11,24 @@ REQUIRED_PROP_EXPORT_COLUMNS = frozenset({
     "market_type", "line", "odds_american",
 })
 
+PROP_AUDIT_COLUMNS = (
+    "directional_market",
+    "MarketProbability",
+    "CalibratedProbability",
+    "ConservativeWinProbability",
+    "CalibrationSource",
+    "CalibrationSampleSize",
+    "CalibrationProfileSampleSize",
+    "DirectionalCalibrationSampleSize",
+    "expected_count",
+    "production_eligible",
+    "production_gate_reason",
+    "production_projection_cushion",
+    "Prop_Tier",
+    "Market_Probation",
+    "Status_Reason",
+)
+
 
 def _pick_column(card: pd.DataFrame) -> str | None:
     return next((name for name in ("best_pick", "pick") if name in card.columns), None)
@@ -137,7 +155,7 @@ def grade_prop_export(
         raw_probability = source.get("RawWinProbability")
         if pd.isna(raw_probability) if raw_probability is not None else True:
             raw_probability = source.get("WinProbability")
-        rows.append({
+        graded_row = {
             "game_date": game_date,
             "date": game_date,
             "player": name,
@@ -161,7 +179,11 @@ def grade_prop_export(
             "profit": round(profit, 2) if profit is not None else None,
             "source_stake_status": source.get("Stake_Status"),
             "source_pick_status": source.get("Pick_Status"),
-        })
+        }
+        for column in PROP_AUDIT_COLUMNS:
+            if column in source.index:
+                graded_row[column] = source.get(column)
+        rows.append(graded_row)
     return pd.DataFrame(rows)
 
 
@@ -207,3 +229,37 @@ def grading_summary(ledger: pd.DataFrame | None) -> dict[str, int | float]:
         "win_rate": wins / (wins + losses) if wins + losses else 0.0,
     }
 
+
+def ledger_coverage_summary(ledger: pd.DataFrame | None) -> dict[str, object]:
+    """Describe whether a graded prop ledger is genuinely cumulative."""
+    if ledger is None or ledger.empty:
+        return {
+            "rows": 0,
+            "settled": 0,
+            "date_count": 0,
+            "start_date": None,
+            "end_date": None,
+        }
+    result = ledger.get(
+        "result", pd.Series("", index=ledger.index)
+    ).fillna("").astype(str).str.upper().str.strip()
+    date_col = next(
+        (
+            column
+            for column in ("game_date", "date", "graded_at", "settled_at")
+            if column in ledger.columns
+        ),
+        None,
+    )
+    dates = pd.Series(dtype="datetime64[ns, UTC]")
+    if date_col is not None:
+        dates = pd.to_datetime(ledger[date_col], errors="coerce", utc=True).dropna()
+    normalized_dates = dates.dt.strftime("%Y-%m-%d") if not dates.empty else dates
+    unique_dates = sorted(set(normalized_dates.tolist()))
+    return {
+        "rows": int(len(ledger)),
+        "settled": int(result.isin(["WIN", "LOSS"]).sum()),
+        "date_count": int(len(unique_dates)),
+        "start_date": unique_dates[0] if unique_dates else None,
+        "end_date": unique_dates[-1] if unique_dates else None,
+    }
