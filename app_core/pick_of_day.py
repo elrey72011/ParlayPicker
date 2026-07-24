@@ -1,18 +1,16 @@
-"""Best Overall Pick of the Day — one pick, every day, across the whole board.
+"""Best Overall Pick of the Day across funded game and prop tickets.
 
-Owner directive (4 Jul): "I'd like the best overall pick of the day … we can't
-have a $0 bet day." The games card correctly stakes $0 when no totals bucket
-clears the 55% floor, but the strikeout-prop card (65%+ realized) almost always
-has qualified picks. So the Pick of the Day ranks GAMES and PROPS together by
-win probability and always surfaces the single likeliest winner on the board.
+The banner is a production recommendation, not a research-leader label. It may
+therefore be empty when the model has no funded edge. Research-only props and
+recreational game leans remain visible on their own cards, but cannot be
+promoted into a suggested wager by this selector.
 
-Honesty rules (the floor is not lowered — it is reported):
+Honesty rules:
   * Hard-disqualified game rows never qualify: already-started games,
     wrong-game Kalshi matches, proven-losing buckets, unresolved/rejected lines.
-  * If the winner clears MIN_STAKE_WIN_PROBABILITY, its own Kelly stake is the
-    recommendation. If the whole board is below the floor, the top pick is
-    still named, but flagged below_floor=True with a flat minimum action stake
-    so the user knows it is a courtesy pick, not a modeled edge.
+  * A candidate must be production-eligible, Actionable, and carry a positive
+    executable stake.
+  * The selector never invents a courtesy stake for an unfunded row.
 """
 from __future__ import annotations
 
@@ -21,7 +19,8 @@ import pandas as pd
 
 from app_core.weights_config import MIN_STAKE_WIN_PROBABILITY
 
-# Flat "action stake" used only when nothing on the board clears the floor.
+# Retained for compatibility with older callers; production selection no longer
+# creates a courtesy bet when the board has no funded edge.
 BELOW_FLOOR_ACTION_STAKE = 5.0
 
 _GAME_DISQUALIFYING_STAGES = {
@@ -52,8 +51,12 @@ def _game_candidates(best_picks_df: pd.DataFrame | None) -> pd.DataFrame:
         keep &= ~df["game_already_started_flag"].fillna(False).astype(bool)
     if "status_blocker_stage" in df.columns:
         keep &= ~df["status_blocker_stage"].astype(str).isin(_GAME_DISQUALIFYING_STAGES)
-    if "Pick_Status" in df.columns:
-        keep &= ~df["Pick_Status"].astype(str).str.strip().eq("No Play")
+    status = df.get("Pick_Status", pd.Series("", index=df.index)).astype(str).str.strip()
+    stake = _num(df.get("Kelly_Bet_Size"), default=0.0, index=df.index)
+    production_eligible = pd.Series(
+        df.get("production_eligible", True), index=df.index
+    ).fillna(False).astype(bool)
+    keep &= status.eq("Actionable") & production_eligible & stake.gt(0)
     if "best_pick" in df.columns:
         bp = df["best_pick"].astype(str)
         keep &= bp.str.strip().ne("") & ~bp.str.contains("Unresolved|Rejected", case=False, na=False)
@@ -89,8 +92,8 @@ def _game_candidates(best_picks_df: pd.DataFrame | None) -> pd.DataFrame:
             "odds_american": _num(df.get("odds_american"), index=df.index),
             "edge": _num(df[edge_source]) if edge_source else pd.Series(np.nan, index=df.index),
             "expected_value": _num(df[ev_source]) if ev_source else pd.Series(np.nan, index=df.index),
-            "kelly_stake": _num(df.get("Kelly_Bet_Size"), default=0.0, index=df.index),
-            "pick_status": df.get("Pick_Status", pd.Series("", index=df.index)).astype(str),
+            "kelly_stake": stake.loc[df.index],
+            "pick_status": status.loc[df.index],
         }
     )
     return out[out["win_probability"].notna()]
@@ -100,6 +103,22 @@ def _prop_candidates(prop_card: pd.DataFrame | None) -> pd.DataFrame:
     if prop_card is None or prop_card.empty:
         return pd.DataFrame()
     df = prop_card.copy()
+    status = df.get(
+        "Pick_Status", pd.Series("", index=df.index)
+    ).astype(str).str.strip()
+    stake = _num(df.get("Kelly_Bet_Size"), default=0.0, index=df.index)
+    production_eligible = pd.Series(
+        df.get("production_eligible", True), index=df.index
+    ).fillna(False).astype(bool)
+    if "Stake_Status" in df.columns:
+        funded = df["Stake_Status"].astype(str).str.strip().eq("Funded")
+    else:
+        funded = status.eq("Actionable") & stake.gt(0)
+    keep = funded & status.eq("Actionable") & production_eligible & stake.gt(0)
+    df = df[keep]
+    if df.empty:
+        return pd.DataFrame()
+
     out = pd.DataFrame(
         {
             "board": "prop",
@@ -114,8 +133,8 @@ def _prop_candidates(prop_card: pd.DataFrame | None) -> pd.DataFrame:
             "expected_value": _num(df.get("expected_value"), index=df.index),
             "odds_american": _num(df.get("odds_american"), index=df.index),
             "book": df.get("book", pd.Series("", index=df.index)).astype(str).str.lower().str.strip(),
-            "kelly_stake": _num(df.get("Kelly_Bet_Size"), default=0.0, index=df.index),
-            "pick_status": df.get("Pick_Status", pd.Series("Actionable", index=df.index)).astype(str),
+            "kelly_stake": stake.loc[df.index],
+            "pick_status": status.loc[df.index],
         }
     )
     return out[out["win_probability"].notna()]
@@ -126,7 +145,7 @@ def select_pick_of_the_day(
     prop_card: pd.DataFrame | None,
     min_win_probability: float = float(MIN_STAKE_WIN_PROBABILITY),
 ) -> dict | None:
-    """The single likeliest winner across games + props, or None if both empty.
+    """The likeliest funded production ticket, or ``None`` when the board abstains.
 
     Returns a dict: board, league, pick, detail, win_probability, odds_american,
     stake, below_floor, runner_up (same shape, sans runner_up, or None).
@@ -143,9 +162,7 @@ def select_pick_of_the_day(
 
     def _row_to_dict(r: pd.Series) -> dict:
         below = float(r["win_probability"]) < float(min_win_probability)
-        # No $0 bet days: the pick's own Kelly stake when it has one, otherwise
-        # the flat minimum action stake (with below_floor telling the user why).
-        stake = float(r["kelly_stake"]) if float(r["kelly_stake"]) > 0 else BELOW_FLOOR_ACTION_STAKE
+        stake = float(r["kelly_stake"])
         return {
             "board": str(r["board"]),
             "league": str(r["league"]),

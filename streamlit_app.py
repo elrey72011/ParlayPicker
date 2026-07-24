@@ -1316,9 +1316,8 @@ def main() -> None:
     with tab3:
         st.subheader("Best Picks")
 
-        # 🏆 Best Overall Pick of the Day — games and strikeout props ranked
-        # together by win probability, so a $0-stake games day still yields the
-        # single likeliest winner on the board (owner directive, 4 Jul).
+        # 🏆 Best Overall Pick of the Day — funded production tickets only.
+        # Research rows keep grading, but can never become a suggested wager.
         try:
             from app_core.pick_of_day import select_pick_of_the_day
             from app_core.weights_config import MIN_STAKE_WIN_PROBABILITY
@@ -1350,6 +1349,11 @@ def main() -> None:
                     f"Runner-up: {_ru['pick']} · {_ru['win_probability']:.1%} "
                     f"({'prop' if _ru['board'] == 'prop' else _ru['league'] + ' game'})"
                 )
+        else:
+            st.info(
+                "No production Pick of the Day — no funded game or player-prop "
+                "ticket cleared every model, calibration, and portfolio guard."
+            )
 
         # 🎫 Best Duos — likeliest 2-leg parlays across games + props, no shared
         # games between legs, no leg reused across duos (owner request, 8 Jul).

@@ -196,6 +196,8 @@ def apply_prop_calibration(
     calibrated_values: list[float] = []
     conservative_values: list[float] = []
     sample_sizes: list[int] = []
+    profile_sample_sizes: list[int] = []
+    directional_sample_sizes: list[int] = []
     sources: list[str] = []
     keys: list[str] = []
 
@@ -205,7 +207,9 @@ def apply_prop_calibration(
             out.at[idx, "best_pick"] if "best_pick" in out.columns else "",
         )
         keys.append(key)
-        profile = profiles.get(key, {})
+        directional_profile = profiles.get(key, {})
+        directional_n = int(directional_profile.get("n", 0) or 0)
+        profile = directional_profile
         source = "directional"
         if not profile.get("knots"):
             if pooled.get("knots"):
@@ -225,19 +229,27 @@ def apply_prop_calibration(
         else:
             # With no settled evidence, trust only a quarter of model/market disagreement.
             calibrated = p_market + 0.25 * (p_raw - p_market)
+        # A pooled curve may shrink a thin direction, but it cannot manufacture
+        # extra confidence for that side. Directional evidence must independently
+        # earn any probability uplift.
+        if source == "pooled":
+            calibrated = min(calibrated, p_raw)
         calibrated = min(0.95, max(0.05, calibrated))
         uncertainty = 0.0
-        if n:
+        uncertainty_n = directional_n if source == "pooled" else n
+        if uncertainty_n:
             uncertainty = PROP_CALIBRATION_Z * sqrt(
                 calibrated * (1.0 - calibrated)
-                / (n + PROP_CALIBRATION_PRIOR_WEIGHT)
+                / (uncertainty_n + PROP_CALIBRATION_PRIOR_WEIGHT)
             )
-        if source == "market_blend_fallback":
+        if source in {"pooled", "market_blend_fallback"}:
             uncertainty += PROP_UNCALIBRATED_EXTRA_HAIRCUT
         conservative = min(calibrated, max(0.05, calibrated - uncertainty))
         calibrated_values.append(calibrated)
         conservative_values.append(conservative)
-        sample_sizes.append(n)
+        sample_sizes.append(directional_n)
+        profile_sample_sizes.append(n)
+        directional_sample_sizes.append(directional_n)
         sources.append(source)
 
     calibrated = pd.Series(calibrated_values, index=out.index)
@@ -251,6 +263,8 @@ def apply_prop_calibration(
     out["CalibratedProbability"] = calibrated.round(4)
     out["ConservativeWinProbability"] = conservative.round(4)
     out["CalibrationSampleSize"] = sample_sizes
+    out["CalibrationProfileSampleSize"] = profile_sample_sizes
+    out["DirectionalCalibrationSampleSize"] = directional_sample_sizes
     out["CalibrationSource"] = sources
     out["WinProbability"] = conservative.round(4)
     out["edge"] = (conservative - market_prob).round(4)

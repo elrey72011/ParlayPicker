@@ -64,7 +64,8 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
         key="prop_results_log",
         help=(
             "Settled WIN/LOSS rows calibrate each prop market and direction. "
-            "Without this ledger, props remain research-only."
+            "Upload the latest cumulative ledger at the start of each new app "
+            "session; without it, props remain research-only."
         ),
     )
 
@@ -118,10 +119,13 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
                         inferred_date = dates[0]
                 grade_date = inferred_date or previous_prop_date.isoformat()
 
-                prior_ledger = st.session_state.get("generated_prop_results_log")
+                generated_prior = st.session_state.get("generated_prop_results_log")
+                uploaded_prior = None
                 if prop_results_log is not None:
                     prop_results_log.seek(0)
-                    prior_ledger = pd.read_csv(prop_results_log)
+                    uploaded_prior = pd.read_csv(prop_results_log)
+                    prop_results_log.seek(0)
+                prior_ledger = merge_prop_ledgers(uploaded_prior, generated_prior)
                 with st.spinner(f"Grading MLB player props for {grade_date}..."):
                     graded = grade_prop_export(previous_card, grade_date)
                     ledger = merge_prop_ledgers(prior_ledger, graded)
@@ -136,6 +140,38 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
                 st.sidebar.error(f"Player-prop grading failed: {exc}")
 
     generated_ledger = st.session_state.get("generated_prop_results_log")
+    active_ledger = generated_ledger
+    if (
+        not isinstance(active_ledger, pd.DataFrame)
+        or active_ledger.empty
+    ) and prop_results_log is not None:
+        try:
+            prop_results_log.seek(0)
+            active_ledger = pd.read_csv(prop_results_log)
+            prop_results_log.seek(0)
+        except (OSError, ValueError, TypeError):
+            active_ledger = None
+
+    if isinstance(active_ledger, pd.DataFrame) and not active_ledger.empty:
+        from app_core.prop_grading import ledger_coverage_summary
+
+        coverage = ledger_coverage_summary(active_ledger)
+        date_range = (
+            coverage["start_date"]
+            if coverage["start_date"] == coverage["end_date"]
+            else f"{coverage['start_date']} to {coverage['end_date']}"
+        )
+        st.sidebar.caption(
+            f"Prop calibration history: {coverage['settled']} settled rows "
+            f"across {coverage['date_count']} slate date(s) ({date_range})."
+        )
+        if coverage["settled"] > 0 and coverage["date_count"] <= 1:
+            st.sidebar.warning(
+                "Only one slate date is loaded. This is not yet a cumulative "
+                "calibration history; download the updated ledger and upload it "
+                "again at the start of the next app session."
+            )
+
     if isinstance(generated_ledger, pd.DataFrame) and not generated_ledger.empty:
         st.sidebar.download_button(
             "Download Updated Graded Prop Ledger",
