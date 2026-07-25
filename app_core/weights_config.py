@@ -8,7 +8,7 @@ ML_MODEL_WEIGHT = 0.15     # Historical model
 THEOVER_WEIGHT = 0.20      # TheOver consensus (raised; Kalshi over-dominance reduced)
 SENTIMENT_WEIGHT = 0.05    # News sentiment
 
-# Market Maturity Overrides â€” MLB only (moderate Kalshi liquidity)
+# Market Maturity Overrides — MLB only (moderate Kalshi liquidity)
 # Reduces Kalshi weight, boosts ML to compensate for thinner market depth.
 LOW_LIQUIDITY_KALSHI_WEIGHT = 0.30
 LOW_LIQUIDITY_ML_MODEL_WEIGHT = 0.35
@@ -16,16 +16,16 @@ LOW_LIQUIDITY_ML_MODEL_WEIGHT = 0.35
 # MLB Totals blending overrides (Tier 1 and Tier 2).
 # May-13 review: TheOver was double-counted (pre-mix + separate weight); overs 1-5.
 # Fix: removed double-counting; reduced TheOver weight to 0.10 and raised market.
-# May-16 correction: TheOver DOES incorporate pitcher data â€” the flat ~0.85 probs
+# May-16 correction: TheOver DOES incorporate pitcher data — the flat ~0.85 probs
 # observed on May-13 were caused by team name cross-matching bugs (now fixed), not
 # bad data quality. Restoring TheOver to 0.25; market eased back to 0.25.
-# May-29 reweight: Kalshi and Market (Novig de-vig) are ~85-90% correlated â€” both are
+# May-29 reweight: Kalshi and Market (Novig de-vig) are ~85-90% correlated — both are
 # "what money thinks." Linear pooling of two correlated forecasters double-counts a
 # single underlying source, so the old 0.40+0.30=0.70 on the market complex overstated
-# its independent information. Shrunk Market 0.30â†’0.16 (market complex now 0.58,
+# its independent information. Shrunk Market 0.30→0.16 (market complex now 0.58,
 # Kalshi-dominant) and redistributed to the two INDEPENDENT signals: TheOver (pitcher
-# data) 0.25â†’0.30 and ML (team form) 0.05â†’0.12. Sum still 1.00. This is a variance-
-# reduction / redundancy fix, not a backtest-fitted optimum â€” fit to Brier/log-loss on
+# data) 0.25→0.30 and ML (team form) 0.05→0.12. Sum still 1.00. This is a variance-
+# reduction / redundancy fix, not a backtest-fitted optimum — fit to Brier/log-loss on
 # historical signal-vs-outcome data to prove the true optimum.
 MLB_TOTAL_THEOVER_WEIGHT = 0.17          # market-trust reweight (16 Jun): cut 0.30->0.17
 MLB_TOTAL_ML_WEIGHT = 0.08               # market-trust reweight (16 Jun): cut 0.12->0.08
@@ -34,10 +34,10 @@ MLB_TOTAL_KALSHI_WEIGHT = 0.48           # market-trust reweight (16 Jun): raise
 MLB_TOTAL_FALLBACK_THEOVER_WEIGHT = 0.17 # market-trust reweight (16 Jun): cut 0.30->0.17
 MLB_TOTAL_FALLBACK_ML_WEIGHT = 0.08      # market-trust reweight (16 Jun): cut 0.15->0.08
 MLB_TOTAL_FALLBACK_MARKET_WEIGHT = 0.55  # market-trust reweight (16 Jun): raised 0.35->0.55
-# MARKET-TRUST REWEIGHT â€” MLB totals only (16 Jun). Evidence: across 13 graded slates
+# MARKET-TRUST REWEIGHT — MLB totals only (16 Jun). Evidence: across 13 graded slates
 # (1-15 Jun, n=171, latest run/day) the STAKED tiers were the worst performers and the
-# model's confidence was inverted â€” Actionable 32% / High Variance 39% / Below Threshold
-# 54% â€” and within Over picks the relationship was the same (Actionable/HV overs 33-39%
+# model's confidence was inverted — Actionable 32% / High Variance 39% / Below Threshold
+# 54% — and within Over picks the relationship was the same (Actionable/HV overs 33-39%
 # vs Below Threshold overs 59%). The gates promote the largest model-vs-market
 # divergence (highest EV/edge); on the efficient MLB totals market that divergence is
 # negatively predictive, so the model + TheOver signals were actively anti-predictive
@@ -55,7 +55,7 @@ NBA_TOTAL_ML_WEIGHT = 0.12               # down from ML_MODEL_WEIGHT (0.15)
 NBA_TOTAL_FALLBACK_THEOVER_WEIGHT = 0.40 # up from FALLBACK_THEOVER (0.20)
 NBA_TOTAL_FALLBACK_ML_WEIGHT = 0.15      # down from FALLBACK_ML (0.35)
 
-# NHL Tier-1 overrides â€” Kalshi is least reliable for hockey; ML + market dominate.
+# NHL Tier-1 overrides — Kalshi is least reliable for hockey; ML + market dominate.
 NHL_KALSHI_WEIGHT = 0.22
 NHL_ML_MODEL_WEIGHT = 0.42
 NHL_MARKET_WEIGHT = 0.22
@@ -72,11 +72,11 @@ FALLBACK_SENTIMENT_WEIGHT = 0.10
 BASELINE_MIN_EV = 0.01
 BASELINE_MIN_EDGE = 0.02
 
-# â”€â”€ Win-probability-first (owner preference, 3 Jul) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Win-probability-first (owner preference, 3 Jul) ─────────────────────────
 # The owner optimizes for CHANCE OF WINNING, not ROI: "I don't want the highest
 # ROI, I want the best pick that has the highest chance of winning." Applied
 # across the board (props got the same treatment in prop_pipeline.py):
-#   * No stake below this win probability, PERIOD â€” it overrides the high-EV
+#   * No stake below this win probability, PERIOD — it overrides the high-EV
 #     exception paths (MLB_SPREAD_HIGH_EV_MIN_WIN_PROB 0.44, the divergence
 #     high-EV override at 0.50) that deliberately staked longshots on price.
 #     Those rows stay visible but are held at High Variance with Kelly 0.
@@ -99,25 +99,25 @@ NBA_STAR_ACTIVE_TOTAL_UNDER_PENALTY = -0.01
 TOTAL_MIN_WIN_PROB = 0.54
 # Under win-prob floor lowered 0.62 -> 0.55 on 8 Jun. Graded MLB totals (n=212,
 # scripts/edge_by_bucket.py): Unders hit 60.6% vs Overs 52.5%, and the eff_win [0.55,0.60)
-# bucket hits 58.9% â€” i.e. Unders carry edge well below the old 0.62/0.63 floors. Relaxing
+# bucket hits 58.9% — i.e. Unders carry edge well below the old 0.62/0.63 floors. Relaxing
 # OVERS bled (46.7%, kept strict at MLB_OVER_ACTIONABLE_MIN_PROB=0.65); this lowers only the
-# UNDER floor. NBA/NHL unders are unaffected â€” NHL pins 0.58 (NHL_TOTAL_MIN_WIN_PROB_STRICT)
+# UNDER floor. NBA/NHL unders are unaffected — NHL pins 0.58 (NHL_TOTAL_MIN_WIN_PROB_STRICT)
 # and NBA pins 0.65 (NBA_TOTAL_MIN_WIN_PROB) via their own max() floors downstream. The high
 # EV/edge floors below and the Agrees-only under gate stay, so this can only add high-quality
 # Agrees unders that were blocked by a small prob gap, never weak picks.
 TOTAL_UNDER_MIN_WIN_PROB = 0.55
-TOTAL_UNDER_MIN_EV = 0.22           # raised 0.18â†’0.22 after May-16 review: both Actionable unders lost
-TOTAL_UNDER_MIN_EDGE = 0.13         # raised 0.10â†’0.13 after May-16 review
+TOTAL_UNDER_MIN_EV = 0.22           # raised 0.18→0.22 after May-16 review: both Actionable unders lost
+TOTAL_UNDER_MIN_EDGE = 0.13         # raised 0.10→0.13 after May-16 review
 # MLB-specific under win prob floor (MLB unders 0-2 Actionable on May-16; both lost badly)
-# Lowered 0.66â†’0.63 on May-28: S/A-Tier Agrees picks at 64-65% were blocked by 1-2% gap;
+# Lowered 0.66→0.63 on May-28: S/A-Tier Agrees picks at 64-65% were blocked by 1-2% gap;
 # MLB_UNDER_ACTIONABLE_CAP already prevents these from reaching Actionable.
-# Lowered 0.63â†’0.55 on 8 Jun (n=212): Unders are the edge side and hold at 0.55-0.63; the
+# Lowered 0.63→0.55 on 8 Jun (n=212): Unders are the edge side and hold at 0.55-0.63; the
 # EV(0.22)/edge(0.13)/Agrees gates remain the quality backstop. See TOTAL_UNDER_MIN_WIN_PROB.
 MLB_TOTAL_UNDER_MIN_WIN_PROB = 0.55  # was 0.63 (was 0.66)
 NHL_TOTAL_EXTRA_EDGE_PENALTY = 0.01
 NHL_TOTAL_MIN_WIN_PROB = 0.57
 NHL_TOTAL_MIN_WIN_PROB_STRICT = 0.58
-# Raised 0.62â†’0.65 after May-11 review: NBA Under 213.5 was Actionable and lost;
+# Raised 0.62→0.65 after May-11 review: NBA Under 213.5 was Actionable and lost;
 # NBA Unders are 0-3 across May 9-11 with no defensive-pace signal in feature set.
 NBA_TOTAL_MIN_WIN_PROB = 0.65
 NBA_TOTAL_MIN_EV = 0.02
@@ -126,25 +126,25 @@ NHL_TOTAL_MIN_EV_STRICT = 0.01
 NHL_TOTAL_MIN_EDGE_STRICT = 0.02
 FALLBACK_HEAVY_TOTAL_EV_MULTIPLIER = 0.85
 
-# Divergence guardrail thresholds â€” per league (ML vs Kalshi gap to trigger cap)
+# Divergence guardrail thresholds — per league (ML vs Kalshi gap to trigger cap)
 # Thresholds reflect market liquidity: liquid markets (NBA) trust Kalshi more,
 # thin markets (NHL) tolerate larger gaps before capping as High Variance.
 KALSHI_DIVERGENCE_THRESHOLD = 0.20          # Default for unlisted leagues
-KALSHI_DIVERGENCE_THRESHOLD_NBA = 0.25      # Very liquid â€” tighter cap
+KALSHI_DIVERGENCE_THRESHOLD_NBA = 0.25      # Very liquid — tighter cap
 KALSHI_DIVERGENCE_THRESHOLD_MLB = 0.22      # Moderate liquidity
-KALSHI_DIVERGENCE_THRESHOLD_NHL = 0.30      # Thin market â€” ML more trusted
+KALSHI_DIVERGENCE_THRESHOLD_NHL = 0.30      # Thin market — ML more trusted
 
 # Spread divergence override (allows Actionable despite divergence if strong signal)
 SPREAD_DIVERGENCE_OVERRIDE_MIN_PROB = 0.55
 SPREAD_DIVERGENCE_OVERRIDE_MIN_EV = 0.03
 SPREAD_DIVERGENCE_OVERRIDE_MIN_EDGE = 0.04
 
-# Divergent picks viability floor â€” min quality to surface as High Variance vs No Play
+# Divergent picks viability floor — min quality to surface as High Variance vs No Play
 DIVERGENCE_HIGH_VARIANCE_MIN_EV = 0.03
 DIVERGENCE_HIGH_VARIANCE_MIN_EDGE = 0.02
 DIVERGENCE_HIGH_VARIANCE_MIN_PROB = 0.53
 
-# High-EV divergence override â€” preserve a divergent pick as High Variance/Speculative
+# High-EV divergence override — preserve a divergent pick as High Variance/Speculative
 # (rather than dropping it to No Play) when EV and edge are comfortably positive, even
 # if win probability falls just short of DIVERGENCE_HIGH_VARIANCE_MIN_PROB. Mirrors the
 # spread divergence/high-EV overrides already used for sides: when the market is clearly
@@ -156,13 +156,13 @@ DIVERGENCE_HIGH_EV_OVERRIDE_MIN_EV = 0.05
 DIVERGENCE_HIGH_EV_OVERRIDE_MIN_EDGE = 0.04
 DIVERGENCE_HIGH_EV_OVERRIDE_MIN_PROB = 0.50
 
-# ML contradiction guardrail â€” totals only
+# ML contradiction guardrail — totals only
 # The XGBoost model predicts home win probability, which has no direct bearing on
 # total runs. The old threshold (50%) was blocking good over picks when the ML
 # simply predicted the away team to win (e.g., MIA/ATL: ML=40.8%, game went 12-0=12 total).
 # Only block a total_over when ML probability is extremely low (< 35%), signalling the
 # model strongly expects a low-scoring or blowout-type result.
-# Unders are not subject to this guardrail â€” a low home win prob says nothing about
+# Unders are not subject to this guardrail — a low home win prob says nothing about
 # whether the game stays under the total.
 # 18 Jun: raised 0.35 -> 0.45 so we don't stake an OVER our own ML model leans against.
 # TheOver's coarse hit-rate was promoting overs to Actionable while ML sat below a coin
@@ -199,14 +199,14 @@ NBA_OVER_ACTIONABLE_BONUS = 0.00
 # calibration (the middle-band miscalibration is non-linear, so a flat shrink won't do it)
 # over re-tuning this gate.
 # 28 Jun: SYMMETRIZED with the under floor. The strict 0.65/0.07 over bar above was set in the
-# "overs bled 46.7%" era; the current graded buckets (n=350) show overs are now ~51% â€”
-# over:Agrees .509, over:Neutral .510 â€” no worse than under:Neutral (.500) or under:Disagrees
+# "overs bled 46.7%" era; the current graded buckets (n=350) show overs are now ~51% —
+# over:Agrees .509, over:Neutral .510 — no worse than under:Neutral (.500) or under:Disagrees
 # (.457). Direction is NOT the signal; the bucket is (only under:Agrees .631 is truly good).
 # The empirical-tier overlay already gates staking by PROVEN bucket, and no over bucket is
 # proven yet, so this opens no floodgate: overs at ~51% are still below the -110 break-even
-# and the overlay still blocks them. What it removes is the stale asymmetry â€” and it lets an
+# and the overlay still blocks them. What it removes is the stale asymmetry — and it lets an
 # over bucket actually stake IF it ever proves out (>0.55), instead of the 0.65 floor blocking
-# it even then. (Per-line over guards â€” high/low total-line penalties â€” are kept; those are
+# it even then. (Per-line over guards — high/low total-line penalties — are kept; those are
 # line-environment effects, not the over/under bucket asymmetry.)
 MLB_OVER_ACTIONABLE_MIN_PROB = 0.55   # = MLB_TOTAL_UNDER_MIN_WIN_PROB (symmetric)
 MLB_OVER_ACTIONABLE_MIN_EV = 0.03     # = TOTAL_OVER_MIN_EV (symmetric)
@@ -230,73 +230,73 @@ MLB_OVER_ACTIONABLE_MIN_EDGE = 0.04
 MLB_OVER_AGREES_ACTIONABLE_MIN_PROB = 0.55
 MLB_OVER_AGREES_ACTIONABLE_MIN_EV = 0.03
 MLB_OVER_AGREES_ACTIONABLE_MIN_EDGE = 0.02
-# Hard cap on calibrated probability for MLB overs â€” prevents residual TheOver
-# inflation above a reliable ceiling. Raised from 0.67 â†’ 0.72 (May-26): the 0.67
+# Hard cap on calibrated probability for MLB overs — prevents residual TheOver
+# inflation above a reliable ceiling. Raised from 0.67 → 0.72 (May-26): the 0.67
 # cap was set when TheOver had a cross-matching bug producing flat ~0.85 probs.
 # That bug was fixed May-16. The shrinkage factor (0.85) handles general calibration;
 # the cap now only blocks genuine outliers, not normal high-confidence picks.
 MLB_OVER_CALIBRATED_PROB_CAP = 0.72
 
-# MLB total HV/Spec floor â€” May 27: HV/Spec MLB totals went 0-6 while BT went 6-2.
+# MLB total HV/Spec floor — May 27: HV/Spec MLB totals went 0-6 while BT went 6-2.
 # Picks with effective_win_probability below this value are demoted from HV/Spec
 # to Below Threshold (still visible, minimal Kelly sizing) rather than HV.
 MLB_TOTAL_HV_MIN_WIN_PROB = 0.62
 
-# MLB Under Actionable cap â€” was True after May 16-17 (0-4 Actionable record).
+# MLB Under Actionable cap — was True after May 16-17 (0-4 Actionable record).
 # Removed May-28: unders have hit at a higher rate than overs across May 22-27
 # (BT unders 6-2 on May 27; Actionable unders 2-0; overs 0-4 on same slate).
 # The cap was set before the TheOver conflict penalty and double-shrink fix.
 # Replaced by a consensus gate in the pipeline: only "Agrees" MLB unders can be Actionable.
 MLB_UNDER_ACTIONABLE_CAP = False
 
-# NHL Under Actionable cap â€” CAR/MTL Under 5.5 went 8 total goals at Actionable on May 21.
+# NHL Under Actionable cap — CAR/MTL Under 5.5 went 8 total goals at Actionable on May 21.
 # Same pattern as MLB unders: model overconfident on unders in lower-scoring sport contexts.
 # Cap at High Variance until NHL under performance demonstrates reliability.
 NHL_UNDER_ACTIONABLE_CAP = True
 
 # Cold-Market Penalty Layer (by League + Market Type)
 MLB_TOTAL_OVER_ACTIONABLE_PENALTY = 0.00
-# MLB Under raised 0.03â†’0.05 after May-11 review: LA/SF Under 9.5 lost (12 runs scored).
-# Further raised 0.05â†’0.07 after May-16 review: both Actionable unders lost (11 runs each).
-# Lowered 0.07â†’0.03 on May-28: MLB_UNDER_ACTIONABLE_CAP=True already prevents Actionable;
+# MLB Under raised 0.03→0.05 after May-11 review: LA/SF Under 9.5 lost (12 runs scored).
+# Further raised 0.05→0.07 after May-16 review: both Actionable unders lost (11 runs each).
+# Lowered 0.07→0.03 on May-28: MLB_UNDER_ACTIONABLE_CAP=True already prevents Actionable;
 # stacking a 7% penalty on top of the cap created a 28% combined edge requirement that
-# blocked S-Tier Agrees picks with 19-20% edge â€” double-counting the same protection.
+# blocked S-Tier Agrees picks with 19-20% edge — double-counting the same protection.
 MLB_TOTAL_UNDER_ACTIONABLE_PENALTY = 0.03
 NBA_TOTAL_OVER_ACTIONABLE_PENALTY = 0.02
-# NBA Under raised 0.02â†’0.05 after May-11 review: NBA Unders 0-3 across May 9-11.
+# NBA Under raised 0.02→0.05 after May-11 review: NBA Unders 0-3 across May 9-11.
 NBA_TOTAL_UNDER_ACTIONABLE_PENALTY = 0.05
 NHL_TOTAL_OVER_ACTIONABLE_PENALTY = 0.02
 NHL_TOTAL_UNDER_ACTIONABLE_PENALTY = 0.03
 
-# High total line penalty â€” MLB overs with a very high line (â‰¥11.0) have consistently
+# High total line penalty — MLB overs with a very high line (≥11.0) have consistently
 # underperformed: COL/ARI Over 11.5 lost on both May-15 and May-16 (6 and 10 runs scored).
 MLB_HIGH_TOTAL_LINE_THRESHOLD = 11.0
 MLB_HIGH_TOTAL_LINE_OVER_PENALTY = 0.03  # added to req_ev and req_edge
 
-# Mid-range total line penalty â€” MLB overs in the 9.5â€“10.9 range have underperformed.
+# Mid-range total line penalty — MLB overs in the 9.5–10.9 range have underperformed.
 # May 21: ARI/COL Over 9.5 went only 3 total runs at Actionable.
-# Adds a smaller penalty tier between the base gate and the â‰¥11.0 extreme-line penalty.
+# Adds a smaller penalty tier between the base gate and the ≥11.0 extreme-line penalty.
 MLB_MID_TOTAL_LINE_THRESHOLD = 9.5
 MLB_MID_TOTAL_LINE_OVER_PENALTY = 0.02  # added to req_ev and req_edge
 
 # Edge-based no-stake gates from graded MLB totals (20 May-7 Jun, n=182; see
 # scripts/edge_by_bucket.py). Two buckets bled below the -110 breakeven (52.4%) and are
 # held out of the production card rather than tuned:
-#   * Neutral-consensus totals â€” Over/Neutral hit 48.2% (n=56), the single largest losing
+#   * Neutral-consensus totals — Over/Neutral hit 48.2% (n=56), the single largest losing
 #     cell; Agrees (61.4%) and Disagrees (63.2%) totals keep their edge.
 #   * Mid-line Overs (line in [MLB_OVER_MIN_TOTAL_LINE, MLB_MID_TOTAL_LINE_THRESHOLD), i.e.
-#     8.0-9.5) â€” hit 46.5% (n=43), while the Under on those same lines hit 65.4%.
+#     8.0-9.5) — hit 46.5% (n=43), while the Under on those same lines hit 65.4%.
 # Capped picks drop to Below Threshold (visible, unstaked). Flip either flag to False to
 # restore prior behavior; re-evaluate as the graded sample grows.
 MLB_TOTAL_NEUTRAL_NO_STAKE = True
 MLB_OVER_MID_LINE_NO_STAKE = True
 
-# Low total line floor â€” MLB overs with a line below 8.0 are pitcher-friendly games.
+# Low total line floor — MLB overs with a line below 8.0 are pitcher-friendly games.
 # May 20: CHC/MIL Over 6.5 (5 total), SD/LAD Over 7.5 (4 total) both lost. The
 # low_line_over_guardrail is now CONSENSUS-AWARE (see core/streamlit_pipeline.py):
 # Neutral low-line overs are held at Below Threshold, while Disagrees/Agrees low-line
 # overs are surfaced at High Variance (the strong Agrees ones keep Actionable via the
-# carve-out below). Sub-8.0 overs are not a uniformly weak bucket â€” see backtest.
+# carve-out below). Sub-8.0 overs are not a uniformly weak bucket — see backtest.
 MLB_OVER_MIN_TOTAL_LINE = 8.0
 
 # Sub-8.0 MLB over escape hatch (conditioned carve-out for the low_line_over_guardrail
@@ -311,7 +311,7 @@ MLB_OVER_MIN_TOTAL_LINE = 8.0
 # Kalshi-Agrees over with strong shrinkage-adjusted win prob and edge keeps Actionable.
 #
 # DISABLED 6 Jun: fresh slates contradicted the backtest above. Low-line MLB "Over 7.5"
-# plays went 1-4 (5 Jun) then 0-4 (6 Jun) â€” the SAME matchups (SD/Mets, Texas/Cle,
+# plays went 1-4 (5 Jun) then 0-4 (6 Jun) — the SAME matchups (SD/Mets, Texas/Cle,
 # Miami/TB) were re-served and missed on back-to-back nights, landing 5, 5, 7, 6 runs.
 # The model is still inflated on MLB overs (see the calibrated-prob cap in
 # streamlit_pipeline), so the 0.62/0.08 floors below clear on overconfidence rather than
@@ -321,7 +321,7 @@ MLB_LOW_LINE_OVER_OVERRIDE_ENABLED = False
 MLB_LOW_LINE_OVER_OVERRIDE_MIN_WIN_PROB = 0.62
 MLB_LOW_LINE_OVER_OVERRIDE_MIN_EDGE = 0.08
 
-# TheOver direction conflict penalty â€” when TheOver's probability clearly disagrees
+# TheOver direction conflict penalty — when TheOver's probability clearly disagrees
 # with the blended pick direction for an MLB total, apply this penalty to the
 # conflicting pick's final_family_score so the TheOver-aligned direction wins selection.
 # TheOver incorporates pitcher/rotation data that Kalshi + market can't fully price.
@@ -329,35 +329,35 @@ MLB_LOW_LINE_OVER_OVERRIDE_MIN_EDGE = 0.08
 # SF 7.5 all lost; the model was following Kalshi/market while TheOver likely disagreed.
 # May 23: All 5 MLB Over picks in High Variance lost (ATL, CHC, TOR, BOS, SD).
 # Tightened threshold to 0.50 and raised penalty to 0.35 to flip more conflicting Overs.
-MLB_THEOVER_CONFLICT_THRESHOLD = 0.50   # TheOver says other side has â‰¥50% probability
+MLB_THEOVER_CONFLICT_THRESHOLD = 0.50   # TheOver says other side has ≥50% probability
 MLB_THEOVER_CONFLICT_PENALTY = 0.35     # Subtracted from final_family_score to flip selection
 
 # Weight on Kalshi's DIRECTIONAL confidence relative to TheOver's when the two
 # disagree on an MLB total's over/under direction (used by
-# _mlb_total_direction_conflict). Motivation â€” the graded history (n=363,
+# _mlb_total_direction_conflict). Motivation — the graded history (n=363,
 # data/calibration/bucket_stats.json) shows the pick LOST whenever it fought Kalshi
 # on an MLB total: over:Disagrees 46% (n=56), under:Disagrees 45% (n=38), while the
 # only proven-profitable total bucket is Kalshi-agreeing under:Agrees 62% (n=66).
 # Kalshi is therefore the more reliable direction signal, so it gets a moderate edge:
 # at 1.5 TheOver must be >1.5x as confident (distance from 0.50) as Kalshi to flip the
 # pick away from Kalshi's side. Genuinely strong TheOver pitcher reads (>1.5x) still
-# win â€” this only reclaims the marginal cases where a mildly-more-confident TheOver was
+# win — this only reclaims the marginal cases where a mildly-more-confident TheOver was
 # overriding Kalshi and losing. Governs DIRECTION selection only (which over/under row
 # is penalized in the family sort); does NOT change calibrated_probability, EV, edge,
 # or any staking threshold, so the calibration tables stay valid. 1.0 restores the
 # prior symmetric most-confident-wins behavior (fully reversible). NOT a fitted
-# optimum â€” a moderate, reversible lean toward the proven-more-reliable signal; fit to
+# optimum — a moderate, reversible lean toward the proven-more-reliable signal; fit to
 # Brier/log-loss on per-pick signal-vs-outcome data to prove the true value.
 KALSHI_DIRECTION_CONFIDENCE_WEIGHT = 1.5
 
 # Kalshi direction VETO (4 Jul, from the graded archive, n=248 totals picks
 # Jun 2 - Jul 3): the model's lean hit 45.5% overall and 39% in its own most
-# confident band â€” while the side KALSHI favored (conviction >= 5 pts) hit
+# confident band — while the side KALSHI favored (conviction >= 5 pts) hit
 # 54.0% (74/137) on the same games. Picks made AGAINST a convicted Kalshi hit
 # 43%. The 0.35 conflict penalty was a nudge the model's z-spread (~1.3 across
 # a family) could out-vote; when Kalshi's conviction clears the threshold
 # below, its opposition now subtracts a penalty no z-spread can survive, so
-# the family finalist IS Kalshi's side. Direction only â€” probabilities, EV,
+# the family finalist IS Kalshi's side. Direction only — probabilities, EV,
 # and staking gates are untouched. Set the penalty to
 # MLB_THEOVER_CONFLICT_PENALTY to restore nudge behavior.
 KALSHI_DIRECTION_VETO_PENALTY = 2.0
@@ -368,23 +368,23 @@ KALSHI_DIRECTION_VETO_MIN_CONVICTION = 0.05  # |P(kalshi) - 0.50| to arm the vet
 #   model_hit_rate_flipped  -> TheOver's model picked the UNDER; P(Over) = 1 - hit_rate
 #   public_betting_pct      -> derived from public betting %
 #   default_0.5             -> no read (handled separately by its 0.50 value)
-# model_hit_rate_flipped is a GENUINE TheOver Under pick â€” the same signal as
-# model_hit_rate, just the Under side â€” NOT a fallback or low-quality value. We FADE it:
+# model_hit_rate_flipped is a GENUINE TheOver Under pick — the same signal as
+# model_hit_rate, just the Under side — NOT a fallback or low-quality value. We FADE it:
 # shrink P(Over) toward 0.50 so it pulls the blend/direction proportionally less. This is
 # a tunable strategy bet (fade a cold model), not a data-quality filter.
 #
-# TUNING PROTOCOL â€” read before touching MLB_THEOVER_FADE_SHRINK:
+# TUNING PROTOCOL — read before touching MLB_THEOVER_FADE_SHRINK:
 #   * The fade ONLY affects flipped games (TheOver picked Under). Judge it by the
-#     flipped-game counterfactual â€” on those games, did Over or Under actually hit? â€”
+#     flipped-game counterfactual — on those games, did Over or Under actually hit? —
 #     NOT by the aggregate consensus/ROI buckets in scripts/backtest_theover_direction.py.
 #     Those buckets are STAKE-WEIGHTED and dominated by big Actionable Over hammers
 #     (genuine model_hit_rate/public picks, not flipped games), so they conflate the fade
 #     decision with hammer staking and will mislead you (they did once already).
-#   * Evidence to date â€” fading (i.e. picking the market Over on a flipped game) was right
+#   * Evidence to date — fading (i.e. picking the market Over on a flipped game) was right
 #     ~11-6 across 1-3 Jun (1 Jun 3-0, 2 Jun 5-3, 3 Jun 3-3). That supported the 0.75 setting.
 #   * REVERSAL (5-6 Jun): the flipped-game signal inverted. On 6 Jun the pipeline faded
 #     TheOver and forced the Over on 5 flipped games (Cubs/SF, Miami/TB, Texas/Cle, NYY/Bos,
-#     Houston/Ath) and those Overs went 1-4 â€” i.e. TheOver's faded Unders would have gone
+#     Houston/Ath) and those Overs went 1-4 — i.e. TheOver's faded Unders would have gone
 #     4-1. The 0.75 fade was now picking the losing side and producing all-Over, empty
 #     production cards. Eased 0.75 -> 0.25 ("respect the signal" end; see
 #     tests/test_mlb_total_direction_conflict.test_light_fade_still_lets_strong_theover_win)
@@ -396,10 +396,10 @@ KALSHI_DIRECTION_VETO_MIN_CONVICTION = 0.05  # |P(kalshi) - 0.50| to arm the vet
 # 18 Jun: added the OVER source ("model_hit_rate") alongside the flipped UNDER source.
 # Both are coarse, repeated hit-rate fractions (e.g. 7/8, 25/32) used as if they were
 # per-game probabilities, and fading only the under side structurally tilted the card
-# toward overs â€” TheOver alone was promoting overs the ML model leaned against (18 Jun
+# toward overs — TheOver alone was promoting overs the ML model leaned against (18 Jun
 # Seattle: ML 0.47 -> Actionable over on TheOver 0.88). Faded symmetrically now.
 MLB_THEOVER_FADE_SOURCES = frozenset({"model_hit_rate_flipped", "model_hit_rate"})
-# 26 Jun: the raw TheOver scrape (M-code) proves these are NOT genuine per-game reads â€”
+# 26 Jun: the raw TheOver scrape (M-code) proves these are NOT genuine per-game reads —
 # ModelHitRate is a hardcoded constant (0.875 = 7/8), so every Under pick emits P(Over)=0.125
 # and every Over pick 0.875, collapsing to a single value across the slate (12/15 totals on
 # the 26-Jun upload were identical). The pipeline already blanks this for the DIRECTION
@@ -407,19 +407,19 @@ MLB_THEOVER_FADE_SOURCES = frozenset({"model_hit_rate_flipped", "model_hit_rate"
 # fade, where the constant was inflating Under win-probabilities with fake support (the
 # Unders graded ~0.53 on the card yet kept losing). Neutralize it fully in the blend too:
 # 1.0 sends the faded value to 0.50 (no opinion), so the win prob defers to the genuine
-# Kalshi/Market/ML signals. There is no per-game information to preserve â€” the value is a
+# Kalshi/Market/ML signals. There is no per-game information to preserve — the value is a
 # placeholder. (PublicBettingPct, the one column that varies, is a separate untouched source.)
 MLB_THEOVER_FADE_SHRINK = 1.0   # fraction of (P-0.5) removed; 1.0=neutralized, 0.0=untouched
 # SCOPE: the shrink above is MLB-tuned and the blend callers apply it ONLY to MLB-total
 # rows. Non-MLB totals (NBA/NHL) can also carry a faded WinProbSource, so they keep this
-# separate legacy default â€” held at the prior 0.75 so the MLB-only reduction (0.75 -> 0.25,
+# separate legacy default — held at the prior 0.75 so the MLB-only reduction (0.75 -> 0.25,
 # 6 Jun) does not silently change non-MLB calibrated probabilities. No evidence to retune
 # non-MLB; revisit separately if/when graded non-MLB flipped-game data warrants it.
 THEOVER_FADE_SHRINK_DEFAULT = 0.75
 
 # 26 Jun: with the constant model_hit_rate neutralized, the only per-game value TheOver still
 # emits is PublicBettingPct (the % of money/tickets on a side). Public money is a FADE signal,
-# not a follow one â€” heavy-public sides win LESS â€” so we CONTRARIAN-fade it instead of letting
+# not a follow one — heavy-public sides win LESS — so we CONTRARIAN-fade it instead of letting
 # the blend treat "88% on the Over" as "Over is 88% likely". The transform mirrors the
 # deviation from 0.50: P(Over)_new = 0.50 - STRENGTH * (P(Over) - 0.50). STRENGTH 0 = neutral
 # (ignore public), 1.0 = full mirror (1 - P), 0<s<1 = weak contrarian. Held weak: the
@@ -433,7 +433,7 @@ MLB_PUBLIC_BETTING_FADE_STRENGTH = 0.5
 # totals read toward neutral 0.50 by this fraction instead of nulling TheOver
 # outright. 1.0 = fully neutralized (equivalent to the old null behaviour),
 # 0.0 = untouched. Set to 0.50 (halve the directional signal) so a false positive
-# â€” TheOver legitimately rating many games at a common confidence â€” still
+# — TheOver legitimately rating many games at a common confidence — still
 # contributes a damped, game-specific read to the blend, while a genuinely
 # non-game-specific constant feed is still meaningfully discounted. Independent of
 # MLB_THEOVER_FADE_SHRINK (the per-row flipped-source fade), which still applies.
@@ -455,18 +455,18 @@ TOTAL_UNDER_FINALIST_SCORE_PENALTY = 0.05
 # Static empirical hooks (league + family) for later recap-driven calibration.
 # Values are additive threshold bumps applied to both EV and edge in selection gating.
 LEAGUE_MARKET_FAMILY_ACTIONABLE_PENALTIES = {
-    # MLB Over raised 0.02â†’0.04 after May-9 review (3-7, 30% hit rate).
-    # Further raised 0.04â†’0.07 after May-10 review (2-6, 25% hit rate).
-    # Eased 0.07â†’0.01 after May-12 review (Below Threshold MLB Overs 4-4, 50%);
+    # MLB Over raised 0.02→0.04 after May-9 review (3-7, 30% hit rate).
+    # Further raised 0.04→0.07 after May-10 review (2-6, 25% hit rate).
+    # Eased 0.07→0.01 after May-12 review (Below Threshold MLB Overs 4-4, 50%);
     # TheOver is now wired into blending and carries the pitcher-quality signal.
     ("MLB", "over"): 0.01,
-    # MLB Under raised 0.02â†’0.04 after May-11 review (LA/SF Under 9.5, High Variance, LOSS).
-    # Further raised 0.04â†’0.06 after May-16 review: both Actionable unders lost (11 runs each).
-    # Raised 0.06â†’0.08 after May-27 review: HV/Spec MLB unders went 0-3.
+    # MLB Under raised 0.02→0.04 after May-11 review (LA/SF Under 9.5, High Variance, LOSS).
+    # Further raised 0.04→0.06 after May-16 review: both Actionable unders lost (11 runs each).
+    # Raised 0.06→0.08 after May-27 review: HV/Spec MLB unders went 0-3.
     ("MLB", "under"): 0.08,
     ("MLB", "side"): 0.00,
     ("NBA", "over"): 0.01,
-    # NBA Under raised 0.01â†’0.05 after May-11 review (0-3 across May 9-11).
+    # NBA Under raised 0.01→0.05 after May-11 review (0-3 across May 9-11).
     ("NBA", "under"): 0.05,
     ("NBA", "side"): 0.00,
     ("NHL", "over"): 0.01,
@@ -477,12 +477,12 @@ LEAGUE_MARKET_FAMILY_ACTIONABLE_PENALTIES = {
 # Model-health guardrail for noisy slates
 FALLBACK_HEAVY_TOTAL_EXTRA_PENALTY = 0.01
 
-# Empirical tier overlay â€” final tier pass that reassigns Actionable / High
+# Empirical tier overlay — final tier pass that reassigns Actionable / High
 # Variance / Below Threshold from realized bucket performance (scripts/
 # fit_bucket_stats.py) + isotonic-calibrated probability (scripts/
 # fit_calibration.py), replacing model-vs-market EV/edge as the promotion
 # signal. Jun 5-10 graded recaps: EV/edge-promoted tiers hit ~21% (Actionable
-# 1-4, HV 3-11) while Below Threshold hit 59% â€” the 10 Jun slate went 10-5 and
+# 1-4, HV 3-11) while Below Threshold hit 59% — the 10 Jun slate went 10-5 and
 # still lost money because stake followed the inverted tiers. Safety statuses
 # (No Play / Missing Line) are never overridden. Flip False to restore the
 # legacy EV/edge tiers. See core/empirical_tiers.py for thresholds.
@@ -494,7 +494,7 @@ EMPIRICAL_TIER_OVERLAY_ENABLED = True
 # market is the sharp, unbiased anchor and graded MLB overs hit only ~52% (no edge
 # over it), so the systematic model-vs-market over-gap is bias, not signal. The
 # pipeline removes the slate-MEAN gap from each MLB total's blended P(over) (and
-# adds it to P(under)) so direction selection rebalances â€” per-game relative leans
+# adds it to P(under)) so direction selection rebalances — per-game relative leans
 # and the market's own genuine lean are preserved. Flip False to disable.
 # MAX_SHIFT caps how much the correction can move any single game's probability.
 MLB_TOTAL_MARKET_DEBIAS_ENABLED = True
@@ -527,17 +527,17 @@ LOCK_UPLOAD_LINES_FOR_MATCHED_ROWS = False
 ALLOW_UPLOAD_TOTAL_FALLBACK_ACTIONABLE = False
 
 # Production-card calibration guards (totals concentration + overconfidence control)
-# May-9 review: MLB Overs 3-7 (30%). Cap reduced 3â†’2; shrink tightened 0.70â†’0.65;
+# May-9 review: MLB Overs 3-7 (30%). Cap reduced 3→2; shrink tightened 0.70→0.65;
 # production thresholds raised to require stronger signal before an Over is Actionable.
-# May-10 review: MLB Overs 2-6 (25%). Cap reduced 2â†’1; shrink tightened 0.65â†’0.55;
+# May-10 review: MLB Overs 2-6 (25%). Cap reduced 2→1; shrink tightened 0.65→0.55;
 # production thresholds raised further; gating thresholds raised across the board.
 # May-12 review: Below Threshold MLB Overs went 4-4 (50%); TheOver now wired into
-# blending. MLB shrink eased 0.55â†’0.85 (double-penalizing post-TheOver). Cap raised
-# 1â†’2 and production thresholds eased to allow legitimate winners through.
+# blending. MLB shrink eased 0.55→0.85 (double-penalizing post-TheOver). Cap raised
+# 1→2 and production thresholds eased to allow legitimate winners through.
 MAX_TOTAL_OVER_ACTIONABLE_SHARE = 0.50
 MAX_TOTAL_OVER_ACTIONABLE_COUNT = 3
 MAX_MLB_TOTAL_OVER_ACTIONABLE_COUNT = 2
-# Same-direction UNDER Actionable caps â€” the mirror of the Over caps above.
+# Same-direction UNDER Actionable caps — the mirror of the Over caps above.
 # 12 Jun: the empirical overlay staked 4-5 MLB Actionable Unders (Disagrees bucket);
 # the league went 10/15 games at 10+ runs and the Under block went 1-3 (am) / 1-4 (pm),
 # -$61.60 on the Actionable tier, while the (mostly-Over) Below Threshold tier went 4-2.
@@ -585,8 +585,11 @@ MLB_TOTAL_OVER_MIN_PRODUCTION_EDGE = 0.04
 DEGRADED_FEATURE_KELLY_MULTIPLIER = 0.50
 DEGRADED_FEATURE_MAX_SLATE_EXPOSURE_PCT = 0.12
 DEGRADED_FEATURE_MAX_PICK_EXPOSURE_PCT = 0.02
-ALLOW_EMPTY_CARD_RECOVERY = True
-ENABLE_EMPTY_CARD_RECOVERY = True
+# Keep the production record honest: the all-games Best Available card remains
+# fully playable, but a thin near-miss may not be relabeled as Actionable merely
+# because the qualified production card is empty.
+ALLOW_EMPTY_CARD_RECOVERY = False
+ENABLE_EMPTY_CARD_RECOVERY = False
 EMPTY_CARD_RECOVERY_MAX_PICKS = 2
 # Speculative-lean tuning (22 Jun, user-directed): when the card is otherwise empty, surface
 # the best CLEAN positive-EV near-miss at SMALL size for daily action. The user accepted that
@@ -611,11 +614,11 @@ ALLOW_MLB_TOTAL_OVER_EMPTY_CARD_RECOVERY = False
 # + not-Disagrees guards above limit the downside. Overs stay blocked (they bleed worst).
 ALLOW_MLB_TOTAL_UNDER_EMPTY_CARD_RECOVERY = True
 
-# NHL Under Actionable cap bypass prevention â€” same pattern as MLB unders.
+# NHL Under Actionable cap bypass prevention — same pattern as MLB unders.
 # Block NHL unders from being promoted by empty card recovery despite the cap.
 ALLOW_NHL_TOTAL_UNDER_EMPTY_CARD_RECOVERY = False
 
-# Kelly Bet Sizing â€” Tiered Bankroll Allocation
+# Kelly Bet Sizing — Tiered Bankroll Allocation
 # The 70/30 ratio means non-Actionable picks use 30% of the Kelly fraction
 # that an equivalent Actionable pick would use (not a slate-level budget cap).
 # This keeps per-pick amounts stable regardless of how many Actionable picks
@@ -626,14 +629,14 @@ ALLOW_NHL_TOTAL_UNDER_EMPTY_CARD_RECOVERY = False
 # Below Threshold:0.025x fractional Kelly (10% of Actionable rate), 1% cap per pick
 # No Play:        $0
 #
-# Below Threshold fraction halved (0.050â†’0.025) and cap tightened (1.5%â†’1%) after
+# Below Threshold fraction halved (0.050→0.025) and cap tightened (1.5%→1%) after
 # May-10 review: Below Threshold picks went 1-3; continuing to size them like
 # meaningful wagers compounds losses on picks that already failed confidence gating.
 #
 # Slate-level safety: non-Actionable total is capped at 30% of combined
 # (Actionable + non-Actionable) if it would otherwise exceed that share.
 ACTIONABLE_KELLY_SHARE = 0.70
-# 16 Jun: set to 0 â€” confine real production stakes to the PROVEN Actionable tier
+# 16 Jun: set to 0 — confine real production stakes to the PROVEN Actionable tier
 # (Agrees-bucket, ~61% realized) and stop staking High Variance / Below Threshold.
 # Across 13 graded slates (n=171) the non-Actionable tiers the portfolio was staking
 # ran sub-break-even (staked Act+HV 37%); the totals market the system is fed is
@@ -662,7 +665,7 @@ PRODUCTION_ABSOLUTE_MAX_SLATE_DOLLARS = 150.0
 # DAILY_STAKE_BUDGET, split by tier: Actionable gets ACTIONABLE_STAKE_SHARE of it and
 # the viable non-Actionable picks (High Variance / Below Threshold) split the rest.
 # Within a tier, bets are proportional to each pick's Kelly fraction (edge-weighted;
-# equal-weight only if every Kelly is 0) and normalized to FILL the tier budget â€”
+# equal-weight only if every Kelly is 0) and normalized to FILL the tier budget —
 # OVERRIDING the per-pick (4%) and slate-% Kelly caps. A tier with no eligible picks
 # deploys nothing (its budget is NOT pushed onto the other tier, so a card with no
 # Actionable picks stakes only the 40%). Slates suspended by a health guard (e.g.
@@ -677,7 +680,7 @@ PRODUCTION_ABSOLUTE_MAX_SLATE_DOLLARS = 150.0
 DAILY_STAKE_FORCE_DEPLOY = False
 DAILY_STAKE_BUDGET = 5000.0
 ACTIONABLE_STAKE_SHARE = 0.60
-# Concentration controls â€” keep a thin/weak slate from dumping a whole tier budget
+# Concentration controls — keep a thin/weak slate from dumping a whole tier budget
 # onto one marginal pick (17 Jun: a lone Below Threshold Under drew the full $2000).
 #  - Stake the non-Actionable 40% ONLY on High Variance picks; Below Threshold picks
 #    failed the thresholds outright and get no forced stake (True to include them).
@@ -726,8 +729,8 @@ MONEYLINE_PARLAY_MIN_ODDS = -250
 MONEYLINE_PARLAY_MAX_ODDS = 250
 MONEYLINE_PARLAY_MIN_EDGE = 0.03
 
-# â”€â”€ Pitcher-strikeout props (production) â”€â”€
-# MLB run totals are near-efficient â€” model and market agree to within a point or two, so
+# ── Pitcher-strikeout props (production) ──
+# MLB run totals are near-efficient — model and market agree to within a point or two, so
 # most picks are honest "no edge / No Play". Strikeout props are a softer market, so the
 # props slice is run daily to surface genuine edges. ENABLED to stake, but with a deliberate
 # caveat: the prop model has NO graded track record yet, so it is uncalibrated. To avoid
@@ -739,6 +742,5 @@ ENABLE_STRIKEOUT_PROPS_PRODUCTION = True
 # Fraction of bankroll per prop pick / across all prop picks. Small because uncalibrated.
 STRIKEOUT_PROP_KELLY_PER_PICK_PCT = 0.01
 STRIKEOUT_PROP_KELLY_TOTAL_PCT = 0.03
-# Kelly is staked fractionally (quarter-Kelly) on top of the cap â€” conservative sizing.
+# Kelly is staked fractionally (quarter-Kelly) on top of the cap — conservative sizing.
 STRIKEOUT_PROP_KELLY_FRACTION = 0.25
-
