@@ -1,5 +1,7 @@
 import pandas as pd
 import pytest
+import streamlit_app as app
+import core.streamlit_pipeline as sp
 
 from core.streamlit_pipeline import (
     _apply_analysis_calculations,
@@ -52,3 +54,162 @@ def test_missing_ml_does_not_double_count_theover_in_blend(monkeypatch):
 
     assert pd.isna(captured["p_ml"].iloc[0])
     assert captured["p_theover"].iloc[0] == pytest.approx(0.61)
+
+def test_post_kalshi_total_reblend_does_not_require_or_double_count_ml(monkeypatch):
+    captured = {}
+
+    def fake_blend(**kwargs):
+        captured.update(kwargs)
+        return pd.Series([0.61])
+
+    monkeypatch.setattr("core.streamlit_pipeline.compute_blended_probability", fake_blend)
+    row = pd.DataFrame(
+        {
+            "best_pick": ["Over 6.5"],
+            "odds_american": [-110],
+            "market_probability": [0.50],
+            "kalshi_probability": [pd.NA],
+            "model_probability": [0.91],
+            "theover_probability": [0.61],
+            "ml_probability": [pd.NA],
+            "sentiment_diff": [0.0],
+            "league": ["NHL"],
+            "market_type": ["total_over"],
+        }
+    )
+
+    out = app._recompute_consensus_from_kalshi(row, require_ml=True)
+
+    assert pd.isna(captured["p_ml"].iloc[0])
+    assert captured["p_theover"].iloc[0] == pytest.approx(0.61)
+    assert pd.isna(out["blend_in_ml"].iloc[0])
+
+
+def test_post_kalshi_moneyline_still_requires_ml_when_enabled():
+    row = pd.DataFrame(
+        {
+            "odds_american": [-110],
+            "market_probability": [0.50],
+            "kalshi_probability": [pd.NA],
+            "theover_probability": [pd.NA],
+            "ml_probability": [pd.NA],
+            "sentiment_diff": [0.0],
+            "league": ["MLB"],
+            "market_type": ["moneyline_home"],
+        }
+    )
+
+    with pytest.raises(ValueError, match="failed to merge"):
+        app._recompute_consensus_from_kalshi(row, require_ml=True)
+
+
+def test_ml_sync_is_market_specific_and_never_restores_totals():
+    analysis = pd.DataFrame(
+        {
+            "league": ["MLB", "MLB"],
+            "home_team": ["Boston Red Sox", "Boston Red Sox"],
+            "away_team": ["New York Yankees", "New York Yankees"],
+            "game_date": ["2026-07-25", "2026-07-25"],
+            "market_type": ["total_over", "moneyline_home"],
+            "ml_probability": [pd.NA, pd.NA],
+        }
+    )
+    best = pd.DataFrame(
+        {
+            "league": ["MLB", "MLB"],
+            "home_team": ["Boston Red Sox", "Boston Red Sox"],
+            "away_team": ["New York Yankees", "New York Yankees"],
+            "game_date": ["2026-07-25", "2026-07-25"],
+            "market_type": ["total_over", "moneyline_home"],
+            "ml_probability": [0.80, 0.62],
+        }
+    )
+
+    out = app._sync_ml_probabilities(analysis, best)
+
+    assert pd.isna(out.loc[out["market_type"].eq("total_over"), "ml_probability"]).all()
+    assert out.loc[out["market_type"].eq("moneyline_home"), "ml_probability"].iloc[0] == pytest.approx(0.62)
+
+
+def test_run_pipeline_all_totals_continues_when_ml_is_enabled(monkeypatch):
+    captured = {}
+
+    def fake_run_analysis_pipeline(**kwargs):
+        analysis = pd.DataFrame(
+            [
+                {
+                    "league": "MLB",
+                    "home_team": "Boston Red Sox",
+                    "away_team": "New York Yankees",
+                    "game_date": "2026-07-25",
+                    "market_type": "total_over",
+                    "ml_probability": pd.NA,
+                    "theover_probability": 0.61,
+                    "market_probability": 0.50,
+                    "odds_american": -110,
+                    "expected_value": 0.10,
+                    "edge": 0.05,
+                    "calibrated_probability": 0.60,
+                    "line_consistency_flag": True,
+                    "line_event_identity_match_flag": True,
+                    "market_line_source": "live",
+                    "line_provenance_warning": "",
+                    "total_line": 8.5,
+                }
+            ]
+        )
+        return analysis, analysis.copy(), {}
+
+    def fake_build_best_picks_df(analysis_df, diagnostics_out=None):
+        return pd.DataFrame(
+            [
+                {
+                    "league": "MLB",
+                    "home_team": "Boston Red Sox",
+                    "away_team": "New York Yankees",
+                    "game_date": "2026-07-25",
+                    "market_type": "total_over",
+                    "best_pick": "Over 8.5",
+                    "Pick_Status": "Actionable",
+                    "expected_value": 0.10,
+                    "edge": 0.05,
+                    "effective_expected_value": 0.10,
+                    "effective_edge": 0.05,
+                    "calibrated_probability": 0.60,
+                    "line_consistency_flag": True,
+                    "line_event_identity_match_flag": True,
+                    "market_line_source": "live",
+                    "line_provenance_warning": "",
+                    "market_line_used": 8.5,
+                }
+            ]
+        )
+
+    def fake_recompute(df, require_ml=False):
+        captured["require_ml"] = require_ml
+        return df
+
+    monkeypatch.setattr(app, "run_analysis_pipeline", fake_run_analysis_pipeline)
+    monkeypatch.setattr(sp, "build_best_picks_df", fake_build_best_picks_df)
+    monkeypatch.setattr(app, "_enrich_with_kalshi_safe", lambda df: (df, None))
+    monkeypatch.setattr(app, "_recompute_consensus_from_kalshi", fake_recompute)
+    monkeypatch.setattr(app, "generate_parlays", lambda *args, **kwargs: pd.DataFrame())
+    monkeypatch.setattr(app, "optimize_portfolio_allocation", lambda *args, **kwargs: pd.DataFrame())
+    monkeypatch.setattr(app, "run_bankroll_simulation", lambda *args, **kwargs: {})
+
+    controls = {
+        "sports": ["MLB"],
+        "use_ml": True,
+        "theover_spreads": None,
+        "theover_totals": None,
+        "bankroll": 1000.0,
+        "use_gemini": False,
+    }
+    state, warnings, errors = app._run_pipeline(controls)
+
+    assert errors == []
+    assert not state["analysis_df"].empty
+    assert captured["require_ml"] is False
+    assert state["diagnostics"]["ml_eligible_rows"] == 0
+    assert any("no moneyline/H2H rows" in warning for warning in warnings)
+
