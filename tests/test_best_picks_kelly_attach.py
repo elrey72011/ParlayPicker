@@ -94,6 +94,19 @@ def test_attach_kelly_carries_portfolio_audit_fields():
     assert out.loc[0, "kelly_cap_reason"] == "Scaled by slate exposure"
 
 
+def test_attach_kelly_handles_portfolio_without_production_bet_amount():
+    best = pd.DataFrame([
+        {"canonical_pick_key": "k1", "best_pick": "Over 220.5", "Pick_Status": "Actionable", "market_line_source": "live", "line_consistency_flag": True, "line_event_identity_match_flag": True},
+    ])
+    portfolio = pd.DataFrame([
+        {"canonical_pick_key": "k1", "raw_kelly_amount": 25.0, "production_eligible": False},
+    ])
+    out = _attach_kelly_to_best_picks(best, portfolio, {})
+    assert float(out.loc[0, "Kelly_Bet_Size"]) == 0.0
+    assert float(out.loc[0, "raw_kelly_amount"]) == 25.0
+    assert out.loc[0, "kelly_zero_reason"] == "production_ineligible"
+
+
 def test_every_zero_kelly_row_has_reason():
     best = pd.DataFrame([
         {"canonical_pick_key": "k1", "best_pick": "Over 220.5", "Pick_Status": "No Play", "market_line_source": "live", "line_consistency_flag": True, "line_event_identity_match_flag": True},

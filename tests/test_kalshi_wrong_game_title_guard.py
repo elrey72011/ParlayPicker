@@ -96,9 +96,9 @@ def test_tiny_fragments_cannot_match_everything():
 
 
 def test_verified_athletics_white_sox_title_aliases_match():
-    assert _match("A's vs Chicago WS Total Runs?", "Chicago White Sox", "Athletics")
-    assert _match("Athletics vs Chicago WS Total Runs?", "Chicago White Sox", "Athletics")
+    assert _check("A's vs Chicago WS Total Runs?", "Chicago White Sox", "Athletics")
+    assert _check("Athletics vs Chicago WS Total Runs?", "Chicago White Sox", "Athletics")
 
 
 def test_verified_aliases_do_not_weaken_wrong_game_guard():
-    assert not _match("A's vs Chicago WS Total Runs?", "Chicago Cubs", "Cincinnati")
+    assert not _check("A's vs Chicago WS Total Runs?", "Chicago Cubs", "Cincinnati")

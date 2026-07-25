@@ -11,18 +11,33 @@
 set -uo pipefail
 cd "${CLAUDE_PROJECT_DIR:-.}" || exit 0
 
-# (a) Dependencies — remote web container only; cached after first run; idempotent.
+# (a) Dependencies â€” remote web container only; cached after first run; idempotent.
+# Install into a project venv. Installing into the distro interpreter can collide
+# with system packages (notably cryptography) and leave the session half-broken.
+PYTHON_BIN="python3"
 if [ "${CLAUDE_CODE_REMOTE:-}" = "true" ] && [ -f requirements.txt ]; then
-  if ! python3 -c "import pandas, numpy" >/dev/null 2>&1; then
-    python3 -m pip install --quiet --disable-pip-version-check -r requirements.txt \
-      || echo "[session-start] WARNING: pip install -r requirements.txt failed; tests may not run."
+  VENV_DIR=".claude/.venv"
+  if [ ! -x "${VENV_DIR}/bin/python" ]; then
+    python3 -m venv "${VENV_DIR}" \
+      || echo "[session-start] WARNING: could not create ${VENV_DIR}; dependency install skipped."
   fi
-  python3 -c "import pytest" >/dev/null 2>&1 \
-    || python3 -m pip install --quiet --disable-pip-version-check pytest >/dev/null 2>&1 || true
+  if [ -x "${VENV_DIR}/bin/python" ]; then
+    PYTHON_BIN="${VENV_DIR}/bin/python"
+    export PATH="$(pwd)/${VENV_DIR}/bin:${PATH}"
+    if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
+      printf 'export PATH="%s/.claude/.venv/bin:$PATH"\n' "$(pwd)" >> "${CLAUDE_ENV_FILE}"
+    fi
+    if ! "${PYTHON_BIN}" -c "import pandas, numpy" >/dev/null 2>&1; then
+      "${PYTHON_BIN}" -m pip install --quiet --disable-pip-version-check -r requirements.txt \
+        || echo "[session-start] WARNING: venv pip install -r requirements.txt failed; tests may not run."
+    fi
+    "${PYTHON_BIN}" -c "import pytest" >/dev/null 2>&1 \
+      || "${PYTHON_BIN}" -m pip install --quiet --disable-pip-version-check pytest >/dev/null 2>&1 || true
+  fi
 fi
 
-# (b) Calibration freshness guard — always; non-blocking.
-python3 - <<'PY' || true
+# (b) Calibration freshness guard â€” always; non-blocking.
+"${PYTHON_BIN}" - <<'PY' || true
 import json, datetime, glob, os, re
 CAL = "data/calibration/effective_prob_calibration.json"
 STALE_DAYS = 2
@@ -55,3 +70,4 @@ except Exception as e:
 PY
 
 exit 0
+

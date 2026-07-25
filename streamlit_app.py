@@ -597,16 +597,18 @@ def _attach_kelly_to_best_picks(best_picks_df: pd.DataFrame, portfolio_df: pd.Da
         return best_picks_df
     out = best_picks_df.copy()
     kelly_map = pd.Series(dtype=float)
-    if portfolio_df is not None and not portfolio_df.empty and "canonical_pick_key" in portfolio_df.columns and "production_bet_amount" in portfolio_df.columns:
-        kelly_map = (
+    detail_cols = pd.DataFrame()
+    if portfolio_df is not None and not portfolio_df.empty and "canonical_pick_key" in portfolio_df.columns:
+        detail_cols = (
             portfolio_df.dropna(subset=["canonical_pick_key"])
             .drop_duplicates(subset=["canonical_pick_key"], keep="first")
-            .set_index("canonical_pick_key")["production_bet_amount"]
+            .set_index("canonical_pick_key")
         )
+        if "production_bet_amount" in detail_cols.columns:
+            kelly_map = detail_cols["production_bet_amount"]
         for col in ["raw_kelly_amount", "production_bet_amount", "kelly_cap_reason", "production_eligible"]:
             if col not in out.columns:
                 out[col] = pd.NA
-        detail_cols = portfolio_df.dropna(subset=["canonical_pick_key"]).drop_duplicates(subset=["canonical_pick_key"], keep="first").set_index("canonical_pick_key")
     canonical_key = _safe_str_series(out, "canonical_pick_key").str.strip()
     out["Kelly_Bet_Size"] = canonical_key.map(kelly_map).fillna(0.0)
     if portfolio_df is not None and not portfolio_df.empty and "canonical_pick_key" in portfolio_df.columns:
@@ -633,6 +635,11 @@ def _attach_kelly_to_best_picks(best_picks_df: pd.DataFrame, portfolio_df: pd.Da
     out.loc[status.eq("Actionable") & (~prod_eligible_col), "kelly_zero_reason"] = "production_ineligible"
     out.loc[status.eq("Actionable") & safe_mask & pd.to_numeric(out["Kelly_Bet_Size"], errors="coerce").fillna(0).le(0), "kelly_zero_reason"] = "zero_after_portfolio_caps"
     out["Kelly_Bet_Size"] = pd.to_numeric(out["Kelly_Bet_Size"], errors="coerce").fillna(0.0).round(2)
+    zero_mask = out["Kelly_Bet_Size"].le(0)
+    blank_reason = _safe_str_series(out, "kelly_zero_reason").str.strip().eq("")
+    out.loc[zero_mask & blank_reason & na_kelly_eligible, "kelly_zero_reason"] = "no_portfolio_allocation"
+    blank_reason = _safe_str_series(out, "kelly_zero_reason").str.strip().eq("")
+    out.loc[zero_mask & blank_reason, "kelly_zero_reason"] = "zero_without_portfolio_allocation"
     if "kelly_cap_reason" in out.columns:
         out.loc[out["Kelly_Bet_Size"].le(0) & out["kelly_cap_reason"].eq(""), "kelly_cap_reason"] = out.loc[out["Kelly_Bet_Size"].le(0), "kelly_zero_reason"]
     diagnostics["kelly_attached_to_best_picks_count"] = int((out["Kelly_Bet_Size"] > 0).sum())

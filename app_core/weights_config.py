@@ -650,6 +650,16 @@ BELOW_THRESHOLD_KELLY_FRACTION = 0.025  # 10% of Actionable's 0.25
 NON_ACTIONABLE_MAX_PICK_PCT = 0.02      # 2% bankroll ceiling per non-Actionable pick
 NON_ACTIONABLE_BELOW_THRESHOLD_MAX_PICK_PCT = 0.010  # 1% cap for Below Threshold
 
+# Production bankroll controls (audit hardening, 25 Jul).
+# Realized calibration has not supported aggressive Kelly sizing. Use one-eighth
+# Kelly and enforce both bankroll-relative and absolute dollar ceilings. The
+# absolute caps protect against a mistyped bankroll or an old force-deploy setting.
+PRODUCTION_KELLY_MULTIPLIER = 0.125
+PRODUCTION_MAX_PICK_PCT = 0.02
+PRODUCTION_MAX_SLATE_PCT = 0.10
+PRODUCTION_ABSOLUTE_MAX_PICK_DOLLARS = 50.0
+PRODUCTION_ABSOLUTE_MAX_SLATE_DOLLARS = 150.0
+
 # --- Force-deploy daily stake budget (17 Jun, user-directed) ------------------
 # When DAILY_STAKE_FORCE_DEPLOY is True, the day's eligible card is staked to SUM to
 # DAILY_STAKE_BUDGET, split by tier: Actionable gets ACTIONABLE_STAKE_SHARE of it and

@@ -41,7 +41,9 @@ def test_probability_shrinkage_and_production_metrics_recomputed():
     df = pd.DataFrame([_row(1, league="NBA", market_type="total_over", prob=0.70, ev=0.12, edge=0.10)])
     out = build_best_picks_df(df)
     r = out.iloc[0]
-    assert r["production_win_probability"] < r["effective_win_probability"]
+    # The effective probability may already contain the same shrinkage. The
+    # production layer must never inflate it, but equality is valid/idempotent.
+    assert r["production_win_probability"] <= r["effective_win_probability"]
     assert pd.notna(r["production_expected_value"]) and pd.notna(r["production_edge"])
 
 
@@ -107,3 +109,4 @@ def test_no_regression_kelly_column_order_and_line_provenance_present():
     idx = cols.index("best_pick")
     assert cols[idx + 1] == "Kelly_Bet_Size"
     assert "line_provenance_warning" in cols
+

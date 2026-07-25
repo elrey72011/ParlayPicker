@@ -2190,14 +2190,18 @@ def _fill_missing_game_dates_from_base(bet_rows_df: pd.DataFrame, base_df: pd.Da
 
 
 def is_postseason_ncaab(df: pd.DataFrame) -> pd.Series:
-    """Identify NCAAB games played on or after March 17, 2026."""
+    """Identify NCAAB games played on or after March 17 of each season year."""
     if df is None or df.empty:
         return pd.Series(dtype=bool)
 
     league_mask = _string_series(df, "league").str.upper() == "NCAAB"
 
     date_series = pd.to_datetime(df.get("game_date"), errors="coerce", utc=True)
-    postseason_start = pd.Timestamp("2026-03-17", tz="UTC")
+    postseason_start = pd.to_datetime(
+        date_series.dt.year.astype("Int64").astype("string") + "-03-17",
+        errors="coerce",
+        utc=True,
+    )
 
     date_mask = date_series >= postseason_start
     return league_mask & date_mask
@@ -5139,7 +5143,9 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
                 logger.error(f"Odds API error for {sk}: {games.get('message')}")
                 continue
 
-            sport_games = filter_games_today_only(games)
+            # Historical/backfill requests must honor the caller's explicit date.
+            # The today-only guard is appropriate only for the live slate.
+            sport_games = games if date else filter_games_today_only(games)
             if not sport_games:
                 continue
 
@@ -5164,7 +5170,11 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
                 row = game_dict[matchup_id]
 
                 for book in game.get('bookmakers', []):
-                    book_key = book.get('key', '')
+                    raw_book_key = str(book.get('key', '')).strip().lower()
+                    # The Odds API has emitted regional NoVig identifiers such as
+                    # novig_us. Normalize all NoVig variants to the canonical
+                    # export prefix so downstream consensus code does not lose them.
+                    book_key = 'novig' if raw_book_key == 'novig' or raw_book_key.startswith('novig_') else raw_book_key
                     if book_key not in ['novig', 'fanduel', 'draftkings', 'betmgm']:
                         continue
 
@@ -7046,7 +7056,70 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
     portfolio["decimal_odds"] = _numeric_series(portfolio, "decimal_odds").fillna(
         _numeric_series(portfolio, "odds_american", -110.0).apply(american_to_decimal)
     )
-    p = pd.to_numeric(portfolio.get("calibrated_probability", pd.NA), errors="coerce").fillna(0.0).clip(lower=0.0, upper=1.0)
+    # Kelly must use the best realized-performance calibrated probability,
+    # not merely the model blend named calibrated_probability. The empirical
+    # overlay is most specific. Otherwise fit effective probability through the
+    # persisted global/bucket calibration. A legacy row with no effective
+    # probability may use calibrated_probability as an already-calibrated input;
+    # a production row with effective probability but no fit receives no stake.
+    empirical_p = pd.to_numeric(
+        portfolio.get("empirical_win_probability", pd.Series(np.nan, index=portfolio.index)),
+        errors="coerce",
+    )
+    effective_p = pd.to_numeric(
+        portfolio.get("effective_win_probability", pd.Series(np.nan, index=portfolio.index)),
+        errors="coerce",
+    )
+    legacy_calibrated_p = pd.to_numeric(
+        portfolio.get("calibrated_probability", pd.Series(np.nan, index=portfolio.index)),
+        errors="coerce",
+    )
+    fitted_p = pd.Series(np.nan, index=portfolio.index, dtype=float)
+    try:
+        from core.probability_calibration import (
+            apply_bucket_calibration,
+            apply_calibration,
+            load_calibration,
+        )
+        from core.empirical_tiers import bucket_key, load_bucket_stats
+
+        calibration = load_calibration()
+        bucket_stats = load_bucket_stats()
+        if calibration:
+            if bucket_stats:
+                buckets = [
+                    bucket_key(league, market, consensus)
+                    for league, market, consensus in zip(
+                        portfolio.get("league", pd.Series("", index=portfolio.index)),
+                        portfolio.get("market_type", pd.Series("", index=portfolio.index)),
+                        portfolio.get("consensus_agreement", pd.Series("", index=portfolio.index)),
+                    )
+                ]
+                fitted_p = pd.to_numeric(
+                    apply_bucket_calibration(effective_p, buckets, calibration, bucket_stats),
+                    errors="coerce",
+                )
+            else:
+                fitted_p = pd.to_numeric(apply_calibration(effective_p, calibration), errors="coerce")
+    except Exception as exc:
+        logger.warning("Kelly calibration unavailable; effective-probability rows will not be staked: %s", exc)
+
+    p = empirical_p.copy()
+    probability_source = pd.Series("empirical_win_probability", index=portfolio.index, dtype="object")
+    fitted_mask = p.isna() & fitted_p.notna()
+    p.loc[fitted_mask] = fitted_p.loc[fitted_mask]
+    probability_source.loc[fitted_mask] = "fitted_effective_probability"
+    legacy_mask = p.isna() & effective_p.isna() & legacy_calibrated_p.notna()
+    p.loc[legacy_mask] = legacy_calibrated_p.loc[legacy_mask]
+    probability_source.loc[legacy_mask] = "legacy_calibrated_probability"
+    missing_probability = p.isna()
+    probability_source.loc[missing_probability] = "missing_fitted_calibration"
+    production_eligible = production_eligible & (~missing_probability)
+    portfolio["production_eligible"] = production_eligible
+    p = p.fillna(0.0).clip(lower=0.0, upper=1.0)
+
+    portfolio["kelly_uncalibrated_probability"] = effective_p.fillna(legacy_calibrated_p)
+    portfolio["kelly_probability_source"] = probability_source
     b = (portfolio["decimal_odds"] - 1.0).clip(lower=0.0)
     q = 1.0 - p
     kelly_fraction = pd.Series(0.0, index=portfolio.index, dtype=float)
@@ -7056,12 +7129,32 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
     portfolio["kelly_decimal_odds"] = portfolio["decimal_odds"]
     portfolio["kelly_fraction"] = kelly_fraction
     portfolio["raw_kelly_amount"] = float(bankroll) * kelly_fraction
-    portfolio["fractional_kelly_amount"] = portfolio["raw_kelly_amount"] * 0.25
+    from app_core.weights_config import (
+        PRODUCTION_ABSOLUTE_MAX_PICK_DOLLARS,
+        PRODUCTION_ABSOLUTE_MAX_SLATE_DOLLARS,
+        PRODUCTION_KELLY_MULTIPLIER,
+        PRODUCTION_MAX_PICK_PCT,
+        PRODUCTION_MAX_SLATE_PCT,
+    )
+
+    portfolio["fractional_kelly_amount"] = portfolio["raw_kelly_amount"] * float(PRODUCTION_KELLY_MULTIPLIER)
     portfolio["recommended_bet"] = portfolio["fractional_kelly_amount"]
     portfolio.loc[~portfolio["production_eligible"], "recommended_bet"] = 0.0
 
-    max_pick = float(bankroll) * 0.04
-    max_slate = float(bankroll) * 0.25
+    max_pick = max(
+        0.0,
+        min(
+            float(bankroll) * float(PRODUCTION_MAX_PICK_PCT),
+            float(PRODUCTION_ABSOLUTE_MAX_PICK_DOLLARS),
+        ),
+    )
+    max_slate = max(
+        0.0,
+        min(
+            float(bankroll) * float(PRODUCTION_MAX_SLATE_PCT),
+            float(PRODUCTION_ABSOLUTE_MAX_SLATE_DOLLARS),
+        ),
+    )
     portfolio["kelly_cap_reason"] = ""
     portfolio.loc[~portfolio["production_eligible"], "kelly_cap_reason"] = "Non-production row"
     eligible = portfolio["production_eligible"]
@@ -7156,6 +7249,7 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
             line_source.eq("live") & line_warning.eq("") & line_used.notna()
             & line_consistent & event_identity_ok
             & (~best_pick_norm.str.contains("unresolved", na=False))
+            & (~untrusted_model)
         )
         _act_tier = _data_safe & status.eq("actionable")
         # Non-Actionable staking tier: High Variance only by default. Below Threshold
@@ -7179,7 +7273,7 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
                 return
             w = pd.to_numeric(portfolio.loc[idx, "kelly_fraction"], errors="coerce").fillna(0.0).clip(lower=0.0)
             if float(w.sum()) <= 0:
-                w = pd.Series(1.0, index=idx)  # equal-weight when no positive Kelly
+                return  # never force money onto a row with no positive calibrated edge
             alloc = ((w / float(w.sum())) * float(budget)).clip(upper=_max_pick)
             portfolio.loc[idx, "production_bet_amount"] = alloc.round(2)
             portfolio.loc[idx, "recommended_bet"] = alloc.round(2)
@@ -7199,6 +7293,36 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
             portfolio["kelly_cap_reason"] = "Force-deploy suspended (slate health guard)"
         portfolio["kelly_allocation_method"] = "force_deploy_daily_budget"
 
+    # Final, non-bypassable production ceilings. This runs after every optional
+    # allocation mode so neither force-deploy nor a future sizing branch can
+    # exceed the bankroll-relative and absolute risk limits.
+    pre_hard_cap = pd.to_numeric(portfolio["production_bet_amount"], errors="coerce").fillna(0.0).clip(lower=0.0)
+    hard_pick_hits = pre_hard_cap > max_pick
+    portfolio["production_bet_amount"] = pre_hard_cap.clip(upper=max_pick)
+    if hard_pick_hits.any():
+        prior = portfolio.loc[hard_pick_hits, "kelly_cap_reason"].fillna("").astype(str)
+        portfolio.loc[hard_pick_hits, "kelly_cap_reason"] = np.where(
+            prior.str.len().gt(0),
+            prior + "; final pick ceiling",
+            "Final pick ceiling",
+        )
+
+    hard_total = float(portfolio["production_bet_amount"].sum())
+    final_slate_scale = min(1.0, (max_slate / hard_total) if hard_total > 0 else 1.0)
+    if final_slate_scale < 1.0:
+        positive_before_scale = portfolio["production_bet_amount"] > 0
+        portfolio["production_bet_amount"] = portfolio["production_bet_amount"] * final_slate_scale
+        prior = portfolio.loc[positive_before_scale, "kelly_cap_reason"].fillna("").astype(str)
+        portfolio.loc[positive_before_scale, "kelly_cap_reason"] = np.where(
+            prior.str.len().gt(0),
+            prior + "; final slate ceiling",
+            "Final slate ceiling",
+        )
+    portfolio["production_bet_amount"] = portfolio["production_bet_amount"].round(2)
+    portfolio["recommended_bet"] = portfolio["production_bet_amount"]
+    capped = capped | hard_pick_hits
+    scale *= final_slate_scale
+
     positive = portfolio["production_bet_amount"] > 0
     unique_positive = int(portfolio.loc[positive, "production_bet_amount"].round(6).nunique())
     cap_hits = int(capped.sum())
@@ -7214,7 +7338,8 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
         "league", "home_team", "away_team", "best_pick",
         "calibrated_probability", "expected_value", "edge",
         "decimal_odds", "raw_kelly_amount", "production_bet_amount", "recommended_bet", "kelly_cap_reason", "Pick_Status",
-        "kelly_probability_used", "kelly_decimal_odds", "kelly_fraction", "fractional_kelly_amount", "kelly_weight_share", "slate_scaled_amount",
+        "kelly_uncalibrated_probability", "kelly_probability_used", "kelly_probability_source",
+        "kelly_decimal_odds", "kelly_fraction", "fractional_kelly_amount", "kelly_weight_share", "slate_scaled_amount",
         "kelly_allocation_method", "kelly_flattening_detected", "kelly_unique_positive_amount_count", "kelly_total_raw_amount",
         "kelly_total_fractional_amount", "kelly_total_production_amount", "kelly_max_pick_cap_hits", "kelly_slate_scale_factor",
         "market_line_used", "market_line_source", "line_consistency_flag", "line_event_identity_match_flag", "line_provenance_warning",

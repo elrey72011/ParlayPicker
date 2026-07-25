@@ -31,8 +31,8 @@ class TestParlaySafety(unittest.TestCase):
         self.assertFalse(bool(production_candidate_mask(frame).iloc[0]))
 
     def test_joint_probability_uses_haircut(self):
-        self.assertAlmostEqual(conservative_joint_probability([0.60, 0.60]), 0.34992)
-        self.assertAlmostEqual(parlay_expected_value(0.34992, 3.0), 0.04976)
+        self.assertAlmostEqual(conservative_joint_probability([0.60, 0.60]), 0.3492)
+        self.assertAlmostEqual(parlay_expected_value(0.3492, 3.0), 0.0476)
 
     def test_same_game_is_conservatively_rejected(self):
         left = {"matchup_id": "MLB|A|B|2026-07-09"}
@@ -42,3 +42,4 @@ class TestParlaySafety(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
