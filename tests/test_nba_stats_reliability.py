@@ -371,6 +371,28 @@ def test_live_fail_no_cache_rows_show_failed_with_warning(monkeypatch):
     assert str(enriched.loc[0, "run_health_warning"]).strip() != ""
 
 
+def test_nba_fetch_failure_is_not_reported_on_mlb_only_slate(monkeypatch):
+    def fake_fetch_team_stats(_api_clients, season_year=None):
+        return pd.DataFrame(
+            [
+                {"team_norm": "ARIZONA DIAMONDBACKS", "league_key": "MLB", "win_pct": 0.55, "home_win_pct": 0.55, "away_win_pct": 0.55, "points_per_game": 4.8, "points_allowed_per_game": 4.3, "turnovers": 0.0, "streak": 0.0, "last5_win_pct": 0.6},
+                {"team_norm": "MILWAUKEE BREWERS", "league_key": "MLB", "win_pct": 0.52, "home_win_pct": 0.52, "away_win_pct": 0.52, "points_per_game": 4.6, "points_allowed_per_game": 4.4, "turnovers": 0.0, "streak": 0.0, "last5_win_pct": 0.5},
+            ]
+        )
+
+    monkeypatch.setattr(fp, "fetch_team_stats", fake_fetch_team_stats)
+    fp._NBA_FETCH_DIAGNOSTICS.update({"status": "failed", "source": "failed", "retries_used": 3, "last_error": "timeout"})
+    games = pd.DataFrame(
+        [{"league": "MLB", "home_team": "Milwaukee", "away_team": "Arizona", "market_type": "h2h_home", "decimal_odds": 1.91, "odds_american": -110}]
+    )
+
+    enriched = fp.enrich_with_model_features(games, api_clients={})
+
+    assert enriched.loc[0, "nba_stats_fetch_status"] == "not_applicable"
+    assert enriched.loc[0, "nba_stats_fetch_source"] == "none"
+    assert str(enriched.loc[0, "run_health_warning"]).strip() == ""
+
+
 def test_unresolved_nba_rows_marked_and_ml_ineligible(monkeypatch):
     def fake_fetch_team_stats(_api_clients, season_year=None):
         return pd.DataFrame(
