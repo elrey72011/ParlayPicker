@@ -106,11 +106,12 @@ def test_fetch_live_odds_dataframe_accepts_novig_key_variants(monkeypatch):
     assert float(df.iloc[0]["novig_under_price"]) == 101
 
 
-def test_ncaab_postseason_cutoff_rolls_forward_each_year():
+def test_ncaab_postseason_cutoff_uses_season_ending_year():
     games = pd.DataFrame(
         {
-            "league": ["NCAAB", "NCAAB", "NCAAB", "NBA"],
+            "league": ["NCAAB", "NCAAB", "NCAAB", "NCAAB", "NBA"],
             "game_date": [
+                "2026-11-15T23:00:00Z",
                 "2027-03-16T23:00:00Z",
                 "2027-03-17T23:00:00Z",
                 "2028-03-18T23:00:00Z",
@@ -118,5 +119,4 @@ def test_ncaab_postseason_cutoff_rolls_forward_each_year():
             ],
         }
     )
-    assert sp.is_postseason_ncaab(games).tolist() == [False, True, True, False]
-
+    assert sp.is_postseason_ncaab(games).tolist() == [False, False, True, True, False]
