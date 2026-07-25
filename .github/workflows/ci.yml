@@ -37,6 +37,8 @@ jobs:
           tests/test_bucket_calibration.py
           tests/test_empirical_tiers.py
           tests/test_production_card_calibration_guard.py
+          tests/test_model_validation.py
+          tests/test_ml_target_guard.py
           tests/test_parlay_safety.py
 
   full-suite-observability:
