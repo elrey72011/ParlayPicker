@@ -606,7 +606,15 @@ def _attach_kelly_to_best_picks(best_picks_df: pd.DataFrame, portfolio_df: pd.Da
         )
         if "production_bet_amount" in detail_cols.columns:
             kelly_map = detail_cols["production_bet_amount"]
-        for col in ["raw_kelly_amount", "production_bet_amount", "kelly_cap_reason", "production_eligible"]:
+        for col in [
+            "raw_kelly_amount",
+            "production_bet_amount",
+            "kelly_cap_reason",
+            "production_eligible",
+            "kelly_uncalibrated_probability",
+            "kelly_probability_used",
+            "kelly_probability_source",
+        ]:
             if col not in out.columns:
                 out[col] = pd.NA
     canonical_key = _safe_str_series(out, "canonical_pick_key").str.strip()
@@ -616,6 +624,12 @@ def _attach_kelly_to_best_picks(best_picks_df: pd.DataFrame, portfolio_df: pd.Da
         out["production_bet_amount"] = canonical_key.map(detail_cols["production_bet_amount"]) if "production_bet_amount" in detail_cols.columns else 0.0
         out["kelly_cap_reason"] = canonical_key.map(detail_cols["kelly_cap_reason"]).fillna("") if "kelly_cap_reason" in detail_cols.columns else ""
         out["production_eligible"] = canonical_key.map(detail_cols["production_eligible"]).fillna(out.get("production_eligible", False)) if "production_eligible" in detail_cols.columns else out.get("production_eligible", False)
+        for col in [
+            "kelly_uncalibrated_probability",
+            "kelly_probability_used",
+            "kelly_probability_source",
+        ]:
+            out[col] = canonical_key.map(detail_cols[col]) if col in detail_cols.columns else pd.NA
     status = _safe_str_series(out, "Pick_Status").str.strip()
     line_source = _safe_str_series(out, "market_line_source").str.strip().str.lower()
     line_consistent = pd.Series(out.get("line_consistency_flag", True), index=out.index).fillna(True).astype(bool)
