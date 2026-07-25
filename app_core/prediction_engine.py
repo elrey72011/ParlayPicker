@@ -652,17 +652,10 @@ class PredictionEngine:
             kalshi_component * 0.10
         )
 
-        # Gaussian Noise Injection (Deterministic using team stats)
-        # Add a deterministic but unique 'nudge' based on team stats to prevent identical probabilities
-        home_team = features.get('home_team', 'home')
-        away_team = features.get('away_team', 'away')
-        date_string = features.get('game_date', 'date')
-
-        nudge_seed = int(hashlib.md5(f"{home_team}{away_team}{date_string}{market_type}".encode()).hexdigest(), 16)
-        nudge = ((nudge_seed % 200) - 100) / 5000.0  # ±2% nudge
-
-        # Apply sentiment adjustment and deterministic noise
-        final_prob = base_prob + sentiment_adj + nudge
+        # Do not manufacture row-level variance. Identical inputs should produce
+        # identical probabilities; otherwise a hash-derived nudge can masquerade
+        # as predictive discrimination and create artificial edge downstream.
+        final_prob = base_prob + sentiment_adj
 
         # Clamp to reasonable range [0.35, 0.65] to avoid extreme predictions without model
         final_prob = max(0.35, min(0.65, final_prob))

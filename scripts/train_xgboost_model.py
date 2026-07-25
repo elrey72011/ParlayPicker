@@ -4,15 +4,14 @@ import xgboost as xgb
 import os
 import json
 from pathlib import Path
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import log_loss, accuracy_score, roc_auc_score
+from sklearn.metrics import log_loss, accuracy_score, roc_auc_score, brier_score_loss
 from collections import Counter
-import datetime
-import traceback
 
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from config import VERTEX_CONFIG
+from core.model_validation import compare_candidate_to_market, select_best_candidate
+from core.walk_forward import chronological_split
 
 VERTEX_FEATURE_COLUMNS = VERTEX_CONFIG['feature_cols']
 
@@ -111,43 +110,67 @@ def build_features_from_master(df: pd.DataFrame) -> pd.DataFrame:
     out = out.astype(float)
     return out[VERTEX_FEATURE_COLUMNS]
 
-def evaluate_model(model, X_val, y_val, name="Model"):
-    """Evaluates a model with first-class focus on Uniqueness Metrics."""
-    dval = xgb.DMatrix(X_val)
-    probs = model.predict(dval)
+def evaluate_probabilities(probabilities, outcomes):
+    """Return proper probability scores plus diagnostic distribution metrics."""
+    probs = np.asarray(probabilities, dtype=float)
+    y_true = np.asarray(outcomes, dtype=int)
+    probs = np.clip(probs, 1e-6, 1.0 - 1e-6)
 
-    # 1. Predictive Metrics
-    acc = accuracy_score(y_val, probs > 0.5)
-    ll = log_loss(y_val, probs)
+    acc = float(accuracy_score(y_true, probs > 0.5))
+    ll = float(log_loss(y_true, probs))
+    brier = float(brier_score_loss(y_true, probs))
     try:
-        auc = roc_auc_score(y_val, probs)
-    except:
+        auc = float(roc_auc_score(y_true, probs))
+    except ValueError:
         auc = 0.5
 
-    # 2. Uniqueness Metrics
-    unique_probs = len(np.unique(probs))
-    unique_ratio = unique_probs / len(probs)
+    unique_probs = int(len(np.unique(probs)))
+    unique_ratio = float(unique_probs / len(probs)) if len(probs) else 0.0
+    return {
+        "acc": acc,
+        "ll": ll,
+        "brier": brier,
+        "auc": auc,
+        "unique_count": unique_probs,
+        "unique_ratio": unique_ratio,
+    }
+
+
+def evaluate_model(model, X_val, y_val, name="Model"):
+    """Evaluate a candidate on a future holdout using proper scoring rules."""
+    dval = xgb.DMatrix(X_val)
+    probs = model.predict(dval)
+    metrics = evaluate_probabilities(probs, y_val)
 
     counts = Counter(probs)
-    top_3 = sorted([(p, c) for p, c in counts.items()], key=lambda x: x[1], reverse=True)[:3]
-
-    # Spread/Distribution summary
+    top_3 = sorted(
+        [(float(p), int(c)) for p, c in counts.items()],
+        key=lambda item: item[1],
+        reverse=True,
+    )[:3]
     percentiles = np.percentile(probs, [0, 25, 50, 75, 100])
-    spread_range = percentiles[4] - percentiles[0]
+    spread_range = float(percentiles[4] - percentiles[0])
 
-    print(f"\n" + "="*50)
+    print("\n" + "=" * 50)
     print(f"--- {name} Results ---")
     print(f"Validation Row Count: {len(probs)}")
-    print(f"Accuracy: {acc:.4f} | Log Loss: {ll:.4f} | AUC: {auc:.4f}")
-    print(f"Raw Unique Count: {unique_probs} / {len(probs)}")
-    print(f"Raw Unique Ratio: {unique_ratio:.1%}")
+    print(
+        f"Accuracy: {metrics['acc']:.4f} | Log Loss: {metrics['ll']:.4f} | "
+        f"Brier: {metrics['brier']:.4f} | AUC: {metrics['auc']:.4f}"
+    )
+    print(f"Raw Unique Count: {metrics['unique_count']} / {len(probs)}")
+    print(f"Raw Unique Ratio (diagnostic only): {metrics['unique_ratio']:.1%}")
     print(f"Probability Spread (Max - Min): {spread_range:.4f}")
-    print(f"Distribution [Min, 25th, Median, 75th, Max]:")
-    print(f"  [{percentiles[0]:.4f}, {percentiles[1]:.4f}, {percentiles[2]:.4f}, {percentiles[3]:.4f}, {percentiles[4]:.4f}]")
+    print(
+        "Distribution [Min, 25th, Median, 75th, Max]:\n"
+        f"  [{percentiles[0]:.4f}, {percentiles[1]:.4f}, {percentiles[2]:.4f}, "
+        f"{percentiles[3]:.4f}, {percentiles[4]:.4f}]"
+    )
     print(f"Top 3 repeated probabilities and counts: {top_3}")
-    print("="*50)
+    print("=" * 50)
 
-    return unique_ratio, model, {"acc": acc, "ll": ll, "auc": auc, "unique_count": unique_probs}
+    return metrics["unique_ratio"], model, metrics
+
 
 def main():
     print("Loading historical training data...")
@@ -170,26 +193,46 @@ def main():
     y = df['home_won'].astype(int)
     X = build_features_from_master(df)
 
-    # Split
-    # Instead of forcing a 62-row snapshot, we evaluate on a dynamic slate size based on the most recent full day
-    # of available validation data, or standard 10-15% of the dataset if dates are unavailable/unreliable.
+    # Honest future holdout. This uses the shared chronological helper and
+    # deliberately keeps the final 25% out of every candidate fit.
+    evaluation_frame = X.copy()
+    evaluation_frame["home_won"] = y.to_numpy()
+    evaluation_frame["commence_time"] = df["commence_time"].to_numpy()
+    evaluation_frame["market_implied_prob"] = pd.to_numeric(
+        df["implied_home_prob"], errors="coerce"
+    ).to_numpy()
+    if evaluation_frame["market_implied_prob"].isna().any():
+        print("ERROR: implied_home_prob contains missing/non-numeric values; market benchmark is required.")
+        return
 
-    if 'commence_time' in df.columns:
-        last_date = df['commence_time'].dt.date.iloc[-1]
-        val_mask = df['commence_time'].dt.date == last_date
-        val_size = val_mask.sum()
-        # Ensure we don't have a trivially small validation set (e.g., just 1 game)
-        if val_size < 10:
-            val_size = int(len(df) * 0.15)
-    else:
-        val_size = int(len(df) * 0.15)
-
-    # Chronological Split (predicting the future based on the past)
-    X_train, X_val = X.iloc[:-val_size], X.iloc[-val_size:]
-    y_train, y_val = y.iloc[:-val_size], y.iloc[-val_size:]
+    train_frame, val_frame = chronological_split(
+        evaluation_frame,
+        "commence_time",
+        test_fraction=0.25,
+        min_train_rows=100,
+    )
+    X_train = train_frame[VERTEX_FEATURE_COLUMNS]
+    X_val = val_frame[VERTEX_FEATURE_COLUMNS]
+    y_train = train_frame["home_won"].astype(int)
+    y_val = val_frame["home_won"].astype(int)
 
     print(f"Schema exactly matches production 21-feature schema: {list(X.columns) == VERTEX_FEATURE_COLUMNS}")
-    print(f"Train set: {X_train.shape}, Validation set (Real Live Slate Equivalent): {X_val.shape}")
+    print(f"Train set: {X_train.shape}, chronological validation set: {X_val.shape}")
+    print(
+        f"Train end: {pd.to_datetime(train_frame['commence_time'], utc=True).max()} | "
+        f"Validation start: {pd.to_datetime(val_frame['commence_time'], utc=True).min()}"
+    )
+
+    market_metrics = evaluate_probabilities(
+        val_frame["market_implied_prob"],
+        y_val,
+    )
+    print(
+        "Market baseline on the same holdout: "
+        f"Log Loss={market_metrics['ll']:.4f} | "
+        f"Brier={market_metrics['brier']:.4f} | "
+        f"AUC={market_metrics['auc']:.4f}"
+    )
 
     dtrain = xgb.DMatrix(X_train, label=y_train)
 
@@ -257,33 +300,95 @@ def main():
     ratio, _, metrics = evaluate_model(model_ultra, X_val, y_val, "Candidate 4 (depth=9, n=500, reg)")
     models['candidate_4_ultra'] = {'ratio': ratio, 'model': model_ultra, 'metrics': metrics}
 
-    # Save the candidates separately
-    os.makedirs('models', exist_ok=True)
-    best_ratio = -1
-    best_candidate_name = None
-
-    print("\n" + "="*50)
-    print("RETRAINING HARNESS SUMMARY")
-    print("="*50)
+    # Save candidates for inspection, but choose by proper scores rather than
+    # probability uniqueness. A candidate cannot be promoted unless it beats
+    # the raw market probability on the same future holdout.
+    os.makedirs("models", exist_ok=True)
     for name, data in models.items():
-        save_path = f'models/{name}.json'
-        data['model'].save_model(save_path)
-        print(f"- Saved {name} to {save_path} (Unique Ratio: {data['ratio']:.1%})")
+        save_path = f"models/{name}.json"
+        data["model"].save_model(save_path)
+        metrics = data["metrics"]
+        print(
+            f"- Saved {name} to {save_path} "
+            f"(Log Loss: {metrics['ll']:.4f}, Brier: {metrics['brier']:.4f}, "
+            f"AUC: {metrics['auc']:.4f}, Unique Ratio: {data['ratio']:.1%})"
+        )
 
-        if data['ratio'] > best_ratio:
-            best_ratio = data['ratio']
-            best_candidate_name = name
+    best_candidate_name = select_best_candidate(models)
+    best_metrics = models[best_candidate_name]["metrics"]
+    promotion = compare_candidate_to_market(best_metrics, market_metrics)
 
-    print(f"\nBest model for uniqueness: {best_candidate_name.upper()} with ratio {best_ratio:.1%}")
-    if best_ratio >= 0.80:
-        print("\nSUCCESS: Target of >= 80% raw unique ratio ACHIEVED via model retraining.")
-        print(f"Candidate '{best_candidate_name}' appears ready to resolve the model coarseness.")
-        print(f"Command to promote: cp models/{best_candidate_name}.json models/xgboost_model_v2.json")
+    sport_col = "sport" if "sport" in df.columns else "league" if "league" in df.columns else None
+    sport_counts = (
+        df[sport_col].astype("string").str.upper().value_counts().to_dict()
+        if sport_col
+        else {}
+    )
+    constant_features = [
+        column
+        for column in VERTEX_FEATURE_COLUMNS
+        if X_train[column].nunique(dropna=False) <= 1
+    ]
+    integrity_reasons = []
+    if len(df) < 1000:
+        integrity_reasons.append(
+            f"training set has only {len(df)} rows; at least 1000 are required for production promotion"
+        )
+    if len(sport_counts) != 1:
+        integrity_reasons.append(
+            "mixed-sport global model is not production eligible; train and validate one model per sport"
+        )
+    if len(constant_features) > len(VERTEX_FEATURE_COLUMNS) * 0.25:
+        integrity_reasons.append(
+            f"{len(constant_features)}/{len(VERTEX_FEATURE_COLUMNS)} model features are constant"
+        )
+
+    if integrity_reasons:
+        promotion["promotable"] = False
+        promotion["reasons"] = list(promotion.get("reasons", [])) + integrity_reasons
+
+    report = {
+        "out_of_sample": True,
+        "target": "home_won",
+        "supported_market_families": ["moneyline", "h2h"],
+        "selection_metric_order": ["log_loss", "brier", "auc"],
+        "train_rows": int(len(train_frame)),
+        "validation_rows": int(len(val_frame)),
+        "train_end": str(pd.to_datetime(train_frame["commence_time"], utc=True).max()),
+        "validation_start": str(pd.to_datetime(val_frame["commence_time"], utc=True).min()),
+        "sport_counts": {str(key): int(value) for key, value in sport_counts.items()},
+        "constant_features": constant_features,
+        "market_baseline": market_metrics,
+        "candidates": {
+            name: data["metrics"]
+            for name, data in models.items()
+        },
+        "selected_candidate": best_candidate_name,
+        "promotion_gate": promotion,
+    }
+    report_path = Path("models/training_validation_report.json")
+    report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+
+    print("\n" + "=" * 50)
+    print("RETRAINING HARNESS SUMMARY")
+    print("=" * 50)
+    print(
+        f"Best candidate by log loss/Brier/AUC: {best_candidate_name.upper()} "
+        f"(Log Loss: {best_metrics['ll']:.4f}, Brier: {best_metrics['brier']:.4f}, "
+        f"AUC: {best_metrics['auc']:.4f})"
+    )
+    print(f"Validation report: {report_path}")
+    if promotion["promotable"]:
+        print("\nREADY: candidate beat the market benchmark and passed data-integrity gates.")
+        print(
+            f"Command to promote for moneyline/H2H only: "
+            f"cp models/{best_candidate_name}.json models/xgboost_model_v2.json"
+        )
     else:
-        print("\nFAILED: Target of >= 80% raw unique ratio NOT achieved even with Ultra capacity models.")
-        print("DIAGNOSIS: Model family capacity is NOT the sole blocker. The issue is likely Feature Collapse/Dataset Size:")
-        print("1. The training dataset is too small (~400 rows) or lacks sufficient variance to teach the model to separate 62 distinct buckets.")
-        print("2. The feature schema itself (win%, ppg, etc) on the validation split is naturally clumped/identical across games without enough high-granularity separators.")
+        print("\nBLOCKED: do not promote this model.")
+        for reason in promotion.get("reasons", []):
+            print(f"- {reason}")
+
 
 if __name__ == "__main__":
     main()

@@ -23,7 +23,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt pytest
       - name: Compile production modules
-        run: python -m compileall -q app app_core core streamlit_app.py
+        run: python -m compileall -q app app_core core scripts/train_xgboost_model.py streamlit_app.py
       - name: Run production-safety regressions
         run: >
           python -m pytest -q
@@ -37,6 +37,8 @@ jobs:
           tests/test_bucket_calibration.py
           tests/test_empirical_tiers.py
           tests/test_production_card_calibration_guard.py
+          tests/test_model_validation.py
+          tests/test_ml_target_guard.py
           tests/test_parlay_safety.py
 
   full-suite-observability:
