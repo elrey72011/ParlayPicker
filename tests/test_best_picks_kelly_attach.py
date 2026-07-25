@@ -86,12 +86,24 @@ def test_attach_kelly_carries_portfolio_audit_fields():
         {"canonical_pick_key": "k1", "best_pick": "Under 213.5", "Pick_Status": "Actionable", "market_line_source": "live", "line_consistency_flag": True, "line_event_identity_match_flag": True},
     ])
     portfolio = pd.DataFrame([
-        {"canonical_pick_key": "k1", "production_bet_amount": 22.0, "raw_kelly_amount": 88.0, "kelly_cap_reason": "Scaled by slate exposure", "production_eligible": True},
+        {
+            "canonical_pick_key": "k1",
+            "production_bet_amount": 22.0,
+            "raw_kelly_amount": 88.0,
+            "kelly_cap_reason": "Scaled by slate exposure",
+            "production_eligible": True,
+            "kelly_uncalibrated_probability": 0.70,
+            "kelly_probability_used": 0.65,
+            "kelly_probability_source": "empirical_win_probability",
+        },
     ])
     out = _attach_kelly_to_best_picks(best, portfolio, {})
     assert float(out.loc[0, "production_bet_amount"]) == 22.0
     assert float(out.loc[0, "raw_kelly_amount"]) == 88.0
     assert out.loc[0, "kelly_cap_reason"] == "Scaled by slate exposure"
+    assert float(out.loc[0, "kelly_uncalibrated_probability"]) == 0.70
+    assert float(out.loc[0, "kelly_probability_used"]) == 0.65
+    assert out.loc[0, "kelly_probability_source"] == "empirical_win_probability"
 
 
 def test_attach_kelly_handles_portfolio_without_production_bet_amount():
