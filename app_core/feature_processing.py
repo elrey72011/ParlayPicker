@@ -2852,7 +2852,11 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     features_data["stats_fetch_retries_used"] = nba_fetch_diag.get("retries_used", 0)
     nba_fetch_source_raw = str(nba_fetch_diag.get("source", "none")).lower()
     nba_row_sources = set(stats_source.loc[nba_mask].astype(str).str.lower().tolist()) if nba_mask.any() else set()
-    if "live" in nba_row_sources:
+    nba_in_slate = bool(nba_mask.any())
+    if not nba_in_slate:
+        nba_fetch_status = "not_applicable"
+        nba_fetch_source = "none"
+    elif "live" in nba_row_sources:
         nba_fetch_status = "live"
         nba_fetch_source = "live"
     elif "cached" in nba_row_sources:
@@ -3072,7 +3076,7 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
 
     total_rows = max(len(df), 1)
     fallback_ratio = float(unresolved_mask.sum()) / float(total_rows)
-    nba_failed = str(nba_fetch_diag.get("source", "")).lower() == "failed"
+    nba_failed = bool(nba_in_slate) and str(nba_fetch_diag.get("source", "")).lower() == "failed"
     fallback_heavy = fallback_ratio >= 0.25 or int(sum(unresolved_counts_by_league.values())) >= 3
     run_health_warning = ""
     if nba_failed and fallback_heavy:
