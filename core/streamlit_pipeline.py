@@ -134,7 +134,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-07-11l-kalshi-mlb-aliases"
+PIPELINE_BUILD = "2026-07-25a-kelly-audit-mlb-health"
 
 
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
@@ -150,6 +150,9 @@ REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
     "run_health_warning",
     "degraded_feature_subset_flag",
     "degraded_feature_subset_reason",
+    "kelly_uncalibrated_probability",
+    "kelly_probability_used",
+    "kelly_probability_source",
     "actionable_family_counts",
     "totals_only_actionable_flag",
     "viable_side_candidates_count",
@@ -404,6 +407,7 @@ BEST_PICK_COLUMNS = [
     "actionable_family_counts", "totals_only_actionable_flag", "viable_side_candidates_count", "side_promoted_by_balance_guard_count", "side_balance_guard_reason",
     "production_win_probability", "production_expected_value", "production_edge", "probability_calibration_reason", "production_eligible",
     "raw_kelly_amount", "production_bet_amount", "kelly_cap_reason", "kelly_zero_reason",
+    "kelly_uncalibrated_probability", "kelly_probability_used", "kelly_probability_source",
     "export_run_id", "pick_id", "canonical_pick_key",
 ]
 
