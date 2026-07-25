@@ -1,6 +1,8 @@
 import os
 import sys
 
+import pandas as pd
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import core.streamlit_pipeline as sp
@@ -99,3 +101,19 @@ def test_fetch_live_odds_dataframe_accepts_novig_key_variants(monkeypatch):
     assert not df.empty
     assert float(df.iloc[0]["novig_under_point"]) == 145.5
     assert float(df.iloc[0]["novig_under_price"]) == 101
+
+
+def test_ncaab_postseason_cutoff_rolls_forward_each_year():
+    games = pd.DataFrame(
+        {
+            "league": ["NCAAB", "NCAAB", "NCAAB", "NBA"],
+            "game_date": [
+                "2027-03-16T23:00:00Z",
+                "2027-03-17T23:00:00Z",
+                "2028-03-18T23:00:00Z",
+                "2028-03-18T23:00:00Z",
+            ],
+        }
+    )
+    assert sp.is_postseason_ncaab(games).tolist() == [False, True, True, False]
+
