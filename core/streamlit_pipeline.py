@@ -7,7 +7,7 @@ import sys
 import warnings
 from itertools import combinations
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 from difflib import SequenceMatcher
 
 import numpy as np
@@ -1670,6 +1670,41 @@ def apply_mlb_total_market_debias(calibrated, df) -> tuple[pd.Series, float]:
         return calibrated, 0.0
 
 
+def _retire_game_winner_model_from_unsupported_markets(
+    df: pd.DataFrame,
+    diagnostics: Optional[dict[str, Any]] = None,
+) -> pd.DataFrame:
+    """Remove home-win model output from totals and spread rows.
+
+    The shipped XGBoost target is ``home_won``. Its output is therefore only
+    eligible for moneyline/H2H markets; treating it as P(over), P(under), or
+    P(cover) creates a target mismatch. The rest of the pipeline can still
+    price unsupported rows from market, Kalshi, and TheOver inputs.
+    """
+    if df is None or df.empty or "ml_probability" not in df.columns:
+        return df
+
+    market_type = _string_series(df, "market_type").str.lower()
+    total_mask = market_type.str.contains("total", na=False)
+    spread_mask = market_type.str.contains("spread", na=False)
+    populated_ml = _numeric_series(df, "ml_probability").notna()
+    retire_mask = populated_ml & (total_mask | spread_mask)
+
+    if diagnostics is not None:
+        diagnostics["ml_target_mismatch_rows"] = int(retire_mask.sum())
+        diagnostics["ml_totals_retired_rows"] = int((retire_mask & total_mask).sum())
+        diagnostics["ml_spreads_retired_rows"] = int((retire_mask & spread_mask).sum())
+
+    if not retire_mask.any():
+        return df
+
+    df.loc[retire_mask, "ml_probability"] = pd.NA
+    if "model_status" not in df.columns:
+        df["model_status"] = "OK"
+    df.loc[retire_mask, "model_status"] = "Unsupported Target: home-win model"
+    return df
+
+
 def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
     out["odds_american"] = _numeric_series(out, "odds_american", pd.NA)
@@ -1725,14 +1760,14 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
 
 
     # theover is a legacy column mapping we still ingest
-    model_prob = ml.where(ml.notna(), theover)
-    out["display_probability"] = model_prob.round(3)
+    display_prob = ml.where(ml.notna(), theover)
+    out["display_probability"] = display_prob.round(3)
     kalshi_prob = _numeric_series(out, "kalshi_probability") if "kalshi_probability" in out.columns else pd.Series([pd.NA]*len(out), index=out.index)
 
     calibrated = compute_blended_probability(
         p_market=out["market_probability"],
         p_kalshi=kalshi_prob,
-        p_ml=model_prob,
+        p_ml=ml,
         p_theover=theover,  # Use existing variable
         p_sentiment=_numeric_series(out, "sentiment_diff", default=0.0).apply(lambda x: 0.5 + x * 0.5),
         league=_string_series(out, "league"),
@@ -6402,6 +6437,19 @@ def run_analysis_pipeline(
         merged["model_status"] = "Model Disabled"
 
     merged.loc[_numeric_series(merged, "ml_probability").isna() & _string_series(merged, "model_status").eq("OK"), "model_status"] = "Model Failure"
+
+    # The loaded model predicts home_won. Until market-specific models pass an
+    # out-of-sample benchmark, do not reinterpret that output as totals/cover
+    # probability. These rows remain available through the other signal sources.
+    merged = _retire_game_winner_model_from_unsupported_markets(
+        merged,
+        ml_prediction_diag,
+    )
+    if int(ml_prediction_diag.get("ml_target_mismatch_rows", 0)) > 0:
+        logger.warning(
+            "MODEL TARGET GUARD: retired home-win ML output from %s totals/spread rows.",
+            ml_prediction_diag["ml_target_mismatch_rows"],
+        )
 
     theover_probability = _numeric_series(merged, "theover_probability")
     theover_probability = theover_probability.where(theover_probability <= 1, theover_probability / 100.0)
