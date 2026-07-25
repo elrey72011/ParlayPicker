@@ -2190,15 +2190,20 @@ def _fill_missing_game_dates_from_base(bet_rows_df: pd.DataFrame, base_df: pd.Da
 
 
 def is_postseason_ncaab(df: pd.DataFrame) -> pd.Series:
-    """Identify NCAAB games played on or after March 17 of each season year."""
+    """Identify NCAAB postseason games using the season-ending calendar year."""
     if df is None or df.empty:
         return pd.Series(dtype=bool)
 
     league_mask = _string_series(df, "league").str.upper() == "NCAAB"
 
     date_series = pd.to_datetime(df.get("game_date"), errors="coerce", utc=True)
+    # College seasons cross calendar years: a November 2026 game belongs to the
+    # season whose postseason begins March 17, 2027. January-June games use their
+    # own calendar year; July-December games use the following year.
+    season_end_year = date_series.dt.year.astype("Int64")
+    season_end_year = season_end_year + date_series.dt.month.ge(7).astype("Int64")
     postseason_start = pd.to_datetime(
-        date_series.dt.year.astype("Int64").astype("string") + "-03-17",
+        season_end_year.astype("string") + "-03-17",
         errors="coerce",
         utc=True,
     )
