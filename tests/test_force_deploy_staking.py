@@ -18,9 +18,10 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from core.streamlit_pipeline import optimize_portfolio_allocation
 from app_core import weights_config
 from app_core.weights_config import (
-    DAILY_STAKE_BUDGET,
-    ACTIONABLE_STAKE_SHARE,
-    FORCE_DEPLOY_MAX_PICK_PCT,
+    PRODUCTION_ABSOLUTE_MAX_PICK_DOLLARS,
+    PRODUCTION_ABSOLUTE_MAX_SLATE_DOLLARS,
+    PRODUCTION_MAX_PICK_PCT,
+    PRODUCTION_MAX_SLATE_PCT,
 )
 
 
@@ -31,7 +32,9 @@ def _enable_force_deploy(monkeypatch):
     # force-deploy LOGIC for when it is explicitly re-enabled, so switch it on here.
     monkeypatch.setattr(weights_config, "DAILY_STAKE_FORCE_DEPLOY", True)
 
-MAX_PICK = DAILY_STAKE_BUDGET * FORCE_DEPLOY_MAX_PICK_PCT  # $750 on a $5000 budget
+TEST_BANKROLL = 1000.0
+MAX_PICK = min(TEST_BANKROLL * PRODUCTION_MAX_PICK_PCT, PRODUCTION_ABSOLUTE_MAX_PICK_DOLLARS)
+MAX_SLATE = min(TEST_BANKROLL * PRODUCTION_MAX_SLATE_PCT, PRODUCTION_ABSOLUTE_MAX_SLATE_DOLLARS)
 
 
 def _row(pick, status, prob, odds=-110, health="", consensus="Agrees"):
@@ -55,26 +58,21 @@ def _df(rows):
     return pd.DataFrame(rows)
 
 
-def test_force_deploy_splits_60_40_under_per_pick_cap():
-    # Enough picks per tier that none hits the cap -> tiers fill to 60% / 40%.
+def test_force_deploy_remains_bounded_by_final_production_caps():
     rows = [_row(f"A{i} Over 7.5", "Actionable", 0.60) for i in range(5)]
     rows += [_row(f"H{i} Over 8.5", "High Variance/Speculative", 0.56) for i in range(4)]
-    out = optimize_portfolio_allocation(_df(rows), bankroll=1000.0)
-    status = out["Pick_Status"].str.lower()
-    act = out.loc[status.eq("actionable"), "production_bet_amount"]
-    hv = out.loc[status.eq("high variance/speculative"), "production_bet_amount"]
-    assert abs(act.sum() - DAILY_STAKE_BUDGET * ACTIONABLE_STAKE_SHARE) < 2.0   # ~3000
-    assert abs(hv.sum() - DAILY_STAKE_BUDGET * (1 - ACTIONABLE_STAKE_SHARE)) < 2.0  # ~2000
+    out = optimize_portfolio_allocation(_df(rows), bankroll=TEST_BANKROLL)
     assert out["production_bet_amount"].max() <= MAX_PICK + 1e-6
+    assert out["production_bet_amount"].sum() <= MAX_SLATE + 1e-6
 
 
 def test_force_deploy_caps_a_lone_pick_instead_of_concentrating():
-    # One Actionable pick must NOT absorb the whole $3000 — it's capped, and the tier
+    # One Actionable pick must NOT absorb the whole $3000 â€” it's capped, and the tier
     # under-deploys by design.
     out = optimize_portfolio_allocation(_df([_row("A Over 7.5", "Actionable", 0.60)]), bankroll=1000.0)
     staked = float(out["production_bet_amount"].iloc[0])
     assert abs(staked - MAX_PICK) < 1e-6
-    assert out["production_bet_amount"].sum() < DAILY_STAKE_BUDGET * ACTIONABLE_STAKE_SHARE
+    assert out["production_bet_amount"].sum() <= MAX_SLATE
 
 
 def test_force_deploy_excludes_below_threshold():
@@ -89,7 +87,7 @@ def test_force_deploy_excludes_below_threshold():
 
 
 def test_force_deploy_suspended_slate_stakes_nothing():
-    warn = "slate_direction_imbalance: 100% of 13 totals are over — big-Kelly staking suspended"
+    warn = "slate_direction_imbalance: 100% of 13 totals are over â€” big-Kelly staking suspended"
     rows = [
         _row("A Over 7.5", "Actionable", 0.60, health=warn),
         _row("H Over 9.5", "High Variance/Speculative", 0.56, health=warn),
@@ -100,7 +98,7 @@ def test_force_deploy_suspended_slate_stakes_nothing():
 
 def test_force_deploy_non_actionable_excludes_disagrees():
     # A High Variance pick where Kalshi DISAGREES (backs the other side) must not be
-    # staked — we never bet against the market on the speculative tier.
+    # staked â€” we never bet against the market on the speculative tier.
     rows = [
         _row("A Over 7.5", "High Variance/Speculative", 0.56, consensus="Disagrees"),
         _row("B Over 8.5", "High Variance/Speculative", 0.56, consensus="Neutral"),
@@ -122,4 +120,20 @@ def test_force_deploy_skips_unsafe_lines():
     unsafe = float(out.loc[out["best_pick"].eq("B Over 8.5"), "production_bet_amount"].iloc[0])
     safe = float(out.loc[out["best_pick"].eq("A Over 7.5"), "production_bet_amount"].iloc[0])
     assert unsafe == 0.0
-    assert abs(safe - MAX_PICK) < 1e-6  # lone safe pick capped, not given full $3000
+    assert abs(safe - MAX_PICK) < 1e-6
+
+
+def test_force_deploy_does_not_bypass_degraded_model_guard():
+    row = _row("A Over 7.5", "Actionable", 0.60)
+    row["model_status"] = "statistical fallback"
+    out = optimize_portfolio_allocation(_df([row]), bankroll=TEST_BANKROLL)
+    assert float(out["production_bet_amount"].sum()) == 0.0
+
+
+def test_force_deploy_does_not_equal_weight_zero_edge_rows():
+    out = optimize_portfolio_allocation(
+        _df([_row("A Over 7.5", "Actionable", 0.50)]),
+        bankroll=TEST_BANKROLL,
+    )
+    assert float(out["production_bet_amount"].sum()) == 0.0
+
