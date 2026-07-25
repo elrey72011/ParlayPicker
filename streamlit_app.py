@@ -235,8 +235,16 @@ def _et_floor_day(series: pd.Series) -> pd.Series:
     )
 
 
+def _ml_eligible_market_mask(df: pd.DataFrame) -> pd.Series:
+    """Return rows compatible with the shipped ``home_won`` model target."""
+    if df is None or df.empty:
+        return pd.Series(False, index=getattr(df, "index", pd.RangeIndex(0)), dtype=bool)
+    market_type = _safe_str_series(df, "market_type").str.lower()
+    return market_type.str.contains(r"moneyline|h2h", regex=True, na=False)
+
+
 def _compose_model_probability(out: pd.DataFrame) -> tuple[pd.Series, pd.Series, pd.Series]:
-    """Build model probability using market-aware fallback logic.
+    """Expose native ML only for markets compatible with its target.
 
     Returns a tuple of (model_probability, ml_probability, theover_probability).
     """
@@ -247,8 +255,6 @@ def _compose_model_probability(out: pd.DataFrame) -> tuple[pd.Series, pd.Series,
     # The previous logic only divided by 100 if theover > 1.
     theover = theover.where(theover <= 1.0, theover / 100.0)
 
-    market_type = _safe_str_series(out, "market_type").str.lower()
-
     # Reject known broken XGBoost baseline default score when feature matrix collapses.
     is_broken_ml = (ml > 0.19063) & (ml < 0.19064)
 
@@ -258,27 +264,8 @@ def _compose_model_probability(out: pd.DataFrame) -> tuple[pd.Series, pd.Series,
         logger.warning(f"⚠️ Trapped broken XGBoost scores (0.19063-0.19064) for matchups: {broken_matchups}. Discarding ML predictions and forcing Statistical Fallback.")
 
     ml_clean = ml.where(~is_broken_ml, pd.NA)
-
-    spread_model = ml_clean.where(ml_clean.notna(), theover)
-
-    # Bayesian Updating for Totals Markets
-    # Replace hard hierarchy with a weighted average: 0.6 * theover_probability + 0.4 * ml_clean
-    total_model = (0.6 * theover) + (0.4 * ml_clean)
-
-    # If one of them is NA, fallback to the other
-    total_model = total_model.where(total_model.notna(), theover.where(theover.notna(), ml_clean))
-
-    model_probability = pd.Series(
-        pd.NA,
-        index=out.index,
-        dtype="Float64",
-    )
-    is_spread = market_type.str.startswith("spread")
-    model_probability = model_probability.where(~is_spread, spread_model)
-    model_probability = model_probability.where(is_spread, total_model)
-    return model_probability.astype("float64"), ml, theover
-
-
+    native_ml = ml_clean.where(_ml_eligible_market_mask(out), pd.NA)
+    return native_ml.astype("float64"), native_ml, theover
 
 
 def _recompute_consensus_from_kalshi(df: pd.DataFrame, require_ml: bool = False) -> pd.DataFrame:
@@ -300,16 +287,10 @@ def _recompute_consensus_from_kalshi(df: pd.DataFrame, require_ml: bool = False)
         broken_matchups = out.loc[is_broken_ml, "matchup_id"].unique() if "matchup_id" in out.columns else []
         logger.warning(f"⚠️ Consensus Step: Trapped broken XGBoost scores (0.19063-0.19064) for matchups: {broken_matchups}.")
 
-    ml_valid = ml.where(~is_broken_ml, pd.NA)
+    ml_eligible = _ml_eligible_market_mask(out)
+    ml_valid = ml.where(~is_broken_ml & ml_eligible, pd.NA)
 
-    # Handle the two variations of model prob stored depending on df origin
-    if "model_probability" in out.columns:
-        model_prob = _safe_numeric_series(out, "model_probability")
-    else:
-        # Fallback to market-aware ml/theover composition used in the analysis pipeline
-        model_prob, _, _ = _compose_model_probability(out)
-
-    if require_ml and ml_valid.notna().sum() == 0:
+    if require_ml and ml_eligible.any() and ml_valid.loc[ml_eligible].notna().sum() == 0:
         raise ValueError("ML predictions failed to merge with the analysis dataframe.")
 
     # Extract the missing features required for the new Tiered Weight system
@@ -333,7 +314,7 @@ def _recompute_consensus_from_kalshi(df: pd.DataFrame, require_ml: bool = False)
     blended = compute_blended_probability(
         p_market=market_prob,
         p_kalshi=kalshi_prob,
-        p_ml=model_prob,
+        p_ml=ml_valid,
         p_theover=theover_prob_blend,
         p_sentiment=sentiment_prob,
         league=_safe_str_series(out, "league"),
@@ -350,7 +331,7 @@ def _recompute_consensus_from_kalshi(df: pd.DataFrame, require_ml: bool = False)
     import numpy as _np
     out["blend_in_kalshi"] = kalshi_prob
     out["blend_in_market"] = market_prob
-    out["blend_in_ml"] = model_prob
+    out["blend_in_ml"] = ml_valid
     out["blend_in_theover"] = theover_prob_blend
     out["blend_tier"] = _np.where(
         kalshi_prob.fillna(0.0) >= 0.55, 1, 2
@@ -358,7 +339,8 @@ def _recompute_consensus_from_kalshi(df: pd.DataFrame, require_ml: bool = False)
 
     # Check if the Hard Safety Net was used (e.g., probability is exactly 0.5 for all and there's a note)
     # Since ml_valid might be filled with 0.5 from fallback:
-    if "ml_probability" in out.columns and (out["ml_probability"] == 0.5).all() and len(out) > 0:
+    present_ml = _safe_numeric_series(out, "ml_probability").dropna()
+    if len(present_ml) > 0 and present_ml.eq(0.5).all():
         logger.warning(
             "Hard Safety Net (Neutral Fallback 0.5) triggered for predictions. "
             "Please check the ML engine logs for the specific missing features that caused the matrix to be mostly empty."
@@ -540,20 +522,22 @@ def _merge_kalshi_into_analysis(analysis_df: pd.DataFrame, best_picks_df: pd.Dat
 
 
 def _sync_ml_probabilities(analysis_df: pd.DataFrame, pipeline_best_picks_df: pd.DataFrame) -> pd.DataFrame:
-    """Repair missing ML probabilities in analysis_df using key-based join from pipeline best picks."""
+    """Repair missing native ML probabilities with a market-specific key join."""
     if analysis_df is None or analysis_df.empty or pipeline_best_picks_df is None or pipeline_best_picks_df.empty:
         return analysis_df
 
-    required_cols = ["league", "home_team", "away_team", "game_date", "ml_probability"]
+    required_cols = ["league", "home_team", "away_team", "game_date", "market_type", "ml_probability"]
     if any(c not in pipeline_best_picks_df.columns for c in required_cols):
         return analysis_df
 
     left = analysis_df.copy()
+    if "ml_probability" in left.columns:
+        left.loc[~_ml_eligible_market_mask(left), "ml_probability"] = pd.NA
     right = pipeline_best_picks_df[required_cols].copy()
     right["ml_probability"] = pd.to_numeric(right["ml_probability"], errors="coerce")
-    right = right[right["ml_probability"].notna()].drop_duplicates()
+    right = right[_ml_eligible_market_mask(right) & right["ml_probability"].notna()].drop_duplicates()
     if right.empty:
-        return analysis_df
+        return left
 
     left["game_date"] = _et_floor_day(left["game_date"])
     right["game_date"] = _et_floor_day(right["game_date"])
@@ -562,8 +546,10 @@ def _sync_ml_probabilities(analysis_df: pd.DataFrame, pipeline_best_picks_df: pd
     left["_merge_away"] = left["away_team"].astype(str).str.lower().str.replace(r"[^a-z0-9]", "", regex=True)
     right["_merge_home"] = right["home_team"].astype(str).str.lower().str.replace(r"[^a-z0-9]", "", regex=True)
     right["_merge_away"] = right["away_team"].astype(str).str.lower().str.replace(r"[^a-z0-9]", "", regex=True)
+    left["_merge_market"] = left["market_type"].astype(str).str.lower().str.strip()
+    right["_merge_market"] = right["market_type"].astype(str).str.lower().str.strip()
 
-    merge_keys = ["league", "game_date", "_merge_home", "_merge_away"]
+    merge_keys = ["league", "game_date", "_merge_home", "_merge_away", "_merge_market"]
     merged = left.merge(
         right[merge_keys + ["ml_probability"]].rename(columns={"ml_probability": "ml_probability_sync"}),
         on=merge_keys,
@@ -580,15 +566,25 @@ def _sync_ml_probabilities(analysis_df: pd.DataFrame, pipeline_best_picks_df: pd
 
     recovered = int(pd.to_numeric(merged["ml_probability_sync"], errors="coerce").notna().sum())
     if recovered > 0:
-        logger.warning("🔧 ML sync: recovered %s ml_probability values via key-based merge.", recovered)
+        logger.warning("🔧 ML sync: recovered %s ml_probability values via market-specific merge.", recovered)
 
-    ml_after_sync = pd.to_numeric(merged["ml_probability"], errors="coerce").dropna()
+    eligible_after_sync = _ml_eligible_market_mask(merged)
+    merged.loc[~eligible_after_sync, "ml_probability"] = pd.NA
+    ml_after_sync = pd.to_numeric(
+        merged.loc[eligible_after_sync, "ml_probability"], errors="coerce"
+    ).dropna()
     if len(ml_after_sync) > 1 and ml_after_sync.nunique() <= 1:
         raise ValueError(
             "ML predictions are constant after sync; feature matrix likely invalid from schedule join failure."
         )
 
-    merged = merged.drop(columns=[c for c in ["ml_probability_sync", "_merge_home", "_merge_away"] if c in merged.columns])
+    merged = merged.drop(
+        columns=[
+            col
+            for col in ["ml_probability_sync", "_merge_home", "_merge_away", "_merge_market"]
+            if col in merged.columns
+        ]
+    )
     return merged
 
 
@@ -739,13 +735,34 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
             deferred_errors.append(f"ML Merge Failed: {exc}")
             return empty_state, deferred_warnings, deferred_errors
 
-        ml_non_null = _safe_numeric_series(analysis_df, "ml_probability").notna().sum()
-        if ml_non_null == 0:
-            deferred_errors.append("ML Merge Failed: Predictions could not be joined to the market odds.")
+        ml_eligible = _ml_eligible_market_mask(analysis_df)
+        ml_required = bool(ml_eligible.any())
+        eligible_ml_non_null = int(
+            _safe_numeric_series(analysis_df, "ml_probability")
+            .loc[ml_eligible]
+            .notna()
+            .sum()
+        )
+        diagnostics["ml_eligible_rows"] = int(ml_eligible.sum())
+        diagnostics["ml_eligible_predictions"] = eligible_ml_non_null
+        if ml_required and eligible_ml_non_null == 0:
+            deferred_errors.append(
+                "ML Merge Failed: Moneyline/H2H predictions could not be joined to the market odds."
+            )
             return empty_state, deferred_warnings, deferred_errors
+        if not ml_required:
+            deferred_warnings.append(
+                "ML is enabled, but this slate has no moneyline/H2H rows. "
+                "Totals and spreads are continuing with market, Kalshi, and TheOver signals."
+            )
+    else:
+        ml_required = False
 
     try:
-        analysis_df = _recompute_consensus_from_kalshi(analysis_df, require_ml=bool(controls.get("use_ml")))
+        analysis_df = _recompute_consensus_from_kalshi(
+            analysis_df,
+            require_ml=ml_required,
+        )
     except ValueError as exc:
         deferred_errors.append(f"ML Merge Failed: {exc}")
         return empty_state, deferred_warnings, deferred_errors
