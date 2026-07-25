@@ -134,7 +134,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-07-10h-probation-parlays"
+PIPELINE_BUILD = "2026-07-11l-kalshi-mlb-aliases"
 
 
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
@@ -194,13 +194,13 @@ REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
     # (e.g. "Kalshi 35% | Market 46% | ML 74% | TheOver 75%"). Derived from the
     # blend_in_* columns above; absent signals are omitted.
     "signal_breakdown",
-    # Kalshi match instrumentation â€” diagnose a systematic over-bias from the export:
+    # Kalshi match instrumentation — diagnose a systematic over-bias from the export:
     # the Kalshi contract line used, its distance from the pick line, and the raw
     # P(over) before pick-side orientation / proxy decay.
     "kalshi_matched_line",
     "kalshi_line_diff",
     "kalshi_raw_over_prob",
-    # Raw Kalshi contract fields â€” confirm strike semantics vs our matched_line, and
+    # Raw Kalshi contract fields — confirm strike semantics vs our matched_line, and
     # let the YES bid/ask reveal any de-vig issue, straight from the export.
     "kalshi_market_title",
     "kalshi_floor_strike",
@@ -373,7 +373,7 @@ BEST_PICK_COLUMNS = [
     "odds_american", "odds_source", "market_probability", "ml_probability", "theover_probability", "win_prob_source", "display_probability",
     "kalshi_probability", "kalshi_match_status", "kalshi_match_reason",
     # Kalshi match instrumentation: the contract line actually used, its distance from
-    # the pick line, and the raw P(over) before orientation/decay â€” for diagnosing a
+    # the pick line, and the raw P(over) before orientation/decay — for diagnosing a
     # systematic over-bias straight from the export.
     "kalshi_matched_line", "kalshi_line_diff", "kalshi_raw_over_prob",
     "kalshi_market_title", "kalshi_floor_strike", "kalshi_cap_strike", "kalshi_yes_bid", "kalshi_yes_ask",
@@ -382,7 +382,7 @@ BEST_PICK_COLUMNS = [
     # exports without having to re-derive orientation (which is ambiguous after
     # the fact). See scripts/fit_blend_weights.py.
     "blend_in_kalshi", "blend_in_market", "blend_in_ml", "blend_in_theover", "blend_tier",
-    # Readable per-signal win-% breakdown (Kalshi/Market/ML/TheOver) â€” see REQUIRED_BEST_PICK_EXPORT_COLUMNS.
+    # Readable per-signal win-% breakdown (Kalshi/Market/ML/TheOver) — see REQUIRED_BEST_PICK_EXPORT_COLUMNS.
     "signal_breakdown",
     "gemini_explanation", "gemini_risk_notes", "used_stale_features", "Pick_Quality", "Conviction_Score",
     "game_already_started_flag",
@@ -429,7 +429,7 @@ def _compute_signal_breakdown(df: pd.DataFrame) -> pd.Series:
     the blend. We prefer the persisted ``blend_in_*`` inputs but fall back to the
     raw signal columns, because ``blend_in_kalshi`` is stamped early in
     run_analysis_pipeline (before Kalshi is merged onto live-odds bet rows) while
-    ``kalshi_probability`` is populated by the time the export is assembled â€” so
+    ``kalshi_probability`` is populated by the time the export is assembled — so
     computing the string here, late, keeps the Kalshi piece from being dropped.
     Signals absent for a row are omitted rather than shown as 0%.
     """
@@ -572,7 +572,7 @@ def _coerce_identity_columns(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
     matchup_text = _first_nonempty_text(out, ["matchup", "match_up", "event", "event_name", "teams", "game"])
     if matchup_text.str.len().eq(0).all():
-        sep_probe = r"(?i)(?:@|\bvs\b|\bv\b|\bat\b|[-â€”])"
+        sep_probe = r"(?i)(?:@|\bvs\b|\bv\b|\bat\b|[-—])"
         for col in out.columns:
             if col in {"home_team", "away_team", "team_1", "team_2", "league", "sport", "pick", "pick_team"}:
                 continue
@@ -584,7 +584,7 @@ def _coerce_identity_columns(df: pd.DataFrame) -> pd.DataFrame:
 
     away_from_matchup = pd.Series([""] * len(out), index=out.index, dtype="string")
     home_from_matchup = pd.Series([""] * len(out), index=out.index, dtype="string")
-    sep_pattern = r"(?i)\s*(?:@|vs\.?|v\.?|at|[-â€”])\s*"
+    sep_pattern = r"(?i)\s*(?:@|vs\.?|v\.?|at|[-—])\s*"
     parts = matchup_clean.str.split(sep_pattern, n=1, expand=True, regex=True)
     if isinstance(parts, pd.DataFrame) and parts.shape[1] >= 2:
         away_from_matchup = _clean_text_placeholders(parts[0])
@@ -1448,7 +1448,7 @@ def compute_blended_probability(
     market = pd.to_numeric(p_market, errors="coerce")
     kalshi = pd.to_numeric(p_kalshi, errors="coerce")
     ml = pd.to_numeric(p_ml, errors="coerce")
-    # Do NOT fill missing TheOver with 0.5 â€” a NaN signal must be dropped and its
+    # Do NOT fill missing TheOver with 0.5 — a NaN signal must be dropped and its
     # weight redistributed (handled in _blend_row), not injected as a neutral vote
     # that drags every blended estimate toward the midpoint.
     theover = pd.to_numeric(p_theover, errors="coerce")
@@ -1465,7 +1465,7 @@ def compute_blended_probability(
             k_oriented = p_kal
 
         # TheOver outputs exactly 0.5 (WinProbSource=default_0.5) when it has no real
-        # prediction. A no-information vote should not consume 30% blend weight â€” treat
+        # prediction. A no-information vote should not consume 30% blend weight — treat
         # it as absent so weight redistributes to signals that have actual information.
         if pd.notna(p_the) and abs(float(p_the) - 0.5) < 1e-9:
             p_the = float('nan')
@@ -1483,7 +1483,7 @@ def compute_blended_probability(
             w_the = THEOVER_WEIGHT
             w_sen = SENTIMENT_WEIGHT if has_real_sentiment else 0.0
 
-            # Market Maturity Overrides â€” league-specific Kalshi reliability
+            # Market Maturity Overrides — league-specific Kalshi reliability
             if lg and lg.upper() == "NHL":
                 w_kalshi = NHL_KALSHI_WEIGHT
                 w_market = NHL_MARKET_WEIGHT
@@ -1529,7 +1529,7 @@ def compute_blended_probability(
             w_the = FALLBACK_THEOVER_WEIGHT
             w_sen = FALLBACK_SENTIMENT_WEIGHT if has_real_sentiment else 0.0
             # For totals, TheOver's contextual signal (pitcher/pace) becomes the
-            # dominant source when Kalshi is absent â€” boost it, cut ML accordingly.
+            # dominant source when Kalshi is absent — boost it, cut ML accordingly.
             if lg and "total" in m_typ:
                 if lg.upper() == "MLB":
                     w_market = MLB_TOTAL_FALLBACK_MARKET_WEIGHT
@@ -1592,7 +1592,7 @@ def apply_mlb_total_market_debias(calibrated, df) -> tuple[pd.Series, float]:
     an over row that leans above the market has its P(over) pulled DOWN toward the
     market by ``bias`` but never below it; an under row whose P(under) sits below the
     market is pulled UP toward the market by ``bias`` but never above it. A flat
-    symmetric Â±bias shift (the original form) overshot â€” it pushed games past the
+    symmetric ±bias shift (the original form) overshot — it pushed games past the
     sharp market into a model-manufactured UNDER lean, and the EV term in direction
     selection amplified that into a near-unanimous all-Under card (14 Jun: a ~7-under
     / 6-over de-vig market produced a 14/14 Under card). Flooring at the market keeps
@@ -1601,7 +1601,7 @@ def apply_mlb_total_market_debias(calibrated, df) -> tuple[pd.Series, float]:
 
     Returns ``(corrected_calibrated, bias)``; bias is 0.0 when not applied. Pure +
     flag-checked + guarded so a single, tested implementation serves BOTH blend
-    paths (the Analysis tab and the production best-picks card) â€” wiring it into
+    paths (the Analysis tab and the production best-picks card) — wiring it into
     only one of them was the #1919 bug.
     """
     try:
@@ -1632,7 +1632,7 @@ def apply_mlb_total_market_debias(calibrated, df) -> tuple[pd.Series, float]:
         mk = pd.to_numeric(df["market_probability"], errors="coerce").to_numpy(dtype=float)
         has_mkt = ~np.isnan(mk)
         # Over rows: shrink a positive over-edge (cal above the market) toward the
-        # market by bias, FLOORED at the market â€” never cross into a manufactured
+        # market by bias, FLOORED at the market — never cross into a manufactured
         # under lean. Rows at/below the market (a genuine under read), or with no
         # market anchor, are left untouched.
         over_corr = np.where(
@@ -1678,7 +1678,7 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
 
     opposing_implied = out["odds_american"].apply(get_opposing_odds_from_exchange).apply(american_to_prob)
     # Guard the de-vig denominator against 0/NaN (missing odds) and bound the result, as
-    # the parallel computation downstream does â€” a bare division here can emit NaN/inf that
+    # the parallel computation downstream does — a bare division here can emit NaN/inf that
     # silently propagates into EV/edge/Kelly.
     _market_denom = implied_prob + opposing_implied
     out["market_probability"] = (
@@ -1696,7 +1696,7 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
     # TOTALS by shrinking each read toward neutral 0.50 by THEOVER_DEGRADED_FADE_SHRINK.
     # Nulling outright was too blunt: it discarded legitimate slates where TheOver's
     # model simply rated many games at a common confidence (15 Jun: six of eight reads
-    # at hit-rate 0.75 â€” magnitude 0.25 â€” folded over/under picks into one cluster and
+    # at hit-rate 0.75 — magnitude 0.25 — folded over/under picks into one cluster and
     # tripped the guard, dropping TheOver entirely and flipping 5 picks, incl. a 95%
     # Over read on MIA@PHI graded to a No Play). Shrinking keeps a damped, game-specific
     # signal in the blend on a false positive while still discounting a truly constant
@@ -1735,7 +1735,7 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
         market_type=_string_series(out, "market_type")
     )
 
-    # Cap calibrated probability for MLB total_over picks â€” TheOver inflates these
+    # Cap calibrated probability for MLB total_over picks — TheOver inflates these
     # because its data is not game-specific (May-13 finding: near-identical ~0.85
     # probability regardless of starting pitcher matchup). Market is now primary signal.
     mlb_over_mask = (
@@ -1858,7 +1858,7 @@ def _build_total_rows(normalized: pd.DataFrame) -> list[pd.DataFrame]:
     total_odds = _first_existing_numeric(normalized, ["odds_american", "american_odds", "odds"], default=pd.NA)
 
     # TheOver always outputs P(Over wins). Assign directly to over_prob and invert for under_prob.
-    # Do NOT re-invert based on pick direction â€” the M code's flip already handles Over/Under orientation.
+    # Do NOT re-invert based on pick direction — the M code's flip already handles Over/Under orientation.
     over_prob = total_prob
     under_prob = (1 - total_prob).where(total_prob.notna(), pd.NA)
 
@@ -1914,7 +1914,7 @@ def build_theover_bet_rows(
             continue
 
         normalized = _normalize_upload(upload_df)
-        # Drop moneylines from TheOver sides CSV â€” only spreads and totals are surfaced
+        # Drop moneylines from TheOver sides CSV — only spreads and totals are surfaced
         if file_type == "spreads" and "market" in normalized.columns:
             normalized = normalized[~normalized["market"].str.lower().str.strip().eq("moneyline")].copy()
         if normalized.empty:
@@ -2224,14 +2224,14 @@ def _apply_triple_filter_ranking(df: pd.DataFrame) -> pd.DataFrame:
 
     final_df = df.copy()
 
-    # 1. Edge Calculation (Model vs Market â€” actual betting edge)
+    # 1. Edge Calculation (Model vs Market — actual betting edge)
     # Previously used ml_prob - theover_prob (inter-model disagreement), which ranked picks
     # by how much ML diverges from TheOver rather than how much the blended model beats the
     # market. Picks with large ML/TheOver disagreement are NOT systematically better; this
     # was promoting overconfident ML predictions to S/A-Tier while better-calibrated picks
     # with real market edges landed in lower tiers.
     # Default missing columns to a NaN Series (not None/scalar) so the chained
-    # .fillna below never hits a numpy scalar â€” a minimal input lacking
+    # .fillna below never hits a numpy scalar — a minimal input lacking
     # market_probability (derived from odds in production) should fall back to a
     # 0.5 coin-flip, not raise. Mirrors the None-safe idiom used elsewhere here.
     _idx = final_df.index
@@ -2303,7 +2303,7 @@ def _apply_triple_filter_ranking(df: pd.DataFrame) -> pd.DataFrame:
     # Mapping Logic for sorting
     final_df['Pick_Quality'] = final_df['tier_score'].map(TIER_LABELS)
 
-    # 4. Final Rank Generation â€” WIN PROBABILITY first within each tier (owner
+    # 4. Final Rank Generation — WIN PROBABILITY first within each tier (owner
     # preference, 3 Jul: rank by chance of winning, not ROI), EV as tiebreak.
     # Probability basis: the most-calibrated column available per row.
     _prob_sort = pd.to_numeric(
@@ -2333,7 +2333,7 @@ def _fade_theover(theover, win_prob_source, fade_sources, shrink):
     """Shrink TheOver P(Over) toward 0.50 for faded WinProbSource rows.
 
     ``model_hit_rate_flipped`` is a *genuine* TheOver Under pick (P(Over)=1-hit_rate),
-    not a fallback â€” but TheOver's Under model has been cold recently, so we temper its
+    not a fallback — but TheOver's Under model has been cold recently, so we temper its
     influence rather than trust or discard it. ``shrink`` is the fraction of the
     deviation-from-0.50 removed: 1.0 fully neutralizes (-> 0.50), 0.0 leaves it untouched.
     Returns a float ndarray. NaN/absent values pass through unchanged.
@@ -2352,7 +2352,7 @@ def _fade_theover(theover, win_prob_source, fade_sources, shrink):
 def _fade_contrarian_public(theover, win_prob_source, sources, strength):
     """Contrarian-fade public-betting-% rows: P(Over)_new = 0.50 - strength*(P(Over)-0.50).
 
-    Public money is a FADE signal â€” heavy-public sides win LESS â€” so we invert its deviation
+    Public money is a FADE signal — heavy-public sides win LESS — so we invert its deviation
     from 0.50 rather than follow it (an 88%-public Over becomes < 0.50, "less likely"). strength
     0 = neutral (-> 0.50), 1.0 = full mirror (1-P), 0<s<1 = weak contrarian. NaN and
     non-matching sources pass through unchanged. Returns a float ndarray.
@@ -2428,7 +2428,7 @@ def _mlb_total_direction_conflict(
     TheOver's before the comparison. The graded history (n=363,
     data/calibration/bucket_stats.json) shows the pick LOST whenever it fought Kalshi
     on an MLB total (over:Disagrees 46%, under:Disagrees 45%), i.e. Kalshi is the more
-    reliable direction signal â€” so at >1.0, TheOver must clear a proportionally higher
+    reliable direction signal — so at >1.0, TheOver must clear a proportionally higher
     confidence bar before it can flip the pick away from Kalshi's side. 1.0 restores
     the symmetric "most-confident-wins" behavior. This governs DIRECTION only; it does
     not touch calibrated_probability, EV, edge, or any staking threshold.
@@ -2483,12 +2483,12 @@ def _edge_no_stake_demotion(
 
     Returns ``(new_status, reason, blocker_stage)`` when a currently-stakeable MLB total
     falls in a bucket that bled below the -110 breakeven (52.4%), else ``(None, None,
-    None)``. Only acts on Actionable / High Variance rows â€” never promotes. Pure +
+    None)``. Only acts on Actionable / High Variance rows — never promotes. Pure +
     side-effect-free for unit testing (tests/test_edge_no_stake_gates.py).
 
-    Rule 1 â€” Neutral-consensus totals: Over/Neutral hit 48.2% (n=56), the single largest
+    Rule 1 — Neutral-consensus totals: Over/Neutral hit 48.2% (n=56), the single largest
       losing cell, while Agrees (61.4%) and Disagrees (63.2%) totals keep their edge.
-    Rule 2 â€” mid-line Overs (``mid_min`` <= line < ``mid_max``, i.e. 8.0-9.5): 46.5%
+    Rule 2 — mid-line Overs (``mid_min`` <= line < ``mid_max``, i.e. 8.0-9.5): 46.5%
       (n=43), while the Under on those same lines hit 65.4%.
     """
     if (league or "").strip().upper() != "MLB":
@@ -2501,7 +2501,7 @@ def _edge_no_stake_demotion(
     if neutral_no_stake and is_total and (consensus or "").strip() == "Neutral":
         return (
             "Below Threshold",
-            "Below Threshold: Neutral-consensus MLB total â€” Neutral O/U hit ~48% "
+            "Below Threshold: Neutral-consensus MLB total — Neutral O/U hit ~48% "
             "(graded n=56), no edge vs -110; only Agrees/Disagrees totals are staked",
             "mlb_total_neutral_no_stake",
         )
@@ -2511,7 +2511,7 @@ def _edge_no_stake_demotion(
         return (
             "Below Threshold",
             f"Below Threshold: MLB Over line {float(total_line)} in mid bucket "
-            f"[{mid_min}, {mid_max}) â€” mid-line Overs hit ~46% (graded n=43); "
+            f"[{mid_min}, {mid_max}) — mid-line Overs hit ~46% (graded n=43); "
             f"the Under is the edge side here",
             "mlb_over_mid_line_no_stake",
         )
@@ -2554,14 +2554,14 @@ def _calibrated_beats_breakeven(eff_win, odds_american, calibration, buckets=Non
     Gate for empty-card recovery so it never STAKES a calibrated-negative pick.
     effective_win_probability is overconfident in the 0.50-0.55 band (327 graded picks:
     predicted .53, realized .43), so a positive RAW EV there is usually a negative CALIBRATED
-    EV. Rows with no usable odds get break-even 1.0 (gate fails â€” don't stake blind). Mirrors
+    EV. Rows with no usable odds get break-even 1.0 (gate fails — don't stake blind). Mirrors
     the all-games lean gate so the staked card and the view agree. Inputs are coerced to
     Series so a missing column (scalar/None) can't crash the gate.
 
     When ``buckets`` + ``bucket_stats`` are supplied the calibration is BUCKET-CONDITIONAL
     (global curve + per-bucket realized tilt), so a pick in a proven bucket (e.g. under:Agrees
     ~61%) isn't crushed below break-even by the pooled curve. Without them it stays the plain
-    global calibration â€” backward compatible.
+    global calibration — backward compatible.
     """
     if not isinstance(eff_win, pd.Series):
         eff_win = pd.Series([] if eff_win is None else eff_win)
@@ -2725,11 +2725,11 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             pool.loc[family_mask, "_normalized_edge"] = 0.0
             pool.loc[family_mask, "_normalized_prob"] = 0.0
 
-    # Finalist score â€” WIN PROBABILITY first (owner preference, 3 Jul: "the best
+    # Finalist score — WIN PROBABILITY first (owner preference, 3 Jul: "the best
     # pick is the one with the highest chance of winning, not the best payout").
     # The audit that motivated this: with the old 0.5*EV + 0.5*edge score, a 47%
     # Over at +150 (EV +17.5%) beat a 58% Under at -130 (EV +2.6%) for the same
-    # game â€” the DIRECTION choice was still optimizing payout even after ranking,
+    # game — the DIRECTION choice was still optimizing payout even after ranking,
     # staking, and recovery had moved to probability. The score is now the
     # z-scored calibrated win probability, with a small EV/edge term (10% weight
     # combined) retained strictly as a value tiebreak between near-equal
@@ -2763,7 +2763,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     pool["final_family_score"] = pool["final_family_score"] - pool["_family_selection_penalty"]
     pool["final_family_score_no_mlb_spread_penalty"] = pool["final_family_score"] + pool["_mlb_spread_finalist_penalty"]
 
-    # MLB total direction resolution â€” "most-confident source wins".
+    # MLB total direction resolution — "most-confident source wins".
     #
     # kalshi_probability and theover_probability are pre-oriented to each row's pick
     # direction (P(Over) on Over rows, P(Under) on Under rows). A value < 0.50 means
@@ -2771,9 +2771,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     #
     # Previously TheOver and Kalshi each subtracted an independent fixed penalty. When
     # the two sources DISAGREED on direction (e.g. TheOver leans Under, Kalshi leans
-    # Over) the penalties hit opposite rows and CANCELLED across the family â€” the Over
+    # Over) the penalties hit opposite rows and CANCELLED across the family — the Over
     # row lost MLB_THEOVER_CONFLICT_PENALTY from TheOver and the Under row lost the same
-    # from Kalshi â€” collapsing the decision to raw EV/edge momentum. That is exactly how
+    # from Kalshi — collapsing the decision to raw EV/edge momentum. That is exactly how
     # the 1 Jun slate flipped three winning Overs to losing Unders (TheOver had just
     # published strong Under reads that inflated the Under EV while Kalshi still priced
     # the Over). See app_core/weights_config.py for the opposing May 22/23 history where
@@ -2784,7 +2784,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     # opposes it. When the two sources agree, they reinforce; when they disagree, the
     # source further from 0.50 dictates direction; a lone present source decides on its
     # own. TheOver emits exactly 0.50 when it has no real pitcher-based read
-    # (default_0.5) â€” that, and NaN, are treated as "no opinion" so they never win.
+    # (default_0.5) — that, and NaN, are treated as "no opinion" so they never win.
     #
     # WinProbSource gating: some TheOver sources are not genuine per-game reads. The
     # `model_hit_rate_flipped` source collapses to a near-constant ~0.30 P(Over) across
@@ -2817,11 +2817,11 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     )
     # Kalshi direction veto (4 Jul): when KALSHI itself opposes this row's
     # direction with real conviction (>= KALSHI_DIRECTION_VETO_MIN_CONVICTION
-    # from 0.50), the penalty is decisive â€” no model z-spread can out-vote it,
+    # from 0.50), the penalty is decisive — no model z-spread can out-vote it,
     # so the family finalist is Kalshi's side. Backtest, n=248 graded totals:
     # model lean 45.5%, Kalshi's side 54.0%, model-vs-Kalshi picks 43%.
     # TheOver-only conflicts keep the original nudge-sized penalty.
-    # Exact 0.0 / 1.0 are miss sentinels ("No Kalshi"), not prices â€” a real Kalshi
+    # Exact 0.0 / 1.0 are miss sentinels ("No Kalshi"), not prices — a real Kalshi
     # quote is always strictly inside (0, 1). They must never arm the veto.
     _kalshi_convicted = (
         ~np.isnan(_kalshi_arr)
@@ -2965,7 +2965,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         # pick as "Disagrees".) A small band around 0.50 is Neutral (Kalshi pick'em).
         # Safety note: this broadens "Agrees", but actual staking stays gated by the
         # realized empirical-bucket bar (>=55% over >=25 graded picks) in the tier
-        # overlay, which the daily loop refits â€” so the directional label routes picks
+        # overlay, which the daily loop refits — so the directional label routes picks
         # into buckets, it does not by itself loosen the Actionable stake gate.
         _CONSENSUS_NEUTRAL_BAND = 0.02
         agrees_mask = (is_kalshi_available & kalshi_prob.ge(0.50 + _CONSENSUS_NEUTRAL_BAND)).fillna(False).astype(bool)
@@ -3029,7 +3029,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     # Earned-Actionable relaxation gate for MLB overs (17 Jun): the strict 0.65 prob
     # bar leaves over-heavy slates empty. We allow a lower bar for Agrees overs, but
     # ONLY when the realized MLB:over:Agrees bucket has earned trust (>=55% over >=25
-    # graded picks) â€” the same proof the empirical overlay's Actionable promotion uses.
+    # graded picks) — the same proof the empirical overlay's Actionable promotion uses.
     # Computed once here so the per-row gate is a cheap lookup. When no graded history
     # exists yet (bucket stats unavailable) we treat the relaxation as available so the
     # card is not permanently empty pre-calibration; once slates are graded the proven
@@ -3049,7 +3049,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             _rate, _n = _smoothed_bucket_rate("MLB:over:Agrees", _bs)
             _mlb_over_agrees_relax_ok = (_n >= _ACT_MIN_N) and (_rate >= _ACT_MIN_RATE)
         else:
-            # No graded history yet â€” let the relaxed bar apply so over-heavy slates
+            # No graded history yet — let the relaxed bar apply so over-heavy slates
             # can surface Agrees overs; the empirical overlay (once fed) re-gates them.
             _mlb_over_agrees_relax_ok = True
     except Exception:
@@ -3198,7 +3198,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 # A genuine "upload_line_market_mismatch" is an upload that WAS matched to
                 # this market but whose line disagrees with the live line. The previous
                 # check fired on upload_market_match == False, which is the DEFAULT for
-                # every row with no uploaded counterpart (all live_unfiltered rows) â€” so
+                # every row with no uploaded counterpart (all live_unfiltered rows) — so
                 # every no-upload pick was mislabeled with this reason. Require an actual
                 # match plus a material line discrepancy instead.
                 upload_matched = str(best.at[idx, "upload_market_match"]).strip().lower() == "true"
@@ -3209,7 +3209,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                     except Exception:
                         pass
 
-        # Corrupt-odds sanity (UNGATED â€” runs regardless of EV). A two-way totals or
+        # Corrupt-odds sanity (UNGATED — runs regardless of EV). A two-way totals or
         # spread market whose de-vigged implied probability sits outside [0.05, 0.95]
         # is almost certainly a bad odds value from the feed: e.g. the 17 Jun Dodgers
         # Over 9.5 came in at +1983 (implied 4.8%), producing a nonsense +850% EV. Real
@@ -3226,13 +3226,13 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 corrupt_odds_reason = (
                     f"corrupt odds (implied {float(_mp_val):.0%}"
                     + (f", {int(_odds_val):+d}" if pd.notna(_odds_val) else "")
-                    + ") â€” line/price mismatch from feed"
+                    + ") — line/price mismatch from feed"
                 )
                 suspicious_reasons.append(corrupt_odds_reason)
 
         # Spread orientation fault (ungated by EV): the spread favorite must be the
         # moneyline favorite. A mismatch means the live feed delivered a flipped
-        # home/away spread (14 Jun: Texas shown -1.5/+158 â€” a favorite line â€” when
+        # home/away spread (14 Jun: Texas shown -1.5/+158 — a favorite line — when
         # Texas was the +1.5 underdog). Block the row rather than ship the wrong side.
         spread_orientation_fault_flag = False
         spread_orientation_fault_reason = ""
@@ -3268,7 +3268,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         #
         # SCOPE (16 Jun): NOT applied to MLB totals. On the efficient MLB totals market the
         # 13-slate recap study (1-15 Jun, n=171) found model-vs-market divergence is
-        # negatively predictive â€” the staked divergent overs went 33-39% while near-market
+        # negatively predictive — the staked divergent overs went 33-39% while near-market
         # Below Threshold picks went 54%. Preserving divergent +EV MLB totals into the
         # staked tier therefore adds losing exposure, so they revert to No Play here.
         # Other leagues/markets keep the override.
@@ -3341,7 +3341,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         elif market_type == "total_over" and pd.notna(ml_prob) and float(ml_prob) < TOTAL_ML_CONTRADICTION_OVER_MAX_PROB:
             status = "No Play"
             status_reason = (
-                f"No Play: ML probability {float(ml_prob):.1%} extremely low â€” strong model signal against over"
+                f"No Play: ML probability {float(ml_prob):.1%} extremely low — strong model signal against over"
             )
             blocker_stage = "ml_contradiction_guardrail"
         elif not pd.isna(ev) and not pd.isna(edge):
@@ -3491,7 +3491,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 req_prob = max(req_prob, _over_min_prob)
                 req_ev = max(req_ev, _over_min_ev)
                 req_edge = max(req_edge, _over_min_edge)
-                # High total line penalty: very high lines (â‰¥11.0) have repeatedly
+                # High total line penalty: very high lines (≥11.0) have repeatedly
                 # underperformed (COL/ARI Over 11.5 lost on both May-15 and May-16).
                 # Mid-range penalty: lines in [9.5, 11.0) also underperform
                 # (ARI/COL Over 9.5 went 3 total runs at Actionable on May-21).
@@ -3639,21 +3639,21 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                     status_reason = "High Variance: NHL total without Kalshi market validation"
                     blocker_stage = "no_kalshi_nhl_guardrail"
 
-            # MLB Under consensus gate â€” replaces the blanket Actionable cap (removed May-28).
+            # MLB Under consensus gate — replaces the blanket Actionable cap (removed May-28).
             # Cap was set after May 16-17 (0-4), before TheOver conflict penalty and
             # double-shrink fix. Unders have since outperformed overs (May 22-27 data).
             # Now: only "Agrees" consensus MLB unders can be Actionable; Neutral/Disagrees
-            # are capped at High Variance â€” the same directional signal that predicts wins.
+            # are capped at High Variance — the same directional signal that predicts wins.
             if league == "MLB" and market_type == "total_under" and status == "Actionable":
                 if consensus_agr not in ("Agrees",):
                     status = "High Variance/Speculative"
                     status_reason = (
-                        f"High Variance: MLB under consensus '{consensus_agr}' â€” "
+                        f"High Variance: MLB under consensus '{consensus_agr}' — "
                         f"only 'Agrees' unders qualify for Actionable"
                     )
                     blocker_stage = "mlb_under_consensus_gate"
 
-            # NHL Under Actionable cap â€” CAR/MTL Under 5.5 went 8 total goals at Actionable
+            # NHL Under Actionable cap — CAR/MTL Under 5.5 went 8 total goals at Actionable
             # on May 21. Same model overconfidence pattern as MLB unders. Cap at High Variance.
             if NHL_UNDER_ACTIONABLE_CAP and league == "NHL" and market_type == "total_under":
                 if status == "Actionable":
@@ -3661,9 +3661,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                     status_reason = "High Variance: NHL under capped (CAR/MTL Under 5.5 went 8 goals May 21; model overconfident on NHL unders)"
                     blocker_stage = "nhl_under_actionable_cap"
 
-            # MLB total HV floor â€” May 27: HV/Spec MLB totals 0-6 (BT was 6-2).
+            # MLB total HV floor — May 27: HV/Spec MLB totals 0-6 (BT was 6-2).
             # Require effective_win_probability >= MLB_TOTAL_HV_MIN_WIN_PROB (0.62) for HV/Spec.
-            # Picks below this floor become Below Threshold â€” still visible at minimal sizing.
+            # Picks below this floor become Below Threshold — still visible at minimal sizing.
             if league == "MLB" and is_total_market and status == "High Variance/Speculative":
                 if effective_win_probability < MLB_TOTAL_HV_MIN_WIN_PROB:
                     status = "Below Threshold"
@@ -3673,7 +3673,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                     )
                     blocker_stage = "mlb_total_hv_floor"
 
-            # MLB Under Kalshi direction cap â€” Kalshi probability is pre-oriented to the pick
+            # MLB Under Kalshi direction cap — Kalshi probability is pre-oriented to the pick
             # side (P(Under) for Under rows). When P(Under) < 0.50, Kalshi is saying the Over
             # is more likely than the Under. Historical record: 0-4 on May 31, recurring on
             # May 27-28. Cap these picks at Below Threshold (visible at minimal Kelly sizing)
@@ -3684,12 +3684,12 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                     and pd.notna(kalshi_prob) and float(kalshi_prob) < 0.50):
                 status = "Below Threshold"
                 status_reason = (
-                    f"Below Threshold: MLB Under â€” Kalshi P(Under)={float(kalshi_prob):.1%} < 50%; "
+                    f"Below Threshold: MLB Under — Kalshi P(Under)={float(kalshi_prob):.1%} < 50%; "
                     f"Kalshi prices the Over as more likely (0-4 pattern on such picks)"
                 )
                 blocker_stage = "mlb_under_kalshi_over_cap"
 
-            # Low total line cap â€” MLB overs with a line below 8.0 are set on
+            # Low total line cap — MLB overs with a line below 8.0 are set on
             # pitcher-friendly matchups where low-scoring shutouts are common.
             # May 20: CHC/MIL Over 6.5 (5 total) and SD/LAD Over 7.5 (4 total) both lost.
             # Surface as High Variance rather than hiding entirely so the pick is visible.
@@ -3712,13 +3712,13 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                     )
                     if _keep_actionable:
                         status_reason = (
-                            f"Actionable: sub-{MLB_OVER_MIN_TOTAL_LINE} over override â€” "
+                            f"Actionable: sub-{MLB_OVER_MIN_TOTAL_LINE} over override — "
                             f"Agrees consensus, effective win {effective_win_probability:.1%}, "
                             f"edge {effective_edge:.1%} (backtest-supported carve-out)"
                         )
                     elif status in ("Actionable", "Below Threshold"):
                         # Consensus-aware low-line demotion. Sub-8.0 overs are NOT a
-                        # uniformly weak bucket â€” graded slates (20 May-5 Jun, n=51) show
+                        # uniformly weak bucket — graded slates (20 May-5 Jun, n=51) show
                         # Agrees 72.7% and Disagrees 60.0%, but Neutral only 45.0%. The
                         # blanket rule surfaced ALL of them at High Variance (0.075x Kelly),
                         # handing the 45% Neutral bucket the same elevated stake as the
@@ -3728,18 +3728,18 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                             status = "Below Threshold"
                             status_reason = (
                                 f"Below Threshold: MLB over line {float(_tl_low)} below {MLB_OVER_MIN_TOTAL_LINE} "
-                                f"with Neutral consensus â€” low-line Neutral overs hit ~45% (backtest), "
+                                f"with Neutral consensus — low-line Neutral overs hit ~45% (backtest), "
                                 f"held below High Variance"
                             )
                         else:
                             status = "High Variance/Speculative"
                             status_reason = (
                                 f"High Variance: MLB over line {float(_tl_low)} below {MLB_OVER_MIN_TOTAL_LINE} "
-                                f"â€” pitcher-friendly game, low-line overs underperform"
+                                f"— pitcher-friendly game, low-line overs underperform"
                             )
                         blocker_stage = "low_line_over_guardrail"
 
-            # â”€â”€ Edge-based no-stake gates (graded MLB totals, 20 May-7 Jun, n=182) â”€â”€
+            # ── Edge-based no-stake gates (graded MLB totals, 20 May-7 Jun, n=182) ──
             # Two buckets bled below the -110 breakeven (52.4%). Hold them out of the
             # production card (Below Threshold = visible, unstaked). Pure helper
             # _edge_no_stake_demotion is unit-tested in tests/test_edge_no_stake_gates.py;
@@ -3763,7 +3763,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             # STRICT profile: full overlay on all market types.
             # STANDARD profile: apply the Disagrees overlay to side/spread bets only.
             # Spread markets are liquid enough that Kalshi divergence is a reliable
-            # signal â€” if Kalshi is significantly more bullish than the model on a
+            # signal — if Kalshi is significantly more bullish than the model on a
             # spread and the model's own confidence is still below the Disagrees floor,
             # the pick is genuinely contested and should be flagged High Variance.
             if status == "Actionable" and BEST_PICKS_PROFILE == 'STRICT':
@@ -3781,7 +3781,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 if win_prob < DISAGREES_ACTIONABLE_MIN_PROB or effective_ev < DISAGREES_ACTIONABLE_MIN_EV or edge < DISAGREES_ACTIONABLE_MIN_EDGE:
                     status = "High Variance/Speculative"
                     status_reason = (
-                        f"High Variance: Kalshi disagrees on spread â€” model win prob {win_prob:.1%} below "
+                        f"High Variance: Kalshi disagrees on spread — model win prob {win_prob:.1%} below "
                         f"Disagrees floor ({DISAGREES_ACTIONABLE_MIN_PROB:.0%}) or EV/edge insufficient"
                     )
                     blocker_stage = "consensus_overlay_spread"
@@ -4072,7 +4072,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 else:
                     logger.info(f"Branch not exercised: {status} (0 rows)")
 
-        # TheOver coverage audit â€” the conflict penalty and 0.25 blend weight both
+        # TheOver coverage audit — the conflict penalty and 0.25 blend weight both
         # depend on theover_probability being populated for MLB totals. If it is NaN,
         # the direction-correction safety net is silently disabled (it defaults to a
         # neutral 0.5 vote and the conflict penalty never fires). Surface the coverage.
@@ -4219,7 +4219,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         # Plausibility-gated live totals: a live total that deviates materially from the
         # uploaded reference is only treated as suspicious when its OWN value is implausible
         # for the league. The real risk is a bad live read (a mis-scraped number), not a
-        # live line that merely disagrees with a (often stale) uploaded reference â€” the live
+        # live line that merely disagrees with a (often stale) uploaded reference — the live
         # line is the more current source, so a plausible live total is trusted and used.
         # Only a garbage live value falls through to the reject / upload-fallback path.
         # Ranges mirror the upload-plausibility ranges used in the recovery step below.
@@ -4280,7 +4280,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         strict_candidate_count = best.groupby(strict_identity_key)["home_team"].transform("size")
         best.loc[suspicious_or_warned, "line_candidate_count"] = strict_candidate_count.loc[suspicious_or_warned].astype(int)
         # Alt-priced totals are not an identity-ambiguity problem (re-resolving the event
-        # would just re-select the same alt line) â€” force them past resolution into the
+        # would just re-select the same alt line) — force them past resolution into the
         # rejected-live -> uploaded-reference fallback below.
         resolved_unambiguous = suspicious_or_warned & strict_candidate_count.eq(1) & trusted_live_match & ~alt_priced_total
         unresolved_suspicious = suspicious_or_warned & ~resolved_unambiguous
@@ -4548,14 +4548,14 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     # "total" and -100000 moneylines). The line-provenance guard only catches these
     # when the in-game line looks corrupt; a plausible-looking in-game line would
     # sail through and could be staked as if it were a pre-game price. Hard-bench
-    # every started game to No Play â€” a safety status the empirical overlay never
+    # every started game to No Play — a safety status the empirical overlay never
     # re-promotes and the parlay engine never admits.
     if "game_already_started_flag" in best.columns and not best.empty:
         _started = best["game_already_started_flag"].eq(True)
         if _started.any():
             best.loc[_started, "Pick_Status"] = "No Play"
             best.loc[_started, "Status_Reason"] = (
-                "No Play: game already started at run time â€” live odds are in-game, not pre-game lines"
+                "No Play: game already started at run time — live odds are in-game, not pre-game lines"
             )
             if "status_blocker_stage" in best.columns:
                 best.loc[_started, "status_blocker_stage"] = "game_already_started"
@@ -4574,7 +4574,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
 
     # Empirical tier overlay: final tier pass driven by realized bucket win rates
     # + isotonic-calibrated probability (Jun 5-10: EV/edge tiers hit ~21%, Below
-    # Threshold 59% â€” stake followed inverted tiers). Runs AFTER every guard pass
+    # Threshold 59% — stake followed inverted tiers). Runs AFTER every guard pass
     # above so safety statuses are final; the existing degraded-feature scaling,
     # non-Actionable Kelly zeroing, and empty-card recovery below all operate on
     # the corrected tiers. Best-effort: any failure leaves legacy tiers in place.
@@ -4642,7 +4642,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
 
                 # Size Kelly for empirically promoted Actionable rows from the
                 # empirical probability at the pick's own odds (0.25x fractional
-                # Kelly, 4% bankroll cap â€” the Actionable convention). Demoted
+                # Kelly, 4% bankroll cap — the Actionable convention). Demoted
                 # rows are zeroed by the non-Actionable Kelly pass below.
                 _kelly_now = pd.to_numeric(best.get("Kelly_Bet_Size"), errors="coerce").fillna(0.0)
                 _promoted = best["Pick_Status"].astype(str).eq("Actionable") & ~_kelly_now.gt(0)
@@ -4670,7 +4670,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     # 14-of-15 all-Over card with a staked Actionable). A near-unanimous totals
     # direction across many games is a near-certain data/orientation fault, not a
     # real read, so suspend big-Kelly staking: demote Actionable totals to High
-    # Variance and surface a loud run_health_warning. Conservative by design â€” it
+    # Variance and surface a loud run_health_warning. Conservative by design — it
     # never fabricates the missing side, it just refuses to stake confidently on a
     # slate whose direction signal can't be trusted. Catches ANY cause, not only
     # TheOver. Runs after the overlay so it has the final tiers.
@@ -4712,7 +4712,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             best["Kelly_Bet_Size"] = best["Kelly_Bet_Size"] * (float(DEGRADED_FEATURE_MAX_SLATE_EXPOSURE_PCT) / slate_sum)
         best["Kelly_Bet_Size"] = pd.to_numeric(best["Kelly_Bet_Size"], errors="coerce").fillna(0.0)
     # Global stake floor on win probability (owner preference, 3 Jul): no stake
-    # below MIN_STAKE_WIN_PROBABILITY regardless of EV â€” this is the terminal
+    # below MIN_STAKE_WIN_PROBABILITY regardless of EV — this is the terminal
     # override of the high-EV exception paths (MLB spread high-EV underdogs at
     # 0.44, divergence high-EV at 0.50) that deliberately staked longshots on
     # price. Demote to High Variance (visible, unstaked) rather than hide; the
@@ -4733,7 +4733,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             best.loc[_below_floor, "Status_Reason"] = (
                 "High Variance: win probability below the owner's stake floor ("
                 + _floor_prob[_below_floor].map(lambda p: f"{p:.1%}")
-                + f" < {float(MIN_STAKE_WIN_PROBABILITY):.0%}) â€” likely-to-win picks only, EV alone does not stake"
+                + f" < {float(MIN_STAKE_WIN_PROBABILITY):.0%}) — likely-to-win picks only, EV alone does not stake"
             )
             best.loc[_below_floor, "status_blocker_stage"] = "min_win_probability_floor"
             best.loc[_below_floor, "status_blocker_reason"] = "Below owner minimum stake win probability"
@@ -4764,7 +4764,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         # Emptiness must be status-based, NOT production_eligible-based. This runs
         # inside build_best_picks_df, BEFORE Kelly is sized downstream in
         # streamlit_app, so production_eligible (Actionable AND Kelly>0) is
-        # structurally all-False here â€” using it made the gate fire unconditionally
+        # structurally all-False here — using it made the gate fire unconditionally
         # and backfill a redundant pick even when a legitimate Actionable pick
         # (e.g. a sub-8.0 over carve-out) was present. Matches the streamlit_app
         # recovery's Pick_Status-based emptiness definition.
@@ -4782,7 +4782,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 best["league"].astype(str).str.upper().eq("NHL")
                 & best["market_type"].astype(str).str.lower().eq("total_under")
             )
-            # Owner win-probability floor applies to recovery too â€” a pick the
+            # Owner win-probability floor applies to recovery too — a pick the
             # stake floor just demoted must not re-enter through the back door.
             _rec_floor_prob = pd.to_numeric(
                 best.get("empirical_win_probability", pd.Series(np.nan, index=best.index)), errors="coerce"
@@ -4864,7 +4864,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 if total_recovery_kelly > EMPTY_CARD_RECOVERY_MAX_KELLY_TOTAL_PCT and total_recovery_kelly > 0:
                     best.loc[top.index, "Kelly_Bet_Size"] *= EMPTY_CARD_RECOVERY_MAX_KELLY_TOTAL_PCT / total_recovery_kelly
                 best["production_eligible"] = best["Pick_Status"].astype(str).eq("Actionable") & best["Kelly_Bet_Size"].gt(0)
-                logger.info(f"Empty card recovery: promoted {len(top)} pick(s) â€” {top['market_type'].tolist()}")
+                logger.info(f"Empty card recovery: promoted {len(top)} pick(s) — {top['market_type'].tolist()}")
                 if diagnostics_out is not None:
                     diagnostics_out["empty_card_recovery_triggered"] = True
                     diagnostics_out["empty_card_recovery_promoted_count"] = len(top)
@@ -5172,7 +5172,7 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
                 for book in game.get('bookmakers', []):
                     raw_book_key = str(book.get('key', '')).strip().lower()
                     # The Odds API has emitted regional NoVig identifiers such as
-                    # ``novig_us``. Normalize all NoVig variants to the canonical
+                    # novig_us. Normalize all NoVig variants to the canonical
                     # export prefix so downstream consensus code does not lose them.
                     book_key = 'novig' if raw_book_key == 'novig' or raw_book_key.startswith('novig_') else raw_book_key
                     if book_key not in ['novig', 'fanduel', 'draftkings', 'betmgm']:
@@ -5213,10 +5213,10 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
 
 def _fmt_odds_token(v):
     """Format a spread point or moneyline price for the raw-odds diagnostic string:
-    signed (+1.5, -1.5, -120, +115); 'Â·' for missing values."""
+    signed (+1.5, -1.5, -120, +115); '·' for missing values."""
     n = pd.to_numeric(v, errors="coerce")
     if pd.isna(n):
-        return "Â·"
+        return "·"
     return f"{float(n):+g}"
 
 
@@ -5241,7 +5241,7 @@ def _raw_book_odds_diag(row):
 
 
 # Use Novig's own total line (the user transacts on Novig) unless it deviates from the
-# multi-book median by MORE than this many runs â€” a larger gap is likely a stale/illiquid
+# multi-book median by MORE than this many runs — a larger gap is likely a stale/illiquid
 # exchange posting, not a real bettable line, so fall back to the consensus book. 0.5-1.0 book
 # disagreement is normal and real; >1.0 is the outlier the original consensus guard protected
 # against. (26 Jun: scoring Det/Bal/StL/Min against the 9.0 consensus mis-priced Novig's 8.5.)
@@ -5249,8 +5249,8 @@ NOVIG_TOTAL_OUTLIER_TOL = 1.0
 
 
 def _consensus_total_line(row):
-    """Median total line across books (over/under share the line). Robust to one book â€”
-    e.g. the thin P2P exchange novig â€” posting a stale/off-market total."""
+    """Median total line across books (over/under share the line). Robust to one book —
+    e.g. the thin P2P exchange novig — posting a stale/off-market total."""
     pts = []
     for bk in ("novig", "fanduel", "draftkings", "betmgm"):
         v = pd.to_numeric(row.get(f"{bk}_over_point"), errors="coerce")
@@ -5280,7 +5280,7 @@ def _consistent_spread_book(row):
     favorite, or None.
 
     Some books (notably the P2P exchange novig, and sometimes fanduel) publish a run
-    line flipped relative to their own moneyline â€” e.g. HOU listed at +1.5 while their
+    line flipped relative to their own moneyline — e.g. HOU listed at +1.5 while their
     moneyline has HOU at -115. Such a book's spread is untrustworthy. A book is
     "consistent" when the side it makes the spread favorite (negative point) is also the
     side its moneyline makes the favorite (more-negative American price). We source the
@@ -5313,7 +5313,7 @@ def _derive_spread_away_line(row):
       1. Negate the first available home point across books (the home point is
          unambiguously signed for the home team, so -home is the away line).
       2. If no book reports a home point, fall back to a STANDARD book's away
-         point â€” fanduel/draftkings/betmgm sign per-team correctly (unlike the
+         point — fanduel/draftkings/betmgm sign per-team correctly (unlike the
          Novig P2P convention).
       3. Otherwise NA, so the pick is dropped rather than emitted with a guessed
          sign. (The spread_orientation guardrail remains the final backstop.)
@@ -5601,7 +5601,7 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
             elif market_type.startswith("total"):
                 t_side = "over" if market_type == "total_over" else "under"
                 # The user bets on Novig, so Novig's posted total IS the line they actually get
-                # â€” prefer it (point_val + odds_american already default to Novig above). Only
+                # — prefer it (point_val + odds_american already default to Novig above). Only
                 # fall back to the consensus book when Novig has NO total OR is a WILD outlier
                 # (> NOVIG_TOTAL_OUTLIER_TOL off the median, i.e. a likely stale/illiquid
                 # exchange posting). This keeps the original off-market protection while not
@@ -5906,7 +5906,7 @@ def run_analysis_pipeline(
         # In the live-odds-empty fallback, master_slate IS theover_rows, so merged
         # already carries these enrichment columns. Merging them again on top would
         # suffix the collision to theover_probability_x/_y and leave the canonical
-        # column entirely NA â€” silently blanking TheOver/ML signal for the whole
+        # column entirely NA — silently blanking TheOver/ML signal for the whole
         # slate exactly when the pipeline is already degraded (odds API outage).
         # Drop the pre-existing copies; the merge below re-attaches identical values
         # under the canonical names. No-op on the normal path, where the expanded
@@ -5961,7 +5961,7 @@ def run_analysis_pipeline(
         # only the probability/source columns, so without this the run_health_warning set
         # by the degradation guard is lost in the live-odds path and the production-stage
         # degraded-run Kelly reduction never fires. Since we now down-weight (rather than
-        # null) a degraded feed, its damped signal still influences direction â€” so the
+        # null) a degraded feed, its damped signal still influences direction — so the
         # de-staking safety must travel with it. Preserve any existing warning.
         if "run_health_warning" in theover_rows.columns:
             _theover_warn = _string_series(theover_rows, "run_health_warning")
@@ -6175,14 +6175,14 @@ def run_analysis_pipeline(
     }
     ml_prediction_diag: dict[str, Any] = {}
     if use_ml and ML_AVAILABLE and PredictionEngine is not None:
-        logger.warning("ðŸ” ML DEBUG: use_ml=True, attempting predictions...")
+        logger.warning("🔍 ML DEBUG: use_ml=True, attempting predictions...")
         logger.info(f"PIPELINE TRACE: Sending {len(merged)} rows into ML prediction logic.")
         try:
             existing_ml = _numeric_series(merged, "ml_probability")
             non_na_existing = existing_ml.dropna()
             if len(non_na_existing) > 0:
                 logger.warning(
-                    "âš ï¸ ML DEBUG: Ignoring %s pre-populated ml_probability values and recomputing from model/features.",
+                    "⚠️ ML DEBUG: Ignoring %s pre-populated ml_probability values and recomputing from model/features.",
                     len(non_na_existing),
                 )
 
@@ -6355,13 +6355,13 @@ def run_analysis_pipeline(
                 ml_count = merged["ml_probability"].notna().sum()
                 ml_unique = _numeric_series(merged, "ml_probability").dropna().nunique()
                 logger.warning(
-                    f"âœ… ML DEBUG: Generated {ml_count} total predictions ({needs_prediction.sum()} new, unique={ml_unique})"
+                    f"✅ ML DEBUG: Generated {ml_count} total predictions ({needs_prediction.sum()} new, unique={ml_unique})"
                 )
             else:
-                logger.warning("âœ… ML DEBUG: All rows already have ml_probability")
+                logger.warning("✅ ML DEBUG: All rows already have ml_probability")
 
         except Exception as e:
-            logger.error(f"âŒ ML prediction failed: {e}")
+            logger.error(f"❌ ML prediction failed: {e}")
             import traceback
             logger.error(traceback.format_exc())
 
@@ -6374,9 +6374,9 @@ def run_analysis_pipeline(
                 merged["ml_probability"] = pd.Series(fallback_predictions, index=merged.index, dtype="float64")
                 merged["model_status"] = "Statistical Fallback"
                 fallback_applied = True
-                logger.warning("âš ï¸ ML DEBUG: Applied statistical fallback predictions unconditionally after model failure.")
+                logger.warning("⚠️ ML DEBUG: Applied statistical fallback predictions unconditionally after model failure.")
             except Exception as fallback_err:
-                logger.error(f"âŒ Statistical fallback prediction failed: {fallback_err}")
+                logger.error(f"❌ Statistical fallback prediction failed: {fallback_err}")
 
             if not fallback_applied:
                 if "ml_probability" not in merged.columns:
@@ -6435,7 +6435,7 @@ def run_analysis_pipeline(
         )
 
     # Non-MLB totals: pre-mix TheOver (60%) + ML (40%) since TheOver adds context ML lacks.
-    # MLB totals: use pure ML â€” TheOver is passed separately to compute_blended_probability
+    # MLB totals: use pure ML — TheOver is passed separately to compute_blended_probability
     # and weighted via MLB_TOTAL_THEOVER_WEIGHT. Pre-mixing here caused double-counting:
     # TheOver was effectively ~44% weight instead of the 10% in config.
     is_mlb = _string_series(merged, "league").str.upper() == "MLB"
@@ -6506,11 +6506,11 @@ def run_analysis_pipeline(
     model_probability = model_probability.where(~(star_impact & (merged["market_type"] == "total_over")), model_probability + NBA_STAR_ACTIVE_TOTAL_OVER_BOOST)
     model_probability = model_probability.where(~(star_impact & (merged["market_type"] == "total_under")), model_probability + NBA_STAR_ACTIVE_TOTAL_UNDER_PENALTY)
 
-    # Enrich with external data (injuries, weather) â€” must run before adjustments below
+    # Enrich with external data (injuries, weather) — must run before adjustments below
     try:
         from app_core.external_data_fetcher import enrich_with_external_data
         merged = enrich_with_external_data(merged)
-        logger.info(f"External enrichment complete â€” injuries_home sum={merged.get('injuries_home_count', pd.Series([0])).sum()}, weather flags={merged.get('weather_flag', pd.Series([0.0])).sum()}")
+        logger.info(f"External enrichment complete — injuries_home sum={merged.get('injuries_home_count', pd.Series([0])).sum()}, weather flags={merged.get('weather_flag', pd.Series([0.0])).sum()}")
     except Exception as _ext_err:
         logger.warning(f"External data enrichment skipped: {_ext_err}")
 
@@ -6562,7 +6562,7 @@ def run_analysis_pipeline(
         market_type=_string_series(merged, "market_type")
     )
 
-    # Market-anchored over-bias correction for MLB totals â€” PRODUCTION best-picks
+    # Market-anchored over-bias correction for MLB totals — PRODUCTION best-picks
     # path (this is the blend the card is built from; #1919 applied it only to the
     # Analysis-tab blend, so the card never rebalanced). Same shared helper, so the
     # two paths cannot drift. Runs before EV/edge/direction selection below.
@@ -6815,8 +6815,8 @@ def run_analysis_pipeline(
         # In-progress guard input: an odds-API commence time already in the past at
         # run time means the row's "live" odds are IN-GAME prices, not pre-game
         # lines (1 Jul run: games 1-3 hours underway surfaced a 19.5 MLB "total"
-        # and -100000 moneylines). Flag here â€” where the raw timestamp is still
-        # available â€” and hard-bench in build_best_picks_df. Only a real parsed
+        # and -100000 moneylines). Flag here — where the raw timestamp is still
+        # available — and hard-bench in build_best_picks_df. Only a real parsed
         # timestamp can flag: uploaded rows without a live commence time (date-only
         # midnight game_date) are never flagged.
         if "commence_time_raw" in analysis_df.columns:
@@ -6868,7 +6868,7 @@ def run_analysis_pipeline(
 
                 # Market agreement factor: picks where the model diverges far from the
                 # bookmaker price get penalized. The old formula used |prob - 0.5| + EV
-                # which simply measured model confidence â€” picks the model was wrongly
+                # which simply measured model confidence — picks the model was wrongly
                 # most confident about received the highest conviction scores.
                 if 'market_probability' in df.columns:
                     mkt = pd.to_numeric(df['market_probability'], errors='coerce').fillna(0.5)
@@ -6984,7 +6984,7 @@ def generate_parlays(best_picks_df: pd.DataFrame, max_legs: int = 3) -> pd.DataF
 
     parlays_df = add_kelly_bet_sizing(parlays_df, bankroll=1000.0, fraction=0.125)
     # Correlated combos (same-game legs or a same-direction Agrees pair) carry
-    # block variance â€” halve their stake before exposure caps are applied.
+    # block variance — halve their stake before exposure caps are applied.
     parlays_df = downweight_correlated_parlay_kelly(parlays_df)
     parlays_df = apply_simultaneous_kelly(parlays_df, bankroll=1000.0, max_exposure=0.05)
 
@@ -7056,13 +7056,12 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
     portfolio["decimal_odds"] = _numeric_series(portfolio, "decimal_odds").fillna(
         _numeric_series(portfolio, "odds_american", -110.0).apply(american_to_decimal)
     )
-    # Kelly must use the best *realized-performance calibrated* probability,
-    # not merely the model blend that happens to be named calibrated_probability.
-    # The empirical overlay is most specific. When it is absent, fit the effective
-    # probability through the persisted global/bucket calibration. A legacy row
-    # with no effective probability may use calibrated_probability as an already-
-    # calibrated compatibility input; a normal production row with an effective
-    # probability but no fitted calibration is deliberately ineligible for staking.
+    # Kelly must use the best realized-performance calibrated probability,
+    # not merely the model blend named calibrated_probability. The empirical
+    # overlay is most specific. Otherwise fit effective probability through the
+    # persisted global/bucket calibration. A legacy row with no effective
+    # probability may use calibrated_probability as an already-calibrated input;
+    # a production row with effective probability but no fit receives no stake.
     empirical_p = pd.to_numeric(
         portfolio.get("empirical_win_probability", pd.Series(np.nan, index=portfolio.index)),
         errors="coerce",
@@ -7189,7 +7188,7 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
     if float(NON_ACTIONABLE_KELLY_SHARE) <= 0:
         # Non-Actionable staking disabled (16 Jun): confine real stakes to the proven
         # Actionable (Agrees-bucket) tier. High Variance / Below Threshold still surface
-        # for visibility but carry NO production stake â€” their production_bet_amount /
+        # for visibility but carry NO production stake — their production_bet_amount /
         # recommended_bet are already 0 and kelly_cap_reason "Non-production row" from the
         # eligibility pass above. Evidence: those tiers ran sub-break-even over graded
         # history, so staking them (even fractionally) is -EV.
@@ -7354,4 +7353,3 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
 
 def run_bankroll_simulation(portfolio_df: pd.DataFrame, bankroll: float) -> dict[str, float | list[list[float]]]:
     return simulate_bankroll(portfolio_df=portfolio_df, starting_bankroll=bankroll, days=30, simulations=200)
-
