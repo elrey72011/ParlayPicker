@@ -23,6 +23,8 @@ PROP_AUDIT_COLUMNS = (
     "expected_count",
     "production_eligible",
     "production_gate_reason",
+    "production_price_allowed",
+    "production_min_american_odds",
     "production_projection_cushion",
     "Prop_Tier",
     "Market_Probation",
