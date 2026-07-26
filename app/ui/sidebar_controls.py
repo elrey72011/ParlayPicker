@@ -8,6 +8,25 @@ import streamlit as st
 FALLBACK_SPORTS = ["NBA", "NHL", "NCAAB", "NFL", "MLB"]
 
 
+def _read_uploaded_prop_ledgers(uploaded_files) -> pd.DataFrame:
+    """Read one or more uploaded ledgers and deduplicate cumulative history."""
+    from app_core.prop_grading import merge_prop_ledgers
+
+    uploads = (
+        list(uploaded_files)
+        if isinstance(uploaded_files, (list, tuple))
+        else [uploaded_files] if uploaded_files is not None else []
+    )
+    merged = pd.DataFrame()
+    for uploaded in uploads:
+        try:
+            uploaded.seek(0)
+            frame = pd.read_csv(uploaded)
+            uploaded.seek(0)
+        except (AttributeError, OSError, TypeError, ValueError):
+            continue
+        merged = merge_prop_ledgers(merged, frame)
+    return merged
 
 
 def _request_run_analysis(state: MutableMapping[str, object]) -> None:
@@ -59,13 +78,14 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
     theover_spreads = st.sidebar.file_uploader("Upload TheOver Spreads CSV", type=["csv"], key="theover_spreads")
     theover_totals = st.sidebar.file_uploader("Upload TheOver Totals CSV", type=["csv"], key="theover_totals")
     prop_results_log = st.sidebar.file_uploader(
-        "Upload Cumulative Graded Prop Ledger (optional)",
+        "Upload Graded Prop Ledger File(s) (optional)",
         type=["csv"],
+        accept_multiple_files=True,
         key="prop_results_log",
         help=(
-            "Settled WIN/LOSS rows calibrate each prop market and direction. "
-            "Upload the latest cumulative ledger at the start of each new app "
-            "session; without it, props remain research-only."
+            "Select every available graded ledger. The app merges and deduplicates "
+            "them into one cumulative history before calibrating markets. Without "
+            "enough prior settled rows, props remain research-only."
         ),
     )
 
@@ -120,16 +140,13 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
                 grade_date = inferred_date or previous_prop_date.isoformat()
 
                 generated_prior = st.session_state.get("generated_prop_results_log")
-                uploaded_prior = None
-                if prop_results_log is not None:
-                    prop_results_log.seek(0)
-                    uploaded_prior = pd.read_csv(prop_results_log)
-                    prop_results_log.seek(0)
+                uploaded_prior = _read_uploaded_prop_ledgers(prop_results_log)
                 prior_ledger = merge_prop_ledgers(uploaded_prior, generated_prior)
                 with st.spinner(f"Grading MLB player props for {grade_date}..."):
                     graded = grade_prop_export(previous_card, grade_date)
                     ledger = merge_prop_ledgers(prior_ledger, graded)
                 st.session_state["generated_prop_results_log"] = ledger
+                st.session_state["active_prop_results_log"] = ledger
                 summary = grading_summary(graded)
                 st.sidebar.success(
                     f"Graded {summary['graded']} props: "
@@ -139,18 +156,12 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
             except Exception as exc:
                 st.sidebar.error(f"Player-prop grading failed: {exc}")
 
+    from app_core.prop_grading import merge_prop_ledgers
+
     generated_ledger = st.session_state.get("generated_prop_results_log")
-    active_ledger = generated_ledger
-    if (
-        not isinstance(active_ledger, pd.DataFrame)
-        or active_ledger.empty
-    ) and prop_results_log is not None:
-        try:
-            prop_results_log.seek(0)
-            active_ledger = pd.read_csv(prop_results_log)
-            prop_results_log.seek(0)
-        except (OSError, ValueError, TypeError):
-            active_ledger = None
+    uploaded_ledger = _read_uploaded_prop_ledgers(prop_results_log)
+    active_ledger = merge_prop_ledgers(uploaded_ledger, generated_ledger)
+    st.session_state["active_prop_results_log"] = active_ledger
 
     if isinstance(active_ledger, pd.DataFrame) and not active_ledger.empty:
         from app_core.prop_grading import ledger_coverage_summary
@@ -172,10 +183,10 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
                 "again at the start of the next app session."
             )
 
-    if isinstance(generated_ledger, pd.DataFrame) and not generated_ledger.empty:
+    if isinstance(active_ledger, pd.DataFrame) and not active_ledger.empty:
         st.sidebar.download_button(
             "Download Updated Graded Prop Ledger",
-            generated_ledger.to_csv(index=False, encoding="utf-8-sig"),
+            active_ledger.to_csv(index=False, encoding="utf-8-sig"),
             "prop_results_log.csv",
             mime="text/csv",
             key="download_prop_results_log",
@@ -210,6 +221,6 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
         "show_kalshi_diagnostics": show_kalshi_diagnostics,
         "theover_spreads": theover_spreads,
         "theover_totals": theover_totals,
-        "prop_results_log": prop_results_log,
+        "prop_results_log": active_ledger,
         "run_analysis_counter": run_counter,
     }
