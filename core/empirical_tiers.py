@@ -157,6 +157,86 @@ def empirical_win_probability(
     return float(min(0.95, max(0.05, float(p_calibrated) + weight * (smoothed - overall))))
 
 
+def _selection_consensus(df: pd.DataFrame) -> pd.Series:
+    """Return the same directional Kalshi label used by the final card.
+
+    Candidate rows are oriented to their own pick, so a Kalshi probability above
+    0.52 agrees with that candidate and one below 0.48 disagrees. Recomputing the
+    label here prevents stale pre-merge consensus text from routing a finalist
+    through the wrong empirical bucket.
+    """
+    consensus = df.get(
+        "consensus_agreement", pd.Series("Neutral", index=df.index)
+    ).fillna("Neutral").astype(str)
+    valid = consensus.isin(["Agrees", "Neutral", "Disagrees"])
+    consensus = consensus.where(valid, "Neutral").copy()
+    kalshi = pd.to_numeric(
+        df.get("kalshi_probability", pd.Series(float("nan"), index=df.index)),
+        errors="coerce",
+    )
+    available = kalshi.gt(0.0) & kalshi.lt(1.0)
+    consensus.loc[available] = "Neutral"
+    consensus.loc[available & kalshi.ge(0.52)] = "Agrees"
+    consensus.loc[available & kalshi.le(0.48)] = "Disagrees"
+    return consensus
+
+
+def empirical_selection_probabilities(
+    df: pd.DataFrame,
+    bucket_stats: dict,
+    calibration: list | None = None,
+    prob_col: str = "calibrated_probability",
+) -> pd.Series:
+    """Decision probabilities for choosing the one finalist per game.
+
+    The old pipeline selected a winner from raw candidate probabilities and only
+    applied empirical bucket evidence afterward. That could demote a proven-losing
+    direction but could not replace it with the better candidate. This helper uses
+    the same leak-safe global calibration and conditional bucket adjustment before
+    selection, including the proven-losing floor used by the final tier overlay.
+    """
+    base = pd.to_numeric(
+        df.get(prob_col, pd.Series(float("nan"), index=df.index)),
+        errors="coerce",
+    )
+    if df.empty or not bucket_stats:
+        return base
+    calibrated = apply_calibration(base, calibration) if calibration else base.copy()
+    consensus = _selection_consensus(df)
+    buckets = [
+        bucket_key(league, market, agreement)
+        for league, market, agreement in zip(
+            df.get("league", pd.Series("", index=df.index)),
+            df.get("market_type", pd.Series("", index=df.index)),
+            consensus,
+        )
+    ]
+    selected: list[float] = []
+    for (_, row), probability, bucket in zip(df.iterrows(), calibrated, buckets):
+        family = bucket.split(":")[1] if ":" in bucket else "side"
+        # The diagnosed regression is directional: Over/Under alternatives were
+        # chosen before their realized direction buckets were considered. Keep
+        # side-vs-total comparisons on the existing calibrated scale so the
+        # established spread/moneyline finalist guards retain their semantics.
+        adjusted = (
+            empirical_win_probability(probability, bucket, bucket_stats)
+            if family in ("over", "under")
+            else float(probability)
+        )
+        rate, n = smoothed_bucket_rate(bucket, bucket_stats)
+        decimal = _decimal_odds(row)
+        breakeven = 1.0 / decimal if pd.notna(decimal) and decimal > 1.0 else float("nan")
+        if (
+            family in ("over", "under")
+            and n >= PROVEN_LOSING_BUCKET_MIN_N
+            and pd.notna(breakeven)
+            and rate - breakeven <= -PROVEN_LOSING_BUCKET_EDGE_MARGIN
+        ):
+            adjusted = min(float(adjusted), float(rate))
+        selected.append(float(adjusted) if pd.notna(adjusted) else float("nan"))
+    return pd.Series(selected, index=df.index, dtype="float64")
+
+
 def smoothed_bucket_rate(bucket: str, stats: dict) -> tuple[float, int]:
     """(Laplace-smoothed realized rate, n) for the Actionable proven-bucket gate."""
     overall = float(stats["overall"]["win_rate"])

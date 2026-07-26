@@ -276,12 +276,29 @@ def load_prop_results_log(
     path: Path | str = DEFAULT_PROP_RESULTS_PATH,
     uploaded: Any = None,
 ) -> pd.DataFrame | None:
-    """Read an uploaded ledger first, then the repository/local fallback."""
+    """Read and deduplicate uploaded ledger file(s), then use the local fallback."""
     if uploaded is not None:
         try:
-            if hasattr(uploaded, "seek"):
-                uploaded.seek(0)
-            return pd.read_csv(uploaded)
+            from app_core.prop_grading import merge_prop_ledgers
+
+            if isinstance(uploaded, pd.DataFrame):
+                return uploaded.copy()
+            uploads = (
+                list(uploaded)
+                if isinstance(uploaded, (list, tuple))
+                else [uploaded]
+            )
+            merged = pd.DataFrame()
+            for item in uploads:
+                if item is None:
+                    continue
+                if hasattr(item, "seek"):
+                    item.seek(0)
+                frame = pd.read_csv(item)
+                if hasattr(item, "seek"):
+                    item.seek(0)
+                merged = merge_prop_ledgers(merged, frame)
+            return merged if not merged.empty else None
         except (OSError, ValueError, TypeError):
             return None
     try:

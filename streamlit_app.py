@@ -1098,6 +1098,7 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
                     kelly_per_pick_pct=STRIKEOUT_PROP_KELLY_PER_PICK_PCT,
                     kelly_total_pct=STRIKEOUT_PROP_KELLY_TOTAL_PCT,
                     kelly_fraction=STRIKEOUT_PROP_KELLY_FRACTION,
+                    prop_results_log=controls.get("prop_results_log"),
                     diagnostics=diagnostics,
                 )
                 _prop_stake_status = strikeout_prop_card.get(
@@ -1107,7 +1108,9 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
                     _prop_stake_status.eq("Funded").sum()
                 )
                 diagnostics["strikeout_prop_research_count"] = int(
-                    _prop_stake_status.eq("Qualified / No Stake").sum()
+                    _prop_stake_status.isin(
+                        ["Research / No Stake", "Qualified / No Stake"]
+                    ).sum()
                 )
 
                 # The legacy strategic-parlay engine only sees game picks. When

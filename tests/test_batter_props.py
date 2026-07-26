@@ -98,8 +98,8 @@ def test_batter_card_stays_research_only_while_on_probation():
     assert bool(row["Market_Probation"])
     assert not bool(row["production_eligible"])
     assert row["Kelly_Bet_Size"] == 0.0
-    assert row["Pick_Status"] == "Qualified / No Stake"
-    assert row["Stake_Status"] == "Qualified / No Stake"
+    assert row["Pick_Status"] == "Research / No Stake"
+    assert row["Stake_Status"] == "Research / No Stake"
     assert any(
         word in row["Status_Reason"].lower()
         for word in ("probation", "calibration")
@@ -221,7 +221,7 @@ def test_production_gate_requires_proven_three_percent_ev_and_allowed_market():
         ],
         "best_pick": ["A", "B", "C", "D"],
         "line": [2.5, 5.5, 1.5, 1.5],
-        "odds_american": [-169, -150, -264, -120],
+        "odds_american": [-150, -150, -264, -120],
         "WinProbability": [0.70, 0.70, 0.70, 0.70],
         "expected_count": [3.2, 4.8, 0.8, 0.8],
         "expected_value": [0.1238, 0.0038, 0.0624, 0.10],
@@ -357,4 +357,41 @@ def test_prop_stake_status_distinguishes_funded_from_unstaked_candidates():
     assert out["Pick_Status"].tolist() == ["Actionable", "Qualified / No Stake"]
     assert out["Stake_Status"].tolist() == ["Funded", "Qualified / No Stake"]
     assert "not selected" in out.loc[1, "Status_Reason"]
+
+def test_production_gate_rejects_prices_shorter_than_minus_150():
+    card = pd.DataFrame({
+        "player": ["Too Juiced", "Price Boundary"],
+        "matchup": ["A @ B", "C @ D"],
+        "market_type": [
+            "pitcher_strikeouts_over", "pitcher_strikeouts_over",
+        ],
+        "best_pick": ["Too Juiced Over 4.5 Ks", "Boundary Over 4.5 Ks"],
+        "line": [4.5, 4.5],
+        "expected_count": [5.3, 5.3],
+        "odds_american": [-151, -150],
+        "WinProbability": [0.70, 0.70],
+        "expected_value": [0.08, 0.08],
+        "Market_Probation": [False, False],
+        "Pick_Status": ["Actionable", "Actionable"],
+        "Kelly_Bet_Size": [1.0, 1.0],
+    })
+    out = apply_production_prop_gate(card)
+    assert out["production_eligible"].tolist() == [False, True]
+    assert out["production_price_allowed"].tolist() == [False, True]
+    assert "shorter than -150" in out.loc[0, "production_gate_reason"]
+    assert out.loc[0, "Kelly_Bet_Size"] == 0.0
+
+
+def test_prop_stake_status_marks_gate_failures_as_research():
+    card = pd.DataFrame({
+        "best_pick": ["Research Over 0.5 Hits"],
+        "Pick_Status": ["Actionable"],
+        "production_eligible": [False],
+        "production_gate_reason": ["Research only: market is still on probation"],
+        "Kelly_Bet_Size": [0.0],
+    })
+    out = apply_prop_stake_status(card)
+    assert out.loc[0, "Pick_Status"] == "Research / No Stake"
+    assert out.loc[0, "Stake_Status"] == "Research / No Stake"
+    assert "probation" in out.loc[0, "Status_Reason"]
 
