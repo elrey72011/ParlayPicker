@@ -255,6 +255,8 @@ def ensure_best_pick_export_columns(
     req_cols = list(required_columns or REQUIRED_BEST_PICK_EXPORT_COLUMNS)
     default_values: dict[str, object] = {
         "status_metric_basis": "raw",
+        "selection_probability_used": pd.NA,
+        "selection_probability_source": "calibrated_probability",
         "effective_expected_value": pd.NA,
         "effective_edge": pd.NA,
         "effective_win_probability": pd.NA,
@@ -298,7 +300,7 @@ def ensure_best_pick_export_columns(
     missing_cols = [c for c in req_cols if c not in out.columns]
 
     for col in req_cols:
-        if col in {"status_blocker_reason", "status_blocker_stage", "nba_stats_fetch_status", "fallback_summary_by_league", "run_health_warning", "degraded_feature_subset_reason", "status_metric_basis", "market_line_source", "market_line_source_detail", "line_consistency_reason", "line_provenance_warning", "line_event_identity_reason", "live_event_match_key", "selected_live_event_source", "raw_book_odds_diag"}:
+        if col in {"status_blocker_reason", "status_blocker_stage", "nba_stats_fetch_status", "fallback_summary_by_league", "run_health_warning", "degraded_feature_subset_reason", "status_metric_basis", "selection_probability_source", "market_line_source", "market_line_source_detail", "line_consistency_reason", "line_provenance_warning", "line_event_identity_reason", "live_event_match_key", "selected_live_event_source", "raw_book_odds_diag"}:
             out[col] = out[col].fillna(default_values.get(col, "")).astype(str)
 
     if "status_blocker_stage" in out.columns:
@@ -313,7 +315,7 @@ def ensure_best_pick_export_columns(
         out["side_promoted_by_balance_guard_count"] = pd.to_numeric(out["side_promoted_by_balance_guard_count"], errors="coerce").fillna(0).astype(int)
     if "side_balance_guard_reason" in out.columns:
         out["side_balance_guard_reason"] = out["side_balance_guard_reason"].fillna("MISSING_COMPUTATION").astype(str)
-    for numeric_col in {"market_line_used", "matched_live_spread_line", "matched_live_total_line", "upload_spread_line", "upload_total_line", "base_spread_line", "base_total_line"}:
+    for numeric_col in {"selection_probability_used", "market_line_used", "matched_live_spread_line", "matched_live_total_line", "upload_spread_line", "upload_total_line", "base_spread_line", "base_total_line"}:
         if numeric_col in out.columns:
             out[numeric_col] = pd.to_numeric(out[numeric_col], errors="coerce")
     if "line_consistency_flag" in out.columns:
@@ -402,7 +404,7 @@ BEST_PICK_COLUMNS = [
     # Verbatim per-book spread points + moneyline prices (see REQUIRED_BEST_PICK_EXPORT_COLUMNS);
     # listed here so it survives the BEST_PICK_COLUMNS reindex into the export.
     "raw_book_odds_diag",
-    "suspicious_data_flag", "suspicious_data_reasons", "status_metric_basis", "effective_expected_value", "effective_edge", "effective_win_probability",
+    "suspicious_data_flag", "suspicious_data_reasons", "status_metric_basis", "selection_probability_used", "selection_probability_source", "effective_expected_value", "effective_edge", "effective_win_probability",
     "empirical_win_probability", "empirical_edge", "empirical_bucket", "status_blocker_reason", "status_blocker_stage",
     "nba_stats_fetch_status", "nba_stats_fetch_source", "nba_stats_fetch_retries_used", "stats_source_counts", "fallback_summary_by_league", "fallback_heavy_slate_flag", "run_health_warning",
     "degraded_feature_subset_flag", "degraded_feature_subset_reason",
