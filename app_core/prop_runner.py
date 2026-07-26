@@ -367,10 +367,13 @@ def build_prop_card(
         try:
             import streamlit as st
 
+            active_results = st.session_state.get("active_prop_results_log")
             generated_results = st.session_state.get("generated_prop_results_log")
             uploaded_results = (
-                generated_results
-                if generated_results is not None
+                active_results
+                if isinstance(active_results, pd.DataFrame) and not active_results.empty
+                else generated_results
+                if isinstance(generated_results, pd.DataFrame) and not generated_results.empty
                 else st.session_state.get("prop_results_log")
             )
         except (ImportError, RuntimeError, AttributeError):
@@ -468,6 +471,7 @@ PROP_PRODUCTION_MIN_EXPECTED_VALUE = 0.03
 PROP_PRODUCTION_MIN_WIN_PROBABILITY = 0.62
 PROP_EXTENDED_MIN_WIN_PROBABILITY = 0.60
 PROP_PRODUCTION_MIN_PROJECTION_CUSHION = 0.50
+PROP_PRODUCTION_MIN_AMERICAN_ODDS = -150
 PROP_MAX_FUNDED_PER_GAME = 2
 PROP_MAX_FUNDED_PER_SLATE = 5
 PROP_EXTENDED_FLAT_STAKE = 1.0
@@ -838,6 +842,7 @@ def apply_production_prop_gate(
     min_win_probability: float = PROP_PRODUCTION_MIN_WIN_PROBABILITY,
     extended_min_win_probability: float = PROP_EXTENDED_MIN_WIN_PROBABILITY,
     min_projection_cushion: float = PROP_PRODUCTION_MIN_PROJECTION_CUSHION,
+    min_american_odds: int = PROP_PRODUCTION_MIN_AMERICAN_ODDS,
     blocked_markets: frozenset[str] = PROP_PRODUCTION_BLOCKED_MARKETS,
 ):
     """Fund only validated, proven props with a meaningful projected edge.
@@ -846,8 +851,8 @@ def apply_production_prop_gate(
     may only round a ticket that survives this gate.  Probation markets and the
     empirically weak batter-total-bases Under family therefore cannot be
     promoted into production or parlays by the $1 minimum rule. Production
-    tickets must also clear a probability floor and beat the posted line by a
-    meaningful model-projection cushion.
+    tickets must also clear a probability floor, beat the posted line by a
+    meaningful model-projection cushion, and avoid prices shorter than -150.
     """
     import pandas as pd
 
@@ -867,6 +872,7 @@ def apply_production_prop_gate(
         out.get("odds_american", pd.Series(float("nan"), index=index)), errors="coerce"
     )
     identity_valid &= odds.notna() & odds.ne(0)
+    price_allowed = odds.ge(float(min_american_odds))
 
     market = out.get("market_type", pd.Series("", index=index)).fillna("").astype(str)
     market_allowed = ~market.isin(set(blocked_markets))
@@ -913,7 +919,8 @@ def apply_production_prop_gate(
         calibration_sample = pd.Series(float("nan"), index=index)
         calibration_ready = pd.Series(True, index=index)
     common_eligible = (
-        qualified & identity_valid & market_allowed & ~probation & calibration_ready
+        qualified & identity_valid & market_allowed & price_allowed
+        & ~probation & calibration_ready
         & projection_cushion.ge(float(min_projection_cushion))
         & expected_value.ge(float(min_expected_value))
     )
@@ -956,6 +963,16 @@ def apply_production_prop_gate(
         & projection_cushion.ge(float(min_projection_cushion))
         & ~expected_value.ge(float(min_expected_value))
     ] = f"Research only: expected value is below {float(min_expected_value):.1%}"
+    reason.loc[
+        identity_valid & market_allowed & ~probation
+        & win_probability.ge(float(extended_min_win_probability))
+        & projection_cushion.ge(float(min_projection_cushion))
+        & expected_value.ge(float(min_expected_value))
+        & ~price_allowed
+    ] = (
+        "Research only: sportsbook price is shorter than "
+        f"{int(min_american_odds):+d}"
+    )
     reason.loc[identity_valid & market_allowed & ~calibration_ready] = (
         "Research only: directional prop calibration needs at least 20 graded results"
     )
@@ -965,6 +982,8 @@ def apply_production_prop_gate(
     ).fillna(0.0)
     out["production_identity_valid"] = identity_valid
     out["production_market_allowed"] = market_allowed
+    out["production_price_allowed"] = price_allowed
+    out["production_min_american_odds"] = int(min_american_odds)
     out["production_calibration_ready"] = calibration_ready
     out["production_calibration_source"] = calibration_source
     out["production_calibration_sample"] = calibration_sample
@@ -1313,12 +1332,11 @@ def apply_novig_minimum_selection(
 
 
 def apply_prop_stake_status(card):
-    """Separate model-qualified props from executable, funded tickets.
+    """Separate research rows, qualified reserves, and funded tickets.
 
-    Pick_Status=Actionable is reserved for rows that survive every portfolio
-    and sportsbook-minimum guard with a positive stake. Qualified rows that lose
-    allocation because of exposure, diversification, or minimum-bet constraints
-    stay visible for research and grading without masquerading as bets.
+    A model signal that fails the production gate remains visible and gradeable,
+    but it is explicitly research-only. Only production-eligible rows may be
+    called qualified, funded, or admitted to the parlay pipeline.
     """
     import pandas as pd
 
@@ -1332,26 +1350,43 @@ def apply_prop_stake_status(card):
         out.get("Kelly_Bet_Size", pd.Series(0.0, index=out.index)),
         errors="coerce",
     ).fillna(0.0)
-    qualified = status.eq("Actionable")
-    funded = qualified & stakes.gt(0)
-    unfunded = qualified & ~funded
+    model_qualified = status.eq("Actionable")
+    production_eligible = out.get(
+        "production_eligible", model_qualified
+    )
+    production_eligible = pd.Series(
+        production_eligible, index=out.index
+    ).fillna(False).astype(bool)
+    funded = model_qualified & production_eligible & stakes.gt(0)
+    qualified_unfunded = model_qualified & production_eligible & ~funded
+    research = model_qualified & ~production_eligible
 
     if "Status_Reason" not in out.columns:
         out["Status_Reason"] = ""
     out["Stake_Status"] = "Not Qualified"
     out.loc[funded, "Stake_Status"] = "Funded"
-    out.loc[unfunded, "Stake_Status"] = "Qualified / No Stake"
-    out.loc[funded, "Status_Reason"] = "Qualified and funded after portfolio guards"
-    out.loc[unfunded, "Pick_Status"] = "Qualified / No Stake"
+    out.loc[qualified_unfunded, "Stake_Status"] = "Qualified / No Stake"
+    out.loc[research, "Stake_Status"] = "Research / No Stake"
+    out.loc[funded, "Status_Reason"] = (
+        "Qualified and funded after production and portfolio guards"
+    )
+    out.loc[qualified_unfunded, "Pick_Status"] = "Qualified / No Stake"
+    out.loc[research, "Pick_Status"] = "Research / No Stake"
+
     generic_unfunded_reason = (
-        "Cleared model gates but was not selected after exposure, "
+        "Cleared production gates but was not selected after exposure, "
         "diversification, and sportsbook-minimum guards"
     )
     gate_reason = out.get(
         "production_gate_reason", pd.Series("", index=out.index)
     ).fillna("").astype(str).str.strip()
-    out.loc[unfunded, "Status_Reason"] = gate_reason.loc[unfunded].where(
-        gate_reason.loc[unfunded].ne(""), generic_unfunded_reason
+    out.loc[qualified_unfunded, "Status_Reason"] = gate_reason.loc[
+        qualified_unfunded
+    ].where(
+        gate_reason.loc[qualified_unfunded].ne(""), generic_unfunded_reason
+    )
+    out.loc[research, "Status_Reason"] = gate_reason.loc[research].where(
+        gate_reason.loc[research].ne(""),
+        "Research only: did not clear the production gate",
     )
     return out
-
