@@ -134,12 +134,14 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-07-25a-kelly-audit-mlb-health"
+PIPELINE_BUILD = "2026-07-26a-empirical-finalist-selection"
 
 
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
     "pipeline_build",
     "status_metric_basis",
+    "selection_probability_used",
+    "selection_probability_source",
     "effective_expected_value",
     "effective_edge",
     "effective_win_probability",
@@ -2727,7 +2729,49 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
 
     # 3. Calculate Normalized EV and Normalized Edge (Z-score style) within market families
     # Initialize normalized columns with NaN
-    pool["_prob_numeric"] = pd.to_numeric(pool["calibrated_probability"], errors="coerce").fillna(0.5)
+    # Finalist selection must consume the same realized-performance evidence used
+    # by the post-selection tier overlay. Previously the raw calibrated candidate
+    # won first and empirical history could only demote it afterward; it could not
+    # choose the better direction for that game.
+    pool["_selection_probability"] = pd.to_numeric(
+        pool["calibrated_probability"], errors="coerce"
+    )
+    pool["selection_probability_source"] = "calibrated_probability"
+    try:
+        from app_core.weights_config import (
+            EMPIRICAL_TIER_OVERLAY_ENABLED as _empirical_selection_enabled,
+        )
+        if _empirical_selection_enabled:
+            from core.empirical_tiers import (
+                empirical_selection_probabilities,
+                load_bucket_stats as _load_selection_bucket_stats,
+            )
+            from core.probability_calibration import (
+                load_calibration as _load_selection_calibration,
+            )
+
+            _selection_bucket_stats = _load_selection_bucket_stats()
+            if _selection_bucket_stats:
+                _empirical_prob = empirical_selection_probabilities(
+                    pool,
+                    _selection_bucket_stats,
+                    _load_selection_calibration(),
+                    prob_col="calibrated_probability",
+                )
+                _usable_empirical = _empirical_prob.notna()
+                pool.loc[_usable_empirical, "_selection_probability"] = (
+                    _empirical_prob.loc[_usable_empirical]
+                )
+                pool.loc[
+                    _usable_empirical, "selection_probability_source"
+                ] = "empirical_bucket_calibrated"
+    except Exception as exc:
+        logger.warning(
+            "Empirical finalist probabilities unavailable; using calibrated candidates: %s",
+            exc,
+        )
+    pool["selection_probability_used"] = pool["_selection_probability"].clip(0.01, 0.99)
+    pool["_prob_numeric"] = pool["selection_probability_used"].fillna(0.5)
     pool["_normalized_ev"] = pd.Series([np.nan] * len(pool), index=pool.index, dtype="float64")
     pool["_normalized_edge"] = pd.Series([np.nan] * len(pool), index=pool.index, dtype="float64")
     pool["_normalized_prob"] = pd.Series([np.nan] * len(pool), index=pool.index, dtype="float64")
@@ -2736,6 +2780,17 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     raw_counts = pool["_market_family"].value_counts().to_dict()
     raw_market_type_counts = pool["market_type"].value_counts().to_dict()
     avg_scores = {}
+    if diagnostics_out is not None:
+        diagnostics_out["empirical_selection_candidate_count"] = int(
+            pool["selection_probability_source"].eq(
+                "empirical_bucket_calibrated"
+            ).sum()
+        )
+        diagnostics_out["empirical_selection_source"] = (
+            "empirical_bucket_calibrated"
+            if diagnostics_out["empirical_selection_candidate_count"] > 0
+            else "calibrated_probability"
+        )
 
     for family in ["total", "side"]:
         family_mask = pool["_market_family"] == family
@@ -2889,7 +2944,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
 
     # 4. Sort to prepare for finalist selection within each family per game
     pool = pool.sort_values(
-        by=["final_family_score", "tier_score", "calibrated_probability", "_ev_numeric", "_edge_numeric"],
+        by=["final_family_score", "tier_score", "selection_probability_used", "_ev_numeric", "_edge_numeric"],
         ascending=[False, True, False, False, False],
         na_position="last"
     )
@@ -2927,12 +2982,12 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
 
         # Sort the finalists for this matchup to find the absolute winner
         group_sorted = group.sort_values(
-            by=["final_family_score", "tier_score", "calibrated_probability", "_ev_numeric", "_edge_numeric"],
+            by=["final_family_score", "tier_score", "selection_probability_used", "_ev_numeric", "_edge_numeric"],
             ascending=[False, True, False, False, False],
             na_position="last"
         )
         group_sorted_no_mlb_spread_penalty = group.sort_values(
-            by=["final_family_score_no_mlb_spread_penalty", "tier_score", "calibrated_probability", "_ev_numeric", "_edge_numeric"],
+            by=["final_family_score_no_mlb_spread_penalty", "tier_score", "selection_probability_used", "_ev_numeric", "_edge_numeric"],
             ascending=[False, True, False, False, False],
             na_position="last"
         )
@@ -2983,7 +3038,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     final_market_type_counts = best["market_type"].value_counts().to_dict()
 
     # Cleanup temporary columns
-    best = best.drop(columns=["_market_family", "_normalized_ev", "_normalized_edge", "final_family_score", "final_family_score_no_mlb_spread_penalty", "_ev_numeric", "_edge_numeric", "_family_selection_penalty", "_under_selection_penalty", "_mlb_spread_finalist_penalty"])
+    best = best.drop(columns=["_market_family", "_normalized_ev", "_normalized_edge", "final_family_score", "final_family_score_no_mlb_spread_penalty", "_ev_numeric", "_edge_numeric", "_family_selection_penalty", "_under_selection_penalty", "_mlb_spread_finalist_penalty", "_selection_probability"])
 
     logger.info(f"BEST PICKS AUDIT: Rows after two-stage finalist comparison: {len(best)} (started with {len(pool)})")
 
