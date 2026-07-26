@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from core.empirical_tiers import (
     assign_empirical_tiers,
     bucket_key,
+    empirical_selection_probabilities,
     empirical_win_probability,
     load_bucket_stats,
     smoothed_bucket_rate,
@@ -309,3 +310,26 @@ def test_actionable_allows_agreement_bucket_with_same_metrics():
     out = assign_empirical_tiers(df, stats, calibration=None)
     assert out.iloc[0]["Pick_Status"] == "Actionable"
     assert "agreement" in str(out.iloc[0]["Status_Reason"]).lower()
+
+def test_selection_probability_floors_proven_losing_direction_before_finalist_choice():
+    stats = {
+        "overall": {"n": 200, "win_rate": 0.50},
+        "buckets": {
+            "MLB:over:Neutral": {"n": 40, "wins": 28, "win_rate": 0.70},
+            "MLB:under:Neutral": {"n": 40, "wins": 10, "win_rate": 0.25},
+        },
+    }
+    candidates = pd.DataFrame({
+        "league": ["MLB", "MLB"],
+        "market_type": ["total_over", "total_under"],
+        "consensus_agreement": ["Neutral", "Neutral"],
+        "kalshi_probability": [0.50, 0.50],
+        "calibrated_probability": [0.60, 0.68],
+        "odds_american": [-110, -110],
+    })
+    probabilities = empirical_selection_probabilities(
+        candidates, stats, calibration=None
+    )
+    assert probabilities.iloc[0] > probabilities.iloc[1]
+    assert probabilities.iloc[1] < 0.40
+
