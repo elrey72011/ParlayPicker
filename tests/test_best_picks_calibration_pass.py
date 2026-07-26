@@ -158,7 +158,9 @@ def test_diagnostics_blocked_rows_and_shadow_cards_populate():
     assert "actionable_counts_by_league_family" in diagnostics
 
 
-def test_mlb_spread_finalist_penalty_can_demote_weak_spread_winner():
+def test_mlb_spread_finalist_penalty_can_demote_weak_spread_winner(monkeypatch):
+    # Isolate the spread handicap from the separate empirical-direction selector.
+    monkeypatch.setattr("core.empirical_tiers.load_bucket_stats", lambda: None)
     matchup_id = "2026-04-24|home1|away1"
     df = pd.DataFrame(
         [
