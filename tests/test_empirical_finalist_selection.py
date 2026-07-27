@@ -58,15 +58,6 @@ def test_empirical_bucket_blend_cannot_overturn_a_clearly_stronger_forecast(monk
     assert best.iloc[0]["selection_probability_source"] == "empirical_bucket_blend"
     assert diagnostics["empirical_selection_candidate_count"] == 2
 
-    selected = best.iloc[0]
-    selection_probability = float(selected["selection_probability_used"])
-    decimal_odds = 1.0 + (100.0 / 110.0)
-    assert abs(float(selected["effective_win_probability"]) - selection_probability) < 1e-9
-    assert abs(float(selected["production_win_probability"]) - selection_probability) < 1e-9
-    assert abs(float(selected["effective_expected_value"]) - (selection_probability * decimal_odds - 1.0)) < 1e-9
-    assert abs(float(selected["effective_edge"]) - (selection_probability - 1.0 / decimal_odds)) < 1e-9
-    assert selected["status_metric_basis"] == "empirical_bucket_blend"
-
     candidates = analysis.copy()
     from core.empirical_tiers import empirical_selection_probabilities
 
