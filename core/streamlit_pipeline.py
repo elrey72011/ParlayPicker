@@ -134,7 +134,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-07-27c-full-market-candidates-date-id"
+PIPELINE_BUILD = "2026-07-27d-moneyline-rendering-line-id"
 
 
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
@@ -1478,9 +1478,9 @@ def _format_best_pick(row: pd.Series) -> str:
         if pd.isna(line):
             line = pd.to_numeric(row.get("total"), errors="coerce")
         return f"Under {line:.1f}" if pd.notna(line) else "Under (No Line)"
-    if market == "h2h_home":
+    if market in {"h2h_home", "moneyline_home"}:
         return home_team
-    if market == "h2h_away":
+    if market in {"h2h_away", "moneyline_away"}:
         return away_team
     return ""
 
@@ -4476,11 +4476,28 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         market_type_norm = best["market_type"].astype(str).str.lower()
         is_spread = market_type_norm.isin({"spread_home", "spread_away"})
         is_total = market_type_norm.isin({"total_over", "total_under"})
+        is_moneyline = market_type_norm.isin({
+            "moneyline_home", "moneyline_away", "h2h_home", "h2h_away",
+        })
         line_source_norm = best.get("line_source", pd.Series([""] * len(best), index=best.index)).astype(str).str.lower()
         live_match = line_source_norm.str.contains("live", na=False)
 
-        has_live_numeric = raw_live_spread_line.notna() | raw_live_total_line.notna()
-        trusted_live_match = live_match & has_live_numeric
+        # Spreads/totals prove their live provenance with a numeric line. A
+        # moneyline intentionally has no point value, so its real sportsbook
+        # price is the equivalent proof. Requiring a spread/total line here made
+        # valid moneylines look like unresolved totals downstream.
+        has_live_numeric = (
+            (is_spread & raw_live_spread_line.notna())
+            | (is_total & raw_live_total_line.notna())
+        )
+        live_moneyline_price = pd.to_numeric(
+            best.get("odds_american", pd.Series([np.nan] * len(best), index=best.index)),
+            errors="coerce",
+        )
+        has_live_moneyline_price = (
+            is_moneyline & live_moneyline_price.notna() & live_moneyline_price.ne(0)
+        )
+        trusted_live_match = live_match & (has_live_numeric | has_live_moneyline_price)
         best["matched_live_spread_line"] = np.where(trusted_live_match, raw_live_spread_line, np.nan)
         best["matched_live_total_line"] = np.where(trusted_live_match, raw_live_total_line, np.nan)
 
