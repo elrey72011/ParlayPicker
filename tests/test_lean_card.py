@@ -354,3 +354,31 @@ def test_exported_started_tier_stays_unplayable_on_all_games_card():
     assert float(out.iloc[0]["Play_Stake"]) == 0.0
     assert not bool(out.iloc[0]["All_Row_Bet"])
 
+def test_repaired_upload_fallback_is_unavailable_for_recreational_stake():
+    source = pd.DataFrame([{
+        "league": "MLB",
+        "home_team": "Texas",
+        "away_team": "Seattle",
+        "best_pick": "Under 8.0",
+        "Pick_Status": "No Play",
+        "effective_expected_value": 0.0,
+        "expected_value": 0.0,
+        "edge": 0.0,
+        "effective_win_probability": 0.49,
+        "odds_american": -108,
+        "consensus_agreement": "Agrees",
+        "line_consistency_flag": True,
+        "line_event_identity_match_flag": False,
+        "market_line_source_detail": "upload_total_fallback_after_rejected_live",
+    }])
+
+    card = build_all_games_lean_card(source, calibration=None, bucket_stats=None)
+    out = attach_play_stakes(card, unit=1.0)
+
+    assert not bool(out.iloc[0]["Started"])
+    assert not bool(out.iloc[0]["Playable"])
+    assert out.iloc[0]["Tier"] == "UNAVAILABLE"
+    assert float(out.iloc[0]["Play_Units"]) == 0.0
+    assert float(out.iloc[0]["Play_Stake"]) == 0.0
+    assert not bool(out.iloc[0]["All_Row_Bet"])
+

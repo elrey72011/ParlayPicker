@@ -151,7 +151,16 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
     unavailable_line = pick_text.str.lower().str.contains(
         r"unresolved|\(no line\)|missing line|rejected", regex=True, na=False
     )
-    playable = ~(started | unavailable_line)
+    unsafe_line_identity = pd.Series(False, index=df.index)
+    if "line_consistency_flag" in df.columns:
+        unsafe_line_identity = unsafe_line_identity | ~df["line_consistency_flag"].fillna(False).astype(bool)
+    if "line_event_identity_match_flag" in df.columns:
+        unsafe_line_identity = unsafe_line_identity | ~df["line_event_identity_match_flag"].fillna(False).astype(bool)
+    if "market_line_source_detail" in df.columns:
+        unsafe_line_identity = unsafe_line_identity | df["market_line_source_detail"].astype(str).eq(
+            "upload_total_fallback_after_rejected_live"
+        )
+    playable = ~(started | unavailable_line | unsafe_line_identity)
 
     return pd.DataFrame({
         "League": _first_col(df, "league", "League"),
