@@ -142,7 +142,17 @@ def grade_prop_export(
                 )
             actual = actual_cache[cache_key]
         actual_value = actual.get(stat) if isinstance(actual, dict) else actual
-        result = grade_side(side, float(line), actual_value)
+        try:
+            actual_missing = actual_value is None or bool(pd.isna(actual_value))
+        except (TypeError, ValueError):
+            actual_missing = actual_value is None
+        result = (
+            "PENDING"
+            if actual_missing
+            else grade_side(side, float(line), actual_value)
+        )
+        if str(result or "").upper() not in {"WIN", "LOSS", "PUSH"}:
+            result = "PENDING"
         stake = float(pd.to_numeric(
             pd.Series([source.get("Kelly_Bet_Size", 0.0)]), errors="coerce"
         ).fillna(0.0).iloc[0])
