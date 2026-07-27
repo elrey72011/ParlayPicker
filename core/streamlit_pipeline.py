@@ -134,7 +134,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-07-27b-best-available-candidate-audit"
+PIPELINE_BUILD = "2026-07-27c-full-market-candidates-date-id"
 
 
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
@@ -2814,10 +2814,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     # Canonical per-game identity key used for full game coverage selection.
     # Guaranteed 1:1 mapping: one selected pick for each unique game_date/home/away combination.
     dt_utc = _game_dates(pool)
-    date_str = pd.Series([""] * len(pool), index=pool.index, dtype="string")
-    valid_dt = dt_utc.notna()
-    if valid_dt.any():
-        date_str.loc[valid_dt] = dt_utc[valid_dt].dt.tz_convert("America/New_York").dt.strftime("%Y-%m-%d")
+    # _et_day_string preserves date-only UTC-midnight slate values on their
+    # nominal day while still converting real event timestamps to ET. Directly
+    # tz-converting midnight moved every 2026-07-27 upload to 2026-07-26.
+    date_str = _et_day_string(dt_utc).fillna("").astype("string")
     pool["matchup_id"] = (
         date_str
         + "|" + pool["home_team"].str.lower().str.replace(r"\s+", " ", regex=True)
@@ -5440,8 +5440,14 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         diagnostics_out["best_available_selection_mismatch_count"] = int(selection_invariant_mismatches)
         diagnostics_out["best_available_candidate_audit_rows"] = int(len(candidate_audit_df))
 
-    from app_core.weights_config import ENABLE_MONEYLINE_PARLAY_LEGS
-    if ENABLE_MONEYLINE_PARLAY_LEGS:
+    from app_core.weights_config import (
+        ENABLE_MONEYLINE_BEST_AVAILABLE,
+        ENABLE_MONEYLINE_PARLAY_LEGS,
+    )
+    if ENABLE_MONEYLINE_BEST_AVAILABLE or ENABLE_MONEYLINE_PARLAY_LEGS:
+        # Moneylines may win the Best Available comparison, but they remain
+        # explicitly non-single and production-ineligible until their own
+        # calibration record clears the dedicated parlay gate.
         final_best_df = _enforce_moneyline_parlay_only(final_best_df)
 
     # Recovered (rejected-live -> uploaded line) rows carry mismatched odds; zero their
@@ -5685,9 +5691,10 @@ def _derive_spread_away_line(row):
 
 def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.DataFrame | None = None) -> tuple[pd.DataFrame, dict[str, Any]]:
     """
-    Expands the wide live_odds_df (1 row per game) into up to 4 market rows per game
-    (e.g., spread_home, spread_away, total_over, total_under) and then filters them
-    based on the user's uploads in `theover_rows`. If no match, retains all candidates.
+    Expands the wide live_odds_df (1 row per game) into every enabled live market
+    candidate. TheOver uploads enrich matching directions but never whitelist the
+    candidate pool: a totals-only upload must not erase live spreads or moneylines
+    from the best-overall comparison.
 
     Returns a tuple of (expanded_df, diag_counts).
     """
@@ -5713,7 +5720,9 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
         "games_matched_canonical": 0,
         "games_matched_fuzzy": 0,
         "rows_retained_unmatched": 0,
+        "rows_retained_without_upload_market": 0,
         "rows_dropped_by_join": 0,
+        "missing_live_moneyline_price": 0,
         "upload_matched_rows": 0,
         "upload_matched_drifted_rows": 0,
         "absolute_line_drifts": [],
@@ -5769,12 +5778,15 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
         game_date = str(row.get("game_date", ""))
         et_date = str(row.get("_et_day", ""))
 
-        # All leagues use spreads and totals
+        # Every game competes across spreads and totals. Moneylines may also enter
+        # the Best Available audit even while production singles/parlays remain
+        # gated; this is the distinction between candidate coverage and staking.
         candidate_markets = ["spread_home", "spread_away", "total_over", "total_under"]
-        # Moneyline is the model's native output (ml_probability already = P(win)); opened
-        # up as PARLAY-ONLY legs behind a flag. Priced off the already-fetched h2h odds.
-        from app_core.weights_config import ENABLE_MONEYLINE_PARLAY_LEGS
-        if ENABLE_MONEYLINE_PARLAY_LEGS:
+        from app_core.weights_config import (
+            ENABLE_MONEYLINE_BEST_AVAILABLE,
+            ENABLE_MONEYLINE_PARLAY_LEGS,
+        )
+        if ENABLE_MONEYLINE_BEST_AVAILABLE or ENABLE_MONEYLINE_PARLAY_LEGS:
             candidate_markets = candidate_markets + ["moneyline_home", "moneyline_away"]
 
         for m in candidate_markets:
@@ -5888,28 +5900,47 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
 
 
         for market_type in candidate_markets:
-            # Moneyline legs come from the live h2h feed, never the TheOver upload, so the
-            # upload-target filter must not drop them on matched games.
-            if match_found and market_type not in target_markets and not market_type.startswith("moneyline"):
-                diag_counts["rows_dropped_by_join"] += 1
-                continue # Skip markets not in the uploaded target set if we found a match
-
-            diag_counts["filtered"][market_type] += 1
-            if not match_found:
-                diag_counts["rows_retained_unmatched"] += 1
+            # Uploads are signals, not a market whitelist. Retain live spreads,
+            # totals, and enabled moneylines even when TheOver recommended only one
+            # family. Otherwise a totals-only upload makes "best overall" mean
+            # "best total" and silently removes every side candidate.
+            market_upload_matched = bool(match_found and market_type in target_markets)
 
             price_suffix, point_suffix = market_mappings[market_type]
             market_dict = base_dict.copy()
             market_dict["market_type"] = market_type
-            market_dict["candidate_source"] = candidate_source
+            market_dict["candidate_source"] = (
+                candidate_source
+                if market_upload_matched or not match_found
+                else "live_market_only"
+            )
             market_dict["orientation_source"] = orientation_source
-            market_dict["upload_match_reason"] = upload_match_reason
+            market_dict["upload_match_reason"] = (
+                upload_match_reason
+                if market_upload_matched or not match_found
+                else f"{upload_match_reason}; market absent from upload, retained from live odds"
+            )
 
             # Map pricing for novig (primary)
             novig_price_col = f"novig_{price_suffix}"
             novig_point_col = f"novig_{point_suffix}" if point_suffix else None
 
             price_val = pd.to_numeric(row.get(novig_price_col), errors="coerce")
+            if market_type.startswith("moneyline") and pd.isna(price_val):
+                # A fabricated -110 h2h price can create a fake edge and even win
+                # the per-game selector. Moneyline candidates require a real Novig
+                # quote; other books remain diagnostics only.
+                diag_counts["missing_live_moneyline_price"] += 1
+                continue
+
+            # These counters describe rows that actually survive candidate
+            # construction; skipped, unpriced moneylines must not inflate them.
+            if match_found and not market_upload_matched:
+                diag_counts["rows_retained_without_upload_market"] += 1
+            diag_counts["filtered"][market_type] += 1
+            if not match_found:
+                diag_counts["rows_retained_unmatched"] += 1
+
             if pd.isna(price_val):
                 market_dict["odds_american"] = -110.0
                 market_dict["odds_source"] = "fallback_novig"
@@ -6050,7 +6081,15 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
     logger.info(f"Games unmatched (kept all candidates): {diag_counts['games_unmatched']}")
     logger.info(f"Generated candidates: {diag_counts['generated']}")
     logger.info(f"Rows dropped by join: {diag_counts['rows_dropped_by_join']}")
+    logger.info(
+        "Rows retained without an upload-market recommendation: %s",
+        diag_counts["rows_retained_without_upload_market"],
+    )
     logger.info(f"Rows retained (unmatched): {diag_counts['rows_retained_unmatched']}")
+    logger.info(
+        "Moneyline rows skipped for missing live Novig price: %s",
+        diag_counts["missing_live_moneyline_price"],
+    )
     logger.info(f"Filtered (final) candidates: {diag_counts['filtered']}")
 
     # Identify uploaded games that were missed entirely

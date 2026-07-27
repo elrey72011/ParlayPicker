@@ -33,7 +33,32 @@ class TestCandidateGeneration(unittest.TestCase):
         self.assertEqual(markets, {"spread_home", "spread_away", "total_over", "total_under"})
         self.assertTrue(all(result["candidate_source"] == "live_unfiltered"))
 
-    def test_upload_match_retains_only_uploaded_markets(self):
+    def test_real_priced_moneylines_join_the_best_available_candidate_pool(self):
+        live = self.live_odds_df.copy()
+        live["novig_h2h_home_price"] = -135
+        live["novig_h2h_away_price"] = 120
+
+        result, diag = _expand_live_odds_to_bet_rows(live, None)
+
+        self.assertEqual(len(result), 6)
+        self.assertEqual(
+            set(result["market_type"]),
+            {
+                "spread_home", "spread_away", "total_over", "total_under",
+                "moneyline_home", "moneyline_away",
+            },
+        )
+        moneylines = result[result["market_type"].str.startswith("moneyline")]
+        self.assertEqual(set(moneylines["odds_american"]), {-135.0, 120.0})
+        self.assertEqual(diag["missing_live_moneyline_price"], 0)
+
+    def test_missing_moneyline_prices_are_not_fabricated_at_minus_110(self):
+        result, diag = _expand_live_odds_to_bet_rows(self.live_odds_df, None)
+
+        self.assertFalse(result["market_type"].str.startswith("moneyline").any())
+        self.assertEqual(diag["missing_live_moneyline_price"], 2)
+
+    def test_upload_match_enriches_uploaded_markets_without_erasing_live_markets(self):
         theover_rows = pd.DataFrame([
             {
                 "matchup_id": "2023-11-01|chicago bulls|miami heat",
@@ -50,11 +75,17 @@ class TestCandidateGeneration(unittest.TestCase):
                 "away_team": "Miami Heat"
             }
         ])
-        result, _ = _expand_live_odds_to_bet_rows(self.live_odds_df, theover_rows)
-        self.assertEqual(len(result), 2)
+        result, diag = _expand_live_odds_to_bet_rows(self.live_odds_df, theover_rows)
+        self.assertEqual(len(result), 4)
         markets = set(result["market_type"])
-        self.assertEqual(markets, {"spread_away", "total_under"})
-        self.assertTrue(all(result["candidate_source"] == "upload_matched"))
+        self.assertEqual(markets, {"spread_home", "spread_away", "total_over", "total_under"})
+        source = result.set_index("market_type")["candidate_source"].to_dict()
+        self.assertEqual(source["spread_away"], "upload_matched")
+        self.assertEqual(source["total_under"], "upload_matched")
+        self.assertEqual(source["spread_home"], "live_market_only")
+        self.assertEqual(source["total_over"], "live_market_only")
+        self.assertEqual(diag["rows_dropped_by_join"], 0)
+        self.assertEqual(diag["rows_retained_without_upload_market"], 2)
 
     def test_failed_join_retains_full_candidate_set(self):
         theover_rows = pd.DataFrame([
@@ -84,10 +115,15 @@ class TestCandidateGeneration(unittest.TestCase):
             }
         ])
         result, _ = _expand_live_odds_to_bet_rows(self.live_odds_df, theover_rows)
-        self.assertEqual(len(result), 1)
-        self.assertEqual(result.iloc[0]["market_type"], "spread_away")
-        self.assertEqual(result.iloc[0]["candidate_source"], "upload_matched")
-        self.assertEqual(result.iloc[0]["orientation_source"], "canonical_match")
+        self.assertEqual(len(result), 4)
+        selected = result[result["market_type"].eq("spread_away")].iloc[0]
+        self.assertEqual(selected["candidate_source"], "upload_matched")
+        self.assertEqual(selected["orientation_source"], "canonical_match")
+        self.assertTrue(
+            result.loc[~result["market_type"].eq("spread_away"), "candidate_source"]
+            .eq("live_market_only")
+            .all()
+        )
 
     def test_fuzzy_join_retains_uploaded_markets(self):
         theover_rows = pd.DataFrame([
@@ -101,10 +137,15 @@ class TestCandidateGeneration(unittest.TestCase):
             }
         ])
         result, _ = _expand_live_odds_to_bet_rows(self.live_odds_df, theover_rows)
-        self.assertEqual(len(result), 1)
-        self.assertEqual(result.iloc[0]["market_type"], "total_over")
-        self.assertEqual(result.iloc[0]["candidate_source"], "upload_matched")
-        self.assertEqual(result.iloc[0]["orientation_source"], "fuzzy_match")
+        self.assertEqual(len(result), 4)
+        selected = result[result["market_type"].eq("total_over")].iloc[0]
+        self.assertEqual(selected["candidate_source"], "upload_matched")
+        self.assertEqual(selected["orientation_source"], "fuzzy_match")
+        self.assertTrue(
+            result.loc[~result["market_type"].eq("total_over"), "candidate_source"]
+            .eq("live_market_only")
+            .all()
+        )
 
     def test_preserved_columns_present(self):
         theover_rows = pd.DataFrame([

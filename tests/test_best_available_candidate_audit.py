@@ -11,6 +11,8 @@ from core.streamlit_pipeline import (
 
 
 def _candidate(market_type: str, probability: float, ev: float) -> dict:
+    is_total = market_type.startswith("total")
+    spread_line = -1.5 if market_type == "spread_home" else 1.5 if market_type == "spread_away" else pd.NA
     return {
         "game_id": "best-available-audit",
         "league": "MLB",
@@ -18,8 +20,8 @@ def _candidate(market_type: str, probability: float, ev: float) -> dict:
         "away_team": "Pittsburgh Pirates",
         "game_date": pd.Timestamp("2026-07-27", tz="UTC"),
         "market_type": market_type,
-        "total_line": 8.5,
-        "spread_line": pd.NA,
+        "total_line": 8.5 if is_total else pd.NA,
+        "spread_line": spread_line,
         "calibrated_probability": probability,
         "model_probability": probability,
         "ml_probability": probability,
@@ -56,6 +58,7 @@ def test_exported_game_is_verified_rank_one_and_audits_every_candidate(monkeypat
     assert int(winner["best_available_family_rank"]) == 1
     assert bool(winner["best_available_selection_verified"])
     assert int(winner["best_available_candidate_count"]) == 2
+    assert str(winner["matchup_id"]).startswith("2026-07-27|")
     assert winner["best_available_runner_up_market_type"] == "total_under"
     assert float(winner["best_available_score_gap"]) > 0
 
@@ -69,6 +72,32 @@ def test_exported_game_is_verified_rank_one_and_audits_every_candidate(monkeypat
     assert rejected["best_available_rejection_reason"] == "lower_score_within_market_family"
     assert diagnostics["best_available_selection_verified"] is True
     assert diagnostics["best_available_selection_mismatch_count"] == 0
+    assert audit["matchup_id"].astype(str).str.startswith("2026-07-27|").all()
+
+
+def test_best_available_audit_compares_side_and_total_families(monkeypatch):
+    monkeypatch.setattr("core.empirical_tiers.load_bucket_stats", lambda: {})
+    monkeypatch.setattr("core.probability_calibration.load_calibration", lambda: None)
+
+    analysis = pd.DataFrame([
+        _candidate("spread_home", probability=0.62, ev=0.08),
+        _candidate("spread_away", probability=0.51, ev=-0.01),
+        _candidate("total_over", probability=0.58, ev=0.04),
+        _candidate("total_under", probability=0.50, ev=-0.02),
+    ])
+    diagnostics: dict = {}
+    best = build_best_picks_df(analysis, diagnostics_out=diagnostics)
+
+    assert len(best) == 1
+    audit = diagnostics["candidate_audit_df"]
+    assert len(audit) == 4
+    assert set(audit["market_family"]) == {"side", "total"}
+    assert set(audit["market_type"]) == {
+        "spread_home", "spread_away", "total_over", "total_under"
+    }
+    assert int(audit["best_available_selected"].sum()) == 1
+    assert int(audit.loc[audit["best_available_selected"], "best_available_rank"].iloc[0]) == 1
+    assert int(best.iloc[0]["best_available_candidate_count"]) == 4
 
 
 def test_commercial_tier_never_upgrades_an_unfunded_best_available_row():
