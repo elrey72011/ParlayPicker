@@ -79,7 +79,7 @@ PROVEN_LOSING_BUCKET_EDGE_MARGIN = 0.03
 # This prevents a noisy or stale bucket from reversing the candidate ordering.
 EMPIRICAL_SELECTION_MIN_N = 20
 EMPIRICAL_SELECTION_SHRINK_N = 100
-EMPIRICAL_SELECTION_MAX_WEIGHT = 0.35
+EMPIRICAL_SELECTION_MAX_WEIGHT = 0.10
 
 # Actionable ALSO requires market AGREEMENT. Across the graded history the only
 # slice that clears the -110 break-even (52.4%) by a real margin is the buckets
