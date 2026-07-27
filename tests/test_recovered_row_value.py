@@ -32,11 +32,20 @@ def _df():
 
 
 def test_recovered_row_ev_is_zeroed():
-    out = _neutralize_recovered_row_value(_df())
+    df = _df()
+    df["best_available_score"] = [1.75, 0.50]
+    df["best_available_runner_up_score"] = [0.50, 0.25]
+    df["best_available_score_gap"] = [1.25, 0.25]
+    df["best_available_selection_reason"] = ["old score", "clean score"]
+    out = _neutralize_recovered_row_value(df)
     rec = out[out["best_pick"] == "Houston Over 8.5"].iloc[0]
     assert float(rec["expected_value"]) == 0.0
     assert float(rec["edge"]) == 0.0
     assert float(rec["effective_expected_value"]) == 0.0
+    assert float(rec["best_available_score"]) == 0.0
+    assert pd.isna(rec["best_available_runner_up_score"])
+    assert pd.isna(rec["best_available_score_gap"])
+    assert "Research-only upload line fallback" in rec["best_available_selection_reason"]
 
 
 def test_recovered_row_sorts_below_clean_row_in_same_tier():
