@@ -7211,14 +7211,20 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
     portfolio["decimal_odds"] = _numeric_series(portfolio, "decimal_odds").fillna(
         _numeric_series(portfolio, "odds_american", -110.0).apply(american_to_decimal)
     )
-    # Kelly uses the same production probability that drove status and EV.
-    # Do not apply the global/bucket calibration a second time here.
+    # App-generated rows use the same production probability that drove
+    # status and EV. Legacy/imported rows without that field retain the prior
+    # safety contract: empirical evidence first, otherwise a fitted effective
+    # probability, and no stake when an effective value cannot be calibrated.
     production_p = pd.to_numeric(
         portfolio.get("production_win_probability", pd.Series(np.nan, index=portfolio.index)),
         errors="coerce",
     )
     selection_p = pd.to_numeric(
         portfolio.get("selection_probability_used", pd.Series(np.nan, index=portfolio.index)),
+        errors="coerce",
+    )
+    empirical_p = pd.to_numeric(
+        portfolio.get("empirical_win_probability", pd.Series(np.nan, index=portfolio.index)),
         errors="coerce",
     )
     effective_p = pd.to_numeric(
@@ -7229,6 +7235,40 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
         portfolio.get("calibrated_probability", pd.Series(np.nan, index=portfolio.index)),
         errors="coerce",
     )
+    fitted_p = pd.Series(np.nan, index=portfolio.index, dtype=float)
+    try:
+        from core.probability_calibration import (
+            apply_bucket_calibration,
+            apply_calibration,
+            load_calibration,
+        )
+        from core.empirical_tiers import bucket_key, load_bucket_stats
+
+        calibration = load_calibration()
+        bucket_stats = load_bucket_stats()
+        if calibration:
+            if bucket_stats:
+                buckets = [
+                    bucket_key(league, market, consensus)
+                    for league, market, consensus in zip(
+                        portfolio.get("league", pd.Series("", index=portfolio.index)),
+                        portfolio.get("market_type", pd.Series("", index=portfolio.index)),
+                        portfolio.get("consensus_agreement", pd.Series("", index=portfolio.index)),
+                    )
+                ]
+                fitted_p = pd.to_numeric(
+                    apply_bucket_calibration(effective_p, buckets, calibration, bucket_stats),
+                    errors="coerce",
+                )
+            else:
+                fitted_p = pd.to_numeric(
+                    apply_calibration(effective_p, calibration), errors="coerce"
+                )
+    except Exception as exc:
+        logger.warning(
+            "Kelly calibration unavailable; legacy effective-probability rows will not be staked: %s",
+            exc,
+        )
 
     p = production_p.copy()
     probability_source = pd.Series(
@@ -7237,14 +7277,17 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
     selection_mask = p.isna() & selection_p.notna()
     p.loc[selection_mask] = selection_p.loc[selection_mask]
     probability_source.loc[selection_mask] = "selection_probability_used"
-    effective_mask = p.isna() & effective_p.notna()
-    p.loc[effective_mask] = effective_p.loc[effective_mask]
-    probability_source.loc[effective_mask] = "effective_win_probability"
-    legacy_mask = p.isna() & legacy_calibrated_p.notna()
+    empirical_mask = p.isna() & empirical_p.notna()
+    p.loc[empirical_mask] = empirical_p.loc[empirical_mask]
+    probability_source.loc[empirical_mask] = "empirical_win_probability"
+    fitted_mask = p.isna() & fitted_p.notna()
+    p.loc[fitted_mask] = fitted_p.loc[fitted_mask]
+    probability_source.loc[fitted_mask] = "fitted_effective_probability"
+    legacy_mask = p.isna() & effective_p.isna() & legacy_calibrated_p.notna()
     p.loc[legacy_mask] = legacy_calibrated_p.loc[legacy_mask]
     probability_source.loc[legacy_mask] = "legacy_calibrated_probability"
     missing_probability = p.isna()
-    probability_source.loc[missing_probability] = "missing_aligned_probability"
+    probability_source.loc[missing_probability] = "missing_fitted_calibration"
     production_eligible = production_eligible & (~missing_probability)
     portfolio["production_eligible"] = production_eligible
     p = p.fillna(0.0).clip(lower=0.0, upper=1.0)
