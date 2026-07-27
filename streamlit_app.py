@@ -696,7 +696,7 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
         totals_df=totals_df,
     )
 
-    parlay_columns = ["parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "legs", "risk_tier", "group_id", "best_payout_book", "Conviction_Score", "min_leg_prob", "has_actionable_anchor", "kelly_fraction", "recommended_bet"]
+    parlay_columns = ["parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "legs", "risk_tier", "group_id", "best_payout_book", "Conviction_Score", "min_leg_prob", "has_actionable_anchor", "production_safety_mode", "parlay_class", "premium_eligible", "sellable_as_premium", "commercial_warning", "kelly_fraction", "recommended_bet"]
     empty_per_leg = {f"parlays_{lc}_df": pd.DataFrame(columns=parlay_columns) for lc in (2, 3)}
 
     empty_state: dict = {
@@ -789,6 +789,7 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
 
     from core.streamlit_pipeline import build_best_picks_df
     from core.streamlit_pipeline import ensure_best_pick_export_columns
+    from core.streamlit_pipeline import classify_best_available_picks
 
     # We pass the diagnostics dictionary so that selection metrics and preview_df
     # can be injected without relying on pandas DataFrame.attrs serialization.
@@ -874,6 +875,9 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
     diagnostics["portfolio_rows_count"] = int(len(portfolio_df)) if isinstance(portfolio_df, pd.DataFrame) else 0
     diagnostics["portfolio_positive_bet_count"] = int((pd.to_numeric(portfolio_df.get("production_bet_amount", 0), errors="coerce").fillna(0).gt(0)).sum()) if isinstance(portfolio_df, pd.DataFrame) and not portfolio_df.empty else 0
     best_picks_df = _attach_kelly_to_best_picks(best_picks_df, portfolio_df, diagnostics)
+    best_picks_df = classify_best_available_picks(best_picks_df)
+    diagnostics["premium_pick_count"] = int(best_picks_df["sellable_as_premium"].sum())
+    diagnostics["best_available_only_count"] = int(best_picks_df["best_available_only"].sum())
     diagnostics["empty_card_recovery_enabled"] = bool(ENABLE_EMPTY_CARD_RECOVERY)
     # Preserve True if the pipeline's internal recovery already fired; only default to False
     diagnostics.setdefault("empty_card_recovery_triggered", False)
@@ -1044,6 +1048,12 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
     }.items():
         best_picks_df[col] = val
 
+    # Recovery can change status and funded stake after the portfolio join; refresh
+    # the commercial boundary so the export never carries stale Premium labels.
+    best_picks_df = classify_best_available_picks(best_picks_df)
+    diagnostics["premium_pick_count"] = int(best_picks_df["sellable_as_premium"].sum())
+    diagnostics["best_available_only_count"] = int(best_picks_df["best_available_only"].sum())
+
     required_portfolio_cols = {"calibrated_probability", "decimal_odds", "recommended_bet"}
     if portfolio_df is not None and not portfolio_df.empty and required_portfolio_cols.issubset(set(portfolio_df.columns)):
         simulation_results = run_bankroll_simulation(portfolio_df, bankroll=float(controls["bankroll"]))
@@ -1152,6 +1162,55 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
             _syntax_line = getattr(exc, "lineno", None)
             _prop_error_detail = f"SyntaxError in {_syntax_file or 'unknown file'}:{_syntax_line or '?'}"
         diagnostics["strikeout_prop_error_detail"] = _prop_error_detail
+
+    # Final parlay product boundary. Game parlays produced by the strict engine
+    # already carry premium_eligible=True. Prop fallback parlays are Premium only
+    # when they are Controlled and not probationary; research rows are explicit
+    # recreational output and can never carry a funded recommendation.
+    if parlays_df is not None and not parlays_df.empty:
+        parlays_df = parlays_df.copy()
+        probation = pd.Series(
+            parlays_df.get("probation_parlay_mode", False), index=parlays_df.index
+        ).fillna(False).astype(bool)
+        risk_tier = _safe_str_series(parlays_df, "risk_tier").str.strip()
+        if "premium_eligible" in parlays_df.columns:
+            premium_parlay = pd.Series(
+                parlays_df["premium_eligible"], index=parlays_df.index
+            ).fillna(False).astype(bool)
+        else:
+            premium_parlay = risk_tier.eq("Controlled") & ~probation
+        parlays_df["premium_eligible"] = premium_parlay
+        parlays_df["sellable_as_premium"] = premium_parlay
+        parlays_df["parlay_class"] = "Research / Recreational"
+        parlays_df.loc[premium_parlay, "parlay_class"] = "Premium"
+        if "commercial_warning" not in parlays_df.columns:
+            parlays_df["commercial_warning"] = ""
+        parlays_df.loc[~premium_parlay, "commercial_warning"] = (
+            "Not production-qualified; research/recreational only."
+        )
+        for stake_col in ("recommended_bet", "kelly_fraction"):
+            if stake_col in parlays_df.columns:
+                parlays_df.loc[~premium_parlay, stake_col] = 0.0
+
+    # Rebuild per-leg state from the final classified frame, including prop fallback.
+    per_leg = {}
+    for lc in (2, 3):
+        parlay_slice = (
+            parlays_df[_safe_numeric_series(parlays_df, "legs").eq(lc)].copy()
+            if parlays_df is not None and not parlays_df.empty
+            else pd.DataFrame()
+        )
+        avail = [col for col in parlay_columns if col in parlay_slice.columns]
+        per_leg[f"parlays_{lc}_df"] = (
+            parlay_slice[avail] if not parlay_slice.empty
+            else pd.DataFrame(columns=parlay_columns)
+        )
+    diagnostics["premium_parlay_count"] = int(
+        parlays_df["premium_eligible"].sum()
+    ) if parlays_df is not None and not parlays_df.empty else 0
+    diagnostics["research_recreational_parlay_count"] = int(
+        (~parlays_df["premium_eligible"]).sum()
+    ) if parlays_df is not None and not parlays_df.empty else 0
 
     state_updates = {
         "pipeline_status": "using stored results",
@@ -2131,6 +2190,28 @@ def main() -> None:
                 mime="text/csv",
             )
 
+            candidate_audit_df = diagnostics.get("candidate_audit_df")
+            if isinstance(candidate_audit_df, pd.DataFrame) and not candidate_audit_df.empty:
+                verified_count = int(
+                    candidate_audit_df.get(
+                        "best_available_selected",
+                        pd.Series(False, index=candidate_audit_df.index),
+                    ).fillna(False).astype(bool).sum()
+                )
+                game_count = int(candidate_audit_df["matchup_id"].nunique())
+                st.caption(
+                    f"Selection audit: {verified_count}/{game_count} games have exactly one "
+                    "exported rank-1 winner. Download this file to inspect every candidate, "
+                    "the runner-up gap, and why each alternative lost."
+                )
+                st.download_button(
+                    "Export Candidate Selection Audit",
+                    candidate_audit_df.to_csv(index=False, encoding="utf-8-sig"),
+                    "best_picks_candidate_audit.csv",
+                    mime="text/csv",
+                    key="export_best_picks_candidate_audit",
+                )
+
             # ── All-games lean view: the model's read on EVERY game, tiered honestly ──
             # Re-presents the same card (no new staking) so a bettor who wants the whole
             # board sees the model's side + confidence + a straight risk label per game.
@@ -2468,9 +2549,11 @@ def main() -> None:
 
         # Rearrange columns for the export
         parlay_export_columns = [
+            "parlay_class", "premium_eligible", "sellable_as_premium", "commercial_warning",
             "risk_tier", "group_id", "parlay_legs", "combined_probability", "combined_decimal_odds",
             "parlay_ev", "legs", "combined_market_prob", "ev_boost_pct", "is_high_correlation",
-            "best_payout_book", "Conviction_Score", "min_leg_prob", "kelly_fraction", "recommended_bet"
+            "production_safety_mode", "best_payout_book", "Conviction_Score", "min_leg_prob",
+            "kelly_fraction", "recommended_bet"
         ]
         export_parlays_df = base_parlays_df.copy() if not base_parlays_df.empty else pd.DataFrame(columns=parlay_export_columns)
 
