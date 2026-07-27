@@ -33,7 +33,7 @@ def _candidate(market_type: str, probability: float, ev: float) -> dict:
     }
 
 
-def test_empirical_bucket_can_replace_higher_raw_probability_direction(monkeypatch):
+def test_empirical_bucket_blend_cannot_overturn_a_clearly_stronger_forecast(monkeypatch):
     stats = {
         "overall": {"n": 200, "win_rate": 0.50},
         "buckets": {
@@ -52,6 +52,17 @@ def test_empirical_bucket_can_replace_higher_raw_probability_direction(monkeypat
     best = build_best_picks_df(analysis, diagnostics_out=diagnostics)
 
     assert len(best) == 1
-    assert best.iloc[0]["market_type"] == "total_over"
-    assert best.iloc[0]["selection_probability_source"] == "empirical_bucket_calibrated"
+    # Bucket history is evidence, not a replacement model. Even an extreme
+    # 28-10 directional split may not overturn an eight-point forecast gap.
+    assert best.iloc[0]["market_type"] == "total_under"
+    assert best.iloc[0]["selection_probability_source"] == "empirical_bucket_blend"
     assert diagnostics["empirical_selection_candidate_count"] == 2
+
+    candidates = analysis.copy()
+    from core.empirical_tiers import empirical_selection_probabilities
+
+    blended = empirical_selection_probabilities(candidates, stats)
+    raw = pd.to_numeric(candidates["calibrated_probability"])
+    movement = (blended - raw).abs()
+    assert movement.gt(0).all()
+    assert movement.max() < 0.04
