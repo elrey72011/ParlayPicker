@@ -1,6 +1,9 @@
 import unittest
+from unittest.mock import patch
+
 import pandas as pd
 from core.streamlit_pipeline import _expand_live_odds_to_bet_rows, build_best_picks_df, BEST_PICK_COLUMNS
+import app_core.weights_config as wc
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -33,12 +36,30 @@ class TestCandidateGeneration(unittest.TestCase):
         self.assertEqual(markets, {"spread_home", "spread_away", "total_over", "total_under"})
         self.assertTrue(all(result["candidate_source"] == "live_unfiltered"))
 
-    def test_real_priced_moneylines_join_the_best_available_candidate_pool(self):
+    def test_default_config_excludes_moneylines_even_when_priced(self):
         live = self.live_odds_df.copy()
         live["novig_h2h_home_price"] = -135
         live["novig_h2h_away_price"] = 120
 
-        result, diag = _expand_live_odds_to_bet_rows(live, None)
+        with patch.object(wc, "ENABLE_MONEYLINE_BEST_AVAILABLE", False), patch.object(
+            wc, "ENABLE_MONEYLINE_PARLAY_LEGS", False
+        ):
+            result, diag = _expand_live_odds_to_bet_rows(live, None)
+
+        self.assertEqual(len(result), 4)
+        self.assertFalse(result["market_type"].str.startswith("moneyline").any())
+        self.assertEqual(diag["generated"]["moneyline_home"], 0)
+        self.assertEqual(diag["generated"]["moneyline_away"], 0)
+
+    def test_real_priced_moneylines_join_the_best_available_candidate_pool_when_enabled(self):
+        live = self.live_odds_df.copy()
+        live["novig_h2h_home_price"] = -135
+        live["novig_h2h_away_price"] = 120
+
+        with patch.object(wc, "ENABLE_MONEYLINE_BEST_AVAILABLE", True), patch.object(
+            wc, "ENABLE_MONEYLINE_PARLAY_LEGS", False
+        ):
+            result, diag = _expand_live_odds_to_bet_rows(live, None)
 
         self.assertEqual(len(result), 6)
         self.assertEqual(
@@ -53,7 +74,10 @@ class TestCandidateGeneration(unittest.TestCase):
         self.assertEqual(diag["missing_live_moneyline_price"], 0)
 
     def test_missing_moneyline_prices_are_not_fabricated_at_minus_110(self):
-        result, diag = _expand_live_odds_to_bet_rows(self.live_odds_df, None)
+        with patch.object(wc, "ENABLE_MONEYLINE_BEST_AVAILABLE", True), patch.object(
+            wc, "ENABLE_MONEYLINE_PARLAY_LEGS", False
+        ):
+            result, diag = _expand_live_odds_to_bet_rows(self.live_odds_df, None)
 
         self.assertFalse(result["market_type"].str.startswith("moneyline").any())
         self.assertEqual(diag["missing_live_moneyline_price"], 2)
