@@ -718,12 +718,15 @@ KALSHI_TOTAL_SPREAD_MAX_PROB = 0.95
 
 # --- Moneyline parlay legs (21 Jun, user-directed) ----------------------------
 # Moneyline is the model's NATIVE output (XGBoost predicts P(win) directly, no margin/
-# cover conversion). Opened up as PARLAY-ONLY legs: they never surface as standalone
-# single bets, only combine into parlays. Off by default -- a core-pipeline change, so it
-# ships gated and is enabled deliberately. Moneyline has almost no graded history yet, so
-# it starts uncalibrated; parlay-only keeps it from drawing single stakes while it builds
-# a track record. Odds capped to a sane range (heavy favorites = low value / poor parlay
-# legs; longshots = variance) and a real edge over the implied price is required.
+# cover conversion). Real-priced moneylines may surface as the per-game Best Available
+# opinion, but never as a funded single. The separate parlay-production flag stays off
+# until moneylines build a graded calibration record. Odds are capped by the dedicated
+# gate when a moneyline wins selection; heavy favorites and longshots remain No Play.
+# Include real-priced moneylines in the per-game Best Available competition so
+# MLB sides uploads do not collapse the candidate pool to totals only. This does
+# not authorize a production single: build_best_picks_df always routes a selected
+# moneyline through _enforce_moneyline_parlay_only, which sets single stake to $0.
+ENABLE_MONEYLINE_BEST_AVAILABLE = True
 ENABLE_MONEYLINE_PARLAY_LEGS = False
 MONEYLINE_PARLAY_MIN_ODDS = -250
 MONEYLINE_PARLAY_MAX_ODDS = 250
