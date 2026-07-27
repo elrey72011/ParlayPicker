@@ -78,7 +78,7 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
     theover_spreads = st.sidebar.file_uploader("Upload TheOver Spreads CSV", type=["csv"], key="theover_spreads")
     theover_totals = st.sidebar.file_uploader("Upload TheOver Totals CSV", type=["csv"], key="theover_totals")
     prop_results_log = st.sidebar.file_uploader(
-        "Upload Graded Prop Ledger File(s) (optional)",
+        "Upload Cumulative Graded Prop Ledger (required for production props)",
         type=["csv"],
         accept_multiple_files=True,
         key="prop_results_log",
@@ -176,12 +176,22 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
             f"Prop calibration history: {coverage['settled']} settled rows "
             f"across {coverage['date_count']} slate date(s) ({date_range})."
         )
-        if coverage["settled"] > 0 and coverage["date_count"] <= 1:
+        if coverage["settled"] <= 0:
+            st.sidebar.error(
+                "The uploaded prop ledger has no settled WIN/LOSS rows. "
+                "Player props will remain research-only."
+            )
+        elif coverage["date_count"] <= 1:
             st.sidebar.warning(
                 "Only one slate date is loaded. This is not yet a cumulative "
                 "calibration history; download the updated ledger and upload it "
                 "again at the start of the next app session."
             )
+    else:
+        st.sidebar.error(
+            "No cumulative graded prop ledger is loaded. Player props will be "
+            "research-only and cannot receive production stakes."
+        )
 
     if isinstance(active_ledger, pd.DataFrame) and not active_ledger.empty:
         st.sidebar.download_button(

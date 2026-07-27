@@ -73,6 +73,14 @@ ACTIONABLE_MIN_BUCKET_RATE = 0.55
 PROVEN_LOSING_BUCKET_MIN_N = 20
 PROVEN_LOSING_BUCKET_EDGE_MARGIN = 0.03
 
+# Finalist selection is a prediction-time ranking decision, so realized bucket
+# history is supporting evidence rather than a replacement forecast. Cap its
+# influence and require a settled sample before it can move the model estimate.
+# This prevents a noisy or stale bucket from reversing the candidate ordering.
+EMPIRICAL_SELECTION_MIN_N = 20
+EMPIRICAL_SELECTION_SHRINK_N = 100
+EMPIRICAL_SELECTION_MAX_WEIGHT = 0.10
+
 # Actionable ALSO requires market AGREEMENT. Across the graded history the only
 # slice that clears the -110 break-even (52.4%) by a real margin is the buckets
 # where Kalshi agrees with the model's direction: MLB over:Agrees 61% (n=41) and
@@ -218,7 +226,7 @@ def empirical_selection_probabilities(
         # chosen before their realized direction buckets were considered. Keep
         # side-vs-total comparisons on the existing calibrated scale so the
         # established spread/moneyline finalist guards retain their semantics.
-        adjusted = (
+        target = (
             empirical_win_probability(probability, bucket, bucket_stats)
             if family in ("over", "under")
             else float(probability)
@@ -232,7 +240,18 @@ def empirical_selection_probabilities(
             and pd.notna(breakeven)
             and rate - breakeven <= -PROVEN_LOSING_BUCKET_EDGE_MARGIN
         ):
-            adjusted = min(float(adjusted), float(rate))
+            target = min(float(target), float(rate))
+
+        if family in ("over", "under") and n >= EMPIRICAL_SELECTION_MIN_N:
+            selection_weight = min(
+                float(EMPIRICAL_SELECTION_MAX_WEIGHT),
+                n / (n + float(EMPIRICAL_SELECTION_SHRINK_N)),
+            )
+            adjusted = float(probability) + selection_weight * (
+                float(target) - float(probability)
+            )
+        else:
+            adjusted = float(probability)
         selected.append(float(adjusted) if pd.notna(adjusted) else float("nan"))
     return pd.Series(selected, index=df.index, dtype="float64")
 

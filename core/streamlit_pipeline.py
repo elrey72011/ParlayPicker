@@ -134,7 +134,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-07-26a-empirical-finalist-selection"
+PIPELINE_BUILD = "2026-07-27a-capped-empirical-selection-prop-guards"
 
 
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
@@ -2766,7 +2766,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 )
                 pool.loc[
                     _usable_empirical, "selection_probability_source"
-                ] = "empirical_bucket_calibrated"
+                ] = "empirical_bucket_blend"
     except Exception as exc:
         logger.warning(
             "Empirical finalist probabilities unavailable; using calibrated candidates: %s",
@@ -2785,11 +2785,11 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     if diagnostics_out is not None:
         diagnostics_out["empirical_selection_candidate_count"] = int(
             pool["selection_probability_source"].eq(
-                "empirical_bucket_calibrated"
+                "empirical_bucket_blend"
             ).sum()
         )
         diagnostics_out["empirical_selection_source"] = (
-            "empirical_bucket_calibrated"
+            "empirical_bucket_blend"
             if diagnostics_out["empirical_selection_candidate_count"] > 0
             else "calibrated_probability"
         )
@@ -7170,12 +7170,18 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
     portfolio["decimal_odds"] = _numeric_series(portfolio, "decimal_odds").fillna(
         _numeric_series(portfolio, "odds_american", -110.0).apply(american_to_decimal)
     )
-    # Kelly must use the best realized-performance calibrated probability,
-    # not merely the model blend named calibrated_probability. The empirical
-    # overlay is most specific. Otherwise fit effective probability through the
-    # persisted global/bucket calibration. A legacy row with no effective
-    # probability may use calibrated_probability as an already-calibrated input;
-    # a production row with effective probability but no fit receives no stake.
+    # App-generated rows use the same production probability that drove
+    # status and EV. Legacy/imported rows without that field retain the prior
+    # safety contract: empirical evidence first, otherwise a fitted effective
+    # probability, and no stake when an effective value cannot be calibrated.
+    production_p = pd.to_numeric(
+        portfolio.get("production_win_probability", pd.Series(np.nan, index=portfolio.index)),
+        errors="coerce",
+    )
+    selection_p = pd.to_numeric(
+        portfolio.get("selection_probability_used", pd.Series(np.nan, index=portfolio.index)),
+        errors="coerce",
+    )
     empirical_p = pd.to_numeric(
         portfolio.get("empirical_win_probability", pd.Series(np.nan, index=portfolio.index)),
         errors="coerce",
@@ -7214,12 +7220,25 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
                     errors="coerce",
                 )
             else:
-                fitted_p = pd.to_numeric(apply_calibration(effective_p, calibration), errors="coerce")
+                fitted_p = pd.to_numeric(
+                    apply_calibration(effective_p, calibration), errors="coerce"
+                )
     except Exception as exc:
-        logger.warning("Kelly calibration unavailable; effective-probability rows will not be staked: %s", exc)
+        logger.warning(
+            "Kelly calibration unavailable; legacy effective-probability rows will not be staked: %s",
+            exc,
+        )
 
-    p = empirical_p.copy()
-    probability_source = pd.Series("empirical_win_probability", index=portfolio.index, dtype="object")
+    p = production_p.copy()
+    probability_source = pd.Series(
+        "production_win_probability", index=portfolio.index, dtype="object"
+    )
+    selection_mask = p.isna() & selection_p.notna()
+    p.loc[selection_mask] = selection_p.loc[selection_mask]
+    probability_source.loc[selection_mask] = "selection_probability_used"
+    empirical_mask = p.isna() & empirical_p.notna()
+    p.loc[empirical_mask] = empirical_p.loc[empirical_mask]
+    probability_source.loc[empirical_mask] = "empirical_win_probability"
     fitted_mask = p.isna() & fitted_p.notna()
     p.loc[fitted_mask] = fitted_p.loc[fitted_mask]
     probability_source.loc[fitted_mask] = "fitted_effective_probability"

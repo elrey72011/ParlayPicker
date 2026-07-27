@@ -311,7 +311,7 @@ def test_actionable_allows_agreement_bucket_with_same_metrics():
     assert out.iloc[0]["Pick_Status"] == "Actionable"
     assert "agreement" in str(out.iloc[0]["Status_Reason"]).lower()
 
-def test_selection_probability_floors_proven_losing_direction_before_finalist_choice():
+def test_selection_probability_blends_proven_losing_direction_without_replacing_forecast():
     stats = {
         "overall": {"n": 200, "win_rate": 0.50},
         "buckets": {
@@ -330,6 +330,9 @@ def test_selection_probability_floors_proven_losing_direction_before_finalist_ch
     probabilities = empirical_selection_probabilities(
         candidates, stats, calibration=None
     )
-    assert probabilities.iloc[0] > probabilities.iloc[1]
-    assert probabilities.iloc[1] < 0.40
+    # The weak bucket can reduce confidence, but it cannot replace a much
+    # stronger forecast with its realized rate or reverse an eight-point gap.
+    assert probabilities.iloc[1] > probabilities.iloc[0]
+    assert abs(float(probabilities.iloc[0]) - 0.60) < 0.02
+    assert abs(float(probabilities.iloc[1]) - 0.68) < 0.04
 
