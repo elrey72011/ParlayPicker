@@ -5905,12 +5905,6 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
             # family. Otherwise a totals-only upload makes "best overall" mean
             # "best total" and silently removes every side candidate.
             market_upload_matched = bool(match_found and market_type in target_markets)
-            if match_found and not market_upload_matched:
-                diag_counts["rows_retained_without_upload_market"] += 1
-
-            diag_counts["filtered"][market_type] += 1
-            if not match_found:
-                diag_counts["rows_retained_unmatched"] += 1
 
             price_suffix, point_suffix = market_mappings[market_type]
             market_dict = base_dict.copy()
@@ -5938,6 +5932,15 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
                 # quote; other books remain diagnostics only.
                 diag_counts["missing_live_moneyline_price"] += 1
                 continue
+
+            # These counters describe rows that actually survive candidate
+            # construction; skipped, unpriced moneylines must not inflate them.
+            if match_found and not market_upload_matched:
+                diag_counts["rows_retained_without_upload_market"] += 1
+            diag_counts["filtered"][market_type] += 1
+            if not match_found:
+                diag_counts["rows_retained_unmatched"] += 1
+
             if pd.isna(price_val):
                 market_dict["odds_american"] = -110.0
                 market_dict["odds_source"] = "fallback_novig"
