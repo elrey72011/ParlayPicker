@@ -475,7 +475,9 @@ PROP_PRODUCTION_MIN_AMERICAN_ODDS = -150
 PROP_MAX_FUNDED_PER_GAME = 2
 PROP_MAX_FUNDED_PER_SLATE = 5
 PROP_EXTENDED_FLAT_STAKE = 1.0
-PROP_PRODUCTION_BLOCKED_MARKETS = frozenset({"batter_total_bases_under"})
+PROP_PRODUCTION_BLOCKED_MARKETS = frozenset(
+    {"batter_total_bases_over", "batter_total_bases_under"}
+)
 PROP_REQUIRED_IDENTITY_FIELDS = ("player", "matchup", "market_type", "best_pick")
 
 
@@ -849,8 +851,8 @@ def apply_production_prop_gate(
 
     Model-qualified rows remain on the research card, but a sportsbook minimum
     may only round a ticket that survives this gate.  Probation markets and the
-    empirically weak batter-total-bases Under family therefore cannot be
-    promoted into production or parlays by the $1 minimum rule. Production
+    empirically weak batter-total-bases family therefore cannot be promoted
+    into production or parlays by the $1 minimum rule. Production
     tickets must also clear a probability floor, beat the posted line by a
     meaningful model-projection cushion, and avoid prices shorter than -150.
     """
@@ -937,7 +939,7 @@ def apply_production_prop_gate(
     reason.loc[extended_eligible] = "Extended production qualified"
     reason.loc[~identity_valid] = "Rejected: missing or invalid prop identity, line, or odds"
     reason.loc[identity_valid & ~market_allowed] = (
-        "Research only: batter total-base Unders are production-disabled pending recalibration"
+        "Research only: batter total bases are production-disabled pending recalibration"
     )
     reason.loc[identity_valid & market_allowed & probation] = (
         "Research only: market is still on probation"
