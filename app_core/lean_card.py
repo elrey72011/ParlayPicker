@@ -141,6 +141,12 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
     )
     if "status_blocker_stage" in df.columns:
         started = started | df["status_blocker_stage"].astype(str).eq("game_already_started")
+    # The exported Best Picks frame carries the authoritative user-facing tier even
+    # when a later blocker stage (for example a market-family gate) replaced the
+    # original game_already_started stage. Preserve that state when rebuilding the
+    # all-games card so a started event can never be reactivated at the $1 minimum.
+    if "Play_Tier" in df.columns:
+        started = started | df["Play_Tier"].astype(str).str.strip().str.upper().eq("STARTED")
     pick_text = _first_col(df, "best_pick").fillna("").astype(str)
     unavailable_line = pick_text.str.lower().str.contains(
         r"unresolved|\(no line\)|missing line|rejected", regex=True, na=False

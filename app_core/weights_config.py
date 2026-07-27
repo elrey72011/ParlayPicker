@@ -716,17 +716,13 @@ WEATHER_TOTAL_OVER_PENALTY = 0.025           # MLB outdoor bad weather suppresse
 KALSHI_TOTAL_SPREAD_MIN_PROB = 0.05
 KALSHI_TOTAL_SPREAD_MAX_PROB = 0.95
 
-# --- Moneyline parlay legs (21 Jun, user-directed) ----------------------------
-# Moneyline is the model's NATIVE output (XGBoost predicts P(win) directly, no margin/
-# cover conversion). Real-priced moneylines may surface as the per-game Best Available
-# opinion, but never as a funded single. The separate parlay-production flag stays off
-# until moneylines build a graded calibration record. Odds are capped by the dedicated
-# gate when a moneyline wins selection; heavy favorites and longshots remain No Play.
-# Include real-priced moneylines in the per-game Best Available competition so
-# MLB sides uploads do not collapse the candidate pool to totals only. This does
-# not authorize a production single: build_best_picks_df always routes a selected
-# moneyline through _enforce_moneyline_parlay_only, which sets single stake to $0.
-ENABLE_MONEYLINE_BEST_AVAILABLE = True
+# --- Moneyline capability (disabled for Best Available, 27 Jul) -------------
+# The implementation remains available behind flags for research and regression
+# coverage, but the owner's production preference is spread/totals only. With
+# both gates false, moneyline rows are neither generated nor allowed through the
+# final Best Available selector. Re-enable deliberately only after that preference
+# changes and moneylines have their own graded calibration record.
+ENABLE_MONEYLINE_BEST_AVAILABLE = False
 ENABLE_MONEYLINE_PARLAY_LEGS = False
 MONEYLINE_PARLAY_MIN_ODDS = -250
 MONEYLINE_PARLAY_MAX_ODDS = 250

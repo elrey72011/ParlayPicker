@@ -134,7 +134,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-07-27d-moneyline-rendering-line-id"
+PIPELINE_BUILD = "2026-07-27e-spread-totals-only-started-card"
 
 
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
@@ -2776,9 +2776,25 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     if "market_type" not in analysis_df.columns:
         raise ValueError("analysis_df missing market_type before best-pick construction")
     from core.slate_quality import spread_moneyline_orientation_fault
+    from app_core.weights_config import (
+        ENABLE_MONEYLINE_BEST_AVAILABLE,
+        ENABLE_MONEYLINE_PARLAY_LEGS,
+    )
 
-    pool = analysis_df[_string_series(analysis_df, "market_type").isin(list(VALID_MARKETS))].copy()
-    logger.info(f"BEST PICKS AUDIT: Rows after VALID_MARKETS filter: {len(pool)}")
+    # Production Best Available is explicitly spread/totals-only while both
+    # moneyline gates are disabled. Keep this final allow-list in addition to the
+    # upstream generator gate so a moneyline introduced by another input path can
+    # never leak into the selected card or candidate audit.
+    allowed_markets = {"spread_home", "spread_away", "total_over", "total_under"}
+    if ENABLE_MONEYLINE_BEST_AVAILABLE or ENABLE_MONEYLINE_PARLAY_LEGS:
+        allowed_markets.update({"moneyline_home", "moneyline_away"})
+    allowed_markets.intersection_update(VALID_MARKETS)
+    pool = analysis_df[_string_series(analysis_df, "market_type").isin(sorted(allowed_markets))].copy()
+    logger.info(
+        "BEST PICKS AUDIT: Rows after enabled-market filter %s: %s",
+        sorted(allowed_markets),
+        len(pool),
+    )
     if pool.empty:
         return pd.DataFrame(columns=BEST_PICK_COLUMNS)
 
@@ -5457,10 +5473,6 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         diagnostics_out["best_available_selection_mismatch_count"] = int(selection_invariant_mismatches)
         diagnostics_out["best_available_candidate_audit_rows"] = int(len(candidate_audit_df))
 
-    from app_core.weights_config import (
-        ENABLE_MONEYLINE_BEST_AVAILABLE,
-        ENABLE_MONEYLINE_PARLAY_LEGS,
-    )
     if ENABLE_MONEYLINE_BEST_AVAILABLE or ENABLE_MONEYLINE_PARLAY_LEGS:
         # Moneylines may win the Best Available comparison, but they remain
         # explicitly non-single and production-ineligible until their own

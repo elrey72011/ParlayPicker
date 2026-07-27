@@ -324,3 +324,33 @@ def test_far_avoid_respects_one_dollar_sportsbook_minimum():
     })
     out = attach_play_stakes(card, unit=1.0)
     assert out.iloc[0]["Play_Stake"] == 1.0
+
+def test_exported_started_tier_stays_unplayable_on_all_games_card():
+    source = pd.DataFrame([{
+        "league": "MLB",
+        "home_team": "Texas",
+        "away_team": "Seattle",
+        "best_pick": "Over 8.5",
+        "Pick_Status": "No Play",
+        "effective_expected_value": -0.02,
+        "expected_value": -0.02,
+        "edge": -0.01,
+        "effective_win_probability": 0.49,
+        "odds_american": -110,
+        "consensus_agreement": "Neutral",
+        # This is the post-export shape that previously lost the started flag
+        # when the play card was rebuilt from best_picks_export.
+        "Play_Tier": "STARTED",
+        "status_blocker_stage": "some_later_guard",
+    }])
+
+    card = build_all_games_lean_card(source, calibration=None, bucket_stats=None)
+    out = attach_play_stakes(card, unit=1.0)
+
+    assert bool(out.iloc[0]["Started"])
+    assert not bool(out.iloc[0]["Playable"])
+    assert out.iloc[0]["Tier"] == "STARTED"
+    assert float(out.iloc[0]["Play_Units"]) == 0.0
+    assert float(out.iloc[0]["Play_Stake"]) == 0.0
+    assert not bool(out.iloc[0]["All_Row_Bet"])
+
