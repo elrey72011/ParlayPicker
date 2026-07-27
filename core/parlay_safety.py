@@ -111,7 +111,7 @@ def production_candidate_mask(df: pd.DataFrame, *, min_probability: float = 0.55
 
 def _normal_tokens(value: Any) -> set[str]:
     tokens = re.findall(r"[a-z0-9]+", str(value or "").lower())
-    generic = {"new", "los", "las", "san", "st", "saint", "city", "blue", "red", "white", "sox"}
+    generic = {"new", "los", "las", "san", "st", "saint", "city", "blue", "red", "white", "sox", "moneyline", "spread", "total", "over", "under", "point", "points", "run", "runs", "goal", "goals", "game", "team"}
     return {t for t in tokens if len(t) >= 4 and t not in generic}
 
 
@@ -122,8 +122,12 @@ def shares_game(left: Any, right: Any) -> bool:
 
     left_id = str(lget("matchup_id", "") or lget("game_id", "") or "").strip()
     right_id = str(rget("matchup_id", "") or rget("game_id", "") or "").strip()
-    if left_id and right_id and left_id == right_id:
-        return True
+    if left_id and right_id:
+        # Canonical event IDs are stronger evidence than shared market vocabulary.
+        # Previously two different games such as "Cubs moneyline" and
+        # "Pirates moneyline" both contained the token "moneyline" and were
+        # incorrectly rejected as a same-game parlay.
+        return left_id == right_id
 
     left_text = " ".join(str(lget(k, "") or "") for k in ("matchup", "home_team", "away_team", "best_pick", "pitcher"))
     right_text = " ".join(str(rget(k, "") or "") for k in ("matchup", "home_team", "away_team", "best_pick", "pitcher"))
