@@ -163,3 +163,40 @@ def test_flag_off_leaves_moneyline_unenforced(monkeypatch):
         "kalshi_probability": 0.55,
     }]))
     assert not out.empty
+
+def test_best_picks_excludes_moneyline_when_both_gates_are_disabled(monkeypatch):
+    monkeypatch.setattr(wc, "ENABLE_MONEYLINE_BEST_AVAILABLE", False)
+    monkeypatch.setattr(wc, "ENABLE_MONEYLINE_PARLAY_LEGS", False)
+    common = {
+        "league": "MLB", "home_team": "HomeC", "away_team": "AwayC",
+        "game_date": "2026-07-27", "matchup_id": "2026-07-27|HomeC|AwayC",
+        "calibrated_probability": 0.60, "ml_probability": 0.60,
+        "model_probability": 0.60, "spread_line": pd.NA,
+        "line_source": "live_odds", "live_spread_line": pd.NA,
+        "is_live_data": True, "used_stale_features": False,
+        "odds_source": "odds_api", "candidate_source": "live_market_only",
+        "orientation_source": "exact_match", "kalshi_probability": 0.55,
+    }
+    df = pd.DataFrame([
+        {
+            **common,
+            "market_type": "moneyline_home", "expected_value": 0.50,
+            "edge": 0.30, "odds_american": 120, "total_line": pd.NA,
+            "live_total_line": pd.NA,
+        },
+        {
+            **common,
+            "market_type": "total_over", "expected_value": 0.01,
+            "edge": 0.01, "odds_american": -110, "total_line": 8.5,
+            "live_total_line": 8.5,
+        },
+    ])
+    diagnostics = {}
+
+    out = build_best_picks_df(df, diagnostics_out=diagnostics)
+
+    assert len(out) == 1
+    assert out.iloc[0]["market_type"] == "total_over"
+    audit = diagnostics["candidate_audit_df"]
+    assert not audit["market_type"].astype(str).str.startswith("moneyline").any()
+
