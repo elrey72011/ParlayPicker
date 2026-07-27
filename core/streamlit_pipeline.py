@@ -134,7 +134,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-07-27e-spread-totals-only-started-card"
+PIPELINE_BUILD = "2026-07-27f-preselection-line-integrity"
 
 
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
@@ -985,6 +985,161 @@ def _apply_mlb_runline_cover(
     )
 
 
+def _filter_preselection_line_integrity(
+    pool: pd.DataFrame,
+    diagnostics_out: dict | None = None,
+) -> pd.DataFrame:
+    """Remove corrupt live-total candidates before Best Available scoring.
+
+    A rejected live total cannot be swapped to an uploaded reference after selection:
+    its probability, odds, EV, and score belong to the rejected line. When another
+    valid spread/total candidate exists for the same game, exclude the corrupt total
+    before ranking so the winner is priced and scored on the line it actually displays.
+    A lone corrupt candidate is retained for the existing conservative research-only
+    fallback path, which remains zero-staked and is synchronized into the audit later.
+    """
+    if pool is None or pool.empty or "market_type" not in pool.columns:
+        return pool
+
+    def _coalesce_numeric(*columns: str) -> pd.Series:
+        out = pd.Series(np.nan, index=pool.index, dtype="float64")
+        for column in columns:
+            out = out.fillna(_numeric_series(pool, column))
+        return out
+
+    market = _string_series(pool, "market_type").str.strip().str.lower()
+    is_total = market.isin({"total_over", "total_under"})
+    line_source = _string_series(pool, "line_source").str.strip().str.lower()
+    live_flag = _string_series(pool, "is_live_data").str.strip().str.lower().isin(
+        {"true", "1", "yes"}
+    )
+    is_live = line_source.str.contains("live", na=False) | live_flag
+    live_total = _coalesce_numeric("live_total_line", "matched_live_total_line")
+    live_total = live_total.fillna(_numeric_series(pool, "total_line").where(is_live))
+    league = _string_series(pool, "league").str.strip().str.upper()
+
+    plausible_live = (
+        (league.eq("MLB") & live_total.between(5.5, 13.0, inclusive="both"))
+        | (league.eq("NHL") & live_total.between(4.5, 8.5, inclusive="both"))
+        | (league.eq("NBA") & live_total.between(185, 255, inclusive="both"))
+        | (league.eq("NCAAB") & live_total.between(115, 175, inclusive="both"))
+        | (league.eq("NFL") & live_total.between(30, 60, inclusive="both"))
+        | (league.eq("NCAAF") & live_total.between(35, 75, inclusive="both"))
+    )
+    known_league = league.isin({"MLB", "NHL", "NBA", "NCAAB", "NFL", "NCAAF"})
+
+    from app_core.weights_config import MAIN_TOTAL_MIN_DEVIG_PROB, MAIN_TOTAL_MAX_DEVIG_PROB
+
+    devig = _numeric_series(pool, "market_probability")
+    alt_priced = is_total & devig.notna() & ~devig.between(
+        MAIN_TOTAL_MIN_DEVIG_PROB,
+        MAIN_TOTAL_MAX_DEVIG_PROB,
+    )
+    invalid_total = (
+        is_total
+        & is_live
+        & live_total.notna()
+        & ((known_league & ~plausible_live) | alt_priced)
+    )
+
+    matchup_key = _string_series(pool, "matchup_id").str.strip()
+    fallback_key = (
+        league
+        + "::"
+        + _string_series(pool, "home_team").str.strip().str.lower()
+        + "::"
+        + _string_series(pool, "away_team").str.strip().str.lower()
+        + "::"
+        + _string_series(pool, "game_date").str.strip()
+    )
+    matchup_key = matchup_key.mask(matchup_key.eq(""), fallback_key)
+    valid_alternatives = (~invalid_total).groupby(matchup_key, dropna=False).transform("sum")
+    drop_mask = invalid_total & valid_alternatives.gt(0)
+
+    if diagnostics_out is not None:
+        diagnostics_out["preselection_invalid_total_candidate_count"] = int(invalid_total.sum())
+        diagnostics_out["preselection_dropped_total_candidate_count"] = int(drop_mask.sum())
+        diagnostics_out["preselection_retained_only_candidate_count"] = int(
+            (invalid_total & ~drop_mask).sum()
+        )
+    if drop_mask.any():
+        logger.warning(
+            "BEST PICKS AUDIT: rejected %s corrupt live-total candidate(s) before scoring",
+            int(drop_mask.sum()),
+        )
+    return pool.loc[~drop_mask].copy()
+
+
+def _sync_selected_candidate_audit(
+    candidate_audit_df: pd.DataFrame,
+    final_best_df: pd.DataFrame,
+) -> tuple[pd.DataFrame, int]:
+    """Make selected audit rows exactly match the post-validation exported pick."""
+    if candidate_audit_df is None or candidate_audit_df.empty or final_best_df is None or final_best_df.empty:
+        return candidate_audit_df, 0
+
+    audit = candidate_audit_df.copy()
+
+    def _keys(df: pd.DataFrame) -> pd.Series:
+        norm = lambda col: _string_series(df, col).str.strip().str.lower().str.replace(
+            r"[^a-z0-9]+", "", regex=True
+        )
+        return (
+            norm("league")
+            + "::"
+            + norm("home_team")
+            + "::"
+            + norm("away_team")
+            + "::"
+            + _string_series(df, "game_date").str.strip()
+        )
+
+    selected_raw = audit.get(
+        "best_available_selected",
+        pd.Series(False, index=audit.index),
+    )
+    if selected_raw.dtype == bool:
+        selected = selected_raw.fillna(False)
+    else:
+        selected = selected_raw.astype(str).str.strip().str.lower().isin({"true", "1", "yes"})
+    audit_keys = _keys(audit)
+    final_keys = _keys(final_best_df)
+    sync_columns = [
+        "pipeline_build",
+        "market_type",
+        "candidate_source",
+        "best_pick",
+        "selection_probability_used",
+        "selection_probability_source",
+        "expected_value",
+        "edge",
+        "best_available_score",
+        "best_available_runner_up_pick",
+        "best_available_runner_up_market_type",
+        "best_available_runner_up_score",
+        "best_available_score_gap",
+        "best_available_selection_verified",
+    ]
+    synced = 0
+    for idx, row in final_best_df.iterrows():
+        mask = selected & audit_keys.eq(final_keys.loc[idx])
+        if not mask.any():
+            continue
+        for column in sync_columns:
+            if column in audit.columns and column in final_best_df.columns:
+                audit.loc[mask, column] = row[column]
+        recovered = str(row.get("market_line_source_detail", "")) == "upload_total_fallback_after_rejected_live"
+        if recovered:
+            if "final_family_score" in audit.columns:
+                audit.loc[mask, "final_family_score"] = 0.0
+            if "best_available_rejection_reason" in audit.columns:
+                audit.loc[mask, "best_available_rejection_reason"] = (
+                    "selected_research_only_after_upload_line_repair"
+                )
+        synced += int(mask.sum())
+    return audit, synced
+
+
 def _neutralize_recovered_row_value(df: pd.DataFrame) -> pd.DataFrame:
     """Make upload-fallback-after-rejected-live rows honest in the export.
 
@@ -1001,10 +1156,24 @@ def _neutralize_recovered_row_value(df: pd.DataFrame) -> pd.DataFrame:
     rec = df["market_line_source_detail"].astype(str).eq("upload_total_fallback_after_rejected_live")
     if not rec.any():
         return df
-    for c in ("expected_value", "edge", "effective_expected_value", "effective_edge",
-              "production_expected_value", "production_edge"):
+    for c in (
+        "expected_value",
+        "edge",
+        "effective_expected_value",
+        "effective_edge",
+        "production_expected_value",
+        "production_edge",
+        "best_available_score",
+    ):
         if c in df.columns:
             df.loc[rec, c] = 0.0
+    for c in ("best_available_runner_up_score", "best_available_score_gap"):
+        if c in df.columns:
+            df.loc[rec, c] = np.nan
+    if "best_available_selection_reason" in df.columns:
+        df.loc[rec, "best_available_selection_reason"] = (
+            "Research-only upload line fallback after rejected live candidate; value neutralized"
+        )
     status_order = ["Actionable", "High Variance/Speculative", "Below Threshold",
                     "Fallback / Low Confidence", "No Play", "Missing Line"]
     df["_so"] = pd.Categorical(df["Pick_Status"].astype(str).str.strip(), categories=status_order, ordered=True)
@@ -2795,6 +2964,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         sorted(allowed_markets),
         len(pool),
     )
+    if pool.empty:
+        return pd.DataFrame(columns=BEST_PICK_COLUMNS)
+
+    pool = _filter_preselection_line_integrity(pool, diagnostics_out=diagnostics_out)
     if pool.empty:
         return pd.DataFrame(columns=BEST_PICK_COLUMNS)
 
@@ -5248,8 +5421,18 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     best = classify_best_available_picks(best)
     final_best_df = best[BEST_PICK_COLUMNS].copy()
     final_best_df = ensure_best_pick_export_columns(final_best_df, diagnostics_out=diagnostics_out)
+    # Neutralize any lone research-only fallback before diagnostics and synchronize
+    # the selected audit row to the exact line/pick/value that will be exported.
+    final_best_df = _neutralize_recovered_row_value(final_best_df)
+    candidate_audit_df, candidate_audit_sync_count = _sync_selected_candidate_audit(
+        candidate_audit_df,
+        final_best_df,
+    )
 
     if diagnostics_out is not None:
+        diagnostics_out["postvalidation_candidate_audit_sync_count"] = int(
+            candidate_audit_sync_count
+        )
         diagnostics_out.setdefault("empty_card_recovery_triggered", False)
         diagnostics_out.setdefault("empty_card_recovery_promoted_count", 0)
         diagnostics_out.setdefault("empty_card_recovery_market_types", [])
@@ -5479,9 +5662,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         # calibration record clears the dedicated parlay gate.
         final_best_df = _enforce_moneyline_parlay_only(final_best_df)
 
-    # Recovered (rejected-live -> uploaded line) rows carry mismatched odds; zero their
-    # fake EV and drop them to the bottom of their tier so they can't headline the card.
-    final_best_df = _neutralize_recovered_row_value(final_best_df)
+    # Reapply the commercial labels after any optional moneyline policy gate.
     final_best_df = classify_best_available_picks(final_best_df)
     if diagnostics_out is not None:
         diagnostics_out["premium_pick_count"] = int(final_best_df["sellable_as_premium"].sum())
