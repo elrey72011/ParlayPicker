@@ -134,7 +134,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-07-26a-empirical-finalist-selection"
+PIPELINE_BUILD = "2026-07-27a-blended-selection-aligned-metrics"
 
 
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
@@ -2766,7 +2766,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 )
                 pool.loc[
                     _usable_empirical, "selection_probability_source"
-                ] = "empirical_bucket_calibrated"
+                ] = "empirical_bucket_blend"
     except Exception as exc:
         logger.warning(
             "Empirical finalist probabilities unavailable; using calibrated candidates: %s",
@@ -2785,11 +2785,11 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     if diagnostics_out is not None:
         diagnostics_out["empirical_selection_candidate_count"] = int(
             pool["selection_probability_source"].eq(
-                "empirical_bucket_calibrated"
+                "empirical_bucket_blend"
             ).sum()
         )
         diagnostics_out["empirical_selection_source"] = (
-            "empirical_bucket_calibrated"
+            "empirical_bucket_blend"
             if diagnostics_out["empirical_selection_candidate_count"] > 0
             else "calibrated_probability"
         )
@@ -3169,13 +3169,46 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         ml_prob = best.at[idx, "ml_probability"] if "ml_probability" in best.columns else pd.NA
         kalshi_prob = best.at[idx, "kalshi_probability"] if "kalshi_probability" in best.columns else pd.NA
 
-        # Calibrated/Win probability (ensure 0-1)
-        win_prob = best.at[idx, "calibrated_probability"] if "calibrated_probability" in best.columns else 0.5
-        win_prob = win_prob if pd.notna(win_prob) else 0.5
-        effective_ev = ev
-        effective_edge = edge
+        # Use the same finalist probability for status, EV, production, and Kelly.
+        # The empirical selector is already globally calibrated and conservatively
+        # bucket-blended, so recalibrating it later would double-count history.
+        probability_column = (
+            "selection_probability_used"
+            if "selection_probability_used" in best.columns
+            else "calibrated_probability"
+        )
+        win_prob = pd.to_numeric(best.at[idx, probability_column], errors="coerce")
+        if pd.isna(win_prob):
+            win_prob = pd.to_numeric(
+                best.at[idx, "calibrated_probability"]
+                if "calibrated_probability" in best.columns
+                else 0.5,
+                errors="coerce",
+            )
+        win_prob = float(win_prob) if pd.notna(win_prob) else 0.5
+
+        status_decimal_odds = pd.to_numeric(
+            best.at[idx, "decimal_odds"] if "decimal_odds" in best.columns else pd.NA,
+            errors="coerce",
+        )
+        if pd.isna(status_decimal_odds) or float(status_decimal_odds) <= 1.0:
+            status_decimal_odds = american_to_decimal(
+                best.at[idx, "odds_american"]
+                if "odds_american" in best.columns
+                else pd.NA
+            )
+        status_decimal_odds = max(1.01, float(status_decimal_odds))
+        status_implied_probability = 1.0 / status_decimal_odds
         effective_win_probability = win_prob
-        status_metric_basis = "raw"
+        effective_ev = (effective_win_probability * status_decimal_odds) - 1.0
+        effective_edge = effective_win_probability - status_implied_probability
+        ev = effective_ev
+        edge = effective_edge
+        status_metric_basis = (
+            str(best.at[idx, "selection_probability_source"])
+            if "selection_probability_source" in best.columns
+            else probability_column
+        )
 
         # Check fallback indicators
         stale = bool(best.at[idx, "used_stale_features"]) if "used_stale_features" in best.columns and pd.notna(best.at[idx, "used_stale_features"]) else False
@@ -3452,27 +3485,29 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             is_side_market = market_type in {"spread_home", "spread_away"}
             is_total_market = "total" in market_type.lower()
 
-            status_metric_basis = "effective"
-            effective_ev = ev
             if is_total_market:
                 from app_core.weights_config import FALLBACK_HEAVY_TOTAL_EV_MULTIPLIER
                 is_fallback_heavy = diagnostics_out.get("is_fallback_heavy", False) if diagnostics_out else False
-                if is_fallback_heavy and ev > 0:
-                    effective_ev = ev * FALLBACK_HEAVY_TOTAL_EV_MULTIPLIER
+                if is_fallback_heavy and effective_ev > 0:
+                    effective_ev = effective_ev * FALLBACK_HEAVY_TOTAL_EV_MULTIPLIER
+                    win_prob = (1.0 + effective_ev) / status_decimal_odds
+                    effective_win_probability = win_prob
+                    effective_edge = win_prob - status_implied_probability
+                    ev = effective_ev
+                    edge = effective_edge
+                    status_metric_basis = f"{status_metric_basis}_fallback_adjusted"
 
-            # Apply the same over-probability shrinkage used in production calibration
-            # to the gating metrics BEFORE threshold comparison. Without this, the
-            # Actionable gate uses the raw inflated calibrated_probability, promoting
-            # overconfident ML picks that the shrinkage was designed to penalize.
+            # Apply the over correction exactly once and recompute EV/edge from
+            # the corrected probability and the same price.
             if market_type == "total_over":
                 _shrink = float(MLB_TOTAL_OVER_PROB_SHRINK) if league == "MLB" else float(TOTAL_OVER_PROB_SHRINK)
                 win_prob = 0.5 + _shrink * (win_prob - 0.5)
-                if pd.notna(effective_ev) and effective_ev > 0:
-                    effective_ev = effective_ev * _shrink
-                if pd.notna(effective_edge):
-                    effective_edge = effective_edge * _shrink
                 effective_win_probability = win_prob
-                status_metric_basis = "shrunk"
+                effective_ev = (win_prob * status_decimal_odds) - 1.0
+                effective_edge = win_prob - status_implied_probability
+                ev = effective_ev
+                edge = effective_edge
+                status_metric_basis = f"{status_metric_basis}_over_shrunk"
 
             # Determine base thresholds with league + market calibration
             req_prob = SIDE_MIN_WIN_PROB if is_side_market else TOTAL_MIN_WIN_PROB
@@ -4516,8 +4551,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     eff_edge = pd.to_numeric(best.get("effective_edge", pd.Series([np.nan] * len(best), index=best.index)), errors="coerce")
     base_ev = pd.to_numeric(best.get("expected_value", pd.Series([np.nan] * len(best), index=best.index)), errors="coerce")
     base_edge = pd.to_numeric(best.get("edge", pd.Series([np.nan] * len(best), index=best.index)), errors="coerce")
-    negative_ev_mask = eff_ev.lt(0) | base_ev.lt(0)
-    negative_edge_mask = eff_edge.lt(0) | base_edge.lt(0)
+    # The legacy raw columns are retained for audit, but eligibility is decided
+    # from the aligned selection metrics used by the status engine.
+    negative_ev_mask = eff_ev.lt(0)
+    negative_edge_mask = eff_edge.lt(0)
     negative_value_guardrail_mask = negative_ev_mask | negative_edge_mask
     pre_status = best["Pick_Status"].astype(str).copy()
     downgrade_viable_mask = negative_value_guardrail_mask & pre_status.isin({"Actionable", "High Variance/Speculative"})
@@ -4529,29 +4566,33 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     best.loc[downgrade_viable_mask, "status_blocker_reason"] = "Negative EV or edge after final validation"
     best.loc[downgrade_viable_mask, "Kelly_Bet_Size"] = 0.0
 
-    # Production-only probability calibration for totals-over overconfidence.
-    best["production_win_probability"] = pd.to_numeric(best.get("effective_win_probability", 0.5), errors="coerce").fillna(0.5)
-    best["probability_calibration_reason"] = "none"
+    # Production consumes the status engine's already aligned probability.
+    # Total-over shrinkage and fallback risk adjustments were applied exactly
+    # once above; resetting to calibrated_probability here caused disagreement
+    # between the displayed status, exported EV, and stake sizing.
+    production_probability = pd.to_numeric(
+        best.get("effective_win_probability", pd.Series([np.nan] * len(best), index=best.index)),
+        errors="coerce",
+    )
+    production_probability = production_probability.fillna(
+        pd.to_numeric(
+            best.get("selection_probability_used", pd.Series([np.nan] * len(best), index=best.index)),
+            errors="coerce",
+        )
+    ).fillna(
+        pd.to_numeric(
+            best.get("calibrated_probability", pd.Series([np.nan] * len(best), index=best.index)),
+            errors="coerce",
+        )
+    ).fillna(0.5)
+    best["production_win_probability"] = production_probability.clip(0.01, 0.99)
+    best["probability_calibration_reason"] = best.get(
+        "status_metric_basis", pd.Series("calibrated_probability", index=best.index)
+    ).fillna("calibrated_probability").astype(str)
     mt_lower = _string_series(best, "market_type").str.lower()
     league_upper = _string_series(best, "league").str.upper()
     is_total_over = mt_lower.eq("total_over")
     is_mlb_total_over = is_total_over & league_upper.eq("MLB")
-    total_over_shrink = np.where(is_mlb_total_over, float(MLB_TOTAL_OVER_PROB_SHRINK), float(TOTAL_OVER_PROB_SHRINK))
-    # ALL total-overs: reset to calibrated_probability before shrinking to avoid a
-    # double-shrink. The gating stage already shrank effective_win_probability, so using
-    # that as the base here compounds shrink^2 (MLB 0.85^2=0.72, non-MLB 0.60^2=0.36
-    # instead of the intended single 0.85 / 0.60). The reset previously covered only MLB
-    # overs, so non-MLB (NBA/NHL) overs were silently double-shrunk to 0.36x.
-    if is_total_over.any():
-        calib_base = pd.to_numeric(
-            best.get("calibrated_probability", pd.Series([np.nan] * len(best), index=best.index)),
-            errors="coerce"
-        ).fillna(0.5)
-        best.loc[is_total_over, "production_win_probability"] = calib_base[is_total_over]
-    best.loc[is_total_over, "production_win_probability"] = 0.5 + total_over_shrink[is_total_over] * (best.loc[is_total_over, "production_win_probability"] - 0.5)
-    best.loc[is_total_over & ~is_mlb_total_over, "probability_calibration_reason"] = f"total_over_shrink={float(TOTAL_OVER_PROB_SHRINK):.2f}"
-    best.loc[is_mlb_total_over, "probability_calibration_reason"] = f"mlb_total_over_shrink={float(MLB_TOTAL_OVER_PROB_SHRINK):.2f}_from_calibrated"
-
     decimal_odds = pd.to_numeric(best.get("decimal_odds", pd.Series([np.nan] * len(best), index=best.index)), errors="coerce")
     fallback_decimal = 1.0 / pd.to_numeric(best.get("market_probability", pd.Series([np.nan] * len(best), index=best.index)), errors="coerce")
     decimal_odds = decimal_odds.fillna(fallback_decimal).clip(lower=1.01)
@@ -7170,14 +7211,14 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
     portfolio["decimal_odds"] = _numeric_series(portfolio, "decimal_odds").fillna(
         _numeric_series(portfolio, "odds_american", -110.0).apply(american_to_decimal)
     )
-    # Kelly must use the best realized-performance calibrated probability,
-    # not merely the model blend named calibrated_probability. The empirical
-    # overlay is most specific. Otherwise fit effective probability through the
-    # persisted global/bucket calibration. A legacy row with no effective
-    # probability may use calibrated_probability as an already-calibrated input;
-    # a production row with effective probability but no fit receives no stake.
-    empirical_p = pd.to_numeric(
-        portfolio.get("empirical_win_probability", pd.Series(np.nan, index=portfolio.index)),
+    # Kelly uses the same production probability that drove status and EV.
+    # Do not apply the global/bucket calibration a second time here.
+    production_p = pd.to_numeric(
+        portfolio.get("production_win_probability", pd.Series(np.nan, index=portfolio.index)),
+        errors="coerce",
+    )
+    selection_p = pd.to_numeric(
+        portfolio.get("selection_probability_used", pd.Series(np.nan, index=portfolio.index)),
         errors="coerce",
     )
     effective_p = pd.to_numeric(
@@ -7188,46 +7229,22 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
         portfolio.get("calibrated_probability", pd.Series(np.nan, index=portfolio.index)),
         errors="coerce",
     )
-    fitted_p = pd.Series(np.nan, index=portfolio.index, dtype=float)
-    try:
-        from core.probability_calibration import (
-            apply_bucket_calibration,
-            apply_calibration,
-            load_calibration,
-        )
-        from core.empirical_tiers import bucket_key, load_bucket_stats
 
-        calibration = load_calibration()
-        bucket_stats = load_bucket_stats()
-        if calibration:
-            if bucket_stats:
-                buckets = [
-                    bucket_key(league, market, consensus)
-                    for league, market, consensus in zip(
-                        portfolio.get("league", pd.Series("", index=portfolio.index)),
-                        portfolio.get("market_type", pd.Series("", index=portfolio.index)),
-                        portfolio.get("consensus_agreement", pd.Series("", index=portfolio.index)),
-                    )
-                ]
-                fitted_p = pd.to_numeric(
-                    apply_bucket_calibration(effective_p, buckets, calibration, bucket_stats),
-                    errors="coerce",
-                )
-            else:
-                fitted_p = pd.to_numeric(apply_calibration(effective_p, calibration), errors="coerce")
-    except Exception as exc:
-        logger.warning("Kelly calibration unavailable; effective-probability rows will not be staked: %s", exc)
-
-    p = empirical_p.copy()
-    probability_source = pd.Series("empirical_win_probability", index=portfolio.index, dtype="object")
-    fitted_mask = p.isna() & fitted_p.notna()
-    p.loc[fitted_mask] = fitted_p.loc[fitted_mask]
-    probability_source.loc[fitted_mask] = "fitted_effective_probability"
-    legacy_mask = p.isna() & effective_p.isna() & legacy_calibrated_p.notna()
+    p = production_p.copy()
+    probability_source = pd.Series(
+        "production_win_probability", index=portfolio.index, dtype="object"
+    )
+    selection_mask = p.isna() & selection_p.notna()
+    p.loc[selection_mask] = selection_p.loc[selection_mask]
+    probability_source.loc[selection_mask] = "selection_probability_used"
+    effective_mask = p.isna() & effective_p.notna()
+    p.loc[effective_mask] = effective_p.loc[effective_mask]
+    probability_source.loc[effective_mask] = "effective_win_probability"
+    legacy_mask = p.isna() & legacy_calibrated_p.notna()
     p.loc[legacy_mask] = legacy_calibrated_p.loc[legacy_mask]
     probability_source.loc[legacy_mask] = "legacy_calibrated_probability"
     missing_probability = p.isna()
-    probability_source.loc[missing_probability] = "missing_fitted_calibration"
+    probability_source.loc[missing_probability] = "missing_aligned_probability"
     production_eligible = production_eligible & (~missing_probability)
     portfolio["production_eligible"] = production_eligible
     p = p.fillna(0.0).clip(lower=0.0, upper=1.0)
