@@ -34,6 +34,11 @@ class TestParlaySafety(unittest.TestCase):
         self.assertAlmostEqual(conservative_joint_probability([0.60, 0.60]), 0.3492)
         self.assertAlmostEqual(parlay_expected_value(0.3492, 3.0), 0.0476)
 
+    def test_distinct_game_ids_override_shared_market_terms(self):
+        left = {"matchup_id": "MLB|A|B|2026-07-27", "best_pick": "Cubs moneyline"}
+        right = {"matchup_id": "MLB|C|D|2026-07-27", "best_pick": "Pirates moneyline"}
+        self.assertFalse(shares_game(left, right))
+
     def test_same_game_is_conservatively_rejected(self):
         left = {"matchup_id": "MLB|A|B|2026-07-09"}
         right = {"matchup_id": "MLB|A|B|2026-07-09"}
