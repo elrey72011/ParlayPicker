@@ -134,7 +134,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-07-27a-capped-empirical-selection-prop-guards"
+PIPELINE_BUILD = "2026-07-27b-best-available-candidate-audit"
 
 
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
@@ -142,6 +142,20 @@ REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
     "status_metric_basis",
     "selection_probability_used",
     "selection_probability_source",
+    "best_available_rank",
+    "best_available_family_rank",
+    "best_available_score",
+    "best_available_runner_up_pick",
+    "best_available_runner_up_market_type",
+    "best_available_runner_up_score",
+    "best_available_score_gap",
+    "best_available_candidate_count",
+    "best_available_selection_verified",
+    "best_available_selection_reason",
+    "commercial_tier",
+    "sellable_as_premium",
+    "best_available_only",
+    "commercial_reason",
     "effective_expected_value",
     "effective_edge",
     "effective_win_probability",
@@ -257,6 +271,20 @@ def ensure_best_pick_export_columns(
         "status_metric_basis": "raw",
         "selection_probability_used": pd.NA,
         "selection_probability_source": "calibrated_probability",
+        "best_available_rank": pd.NA,
+        "best_available_family_rank": pd.NA,
+        "best_available_score": pd.NA,
+        "best_available_runner_up_pick": "",
+        "best_available_runner_up_market_type": "",
+        "best_available_runner_up_score": pd.NA,
+        "best_available_score_gap": pd.NA,
+        "best_available_candidate_count": 0,
+        "best_available_selection_verified": False,
+        "best_available_selection_reason": "",
+        "commercial_tier": "Best Available / Pass",
+        "sellable_as_premium": False,
+        "best_available_only": True,
+        "commercial_reason": "Best available only; no production-qualified edge.",
         "effective_expected_value": pd.NA,
         "effective_edge": pd.NA,
         "effective_win_probability": pd.NA,
@@ -300,11 +328,21 @@ def ensure_best_pick_export_columns(
     missing_cols = [c for c in req_cols if c not in out.columns]
 
     for col in req_cols:
-        if col in {"status_blocker_reason", "status_blocker_stage", "nba_stats_fetch_status", "fallback_summary_by_league", "run_health_warning", "degraded_feature_subset_reason", "status_metric_basis", "selection_probability_source", "market_line_source", "market_line_source_detail", "line_consistency_reason", "line_provenance_warning", "line_event_identity_reason", "live_event_match_key", "selected_live_event_source", "raw_book_odds_diag"}:
+        if col in {"status_blocker_reason", "status_blocker_stage", "nba_stats_fetch_status", "fallback_summary_by_league", "run_health_warning", "degraded_feature_subset_reason", "status_metric_basis", "selection_probability_source", "market_line_source", "market_line_source_detail", "line_consistency_reason", "line_provenance_warning", "line_event_identity_reason", "live_event_match_key", "selected_live_event_source", "raw_book_odds_diag", "best_available_runner_up_pick", "best_available_runner_up_market_type", "best_available_selection_reason", "commercial_tier", "commercial_reason"}:
             out[col] = out[col].fillna(default_values.get(col, "")).astype(str)
 
     if "status_blocker_stage" in out.columns:
         out["status_blocker_stage"] = out["status_blocker_stage"].replace({"": "none"})
+    for bool_col, default in {
+        "best_available_selection_verified": False,
+        "sellable_as_premium": False,
+        "best_available_only": True,
+    }.items():
+        if bool_col in out.columns:
+            out[bool_col] = out[bool_col].fillna(default).astype(bool)
+    for int_col in ("best_available_rank", "best_available_family_rank", "best_available_candidate_count"):
+        if int_col in out.columns:
+            out[int_col] = pd.to_numeric(out[int_col], errors="coerce").astype("Int64")
     if "degraded_feature_subset_flag" in out.columns:
         out["degraded_feature_subset_flag"] = out["degraded_feature_subset_flag"].fillna(False).astype(bool)
     if "totals_only_actionable_flag" in out.columns:
@@ -376,6 +414,12 @@ BEST_PICK_COLUMNS = [
     "Triple_Filter_Rank", "parlay_rank",
     "league", "home_team", "away_team", "game_date", "game_time_est", "market_type", "candidate_source", "orientation_source", "upload_match_reason", "best_pick", "Kelly_Bet_Size", "Pick_Status", "Status_Reason",
     "calibrated_probability", "expected_value", "edge", "consensus_agreement",
+    "best_available_rank", "best_available_family_rank", "best_available_score",
+    "best_available_runner_up_pick", "best_available_runner_up_market_type",
+    "best_available_runner_up_score", "best_available_score_gap",
+    "best_available_candidate_count", "best_available_selection_verified",
+    "best_available_selection_reason", "commercial_tier", "sellable_as_premium",
+    "best_available_only", "commercial_reason",
     "decimal_odds", "matchup_id",
     "odds_american", "odds_source", "market_probability", "ml_probability", "theover_probability", "win_prob_source", "display_probability",
     "kalshi_probability", "kalshi_match_status", "kalshi_match_reason",
@@ -2655,6 +2699,76 @@ def apply_no_bet_pick_quality(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+
+def classify_best_available_picks(best_picks_df: pd.DataFrame) -> pd.DataFrame:
+    """Separate the full-board rank-1 pick from the premium, funded product.
+
+    Every row may be the model's best available choice for its game. Only rows with
+    explicit production eligibility, positive priced edge, and a positive funded
+    stake are sellable as Premium. This prevents an all-games card from silently
+    marketing a negative-EV pass as a proven bet.
+    """
+    if best_picks_df is None or best_picks_df.empty:
+        return best_picks_df
+    out = best_picks_df.copy()
+    status = _string_series(out, "Pick_Status").str.strip()
+    production_eligible = pd.Series(
+        out.get("production_eligible", False), index=out.index
+    ).fillna(False).astype(bool)
+    production_bet = (
+        _numeric_series(out, "production_bet_amount", 0.0)
+        if "production_bet_amount" in out.columns
+        else _numeric_series(out, "Kelly_Bet_Size", 0.0)
+    ).fillna(0.0)
+    production_ev = (
+        _numeric_series(out, "production_expected_value")
+        if "production_expected_value" in out.columns
+        else _numeric_series(out, "effective_expected_value")
+        if "effective_expected_value" in out.columns
+        else _numeric_series(out, "expected_value")
+    )
+    production_edge = (
+        _numeric_series(out, "production_edge")
+        if "production_edge" in out.columns
+        else _numeric_series(out, "effective_edge")
+        if "effective_edge" in out.columns
+        else _numeric_series(out, "edge")
+    )
+    line_source = _string_series(out, "market_line_source").str.strip().str.lower()
+    line_ok = pd.Series(
+        out.get("line_consistency_flag", True), index=out.index
+    ).fillna(True).astype(bool)
+    event_ok = pd.Series(
+        out.get("line_event_identity_match_flag", True), index=out.index
+    ).fillna(True).astype(bool)
+
+    premium = (
+        status.eq("Actionable")
+        & production_eligible
+        & production_bet.gt(0)
+        & production_ev.gt(0)
+        & production_edge.gt(0)
+        & line_source.eq("live")
+        & line_ok
+        & event_ok
+    )
+    lean = (~premium) & production_ev.gt(0) & production_edge.gt(0)
+
+    out["sellable_as_premium"] = premium
+    out["best_available_only"] = ~premium
+    out["commercial_tier"] = "Best Available / Pass"
+    out.loc[lean, "commercial_tier"] = "Best Available / Lean"
+    out.loc[premium, "commercial_tier"] = "Premium Pick"
+    out["commercial_reason"] = "Best available only: no proven positive edge at this price."
+    out.loc[lean, "commercial_reason"] = (
+        "Best available only: positive indication, but no funded production edge."
+    )
+    out.loc[premium, "commercial_reason"] = (
+        "Production-qualified positive edge with a funded stake and verified live line."
+    )
+    return out
+
+
 def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None = None) -> pd.DataFrame:
     logger.info(f"BEST PICKS AUDIT: Received analysis_df with {len(analysis_df)} rows")
     if analysis_df is None or analysis_df.empty:
@@ -2944,27 +3058,57 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         _direction_conflict & _kalshi_opp, float(MLB_THEOVER_CONFLICT_PENALTY), 0.0
     )
 
-    # 4. Sort to prepare for finalist selection within each family per game
+    # 4. Deterministic ranking contract. Every valid pregame candidate receives an
+    # auditable rank. The two-stage family comparison is mathematically equivalent
+    # to the global argmax because both stages use this exact same sort contract.
+    best_available_sort_columns = [
+        "final_family_score",
+        "tier_score",
+        "selection_probability_used",
+        "_ev_numeric",
+        "_edge_numeric",
+    ]
+    best_available_sort_ascending = [False, True, False, False, False]
     pool = pool.sort_values(
-        by=["final_family_score", "tier_score", "selection_probability_used", "_ev_numeric", "_edge_numeric"],
-        ascending=[False, True, False, False, False],
-        na_position="last"
+        by=best_available_sort_columns,
+        ascending=best_available_sort_ascending,
+        na_position="last",
+        kind="mergesort",
     )
+    pool["best_available_rank"] = (
+        pool.groupby("matchup_id", sort=False).cumcount().add(1).astype("Int64")
+    )
+    pool["best_available_family_rank"] = (
+        pool.groupby(["matchup_id", "_market_family"], sort=False)
+        .cumcount()
+        .add(1)
+        .astype("Int64")
+    )
+    pool["best_available_score"] = pd.to_numeric(pool["final_family_score"], errors="coerce")
+    pool["best_available_finalist"] = pool["best_available_family_rank"].eq(1)
+    pool["best_available_final_rank"] = pd.Series(pd.NA, index=pool.index, dtype="Int64")
+    pool["best_available_selected"] = False
 
-    # 5. First Stage: Best side finalist vs Best total finalist per game
-    # Because we sorted exactly above, drop_duplicates on matchup_id + family gives the true best per family
-    finalists = pool.drop_duplicates(subset=["matchup_id", "_market_family"], keep="first").copy()
+    # 5. First Stage: best side finalist vs best total finalist per game.
+    finalists = pool[pool["best_available_finalist"]].copy()
 
     finalist_counts = finalists["_market_family"].value_counts().to_dict()
     finalist_market_type_counts = finalists["market_type"].value_counts().to_dict()
 
-    # 6. Second Stage: Compare the two finalists and choose exactly one final winner per game
+    # 6. Second Stage: compare family finalists and enforce the rank-1 invariant.
     preview_rows = []
     final_winner_indices = []
     demoted_by_mlb_spread_finalist_penalty = 0
+    selection_invariant_mismatches = 0
+    winner_by_matchup: dict[object, object] = {}
+    runner_up_pick_by_matchup: dict[object, str] = {}
+    runner_up_market_by_matchup: dict[object, str] = {}
+    runner_up_score_by_matchup: dict[object, float] = {}
+    score_gap_by_matchup: dict[object, float] = {}
+    candidate_count_by_matchup: dict[object, int] = {}
+    verified_by_matchup: dict[object, bool] = {}
 
-    # Iterate over each unique game to do the direct comparison
-    for matchup, group in finalists.groupby("matchup_id"):
+    for matchup, group in finalists.groupby("matchup_id", sort=False):
         side_row = group[group["_market_family"] == "side"]
         total_row = group[group["_market_family"] == "total"]
 
@@ -2982,21 +3126,60 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         total_market_type = total_row["market_type"].iloc[0] if not total_row.empty else "None"
         total_candidate_source = total_row["candidate_source"].iloc[0] if not total_row.empty and "candidate_source" in total_row.columns else "None"
 
-        # Sort the finalists for this matchup to find the absolute winner
         group_sorted = group.sort_values(
-            by=["final_family_score", "tier_score", "selection_probability_used", "_ev_numeric", "_edge_numeric"],
-            ascending=[False, True, False, False, False],
-            na_position="last"
+            by=best_available_sort_columns,
+            ascending=best_available_sort_ascending,
+            na_position="last",
+            kind="mergesort",
         )
         group_sorted_no_mlb_spread_penalty = group.sort_values(
             by=["final_family_score_no_mlb_spread_penalty", "tier_score", "selection_probability_used", "_ev_numeric", "_edge_numeric"],
             ascending=[False, True, False, False, False],
-            na_position="last"
+            na_position="last",
+            kind="mergesort",
+        )
+        pool.loc[group_sorted.index, "best_available_final_rank"] = pd.Series(
+            range(1, len(group_sorted) + 1), index=group_sorted.index, dtype="Int64"
         )
 
         winner_row = group_sorted.iloc[0]
+        matchup_candidates = pool[pool["matchup_id"].eq(matchup)].sort_values(
+            by=best_available_sort_columns,
+            ascending=best_available_sort_ascending,
+            na_position="last",
+            kind="mergesort",
+        )
+        global_rank_one = matchup_candidates.iloc[0]
+        verified = bool(winner_row.name == global_rank_one.name)
+        if not verified:
+            selection_invariant_mismatches += 1
+            # Fail closed: the exported pick is always the deterministic global argmax.
+            winner_row = global_rank_one
+
         winner_row_no_mlb_penalty = group_sorted_no_mlb_spread_penalty.iloc[0]
         final_winner_indices.append(winner_row.name)
+        winner_by_matchup[matchup] = winner_row["best_pick"]
+        candidate_count_by_matchup[matchup] = int(len(matchup_candidates))
+        verified_by_matchup[matchup] = verified
+
+        if len(matchup_candidates) > 1:
+            runner_up = matchup_candidates.iloc[1]
+            runner_up_pick_by_matchup[matchup] = str(runner_up.get("best_pick", ""))
+            runner_up_market_by_matchup[matchup] = str(runner_up.get("market_type", ""))
+            runner_score = pd.to_numeric(runner_up.get("final_family_score"), errors="coerce")
+            winner_score = pd.to_numeric(winner_row.get("final_family_score"), errors="coerce")
+            runner_up_score_by_matchup[matchup] = float(runner_score) if pd.notna(runner_score) else float("nan")
+            score_gap_by_matchup[matchup] = (
+                float(winner_score - runner_score)
+                if pd.notna(winner_score) and pd.notna(runner_score)
+                else float("nan")
+            )
+        else:
+            runner_up_pick_by_matchup[matchup] = ""
+            runner_up_market_by_matchup[matchup] = ""
+            runner_up_score_by_matchup[matchup] = float("nan")
+            score_gap_by_matchup[matchup] = float("nan")
+
         if (
             winner_row_no_mlb_penalty.name != winner_row.name
             and str(winner_row_no_mlb_penalty.get("league", "")).upper() == "MLB"
@@ -3029,20 +3212,77 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             "winner_reason": winner_reason,
             "has_side_finalist": not side_row.empty,
             "has_total_finalist": not total_row.empty,
+            "candidate_count": int(len(matchup_candidates)),
+            "runner_up_pick": runner_up_pick_by_matchup[matchup],
+            "runner_up_market_type": runner_up_market_by_matchup[matchup],
+            "runner_up_score": runner_up_score_by_matchup[matchup],
+            "best_available_score_gap": score_gap_by_matchup[matchup],
+            "selection_verified": verified,
         })
 
     preview_df = pd.DataFrame(preview_rows)
 
-    # Select final winner
-    best = finalists.loc[final_winner_indices].copy()
+    pool.loc[final_winner_indices, "best_available_selected"] = True
+    pool["best_available_runner_up_pick"] = pool["matchup_id"].map(runner_up_pick_by_matchup).fillna("")
+    pool["best_available_runner_up_market_type"] = pool["matchup_id"].map(runner_up_market_by_matchup).fillna("")
+    pool["best_available_runner_up_score"] = pd.to_numeric(
+        pool["matchup_id"].map(runner_up_score_by_matchup), errors="coerce"
+    )
+    pool["best_available_score_gap"] = pd.to_numeric(
+        pool["matchup_id"].map(score_gap_by_matchup), errors="coerce"
+    )
+    pool["best_available_candidate_count"] = (
+        pd.to_numeric(pool["matchup_id"].map(candidate_count_by_matchup), errors="coerce")
+        .fillna(0)
+        .astype("Int64")
+    )
+    pool["best_available_selection_verified"] = (
+        pool["matchup_id"].map(verified_by_matchup).fillna(False).astype(bool)
+    )
+    pool["best_available_selection_reason"] = (
+        "Highest deterministic candidate score after validity, identity, and line-integrity gates"
+    )
+    pool["best_available_rejection_reason"] = "lower_score_within_market_family"
+    pool.loc[
+        pool["best_available_finalist"] & ~pool["best_available_selected"],
+        "best_available_rejection_reason",
+    ] = "family_finalist_lost_cross_family_comparison"
+    pool.loc[pool["best_available_selected"], "best_available_rejection_reason"] = "selected_best_available"
+
+    candidate_audit_columns = [
+        "pipeline_build", "league", "home_team", "away_team", "game_date", "game_time_est",
+        "matchup_id", "market_type", "candidate_source", "best_pick",
+        "selection_probability_used", "selection_probability_source",
+        "expected_value", "edge", "tier_score", "final_family_score",
+        "_market_family", "best_available_rank", "best_available_family_rank",
+        "best_available_finalist", "best_available_final_rank",
+        "best_available_selected", "best_available_score",
+        "best_available_runner_up_pick", "best_available_runner_up_market_type",
+        "best_available_runner_up_score", "best_available_score_gap",
+        "best_available_candidate_count", "best_available_selection_verified",
+        "best_available_rejection_reason",
+    ]
+    audit_available_columns = [col for col in candidate_audit_columns if col in pool.columns]
+    candidate_audit_df = pool[audit_available_columns].copy().rename(
+        columns={"_market_family": "market_family"}
+    )
+    if "pipeline_build" not in candidate_audit_df.columns:
+        candidate_audit_df.insert(0, "pipeline_build", PIPELINE_BUILD)
+
+    # Select the verified rank-1 winner for each game.
+    best = pool.loc[final_winner_indices].copy()
 
     final_counts = best["_market_family"].value_counts().to_dict()
     final_market_type_counts = best["market_type"].value_counts().to_dict()
 
-    # Cleanup temporary columns
-    best = best.drop(columns=["_market_family", "_normalized_ev", "_normalized_edge", "final_family_score", "final_family_score_no_mlb_spread_penalty", "_ev_numeric", "_edge_numeric", "_family_selection_penalty", "_under_selection_penalty", "_mlb_spread_finalist_penalty", "_selection_probability"])
+    # Cleanup temporary score inputs while preserving the public audit contract.
+    best = best.drop(columns=["_market_family", "_normalized_ev", "_normalized_edge", "final_family_score", "final_family_score_no_mlb_spread_penalty", "_ev_numeric", "_edge_numeric", "_family_selection_penalty", "_under_selection_penalty", "_mlb_spread_finalist_penalty", "_selection_probability", "best_available_finalist", "best_available_final_rank", "best_available_selected", "best_available_rejection_reason"])
 
-    logger.info(f"BEST PICKS AUDIT: Rows after two-stage finalist comparison: {len(best)} (started with {len(pool)})")
+    logger.info(
+        "BEST PICKS AUDIT: Rows after verified two-stage comparison: %s "
+        "(started with %s; invariant mismatches=%s)",
+        len(best), len(pool), selection_invariant_mismatches,
+    )
 
     # Pre-compute consensus agreement before status labelling so overlays can use it
     if "consensus_agreement" not in best.columns:
@@ -4972,6 +5212,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                     diagnostics_out["empty_card_recovery_market_types"] = top["market_type"].tolist()
                     diagnostics_out["empty_card_recovery_leagues"] = top["league"].tolist() if "league" in top.columns else []
 
+    best = classify_best_available_picks(best)
     final_best_df = best[BEST_PICK_COLUMNS].copy()
     final_best_df = ensure_best_pick_export_columns(final_best_df, diagnostics_out=diagnostics_out)
 
@@ -5189,7 +5430,15 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             "actionable_market_type_counts": actionable_market_type_counts,
             "avg_scores": avg_scores,
             "preview_df": preview_df,
+            "candidate_audit_df": candidate_audit_df,
+            "best_available_selection_verified": bool(selection_invariant_mismatches == 0),
+            "best_available_selection_mismatch_count": int(selection_invariant_mismatches),
+            "best_available_candidate_audit_rows": int(len(candidate_audit_df)),
         }
+        diagnostics_out["candidate_audit_df"] = candidate_audit_df
+        diagnostics_out["best_available_selection_verified"] = bool(selection_invariant_mismatches == 0)
+        diagnostics_out["best_available_selection_mismatch_count"] = int(selection_invariant_mismatches)
+        diagnostics_out["best_available_candidate_audit_rows"] = int(len(candidate_audit_df))
 
     from app_core.weights_config import ENABLE_MONEYLINE_PARLAY_LEGS
     if ENABLE_MONEYLINE_PARLAY_LEGS:
@@ -5198,6 +5447,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     # Recovered (rejected-live -> uploaded line) rows carry mismatched odds; zero their
     # fake EV and drop them to the bottom of their tier so they can't headline the card.
     final_best_df = _neutralize_recovered_row_value(final_best_df)
+    final_best_df = classify_best_available_picks(final_best_df)
+    if diagnostics_out is not None:
+        diagnostics_out["premium_pick_count"] = int(final_best_df["sellable_as_premium"].sum())
+        diagnostics_out["best_available_only_count"] = int(final_best_df["best_available_only"].sum())
 
     return final_best_df
 

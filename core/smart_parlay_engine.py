@@ -257,6 +257,13 @@ def _build_record(legs: pd.DataFrame, label_cols: list[str], leg_count: int,
         "has_actionable_anchor": has_actionable,
         "production_safety_mode": bool(strict_mode),
         "model_risk_haircut": PARLAY_PROBABILITY_HAIRCUT if strict_mode else 1.0,
+        "parlay_class": "Premium" if strict_mode else "Research / Recreational",
+        "premium_eligible": bool(strict_mode),
+        "sellable_as_premium": bool(strict_mode),
+        "commercial_warning": (
+            "" if strict_mode
+            else "Not production-qualified; research/recreational only."
+        ),
     }
 
 
@@ -300,6 +307,7 @@ def generate_smart_parlays(
         "legs", "combined_market_prob", "ev_boost_pct", "is_high_correlation",
         "risk_tier", "group_id", "best_payout_book", "Conviction_Score", "min_leg_prob",
         "has_actionable_anchor", "production_safety_mode", "model_risk_haircut",
+        "parlay_class", "premium_eligible", "sellable_as_premium", "commercial_warning",
     ]
     if df is None or df.empty:
         return pd.DataFrame(columns=columns)
