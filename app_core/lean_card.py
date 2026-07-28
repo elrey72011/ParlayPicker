@@ -3,12 +3,12 @@
 The games card stakes only proven +EV picks, so on an efficient slate it looks empty even
 though the model has a directional read on every game. This view re-presents the SAME card
 (it adds no staking and changes no guard) so a bettor who wants action across the board can
-see, per game: the model's side, its confidence, and an honest tier �
+see, per game: the model's side, its confidence, and an honest tier -
 
-  * BET   � the pick the system would actually stake (Actionable: a real, priced edge).
-  * LEAN  � the model has a positive-EV side but below the stake bar, and it is not fading
+  * BET   - the pick the system would actually stake (Actionable: a real, priced edge).
+  * LEAN  - the model has a positive-EV side but below the stake bar, and it is not fading
             Kalshi. A read worth knowing; NOT a proven +EV bet. Bet at your own risk.
-  * AVOID � negative EV at the price, or the model is fading consensus (Disagrees). The
+  * AVOID - negative EV at the price, or the model is fading consensus (Disagrees). The
             board the math says to stay off.
 
 The tiers separate a best-available directional read from a production wager. Every game
@@ -36,7 +36,7 @@ def classify_lean_tier(status: object, eff_ev: object, consensus: object,
     """BET / LEAN / AVOID for one row (see module docstring).
 
     When ``calibrated_win`` and ``break_even`` are supplied, a would-be LEAN is demoted to
-    AVOID if its CALIBRATED win probability fails to beat the break-even price � the model's
+    AVOID if its CALIBRATED win probability fails to beat the break-even price - the model's
     raw EV is overconfident in the 0.50-0.55 band (327 graded picks: predicted .53, realized
     .43), so a positive *raw* EV there is usually a negative *calibrated* EV.
     """
@@ -119,7 +119,7 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
 
     # Calibrated win probability + break-even, for the LEAN gate and transparency. Bucket-
     # conditional (global curve + per-bucket realized tilt) so a proven bucket (e.g.
-    # under:Agrees ~61%) isn't crushed below break-even by the pooled curve � same number the
+    # under:Agrees ~61%) isn't crushed below break-even by the pooled curve - same number the
     # staking gate uses, so the view and the card agree.
     if calibration:
         try:
@@ -148,13 +148,13 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
         for s, e, c, cw, be in zip(status, eff_ev, consensus, calib_win, breakeven)
     ]
 
-    # Empirical edge = bucket-aware calibrated win minus break-even. This � NOT model EV � is
+    # Empirical edge = bucket-aware calibrated win minus break-even. This - NOT model EV - is
     # the predictive ranking signal: across 63 graded picks the model's EV ranking was
     # inverted (its highest-EV/most-contrarian picks lost), while bucket-realized performance
     # held up. So the card is ordered by Emp_Edge, best first, within each tier.
     emp_edge = gate["absolute_production_edge"]
 
-    # A started game is never playable at ANY size � pre-game lines are stale
+    # A started game is never playable at ANY size - pre-game lines are stale
     # and the shown odds may be in-game. attach_play_stakes zeroes these rows.
     started = _first_col(df, "game_already_started_flag").map(
         lambda v: bool(v) if pd.notna(v) and v is not None else False
@@ -231,7 +231,7 @@ def build_all_games_lean_card(best_picks_df: pd.DataFrame, *, calibration: objec
     if out.empty:
         return out
     out["_t"] = out["Tier"].map(_TIER_ORDER).fillna(3)
-    # Rank by empirical edge (bucket-proven), not model Win%/EV � the latter is anti-informative.
+    # Rank by empirical edge (bucket-proven), not model Win%/EV - the latter is anti-informative.
     # Win% is the tiebreaker and the fallback when there's no calibration (Emp_Edge all NaN).
     out = out.sort_values(
         ["_t", "Emp_Edge", "Win%"], ascending=[True, False, False], na_position="last"
@@ -260,7 +260,7 @@ def attach_play_stakes(card: pd.DataFrame, unit: float = 1.0) -> pd.DataFrame:
     but they receive zero dollars. This keeps Play_Stake aligned with the app's
     positive-EV production decision:
 
-      BET    2.0u (or the pick's own Kelly stake if larger � a real edge)
+      BET    2.0u (or the pick's own Kelly stake if larger - a real edge)
       LEAN   0u
       AVOID  0u
 
