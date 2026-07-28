@@ -80,6 +80,15 @@ def test_moneyline_export_preserves_favorite_orientation_without_creating_a_bet(
             },
             {
                 "league": "MLB",
+                "home_team": "Los Angeles Angels",
+                "away_team": "Houston",
+                "homekalshi": "LAA",
+                "awaykalshi": "HOU",
+                "pick": "LAA",
+                "line": -115,
+            },
+            {
+                "league": "MLB",
                 "home_team": "New York Mets",
                 "away_team": "Atlanta",
                 "homekalshi": "NYM",
@@ -93,7 +102,7 @@ def test_moneyline_export_preserves_favorite_orientation_without_creating_a_bet(
     hints = _build_moneyline_orientation_rows(rows)[0]
 
     assert hints["market_type"].eq("orientation_hint").all()
-    assert hints["orientation_favorite_side"].tolist() == ["home", "away"]
+    assert hints["orientation_favorite_side"].tolist() == ["home", "home", "away"]
     assert hints["odds_american"].isna().all()
 
 
@@ -176,3 +185,4 @@ def test_expand_uses_orientation_hint_for_miami_novig_run_line():
     assert home["line_source"] == "novig_theover_moneyline_reoriented"
     assert float(away["spread_line"]) == 1.5
     assert float(away["odds_american"]) == -208.0
+
