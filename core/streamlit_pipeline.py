@@ -462,6 +462,7 @@ BEST_PICK_COLUMNS = [
 CANONICAL_BET_COLUMNS = [
     "league", "home_team", "away_team", "game_date", "game_time_est", "game_key",
     "market_type", "candidate_source", "orientation_source", "upload_match_reason", "spread_line", "total_line",
+    "orientation_favorite_side",
     "theover_probability", "win_prob_source", "odds_american", "odds_source", "market_probability",
     "ml_probability", "display_probability", "calibrated_probability", "expected_value", "edge", "best_pick", "used_stale_features", "matchup_id", "Conviction_Score",
     "uploaded_spread_line", "uploaded_total_line", "live_spread_line", "live_total_line", "line_source", "line_delta", "upload_market_match",
@@ -2077,6 +2078,72 @@ def _build_spread_rows(normalized: pd.DataFrame) -> list[pd.DataFrame]:
     return [spread_home, spread_away]
 
 
+def _build_moneyline_orientation_rows(normalized: pd.DataFrame) -> list[pd.DataFrame]:
+    """Preserve favorite orientation from a sides-upload moneyline row.
+
+    Moneyline bets remain disabled. The signed price is used only to identify
+    which team should own the negative MLB run line when the live odds feed has
+    stale or reversed spread outcome names.
+    """
+    if normalized is None or normalized.empty:
+        return []
+
+    base_cols = [
+        c for c in ["league", "home_team", "away_team", "game_date", "game_time_est"]
+        if c in normalized.columns
+    ]
+    base = normalized[base_cols].copy()
+
+    def _team_token(value: object) -> str:
+        if value is None or pd.isna(value):
+            return ""
+        return re.sub(r"[^A-Z0-9]+", "", str(value).upper())
+
+    def _favorite_side(row: pd.Series) -> object:
+        pick_value = row.get("pick_team")
+        if pd.isna(pick_value) or not str(pick_value).strip():
+            pick_value = row.get("pick")
+        pick_token = _team_token(pick_value)
+        if not pick_token:
+            return pd.NA
+
+        home_tokens = {
+            _team_token(row.get("home_team")),
+            _team_token(row.get("homekalshi")),
+            _team_token(row.get("home_kalshi")),
+        }
+        away_tokens = {
+            _team_token(row.get("away_team")),
+            _team_token(row.get("awaykalshi")),
+            _team_token(row.get("away_kalshi")),
+        }
+        home_tokens.discard("")
+        away_tokens.discard("")
+
+        if pick_token in home_tokens:
+            pick_side = "home"
+        elif pick_token in away_tokens:
+            pick_side = "away"
+        else:
+            return pd.NA
+
+        price = pd.to_numeric(row.get("line"), errors="coerce")
+        if pd.isna(price) or float(price) == 0.0:
+            return pd.NA
+        if float(price) < 0.0:
+            return pick_side
+        return "away" if pick_side == "home" else "home"
+
+    base["market_type"] = "orientation_hint"
+    base["orientation_favorite_side"] = normalized.apply(_favorite_side, axis=1)
+    base["spread_line"] = pd.NA
+    base["total_line"] = pd.NA
+    base["theover_probability"] = pd.NA
+    base["odds_american"] = pd.NA
+    base = base[base["orientation_favorite_side"].isin(["home", "away"])].copy()
+    return [base] if not base.empty else []
+
+
 def _build_h2h_rows(normalized: pd.DataFrame) -> list[pd.DataFrame]:
     """Build h2h_home and h2h_away rows from TheOver moneyline export."""
     prob = _first_existing_numeric(normalized, ["theover_probability", "winprobability", "win_probability", "probability"])
@@ -2170,9 +2237,12 @@ def build_theover_bet_rows(
             continue
 
         normalized = _normalize_upload(upload_df)
-        # Drop moneylines from TheOver sides CSV — only spreads and totals are surfaced
+        # Moneyline bets remain disabled; retain only an orientation hint.
         if file_type == "spreads" and "market" in normalized.columns:
-            normalized = normalized[~normalized["market"].str.lower().str.strip().eq("moneyline")].copy()
+            moneyline_mask = normalized["market"].str.lower().str.strip().eq("moneyline")
+            if moneyline_mask.any():
+                pieces.extend(_build_moneyline_orientation_rows(normalized[moneyline_mask].copy()))
+            normalized = normalized[~moneyline_mask].copy()
         if normalized.empty:
             continue
 
@@ -5975,6 +6045,28 @@ def _derive_spread_away_line(row):
     return pd.NA
 
 
+def _novig_spread_quote_for_favorite(row, requested_side: str, favorite_side: str):
+    """Return the Novig point and price matching an independently oriented side.
+
+    The odds feed can attach Novig's two run-line outcomes to the wrong team
+    names. Once the uploaded moneyline identifies the favorite, select the
+    outcome by its signed point and keep that outcome's price attached. This
+    repairs ``Miami +1.5`` into ``Miami -1.5`` without pairing ``-1.5`` with the
+    price for ``+1.5``.
+    """
+    if requested_side not in {"home", "away"} or favorite_side not in {"home", "away"}:
+        return pd.NA, pd.NA, False
+
+    requested_is_favorite = requested_side == favorite_side
+    desired_sign = -1.0 if requested_is_favorite else 1.0
+    for quoted_side in ("home", "away"):
+        point = pd.to_numeric(row.get(f"novig_{quoted_side}_point"), errors="coerce")
+        price = pd.to_numeric(row.get(f"novig_{quoted_side}_price"), errors="coerce")
+        if pd.notna(point) and pd.notna(price) and float(point) * desired_sign > 0.0:
+            return float(point), float(price), quoted_side != requested_side
+    return pd.NA, pd.NA, False
+
+
 def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.DataFrame | None = None) -> tuple[pd.DataFrame, dict[str, Any]]:
     """
     Expands the wide live_odds_df (1 row per game) into every enabled live market
@@ -6184,6 +6276,15 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
             elif orientation_source == "fuzzy_match":
                 matched_group = matched_rows
 
+        orientation_favorite_side = ""
+        if matched_group is not None and "orientation_favorite_side" in matched_group.columns:
+            orientation_hints = _string_series(
+                matched_group[matched_group["market_type"].astype(str).eq("orientation_hint")],
+                "orientation_favorite_side",
+            )
+            orientation_hints = orientation_hints[orientation_hints.isin(["home", "away"])]
+            if not orientation_hints.empty:
+                orientation_favorite_side = str(orientation_hints.iloc[0])
 
         for market_type in candidate_markets:
             # Uploads are signals, not a market whitelist. Retain live spreads,
@@ -6249,22 +6350,45 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
             else:
                 point_val = pd.NA
 
+            spread_line_source = "live_odds"
             if market_type.startswith("spread"):
                 side = "home" if market_type == "spread_home" else "away"
-                # Prefer a book whose spread agrees with its own moneyline; take BOTH
-                # its point and its price for this side so line and odds stay coherent.
-                cb = _consistent_spread_book(row)
-                cb_point = pd.to_numeric(row.get(f"{cb}_{side}_point"), errors="coerce") if cb else pd.NA
-                if cb is not None and pd.notna(cb_point):
-                    point_val = float(cb_point)
-                    cb_price = pd.to_numeric(row.get(f"{cb}_{side}_price"), errors="coerce")
-                    if pd.notna(cb_price):
-                        market_dict["odds_american"] = float(cb_price)
-                        market_dict["odds_source"] = "odds_api"
-                elif market_type == "spread_away":
-                    # No internally consistent book: fall back to the home-mirror
-                    # derivation (a flipped feed stays caught by the orientation guard).
-                    point_val = _derive_spread_away_line(row)
+                if league_str == "MLB" and orientation_favorite_side:
+                    oriented_point, oriented_price, remapped = _novig_spread_quote_for_favorite(
+                        row, side, orientation_favorite_side
+                    )
+                    if pd.notna(oriented_point) and pd.notna(oriented_price):
+                        point_val = float(oriented_point)
+                        market_dict["odds_american"] = float(oriented_price)
+                        market_dict["odds_source"] = "novig"
+                        spread_line_source = (
+                            "novig_theover_moneyline_reoriented"
+                            if remapped
+                            else "novig_theover_moneyline_verified"
+                        )
+                        market_dict["orientation_source"] = (
+                            f"{orientation_source}|theover_moneyline_favorite"
+                        )
+                    else:
+                        point_val = pd.NA
+                        market_dict["odds_american"] = pd.NA
+                        market_dict["odds_source"] = "rejected_live_orientation"
+                        spread_line_source = "rejected_live_orientation"
+                else:
+                    # Prefer a book whose spread agrees with its own moneyline; take BOTH
+                    # its point and its price for this side so line and odds stay coherent.
+                    cb = _consistent_spread_book(row)
+                    cb_point = pd.to_numeric(row.get(f"{cb}_{side}_point"), errors="coerce") if cb else pd.NA
+                    if cb is not None and pd.notna(cb_point):
+                        point_val = float(cb_point)
+                        cb_price = pd.to_numeric(row.get(f"{cb}_{side}_price"), errors="coerce")
+                        if pd.notna(cb_price):
+                            market_dict["odds_american"] = float(cb_price)
+                            market_dict["odds_source"] = "odds_api"
+                    elif market_type == "spread_away":
+                        # No internally consistent book: fall back to the home-mirror
+                        # derivation (a flipped feed stays caught by the orientation guard).
+                        point_val = _derive_spread_away_line(row)
                 market_dict["spread_line"] = float(point_val) if pd.notna(point_val) else pd.NA
                 market_dict["total_line"] = pd.NA
                 market_dict["live_spread_line"] = market_dict["spread_line"]
@@ -6303,7 +6427,7 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
 
             market_dict["uploaded_spread_line"] = pd.NA
             market_dict["uploaded_total_line"] = pd.NA
-            market_dict["line_source"] = "live_odds"
+            market_dict["line_source"] = spread_line_source
             market_dict["line_delta"] = pd.NA
             market_dict["upload_market_match"] = False
 
