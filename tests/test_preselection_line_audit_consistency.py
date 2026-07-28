@@ -5,10 +5,17 @@ import pandas as pd
 from core.streamlit_pipeline import build_best_picks_df
 
 
-def _candidate(market_type: str, *, win_prob: float, ev: float, edge: float) -> dict:
+def _candidate(
+    market_type: str,
+    *,
+    win_prob: float,
+    ev: float,
+    edge: float,
+    **overrides,
+) -> dict:
     is_total = market_type.startswith("total")
     is_home = market_type.endswith("home")
-    return {
+    row = {
         "league": "MLB",
         "home_team": "Texas",
         "away_team": "Seattle",
@@ -36,6 +43,8 @@ def _candidate(market_type: str, *, win_prob: float, ev: float, edge: float) -> 
         "used_stale_features": False,
         "odds_source": "odds_api",
     }
+    row.update(overrides)
+    return row
 
 
 def test_corrupt_live_totals_cannot_beat_valid_spreads_before_selection():
@@ -95,3 +104,103 @@ def test_lone_repaired_total_is_value_neutral_and_audit_matches_export():
     assert diagnostics["preselection_dropped_total_candidate_count"] == 0
     assert diagnostics["preselection_retained_only_candidate_count"] == 1
     assert diagnostics["postvalidation_candidate_audit_sync_count"] == 1
+
+
+def test_reoriented_novig_spread_is_trusted_through_final_validation():
+    df = pd.DataFrame([
+        _candidate(
+            "spread_away",
+            win_prob=0.72,
+            ev=0.20,
+            edge=0.16,
+            spread_line=1.5,
+            live_spread_line=1.5,
+            line_source="novig_theover_moneyline_reoriented",
+            orientation_source="exact_match|theover_moneyline_favorite",
+            odds_american=-178,
+            odds_source="novig",
+        ),
+        _candidate(
+            "spread_home",
+            win_prob=0.30,
+            ev=-0.10,
+            edge=0.0,
+            spread_line=-1.5,
+            live_spread_line=-1.5,
+            line_source="novig_theover_moneyline_reoriented",
+            orientation_source="exact_match|theover_moneyline_favorite",
+            odds_american=160,
+            odds_source="novig",
+        ),
+        _candidate(
+            "total_under",
+            win_prob=0.55,
+            ev=0.01,
+            edge=0.01,
+            total_line=8.5,
+            live_total_line=8.5,
+            uploaded_total_line=8.5,
+            upload_total_line=8.5,
+        ),
+    ])
+    diagnostics = {}
+
+    out = build_best_picks_df(df, diagnostics_out=diagnostics)
+    audit = diagnostics["candidate_audit_df"]
+    selected = audit[audit["best_available_selected"].astype(bool)].iloc[0]
+    row = out.iloc[0]
+
+    assert row["market_type"] == "spread_away"
+    assert row["best_pick"] == "Seattle +1.5"
+    assert float(row["market_line_used"]) == 1.5
+    assert row["market_line_source_detail"] == "novig_theover_moneyline_reoriented"
+    assert bool(row["line_consistency_flag"])
+    assert bool(row["line_event_identity_match_flag"])
+    assert bool(row["best_available_ranking_verified"])
+    assert bool(row["final_pick_valid"])
+    assert row["final_pick_valid_reason"] == "validated_live_line"
+    assert bool(selected["best_available_ranking_verified"])
+    assert bool(selected["final_pick_valid"])
+    assert diagnostics["preselection_invalid_spread_candidate_count"] == 0
+
+
+def test_invalid_spread_is_removed_and_valid_total_becomes_fallback():
+    df = pd.DataFrame([
+        _candidate(
+            "spread_away",
+            win_prob=0.90,
+            ev=0.40,
+            edge=0.30,
+            spread_line=pd.NA,
+            live_spread_line=pd.NA,
+            line_source="rejected_live_orientation",
+            odds_american=pd.NA,
+        ),
+        _candidate(
+            "total_under",
+            win_prob=0.58,
+            ev=0.03,
+            edge=0.03,
+            total_line=8.5,
+            live_total_line=8.5,
+            uploaded_total_line=8.5,
+            upload_total_line=8.5,
+        ),
+    ])
+    diagnostics = {}
+
+    out = build_best_picks_df(df, diagnostics_out=diagnostics)
+    audit = diagnostics["candidate_audit_df"]
+    selected = audit[audit["best_available_selected"].astype(bool)].iloc[0]
+    row = out.iloc[0]
+
+    assert len(audit) == 1
+    assert not audit["market_type"].astype(str).str.startswith("spread").any()
+    assert row["market_type"] == "total_under"
+    assert row["best_pick"] == "Under 8.5"
+    assert bool(row["final_pick_valid"])
+    assert selected["market_type"] == "total_under"
+    assert bool(selected["final_pick_valid"])
+    assert diagnostics["preselection_invalid_spread_candidate_count"] == 1
+    assert diagnostics["preselection_dropped_spread_candidate_count"] == 1
+    assert diagnostics["preselection_dropped_line_candidate_count"] == 1
