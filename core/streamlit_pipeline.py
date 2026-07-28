@@ -134,7 +134,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-07-27f-preselection-line-integrity"
+PIPELINE_BUILD = "2026-07-28a-trusted-novig-line-fallback"
 
 
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
@@ -151,6 +151,9 @@ REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
     "best_available_score_gap",
     "best_available_candidate_count",
     "best_available_selection_verified",
+    "best_available_ranking_verified",
+    "final_pick_valid",
+    "final_pick_valid_reason",
     "best_available_selection_reason",
     "commercial_tier",
     "sellable_as_premium",
@@ -280,6 +283,9 @@ def ensure_best_pick_export_columns(
         "best_available_score_gap": pd.NA,
         "best_available_candidate_count": 0,
         "best_available_selection_verified": False,
+        "best_available_ranking_verified": False,
+        "final_pick_valid": False,
+        "final_pick_valid_reason": "not_validated",
         "best_available_selection_reason": "",
         "commercial_tier": "Best Available / Pass",
         "sellable_as_premium": False,
@@ -328,13 +334,15 @@ def ensure_best_pick_export_columns(
     missing_cols = [c for c in req_cols if c not in out.columns]
 
     for col in req_cols:
-        if col in {"status_blocker_reason", "status_blocker_stage", "nba_stats_fetch_status", "fallback_summary_by_league", "run_health_warning", "degraded_feature_subset_reason", "status_metric_basis", "selection_probability_source", "market_line_source", "market_line_source_detail", "line_consistency_reason", "line_provenance_warning", "line_event_identity_reason", "live_event_match_key", "selected_live_event_source", "raw_book_odds_diag", "best_available_runner_up_pick", "best_available_runner_up_market_type", "best_available_selection_reason", "commercial_tier", "commercial_reason"}:
+        if col in {"status_blocker_reason", "status_blocker_stage", "nba_stats_fetch_status", "fallback_summary_by_league", "run_health_warning", "degraded_feature_subset_reason", "status_metric_basis", "selection_probability_source", "market_line_source", "market_line_source_detail", "line_consistency_reason", "line_provenance_warning", "line_event_identity_reason", "live_event_match_key", "selected_live_event_source", "raw_book_odds_diag", "best_available_runner_up_pick", "best_available_runner_up_market_type", "best_available_selection_reason", "commercial_tier", "commercial_reason", "final_pick_valid_reason"}:
             out[col] = out[col].fillna(default_values.get(col, "")).astype(str)
 
     if "status_blocker_stage" in out.columns:
         out["status_blocker_stage"] = out["status_blocker_stage"].replace({"": "none"})
     for bool_col, default in {
         "best_available_selection_verified": False,
+        "best_available_ranking_verified": False,
+        "final_pick_valid": False,
         "sellable_as_premium": False,
         "best_available_only": True,
     }.items():
@@ -418,6 +426,7 @@ BEST_PICK_COLUMNS = [
     "best_available_runner_up_pick", "best_available_runner_up_market_type",
     "best_available_runner_up_score", "best_available_score_gap",
     "best_available_candidate_count", "best_available_selection_verified",
+    "best_available_ranking_verified", "final_pick_valid", "final_pick_valid_reason",
     "best_available_selection_reason", "commercial_tier", "sellable_as_premium",
     "best_available_only", "commercial_reason",
     "decimal_odds", "matchup_id",
@@ -986,18 +995,36 @@ def _apply_mlb_runline_cover(
     )
 
 
+_TRUSTED_LIVE_LINE_SOURCES = frozenset({
+    "novig_theover_moneyline_reoriented",
+    "novig_theover_moneyline_verified",
+})
+
+
+def _trusted_live_line_source_mask(values: pd.Series) -> pd.Series:
+    """Classify sportsbook line provenance shared by pre- and post-selection guards.
+
+    The Novig/TheOver orientation repair still originates from the live odds row even
+    though its explicit provenance label does not contain the word live. Keep one
+    authoritative classifier so a source accepted before ranking cannot be rejected
+    merely because a later guard uses a different string heuristic.
+    """
+    source = values.fillna("").astype(str).str.strip().str.lower()
+    live = source.str.contains("live", na=False) | source.isin(_TRUSTED_LIVE_LINE_SOURCES)
+    return live & ~source.str.startswith("rejected_")
+
+
 def _filter_preselection_line_integrity(
     pool: pd.DataFrame,
     diagnostics_out: dict | None = None,
 ) -> pd.DataFrame:
-    """Remove corrupt live-total candidates before Best Available scoring.
+    """Exclude candidates that cannot survive final line validation before ranking.
 
-    A rejected live total cannot be swapped to an uploaded reference after selection:
-    its probability, odds, EV, and score belong to the rejected line. When another
-    valid spread/total candidate exists for the same game, exclude the corrupt total
-    before ranking so the winner is priced and scored on the line it actually displays.
-    A lone corrupt candidate is retained for the existing conservative research-only
-    fallback path, which remains zero-staked and is synchronized into the audit later.
+    Relative ranking must never select a candidate whose displayed line, price, or live
+    identity will be erased later. Invalid candidates are removed when the same game has
+    at least one valid alternative, which makes the best valid total/spread the automatic
+    fallback. A lone invalid candidate remains visible for the existing research-only,
+    zero-stake path instead of silently deleting the game.
     """
     if pool is None or pool.empty or "market_type" not in pool.columns:
         return pool
@@ -1010,13 +1037,16 @@ def _filter_preselection_line_integrity(
 
     market = _string_series(pool, "market_type").str.strip().str.lower()
     is_total = market.isin({"total_over", "total_under"})
+    is_spread = market.isin({"spread_home", "spread_away"})
     line_source = _string_series(pool, "line_source").str.strip().str.lower()
-    live_flag = _string_series(pool, "is_live_data").str.strip().str.lower().isin(
-        {"true", "1", "yes"}
-    )
-    is_live = line_source.str.contains("live", na=False) | live_flag
+    trusted_live_source = _trusted_live_line_source_mask(line_source)
     live_total = _coalesce_numeric("live_total_line", "matched_live_total_line")
-    live_total = live_total.fillna(_numeric_series(pool, "total_line").where(is_live))
+    live_total = live_total.fillna(_numeric_series(pool, "total_line").where(trusted_live_source))
+    live_spread = _coalesce_numeric("live_spread_line", "matched_live_spread_line")
+    live_spread = live_spread.fillna(_numeric_series(pool, "spread_line").where(trusted_live_source))
+    price = _numeric_series(pool, "odds_american")
+    orientation = _string_series(pool, "orientation_source").str.strip().str.lower()
+    ambiguous_identity = orientation.str.contains("fuzzy", na=False)
     league = _string_series(pool, "league").str.strip().str.upper()
 
     plausible_live = (
@@ -1036,12 +1066,28 @@ def _filter_preselection_line_integrity(
         MAIN_TOTAL_MIN_DEVIG_PROB,
         MAIN_TOTAL_MAX_DEVIG_PROB,
     )
-    invalid_total = (
+    invalid_total_shape = (
         is_total
-        & is_live
+        & trusted_live_source
         & live_total.notna()
         & ((known_league & ~plausible_live) | alt_priced)
     )
+    invalid_spread = is_spread & (
+        ~trusted_live_source
+        | live_spread.isna()
+        | price.isna()
+        | price.eq(0)
+        | ambiguous_identity
+    )
+    invalid_total = is_total & (
+        ~trusted_live_source
+        | live_total.isna()
+        | price.isna()
+        | price.eq(0)
+        | ambiguous_identity
+        | invalid_total_shape
+    )
+    invalid_candidate = invalid_spread | invalid_total
 
     matchup_key = _string_series(pool, "matchup_id").str.strip()
     fallback_key = (
@@ -1054,22 +1100,24 @@ def _filter_preselection_line_integrity(
         + _string_series(pool, "game_date").str.strip()
     )
     matchup_key = matchup_key.mask(matchup_key.eq(""), fallback_key)
-    valid_alternatives = (~invalid_total).groupby(matchup_key, dropna=False).transform("sum")
-    drop_mask = invalid_total & valid_alternatives.gt(0)
+    valid_alternatives = (~invalid_candidate).groupby(matchup_key, dropna=False).transform("sum")
+    drop_mask = invalid_candidate & valid_alternatives.gt(0)
 
     if diagnostics_out is not None:
         diagnostics_out["preselection_invalid_total_candidate_count"] = int(invalid_total.sum())
-        diagnostics_out["preselection_dropped_total_candidate_count"] = int(drop_mask.sum())
+        diagnostics_out["preselection_invalid_spread_candidate_count"] = int(invalid_spread.sum())
+        diagnostics_out["preselection_dropped_total_candidate_count"] = int((drop_mask & is_total).sum())
+        diagnostics_out["preselection_dropped_spread_candidate_count"] = int((drop_mask & is_spread).sum())
+        diagnostics_out["preselection_dropped_line_candidate_count"] = int(drop_mask.sum())
         diagnostics_out["preselection_retained_only_candidate_count"] = int(
-            (invalid_total & ~drop_mask).sum()
+            (invalid_candidate & ~drop_mask).sum()
         )
     if drop_mask.any():
         logger.warning(
-            "BEST PICKS AUDIT: rejected %s corrupt live-total candidate(s) before scoring",
+            "BEST PICKS AUDIT: rejected %s invalid line candidate(s) before scoring",
             int(drop_mask.sum()),
         )
     return pool.loc[~drop_mask].copy()
-
 
 def _sync_selected_candidate_audit(
     candidate_audit_df: pd.DataFrame,
@@ -1120,6 +1168,9 @@ def _sync_selected_candidate_audit(
         "best_available_runner_up_score",
         "best_available_score_gap",
         "best_available_selection_verified",
+        "best_available_ranking_verified",
+        "final_pick_valid",
+        "final_pick_valid_reason",
     ]
     synced = 0
     for idx, row in final_best_df.iterrows():
@@ -3498,6 +3549,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     pool["best_available_selection_verified"] = (
         pool["matchup_id"].map(verified_by_matchup).fillna(False).astype(bool)
     )
+    pool["best_available_ranking_verified"] = pool[
+        "best_available_selection_verified"
+    ].fillna(False).astype(bool)
     pool["best_available_selection_reason"] = (
         "Highest deterministic candidate score after validity, identity, and line-integrity gates"
     )
@@ -3519,7 +3573,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         "best_available_runner_up_pick", "best_available_runner_up_market_type",
         "best_available_runner_up_score", "best_available_score_gap",
         "best_available_candidate_count", "best_available_selection_verified",
-        "best_available_rejection_reason",
+        "best_available_ranking_verified", "best_available_rejection_reason",
     ]
     audit_available_columns = [col for col in candidate_audit_columns if col in pool.columns]
     candidate_audit_df = pool[audit_available_columns].copy().rename(
@@ -3527,6 +3581,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     )
     if "pipeline_build" not in candidate_audit_df.columns:
         candidate_audit_df.insert(0, "pipeline_build", PIPELINE_BUILD)
+    candidate_audit_df["final_pick_valid"] = False
+    candidate_audit_df["final_pick_valid_reason"] = "not_selected"
 
     # Select the verified rank-1 winner for each game.
     best = pool.loc[final_winner_indices].copy()
@@ -4739,7 +4795,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             "moneyline_home", "moneyline_away", "h2h_home", "h2h_away",
         })
         line_source_norm = best.get("line_source", pd.Series([""] * len(best), index=best.index)).astype(str).str.lower()
-        live_match = line_source_norm.str.contains("live", na=False)
+        live_match = _trusted_live_line_source_mask(line_source_norm)
 
         # Spreads/totals prove their live provenance with a numeric line. A
         # moneyline intentionally has no point value, so its real sportsbook
@@ -5564,6 +5620,48 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             diagnostics_out["absolute_production_gate_passed_count"] = int(
                 (_absolute_actionable & _absolute_gate["production_gate_pass"]).sum()
             )
+
+    # Keep ranking integrity distinct from final bet-line validity. Ranking can be
+    # correct while the winning line later fails identity/provenance checks.
+    best["best_available_ranking_verified"] = best.get(
+        "best_available_selection_verified",
+        pd.Series(False, index=best.index),
+    ).fillna(False).astype(bool)
+    _final_market = _string_series(best, "market_type").str.strip().str.lower()
+    _final_requires_line = _final_market.isin({
+        "spread_home", "spread_away", "total_over", "total_under",
+    })
+    _final_line = pd.to_numeric(best.get("market_line_used"), errors="coerce")
+    _final_line_ok = best.get(
+        "line_consistency_flag", pd.Series(False, index=best.index)
+    ).fillna(False).astype(bool)
+    _final_event_ok = best.get(
+        "line_event_identity_match_flag", pd.Series(False, index=best.index)
+    ).fillna(False).astype(bool)
+    _final_unresolved = _string_series(best, "best_pick").str.contains(
+        "unresolved|missing line", case=False, na=False
+    )
+    best["final_pick_valid"] = (
+        best["best_available_ranking_verified"]
+        & (~_final_requires_line | _final_line.notna())
+        & _final_line_ok
+        & _final_event_ok
+        & ~_final_unresolved
+    )
+    best["final_pick_valid_reason"] = "validated_live_line"
+    best.loc[~best["best_available_ranking_verified"], "final_pick_valid_reason"] = (
+        "ranking_invariant_failed"
+    )
+    best.loc[_final_requires_line & _final_line.isna(), "final_pick_valid_reason"] = (
+        "missing_market_line_after_validation"
+    )
+    best.loc[~_final_line_ok, "final_pick_valid_reason"] = best.get(
+        "line_consistency_reason", pd.Series("line_consistency_failed", index=best.index)
+    ).fillna("line_consistency_failed").replace("", "line_consistency_failed")
+    best.loc[~_final_event_ok, "final_pick_valid_reason"] = best.get(
+        "line_event_identity_reason", pd.Series("line_event_identity_failed", index=best.index)
+    ).fillna("line_event_identity_failed").replace("", "line_event_identity_failed")
+    best.loc[_final_unresolved, "final_pick_valid_reason"] = "unresolved_pick_text"
 
     final_best_df = best[BEST_PICK_COLUMNS].copy()
     final_best_df = ensure_best_pick_export_columns(final_best_df, diagnostics_out=diagnostics_out)
