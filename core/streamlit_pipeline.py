@@ -7843,12 +7843,33 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
     # Actionable label alone can never produce dollars.
     from core.production_gate import evaluate_absolute_production_gate
     portfolio_break_even = (1.0 / portfolio["decimal_odds"]).replace([np.inf, -np.inf], np.nan)
+    # Prefer the most production-specific EV, but fall back row by row.  A
+    # present-but-sparse production_expected_value column must not hide a valid
+    # effective/legacy EV on the same row.
     portfolio_model_ev = pd.to_numeric(
         portfolio.get(
             "production_expected_value",
-            portfolio.get("effective_expected_value", portfolio.get("expected_value")),
+            pd.Series(np.nan, index=portfolio.index),
         ),
         errors="coerce",
+    )
+    portfolio_model_ev = portfolio_model_ev.fillna(
+        pd.to_numeric(
+            portfolio.get(
+                "effective_expected_value",
+                pd.Series(np.nan, index=portfolio.index),
+            ),
+            errors="coerce",
+        )
+    )
+    portfolio_model_ev = portfolio_model_ev.fillna(
+        pd.to_numeric(
+            portfolio.get(
+                "expected_value",
+                pd.Series(np.nan, index=portfolio.index),
+            ),
+            errors="coerce",
+        )
     )
     portfolio_gate = evaluate_absolute_production_gate(
         p,
