@@ -38,11 +38,13 @@ MAX_SLATE = min(TEST_BANKROLL * PRODUCTION_MAX_SLATE_PCT, PRODUCTION_ABSOLUTE_MA
 
 
 def _row(pick, status, prob, odds=-110, health="", consensus="Agrees"):
+    decimal_odds = 1.0 + (100.0 / abs(odds) if odds < 0 else odds / 100.0)
     return {
         "best_pick": pick,
         "Pick_Status": status,
         "calibrated_probability": prob,
         "odds_american": odds,
+        "expected_value": (prob * decimal_odds) - 1.0,
         "consensus_agreement": consensus,
         "market_line_source": "live",
         "line_provenance_warning": "",

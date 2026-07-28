@@ -5419,6 +5419,82 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                     diagnostics_out["empty_card_recovery_leagues"] = top["league"].tolist() if "league" in top.columns else []
 
     best = classify_best_available_picks(best)
+    # Terminal absolute production gate. Candidate selection is intentionally
+    # relative (one best-available direction per game), but funding must be
+    # absolute: a pick needs positive model EV and a calibrated probability at
+    # least two percentage points above the exact sportsbook break-even price.
+    # This runs after empirical promotion AND empty-card recovery so neither path
+    # can re-fund a merely "least bad" candidate.
+    if not best.empty:
+        from core.production_gate import evaluate_absolute_production_gate
+
+        _absolute_probability = pd.to_numeric(
+            best.get("empirical_win_probability", pd.Series(np.nan, index=best.index)),
+            errors="coerce",
+        ).fillna(
+            pd.to_numeric(
+                best.get("production_win_probability", pd.Series(np.nan, index=best.index)),
+                errors="coerce",
+            )
+        ).fillna(
+            pd.to_numeric(
+                best.get("effective_win_probability", pd.Series(np.nan, index=best.index)),
+                errors="coerce",
+            )
+        )
+        _absolute_decimal = pd.to_numeric(
+            best.get("decimal_odds", pd.Series(np.nan, index=best.index)),
+            errors="coerce",
+        )
+        _absolute_break_even = (1.0 / _absolute_decimal).replace([np.inf, -np.inf], np.nan)
+        _absolute_break_even = _absolute_break_even.fillna(
+            pd.to_numeric(
+                best.get("market_probability", pd.Series(np.nan, index=best.index)),
+                errors="coerce",
+            )
+        )
+        _absolute_model_ev = pd.to_numeric(
+            best.get("production_expected_value", pd.Series(np.nan, index=best.index)),
+            errors="coerce",
+        ).fillna(
+            pd.to_numeric(
+                best.get("effective_expected_value", pd.Series(np.nan, index=best.index)),
+                errors="coerce",
+            )
+        )
+        _absolute_gate = evaluate_absolute_production_gate(
+            _absolute_probability,
+            _absolute_break_even,
+            _absolute_model_ev,
+        )
+        _absolute_fail = (
+            best["Pick_Status"].astype(str).eq("Actionable")
+            & ~_absolute_gate["production_gate_pass"]
+        )
+        if _absolute_fail.any():
+            best.loc[_absolute_fail, "Pick_Status"] = "High Variance/Speculative"
+            best.loc[_absolute_fail, "Kelly_Bet_Size"] = 0.0
+            best.loc[_absolute_fail, "production_eligible"] = False
+            best.loc[_absolute_fail, "status_blocker_stage"] = "absolute_production_value_gate"
+            best.loc[_absolute_fail, "status_blocker_reason"] = _absolute_gate.loc[
+                _absolute_fail, "production_gate_reason"
+            ]
+            best.loc[_absolute_fail, "Status_Reason"] = (
+                "High Variance: best available pick is a pass - "
+                + _absolute_gate.loc[_absolute_fail, "production_gate_reason"].astype(str)
+            )
+        _absolute_actionable = best["Pick_Status"].astype(str).eq("Actionable")
+        best["production_eligible"] = (
+            _absolute_actionable
+            & pd.to_numeric(best["Kelly_Bet_Size"], errors="coerce").fillna(0.0).gt(0)
+            & _absolute_gate["production_gate_pass"]
+        )
+        if diagnostics_out is not None:
+            diagnostics_out["absolute_production_gate_failed_count"] = int(_absolute_fail.sum())
+            diagnostics_out["absolute_production_gate_passed_count"] = int(
+                (_absolute_actionable & _absolute_gate["production_gate_pass"]).sum()
+            )
+
     final_best_df = best[BEST_PICK_COLUMNS].copy()
     final_best_df = ensure_best_pick_export_columns(final_best_df, diagnostics_out=diagnostics_out)
     # Neutralize any lone research-only fallback before diagnostics and synchronize
@@ -7762,6 +7838,49 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
     kelly_fraction.loc[valid] = (((b.loc[valid] * p.loc[valid]) - q.loc[valid]) / b.loc[valid]).clip(lower=0.0)
     portfolio["kelly_probability_used"] = p
     portfolio["kelly_decimal_odds"] = portfolio["decimal_odds"]
+    # Defense in depth: callers may pass a pre-built frame directly to the
+    # portfolio allocator. Re-apply the same absolute production gate here so an
+    # Actionable label alone can never produce dollars.
+    from core.production_gate import evaluate_absolute_production_gate
+    portfolio_break_even = (1.0 / portfolio["decimal_odds"]).replace([np.inf, -np.inf], np.nan)
+    # Prefer the most production-specific EV, but fall back row by row.  A
+    # present-but-sparse production_expected_value column must not hide a valid
+    # effective/legacy EV on the same row.
+    portfolio_model_ev = pd.to_numeric(
+        portfolio.get(
+            "production_expected_value",
+            pd.Series(np.nan, index=portfolio.index),
+        ),
+        errors="coerce",
+    )
+    portfolio_model_ev = portfolio_model_ev.fillna(
+        pd.to_numeric(
+            portfolio.get(
+                "effective_expected_value",
+                pd.Series(np.nan, index=portfolio.index),
+            ),
+            errors="coerce",
+        )
+    )
+    portfolio_model_ev = portfolio_model_ev.fillna(
+        pd.to_numeric(
+            portfolio.get(
+                "expected_value",
+                pd.Series(np.nan, index=portfolio.index),
+            ),
+            errors="coerce",
+        )
+    )
+    portfolio_gate = evaluate_absolute_production_gate(
+        p,
+        portfolio_break_even,
+        portfolio_model_ev,
+    )
+    portfolio["absolute_production_edge"] = portfolio_gate["absolute_production_edge"]
+    portfolio["absolute_production_gate_pass"] = portfolio_gate["production_gate_pass"]
+    portfolio["absolute_production_gate_reason"] = portfolio_gate["production_gate_reason"]
+    production_eligible = production_eligible & portfolio_gate["production_gate_pass"]
+    portfolio["production_eligible"] = production_eligible
     portfolio["kelly_fraction"] = kelly_fraction
     portfolio["raw_kelly_amount"] = float(bankroll) * kelly_fraction
     from app_core.weights_config import (
@@ -7928,6 +8047,15 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
             portfolio["kelly_cap_reason"] = "Force-deploy suspended (slate health guard)"
         portfolio["kelly_allocation_method"] = "force_deploy_daily_budget"
 
+    # Absolute value is a final non-bypassable funding requirement. In
+    # particular, the optional force-deploy allocator must not reintroduce
+    # dollars on a row that the calibrated price gate rejected.
+    absolute_pass = portfolio["absolute_production_gate_pass"].fillna(False).astype(bool)
+    portfolio.loc[~absolute_pass, "production_bet_amount"] = 0.0
+    portfolio.loc[~absolute_pass, "recommended_bet"] = 0.0
+    portfolio.loc[~absolute_pass, "production_eligible"] = False
+    portfolio.loc[~absolute_pass, "kelly_cap_reason"] = "Absolute production value gate"
+
     # Final, non-bypassable production ceilings. This runs after every optional
     # allocation mode so neither force-deploy nor a future sizing branch can
     # exceed the bankroll-relative and absolute risk limits.
@@ -7979,6 +8107,7 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
         "kelly_total_fractional_amount", "kelly_total_production_amount", "kelly_max_pick_cap_hits", "kelly_slate_scale_factor",
         "market_line_used", "market_line_source", "line_consistency_flag", "line_event_identity_match_flag", "line_provenance_warning",
         "export_run_id", "pick_id", "canonical_pick_key", "production_eligible", "non_actionable_eligible",
+        "absolute_production_edge", "absolute_production_gate_pass", "absolute_production_gate_reason",
     ]
     for col in cols:
         if col not in portfolio.columns:

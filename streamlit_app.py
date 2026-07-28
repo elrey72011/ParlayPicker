@@ -1980,9 +1980,9 @@ def main() -> None:
         # Same display hygiene as the CSV export: $0-stake picks read as "No Bet", not a tier.
         display_df = apply_no_bet_pick_quality(display_df)
 
-        # Every row playable (owner, 4 Jul): join the Play Card tier + flat stake
-        # onto the MAIN card so "No Play"/"Below Threshold" is fine print, not the
-        # headline. Index-aligned scoring; production Kelly staking untouched.
+        # Keep one directional read per game, but independently label whether the
+        # offered price clears the absolute production gate. Nonqualified rows
+        # remain visible as BEST AVAILABLE - PASS and carry $0.
         if not display_df.empty:
             try:
                 from app_core.lean_card import attach_play_stakes as _aps, score_best_picks_rows as _sbr
@@ -1992,6 +1992,9 @@ def main() -> None:
                 if not _scored.empty:
                     display_df["Play Tier"] = _scored["Tier"]
                     display_df["Play Stake"] = _scored["Play_Stake"]
+                    display_df["Bet Decision"] = _scored["Bet_Decision"]
+                    display_df["Calibrated Edge"] = _scored["Absolute_Edge"]
+                    display_df["Production Gate Reason"] = _scored["Production_Gate_Reason"]
             except Exception as _tier_exc:  # tiers are additive; never break the card
                 logger.warning("main-card play tiers failed: %s", _tier_exc)
 
@@ -2026,7 +2029,7 @@ def main() -> None:
             if "kalshi_probability" in display_df.columns:
                 kalshi_display = pd.to_numeric(display_df["kalshi_probability"], errors="coerce")
                 display_df["kalshi_probability_display"] = kalshi_display.map(lambda x: "No Kalshi" if pd.isna(x) else f"{x:.4f}")
-            preferred = ["Play Tier", "Play Stake", "Pick_Status", "Triple Filter Rank", "Pick Quality", "parlay_rank", "League", "Home Team", "Away Team", "Game Date", "Game Time (ET)", "Best Pick", "Gemini Pick", "Prob", "ML Prob", "Odds", "Source", "EV", "Edge", "Consensus", "Kalshi Status", "kalshi_probability_display"]
+            preferred = ["Bet Decision", "Play Tier", "Play Stake", "Pick_Status", "Triple Filter Rank", "Pick Quality", "parlay_rank", "League", "Home Team", "Away Team", "Game Date", "Game Time (ET)", "Best Pick", "Gemini Pick", "Prob", "ML Prob", "Odds", "Source", "EV", "Edge", "Calibrated Edge", "Consensus", "Kalshi Status", "kalshi_probability_display", "Production Gate Reason"]
             ordered = [c for c in preferred if c in display_df.columns] + [c for c in display_df.columns if c not in preferred]
             display_df = display_df[ordered]
 
@@ -2036,8 +2039,11 @@ def main() -> None:
             # into a single "No Edge" group with a plain-English reason. Exports
             # and grading keep the raw statuses untouched.
             _disp_status = display_df["Pick_Status"].astype(str).str.strip() if "Pick_Status" in display_df.columns else pd.Series("", index=display_df.index)
-            qualified_df = display_df[_disp_status.eq("Actionable")]
-            no_edge_df = display_df[~_disp_status.eq("Actionable")]
+            _bet_decision = display_df.get(
+                "Bet Decision", pd.Series("BEST AVAILABLE - PASS", index=display_df.index)
+            ).astype(str)
+            qualified_df = display_df[_disp_status.eq("Actionable") & _bet_decision.eq("BET")]
+            no_edge_df = display_df.drop(index=qualified_df.index)
 
             if not qualified_df.empty:
                 st.success(f"✅ {len(qualified_df)} qualified game pick(s) today")
@@ -2046,7 +2052,7 @@ def main() -> None:
                 st.info(
                     f"🚫 **No production-staked game picks today** — the model has no proven edge "
                     f"at current prices, so the Kelly bankroll sits out. Every game below still "
-                    f"carries a Play Tier and a flat Play Stake if you want the board. Best action: "
+                    f"shows the best available direction, but failed rows are explicit PASSes at $0. Best action: "
                     f"the 🏆 Pick of the Day above and the ⚾ strikeout props below."
                 )
 
@@ -2054,33 +2060,34 @@ def main() -> None:
                 _playable = no_edge_df
                 _n_lean = int((_playable.get("Play Tier", pd.Series(dtype=str)) == "LEAN").sum())
                 with st.expander(
-                    f"🎲 Playable Board — {len(no_edge_df)} game(s), {_n_lean} LEAN "
-                    f"(every row staked at play units; tap for reasons)",
+                    f"📋 Best Available — Pass — {len(no_edge_df)} game(s), {_n_lean} LEAN "
+                    f"(all failed the production price gate; tap for reasons)",
                     expanded=False,
                 ):
                     no_edge_view = no_edge_df.copy()
                     no_edge_view.insert(0, "Why No Production Bet", no_edge_df.apply(_friendly_no_bet_reason, axis=1))
                     compact_cols = [
                         c for c in [
-                            "Play Tier", "Play Stake", "Best Pick", "League", "Away Team", "Home Team",
-                            "Game Time (ET)", "Prob", "Odds", "EV", "Edge", "Consensus",
-                            "Why No Production Bet", "Pick_Status",
+                            "Bet Decision", "Play Tier", "Play Stake", "Best Pick", "League", "Away Team", "Home Team",
+                            "Game Time (ET)", "Prob", "Odds", "EV", "Edge", "Calibrated Edge", "Consensus",
+                            "Why No Production Bet", "Pick_Status", "Production Gate Reason",
                         ] if c in no_edge_view.columns
                     ]
                     st.dataframe(no_edge_view[compact_cols], width="stretch")
                     st.caption(
-                        "Play Stake is the flat recreational sizing (unit set in the Play Card "
-                        "section below) — sized down as confidence drops. The production bankroll "
-                        "only stakes qualified picks; these rows failed those gates for the reason "
-                        "shown, and the model's lean stays visible for reference."
+                        "These are directional reads, not wagers. A BET requires positive model EV "
+                        "and calibrated probability at least two percentage points above the exact "
+                        "sportsbook break-even price. Every PASS remains visible at $0."
                     )
 
             export_prep_df = best_picks_df.copy()
-            # Play tier + flat stake ride along in the CSV export too, so the
-            # exported card never reads as all-No-Bet (owner, 4 Jul).
+            # Carry the decision and absolute price-gate evidence into the export.
             if "Play Tier" in display_df.columns:
                 export_prep_df["Play_Tier"] = display_df["Play Tier"]
                 export_prep_df["Play_Stake"] = display_df["Play Stake"]
+                export_prep_df["Bet_Decision"] = display_df["Bet Decision"]
+                export_prep_df["Absolute_Edge"] = display_df["Calibrated Edge"]
+                export_prep_df["Production_Gate_Reason"] = display_df["Production Gate Reason"]
 
             csv_rename_map = {
                 "home_team": "Home",
@@ -2093,7 +2100,7 @@ def main() -> None:
             export_prep_df = ensure_best_pick_export_columns(export_prep_df)
 
             target_export_cols = [
-                "Play_Tier", "Play_Stake",
+                "Bet_Decision", "Play_Tier", "Play_Stake", "Absolute_Edge", "Production_Gate_Reason",
                 "Pick_Status", "Status_Reason", "Triple_Filter_Rank", "Pick_Quality", "parlay_rank", "league", "Home", "Away", "Local Date",
                 "Commence (Local)", "market_type", "candidate_source", "orientation_source", "upload_match_reason", "best_pick", "Kelly_Bet_Size", "WinProbability", "expected_value",
                 "edge", "Conviction_Score", "consensus_agreement", "odds_american", "odds_source", "market_probability",
@@ -2225,18 +2232,18 @@ def main() -> None:
                         f"BET {counts.get('BET', 0)} · LEAN {counts.get('LEAN', 0)} · "
                         f"AVOID {counts.get('AVOID', 0)}.  Ranked by Emp_Edge — the bucket-REALIZED "
                         f"edge (calibrated win vs break-even), NOT model EV (which graded out "
-                        f"anti-informative). BET = priced edge the model stakes. LEAN = its "
+                        f"anti-informative). BET = positive model EV plus at least a 2-point "
+                        f"calibrated edge over the exact price. LEAN = its "
                         f"calibrated win beats break-even (your call). AVOID = negative-EV, fading "
                         f"Kalshi, or calibrated win below break-even. Calib_Win% = the model's "
                         f"probability after the bucket-conditional calibration correction. Every valid "
-                        f"pregame row is the Best Available pick and receives a tier-scaled "
-                        f"play stake; STARTED, UNAVAILABLE, and hopeless-price rows stay at $0."
+                        f"pregame row remains visible as the Best Available pick, but only absolute-gate "
+                        f"BET rows receive a stake; every LEAN/AVOID row is an explicit $0 PASS."
                     )
-                    # Every game playable (owner request, 4 Jul): flat recreational
-                    # stakes sized down by tier — 2u BET / 1.5u LEAN / 1u near-miss
-                    # AVOID / 0.5u clear AVOID. Separate money from production Kelly.
+                    # Keep unit control for qualified BET rows only. LEAN/AVOID
+                    # rows stay visible but the absolute gate holds them at $0.
                     play_unit = st.number_input(
-                        "Play unit ($) — flat recreational stake per unit",
+                        "Production play unit ($)",
                         min_value=1.0, max_value=100.0, value=1.0, step=1.0,
                         key="lean_play_unit",
                     )
@@ -2244,10 +2251,9 @@ def main() -> None:
                     _play_total = float(lean_card["Play_Stake"].sum())
                     _play_count = int(pd.to_numeric(lean_card["Play_Stake"], errors="coerce").fillna(0).gt(0).sum())
                     st.caption(
-                        f"🎲 Play_Stake puts ${_play_total:.2f} across {_play_count}/{len(lean_card)} valid games "
-                        f"at a ${play_unit:.0f} unit. This is entertainment sizing, not Kelly: on "
-                        f"AVOID rows the math expects you to pay the vig — that's why they get the "
-                        f"smallest units. The production bankroll only ever bets the BET tier."
+                        f"Play_Stake puts ${_play_total:.2f} on {_play_count}/{len(lean_card)} "
+                        f"absolute-gate BET rows at a ${play_unit:.0f} unit. LEAN and AVOID rows "
+                        f"are best-available directions for reference and remain explicit $0 PASSes."
                     )
                     st.dataframe(lean_card, width="stretch")
                     st.download_button(

@@ -18,6 +18,7 @@ def _row(name: str, *, calibrated=0.80, effective=None, empirical=None):
         "Pick_Status": "Actionable",
         "calibrated_probability": calibrated,
         "odds_american": -110,
+        "expected_value": (calibrated * (1.0 + 100.0 / 110.0)) - 1.0,
         "market_line_source": "live",
         "line_provenance_warning": "",
         "market_line_used": 8.5,
