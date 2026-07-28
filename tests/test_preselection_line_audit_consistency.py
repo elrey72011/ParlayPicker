@@ -119,6 +119,11 @@ def test_reoriented_novig_spread_is_trusted_through_final_validation():
             orientation_source="exact_match|theover_moneyline_favorite",
             odds_american=-178,
             odds_source="novig",
+            # Raw live fields still reflect Novig's pre-remap team attachment:
+            # they say the away team is favored even though the independently
+            # oriented spread correctly assigns Seattle +1.5.
+            game_home_ml_price=120,
+            game_away_ml_price=-125,
         ),
         _candidate(
             "spread_home",
@@ -159,6 +164,8 @@ def test_reoriented_novig_spread_is_trusted_through_final_validation():
     assert bool(row["best_available_ranking_verified"])
     assert bool(row["final_pick_valid"])
     assert row["final_pick_valid_reason"] == "validated_live_line"
+    assert row["status_blocker_stage"] != "spread_orientation_guardrail"
+    assert "spread_orientation_fault" not in str(row["Status_Reason"])
     assert bool(selected["best_available_ranking_verified"])
     assert bool(selected["final_pick_valid"])
     assert diagnostics["preselection_invalid_spread_candidate_count"] == 0
@@ -204,3 +211,28 @@ def test_invalid_spread_is_removed_and_valid_total_becomes_fallback():
     assert diagnostics["preselection_invalid_spread_candidate_count"] == 1
     assert diagnostics["preselection_dropped_spread_candidate_count"] == 1
     assert diagnostics["preselection_dropped_line_candidate_count"] == 1
+
+def test_plain_live_spread_still_uses_raw_moneyline_orientation_guard():
+    df = pd.DataFrame([
+        _candidate(
+            "spread_away",
+            win_prob=0.72,
+            ev=0.20,
+            edge=0.16,
+            spread_line=1.5,
+            live_spread_line=1.5,
+            line_source="live_odds",
+            orientation_source="exact_match",
+            odds_american=-135,
+            odds_source="novig",
+            game_home_ml_price=120,
+            game_away_ml_price=-125,
+        ),
+    ])
+
+    row = build_best_picks_df(df).iloc[0]
+
+    assert row["best_pick"] == "Seattle +1.5"
+    assert row["status_blocker_stage"] == "spread_orientation_guardrail"
+    assert "spread_orientation_fault" in str(row["Status_Reason"])
+

@@ -134,7 +134,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-07-28a-trusted-novig-line-fallback"
+PIPELINE_BUILD = "2026-07-28b-reoriented-spread-status"
 
 
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
@@ -3890,10 +3890,35 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         # moneyline favorite. A mismatch means the live feed delivered a flipped
         # home/away spread (14 Jun: Texas shown -1.5/+158 — a favorite line — when
         # Texas was the +1.5 underdog). Block the row rather than ship the wrong side.
+        #
+        # Novig's paired spread outcomes can arrive attached to the wrong team names.
+        # When candidate construction has explicitly remapped the quote using the
+        # independently uploaded TheOver moneyline favorite, the raw game moneyline
+        # fields describe the pre-remap orientation. Reapplying this guard to the
+        # corrected line creates a stale false blocker. Only bypass the raw comparison
+        # for that explicit, independently oriented provenance; ordinary and merely
+        # verified live lines still receive the guard.
         spread_orientation_fault_flag = False
         spread_orientation_fault_reason = ""
         _mt_row = str(best.at[idx, "market_type"]).strip().lower() if "market_type" in best.columns else ""
-        if _mt_row in {"spread_home", "spread_away"}:
+        _line_source_for_orient = (
+            str(best.at[idx, "line_source"]).strip().lower()
+            if "line_source" in best.columns
+            else ""
+        )
+        _orientation_source_for_orient = (
+            str(best.at[idx, "orientation_source"]).strip().lower()
+            if "orientation_source" in best.columns
+            else ""
+        )
+        _independently_reoriented_spread = (
+            _line_source_for_orient == "novig_theover_moneyline_reoriented"
+            and "theover_moneyline_favorite" in _orientation_source_for_orient
+        )
+        if (
+            _mt_row in {"spread_home", "spread_away"}
+            and not _independently_reoriented_spread
+        ):
             _line_for_orient = next(
                 (best.at[idx, c] for c in ("market_line_used", "spread_line", "base_spread_line")
                  if c in best.columns and pd.notna(best.at[idx, c])),
