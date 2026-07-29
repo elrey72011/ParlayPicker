@@ -134,7 +134,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-07-29a-candidate-rank-recap"
+PIPELINE_BUILD = "2026-07-29b-novig-spread-team-binding"
 
 
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
@@ -6425,6 +6425,24 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
             if not orientation_hints.empty:
                 orientation_favorite_side = str(orientation_hints.iloc[0])
 
+        # Bind Novig spread outcomes to Novig's own live moneyline whenever it is
+        # available. An uploaded TheOver moneyline can be stale or parse a different
+        # market snapshot; allowing it to override a complete Novig market can swap
+        # the two run-line outcomes (for example, Toronto -1.5/+141 became
+        # Toronto +1.5/-150 on 29 Jul). The upload remains a fallback only when
+        # Novig did not publish a usable two-way moneyline.
+        novig_moneyline_favorite_side = ""
+        novig_home_ml = pd.to_numeric(row.get("novig_h2h_home_price"), errors="coerce")
+        novig_away_ml = pd.to_numeric(row.get("novig_h2h_away_price"), errors="coerce")
+        if (
+            pd.notna(novig_home_ml)
+            and pd.notna(novig_away_ml)
+            and float(novig_home_ml) != float(novig_away_ml)
+        ):
+            novig_moneyline_favorite_side = (
+                "home" if float(novig_home_ml) < float(novig_away_ml) else "away"
+            )
+
         for market_type in candidate_markets:
             # Uploads are signals, not a market whitelist. Retain live spreads,
             # totals, and enabled moneylines even when TheOver recommended only one
@@ -6492,21 +6510,36 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
             spread_line_source = "live_odds"
             if market_type.startswith("spread"):
                 side = "home" if market_type == "spread_home" else "away"
-                if league_str == "MLB" and orientation_favorite_side:
+                spread_favorite_side = (
+                    novig_moneyline_favorite_side or orientation_favorite_side
+                )
+                spread_orientation_basis = (
+                    "novig_moneyline_favorite"
+                    if novig_moneyline_favorite_side
+                    else "theover_moneyline_favorite"
+                )
+                if league_str == "MLB" and spread_favorite_side:
                     oriented_point, oriented_price, remapped = _novig_spread_quote_for_favorite(
-                        row, side, orientation_favorite_side
+                        row, side, spread_favorite_side
                     )
                     if pd.notna(oriented_point) and pd.notna(oriented_price):
                         point_val = float(oriented_point)
                         market_dict["odds_american"] = float(oriented_price)
                         market_dict["odds_source"] = "novig"
-                        spread_line_source = (
-                            "novig_theover_moneyline_reoriented"
-                            if remapped
-                            else "novig_theover_moneyline_verified"
-                        )
+                        if spread_orientation_basis == "novig_moneyline_favorite":
+                            spread_line_source = (
+                                "novig_moneyline_reoriented"
+                                if remapped
+                                else "novig_moneyline_verified"
+                            )
+                        else:
+                            spread_line_source = (
+                                "novig_theover_moneyline_reoriented"
+                                if remapped
+                                else "novig_theover_moneyline_verified"
+                            )
                         market_dict["orientation_source"] = (
-                            f"{orientation_source}|theover_moneyline_favorite"
+                            f"{orientation_source}|{spread_orientation_basis}"
                         )
                     else:
                         point_val = pd.NA
