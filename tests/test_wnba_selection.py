@@ -1,4 +1,5 @@
 import pandas as pd
+import pytest
 
 from app.ui.sidebar_controls import FALLBACK_SPORTS, _resolve_sports_options
 from app_core import odds_api
@@ -126,7 +127,7 @@ def test_theover_full_pick_team_survives_team_name_normalization():
     assert float(home.iloc[0]["spread_line"]) == -3.5
     assert float(home.iloc[0]["theover_probability"]) == 0.57
     assert float(away.iloc[0]["spread_line"]) == 3.5
-    assert float(away.iloc[0]["theover_probability"]) == 0.43
+    assert float(away.iloc[0]["theover_probability"]) == pytest.approx(0.43)
 
 def _line_candidate(market_type, **overrides):
     row = {
