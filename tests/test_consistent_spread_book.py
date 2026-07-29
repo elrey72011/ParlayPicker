@@ -15,6 +15,7 @@ from core.streamlit_pipeline import (
     _build_moneyline_orientation_rows,
     _consistent_spread_book,
     _expand_live_odds_to_bet_rows,
+    _novig_spread_is_consensus_outlier,
     _novig_spread_quote_for_favorite,
     _trusted_live_line_source_mask,
 )
@@ -262,4 +263,72 @@ def test_novig_moneyline_beats_stale_theover_hint_for_toronto_run_line():
     assert away["line_source"] == "novig_moneyline_verified"
     assert home["orientation_source"].endswith("|novig_moneyline_favorite")
     assert away["orientation_source"].endswith("|novig_moneyline_favorite")
+
+
+def test_rejects_washington_plus_5_5_alt_line_against_standard_consensus():
+    # 29 Jul production regression: Novig exposed the alternate WAS +5.5 at
+    # -1150 while every standard book carried the normal MLB run line at 1.5.
+    # The alt outcome is real, but it is not a comparable Best Available spread.
+    live_row = {
+        "league": "MLB",
+        "home_team": "Washington",
+        "away_team": "Toronto",
+        "game_date": "2026-07-29",
+        "matchup_id": "tor-was-alt",
+        "commence_time_raw": "2026-07-29T17:05:00Z",
+        "novig_home_point": 5.5,
+        "novig_home_price": -1150,
+        "novig_away_point": -5.5,
+        "novig_away_price": 1100,
+        "novig_h2h_home_price": 108,
+        "novig_h2h_away_price": -113,
+        "fanduel_home_point": 1.5,
+        "fanduel_home_price": -165,
+        "fanduel_away_point": -1.5,
+        "fanduel_away_price": 145,
+        "fanduel_h2h_home_price": 110,
+        "fanduel_h2h_away_price": -130,
+        "draftkings_home_point": 1.5,
+        "draftkings_home_price": -160,
+        "draftkings_away_point": -1.5,
+        "draftkings_away_price": 140,
+        "draftkings_h2h_home_price": 108,
+        "draftkings_h2h_away_price": -128,
+        "betmgm_home_point": 1.5,
+        "betmgm_home_price": -158,
+        "betmgm_away_point": -1.5,
+        "betmgm_away_price": 138,
+        "betmgm_h2h_home_price": 105,
+        "betmgm_h2h_away_price": -125,
+    }
+    hint = pd.DataFrame(
+        [
+            {
+                "league": "MLB",
+                "home_team": "Washington",
+                "away_team": "Toronto",
+                "game_date": "2026-07-29",
+                "matchup_id": "tor-was-alt",
+                "market_type": market_type,
+                "orientation_favorite_side": (
+                    "home" if market_type == "orientation_hint" else pd.NA
+                ),
+            }
+            for market_type in ("orientation_hint", "spread_home", "spread_away")
+        ]
+    )
+
+    assert _novig_spread_is_consensus_outlier(live_row)
+
+    out, _ = _expand_live_odds_to_bet_rows(pd.DataFrame([live_row]), hint)
+    spreads = out[out["market_type"].isin(["spread_home", "spread_away"])]
+
+    assert len(spreads) == 2
+    assert spreads["spread_line"].isna().all()
+    assert spreads["odds_american"].isna().all()
+    assert spreads["line_source"].eq("rejected_live_spread_outlier").all()
+    assert spreads["odds_source"].eq("rejected_live_spread_outlier").all()
+    assert spreads["orientation_source"].str.endswith(
+        "|novig_spread_consensus_outlier"
+    ).all()
 

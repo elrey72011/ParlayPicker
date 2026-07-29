@@ -134,7 +134,14 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-07-29b-novig-spread-team-binding"
+PIPELINE_BUILD = "2026-07-29c-novig-spread-outlier-guard"
+
+# Best Available must compare standard, reasonably priced markets. A P2P exchange can
+# expose alternate run lines (for example +5.5 at -1150) beside the standard MLB +1.5.
+# Those quotes are valid exchange outcomes, but they are not comparable candidates for
+# a standard spread picker and must never win merely because their hit probability is high.
+NOVIG_MLB_SPREAD_OUTLIER_TOL = 0.5
+BEST_AVAILABLE_SPREAD_MIN_AMERICAN_ODDS = -400.0
 
 
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
@@ -1079,11 +1086,15 @@ def _filter_preselection_line_integrity(
         & live_total.notna()
         & ((known_league & ~plausible_live) | alt_priced)
     )
+    extreme_spread_price = is_spread & price.lt(
+        BEST_AVAILABLE_SPREAD_MIN_AMERICAN_ODDS
+    )
     invalid_spread = is_spread & (
         ~trusted_live_source
         | live_spread.isna()
         | price.isna()
         | price.eq(0)
+        | extreme_spread_price
         | ambiguous_identity
     )
     invalid_total = is_total & (
@@ -1113,6 +1124,9 @@ def _filter_preselection_line_integrity(
     if diagnostics_out is not None:
         diagnostics_out["preselection_invalid_total_candidate_count"] = int(invalid_total.sum())
         diagnostics_out["preselection_invalid_spread_candidate_count"] = int(invalid_spread.sum())
+        diagnostics_out["preselection_invalid_extreme_spread_price_count"] = int(
+            extreme_spread_price.sum()
+        )
         diagnostics_out["preselection_dropped_total_candidate_count"] = int((drop_mask & is_total).sum())
         diagnostics_out["preselection_dropped_spread_candidate_count"] = int((drop_mask & is_spread).sum())
         diagnostics_out["preselection_dropped_line_candidate_count"] = int(drop_mask.sum())
@@ -6133,6 +6147,44 @@ def _consistent_total_book(row, side):
     return None
 
 
+def _consensus_standard_spread_magnitude(row):
+    """Median absolute spread across at least two standard sportsbooks.
+
+    Novig is intentionally excluded from the reference set. Its P2P market can expose
+    alternate run lines alongside the standard MLB run line, so including it in the
+    median could allow the outlier being checked to move its own benchmark.
+    """
+    magnitudes = []
+    for bk in ("fanduel", "draftkings", "betmgm"):
+        point = pd.to_numeric(row.get(f"{bk}_home_point"), errors="coerce")
+        if pd.isna(point):
+            point = pd.to_numeric(row.get(f"{bk}_away_point"), errors="coerce")
+        if pd.notna(point) and abs(float(point)) > 0.0:
+            magnitudes.append(abs(float(point)))
+    if len(magnitudes) < 2:
+        return pd.NA
+    return float(pd.Series(magnitudes).median())
+
+
+def _novig_spread_is_consensus_outlier(row) -> bool:
+    """True when any quoted Novig spread is off the standard-book magnitude."""
+    consensus = _consensus_standard_spread_magnitude(row)
+    if pd.isna(consensus):
+        return False
+    novig_magnitudes = []
+    for side in ("home", "away"):
+        point = pd.to_numeric(row.get(f"novig_{side}_point"), errors="coerce")
+        if pd.notna(point) and abs(float(point)) > 0.0:
+            novig_magnitudes.append(abs(float(point)))
+    return bool(
+        novig_magnitudes
+        and any(
+            abs(magnitude - float(consensus)) > NOVIG_MLB_SPREAD_OUTLIER_TOL
+            for magnitude in novig_magnitudes
+        )
+    )
+
+
 def _consistent_spread_book(row):
     """Return the first book whose spread orientation agrees with its OWN moneyline
     favorite, or None.
@@ -6146,6 +6198,8 @@ def _consistent_spread_book(row):
     none is consistent the caller keeps its existing (guard-blocked) fallback.
     """
     for bk in ("novig", "fanduel", "draftkings", "betmgm"):
+        if bk == "novig" and _novig_spread_is_consensus_outlier(row):
+            continue
         hp = pd.to_numeric(row.get(f"{bk}_home_point"), errors="coerce")
         hml = pd.to_numeric(row.get(f"{bk}_h2h_home_price"), errors="coerce")
         aml = pd.to_numeric(row.get(f"{bk}_h2h_away_price"), errors="coerce")
@@ -6528,33 +6582,42 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
                     else "theover_moneyline_favorite"
                 )
                 if league_str == "MLB" and orientation_favorite_side and spread_favorite_side:
-                    oriented_point, oriented_price, remapped = _novig_spread_quote_for_favorite(
-                        row, side, spread_favorite_side
-                    )
-                    if pd.notna(oriented_point) and pd.notna(oriented_price):
-                        point_val = float(oriented_point)
-                        market_dict["odds_american"] = float(oriented_price)
-                        market_dict["odds_source"] = "novig"
-                        if spread_orientation_basis == "novig_moneyline_favorite":
-                            spread_line_source = (
-                                "novig_moneyline_reoriented"
-                                if remapped
-                                else "novig_moneyline_verified"
-                            )
-                        else:
-                            spread_line_source = (
-                                "novig_theover_moneyline_reoriented"
-                                if remapped
-                                else "novig_theover_moneyline_verified"
-                            )
-                        market_dict["orientation_source"] = (
-                            f"{orientation_source}|{spread_orientation_basis}"
-                        )
-                    else:
+                    if _novig_spread_is_consensus_outlier(row):
                         point_val = pd.NA
                         market_dict["odds_american"] = pd.NA
-                        market_dict["odds_source"] = "rejected_live_orientation"
-                        spread_line_source = "rejected_live_orientation"
+                        market_dict["odds_source"] = "rejected_live_spread_outlier"
+                        spread_line_source = "rejected_live_spread_outlier"
+                        market_dict["orientation_source"] = (
+                            f"{orientation_source}|novig_spread_consensus_outlier"
+                        )
+                    else:
+                        oriented_point, oriented_price, remapped = _novig_spread_quote_for_favorite(
+                            row, side, spread_favorite_side
+                        )
+                        if pd.notna(oriented_point) and pd.notna(oriented_price):
+                            point_val = float(oriented_point)
+                            market_dict["odds_american"] = float(oriented_price)
+                            market_dict["odds_source"] = "novig"
+                            if spread_orientation_basis == "novig_moneyline_favorite":
+                                spread_line_source = (
+                                    "novig_moneyline_reoriented"
+                                    if remapped
+                                    else "novig_moneyline_verified"
+                                )
+                            else:
+                                spread_line_source = (
+                                    "novig_theover_moneyline_reoriented"
+                                    if remapped
+                                    else "novig_theover_moneyline_verified"
+                                )
+                            market_dict["orientation_source"] = (
+                                f"{orientation_source}|{spread_orientation_basis}"
+                            )
+                        else:
+                            point_val = pd.NA
+                            market_dict["odds_american"] = pd.NA
+                            market_dict["odds_source"] = "rejected_live_orientation"
+                            spread_line_source = "rejected_live_orientation"
                 else:
                     # Prefer a book whose spread agrees with its own moneyline; take BOTH
                     # its point and its price for this side so line and odds stay coherent.
