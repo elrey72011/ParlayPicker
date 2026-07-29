@@ -73,6 +73,8 @@ def test_exported_game_is_verified_rank_one_and_audits_every_candidate(monkeypat
     assert diagnostics["best_available_selection_verified"] is True
     assert diagnostics["best_available_selection_mismatch_count"] == 0
     assert audit["matchup_id"].astype(str).str.startswith("2026-07-27|").all()
+    assert not audit["wager_approved"].any()
+    assert audit["export_role"].eq("RANKING CANDIDATE - BACKTEST ONLY").all()
 
 
 def test_best_available_audit_compares_side_and_total_families(monkeypatch):
@@ -131,6 +133,11 @@ def test_commercial_tier_never_upgrades_an_unfunded_best_available_row():
     assert classified.loc[1, "commercial_tier"] == "Best Available / Pass"
     assert not bool(classified.loc[1, "sellable_as_premium"])
     assert bool(classified.loc[1, "best_available_only"])
+    assert bool(classified.loc[0, "wager_approved"])
+    assert classified.loc[0, "export_role"] == "PRODUCTION WAGER"
+    assert not bool(classified.loc[1, "wager_approved"])
+    assert classified.loc[1, "export_role"] == "COVERAGE PICK - PASS"
+    assert classified.loc[1, "wager_instruction"].startswith("DO NOT TREAT")
 
 
 def _parlay_leg(matchup_id: str, pick: str) -> dict:

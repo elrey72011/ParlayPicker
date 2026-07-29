@@ -134,7 +134,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-07-28b-reoriented-spread-status"
+PIPELINE_BUILD = "2026-07-29a-candidate-rank-recap"
 
 
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
@@ -159,6 +159,9 @@ REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
     "sellable_as_premium",
     "best_available_only",
     "commercial_reason",
+    "wager_approved",
+    "export_role",
+    "wager_instruction",
     "effective_expected_value",
     "effective_edge",
     "effective_win_probability",
@@ -428,7 +431,8 @@ BEST_PICK_COLUMNS = [
     "best_available_candidate_count", "best_available_selection_verified",
     "best_available_ranking_verified", "final_pick_valid", "final_pick_valid_reason",
     "best_available_selection_reason", "commercial_tier", "sellable_as_premium",
-    "best_available_only", "commercial_reason",
+    "best_available_only", "commercial_reason", "wager_approved", "export_role",
+    "wager_instruction",
     "decimal_odds", "matchup_id",
     "odds_american", "odds_source", "market_probability", "ml_probability", "theover_probability", "win_prob_source", "display_probability",
     "kalshi_probability", "kalshi_match_status", "kalshi_match_reason",
@@ -3056,6 +3060,13 @@ def classify_best_available_picks(best_picks_df: pd.DataFrame) -> pd.DataFrame:
     out.loc[premium, "commercial_reason"] = (
         "Production-qualified positive edge with a funded stake and verified live line."
     )
+    out["wager_approved"] = premium
+    out["export_role"] = "COVERAGE PICK - PASS"
+    out.loc[premium, "export_role"] = "PRODUCTION WAGER"
+    out["wager_instruction"] = (
+        "DO NOT TREAT AS AN APPROVED BET; this is the best available coverage pick."
+    )
+    out.loc[premium, "wager_instruction"] = "APPROVED: use the exported production stake."
     return out
 
 
@@ -3581,6 +3592,11 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     )
     if "pipeline_build" not in candidate_audit_df.columns:
         candidate_audit_df.insert(0, "pipeline_build", PIPELINE_BUILD)
+    candidate_audit_df["wager_approved"] = False
+    candidate_audit_df["export_role"] = "RANKING CANDIDATE - BACKTEST ONLY"
+    candidate_audit_df["wager_instruction"] = (
+        "NOT A BETTING CARD; upload this file to Performance Recap for candidate grading."
+    )
     candidate_audit_df["final_pick_valid"] = False
     candidate_audit_df["final_pick_valid_reason"] = "not_selected"
 
