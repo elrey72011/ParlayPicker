@@ -4,6 +4,11 @@ import pandas as pd
 import streamlit as st
 from app_core.results_fetcher import fetch_yesterdays_results
 from app_core.results_ingestion import attach_results
+from app_core.candidate_recap import (
+    grade_candidate_audit,
+    merge_candidate_ledgers,
+    summarize_candidate_performance,
+)
 
 
 def determine_display_outcome(row):
@@ -259,9 +264,145 @@ def _render_prop_results_recap() -> None:
     )
 
 
+def _production_wager_mask(frame: pd.DataFrame) -> pd.Series:
+    """True only where the exported card assigned a positive production stake."""
+
+    if frame is None or frame.empty:
+        return pd.Series(False, index=getattr(frame, "index", None), dtype=bool)
+
+    stake_columns = [
+        name
+        for name in (
+            "Play_Stake",
+            "production_bet_amount",
+            "Kelly_Bet_Size",
+            "recommended_bet",
+            "Suggested_Stake",
+        )
+        if name in frame.columns
+    ]
+    if not stake_columns:
+        return pd.Series(False, index=frame.index, dtype=bool)
+
+    amounts = pd.concat(
+        [pd.to_numeric(frame[name], errors="coerce").fillna(0.0) for name in stake_columns],
+        axis=1,
+    )
+    return amounts.max(axis=1).gt(0.0)
+
+
+def _format_candidate_summary(summary: pd.DataFrame) -> pd.DataFrame:
+    out = summary.copy()
+    for column in ("Hit Rate", "Avg Probability", "Avg EV"):
+        if column in out.columns:
+            out[column] = pd.to_numeric(out[column], errors="coerce").map(
+                lambda value: "" if pd.isna(value) else f"{value:.1%}"
+            )
+    return out
+
+
+def _render_candidate_results_recap(
+    scored_picks: pd.DataFrame,
+    uploaded_candidate_audit,
+    uploaded_candidate_ledger,
+) -> None:
+    """Grade the full candidate set and expose cumulative rank/family evidence."""
+
+    st.markdown("#### Candidate Ranking Backtest")
+    if uploaded_candidate_audit is None:
+        st.caption(
+            "Upload yesterday's Candidate Selection Audit to grade every side and total, "
+            "not only the one-row-per-game selection."
+        )
+        return
+
+    try:
+        uploaded_candidate_audit.seek(0)
+        candidate_audit = pd.read_csv(uploaded_candidate_audit)
+        current_graded = grade_candidate_audit(candidate_audit, scored_picks)
+    except Exception as exc:
+        st.error(f"Could not grade the candidate audit: {exc}")
+        return
+
+    prior_ledger = None
+    if uploaded_candidate_ledger is not None:
+        try:
+            uploaded_candidate_ledger.seek(0)
+            prior_ledger = pd.read_csv(uploaded_candidate_ledger)
+        except Exception as exc:
+            st.error(f"Could not read the prior candidate ledger: {exc}")
+            return
+
+    ledger = merge_candidate_ledgers(current_graded, prior_ledger)
+    current_settled = int(current_graded.get("candidate_graded", pd.Series(dtype=bool)).sum())
+    total_settled = int(ledger.get("candidate_graded", pd.Series(dtype=bool)).sum())
+    st.caption(
+        f"Graded {current_settled}/{len(current_graded)} candidates from this slate; "
+        f"the cumulative ledger contains {total_settled}/{len(ledger)} settled candidates."
+    )
+
+    if total_settled:
+        summaries = summarize_candidate_performance(ledger)
+        left, right = st.columns(2)
+        with left:
+            st.markdown("##### By Overall Candidate Rank")
+            st.dataframe(_format_candidate_summary(summaries["rank"]), width="stretch", hide_index=True)
+        with right:
+            st.markdown("##### By Market Family")
+            st.dataframe(
+                _format_candidate_summary(summaries["market_family"]),
+                width="stretch",
+                hide_index=True,
+            )
+        st.markdown("##### By Rank Within Each Market Family")
+        st.dataframe(
+            _format_candidate_summary(summaries["family_rank"]),
+            width="stretch",
+            hide_index=True,
+        )
+        st.caption(
+            "These are diagnostics, not an automatic ranking rewrite. Change the selector only "
+            "after the cumulative ledger shows a stable out-of-sample advantage."
+        )
+    else:
+        st.info(
+            "No candidate rows have final scores yet. Attach or edit the game scores, then "
+            "the full candidate set will grade automatically."
+        )
+
+    dl_left, dl_right = st.columns(2)
+    dl_left.download_button(
+        "Download This Slate's Graded Candidates",
+        data=current_graded.to_csv(index=False, encoding="utf-8-sig"),
+        file_name="graded_candidate_audit.csv",
+        mime="text/csv",
+        key="download_current_candidate_grades",
+    )
+    dl_right.download_button(
+        "Download Cumulative Candidate Results Ledger",
+        data=ledger.to_csv(index=False, encoding="utf-8-sig"),
+        file_name="candidate_results_ledger.csv",
+        mime="text/csv",
+        key="download_candidate_results_ledger",
+    )
+
+
 def render_results_dashboard(picks_df: pd.DataFrame) -> None:
     # 1. File Uploader for Yesterday's Picks at the very top
     uploaded_picks_file = st.file_uploader("Upload Yesterday's Best Picks Export", type=["csv"], key="perf_picks_uploader")
+
+    uploaded_candidate_audit = st.file_uploader(
+        "Upload Yesterday's Candidate Selection Audit (optional)",
+        type=["csv"],
+        key="perf_candidate_audit_uploader",
+        help="Use best_picks_candidate_audit.csv to grade every ranked alternative.",
+    )
+    uploaded_candidate_ledger = st.file_uploader(
+        "Upload Prior Candidate Results Ledger (optional)",
+        type=["csv"],
+        key="perf_candidate_ledger_uploader",
+        help="Upload the prior candidate_results_ledger.csv to build cumulative evidence.",
+    )
 
     st.subheader("Prior Day Performance")
 
@@ -407,32 +548,42 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
 
         return wins, losses, pushes, win_rate, net_profit
 
-    # Owner bets every valid game row, so the all-row settled record is the
-    # production headline. N/A/postponed rows are excluded from the denominator.
+    production_mask = _production_wager_mask(display_df)
+    production_df = display_df[production_mask].copy()
+
+    st.markdown("#### Production-Approved Wager Performance")
+    if production_df.empty:
+        st.info(
+            "No rows carried a positive app-approved stake on this slate. That means the "
+            "production record is 0 wagers; the full-board results below are diagnostic coverage."
+        )
+    else:
+        wins_prod, losses_prod, pushes_prod, win_rate_prod, net_profit_prod = calculate_metrics(production_df)
+        settled_prod = wins_prod + losses_prod + pushes_prod
+        prod_cols = st.columns(4)
+        prod_cols[0].metric("Settled Record", f"{wins_prod}-{losses_prod}-{pushes_prod}")
+        prod_cols[1].metric("Production Win Rate", f"{win_rate_prod:.1%}")
+        prod_cols[2].metric("Flat-Bet P&L (Units)", f"{net_profit_prod:+.2f}")
+        prod_cols[3].metric("Rows Settled", f"{settled_prod}/{len(production_df)}")
+
     wins_all, losses_all, pushes_all, win_rate_all, net_profit_all = calculate_metrics(display_df)
     settled_all = wins_all + losses_all + pushes_all
-    st.markdown("#### All-Row Betting Performance")
+    st.markdown("#### Coverage Board Performance (Diagnostic)")
     _all_cols = st.columns(4)
-    _all_cols[0].metric(
-        "Settled Record",
-        f"{wins_all}-{losses_all}-{pushes_all}",
-    )
-    _all_cols[1].metric("All-Row Win Rate", f"{win_rate_all:.1%}")
-    _all_cols[2].metric("Estimated Flat-Bet P&L (Units)", f"{net_profit_all:+.2f}")
+    _all_cols[0].metric("Settled Record", f"{wins_all}-{losses_all}-{pushes_all}")
+    _all_cols[1].metric("Coverage Win Rate", f"{win_rate_all:.1%}")
+    _all_cols[2].metric("Hypothetical Flat-Bet P&L (Units)", f"{net_profit_all:+.2f}")
     _all_cols[3].metric("Rows Settled", f"{settled_all}/{len(display_df)}")
     st.caption(
-        "This is the headline because every valid game row is bet. N/A, postponed, "
-        "started, and unresolved-line rows do not count as settled decisions. P&L uses "
-        "the exported odds when present and -110 only as a fallback when odds are missing."
+        "This grades the best available direction for every game, including PASS rows. "
+        "It is coverage analysis—not approval to wager every row. N/A, postponed, started, "
+        "and unresolved-line rows do not count as settled decisions."
     )
 
-    # Keep strict production-edge tiers as a diagnostic beneath the owner's
-    # all-row headline. They show where the model had genuine priced edge versus
-    # where the full-board policy forced the best available valid selection.
     from app_core.strategy_lab_realized import summarize_recap_tiers
     _tier_src = display_df.rename(columns={"Pick_Status": "Status"}) if "Pick_Status" in display_df.columns else display_df
     tiers = summarize_recap_tiers(_tier_src)
-    st.markdown("#### Staked Performance by Tier")
+    st.markdown("#### Performance by Model Tier (Diagnostic)")
     _tcols = st.columns(3)
     for _col, (_, _row) in zip(_tcols, tiers.iterrows()):
         _col.metric(
@@ -441,36 +592,14 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
             f"{int(_row['Wins'])}-{int(_row['Losses'])} ({int(_row['Total'])})",
         )
     st.caption(
-        "Judge the system by the staked tiers (Actionable / Actionable + High Variance). "
-        "'All graded rows' includes Below Threshold and No Play picks that were never "
-        "staked, so it trends toward ~50% by construction and understates a good staked day."
+        "Tier results help diagnose calibration and selection quality. A tier label alone "
+        "does not prove a wager was approved; the positive exported stake is authoritative."
     )
 
-    # Net profit on the staked card (Actionable or High Variance with a positive stake).
-    STAKED_STATUSES = {"Actionable", "High Variance/Speculative"}
-    if "Pick_Status" in display_df.columns:
-        _staked_mask = display_df["Pick_Status"].astype(str).isin(STAKED_STATUSES)
-        if "Kelly_Bet_Size" in display_df.columns:
-            _staked_mask &= pd.to_numeric(display_df["Kelly_Bet_Size"], errors="coerce").fillna(0) > 0
-        staked_df = display_df[_staked_mask].copy()
-    else:
-        staked_df = pd.DataFrame()
-
-    if staked_df.empty:
-        st.info(
-            "No rows cleared the strict production-edge stake gate. The all-row "
-            "best-available record above still represents the owner's placed bets."
-        )
-    else:
-        wins_s, losses_s, pushes_s, win_rate_s, net_profit_s = calculate_metrics(staked_df)
-        scol1, scol2 = st.columns(2)
-        scol1.metric("Net Profit - Staked (Units)", f"{net_profit_s:+.2f}")
-        scol2.metric("Staked Picks Evaluated", len(staked_df))
-
-    st.markdown("###### Production-Edge Reference")
-    st.caption(
-        "The tier metrics above remain useful for comparing strict modeled edges with "
-        "forced best-available rows, but they no longer replace the all-row headline."
+    _render_candidate_results_recap(
+        display_df,
+        uploaded_candidate_audit,
+        uploaded_candidate_ledger,
     )
 
     st.divider()
