@@ -40,6 +40,9 @@ jobs:
           tests/test_model_validation.py
           tests/test_ml_target_guard.py
           tests/test_parlay_safety.py
+          tests/test_candidate_recap.py
+          tests/test_best_available_candidate_audit.py
+          tests/test_lean_card.py
 
   full-suite-observability:
     runs-on: ubuntu-latest
