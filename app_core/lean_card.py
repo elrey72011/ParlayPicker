@@ -303,4 +303,11 @@ def attach_play_stakes(card: pd.DataFrame, unit: float = 1.0) -> pd.DataFrame:
     out["Play_Units"] = units
     out["Play_Stake"] = stake.round(2)
     out["All_Row_Bet"] = stake.gt(0)
+    out["Wager_Approved"] = out["Play_Stake"].gt(0)
+    out["Export_Role"] = "COVERAGE PICK - PASS"
+    out.loc[out["Wager_Approved"], "Export_Role"] = "PRODUCTION WAGER"
+    out["Wager_Instruction"] = "DO NOT BET: diagnostic best-available direction only."
+    out.loc[out["Wager_Approved"], "Wager_Instruction"] = (
+        "APPROVED: wager the exported Play_Stake amount."
+    )
     return out
