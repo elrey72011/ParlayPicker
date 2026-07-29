@@ -100,6 +100,7 @@ KALSHI_SERIES_CACHE_TTL_SECONDS = 300.0
 
 MAX_LINE_TOLERANCE = {
     "NBA": 5.5,
+    "WNBA": 5.5,
     "NCAAB": 10.5,
     "NHL": 5.5,
     "MLB": 8.5,
@@ -118,6 +119,7 @@ MAX_LINE_TOLERANCE = {
 # proxying a wrong-line probability.
 MAX_TOTAL_LINE_TOLERANCE = {
     "NBA": 4.5,
+    "WNBA": 4.5,
     "NCAAB": 6.5,
     "NHL": 1.0,
     "MLB": 1.0,
@@ -167,6 +169,7 @@ API_URL = API_BASE
 LEAGUE_SERIES_MAP = {
     "NCAAB": {"spread": "KXNCAAMBSPREAD", "total": "KXNCAAMBTOTAL", "moneyline": "KXNCAABGAME"},
     "NBA": {"spread": "KXNBASPREAD", "total": "KXNBATOTAL", "moneyline": "KXNBAGAME"},
+    "WNBA": {"spread": "KXWNBASPREAD", "total": "KXWNBATOTAL", "moneyline": "KXWNBAGAME"},
     "NHL": {"spread": "KXNHLSPREAD", "total": "KXNHLTOTAL", "moneyline": "KXNHLGAME"},
     "NFL": {"spread": "KXNFLSPREAD", "total": "KXNFLTOTAL", "moneyline": "KXNFLGAME"},
     "MLB": {"spread": "KXMLBSPREAD", "total": "KXMLBTOTAL", "moneyline": "KXMLBGAME"},
@@ -272,11 +275,43 @@ KALSHI_TEAM_CODES = {
     "Boston Red Sox": "BOS",
 }
 
+KALSHI_WNBA_TEAM_CODES = {
+    # WNBA — Kalshi uses a separate code namespace from the NBA/NHL.
+    # City-only inputs are common in TheOver uploads, so keep these
+    # league-scoped instead of placing collision-prone aliases in the global map.
+    "Atlanta Dream": "ATL", "Atlanta": "ATL",
+    "Chicago Sky": "CHI", "Chicago": "CHI",
+    "Connecticut Sun": "CONN", "Connecticut": "CONN",
+    "Dallas Wings": "DAL", "Dallas": "DAL",
+    "Golden State Valkyries": "GS", "Golden State": "GS",
+    "Indiana Fever": "IND", "Indiana": "IND",
+    "Las Vegas Aces": "LV", "Las Vegas": "LV",
+    "Los Angeles Sparks": "LA", "Los Angeles": "LA",
+    "Minnesota Lynx": "MIN", "Minnesota": "MIN",
+    "New York Liberty": "NY", "New York": "NY",
+    "Phoenix Mercury": "PHX", "Phoenix": "PHX",
+    "Portland Fire": "PDX", "Portland": "PDX",
+    "Seattle Storm": "SEA", "Seattle": "SEA",
+    "Toronto Tempo": "TOR", "Toronto": "TOR",
+    "Washington Mystics": "WSH", "Washington": "WSH",
+}
+
 _KALSHI_TEAM_CODES_NORMALIZED = {
     re.sub(r"\s+", " ", k.lower().strip().replace(".", "")): v
     for k, v in KALSHI_TEAM_CODES.items()
 }
+_KALSHI_WNBA_TEAM_CODES_NORMALIZED = {
+    re.sub(r"\s+", " ", k.lower().strip().replace(".", "")): v
+    for k, v in KALSHI_WNBA_TEAM_CODES.items()
+}
 
+
+def _lookup_wnba_team_code(team: str) -> str | None:
+    raw = _safe_text(team).strip()
+    if raw in KALSHI_WNBA_TEAM_CODES:
+        return KALSHI_WNBA_TEAM_CODES[raw]
+    normalized = re.sub(r"\s+", " ", raw.lower().replace(".", "").strip())
+    return _KALSHI_WNBA_TEAM_CODES_NORMALIZED.get(normalized)
 
 
 KALSHI_NCAAB_TEAM_CODES = {
@@ -369,6 +404,19 @@ def build_kalshi_date_code(game_date: Any) -> str:
     return dt_local.strftime("%y%b%d").upper()
 
 
+def _build_row_kalshi_date_code(row: pd.Series, league: str) -> str:
+    """Use the local event date when a UTC-normalized game_date crosses midnight."""
+    if _normalize_league_for_kalshi(league) == "WNBA":
+        for key in ("game_time_est", "matchup_id"):
+            value = _safe_text(row.get(key))
+            match = re.search(r"\b(20\d{2}-\d{2}-\d{2})\b", value)
+            if match:
+                dt = pd.to_datetime(match.group(1), errors="coerce")
+                if pd.notna(dt):
+                    return dt.strftime("%y%b%d").upper()
+    return build_kalshi_date_code(row.get("game_date"))
+
+
 def _market_family(row: pd.Series) -> str | None:
     market_type = _row_text(row, "market_type", lowercase=True)
     if market_type.startswith("spread"):
@@ -421,14 +469,15 @@ def _fetch_event_markets_legacy(league: str, game_date: Any, home_team: str, awa
 
     series_map = {
         "NBA": ["KXNBATOTAL", "KXNBASPREAD"],
+        "WNBA": ["KXWNBATOTAL", "KXWNBASPREAD"],
         "NCAAB": ["KXNCAAMBTOTAL", "KXNCAAMBSPREAD"],
         "NHL": ["KXNHLTOTAL", "KXNHLSPREAD"],
     }
     league_text = str(league).upper() if pd.notna(league) else ""
     series_list = series_map.get(league_text, [])
 
-    home_code = _lookup_kalshi_team_code(home_team) or ""
-    away_code = _lookup_kalshi_team_code(away_team) or ""
+    home_code = team_code_for_league(league_text, home_team)
+    away_code = team_code_for_league(league_text, away_team)
 
     headers = {"Authorization": f"Bearer {kalshi_api_key}"}
     for series in series_list:
@@ -461,7 +510,8 @@ def _fetch_event_markets_legacy(league: str, game_date: Any, home_team: str, awa
 
 def _det_team_code(league: str, team: str) -> str | None:
     """Deterministic team-code resolver used by tests and ingestion code."""
-    _ = league
+    if _normalize_league_for_kalshi(league) == "WNBA":
+        return _lookup_wnba_team_code(team) or _guess_code(team)
     return _guess_code(team)
 
 
@@ -485,7 +535,8 @@ def league_series_ticker(league: str, market_type: str) -> str:
 
 
 def team_code_map(league: str, team: str) -> str:
-    _ = league
+    if _normalize_league_for_kalshi(league) == "WNBA":
+        return str(_det_team_code(league, team) or "")
     token = _normalize_team_token(team)
     if token in TEAM_CODE_ALIASES:
         return TEAM_CODE_ALIASES[token]
@@ -1216,15 +1267,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
         game_date = pd.to_datetime(row.get("game_date"), errors="coerce", utc=True)
         game_date_date = game_date.date() if pd.notna(game_date) else None
-        if pd.notna(game_date):
-            # If the time is exactly midnight UTC, it's a fallback date. Do NOT shift timezone.
-            if game_date.hour == 0 and game_date.minute == 0 and game_date.second == 0:
-                date_code = game_date.strftime("%y%b%d").upper()
-            else:
-                dt_local = game_date.tz_convert("America/New_York")
-                date_code = dt_local.strftime("%y%b%d").upper()
-        else:
-            date_code = ""
+        date_code = _build_row_kalshi_date_code(row, league)
 
         if not date_code:
             out.at[idx, "kalshi_match_status"] = "miss"
