@@ -5,6 +5,8 @@ from app_core.kalshi_integrator import (
     _build_row_kalshi_date_code,
     _event_match_score,
     league_series_ticker,
+    orient_spread_kalshi_prob,
+    spread_market_subject_is_home,
     team_code_for_league,
 )
 
@@ -60,3 +62,44 @@ def test_wnba_kalshi_date_prefers_local_game_time_over_utc_midnight_date():
         }
     )
     assert _build_row_kalshi_date_code(row, "WNBA") == "26JUL29"
+
+
+def test_wnba_short_code_ticker_identifies_golden_state_as_spread_subject():
+    market = {
+        "ticker": "KXWNBASPREAD-26JUL29GSPHX-GS4",
+        "title": "Women's professional basketball spread",
+    }
+    assert (
+        spread_market_subject_is_home(
+            market, "WNBA", home_team="Phoenix", away_team="Golden State"
+        )
+        is False
+    )
+
+
+@pytest.mark.parametrize(
+    "pick_is_home,pick_line,expected_probability",
+    [
+        (False, -3.5, 0.58),  # Golden State -3.5 is the ticker subject's YES side.
+        (True, 3.5, 0.42),    # Phoenix +3.5 is the complementary NO side.
+    ],
+)
+def test_reported_phoenix_golden_state_spread_sides_are_priceable(
+    pick_is_home, pick_line, expected_probability
+):
+    subject_is_home = spread_market_subject_is_home(
+        {
+            "ticker": "KXWNBASPREAD-26JUL29GSPHX-GS4",
+            "title": "WNBA spread",
+        },
+        "WNBA",
+        home_team="Phoenix",
+        away_team="Golden State",
+    )
+    probability = orient_spread_kalshi_prob(
+        0.58,
+        subject_is_home=subject_is_home,
+        pick_is_home=pick_is_home,
+        pick_line=pick_line,
+    )
+    assert probability == pytest.approx(expected_probability)
