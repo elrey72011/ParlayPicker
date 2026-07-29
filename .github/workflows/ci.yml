@@ -43,6 +43,7 @@ jobs:
           tests/test_candidate_recap.py
           tests/test_best_available_candidate_audit.py
           tests/test_lean_card.py
+          tests/test_regression_kalshi_and_results.py::test_results_recap_upload_reset_behavior
 
   full-suite-observability:
     runs-on: ubuntu-latest
