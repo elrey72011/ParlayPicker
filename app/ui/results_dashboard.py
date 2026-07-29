@@ -395,13 +395,11 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
         "Upload Yesterday's Candidate Selection Audit (optional)",
         type=["csv"],
         key="perf_candidate_audit_uploader",
-        help="Use best_picks_candidate_audit.csv to grade every ranked alternative.",
     )
     uploaded_candidate_ledger = st.file_uploader(
         "Upload Prior Candidate Results Ledger (optional)",
         type=["csv"],
         key="perf_candidate_ledger_uploader",
-        help="Upload the prior candidate_results_ledger.csv to build cumulative evidence.",
     )
 
     st.subheader("Prior Day Performance")
