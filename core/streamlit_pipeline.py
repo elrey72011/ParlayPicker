@@ -6513,15 +6513,21 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
             spread_line_source = "live_odds"
             if market_type.startswith("spread"):
                 side = "home" if market_type == "spread_home" else "away"
+                # Preserve the no-upload path: without an uploaded orientation
+                # hint, _consistent_spread_book still selects the first book whose
+                # spread agrees with its own moneyline. The Novig-first binding rule
+                # only resolves authority inside the matched-upload repair path.
                 spread_favorite_side = (
                     novig_moneyline_favorite_side or orientation_favorite_side
+                    if orientation_favorite_side
+                    else ""
                 )
                 spread_orientation_basis = (
                     "novig_moneyline_favorite"
-                    if novig_moneyline_favorite_side
+                    if orientation_favorite_side and novig_moneyline_favorite_side
                     else "theover_moneyline_favorite"
                 )
-                if league_str == "MLB" and spread_favorite_side:
+                if league_str == "MLB" and orientation_favorite_side and spread_favorite_side:
                     oriented_point, oriented_price, remapped = _novig_spread_quote_for_favorite(
                         row, side, spread_favorite_side
                     )
