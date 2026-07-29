@@ -5,7 +5,7 @@ import pandas as pd
 import streamlit as st
 
 
-FALLBACK_SPORTS = ["NBA", "NHL", "NCAAB", "NFL", "MLB"]
+FALLBACK_SPORTS = ["NBA", "WNBA", "NHL", "NCAAB", "NFL", "MLB"]
 
 
 def _read_uploaded_prop_ledgers(uploaded_files) -> pd.DataFrame:

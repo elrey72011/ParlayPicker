@@ -22,7 +22,7 @@ from core.kelly_optimizer import add_kelly_bet_sizing
 from app_core.calibration import generate_calibration_dataset
 from core.probability_engine import american_to_prob
 from core.schema.base_schema import ensure_base_schema
-from core.team_mapper import normalize_team_name, NBA_EXACT_MAP, NHL_EXACT_MAP
+from core.team_mapper import normalize_team_name, NBA_EXACT_MAP, WNBA_EXACT_MAP, NHL_EXACT_MAP
 from app_core.weights_config import (
             TOTAL_UNDER_MIN_WIN_PROB, TOTAL_UNDER_MIN_EV, TOTAL_UNDER_MIN_EDGE,
             NHL_TOTAL_EXTRA_EDGE_PENALTY, MLB_SPREAD_MIN_WIN_PROB,
@@ -134,7 +134,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-07-29c-novig-spread-outlier-guard"
+PIPELINE_BUILD = "2026-07-29d-wnba-selection"
 
 # Best Available must compare standard, reasonably priced markets. A P2P exchange can
 # expose alternate run lines (for example +5.5 at -1150) beside the standard MLB +1.5.
@@ -733,7 +733,18 @@ def _infer_missing_league_from_team_sets(df: pd.DataFrame, selected_sports: list
     # Refresh missing mask after NCAAB assignment
     missing_mask = out["league"].str.len().eq(0)
 
-    # 2. Precedence Override: Check NBA/NHL exact map
+    # 2. Preserve explicit WNBA franchise identities before global normalization
+    # collapses full names to city-only aliases that overlap NBA teams.
+    raw_home = _clean_text_placeholders(_string_series(out, "home_team")).str.lower()
+    raw_away = _clean_text_placeholders(_string_series(out, "away_team")).str.lower()
+    wnba_exact_keys = {str(k).strip().lower() for k in WNBA_EXACT_MAP}
+    wnba_mask = missing_mask & (
+        raw_home.isin(wnba_exact_keys) | raw_away.isin(wnba_exact_keys)
+    )
+    out.loc[wnba_mask, "league"] = "WNBA"
+
+    # 3. Precedence Override: Check NBA/NHL exact map
+    missing_mask = out["league"].str.len().eq(0)
     nba_teams = {normalize_team_name(v) for v in NBA_EXACT_MAP.values()}
     nhl_teams = {normalize_team_name(v) for v in NHL_EXACT_MAP.values()}
 
@@ -1067,11 +1078,12 @@ def _filter_preselection_line_integrity(
         (league.eq("MLB") & live_total.between(5.5, 13.0, inclusive="both"))
         | (league.eq("NHL") & live_total.between(4.5, 8.5, inclusive="both"))
         | (league.eq("NBA") & live_total.between(185, 255, inclusive="both"))
+        | (league.eq("WNBA") & live_total.between(130, 210, inclusive="both"))
         | (league.eq("NCAAB") & live_total.between(115, 175, inclusive="both"))
         | (league.eq("NFL") & live_total.between(30, 60, inclusive="both"))
         | (league.eq("NCAAF") & live_total.between(35, 75, inclusive="both"))
     )
-    known_league = league.isin({"MLB", "NHL", "NBA", "NCAAB", "NFL", "NCAAF"})
+    known_league = league.isin({"MLB", "NHL", "NBA", "WNBA", "NCAAB", "NFL", "NCAAF"})
 
     from app_core.weights_config import MAIN_TOTAL_MIN_DEVIG_PROB, MAIN_TOTAL_MAX_DEVIG_PROB
 
@@ -2113,9 +2125,12 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _build_spread_rows(normalized: pd.DataFrame) -> list[pd.DataFrame]:
-    """Build spread_home and spread_away rows from TheOver export.
-    TheOver's 'Line' is the PickTeam's spread line (already signed correctly for them).
-    The opposing team gets the negated line.
+    """Build spread_home and spread_away rows from a TheOver sides export.
+
+    TheOver's Line belongs to its selected team. Current exports may identify
+    that team either by full name (PickTeam) or by the short Pick code matching
+    HomeKalshi/AwayKalshi. Resolve both forms explicitly; never silently assign
+    an unresolved pick to the away team.
     """
     line = _first_existing_numeric(normalized, ["line", "spread_line", "spread", "points"])
     prob = _first_existing_numeric(normalized, ["theover_probability", "winprobability", "win_probability", "probability"])
@@ -2125,30 +2140,66 @@ def _build_spread_rows(normalized: pd.DataFrame) -> list[pd.DataFrame]:
     base_cols = [c for c in ["league", "home_team", "away_team", "game_date", "game_time_est"] if c in normalized.columns]
     base = normalized[base_cols].copy()
 
-    # Determine which team is the pick team
-    pick_team = _string_series(normalized, "pick_team")
-    home_team = _string_series(normalized, "home_team")
-    away_team = _string_series(normalized, "away_team")
+    def _team_tokens(column_names: list[str]) -> pd.Series:
+        raw = _first_nonempty_text(normalized, column_names)
+        return raw.fillna("").astype(str).str.upper().str.replace(r"[^A-Z0-9]+", "", regex=True)
 
-    # pick_is_home: True when PickTeam matches HomeTeam
-    pick_is_home = pick_team.str.strip().str.lower() == home_team.str.strip().str.lower()
+    pick_raw = _first_nonempty_text(
+        normalized, ["pick_team", "pick", "pick_code", "pickcode"]
+    )
+    pick_token = (
+        pick_raw.fillna("")
+        .astype(str)
+        .str.upper()
+        .str.replace(r"[^A-Z0-9]+", "", regex=True)
+    )
+    # _coerce_identity_columns normalizes HomeTeam/AwayTeam (for example,
+    # "Boston Celtics" -> "Boston"), but intentionally leaves PickTeam intact.
+    # Normalize the selected full name for name matching while retaining the
+    # raw token for short-code matching (for example WNBA Pick=LV).
+    pick_name_token = (
+        pick_raw.map(normalize_team_name)
+        .fillna("")
+        .astype(str)
+        .str.upper()
+        .str.replace(r"[^A-Z0-9]+", "", regex=True)
+    )
+    home_name_token = _team_tokens(["home_team"])
+    away_name_token = _team_tokens(["away_team"])
+    home_code_token = _team_tokens(["homekalshi", "home_kalshi", "home_code"])
+    away_code_token = _team_tokens(["awaykalshi", "away_kalshi", "away_code"])
+
+    pick_has_value = pick_token.ne("")
+    pick_is_home = pick_has_value & (
+        pick_name_token.eq(home_name_token) | pick_token.eq(home_code_token)
+    )
+    pick_is_away = pick_has_value & (
+        pick_name_token.eq(away_name_token) | pick_token.eq(away_code_token)
+    )
+    resolved_home = pick_is_home & ~pick_is_away
+    resolved_away = pick_is_away & ~pick_is_home
+
+    home_line = line.where(resolved_home, (-line).where(resolved_away, pd.NA))
+    home_prob = prob.where(
+        resolved_home,
+        (1 - prob).where(resolved_away & prob.notna(), pd.NA),
+    )
 
     spread_home = base.copy()
     spread_home["market_type"] = "spread_home"
-    spread_home["spread_line"] = line.where(pick_is_home, -line)
+    spread_home["spread_line"] = home_line
     spread_home["total_line"] = pd.NA
-    spread_home["theover_probability"] = prob.where(pick_is_home, (1 - prob).where(prob.notna(), pd.NA))
+    spread_home["theover_probability"] = home_prob
     spread_home["odds_american"] = odds
 
     spread_away = base.copy()
     spread_away["market_type"] = "spread_away"
-    spread_away["spread_line"] = -line.where(pick_is_home, -line)  # negated from home
+    spread_away["spread_line"] = -home_line
     spread_away["total_line"] = pd.NA
-    spread_away["theover_probability"] = (1 - prob).where(pick_is_home & prob.notna(), prob.where(prob.notna(), pd.NA))
+    spread_away["theover_probability"] = (1 - home_prob).where(home_prob.notna(), pd.NA)
     spread_away["odds_american"] = odds
 
     return [spread_home, spread_away]
-
 
 def _build_moneyline_orientation_rows(normalized: pd.DataFrame) -> list[pd.DataFrame]:
     """Preserve favorite orientation from a sides-upload moneyline row.
@@ -5997,13 +6048,15 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
                 sport_keys.append("basketball_ncaab")
             elif s_up == "NBA":
                 sport_keys.append("basketball_nba")
+            elif s_up == "WNBA":
+                sport_keys.append("basketball_wnba")
             elif s_up == "NHL":
                 sport_keys.append("icehockey_nhl")
             elif s_up == "MLB":
                 sport_keys.append("baseball_mlb_preseason")
                 sport_keys.append("baseball_mlb")
     else:
-        sport_keys = ["basketball_ncaab", "basketball_nba", "icehockey_nhl", "baseball_mlb"]
+        sport_keys = ["basketball_ncaab", "basketball_nba", "basketball_wnba", "icehockey_nhl", "baseball_mlb"]
 
     game_dict = {}
     for sk in sport_keys:
