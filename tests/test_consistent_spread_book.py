@@ -16,6 +16,7 @@ from core.streamlit_pipeline import (
     _consistent_spread_book,
     _expand_live_odds_to_bet_rows,
     _novig_spread_quote_for_favorite,
+    _trusted_live_line_source_mask,
 )
 
 
@@ -104,6 +105,14 @@ def test_moneyline_export_preserves_favorite_orientation_without_creating_a_bet(
     assert hints["market_type"].eq("orientation_hint").all()
     assert hints["orientation_favorite_side"].tolist() == ["home", "home", "away"]
     assert hints["odds_american"].isna().all()
+
+
+def test_novig_moneyline_line_sources_are_trusted_live():
+    mask = _trusted_live_line_source_mask(
+        pd.Series(["novig_moneyline_verified", "novig_moneyline_reoriented"])
+    )
+
+    assert mask.tolist() == [True, True]
 
 
 def test_novig_reorientation_swaps_line_and_price_together():
