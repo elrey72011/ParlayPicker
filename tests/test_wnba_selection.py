@@ -104,6 +104,30 @@ def test_theover_wnba_pick_code_binds_line_and_probability_to_home_team():
     assert float(away.iloc[0]["theover_probability"]) == 0.38
 
 
+
+def test_theover_full_pick_team_survives_team_name_normalization():
+    raw = pd.DataFrame(
+        [
+            {
+                "League": "NBA",
+                "HomeTeam": "Boston Celtics",
+                "AwayTeam": "Miami Heat",
+                "PickTeam": "Boston Celtics",
+                "Line": -3.5,
+                "WinProbability": 0.57,
+                "Market": "Spread",
+            }
+        ]
+    )
+
+    normalized = sp._normalize_upload(raw)
+    home, away = sp._build_spread_rows(normalized)
+
+    assert float(home.iloc[0]["spread_line"]) == -3.5
+    assert float(home.iloc[0]["theover_probability"]) == 0.57
+    assert float(away.iloc[0]["spread_line"]) == 3.5
+    assert float(away.iloc[0]["theover_probability"]) == 0.43
+
 def _line_candidate(market_type, **overrides):
     row = {
         "league": "WNBA",
