@@ -2144,17 +2144,37 @@ def _build_spread_rows(normalized: pd.DataFrame) -> list[pd.DataFrame]:
         raw = _first_nonempty_text(normalized, column_names)
         return raw.fillna("").astype(str).str.upper().str.replace(r"[^A-Z0-9]+", "", regex=True)
 
-    pick_token = _team_tokens(["pick_team", "pick", "pick_code", "pickcode"])
+    pick_raw = _first_nonempty_text(
+        normalized, ["pick_team", "pick", "pick_code", "pickcode"]
+    )
+    pick_token = (
+        pick_raw.fillna("")
+        .astype(str)
+        .str.upper()
+        .str.replace(r"[^A-Z0-9]+", "", regex=True)
+    )
+    # _coerce_identity_columns normalizes HomeTeam/AwayTeam (for example,
+    # "Boston Celtics" -> "Boston"), but intentionally leaves PickTeam intact.
+    # Normalize the selected full name for name matching while retaining the
+    # raw token for short-code matching (for example WNBA Pick=LV).
+    pick_name_token = (
+        pick_raw.map(normalize_team_name)
+        .fillna("")
+        .astype(str)
+        .str.upper()
+        .str.replace(r"[^A-Z0-9]+", "", regex=True)
+    )
     home_name_token = _team_tokens(["home_team"])
     away_name_token = _team_tokens(["away_team"])
     home_code_token = _team_tokens(["homekalshi", "home_kalshi", "home_code"])
     away_code_token = _team_tokens(["awaykalshi", "away_kalshi", "away_code"])
 
-    pick_is_home = pick_token.ne("") & (
-        pick_token.eq(home_name_token) | pick_token.eq(home_code_token)
+    pick_has_value = pick_token.ne("")
+    pick_is_home = pick_has_value & (
+        pick_name_token.eq(home_name_token) | pick_token.eq(home_code_token)
     )
-    pick_is_away = pick_token.ne("") & (
-        pick_token.eq(away_name_token) | pick_token.eq(away_code_token)
+    pick_is_away = pick_has_value & (
+        pick_name_token.eq(away_name_token) | pick_token.eq(away_code_token)
     )
     resolved_home = pick_is_home & ~pick_is_away
     resolved_away = pick_is_away & ~pick_is_home
