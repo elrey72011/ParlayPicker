@@ -22,7 +22,7 @@ from core.kelly_optimizer import add_kelly_bet_sizing
 from app_core.calibration import generate_calibration_dataset
 from core.probability_engine import american_to_prob
 from core.schema.base_schema import ensure_base_schema
-from core.team_mapper import normalize_team_name, NBA_EXACT_MAP, NHL_EXACT_MAP
+from core.team_mapper import normalize_team_name, NBA_EXACT_MAP, WNBA_EXACT_MAP, NHL_EXACT_MAP
 from app_core.weights_config import (
             TOTAL_UNDER_MIN_WIN_PROB, TOTAL_UNDER_MIN_EV, TOTAL_UNDER_MIN_EDGE,
             NHL_TOTAL_EXTRA_EDGE_PENALTY, MLB_SPREAD_MIN_WIN_PROB,
@@ -134,7 +134,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-07-29c-novig-spread-outlier-guard"
+PIPELINE_BUILD = "2026-07-29d-wnba-selection"
 
 # Best Available must compare standard, reasonably priced markets. A P2P exchange can
 # expose alternate run lines (for example +5.5 at -1150) beside the standard MLB +1.5.
@@ -733,7 +733,18 @@ def _infer_missing_league_from_team_sets(df: pd.DataFrame, selected_sports: list
     # Refresh missing mask after NCAAB assignment
     missing_mask = out["league"].str.len().eq(0)
 
-    # 2. Precedence Override: Check NBA/NHL exact map
+    # 2. Preserve explicit WNBA franchise identities before global normalization
+    # collapses full names to city-only aliases that overlap NBA teams.
+    raw_home = _clean_text_placeholders(_string_series(out, "home_team")).str.lower()
+    raw_away = _clean_text_placeholders(_string_series(out, "away_team")).str.lower()
+    wnba_exact_keys = {str(k).strip().lower() for k in WNBA_EXACT_MAP}
+    wnba_mask = missing_mask & (
+        raw_home.isin(wnba_exact_keys) | raw_away.isin(wnba_exact_keys)
+    )
+    out.loc[wnba_mask, "league"] = "WNBA"
+
+    # 3. Precedence Override: Check NBA/NHL exact map
+    missing_mask = out["league"].str.len().eq(0)
     nba_teams = {normalize_team_name(v) for v in NBA_EXACT_MAP.values()}
     nhl_teams = {normalize_team_name(v) for v in NHL_EXACT_MAP.values()}
 
@@ -1067,11 +1078,12 @@ def _filter_preselection_line_integrity(
         (league.eq("MLB") & live_total.between(5.5, 13.0, inclusive="both"))
         | (league.eq("NHL") & live_total.between(4.5, 8.5, inclusive="both"))
         | (league.eq("NBA") & live_total.between(185, 255, inclusive="both"))
+        | (league.eq("WNBA") & live_total.between(130, 210, inclusive="both"))
         | (league.eq("NCAAB") & live_total.between(115, 175, inclusive="both"))
         | (league.eq("NFL") & live_total.between(30, 60, inclusive="both"))
         | (league.eq("NCAAF") & live_total.between(35, 75, inclusive="both"))
     )
-    known_league = league.isin({"MLB", "NHL", "NBA", "NCAAB", "NFL", "NCAAF"})
+    known_league = league.isin({"MLB", "NHL", "NBA", "WNBA", "NCAAB", "NFL", "NCAAF"})
 
     from app_core.weights_config import MAIN_TOTAL_MIN_DEVIG_PROB, MAIN_TOTAL_MAX_DEVIG_PROB
 
@@ -5997,13 +6009,15 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
                 sport_keys.append("basketball_ncaab")
             elif s_up == "NBA":
                 sport_keys.append("basketball_nba")
+            elif s_up == "WNBA":
+                sport_keys.append("basketball_wnba")
             elif s_up == "NHL":
                 sport_keys.append("icehockey_nhl")
             elif s_up == "MLB":
                 sport_keys.append("baseball_mlb_preseason")
                 sport_keys.append("baseball_mlb")
     else:
-        sport_keys = ["basketball_ncaab", "basketball_nba", "icehockey_nhl", "baseball_mlb"]
+        sport_keys = ["basketball_ncaab", "basketball_nba", "basketball_wnba", "icehockey_nhl", "baseball_mlb"]
 
     game_dict = {}
     for sk in sport_keys:
