@@ -420,3 +420,14 @@ def test_repaired_upload_fallback_is_unavailable_for_production_stake():
     assert float(out.iloc[0]["Play_Units"]) == 0.0
     assert float(out.iloc[0]["Play_Stake"]) == 0.0
     assert not bool(out.iloc[0]["All_Row_Bet"])
+
+
+def test_play_card_labels_production_wagers_and_coverage_passes_explicitly():
+    out = attach_play_stakes(_play_card(), unit=5.0)
+    approved = out["Wager_Approved"]
+
+    assert approved.sum() == 1
+    assert out.loc[approved, "Export_Role"].eq("PRODUCTION WAGER").all()
+    assert out.loc[approved, "Wager_Instruction"].str.startswith("APPROVED").all()
+    assert out.loc[~approved, "Export_Role"].eq("COVERAGE PICK - PASS").all()
+    assert out.loc[~approved, "Wager_Instruction"].str.startswith("DO NOT BET").all()
