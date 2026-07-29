@@ -1000,6 +1000,8 @@ def _apply_mlb_runline_cover(
 
 
 _TRUSTED_LIVE_LINE_SOURCES = frozenset({
+    "novig_moneyline_reoriented",
+    "novig_moneyline_verified",
     "novig_theover_moneyline_reoriented",
     "novig_theover_moneyline_verified",
 })
@@ -1008,8 +1010,9 @@ _TRUSTED_LIVE_LINE_SOURCES = frozenset({
 def _trusted_live_line_source_mask(values: pd.Series) -> pd.Series:
     """Classify sportsbook line provenance shared by pre- and post-selection guards.
 
-    The Novig/TheOver orientation repair still originates from the live odds row even
-    though its explicit provenance label does not contain the word live. Keep one
+    Novig moneyline and Novig/TheOver fallback orientation repairs still originate
+    from the live odds row even though their explicit provenance labels do not contain
+    the word live. Keep one
     authoritative classifier so a source accepted before ranking cannot be rejected
     merely because a later guard uses a different string heuristic.
     """
