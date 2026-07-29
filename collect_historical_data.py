@@ -64,6 +64,7 @@ FEATURE_NAMES = [
 # The Odds API sports keys
 ODDS_API_SPORTS = {
     "NBA": "basketball_nba",
+    "WNBA": "basketball_wnba",
     "NCAAB": "basketball_ncaab",
     "NHL": "icehockey_nhl",
     "NFL": "americanfootball_nfl",
@@ -340,7 +341,7 @@ def main():
     parser = argparse.ArgumentParser(description="Collect historical data using The Odds API")
     parser.add_argument("--days", type=int, default=45, help="Number of days to look back (default 45)")
     parser.add_argument("--sports", nargs="+", default=["NBA", "NHL", "NCAAB"],
-                       choices=["NBA", "NHL", "NCAAB", "NFL", "NCAAF"])
+                       choices=["NBA", "WNBA", "NHL", "NCAAB", "NFL", "NCAAF"])
     parser.add_argument("--output", type=str, default="master_all_sports.csv")
     parser.add_argument("--api-key", type=str)
     
