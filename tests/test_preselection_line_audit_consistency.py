@@ -236,3 +236,42 @@ def test_plain_live_spread_still_uses_raw_moneyline_orientation_guard():
     assert row["status_blocker_stage"] == "spread_orientation_guardrail"
     assert "spread_orientation_fault" in str(row["Status_Reason"])
 
+
+def test_extreme_juice_spread_cannot_win_best_available_ranking():
+    df = pd.DataFrame([
+        _candidate(
+            "spread_home",
+            win_prob=0.90,
+            ev=0.40,
+            edge=0.30,
+            spread_line=5.5,
+            live_spread_line=5.5,
+            line_source="novig_moneyline_verified",
+            orientation_source="exact_match|novig_moneyline_favorite",
+            odds_american=-1150,
+            odds_source="novig",
+        ),
+        _candidate(
+            "total_under",
+            win_prob=0.58,
+            ev=0.03,
+            edge=0.03,
+            total_line=8.5,
+            live_total_line=8.5,
+            uploaded_total_line=8.5,
+            upload_total_line=8.5,
+        ),
+    ])
+    diagnostics = {}
+
+    out = build_best_picks_df(df, diagnostics_out=diagnostics)
+    audit = diagnostics["candidate_audit_df"]
+
+    assert len(out) == 1
+    assert out.iloc[0]["market_type"] == "total_under"
+    assert out.iloc[0]["best_pick"] == "Under 8.5"
+    assert not audit["market_type"].astype(str).str.startswith("spread").any()
+    assert diagnostics["preselection_invalid_extreme_spread_price_count"] == 1
+    assert diagnostics["preselection_invalid_spread_candidate_count"] == 1
+    assert diagnostics["preselection_dropped_spread_candidate_count"] == 1
+
