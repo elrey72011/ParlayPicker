@@ -1125,6 +1125,40 @@ def find_team_reference(norm_title: str, team_name: str) -> int:
     return -1
 
 
+def spread_market_subject_is_home(
+    market: dict[str, Any], league: str, home_team: str, away_team: str
+) -> bool | None:
+    """Resolve a spread contract's subject from its exact ticker suffix, then title.
+
+    Kalshi spread market tickers end with the subject team code plus a strike
+    token (for example, a GS4 suffix means Golden State wins by over 3.5).
+    This machine-readable suffix is necessary for short WNBA codes such as GS,
+    which intentionally are not accepted as generic title substrings.
+    """
+    ticker_suffix = _safe_text(market.get("ticker")).upper().rsplit("-", 1)[-1]
+    home_code = team_code_for_league(league, home_team).upper()
+    away_code = team_code_for_league(league, away_team).upper()
+
+    def ticker_names(code: str) -> bool:
+        return bool(code) and re.match(rf"^{re.escape(code)}(?:\d|$)", ticker_suffix) is not None
+
+    ticker_home = ticker_names(home_code)
+    ticker_away = ticker_names(away_code)
+    if ticker_home ^ ticker_away:
+        return bool(ticker_home)
+
+    title_text = " ".join(
+        _safe_text(market.get(key))
+        for key in ("title", "subtitle", "yes_sub_title")
+    )
+    norm_title = normalize_team_name(title_text)
+    home_idx = find_team_reference(norm_title, normalize_team_name(home_team))
+    away_idx = find_team_reference(norm_title, normalize_team_name(away_team))
+    if home_idx < 0 and away_idx < 0:
+        return None
+    return home_idx >= 0 and (away_idx < 0 or home_idx <= away_idx)
+
+
 def kalshi_title_references_matchup(norm_title: str, norm_home: str, norm_away: str) -> bool:
     """True when a Kalshi market title plausibly belongs to the row's game.
 
@@ -1723,12 +1757,14 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                     def _spread_unpriceable_rank(mkt) -> int:
                         try:
                             from core.team_mapper import normalize_team_name as _norm
-                            t = f" {_norm(str(mkt.get('title') or ''))} "
-                            h_idx = find_team_reference(t, str(_norm(str(row.get('home_team') or ''))))
-                            a_idx = find_team_reference(t, str(_norm(str(row.get('away_team') or ''))))
-                            if h_idx < 0 and a_idx < 0:
+                            subj_is_home = spread_market_subject_is_home(
+                                mkt,
+                                league,
+                                str(row.get("home_team") or ""),
+                                str(row.get("away_team") or ""),
+                            )
+                            if subj_is_home is None:
                                 return 1
-                            subj_is_home = h_idx >= 0 and (a_idx < 0 or h_idx <= a_idx)
                             ok = orient_spread_kalshi_prob(
                                 0.5, subj_is_home, "home" in str(market_type).lower(),
                                 pd.to_numeric(row.get("spread_line"), errors="coerce"),
@@ -1862,6 +1898,18 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 if away_idx == 999 and " away " in norm_title:
                     away_idx = norm_title.find(" away ")
 
+                spread_subject_is_home = None
+                if "spread" in market_type_str:
+                    spread_subject_is_home = spread_market_subject_is_home(
+                        best_market,
+                        league,
+                        str(row.get("home_team") or ""),
+                        str(row.get("away_team") or ""),
+                    )
+                    if spread_subject_is_home is not None:
+                        home_idx = 0 if spread_subject_is_home else 1
+                        away_idx = 1 if spread_subject_is_home else 0
+
                 if away_idx < home_idx:
                     # Away team is the subject. Invert to anchor to Home team.
                     final_prob = 1.0 - raw_prob
@@ -1883,10 +1931,10 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 # subject S is the first team named in the title.
                 _oriented = (
                     None
-                    if home_idx == 999 and away_idx == 999
+                    if spread_subject_is_home is None
                     else orient_spread_kalshi_prob(
                         raw_prob,
-                        home_idx <= away_idx,
+                        spread_subject_is_home,
                         "home" in market_type_str,
                         pd.to_numeric(row.get("spread_line"), errors="coerce"),
                     )
