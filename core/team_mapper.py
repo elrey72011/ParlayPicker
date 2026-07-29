@@ -78,6 +78,28 @@ NBA_EXACT_MAP = {
     "washington wizards": "Washington",
 }
 
+
+# WNBA uses full franchise names in The Odds API while TheOver commonly exports
+# city-only names. Normalize both representations to the same stable identity.
+# Includes the Portland Fire and Toronto Tempo, which joined for the 2026 season.
+WNBA_EXACT_MAP = {
+    "atlanta dream": "Atlanta",
+    "chicago sky": "Chicago",
+    "connecticut sun": "Connecticut",
+    "dallas wings": "Dallas",
+    "golden state valkyries": "Golden State",
+    "indiana fever": "Indiana",
+    "las vegas aces": "Las Vegas",
+    "los angeles sparks": "Los Angeles",
+    "minnesota lynx": "Minnesota",
+    "new york liberty": "New York",
+    "phoenix mercury": "Phoenix",
+    "portland fire": "Portland",
+    "seattle storm": "Seattle",
+    "toronto tempo": "Toronto",
+    "washington mystics": "Washington",
+}
+
 NHL_EXACT_MAP = {
     "anaheim ducks": "Anaheim",
     "boston bruins": "Boston",
@@ -899,6 +921,7 @@ NCAAB_MASCOT_MAP = {
 TEAM_MAP.update(NCAAB_MASCOT_MAP)
 
 TEAM_MAP.update(NBA_EXACT_MAP)
+TEAM_MAP.update(WNBA_EXACT_MAP)
 TEAM_MAP.update(NHL_EXACT_MAP)
 TEAM_MAP.update(NCAAB_EXTRA_MAP)
 # Merge dynamic aliases into the primary mapping dictionary
