@@ -2125,9 +2125,12 @@ def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _build_spread_rows(normalized: pd.DataFrame) -> list[pd.DataFrame]:
-    """Build spread_home and spread_away rows from TheOver export.
-    TheOver's 'Line' is the PickTeam's spread line (already signed correctly for them).
-    The opposing team gets the negated line.
+    """Build spread_home and spread_away rows from a TheOver sides export.
+
+    TheOver's Line belongs to its selected team. Current exports may identify
+    that team either by full name (PickTeam) or by the short Pick code matching
+    HomeKalshi/AwayKalshi. Resolve both forms explicitly; never silently assign
+    an unresolved pick to the away team.
     """
     line = _first_existing_numeric(normalized, ["line", "spread_line", "spread", "points"])
     prob = _first_existing_numeric(normalized, ["theover_probability", "winprobability", "win_probability", "probability"])
@@ -2137,30 +2140,46 @@ def _build_spread_rows(normalized: pd.DataFrame) -> list[pd.DataFrame]:
     base_cols = [c for c in ["league", "home_team", "away_team", "game_date", "game_time_est"] if c in normalized.columns]
     base = normalized[base_cols].copy()
 
-    # Determine which team is the pick team
-    pick_team = _string_series(normalized, "pick_team")
-    home_team = _string_series(normalized, "home_team")
-    away_team = _string_series(normalized, "away_team")
+    def _team_tokens(column_names: list[str]) -> pd.Series:
+        raw = _first_nonempty_text(normalized, column_names)
+        return raw.fillna("").astype(str).str.upper().str.replace(r"[^A-Z0-9]+", "", regex=True)
 
-    # pick_is_home: True when PickTeam matches HomeTeam
-    pick_is_home = pick_team.str.strip().str.lower() == home_team.str.strip().str.lower()
+    pick_token = _team_tokens(["pick_team", "pick", "pick_code", "pickcode"])
+    home_name_token = _team_tokens(["home_team"])
+    away_name_token = _team_tokens(["away_team"])
+    home_code_token = _team_tokens(["homekalshi", "home_kalshi", "home_code"])
+    away_code_token = _team_tokens(["awaykalshi", "away_kalshi", "away_code"])
+
+    pick_is_home = pick_token.ne("") & (
+        pick_token.eq(home_name_token) | pick_token.eq(home_code_token)
+    )
+    pick_is_away = pick_token.ne("") & (
+        pick_token.eq(away_name_token) | pick_token.eq(away_code_token)
+    )
+    resolved_home = pick_is_home & ~pick_is_away
+    resolved_away = pick_is_away & ~pick_is_home
+
+    home_line = line.where(resolved_home, (-line).where(resolved_away, pd.NA))
+    home_prob = prob.where(
+        resolved_home,
+        (1 - prob).where(resolved_away & prob.notna(), pd.NA),
+    )
 
     spread_home = base.copy()
     spread_home["market_type"] = "spread_home"
-    spread_home["spread_line"] = line.where(pick_is_home, -line)
+    spread_home["spread_line"] = home_line
     spread_home["total_line"] = pd.NA
-    spread_home["theover_probability"] = prob.where(pick_is_home, (1 - prob).where(prob.notna(), pd.NA))
+    spread_home["theover_probability"] = home_prob
     spread_home["odds_american"] = odds
 
     spread_away = base.copy()
     spread_away["market_type"] = "spread_away"
-    spread_away["spread_line"] = -line.where(pick_is_home, -line)  # negated from home
+    spread_away["spread_line"] = -home_line
     spread_away["total_line"] = pd.NA
-    spread_away["theover_probability"] = (1 - prob).where(pick_is_home & prob.notna(), prob.where(prob.notna(), pd.NA))
+    spread_away["theover_probability"] = (1 - home_prob).where(home_prob.notna(), pd.NA)
     spread_away["odds_american"] = odds
 
     return [spread_home, spread_away]
-
 
 def _build_moneyline_orientation_rows(normalized: pd.DataFrame) -> list[pd.DataFrame]:
     """Preserve favorite orientation from a sides-upload moneyline row.
