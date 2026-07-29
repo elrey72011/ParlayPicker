@@ -1759,8 +1759,8 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                             subj_is_home = spread_market_subject_is_home(
                                 mkt,
                                 league,
-                                str(row.get("home_team") or ""),
-                                str(row.get("away_team") or ""),
+                                _safe_text(row.get("home_team")),
+                                _safe_text(row.get("away_team")),
                             )
                             if subj_is_home is None:
                                 return 1
@@ -1902,8 +1902,8 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                     spread_subject_is_home = spread_market_subject_is_home(
                         best_market,
                         league,
-                        str(row.get("home_team") or ""),
-                        str(row.get("away_team") or ""),
+                        _safe_text(row.get("home_team")),
+                        _safe_text(row.get("away_team")),
                     )
                     if spread_subject_is_home is not None:
                         home_idx = 0 if spread_subject_is_home else 1
