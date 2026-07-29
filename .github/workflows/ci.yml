@@ -30,6 +30,7 @@ jobs:
           tests/test_best_picks_kelly_attach.py
           tests/test_portfolio_calibration_and_caps.py
           tests/test_novig_fetch_no_hardcoded_date.py
+          tests/test_consistent_spread_book.py
           tests/test_consistent_total_book.py
           tests/test_totals_pick_direction.py
           tests/test_kalshi_wrong_game_title_guard.py

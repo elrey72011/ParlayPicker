@@ -134,7 +134,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-07-29a-candidate-rank-recap"
+PIPELINE_BUILD = "2026-07-29b-novig-spread-team-binding"
 
 
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
@@ -1000,6 +1000,8 @@ def _apply_mlb_runline_cover(
 
 
 _TRUSTED_LIVE_LINE_SOURCES = frozenset({
+    "novig_moneyline_reoriented",
+    "novig_moneyline_verified",
     "novig_theover_moneyline_reoriented",
     "novig_theover_moneyline_verified",
 })
@@ -1008,8 +1010,9 @@ _TRUSTED_LIVE_LINE_SOURCES = frozenset({
 def _trusted_live_line_source_mask(values: pd.Series) -> pd.Series:
     """Classify sportsbook line provenance shared by pre- and post-selection guards.
 
-    The Novig/TheOver orientation repair still originates from the live odds row even
-    though its explicit provenance label does not contain the word live. Keep one
+    Novig moneyline and Novig/TheOver fallback orientation repairs still originate
+    from the live odds row even though their explicit provenance labels do not contain
+    the word live. Keep one
     authoritative classifier so a source accepted before ranking cannot be rejected
     merely because a later guard uses a different string heuristic.
     """
@@ -6425,6 +6428,24 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
             if not orientation_hints.empty:
                 orientation_favorite_side = str(orientation_hints.iloc[0])
 
+        # Bind Novig spread outcomes to Novig's own live moneyline whenever it is
+        # available. An uploaded TheOver moneyline can be stale or parse a different
+        # market snapshot; allowing it to override a complete Novig market can swap
+        # the two run-line outcomes (for example, Toronto -1.5/+141 became
+        # Toronto +1.5/-150 on 29 Jul). The upload remains a fallback only when
+        # Novig did not publish a usable two-way moneyline.
+        novig_moneyline_favorite_side = ""
+        novig_home_ml = pd.to_numeric(row.get("novig_h2h_home_price"), errors="coerce")
+        novig_away_ml = pd.to_numeric(row.get("novig_h2h_away_price"), errors="coerce")
+        if (
+            pd.notna(novig_home_ml)
+            and pd.notna(novig_away_ml)
+            and float(novig_home_ml) != float(novig_away_ml)
+        ):
+            novig_moneyline_favorite_side = (
+                "home" if float(novig_home_ml) < float(novig_away_ml) else "away"
+            )
+
         for market_type in candidate_markets:
             # Uploads are signals, not a market whitelist. Retain live spreads,
             # totals, and enabled moneylines even when TheOver recommended only one
@@ -6492,21 +6513,42 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
             spread_line_source = "live_odds"
             if market_type.startswith("spread"):
                 side = "home" if market_type == "spread_home" else "away"
-                if league_str == "MLB" and orientation_favorite_side:
+                # Preserve the no-upload path: without an uploaded orientation
+                # hint, _consistent_spread_book still selects the first book whose
+                # spread agrees with its own moneyline. The Novig-first binding rule
+                # only resolves authority inside the matched-upload repair path.
+                spread_favorite_side = (
+                    novig_moneyline_favorite_side or orientation_favorite_side
+                    if orientation_favorite_side
+                    else ""
+                )
+                spread_orientation_basis = (
+                    "novig_moneyline_favorite"
+                    if orientation_favorite_side and novig_moneyline_favorite_side
+                    else "theover_moneyline_favorite"
+                )
+                if league_str == "MLB" and orientation_favorite_side and spread_favorite_side:
                     oriented_point, oriented_price, remapped = _novig_spread_quote_for_favorite(
-                        row, side, orientation_favorite_side
+                        row, side, spread_favorite_side
                     )
                     if pd.notna(oriented_point) and pd.notna(oriented_price):
                         point_val = float(oriented_point)
                         market_dict["odds_american"] = float(oriented_price)
                         market_dict["odds_source"] = "novig"
-                        spread_line_source = (
-                            "novig_theover_moneyline_reoriented"
-                            if remapped
-                            else "novig_theover_moneyline_verified"
-                        )
+                        if spread_orientation_basis == "novig_moneyline_favorite":
+                            spread_line_source = (
+                                "novig_moneyline_reoriented"
+                                if remapped
+                                else "novig_moneyline_verified"
+                            )
+                        else:
+                            spread_line_source = (
+                                "novig_theover_moneyline_reoriented"
+                                if remapped
+                                else "novig_theover_moneyline_verified"
+                            )
                         market_dict["orientation_source"] = (
-                            f"{orientation_source}|theover_moneyline_favorite"
+                            f"{orientation_source}|{spread_orientation_basis}"
                         )
                     else:
                         point_val = pd.NA

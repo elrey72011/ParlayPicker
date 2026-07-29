@@ -16,6 +16,7 @@ from core.streamlit_pipeline import (
     _consistent_spread_book,
     _expand_live_odds_to_bet_rows,
     _novig_spread_quote_for_favorite,
+    _trusted_live_line_source_mask,
 )
 
 
@@ -106,6 +107,14 @@ def test_moneyline_export_preserves_favorite_orientation_without_creating_a_bet(
     assert hints["odds_american"].isna().all()
 
 
+def test_novig_moneyline_line_sources_are_trusted_live():
+    mask = _trusted_live_line_source_mask(
+        pd.Series(["novig_moneyline_verified", "novig_moneyline_reoriented"])
+    )
+
+    assert mask.tolist() == [True, True]
+
+
 def test_novig_reorientation_swaps_line_and_price_together():
     row = {
         "novig_home_point": 1.5,
@@ -125,7 +134,7 @@ def test_novig_reorientation_swaps_line_and_price_together():
     assert (away_point, away_price, away_remapped) == (1.5, -208.0, True)
 
 
-def test_expand_uses_orientation_hint_for_miami_novig_run_line():
+def test_expand_uses_novig_moneyline_for_miami_novig_run_line():
     live = pd.DataFrame(
         [
             {
@@ -182,7 +191,75 @@ def test_expand_uses_orientation_hint_for_miami_novig_run_line():
 
     assert float(home["spread_line"]) == -1.5
     assert float(home["odds_american"]) == 194.0
-    assert home["line_source"] == "novig_theover_moneyline_reoriented"
+    assert home["line_source"] == "novig_moneyline_reoriented"
+    assert home["orientation_source"].endswith("|novig_moneyline_favorite")
     assert float(away["spread_line"]) == 1.5
     assert float(away["odds_american"]) == -208.0
+
+def test_novig_moneyline_beats_stale_theover_hint_for_toronto_run_line():
+    # 29 Jul production regression: Novig showed TOR -1.5/+141 and
+    # WAS +1.5/-147, but a conflicting TheOver hint reassigned the outcomes and
+    # exported Toronto +1.5/-150. A complete Novig market must bind to itself.
+    live = pd.DataFrame(
+        [
+            {
+                "league": "MLB",
+                "home_team": "Washington",
+                "away_team": "Toronto",
+                "game_date": "2026-07-29",
+                "matchup_id": "tor-was",
+                "commence_time_raw": "2026-07-29T17:05:00Z",
+                "novig_home_point": 1.5,
+                "novig_home_price": -147,
+                "novig_away_point": -1.5,
+                "novig_away_price": 141,
+                "novig_h2h_home_price": 106,
+                "novig_h2h_away_price": -108,
+            }
+        ]
+    )
+    stale_hint = pd.DataFrame(
+        [
+            {
+                "league": "MLB",
+                "home_team": "Washington",
+                "away_team": "Toronto",
+                "game_date": "2026-07-29",
+                "matchup_id": "tor-was",
+                "market_type": "orientation_hint",
+                "orientation_favorite_side": "home",
+            },
+            {
+                "league": "MLB",
+                "home_team": "Washington",
+                "away_team": "Toronto",
+                "game_date": "2026-07-29",
+                "matchup_id": "tor-was",
+                "market_type": "spread_home",
+                "orientation_favorite_side": pd.NA,
+            },
+            {
+                "league": "MLB",
+                "home_team": "Washington",
+                "away_team": "Toronto",
+                "game_date": "2026-07-29",
+                "matchup_id": "tor-was",
+                "market_type": "spread_away",
+                "orientation_favorite_side": pd.NA,
+            },
+        ]
+    )
+
+    out, _ = _expand_live_odds_to_bet_rows(live, stale_hint)
+    home = out[out["market_type"] == "spread_home"].iloc[0]
+    away = out[out["market_type"] == "spread_away"].iloc[0]
+
+    assert float(home["spread_line"]) == 1.5
+    assert float(home["odds_american"]) == -147.0
+    assert float(away["spread_line"]) == -1.5
+    assert float(away["odds_american"]) == 141.0
+    assert home["line_source"] == "novig_moneyline_verified"
+    assert away["line_source"] == "novig_moneyline_verified"
+    assert home["orientation_source"].endswith("|novig_moneyline_favorite")
+    assert away["orientation_source"].endswith("|novig_moneyline_favorite")
 
