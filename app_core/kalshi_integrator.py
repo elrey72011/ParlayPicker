@@ -1756,7 +1756,6 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                     # prefer a market whose subject makes the pick priceable.
                     def _spread_unpriceable_rank(mkt) -> int:
                         try:
-                            from core.team_mapper import normalize_team_name as _norm
                             subj_is_home = spread_market_subject_is_home(
                                 mkt,
                                 league,
@@ -1928,7 +1927,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             if "spread" in market_type_str:
                 # Run lines: a "S wins by over L" contract prices only S -L and Opp(S) +L;
                 # the other two sides are unpriceable (see orient_spread_kalshi_prob). The
-                # subject S is the first team named in the title.
+                # subject S is resolved from the exact ticker suffix, then the title.
                 _oriented = (
                     None
                     if spread_subject_is_home is None
