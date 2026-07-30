@@ -78,6 +78,27 @@ def test_wnba_full_names_normalize_to_theover_city_names():
     assert normalize_team_name("Toronto Tempo") == normalize_team_name("Toronto")
 
 
+def test_wnba_connecticut_sun_does_not_inherit_college_uconn_alias():
+    raw = pd.DataFrame(
+        [
+            {
+                "League": "WNBA",
+                "HomeTeam": "Chicago Sky",
+                "AwayTeam": "Connecticut Sun",
+                "PickTeam": "Chicago Sky",
+                "Line": -4.5,
+                "WinProbability": 0.58,
+                "Market": "Spread",
+            }
+        ]
+    )
+
+    normalized = sp._normalize_upload(raw)
+
+    assert normalized.iloc[0]["home_team"] == "Chicago"
+    assert normalized.iloc[0]["away_team"] == "Connecticut"
+
+
 def test_theover_wnba_pick_code_binds_line_and_probability_to_home_team():
     raw = pd.DataFrame(
         [
