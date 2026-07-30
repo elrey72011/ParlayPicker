@@ -8,6 +8,127 @@ import app_core.feature_processing as fp
 from app_core import weights_config
 
 
+def test_wnba_league_key_does_not_collapse_into_nba():
+    assert fp._model_league_key("WNBA") == "WNBA"
+    assert fp._model_league_key("Women's National Basketball Association") == "WNBA"
+    assert fp._model_league_key("NBA") == "NBA"
+
+
+def test_wnba_rows_are_isolated_from_failed_nba_diagnostics(monkeypatch):
+    monkeypatch.setattr(
+        fp,
+        "fetch_team_stats",
+        lambda _api_clients, season_year=None: pd.DataFrame(
+            columns=["team_norm", "league_key"]
+        ),
+    )
+    fp._NBA_FETCH_DIAGNOSTICS.update(
+        {
+            "status": "failed",
+            "source": "failed",
+            "retries_used": 3,
+            "last_error": "timeout",
+        }
+    )
+    games = pd.DataFrame(
+        [
+            {
+                "league": "WNBA",
+                "home_team": "Dallas",
+                "away_team": "Atlanta",
+                "market_type": "spread_home",
+                "decimal_odds": 1.91,
+                "odds_american": -110,
+            }
+        ]
+    )
+
+    enriched = fp.enrich_with_model_features(games, api_clients={})
+
+    assert enriched.loc[0, "League"] == "WNBA"
+    if "feature_league_NBA" in enriched.columns:
+        assert float(enriched.loc[0, "feature_league_NBA"]) == 0.0
+    assert enriched.loc[0, "nba_stats_fetch_status"] == "not_applicable"
+    assert enriched.loc[0, "nba_stats_fetch_source"] == "none"
+    fallback_summary = str(enriched.loc[0, "fallback_summary_by_league"])
+    assert "'WNBA':" in fallback_summary
+    assert "'NBA':" not in fallback_summary
+    assert "NBA stats fetch failed" not in str(enriched.loc[0, "run_health_warning"])
+
+
+def test_mixed_slate_fallback_diagnostics_are_scoped_to_affected_league(monkeypatch):
+    monkeypatch.setattr(
+        fp,
+        "fetch_team_stats",
+        lambda _api_clients, season_year=None: pd.DataFrame(
+            [
+                {
+                    "team_norm": "BOSTON RED SOX",
+                    "league_key": "MLB",
+                    "win_pct": 0.55,
+                    "home_win_pct": 0.56,
+                    "away_win_pct": 0.54,
+                    "points_per_game": 4.8,
+                    "points_allowed_per_game": 4.2,
+                    "turnovers": 0.0,
+                    "streak": 1.0,
+                    "last5_win_pct": 0.6,
+                },
+                {
+                    "team_norm": "NEW YORK YANKEES",
+                    "league_key": "MLB",
+                    "win_pct": 0.57,
+                    "home_win_pct": 0.58,
+                    "away_win_pct": 0.56,
+                    "points_per_game": 5.0,
+                    "points_allowed_per_game": 4.1,
+                    "turnovers": 0.0,
+                    "streak": 2.0,
+                    "last5_win_pct": 0.6,
+                },
+            ]
+        ),
+    )
+    fp._NBA_FETCH_DIAGNOSTICS.update(
+        {
+            "status": "failed",
+            "source": "failed",
+            "retries_used": 3,
+            "last_error": "timeout",
+        }
+    )
+    games = pd.DataFrame(
+        [
+            {
+                "league": "MLB",
+                "home_team": "Boston",
+                "away_team": "New York Yankees",
+                "market_type": "total",
+                "decimal_odds": 1.91,
+                "odds_american": -110,
+            },
+            {
+                "league": "WNBA",
+                "home_team": "Dallas",
+                "away_team": "Atlanta",
+                "market_type": "spread_home",
+                "decimal_odds": 1.91,
+                "odds_american": -110,
+            },
+        ]
+    )
+
+    enriched = fp.enrich_with_model_features(games, api_clients={})
+    mlb = enriched.loc[enriched["League"].eq("MLB")].iloc[0]
+    wnba = enriched.loc[enriched["League"].eq("WNBA")].iloc[0]
+
+    assert mlb["stats_resolution_status"] == "resolved"
+    assert mlb["fallback_summary_by_league"] in {"{}", "{ }"}
+    assert str(mlb["run_health_warning"]).strip() == ""
+    assert "WNBA" in str(wnba["fallback_summary_by_league"])
+    assert "WNBA" in str(wnba["run_health_warning"])
+
+
 def test_nba_minnesota_resolves_to_timberwolves_not_wild():
     assert fp.normalize_team_for_stats("Minnesota", "NBA") == "MINNESOTA TIMBERWOLVES"
 

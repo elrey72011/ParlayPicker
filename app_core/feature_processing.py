@@ -115,6 +115,27 @@ LEAGUE_AVERAGES = {
     "default": {"ppg": 50.0, "oppg": 50.0, "win_pct": 0.5, "last5_win_pct": 0.5}
 }
 
+
+def _model_league_key(value: Any) -> str:
+    """Return an exact model league without treating WNBA as NBA."""
+    league = re.sub(r"[^A-Z0-9]+", " ", str(value).upper()).strip()
+    if "WNBA" in league or "WOMEN S NATIONAL BASKETBALL" in league:
+        return "WNBA"
+    if "MLB" in league or "BASEBALL" in league:
+        return "MLB"
+    if "NCAAB" in league or "COLLEGE BASKETBALL" in league:
+        return "NCAAB"
+    if "NCAAF" in league or "COLLEGE FOOTBALL" in league:
+        return "NCAAF"
+    if "NHL" in league or "ICE HOCKEY" in league:
+        return "NHL"
+    if "NFL" in league:
+        return "NFL"
+    if "NBA" in league:
+        return "NBA"
+    return "default"
+
+
 _NBA_STATS_RUNTIME_CACHE: Dict[int, List[Dict[str, Any]]] = {}
 _NBA_STATS_RUNTIME_CACHE_DAY: Dict[int, str] = {}
 _NBA_STATS_SUCCESS_ARCHIVE: Dict[int, Dict[str, Any]] = {}
@@ -2476,25 +2497,9 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     # ------------------------------------------------------------
     # 2) Row-by-row league_key inference (single correct definition)
     # ------------------------------------------------------------
-    def get_row_league_key(l_val: Any) -> str:
-        s = str(l_val).upper()
-        if "MLB" in s or "BASEBALL" in s:
-            return "MLB"
-        if "NCAAB" in s or "COLLEGE BASKETBALL" in s:
-            return "NCAAB"
-        if "NCAAF" in s or "COLLEGE FOOTBALL" in s:
-            return "NCAAF"
-        if "NHL" in s or "ICE HOCKEY" in s:
-            return "NHL"
-        if "NFL" in s:
-            return "NFL"
-        if "NBA" in s:
-            return "NBA"
-        return "default"
-
     # Explicit assignment to local variable
     if league_col:
-        league_keys = df[league_col].apply(get_row_league_key)
+        league_keys = df[league_col].apply(_model_league_key)
     else:
         league_keys = pd.Series(["default"] * len(df), index=df.index)
 
@@ -2504,7 +2509,7 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     features_data["League"] = league_keys
 
     # Explicitly set the OHE league columns
-    for lg in ["NBA", "NFL", "NHL", "NCAAB", "NCAAF", "MLB"]:
+    for lg in ["NBA", "WNBA", "NFL", "NHL", "NCAAB", "NCAAF", "MLB"]:
         col = f"feature_league_{lg}"
         if col in VERTEX_FEATURE_COLUMNS:
             features_data[col] = (league_keys == lg).astype(float)
@@ -2880,8 +2885,16 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     else:
         nba_fetch_status = "not_started"
         nba_fetch_source = "none"
-    features_data["nba_stats_fetch_status"] = nba_fetch_status
-    features_data["nba_stats_fetch_source"] = nba_fetch_source
+    nba_status_by_row = pd.Series(
+        ["not_applicable"] * len(df), index=df.index, dtype="object"
+    )
+    nba_source_by_row = pd.Series(
+        ["none"] * len(df), index=df.index, dtype="object"
+    )
+    nba_status_by_row.loc[nba_mask] = nba_fetch_status
+    nba_source_by_row.loc[nba_mask] = nba_fetch_source
+    features_data["nba_stats_fetch_status"] = nba_status_by_row
+    features_data["nba_stats_fetch_source"] = nba_source_by_row
     features_data["nba_stats_fetch_retries_used"] = int(nba_fetch_diag.get("retries_used", 0))
     features_data["ml_feature_eligible"] = stats_resolution_status == "resolved"
 
@@ -3054,8 +3067,12 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     )
     features_data["stats_ml_excluded_rows"] = int((~features_data["ml_feature_eligible"]).sum())
     features_data["stats_source_counts"] = str(source_counts)
-    features_data["fallback_summary_by_league"] = str(
-        {str(k): int(v) for k, v in fallback_counts_by_league.items()}
+    features_data["fallback_summary_by_league"] = league_keys.map(
+        lambda league: str(
+            {str(league): int(fallback_counts_by_league.get(league, 0))}
+        )
+        if int(fallback_counts_by_league.get(league, 0)) > 0
+        else "{}"
     )
     features_data["stats_binding_failures_by_league"] = str(
         {str(k): int(v) for k, v in stats_binding_failures_by_league.items()}
@@ -3074,23 +3091,44 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     features_data["unresolved_after_fuzzy"] = int(unresolved_after_fuzzy)
     features_data["stats_resolution_stage_failure_counts"] = str(dict(resolution_stage_counts))
 
-    total_rows = max(len(df), 1)
-    fallback_ratio = float(unresolved_mask.sum()) / float(total_rows)
-    nba_failed = bool(nba_in_slate) and str(nba_fetch_diag.get("source", "")).lower() == "failed"
-    fallback_heavy = fallback_ratio >= 0.25 or int(sum(unresolved_counts_by_league.values())) >= 3
-    run_health_warning = ""
-    if nba_failed and fallback_heavy:
-        run_health_warning = (
-            "Run health warning: NBA stats fetch failed and fallback usage is elevated; card confidence may be reduced."
+    league_row_counts = league_keys.value_counts().to_dict()
+    fallback_heavy_by_league = {
+        league: (
+            float(count) / float(max(int(league_row_counts.get(league, 0)), 1))
+            >= 0.25
+            or int(unresolved_counts_by_league.get(league, 0)) >= 3
         )
-    elif fallback_heavy:
-        run_health_warning = (
-            "Run health warning: fallback usage is elevated; verify unresolved team bindings before trusting the card."
+        for league, count in fallback_counts_by_league.items()
+    }
+    fallback_heavy = league_keys.map(
+        lambda league: bool(fallback_heavy_by_league.get(league, False))
+    )
+    nba_failed = bool(nba_in_slate) and (
+        str(nba_fetch_diag.get("source", "")).lower() == "failed"
+    )
+
+    def _league_health_warning(league: str) -> str:
+        league_fallback_heavy = bool(
+            fallback_heavy_by_league.get(league, False)
         )
-    elif nba_failed:
-        run_health_warning = "Run health warning: NBA stats fetch failed for this run."
-    features_data["fallback_heavy_slate_flag"] = bool(fallback_heavy)
-    features_data["run_health_warning"] = run_health_warning
+        if league == "NBA" and nba_failed and league_fallback_heavy:
+            return (
+                "Run health warning: NBA stats fetch failed and fallback usage "
+                "is elevated; card confidence may be reduced."
+            )
+        if league_fallback_heavy:
+            return (
+                f"Run health warning: {league} fallback usage is elevated; "
+                "verify unresolved team bindings before trusting the card."
+            )
+        if league == "NBA" and nba_failed:
+            return "Run health warning: NBA stats fetch failed for this run."
+        return ""
+
+    features_data["fallback_heavy_slate_flag"] = fallback_heavy.astype(bool)
+    features_data["run_health_warning"] = league_keys.map(
+        _league_health_warning
+    )
 
     logger.info(f"STATS SOURCE COUNTS: {source_counts}")
     logger.info(f"STATS UNRESOLVED COUNT BY LEAGUE: {unresolved_counts_by_league}")

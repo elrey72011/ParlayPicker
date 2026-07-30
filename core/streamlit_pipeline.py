@@ -134,7 +134,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-07-30f-pathological-price-rejection"
+PIPELINE_BUILD = "2026-07-30g-wnba-league-isolation"
 
 # Best Available must compare standard, reasonably priced markets. A P2P exchange can
 # expose alternate run lines (for example +5.5 at -1150) beside the standard MLB +1.5.
@@ -400,8 +400,19 @@ def ensure_best_pick_export_columns(
         diag_status = str(diagnostics_out.get("nba_stats_fetch_status", "")).strip().lower()
         if "nba_stats_fetch_status" in out.columns:
             row_status = out["nba_stats_fetch_status"].astype(str).str.strip().str.lower()
-            if diag_status in {"live", "cached", "failed"}:
-                out["nba_stats_fetch_status"] = row_status.mask(~row_status.isin({"live", "cached", "failed"}), diag_status)
+            valid_nba_statuses = {
+                "live",
+                "cached",
+                "failed",
+                "ok",
+                "not_started",
+                "not_applicable",
+            }
+            if diag_status in valid_nba_statuses:
+                out["nba_stats_fetch_status"] = row_status.mask(
+                    ~row_status.isin(valid_nba_statuses),
+                    diag_status,
+                )
         if "fallback_summary_by_league" in out.columns and not str(diagnostics_out.get("fallback_summary_by_league", "")).strip() == "":
             out["fallback_summary_by_league"] = out["fallback_summary_by_league"].replace("", diagnostics_out.get("fallback_summary_by_league", ""))
         if "run_health_warning" in out.columns and not str(diagnostics_out.get("run_health_warning", "")).strip() == "":
@@ -8900,6 +8911,32 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
     stats_source = _string_series(portfolio, "stats_source").str.strip().str.lower()
     fallback_summary = _string_series(portfolio, "fallback_summary_by_league").str.strip().str.lower()
     health_warning = _string_series(portfolio, "run_health_warning").str.strip().str.lower()
+    row_league = _string_series(portfolio, "league").str.strip().str.upper()
+    fallback_empty_tokens = {"", "{}", "{ }", "none", "nan", "<na>"}
+    fallback_affects_row = pd.Series(False, index=portfolio.index, dtype=bool)
+    keyed_summary_pattern = re.compile(r"""(?:['"][^'"]+['"]|[A-Za-z0-9_]+)\s*:""")
+    for idx in portfolio.index:
+        summary_value = str(fallback_summary.loc[idx]).strip()
+        if summary_value in fallback_empty_tokens:
+            continue
+        league_value = str(row_league.loc[idx]).strip()
+        if not league_value:
+            fallback_affects_row.loc[idx] = True
+            continue
+        league_pattern = re.compile(
+            rf"""(?:['"])?{re.escape(league_value)}(?:['"])?\s*:""",
+            flags=re.IGNORECASE,
+        )
+        if league_pattern.search(summary_value):
+            fallback_affects_row.loc[idx] = True
+        elif not keyed_summary_pattern.search(summary_value):
+            # Older, unstructured warnings cannot be safely attributed to a
+            # different league, so retain the conservative production block.
+            fallback_affects_row.loc[idx] = True
+    fallback_health_warning = (
+        health_warning.str.contains("fallback", regex=False, na=False)
+        & fallback_affects_row
+    )
     degraded = pd.Series(
         portfolio.get("degraded_feature_subset_flag", False),
         index=portfolio.index,
@@ -8907,8 +8944,9 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
     untrusted_model = (
         model_status.isin({"statistical fallback", "neutral fallback", "model failure"})
         | stats_source.isin({"fallback", "failed"})
-        | fallback_summary.ne("")
-        | health_warning.str.contains("fallback|degraded|staking suspended", regex=True, na=False)
+        | fallback_affects_row
+        | fallback_health_warning
+        | health_warning.str.contains("degraded|staking suspended", regex=True, na=False)
         | degraded
     )
     production_eligible = (
