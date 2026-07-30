@@ -2860,7 +2860,7 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     nba_in_slate = bool(nba_mask.any())
     if not nba_in_slate:
         nba_fetch_status = "not_applicable"
-        nba_fetch_source = "not_applicable"
+        nba_fetch_source = "none"
     elif "live" in nba_row_sources:
         nba_fetch_status = "live"
         nba_fetch_source = "live"
@@ -2889,7 +2889,7 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
         ["not_applicable"] * len(df), index=df.index, dtype="object"
     )
     nba_source_by_row = pd.Series(
-        ["not_applicable"] * len(df), index=df.index, dtype="object"
+        ["none"] * len(df), index=df.index, dtype="object"
     )
     nba_status_by_row.loc[nba_mask] = nba_fetch_status
     nba_source_by_row.loc[nba_mask] = nba_fetch_source
