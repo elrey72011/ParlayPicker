@@ -31,6 +31,7 @@ from core.streamlit_pipeline import (
     optimize_portfolio_allocation,
     run_analysis_pipeline,
     run_bankroll_simulation,
+    PIPELINE_BUILD,
     CANONICAL_BET_COLUMNS,
     VALID_MARKETS,
     MIN_EDGE_THRESHOLD,
@@ -2268,6 +2269,11 @@ def main() -> None:
             # ── MLB player props (separate softer-market card) ──
             prop_card = st.session_state.get("strikeout_prop_card")
             if prop_card is not None and not prop_card.empty:
+                from app_core.prop_runner import stamp_prop_export
+
+                # All funded, all-grading, and research prop CSVs inherit this
+                # self-identifying build stamp before they are split.
+                prop_card = stamp_prop_export(prop_card, PIPELINE_BUILD)
                 _prop_status = prop_card.get(
                     "Stake_Status", pd.Series("", index=prop_card.index)
                 ).astype(str).str.strip()

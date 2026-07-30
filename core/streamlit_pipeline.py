@@ -134,7 +134,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-07-29d-wnba-selection"
+PIPELINE_BUILD = "2026-07-30a-export-transparency"
 
 # Best Available must compare standard, reasonably priced markets. A P2P exchange can
 # expose alternate run lines (for example +5.5 at -1150) beside the standard MLB +1.5.
@@ -471,7 +471,7 @@ BEST_PICK_COLUMNS = [
     # Verbatim per-book spread points + moneyline prices (see REQUIRED_BEST_PICK_EXPORT_COLUMNS);
     # listed here so it survives the BEST_PICK_COLUMNS reindex into the export.
     "raw_book_odds_diag",
-    "suspicious_data_flag", "suspicious_data_reasons", "status_metric_basis", "selection_probability_used", "selection_probability_source", "effective_expected_value", "effective_edge", "effective_win_probability",
+    "suspicious_data_flag", "suspicious_data_reasons", "status_metric_basis", "selection_probability_used", "selection_probability_source", "selection_probability_pair_normalized", "effective_expected_value", "effective_edge", "effective_win_probability",
     "empirical_win_probability", "empirical_edge", "empirical_bucket", "status_blocker_reason", "status_blocker_stage",
     "nba_stats_fetch_status", "nba_stats_fetch_source", "nba_stats_fetch_retries_used", "stats_source_counts", "fallback_summary_by_league", "fallback_heavy_slate_flag", "run_health_warning",
     "degraded_feature_subset_flag", "degraded_feature_subset_reason",

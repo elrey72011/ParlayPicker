@@ -61,6 +61,7 @@ def test_exported_game_is_verified_rank_one_and_audits_every_candidate(monkeypat
     assert str(winner["matchup_id"]).startswith("2026-07-27|")
     assert winner["best_available_runner_up_market_type"] == "total_under"
     assert float(winner["best_available_score_gap"]) > 0
+    assert bool(winner["selection_probability_pair_normalized"])
 
     audit = diagnostics["candidate_audit_df"]
     assert len(audit) == 2
@@ -73,6 +74,8 @@ def test_exported_game_is_verified_rank_one_and_audits_every_candidate(monkeypat
     assert diagnostics["best_available_selection_verified"] is True
     assert diagnostics["best_available_selection_mismatch_count"] == 0
     assert audit["matchup_id"].astype(str).str.startswith("2026-07-27|").all()
+    assert audit["selection_probability_pair_normalized"].all()
+    assert bool(selected["selection_probability_pair_normalized"])
     assert not audit["wager_approved"].any()
     assert audit["export_role"].eq("RANKING CANDIDATE - BACKTEST ONLY").all()
 

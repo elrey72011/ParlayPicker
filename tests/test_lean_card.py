@@ -358,6 +358,33 @@ def test_unresolved_line_is_unavailable_and_never_staked():
     assert out.iloc[0]["Play_Stake"] == 0.0
 
 
+def test_line_availability_is_distinct_from_wager_approval():
+    source = pd.DataFrame([{
+        "league": "MLB",
+        "home_team": "Texas",
+        "away_team": "Seattle",
+        "best_pick": "Under 8.0",
+        "Pick_Status": "No Play",
+        "effective_expected_value": -0.01,
+        "expected_value": -0.01,
+        "edge": -0.01,
+        "effective_win_probability": 0.49,
+        "odds_american": -110,
+        "consensus_agreement": "Neutral",
+        "Kelly_Bet_Size": 0.0,
+    }])
+
+    out = attach_play_stakes(
+        build_all_games_lean_card(source, calibration=None, bucket_stats=None),
+        unit=1.0,
+    )
+
+    assert bool(out.iloc[0]["Line_Available"])
+    assert "Playable" not in out.columns
+    assert not bool(out.iloc[0]["Wager_Approved"])
+    assert out.iloc[0]["Bet_Decision"] == "BEST AVAILABLE - PASS"
+
+
 def test_exported_started_tier_stays_unplayable_on_all_games_card():
     source = pd.DataFrame([{
         "league": "MLB",
@@ -381,7 +408,7 @@ def test_exported_started_tier_stays_unplayable_on_all_games_card():
     )
 
     assert bool(out.iloc[0]["Started"])
-    assert not bool(out.iloc[0]["Playable"])
+    assert not bool(out.iloc[0]["Line_Available"])
     assert out.iloc[0]["Tier"] == "STARTED"
     assert out.iloc[0]["Bet_Decision"] == "STARTED"
     assert float(out.iloc[0]["Play_Units"]) == 0.0
@@ -414,7 +441,7 @@ def test_repaired_upload_fallback_is_unavailable_for_production_stake():
     )
 
     assert not bool(out.iloc[0]["Started"])
-    assert not bool(out.iloc[0]["Playable"])
+    assert not bool(out.iloc[0]["Line_Available"])
     assert out.iloc[0]["Tier"] == "UNAVAILABLE"
     assert out.iloc[0]["Bet_Decision"] == "UNAVAILABLE"
     assert float(out.iloc[0]["Play_Units"]) == 0.0
