@@ -4,7 +4,7 @@ from core.streamlit_pipeline import _apply_analysis_calculations, build_best_pic
 
 from core import streamlit_pipeline as sp
 
-def test_sanitization_drops_extreme_odds(monkeypatch):
+def test_sanitization_rejects_extreme_odds_without_fabricating_price(monkeypatch):
     base_df = pd.DataFrame(columns=["league", "home_team", "away_team", "game_date", "odds_american", "ml_probability"])
     bet_rows_df = pd.DataFrame([
         {
@@ -38,11 +38,20 @@ def test_sanitization_drops_extreme_odds(monkeypatch):
         sports=["NBA"], max_rows=10, use_ml=False, spreads_df=None, totals_df=None
     )
 
-    # We now patch extreme rows instead of dropping them
     assert len(analysis_df) == 2
-    assert analysis_df.loc[0, "odds_american"] == -110.0
-    assert analysis_df.loc[0, "odds_source"] == "fallback_novig"
-    assert analysis_df.iloc[0]["odds_american"] == -110.0
+    rejected = analysis_df.loc[analysis_df["home_team"].eq("A")].iloc[0]
+    assert pd.isna(rejected["odds_american"])
+    assert pd.isna(rejected["market_probability"])
+    assert pd.isna(rejected["decimal_odds"])
+    assert pd.isna(rejected["spread_line"])
+    assert rejected["odds_source"] == "rejected_live_price"
+    assert rejected["line_source"] == "rejected_live_price"
+    assert bool(rejected["sanitized_value"]) is True
+    assert not (
+        analysis_df["odds_source"].eq("fallback_novig")
+        & analysis_df["odds_american"].eq(-110.0)
+        & analysis_df["sanitized_value"].eq(True)
+    ).any()
 
 def test_best_picks_keeps_negative_ev():
     df = pd.DataFrame([
@@ -77,3 +86,5 @@ def test_best_picks_keeps_negative_ev():
     # We no longer filter by EV > 0, so both rows should remain
     # best_picks_df no longer filters by negative EV
     assert len(best) == 2
+
+
