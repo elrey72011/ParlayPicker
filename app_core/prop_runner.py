@@ -51,6 +51,26 @@ MLB_SPORT_KEY = "baseball_mlb"
 MLB_PROP_DEFAULT_ENABLED_MARKETS = PROP_DEFAULT_ENABLED_MARKETS + BATTER_DEFAULT_ENABLED_MARKETS
 
 
+def stamp_prop_export(card, pipeline_build: str):
+    """Return a self-identifying prop export without mutating the scored card."""
+    import pandas as pd
+
+    if card is None:
+        return pd.DataFrame(columns=["pipeline_build"])
+
+    out = card.copy()
+    build = str(pipeline_build or "").strip()
+    if "pipeline_build" in out.columns:
+        out["pipeline_build"] = build
+        ordered = ["pipeline_build"] + [
+            column for column in out.columns if column != "pipeline_build"
+        ]
+        out = out[ordered]
+    else:
+        out.insert(0, "pipeline_build", build)
+    return out
+
+
 def _norm_name(s: object) -> str:
     return " ".join(str(s or "").strip().lower().split())
 
