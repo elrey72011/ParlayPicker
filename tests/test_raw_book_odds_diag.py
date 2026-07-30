@@ -46,8 +46,25 @@ def test_diag_string_for_flipped_houston_cleveland():
         "novig_h2h_home_price": -120, "novig_h2h_away_price": 115,
     }
     s = _raw_book_odds_diag(row)
-    assert s == "novig: sp H=+1.5/A=-1.5 ml H=-120/A=+115 tot O=·/U=·"
+    assert s == "novig: sp H=+1.5@·/A=-1.5@· ml H=-120/A=+115 tot O=·/U=·"
 
+
+
+def test_diag_keeps_each_spread_price_attached_to_its_signed_point():
+    row = {
+        "novig_home_point": 1.5,
+        "novig_home_price": 189,
+        "novig_away_point": -1.5,
+        "novig_away_price": -107,
+        "novig_h2h_home_price": -178,
+        "novig_h2h_away_price": 167,
+    }
+
+    assert (
+        _raw_book_odds_diag(row)
+        == "novig: sp H=+1.5@+189/A=-1.5@-107 "
+        "ml H=-178/A=+167 tot O=·/U=·"
+    )
 
 def test_multiple_books_joined_and_empty_omitted():
     row = {
@@ -56,8 +73,8 @@ def test_multiple_books_joined_and_empty_omitted():
         # draftkings/betmgm absent -> omitted entirely
     }
     s = _raw_book_odds_diag(row)
-    assert "novig: sp H=-1.5/A=+1.5" in s
-    assert "fanduel: sp H=-1.5/A=+1.5" in s
+    assert "novig: sp H=-1.5@·/A=+1.5@·" in s
+    assert "fanduel: sp H=-1.5@·/A=+1.5@·" in s
     assert "draftkings" not in s and "betmgm" not in s
     assert s.count("|") == 1
 

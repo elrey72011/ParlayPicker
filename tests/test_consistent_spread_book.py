@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from core.streamlit_pipeline import (
     _build_moneyline_orientation_rows,
     _consistent_spread_book,
+    _consistent_standard_spread_pair,
     _expand_live_odds_to_bet_rows,
     _filter_preselection_line_integrity,
     _novig_spread_is_consensus_outlier,
@@ -349,6 +350,87 @@ def test_partial_novig_side_uses_oriented_standard_consensus_and_survives_presel
         "total_under",
     }
 
+
+
+def test_reversed_novig_price_pair_uses_internally_consistent_standard_book():
+    # 30 Jul production regression: Novig attached Tampa Bay's home label to +1.5
+    # while its own moneyline made Tampa Bay the favorite. Trusting the signed Novig
+    # outcomes produced Texas +1.5 at about +189 and a fake 41% EV. FanDuel carried a
+    # complete, internally consistent run-line pair, so both point and price must come
+    # from FanDuel together.
+    live_row = {
+        "league": "MLB",
+        "home_team": "Tampa Bay",
+        "away_team": "Texas",
+        "game_date": "2026-07-30",
+        "matchup_id": "tb-tex-price-pair",
+        "commence_time_raw": "2026-07-30T16:11:00Z",
+        "novig_home_point": 1.5,
+        "novig_home_price": 189,
+        "novig_away_point": -1.5,
+        "novig_away_price": -107,
+        "novig_h2h_home_price": -178,
+        "novig_h2h_away_price": 167,
+        "novig_over_point": 5.5,
+        "novig_over_price": -105,
+        "novig_under_point": 5.5,
+        "novig_under_price": -115,
+        "fanduel_home_point": -1.5,
+        "fanduel_home_price": 125,
+        "fanduel_away_point": 1.5,
+        "fanduel_away_price": -145,
+        "fanduel_h2h_home_price": -180,
+        "fanduel_h2h_away_price": 140,
+        "draftkings_home_point": 1.5,
+        "draftkings_home_price": -150,
+        "draftkings_away_point": -1.5,
+        "draftkings_away_price": 130,
+        "draftkings_h2h_home_price": -203,
+        "draftkings_h2h_away_price": 153,
+        "betmgm_home_point": 1.5,
+        "betmgm_home_price": -148,
+        "betmgm_away_point": -1.5,
+        "betmgm_away_price": 128,
+        "betmgm_h2h_home_price": -190,
+        "betmgm_h2h_away_price": 150,
+    }
+    hint = pd.DataFrame(
+        [
+            {
+                "league": "MLB",
+                "home_team": "Tampa Bay",
+                "away_team": "Texas",
+                "game_date": "2026-07-30",
+                "matchup_id": "tb-tex-price-pair",
+                "market_type": market_type,
+                "orientation_favorite_side": (
+                    "home" if market_type == "orientation_hint" else pd.NA
+                ),
+            }
+            for market_type in ("orientation_hint", "spread_home", "spread_away")
+        ]
+    )
+
+    home_pair = _consistent_standard_spread_pair(live_row, "home")
+    away_pair = _consistent_standard_spread_pair(live_row, "away")
+    assert home_pair == (-1.5, 125.0, -145.0, "fanduel")
+    assert away_pair == (1.5, -145.0, 125.0, "fanduel")
+
+    expanded, _ = _expand_live_odds_to_bet_rows(pd.DataFrame([live_row]), hint)
+    spreads = expanded[
+        expanded["market_type"].isin(["spread_home", "spread_away"])
+    ].set_index("market_type")
+
+    assert float(spreads.loc["spread_home", "spread_line"]) == -1.5
+    assert float(spreads.loc["spread_home", "odds_american"]) == 125.0
+    assert float(spreads.loc["spread_home", "opposing_odds_american"]) == -145.0
+    assert float(spreads.loc["spread_away", "spread_line"]) == 1.5
+    assert float(spreads.loc["spread_away", "odds_american"]) == -145.0
+    assert float(spreads.loc["spread_away", "opposing_odds_american"]) == 125.0
+    assert spreads["line_source"].eq(
+        "fanduel_standard_spread_consensus"
+    ).all()
+    assert spreads["opposing_odds_source"].eq("fanduel").all()
 
 def test_rejects_washington_plus_5_5_alt_line_against_standard_consensus():
     # 29 Jul production regression: Novig exposed the alternate WAS +5.5 at
