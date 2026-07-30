@@ -499,3 +499,71 @@ def test_rejects_washington_plus_5_5_alt_line_against_standard_consensus():
         "|novig_spread_consensus_outlier"
     ).all()
 
+
+
+def test_rejects_pathological_novig_spread_pair_without_synthetic_minus_110():
+    # 30 Jul production regression: only DraftKings carried a standard run line,
+    # so Novig's alternate +/-3.5 market could not be identified as a consensus
+    # outlier. The suspended Texas quote (-100000) was later sanitized to -110 and
+    # became a fake +29.5% EV rank-1 pick. Reject both sides of the price pair.
+    live_row = {
+        "league": "MLB",
+        "home_team": "Tampa Bay",
+        "away_team": "Texas",
+        "game_date": "2026-07-30",
+        "matchup_id": "tb-tex-pathological-price",
+        "commence_time_raw": "2026-07-30T16:11:00Z",
+        "novig_home_point": -3.5,
+        "novig_home_price": 111,
+        "novig_away_point": 3.5,
+        "novig_away_price": -100000,
+        "novig_h2h_home_price": -2500,
+        "novig_h2h_away_price": 900,
+        "draftkings_home_point": 1.5,
+        "draftkings_home_price": -10000,
+        "draftkings_away_point": -1.5,
+        "draftkings_away_price": 1440,
+        "draftkings_h2h_home_price": -2300,
+        "draftkings_h2h_away_price": 830,
+    }
+    hint = pd.DataFrame(
+        [
+            {
+                "league": "MLB",
+                "home_team": "Tampa Bay",
+                "away_team": "Texas",
+                "game_date": "2026-07-30",
+                "matchup_id": "tb-tex-pathological-price",
+                "market_type": market_type,
+                "orientation_favorite_side": (
+                    "home" if market_type == "orientation_hint" else pd.NA
+                ),
+            }
+            for market_type in ("orientation_hint", "spread_home", "spread_away")
+        ]
+    )
+
+    assert not _novig_spread_is_consensus_outlier(live_row)
+
+    expanded, _ = _expand_live_odds_to_bet_rows(
+        pd.DataFrame([live_row]), hint
+    )
+    spreads = expanded[
+        expanded["market_type"].isin(["spread_home", "spread_away"])
+    ]
+
+    assert len(spreads) == 2
+    assert spreads["spread_line"].isna().all()
+    assert spreads["odds_american"].isna().all()
+    assert spreads["opposing_odds_american"].isna().all()
+    assert spreads["odds_source"].eq("rejected_live_spread_price").all()
+    assert spreads["line_source"].eq("rejected_live_spread_price").all()
+    assert spreads["orientation_source"].str.endswith(
+        "|spread_price_pair_rejected"
+    ).all()
+    assert not (
+        spreads["odds_source"].eq("fallback_novig")
+        & spreads["odds_american"].eq(-110.0)
+    ).any()
+
+
