@@ -21,7 +21,12 @@ import pandas as pd
 from core.probability_calibration import apply_calibration, fit_isotonic_calibration
 
 
-DEFAULT_PROP_RESULTS_PATH = Path("data/prop_results/prop_results_log.csv")
+DEFAULT_PROP_RESULTS_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "data"
+    / "prop_results"
+    / "prop_results_log.csv"
+)
 PROP_CALIBRATION_MIN_DIRECTIONAL = 20
 PROP_CALIBRATION_MIN_POOLED = 40
 PROP_CALIBRATION_PRIOR_WEIGHT = 35.0
