@@ -200,7 +200,9 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
         "Consensus": consensus,
         "Tier": tier,
         "Started": started,
-        "Playable": playable,
+        # This only states that a valid pregame line is present; wager approval
+        # remains exclusively in Production_Gate_Pass / Wager_Approved.
+        "Line_Available": playable,
         "Selection_Mode": "Best Available",
         "Bet_Decision": production_gate_pass.map(
             {True: "BET", False: "BEST AVAILABLE - PASS"}
@@ -283,13 +285,20 @@ def attach_play_stakes(card: pd.DataFrame, unit: float = 1.0) -> pd.DataFrame:
         kelly = pd.to_numeric(out["Suggested_Stake"], errors="coerce").fillna(0.0)
         stake = stake.where(~(tier.eq("BET") & kelly.gt(stake)), kelly)
 
-    if "Playable" in out.columns:
-        playable = out["Playable"].fillna(False).astype(bool)
-        units = units.where(playable, 0.0)
-        stake = stake.where(playable, 0.0)
-        out.loc[~playable, "Tier"] = "UNAVAILABLE"
+    # Prefer the explicit availability name while accepting legacy cards that
+    # still carry Playable. Availability is not itself wager approval.
+    availability_column = (
+        "Line_Available" if "Line_Available" in out.columns
+        else "Playable" if "Playable" in out.columns
+        else None
+    )
+    if availability_column is not None:
+        line_available = out[availability_column].fillna(False).astype(bool)
+        units = units.where(line_available, 0.0)
+        stake = stake.where(line_available, 0.0)
+        out.loc[~line_available, "Tier"] = "UNAVAILABLE"
         if "Bet_Decision" in out.columns:
-            out.loc[~playable, "Bet_Decision"] = "UNAVAILABLE"
+            out.loc[~line_available, "Bet_Decision"] = "UNAVAILABLE"
 
     # Started games are unplayable at any size: the pre-game line is gone.
     if "Started" in out.columns:
