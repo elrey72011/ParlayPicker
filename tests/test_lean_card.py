@@ -122,7 +122,7 @@ def test_lean_card_handles_export_column_names():
 def test_play_card_preserves_pipeline_build_stamp():
     df = _df([
         {
-            "pipeline_build": "2026-07-30d-partial-spread-consensus-fallback",
+            "pipeline_build": "2026-07-30e-spread-price-pairing-guard",
             "League": "WNBA",
             "Home": "Chicago",
             "Away": "Connecticut",
@@ -141,7 +141,7 @@ def test_play_card_preserves_pipeline_build_stamp():
 
     assert card.columns[0] == "pipeline_build"
     assert card["pipeline_build"].eq(
-        "2026-07-30d-partial-spread-consensus-fallback"
+        "2026-07-30e-spread-price-pairing-guard"
     ).all()
 
 
