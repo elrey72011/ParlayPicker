@@ -3396,24 +3396,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     if "total_line" in pool.columns:
         pool["total_line"] = pd.to_numeric(pool["total_line"], errors="coerce")
 
-    pool["league"] = _clean_text_placeholders(_string_series(pool, "league")).astype("string").str.strip()
-    pool["home_team"] = pd.Series(
-        [
-            _normalize_team_for_known_league(team, league)
-            for team, league in zip(_string_series(pool, "home_team"), pool["league"])
-        ],
-        index=pool.index,
-        dtype="string",
-    )
-    pool["away_team"] = pd.Series(
-        [
-            _normalize_team_for_known_league(team, league)
-            for team, league in zip(_string_series(pool, "away_team"), pool["league"])
-        ],
-        index=pool.index,
-        dtype="string",
-    )
     pool["best_pick"] = pool.apply(_format_best_pick, axis=1)
+    pool["league"] = _clean_text_placeholders(_string_series(pool, "league")).astype("string").str.strip()
+    pool["home_team"] = _clean_text_placeholders(_string_series(pool, "home_team")).astype("string").str.strip()
+    pool["away_team"] = _clean_text_placeholders(_string_series(pool, "away_team")).astype("string").str.strip()
     pool["game_date"] = _game_dates(pool)
 
     # Removed strict game_date.notna() requirement to prevent dropping Spread uploads
@@ -6955,15 +6941,29 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
                             market_dict["odds_source"] = "rejected_live_orientation"
                             spread_line_source = "rejected_live_orientation"
                 else:
-                    # Prefer a book whose spread agrees with its own moneyline; take BOTH
-                    # its point and its price for this side so line and odds stay coherent.
+                    # Preserve the legacy behavior for non-MLB leagues. The outlier
+                    # incident being guarded here is specific to MLB alternate run
+                    # lines; rejecting unpriced NBA/WNBA lines would erase legitimate
+                    # line-drift diagnostics.
                     cb = _consistent_spread_book(row)
-                    cb_point = pd.to_numeric(row.get(f"{cb}_{side}_point"), errors="coerce") if cb else pd.NA
+                    cb_point = pd.to_numeric(
+                        row.get(f"{cb}_{side}_point"), errors="coerce"
+                    ) if cb else pd.NA
                     cb_price = (
                         pd.to_numeric(row.get(f"{cb}_{side}_price"), errors="coerce")
                         if cb else pd.NA
                     )
-                    if cb is not None and pd.notna(cb_point) and pd.notna(cb_price):
+                    if league_str != "MLB":
+                        if cb is not None and pd.notna(cb_point):
+                            point_val = float(cb_point)
+                            if pd.notna(cb_price):
+                                market_dict["odds_american"] = float(cb_price)
+                                market_dict["odds_source"] = "odds_api"
+                        elif market_type == "spread_away":
+                            point_val = _derive_spread_away_line(row)
+                    elif cb is not None and pd.notna(cb_point) and pd.notna(cb_price):
+                        # MLB standard-run-line fallbacks must bind the quoted point
+                        # to a real price from the same book.
                         point_val = float(cb_point)
                         market_dict["odds_american"] = float(cb_price)
                         market_dict["odds_source"] = "odds_api"
