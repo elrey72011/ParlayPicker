@@ -12,6 +12,7 @@ from app_core.prop_runner import (
     apply_prop_slate_guard,
     apply_prop_stake_status,
     build_prop_card,
+    stamp_prop_export,
 )
 from scripts.grade_props import grade_card
 
@@ -31,6 +32,20 @@ def _event():
             }],
         }],
     }
+
+
+def test_prop_export_is_stamped_without_mutating_scored_card():
+    card = pd.DataFrame({
+        "player": ["Juan Soto"],
+        "pipeline_build": ["stale-build"],
+        "best_pick": ["Juan Soto Over 0.5 Hits"],
+    })
+
+    out = stamp_prop_export(card, "2026-07-30a-export-transparency")
+
+    assert out.columns[0] == "pipeline_build"
+    assert out["pipeline_build"].eq("2026-07-30a-export-transparency").all()
+    assert card.loc[0, "pipeline_build"] == "stale-build"
 
 
 def test_batter_market_parses_participant_type():
