@@ -172,3 +172,35 @@ def test_strict_production_parlays_are_explicitly_premium():
     assert parlays["sellable_as_premium"].all()
     assert parlays["parlay_class"].eq("Premium").all()
     assert parlays["commercial_warning"].eq("").all()
+
+def test_coverage_rows_cannot_retain_any_stake_like_value():
+    frame = pd.DataFrame([
+        {
+            "Pick_Status": "Below Threshold",
+            "production_eligible": False,
+            "production_bet_amount": 12.0,
+            "Kelly_Bet_Size": 9.0,
+            "Play_Stake": 7.0,
+            "recommended_bet": 5.0,
+            "Suggested_Stake": 3.0,
+            "production_expected_value": 0.05,
+            "production_edge": 0.03,
+            "market_line_source": "live",
+            "line_consistency_flag": True,
+            "line_event_identity_match_flag": True,
+        }
+    ])
+
+    classified = classify_best_available_picks(frame)
+    row = classified.iloc[0]
+
+    assert not bool(row["wager_approved"])
+    assert row["export_role"] == "COVERAGE PICK - PASS"
+    for column in (
+        "production_bet_amount",
+        "Kelly_Bet_Size",
+        "Play_Stake",
+        "recommended_bet",
+        "Suggested_Stake",
+    ):
+        assert float(row[column]) == 0.0
