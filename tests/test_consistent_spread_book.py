@@ -15,6 +15,7 @@ from core.streamlit_pipeline import (
     _build_moneyline_orientation_rows,
     _consistent_spread_book,
     _expand_live_odds_to_bet_rows,
+    _filter_preselection_line_integrity,
     _novig_spread_is_consensus_outlier,
     _novig_spread_quote_for_favorite,
     _trusted_live_line_source_mask,
@@ -110,10 +111,16 @@ def test_moneyline_export_preserves_favorite_orientation_without_creating_a_bet(
 
 def test_novig_moneyline_line_sources_are_trusted_live():
     mask = _trusted_live_line_source_mask(
-        pd.Series(["novig_moneyline_verified", "novig_moneyline_reoriented"])
+        pd.Series(
+            [
+                "novig_moneyline_verified",
+                "novig_moneyline_reoriented",
+                "fanduel_standard_spread_consensus",
+            ]
+        )
     )
 
-    assert mask.tolist() == [True, True]
+    assert mask.tolist() == [True, True, True]
 
 
 def test_novig_reorientation_swaps_line_and_price_together():
@@ -263,6 +270,84 @@ def test_novig_moneyline_beats_stale_theover_hint_for_toronto_run_line():
     assert away["line_source"] == "novig_moneyline_verified"
     assert home["orientation_source"].endswith("|novig_moneyline_favorite")
     assert away["orientation_source"].endswith("|novig_moneyline_favorite")
+
+
+def test_partial_novig_side_uses_oriented_standard_consensus_and_survives_preselection():
+    # 30 Jul production regression: Tampa Bay/Texas exposed both Novig points,
+    # but the Texas +1.5 outcome lacked a usable Novig price. The expansion kept
+    # Tampa Bay -1.5 and silently lost Texas +1.5 during preselection even though
+    # every standard book carried a real-priced +1.5.
+    live_row = {
+        "league": "MLB",
+        "home_team": "Tampa Bay",
+        "away_team": "Texas",
+        "game_date": "2026-07-30",
+        "matchup_id": "tb-tex",
+        "commence_time_raw": "2026-07-30T16:11:00Z",
+        "novig_home_point": -1.5,
+        "novig_home_price": 132,
+        "novig_away_point": 1.5,
+        "novig_away_price": pd.NA,
+        "novig_h2h_home_price": -217,
+        "novig_h2h_away_price": 153,
+        "novig_over_point": 6.5,
+        "novig_over_price": -105,
+        "novig_under_point": 6.5,
+        "novig_under_price": -115,
+        "fanduel_home_point": -1.5,
+        "fanduel_home_price": 125,
+        "fanduel_away_point": 1.5,
+        "fanduel_away_price": -145,
+        "fanduel_h2h_home_price": -210,
+        "fanduel_h2h_away_price": 175,
+        "draftkings_home_point": -1.5,
+        "draftkings_home_price": 130,
+        "draftkings_away_point": 1.5,
+        "draftkings_away_price": -150,
+        "draftkings_h2h_home_price": -215,
+        "draftkings_h2h_away_price": 170,
+        "betmgm_home_point": -1.5,
+        "betmgm_home_price": 128,
+        "betmgm_away_point": 1.5,
+        "betmgm_away_price": -148,
+        "betmgm_h2h_home_price": -212,
+        "betmgm_h2h_away_price": 168,
+    }
+    hint = pd.DataFrame(
+        [
+            {
+                "league": "MLB",
+                "home_team": "Tampa Bay",
+                "away_team": "Texas",
+                "game_date": "2026-07-30",
+                "matchup_id": "tb-tex",
+                "market_type": market_type,
+                "orientation_favorite_side": (
+                    "home" if market_type == "orientation_hint" else pd.NA
+                ),
+            }
+            for market_type in ("orientation_hint", "spread_home", "spread_away")
+        ]
+    )
+
+    expanded, _ = _expand_live_odds_to_bet_rows(pd.DataFrame([live_row]), hint)
+    away = expanded[expanded["market_type"].eq("spread_away")].iloc[0]
+
+    assert float(away["spread_line"]) == 1.5
+    assert float(away["odds_american"]) == -145.0
+    assert away["odds_source"] == "odds_api"
+    assert away["line_source"] == "fanduel_standard_spread_consensus"
+    assert away["orientation_source"].endswith(
+        "|novig_moneyline_favorite|standard_spread_consensus"
+    )
+
+    retained = _filter_preselection_line_integrity(expanded)
+    assert set(retained["market_type"]) == {
+        "spread_home",
+        "spread_away",
+        "total_over",
+        "total_under",
+    }
 
 
 def test_rejects_washington_plus_5_5_alt_line_against_standard_consensus():
