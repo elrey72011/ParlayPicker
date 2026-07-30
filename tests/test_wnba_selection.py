@@ -141,8 +141,8 @@ def test_best_pick_export_restores_connecticut_after_generic_uconn_alias(monkeyp
 
     assert len(best) == 1
     winner = best.iloc[0]
-    assert winner["Home"] == "Chicago"
-    assert winner["Away"] == "Connecticut"
+    assert winner["home_team"] == "Chicago"
+    assert winner["away_team"] == "Connecticut"
     assert winner["best_pick"] == "Connecticut +4.5"
     assert "uconn" not in str(winner["matchup_id"]).lower()
     assert "uconn" not in str(winner.get("canonical_pick_key", "")).lower()
