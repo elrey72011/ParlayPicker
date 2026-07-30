@@ -50,7 +50,9 @@ def test_wnba_rows_are_isolated_from_failed_nba_diagnostics(monkeypatch):
         assert float(enriched.loc[0, "feature_league_NBA"]) == 0.0
     assert enriched.loc[0, "nba_stats_fetch_status"] == "not_applicable"
     assert enriched.loc[0, "nba_stats_fetch_source"] == "none"
-    assert "NBA" not in str(enriched.loc[0, "fallback_summary_by_league"])
+    fallback_summary = str(enriched.loc[0, "fallback_summary_by_league"])
+    assert "'WNBA':" in fallback_summary
+    assert "'NBA':" not in fallback_summary
     assert "NBA stats fetch failed" not in str(enriched.loc[0, "run_health_warning"])
 
 
