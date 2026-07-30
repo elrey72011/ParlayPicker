@@ -1,41 +1,81 @@
-import unittest
 import pandas as pd
-from core.streamlit_pipeline import build_best_picks_df
 
-class TestNormalizedEVPicking(unittest.TestCase):
-    def test_structural_bias_fixed(self):
-        # We simulate a pool where totals are structurally inflated (higher mean EV).
-        # We want to show that normalized Z-score EV fixes this so that an
-        # excellent side pick can beat an average total pick, even if the
-        # total pick has higher absolute EV.
+import core.streamlit_pipeline as sp
 
-        # We simulate 3 games.
-        df = pd.DataFrame([
-            {"matchup_id": "G1", "market_type": "spread_home", "expected_value": 0.04, "tier_score": 2, "league": "NBA", "home_team": "A", "away_team": "B"},
-            {"matchup_id": "G1", "market_type": "total_over", "expected_value": 0.10, "tier_score": 2, "league": "NBA", "home_team": "A", "away_team": "B"},
 
-            {"matchup_id": "G2", "market_type": "spread_home", "expected_value": 0.03, "tier_score": 2, "league": "NBA", "home_team": "C", "away_team": "D"},
-            {"matchup_id": "G2", "market_type": "total_over", "expected_value": 0.14, "tier_score": 2, "league": "NBA", "home_team": "C", "away_team": "D"},
+def _candidate(matchup, home, away, market_type, probability, ev):
+    is_total = market_type.startswith("total")
+    is_home = market_type == "spread_home"
+    return {
+        "matchup_id": matchup,
+        "market_type": market_type,
+        "expected_value": ev,
+        "edge": ev,
+        "league": "NBA",
+        "home_team": home,
+        "away_team": away,
+        "game_date": "2026-07-30",
+        "model_probability": probability,
+        "ml_probability": probability,
+        "calibrated_probability": probability,
+        "market_probability": 0.50,
+        "odds_american": -110,
+        "line_source": "live",
+        "live_total_line": 220.5 if is_total else pd.NA,
+        "total_line": 220.5 if is_total else pd.NA,
+        "live_spread_line": -3.5 if is_home else pd.NA,
+        "spread_line": -3.5 if is_home else pd.NA,
+        "is_live_data": True,
+        "odds_source": "odds_api",
+    }
 
-            {"matchup_id": "G3", "market_type": "spread_home", "expected_value": 0.01, "tier_score": 2, "league": "NBA", "home_team": "E", "away_team": "F"},
-            {"matchup_id": "G4", "market_type": "spread_home", "expected_value": 0.00, "tier_score": 2, "league": "NBA", "home_team": "G", "away_team": "H"},
 
-            {"matchup_id": "G3", "market_type": "total_over", "expected_value": 0.06, "tier_score": 2, "league": "NBA", "home_team": "E", "away_team": "F"},
-            {"matchup_id": "G4", "market_type": "total_over", "expected_value": 0.10, "tier_score": 2, "league": "NBA", "home_team": "G", "away_team": "H"},
-        ])
+def test_absolute_probability_beats_structurally_higher_family_ev(monkeypatch):
+    monkeypatch.setattr("core.empirical_tiers.load_bucket_stats", lambda: {})
 
-        # Mock what the df needs
-        df["game_date"] = "2023-11-01"
+    frame = pd.DataFrame([
+        _candidate("G1", "A", "B", "spread_home", 0.63, 0.04),
+        _candidate("G1", "A", "B", "total_over", 0.57, 0.10),
+        _candidate("G2", "C", "D", "spread_home", 0.54, 0.03),
+        _candidate("G2", "C", "D", "total_over", 0.61, 0.14),
+        # Unrelated games deliberately change each family's slate distribution.
+        _candidate("G3", "E", "F", "spread_home", 0.80, 0.01),
+        _candidate("G3", "E", "F", "total_over", 0.40, 0.30),
+        _candidate("G4", "G", "H", "spread_home", 0.30, 0.25),
+        _candidate("G4", "G", "H", "total_over", 0.75, 0.02),
+    ])
 
-        best = build_best_picks_df(df)
-        # Note: build_best_picks_df returns a df where matchup_id is an index or column.
-        # But wait, it recreates matchup_id based on game_date, home_team, away_team.
+    best = sp.build_best_picks_df(frame)
 
-        g1_pick = best[(best["home_team"] == "A") & (best["away_team"] == "B")].iloc[0]
-        self.assertEqual(g1_pick["market_type"], "spread_home")
+    g1 = best[(best["home_team"] == "A") & (best["away_team"] == "B")].iloc[0]
+    g2 = best[(best["home_team"] == "C") & (best["away_team"] == "D")].iloc[0]
+    assert g1["market_type"] == "spread_home"
+    assert g2["market_type"] == "total_over"
 
-        g2_pick = best[(best["home_team"] == "C") & (best["away_team"] == "D")].iloc[0]
-        self.assertEqual(g2_pick["market_type"], "total_over")
 
-if __name__ == "__main__":
-    unittest.main()
+def test_unrelated_slate_rows_cannot_flip_a_games_absolute_winner(monkeypatch):
+    monkeypatch.setattr("core.empirical_tiers.load_bucket_stats", lambda: {})
+
+    target = pd.DataFrame([
+        _candidate("G1", "A", "B", "spread_home", 0.62, 0.03),
+        _candidate("G1", "A", "B", "total_over", 0.56, 0.20),
+    ])
+    expanded = pd.concat(
+        [
+            target,
+            pd.DataFrame([
+                _candidate("G2", "C", "D", "spread_home", 0.90, 0.01),
+                _candidate("G2", "C", "D", "total_over", 0.20, 0.40),
+                _candidate("G3", "E", "F", "spread_home", 0.25, 0.40),
+                _candidate("G3", "E", "F", "total_over", 0.85, 0.01),
+            ]),
+        ],
+        ignore_index=True,
+    )
+
+    target_pick = sp.build_best_picks_df(target).iloc[0]["market_type"]
+    expanded_pick = sp.build_best_picks_df(expanded)
+    expanded_pick = expanded_pick[expanded_pick["home_team"] == "A"].iloc[0]["market_type"]
+
+    assert target_pick == "spread_home"
+    assert expanded_pick == target_pick
