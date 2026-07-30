@@ -171,6 +171,54 @@ class TestCandidateGeneration(unittest.TestCase):
             .all()
         )
 
+    def test_mlb_novig_outlier_falls_back_to_real_priced_standard_consensus(self):
+        live = pd.DataFrame([
+            {
+                "league": "MLB",
+                "home_team": "Chicago White Sox",
+                "away_team": "New York Yankees",
+                "game_date": "2026-07-30",
+                "matchup_id": "2026-07-30|chicago white sox|new york yankees",
+                "commence_time_raw": "2026-07-30T18:11:00Z",
+                "novig_home_point": -5.5,
+                "novig_away_point": 5.5,
+                "novig_home_price": pd.NA,
+                "novig_away_price": pd.NA,
+                "novig_h2h_home_price": -108,
+                "novig_h2h_away_price": 106,
+                "fanduel_home_point": 1.5,
+                "fanduel_away_point": -1.5,
+                "fanduel_home_price": -108,
+                "fanduel_away_price": -112,
+                "fanduel_h2h_home_price": -116,
+                "fanduel_h2h_away_price": -102,
+                "draftkings_home_point": 1.5,
+                "draftkings_away_point": -1.5,
+                "draftkings_home_price": -110,
+                "draftkings_away_price": -110,
+                "draftkings_h2h_home_price": -110,
+                "draftkings_h2h_away_price": -110,
+                "betmgm_home_point": 1.5,
+                "betmgm_away_point": -1.5,
+                "betmgm_home_price": -115,
+                "betmgm_away_price": -105,
+                "betmgm_h2h_home_price": -115,
+                "betmgm_h2h_away_price": -105,
+            }
+        ])
+
+        result, _ = _expand_live_odds_to_bet_rows(live, None)
+        spreads = result[result["market_type"].str.startswith("spread")].set_index(
+            "market_type"
+        )
+
+        self.assertEqual(float(spreads.loc["spread_home", "spread_line"]), 1.5)
+        self.assertEqual(float(spreads.loc["spread_away", "spread_line"]), -1.5)
+        self.assertEqual(float(spreads.loc["spread_home", "odds_american"]), -108.0)
+        self.assertEqual(float(spreads.loc["spread_away", "odds_american"]), -112.0)
+        self.assertTrue(spreads["odds_source"].eq("odds_api").all())
+        self.assertFalse(spreads["odds_source"].str.contains("fallback", case=False).any())
+
     def test_preserved_columns_present(self):
         theover_rows = pd.DataFrame([
             {

@@ -134,7 +134,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-07-30a-export-transparency"
+PIPELINE_BUILD = "2026-07-30b-line-identity-guards"
 
 # Best Available must compare standard, reasonably priced markets. A P2P exchange can
 # expose alternate run lines (for example +5.5 at -1150) beside the standard MLB +1.5.
@@ -644,6 +644,19 @@ def _first_nonempty_text(df: pd.DataFrame, candidates: list[str]) -> pd.Series:
     return out
 
 
+def _normalize_team_for_known_league(value: object, league: object) -> str:
+    """Apply sport-specific identities after the league is known.
+
+    Generic college aliases intentionally normalize Connecticut to UConn. WNBA
+    rows must instead retain the Connecticut Sun franchise identity.
+    """
+    normalized = normalize_team_name(value)
+    league_text = "" if league is None or pd.isna(league) else str(league)
+    if league_text.strip().upper() == "WNBA" and str(normalized).strip().lower() == "uconn":
+        return "Connecticut"
+    return normalized
+
+
 def _coerce_identity_columns(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
     matchup_text = _first_nonempty_text(out, ["matchup", "match_up", "event", "event_name", "teams", "game"])
@@ -673,8 +686,22 @@ def _coerce_identity_columns(df: pd.DataFrame) -> pd.DataFrame:
     away_fallback = away_fallback.where(away_fallback.str.len().gt(0), away_from_matchup)
     league_fallback = _first_nonempty_text(out, ["league", "sport"])
     out["league"] = league_fallback.str.upper().replace(LEAGUE_ALIASES)
-    out["home_team"] = home_fallback.map(normalize_team_name)
-    out["away_team"] = away_fallback.map(normalize_team_name)
+    out["home_team"] = pd.Series(
+        [
+            _normalize_team_for_known_league(team, league)
+            for team, league in zip(home_fallback, out["league"])
+        ],
+        index=out.index,
+        dtype="string",
+    )
+    out["away_team"] = pd.Series(
+        [
+            _normalize_team_for_known_league(team, league)
+            for team, league in zip(away_fallback, out["league"])
+        ],
+        index=out.index,
+        dtype="string",
+    )
     return out
 
 
@@ -6481,6 +6508,32 @@ def _consistent_spread_book(row):
     return None
 
 
+def _standard_spread_consensus_quote(row, side: str):
+    """Return a real-priced standard-book quote agreed on by at least two books."""
+    if side not in {"home", "away"}:
+        return pd.NA, pd.NA, None
+
+    by_point: dict[float, list[tuple[str, object]]] = {}
+    for book in ("fanduel", "draftkings", "betmgm"):
+        point = pd.to_numeric(row.get(f"{book}_{side}_point"), errors="coerce")
+        if pd.isna(point):
+            continue
+        key = round(float(point), 4)
+        price = pd.to_numeric(row.get(f"{book}_{side}_price"), errors="coerce")
+        by_point.setdefault(key, []).append((book, price))
+
+    if not by_point:
+        return pd.NA, pd.NA, None
+
+    point, quotes = max(by_point.items(), key=lambda item: len(item[1]))
+    if len(quotes) < 2:
+        return pd.NA, pd.NA, None
+    for book, price in quotes:
+        if pd.notna(price):
+            return float(point), float(price), book
+    return pd.NA, pd.NA, None
+
+
 def _derive_spread_away_line(row):
     """Return the away team's run line, robust to the live feed's sign quirks.
 
@@ -6888,20 +6941,69 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
                             market_dict["odds_source"] = "rejected_live_orientation"
                             spread_line_source = "rejected_live_orientation"
                 else:
-                    # Prefer a book whose spread agrees with its own moneyline; take BOTH
-                    # its point and its price for this side so line and odds stay coherent.
+                    # Preserve the legacy behavior for non-MLB leagues. The outlier
+                    # incident being guarded here is specific to MLB alternate run
+                    # lines; rejecting unpriced NBA/WNBA lines would erase legitimate
+                    # line-drift diagnostics.
                     cb = _consistent_spread_book(row)
-                    cb_point = pd.to_numeric(row.get(f"{cb}_{side}_point"), errors="coerce") if cb else pd.NA
-                    if cb is not None and pd.notna(cb_point):
+                    cb_point = pd.to_numeric(
+                        row.get(f"{cb}_{side}_point"), errors="coerce"
+                    ) if cb else pd.NA
+                    cb_price = (
+                        pd.to_numeric(row.get(f"{cb}_{side}_price"), errors="coerce")
+                        if cb else pd.NA
+                    )
+                    if league_str != "MLB":
+                        if cb is not None and pd.notna(cb_point):
+                            point_val = float(cb_point)
+                            if pd.notna(cb_price):
+                                market_dict["odds_american"] = float(cb_price)
+                                market_dict["odds_source"] = "odds_api"
+                        elif market_type == "spread_away":
+                            point_val = _derive_spread_away_line(row)
+                    elif cb is not None and pd.notna(cb_point) and pd.notna(cb_price):
+                        # MLB standard-run-line fallbacks must bind the quoted point
+                        # to a real price from the same book.
                         point_val = float(cb_point)
-                        cb_price = pd.to_numeric(row.get(f"{cb}_{side}_price"), errors="coerce")
-                        if pd.notna(cb_price):
-                            market_dict["odds_american"] = float(cb_price)
+                        market_dict["odds_american"] = float(cb_price)
+                        market_dict["odds_source"] = "odds_api"
+                    else:
+                        # If moneyline-orientation checks cannot identify a trustworthy
+                        # book, require at least two standard books to agree on this exact
+                        # signed line and bind a real price from that consensus. This
+                        # closes the escape hatch that resurrected a rejected Novig +5.5
+                        # as a fabricated -110 spread.
+                        consensus_point, consensus_price, consensus_book = (
+                            _standard_spread_consensus_quote(row, side)
+                        )
+                        if pd.notna(consensus_point) and pd.notna(consensus_price):
+                            point_val = float(consensus_point)
+                            market_dict["odds_american"] = float(consensus_price)
                             market_dict["odds_source"] = "odds_api"
-                    elif market_type == "spread_away":
-                        # No internally consistent book: fall back to the home-mirror
-                        # derivation (a flipped feed stays caught by the orientation guard).
-                        point_val = _derive_spread_away_line(row)
+                            spread_line_source = (
+                                f"{consensus_book}_standard_spread_consensus"
+                            )
+                            market_dict["orientation_source"] = (
+                                f"{orientation_source}|standard_spread_consensus"
+                            )
+                        else:
+                            novig_outlier = _novig_spread_is_consensus_outlier(row)
+                            novig_has_real_price = (
+                                pd.notna(point_val)
+                                and pd.notna(price_val)
+                                and market_dict["odds_source"] != "fallback_novig"
+                            )
+                            if novig_outlier or not novig_has_real_price:
+                                point_val = pd.NA
+                                market_dict["odds_american"] = pd.NA
+                                market_dict["odds_source"] = (
+                                    "rejected_live_spread_outlier"
+                                    if novig_outlier
+                                    else "rejected_live_spread_unpriced"
+                                )
+                                spread_line_source = market_dict["odds_source"]
+                            elif market_type == "spread_away":
+                                point_val = _derive_spread_away_line(row)
                 market_dict["spread_line"] = float(point_val) if pd.notna(point_val) else pd.NA
                 market_dict["total_line"] = pd.NA
                 market_dict["live_spread_line"] = market_dict["spread_line"]
