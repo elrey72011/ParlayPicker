@@ -149,6 +149,7 @@ REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
     "status_metric_basis",
     "selection_probability_used",
     "selection_probability_source",
+    "selection_probability_pair_normalized",
     "best_available_rank",
     "best_available_family_rank",
     "best_available_score",
@@ -284,6 +285,7 @@ def ensure_best_pick_export_columns(
         "status_metric_basis": "raw",
         "selection_probability_used": pd.NA,
         "selection_probability_source": "calibrated_probability",
+        "selection_probability_pair_normalized": False,
         "best_available_rank": pd.NA,
         "best_available_family_rank": pd.NA,
         "best_available_score": pd.NA,
@@ -355,6 +357,7 @@ def ensure_best_pick_export_columns(
         "final_pick_valid": False,
         "sellable_as_premium": False,
         "best_available_only": True,
+        "selection_probability_pair_normalized": False,
     }.items():
         if bool_col in out.columns:
             out[bool_col] = out[bool_col].fillna(default).astype(bool)
@@ -1197,14 +1200,14 @@ def _filter_preselection_line_integrity(
     invalid_total = invalid_total | pair_invalid_total
     invalid_spread = invalid_spread | pair_invalid_spread
     invalid_candidate = invalid_total | invalid_spread
-    hard_invalid = (
-        pair_invalid_total
-        | pair_invalid_spread
-        | total_display_live_mismatch
-        | spread_display_live_mismatch
-        | total_display_line_missing
-        | spread_display_line_missing
-    )
+    # Pair-level contradictions are never repairable: two individually valid
+    # opposite-side rows cannot describe the same market when their lines are
+    # non-complementary.  A lone display/live mismatch is different.  Keep it
+    # only when no valid alternative exists so the established post-selection
+    # live-line re-resolution and upload-fallback guards can repair it or mark
+    # it no-play.  When a clean alternative exists, invalid_candidate below
+    # still rejects the mismatched row before ranking.
+    hard_invalid = pair_invalid_total | pair_invalid_spread
     valid_alternatives = (~invalid_candidate).groupby(matchup_key, dropna=False).transform("sum")
     drop_mask = hard_invalid | (invalid_candidate & valid_alternatives.gt(0))
 
@@ -1366,6 +1369,7 @@ def _sync_selected_candidate_audit(
         "best_pick",
         "selection_probability_used",
         "selection_probability_source",
+        "selection_probability_pair_normalized",
         "expected_value",
         "edge",
         "best_available_score",
@@ -3476,13 +3480,12 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     pool["_selection_probability"], _pair_probability_normalized = (
         _normalize_complementary_selection_probabilities(pool)
     )
-    pool.loc[
-        _pair_probability_normalized, "selection_probability_source"
-    ] = (
-        pool.loc[
-            _pair_probability_normalized, "selection_probability_source"
-        ].astype(str)
-        + "+pair_normalized"
+    # Keep the underlying calibration source stable for calibration diagnostics
+    # and record complementary-pair normalization independently.  Appending a
+    # suffix to the source name made valid empirical rows look like a different,
+    # unknown calibration method downstream.
+    pool["selection_probability_pair_normalized"] = (
+        _pair_probability_normalized.fillna(False).astype(bool)
     )
     pool["selection_probability_used"] = pool["_selection_probability"].clip(0.01, 0.99)
     pool["_prob_numeric"] = pool["selection_probability_used"].fillna(0.5)
@@ -3857,6 +3860,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         "pipeline_build", "league", "home_team", "away_team", "game_date", "game_time_est",
         "matchup_id", "market_type", "candidate_source", "best_pick",
         "selection_probability_used", "selection_probability_source",
+        "selection_probability_pair_normalized",
         "expected_value", "edge", "tier_score", "final_family_score",
         "_market_family", "best_available_rank", "best_available_family_rank",
         "best_available_finalist", "best_available_final_rank",
