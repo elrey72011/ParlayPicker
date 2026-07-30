@@ -276,7 +276,7 @@ def test_extreme_juice_spread_cannot_win_best_available_ranking():
     assert diagnostics["preselection_dropped_spread_candidate_count"] == 1
 
 
-def test_mismatched_display_total_pair_is_rejected_before_audit():
+def test_mismatched_display_total_row_is_rejected_before_audit():
     df = pd.DataFrame([
         _candidate("spread_home", win_prob=0.58, ev=0.02, edge=0.02),
         _candidate("spread_away", win_prob=0.54, ev=0.01, edge=0.01),
@@ -307,11 +307,12 @@ def test_mismatched_display_total_pair_is_rejected_before_audit():
     audit_frame = diagnostics["candidate_audit_df"]
 
     assert len(out) == 1
-    assert out.iloc[0]["market_type"].startswith("spread")
-    assert not audit_frame["market_type"].astype(str).str.startswith("total").any()
+    assert out.iloc[0]["market_type"] == "total_under"
+    assert "total_over" not in set(audit_frame["market_type"])
+    assert "total_under" in set(audit_frame["market_type"])
     assert diagnostics["preselection_total_display_live_mismatch_count"] == 1
-    assert diagnostics["preselection_invalid_total_pair_count"] == 2
-    assert diagnostics["preselection_dropped_total_candidate_count"] == 2
+    assert diagnostics["preselection_invalid_total_pair_count"] == 0
+    assert diagnostics["preselection_dropped_total_candidate_count"] == 1
 
 
 def test_non_complementary_spread_pair_is_rejected_before_ranking():
