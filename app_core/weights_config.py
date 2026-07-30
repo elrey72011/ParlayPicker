@@ -443,14 +443,12 @@ THEOVER_DEGRADED_FADE_SHRINK = 0.50
 NO_KALSHI_TOTAL_EXTRA_PENALTY = 0.02
 NO_KALSHI_TOTAL_UNDER_EXTRA_PENALTY = 0.03
 
-# Cross-family selection nudge to avoid unders dominating finalists on EV/edge alone.
-# Lowered 0.10 -> 0.05 on 7 Jun. The 0.10 blanket handicap had no evidentiary basis and
-# was over-suppressing Unders: across 20 May-5 Jun graded MLB totals (n=182) Unders out-
-# hit Overs 62.1% vs 55.2% (ROI +23.0% vs +11.1%), yet the finalist selection produced
-# all-Over cards (7 Jun: 15/15 Overs) because every Under started 0.10 behind. Easing the
-# handicap lets Unders compete on merit. Independent of the TheOver fade (see
-# MLB_THEOVER_FADE_SHRINK), which governs the source-confidence flip, not this nudge.
-TOTAL_UNDER_FINALIST_SCORE_PENALTY = 0.05
+# Cross-family direction must be decided by coherent calibrated probability and the
+# independent Kalshi/TheOver evidence, not a blanket directional handicap. The prior
+# 0.05 Under penalty had no stable evidentiary basis and structurally favored Overs even
+# though the fitted MLB buckets show every Over bucket below 50% while multiple Under
+# buckets are stronger. Keep the hook for reversibility, but neutralize it.
+TOTAL_UNDER_FINALIST_SCORE_PENALTY = 0.00
 
 # Static empirical hooks (league + family) for later recap-driven calibration.
 # Values are additive threshold bumps applied to both EV and edge in selection gating.
