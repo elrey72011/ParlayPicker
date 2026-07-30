@@ -99,6 +99,61 @@ def test_wnba_connecticut_sun_does_not_inherit_college_uconn_alias():
     assert normalized.iloc[0]["away_team"] == "Connecticut"
 
 
+def test_best_pick_export_restores_connecticut_after_generic_uconn_alias(monkeypatch):
+    monkeypatch.setattr("core.empirical_tiers.load_bucket_stats", lambda: {})
+    monkeypatch.setattr("core.probability_calibration.load_calibration", lambda: None)
+
+    analysis = pd.DataFrame(
+        [
+            {
+                "game_id": "wnba-connecticut-export",
+                "league": "WNBA",
+                "home_team": "Chicago",
+                # Reproduce the post-ingestion alias observed in the live export.
+                "away_team": "UConn",
+                "game_date": pd.Timestamp("2026-07-30", tz="UTC"),
+                "market_type": "spread_away",
+                "spread_line": 4.5,
+                "live_spread_line": 4.5,
+                "total_line": pd.NA,
+                "live_total_line": pd.NA,
+                "calibrated_probability": 0.62,
+                "model_probability": 0.62,
+                "ml_probability": pd.NA,
+                "expected_value": 0.08,
+                "edge": 0.06,
+                "market_probability": 0.50,
+                "kalshi_probability": 0.55,
+                "consensus_agreement": "Agrees",
+                "odds_american": -110,
+                "odds_source": "test",
+                "line_source": "live",
+                "market_line_source": "live",
+                "line_consistency_flag": True,
+                "line_event_identity_match_flag": True,
+                "is_live_data": True,
+                "used_stale_features": False,
+            }
+        ]
+    )
+    diagnostics = {}
+    best = sp.build_best_picks_df(analysis, diagnostics_out=diagnostics)
+
+    assert len(best) == 1
+    winner = best.iloc[0]
+    assert winner["Home"] == "Chicago"
+    assert winner["Away"] == "Connecticut"
+    assert winner["best_pick"] == "Connecticut +4.5"
+    assert "uconn" not in str(winner["matchup_id"]).lower()
+    assert "uconn" not in str(winner.get("canonical_pick_key", "")).lower()
+
+    audit = diagnostics["candidate_audit_df"]
+    assert audit["home_team"].eq("Chicago").all()
+    assert audit["away_team"].eq("Connecticut").all()
+    assert audit["best_pick"].eq("Connecticut +4.5").all()
+    assert not audit["matchup_id"].astype(str).str.contains("uconn", case=False).any()
+
+
 def test_theover_wnba_pick_code_binds_line_and_probability_to_home_team():
     raw = pd.DataFrame(
         [
