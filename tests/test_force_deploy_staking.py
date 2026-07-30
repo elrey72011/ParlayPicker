@@ -37,10 +37,11 @@ MAX_PICK = min(TEST_BANKROLL * PRODUCTION_MAX_PICK_PCT, PRODUCTION_ABSOLUTE_MAX_
 MAX_SLATE = min(TEST_BANKROLL * PRODUCTION_MAX_SLATE_PCT, PRODUCTION_ABSOLUTE_MAX_SLATE_DOLLARS)
 
 
-def _row(pick, status, prob, odds=-110, health="", consensus="Agrees"):
+def _row(pick, status, prob, odds=-110, health="", consensus="Agrees", league="MLB"):
     decimal_odds = 1.0 + (100.0 / abs(odds) if odds < 0 else odds / 100.0)
     return {
         "best_pick": pick,
+        "league": league,
         "Pick_Status": status,
         "calibrated_probability": prob,
         "odds_american": odds,
@@ -138,4 +139,27 @@ def test_force_deploy_does_not_equal_weight_zero_edge_rows():
         bankroll=TEST_BANKROLL,
     )
     assert float(out["production_bet_amount"].sum()) == 0.0
+
+
+def test_empty_fallback_summary_does_not_block_clean_row():
+    row = _row("Boston Over 7.5", "Actionable", 0.60)
+    row["fallback_summary_by_league"] = "{}"
+    out = optimize_portfolio_allocation(_df([row]), bankroll=TEST_BANKROLL)
+    assert float(out["production_bet_amount"].iloc[0]) > 0.0
+
+
+def test_unrelated_league_fallback_does_not_block_clean_row():
+    row = _row("Boston Over 7.5", "Actionable", 0.60, league="MLB")
+    row["fallback_summary_by_league"] = "{'WNBA': 12}"
+    row["run_health_warning"] = "Run health warning: WNBA fallback usage is elevated."
+    out = optimize_portfolio_allocation(_df([row]), bankroll=TEST_BANKROLL)
+    assert float(out["production_bet_amount"].iloc[0]) > 0.0
+
+
+def test_matching_league_fallback_blocks_row():
+    row = _row("Dallas +4.5", "Actionable", 0.60, league="WNBA")
+    row["fallback_summary_by_league"] = "{'WNBA': 12}"
+    row["run_health_warning"] = "Run health warning: WNBA fallback usage is elevated."
+    out = optimize_portfolio_allocation(_df([row]), bankroll=TEST_BANKROLL)
+    assert float(out["production_bet_amount"].iloc[0]) == 0.0
 
