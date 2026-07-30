@@ -134,7 +134,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-07-30c-wnba-export-playcard-stamp"
+PIPELINE_BUILD = "2026-07-30d-partial-spread-consensus-fallback"
 
 # Best Available must compare standard, reasonably priced markets. A P2P exchange can
 # expose alternate run lines (for example +5.5 at -1150) beside the standard MLB +1.5.
@@ -1091,7 +1091,12 @@ def _trusted_live_line_source_mask(values: pd.Series) -> pd.Series:
     merely because a later guard uses a different string heuristic.
     """
     source = values.fillna("").astype(str).str.strip().str.lower()
-    live = source.str.contains("live", na=False) | source.isin(_TRUSTED_LIVE_LINE_SOURCES)
+    standard_spread_consensus = source.str.endswith("_standard_spread_consensus")
+    live = (
+        source.str.contains("live", na=False)
+        | source.isin(_TRUSTED_LIVE_LINE_SOURCES)
+        | standard_spread_consensus
+    )
     return live & ~source.str.startswith("rejected_")
 
 
@@ -6967,10 +6972,37 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
                                 f"{orientation_source}|{spread_orientation_basis}"
                             )
                         else:
-                            point_val = pd.NA
-                            market_dict["odds_american"] = pd.NA
-                            market_dict["odds_source"] = "rejected_live_orientation"
-                            spread_line_source = "rejected_live_orientation"
+                            # A partial Novig market can expose both signed points while
+                            # omitting the price for one outcome. Do not fabricate -110 or
+                            # delete that side from Best Available. Fall back only when at
+                            # least two standard books agree on the requested side's exact
+                            # signed line and a real price is attached to that quote.
+                            consensus_point, consensus_price, consensus_book = (
+                                _standard_spread_consensus_quote(row, side)
+                            )
+                            requested_is_favorite = side == spread_favorite_side
+                            desired_sign = -1.0 if requested_is_favorite else 1.0
+                            consensus_is_oriented = (
+                                pd.notna(consensus_point)
+                                and pd.notna(consensus_price)
+                                and float(consensus_point) * desired_sign > 0.0
+                            )
+                            if consensus_is_oriented:
+                                point_val = float(consensus_point)
+                                market_dict["odds_american"] = float(consensus_price)
+                                market_dict["odds_source"] = "odds_api"
+                                spread_line_source = (
+                                    f"{consensus_book}_standard_spread_consensus"
+                                )
+                                market_dict["orientation_source"] = (
+                                    f"{orientation_source}|{spread_orientation_basis}"
+                                    "|standard_spread_consensus"
+                                )
+                            else:
+                                point_val = pd.NA
+                                market_dict["odds_american"] = pd.NA
+                                market_dict["odds_source"] = "rejected_live_orientation"
+                                spread_line_source = "rejected_live_orientation"
                 else:
                     # Preserve the legacy behavior for non-MLB leagues. The outlier
                     # incident being guarded here is specific to MLB alternate run
