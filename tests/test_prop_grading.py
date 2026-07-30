@@ -1,6 +1,7 @@
 import pandas as pd
 
 from app_core.prop_grading import (
+    assemble_prop_ledgers,
     grade_prop_export,
     grading_summary,
     ledger_coverage_summary,
@@ -79,6 +80,35 @@ def test_ledger_merge_replaces_repeat_upload_without_duplication():
     merged = merge_prop_ledgers(original, corrected)
     assert len(merged) == 1
     assert merged.iloc[0]["result"] == "WIN"
+
+
+def test_active_ledger_uses_bundled_history_when_newer_sources_are_empty():
+    bundled = pd.DataFrame([{
+        "game_date": "2026-07-22",
+        "player": "Juan Soto",
+        "pick": "Juan Soto Over 0.5 Hits",
+        "result": "WIN",
+    }])
+
+    active = assemble_prop_ledgers(bundled, pd.DataFrame(), None)
+
+    assert active.to_dict("records") == bundled.to_dict("records")
+
+
+def test_active_ledger_applies_upload_and_generated_overrides_in_order():
+    bundled = pd.DataFrame([{
+        "game_date": "2026-07-22",
+        "player": "Juan Soto",
+        "pick": "Juan Soto Over 0.5 Hits",
+        "result": None,
+    }])
+    uploaded = bundled.assign(result="LOSS")
+    generated = bundled.assign(result="WIN")
+
+    active = assemble_prop_ledgers(bundled, uploaded, generated)
+
+    assert len(active) == 1
+    assert active.iloc[0]["result"] == "WIN"
 
 
 def test_summary_separates_pushes_and_unresolved_rows():

@@ -16,6 +16,8 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
+import pandas as pd
+
 from app_core.batter_prop_pipeline import (
     BATTER_DEFAULT_ENABLED_MARKETS,
     BATTER_PROP_SPECS,
@@ -290,6 +292,17 @@ def _decimal_odds(american: float) -> float:
     return 1.0 + (a / 100.0 if a > 0 else 100.0 / -a)
 
 
+def _resolve_prop_results_history(uploaded_results):
+    """Use an explicit non-empty ledger, otherwise restore the repo baseline."""
+    if isinstance(uploaded_results, pd.DataFrame):
+        return (
+            uploaded_results
+            if not uploaded_results.empty
+            else load_prop_results_log()
+        )
+    return load_prop_results_log(uploaded=uploaded_results)
+
+
 def build_prop_card(
     odds_client: Any,
     date: str,
@@ -321,8 +334,6 @@ def build_prop_card(
     card even when their EV is the highest on the slate. The +EV/min-edge gate remains as
     the eligibility floor so a likely winner at a losing price is still never staked.
     """
-    import pandas as pd
-
     scored = build_strikeout_card(
         odds_client, date, season, min_edge=min_edge, **card_kwargs
     )
@@ -398,11 +409,7 @@ def build_prop_card(
             )
         except (ImportError, RuntimeError, AttributeError):
             uploaded_results = None
-    results_history = (
-        uploaded_results
-        if isinstance(uploaded_results, pd.DataFrame)
-        else load_prop_results_log(uploaded=uploaded_results)
-    )
+    results_history = _resolve_prop_results_history(uploaded_results)
     card = apply_prop_calibration(card, results_history, as_of_date=date)
 
     # Re-size from the conservative probability. Raw-model Kelly is intentionally

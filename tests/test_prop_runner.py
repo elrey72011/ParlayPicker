@@ -15,7 +15,12 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from app_core.mlb_pitcher_stats import parse_schedule_probables
 from app_core.prop_pipeline import PROP_MAX_PLAUSIBLE_EDGE
-from app_core.prop_runner import build_prop_card, build_resolvers, build_strikeout_card
+from app_core.prop_runner import (
+    _resolve_prop_results_history,
+    build_prop_card,
+    build_resolvers,
+    build_strikeout_card,
+)
 
 
 _SCHEDULE = {
@@ -30,6 +35,13 @@ _SCHEDULE = {
         }]
     }]
 }
+
+
+def test_empty_explicit_prop_ledger_restores_repo_baseline():
+    history = _resolve_prop_results_history(pd.DataFrame())
+    assert history is not None
+    assert len(history) >= 470
+    assert history["result"].isin(["WIN", "LOSS"]).sum() >= 441
 
 
 def test_parse_schedule_probables_extracts_ids_and_names():

@@ -1,8 +1,7 @@
-from io import StringIO
-
 import pandas as pd
 
 from app_core.prop_calibration import (
+    DEFAULT_PROP_RESULTS_PATH,
     apply_prop_calibration,
     directional_market_key,
     fit_prop_calibration,
@@ -25,6 +24,14 @@ def _card(market_type="pitcher_strikeouts_over", probability=0.72):
         "odds_american": -110,
         "Kelly_Bet_Size": 5.0,
     }])
+
+
+def test_repo_bundled_prop_ledger_loads_independent_of_working_directory():
+    assert DEFAULT_PROP_RESULTS_PATH.is_absolute()
+    ledger = load_prop_results_log()
+    assert ledger is not None
+    assert len(ledger) >= 470
+    assert ledger["result"].isin(["WIN", "LOSS"]).sum() >= 441
 
 
 def test_directional_market_keys_do_not_pool_over_and_under():
@@ -119,37 +126,3 @@ def test_pooled_calibration_is_shrink_only_and_uses_directional_uncertainty():
     assert row["CalibrationProfileSampleSize"] == 100
     assert row["CalibratedProbability"] <= row["RawWinProbability"]
     assert row["ConservativeWinProbability"] < row["CalibratedProbability"]
-
-def test_multiple_uploaded_ledgers_are_merged_and_deduplicated():
-    first = pd.DataFrame({
-        "game_date": ["2026-07-22", "2026-07-22"],
-        "player": ["A", "B"],
-        "pick": ["A Over 4.5 Ks", "B Under 5.5 Ks"],
-        "market_type": [
-            "pitcher_strikeouts_over", "pitcher_strikeouts_under",
-        ],
-        "result": ["WIN", "LOSS"],
-        "raw_probability": [0.65, 0.62],
-    })
-    second = pd.DataFrame({
-        "game_date": ["2026-07-22", "2026-07-25"],
-        "player": ["A", "C"],
-        "pick": ["A Over 4.5 Ks", "C Under 1.5 Hits"],
-        "market_type": [
-            "pitcher_strikeouts_over", "batter_hits_under",
-        ],
-        "result": ["LOSS", "WIN"],
-        "raw_probability": [0.65, 0.68],
-    })
-    merged = load_prop_results_log(
-        uploaded=[
-            StringIO(first.to_csv(index=False)),
-            StringIO(second.to_csv(index=False)),
-        ]
-    )
-    assert merged is not None
-    assert len(merged) == 3
-    a_row = merged.loc[merged["player"].eq("A")].iloc[0]
-    assert a_row["result"] == "LOSS"
-    assert set(merged["game_date"].astype(str)) == {"2026-07-22", "2026-07-25"}
-

@@ -29,6 +29,31 @@ def _read_uploaded_prop_ledgers(uploaded_files) -> pd.DataFrame:
     return merged
 
 
+def _read_bundled_prop_ledger() -> pd.DataFrame:
+    """Load the repo-backed cumulative ledger used after every deployment."""
+    from app_core.prop_calibration import load_prop_results_log
+
+    ledger = load_prop_results_log()
+    return ledger if isinstance(ledger, pd.DataFrame) else pd.DataFrame()
+
+
+def _assemble_active_prop_ledger(
+    uploaded_files=None,
+    generated_ledger: pd.DataFrame | None = None,
+    bundled_ledger: pd.DataFrame | None = None,
+) -> pd.DataFrame:
+    """Layer uploads and newly graded rows over the bundled calibration history."""
+    from app_core.prop_grading import assemble_prop_ledgers
+
+    bundled = (
+        _read_bundled_prop_ledger()
+        if bundled_ledger is None
+        else bundled_ledger.copy()
+    )
+    uploaded = _read_uploaded_prop_ledgers(uploaded_files)
+    return assemble_prop_ledgers(bundled, uploaded, generated_ledger)
+
+
 def _request_run_analysis(state: MutableMapping[str, object]) -> None:
     state["run_analysis_counter"] = int(state.get("run_analysis_counter", 0)) + 1
 
@@ -78,16 +103,17 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
     theover_spreads = st.sidebar.file_uploader("Upload TheOver Spreads CSV", type=["csv"], key="theover_spreads")
     theover_totals = st.sidebar.file_uploader("Upload TheOver Totals CSV", type=["csv"], key="theover_totals")
     prop_results_log = st.sidebar.file_uploader(
-        "Upload Cumulative Graded Prop Ledger (required for production props)",
+        "Upload Newer Graded Prop Ledger(s) (optional)",
         type=["csv"],
         accept_multiple_files=True,
         key="prop_results_log",
         help=(
-            "Select every available graded ledger. The app merges and deduplicates "
-            "them into one cumulative history before calibrating markets. Without "
-            "enough prior settled rows, props remain research-only."
+            "The app starts with the cumulative ledger bundled in the repo. Upload "
+            "newer ledgers here to append or correct rows before calibration; all "
+            "sources are merged and deduplicated automatically."
         ),
     )
+    bundled_ledger = _read_bundled_prop_ledger()
 
     previous_prop_exports = st.sidebar.file_uploader(
         "Upload Yesterday's Player-Prop Export(s)",
@@ -140,8 +166,11 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
                 grade_date = inferred_date or previous_prop_date.isoformat()
 
                 generated_prior = st.session_state.get("generated_prop_results_log")
-                uploaded_prior = _read_uploaded_prop_ledgers(prop_results_log)
-                prior_ledger = merge_prop_ledgers(uploaded_prior, generated_prior)
+                prior_ledger = _assemble_active_prop_ledger(
+                    prop_results_log,
+                    generated_prior,
+                    bundled_ledger,
+                )
                 with st.spinner(f"Grading MLB player props for {grade_date}..."):
                     graded = grade_prop_export(previous_card, grade_date)
                     ledger = merge_prop_ledgers(prior_ledger, graded)
@@ -156,11 +185,12 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
             except Exception as exc:
                 st.sidebar.error(f"Player-prop grading failed: {exc}")
 
-    from app_core.prop_grading import merge_prop_ledgers
-
     generated_ledger = st.session_state.get("generated_prop_results_log")
-    uploaded_ledger = _read_uploaded_prop_ledgers(prop_results_log)
-    active_ledger = merge_prop_ledgers(uploaded_ledger, generated_ledger)
+    active_ledger = _assemble_active_prop_ledger(
+        prop_results_log,
+        generated_ledger,
+        bundled_ledger,
+    )
     st.session_state["active_prop_results_log"] = active_ledger
 
     if isinstance(active_ledger, pd.DataFrame) and not active_ledger.empty:

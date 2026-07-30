@@ -224,6 +224,16 @@ def merge_prop_ledgers(
     return combined.drop(columns="_ledger_key").reset_index(drop=True)
 
 
+def assemble_prop_ledgers(
+    bundled: pd.DataFrame | None,
+    uploaded: pd.DataFrame | None,
+    generated: pd.DataFrame | None,
+) -> pd.DataFrame:
+    """Build active history with newer sources overriding the repo baseline."""
+    combined = merge_prop_ledgers(bundled, uploaded)
+    return merge_prop_ledgers(combined, generated)
+
+
 def grading_summary(ledger: pd.DataFrame | None) -> dict[str, int | float]:
     if ledger is None or ledger.empty or "result" not in ledger.columns:
         return {"graded": 0, "wins": 0, "losses": 0, "pushes": 0, "unresolved": 0}
