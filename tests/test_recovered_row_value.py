@@ -74,3 +74,28 @@ def test_recovered_row_status_unchanged():
     out = _neutralize_recovered_row_value(_df())
     rec = out[out["best_pick"] == "Houston Over 8.5"].iloc[0]
     assert rec["Pick_Status"] == "High Variance/Speculative"
+
+
+def test_recovered_row_clears_incompatible_live_price():
+    df = _df()
+    df["odds_american"] = [390.0, -110.0]
+    df["opposing_odds_american"] = [-600.0, -110.0]
+    df["decimal_odds"] = [4.9, 1.91]
+    df["market_probability"] = [1 / 4.9, 1 / 1.91]
+    df["odds_source"] = ["novig_over_price", "novig_over_price"]
+
+    out = _neutralize_recovered_row_value(df)
+    recovered = out[out["best_pick"] == "Houston Over 8.5"].iloc[0]
+    clean = out[out["best_pick"] == "Clean HV"].iloc[0]
+
+    for column in (
+        "odds_american",
+        "opposing_odds_american",
+        "decimal_odds",
+        "market_probability",
+    ):
+        assert pd.isna(recovered[column])
+    assert recovered["odds_source"] == "unpriced_upload_fallback"
+    assert float(clean["odds_american"]) == -110.0
+    assert clean["odds_source"] == "novig_over_price"
+

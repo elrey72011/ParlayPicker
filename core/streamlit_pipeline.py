@@ -134,7 +134,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-07-30g-wnba-league-isolation"
+PIPELINE_BUILD = "2026-07-30h-total-consensus-price-scrub"
 
 # Best Available must compare standard, reasonably priced markets. A P2P exchange can
 # expose alternate run lines (for example +5.5 at -1150) beside the standard MLB +1.5.
@@ -1518,6 +1518,19 @@ def _neutralize_recovered_row_value(df: pd.DataFrame) -> pd.DataFrame:
     ):
         if c in df.columns:
             df.loc[rec, c] = 0.0
+    # The recovered upload line has no compatible live quote. Keeping the rejected
+    # alternate-line price makes the detailed and compact exports look bettable even
+    # though the row is correctly $0. Clear every price-derived field instead.
+    for c in (
+        "odds_american",
+        "opposing_odds_american",
+        "decimal_odds",
+        "market_probability",
+    ):
+        if c in df.columns:
+            df.loc[rec, c] = np.nan
+    if "odds_source" in df.columns:
+        df.loc[rec, "odds_source"] = "unpriced_upload_fallback"
     for c in ("best_available_runner_up_score", "best_available_score_gap"):
         if c in df.columns:
             df.loc[rec, c] = np.nan
@@ -6496,17 +6509,37 @@ NOVIG_TOTAL_OUTLIER_TOL = 1.0
 
 
 def _consensus_total_line(row):
-    """Median total line across books (over/under share the line). Robust to one book â€”
-    e.g. the thin P2P exchange novig â€” posting a stale/off-market total."""
-    pts = []
-    for bk in ("novig", "fanduel", "draftkings", "betmgm"):
-        v = pd.to_numeric(row.get(f"{bk}_over_point"), errors="coerce")
-        if pd.isna(v):
-            v = pd.to_numeric(row.get(f"{bk}_under_point"), errors="coerce")
-        if pd.notna(v):
-            pts.append(float(v))
-    return float(pd.Series(pts).median()) if pts else pd.NA
+    """Return the standard-book consensus total.
 
+    Novig can expose thin or stale alternate totals. Build the reference from FanDuel,
+    DraftKings, and BetMGM whenever at least two of those books quote the game. If two
+    or more standard books agree, use that quoted mode; otherwise retain the standard
+    median as a disagreement signal. Novig participates only when standard coverage is
+    too sparse to establish a reference.
+    """
+    def _point(book):
+        value = pd.to_numeric(row.get(f"{book}_over_point"), errors="coerce")
+        if pd.isna(value):
+            value = pd.to_numeric(row.get(f"{book}_under_point"), errors="coerce")
+        return float(value) if pd.notna(value) else None
+
+    standard_points = [
+        point
+        for book in ("fanduel", "draftkings", "betmgm")
+        if (point := _point(book)) is not None
+    ]
+    if len(standard_points) >= 2:
+        rounded = pd.Series(standard_points).round(3)
+        counts = rounded.value_counts()
+        if not counts.empty and int(counts.iloc[0]) >= 2:
+            return float(counts.index[0])
+        return float(rounded.median())
+
+    points = list(standard_points)
+    novig_point = _point("novig")
+    if novig_point is not None:
+        points.append(novig_point)
+    return float(pd.Series(points).median()) if points else pd.NA
 
 def _consistent_total_book(row, side):
     """First book whose total line for ``side`` ("over"/"under") matches the cross-book

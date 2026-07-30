@@ -35,6 +35,7 @@ jobs:
           tests/test_consistent_spread_book.py
           tests/test_preselection_line_audit_consistency.py
           tests/test_consistent_total_book.py
+          tests/test_recovered_row_value.py
           tests/test_totals_pick_direction.py
           tests/test_kalshi_wrong_game_title_guard.py
           tests/test_force_deploy_staking.py
