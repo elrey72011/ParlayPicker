@@ -1147,6 +1147,7 @@ def _filter_preselection_line_integrity(
     total_display_line_missing = is_total & live_total.notna() & displayed_total.isna()
     spread_display_line_missing = is_spread & live_spread.notna() & displayed_spread.isna()
     price = _numeric_series(pool, "odds_american")
+    has_paired_price_metadata = "opposing_odds_american" in pool.columns
     opposing_price = _numeric_series(pool, "opposing_odds_american")
     orientation = _string_series(pool, "orientation_source").str.strip().str.lower()
     ambiguous_identity = orientation.str.contains("fuzzy", na=False)
@@ -1182,13 +1183,16 @@ def _filter_preselection_line_integrity(
     extreme_opposing_spread_price = is_spread & opposing_price.lt(
         BEST_AVAILABLE_SPREAD_MIN_AMERICAN_ODDS
     )
-    invalid_spread_price_pair = is_spread & (
-        price.isna()
-        | price.eq(0)
-        | extreme_spread_price
-        | opposing_price.isna()
+    invalid_selected_spread_price = is_spread & (
+        price.isna() | price.eq(0) | extreme_spread_price
+    )
+    invalid_opposing_spread_price = is_spread & has_paired_price_metadata & (
+        opposing_price.isna()
         | opposing_price.eq(0)
         | extreme_opposing_spread_price
+    )
+    invalid_spread_price_pair = (
+        invalid_selected_spread_price | invalid_opposing_spread_price
     )
     invalid_spread = is_spread & (
         ~trusted_live_source
@@ -1286,9 +1290,7 @@ def _filter_preselection_line_integrity(
             extreme_spread_price.sum()
         )
         diagnostics_out["preselection_invalid_opposing_spread_price_count"] = int(
-            (opposing_price.isna() | opposing_price.eq(0) | extreme_opposing_spread_price).where(
-                is_spread, False
-            ).sum()
+            invalid_opposing_spread_price.sum()
         )
         diagnostics_out["preselection_invalid_spread_price_pair_count"] = int(
             invalid_spread_price_pair.sum()
