@@ -1163,40 +1163,36 @@ def _filter_preselection_line_integrity(
         group_market = market.loc[group_index]
 
         total_index = group_market[group_market.isin({"total_over", "total_under"})].index
-        if (
-            group_market.eq("total_over").any()
-            and group_market.eq("total_under").any()
-        ):
-            total_lines = displayed_total.loc[total_index]
-            total_markets = group_market.loc[total_index]
+        valid_total_index = total_index[~invalid_total.loc[total_index]]
+        valid_total_markets = group_market.loc[valid_total_index]
+        if set(valid_total_markets) == {"total_over", "total_under"}:
+            total_lines = displayed_total.loc[valid_total_index]
             coherent_total_pair = (
-                len(total_index) == 2
-                and total_markets.nunique() == 2
+                len(valid_total_index) == 2
                 and total_lines.notna().all()
                 and total_lines.round(6).nunique() == 1
             )
             if not coherent_total_pair:
-                pair_invalid_total.loc[total_index] = True
+                pair_invalid_total.loc[valid_total_index] = True
 
         spread_index = group_market[group_market.isin({"spread_home", "spread_away"})].index
-        if (
-            group_market.eq("spread_home").any()
-            and group_market.eq("spread_away").any()
-        ):
+        valid_spread_index = spread_index[~invalid_spread.loc[spread_index]]
+        valid_spread_markets = group_market.loc[valid_spread_index]
+        if set(valid_spread_markets) == {"spread_home", "spread_away"}:
             home_lines = displayed_spread.loc[
-                group_market[group_market.eq("spread_home")].index
+                valid_spread_markets[valid_spread_markets.eq("spread_home")].index
             ].dropna().round(6).unique()
             away_lines = displayed_spread.loc[
-                group_market[group_market.eq("spread_away")].index
+                valid_spread_markets[valid_spread_markets.eq("spread_away")].index
             ].dropna().round(6).unique()
             coherent_spread_pair = (
-                len(spread_index) == 2
+                len(valid_spread_index) == 2
                 and len(home_lines) == 1
                 and len(away_lines) == 1
                 and bool(np.isclose(float(home_lines[0]), -float(away_lines[0])))
             )
             if not coherent_spread_pair:
-                pair_invalid_spread.loc[spread_index] = True
+                pair_invalid_spread.loc[valid_spread_index] = True
 
     invalid_total = invalid_total | pair_invalid_total
     invalid_spread = invalid_spread | pair_invalid_spread
