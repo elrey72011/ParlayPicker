@@ -134,7 +134,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-07-30b-line-identity-guards"
+PIPELINE_BUILD = "2026-07-30c-wnba-export-playcard-stamp"
 
 # Best Available must compare standard, reasonably priced markets. A P2P exchange can
 # expose alternate run lines (for example +5.5 at -1150) beside the standard MLB +1.5.
@@ -655,6 +655,32 @@ def _normalize_team_for_known_league(value: object, league: object) -> str:
     if league_text.strip().upper() == "WNBA" and str(normalized).strip().lower() == "uconn":
         return "Connecticut"
     return normalized
+
+
+def _restore_known_league_team_identities(df: pd.DataFrame) -> pd.DataFrame:
+    """Repair league-specific alias collisions without renormalizing other names.
+
+    The generic mapper intentionally treats Connecticut as college UConn. Once a
+    row is known to be WNBA, restore the Connecticut Sun display identity. This
+    function is deliberately substitution-only so names such as Boston Celtics
+    and synthetic test identities retain their original spelling.
+    """
+    if df is None or df.empty or "league" not in df.columns:
+        return pd.DataFrame() if df is None else df.copy()
+
+    out = df.copy()
+    league = _clean_text_placeholders(_string_series(out, "league")).str.upper()
+    for team_column in ("home_team", "away_team"):
+        if team_column not in out.columns:
+            continue
+        team_token = (
+            _clean_text_placeholders(_string_series(out, team_column))
+            .str.lower()
+            .str.replace(r"[^a-z0-9]+", "", regex=True)
+        )
+        wnba_connecticut = league.eq("WNBA") & team_token.eq("uconn")
+        out.loc[wnba_connecticut, team_column] = "Connecticut"
+    return out
 
 
 def _coerce_identity_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -3386,6 +3412,11 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     pool = _filter_preselection_line_integrity(pool, diagnostics_out=diagnostics_out)
     if pool.empty:
         return pd.DataFrame(columns=BEST_PICK_COLUMNS)
+
+    # Upstream canonical matching may use the college-oriented UConn alias. Restore
+    # league-correct display identities before formatting picks, matchup IDs,
+    # candidate-audit rows, and grading keys.
+    pool = _restore_known_league_team_identities(pool)
 
     pool["expected_value"] = _numeric_series(pool, "expected_value")
     pool["edge"] = _numeric_series(pool, "edge", 0.0)
