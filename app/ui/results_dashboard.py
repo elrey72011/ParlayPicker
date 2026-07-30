@@ -336,10 +336,38 @@ def _render_candidate_results_recap(
     ledger = merge_candidate_ledgers(current_graded, prior_ledger)
     current_settled = int(current_graded.get("candidate_graded", pd.Series(dtype=bool)).sum())
     total_settled = int(ledger.get("candidate_graded", pd.Series(dtype=bool)).sum())
-    st.caption(
-        f"Graded {current_settled}/{len(current_graded)} candidates from this slate; "
-        f"the cumulative ledger contains {total_settled}/{len(ledger)} settled candidates."
+    current_keys = set(
+        current_graded.get("candidate_ledger_key", pd.Series(dtype=str))
+        .dropna()
+        .astype(str)
     )
+    prior_keys: set[str] = set()
+    if prior_ledger is not None and not prior_ledger.empty:
+        normalized_prior = merge_candidate_ledgers(pd.DataFrame(), prior_ledger)
+        prior_keys = set(
+            normalized_prior.get("candidate_ledger_key", pd.Series(dtype=str))
+            .dropna()
+            .astype(str)
+        )
+    prior_history_rows = len(prior_keys - current_keys)
+    ledger_is_cumulative = prior_history_rows > 0
+
+    if ledger_is_cumulative:
+        st.caption(
+            f"Graded {current_settled}/{len(current_graded)} candidates from this slate; "
+            f"the cumulative ledger contains {total_settled}/{len(ledger)} settled candidates "
+            f"including {prior_history_rows} prior unique rows."
+        )
+    else:
+        st.warning(
+            "No earlier unique candidate history was supplied. This download contains the "
+            "current slate only and must not be treated as cumulative calibration evidence. "
+            "Upload the previously downloaded candidate_results_ledger.csv on the next run."
+        )
+        st.caption(
+            f"Graded {current_settled}/{len(current_graded)} current-slate candidates; "
+            f"{total_settled}/{len(ledger)} rows are settled."
+        )
 
     if total_settled:
         summaries = summarize_candidate_performance(ledger)
@@ -371,6 +399,11 @@ def _render_candidate_results_recap(
         )
 
     dl_left, dl_right = st.columns(2)
+    ledger_download_label = (
+        "Download Updated Cumulative Candidate Results Ledger"
+        if ledger_is_cumulative
+        else "Download Current-Slate Candidate Results Ledger"
+    )
     dl_left.download_button(
         "Download This Slate's Graded Candidates",
         data=current_graded.to_csv(index=False, encoding="utf-8-sig"),
@@ -379,7 +412,7 @@ def _render_candidate_results_recap(
         key="download_current_candidate_grades",
     )
     dl_right.download_button(
-        "Download Cumulative Candidate Results Ledger",
+        ledger_download_label,
         data=ledger.to_csv(index=False, encoding="utf-8-sig"),
         file_name="candidate_results_ledger.csv",
         mime="text/csv",

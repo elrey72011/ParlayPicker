@@ -275,3 +275,92 @@ def test_extreme_juice_spread_cannot_win_best_available_ranking():
     assert diagnostics["preselection_invalid_spread_candidate_count"] == 1
     assert diagnostics["preselection_dropped_spread_candidate_count"] == 1
 
+
+def test_mismatched_display_total_row_is_rejected_before_audit():
+    df = pd.DataFrame([
+        _candidate("spread_home", win_prob=0.58, ev=0.02, edge=0.02),
+        _candidate("spread_away", win_prob=0.54, ev=0.01, edge=0.01),
+        _candidate(
+            "total_over",
+            win_prob=0.90,
+            ev=0.40,
+            edge=0.25,
+            total_line=19.5,
+            live_total_line=8.0,
+            uploaded_total_line=8.0,
+            upload_total_line=8.0,
+        ),
+        _candidate(
+            "total_under",
+            win_prob=0.55,
+            ev=0.02,
+            edge=0.02,
+            total_line=8.0,
+            live_total_line=8.0,
+            uploaded_total_line=8.0,
+            upload_total_line=8.0,
+        ),
+    ])
+    diagnostics = {}
+
+    out = build_best_picks_df(df, diagnostics_out=diagnostics)
+    audit_frame = diagnostics["candidate_audit_df"]
+
+    assert len(out) == 1
+    assert out.iloc[0]["market_type"] == "total_under"
+    assert "total_over" not in set(audit_frame["market_type"])
+    assert "total_under" in set(audit_frame["market_type"])
+    assert diagnostics["preselection_total_display_live_mismatch_count"] == 1
+    assert diagnostics["preselection_invalid_total_pair_count"] == 0
+    assert diagnostics["preselection_dropped_total_candidate_count"] == 1
+
+
+def test_non_complementary_spread_pair_is_rejected_before_ranking():
+    df = pd.DataFrame([
+        _candidate(
+            "spread_home",
+            win_prob=0.90,
+            ev=0.40,
+            edge=0.25,
+            spread_line=-1.5,
+            live_spread_line=-1.5,
+        ),
+        _candidate(
+            "spread_away",
+            win_prob=0.88,
+            ev=0.35,
+            edge=0.22,
+            spread_line=2.5,
+            live_spread_line=2.5,
+        ),
+        _candidate(
+            "total_over",
+            win_prob=0.57,
+            ev=0.02,
+            edge=0.02,
+            total_line=8.5,
+            live_total_line=8.5,
+            uploaded_total_line=8.5,
+            upload_total_line=8.5,
+        ),
+        _candidate(
+            "total_under",
+            win_prob=0.53,
+            ev=0.00,
+            edge=0.00,
+            total_line=8.5,
+            live_total_line=8.5,
+            uploaded_total_line=8.5,
+            upload_total_line=8.5,
+        ),
+    ])
+    diagnostics = {}
+
+    out = build_best_picks_df(df, diagnostics_out=diagnostics)
+    audit_frame = diagnostics["candidate_audit_df"]
+
+    assert len(out) == 1
+    assert out.iloc[0]["market_type"].startswith("total")
+    assert not audit_frame["market_type"].astype(str).str.startswith("spread").any()
+    assert diagnostics["preselection_invalid_spread_pair_count"] == 2
+    assert diagnostics["preselection_dropped_spread_candidate_count"] == 2
