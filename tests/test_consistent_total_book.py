@@ -81,3 +81,43 @@ def test_diag_includes_total_points():
     }
     s = _raw_book_odds_diag(row)
     assert "tot O=+8.5/U=+8.5" in s
+
+
+def test_standard_book_mode_prevents_unquoted_synthetic_median():
+    row = {
+        # The 30-Jul Atlanta/Washington failure: including Novig produced a synthetic
+        # 9.75 median that no book quoted, so both total candidates disappeared.
+        "novig_over_point": 4.5, "novig_under_point": 4.5,
+        "fanduel_over_point": 9.5, "fanduel_under_point": 9.5,
+        "draftkings_over_point": 10.0, "draftkings_under_point": 10.0,
+        "betmgm_over_point": 10.0, "betmgm_under_point": 10.0,
+    }
+    assert _consensus_total_line(row) == 10.0
+    assert _consistent_total_book(row, "over") == "draftkings"
+    assert _consistent_total_book(row, "under") == "draftkings"
+
+
+def test_expand_recovers_totals_from_standard_book_agreement():
+    row = {
+        "league": "MLB", "home_team": "Atlanta", "away_team": "Washington",
+        "game_date": "2026-07-30", "matchup_id": "atl-wsh",
+        "commence_time_raw": "2026-07-30T23:15:00Z",
+        "novig_over_point": 4.5, "novig_over_price": 390,
+        "novig_under_point": 4.5, "novig_under_price": -600,
+        "fanduel_over_point": 9.5, "fanduel_over_price": -102,
+        "fanduel_under_point": 9.5, "fanduel_under_price": -118,
+        "draftkings_over_point": 10.0, "draftkings_over_price": -108,
+        "draftkings_under_point": 10.0, "draftkings_under_price": -112,
+        "betmgm_over_point": 10.0, "betmgm_over_price": -105,
+        "betmgm_under_point": 10.0, "betmgm_under_price": -115,
+    }
+    out, _ = _expand_live_odds_to_bet_rows(pd.DataFrame([row]), None)
+    totals = out[out["market_type"].isin(["total_over", "total_under"])].copy()
+
+    assert set(totals["market_type"]) == {"total_over", "total_under"}
+    assert set(pd.to_numeric(totals["total_line"])) == {10.0}
+    over = totals[totals["market_type"] == "total_over"].iloc[0]
+    under = totals[totals["market_type"] == "total_under"].iloc[0]
+    assert float(over["odds_american"]) == -108.0
+    assert float(under["odds_american"]) == -112.0
+
