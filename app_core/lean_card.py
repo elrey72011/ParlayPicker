@@ -232,6 +232,15 @@ def build_all_games_lean_card(best_picks_df: pd.DataFrame, *, calibration: objec
     out = score_best_picks_rows(best_picks_df, calibration=calibration, bucket_stats=bucket_stats)
     if out.empty:
         return out
+
+    # Preserve deployment provenance in the compact CSV without coupling this
+    # presentation module back to the main pipeline (and without inventing a
+    # stamp for legacy callers that did not supply one).
+    if "pipeline_build" in best_picks_df.columns and "pipeline_build" not in out.columns:
+        build = best_picks_df["pipeline_build"].reindex(out.index).fillna("").astype(str)
+        if build.str.strip().ne("").any():
+            out.insert(0, "pipeline_build", build)
+
     out["_t"] = out["Tier"].map(_TIER_ORDER).fillna(3)
     # Rank by empirical edge (bucket-proven), not model Win%/EV - the latter is anti-informative.
     # Win% is the tiebreaker and the fallback when there's no calibration (Emp_Edge all NaN).

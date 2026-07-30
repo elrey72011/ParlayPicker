@@ -119,6 +119,32 @@ def test_lean_card_handles_export_column_names():
     assert card.iloc[0]["Matchup"] == "B @ A"
 
 
+def test_play_card_preserves_pipeline_build_stamp():
+    df = _df([
+        {
+            "pipeline_build": "2026-07-30c-wnba-export-playcard-stamp",
+            "League": "WNBA",
+            "Home": "Chicago",
+            "Away": "Connecticut",
+            "best_pick": "Chicago -4.5",
+            "Pick_Status": "No Play",
+            "expected_value": -0.02,
+            "WinProbability": 0.51,
+            "edge": 0.0,
+            "odds_american": -111,
+            "consensus_agreement": "Agrees",
+            "Kelly_Bet_Size": 0.0,
+        }
+    ])
+
+    card = build_all_games_lean_card(df, calibration=None, bucket_stats=None)
+
+    assert card.columns[0] == "pipeline_build"
+    assert card["pipeline_build"].eq(
+        "2026-07-30c-wnba-export-playcard-stamp"
+    ).all()
+
+
 def test_build_applies_calibration_gate_end_to_end():
     # Raw win 0.53 @ -110 (b/e .524) looks like a LEAN, but a calibration that shrinks the
     # 0.50-0.55 band to ~.45 pushes it below break-even -> AVOID. A strong 0.62 pick survives.
