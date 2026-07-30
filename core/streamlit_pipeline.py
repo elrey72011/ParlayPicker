@@ -651,7 +651,8 @@ def _normalize_team_for_known_league(value: object, league: object) -> str:
     rows must instead retain the Connecticut Sun franchise identity.
     """
     normalized = normalize_team_name(value)
-    if str(league or "").strip().upper() == "WNBA" and str(normalized).strip().lower() == "uconn":
+    league_text = "" if league is None or pd.isna(league) else str(league)
+    if league_text.strip().upper() == "WNBA" and str(normalized).strip().lower() == "uconn":
         return "Connecticut"
     return normalized
 
