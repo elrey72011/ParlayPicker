@@ -1069,6 +1069,22 @@ def _filter_preselection_line_integrity(
     live_total = live_total.fillna(_numeric_series(pool, "total_line").where(trusted_live_source))
     live_spread = _coalesce_numeric("live_spread_line", "matched_live_spread_line")
     live_spread = live_spread.fillna(_numeric_series(pool, "spread_line").where(trusted_live_source))
+    displayed_total = _numeric_series(pool, "total_line")
+    displayed_spread = _numeric_series(pool, "spread_line")
+    total_display_live_mismatch = (
+        is_total
+        & live_total.notna()
+        & displayed_total.notna()
+        & (displayed_total - live_total).abs().gt(1e-9)
+    )
+    spread_display_live_mismatch = (
+        is_spread
+        & live_spread.notna()
+        & displayed_spread.notna()
+        & (displayed_spread - live_spread).abs().gt(1e-9)
+    )
+    total_display_line_missing = is_total & live_total.notna() & displayed_total.isna()
+    spread_display_line_missing = is_spread & live_spread.notna() & displayed_spread.isna()
     price = _numeric_series(pool, "odds_american")
     orientation = _string_series(pool, "orientation_source").str.strip().str.lower()
     ambiguous_identity = orientation.str.contains("fuzzy", na=False)
@@ -1104,6 +1120,8 @@ def _filter_preselection_line_integrity(
     invalid_spread = is_spread & (
         ~trusted_live_source
         | live_spread.isna()
+        | displayed_spread.isna()
+        | spread_display_live_mismatch
         | price.isna()
         | price.eq(0)
         | extreme_spread_price
@@ -1112,6 +1130,8 @@ def _filter_preselection_line_integrity(
     invalid_total = is_total & (
         ~trusted_live_source
         | live_total.isna()
+        | displayed_total.isna()
+        | total_display_live_mismatch
         | price.isna()
         | price.eq(0)
         | ambiguous_identity
@@ -1130,14 +1150,85 @@ def _filter_preselection_line_integrity(
         + _string_series(pool, "game_date").str.strip()
     )
     matchup_key = matchup_key.mask(matchup_key.eq(""), fallback_key)
+
+    # Complementary markets are one event and must share one coherent line. Row-level
+    # validation alone allowed a displayed Over 19.5 to survive beside Under 8.0 because
+    # both rows carried a plausible hidden live line. Fail the entire broken family
+    # before ranking whenever Over/Under do not share a total or home/away spreads are
+    # not exact opposites.
+    pair_invalid_total = pd.Series(False, index=pool.index, dtype=bool)
+    pair_invalid_spread = pd.Series(False, index=pool.index, dtype=bool)
+    for _, group_index in pool.groupby(matchup_key, dropna=False).groups.items():
+        group_index = list(group_index)
+        group_market = market.loc[group_index]
+
+        total_index = group_market[group_market.isin({"total_over", "total_under"})].index
+        if (
+            group_market.eq("total_over").any()
+            and group_market.eq("total_under").any()
+        ):
+            total_lines = displayed_total.loc[total_index]
+            total_markets = group_market.loc[total_index]
+            coherent_total_pair = (
+                len(total_index) == 2
+                and total_markets.nunique() == 2
+                and total_lines.notna().all()
+                and total_lines.round(6).nunique() == 1
+            )
+            if not coherent_total_pair:
+                pair_invalid_total.loc[total_index] = True
+
+        spread_index = group_market[group_market.isin({"spread_home", "spread_away"})].index
+        if (
+            group_market.eq("spread_home").any()
+            and group_market.eq("spread_away").any()
+        ):
+            home_lines = displayed_spread.loc[
+                group_market[group_market.eq("spread_home")].index
+            ].dropna().round(6).unique()
+            away_lines = displayed_spread.loc[
+                group_market[group_market.eq("spread_away")].index
+            ].dropna().round(6).unique()
+            coherent_spread_pair = (
+                len(spread_index) == 2
+                and len(home_lines) == 1
+                and len(away_lines) == 1
+                and bool(np.isclose(float(home_lines[0]), -float(away_lines[0])))
+            )
+            if not coherent_spread_pair:
+                pair_invalid_spread.loc[spread_index] = True
+
+    invalid_total = invalid_total | pair_invalid_total
+    invalid_spread = invalid_spread | pair_invalid_spread
+    invalid_candidate = invalid_total | invalid_spread
+    hard_invalid = (
+        pair_invalid_total
+        | pair_invalid_spread
+        | total_display_live_mismatch
+        | spread_display_live_mismatch
+        | total_display_line_missing
+        | spread_display_line_missing
+    )
     valid_alternatives = (~invalid_candidate).groupby(matchup_key, dropna=False).transform("sum")
-    drop_mask = invalid_candidate & valid_alternatives.gt(0)
+    drop_mask = hard_invalid | (invalid_candidate & valid_alternatives.gt(0))
 
     if diagnostics_out is not None:
         diagnostics_out["preselection_invalid_total_candidate_count"] = int(invalid_total.sum())
         diagnostics_out["preselection_invalid_spread_candidate_count"] = int(invalid_spread.sum())
         diagnostics_out["preselection_invalid_extreme_spread_price_count"] = int(
             extreme_spread_price.sum()
+        )
+        diagnostics_out["preselection_total_display_live_mismatch_count"] = int(
+            total_display_live_mismatch.sum()
+        )
+        diagnostics_out["preselection_spread_display_live_mismatch_count"] = int(
+            spread_display_live_mismatch.sum()
+        )
+        diagnostics_out["preselection_invalid_total_pair_count"] = int(
+            pair_invalid_total.sum()
+        )
+        diagnostics_out["preselection_invalid_spread_pair_count"] = int(
+            pair_invalid_spread.sum()
         )
         diagnostics_out["preselection_dropped_total_candidate_count"] = int((drop_mask & is_total).sum())
         diagnostics_out["preselection_dropped_spread_candidate_count"] = int((drop_mask & is_spread).sum())
@@ -1151,6 +1242,92 @@ def _filter_preselection_line_integrity(
             int(drop_mask.sum()),
         )
     return pool.loc[~drop_mask].copy()
+
+
+def _selection_bucket_stats_are_fresh(
+    bucket_stats: dict | None,
+    *,
+    now: pd.Timestamp | None = None,
+    max_age_days: int = 14,
+) -> bool:
+    """Whether an empirical selection overlay is recent enough to steer finalists.
+
+    Missing metadata remains backward-compatible for injected/test statistics. A dated
+    production artifact fails closed once it is older than max_age_days; stale
+    historical buckets remain useful for diagnostics but must not choose today's side.
+    """
+    if not bucket_stats:
+        return False
+    fitted_on = (bucket_stats.get("meta") or {}).get("fitted_on")
+    if not fitted_on:
+        return True
+    fitted = pd.to_datetime(fitted_on, errors="coerce", utc=True)
+    if pd.isna(fitted):
+        return False
+    current = pd.Timestamp.now(tz="UTC") if now is None else pd.Timestamp(now)
+    if current.tzinfo is None:
+        current = current.tz_localize("UTC")
+    else:
+        current = current.tz_convert("UTC")
+    age_days = (current.normalize() - fitted.normalize()).days
+    return -1 <= age_days <= int(max_age_days)
+
+
+def _normalize_complementary_selection_probabilities(
+    pool: pd.DataFrame,
+    probability_column: str = "_selection_probability",
+) -> tuple[pd.Series, pd.Series]:
+    """No-vig complementary rank probabilities within each valid market pair.
+
+    Independently calibrated opposite rows can sum far below or above one. That made
+    repeated bucket constants dominate cross-family ranking. Normalize only exact,
+    line-coherent two-row pairs; production probability and staking columns are left
+    untouched, so this changes finalist comparison without manufacturing wager edge.
+    """
+    probabilities = pd.to_numeric(
+        pool.get(probability_column, pd.Series(np.nan, index=pool.index)),
+        errors="coerce",
+    ).copy()
+    normalized = pd.Series(False, index=pool.index, dtype=bool)
+    required = {"matchup_id", "market_type"}
+    if pool.empty or not required.issubset(pool.columns):
+        return probabilities, normalized
+
+    market = _string_series(pool, "market_type").str.strip().str.lower()
+    total_line = _numeric_series(pool, "total_line")
+    spread_line = _numeric_series(pool, "spread_line")
+
+    for _, group_index in pool.groupby("matchup_id", dropna=False).groups.items():
+        group_index = list(group_index)
+        group_market = market.loc[group_index]
+        for expected_markets, lines, is_spread_pair in (
+            ({"total_over", "total_under"}, total_line, False),
+            ({"spread_home", "spread_away"}, spread_line, True),
+        ):
+            pair_index = group_market[group_market.isin(expected_markets)].index
+            if len(pair_index) != 2 or set(group_market.loc[pair_index]) != expected_markets:
+                continue
+            pair_lines = lines.loc[pair_index]
+            if pair_lines.isna().any():
+                continue
+            if is_spread_pair:
+                if not np.isclose(float(pair_lines.iloc[0]), -float(pair_lines.iloc[1])):
+                    continue
+            elif pair_lines.round(6).nunique() != 1:
+                continue
+            pair_probabilities = probabilities.loc[pair_index]
+            denominator = float(pair_probabilities.sum())
+            if (
+                pair_probabilities.notna().all()
+                and pair_probabilities.gt(0.0).all()
+                and np.isfinite(denominator)
+                and denominator > 0.0
+            ):
+                probabilities.loc[pair_index] = pair_probabilities / denominator
+                normalized.loc[pair_index] = True
+
+    return probabilities.clip(0.01, 0.99), normalized
+
 
 def _sync_selected_candidate_audit(
     candidate_audit_df: pd.DataFrame,
@@ -3128,6 +3305,18 @@ def classify_best_available_picks(best_picks_df: pd.DataFrame) -> pd.DataFrame:
     out.loc[premium, "commercial_reason"] = (
         "Production-qualified positive edge with a funded stake and verified live line."
     )
+    # Fail closed on every stake-like export field. A coverage/lean row must not
+    # retain a dollar value from an earlier recovery or classification stage.
+    for stake_column in (
+        "Play_Stake",
+        "production_bet_amount",
+        "Kelly_Bet_Size",
+        "recommended_bet",
+        "Suggested_Stake",
+    ):
+        if stake_column in out.columns:
+            out.loc[~premium, stake_column] = 0.0
+
     out["wager_approved"] = premium
     out["export_role"] = "COVERAGE PICK - PASS"
     out.loc[premium, "export_role"] = "PRODUCTION WAGER"
@@ -3256,7 +3445,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             )
 
             _selection_bucket_stats = _load_selection_bucket_stats()
-            if _selection_bucket_stats:
+            _selection_bucket_stats_fresh = _selection_bucket_stats_are_fresh(
+                _selection_bucket_stats
+            )
+            if _selection_bucket_stats and _selection_bucket_stats_fresh:
                 _empirical_prob = empirical_selection_probabilities(
                     pool,
                     _selection_bucket_stats,
@@ -3267,14 +3459,35 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 pool.loc[_usable_empirical, "_selection_probability"] = (
                     _empirical_prob.loc[_usable_empirical]
                 )
+                _empirical_total = _usable_empirical & pool["_market_family"].eq("total")
+                _empirical_side = _usable_empirical & pool["_market_family"].eq("side")
                 pool.loc[
-                    _usable_empirical, "selection_probability_source"
+                    _empirical_total, "selection_probability_source"
                 ] = "empirical_bucket_blend"
+                pool.loc[
+                    _empirical_side, "selection_probability_source"
+                ] = "global_isotonic_calibration"
+            elif _selection_bucket_stats:
+                logger.warning(
+                    "Selection bucket statistics are stale; finalist ranking is using "
+                    "current calibrated probabilities without the dated bucket overlay."
+                )
     except Exception as exc:
         logger.warning(
             "Empirical finalist probabilities unavailable; using calibrated candidates: %s",
             exc,
         )
+    pool["_selection_probability"], _pair_probability_normalized = (
+        _normalize_complementary_selection_probabilities(pool)
+    )
+    pool.loc[
+        _pair_probability_normalized, "selection_probability_source"
+    ] = (
+        pool.loc[
+            _pair_probability_normalized, "selection_probability_source"
+        ].astype(str)
+        + "+pair_normalized"
+    )
     pool["selection_probability_used"] = pool["_selection_probability"].clip(0.01, 0.99)
     pool["_prob_numeric"] = pool["selection_probability_used"].fillna(0.5)
     pool["_normalized_ev"] = pd.Series([np.nan] * len(pool), index=pool.index, dtype="float64")
@@ -3295,6 +3508,12 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             "empirical_bucket_blend"
             if diagnostics_out["empirical_selection_candidate_count"] > 0
             else "calibrated_probability"
+        )
+        diagnostics_out["selection_bucket_stats_fresh"] = bool(
+            locals().get("_selection_bucket_stats_fresh", False)
+        )
+        diagnostics_out["pair_probability_normalized_count"] = int(
+            _pair_probability_normalized.sum()
         )
 
     for family in ["total", "side"]:
@@ -3329,21 +3548,18 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             pool.loc[family_mask, "_normalized_edge"] = 0.0
             pool.loc[family_mask, "_normalized_prob"] = 0.0
 
-    # Finalist score — WIN PROBABILITY first (owner preference, 3 Jul: "the best
-    # pick is the one with the highest chance of winning, not the best payout").
-    # The audit that motivated this: with the old 0.5*EV + 0.5*edge score, a 47%
-    # Over at +150 (EV +17.5%) beat a 58% Under at -130 (EV +2.6%) for the same
-    # game — the DIRECTION choice was still optimizing payout even after ranking,
-    # staking, and recovery had moved to probability. The score is now the
-    # z-scored calibrated win probability, with a small EV/edge term (10% weight
-    # combined) retained strictly as a value tiebreak between near-equal
-    # probabilities. All graded-evidence penalties below (Kalshi direction
-    # conflict, under-selection nudge, MLB-spread handicap) are unchanged and
-    # still subtract in the same z-units they were tuned in.
+    # Finalist score — absolute WIN PROBABILITY first. The old score z-scored
+    # candidates against the rest of the slate, so a merely "less bad" 47% row could
+    # look elite on a weak day and a game's selection could change when an unrelated
+    # game was added. Keep EV and edge only as bounded tiebreakers; production funding
+    # still passes through the separate absolute price/EV gate below.
+    pool["_absolute_probability_score"] = pool["_prob_numeric"].clip(0.01, 0.99)
+    pool["_absolute_ev_tiebreak"] = pool["_ev_numeric"].clip(-1.0, 1.0).fillna(0.0)
+    pool["_absolute_edge_tiebreak"] = pool["_edge_numeric"].clip(-1.0, 1.0).fillna(0.0)
     pool["final_family_score"] = (
-        0.90 * pool["_normalized_prob"].fillna(0.0)
-        + 0.05 * pool["_normalized_ev"].fillna(0.0)
-        + 0.05 * pool["_normalized_edge"].fillna(0.0)
+        0.90 * pool["_absolute_probability_score"]
+        + 0.05 * pool["_absolute_ev_tiebreak"]
+        + 0.05 * pool["_absolute_edge_tiebreak"]
     )
 
     for family in ["total", "side"]:
