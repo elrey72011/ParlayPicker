@@ -5,6 +5,33 @@ from __future__ import annotations
 import pandas as pd
 
 
+_CANONICAL_EXPORT_COLUMNS = ("Bettable", "Export_Scope", "Wager_Instruction")
+
+
+def _drop_case_insensitive_export_aliases(frame: pd.DataFrame) -> pd.DataFrame:
+    """Keep one canonical spelling for public wager-scope columns.
+
+    Candidate diagnostics historically carried a lowercase
+    ``wager_instruction`` field.  Adding the public ``Wager_Instruction``
+    column beside it produced a CSV that pandas could write but common
+    case-insensitive readers (including PowerShell ``Import-Csv``) could not
+    load.  The canonical public label supersedes those internal aliases.
+    """
+
+    canonical_by_fold = {
+        column.casefold(): column for column in _CANONICAL_EXPORT_COLUMNS
+    }
+    aliases = [
+        column
+        for column in frame.columns
+        if column.casefold() in canonical_by_fold
+        and column != canonical_by_fold[column.casefold()]
+    ]
+    if not aliases:
+        return frame
+    return frame.drop(columns=aliases)
+
+
 def _positive_stake(frame: pd.DataFrame) -> pd.Series:
     stake_columns = [
         column
@@ -31,7 +58,7 @@ def label_wager_export(frame: pd.DataFrame) -> pd.DataFrame:
 
     if frame is None:
         return frame
-    out = frame.copy()
+    out = _drop_case_insensitive_export_aliases(frame.copy())
     funded = _positive_stake(out)
 
     if "production_eligible" in out.columns:
