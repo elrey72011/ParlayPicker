@@ -41,6 +41,7 @@ def test_prop_grading_export_keeps_research_but_marks_it_do_not_bet():
     assert labeled["Export_Scope"].tolist() == ["PRODUCTION BET", "COVERAGE / RESEARCH"]
     assert production_wagers(frame)["player_name"].tolist() == ["Funded Player"]
 
+
 def test_public_export_scope_columns_are_case_insensitively_unique():
     frame = pd.DataFrame(
         {
