@@ -7,6 +7,16 @@ from app_core.team_name_matcher import TeamNameMatcher
 
 logger = logging.getLogger(__name__)
 
+
+def _first_text(row: pd.Series, *columns: str) -> str:
+    """Return the first present, non-blank pick representation."""
+
+    for column in columns:
+        value = row.get(column)
+        if value is not None and pd.notna(value) and str(value).strip():
+            return str(value).strip()
+    return ""
+
 def attach_results(master_df: pd.DataFrame, results_df: pd.DataFrame) -> pd.DataFrame:
     """
     Attaches actual game results to the master DataFrame from a results DataFrame.
@@ -48,8 +58,10 @@ def attach_results(master_df: pd.DataFrame, results_df: pd.DataFrame) -> pd.Data
         logger.error(f"results_df missing required columns. Found: {res_df.columns.tolist()}")
         return _add_empty_outcome_columns(df)
 
-    from app_core.feature_processing import robust_normalize_team
-    from app_core.prediction_engine import clean_team_name
+    from app_core.result_team_names import clean_result_team, normalize_result_team
+
+    robust_normalize_team = normalize_result_team
+    clean_team_name = clean_result_team
 
     # Pre-compute normalized names
     res_df['_norm_home'] = res_df[home_col].apply(lambda x: robust_normalize_team(str(x)).lower() if pd.notnull(x) else "")
@@ -88,7 +100,9 @@ def attach_results(master_df: pd.DataFrame, results_df: pd.DataFrame) -> pd.Data
                     df.loc[idx, 'Pick_Outcome'] = outcome
 
                     # Also populate specific results so determining outcome doesn't fail later
-                    best_pick_str = str(row.get('Pick Taken', row.get('Best Pick', row.get('Pick', '')))).lower()
+                    best_pick_str = _first_text(
+                        row, 'Pick Taken', 'Best Pick', 'best_pick', 'Pick'
+                    ).lower()
                     if 'over' in best_pick_str or 'under' in best_pick_str:
                         df.loc[idx, 'total_result'] = outcome
                     elif '+' in best_pick_str or '-' in best_pick_str:
@@ -182,7 +196,9 @@ def attach_results(master_df: pd.DataFrame, results_df: pd.DataFrame) -> pd.Data
                 spread_line = _safefloat(row.get('spread_pick_line'))
                 if spread_line is None:
                     # Fallback to parsing from 'Spread & Pick' or 'Pick'
-                    pick_str = str(row.get('Spread & Pick') or row.get('Pick', row.get('best_pick', row.get('Pick Taken', row.get('Best Pick', '')))))
+                    pick_str = _first_text(
+                        row, 'Spread & Pick', 'Pick', 'best_pick', 'Pick Taken', 'Best Pick'
+                    )
                     import re
                     # Extract last number which might have + or -
                     m = re.search(r'([+-]?\d+\.?\d*)\s*(?:\(.*\))?$', pick_str)
@@ -191,7 +207,9 @@ def attach_results(master_df: pd.DataFrame, results_df: pd.DataFrame) -> pd.Data
 
                 if spread_line is not None:
                      # Determine which team we picked
-                     raw_pick_team = str(row.get('spread_pick_team') or row.get('Pick', row.get('best_pick', row.get('Pick Taken', row.get('Best Pick', '')))))
+                     raw_pick_team = _first_text(
+                         row, 'spread_pick_team', 'Pick', 'best_pick', 'Pick Taken', 'Best Pick'
+                     )
                      import re
                      # Remove the spread line from the pick team string
                      raw_pick_team = re.sub(r'([+-]?\d+\.?\d*)\s*(?:\(.*\))?$', '', raw_pick_team).strip()
@@ -241,7 +259,9 @@ def attach_results(master_df: pd.DataFrame, results_df: pd.DataFrame) -> pd.Data
                 # Calculate Total Result
                 total_line = _safefloat(row.get('total_pick_line'))
                 if total_line is None:
-                    pick_str = str(row.get('Total & Pick') or row.get('Pick', row.get('best_pick', row.get('Pick Taken', row.get('Best Pick', '')))))
+                    pick_str = _first_text(
+                        row, 'Total & Pick', 'Pick', 'best_pick', 'Pick Taken', 'Best Pick'
+                    )
                     import re
                     m = re.search(r'(Over|Under)\s*(\d+\.?\d*)', pick_str, re.IGNORECASE)
                     if m:
@@ -249,7 +269,9 @@ def attach_results(master_df: pd.DataFrame, results_df: pd.DataFrame) -> pd.Data
 
                 total_side = str(row.get('total_pick_side') or '')
                 if not total_side:
-                    pick_str = str(row.get('Total & Pick') or row.get('Pick', row.get('best_pick', row.get('Pick Taken', row.get('Best Pick', ''))))).lower()
+                    pick_str = _first_text(
+                        row, 'Total & Pick', 'Pick', 'best_pick', 'Pick Taken', 'Best Pick'
+                    ).lower()
                     if 'over' in pick_str:
                         total_side = 'over'
                     elif 'under' in pick_str:
@@ -273,7 +295,9 @@ def attach_results(master_df: pd.DataFrame, results_df: pd.DataFrame) -> pd.Data
                             df.loc[idx, 'total_result'] = 'PUSH'
 
                 # Calculate ML result if best_pick_type is ML (optional fallback)
-                ml_pick_team = str(row.get('best_pick', row.get('Pick', row.get('best_pick', row.get('Pick Taken', row.get('Best Pick', '')))))).replace(' ML', '').lower()
+                ml_pick_team = _first_text(
+                    row, 'best_pick', 'Pick', 'Pick Taken', 'Best Pick'
+                ).replace(' ML', '').lower()
                 norm_ml_raw = robust_normalize_team(ml_pick_team).lower()
                 norm_ml_clean = clean_team_name(ml_pick_team)
 
@@ -293,7 +317,9 @@ def attach_results(master_df: pd.DataFrame, results_df: pd.DataFrame) -> pd.Data
                     df.loc[idx, 'ml_result'] = 'PUSH'
 
                 # Assign explicitly based on best_pick string
-                best_pick_str = str(row.get('Pick Taken', row.get('Best Pick', row.get('Pick', '')))).lower()
+                best_pick_str = _first_text(
+                    row, 'Pick Taken', 'Best Pick', 'best_pick', 'Pick'
+                ).lower()
                 if best_pick_str:
                     if 'over' in best_pick_str or 'under' in best_pick_str:
                         df.loc[idx, 'Pick_Outcome'] = df.loc[idx, 'total_result']

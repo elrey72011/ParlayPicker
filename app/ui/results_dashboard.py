@@ -2,8 +2,8 @@ from datetime import date, timedelta
 
 import pandas as pd
 import streamlit as st
-from app_core.results_fetcher import fetch_yesterdays_results
 from app_core.results_ingestion import attach_results
+from app_core.performance_pipeline import grade_picks_with_live_results
 from app_core.candidate_recap import (
     grade_candidate_audit,
     merge_candidate_ledgers,
@@ -446,6 +446,14 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
         league_str = ", ".join(sorted(list(restricted_leagues)))
         st.warning(f"Results for [{league_str}] are currently unavailable due to API plan restrictions. These picks must be verified manually.")
 
+    unsupported_leagues = st.session_state.get("unsupported_result_leagues", set())
+    if unsupported_leagues:
+        league_str = ", ".join(sorted(str(league) for league in unsupported_leagues))
+        st.error(
+            f"No automatic results provider is configured for: {league_str}. "
+            "Those rows remain ungraded and are excluded from the win rate."
+        )
+
     # Re-evaluate the source data based on the explicit uploader first
     new_upload_detected = False
     if uploaded_picks_file is not None:
@@ -519,16 +527,26 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
 
             if allowed_leagues:
                 try:
-                    fetched_results_df = fetch_yesterdays_results(allowed_leagues)
-                    if not fetched_results_df.empty:
-                        current_df = attach_results(current_df, fetched_results_df)
-                        st.session_state["perf_edited_picks"] = current_df
-                        st.success("Successfully fetched and applied API results.")
+                    current_df = grade_picks_with_live_results(current_df)
+                    st.session_state["perf_edited_picks"] = current_df
+                    settled = int(
+                        current_df.get("Pick_Outcome", pd.Series("N/A", index=current_df.index))
+                        .fillna("N/A")
+                        .astype(str)
+                        .str.upper()
+                        .isin(["WIN", "LOSS", "PUSH"])
+                        .sum()
+                    )
+                    if settled:
+                        st.success(
+                            f"Fetched and applied API results: {settled}/{len(current_df)} rows settled."
+                        )
                         has_results = True
-                    else:
-                        st.warning("No results found from API for the given leagues.")
-                        current_df = attach_results(current_df, pd.DataFrame()) # Add empty columns
-                        st.session_state["perf_edited_picks"] = current_df
+                    if settled < len(current_df):
+                        st.warning(
+                            f"{len(current_df) - settled} row(s) remain ungraded after retry. "
+                            "Use Refresh / Backfill after late games become final."
+                        )
                 except Exception as e:
                     st.error(f"Error fetching results from API: {e}")
             else:
@@ -547,6 +565,31 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
               display_df[col] = pd.NA
 
     display_df['Outcome'] = display_df.apply(determine_display_outcome, axis=1)
+
+    unresolved_mask = ~display_df["Outcome"].fillna("N/A").astype(str).str.upper().isin(
+        ["WIN", "LOSS", "PUSH"]
+    )
+    if unresolved_mask.any():
+        unresolved_league_col = next(
+            (column for column in ("league", "League") if column in display_df.columns),
+            None,
+        )
+        unresolved_leagues = (
+            sorted(
+                display_df.loc[unresolved_mask, unresolved_league_col]
+                .dropna()
+                .astype(str)
+                .unique()
+                .tolist()
+            )
+            if unresolved_league_col
+            else []
+        )
+        league_detail = f" ({', '.join(unresolved_leagues)})" if unresolved_leagues else ""
+        st.warning(
+            f"Grading is incomplete: {int(unresolved_mask.sum())} row(s){league_detail} are N/A. "
+            "They are excluded from every win-rate denominator below."
+        )
 
     def calculate_metrics(df):
         wins = len(df[df['Outcome'] == 'WIN'])
@@ -646,7 +689,11 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
     # scripts/grade_slate.py warns when a recap's run id doesn't match the
     # export being graded (11 Jun: a recap built from a stale morning card
     # graded lines the final card never played).
-    cols_to_show = ['league', 'home_team', 'away_team', 'best_pick', 'actual_home_score', 'actual_away_score', 'Outcome', 'Pick_Status', 'export_run_id']
+    cols_to_show = [
+        'league', 'home_team', 'away_team', 'best_pick',
+        'actual_home_score', 'actual_away_score', 'Outcome',
+        'grading_status', 'grading_issue', 'Pick_Status', 'export_run_id',
+    ]
     # Filter to only existing columns
     cols_to_show = [c for c in cols_to_show if c in display_df.columns]
 
@@ -656,6 +703,8 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
          'home_team': 'Home',
          'away_team': 'Away',
          'best_pick': 'Pick Taken',
+         'grading_status': 'Grading Status',
+         'grading_issue': 'Grading Issue',
          'Pick_Status': 'Status'
     }
 
@@ -665,7 +714,10 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
     edited_df = st.data_editor(
         table_df,
         width="stretch",
-        disabled=["League", "Home", "Away", "Pick Taken", "Status", "export_run_id"],
+        disabled=[
+            "League", "Home", "Away", "Pick Taken", "Grading Status",
+            "Grading Issue", "Status", "export_run_id",
+        ],
         column_config={
             "actual_home_score": st.column_config.NumberColumn(
                 "Home Score",
