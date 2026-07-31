@@ -134,7 +134,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-07-31a-wnba-grading-export-schema"
+PIPELINE_BUILD = "2026-07-31b-safe-standard-spread-recovery"
 
 # Best Available must compare standard, reasonably priced markets. A P2P exchange can
 # expose alternate run lines (for example +5.5 at -1150) beside the standard MLB +1.5.
@@ -6703,6 +6703,77 @@ def _consistent_standard_spread_pair(row, side: str):
     return pd.NA, pd.NA, pd.NA, None
 
 
+def _oriented_standard_spread_pair(row, side: str, favorite_side: str):
+    """Recover a corroborated standard-book pair using an independent favorite.
+
+    Odds feeds occasionally bind the two signed run-line outcomes to the wrong team
+    labels even though the point/price pairs themselves are intact. When Novig's
+    complete two-way moneyline independently identifies the favorite, map the
+    negative standard-book outcome to that favorite and the positive outcome to the
+    underdog. Require at least two standard books to publish complete mirrored pairs
+    at the same consensus magnitude, and never detach a price from its signed point.
+    """
+    if side not in {"home", "away"} or favorite_side not in {"home", "away"}:
+        return pd.NA, pd.NA, pd.NA, None, False
+
+    consensus_magnitude = _consensus_standard_spread_magnitude(row)
+    if pd.isna(consensus_magnitude):
+        return pd.NA, pd.NA, pd.NA, None, False
+
+    complete_pairs = []
+    for book in ("fanduel", "draftkings", "betmgm"):
+        home_point = pd.to_numeric(row.get(f"{book}_home_point"), errors="coerce")
+        away_point = pd.to_numeric(row.get(f"{book}_away_point"), errors="coerce")
+        home_price = pd.to_numeric(row.get(f"{book}_home_price"), errors="coerce")
+        away_price = pd.to_numeric(row.get(f"{book}_away_price"), errors="coerce")
+        if any(
+            pd.isna(value)
+            for value in (home_point, away_point, home_price, away_price)
+        ):
+            continue
+        if abs(float(home_point) + float(away_point)) > 1e-9:
+            continue
+        if abs(abs(float(home_point)) - float(consensus_magnitude)) > 1e-9:
+            continue
+        if (
+            float(home_price) == 0.0
+            or float(away_price) == 0.0
+            or float(home_price) < float(BEST_AVAILABLE_SPREAD_MIN_AMERICAN_ODDS)
+            or float(away_price) < float(BEST_AVAILABLE_SPREAD_MIN_AMERICAN_ODDS)
+            or abs(float(home_price)) > 10000.0
+            or abs(float(away_price)) > 10000.0
+        ):
+            continue
+        complete_pairs.append(
+            (
+                book,
+                float(home_point),
+                float(home_price),
+                float(away_point),
+                float(away_price),
+            )
+        )
+
+    if len(complete_pairs) < 2:
+        return pd.NA, pd.NA, pd.NA, None, False
+
+    desired_sign = -1.0 if side == favorite_side else 1.0
+    for book, home_point, home_price, away_point, away_price in complete_pairs:
+        if home_point * desired_sign > 0.0:
+            selected_point, selected_price = home_point, home_price
+            opposing_price = away_price
+            rebound = side != "home"
+        elif away_point * desired_sign > 0.0:
+            selected_point, selected_price = away_point, away_price
+            opposing_price = home_price
+            rebound = side != "away"
+        else:
+            continue
+        return selected_point, selected_price, opposing_price, book, rebound
+
+    return pd.NA, pd.NA, pd.NA, None, False
+
+
 def _derive_spread_away_line(row):
     """Return the away team's run line, robust to the live feed's sign quirks.
 
@@ -7077,22 +7148,77 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
             spread_line_source = "live_odds"
             if market_type.startswith("spread"):
                 side = "home" if market_type == "spread_home" else "away"
-                # Preserve the no-upload path: without an uploaded orientation
-                # hint, _consistent_spread_book still selects the first book whose
-                # spread agrees with its own moneyline. The Novig-first binding rule
-                # only resolves authority inside the matched-upload repair path.
+                # A complete Novig moneyline is an independent orientation signal
+                # even when TheOver uploaded totals only. Discarding it in that case
+                # erased otherwise valid standard-book run-line candidates.
                 spread_favorite_side = (
                     novig_moneyline_favorite_side or orientation_favorite_side
-                    if orientation_favorite_side
-                    else ""
                 )
                 spread_orientation_basis = (
                     "novig_moneyline_favorite"
-                    if orientation_favorite_side and novig_moneyline_favorite_side
+                    if novig_moneyline_favorite_side
                     else "theover_moneyline_favorite"
                 )
-                if league_str == "MLB" and orientation_favorite_side and spread_favorite_side:
-                    if _novig_spread_is_consensus_outlier(row):
+                if league_str == "MLB" and spread_favorite_side:
+                    novig_outlier = _novig_spread_is_consensus_outlier(row)
+                    novig_home_point = pd.to_numeric(
+                        row.get("novig_home_point"), errors="coerce"
+                    )
+                    novig_orientation_is_consistent = (
+                        pd.notna(novig_home_point)
+                        and (
+                            (float(novig_home_point) < 0.0)
+                            == (spread_favorite_side == "home")
+                        )
+                    )
+
+                    standard_point = standard_price = standard_opposing_price = pd.NA
+                    standard_book = None
+                    standard_rebound = False
+                    if novig_outlier or not novig_orientation_is_consistent:
+                        (
+                            standard_point,
+                            standard_price,
+                            standard_opposing_price,
+                            standard_book,
+                        ) = _consistent_standard_spread_pair(row, side)
+                        if pd.isna(standard_point):
+                            (
+                                standard_point,
+                                standard_price,
+                                standard_opposing_price,
+                                standard_book,
+                                standard_rebound,
+                            ) = _oriented_standard_spread_pair(
+                                row, side, spread_favorite_side
+                            )
+
+                    standard_pair_is_usable = (
+                        pd.notna(standard_point)
+                        and pd.notna(standard_price)
+                        and pd.notna(standard_opposing_price)
+                    )
+                    if standard_pair_is_usable:
+                        point_val = float(standard_point)
+                        market_dict["odds_american"] = float(standard_price)
+                        market_dict["opposing_odds_american"] = float(
+                            standard_opposing_price
+                        )
+                        market_dict["odds_source"] = "odds_api"
+                        market_dict["opposing_odds_source"] = standard_book
+                        spread_line_source = (
+                            f"{standard_book}_standard_spread_consensus"
+                        )
+                        rebound_suffix = (
+                            "|standard_spread_sign_rebound"
+                            if standard_rebound
+                            else ""
+                        )
+                        market_dict["orientation_source"] = (
+                            f"{orientation_source}|{spread_orientation_basis}"
+                            f"|standard_spread_consensus{rebound_suffix}"
+                        )
+                    elif novig_outlier:
                         point_val = pd.NA
                         market_dict["odds_american"] = pd.NA
                         market_dict["opposing_odds_american"] = pd.NA
@@ -7103,145 +7229,86 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
                             f"{orientation_source}|novig_spread_consensus_outlier"
                         )
                     else:
-                        novig_home_point = pd.to_numeric(
-                            row.get("novig_home_point"), errors="coerce"
-                        )
-                        novig_orientation_is_consistent = (
-                            pd.notna(novig_home_point)
-                            and (
-                                (float(novig_home_point) < 0.0)
-                                == (spread_favorite_side == "home")
+                        oriented_point, oriented_price, remapped = (
+                            _novig_spread_quote_for_favorite(
+                                row, side, spread_favorite_side
                             )
                         )
-
-                        # If Novig's team labels conflict with Novig's own moneyline,
-                        # prefer a complete point/price pair from a standard book that
-                        # agrees with its own moneyline. Reorienting a contradictory
-                        # Novig point by sign alone can attach the opposing price and
-                        # create a fake high-EV candidate.
-                        standard_point = standard_price = standard_opposing_price = pd.NA
-                        standard_book = None
-                        if not novig_orientation_is_consistent:
+                        if pd.notna(oriented_point) and pd.notna(oriented_price):
+                            point_val = float(oriented_point)
+                            market_dict["odds_american"] = float(oriented_price)
+                            market_dict["odds_source"] = "novig"
+                            opposing_side = (
+                                side
+                                if remapped
+                                else ("away" if side == "home" else "home")
+                            )
+                            paired_opposing_price = pd.to_numeric(
+                                row.get(f"novig_{opposing_side}_price"),
+                                errors="coerce",
+                            )
+                            market_dict["opposing_odds_american"] = (
+                                float(paired_opposing_price)
+                                if pd.notna(paired_opposing_price)
+                                else pd.NA
+                            )
+                            market_dict["opposing_odds_source"] = (
+                                "novig"
+                                if pd.notna(paired_opposing_price)
+                                else "missing"
+                            )
+                            if spread_orientation_basis == "novig_moneyline_favorite":
+                                spread_line_source = (
+                                    "novig_moneyline_reoriented"
+                                    if remapped
+                                    else "novig_moneyline_verified"
+                                )
+                            else:
+                                spread_line_source = (
+                                    "novig_theover_moneyline_reoriented"
+                                    if remapped
+                                    else "novig_theover_moneyline_verified"
+                                )
+                            market_dict["orientation_source"] = (
+                                f"{orientation_source}|{spread_orientation_basis}"
+                            )
+                        else:
                             (
                                 standard_point,
                                 standard_price,
                                 standard_opposing_price,
                                 standard_book,
-                            ) = _consistent_standard_spread_pair(row, side)
-
-                        if (
-                            pd.notna(standard_point)
-                            and pd.notna(standard_price)
-                            and pd.notna(standard_opposing_price)
-                        ):
-                            point_val = float(standard_point)
-                            market_dict["odds_american"] = float(standard_price)
-                            market_dict["opposing_odds_american"] = float(
-                                standard_opposing_price
+                                standard_rebound,
+                            ) = _oriented_standard_spread_pair(
+                                row, side, spread_favorite_side
                             )
-                            market_dict["odds_source"] = "odds_api"
-                            market_dict["opposing_odds_source"] = standard_book
-                            spread_line_source = (
-                                f"{standard_book}_standard_spread_consensus"
-                            )
-                            market_dict["orientation_source"] = (
-                                f"{orientation_source}|{spread_orientation_basis}"
-                                "|standard_spread_consensus"
-                            )
-                        else:
-                            oriented_point, oriented_price, remapped = (
-                                _novig_spread_quote_for_favorite(
-                                    row, side, spread_favorite_side
+                            if pd.notna(standard_point):
+                                point_val = float(standard_point)
+                                market_dict["odds_american"] = float(standard_price)
+                                market_dict["opposing_odds_american"] = float(
+                                    standard_opposing_price
                                 )
-                            )
-                            if pd.notna(oriented_point) and pd.notna(oriented_price):
-                                point_val = float(oriented_point)
-                                market_dict["odds_american"] = float(oriented_price)
-                                market_dict["odds_source"] = "novig"
-                                opposing_side = (
-                                    side
-                                    if remapped
-                                    else ("away" if side == "home" else "home")
+                                market_dict["odds_source"] = "odds_api"
+                                market_dict["opposing_odds_source"] = standard_book
+                                spread_line_source = (
+                                    f"{standard_book}_standard_spread_consensus"
                                 )
-                                paired_opposing_price = pd.to_numeric(
-                                    row.get(f"novig_{opposing_side}_price"),
-                                    errors="coerce",
+                                rebound_suffix = (
+                                    "|standard_spread_sign_rebound"
+                                    if standard_rebound
+                                    else ""
                                 )
-                                market_dict["opposing_odds_american"] = (
-                                    float(paired_opposing_price)
-                                    if pd.notna(paired_opposing_price)
-                                    else pd.NA
-                                )
-                                market_dict["opposing_odds_source"] = (
-                                    "novig"
-                                    if pd.notna(paired_opposing_price)
-                                    else "missing"
-                                )
-                                if spread_orientation_basis == "novig_moneyline_favorite":
-                                    spread_line_source = (
-                                        "novig_moneyline_reoriented"
-                                        if remapped
-                                        else "novig_moneyline_verified"
-                                    )
-                                else:
-                                    spread_line_source = (
-                                        "novig_theover_moneyline_reoriented"
-                                        if remapped
-                                        else "novig_theover_moneyline_verified"
-                                    )
                                 market_dict["orientation_source"] = (
                                     f"{orientation_source}|{spread_orientation_basis}"
+                                    f"|standard_spread_consensus{rebound_suffix}"
                                 )
                             else:
-                                # A partial Novig market can expose both signed points
-                                # while omitting the price for one outcome. Retain the
-                                # side only when standard books agree on the signed line
-                                # and attach a real price; never fabricate -110.
-                                consensus_point, consensus_price, consensus_book = (
-                                    _standard_spread_consensus_quote(row, side)
-                                )
-                                requested_is_favorite = side == spread_favorite_side
-                                desired_sign = -1.0 if requested_is_favorite else 1.0
-                                consensus_is_oriented = (
-                                    pd.notna(consensus_point)
-                                    and pd.notna(consensus_price)
-                                    and float(consensus_point) * desired_sign > 0.0
-                                )
-                                if consensus_is_oriented:
-                                    point_val = float(consensus_point)
-                                    market_dict["odds_american"] = float(consensus_price)
-                                    paired_opposing_price = pd.to_numeric(
-                                        row.get(
-                                            f"{consensus_book}_"
-                                            f"{'away' if side == 'home' else 'home'}_price"
-                                        ),
-                                        errors="coerce",
-                                    )
-                                    market_dict["opposing_odds_american"] = (
-                                        float(paired_opposing_price)
-                                        if pd.notna(paired_opposing_price)
-                                        else pd.NA
-                                    )
-                                    market_dict["odds_source"] = "odds_api"
-                                    market_dict["opposing_odds_source"] = (
-                                        consensus_book
-                                        if pd.notna(paired_opposing_price)
-                                        else "missing"
-                                    )
-                                    spread_line_source = (
-                                        f"{consensus_book}_standard_spread_consensus"
-                                    )
-                                    market_dict["orientation_source"] = (
-                                        f"{orientation_source}|{spread_orientation_basis}"
-                                        "|standard_spread_consensus"
-                                    )
-                                else:
-                                    point_val = pd.NA
-                                    market_dict["odds_american"] = pd.NA
-                                    market_dict["opposing_odds_american"] = pd.NA
-                                    market_dict["odds_source"] = "rejected_live_orientation"
-                                    market_dict["opposing_odds_source"] = "rejected"
-                                    spread_line_source = "rejected_live_orientation"
+                                point_val = pd.NA
+                                market_dict["odds_american"] = pd.NA
+                                market_dict["opposing_odds_american"] = pd.NA
+                                market_dict["odds_source"] = "rejected_live_orientation"
+                                market_dict["opposing_odds_source"] = "rejected"
+                                spread_line_source = "rejected_live_orientation"
                 else:
                     # Preserve the legacy behavior for non-MLB leagues. The outlier
                     # incident being guarded here is specific to MLB alternate run
@@ -7388,6 +7455,17 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
                             fallback_opposing_price,
                             fallback_book,
                         ) = _consistent_standard_spread_pair(row, side)
+                        fallback_rebound = False
+                        if pd.isna(fallback_point) and spread_favorite_side:
+                            (
+                                fallback_point,
+                                fallback_price,
+                                fallback_opposing_price,
+                                fallback_book,
+                                fallback_rebound,
+                            ) = _oriented_standard_spread_pair(
+                                row, side, spread_favorite_side
+                            )
                         fallback_pair_is_usable = (
                             pd.notna(fallback_point)
                             and pd.notna(fallback_price)
@@ -7415,6 +7493,11 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
                             market_dict["orientation_source"] = (
                                 f"{market_dict.get('orientation_source', '')}"
                                 "|standard_spread_price_pair"
+                                + (
+                                    "|standard_spread_sign_rebound"
+                                    if fallback_rebound
+                                    else ""
+                                )
                             ).strip("|")
                         else:
                             point_val = pd.NA

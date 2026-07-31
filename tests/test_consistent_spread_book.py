@@ -19,6 +19,7 @@ from core.streamlit_pipeline import (
     _filter_preselection_line_integrity,
     _novig_spread_is_consensus_outlier,
     _novig_spread_quote_for_favorite,
+    _oriented_standard_spread_pair,
     _trusted_live_line_source_mask,
 )
 
@@ -432,7 +433,7 @@ def test_reversed_novig_price_pair_uses_internally_consistent_standard_book():
     ).all()
     assert spreads["opposing_odds_source"].eq("fanduel").all()
 
-def test_rejects_washington_plus_5_5_alt_line_against_standard_consensus():
+def test_replaces_washington_plus_5_5_alt_line_with_standard_consensus():
     # 29 Jul production regression: Novig exposed the alternate WAS +5.5 at
     # -1150 while every standard book carried the normal MLB run line at 1.5.
     # The alt outcome is real, but it is not a comparable Best Available spread.
@@ -491,12 +492,102 @@ def test_rejects_washington_plus_5_5_alt_line_against_standard_consensus():
     spreads = out[out["market_type"].isin(["spread_home", "spread_away"])]
 
     assert len(spreads) == 2
-    assert spreads["spread_line"].isna().all()
-    assert spreads["odds_american"].isna().all()
-    assert spreads["line_source"].eq("rejected_live_spread_outlier").all()
-    assert spreads["odds_source"].eq("rejected_live_spread_outlier").all()
+    spreads = spreads.set_index("market_type")
+    assert float(spreads.loc["spread_home", "spread_line"]) == 1.5
+    assert float(spreads.loc["spread_home", "odds_american"]) == -165.0
+    assert float(spreads.loc["spread_away", "spread_line"]) == -1.5
+    assert float(spreads.loc["spread_away", "odds_american"]) == 145.0
+    assert spreads["line_source"].eq(
+        "fanduel_standard_spread_consensus"
+    ).all()
+    assert spreads["orientation_source"].str.contains(
+        "novig_moneyline_favorite.*standard_spread_consensus",
+        regex=True,
+    ).all()
+
+
+def test_totals_only_upload_recovers_reversed_standard_spread_labels_safely():
+    # 31 Jul production regression: TheOver uploaded totals only, Novig exposed a
+    # pathological +/-5.5 alternate line, and standard books bound the +/-1.5
+    # outcomes to team labels that conflicted with their own/Novig moneylines.
+    # Keep each signed point attached to its real price, then use Novig's complete
+    # moneyline to assign the negative outcome to the independently known favorite.
+    live_row = {
+        "league": "MLB",
+        "home_team": "Atlanta",
+        "away_team": "Washington",
+        "game_date": "2026-07-31",
+        "matchup_id": "wsh-atl",
+        "commence_time_raw": "2026-07-31T23:15:00Z",
+        "novig_home_point": 5.5,
+        "novig_home_price": -99900,
+        "novig_away_point": -5.5,
+        "novig_away_price": 1000,
+        "novig_h2h_home_price": -116,
+        "novig_h2h_away_price": 106,
+        "novig_over_point": 8.5,
+        "novig_over_price": -110,
+        "novig_under_point": 8.5,
+        "novig_under_price": -110,
+        "fanduel_home_point": 1.5,
+        "fanduel_home_price": -196,
+        "fanduel_away_point": -1.5,
+        "fanduel_away_price": 162,
+        "fanduel_h2h_home_price": -116,
+        "fanduel_h2h_away_price": 106,
+        "draftkings_home_point": 1.5,
+        "draftkings_home_price": -190,
+        "draftkings_away_point": -1.5,
+        "draftkings_away_price": 156,
+        "draftkings_h2h_home_price": -118,
+        "draftkings_h2h_away_price": -102,
+    }
+    totals_only = pd.DataFrame(
+        [
+            {
+                "league": "MLB",
+                "home_team": "Atlanta",
+                "away_team": "Washington",
+                "game_date": "2026-07-31",
+                "matchup_id": "wsh-atl",
+                "market_type": market_type,
+                "total_line": 8.5,
+            }
+            for market_type in ("total_over", "total_under")
+        ]
+    )
+
+    home_pair = _oriented_standard_spread_pair(live_row, "home", "home")
+    away_pair = _oriented_standard_spread_pair(live_row, "away", "home")
+    assert home_pair == (-1.5, 162.0, -196.0, "fanduel", True)
+    assert away_pair == (1.5, -196.0, 162.0, "fanduel", True)
+
+    expanded, _ = _expand_live_odds_to_bet_rows(
+        pd.DataFrame([live_row]), totals_only
+    )
+    retained = _filter_preselection_line_integrity(expanded)
+    assert set(retained["market_type"]) == {
+        "spread_home",
+        "spread_away",
+        "total_over",
+        "total_under",
+    }
+
+    spreads = retained[
+        retained["market_type"].isin(["spread_home", "spread_away"])
+    ].set_index("market_type")
+    assert spreads["candidate_source"].eq("live_market_only").all()
+    assert float(spreads.loc["spread_home", "spread_line"]) == -1.5
+    assert float(spreads.loc["spread_home", "odds_american"]) == 162.0
+    assert float(spreads.loc["spread_home", "opposing_odds_american"]) == -196.0
+    assert float(spreads.loc["spread_away", "spread_line"]) == 1.5
+    assert float(spreads.loc["spread_away", "odds_american"]) == -196.0
+    assert float(spreads.loc["spread_away", "opposing_odds_american"]) == 162.0
+    assert spreads["line_source"].eq(
+        "fanduel_standard_spread_consensus"
+    ).all()
     assert spreads["orientation_source"].str.endswith(
-        "|novig_spread_consensus_outlier"
+        "|standard_spread_sign_rebound"
     ).all()
 
 
