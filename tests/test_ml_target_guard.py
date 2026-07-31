@@ -30,6 +30,22 @@ def test_home_win_model_is_retired_from_totals_and_spreads_only():
     assert diagnostics["ml_spreads_retired_rows"] == 1
 
 
+def test_target_specific_market_probability_survives_home_win_guard():
+    df = pd.DataFrame(
+        {
+            "market_type": ["total_over", "spread_home"],
+            "ml_probability": [0.57, 0.54],
+            "ml_target": ["total_over", "spread_cover"],
+            "model_status": ["Market Score Model", "Market Score Model"],
+        }
+    )
+
+    out = _retire_game_winner_model_from_unsupported_markets(df, {})
+
+    assert out["ml_probability"].tolist() == pytest.approx([0.57, 0.54])
+    assert out["model_status"].eq("Market Score Model").all()
+
+
 def test_missing_ml_does_not_double_count_theover_in_blend(monkeypatch):
     captured = {}
 
@@ -211,5 +227,50 @@ def test_run_pipeline_all_totals_continues_when_ml_is_enabled(monkeypatch):
     assert not state["analysis_df"].empty
     assert captured["require_ml"] is False
     assert state["diagnostics"]["ml_eligible_rows"] == 0
-    assert any("no moneyline/H2H rows" in warning for warning in warnings)
+    assert any("no target-specific spread/total model probabilities" in warning for warning in warnings)
+
+
+def test_market_specific_targets_are_ml_eligible_without_moneylines():
+    frame = pd.DataFrame(
+        {
+            "market_type": ["spread_home", "total_over", "total_under", "spread_away"],
+            "ml_target": ["spread_cover", "total_over", "total_under", "home_win"],
+        }
+    )
+
+    mask = app._ml_eligible_market_mask(frame)
+
+    assert mask.tolist() == [True, True, True, False]
+
+
+def test_ml_sync_restores_market_specific_probability_with_target_metadata():
+    analysis = pd.DataFrame(
+        {
+            "league": ["MLB"],
+            "home_team": ["Boston Red Sox"],
+            "away_team": ["New York Yankees"],
+            "game_date": ["2026-07-25"],
+            "market_type": ["total_over"],
+            "ml_probability": [pd.NA],
+            "ml_target": [pd.NA],
+        }
+    )
+    best = pd.DataFrame(
+        {
+            "league": ["MLB"],
+            "home_team": ["Boston Red Sox"],
+            "away_team": ["New York Yankees"],
+            "game_date": ["2026-07-25"],
+            "market_type": ["total_over"],
+            "ml_probability": [0.61],
+            "ml_probability_source": ["score-distribution-v1:mlb"],
+            "ml_target": ["total_over"],
+        }
+    )
+
+    out = app._sync_ml_probabilities(analysis, best)
+
+    assert out.loc[0, "ml_probability"] == pytest.approx(0.61)
+    assert out.loc[0, "ml_target"] == "total_over"
+    assert out.loc[0, "ml_probability_source"] == "score-distribution-v1:mlb"
 

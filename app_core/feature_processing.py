@@ -112,6 +112,7 @@ LEAGUE_AVERAGES = {
     "NCAAB": {"ppg": 72.0, "oppg": 72.0, "win_pct": 0.5, "last5_win_pct": 0.5},
     "NCAAF": {"ppg": 28.0, "oppg": 28.0, "win_pct": 0.5, "last5_win_pct": 0.5},
     "MLB": {"ppg": 4.5, "oppg": 4.5, "win_pct": 0.5, "last5_win_pct": 0.5},
+    "WNBA": {"ppg": 82.0, "oppg": 82.0, "win_pct": 0.5, "last5_win_pct": 0.5},
     "default": {"ppg": 50.0, "oppg": 50.0, "win_pct": 0.5, "last5_win_pct": 0.5}
 }
 
@@ -258,6 +259,23 @@ LEAGUE_TEAM_NAME_MAPPING: Dict[str, Dict[str, str]] = {
         "seattle": "SEATTLE MARINERS",
         "atlanta": "ATLANTA BRAVES",
     },
+    "WNBA": {
+        "atlanta": "ATLANTA DREAM",
+        "chicago": "CHICAGO SKY",
+        "connecticut": "CONNECTICUT SUN",
+        "dallas": "DALLAS WINGS",
+        "golden state": "GOLDEN STATE VALKYRIES",
+        "indiana": "INDIANA FEVER",
+        "las vegas": "LAS VEGAS ACES",
+        "los angeles": "LOS ANGELES SPARKS",
+        "minnesota": "MINNESOTA LYNX",
+        "new york": "NEW YORK LIBERTY",
+        "phoenix": "PHOENIX MERCURY",
+        "portland": "PORTLAND FIRE",
+        "seattle": "SEATTLE STORM",
+        "toronto": "TORONTO TEMPO",
+        "washington": "WASHINGTON MYSTICS",
+    },
     "NCAAB": {},
     "NCAAF": {},
 }
@@ -301,6 +319,23 @@ LEAGUE_CITY_ONLY_ALIASES: Dict[str, Dict[str, str]] = {
         "pittsburgh": "PITTSBURGH PIRATES",
         "seattle": "SEATTLE MARINERS",
         "atlanta": "ATLANTA BRAVES",
+    },
+    "WNBA": {
+        "atlanta": "ATLANTA DREAM",
+        "chicago": "CHICAGO SKY",
+        "connecticut": "CONNECTICUT SUN",
+        "dallas": "DALLAS WINGS",
+        "golden state": "GOLDEN STATE VALKYRIES",
+        "indiana": "INDIANA FEVER",
+        "las vegas": "LAS VEGAS ACES",
+        "los angeles": "LOS ANGELES SPARKS",
+        "minnesota": "MINNESOTA LYNX",
+        "new york": "NEW YORK LIBERTY",
+        "phoenix": "PHOENIX MERCURY",
+        "portland": "PORTLAND FIRE",
+        "seattle": "SEATTLE STORM",
+        "toronto": "TORONTO TEMPO",
+        "washington": "WASHINGTON MYSTICS",
     },
     "NFL": {},
     "NCAAB": {},
@@ -2391,6 +2426,83 @@ def fetch_from_espn_mlb(season_year: int) -> List[Dict[str, Any]]:
         logger.error(f"ESPN MLB fetch failed: {e}")
         return []
 
+
+@st.cache_data(ttl=21600)
+def fetch_from_espn_wnba(season_year: int) -> List[Dict[str, Any]]:
+    """Fetch current WNBA scoring and win-rate features from ESPN standings."""
+    try:
+        logger.info(f"Fetching WNBA stats from ESPN for season: {season_year}")
+        url = "https://site.api.espn.com/apis/v2/sports/basketball/wnba/standings"
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+
+        stats: List[Dict[str, Any]] = []
+        for entry in find_entries(data):
+            team_info = entry.get("team", {})
+            team_name = team_info.get("displayName")
+            if not team_name:
+                continue
+            team_norm = normalize_team_for_stats(team_name, "WNBA")
+
+            wins = losses = games_played = points_for = points_against = 0.0
+            points_avg = points_allowed_avg = 0.0
+            streak = 0.0
+            for stat in entry.get("stats", []):
+                name = str(stat.get("name", "")).lower()
+                abbreviation = str(stat.get("abbreviation", "")).lower()
+                try:
+                    value = float(stat.get("value", 0))
+                except (TypeError, ValueError):
+                    continue
+                if "wins" in name or abbreviation == "w":
+                    wins = value
+                elif "losses" in name or abbreviation == "l":
+                    losses = value
+                elif "gamesplayed" in name or abbreviation == "gp":
+                    games_played = value
+                elif name in {"avgpointsfor", "pointspergame", "avg", "ppg", "apf"} or abbreviation in {"ppg", "apf"}:
+                    points_avg = value
+                elif name in {"avgpointsagainst", "oppointspergame", "apa"} or abbreviation == "apa":
+                    points_allowed_avg = value
+                elif any(token in name for token in ("pointsagainst", "pointsallowed")) or abbreviation == "pa":
+                    points_against = value
+                elif any(token in name for token in ("pointsfor", "totalpointsfor")) or abbreviation == "pf":
+                    points_for = value
+                elif "streak" in name:
+                    streak = value
+
+            games = games_played if games_played > 0 else wins + losses
+            ppg = points_avg if points_avg > 0 else (points_for / games if games > 0 else 0.0)
+            oppg = points_allowed_avg if points_allowed_avg > 0 else (points_against / games if games > 0 else 0.0)
+            win_pct = wins / games if games > 0 else 0.5
+            if ppg <= 0 or oppg <= 0:
+                continue
+
+            stats.append(
+                {
+                    "team_norm": team_norm,
+                    "stats_team_key": team_norm.strip().lower(),
+                    "team_name_source": team_name,
+                    "league_key": "WNBA",
+                    "win_pct": win_pct,
+                    "home_win_pct": win_pct,
+                    "away_win_pct": win_pct,
+                    "points_per_game": ppg,
+                    "points_allowed_per_game": oppg,
+                    "turnovers": 0.0,
+                    "streak": streak,
+                    "last5_win_pct": win_pct,
+                    "source": "ESPN",
+                }
+            )
+
+        logger.info(f"Successfully fetched WNBA stats for {len(stats)} teams.")
+        return stats
+    except Exception as e:
+        logger.error(f"ESPN WNBA fetch failed: {e}")
+        return []
+
 @st.cache_data(ttl=21600)
 def fetch_ncaab_stats(season_year: int) -> List[Dict[str, Any]]:
     """
@@ -2438,6 +2550,7 @@ def fetch_team_stats(api_clients: Dict[str, Any], season_year: Optional[int] = N
     all_stats.extend(fetch_nhl_stats(season_year))
     all_stats.extend(fetch_ncaab_stats(season_year))
     all_stats.extend(fetch_from_espn_mlb(season_year))
+    all_stats.extend(fetch_from_espn_wnba(season_year))
 
     # API-Sports fallback logic REMOVED as per instruction to "replace" logic.
     # If the user wants to keep API-Sports as a fallback for other leagues not listed,
