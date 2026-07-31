@@ -40,3 +40,24 @@ def test_prop_grading_export_keeps_research_but_marks_it_do_not_bet():
 
     assert labeled["Export_Scope"].tolist() == ["PRODUCTION BET", "COVERAGE / RESEARCH"]
     assert production_wagers(frame)["player_name"].tolist() == ["Funded Player"]
+
+
+def test_public_export_scope_columns_are_case_insensitively_unique():
+    frame = pd.DataFrame(
+        {
+            "best_pick": ["Over 8.5"],
+            "wager_instruction": [
+                "DO NOT TREAT AS AN APPROVED BET; diagnostic coverage only."
+            ],
+            "Bet_Decision": ["PASS"],
+            "production_eligible": [False],
+            "Play_Stake": [0.0],
+        }
+    )
+
+    labeled = label_wager_export(frame)
+
+    folded = [column.casefold() for column in labeled.columns]
+    assert len(folded) == len(set(folded))
+    assert "wager_instruction" not in labeled.columns
+    assert labeled.loc[0, "Wager_Instruction"] == "DO NOT BET - $0 PASS / RESEARCH"
