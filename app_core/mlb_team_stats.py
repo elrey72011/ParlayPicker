@@ -188,6 +188,9 @@ def enrich_mlb_model_features(
             _set_diff(df, idx, "feature_diff_streak", h["streak"], a["streak"])
             _set_diff(df, idx, "feature_diff_last5", h["last10_pct"], a["last10_pct"])
             df.at[idx, "stats_source"] = "mlb_statsapi"
+            df.at[idx, "stats_resolution_status"] = "resolved"
+            df.at[idx, "stats_fallback_reason"] = ""
+            df.at[idx, "ml_feature_eligible"] = True
             resolved += 1
         return df
     except Exception:

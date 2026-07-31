@@ -134,7 +134,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-07-31b-safe-standard-spread-recovery"
+PIPELINE_BUILD = "2026-07-31c-market-specific-model-probability"
 
 # Best Available must compare standard, reasonably priced markets. A P2P exchange can
 # expose alternate run lines (for example +5.5 at -1150) beside the standard MLB +1.5.
@@ -213,6 +213,12 @@ REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
     # weights from saved exports. Without them the download is a curated subset
     # and the fitting data never reaches the file the user saves.
     "theover_probability",
+    "ml_probability",
+    "ml_probability_source",
+    "ml_target",
+    "ml_projection",
+    "ml_residual_scale",
+    "ml_feature_quality",
     # TheOver WinProbSource tag, surfaced for transparency + as a deploy/version
     # signal: if this column is absent or all-NaN in an export, the running app is
     # not on the build that gates untrusted MLB-total direction sources.
@@ -455,7 +461,7 @@ BEST_PICK_COLUMNS = [
     "best_available_only", "commercial_reason", "wager_approved", "export_role",
     "wager_instruction",
     "decimal_odds", "matchup_id",
-    "odds_american", "odds_source", "market_probability", "ml_probability", "theover_probability", "win_prob_source", "display_probability",
+    "odds_american", "odds_source", "market_probability", "ml_probability", "ml_probability_source", "ml_target", "ml_projection", "ml_residual_scale", "ml_feature_quality", "theover_probability", "win_prob_source", "display_probability",
     "kalshi_probability", "kalshi_match_status", "kalshi_match_reason",
     # Kalshi match instrumentation: the contract line actually used, its distance from
     # the pick line, and the raw P(over) before orientation/decay â€” for diagnosing a
@@ -498,7 +504,7 @@ CANONICAL_BET_COLUMNS = [
     "market_type", "candidate_source", "orientation_source", "upload_match_reason", "spread_line", "total_line",
     "orientation_favorite_side",
     "theover_probability", "win_prob_source", "odds_american", "odds_source", "market_probability",
-    "ml_probability", "display_probability", "calibrated_probability", "expected_value", "edge", "best_pick", "used_stale_features", "matchup_id", "Conviction_Score",
+    "ml_probability", "ml_probability_source", "ml_target", "ml_projection", "ml_residual_scale", "ml_feature_quality", "display_probability", "calibrated_probability", "expected_value", "edge", "best_pick", "used_stale_features", "matchup_id", "Conviction_Score",
     "uploaded_spread_line", "uploaded_total_line", "live_spread_line", "live_total_line", "line_source", "line_delta", "upload_market_match",
     # Carried so a TheOver-feed degradation warning set by _apply_analysis_calculations
     # survives the canonical reindex and reaches the production degraded-run Kelly guard.
@@ -2269,7 +2275,9 @@ def _retire_game_winner_model_from_unsupported_markets(
     total_mask = market_type.str.contains("total", na=False)
     spread_mask = market_type.str.contains("spread", na=False)
     populated_ml = _numeric_series(df, "ml_probability").notna()
-    retire_mask = populated_ml & (total_mask | spread_mask)
+    target = _string_series(df, "ml_target").str.lower().str.strip()
+    home_win_output = target.eq("") | target.eq("home_win")
+    retire_mask = populated_ml & (total_mask | spread_mask) & home_win_output
 
     if diagnostics is not None:
         diagnostics["ml_target_mismatch_rows"] = int(retire_mask.sum())
@@ -2280,6 +2288,9 @@ def _retire_game_winner_model_from_unsupported_markets(
         return df
 
     df.loc[retire_mask, "ml_probability"] = pd.NA
+    for column in ("ml_probability_source", "ml_target", "ml_projection", "ml_residual_scale", "ml_feature_quality"):
+        if column in df.columns:
+            df.loc[retire_mask, column] = pd.NA
     if "model_status" not in df.columns:
         df["model_status"] = "OK"
     df.loc[retire_mask, "model_status"] = "Unsupported Target: home-win model"
@@ -3968,6 +3979,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         "matchup_id", "market_type", "candidate_source", "best_pick",
         "odds_american", "opposing_odds_american", "odds_source",
         "opposing_odds_source", "market_probability", "line_source",
+        "ml_probability", "ml_probability_source", "ml_target", "ml_projection",
+        "ml_residual_scale", "ml_feature_quality", "theover_probability",
         "orientation_source", "raw_book_odds_diag",
         "selection_probability_used", "selection_probability_source",
         "selection_probability_pair_normalized",
@@ -8158,6 +8171,7 @@ def run_analysis_pipeline(
         "ml_flatness_root_cause_hint": "not_computed",
     }
     ml_prediction_diag: dict[str, Any] = {}
+    market_model_predictions: pd.DataFrame | None = None
     if use_ml and ML_AVAILABLE and PredictionEngine is not None:
         logger.warning("ðŸ” ML DEBUG: use_ml=True, attempting predictions...")
         logger.info(f"PIPELINE TRACE: Sending {len(merged)} rows into ML prediction logic.")
@@ -8292,6 +8306,18 @@ def run_analysis_pipeline(
                     remaining_dupes = enriched_for_prediction.columns[enriched_for_prediction.columns.duplicated()].unique()
                     raise RuntimeError(f"Duplicate columns STILL exist in enriched_for_prediction after collapse: {list(remaining_dupes)}")
 
+                # Build target-specific P(cover)/P(over)/P(under) from resolved
+                # team scoring stats.  This runs beside the home-win XGBoost
+                # model and is applied only after the target guard retires the
+                # incompatible home-win output from spreads and totals.
+                try:
+                    from app_core.market_probability_model import predict_market_probabilities
+
+                    market_model_predictions = predict_market_probabilities(enriched_for_prediction)
+                except Exception as market_model_exc:
+                    market_model_predictions = None
+                    logger.warning("Market-specific probability model skipped: %s", market_model_exc)
+
                 # Copy the enriched columns back into merged (or at least provide to predictor)
                 # Ensure the predictor runs on the enriched dataframe
 
@@ -8321,6 +8347,8 @@ def run_analysis_pipeline(
                     index=merged[needs_prediction].index,
                     dtype="float64"
                 )
+                merged.loc[needs_prediction, "ml_probability_source"] = "home-win-xgboost"
+                merged.loc[needs_prediction, "ml_target"] = "home_win"
                 logger.info(f"PIPELINE AUDIT: [8/9] Rows successfully merged back into the analysis dataframe: {len(predictions_list)}")
 
                 # Assign used_stale_features flag
@@ -8356,6 +8384,8 @@ def run_analysis_pipeline(
                 engine.use_fallback = True
                 fallback_predictions = engine.predict_batch(merged)
                 merged["ml_probability"] = pd.Series(fallback_predictions, index=merged.index, dtype="float64")
+                merged["ml_probability_source"] = "home-win-statistical-fallback"
+                merged["ml_target"] = "home_win"
                 merged["model_status"] = "Statistical Fallback"
                 fallback_applied = True
                 logger.warning("âš ï¸ ML DEBUG: Applied statistical fallback predictions unconditionally after model failure.")
@@ -8374,6 +8404,8 @@ def run_analysis_pipeline(
     if not use_ml:
         if "ml_probability" in merged.columns:
             merged["ml_probability"] = pd.NA
+        for column in ("ml_probability_source", "ml_target", "ml_projection", "ml_residual_scale", "ml_feature_quality"):
+            merged[column] = pd.NA
         merged["model_status"] = "Model Disabled"
 
     merged.loc[_numeric_series(merged, "ml_probability").isna() & _string_series(merged, "model_status").eq("OK"), "model_status"] = "Model Failure"
@@ -8390,6 +8422,37 @@ def run_analysis_pipeline(
             "MODEL TARGET GUARD: retired home-win ML output from %s totals/spread rows.",
             ml_prediction_diag["ml_target_mismatch_rows"],
         )
+
+    # Replace the retired home-win values with probabilities whose target is
+    # the exact market being evaluated.  Missing/unresolved stats stay blank;
+    # no market or TheOver value is relabeled as an ML prediction.
+    market_ml_count = 0
+    if use_ml and market_model_predictions is not None and not market_model_predictions.empty:
+        market_probability = pd.to_numeric(
+            market_model_predictions.get("ml_probability"), errors="coerce"
+        )
+        market_available = market_probability.notna()
+        market_ml_count = int(market_available.sum())
+        for column in (
+            "ml_probability",
+            "ml_probability_source",
+            "ml_target",
+            "ml_projection",
+            "ml_residual_scale",
+            "ml_feature_quality",
+        ):
+            if column not in merged.columns:
+                merged[column] = pd.NA
+            if column in market_model_predictions.columns:
+                merged.loc[market_available, column] = market_model_predictions.loc[
+                    market_available, column
+                ]
+        merged.loc[market_available, "model_status"] = "Market Score Model"
+        logger.info(
+            "MARKET MODEL: generated %s target-specific spread/total probabilities.",
+            market_ml_count,
+        )
+    ml_prediction_diag["market_specific_ml_predictions"] = market_ml_count
 
     theover_probability = _numeric_series(merged, "theover_probability")
     theover_probability = theover_probability.where(theover_probability <= 1, theover_probability / 100.0)
@@ -8415,39 +8478,13 @@ def run_analysis_pipeline(
     market_type = _string_series(merged, "market_type").str.lower()
     spread_model = ml_probability.where(ml_probability.notna(), theover_probability)
 
-    # Run lines pay on the MARGIN, not the win: convert moneyline P(win) -> P(cover +-1.5)
-    # for MLB spreads (see _apply_mlb_runline_cover / weights_config). 19 Jun: Pittsburgh
-    # -1.5 carried P(win)=0.54 as its cover prob and lost outright.
-    from app_core.weights_config import (
-        MLB_RUNLINE_COVER_CONVERSION_ENABLED,
-        MLB_RUNLINE_ONE_RUN_BAND,
-    )
-    if MLB_RUNLINE_COVER_CONVERSION_ENABLED:
-        spread_model = _apply_mlb_runline_cover(
-            spread_model,
-            _string_series(merged, "league"),
-            market_type,
-            _numeric_series(merged, "spread_line"),
-            MLB_RUNLINE_ONE_RUN_BAND,
-        )
+    # spread_model is already P(cover): either the target-specific score model
+    # or TheOver's selected-side probability. Do not run the legacy
+    # moneyline-to-runline conversion on an already-oriented probability.
 
-    # Non-MLB totals: pre-mix TheOver (60%) + ML (40%) since TheOver adds context ML lacks.
-    # MLB totals: use pure ML â€” TheOver is passed separately to compute_blended_probability
-    # and weighted via MLB_TOTAL_THEOVER_WEIGHT. Pre-mixing here caused double-counting:
-    # TheOver was effectively ~44% weight instead of the 10% in config.
-    is_mlb = _string_series(merged, "league").str.upper() == "MLB"
-    is_mlb_total = is_mlb & market_type.str.contains("total", case=False, na=False)
-
-    mixed_total_model = (0.6 * theover_probability) + (0.4 * ml_probability)
-    mixed_total_model = mixed_total_model.where(mixed_total_model.notna(), theover_probability.where(theover_probability.notna(), ml_probability))
-
-    # For MLB totals, pass raw ml_probability so TheOver isn't pre-baked into the "ML" input.
-    total_model = pd.Series(
-        np.where(is_mlb_total, ml_probability, mixed_total_model),
-        index=merged.index,
-        dtype="float64",
-    )
-    total_model = total_model.where(total_model.notna(), theover_probability.where(theover_probability.notna(), ml_probability))
+    # Keep TheOver separate from the model signal. The downstream blend receives
+    # both inputs independently, so pre-mixing would count TheOver twice.
+    total_model = ml_probability.where(ml_probability.notna(), theover_probability)
 
     is_side = market_type.str.contains("spread", case=False, na=False)
     model_probability = pd.Series(
@@ -8736,6 +8773,9 @@ def run_analysis_pipeline(
         "bet_rows": int(len(analysis_df)),
         "ml_model_loaded": bool(use_ml and ML_AVAILABLE and ml_model_actually_loaded),
         "ml_predictions": int(analysis_df["ml_probability"].notna().sum()) if "ml_probability" in analysis_df.columns else 0,
+        "market_specific_ml_predictions": int(ml_prediction_diag.get("market_specific_ml_predictions", 0)),
+        "ml_probability_source_counts": _string_series(analysis_df, "ml_probability_source").replace("", "Missing").value_counts(dropna=False).to_dict() if not analysis_df.empty else {},
+        "ml_target_counts": _string_series(analysis_df, "ml_target").replace("", "Missing").value_counts(dropna=False).to_dict() if not analysis_df.empty else {},
         "best_picks": int(len(best_picks_df)),
         "kalshi_attempted": 0,
         "kalshi_matches": 0,

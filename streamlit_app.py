@@ -237,15 +237,20 @@ def _et_floor_day(series: pd.Series) -> pd.Series:
 
 
 def _ml_eligible_market_mask(df: pd.DataFrame) -> pd.Series:
-    """Return rows compatible with the shipped ``home_won`` model target."""
+    """Return rows whose probability target matches the wager being priced."""
     if df is None or df.empty:
         return pd.Series(False, index=getattr(df, "index", pd.RangeIndex(0)), dtype=bool)
     market_type = _safe_str_series(df, "market_type").str.lower()
-    return market_type.str.contains(r"moneyline|h2h", regex=True, na=False)
+    target = _safe_str_series(df, "ml_target").str.lower()
+    native_home_win = market_type.str.contains(r"moneyline|h2h", regex=True, na=False)
+    spread_cover = market_type.str.contains("spread", na=False) & target.eq("spread_cover")
+    total_over = market_type.eq("total_over") & target.eq("total_over")
+    total_under = market_type.eq("total_under") & target.eq("total_under")
+    return native_home_win | spread_cover | total_over | total_under
 
 
 def _compose_model_probability(out: pd.DataFrame) -> tuple[pd.Series, pd.Series, pd.Series]:
-    """Expose native ML only for markets compatible with its target.
+    """Expose model output only where its target matches the market.
 
     Returns a tuple of (model_probability, ml_probability, theover_probability).
     """
@@ -265,8 +270,8 @@ def _compose_model_probability(out: pd.DataFrame) -> tuple[pd.Series, pd.Series,
         logger.warning(f"⚠️ Trapped broken XGBoost scores (0.19063-0.19064) for matchups: {broken_matchups}. Discarding ML predictions and forcing Statistical Fallback.")
 
     ml_clean = ml.where(~is_broken_ml, pd.NA)
-    native_ml = ml_clean.where(_ml_eligible_market_mask(out), pd.NA)
-    return native_ml.astype("float64"), native_ml, theover
+    target_matched_ml = ml_clean.where(_ml_eligible_market_mask(out), pd.NA)
+    return target_matched_ml.astype("float64"), target_matched_ml, theover
 
 
 def _recompute_consensus_from_kalshi(df: pd.DataFrame, require_ml: bool = False) -> pd.DataFrame:
@@ -523,18 +528,31 @@ def _merge_kalshi_into_analysis(analysis_df: pd.DataFrame, best_picks_df: pd.Dat
 
 
 def _sync_ml_probabilities(analysis_df: pd.DataFrame, pipeline_best_picks_df: pd.DataFrame) -> pd.DataFrame:
-    """Repair missing native ML probabilities with a market-specific key join."""
+    """Repair missing target-matched model probabilities with an exact key join."""
     if analysis_df is None or analysis_df.empty or pipeline_best_picks_df is None or pipeline_best_picks_df.empty:
         return analysis_df
 
-    required_cols = ["league", "home_team", "away_team", "game_date", "market_type", "ml_probability"]
+    identity_cols = ["league", "home_team", "away_team", "game_date", "market_type"]
+    required_cols = identity_cols + ["ml_probability"]
     if any(c not in pipeline_best_picks_df.columns for c in required_cols):
         return analysis_df
+
+    metadata_cols = [
+        column
+        for column in (
+            "ml_probability_source",
+            "ml_target",
+            "ml_projection",
+            "ml_residual_scale",
+            "ml_feature_quality",
+        )
+        if column in pipeline_best_picks_df.columns
+    ]
 
     left = analysis_df.copy()
     if "ml_probability" in left.columns:
         left.loc[~_ml_eligible_market_mask(left), "ml_probability"] = pd.NA
-    right = pipeline_best_picks_df[required_cols].copy()
+    right = pipeline_best_picks_df[required_cols + metadata_cols].copy()
     right["ml_probability"] = pd.to_numeric(right["ml_probability"], errors="coerce")
     right = right[_ml_eligible_market_mask(right) & right["ml_probability"].notna()].drop_duplicates()
     if right.empty:
@@ -551,8 +569,10 @@ def _sync_ml_probabilities(analysis_df: pd.DataFrame, pipeline_best_picks_df: pd
     right["_merge_market"] = right["market_type"].astype(str).str.lower().str.strip()
 
     merge_keys = ["league", "game_date", "_merge_home", "_merge_away", "_merge_market"]
+    sync_columns = ["ml_probability"] + metadata_cols
+    sync_rename = {column: f"{column}_sync" for column in sync_columns}
     merged = left.merge(
-        right[merge_keys + ["ml_probability"]].rename(columns={"ml_probability": "ml_probability_sync"}),
+        right[merge_keys + sync_columns].rename(columns=sync_rename),
         on=merge_keys,
         how="left",
     )
@@ -564,6 +584,14 @@ def _sync_ml_probabilities(analysis_df: pd.DataFrame, pipeline_best_picks_df: pd
         )
     else:
         merged["ml_probability"] = merged["ml_probability_sync"]
+
+    for column in metadata_cols:
+        sync_column = f"{column}_sync"
+        if column in merged.columns:
+            current = merged[column].replace("", pd.NA)
+            merged[column] = current.where(current.notna(), merged[sync_column])
+        else:
+            merged[column] = merged[sync_column]
 
     recovered = int(pd.to_numeric(merged["ml_probability_sync"], errors="coerce").notna().sum())
     if recovered > 0:
@@ -582,7 +610,13 @@ def _sync_ml_probabilities(analysis_df: pd.DataFrame, pipeline_best_picks_df: pd
     merged = merged.drop(
         columns=[
             col
-            for col in ["ml_probability_sync", "_merge_home", "_merge_away", "_merge_market"]
+            for col in [
+                "ml_probability_sync",
+                *[f"{column}_sync" for column in metadata_cols],
+                "_merge_home",
+                "_merge_away",
+                "_merge_market",
+            ]
             if col in merged.columns
         ]
     )
@@ -746,15 +780,30 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
         )
         diagnostics["ml_eligible_rows"] = int(ml_eligible.sum())
         diagnostics["ml_eligible_predictions"] = eligible_ml_non_null
+        market_types = _safe_str_series(analysis_df, "market_type").str.lower()
+        target_market_rows = market_types.str.contains(r"spread|total", regex=True, na=False)
+        target_market_predictions = int(
+            (_safe_numeric_series(analysis_df, "ml_probability").notna() & ml_eligible & target_market_rows).sum()
+        )
+        missing_target_market_predictions = int(target_market_rows.sum()) - target_market_predictions
+        diagnostics["target_market_ml_rows"] = int(target_market_rows.sum())
+        diagnostics["target_market_ml_predictions"] = target_market_predictions
+        diagnostics["target_market_ml_missing"] = max(missing_target_market_predictions, 0)
         if ml_required and eligible_ml_non_null == 0:
             deferred_errors.append(
-                "ML Merge Failed: Moneyline/H2H predictions could not be joined to the market odds."
+                "ML Merge Failed: target-matched model predictions could not be joined to the market odds."
             )
             return empty_state, deferred_warnings, deferred_errors
         if not ml_required:
             deferred_warnings.append(
-                "ML is enabled, but this slate has no moneyline/H2H rows. "
-                "Totals and spreads are continuing with market, Kalshi, and TheOver signals."
+                "ML is enabled, but no target-specific spread/total model probabilities "
+                "were available. Those rows are continuing with market, Kalshi, and TheOver signals."
+            )
+        elif missing_target_market_predictions > 0:
+            deferred_warnings.append(
+                f"Target-specific model probability is unavailable for "
+                f"{missing_target_market_predictions}/{int(target_market_rows.sum())} spread/total rows "
+                "because resolved team scoring features or an exact line were missing."
             )
     else:
         ml_required = False
@@ -2113,7 +2162,8 @@ def main() -> None:
                 "Pick_Status", "Status_Reason", "Triple_Filter_Rank", "Pick_Quality", "parlay_rank", "league", "Home", "Away", "Local Date",
                 "Commence (Local)", "market_type", "candidate_source", "orientation_source", "upload_match_reason", "best_pick", "Kelly_Bet_Size", "WinProbability", "expected_value",
                 "edge", "Conviction_Score", "consensus_agreement", "odds_american", "odds_source", "market_probability",
-                "kalshi_probability", "ml_probability", "gemini_pick", "gemini_explanation", "gemini_risk_notes",
+                "kalshi_probability", "ml_probability", "ml_probability_source", "ml_target", "ml_projection",
+                "ml_residual_scale", "ml_feature_quality", "gemini_pick", "gemini_explanation", "gemini_risk_notes",
                 "status_metric_basis", "effective_expected_value", "effective_edge", "effective_win_probability",
                 "empirical_win_probability", "empirical_edge", "empirical_bucket",
                 "status_blocker_reason", "status_blocker_stage", "nba_stats_fetch_status", "fallback_summary_by_league",
