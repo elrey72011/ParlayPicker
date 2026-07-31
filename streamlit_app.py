@@ -1326,6 +1326,14 @@ def main() -> None:
              with st.spinner("Fetching yesterday's results..."):
                   st.session_state["performance_df"] = run_performance_pipeline()
 
+        if st.button(
+            "Refresh / Backfill Final Scores",
+            key="refresh_performance_results",
+            help="Re-query every league and fill games that were not final during the first grading pass.",
+        ):
+             with st.spinner("Refreshing final scores for every league..."):
+                  st.session_state["performance_df"] = run_performance_pipeline()
+
         perf_df = st.session_state.get("performance_df")
         if perf_df is None:
              from datetime import datetime, timedelta
@@ -2180,6 +2188,14 @@ def main() -> None:
             # Unproven); applied AFTER the categorical status sort above, which keys
             # off the internal names.
             best_picks_export = apply_status_display_labels(best_picks_export)
+            from app_core.export_scope import label_wager_export, production_wagers
+
+            best_picks_export = label_wager_export(best_picks_export)
+            _scope_cols = ["Wager_Instruction", "Export_Scope", "Bettable"]
+            best_picks_export = best_picks_export[
+                _scope_cols + [column for column in best_picks_export.columns if column not in _scope_cols]
+            ]
+            production_game_export = production_wagers(best_picks_export)
 
             if "Home" in best_picks_export.columns and not best_picks_export.empty:
                 if not best_picks_export["Home"].notna().all():
@@ -2192,11 +2208,24 @@ def main() -> None:
 
             best_picks_csv = best_picks_export.to_csv(index=False, encoding="utf-8-sig")
             st.download_button(
-                "Export Best Picks",
+                "Export All Best-Available Picks (includes $0 PASSes)",
                 best_picks_csv,
                 "best_picks_export.csv",
                 mime="text/csv",
             )
+            if production_game_export is not None and not production_game_export.empty:
+                st.download_button(
+                    "Export Production Game Bets Only",
+                    production_game_export.to_csv(index=False, encoding="utf-8-sig"),
+                    "production_game_bets.csv",
+                    mime="text/csv",
+                    key="export_production_game_bets",
+                )
+            else:
+                st.caption(
+                    "Production-only game export: 0 approved wagers. The all-picks CSV is "
+                    "coverage and marks every row as a $0 PASS."
+                )
 
             candidate_audit_df = diagnostics.get("candidate_audit_df")
             if isinstance(candidate_audit_df, pd.DataFrame) and not candidate_audit_df.empty:
@@ -2274,6 +2303,9 @@ def main() -> None:
                 # All funded, all-grading, and research prop CSVs inherit this
                 # self-identifying build stamp before they are split.
                 prop_card = stamp_prop_export(prop_card, PIPELINE_BUILD)
+                from app_core.export_scope import label_wager_export
+
+                prop_card = label_wager_export(prop_card)
                 _prop_status = prop_card.get(
                     "Stake_Status", pd.Series("", index=prop_card.index)
                 ).astype(str).str.strip()
@@ -2301,7 +2333,7 @@ def main() -> None:
                     )
 
                 st.download_button(
-                    "Export All MLB Player Props for Next-Day Grading",
+                    "Export All MLB Props for Grading (includes DO NOT BET research)",
                     prop_card.to_csv(index=False, encoding="utf-8-sig"),
                     "mlb_player_props_all_export.csv",
                     mime="text/csv",
@@ -2358,6 +2390,7 @@ def main() -> None:
             from openpyxl.styles import Font
 
             compact_cols = [
+                "Wager_Instruction", "Export_Scope", "Bettable",
                 "WinProbability", "expected_value", "edge",
                 "Conviction_Score", "market_probability", "kalshi_probability", "ml_probability",
                 "effective_expected_value", "effective_edge", "effective_win_probability",
