@@ -142,7 +142,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-08-01a-refreshed-calibration-wnba-cold-start"
+PIPELINE_BUILD = "2026-08-01b-team-bound-spreads-and-promotion-guards"
 
 # Best Available must compare standard, reasonably priced markets. A P2P exchange can
 # expose alternate run lines (for example +5.5 at -1150) beside the standard MLB +1.5.
@@ -150,13 +150,6 @@ PIPELINE_BUILD = "2026-08-01a-refreshed-calibration-wnba-cold-start"
 # a standard spread picker and must never win merely because their hit probability is high.
 NOVIG_MLB_SPREAD_OUTLIER_TOL = 0.5
 BEST_AVAILABLE_SPREAD_MIN_AMERICAN_ODDS = -400.0
-# When the two run-line prices are nearly even, the quote may be an alternate
-# line and must not be forced to follow the moneyline favorite. A larger cover-
-# probability gap indicates a conventional favorite/underdog run-line pair, so
-# the book's signed labels must agree with its own moneyline orientation.
-STANDARD_SPREAD_ORIENTATION_MIN_PRICE_GAP = 0.05
-
-
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
     "pipeline_build",
     "status_metric_basis",
@@ -1104,6 +1097,7 @@ def _apply_mlb_runline_cover(
 
 
 _TRUSTED_LIVE_LINE_SOURCES = frozenset({
+    "novig_team_bound_quote",
     "novig_moneyline_reoriented",
     "novig_moneyline_verified",
     "novig_theover_moneyline_reoriented",
@@ -4346,18 +4340,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 )
                 suspicious_reasons.append(corrupt_odds_reason)
 
-        # Spread orientation fault (ungated by EV): the spread favorite must be the
-        # moneyline favorite. A mismatch means the live feed delivered a flipped
-        # home/away spread (14 Jun: Texas shown -1.5/+158 â€” a favorite line â€” when
-        # Texas was the +1.5 underdog). Block the row rather than ship the wrong side.
-        #
-        # Novig's paired spread outcomes can arrive attached to the wrong team names.
-        # When candidate construction has explicitly remapped the quote using the
-        # independently uploaded TheOver moneyline favorite, the raw game moneyline
-        # fields describe the pre-remap orientation. Reapplying this guard to the
-        # corrected line creates a stale false blocker. Only bypass the raw comparison
-        # for that explicit, independently oriented provenance; ordinary and merely
-        # verified live lines still receive the guard.
+        # Spread-orientation heuristics are only a backstop for unbound or synthetic
+        # rows. Exact Odds API outcomes are already attached to a named team, and an
+        # alternate run line need not share the moneyline favorite's sign. Team-bound
+        # quotes are therefore exempt and are never reassigned.
         spread_orientation_fault_flag = False
         spread_orientation_fault_reason = ""
         _mt_row = str(best.at[idx, "market_type"]).strip().lower() if "market_type" in best.columns else ""
@@ -4375,9 +4361,14 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             _line_source_for_orient == "novig_theover_moneyline_reoriented"
             and "theover_moneyline_favorite" in _orientation_source_for_orient
         )
+        _team_bound_live_spread = (
+            _line_source_for_orient == "novig_team_bound_quote"
+            or _line_source_for_orient.endswith("_standard_spread_consensus")
+        )
         if (
             _mt_row in {"spread_home", "spread_away"}
             and not _independently_reoriented_spread
+            and not _team_bound_live_spread
         ):
             _line_for_orient = next(
                 (best.at[idx, c] for c in ("market_line_used", "spread_line", "base_spread_line")
@@ -6735,12 +6726,12 @@ def _standard_spread_consensus_quote(row, side: str):
 
 
 def _consistent_standard_spread_pair(row, side: str):
-    """Return a corroborated, internally coherent standard-book spread pair.
+    """Return a corroborated, team-bound standard-book spread pair.
 
-    At least two standard books must corroborate the standard magnitude. Prices
-    remain paired within one book. For a clearly asymmetric run-line quote, the
-    signed team labels must agree with that book's own moneyline; near-even
-    alternate lines are orientation-ambiguous and remain eligible.
+    Odds API outcomes are already bound to the named home/away team. At least two
+    standard books must corroborate the complete signed pair, not just its
+    magnitude. The selected team's point and price then remain attached to that
+    team exactly as quoted; a moneyline favorite never swaps the two outcomes.
     """
     if side not in {"home", "away"}:
         return pd.NA, pd.NA, pd.NA, None
@@ -6786,46 +6777,23 @@ def _consistent_standard_spread_pair(row, side: str):
             (book, float(home_point), float(home_price), float(away_point), float(away_price))
         )
 
-    # Magnitude corroboration protects against selecting an isolated alternate
-    # outcome. Signed labels are checked per book below because two feeds can
-    # repeat the same upstream label reversal.
-    magnitude_counts = {}
-    for _book, home_point, _home_price, _away_point, _away_price in pairs:
-        key = round(abs(home_point), 4)
-        magnitude_counts[key] = magnitude_counts.get(key, 0) + 1
-    if not magnitude_counts:
+    # Require agreement on the full signed team pair. This protects against an
+    # isolated alternate without fabricating a quote by reassigning the two teams.
+    signed_pair_counts = {}
+    for _book, home_point, _home_price, away_point, _away_price in pairs:
+        key = (round(home_point, 4), round(away_point, 4))
+        signed_pair_counts[key] = signed_pair_counts.get(key, 0) + 1
+    if not signed_pair_counts:
         return pd.NA, pd.NA, pd.NA, None
-    corroborated_magnitude, corroboration_count = max(
-        magnitude_counts.items(), key=lambda item: item[1]
+    corroborated_pair, corroboration_count = max(
+        signed_pair_counts.items(), key=lambda item: item[1]
     )
     if corroboration_count < 2:
         return pd.NA, pd.NA, pd.NA, None
 
     for book, home_point, home_price, away_point, away_price in pairs:
-        if round(abs(home_point), 4) != corroborated_magnitude:
+        if (round(home_point, 4), round(away_point, 4)) != corroborated_pair:
             continue
-        home_cover_prob = american_to_prob(home_price)
-        away_cover_prob = american_to_prob(away_price)
-        cover_direction_is_clear = (
-            pd.notna(home_cover_prob)
-            and pd.notna(away_cover_prob)
-            and abs(float(home_cover_prob) - float(away_cover_prob))
-            >= STANDARD_SPREAD_ORIENTATION_MIN_PRICE_GAP
-        )
-        home_ml = pd.to_numeric(row.get(f"{book}_h2h_home_price"), errors="coerce")
-        away_ml = pd.to_numeric(row.get(f"{book}_h2h_away_price"), errors="coerce")
-        ml_direction_is_clear = (
-            pd.notna(home_ml)
-            and pd.notna(away_ml)
-            and float(home_ml) != float(away_ml)
-        )
-        if cover_direction_is_clear and ml_direction_is_clear:
-            home_ml_prob = american_to_prob(home_ml)
-            away_ml_prob = american_to_prob(away_ml)
-            ml_home_favorite = float(home_ml_prob) > float(away_ml_prob)
-            spread_home_favorite = home_point < 0.0
-            if ml_home_favorite != spread_home_favorite:
-                continue
         selected_point = home_point if side == "home" else away_point
         selected_price = home_price if side == "home" else away_price
         opposing_price = away_price if side == "home" else home_price
@@ -6835,74 +6803,16 @@ def _consistent_standard_spread_pair(row, side: str):
 
 
 def _oriented_standard_spread_pair(row, side: str, favorite_side: str):
-    """Recover a corroborated standard-book pair using an independent favorite.
+    """Compatibility wrapper that never rebinds a quote to the other team.
 
-    Odds feeds occasionally bind the two signed run-line outcomes to the wrong team
-    labels even though the point/price pairs themselves are intact. When Novig's
-    complete two-way moneyline independently identifies the favorite, map the
-    negative standard-book outcome to that favorite and the positive outcome to the
-    underdog. Require at least two standard books to publish complete mirrored pairs
-    at the same consensus magnitude, and never detach a price from its signed point.
+    ``favorite_side`` is intentionally ignored for outcome assignment. The Odds API
+    has already bound each point and price to an outcome name; changing that binding
+    creates a synthetic bet that the sportsbook did not offer.
     """
     if side not in {"home", "away"} or favorite_side not in {"home", "away"}:
         return pd.NA, pd.NA, pd.NA, None, False
-
-    consensus_magnitude = _consensus_standard_spread_magnitude(row)
-    if pd.isna(consensus_magnitude):
-        return pd.NA, pd.NA, pd.NA, None, False
-
-    complete_pairs = []
-    for book in ("fanduel", "draftkings", "betmgm"):
-        home_point = pd.to_numeric(row.get(f"{book}_home_point"), errors="coerce")
-        away_point = pd.to_numeric(row.get(f"{book}_away_point"), errors="coerce")
-        home_price = pd.to_numeric(row.get(f"{book}_home_price"), errors="coerce")
-        away_price = pd.to_numeric(row.get(f"{book}_away_price"), errors="coerce")
-        if any(
-            pd.isna(value)
-            for value in (home_point, away_point, home_price, away_price)
-        ):
-            continue
-        if abs(float(home_point) + float(away_point)) > 1e-9:
-            continue
-        if abs(abs(float(home_point)) - float(consensus_magnitude)) > 1e-9:
-            continue
-        if (
-            float(home_price) == 0.0
-            or float(away_price) == 0.0
-            or float(home_price) < float(BEST_AVAILABLE_SPREAD_MIN_AMERICAN_ODDS)
-            or float(away_price) < float(BEST_AVAILABLE_SPREAD_MIN_AMERICAN_ODDS)
-            or abs(float(home_price)) > 10000.0
-            or abs(float(away_price)) > 10000.0
-        ):
-            continue
-        complete_pairs.append(
-            (
-                book,
-                float(home_point),
-                float(home_price),
-                float(away_point),
-                float(away_price),
-            )
-        )
-
-    if len(complete_pairs) < 2:
-        return pd.NA, pd.NA, pd.NA, None, False
-
-    desired_sign = -1.0 if side == favorite_side else 1.0
-    for book, home_point, home_price, away_point, away_price in complete_pairs:
-        if home_point * desired_sign > 0.0:
-            selected_point, selected_price = home_point, home_price
-            opposing_price = away_price
-            rebound = side != "home"
-        elif away_point * desired_sign > 0.0:
-            selected_point, selected_price = away_point, away_price
-            opposing_price = home_price
-            rebound = side != "away"
-        else:
-            continue
-        return selected_point, selected_price, opposing_price, book, rebound
-
-    return pd.NA, pd.NA, pd.NA, None, False
+    point, price, opposing_price, book = _consistent_standard_spread_pair(row, side)
+    return point, price, opposing_price, book, False
 
 
 def _derive_spread_away_line(row):
@@ -6935,24 +6845,13 @@ def _derive_spread_away_line(row):
 
 
 def _novig_spread_quote_for_favorite(row, requested_side: str, favorite_side: str):
-    """Return the Novig point and price matching an independently oriented side.
-
-    The odds feed can attach Novig's two run-line outcomes to the wrong team
-    names. Once the uploaded moneyline identifies the favorite, select the
-    outcome by its signed point and keep that outcome's price attached. This
-    repairs ``Miami +1.5`` into ``Miami -1.5`` without pairing ``-1.5`` with the
-    price for ``+1.5``.
-    """
+    """Return Novig's exact team-bound quote without outcome reassignment."""
     if requested_side not in {"home", "away"} or favorite_side not in {"home", "away"}:
         return pd.NA, pd.NA, False
-
-    requested_is_favorite = requested_side == favorite_side
-    desired_sign = -1.0 if requested_is_favorite else 1.0
-    for quoted_side in ("home", "away"):
-        point = pd.to_numeric(row.get(f"novig_{quoted_side}_point"), errors="coerce")
-        price = pd.to_numeric(row.get(f"novig_{quoted_side}_price"), errors="coerce")
-        if pd.notna(point) and pd.notna(price) and float(point) * desired_sign > 0.0:
-            return float(point), float(price), quoted_side != requested_side
+    point = pd.to_numeric(row.get(f"novig_{requested_side}_point"), errors="coerce")
+    price = pd.to_numeric(row.get(f"novig_{requested_side}_price"), errors="coerce")
+    if pd.notna(point) and pd.notna(price):
+        return float(point), float(price), False
     return pd.NA, pd.NA, False
 
 
@@ -7360,7 +7259,7 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
                             f"{orientation_source}|novig_spread_consensus_outlier"
                         )
                     else:
-                        oriented_point, oriented_price, remapped = (
+                        oriented_point, oriented_price, _remapped = (
                             _novig_spread_quote_for_favorite(
                                 row, side, spread_favorite_side
                             )
@@ -7369,11 +7268,7 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
                             point_val = float(oriented_point)
                             market_dict["odds_american"] = float(oriented_price)
                             market_dict["odds_source"] = "novig"
-                            opposing_side = (
-                                side
-                                if remapped
-                                else ("away" if side == "home" else "home")
-                            )
+                            opposing_side = "away" if side == "home" else "home"
                             paired_opposing_price = pd.to_numeric(
                                 row.get(f"novig_{opposing_side}_price"),
                                 errors="coerce",
@@ -7388,20 +7283,9 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
                                 if pd.notna(paired_opposing_price)
                                 else "missing"
                             )
-                            if spread_orientation_basis == "novig_moneyline_favorite":
-                                spread_line_source = (
-                                    "novig_moneyline_reoriented"
-                                    if remapped
-                                    else "novig_moneyline_verified"
-                                )
-                            else:
-                                spread_line_source = (
-                                    "novig_theover_moneyline_reoriented"
-                                    if remapped
-                                    else "novig_theover_moneyline_verified"
-                                )
+                            spread_line_source = "novig_team_bound_quote"
                             market_dict["orientation_source"] = (
-                                f"{orientation_source}|{spread_orientation_basis}"
+                                f"{orientation_source}|odds_api_team_binding"
                             )
                         else:
                             (

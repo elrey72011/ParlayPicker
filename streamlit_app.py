@@ -2444,7 +2444,7 @@ def main() -> None:
             import openpyxl
             from openpyxl.worksheet.table import Table, TableStyleInfo
             from openpyxl.utils import get_column_letter
-            from openpyxl.styles import Font
+            from openpyxl.styles import Alignment, Font
 
             compact_cols = [
                 "Wager_Instruction", "Export_Scope", "Bettable",
@@ -2452,21 +2452,30 @@ def main() -> None:
                 "Conviction_Score", "market_probability", "kalshi_probability", "ml_probability",
                 "effective_expected_value", "effective_edge", "effective_win_probability",
                 "consensus_agreement", "Play_Tier", "Play_Stake", "Pick_Status", "Pick_Quality", "league", "Home", "Away",
-                "Commence (Local)", "odds_american", "best_pick", "gemini_pick", "Kelly_Bet_Size",
+                "Commence (Local)", "odds_american", "odds_source",
+                "market_line_source_detail", "best_pick", "gemini_pick", "Kelly_Bet_Size",
             ]
             available_compact_cols = [c for c in compact_cols if c in best_picks_export.columns]
             compact_export = best_picks_export[available_compact_cols].copy()
-            # Surface the Novig price for the pick as "Novig Line" (the line/total itself is
-            # already encoded in best_pick). Sits between "Commence (Local)" and "best_pick"
-            # per its position in compact_cols above. odds_american is the Novig price only
-            # when odds_source is a genuine Novig quote (odds_api / novig); for uploaded or
-            # synthetic-fallback (fallback_novig = -110) rows it is NOT a Novig price, so
-            # blank those cells rather than mislabel a non-Novig price as Novig.
+            # Keep the pick's exact American price and expose its provenance. ``odds_api``
+            # is a transport/source family, not a Novig book identifier, so labeling every
+            # such price "Novig Line" misidentified FanDuel consensus quotes.
             if "odds_american" in compact_export.columns:
-                compact_export = compact_export.rename(columns={"odds_american": "Novig Line"})
-                if "odds_source" in best_picks_export.columns:
-                    _is_novig = best_picks_export["odds_source"].astype(str).str.strip().str.lower().isin({"odds_api", "novig"})
-                    compact_export.loc[~_is_novig, "Novig Line"] = pd.NA
+                compact_export = compact_export.rename(columns={"odds_american": "Pick Price"})
+                _price_source = compact_export.get(
+                    "market_line_source_detail",
+                    pd.Series("", index=compact_export.index, dtype="object"),
+                ).fillna("").astype(str).str.strip()
+                _fallback_price_source = compact_export.get(
+                    "odds_source",
+                    pd.Series("", index=compact_export.index, dtype="object"),
+                ).fillna("").astype(str).str.strip()
+                _price_source = _price_source.where(_price_source.ne(""), _fallback_price_source)
+                compact_export = compact_export.drop(
+                    columns=["odds_source", "market_line_source_detail"], errors="ignore"
+                )
+                _price_col_index = compact_export.columns.get_loc("Pick Price") + 1
+                compact_export.insert(_price_col_index, "Price Source", _price_source)
 
             # Win Amount and W/L are left blank for manual entry. Total Amount is a
             # per-row P&L formula (filled below) that resolves once they're entered.
@@ -2481,7 +2490,7 @@ def main() -> None:
                 "effective_expected_value", "effective_edge", "effective_win_probability",
             }
             money_cols = {"Kelly_Bet_Size", "Win Amount", "Total Amount"}
-            odds_cols = {"Novig Line"}  # American odds, shown with explicit sign (e.g. +109 / -114)
+            odds_cols = {"Pick Price"}  # American odds, shown with explicit sign (e.g. +109 / -114)
 
             def _col_num(x):
                 v = pd.to_numeric(x, errors="coerce")
@@ -2497,7 +2506,11 @@ def main() -> None:
             wb = openpyxl.Workbook()
             ws = wb.active
             ws.title = "Best Picks"
+            ws.freeze_panes = "A2"
+            ws.sheet_view.showGridLines = False
             ws.append(final_cols)
+            for cell in ws[1]:
+                cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
             for i, (_, row) in enumerate(compact_export.iterrows()):
                 excel_row = i + 2  # row 1 is the header
@@ -2536,7 +2549,15 @@ def main() -> None:
                 if fmt:
                     for r in range(2, last_row + 1):
                         ws[f"{letter}{r}"].number_format = fmt
-                ws.column_dimensions[letter].width = max(12, min(30, len(col) + 2))
+                populated_lengths = [len(str(col))]
+                populated_lengths.extend(
+                    len(str(value))
+                    for value in compact_export[col].dropna().tolist()
+                    if str(value)
+                )
+                ws.column_dimensions[letter].width = max(
+                    12, min(32, max(populated_lengths, default=len(col)) + 2)
+                )
 
             if len(compact_export) > 0:
                 ref = f"A1:{get_column_letter(len(final_cols))}{last_row}"
