@@ -1998,9 +1998,18 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             out.at[idx, "kalshi_yes_ask"] = _safe_float(best_market.get("yes_ask_dollars"))
 
     # NA-safe columns to prevent ambiguous boolean evaluation downstream.
-    out["kalshi_probability"] = pd.to_numeric(out.get("kalshi_probability"), errors="coerce")
+    raw_kalshi_probability = pd.to_numeric(
+        out.get("kalshi_probability", pd.Series(pd.NA, index=out.index)),
+        errors="coerce",
+    )
+    probability_was_present = raw_kalshi_probability.notna()
+    out["kalshi_probability"] = raw_kalshi_probability.fillna(0.0).astype(float)
     out["is_matched"] = out.get("kalshi_match_status", "").astype(str).eq("matched").fillna(False).astype(bool)
-    out["kalshi_probability_is_valid"] = out["kalshi_probability"].notna().fillna(False)
+    out["kalshi_probability_is_valid"] = (
+        out["is_matched"]
+        & probability_was_present
+        & out["kalshi_probability"].between(0.0, 1.0, inclusive="both")
+    )
 
     return out
 

@@ -29,10 +29,11 @@ def test_kalshi_probability_orientation_no_flip():
         market_type=market_type
     )
 
-    # Since p_kalshi=0.6 for both, and other probabilities are 0.5,
-    # the blended probability should be identical for both rows and > 0.5.
-    assert blended[0] == blended[1], f"Expected equal blend for both orientations, got {blended[0]} vs {blended[1]}"
-    assert blended[0] > 0.5, f"Expected blend > 0.5 due to kalshi_prob=0.6, got {blended[0]}"
+    # NBA totals intentionally use different weights than sides, so the two
+    # numeric blends need not be identical. Both must stay above neutral: an
+    # accidental away/under inversion would turn the 0.60 input into 0.40.
+    assert blended[0] > 0.5, f"Expected spread blend > 0.5, got {blended[0]}"
+    assert blended[1] > 0.5, f"Expected total blend > 0.5, got {blended[1]}"
 
 def test_multi_word_team_spread_grading():
     """

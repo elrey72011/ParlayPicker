@@ -312,7 +312,7 @@ def generate_smart_parlays(
     if df is None or df.empty:
         return pd.DataFrame(columns=columns)
 
-    needed = {"edge", "calibrated_probability", "decimal_odds", "market_probability", "matchup_id"}
+    needed = {"edge", "calibrated_probability", "decimal_odds"}
     if not needed.issubset(df.columns):
         return pd.DataFrame(columns=columns)
 
@@ -323,9 +323,6 @@ def generate_smart_parlays(
 
     candidates = df.copy()
 
-    # In production, only explicit Actionable rows with complete pricing and
-    # eligibility evidence may become parlay legs. Fallback, stale, degraded,
-    # or merely informational rows are not silently upgraded by this layer.
     strict_mode = bool(
         STRICT_PRODUCTION_PARLAYS
         and "Pick_Status" in candidates.columns
@@ -334,6 +331,34 @@ def generate_smart_parlays(
             "degraded_feature_subset_flag", "market_line_source",
         ))
     )
+    if strict_mode and not {"market_probability", "matchup_id"}.issubset(candidates.columns):
+        return pd.DataFrame(columns=columns)
+
+    # Legacy/research callers may not persist market or matchup identifiers.
+    # Derive conservative defaults for that non-production path; explicit
+    # production metadata is still required by the strict gate below.
+    if not strict_mode and "market_probability" not in candidates.columns:
+        decimal = pd.to_numeric(candidates["decimal_odds"], errors="coerce")
+        candidates["market_probability"] = 1.0 / decimal.where(decimal > 1.0)
+    if not strict_mode and "matchup_id" not in candidates.columns:
+        if {"home_team", "away_team"}.issubset(candidates.columns):
+            team_key = (
+                candidates["away_team"].astype(str).str.strip().str.lower()
+                + "|"
+                + candidates["home_team"].astype(str).str.strip().str.lower()
+            )
+            if "game_date" in candidates.columns:
+                candidates["matchup_id"] = (
+                    candidates["game_date"].astype(str).str.strip() + "|" + team_key
+                )
+            else:
+                candidates["matchup_id"] = team_key
+        else:
+            candidates["matchup_id"] = [f"legacy-{i}" for i in range(len(candidates))]
+
+    # In production, only explicit Actionable rows with complete pricing and
+    # eligibility evidence may become parlay legs. Fallback, stale, degraded,
+    # or merely informational rows are not silently upgraded by this layer.
     if strict_mode:
         candidates = candidates[production_candidate_mask(candidates)].copy()
         if candidates.empty:

@@ -101,10 +101,16 @@ except Exception:  # pragma: no cover - optional dependency fallback
     thefuzz_fuzz = None
 
 def _get_odds_api_key() -> str:
-    key = st.secrets.get("ODDS_API_KEY")
-    if not key:
-        key = os.environ.get("ODDS_API_KEY", "")
-    return key
+    """Return the odds API key without requiring a Streamlit secrets file."""
+    key = os.environ.get("ODDS_API_KEY", "").strip()
+    if key:
+        return key
+    try:
+        return str(st.secrets.get("ODDS_API_KEY", "") or "").strip()
+    except Exception:
+        # Streamlit raises when no secrets.toml exists. Headless runs should
+        # degrade to an unauthenticated pipeline instead of crashing here.
+        return ""
 
 try:
     from app_core.prediction_engine import PredictionEngine, get_cached_prediction_engine
@@ -144,6 +150,11 @@ PIPELINE_BUILD = "2026-08-01a-refreshed-calibration-wnba-cold-start"
 # a standard spread picker and must never win merely because their hit probability is high.
 NOVIG_MLB_SPREAD_OUTLIER_TOL = 0.5
 BEST_AVAILABLE_SPREAD_MIN_AMERICAN_ODDS = -400.0
+# When the two run-line prices are nearly even, the quote may be an alternate
+# line and must not be forced to follow the moneyline favorite. A larger cover-
+# probability gap indicates a conventional favorite/underdog run-line pair, so
+# the book's signed labels must agree with its own moneyline orientation.
+STANDARD_SPREAD_ORIENTATION_MIN_PRICE_GAP = 0.05
 
 
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
@@ -5469,11 +5480,13 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         )
 
         # Hard block unresolved suspicious lines from viable buckets.
+        preexisting_no_play = best["Pick_Status"].astype(str).eq("No Play")
         blocked_viable_status = best["Pick_Status"].astype(str).isin({"Actionable", "High Variance/Speculative"})
         best.loc[unresolved_suspicious & blocked_viable_status, "Pick_Status"] = "No Play"
-        best.loc[unresolved_suspicious, "status_blocker_stage"] = "line_provenance"
-        best.loc[unresolved_suspicious, "status_blocker_reason"] = "Suspicious live line delta could not be resolved"
-        best.loc[unresolved_suspicious, "Status_Reason"] = "No Play: suspicious live line delta could not be resolved"
+        new_line_block = unresolved_suspicious & ~preexisting_no_play
+        best.loc[new_line_block, "status_blocker_stage"] = "line_provenance"
+        best.loc[new_line_block, "status_blocker_reason"] = "Suspicious live line delta could not be resolved"
+        best.loc[new_line_block, "Status_Reason"] = "No Play: suspicious live line delta could not be resolved"
         best.loc[unresolved_suspicious, "market_line_source"] = "rejected_live"
         best.loc[unresolved_suspicious, "market_line_source_detail"] = "suspicious_live_line_rejected"
         best.loc[unresolved_suspicious & is_spread, "matched_live_spread_line"] = np.nan
@@ -5547,10 +5560,12 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             | best["line_provenance_warning"].astype(str).str.contains("Live line deviates materially", case=False, na=False)
             | (~best["line_event_identity_match_flag"])
         ) & ~recovered_upload_total_mask
+        existing_no_play = best["Pick_Status"].astype(str).eq("No Play")
+        new_final_line_block = final_rejected_line & ~existing_no_play
         best.loc[final_rejected_line, "Pick_Status"] = "No Play"
-        best.loc[final_rejected_line, "Status_Reason"] = "No Play: suspicious live line delta could not be resolved"
-        best.loc[final_rejected_line, "status_blocker_stage"] = "line_provenance"
-        best.loc[final_rejected_line, "status_blocker_reason"] = "Suspicious live line delta could not be resolved"
+        best.loc[new_final_line_block, "Status_Reason"] = "No Play: suspicious live line delta could not be resolved"
+        best.loc[new_final_line_block, "status_blocker_stage"] = "line_provenance"
+        best.loc[new_final_line_block, "status_blocker_reason"] = "Suspicious live line delta could not be resolved"
         best.loc[final_rejected_line, "market_line_source"] = "rejected_live"
         best.loc[final_rejected_line, "market_line_source_detail"] = "suspicious_live_line_rejected"
         best.loc[final_rejected_line, "market_line_used"] = np.nan
@@ -6541,10 +6556,10 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
 
 def _fmt_odds_token(v):
     """Format a spread point or moneyline price for the raw-odds diagnostic string:
-    signed (+1.5, -1.5, -120, +115); 'Â·' for missing values."""
+    signed (+1.5, -1.5, -120, +115); a middle dot for missing values."""
     n = pd.to_numeric(v, errors="coerce")
     if pd.isna(n):
-        return "Â·"
+        return "·"
     return f"{float(n):+g}"
 
 
@@ -6720,24 +6735,26 @@ def _standard_spread_consensus_quote(row, side: str):
 
 
 def _consistent_standard_spread_pair(row, side: str):
-    """Return one internally coherent standard-book spread pair.
+    """Return a corroborated, internally coherent standard-book spread pair.
 
-    The selected side's signed point, its price, and the complementary side's price
-    must all come from the same book. The book's spread favorite must agree with its
-    own moneyline favorite, and the two points must be exact mirrors. This is the
-    fail-closed fallback when Novig's outcome labels conflict with Novig's moneyline.
+    At least two standard books must corroborate the standard magnitude. Prices
+    remain paired within one book. For a clearly asymmetric run-line quote, the
+    signed team labels must agree with that book's own moneyline; near-even
+    alternate lines are orientation-ambiguous and remain eligible.
     """
     if side not in {"home", "away"}:
         return pd.NA, pd.NA, pd.NA, None
 
     consensus_magnitude = _consensus_standard_spread_magnitude(row)
+    if pd.isna(consensus_magnitude):
+        return pd.NA, pd.NA, pd.NA, None
+
+    pairs = []
     for book in ("fanduel", "draftkings", "betmgm"):
         home_point = pd.to_numeric(row.get(f"{book}_home_point"), errors="coerce")
         away_point = pd.to_numeric(row.get(f"{book}_away_point"), errors="coerce")
         home_price = pd.to_numeric(row.get(f"{book}_home_price"), errors="coerce")
         away_price = pd.to_numeric(row.get(f"{book}_away_price"), errors="coerce")
-        home_ml = pd.to_numeric(row.get(f"{book}_h2h_home_price"), errors="coerce")
-        away_ml = pd.to_numeric(row.get(f"{book}_h2h_away_price"), errors="coerce")
         if any(
             pd.isna(value)
             for value in (
@@ -6745,8 +6762,6 @@ def _consistent_standard_spread_pair(row, side: str):
                 away_point,
                 home_price,
                 away_price,
-                home_ml,
-                away_ml,
             )
         ):
             continue
@@ -6758,20 +6773,63 @@ def _consistent_standard_spread_pair(row, side: str):
             > NOVIG_MLB_SPREAD_OUTLIER_TOL
         ):
             continue
-        spread_home_favorite = float(home_point) < 0.0
-        moneyline_home_favorite = float(home_ml) < float(away_ml)
-        if spread_home_favorite != moneyline_home_favorite:
+        if (
+            float(home_price) == 0.0
+            or float(away_price) == 0.0
+            or float(home_price) < float(BEST_AVAILABLE_SPREAD_MIN_AMERICAN_ODDS)
+            or float(away_price) < float(BEST_AVAILABLE_SPREAD_MIN_AMERICAN_ODDS)
+            or abs(float(home_price)) > 10000.0
+            or abs(float(away_price)) > 10000.0
+        ):
             continue
+        pairs.append(
+            (book, float(home_point), float(home_price), float(away_point), float(away_price))
+        )
 
+    # Magnitude corroboration protects against selecting an isolated alternate
+    # outcome. Signed labels are checked per book below because two feeds can
+    # repeat the same upstream label reversal.
+    magnitude_counts = {}
+    for _book, home_point, _home_price, _away_point, _away_price in pairs:
+        key = round(abs(home_point), 4)
+        magnitude_counts[key] = magnitude_counts.get(key, 0) + 1
+    if not magnitude_counts:
+        return pd.NA, pd.NA, pd.NA, None
+    corroborated_magnitude, corroboration_count = max(
+        magnitude_counts.items(), key=lambda item: item[1]
+    )
+    if corroboration_count < 2:
+        return pd.NA, pd.NA, pd.NA, None
+
+    for book, home_point, home_price, away_point, away_price in pairs:
+        if round(abs(home_point), 4) != corroborated_magnitude:
+            continue
+        home_cover_prob = american_to_prob(home_price)
+        away_cover_prob = american_to_prob(away_price)
+        cover_direction_is_clear = (
+            pd.notna(home_cover_prob)
+            and pd.notna(away_cover_prob)
+            and abs(float(home_cover_prob) - float(away_cover_prob))
+            >= STANDARD_SPREAD_ORIENTATION_MIN_PRICE_GAP
+        )
+        home_ml = pd.to_numeric(row.get(f"{book}_h2h_home_price"), errors="coerce")
+        away_ml = pd.to_numeric(row.get(f"{book}_h2h_away_price"), errors="coerce")
+        ml_direction_is_clear = (
+            pd.notna(home_ml)
+            and pd.notna(away_ml)
+            and float(home_ml) != float(away_ml)
+        )
+        if cover_direction_is_clear and ml_direction_is_clear:
+            home_ml_prob = american_to_prob(home_ml)
+            away_ml_prob = american_to_prob(away_ml)
+            ml_home_favorite = float(home_ml_prob) > float(away_ml_prob)
+            spread_home_favorite = home_point < 0.0
+            if ml_home_favorite != spread_home_favorite:
+                continue
         selected_point = home_point if side == "home" else away_point
         selected_price = home_price if side == "home" else away_price
         opposing_price = away_price if side == "home" else home_price
-        return (
-            float(selected_point),
-            float(selected_price),
-            float(opposing_price),
-            book,
-        )
+        return selected_point, selected_price, opposing_price, book
 
     return pd.NA, pd.NA, pd.NA, None
 
@@ -7625,6 +7683,10 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
                                 cb if pd.notna(cb_opposing_price) else "missing"
                             )
                             market_dict["odds_source"] = "odds_api"
+                if pd.isna(point_val):
+                    # A live spread upload must not manufacture two unresolved
+                    # total candidates when no book published a total market.
+                    continue
                 market_dict["spread_line"] = pd.NA
                 market_dict["total_line"] = float(point_val) if pd.notna(point_val) else pd.NA
                 market_dict["live_spread_line"] = pd.NA
@@ -9065,7 +9127,18 @@ def generate_parlays(best_picks_df: pd.DataFrame, max_legs: int = 3) -> pd.DataF
 
     # Recap-fitted isotonic table (scripts/fit_calibration.py); None when absent,
     # in which case legs use raw effective_win_probability as before.
-    calibration = load_calibration()
+    production_frame = (
+        "Pick_Status" in best_picks_df.columns
+        and any(
+            column in best_picks_df.columns
+            for column in (
+                "production_eligible",
+                "market_line_source",
+                "degraded_feature_subset_flag",
+            )
+        )
+    )
+    calibration = load_calibration() if production_frame else None
     parlays_df = generate_smart_parlays(best_picks_df, num_rr_candidates=5, calibration=calibration)
 
     if parlays_df.empty:

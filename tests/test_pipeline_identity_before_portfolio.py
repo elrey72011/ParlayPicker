@@ -65,7 +65,7 @@ def test_empty_production_card_sets_final_empty_diagnostics(monkeypatch):
     assert state["diagnostics"]["actionable_family_counts"] == {}
 
 
-def test_empty_card_recovery_promotes_clean_non_over_candidates(monkeypatch):
+def test_empty_card_recovery_stays_disabled_in_production(monkeypatch):
     def fake_run_analysis_pipeline(**kwargs):
         analysis = pd.DataFrame([{"league":"NBA","home_team":"A","away_team":"B","game_date":"2026-05-03","market_type":"spread_home","expected_value":0.2,"edge":0.2,"calibrated_probability":0.65}])
         return analysis, pd.DataFrame(), {}
@@ -92,6 +92,6 @@ def test_empty_card_recovery_promotes_clean_non_over_candidates(monkeypatch):
     state, _, _ = app._run_pipeline(controls)
     out = state["best_picks_df"]
     actionable = out[out["Pick_Status"] == "Actionable"]
-    assert len(actionable) <= 2
-    assert not actionable["market_type"].astype(str).str.lower().eq("total_over").any()
-    assert state["diagnostics"]["empty_card_recovery_triggered"] is True
+    assert actionable.empty
+    assert state["diagnostics"]["empty_card_recovery_enabled"] is False
+    assert state["diagnostics"]["empty_card_recovery_triggered"] is False

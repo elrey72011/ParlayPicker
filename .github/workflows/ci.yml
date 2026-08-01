@@ -50,10 +50,9 @@ jobs:
           tests/test_lean_card.py
           tests/test_regression_kalshi_and_results.py::test_results_recap_upload_reset_behavior
 
-  full-suite-observability:
+  full-suite:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6

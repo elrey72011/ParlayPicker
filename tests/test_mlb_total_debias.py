@@ -64,7 +64,7 @@ def test_recompute_consensus_reapplies_mlb_total_debias():
         "best_pick": [f"Over {i}" for i in range(n)],
         "odds_american": [-110.0] * n,
         "market_probability": [0.46] * n,
-        "kalshi_probability": [0.575] * n,   # tier 1
+        "kalshi_probability": [0.55] * n,   # tier 1, not exempt as a strong Agrees over
         "ml_probability": [0.72] * n,
         "model_probability": [0.72] * n,
         "theover_probability": [float("nan")] * n,

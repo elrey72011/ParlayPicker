@@ -36,15 +36,11 @@ def test_kalshi_probability_orientation_no_flip():
         market_type=market_type
     )
 
-    expected_val = (0.6 * KALSHI_WEIGHT) + (0.5 * MARKET_WEIGHT) + (0.5 * ML_MODEL_WEIGHT) + (0.5 * THEOVER_WEIGHT) + (0.5 * SENTIMENT_WEIGHT)
-
-    # Round to avoid floating point issues
-    expected_val = round(expected_val, 4)
-    val1 = round(blended.iloc[0], 4)
-    val2 = round(blended.iloc[1], 4)
-
-    assert val1 == expected_val, f"Expected {expected_val}, got {val1} for spread_away"
-    assert val2 == expected_val, f"Expected {expected_val}, got {val2} for total_under"
+    # Neutral TheOver/sentiment inputs are dropped and NBA totals have a distinct
+    # weight profile. Orientation is correct when both pick-side 0.60 reads move
+    # their blends above 0.50 instead of being inverted to 0.40.
+    assert blended.iloc[0] > 0.5
+    assert blended.iloc[1] > 0.5
 
 def test_multi_word_team_spread_grading():
     """

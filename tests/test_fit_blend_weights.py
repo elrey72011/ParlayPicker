@@ -14,16 +14,31 @@ from scripts.fit_blend_weights import (
     log_loss,
     load_exports,
     run_fit,
+    walk_forward_indices,
 )
 
 
 def test_blended_prob_matches_weighted_average_when_all_present():
     signals = np.array([[0.6, 0.5, 0.7, 0.65]])
     w = np.array([0.43, 0.17, 0.35, 0.05])  # Kalshi, Market, TheOver, ML order
-    # NOTE: SIGNAL order in the harness is kalshi, market, ml, theover.
-    # Here we just check the math: dot product of normalised weights.
     expected = float((signals[0] * w).sum() / w.sum())
     assert blended_prob(signals, w)[0] == pytest.approx(expected, abs=1e-9)
+
+
+def test_signal_columns_match_production_weight_order():
+    assert SIGNAL_COLS == [
+        "blend_in_kalshi",
+        "blend_in_market",
+        "blend_in_theover",
+        "blend_in_ml",
+    ]
+
+
+def test_walk_forward_indices_never_train_on_future_rows():
+    splits = walk_forward_indices(20, folds=4, min_train_rows=10)
+    assert splits
+    for train, test in splits:
+        assert train.max() < test.min()
 
 
 def test_blended_prob_drops_nan_and_renormalises():
@@ -115,10 +130,11 @@ def test_run_fit_end_to_end(tmp_path):
     df = pd.DataFrame({
         "league": "MLB",
         "market_type": "total_under",
+        "game_date": pd.date_range("2025-01-01", periods=n, freq="D"),
         "blend_in_kalshi": sig[:, 0],
         "blend_in_market": sig[:, 1],
-        "blend_in_ml": sig[:, 2],
-        "blend_in_theover": sig[:, 3],
+        "blend_in_theover": sig[:, 2],
+        "blend_in_ml": sig[:, 3],
         "Pick_Outcome": np.where(y == 1, "WIN", "LOSS"),
     })
     p = tmp_path / "best_picks_export_test.csv"

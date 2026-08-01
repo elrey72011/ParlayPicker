@@ -8,7 +8,7 @@ def test_two_stage_finalist_selection_logic():
         "league": ["NBA", "NBA", "NBA", "NBA", "NBA"],
         "home_team": ["Lakers", "Lakers", "Bulls", "Bulls", "Bulls"],
         "away_team": ["Warriors", "Warriors", "Celtics", "Celtics", "Celtics"],
-        "game_date": pd.to_datetime(["2024-01-01", "2024-01-01", "2024-01-02", "2024-01-02", "2024-01-02"], utc=True),
+        "game_date": pd.to_datetime(["2026-08-01"] * 5, utc=True),
         "market_type": ["spread_home", "total_over", "spread_away", "total_under", "h2h_home"],
         "spread_line": [-5.5, np.nan, 4.5, np.nan, np.nan],
         "total_line": [np.nan, 225.5, np.nan, 210.5, np.nan],
@@ -23,6 +23,9 @@ def test_two_stage_finalist_selection_logic():
         "candidate_source": ["upload"] * 5,
         "orientation_source": ["model"] * 5,
         "upload_match_reason": ["matched"] * 5,
+        "line_source": ["live"] * 5,
+        "live_spread_line": [-5.5, np.nan, 4.5, np.nan, np.nan],
+        "live_total_line": [np.nan, 225.5, np.nan, 210.5, np.nan],
     })
 
     diagnostics = {}
@@ -47,7 +50,8 @@ def test_two_stage_finalist_selection_logic():
     # Verify diagnostics dictionary was updated properly
     assert "selection_diagnostics" in diagnostics
     diags = diagnostics["selection_diagnostics"]
-    assert diags["raw_family_counts"]["side"] == 3
+    # Production Best Available excludes moneylines, leaving the two spread rows.
+    assert diags["raw_family_counts"]["side"] == 2
     assert diags["raw_family_counts"]["total"] == 2
 
     assert diags["finalist_family_counts"]["side"] == 2

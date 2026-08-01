@@ -40,13 +40,14 @@ def test_nba_over_boost_applied():
     assert model_probability[2] == 0.5
 
 
-def test_total_over_strict_guardrails():
+def test_total_over_strict_guardrails(monkeypatch):
     """Test that total_over requires higher edge and EV thresholds to become Actionable."""
+    monkeypatch.setattr("app_core.weights_config.EMPIRICAL_TIER_OVERLAY_ENABLED", False)
     analysis_df = pd.DataFrame({
         "league": ["NFL", "NFL", "NFL", "NFL"],
         "home_team": ["Team A", "Team B", "Team C", "Team D"],
         "away_team": ["Team X", "Team Y", "Team Z", "Team W"],
-        "game_date": ["2023-10-10", "2023-10-10", "2023-10-10", "2023-10-10"],
+        "game_date": ["2026-08-01", "2026-08-01", "2026-08-01", "2026-08-01"],
         "market_type": ["total_over", "total_over", "spread_home", "total_under"],
         "expected_value": [0.02, TOTAL_OVER_MIN_EV + 0.01, 0.02, 0.02],
         "edge": [0.03, TOTAL_OVER_MIN_EDGE + 0.01, 0.03, 0.03],
@@ -55,10 +56,16 @@ def test_total_over_strict_guardrails():
         "theover_probability": [0.55, 0.55, 0.55, 0.55],
         "market_probability": [0.5, 0.5, 0.5, 0.5],
         "odds_american": [-110, -110, -110, -110],
+        "decimal_odds": [1.0 + (100.0 / 110.0)] * 4,
         "total_line": [50.5, 50.5, np.nan, 50.5],
         "spread_line": [np.nan, np.nan, -3.5, np.nan],
         "matchup_id": ["A", "B", "C", "D"],
-        "best_pick": ["Over 50.5", "Over 50.5", "Team C -3.5", "Under 50.5"]
+        "best_pick": ["Over 50.5", "Over 50.5", "Team C -3.5", "Under 50.5"],
+        "is_live_data": [True] * 4,
+        "odds_source": ["odds_api"] * 4,
+        "line_source": ["live"] * 4,
+        "live_total_line": [50.5, 50.5, np.nan, 50.5],
+        "live_spread_line": [np.nan, np.nan, -3.5, np.nan],
     })
 
     best_picks_df = build_best_picks_df(analysis_df)
@@ -81,4 +88,4 @@ def test_total_over_strict_guardrails():
 
     # 4th row (D): total_under with 0.02 EV/0.03 Edge (passes baseline 0.01/0.02) -> Below Threshold (fails 0.56 TOTAL_MIN_WIN_PROB)
     assert row_d["Pick_Status"] == "Below Threshold"
-    assert "Win Probability for Totals" in row_d["Status_Reason"]
+    assert "total_under cold-market penalty" in row_d["Status_Reason"]
