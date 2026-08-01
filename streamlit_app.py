@@ -174,6 +174,87 @@ def apply_status_display_labels(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+_COMPACT_EXPORT_COLUMNS = [
+    "pipeline_build",
+    "Wager_Instruction", "Export_Scope", "Bettable",
+    "WinProbability", "expected_value", "edge",
+    "Conviction_Score", "market_probability", "kalshi_probability", "ml_probability",
+    "effective_expected_value", "effective_edge", "effective_win_probability",
+    "consensus_agreement", "Play_Tier", "Play_Stake", "Pick_Status", "Pick_Quality",
+    "league", "Home", "Away", "Commence (Local)", "odds_american", "odds_source",
+    "market_line_source_detail", "best_pick", "gemini_pick", "Kelly_Bet_Size",
+]
+
+
+def _compact_bool_series(df: pd.DataFrame, column: str) -> pd.Series:
+    """Fail-closed boolean parsing for user-facing wager exports."""
+    if column not in df.columns:
+        return pd.Series(False, index=df.index, dtype=bool)
+    values = df[column]
+    if pd.api.types.is_bool_dtype(values.dtype):
+        return values.fillna(False).astype(bool)
+    normalized = values.astype("string").fillna("").str.strip().str.lower()
+    return normalized.isin({"true", "1", "yes", "y"})
+
+
+def _build_compact_export_frame(best_picks_export: pd.DataFrame) -> pd.DataFrame:
+    """Build the compact workbook frame with wager state enforced fail-closed.
+
+    Streamlit reruns can retain stale sizing fields even after the production gate
+    downgrades a row. The compact workbook is a user-facing betting artifact, so its
+    Kelly column must never show money unless the same row is explicitly bettable,
+    carries a positive approved play stake, and is not labeled DO NOT BET.
+    """
+    if best_picks_export is None:
+        best_picks_export = pd.DataFrame()
+    available_cols = [
+        column for column in _COMPACT_EXPORT_COLUMNS
+        if column in best_picks_export.columns
+    ]
+    compact_export = best_picks_export[available_cols].copy()
+
+    if "odds_american" in compact_export.columns:
+        compact_export = compact_export.rename(columns={"odds_american": "Pick Price"})
+        price_source = compact_export.get(
+            "market_line_source_detail",
+            pd.Series("", index=compact_export.index, dtype="object"),
+        ).fillna("").astype(str).str.strip()
+        fallback_price_source = compact_export.get(
+            "odds_source",
+            pd.Series("", index=compact_export.index, dtype="object"),
+        ).fillna("").astype(str).str.strip()
+        price_source = price_source.where(price_source.ne(""), fallback_price_source)
+        compact_export = compact_export.drop(
+            columns=["odds_source", "market_line_source_detail"], errors="ignore"
+        )
+        price_col_index = compact_export.columns.get_loc("Pick Price") + 1
+        compact_export.insert(price_col_index, "Price Source", price_source)
+
+    bettable = _compact_bool_series(compact_export, "Bettable")
+    play_stake = pd.to_numeric(
+        compact_export.get("Play_Stake", pd.Series(0.0, index=compact_export.index)),
+        errors="coerce",
+    ).fillna(0.0)
+    wager_instruction = _safe_str_series(compact_export, "Wager_Instruction")
+    do_not_bet = (
+        wager_instruction.str.strip().str.upper().str.startswith("DO NOT BET")
+    )
+    approved_wager = bettable & play_stake.gt(0.0) & ~do_not_bet
+
+    if "Play_Stake" in compact_export.columns:
+        compact_export["Play_Stake"] = play_stake.where(approved_wager, 0.0).round(2)
+    if "Kelly_Bet_Size" in compact_export.columns:
+        kelly = pd.to_numeric(compact_export["Kelly_Bet_Size"], errors="coerce").fillna(0.0)
+        compact_export["Kelly_Bet_Size"] = (
+            kelly.where(approved_wager, 0.0).clip(lower=0.0).round(2)
+        )
+
+    compact_export["Win Amount"] = ""
+    compact_export["W/L"] = ""
+    compact_export["Total Amount"] = ""
+    return compact_export
+
+
 def _friendly_no_bet_reason(row: pd.Series | dict) -> str:
     """One plain-English line for why a non-Actionable pick isn't bettable.
 
@@ -2446,42 +2527,7 @@ def main() -> None:
             from openpyxl.utils import get_column_letter
             from openpyxl.styles import Alignment, Font
 
-            compact_cols = [
-                "Wager_Instruction", "Export_Scope", "Bettable",
-                "WinProbability", "expected_value", "edge",
-                "Conviction_Score", "market_probability", "kalshi_probability", "ml_probability",
-                "effective_expected_value", "effective_edge", "effective_win_probability",
-                "consensus_agreement", "Play_Tier", "Play_Stake", "Pick_Status", "Pick_Quality", "league", "Home", "Away",
-                "Commence (Local)", "odds_american", "odds_source",
-                "market_line_source_detail", "best_pick", "gemini_pick", "Kelly_Bet_Size",
-            ]
-            available_compact_cols = [c for c in compact_cols if c in best_picks_export.columns]
-            compact_export = best_picks_export[available_compact_cols].copy()
-            # Keep the pick's exact American price and expose its provenance. ``odds_api``
-            # is a transport/source family, not a Novig book identifier, so labeling every
-            # such price "Novig Line" misidentified FanDuel consensus quotes.
-            if "odds_american" in compact_export.columns:
-                compact_export = compact_export.rename(columns={"odds_american": "Pick Price"})
-                _price_source = compact_export.get(
-                    "market_line_source_detail",
-                    pd.Series("", index=compact_export.index, dtype="object"),
-                ).fillna("").astype(str).str.strip()
-                _fallback_price_source = compact_export.get(
-                    "odds_source",
-                    pd.Series("", index=compact_export.index, dtype="object"),
-                ).fillna("").astype(str).str.strip()
-                _price_source = _price_source.where(_price_source.ne(""), _fallback_price_source)
-                compact_export = compact_export.drop(
-                    columns=["odds_source", "market_line_source_detail"], errors="ignore"
-                )
-                _price_col_index = compact_export.columns.get_loc("Pick Price") + 1
-                compact_export.insert(_price_col_index, "Price Source", _price_source)
-
-            # Win Amount and W/L are left blank for manual entry. Total Amount is a
-            # per-row P&L formula (filled below) that resolves once they're entered.
-            compact_export["Win Amount"] = ""
-            compact_export["W/L"] = ""
-            compact_export["Total Amount"] = ""
+            compact_export = _build_compact_export_frame(best_picks_export)
 
             final_cols = list(compact_export.columns)
             pct_cols = {
