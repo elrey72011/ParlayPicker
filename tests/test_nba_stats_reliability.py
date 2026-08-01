@@ -240,7 +240,8 @@ def test_fetch_nba_stats_retries_before_fallback(monkeypatch, tmp_path):
     diag = fp.get_nba_fetch_diagnostics()
 
     assert len(stats) == 1
-    assert FakeEndpoint.calls == 3
+    # Three primary attempts plus one successful auxiliary last-five query.
+    assert FakeEndpoint.calls == 4
     assert diag["status"] == "ok"
     assert diag["retries_used"] == 2
 

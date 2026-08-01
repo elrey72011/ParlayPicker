@@ -14,7 +14,7 @@ def test_best_picks_df_matches_analysis_df_values():
         "league": ["NBA", "NBA"],
         "home_team": ["Denver Nuggets", "Denver Nuggets"],
         "away_team": ["Oklahoma City Thunder", "Oklahoma City Thunder"],
-        "game_date": [pd.Timestamp("2026-03-08", tz="UTC")] * 2,
+        "game_date": [pd.Timestamp("2026-08-01", tz="UTC")] * 2,
         "market_type": ["total_over", "total_under"],
         "total_line": [225.5, 225.5],
         "expected_value": [0.05, -0.01],
@@ -26,6 +26,10 @@ def test_best_picks_df_matches_analysis_df_values():
         "ml_probability": [0.55, 0.45],
         "odds_american": [-110, -110],
         "market_probability": [0.5238, 0.5238],
+        "is_live_data": [True, True],
+        "odds_source": ["odds_api", "odds_api"],
+        "line_source": ["live", "live"],
+        "live_total_line": [225.5, 225.5],
     }
 
     analysis_df = pd.DataFrame(data)

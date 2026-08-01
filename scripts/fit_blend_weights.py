@@ -45,9 +45,16 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-# Order is fixed and shared with the weights table below.
-SIGNAL_COLS = ["blend_in_kalshi", "blend_in_market", "blend_in_ml", "blend_in_theover"]
-SIGNAL_NAMES = ["Kalshi", "Market", "TheOver", "ML"]
+# Keep names, persisted columns, and production weight vectors in one canonical
+# order. A previous pair of independent lists silently swapped TheOver and ML.
+SIGNAL_SPECS = [
+    ("Kalshi", "blend_in_kalshi"),
+    ("Market", "blend_in_market"),
+    ("TheOver", "blend_in_theover"),
+    ("ML", "blend_in_ml"),
+]
+SIGNAL_NAMES = [name for name, _column in SIGNAL_SPECS]
+SIGNAL_COLS = [column for _name, column in SIGNAL_SPECS]
 
 _WIN_TOKENS = {"win", "w", "won", "1", "true"}
 _LOSS_TOKENS = {"loss", "l", "lose", "lost", "0", "false"}
@@ -146,10 +153,18 @@ def _project_simplex(v: np.ndarray) -> np.ndarray:
     return np.maximum(v - theta, 0.0)
 
 
-def kfold_indices(n: int, folds: int, seed: int = 0):
-    rng = np.random.default_rng(seed)
-    idx = rng.permutation(n)
-    return [idx[i::folds] for i in range(folds)]
+def walk_forward_indices(n: int, folds: int, min_train_rows: int | None = None):
+    """Yield expanding-window train/test indices without future leakage."""
+    if n < 2:
+        return []
+    min_train = int(min_train_rows or max(1, n // 2))
+    min_train = min(max(min_train, 1), n - 1)
+    boundaries = np.linspace(min_train, n, min(int(folds), n - min_train) + 1, dtype=int)
+    splits = []
+    for start, end in zip(boundaries[:-1], boundaries[1:]):
+        if end > start:
+            splits.append((np.arange(0, start), np.arange(start, end)))
+    return splits
 
 
 # --------------------------------------------------------------------------- #
@@ -195,6 +210,19 @@ def load_exports(pattern: str, outcome_col: str | None) -> pd.DataFrame:
     if not frames:
         raise SystemExit("No readable CSVs.")
     df = pd.concat(frames, ignore_index=True)
+
+    date_col = next((c for c in ("game_date", "event_date", "date") if c in df.columns), None)
+    dates = (
+        pd.to_datetime(df[date_col], errors="coerce", utc=True)
+        if date_col
+        else pd.Series(pd.NaT, index=df.index, dtype="datetime64[ns, UTC]")
+    )
+    if dates.isna().any():
+        source_dates = df["__source_file"].astype(str).str.extract(
+            r"(20\d{2}-\d{2}-\d{2})", expand=False
+        )
+        dates = dates.fillna(pd.to_datetime(source_dates, errors="coerce", utc=True))
+    df["__evaluation_date"] = dates
 
     col = outcome_col or next((c for c in _OUTCOME_CANDIDATES if c in df.columns), None)
     if col is None:
@@ -259,19 +287,69 @@ def evaluate(signals: np.ndarray, y: np.ndarray, ws: WeightSet) -> dict:
 
 
 def cross_val(signals: np.ndarray, y: np.ndarray, folds: int, seed_weights: np.ndarray) -> dict:
-    folds = min(folds, len(y))
-    if folds < 2:
+    splits = walk_forward_indices(len(y), folds)
+    if not splits:
         return {}
-    parts = kfold_indices(len(y), folds)
     ll, br = [], []
-    for i in range(folds):
-        test = parts[i]
-        train = np.concatenate([parts[j] for j in range(folds) if j != i])
+    for train, test in splits:
         w = fit_weights(signals[train], y[train], seed_weights=seed_weights)
         p = blended_prob(signals[test], w)
         ll.append(log_loss(y[test], p))
         br.append(brier(y[test], p))
-    return {"cv_log_loss": float(np.mean(ll)), "cv_brier": float(np.mean(br))}
+    return {
+        "cv_log_loss": float(np.mean(ll)),
+        "cv_brier": float(np.mean(br)),
+        "cv_folds": len(splits),
+        "out_of_sample": True,
+    }
+
+
+def chronological_promotion_gate(
+    signals: np.ndarray,
+    y: np.ndarray,
+    current_weights: np.ndarray,
+    *,
+    test_fraction: float = 0.20,
+) -> dict:
+    """Require fitted weights to beat current and simple future baselines."""
+    n = len(y)
+    if n < 2:
+        return {"promotable": False, "reason": "not enough dated rows"}
+    cut = min(max(int(np.floor(n * (1.0 - test_fraction))), 1), n - 1)
+    train, test = np.arange(cut), np.arange(cut, n)
+    fitted = fit_weights(signals[train], y[train], seed_weights=current_weights)
+    candidates = {
+        "fitted": blended_prob(signals[test], fitted),
+        "current": blended_prob(signals[test], current_weights),
+    }
+    for name, column in (("kalshi", 0), ("market", 1)):
+        present = np.isfinite(signals[test, column])
+        if present.any():
+            candidate = np.full(len(test), float(y[train].mean()))
+            candidate[present] = signals[test, column][present]
+            candidates[name] = np.clip(candidate, 1e-6, 1 - 1e-6)
+    candidates["train_base_rate"] = np.full(len(test), float(y[train].mean()))
+    metrics = {
+        name: {"log_loss": log_loss(y[test], p), "brier": brier(y[test], p)}
+        for name, p in candidates.items()
+    }
+    benchmarks = [metrics[name] for name in metrics if name != "fitted"]
+    promotable = all(
+        metrics["fitted"][metric] < min(row[metric] for row in benchmarks)
+        for metric in ("log_loss", "brier")
+    )
+    return {
+        "promotable": bool(promotable),
+        "train_rows": int(len(train)),
+        "test_rows": int(len(test)),
+        "weights": fitted,
+        "metrics": metrics,
+        "reason": (
+            "beats all holdout baselines"
+            if promotable
+            else "does not beat every holdout baseline"
+        ),
+    }
 
 
 def reliability(y: np.ndarray, p: np.ndarray, bins: int = 5) -> None:
@@ -316,6 +394,9 @@ def run_fit(df: pd.DataFrame, league: str, market: str, min_samples: int, folds:
         )
     cell = filter_cell(df, league, market)
     cell = cell[cell["__y"].notna()].copy()
+    dated = "__evaluation_date" in cell.columns and cell["__evaluation_date"].notna().all()
+    if dated:
+        cell = cell.sort_values("__evaluation_date", kind="stable")
     signals = cell[SIGNAL_COLS].apply(pd.to_numeric, errors="coerce").to_numpy(dtype=float)
     y = cell["__y"].to_numpy(dtype=float)
     # Require at least one present signal per row.
@@ -340,11 +421,31 @@ def run_fit(df: pd.DataFrame, league: str, market: str, min_samples: int, folds:
     for ws in sets:
         m = evaluate(signals, y, ws)
         print(f"{ws.name + ' (train)':>16} | {m['log_loss']:10.4f}  {m['brier']:8.4f}")
-    cv = cross_val(signals, y, folds, seed_weights=current.weights if current else None)
+    cv = (
+        cross_val(signals, y, folds, seed_weights=current.weights)
+        if dated and current is not None
+        else {}
+    )
     if cv:
         print(f"{'fitted (CV)':>16} | {cv['cv_log_loss']:10.4f}  {cv['cv_brier']:8.4f}")
 
     reliability(y, blended_prob(signals, fitted.weights))
+
+    promotion = (
+        chronological_promotion_gate(signals, y, current.weights)
+        if dated and current is not None and n >= min_samples
+        else {"promotable": False, "reason": "insufficient dated samples"}
+    )
+    if promotion.get("metrics"):
+        print("\nChronological holdout promotion gate:")
+        for name, metrics in promotion["metrics"].items():
+            print(
+                f"  {name:<15} log_loss={metrics['log_loss']:.4f} "
+                f"brier={metrics['brier']:.4f}"
+            )
+    if n >= min_samples and not promotion["promotable"]:
+        print(f"\nNOT PROMOTABLE: {promotion['reason']}. Keep the current production weights.")
+        return 0
 
     if n < min_samples:
         print(

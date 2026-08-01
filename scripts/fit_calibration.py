@@ -19,6 +19,7 @@ Re-run after each graded slate is added (scripts/grade_slate.py).
 """
 from __future__ import annotations
 
+import argparse
 import re
 import sys
 from pathlib import Path
@@ -29,9 +30,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from core.probability_calibration import (  # noqa: E402
     DEFAULT_CALIBRATION_PATH,
+    apply_calibration,
     fit_isotonic_calibration,
     save_calibration,
 )
+from core.walk_forward import chronological_split, probability_metrics  # noqa: E402
 
 PROB_COLS = ["effective_win_probability", "WinProbability"]
 ROOT = Path(__file__).resolve().parents[1]
@@ -68,9 +71,13 @@ def _extract(df: pd.DataFrame) -> pd.DataFrame:
         "prob": df[prob_col].map(_to_prob),
         "wl": df[wl_col].astype(str).str.strip().str.upper(),
     })
+    date_col = next((c for c in ("game_date", "event_date", "date") if c in df.columns), None)
+    if date_col:
+        out["slate_date"] = pd.to_datetime(df[date_col], errors="coerce", utc=True)
     out = out[out["wl"].isin(["WIN", "LOSS", "W", "L"])]
     out["win"] = out["wl"].isin(["WIN", "W"]).astype(int)
-    return out[["prob", "win"]].dropna()
+    keep = ["prob", "win"] + (["slate_date"] if "slate_date" in out.columns else [])
+    return out[keep].dropna(subset=["prob", "win"])
 
 
 # The May .txt slates are hand-pasted spreadsheet dumps: all rows on ONE line, with
@@ -108,6 +115,11 @@ def load_graded(exports_dir: Path) -> pd.DataFrame:
             print(f"  [skip] {f.name}: {e}", file=sys.stderr)
             continue
         if not got.empty:
+            file_date = pd.to_datetime(f.stem[:10], errors="coerce", utc=True)
+            if "slate_date" not in got.columns:
+                got["slate_date"] = file_date
+            else:
+                got["slate_date"] = got["slate_date"].fillna(file_date)
             frames.append(got)
             print(f"  {f.name}: {len(got)} graded picks")
     if not frames:
@@ -122,17 +134,93 @@ def report(graded: pd.DataFrame) -> None:
     print(by_bin.to_string(float_format=lambda v: f"{v:.3f}"))
 
 
-def main() -> int:
-    exports_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("data/backtest_exports")
-    out_json = Path(sys.argv[2]) if len(sys.argv) > 2 else DEFAULT_CALIBRATION_PATH
+def validate_calibration_promotion(
+    graded: pd.DataFrame,
+    *,
+    test_fraction: float = 0.20,
+    min_train_rows: int = 100,
+) -> dict:
+    """Evaluate a train-only isotonic map on a strictly future holdout."""
+    required = {"prob", "win", "slate_date"}
+    if not required.issubset(graded.columns) or graded["slate_date"].isna().any():
+        return {"promotable": False, "reason": "dated graded rows are required"}
+    if len(graded) <= int(min_train_rows):
+        return {
+            "promotable": False,
+            "reason": (
+                f"not enough training rows: need more than {int(min_train_rows)}, "
+                f"got {len(graded)}"
+            ),
+        }
+    try:
+        train, test = chronological_split(
+            graded,
+            "slate_date",
+            test_fraction=test_fraction,
+            min_train_rows=min_train_rows,
+        )
+    except ValueError as exc:
+        return {"promotable": False, "reason": str(exc)}
+    knots = fit_isotonic_calibration(train["prob"].tolist(), train["win"].tolist())
+    calibrated = apply_calibration(test["prob"], knots)
+    base_rate = pd.Series(float(train["win"].mean()), index=test.index)
+    metrics = {
+        "calibrated": probability_metrics(calibrated, test["win"]),
+        "raw": probability_metrics(test["prob"], test["win"]),
+        "train_base_rate": probability_metrics(base_rate, test["win"]),
+    }
+    promotable = all(
+        metrics["calibrated"][metric]
+        < min(metrics["raw"][metric], metrics["train_base_rate"][metric])
+        for metric in ("brier", "log_loss")
+    )
+    return {
+        "promotable": bool(promotable),
+        "reason": (
+            "beats raw probability and train base rate on the future holdout"
+            if promotable
+            else "does not beat raw probability and train base rate on the future holdout"
+        ),
+        "train_rows": int(len(train)),
+        "test_rows": int(len(test)),
+        "train_end": str(pd.to_datetime(train["slate_date"], utc=True).max()),
+        "test_start": str(pd.to_datetime(test["slate_date"], utc=True).min()),
+        "metrics": metrics,
+    }
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("exports_dir", nargs="?", default="data/backtest_exports")
+    parser.add_argument("out_json", nargs="?", default=str(DEFAULT_CALIBRATION_PATH))
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Write even when chronological validation fails (emergency/manual use only).",
+    )
+    args = parser.parse_args(argv)
+    exports_dir = Path(args.exports_dir)
+    out_json = Path(args.out_json)
 
     graded = load_graded(exports_dir)
+    validation = validate_calibration_promotion(graded)
+    print("\nChronological promotion validation:")
+    for name, metrics in validation.get("metrics", {}).items():
+        print(
+            f"  {name:<16} log_loss={metrics['log_loss']:.4f} "
+            f"brier={metrics['brier']:.4f} n={metrics['n']}"
+        )
+    if not validation["promotable"] and not args.force:
+        print(f"\nPROMOTION BLOCKED: {validation['reason']}", file=sys.stderr)
+        return 2
+
     knots = fit_isotonic_calibration(graded["prob"].tolist(), graded["win"].tolist())
     save_calibration(knots, out_json, meta={
         "n_graded": int(len(graded)),
         "source": _source_label(exports_dir),
         "fitted_on": pd.Timestamp.now().strftime("%Y-%m-%d"),
         "prob_col": "effective_win_probability (fallback WinProbability)",
+        "validation": validation,
     })
     print(f"\nfit on {len(graded)} graded picks -> {len(knots)} knots -> {out_json}")
     report(graded)

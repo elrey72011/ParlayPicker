@@ -39,6 +39,7 @@ def test_kalshi_enrich_na_safe_output_columns(monkeypatch):
     assert "is_matched" in out.columns
     assert bool(out.loc[0, "is_matched"]) is False
     assert float(out.loc[0, "kalshi_probability"]) == 0.0
+    assert bool(out.loc[0, "kalshi_probability_is_valid"]) is False
 
 def test_run_analysis_pipeline_handles_missing_live_game_date(monkeypatch):
     import core.streamlit_pipeline as sp

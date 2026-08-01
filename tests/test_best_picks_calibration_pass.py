@@ -26,8 +26,8 @@ def _row(
         "league": league,
         "home_team": home,
         "away_team": away,
-        "game_date": "2026-04-24",
-        "matchup_id": f"2026-04-24|{home}|{away}",
+        "game_date": "2026-08-01",
+        "matchup_id": f"2026-08-01|{home}|{away}",
         "market_type": market_type,
         "expected_value": ev,
         "edge": edge,
@@ -35,6 +35,8 @@ def _row(
         "ml_probability": win_prob,
         "model_probability": win_prob,
         "odds_american": -110,
+        "decimal_odds": 1.0 + (100.0 / 110.0),
+        "market_probability": 110.0 / 210.0,
         "spread_line": -3.5 if "spread" in market_type else pd.NA,
         "total_line": _lt,
         # Live-line provenance. build_best_picks_df now requires a trusted live line
@@ -52,7 +54,10 @@ def _row(
     }
 
 
-def test_total_under_requires_stronger_bar_than_generic_totals():
+def test_total_under_requires_stronger_bar_than_generic_totals(monkeypatch):
+    # Isolate the family threshold from the dated empirical overlay; the overlay
+    # has its own regression coverage below.
+    monkeypatch.setattr("app_core.weights_config.EMPIRICAL_TIER_OVERLAY_ENABLED", False)
     df = pd.DataFrame(
         [
             _row(idx=1, league="NFL", market_type="total_over", win_prob=0.60, ev=0.05, edge=0.05, kalshi_probability=0.54),
@@ -64,7 +69,7 @@ def test_total_under_requires_stronger_bar_than_generic_totals():
     assert out.loc[out["market_type"] == "total_under", "Pick_Status"].iloc[0] == "Below Threshold"
 
 
-def test_nba_totals_are_no_longer_overpenalized_vs_weak_mlb_spreads():
+def test_current_nba_total_and_weak_mlb_spread_both_fail_closed():
     df = pd.DataFrame(
         [
             _row(idx=1, league="NBA", market_type="total_over", win_prob=0.58, ev=0.05, edge=0.06, kalshi_probability=0.53),
@@ -72,11 +77,12 @@ def test_nba_totals_are_no_longer_overpenalized_vs_weak_mlb_spreads():
         ]
     )
     out = build_best_picks_df(df)
-    assert out.loc[out["league"] == "NBA", "Pick_Status"].iloc[0] == "Actionable"
+    assert out.loc[out["league"] == "NBA", "Pick_Status"].iloc[0] == "Below Threshold"
     assert out.loc[out["league"] == "MLB", "Pick_Status"].iloc[0] == "Below Threshold"
 
 
-def test_no_kalshi_totals_are_harder_than_kalshi_backed_totals():
+def test_no_kalshi_totals_are_harder_than_kalshi_backed_totals(monkeypatch):
+    monkeypatch.setattr("app_core.weights_config.EMPIRICAL_TIER_OVERLAY_ENABLED", False)
     df = pd.DataFrame(
         [
             # Bumped 0.60 -> 0.64 (ev/edge raised) so the Kalshi-backed row clears the
@@ -108,7 +114,7 @@ def test_agrees_does_not_auto_promote_in_standard_mode():
     assert statuses == ["Below Threshold", "Below Threshold"]
 
 
-def test_overs_and_sides_not_penalized_like_unders():
+def test_empirical_direction_overlay_can_override_generic_family_priors():
     df = pd.DataFrame(
         [
             # Kalshi 0.48 -> 0.55 so it agrees with the home spread; a disagreeing Kalshi
@@ -121,9 +127,11 @@ def test_overs_and_sides_not_penalized_like_unders():
         ]
     )
     out = build_best_picks_df(df)
-    assert out.loc[out["market_type"] == "spread_home", "Pick_Status"].iloc[0] == "Actionable"
-    assert out.loc[out["market_type"] == "total_over", "Pick_Status"].iloc[0] == "Actionable"
-    assert out.loc[out["market_type"] == "total_under", "Pick_Status"].iloc[0] == "Below Threshold"
+    # The refreshed graded sample makes the MLB Under the only production-qualified
+    # direction here. Generic family preferences must not override that evidence.
+    assert out.loc[out["market_type"] == "spread_home", "Pick_Status"].iloc[0] == "Below Threshold"
+    assert out.loc[out["market_type"] == "total_over", "Pick_Status"].iloc[0] == "Below Threshold"
+    assert out.loc[out["market_type"] == "total_under", "Pick_Status"].iloc[0] == "Actionable"
 
 
 def test_diagnostics_blocked_rows_and_shadow_cards_populate():
@@ -161,7 +169,7 @@ def test_diagnostics_blocked_rows_and_shadow_cards_populate():
 def test_mlb_spread_finalist_penalty_can_demote_weak_spread_winner(monkeypatch):
     # Isolate the spread handicap from the separate empirical-direction selector.
     monkeypatch.setattr("core.empirical_tiers.load_bucket_stats", lambda: None)
-    matchup_id = "2026-04-24|home1|away1"
+    matchup_id = "2026-08-01|home1|away1"
     df = pd.DataFrame(
         [
             _row(idx=1, league="MLB", market_type="spread_home", win_prob=0.60, ev=0.20, edge=0.20, kalshi_probability=0.50),
@@ -176,7 +184,7 @@ def test_mlb_spread_finalist_penalty_can_demote_weak_spread_winner(monkeypatch):
     assert diagnostics["demoted_by_mlb_spread_finalist_score_penalty"] >= 1
 
 
-def test_nba_side_bonus_can_promote_borderline_side():
+def test_nba_side_bonus_cannot_bypass_downstream_production_guards():
     df = pd.DataFrame(
         [
             _row(idx=1, league="NBA", market_type="spread_home", win_prob=0.52, ev=0.01, edge=0.015, kalshi_probability=0.48),
@@ -184,7 +192,8 @@ def test_nba_side_bonus_can_promote_borderline_side():
     )
     diagnostics = {}
     out = build_best_picks_df(df, diagnostics_out=diagnostics)
-    assert out.iloc[0]["Pick_Status"] == "Actionable"
+    assert out.iloc[0]["Pick_Status"] != "Actionable"
+    assert out.iloc[0]["status_blocker_stage"] != "none"
     assert diagnostics["promoted_by_nba_side_bonus"] >= 1
 
 
@@ -203,7 +212,7 @@ def test_nba_over_bonus_is_retired_and_no_longer_promotes():
     assert diagnostics.get("promoted_by_nba_over_bonus", 0) == 0
 
 
-def test_mlb_over_explicit_actionable_gate_blocks_weak_over():
+def test_mlb_mid_line_over_no_stake_rule_blocks_even_high_raw_signal():
     df = pd.DataFrame(
         [
             _row(idx=1, league="MLB", market_type="total_over", win_prob=0.56, ev=0.05, edge=0.05, kalshi_probability=0.53),
@@ -215,9 +224,10 @@ def test_mlb_over_explicit_actionable_gate_blocks_weak_over():
     diagnostics = {}
     out = build_best_picks_df(df, diagnostics_out=diagnostics).sort_values("home_team")
     assert out.iloc[0]["Pick_Status"] == "Below Threshold"
-    assert "MLB over actionable gate" in out.iloc[0]["Status_Reason"]
-    assert out.iloc[1]["Pick_Status"] == "Actionable"
-    assert diagnostics["blocked_by_mlb_over_promotion_gate"] >= 1
+    assert "mid-line Overs" in out.iloc[0]["Status_Reason"]
+    assert out.iloc[0]["status_blocker_stage"] == "mlb_over_mid_line_no_stake"
+    assert out.iloc[1]["Pick_Status"] == "Below Threshold"
+    assert out.iloc[1]["status_blocker_stage"] == "mlb_over_mid_line_no_stake"
 
 
 def test_low_line_over_guardrail_is_consensus_aware():
@@ -307,12 +317,13 @@ def test_new_diagnostics_populate_without_regressing_existing_total_protections(
     assert not out.empty
     assert diagnostics["blocked_by_mlb_spread_penalty"] >= 1
     assert diagnostics["promoted_by_nba_side_bonus"] >= 1
-    assert diagnostics["promoted_by_nba_over_bonus"] >= 1
+    assert diagnostics["promoted_by_nba_over_bonus"] == 0
     assert diagnostics["blocked_by_no_kalshi_total_penalty"] >= 1
     assert diagnostics["blocked_by_under_specific_thresholds"] >= 1
 
 
-def test_high_ev_alone_is_not_auto_blocked_as_suspicious_data():
+def test_high_ev_alone_is_not_auto_blocked_as_suspicious_data(monkeypatch):
+    monkeypatch.setattr("app_core.weights_config.EMPIRICAL_TIER_OVERLAY_ENABLED", False)
     df = pd.DataFrame(
         [
             _row(idx=1, league="NBA", market_type="spread_home", win_prob=0.61, ev=0.41, edge=0.06, kalshi_probability=0.55),
@@ -374,7 +385,7 @@ def test_divergence_cannot_preserve_negative_edge_row():
     assert row["status_blocker_stage"] == "divergence_viability_floor"
 
 
-def test_divergence_can_preserve_minimally_viable_row():
+def test_divergence_does_not_preserve_row_below_raw_viability_floor():
     df = pd.DataFrame(
         [
             _row(idx=1, league="NBA", market_type="total_over", win_prob=0.56, ev=0.01, edge=0.01, kalshi_probability=0.80),
@@ -383,9 +394,9 @@ def test_divergence_can_preserve_minimally_viable_row():
     df.loc[0, "ml_probability"] = 0.50
     out = build_best_picks_df(df)
     row = out.iloc[0]
-    assert row["Pick_Status"] == "High Variance/Speculative"
-    assert "capped due to divergence" in row["Status_Reason"]
-    assert row["status_blocker_stage"] == "divergence_guardrail"
+    assert row["Pick_Status"] == "No Play"
+    assert "divergence override denied" in row["Status_Reason"]
+    assert row["status_blocker_stage"] == "divergence_viability_floor"
 
 
 def test_divergence_high_ev_override_preserves_sub_floor_win_prob_row():
@@ -460,8 +471,8 @@ def test_divergence_viability_diagnostics_populate():
     diagnostics = {}
     out = build_best_picks_df(df, diagnostics_out=diagnostics)
     assert not out.empty
-    assert diagnostics["divergence_rows_preserved"] >= 1
-    assert diagnostics["divergence_rows_blocked_by_viability_floor"] >= 2
+    assert diagnostics["divergence_rows_preserved"] == 0
+    assert diagnostics["divergence_rows_blocked_by_viability_floor"] == 3
     assert diagnostics["divergence_rows_negative_ev"] >= 1
     assert diagnostics["divergence_rows_negative_edge"] >= 1
     assert "No Play" in diagnostics["divergence_rows_by_pick_status"]
@@ -477,10 +488,10 @@ def test_effective_metric_transparency_when_blocked_by_effective_thresholds():
     out = build_best_picks_df(df, diagnostics_out=diagnostics)
     row = out.iloc[0]
     assert row["Pick_Status"] == "Below Threshold"
-    assert row["status_metric_basis"] == "effective"
+    assert row["status_metric_basis"] == "shrunk"
     assert float(row["effective_expected_value"]) < float(row["expected_value"])
     assert "Effective EV" in row["Status_Reason"]
-    assert row["status_blocker_stage"] == "fallback_heavy_guardrail"
+    assert row["status_blocker_stage"] == "actionable_threshold"
     assert row["status_blocker_reason"] == row["Status_Reason"]
 
 
@@ -509,7 +520,7 @@ def test_run_health_fields_are_export_visible_when_present():
     assert "degraded_subset" in str(row["degraded_feature_subset_reason"])
 
 
-def test_high_ev_clean_row_promotes_to_actionable_not_high_variance():
+def test_high_ev_cannot_bypass_nba_total_probability_floor():
     df = pd.DataFrame(
         [
             _row(idx=10, league="NBA", market_type="total_over", win_prob=0.64, ev=0.45, edge=0.18, kalshi_probability=0.59),
@@ -518,9 +529,9 @@ def test_high_ev_clean_row_promotes_to_actionable_not_high_variance():
     diagnostics = {}
     out = build_best_picks_df(df, diagnostics_out=diagnostics)
     row = out.iloc[0]
-    assert row["Pick_Status"] == "Actionable"
-    assert "strong EV/edge" in row["Status_Reason"]
-    assert diagnostics["promoted_high_ev_to_actionable_no_uncertainty"] >= 1
+    assert row["Pick_Status"] == "Below Threshold"
+    assert "Win Probability for NBA Totals" in row["Status_Reason"]
+    assert diagnostics["promoted_high_ev_to_actionable_no_uncertainty"] == 0
     assert diagnostics["high_variance_due_only_high_ev"] == 0
 
 
@@ -535,8 +546,8 @@ def test_high_ev_can_be_capped_for_real_uncertainty_reason():
     out = build_best_picks_df(df, diagnostics_out=diagnostics)
     row = out.iloc[0]
     assert row["Pick_Status"] == "High Variance/Speculative"
-    assert "capped due to" in row["Status_Reason"]
-    assert row["status_blocker_stage"] == "variance_uncertainty_guardrail"
+    assert "without Kalshi market validation" in row["Status_Reason"]
+    assert row["status_blocker_stage"] == "no_kalshi_nba_guardrail"
 
 
 def test_high_variance_inflation_diagnostics_populate():
@@ -553,17 +564,19 @@ def test_high_variance_inflation_diagnostics_populate():
     out = build_best_picks_df(df, diagnostics_out=diagnostics)
     assert not out.empty
     assert diagnostics["high_variance_due_only_high_ev"] == 0
-    assert diagnostics["promoted_high_ev_to_actionable_no_uncertainty"] >= 1
-    assert diagnostics["high_variance_capped_due_to_degraded_subset"] >= 1
-    assert diagnostics["high_variance_capped_due_to_no_kalshi"] >= 1
-    assert diagnostics["high_variance_capped_due_to_divergence"] >= 1
+    assert diagnostics["promoted_high_ev_to_actionable_no_uncertainty"] == 0
+    assert out.loc[out["home_team"] == "Home21", "Pick_Status"].iloc[0] == "Below Threshold"
+    assert out.loc[out["home_team"] == "Home22", "Pick_Status"].iloc[0] == "High Variance/Speculative"
+    assert out.loc[out["home_team"] == "Home23", "Pick_Status"].iloc[0] == "No Play"
+    assert diagnostics["divergence_rows_blocked_by_viability_floor"] >= 1
     assert "High Variance/Speculative" in diagnostics["final_pick_status_counts"]
 
 
-def test_side_balance_does_not_promote_side_blocked_by_degraded_subset_reason():
+def test_side_balance_does_not_promote_side_blocked_by_degraded_subset_reason(monkeypatch):
+    monkeypatch.setattr("app_core.weights_config.EMPIRICAL_TIER_OVERLAY_ENABLED", False)
     df = pd.DataFrame(
         [
-            _row(idx=30, league="NBA", market_type="total_over", win_prob=0.64, ev=0.08, edge=0.07, kalshi_probability=0.59),
+            _row(idx=30, league="NBA", market_type="total_over", win_prob=0.75, ev=0.12, edge=0.12, kalshi_probability=0.59),
             _row(idx=31, league="NBA", market_type="spread_home", win_prob=0.64, ev=0.45, edge=0.18, kalshi_probability=None),
         ]
     )
@@ -667,10 +680,11 @@ def test_line_provenance_backfilled_and_diagnostics_set():
     assert "market_line_used" in diagnostics["best_pick_export_missing_line_columns"]
 
 
-def test_side_balance_guard_promotes_viable_side_when_actionable_is_totals_only():
+def test_side_balance_guard_does_not_promote_divergent_side(monkeypatch):
+    monkeypatch.setattr("app_core.weights_config.EMPIRICAL_TIER_OVERLAY_ENABLED", False)
     df = pd.DataFrame(
         [
-            _row(idx=510, league="NBA", market_type="total_over", win_prob=0.58, ev=0.04, edge=0.04, kalshi_probability=0.56),
+            _row(idx=510, league="NBA", market_type="total_over", win_prob=0.75, ev=0.12, edge=0.12, kalshi_probability=0.56),
             _row(idx=511, league="NBA", market_type="spread_home", win_prob=0.54, ev=0.03, edge=0.03, kalshi_probability=0.30),
         ]
     )
@@ -679,16 +693,18 @@ def test_side_balance_guard_promotes_viable_side_when_actionable_is_totals_only(
     diagnostics = {}
     out = build_best_picks_df(df, diagnostics_out=diagnostics)
     actionable = out[out["Pick_Status"].astype(str) == "Actionable"]
-    assert actionable["market_type"].astype(str).str.contains("spread|h2h", case=False, regex=True, na=False).any()
-    assert int(diagnostics["side_promoted_by_balance_guard_count"]) >= 1
-    assert "Promoted strongest viable side" in str(diagnostics["side_balance_guard_reason"])
+    assert not actionable.empty
+    assert not actionable["market_type"].astype(str).str.contains("spread|h2h", case=False, regex=True, na=False).any()
+    assert int(diagnostics["side_promoted_by_balance_guard_count"]) == 0
+    assert "No viable side candidates" in str(diagnostics["side_balance_guard_reason"])
     assert str(out.iloc[0]["actionable_family_counts"]).strip() not in {"", "{}", "MISSING_COMPUTATION"}
 
 
-def test_side_balance_guard_does_not_promote_weak_sides():
+def test_side_balance_guard_does_not_promote_weak_sides(monkeypatch):
+    monkeypatch.setattr("app_core.weights_config.EMPIRICAL_TIER_OVERLAY_ENABLED", False)
     df = pd.DataFrame(
         [
-            _row(idx=520, league="NBA", market_type="total_over", win_prob=0.64, ev=0.08, edge=0.07, kalshi_probability=0.59),
+            _row(idx=520, league="NBA", market_type="total_over", win_prob=0.75, ev=0.12, edge=0.12, kalshi_probability=0.59),
             _row(idx=521, league="NBA", market_type="spread_home", win_prob=0.51, ev=0.005, edge=0.005, kalshi_probability=0.58),
         ]
     )
@@ -700,9 +716,10 @@ def test_side_balance_guard_does_not_promote_weak_sides():
     assert "No viable side candidates within margin" in str(diagnostics["side_balance_guard_reason"])
 
 
-def test_totals_only_actionable_allowed_when_no_viable_sides_exist():
+def test_totals_only_actionable_allowed_when_no_viable_sides_exist(monkeypatch):
+    monkeypatch.setattr("app_core.weights_config.EMPIRICAL_TIER_OVERLAY_ENABLED", False)
     df = pd.DataFrame([
-        _row(idx=530, league="NBA", market_type="total_over", win_prob=0.64, ev=0.08, edge=0.07, kalshi_probability=0.59),
+        _row(idx=530, league="NBA", market_type="total_over", win_prob=0.75, ev=0.12, edge=0.12, kalshi_probability=0.59),
         _row(idx=531, league="NBA", market_type="total_under", win_prob=0.62, ev=0.06, edge=0.06, kalshi_probability=0.57),
     ])
     diagnostics = {}

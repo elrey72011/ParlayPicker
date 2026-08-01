@@ -50,7 +50,7 @@ def test_mlb_and_non_mlb_diverge_only_because_shrinks_differ():
 def test_unfaded_sources_pass_through_regardless_of_league():
     # A non-faded source (e.g. model_hit_rate) is untouched in every league/market.
     theover = np.array([0.83, 0.83])
-    src = pd.Series(["model_hit_rate", "model_hit_rate"])
+    src = pd.Series(["independent_projection", "independent_projection"])
     out = _scoped_theover_blend_fade(
         theover, src, pd.Series(["MLB", "NBA"]), pd.Series(["total_over", "total_over"]), [0, 1]
     )

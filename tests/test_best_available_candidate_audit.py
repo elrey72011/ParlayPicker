@@ -176,6 +176,21 @@ def test_strict_production_parlays_are_explicitly_premium():
     assert parlays["parlay_class"].eq("Premium").all()
     assert parlays["commercial_warning"].eq("").all()
 
+
+def test_strict_production_parlays_fail_closed_without_explicit_identity_or_price():
+    frame = pd.DataFrame([
+        _parlay_leg("game-a", "Cubs moneyline"),
+        _parlay_leg("game-b", "Pirates moneyline"),
+    ])
+
+    for required_column in ("matchup_id", "market_probability"):
+        parlays = generate_smart_parlays(
+            frame.drop(columns=[required_column]),
+            num_rr_candidates=5,
+            calibration=None,
+        )
+        assert parlays.empty
+
 def test_coverage_rows_cannot_retain_any_stake_like_value():
     frame = pd.DataFrame([
         {

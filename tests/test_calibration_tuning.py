@@ -1,7 +1,8 @@
 import pandas as pd
 from core.streamlit_pipeline import build_best_picks_df
 
-def test_side_floor_and_consensus_overlays():
+def test_side_floor_and_consensus_overlays(monkeypatch):
+    monkeypatch.setattr("app_core.weights_config.EMPIRICAL_TIER_OVERLAY_ENABLED", False)
     # Helper to generate rows for pipeline processing
     def create_row(home_team, away_team, market_type, win_prob, ev, edge, consensus_agreement="Agrees"):
         is_total = "total" in market_type.lower()
@@ -25,20 +26,25 @@ def test_side_floor_and_consensus_overlays():
             "league": "NBA",
             "home_team": home_team,
             "away_team": away_team,
-            "game_date": "2024-01-01",
-            "matchup_id": f"2024-01-01|{home_team}|{away_team}",
+            "game_date": "2026-08-01",
+            "matchup_id": f"2026-08-01|{home_team}|{away_team}",
             "market_type": market_type,
             "expected_value": ev,
             "edge": edge,
             "calibrated_probability": win_prob,
             "ml_probability": win_prob,
             "odds_american": -110,
+            "decimal_odds": 1.0 + (100.0 / 110.0),
+            "market_probability": 110.0 / 210.0,
             "spread_line": -5.0 if not is_total else pd.NA,
             "total_line": 210.0 if is_total else pd.NA,
             "consensus_agreement": consensus_agreement,
             "is_live_data": True,
             "used_stale_features": False,
             "odds_source": "odds_api",
+            "line_source": "live",
+            "live_spread_line": -5.0 if not is_total else pd.NA,
+            "live_total_line": 210.0 if is_total else pd.NA,
             "kalshi_probability": k_prob
         }
 
@@ -70,20 +76,22 @@ def test_side_floor_and_consensus_overlays():
     # 1. Side failing floor -> Below Threshold
     assert best.loc[best["home_team"] == "A", "Pick_Status"].iloc[0] == "Below Threshold"
 
-    # 2. Side passing floor -> Actionable
-    assert best.loc[best["home_team"] == "C", "Pick_Status"].iloc[0] == "Actionable"
+    # 2. A side above the generic floor still cannot bypass the owner's stake floor.
+    side = best.loc[best["home_team"] == "C"].iloc[0]
+    assert side["Pick_Status"] == "High Variance/Speculative"
+    assert "stake floor" in side["Status_Reason"]
 
     # 3. Neutral failing overlay -> Below Threshold
     assert best.loc[best["home_team"] == "E", "Pick_Status"].iloc[0] == "Below Threshold"
 
-    # 4. Neutral NBA total now passes due NBA over bonus in STANDARD profile
-    assert best.loc[best["home_team"] == "G", "Pick_Status"].iloc[0] == "Actionable"
+    # 4. The retired NBA Over bonus cannot bypass the current NBA probability floor.
+    assert best.loc[best["home_team"] == "G", "Pick_Status"].iloc[0] == "Below Threshold"
 
-    # 5. Disagrees row remains Actionable in STANDARD when core thresholds are met
-    assert best.loc[best["home_team"] == "I", "Pick_Status"].iloc[0] == "Actionable"
+    # 5. A disagreeing market does not relax the NBA total floor.
+    assert best.loc[best["home_team"] == "I", "Pick_Status"].iloc[0] == "Below Threshold"
 
-    # 6. Higher-prob Disagrees row is also Actionable
-    assert best.loc[best["home_team"] == "K", "Pick_Status"].iloc[0] == "Actionable"
+    # 6. Even the higher raw probability remains below the post-shrink NBA floor.
+    assert best.loc[best["home_team"] == "K", "Pick_Status"].iloc[0] == "Below Threshold"
 
     # 7. Agrees does not bypass under-specific thresholds -> Below Threshold
     assert best.loc[best["home_team"] == "M", "Pick_Status"].iloc[0] == "Below Threshold"

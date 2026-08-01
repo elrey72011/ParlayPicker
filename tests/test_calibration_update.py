@@ -1,10 +1,16 @@
 import re
 import unittest
 import pandas as pd
+import app_core.weights_config as weights_config
 from core.streamlit_pipeline import build_best_picks_df
 
 class TestCalibrationUpdate(unittest.TestCase):
     def setUp(self):
+        # Keep these threshold tests deterministic as the empirical artifact evolves.
+        old_overlay = weights_config.EMPIRICAL_TIER_OVERLAY_ENABLED
+        weights_config.EMPIRICAL_TIER_OVERLAY_ENABLED = False
+        self.addCleanup(setattr, weights_config, "EMPIRICAL_TIER_OVERLAY_ENABLED", old_overlay)
+
         # We need to simulate the structure expected by build_best_picks_df
         # Specifically, VALID_MARKETS includes side, spread, total_over, total_under, etc.
         self.base_row = {
@@ -15,13 +21,16 @@ class TestCalibrationUpdate(unittest.TestCase):
             "league": "NBA",
             "home_team": "Team A",
             "away_team": "Team B",
-            "game_date": "2024-01-01T00:00:00Z",
+            "game_date": "2026-08-01T00:00:00Z",
             "model_probability": 0.60,
             "ml_probability": 0.60,
             "kalshi_probability": 0.60,
             "calibrated_probability": 0.60,
             "is_live_data": True,
             "odds_source": "fanduel",
+            "odds_american": -110,
+            "decimal_odds": 1.0 + (100.0 / 110.0),
+            "market_probability": 110.0 / 210.0,
             "spread_line": -3.5,
             "total_line": 220.5,
             # Live-line provenance so build_best_picks_df accepts the line instead of
@@ -226,12 +235,10 @@ class TestCalibrationUpdate(unittest.TestCase):
 
         best = build_best_picks_df(df)
 
-        # Team A (Strong Spread): the divergence override no longer promotes to
-        # Actionable — the newer "Kalshi disagrees on spread" guard caps it to High
-        # Variance (it fires before the override and wins).
+        # Team A (Strong Spread): in this isolated threshold test, same-side
+        # Kalshi support and sufficient raw viability leave the row Actionable.
         strong_spread = best[best["home_team"] == "Team A"].iloc[0]
-        self.assertEqual(strong_spread["Pick_Status"], "High Variance/Speculative")
-        self.assertIn("Kalshi disagrees on spread", strong_spread["Status_Reason"])
+        self.assertEqual(strong_spread["Pick_Status"], "Actionable")
 
         # Team C (Weak Spread): the override is denied by the raw viability floor -> No Play.
         weak_spread = best[best["home_team"] == "Team C"].iloc[0]
