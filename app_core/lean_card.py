@@ -94,8 +94,10 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
 
     if bucket_stats is _UNSET:
         try:
-            from core.empirical_tiers import load_bucket_stats
+            from core.empirical_tiers import bucket_stats_are_fresh, load_bucket_stats
             bucket_stats = load_bucket_stats()
+            if not bucket_stats_are_fresh(bucket_stats):
+                bucket_stats = None
         except Exception:
             bucket_stats = None
 

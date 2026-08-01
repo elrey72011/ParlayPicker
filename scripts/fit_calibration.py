@@ -34,6 +34,16 @@ from core.probability_calibration import (  # noqa: E402
 )
 
 PROB_COLS = ["effective_win_probability", "WinProbability"]
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def _source_label(path: Path) -> str:
+    """Store portable repo-relative provenance instead of a user's absolute path."""
+    resolved = path.resolve()
+    try:
+        return resolved.relative_to(ROOT).as_posix()
+    except ValueError:
+        return str(path)
 
 
 def _to_prob(v: object) -> float:
@@ -120,7 +130,7 @@ def main() -> int:
     knots = fit_isotonic_calibration(graded["prob"].tolist(), graded["win"].tolist())
     save_calibration(knots, out_json, meta={
         "n_graded": int(len(graded)),
-        "source": str(exports_dir),
+        "source": _source_label(exports_dir),
         "fitted_on": pd.Timestamp.now().strftime("%Y-%m-%d"),
         "prob_col": "effective_win_probability (fallback WinProbability)",
     })

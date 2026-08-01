@@ -53,6 +53,7 @@ from scripts.fit_calibration import _WL_CELL_RE  # noqa: E402
 # fitted table is not very sensitive to the exact value (21/28/35 all flag the
 # same decayed buckets and keep under:Agrees proven).
 DEFAULT_HALF_LIFE_DAYS = 21.0
+ROOT = Path(__file__).resolve().parents[1]
 
 _FILE_DATE_RE = re.compile(r"(\d{4}-\d{2}-\d{2})")
 
@@ -61,6 +62,15 @@ _CONSENSUS_CAPTURE_RE = re.compile(
 )
 _LEAGUE_RE = re.compile(r"\b(MLB|NBA|NHL)\b")
 _DIRECTION_RE = re.compile(r"\b(Over|Under)\b")
+
+
+def _source_label(path: Path) -> str:
+    """Store portable repo-relative provenance instead of a user's absolute path."""
+    resolved = path.resolve()
+    try:
+        return resolved.relative_to(ROOT).as_posix()
+    except ValueError:
+        return str(path)
 
 
 def _rows_from_txt(text: str) -> list[dict]:
@@ -162,7 +172,7 @@ def fit_bucket_stats(exports_dir: Path, half_life_days: float = DEFAULT_HALF_LIF
         "overall": {"n": int(len(graded)), "win_rate": overall_rate},
         "buckets": buckets,
         "meta": {
-            "source": str(exports_dir),
+            "source": _source_label(exports_dir),
             "fitted_on": pd.Timestamp.now().strftime("%Y-%m-%d"),
             "half_life_days": float(half_life_days),
             "recency_anchor": anchor.strftime("%Y-%m-%d") if pd.notna(anchor) else None,

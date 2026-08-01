@@ -14,7 +14,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from scripts.fit_bucket_stats import fit_bucket_stats
+from scripts.fit_bucket_stats import ROOT, _source_label, fit_bucket_stats
 
 
 def _write_slate(path: Path, date: str, wl_list: list[str]) -> None:
@@ -75,3 +75,7 @@ def test_overall_n_is_raw_count(tmp_path):
     assert stats["overall"]["n"] == 10
     # Overall rate is recency-weighted (recent losses dominate the old wins).
     assert stats["overall"]["win_rate"] < 0.30
+
+
+def test_repo_calibration_source_is_portable():
+    assert _source_label(ROOT / "data" / "backtest_exports") == "data/backtest_exports"
