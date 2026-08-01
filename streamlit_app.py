@@ -971,7 +971,11 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
         try:
             from core.streamlit_pipeline import _calibrated_beats_breakeven
             from core.probability_calibration import load_calibration as _load_cal
-            from core.empirical_tiers import bucket_key as _bkey, load_bucket_stats as _load_bstats
+            from core.empirical_tiers import (
+                bucket_key as _bkey,
+                bucket_stats_are_fresh as _bucket_stats_are_fresh,
+                load_bucket_stats as _load_bstats,
+            )
             from app_core.weights_config import EMPTY_CARD_RECOVERY_CONSENSUS as _RECOVERY_CONSENSUS
             _rec_buckets0 = [
                 _bkey(l, m, c) for l, m, c in zip(
@@ -980,12 +984,15 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
                     _safe_str_series(best_picks_df, "consensus_agreement"),
                 )
             ]
+            _recovery_bucket_stats = _load_bstats()
+            if not _bucket_stats_are_fresh(_recovery_bucket_stats):
+                _recovery_bucket_stats = None
             _calib_gate0 = _calibrated_beats_breakeven(
                 best_picks_df.get("effective_win_probability", pd.Series(index=best_picks_df.index, dtype=float)),
                 best_picks_df.get("odds_american", pd.Series(index=best_picks_df.index, dtype=float)),
                 _load_cal(),
                 buckets=_rec_buckets0,
-                bucket_stats=_load_bstats(),
+                bucket_stats=_recovery_bucket_stats,
             ).reindex(best_picks_df.index).fillna(False)
         except Exception as _cal_exc:
             logger.warning("recovery calibration gate unavailable: %s", _cal_exc)

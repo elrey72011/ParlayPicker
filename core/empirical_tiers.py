@@ -24,6 +24,7 @@ import pandas as pd
 from core.probability_calibration import apply_calibration
 
 DEFAULT_BUCKET_STATS_PATH = Path("data/calibration/bucket_stats.json")
+BUCKET_STATS_MAX_AGE_DAYS = 14
 
 VIABLE_STATUSES = {"Actionable", "High Variance/Speculative", "Below Threshold"}
 
@@ -143,6 +144,36 @@ def load_bucket_stats(path: Path | str = DEFAULT_BUCKET_STATS_PATH) -> dict | No
         return payload if payload.get("buckets") else None
     except (OSError, ValueError):
         return None
+
+
+def bucket_stats_are_fresh(
+    bucket_stats: dict | None,
+    *,
+    now: pd.Timestamp | None = None,
+    max_age_days: int = BUCKET_STATS_MAX_AGE_DAYS,
+) -> bool:
+    """Return whether dated bucket evidence is recent enough for decisions.
+
+    Undated injected/test statistics remain backward compatible. Production
+    artifacts fail closed once their fit is older than ``max_age_days`` so the
+    finalist selector, tier overlay, recovery gate, and portfolio calibration
+    cannot silently use different evidence vintages.
+    """
+    if not bucket_stats:
+        return False
+    fitted_on = (bucket_stats.get("meta") or {}).get("fitted_on")
+    if not fitted_on:
+        return True
+    fitted = pd.to_datetime(fitted_on, errors="coerce", utc=True)
+    if pd.isna(fitted):
+        return False
+    current = pd.Timestamp.now(tz="UTC") if now is None else pd.Timestamp(now)
+    if current.tzinfo is None:
+        current = current.tz_localize("UTC")
+    else:
+        current = current.tz_convert("UTC")
+    age_days = (current.normalize() - fitted.normalize()).days
+    return -1 <= age_days <= int(max_age_days)
 
 
 def empirical_win_probability(

@@ -64,6 +64,8 @@ from app_core.weights_config import (
     MLB_TOTAL_FALLBACK_MARKET_WEIGHT,
     NBA_TOTAL_THEOVER_WEIGHT, NBA_TOTAL_ML_WEIGHT,
     NBA_TOTAL_FALLBACK_THEOVER_WEIGHT, NBA_TOTAL_FALLBACK_ML_WEIGHT,
+    WNBA_KALSHI_WEIGHT, WNBA_MARKET_WEIGHT, WNBA_ML_MODEL_WEIGHT, WNBA_THEOVER_WEIGHT,
+    WNBA_FALLBACK_MARKET_WEIGHT, WNBA_FALLBACK_ML_WEIGHT, WNBA_FALLBACK_THEOVER_WEIGHT,
     NHL_KALSHI_WEIGHT, NHL_ML_MODEL_WEIGHT, NHL_MARKET_WEIGHT, NHL_THEOVER_WEIGHT, NHL_SENTIMENT_WEIGHT,
     KALSHI_DIVERGENCE_THRESHOLD, KALSHI_DIVERGENCE_THRESHOLD_NBA,
     KALSHI_DIVERGENCE_THRESHOLD_MLB, KALSHI_DIVERGENCE_THRESHOLD_NHL,
@@ -134,7 +136,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-07-31c-market-specific-model-probability"
+PIPELINE_BUILD = "2026-08-01a-refreshed-calibration-wnba-cold-start"
 
 # Best Available must compare standard, reasonably priced markets. A P2P exchange can
 # expose alternate run lines (for example +5.5 at -1150) beside the standard MLB +1.5.
@@ -1350,21 +1352,26 @@ def _selection_bucket_stats_are_fresh(
     production artifact fails closed once it is older than max_age_days; stale
     historical buckets remain useful for diagnostics but must not choose today's side.
     """
-    if not bucket_stats:
-        return False
-    fitted_on = (bucket_stats.get("meta") or {}).get("fitted_on")
-    if not fitted_on:
-        return True
-    fitted = pd.to_datetime(fitted_on, errors="coerce", utc=True)
-    if pd.isna(fitted):
-        return False
-    current = pd.Timestamp.now(tz="UTC") if now is None else pd.Timestamp(now)
-    if current.tzinfo is None:
-        current = current.tz_localize("UTC")
-    else:
-        current = current.tz_convert("UTC")
-    age_days = (current.normalize() - fitted.normalize()).days
-    return -1 <= age_days <= int(max_age_days)
+    from core.empirical_tiers import bucket_stats_are_fresh
+
+    return bucket_stats_are_fresh(
+        bucket_stats,
+        now=now,
+        max_age_days=max_age_days,
+    )
+
+
+def _slate_as_of_timestamp(frame: pd.DataFrame | None) -> pd.Timestamp | None:
+    """Return the newest slate date for point-in-time artifact validation.
+
+    Calibration fitted after a historical slate is look-ahead information.  Live
+    cards use their own slate date, while frames without a usable date retain the
+    wall-clock fallback in ``bucket_stats_are_fresh``.
+    """
+    if frame is None or frame.empty or "game_date" not in frame.columns:
+        return None
+    dates = pd.to_datetime(frame["game_date"], errors="coerce", utc=True).dropna()
+    return dates.max() if not dates.empty else None
 
 
 def _normalize_complementary_selection_probabilities(
@@ -2096,6 +2103,14 @@ def compute_blended_probability(
                 # NBA totals: TheOver has pace/defensive-rating context ML lacks.
                 w_the = NBA_TOTAL_THEOVER_WEIGHT
                 w_ml = NBA_TOTAL_ML_WEIGHT
+            elif lg and lg.upper() == "WNBA":
+                # Cold-start WNBA market model: keep it independent and visible,
+                # but do not let three graded target observations overpower the
+                # market/Kalshi baseline.
+                w_kalshi = WNBA_KALSHI_WEIGHT
+                w_market = WNBA_MARKET_WEIGHT
+                w_ml = WNBA_ML_MODEL_WEIGHT
+                w_the = WNBA_THEOVER_WEIGHT
 
             # Assemble only the signals that are actually present. A NaN signal
             # (e.g. missing TheOver or ML) has its weight redistributed
@@ -2121,7 +2136,11 @@ def compute_blended_probability(
             w_sen = FALLBACK_SENTIMENT_WEIGHT if has_real_sentiment else 0.0
             # For totals, TheOver's contextual signal (pitcher/pace) becomes the
             # dominant source when Kalshi is absent â€” boost it, cut ML accordingly.
-            if lg and "total" in m_typ:
+            if lg and lg.upper() == "WNBA":
+                w_market = WNBA_FALLBACK_MARKET_WEIGHT
+                w_ml = WNBA_FALLBACK_ML_WEIGHT
+                w_the = WNBA_FALLBACK_THEOVER_WEIGHT
+            elif lg and "total" in m_typ:
                 if lg.upper() == "MLB":
                     w_market = MLB_TOTAL_FALLBACK_MARKET_WEIGHT
                     w_the = MLB_TOTAL_FALLBACK_THEOVER_WEIGHT
@@ -3564,7 +3583,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
 
             _selection_bucket_stats = _load_selection_bucket_stats()
             _selection_bucket_stats_fresh = _selection_bucket_stats_are_fresh(
-                _selection_bucket_stats
+                _selection_bucket_stats,
+                now=_slate_as_of_timestamp(pool),
             )
             if _selection_bucket_stats and _selection_bucket_stats_fresh:
                 _empirical_prob = empirical_selection_probabilities(
@@ -4117,16 +4137,22 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     _mlb_over_agrees_bucket_stats_available = False
     try:
         from core.empirical_tiers import (
+            bucket_stats_are_fresh as _bucket_stats_are_fresh,
             load_bucket_stats as _load_bucket_stats,
             smoothed_bucket_rate as _smoothed_bucket_rate,
             ACTIONABLE_MIN_BUCKET_N as _ACT_MIN_N,
             ACTIONABLE_MIN_BUCKET_RATE as _ACT_MIN_RATE,
         )
         _bs = _load_bucket_stats()
-        if _bs:
+        if _bs and _bucket_stats_are_fresh(_bs):
             _mlb_over_agrees_bucket_stats_available = True
             _rate, _n = _smoothed_bucket_rate("MLB:over:Agrees", _bs)
             _mlb_over_agrees_relax_ok = (_n >= _ACT_MIN_N) and (_rate >= _ACT_MIN_RATE)
+        elif _bs:
+            # Known-but-stale history is not equivalent to a genuine cold start.
+            # Fail closed until the calibration artifact is refreshed.
+            _mlb_over_agrees_bucket_stats_available = True
+            _mlb_over_agrees_relax_ok = False
         else:
             # No graded history yet â€” let the relaxed bar apply so over-heavy slates
             # can surface Agrees overs; the empirical overlay (once fed) re-gates them.
@@ -5260,7 +5286,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         has_live_moneyline_price = (
             is_moneyline & live_moneyline_price.notna() & live_moneyline_price.ne(0)
         )
-        trusted_live_match = live_match & (has_live_numeric | has_live_moneyline_price)
+        trusted_live_match = (
+            live_match & (has_live_numeric | has_live_moneyline_price)
+        ).fillna(False).astype(bool)
         best["matched_live_spread_line"] = np.where(trusted_live_match, raw_live_spread_line, np.nan)
         best["matched_live_total_line"] = np.where(trusted_live_match, raw_live_total_line, np.nan)
 
@@ -5281,7 +5309,17 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             + commence_key + "::" + pd.Series(family_key, index=best.index).astype(str) + "::"
             + market_type_norm.astype(str) + "::" + strict_event_id + "::" + strict_event_key
         )
-        candidate_count = best.groupby(candidate_key)["home_team"].transform("size")
+        # Nullable event-id columns can propagate ``pd.NA`` through a composite
+        # key.  Keep those rows in the groupby and normalize the count before it
+        # reaches ``np.where``; otherwise pandas attempts to coerce ``pd.NA`` to
+        # bool and aborts an otherwise valid no-live-line export.
+        candidate_key = candidate_key.fillna("").astype(str)
+        candidate_count = (
+            best.groupby(candidate_key, dropna=False)["home_team"]
+            .transform("size")
+            .fillna(0)
+            .astype(int)
+        )
         best["live_event_match_key"] = np.where(trusted_live_match, candidate_key, "")
         best["line_candidate_count"] = np.where(trusted_live_match, candidate_count, 0).astype(int)
         best["line_event_identity_match_flag"] = trusted_live_match & candidate_count.eq(1)
@@ -5706,12 +5744,20 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     from app_core.weights_config import EMPIRICAL_TIER_OVERLAY_ENABLED
     if EMPIRICAL_TIER_OVERLAY_ENABLED and not best.empty:
         try:
-            from core.empirical_tiers import assign_empirical_tiers, load_bucket_stats
+            from core.empirical_tiers import (
+                assign_empirical_tiers,
+                bucket_stats_are_fresh,
+                load_bucket_stats,
+            )
             from core.kelly_optimizer import kelly_fraction
             from core.probability_calibration import load_calibration
 
             _bucket_stats = load_bucket_stats()
-            if _bucket_stats:
+            _bucket_stats_fresh = bucket_stats_are_fresh(
+                _bucket_stats,
+                now=_slate_as_of_timestamp(best),
+            )
+            if _bucket_stats and _bucket_stats_fresh:
                 _pre_actionable = int(best["Pick_Status"].astype(str).eq("Actionable").sum())
                 best = assign_empirical_tiers(best, _bucket_stats, load_calibration())
 
@@ -5787,7 +5833,15 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                         "actionable_before": _pre_actionable,
                         "actionable_after": int(best["Pick_Status"].astype(str).eq("Actionable").sum()),
                         "bucket_stats_n": int(_bucket_stats["overall"]["n"]),
+                        "bucket_stats_fresh": True,
                     }
+            elif _bucket_stats and diagnostics_out is not None:
+                diagnostics_out["empirical_tier_overlay"] = {
+                    "applied": False,
+                    "reason": "stale_bucket_stats",
+                    "bucket_stats_n": int((_bucket_stats.get("overall") or {}).get("n", 0)),
+                    "bucket_stats_fresh": False,
+                }
         except Exception as e:
             logger.warning(f"Empirical tier overlay failed; keeping legacy tiers: {e}")
 
@@ -5942,9 +5996,15 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             # pooled curve. Mirrors the all-games lean gate so the staked card and view agree.
             try:
                 from core.probability_calibration import load_calibration
-                from core.empirical_tiers import bucket_key, load_bucket_stats
+                from core.empirical_tiers import (
+                    bucket_key,
+                    bucket_stats_are_fresh,
+                    load_bucket_stats,
+                )
                 _rec_cal = load_calibration()
                 _rec_bstats = load_bucket_stats()
+                if not bucket_stats_are_fresh(_rec_bstats):
+                    _rec_bstats = None
                 _rec_buckets = [
                     bucket_key(l, m, c) for l, m, c in zip(
                         best.get("league", pd.Series("", index=best.index)),
@@ -9151,10 +9211,16 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
             apply_calibration,
             load_calibration,
         )
-        from core.empirical_tiers import bucket_key, load_bucket_stats
+        from core.empirical_tiers import (
+            bucket_key,
+            bucket_stats_are_fresh,
+            load_bucket_stats,
+        )
 
         calibration = load_calibration()
         bucket_stats = load_bucket_stats()
+        if not bucket_stats_are_fresh(bucket_stats):
+            bucket_stats = None
         if calibration:
             if bucket_stats:
                 buckets = [

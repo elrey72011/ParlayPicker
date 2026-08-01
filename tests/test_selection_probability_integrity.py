@@ -5,6 +5,7 @@ from core.streamlit_pipeline import (
     _normalize_complementary_selection_probabilities,
     _selection_bucket_stats_are_fresh,
 )
+from core.empirical_tiers import bucket_stats_are_fresh
 
 
 def test_complementary_rank_probabilities_are_coherent_without_touching_order():
@@ -47,7 +48,11 @@ def test_dated_empirical_overlay_fails_closed_when_stale():
     now = pd.Timestamp("2026-07-30", tz="UTC")
     fresh = {"meta": {"fitted_on": "2026-07-25"}}
     stale = {"meta": {"fitted_on": "2026-07-09"}}
+    future = {"meta": {"fitted_on": "2026-08-01"}}
 
     assert _selection_bucket_stats_are_fresh(fresh, now=now, max_age_days=14)
     assert not _selection_bucket_stats_are_fresh(stale, now=now, max_age_days=14)
     assert _selection_bucket_stats_are_fresh({"overall": {"n": 10}}, now=now)
+    assert bucket_stats_are_fresh(fresh, now=now, max_age_days=14)
+    assert not bucket_stats_are_fresh(stale, now=now, max_age_days=14)
+    assert not bucket_stats_are_fresh(future, now=now, max_age_days=14)

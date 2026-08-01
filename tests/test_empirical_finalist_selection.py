@@ -66,3 +66,31 @@ def test_empirical_bucket_blend_cannot_overturn_a_clearly_stronger_forecast(monk
     movement = (blended - raw).abs()
     assert movement.gt(0).all()
     assert movement.max() < 0.04
+
+
+def test_stale_bucket_stats_cannot_label_after_being_rejected_for_selection(monkeypatch):
+    stale = {
+        "overall": {"n": 200, "win_rate": 0.50},
+        "buckets": {
+            "MLB:over:Neutral": {"n": 80, "wins": 60, "win_rate": 0.75},
+            "MLB:under:Neutral": {"n": 80, "wins": 20, "win_rate": 0.25},
+        },
+        "meta": {"fitted_on": "2026-01-01"},
+    }
+    monkeypatch.setattr("core.empirical_tiers.load_bucket_stats", lambda: stale)
+    monkeypatch.setattr("core.probability_calibration.load_calibration", lambda: None)
+
+    diagnostics = {}
+    build_best_picks_df(
+        pd.DataFrame(
+            [
+                _candidate("total_over", probability=0.58, ev=0.05),
+                _candidate("total_under", probability=0.54, ev=0.02),
+            ]
+        ),
+        diagnostics_out=diagnostics,
+    )
+
+    assert diagnostics["selection_bucket_stats_fresh"] is False
+    assert diagnostics["empirical_tier_overlay"]["applied"] is False
+    assert diagnostics["empirical_tier_overlay"]["reason"] == "stale_bucket_stats"

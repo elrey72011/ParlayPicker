@@ -68,6 +68,19 @@ FALLBACK_ML_WEIGHT = 0.35
 FALLBACK_THEOVER_WEIGHT = 0.20
 FALLBACK_SENTIMENT_WEIGHT = 0.10
 
+# WNBA score-distribution cold-start weights. The target-specific model is an
+# independent signal, but it currently has only three graded WNBA selections.
+# Until that target has a real out-of-sample history, the efficient book market
+# remains the anchor and the model is capped at a supporting vote. These weights
+# are renormalized over signals that are actually present.
+WNBA_KALSHI_WEIGHT = 0.35
+WNBA_MARKET_WEIGHT = 0.40
+WNBA_ML_MODEL_WEIGHT = 0.10
+WNBA_THEOVER_WEIGHT = 0.15
+WNBA_FALLBACK_MARKET_WEIGHT = 0.70
+WNBA_FALLBACK_ML_WEIGHT = 0.15
+WNBA_FALLBACK_THEOVER_WEIGHT = 0.15
+
 # Baseline Thresholds
 BASELINE_MIN_EV = 0.01
 BASELINE_MIN_EDGE = 0.02
