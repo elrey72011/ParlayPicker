@@ -458,6 +458,11 @@ def build_prop_card(
     card = apply_probation_portfolio_guard(card, bankroll)
     card = apply_prop_participant_guard(card)
     card = apply_production_prop_gate(card)
+    card = apply_controlled_prop_rollout(
+        card,
+        results_history,
+        as_of_date=date,
+    )
     card = apply_prop_game_guard(card)
     card = apply_prop_slate_guard(card)
     card = apply_novig_minimum_selection(
@@ -506,6 +511,13 @@ PROP_PRODUCTION_BLOCKED_MARKETS = frozenset(
     {"batter_total_bases_over", "batter_total_bases_under"}
 )
 PROP_REQUIRED_IDENTITY_FIELDS = ("player", "matchup", "market_type", "best_pick")
+PROP_CONTROLLED_PILOT_MARKETS = frozenset(
+    {"batter_hits_over", "batter_hits_under"}
+)
+PROP_CONTROLLED_PILOT_START_DATE = "2026-08-02"
+PROP_CONTROLLED_PILOT_MIN_POST_FIX_GRADED = 50
+PROP_CONTROLLED_PILOT_MIN_RATE = 0.55
+PROP_CONTROLLED_PILOT_STAKE = 1.0
 
 
 def _market_of_pick(text: object, market_type: object = None) -> str:
@@ -1031,6 +1043,143 @@ def apply_production_prop_gate(
     if "Status_Reason" not in out.columns:
         out["Status_Reason"] = ""
     out.loc[~production_eligible, "Status_Reason"] = reason.loc[~production_eligible]
+    return out
+
+
+def apply_controlled_prop_rollout(
+    card,
+    results_history=None,
+    *,
+    as_of_date: str | None = None,
+    pilot_markets: frozenset[str] = PROP_CONTROLLED_PILOT_MARKETS,
+    pilot_start_date: str = PROP_CONTROLLED_PILOT_START_DATE,
+    min_post_fix_graded: int = PROP_CONTROLLED_PILOT_MIN_POST_FIX_GRADED,
+    min_rate: float = PROP_CONTROLLED_PILOT_MIN_RATE,
+    pilot_stake: float = PROP_CONTROLLED_PILOT_STAKE,
+):
+    """Restrict live props to a small, evidence-gated batter-hit pilot.
+
+    The ordinary production gate still validates probability, EV, price,
+    projection cushion, identity, calibration, and market probation. This
+    rollout layer then keeps every non-hit family research-only and caps fully
+    approved batter-hit tickets at the sportsbook minimum. A hit direction may
+    return to normal sizing only after it records a fresh post-rollout sample
+    with at least ``min_post_fix_graded`` settled picks, a 55% hit rate, and
+    positive flat-risk ROI at the exported prices.
+
+    Results on the active slate are excluded through ``as_of_date`` so same-day
+    outcomes can never promote or resize a pregame ticket.
+    """
+    import pandas as pd
+
+    if card is None or card.empty:
+        return card
+    out = card.copy()
+    index = out.index
+    market = out.get(
+        "market_type", pd.Series("", index=index)
+    ).fillna("").astype(str).str.strip().str.lower()
+    pilot_markets = frozenset(str(value).strip().lower() for value in pilot_markets)
+    allowed = market.isin(pilot_markets)
+    eligible = out.get(
+        "production_eligible", pd.Series(False, index=index)
+    ).fillna(False).astype(bool)
+    stakes = pd.to_numeric(
+        out.get("Kelly_Bet_Size", pd.Series(0.0, index=index)), errors="coerce"
+    ).fillna(0.0)
+
+    # Build a leak-safe ledger containing only results generated after this
+    # rollout began. Missing or unparseable dates do not count toward graduation.
+    records: dict[str, dict[str, float]] = {}
+    try:
+        clean = normalize_prop_results(results_history, as_of_date=as_of_date)
+        if not clean.empty and "result_date" in clean.columns:
+            start = pd.to_datetime(pilot_start_date, errors="coerce", utc=True)
+            if pd.notna(start):
+                clean = clean[
+                    clean["result_date"].notna()
+                    & clean["result_date"].ge(start)
+                ].copy()
+            else:
+                clean = clean.iloc[0:0].copy()
+        else:
+            clean = clean.iloc[0:0].copy()
+        if not clean.empty:
+            records = market_records_from_log(clean, detailed=True)
+    except (KeyError, TypeError, ValueError):
+        records = {}
+
+    out["controlled_pilot_market_allowed"] = allowed
+    out["controlled_pilot_start_date"] = str(pilot_start_date)
+    out["controlled_pilot_min_post_fix_graded"] = max(
+        0, int(min_post_fix_graded)
+    )
+    out["controlled_pilot_min_rate"] = float(min_rate)
+    out["controlled_pilot_stake"] = round(max(0.0, float(pilot_stake)), 2)
+    out["controlled_pilot_post_fix_graded"] = 0
+    out["controlled_pilot_post_fix_hit_rate"] = float("nan")
+    out["controlled_pilot_post_fix_roi"] = float("nan")
+    out["controlled_pilot_graduated"] = False
+    out["controlled_pilot_mode"] = False
+    out["controlled_pilot_stake_cap_applied"] = False
+
+    minimum = max(0, int(min_post_fix_graded))
+    required_rate = float(min_rate)
+    graduated = pd.Series(False, index=index, dtype=bool)
+    for key in pilot_markets:
+        record = records.get(key, {})
+        wins = int(record.get("wins", 0) or 0)
+        losses = int(record.get("losses", 0) or 0)
+        graded = wins + losses
+        rate = (wins / graded) if graded else None
+        roi = record.get("roi")
+        market_rows = market.eq(key)
+        out.loc[market_rows, "controlled_pilot_post_fix_graded"] = graded
+        if rate is not None:
+            out.loc[market_rows, "controlled_pilot_post_fix_hit_rate"] = float(rate)
+        if roi is not None:
+            out.loc[market_rows, "controlled_pilot_post_fix_roi"] = float(roi)
+        direction_graduated = bool(
+            graded >= minimum
+            and rate is not None
+            and rate >= required_rate
+            and roi is not None
+            and float(roi) > 0.0
+        )
+        graduated.loc[market_rows] = direction_graduated
+
+    out["controlled_pilot_graduated"] = allowed & graduated
+    out["controlled_pilot_mode"] = allowed & ~graduated
+
+    # Even a fully production-qualified pitcher or other prop remains visible
+    # for grading but cannot receive a stake during the controlled rollout.
+    outside_scope = eligible & ~allowed
+    if outside_scope.any():
+        reason = (
+            "Research only: controlled rollout currently funds batter-hit "
+            "props only"
+        )
+        out.loc[outside_scope, "production_eligible"] = False
+        out.loc[outside_scope, "Kelly_Bet_Size"] = 0.0
+        out.loc[outside_scope, "Prop_Tier"] = "Research"
+        out.loc[outside_scope, "production_gate_reason"] = reason
+        if "Status_Reason" not in out.columns:
+            out["Status_Reason"] = ""
+        out.loc[outside_scope, "Status_Reason"] = reason
+
+    pilot_eligible = eligible & allowed & ~graduated
+    cap = round(max(0.0, float(pilot_stake)), 2)
+    cap_applied = pilot_eligible & stakes.gt(cap)
+    out.loc[pilot_eligible, "Kelly_Bet_Size"] = stakes.loc[
+        pilot_eligible
+    ].clip(upper=cap)
+    out.loc[cap_applied, "controlled_pilot_stake_cap_applied"] = True
+    if pilot_eligible.any():
+        out.loc[pilot_eligible, "production_gate_reason"] = (
+            "Controlled batter-hit pilot qualified; stake capped at "
+            f"${cap:.2f} until {minimum} post-fix graded results have at "
+            f"least {required_rate:.0%} accuracy and positive ROI"
+        )
     return out
 
 
