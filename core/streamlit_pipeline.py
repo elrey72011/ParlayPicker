@@ -142,7 +142,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-08-02a-controlled-prop-hits-pilot"
+PIPELINE_BUILD = "2026-08-02b-signed-spread-pair-safety"
 
 # Best Available must compare standard, reasonably priced markets. A P2P exchange can
 # expose alternate run lines (for example +5.5 at -1150) beside the standard MLB +1.5.
@@ -6802,6 +6802,31 @@ def _consistent_standard_spread_pair(row, side: str):
     return pd.NA, pd.NA, pd.NA, None
 
 
+def _novig_spread_conflicts_with_standard_signed_pair(row) -> bool:
+    """Return whether NoVig assigns the opposite signed pair from consensus.
+
+    A spread's magnitude alone cannot validate its team binding. Thin or delayed
+    exchange feeds can expose the correct ``+/-`` magnitude while attaching the
+    signs to the wrong teams. Require two standard books to corroborate the full
+    home/away pair before treating the disagreement as a binding conflict. Prices
+    are never swapped between outcomes; the caller uses the corroborated book's
+    complete point/price pair instead.
+    """
+    standard_home, _, _, _ = _consistent_standard_spread_pair(row, "home")
+    standard_away, _, _, _ = _consistent_standard_spread_pair(row, "away")
+    novig_home = pd.to_numeric(row.get("novig_home_point"), errors="coerce")
+    novig_away = pd.to_numeric(row.get("novig_away_point"), errors="coerce")
+    if any(
+        pd.isna(value)
+        for value in (standard_home, standard_away, novig_home, novig_away)
+    ):
+        return False
+    return bool(
+        abs(float(novig_home) - float(standard_home)) > 1e-9
+        or abs(float(novig_away) - float(standard_away)) > 1e-9
+    )
+
+
 def _oriented_standard_spread_pair(row, side: str, favorite_side: str):
     """Compatibility wrapper that never rebinds a quote to the other team.
 
@@ -7178,6 +7203,19 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
             spread_line_source = "live_odds"
             if market_type.startswith("spread"):
                 side = "home" if market_type == "spread_home" else "away"
+                signed_pair_conflict = (
+                    _novig_spread_conflicts_with_standard_signed_pair(row)
+                )
+                signed_standard_point = signed_standard_price = pd.NA
+                signed_standard_opposing_price = pd.NA
+                signed_standard_book = None
+                if signed_pair_conflict:
+                    (
+                        signed_standard_point,
+                        signed_standard_price,
+                        signed_standard_opposing_price,
+                        signed_standard_book,
+                    ) = _consistent_standard_spread_pair(row, side)
                 # A complete Novig moneyline is an independent orientation signal
                 # even when TheOver uploaded totals only. Discarding it in that case
                 # erased otherwise valid standard-book run-line candidates.
@@ -7189,7 +7227,40 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
                     if novig_moneyline_favorite_side
                     else "theover_moneyline_favorite"
                 )
-                if league_str == "MLB" and spread_favorite_side:
+                signed_standard_pair_is_usable = (
+                    pd.notna(signed_standard_point)
+                    and pd.notna(signed_standard_price)
+                    and pd.notna(signed_standard_opposing_price)
+                    and signed_standard_book is not None
+                )
+                if signed_pair_conflict and signed_standard_pair_is_usable:
+                    point_val = float(signed_standard_point)
+                    market_dict["odds_american"] = float(signed_standard_price)
+                    market_dict["opposing_odds_american"] = float(
+                        signed_standard_opposing_price
+                    )
+                    market_dict["odds_source"] = "odds_api"
+                    market_dict["opposing_odds_source"] = signed_standard_book
+                    spread_line_source = (
+                        f"{signed_standard_book}_standard_spread_consensus"
+                    )
+                    signed_pair_orientation_parts = [orientation_source]
+                    if spread_favorite_side:
+                        signed_pair_orientation_parts.append(
+                            spread_orientation_basis
+                        )
+                    signed_pair_orientation_parts.extend(
+                        [
+                            "standard_spread_consensus",
+                            "standard_signed_pair_override",
+                        ]
+                    )
+                    market_dict["orientation_source"] = "|".join(
+                        part
+                        for part in signed_pair_orientation_parts
+                        if str(part).strip()
+                    )
+                elif league_str == "MLB" and spread_favorite_side:
                     novig_outlier = _novig_spread_is_consensus_outlier(row)
                     novig_home_point = pd.to_numeric(
                         row.get("novig_home_point"), errors="coerce"
