@@ -71,6 +71,67 @@ def test_expand_orients_cleveland_to_plus_1_5_from_consistent_book():
     assert float(home["spread_line"]) == -1.5     # Houston -1.5
 
 
+def _same_magnitude_signed_pair_conflict_row(league="WNBA"):
+    return {
+        "league": league,
+        "home_team": "Portland" if league == "WNBA" else "Atlanta",
+        "away_team": "Los Angeles" if league == "WNBA" else "Washington",
+        "game_date": "2026-08-02",
+        "matchup_id": f"signed-conflict-{league.lower()}",
+        "commence_time_raw": "2026-08-02T19:30:00Z",
+        # NoVig/Odds API binds the +/-1.5 signs opposite the corroborated
+        # standard-book pair while its moneyline makes the bad binding look
+        # internally consistent.
+        "novig_home_point": 1.5,
+        "novig_home_price": -111,
+        "novig_away_point": -1.5,
+        "novig_away_price": 106,
+        "novig_h2h_home_price": 100,
+        "novig_h2h_away_price": -106,
+        "fanduel_home_point": -1.5,
+        "fanduel_home_price": -106,
+        "fanduel_away_point": 1.5,
+        "fanduel_away_price": -114,
+        "draftkings_home_point": -1.5,
+        "draftkings_home_price": -102,
+        "draftkings_away_point": 1.5,
+        "draftkings_away_price": -118,
+    }
+
+
+def test_wnba_signed_pair_conflict_uses_corroborated_portland_line():
+    out, _ = _expand_live_odds_to_bet_rows(
+        pd.DataFrame([_same_magnitude_signed_pair_conflict_row()]), None
+    )
+    home = out[out["market_type"].eq("spread_home")].iloc[0]
+    away = out[out["market_type"].eq("spread_away")].iloc[0]
+
+    assert float(home["spread_line"]) == -1.5
+    assert float(home["odds_american"]) == -106.0
+    assert float(away["spread_line"]) == 1.5
+    assert float(away["odds_american"]) == -114.0
+    assert home["line_source"] == "fanduel_standard_spread_consensus"
+    assert away["line_source"] == "fanduel_standard_spread_consensus"
+    assert home["orientation_source"].endswith(
+        "|standard_signed_pair_override"
+    )
+
+
+def test_mlb_signed_pair_conflict_cannot_survive_on_internal_moneyline_agreement():
+    out, _ = _expand_live_odds_to_bet_rows(
+        pd.DataFrame([_same_magnitude_signed_pair_conflict_row("MLB")]), None
+    )
+    home = out[out["market_type"].eq("spread_home")].iloc[0]
+    away = out[out["market_type"].eq("spread_away")].iloc[0]
+
+    assert float(home["spread_line"]) == -1.5
+    assert float(home["odds_american"]) == -106.0
+    assert float(away["spread_line"]) == 1.5
+    assert float(away["odds_american"]) == -114.0
+    assert home["line_source"] == "fanduel_standard_spread_consensus"
+    assert away["line_source"] == "fanduel_standard_spread_consensus"
+
+
 def test_moneyline_export_preserves_favorite_orientation_without_creating_a_bet():
     rows = pd.DataFrame(
         [
