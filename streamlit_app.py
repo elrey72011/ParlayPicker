@@ -2452,12 +2452,14 @@ def main() -> None:
 
                 st.subheader("⚾ MLB Player Props — Production Picks")
                 st.caption(
-                    "Core props require at least 62% conservative calibrated win probability; Extended props cover "
-                    "the 60–62% band at a flat $1. Both tiers require at least 3% expected "
-                    "value, a 0.50-stat model advantage, valid odds, and a non-probation "
-                    "market with sufficient graded directional history. The card funds at most two props per game and five total. "
-                    "Batter total-base Unders remain research-only until recalibrated. "
-                    "Parlays use funded Core and Extended rows only."
+                    "The controlled rollout currently funds only approved batter-hit Overs and Unders. "
+                    "Each pilot ticket is capped at $1 until its direction records 50 new settled picks "
+                    "with at least 55% accuracy and positive price-adjusted ROI. Core props require at "
+                    "least 62% conservative calibrated win probability; Extended props cover the 60–62% "
+                    "band. Both tiers also require at least 3% expected value, a 0.50-stat model advantage, "
+                    "valid odds of -150 or better, and sufficient directional calibration. Batter total-base "
+                    "and pitcher markets remain research-only. The card funds at most two props per game "
+                    "and five total. Parlays use funded rows only."
                 )
                 if funded_prop_card.empty:
                     st.info("No player props qualify for a production wager today.")

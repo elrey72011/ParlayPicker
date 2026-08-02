@@ -238,7 +238,7 @@ def _proven_strikeout_over_log():
     })
 
 
-def test_prop_card_stakes_actionable_pick_within_caps():
+def test_prop_card_keeps_pitcher_market_research_only_during_hits_pilot():
     prop = {
         "pitcher": "Gerrit Cole", "line": 6.5, "over_odds": -115, "under_odds": -105,
         "book": "novig", "home_team": "New York Yankees", "away_team": "Chicago White Sox",
@@ -246,13 +246,15 @@ def test_prop_card_stakes_actionable_pick_within_caps():
     card = _prop_card(prop, prop_results_log=_proven_strikeout_over_log())
     assert len(card) == 1
     row = card.iloc[0]
-    assert row["Pick_Status"] == "Actionable"
+    assert row["Pick_Status"] == "Research / No Stake"
     assert row["market_type"] == "pitcher_strikeouts_over"
     assert "Gerrit Cole Over 6.5 Ks" == row["best_pick"]
     assert row["CalibrationSource"] == "directional"
     assert row["WinProbability"] <= row["CalibratedProbability"]
-    # Per-pick cap is 1% of a 1000 bankroll -> never exceeds $10.
-    assert 0.0 < float(row["Kelly_Bet_Size"]) <= 10.0 + 1e-9
+    assert not bool(row["production_eligible"])
+    assert row["Stake_Status"] == "Research / No Stake"
+    assert row["Kelly_Bet_Size"] == 0.0
+    assert "batter-hit props only" in row["Status_Reason"]
 
 
 def test_prop_card_without_graded_ledger_is_research_only():
