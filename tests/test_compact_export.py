@@ -96,3 +96,37 @@ def test_compact_export_keeps_truthful_price_provenance():
         "fanduel_standard_spread_consensus",
         "novig",
     ]
+
+
+def test_compact_export_uses_public_display_pick_and_keeps_legacy_fallback():
+    source = pd.DataFrame([
+        _compact_source(
+            best_pick="Under 11.5",
+            display_pick="NO QUALIFIED PICK",
+            Export_Scope="NO QUALIFIED PICK / RESEARCH",
+            Wager_Instruction=(
+                "DO NOT BET - NO CANDIDATE CLEARS THE QUALIFIED-PICK GATE"
+            ),
+        ),
+        _compact_source(
+            Home="Philadelphia",
+            Away="Washington",
+            best_pick="Washington +1.5",
+            display_pick="Washington +1.5",
+        ),
+        _compact_source(
+            Home="Milwaukee",
+            Away="Pittsburgh",
+            best_pick="Pittsburgh +1.5",
+            display_pick="",
+        ),
+    ])
+
+    compact = _build_compact_export_frame(source)
+
+    assert compact["best_pick"].tolist() == [
+        "NO QUALIFIED PICK",
+        "Washington +1.5",
+        "Pittsburgh +1.5",
+    ]
+    assert "display_pick" not in compact.columns
