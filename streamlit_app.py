@@ -203,15 +203,32 @@ def _build_compact_export_frame(best_picks_export: pd.DataFrame) -> pd.DataFrame
     Streamlit reruns can retain stale sizing fields even after the production gate
     downgrades a row. The compact workbook is a user-facing betting artifact, so its
     Kelly column must never show money unless the same row is explicitly bettable,
-    carries a positive approved play stake, and is not labeled DO NOT BET.
+    carries a positive approved play stake, and is not labeled DO NOT BET. It must
+    also show the public display pick: raw rank-one candidates belong only in the
+    audit/main exports when the qualified-pick gate abstains.
     """
     if best_picks_export is None:
         best_picks_export = pd.DataFrame()
+    compact_source = best_picks_export.copy()
+    if "display_pick" in compact_source.columns:
+        display_pick = (
+            compact_source["display_pick"]
+            .astype("string")
+            .fillna("")
+            .str.strip()
+        )
+        raw_pick = compact_source.get(
+            "best_pick",
+            pd.Series("", index=compact_source.index, dtype="object"),
+        )
+        compact_source["best_pick"] = display_pick.where(
+            display_pick.ne(""), raw_pick
+        )
     available_cols = [
         column for column in _COMPACT_EXPORT_COLUMNS
-        if column in best_picks_export.columns
+        if column in compact_source.columns
     ]
-    compact_export = best_picks_export[available_cols].copy()
+    compact_export = compact_source[available_cols].copy()
 
     if "odds_american" in compact_export.columns:
         compact_export = compact_export.rename(columns={"odds_american": "Pick Price"})
