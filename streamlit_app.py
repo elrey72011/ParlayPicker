@@ -174,6 +174,14 @@ def apply_status_display_labels(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def _bet_decision_mask(df: pd.DataFrame) -> pd.Series:
+    """Return rows explicitly approved as BET without using a string accessor."""
+    decisions = df.get(
+        "Bet Decision", pd.Series("", index=df.index, dtype="object")
+    )
+    return decisions.astype("string").fillna("").str.strip().eq("BET")
+
+
 _COMPACT_EXPORT_COLUMNS = [
     "pipeline_build",
     "Wager_Instruction", "Export_Scope", "Bettable",
@@ -2158,7 +2166,7 @@ def main() -> None:
         display_df = apply_status_display_labels(display_df)
         if "qualified_pick" in display_df.columns and "Bet Decision" in display_df.columns:
             _qualified_pick = display_df["qualified_pick"].fillna(False).astype(bool)
-            _is_bet = display_df["Bet Decision"].astype(str).str.eq("BET")
+            _is_bet = _bet_decision_mask(display_df)
             display_df.loc[~_qualified_pick & ~_is_bet, "Pick_Status"] = (
                 "Best Available / Pass"
             )
