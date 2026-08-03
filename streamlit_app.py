@@ -262,6 +262,19 @@ def _build_compact_export_frame(best_picks_export: pd.DataFrame) -> pd.DataFrame
         compact_export["Kelly_Bet_Size"] = (
             kelly.where(approved_wager, 0.0).clip(lower=0.0).round(2)
         )
+    if "Play_Tier" in compact_export.columns:
+        play_tier = compact_export["Play_Tier"].astype("string").fillna("").str.strip()
+        scope = _safe_str_series(compact_export, "Export_Scope").str.strip().str.upper()
+        unavailable = play_tier.str.upper().isin({"STARTED", "UNAVAILABLE"})
+        compact_export.loc[approved_wager, "Play_Tier"] = "BET"
+        compact_export.loc[
+            ~approved_wager & ~unavailable & scope.eq("QUALIFIED LEAN / RESEARCH"),
+            "Play_Tier",
+        ] = "LEAN"
+        compact_export.loc[
+            ~approved_wager & ~unavailable & ~scope.eq("QUALIFIED LEAN / RESEARCH"),
+            "Play_Tier",
+        ] = "AVOID"
 
     compact_export["Win Amount"] = ""
     compact_export["W/L"] = ""

@@ -86,6 +86,32 @@ def test_qualified_unfunded_game_row_stays_a_zero_dollar_lean():
     assert labeled.loc[0, "Pick_Quality"] == "No Bet - Qualified Lean"
 
 
+def test_qualified_unfunded_export_cannot_retain_stale_bet_labels_or_stake():
+    frame = pd.DataFrame({
+        "best_pick": ["Under 11.5"],
+        "qualified_pick": [True],
+        "Bet_Decision": ["BET"],
+        "Play_Tier": ["BET"],
+        "production_eligible": [False],
+        "Play_Units": [2.0],
+        "Play_Stake": [2.0],
+        "Kelly_Bet_Size": [0.0],
+        "Wager_Approved": [False],
+        "Pick_Status": ["Actionable"],
+        "Pick_Quality": ["Value"],
+    })
+
+    labeled = label_wager_export(frame)
+
+    assert not bool(labeled.loc[0, "Bettable"])
+    assert not bool(labeled.loc[0, "Wager_Approved"])
+    assert labeled.loc[0, "Bet_Decision"] == "QUALIFIED LEAN - PASS"
+    assert labeled.loc[0, "Play_Tier"] == "LEAN"
+    assert float(labeled.loc[0, "Play_Units"]) == 0.0
+    assert float(labeled.loc[0, "Play_Stake"]) == 0.0
+    assert labeled.loc[0, "Wager_Instruction"].startswith("DO NOT BET")
+
+
 def test_public_export_scope_columns_are_case_insensitively_unique():
     frame = pd.DataFrame(
         {

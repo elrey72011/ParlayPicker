@@ -8,6 +8,18 @@ import pandas as pd
 _CANONICAL_EXPORT_COLUMNS = ("Bettable", "Export_Scope", "Wager_Instruction")
 
 
+def _strict_bool_series(frame: pd.DataFrame, column: str, *, default: bool = False) -> pd.Series:
+    """Parse public authorization flags without treating the string ``False`` as true."""
+
+    if column not in frame.columns:
+        return pd.Series(default, index=frame.index, dtype=bool)
+    values = frame[column]
+    if pd.api.types.is_bool_dtype(values.dtype):
+        return values.fillna(default).astype(bool)
+    normalized = values.astype("string").fillna("").str.strip().str.casefold()
+    return normalized.isin({"true", "1", "yes", "y"})
+
+
 def _drop_case_insensitive_export_aliases(frame: pd.DataFrame) -> pd.DataFrame:
     """Keep one canonical spelling for public wager-scope columns.
 
@@ -54,7 +66,12 @@ def _positive_stake(frame: pd.DataFrame) -> pd.Series:
 
 
 def label_wager_export(frame: pd.DataFrame) -> pd.DataFrame:
-    """Label every row as a funded wager or non-bet coverage/research row."""
+    """Label and reconcile every public wager field from one funded mask.
+
+    The export is a betting artifact, so a stale upstream ``BET`` tier or stake must
+    not coexist with ``Bettable=False``.  Every non-funded row is forced to zero and
+    receives the matching pass/lean label; every funded row is explicitly marked BET.
+    """
 
     if frame is None:
         return frame
@@ -62,7 +79,10 @@ def label_wager_export(frame: pd.DataFrame) -> pd.DataFrame:
     funded = _positive_stake(out)
 
     if "production_eligible" in out.columns:
-        funded &= out["production_eligible"].fillna(False).astype(bool)
+        funded &= _strict_bool_series(out, "production_eligible")
+    for approval_column in ("wager_approved", "Wager_Approved"):
+        if approval_column in out.columns:
+            funded &= _strict_bool_series(out, approval_column)
     if "Bet_Decision" in out.columns:
         decision = out["Bet_Decision"].fillna("").astype(str).str.upper().str.strip()
         funded &= decision.eq("BET")
@@ -71,12 +91,54 @@ def label_wager_export(frame: pd.DataFrame) -> pd.DataFrame:
         if stake_status.ne("").any():
             funded &= stake_status.eq("funded")
 
+    qualified = (
+        _strict_bool_series(out, "qualified_pick")
+        if "qualified_pick" in out.columns
+        else pd.Series(False, index=out.index, dtype=bool)
+    )
+    qualified_pass = qualified & ~funded
+    best_available_pass = ~qualified & ~funded
+
+    # Reconcile every existing public approval/stake field before adding scope labels.
+    # Preserve explicit STARTED/UNAVAILABLE blockers instead of relabeling them AVOID.
+    decision = out.get(
+        "Bet_Decision", pd.Series("", index=out.index, dtype="object")
+    ).astype("string").fillna("").str.strip().str.upper()
+    tier = out.get(
+        "Play_Tier", pd.Series("", index=out.index, dtype="object")
+    ).astype("string").fillna("").str.strip().str.upper()
+    unavailable = decision.isin({"STARTED", "UNAVAILABLE"}) | tier.isin(
+        {"STARTED", "UNAVAILABLE"}
+    )
+
+    if "Bet_Decision" in out.columns:
+        out.loc[funded, "Bet_Decision"] = "BET"
+        out.loc[qualified_pass & ~unavailable, "Bet_Decision"] = "QUALIFIED LEAN - PASS"
+        out.loc[best_available_pass & ~unavailable, "Bet_Decision"] = (
+            "BEST AVAILABLE - PASS" if "qualified_pick" in out.columns else "PASS"
+        )
+    if "Play_Tier" in out.columns:
+        out.loc[funded, "Play_Tier"] = "BET"
+        out.loc[qualified_pass & ~unavailable, "Play_Tier"] = "LEAN"
+        out.loc[best_available_pass & ~unavailable, "Play_Tier"] = "AVOID"
+    for stake_column in (
+        "Play_Stake",
+        "Play_Units",
+        "production_bet_amount",
+        "Kelly_Bet_Size",
+        "recommended_bet",
+        "Suggested_Stake",
+    ):
+        if stake_column in out.columns:
+            out.loc[~funded, stake_column] = 0.0
+    for approval_column in ("Wager_Approved", "wager_approved", "All_Row_Bet"):
+        if approval_column in out.columns:
+            out[approval_column] = funded
+
     out["Bettable"] = funded
     out["Export_Scope"] = "COVERAGE / RESEARCH"
     out["Wager_Instruction"] = "DO NOT BET - $0 PASS / RESEARCH"
     if "qualified_pick" in out.columns:
-        qualified = out["qualified_pick"].fillna(False).astype(bool)
-        qualified_pass = qualified & ~funded
         out.loc[~qualified, "Export_Scope"] = "BEST AVAILABLE PICK / RESEARCH"
         out.loc[~qualified, "Wager_Instruction"] = (
             "DO NOT BET - BEST AVAILABLE PICK DOES NOT CLEAR THE WAGER GATE"
