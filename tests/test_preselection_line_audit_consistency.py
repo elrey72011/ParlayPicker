@@ -212,6 +212,61 @@ def test_invalid_spread_is_removed_and_valid_total_becomes_fallback():
     assert diagnostics["preselection_dropped_spread_candidate_count"] == 1
     assert diagnostics["preselection_dropped_line_candidate_count"] == 1
 
+
+def test_moneyline_reversed_team_bound_spreads_are_removed_before_ranking():
+    df = pd.DataFrame([
+        _candidate(
+            "spread_home",
+            win_prob=0.90,
+            ev=0.40,
+            edge=0.30,
+            spread_line=1.5,
+            live_spread_line=1.5,
+            line_source="fanduel_standard_spread_consensus",
+            orientation_source="exact_match|standard_spread_consensus",
+            odds_american=-220,
+            opposing_odds_american=180,
+            game_home_ml_price=-117,
+            game_away_ml_price=115,
+        ),
+        _candidate(
+            "spread_away",
+            win_prob=0.88,
+            ev=0.35,
+            edge=0.25,
+            spread_line=-1.5,
+            live_spread_line=-1.5,
+            line_source="fanduel_standard_spread_consensus",
+            orientation_source="exact_match|standard_spread_consensus",
+            odds_american=180,
+            opposing_odds_american=-220,
+            game_home_ml_price=-117,
+            game_away_ml_price=115,
+        ),
+        _candidate(
+            "total_under",
+            win_prob=0.58,
+            ev=0.03,
+            edge=0.03,
+            total_line=8.5,
+            live_total_line=8.5,
+            uploaded_total_line=8.5,
+            upload_total_line=8.5,
+            opposing_odds_american=-105,
+        ),
+    ])
+    diagnostics = {}
+
+    out = build_best_picks_df(df, diagnostics_out=diagnostics)
+    audit = diagnostics["candidate_audit_df"]
+
+    assert out.iloc[0]["market_type"] == "total_under"
+    assert out.iloc[0]["best_pick"] == "Under 8.5"
+    assert not audit["market_type"].astype(str).str.startswith("spread").any()
+    assert diagnostics["preselection_mlb_spread_orientation_fault_count"] == 2
+    assert diagnostics["preselection_dropped_spread_candidate_count"] == 2
+
+
 def test_plain_live_spread_still_uses_raw_moneyline_orientation_guard():
     df = pd.DataFrame([
         _candidate(
@@ -233,6 +288,32 @@ def test_plain_live_spread_still_uses_raw_moneyline_orientation_guard():
     row = build_best_picks_df(df).iloc[0]
 
     assert row["best_pick"] == "Seattle +1.5"
+    assert row["status_blocker_stage"] == "spread_orientation_guardrail"
+    assert "spread_orientation_fault" in str(row["Status_Reason"])
+
+
+def test_team_bound_live_spread_cannot_bypass_final_orientation_guard():
+    df = pd.DataFrame([
+        _candidate(
+            "spread_home",
+            win_prob=0.72,
+            ev=0.20,
+            edge=0.16,
+            spread_line=1.5,
+            live_spread_line=1.5,
+            line_source="novig_team_bound_quote",
+            orientation_source="exact_match|odds_api_team_binding",
+            odds_american=-194,
+            opposing_odds_american=182,
+            odds_source="novig",
+            game_home_ml_price=-117,
+            game_away_ml_price=115,
+        ),
+    ])
+
+    row = build_best_picks_df(df).iloc[0]
+
+    assert row["best_pick"] == "Texas +1.5"
     assert row["status_blocker_stage"] == "spread_orientation_guardrail"
     assert "spread_orientation_fault" in str(row["Status_Reason"])
 

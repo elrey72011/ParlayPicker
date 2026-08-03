@@ -187,7 +187,7 @@ def test_novig_moneyline_line_sources_are_trusted_live():
     assert mask.tolist() == [True, True, True, True]
 
 
-def test_novig_team_binding_never_swaps_quotes_between_teams():
+def test_novig_complete_pair_rebinds_by_own_moneyline_without_swapping_prices():
     row = {
         "novig_home_point": 1.5,
         "novig_home_price": -208,
@@ -202,11 +202,11 @@ def test_novig_team_binding_never_swaps_quotes_between_teams():
         row, "away", "home"
     )
 
-    assert (home_point, home_price, home_remapped) == (1.5, -208.0, False)
-    assert (away_point, away_price, away_remapped) == (-1.5, 194.0, False)
+    assert (home_point, home_price, home_remapped) == (-1.5, 194.0, True)
+    assert (away_point, away_price, away_remapped) == (1.5, -208.0, True)
 
 
-def test_expand_preserves_novig_team_bound_miami_run_line():
+def test_expand_reorients_complete_novig_miami_run_line_by_own_moneyline():
     live = pd.DataFrame(
         [
             {
@@ -261,12 +261,14 @@ def test_expand_preserves_novig_team_bound_miami_run_line():
     home = out[out["market_type"] == "spread_home"].iloc[0]
     away = out[out["market_type"] == "spread_away"].iloc[0]
 
-    assert float(home["spread_line"]) == 1.5
-    assert float(home["odds_american"]) == -208.0
-    assert home["line_source"] == "novig_team_bound_quote"
-    assert home["orientation_source"].endswith("|odds_api_team_binding")
-    assert float(away["spread_line"]) == -1.5
-    assert float(away["odds_american"]) == 194.0
+    assert float(home["spread_line"]) == -1.5
+    assert float(home["odds_american"]) == 194.0
+    assert float(home["opposing_odds_american"]) == -208.0
+    assert home["line_source"] == "novig_moneyline_reoriented"
+    assert home["orientation_source"].endswith("|novig_signed_pair_rebound")
+    assert float(away["spread_line"]) == 1.5
+    assert float(away["odds_american"]) == -208.0
+    assert float(away["opposing_odds_american"]) == 194.0
 
 def test_novig_moneyline_beats_stale_theover_hint_for_toronto_run_line():
     # 29 Jul production regression: Novig showed TOR -1.5/+141 and
@@ -415,54 +417,56 @@ def test_partial_novig_side_uses_oriented_standard_consensus_and_survives_presel
 
 
 
-def test_conflicting_spread_signs_use_the_corroborated_team_bound_pair():
-    # DraftKings and BetMGM agree on the complete signed team pair while FanDuel is
-    # the lone dissenting book. Preserve the majority's team binding and keep each
-    # price attached to its quoted point; moneyline favoritism must not swap outcomes.
+def test_aug3_texas_novig_reversal_is_corrected_before_candidate_ranking():
+    # Production regression from the 14:55 export: the Odds API attached Novig's
+    # Texas/San Francisco run-line outcomes to the opposite team names. The exact
+    # Novig screen showed SF +1.5/-194 and TEX -1.5/+182, while the raw row carried
+    # those same point/price outcomes on the opposite team fields. FanDuel and
+    # BetMGM repeated the reversal, so a simple two-of-three signed-pair vote failed.
     live_row = {
         "league": "MLB",
-        "home_team": "Tampa Bay",
-        "away_team": "Texas",
-        "game_date": "2026-07-30",
-        "matchup_id": "tb-tex-price-pair",
-        "commence_time_raw": "2026-07-30T16:11:00Z",
+        "home_team": "Texas",
+        "away_team": "San Francisco",
+        "game_date": "2026-08-03",
+        "matchup_id": "2026-08-03|texas|san francisco",
+        "commence_time_raw": "2026-08-04T00:06:00Z",
         "novig_home_point": 1.5,
-        "novig_home_price": 189,
+        "novig_home_price": -194,
         "novig_away_point": -1.5,
-        "novig_away_price": -107,
-        "novig_h2h_home_price": -178,
-        "novig_h2h_away_price": 167,
-        "novig_over_point": 5.5,
-        "novig_over_price": -105,
-        "novig_under_point": 5.5,
-        "novig_under_price": -115,
-        "fanduel_home_point": -1.5,
-        "fanduel_home_price": 125,
-        "fanduel_away_point": 1.5,
-        "fanduel_away_price": -145,
-        "fanduel_h2h_home_price": -180,
-        "fanduel_h2h_away_price": 140,
-        "draftkings_home_point": 1.5,
-        "draftkings_home_price": -150,
-        "draftkings_away_point": -1.5,
-        "draftkings_away_price": 130,
-        "draftkings_h2h_home_price": -203,
-        "draftkings_h2h_away_price": 153,
+        "novig_away_price": 182,
+        "novig_h2h_home_price": -117,
+        "novig_h2h_away_price": 115,
+        "novig_over_point": 8.5,
+        "novig_over_price": 117,
+        "novig_under_point": 8.5,
+        "novig_under_price": -120,
+        "fanduel_home_point": 1.5,
+        "fanduel_home_price": -220,
+        "fanduel_away_point": -1.5,
+        "fanduel_away_price": 180,
+        "fanduel_h2h_home_price": -116,
+        "fanduel_h2h_away_price": 106,
+        "draftkings_home_point": -1.5,
+        "draftkings_home_price": 169,
+        "draftkings_away_point": 1.5,
+        "draftkings_away_price": -207,
+        "draftkings_h2h_home_price": -125,
+        "draftkings_h2h_away_price": 104,
         "betmgm_home_point": 1.5,
-        "betmgm_home_price": -148,
+        "betmgm_home_price": -220,
         "betmgm_away_point": -1.5,
-        "betmgm_away_price": 128,
-        "betmgm_h2h_home_price": -190,
-        "betmgm_h2h_away_price": 150,
+        "betmgm_away_price": 165,
+        "betmgm_h2h_home_price": -125,
+        "betmgm_h2h_away_price": 105,
     }
     hint = pd.DataFrame(
         [
             {
                 "league": "MLB",
-                "home_team": "Tampa Bay",
-                "away_team": "Texas",
-                "game_date": "2026-07-30",
-                "matchup_id": "tb-tex-price-pair",
+                "home_team": "Texas",
+                "away_team": "San Francisco",
+                "game_date": "2026-08-03",
+                "matchup_id": "2026-08-03|texas|san francisco",
                 "market_type": market_type,
                 "orientation_favorite_side": (
                     "home" if market_type == "orientation_hint" else pd.NA
@@ -472,26 +476,35 @@ def test_conflicting_spread_signs_use_the_corroborated_team_bound_pair():
         ]
     )
 
-    home_pair = _consistent_standard_spread_pair(live_row, "home")
-    away_pair = _consistent_standard_spread_pair(live_row, "away")
-    assert home_pair == (1.5, -150.0, 130.0, "draftkings")
-    assert away_pair == (-1.5, 130.0, -150.0, "draftkings")
+    # Only DraftKings is internally oriented, so the two-book standard consensus
+    # now fails closed instead of letting the two reversed books outvote it.
+    assert pd.isna(_consistent_standard_spread_pair(live_row, "home")[0])
+    assert pd.isna(_consistent_standard_spread_pair(live_row, "away")[0])
 
     expanded, _ = _expand_live_odds_to_bet_rows(pd.DataFrame([live_row]), hint)
     spreads = expanded[
         expanded["market_type"].isin(["spread_home", "spread_away"])
     ].set_index("market_type")
 
-    assert float(spreads.loc["spread_home", "spread_line"]) == 1.5
-    assert float(spreads.loc["spread_home", "odds_american"]) == -150.0
-    assert float(spreads.loc["spread_home", "opposing_odds_american"]) == 130.0
-    assert float(spreads.loc["spread_away", "spread_line"]) == -1.5
-    assert float(spreads.loc["spread_away", "odds_american"]) == 130.0
-    assert float(spreads.loc["spread_away", "opposing_odds_american"]) == -150.0
-    assert spreads["line_source"].eq(
-        "draftkings_standard_spread_consensus"
+    assert float(spreads.loc["spread_home", "spread_line"]) == -1.5
+    assert float(spreads.loc["spread_home", "odds_american"]) == 182.0
+    assert float(spreads.loc["spread_home", "opposing_odds_american"]) == -194.0
+    assert float(spreads.loc["spread_away", "spread_line"]) == 1.5
+    assert float(spreads.loc["spread_away", "odds_american"]) == -194.0
+    assert float(spreads.loc["spread_away", "opposing_odds_american"]) == 182.0
+    assert spreads["line_source"].eq("novig_moneyline_reoriented").all()
+    assert spreads["odds_source"].eq("novig").all()
+    assert spreads["opposing_odds_source"].eq("novig").all()
+    assert spreads["orientation_source"].str.endswith(
+        "|novig_signed_pair_rebound"
     ).all()
-    assert spreads["opposing_odds_source"].eq("draftkings").all()
+
+    retained = _filter_preselection_line_integrity(expanded)
+    retained_spreads = retained[
+        retained["market_type"].isin(["spread_home", "spread_away"])
+    ]
+    assert len(retained_spreads) == 2
+    assert set(retained_spreads["spread_line"].astype(float)) == {-1.5, 1.5}
 
 def test_replaces_washington_plus_5_5_alt_line_with_standard_consensus():
     # 29 Jul production regression: Novig exposed the alternate WAS +5.5 at
@@ -566,11 +579,11 @@ def test_replaces_washington_plus_5_5_alt_line_with_standard_consensus():
     ).all()
 
 
-def test_totals_only_upload_preserves_standard_book_team_bindings():
+def test_totals_only_upload_rejects_standard_pairs_that_oppose_every_moneyline():
     # 31 Jul production regression: a totals-only upload and pathological Novig
-    # +/-5.5 alternate caused standard-book outcomes to be reassigned according to
-    # the moneyline favorite. Outcome names already bind point and price to the team,
-    # so the corroborated FanDuel/DraftKings pair must remain unchanged.
+    # +/-5.5 alternate left only standard-book pairs whose signs contradicted their
+    # own moneylines. With no independently trustworthy spread, reject both sides
+    # and retain the game's valid total candidates instead of emitting a reversal.
     live_row = {
         "league": "MLB",
         "home_team": "Atlanta",
@@ -618,36 +631,19 @@ def test_totals_only_upload_preserves_standard_book_team_bindings():
 
     home_pair = _oriented_standard_spread_pair(live_row, "home", "home")
     away_pair = _oriented_standard_spread_pair(live_row, "away", "home")
-    assert home_pair == (1.5, -196.0, 162.0, "fanduel", False)
-    assert away_pair == (-1.5, 162.0, -196.0, "fanduel", False)
+    assert pd.isna(home_pair[0])
+    assert pd.isna(away_pair[0])
 
     expanded, _ = _expand_live_odds_to_bet_rows(
         pd.DataFrame([live_row]), totals_only
     )
     retained = _filter_preselection_line_integrity(expanded)
-    assert set(retained["market_type"]) == {
-        "spread_home",
-        "spread_away",
-        "total_over",
-        "total_under",
-    }
-
-    spreads = retained[
-        retained["market_type"].isin(["spread_home", "spread_away"])
-    ].set_index("market_type")
-    assert spreads["candidate_source"].eq("live_market_only").all()
-    assert float(spreads.loc["spread_home", "spread_line"]) == 1.5
-    assert float(spreads.loc["spread_home", "odds_american"]) == -196.0
-    assert float(spreads.loc["spread_home", "opposing_odds_american"]) == 162.0
-    assert float(spreads.loc["spread_away", "spread_line"]) == -1.5
-    assert float(spreads.loc["spread_away", "odds_american"]) == 162.0
-    assert float(spreads.loc["spread_away", "opposing_odds_american"]) == -196.0
-    assert spreads["line_source"].eq(
-        "fanduel_standard_spread_consensus"
-    ).all()
-    assert ~spreads["orientation_source"].str.contains(
-        "standard_spread_sign_rebound", regex=False
-    ).any()
+    assert set(retained["market_type"]) == {"total_over", "total_under"}
+    rejected_spreads = expanded[
+        expanded["market_type"].isin(["spread_home", "spread_away"])
+    ]
+    assert rejected_spreads["spread_line"].isna().all()
+    assert rejected_spreads["odds_source"].str.startswith("rejected_").all()
 
 
 def test_aug1_yankees_quote_never_inherits_cubs_point_and_price():
@@ -687,27 +683,15 @@ def test_aug1_yankees_quote_never_inherits_cubs_point_and_price():
         "betmgm_h2h_away_price": -102,
     }
 
-    assert _consistent_standard_spread_pair(live_row, "home") == (
-        1.5,
-        -205.0,
-        168.0,
-        "fanduel",
-    )
-    assert _consistent_standard_spread_pair(live_row, "away") == (
-        -1.5,
-        168.0,
-        -205.0,
-        "fanduel",
-    )
+    assert pd.isna(_consistent_standard_spread_pair(live_row, "home")[0])
+    assert pd.isna(_consistent_standard_spread_pair(live_row, "away")[0])
 
     expanded, _ = _expand_live_odds_to_bet_rows(pd.DataFrame([live_row]), None)
     spreads = expanded[expanded["market_type"].isin(["spread_home", "spread_away"])].set_index(
         "market_type"
     )
-    assert float(spreads.loc["spread_home", "spread_line"]) == 1.5
-    assert float(spreads.loc["spread_home", "odds_american"]) == -205.0
-    assert float(spreads.loc["spread_away", "spread_line"]) == -1.5
-    assert float(spreads.loc["spread_away", "odds_american"]) == 168.0
+    assert spreads["spread_line"].isna().all()
+    assert spreads["odds_source"].str.startswith("rejected_").all()
 
     royals_row = {
         "novig_home_point": 1.5,
@@ -797,10 +781,10 @@ def test_rejects_pathological_novig_spread_pair_without_synthetic_minus_110():
     assert spreads["spread_line"].isna().all()
     assert spreads["odds_american"].isna().all()
     assert spreads["opposing_odds_american"].isna().all()
-    assert spreads["odds_source"].eq("rejected_live_spread_price").all()
-    assert spreads["line_source"].eq("rejected_live_spread_price").all()
+    assert spreads["odds_source"].str.startswith("rejected_").all()
+    assert spreads["line_source"].str.startswith("rejected_").all()
     assert spreads["orientation_source"].str.endswith(
-        "|spread_price_pair_rejected"
+        "|spread_orientation_rejected"
     ).all()
     assert not (
         spreads["odds_source"].eq("fallback_novig")

@@ -171,7 +171,7 @@ class TestCandidateGeneration(unittest.TestCase):
             .all()
         )
 
-    def test_mlb_novig_outlier_falls_back_to_real_priced_standard_consensus(self):
+    def test_mlb_novig_outlier_rejects_standard_consensus_opposing_moneylines(self):
         live = pd.DataFrame([
             {
                 "league": "MLB",
@@ -212,12 +212,15 @@ class TestCandidateGeneration(unittest.TestCase):
             "market_type"
         )
 
-        self.assertEqual(float(spreads.loc["spread_home", "spread_line"]), 1.5)
-        self.assertEqual(float(spreads.loc["spread_away", "spread_line"]), -1.5)
-        self.assertEqual(float(spreads.loc["spread_home", "odds_american"]), -108.0)
-        self.assertEqual(float(spreads.loc["spread_away", "odds_american"]), -112.0)
-        self.assertTrue(spreads["odds_source"].eq("odds_api").all())
-        self.assertFalse(spreads["odds_source"].str.contains("fallback", case=False).any())
+        # FanDuel and BetMGM both make the home team the moneyline favorite but
+        # attach +1.5 to that team. DraftKings is a pick'em and cannot independently
+        # orient the pair. With Novig quoting only an outlier +/-5.5, no trustworthy
+        # standard run line remains, so fail closed instead of exporting a reversal.
+        self.assertTrue(spreads["spread_line"].isna().all())
+        self.assertTrue(spreads["odds_american"].isna().all())
+        self.assertTrue(spreads["opposing_odds_american"].isna().all())
+        self.assertTrue(spreads["odds_source"].str.startswith("rejected_").all())
+        self.assertTrue(spreads["line_source"].str.startswith("rejected_").all())
 
     def test_preserved_columns_present(self):
         theover_rows = pd.DataFrame([
