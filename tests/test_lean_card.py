@@ -119,7 +119,7 @@ def test_lean_card_handles_export_column_names():
     assert card.iloc[0]["Matchup"] == "B @ A"
 
 
-def test_lean_card_shows_abstention_instead_of_weak_coverage_pick():
+def test_lean_card_shows_best_available_pick_and_keeps_pass():
     df = _df([{
         "league": "MLB",
         "home_team": "A",
@@ -139,10 +139,10 @@ def test_lean_card_shows_abstention_instead_of_weak_coverage_pick():
 
     card = build_all_games_lean_card(df, calibration=None, bucket_stats=None)
 
-    assert card.loc[0, "Pick"] == "NO QUALIFIED PICK"
+    assert card.loc[0, "Pick"] == "Under 8.5"
     assert card.loc[0, "Tier"] == "AVOID"
-    assert card.loc[0, "Bet_Decision"] == "NO QUALIFIED PICK"
-    assert card.loc[0, "Selection_Mode"] == "Research Candidate / Abstain"
+    assert card.loc[0, "Bet_Decision"] == "BEST AVAILABLE - PASS"
+    assert card.loc[0, "Selection_Mode"] == "Best Available Pick / Pass"
 
 
 def test_play_card_preserves_pipeline_build_stamp():

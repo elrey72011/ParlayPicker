@@ -108,6 +108,7 @@ def test_best_available_audit_compares_side_and_total_families(monkeypatch):
 def test_commercial_tier_never_upgrades_an_unfunded_best_available_row():
     frame = pd.DataFrame([
         {
+            "best_pick": "Over 8.5",
             "Pick_Status": "Actionable",
             "production_eligible": True,
             "production_bet_amount": 12.0,
@@ -118,6 +119,7 @@ def test_commercial_tier_never_upgrades_an_unfunded_best_available_row():
             "line_event_identity_match_flag": True,
         },
         {
+            "best_pick": "Under 8.5",
             "Pick_Status": "Below Threshold",
             "production_eligible": False,
             "production_bet_amount": 0.0,
@@ -133,19 +135,19 @@ def test_commercial_tier_never_upgrades_an_unfunded_best_available_row():
 
     assert classified.loc[0, "commercial_tier"] == "Premium Pick"
     assert bool(classified.loc[0, "sellable_as_premium"])
-    assert classified.loc[1, "commercial_tier"] == "No Qualified Pick"
+    assert classified.loc[1, "commercial_tier"] == "Best Available / Pass"
     assert not bool(classified.loc[1, "sellable_as_premium"])
     assert bool(classified.loc[1, "best_available_only"])
     assert not bool(classified.loc[1, "qualified_pick"])
-    assert classified.loc[1, "display_pick"] == "NO QUALIFIED PICK"
+    assert classified.loc[1, "display_pick"] == "Under 8.5"
     assert bool(classified.loc[0, "wager_approved"])
     assert classified.loc[0, "export_role"] == "PRODUCTION WAGER"
     assert not bool(classified.loc[1, "wager_approved"])
-    assert classified.loc[1, "export_role"] == "NO QUALIFIED PICK - RESEARCH"
+    assert classified.loc[1, "export_role"] == "BEST AVAILABLE PICK - PASS / RESEARCH"
     assert classified.loc[1, "wager_instruction"].startswith("DO NOT BET")
 
 
-def test_public_pick_abstains_below_absolute_probability_or_value_gate():
+def test_public_pick_stays_visible_below_absolute_probability_or_value_gate():
     frame = pd.DataFrame([
         {
             "best_pick": "Under 8.5",
@@ -172,7 +174,7 @@ def test_public_pick_abstains_below_absolute_probability_or_value_gate():
     classified = classify_best_available_picks(frame)
 
     assert classified["qualified_pick"].tolist() == [False, True]
-    assert classified["display_pick"].tolist() == ["NO QUALIFIED PICK", "Chicago +1.5"]
+    assert classified["display_pick"].tolist() == ["Under 8.5", "Chicago +1.5"]
     assert "below 55%" in classified.loc[0, "qualification_reason"]
     assert classified.loc[1, "commercial_tier"] == "Qualified Lean / Pass"
 
@@ -250,6 +252,7 @@ def test_strict_production_parlays_fail_closed_without_explicit_identity_or_pric
 def test_coverage_rows_cannot_retain_any_stake_like_value():
     frame = pd.DataFrame([
         {
+            "best_pick": "Under 8.5",
             "Pick_Status": "Below Threshold",
             "production_eligible": False,
             "production_bet_amount": 12.0,
@@ -269,7 +272,7 @@ def test_coverage_rows_cannot_retain_any_stake_like_value():
     row = classified.iloc[0]
 
     assert not bool(row["wager_approved"])
-    assert row["export_role"] == "NO QUALIFIED PICK - RESEARCH"
+    assert row["export_role"] == "BEST AVAILABLE PICK - PASS / RESEARCH"
     for column in (
         "production_bet_amount",
         "Kelly_Bet_Size",

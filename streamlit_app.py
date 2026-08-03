@@ -204,26 +204,15 @@ def _build_compact_export_frame(best_picks_export: pd.DataFrame) -> pd.DataFrame
     downgrades a row. The compact workbook is a user-facing betting artifact, so its
     Kelly column must never show money unless the same row is explicitly bettable,
     carries a positive approved play stake, and is not labeled DO NOT BET. It must
-    also show the public display pick: raw rank-one candidates belong only in the
-    audit/main exports when the qualified-pick gate abstains.
+    also show the rank-one pick for every game; wager approval remains separate.
     """
     if best_picks_export is None:
         best_picks_export = pd.DataFrame()
     compact_source = best_picks_export.copy()
-    if "display_pick" in compact_source.columns:
-        display_pick = (
-            compact_source["display_pick"]
-            .astype("string")
-            .fillna("")
-            .str.strip()
-        )
-        raw_pick = compact_source.get(
-            "best_pick",
-            pd.Series("", index=compact_source.index, dtype="object"),
-        )
-        compact_source["best_pick"] = display_pick.where(
-            display_pick.ne(""), raw_pick
-        )
+    if "best_pick" in compact_source.columns and "display_pick" in compact_source.columns:
+        raw_pick = compact_source["best_pick"].astype("string").fillna("").str.strip()
+        display_pick = compact_source["display_pick"].astype("string").fillna("").str.strip()
+        compact_source["best_pick"] = raw_pick.where(raw_pick.ne(""), display_pick)
     available_cols = [
         column for column in _COMPACT_EXPORT_COLUMNS
         if column in compact_source.columns
@@ -2143,8 +2132,8 @@ def main() -> None:
         # Same display hygiene as the CSV export: $0-stake picks read as "No Bet", not a tier.
         display_df = apply_no_bet_pick_quality(display_df)
 
-        # Keep the raw rank-one direction for grading, but expose it publicly only
-        # when it clears the absolute display gate. Other games show an abstention.
+        # Show the rank-one direction for every game. Wager qualification and stake
+        # remain separate so the full-board answer never disappears behind a pass.
         if not display_df.empty:
             try:
                 from app_core.lean_card import attach_play_stakes as _aps, score_best_picks_rows as _sbr
@@ -2167,6 +2156,15 @@ def main() -> None:
         # Relabel statuses for everything the user reads ("Actionable" is unchanged,
         # so the qualified/no-edge split below still keys off it safely).
         display_df = apply_status_display_labels(display_df)
+        if "qualified_pick" in display_df.columns and "Bet Decision" in display_df.columns:
+            _qualified_pick = display_df["qualified_pick"].fillna(False).astype(bool)
+            _is_bet = display_df["Bet Decision"].astype(str).str.eq("BET")
+            display_df.loc[~_qualified_pick & ~_is_bet, "Pick_Status"] = (
+                "Best Available / Pass"
+            )
+            display_df.loc[_qualified_pick & ~_is_bet, "Pick_Status"] = (
+                "Qualified Lean / Pass"
+            )
 
         if display_df.empty:
             st.warning("⚠️ No games found.")
@@ -2217,20 +2215,24 @@ def main() -> None:
             else:
                 st.info(
                     f"🚫 **No production-staked game picks today** — the model has no proven edge "
-                    f"at current prices, so the Kelly bankroll sits out. Games that fail the absolute "
-                    f"display gate show NO QUALIFIED PICK instead of a weak direction. Best action: "
+                    f"at current prices, so the Kelly bankroll sits out. The table still shows the "
+                    f"top-ranked best pick for every game; BEST AVAILABLE - PASS means that direction "
+                    f"does not clear the wager gate. Best action: "
                     f"the 🏆 Pick of the Day above and the ⚾ strikeout props below."
                 )
 
             if not no_edge_df.empty:
                 _playable = no_edge_df
                 _n_lean = int((_playable.get("Play Tier", pd.Series(dtype=str)) == "LEAN").sum())
-                _n_abstain = int(
-                    (_playable.get("Bet Decision", pd.Series(dtype=str)) == "NO QUALIFIED PICK").sum()
+                _n_pass = int(
+                    _playable.get("Bet Decision", pd.Series(dtype=str))
+                    .astype(str)
+                    .str.contains("PASS", case=False, na=False)
+                    .sum()
                 )
                 with st.expander(
                     f"📋 Research Card — {len(no_edge_df)} game(s), {_n_lean} qualified lean, "
-                    f"{_n_abstain} abstention(s) (tap for reasons)",
+                    f"{_n_pass} pass(es) (tap for reasons)",
                     expanded=False,
                 ):
                     no_edge_view = no_edge_df.copy()
@@ -2244,9 +2246,9 @@ def main() -> None:
                     ]
                     st.dataframe(no_edge_view[compact_cols], width="stretch")
                     st.caption(
-                        "Qualified leans are directional research reads, not wagers. NO QUALIFIED PICK "
-                        "means the raw rank-one candidate was retained only for grading. A funded BET "
-                        "still requires the stricter production price gate."
+                        "Every game shows its rank-one model direction. BEST AVAILABLE - PASS and "
+                        "QUALIFIED LEAN - PASS are directional research reads, not wagers. Only BET "
+                        "rows clear the stricter production price gate and receive a stake."
                     )
 
             export_prep_df = best_picks_df.copy()
@@ -2429,9 +2431,9 @@ def main() -> None:
                         f"calibrated edge over the exact price. LEAN = its "
                         f"calibrated win beats break-even (your call). AVOID = negative-EV, fading "
                         f"Kalshi, or calibrated win below break-even. Calib_Win% = the model's "
-                        f"probability after the bucket-conditional calibration correction. A game that "
-                        f"does not clear the display gate shows NO QUALIFIED PICK; only absolute-gate "
-                        f"BET rows receive a stake."
+                        f"probability after the bucket-conditional calibration correction. Every game "
+                        f"shows its top-ranked best available pick; only absolute-gate BET rows receive "
+                        f"a stake."
                     )
                     # Keep unit control for qualified BET rows only. LEAN/AVOID
                     # rows stay visible but the absolute gate holds them at $0.
@@ -2446,7 +2448,7 @@ def main() -> None:
                     st.caption(
                         f"Play_Stake puts ${_play_total:.2f} on {_play_count}/{len(lean_card)} "
                         f"absolute-gate BET rows at a ${play_unit:.0f} unit. Qualified leans remain "
-                        f"$0 research rows; failed display gates are explicit abstentions."
+                        f"$0 research rows; best-available passes stay visible with their gate reasons."
                     )
                     st.dataframe(lean_card, width="stretch")
                     st.download_button(

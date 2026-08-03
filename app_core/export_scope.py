@@ -76,10 +76,22 @@ def label_wager_export(frame: pd.DataFrame) -> pd.DataFrame:
     out["Wager_Instruction"] = "DO NOT BET - $0 PASS / RESEARCH"
     if "qualified_pick" in out.columns:
         qualified = out["qualified_pick"].fillna(False).astype(bool)
-        out.loc[~qualified, "Export_Scope"] = "NO QUALIFIED PICK / RESEARCH"
+        qualified_pass = qualified & ~funded
+        out.loc[~qualified, "Export_Scope"] = "BEST AVAILABLE PICK / RESEARCH"
         out.loc[~qualified, "Wager_Instruction"] = (
-            "DO NOT BET - NO CANDIDATE CLEARS THE QUALIFIED-PICK GATE"
+            "DO NOT BET - BEST AVAILABLE PICK DOES NOT CLEAR THE WAGER GATE"
         )
+        out.loc[qualified_pass, "Export_Scope"] = "QUALIFIED LEAN / RESEARCH"
+        out.loc[qualified_pass, "Wager_Instruction"] = (
+            "DO NOT BET - QUALIFIED LEAN HAS NO APPROVED STAKE"
+        )
+        if "Pick_Status" in out.columns:
+            out.loc[~qualified, "Pick_Status"] = "Best Available / Pass"
+            out.loc[qualified_pass, "Pick_Status"] = "Qualified Lean / Pass"
+        for quality_column in ("Pick_Quality", "Pick Quality"):
+            if quality_column in out.columns:
+                out.loc[~qualified, quality_column] = "No Bet - Best Available"
+                out.loc[qualified_pass, quality_column] = "No Bet - Qualified Lean"
     out.loc[funded, "Export_Scope"] = "PRODUCTION BET"
     out.loc[funded, "Wager_Instruction"] = "BET - APP APPROVED"
     return out

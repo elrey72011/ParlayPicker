@@ -147,7 +147,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-08-03b-prop-ledger-recovery"
+PIPELINE_BUILD = "2026-08-03c-show-best-pick-every-game"
 
 # Best Available must compare standard, reasonably priced markets. A P2P exchange can
 # expose alternate run lines (for example +5.5 at -1150) beside the standard MLB +1.5.
@@ -328,9 +328,9 @@ def ensure_best_pick_export_columns(
         "best_available_selection_reason": "",
         "qualified_pick": False,
         "qualification_probability": pd.NA,
-        "qualification_reason": "NO QUALIFIED PICK: not evaluated.",
-        "display_pick": "NO QUALIFIED PICK",
-        "commercial_tier": "No Qualified Pick",
+        "qualification_reason": "PASS: wager qualification not evaluated.",
+        "display_pick": "",
+        "commercial_tier": "Best Available / Pass",
         "sellable_as_premium": False,
         "best_available_only": True,
         "commercial_reason": "Best available only; no production-qualified edge.",
@@ -379,6 +379,14 @@ def ensure_best_pick_export_columns(
     for col in req_cols:
         if col in {"status_blocker_reason", "status_blocker_stage", "nba_stats_fetch_status", "fallback_summary_by_league", "run_health_warning", "degraded_feature_subset_reason", "status_metric_basis", "selection_probability_source", "mlb_spread_finalist_penalty_reason", "market_line_source", "market_line_source_detail", "line_consistency_reason", "line_provenance_warning", "line_event_identity_reason", "live_event_match_key", "selected_live_event_source", "raw_book_odds_diag", "best_available_runner_up_pick", "best_available_runner_up_market_type", "best_available_selection_reason", "qualification_reason", "display_pick", "commercial_tier", "commercial_reason", "final_pick_valid_reason"}:
             out[col] = out[col].fillna(default_values.get(col, "")).astype(str)
+
+    # The public card always answers which candidate ranked first for the game.
+    # Wager approval lives in qualified_pick/Bettable/stake fields and must never
+    # be encoded by replacing the pick text with an abstention placeholder.
+    if "display_pick" in out.columns and "best_pick" in out.columns:
+        display = out["display_pick"].fillna("").astype(str).str.strip()
+        ranked_pick = out["best_pick"].fillna("").astype(str).str.strip()
+        out["display_pick"] = ranked_pick.where(ranked_pick.ne(""), display)
 
     if "status_blocker_stage" in out.columns:
         out["status_blocker_stage"] = out["status_blocker_stage"].replace({"": "none"})
@@ -3533,37 +3541,38 @@ def classify_best_available_picks(best_picks_df: pd.DataFrame) -> pd.DataFrame:
     out["best_available_only"] = ~premium
     out["qualified_pick"] = qualified
     out["qualification_probability"] = selection_probability
-    out["qualification_reason"] = "NO QUALIFIED PICK: selection does not clear the absolute display gate."
+    out["qualification_reason"] = "PASS: selection does not clear the wager qualification gate."
     out.loc[selection_probability.isna(), "qualification_reason"] = (
-        "NO QUALIFIED PICK: selection probability is unavailable."
+        "PASS: selection probability is unavailable."
     )
     out.loc[selection_probability.lt(float(BEST_AVAILABLE_QUALIFIED_MIN_WIN_PROB)), "qualification_reason"] = (
-        f"NO QUALIFIED PICK: win probability is below {BEST_AVAILABLE_QUALIFIED_MIN_WIN_PROB:.0%}."
+        f"PASS: win probability is below {BEST_AVAILABLE_QUALIFIED_MIN_WIN_PROB:.0%}."
     )
     out.loc[selection_probability.ge(float(BEST_AVAILABLE_QUALIFIED_MIN_WIN_PROB)) & ~production_ev.gt(float(BEST_AVAILABLE_QUALIFIED_MIN_EV)), "qualification_reason"] = (
-        "NO QUALIFIED PICK: expected value is not positive."
+        "PASS: expected value is not positive."
     )
     out.loc[selection_probability.ge(float(BEST_AVAILABLE_QUALIFIED_MIN_WIN_PROB)) & production_ev.gt(float(BEST_AVAILABLE_QUALIFIED_MIN_EV)) & ~production_edge.gt(float(BEST_AVAILABLE_QUALIFIED_MIN_EDGE)), "qualification_reason"] = (
-        "NO QUALIFIED PICK: edge is not positive."
+        "PASS: edge is not positive."
     )
     out.loc[~line_source.eq("live") | ~line_ok | ~event_ok, "qualification_reason"] = (
-        "NO QUALIFIED PICK: live line or event identity is not verified."
+        "PASS: live line or event identity is not verified."
     )
     out.loc[lean, "qualification_reason"] = (
-        "Qualified research lean: clears the absolute display gate but is not funded."
+        "Qualified research lean: clears the directional qualification threshold but is not funded."
     )
     out.loc[premium, "qualification_reason"] = (
         "Production-qualified pick with a verified live line and funded stake."
     )
-    out["display_pick"] = "NO QUALIFIED PICK"
-    if "best_pick" in out.columns:
-        out.loc[qualified, "display_pick"] = out.loc[qualified, "best_pick"].astype(str)
+    ranked_pick = _string_series(out, "best_pick").str.strip()
+    out["display_pick"] = ranked_pick.where(
+        ranked_pick.ne(""), "BEST PICK UNAVAILABLE"
+    )
 
-    out["commercial_tier"] = "No Qualified Pick"
+    out["commercial_tier"] = "Best Available / Pass"
     out.loc[lean, "commercial_tier"] = "Qualified Lean / Pass"
     out.loc[premium, "commercial_tier"] = "Premium Pick"
     out["commercial_reason"] = (
-        "Research candidate retained for grading; no pick is recommended for this game."
+        "Top-ranked pick for this game; shown for full-board coverage but not approved as a wager."
     )
     out.loc[lean, "commercial_reason"] = (
         "Qualified directional lean, but no funded production edge."
@@ -3584,11 +3593,11 @@ def classify_best_available_picks(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             out.loc[~premium, stake_column] = 0.0
 
     out["wager_approved"] = premium
-    out["export_role"] = "NO QUALIFIED PICK - RESEARCH"
+    out["export_role"] = "BEST AVAILABLE PICK - PASS / RESEARCH"
     out.loc[lean, "export_role"] = "QUALIFIED LEAN - PASS"
     out.loc[premium, "export_role"] = "PRODUCTION WAGER"
     out["wager_instruction"] = (
-        "DO NOT BET; no candidate clears the absolute qualified-pick gate."
+        "DO NOT BET; best available pick does not clear the wager qualification gate."
     )
     out.loc[lean, "wager_instruction"] = (
         "DO NOT BET; qualified research lean without a funded production edge."
