@@ -201,6 +201,31 @@ def test_qualified_pick_uses_rowwise_fallback_when_production_metrics_are_sparse
     assert classified.loc[0, "display_pick"] == "Chicago +1.5"
 
 
+def test_final_empirical_edge_downgrades_preoverlay_qualified_lean_label():
+    frame = pd.DataFrame([{
+        "best_pick": "Washington +1.5",
+        "Pick_Status": "Below Threshold",
+        "selection_probability_used": 0.5772,
+        "production_expected_value": 0.0024,
+        "production_edge": 0.0226,
+        "empirical_win_probability": 0.5400,
+        "empirical_edge": -0.0450,
+        "market_line_source": "live",
+        "line_consistency_flag": True,
+        "line_event_identity_match_flag": True,
+        "consensus_agreement": "Neutral",
+    }])
+
+    classified = classify_best_available_picks(frame)
+
+    assert not bool(classified.loc[0, "qualified_pick"])
+    assert classified.loc[0, "qualification_probability"] == 0.5400
+    assert classified.loc[0, "commercial_tier"] == "Best Available / Pass"
+    assert classified.loc[0, "export_role"] == "BEST AVAILABLE PICK - PASS / RESEARCH"
+    assert classified.loc[0, "display_pick"] == "Washington +1.5"
+    assert "below 55%" in classified.loc[0, "qualification_reason"]
+
+
 def _parlay_leg(matchup_id: str, pick: str) -> dict:
     return {
         "matchup_id": matchup_id,

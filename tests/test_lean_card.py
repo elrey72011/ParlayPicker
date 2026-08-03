@@ -145,6 +145,38 @@ def test_lean_card_shows_best_available_pick_and_keeps_pass():
     assert card.loc[0, "Selection_Mode"] == "Best Available Pick / Pass"
 
 
+def test_final_avoid_tier_downgrades_stale_qualified_lean_label():
+    df = _df([{
+        "league": "MLB",
+        "home_team": "Philadelphia",
+        "away_team": "Washington",
+        "best_pick": "Washington +1.5",
+        "qualified_pick": True,
+        "qualification_reason": "Qualified research lean from pre-overlay metrics.",
+        "Pick_Status": "Below Threshold",
+        "effective_expected_value": 0.0024,
+        "effective_win_probability": 0.5400,
+        "effective_edge": 0.0226,
+        "odds_american": -141,
+        "consensus_agreement": "Neutral",
+        "line_consistency_flag": True,
+        "line_event_identity_match_flag": True,
+        "Kelly_Bet_Size": 0.0,
+    }])
+
+    card = build_all_games_lean_card(df, calibration=None, bucket_stats=None)
+    exported = attach_play_stakes(card, unit=1.0)
+
+    assert card.loc[0, "Tier"] == "AVOID"
+    assert not bool(card.loc[0, "Qualified_Pick"])
+    assert card.loc[0, "Bet_Decision"] == "BEST AVAILABLE - PASS"
+    assert card.loc[0, "Selection_Mode"] == "Best Available Pick / Pass"
+    assert card.loc[0, "Qualification_Reason"] == (
+        "PASS: final empirical tier is AVOID at the offered price."
+    )
+    assert exported.loc[0, "Export_Role"] == "BEST AVAILABLE PICK - PASS / RESEARCH"
+
+
 def test_play_card_preserves_pipeline_build_stamp():
     df = _df([
         {

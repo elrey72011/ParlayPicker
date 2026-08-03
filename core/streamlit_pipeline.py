@@ -147,7 +147,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-08-03c-show-best-pick-every-game"
+PIPELINE_BUILD = "2026-08-03d-final-qualified-label"
 
 # Best Available must compare standard, reasonably priced markets. A P2P exchange can
 # expose alternate run lines (for example +5.5 at -1150) beside the standard MLB +1.5.
@@ -3526,10 +3526,27 @@ def classify_best_available_picks(best_picks_df: pd.DataFrame) -> pd.DataFrame:
     selection_probability = selection_probability.fillna(
         _numeric_series(out, "calibrated_probability")
     )
+    # Public qualification must use the same final empirical probability/edge
+    # that the all-games card uses at the offered price. Previously the label
+    # used the pre-overlay selection probability and raw production edge, so a
+    # row could say QUALIFIED LEAN while the final card correctly graded it
+    # AVOID with a negative empirical edge (Washington +1.5 on 3 Aug).
+    empirical_probability = _numeric_series(out, "empirical_win_probability")
+    qualification_probability = empirical_probability.fillna(selection_probability)
+    empirical_edge = _numeric_series(out, "empirical_edge")
+    qualification_edge = empirical_edge.fillna(production_edge)
+    research_status_ok = status.isin({
+        "Actionable", "High Variance/Speculative", "Below Threshold"
+    })
+    consensus_ok = ~_string_series(out, "consensus_agreement").str.strip().eq(
+        "Disagrees"
+    )
     research_qualified = (
-        selection_probability.ge(float(BEST_AVAILABLE_QUALIFIED_MIN_WIN_PROB))
+        qualification_probability.ge(float(BEST_AVAILABLE_QUALIFIED_MIN_WIN_PROB))
         & production_ev.gt(float(BEST_AVAILABLE_QUALIFIED_MIN_EV))
-        & production_edge.gt(float(BEST_AVAILABLE_QUALIFIED_MIN_EDGE))
+        & qualification_edge.gt(float(BEST_AVAILABLE_QUALIFIED_MIN_EDGE))
+        & research_status_ok
+        & consensus_ok
         & line_source.eq("live")
         & line_ok
         & event_ok
@@ -3540,25 +3557,31 @@ def classify_best_available_picks(best_picks_df: pd.DataFrame) -> pd.DataFrame:
     out["sellable_as_premium"] = premium
     out["best_available_only"] = ~premium
     out["qualified_pick"] = qualified
-    out["qualification_probability"] = selection_probability
+    out["qualification_probability"] = qualification_probability
     out["qualification_reason"] = "PASS: selection does not clear the wager qualification gate."
-    out.loc[selection_probability.isna(), "qualification_reason"] = (
-        "PASS: selection probability is unavailable."
+    out.loc[qualification_probability.isna(), "qualification_reason"] = (
+        "PASS: final qualification probability is unavailable."
     )
-    out.loc[selection_probability.lt(float(BEST_AVAILABLE_QUALIFIED_MIN_WIN_PROB)), "qualification_reason"] = (
-        f"PASS: win probability is below {BEST_AVAILABLE_QUALIFIED_MIN_WIN_PROB:.0%}."
+    out.loc[qualification_probability.lt(float(BEST_AVAILABLE_QUALIFIED_MIN_WIN_PROB)), "qualification_reason"] = (
+        f"PASS: final calibrated win probability is below {BEST_AVAILABLE_QUALIFIED_MIN_WIN_PROB:.0%}."
     )
-    out.loc[selection_probability.ge(float(BEST_AVAILABLE_QUALIFIED_MIN_WIN_PROB)) & ~production_ev.gt(float(BEST_AVAILABLE_QUALIFIED_MIN_EV)), "qualification_reason"] = (
+    out.loc[qualification_probability.ge(float(BEST_AVAILABLE_QUALIFIED_MIN_WIN_PROB)) & ~production_ev.gt(float(BEST_AVAILABLE_QUALIFIED_MIN_EV)), "qualification_reason"] = (
         "PASS: expected value is not positive."
     )
-    out.loc[selection_probability.ge(float(BEST_AVAILABLE_QUALIFIED_MIN_WIN_PROB)) & production_ev.gt(float(BEST_AVAILABLE_QUALIFIED_MIN_EV)) & ~production_edge.gt(float(BEST_AVAILABLE_QUALIFIED_MIN_EDGE)), "qualification_reason"] = (
-        "PASS: edge is not positive."
+    out.loc[qualification_probability.ge(float(BEST_AVAILABLE_QUALIFIED_MIN_WIN_PROB)) & production_ev.gt(float(BEST_AVAILABLE_QUALIFIED_MIN_EV)) & ~qualification_edge.gt(float(BEST_AVAILABLE_QUALIFIED_MIN_EDGE)), "qualification_reason"] = (
+        "PASS: final calibrated edge is not positive at the offered price."
+    )
+    out.loc[~research_status_ok & ~premium, "qualification_reason"] = (
+        "PASS: final safety status is not eligible for a qualified lean."
+    )
+    out.loc[~consensus_ok & ~premium, "qualification_reason"] = (
+        "PASS: market consensus opposes the selected direction."
     )
     out.loc[~line_source.eq("live") | ~line_ok | ~event_ok, "qualification_reason"] = (
         "PASS: live line or event identity is not verified."
     )
     out.loc[lean, "qualification_reason"] = (
-        "Qualified research lean: clears the directional qualification threshold but is not funded."
+        "Qualified research lean: final calibrated probability and edge clear the offered price, but no production stake is funded."
     )
     out.loc[premium, "qualification_reason"] = (
         "Production-qualified pick with a verified live line and funded stake."
