@@ -365,6 +365,36 @@ def test_actionable_row_with_positive_ev_and_absolute_edge_is_funded():
     assert float(staked.iloc[0]["Play_Stake"]) == 10.0
 
 
+def test_explicit_unfunded_authorization_downgrades_mathematical_bet_to_lean():
+    df = pd.DataFrame({
+        "league": ["MLB"],
+        "home_team": ["Colorado"],
+        "away_team": ["Tampa Bay"],
+        "Pick_Status": ["Actionable"],
+        "best_pick": ["Under 11.5"],
+        "qualified_pick": [True],
+        "wager_approved": [False],
+        "production_eligible": [False],
+        "production_bet_amount": [0.0],
+        "effective_expected_value": [0.05],
+        "consensus_agreement": ["Agrees"],
+        "effective_win_probability": [0.58],
+        "effective_edge": [0.05],
+        "odds_american": [-110],
+        "Kelly_Bet_Size": [0.0],
+    })
+
+    scored = score_best_picks_rows(df, calibration=None, bucket_stats=None)
+    staked = attach_play_stakes(scored, unit=5.0)
+
+    assert scored.iloc[0]["Tier"] == "LEAN"
+    assert scored.iloc[0]["Bet_Decision"] == "QUALIFIED LEAN - PASS"
+    assert not bool(scored.iloc[0]["Production_Gate_Pass"])
+    assert "approval" in scored.iloc[0]["Production_Gate_Reason"]
+    assert float(staked.iloc[0]["Play_Stake"]) == 0.0
+    assert not bool(staked.iloc[0]["Wager_Approved"])
+
+
 def test_build_card_matches_row_scores():
     df = pd.DataFrame({
         "league": ["MLB", "MLB"],

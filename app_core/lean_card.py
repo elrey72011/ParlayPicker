@@ -31,6 +31,18 @@ def _first_col(df: pd.DataFrame, *names: str):
     return pd.Series([None] * len(df), index=df.index)
 
 
+def _strict_bool_col(df: pd.DataFrame, name: str, *, default: bool = False) -> pd.Series:
+    """Return a fail-closed boolean Series for an optional authorization column."""
+
+    if name not in df.columns:
+        return pd.Series(default, index=df.index, dtype=bool)
+    values = df[name]
+    if pd.api.types.is_bool_dtype(values.dtype):
+        return values.fillna(default).astype(bool)
+    normalized = values.astype("string").fillna("").str.strip().str.casefold()
+    return normalized.isin({"true", "1", "yes", "y"})
+
+
 def classify_lean_tier(status: object, eff_ev: object, consensus: object,
                        *, calibrated_win: object = None, break_even: object = None) -> str:
     """BET / LEAN / AVOID for one row (see module docstring).
@@ -199,16 +211,46 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
     qualification_reason.loc[final_tier_downgrade & ~playable] = (
         "PASS: final line is unavailable or failed identity validation."
     )
+    # A mathematical BET label is not authorization. When the classified pipeline
+    # supplies an approval/eligibility field, require that explicit flag plus a funded
+    # amount. Legacy callers without authorization columns retain the historical gate.
+    authorization_known = "wager_approved" in df.columns or "production_eligible" in df.columns
+    explicitly_authorized = pd.Series(True, index=df.index, dtype=bool)
+    if "wager_approved" in df.columns:
+        explicitly_authorized &= _strict_bool_col(df, "wager_approved")
+    if "production_eligible" in df.columns:
+        explicitly_authorized &= _strict_bool_col(df, "production_eligible")
+    if authorization_known:
+        funded_amounts = [
+            pd.to_numeric(df[column], errors="coerce").fillna(0.0)
+            for column in ("production_bet_amount", "Kelly_Bet_Size", "Play_Stake")
+            if column in df.columns
+        ]
+        if funded_amounts:
+            explicitly_authorized &= pd.concat(funded_amounts, axis=1).max(axis=1).gt(0.0)
+        else:
+            explicitly_authorized &= False
+
+    mathematical_bet = tier.eq("BET")
     production_gate_pass = (
-        tier.eq("BET")
+        mathematical_bet
         & gate["production_gate_pass"]
         & playable
+        & explicitly_authorized
     )
+    # Keep an otherwise-qualified, unfunded direction visible as a LEAN, never BET.
+    tier = tier.where(~(mathematical_bet & ~production_gate_pass), "LEAN")
     production_gate_reason = gate["production_gate_reason"].copy()
     non_actionable = ~status.astype(str).str.strip().eq("Actionable")
     production_gate_reason.loc[non_actionable & gate["production_gate_pass"]] = (
         "upstream status is not Actionable"
     )
+    production_gate_reason.loc[
+        mathematical_bet
+        & gate["production_gate_pass"]
+        & playable
+        & ~explicitly_authorized
+    ] = "explicit wager approval or funded production stake is missing"
 
     return pd.DataFrame({
         "League": _first_col(df, "league", "League"),

@@ -10,6 +10,7 @@ def _compact_source(**overrides):
         "Export_Scope": "COVERAGE / RESEARCH",
         "Bettable": False,
         "Play_Stake": 0.0,
+        "Play_Tier": "AVOID",
         "Pick_Status": "No Edge",
         "league": "MLB",
         "Home": "Chicago Cubs",
@@ -61,6 +62,7 @@ def test_compact_export_retains_only_explicitly_approved_stake():
             Wager_Instruction="APPROVED: wager the exported Play_Stake amount.",
             Export_Scope="PRODUCTION WAGERS ONLY",
             Bettable=True,
+            Play_Tier="BET",
             Play_Stake=12.5,
             Kelly_Bet_Size=18.75,
         )
@@ -70,6 +72,24 @@ def test_compact_export_retains_only_explicitly_approved_stake():
 
     assert compact.loc[0, "Play_Stake"] == 12.5
     assert compact.loc[0, "Kelly_Bet_Size"] == 18.75
+    assert compact.loc[0, "Play_Tier"] == "BET"
+
+
+def test_compact_export_reconciles_unfunded_qualified_bet_tier_to_lean():
+    source = pd.DataFrame([
+        _compact_source(
+            Wager_Instruction="DO NOT BET - QUALIFIED LEAN HAS NO APPROVED STAKE",
+            Export_Scope="QUALIFIED LEAN / RESEARCH",
+            Bettable=False,
+            Play_Tier="BET",
+            Play_Stake=2.0,
+        )
+    ])
+
+    compact = _build_compact_export_frame(source)
+
+    assert compact.loc[0, "Play_Tier"] == "LEAN"
+    assert float(compact.loc[0, "Play_Stake"]) == 0.0
 
 
 def test_compact_export_keeps_truthful_price_provenance():
