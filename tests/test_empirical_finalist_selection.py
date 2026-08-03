@@ -4,6 +4,7 @@ from __future__ import annotations
 import pandas as pd
 
 from core.streamlit_pipeline import build_best_picks_df
+from core.empirical_tiers import empirical_selection_probabilities
 
 
 def _candidate(market_type: str, probability: float, ev: float) -> dict:
@@ -94,3 +95,25 @@ def test_stale_bucket_stats_cannot_label_after_being_rejected_for_selection(monk
     assert diagnostics["selection_bucket_stats_fresh"] is False
     assert diagnostics["empirical_tier_overlay"]["applied"] is False
     assert diagnostics["empirical_tier_overlay"]["reason"] == "stale_bucket_stats"
+
+
+def test_side_candidates_use_same_bounded_empirical_selection_scale_as_totals():
+    stats = {
+        "overall": {"n": 200, "win_rate": 0.50},
+        "buckets": {
+            "MLB:side:Agrees": {"n": 40, "wins": 28, "win_rate": 0.70},
+        },
+    }
+    frame = pd.DataFrame([{
+        "league": "MLB",
+        "market_type": "spread_home",
+        "calibrated_probability": 0.60,
+        "consensus_agreement": "Agrees",
+        "kalshi_probability": 0.55,
+        "odds_american": -110,
+    }])
+
+    adjusted = empirical_selection_probabilities(frame, stats)
+
+    assert adjusted.iloc[0] > 0.60
+    assert adjusted.iloc[0] < 0.62

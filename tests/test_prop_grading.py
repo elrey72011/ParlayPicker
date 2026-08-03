@@ -13,6 +13,8 @@ from app_core.prop_grading import (
 def _card():
     return pd.DataFrame([
         {
+            "pipeline_build": "build-a",
+            "export_run_id": "run-a",
             "player": "Juan Soto",
             "participant_type": "batter",
             "market_type": "batter_hits_over",
@@ -30,6 +32,8 @@ def _card():
             "production_gate_reason": "Core production qualified",
         },
         {
+            "pipeline_build": "build-a",
+            "export_run_id": "run-a",
             "player": "Juan Soto",
             "participant_type": "batter",
             "market_type": "batter_total_bases_over",
@@ -64,6 +68,8 @@ def test_normal_export_grades_funded_and_research_rows_and_preserves_raw_probabi
     assert graded.loc[0, "CalibrationSampleSize"] == 24
     assert bool(graded.loc[0, "production_eligible"])
     assert graded.loc[0, "production_gate_reason"] == "Core production qualified"
+    assert graded["pipeline_build"].eq("build-a").all()
+    assert graded["export_run_id"].eq("run-a").all()
     assert graded["game_date"].eq("2026-07-21").all()
     assert calls == [(1, "batter")]
 

@@ -42,6 +42,23 @@ def test_prop_grading_export_keeps_research_but_marks_it_do_not_bet():
     assert production_wagers(frame)["player_name"].tolist() == ["Funded Player"]
 
 
+def test_unqualified_game_row_gets_explicit_abstention_scope():
+    frame = pd.DataFrame({
+        "display_pick": ["NO QUALIFIED PICK"],
+        "qualified_pick": [False],
+        "Bet_Decision": ["NO QUALIFIED PICK"],
+        "production_eligible": [False],
+        "Play_Stake": [0.0],
+    })
+
+    labeled = label_wager_export(frame)
+
+    assert labeled.loc[0, "Export_Scope"] == "NO QUALIFIED PICK / RESEARCH"
+    assert labeled.loc[0, "Wager_Instruction"] == (
+        "DO NOT BET - NO CANDIDATE CLEARS THE QUALIFIED-PICK GATE"
+    )
+
+
 def test_public_export_scope_columns_are_case_insensitively_unique():
     frame = pd.DataFrame(
         {

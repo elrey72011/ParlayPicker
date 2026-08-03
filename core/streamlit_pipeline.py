@@ -27,6 +27,11 @@ from app_core.weights_config import (
             TOTAL_UNDER_MIN_WIN_PROB, TOTAL_UNDER_MIN_EV, TOTAL_UNDER_MIN_EDGE,
             NHL_TOTAL_EXTRA_EDGE_PENALTY, MLB_SPREAD_MIN_WIN_PROB,
             MLB_SPREAD_ACTIONABLE_PENALTY, MLB_SPREAD_FINALIST_SCORE_PENALTY,
+            MLB_SPREAD_FINALIST_PENALTY_MIN_FAMILY_N,
+            MLB_SPREAD_FINALIST_PENALTY_MIN_RATE_GAP,
+            BEST_AVAILABLE_QUALIFIED_MIN_WIN_PROB,
+            BEST_AVAILABLE_QUALIFIED_MIN_EV,
+            BEST_AVAILABLE_QUALIFIED_MIN_EDGE,
             NBA_SIDE_ACTIONABLE_BONUS, NBA_OVER_ACTIONABLE_BONUS,
             MLB_OVER_ACTIONABLE_MIN_PROB, MLB_OVER_ACTIONABLE_MIN_EV, MLB_OVER_ACTIONABLE_MIN_EDGE,
             MLB_TOTAL_OVER_ACTIONABLE_PENALTY, MLB_TOTAL_UNDER_ACTIONABLE_PENALTY,
@@ -142,7 +147,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-08-02b-signed-spread-pair-safety"
+PIPELINE_BUILD = "2026-08-03a-qualified-pick-abstention"
 
 # Best Available must compare standard, reasonably priced markets. A P2P exchange can
 # expose alternate run lines (for example +5.5 at -1150) beside the standard MLB +1.5.
@@ -156,6 +161,9 @@ REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
     "selection_probability_used",
     "selection_probability_source",
     "selection_probability_pair_normalized",
+    "mlb_spread_finalist_penalty_applied",
+    "mlb_spread_finalist_penalty_value",
+    "mlb_spread_finalist_penalty_reason",
     "best_available_rank",
     "best_available_family_rank",
     "best_available_score",
@@ -169,6 +177,10 @@ REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
     "final_pick_valid",
     "final_pick_valid_reason",
     "best_available_selection_reason",
+    "qualified_pick",
+    "qualification_probability",
+    "qualification_reason",
+    "display_pick",
     "commercial_tier",
     "sellable_as_premium",
     "best_available_only",
@@ -298,6 +310,9 @@ def ensure_best_pick_export_columns(
         "selection_probability_used": pd.NA,
         "selection_probability_source": "calibrated_probability",
         "selection_probability_pair_normalized": False,
+        "mlb_spread_finalist_penalty_applied": False,
+        "mlb_spread_finalist_penalty_value": 0.0,
+        "mlb_spread_finalist_penalty_reason": "not_evaluated",
         "best_available_rank": pd.NA,
         "best_available_family_rank": pd.NA,
         "best_available_score": pd.NA,
@@ -311,7 +326,11 @@ def ensure_best_pick_export_columns(
         "final_pick_valid": False,
         "final_pick_valid_reason": "not_validated",
         "best_available_selection_reason": "",
-        "commercial_tier": "Best Available / Pass",
+        "qualified_pick": False,
+        "qualification_probability": pd.NA,
+        "qualification_reason": "NO QUALIFIED PICK: not evaluated.",
+        "display_pick": "NO QUALIFIED PICK",
+        "commercial_tier": "No Qualified Pick",
         "sellable_as_premium": False,
         "best_available_only": True,
         "commercial_reason": "Best available only; no production-qualified edge.",
@@ -358,7 +377,7 @@ def ensure_best_pick_export_columns(
     missing_cols = [c for c in req_cols if c not in out.columns]
 
     for col in req_cols:
-        if col in {"status_blocker_reason", "status_blocker_stage", "nba_stats_fetch_status", "fallback_summary_by_league", "run_health_warning", "degraded_feature_subset_reason", "status_metric_basis", "selection_probability_source", "market_line_source", "market_line_source_detail", "line_consistency_reason", "line_provenance_warning", "line_event_identity_reason", "live_event_match_key", "selected_live_event_source", "raw_book_odds_diag", "best_available_runner_up_pick", "best_available_runner_up_market_type", "best_available_selection_reason", "commercial_tier", "commercial_reason", "final_pick_valid_reason"}:
+        if col in {"status_blocker_reason", "status_blocker_stage", "nba_stats_fetch_status", "fallback_summary_by_league", "run_health_warning", "degraded_feature_subset_reason", "status_metric_basis", "selection_probability_source", "mlb_spread_finalist_penalty_reason", "market_line_source", "market_line_source_detail", "line_consistency_reason", "line_provenance_warning", "line_event_identity_reason", "live_event_match_key", "selected_live_event_source", "raw_book_odds_diag", "best_available_runner_up_pick", "best_available_runner_up_market_type", "best_available_selection_reason", "qualification_reason", "display_pick", "commercial_tier", "commercial_reason", "final_pick_valid_reason"}:
             out[col] = out[col].fillna(default_values.get(col, "")).astype(str)
 
     if "status_blocker_stage" in out.columns:
@@ -369,7 +388,9 @@ def ensure_best_pick_export_columns(
         "final_pick_valid": False,
         "sellable_as_premium": False,
         "best_available_only": True,
+        "qualified_pick": False,
         "selection_probability_pair_normalized": False,
+        "mlb_spread_finalist_penalty_applied": False,
     }.items():
         if bool_col in out.columns:
             out[bool_col] = out[bool_col].fillna(default).astype(bool)
@@ -386,7 +407,7 @@ def ensure_best_pick_export_columns(
         out["side_promoted_by_balance_guard_count"] = pd.to_numeric(out["side_promoted_by_balance_guard_count"], errors="coerce").fillna(0).astype(int)
     if "side_balance_guard_reason" in out.columns:
         out["side_balance_guard_reason"] = out["side_balance_guard_reason"].fillna("MISSING_COMPUTATION").astype(str)
-    for numeric_col in {"selection_probability_used", "market_line_used", "matched_live_spread_line", "matched_live_total_line", "upload_spread_line", "upload_total_line", "base_spread_line", "base_total_line"}:
+    for numeric_col in {"selection_probability_used", "mlb_spread_finalist_penalty_value", "qualification_probability", "market_line_used", "matched_live_spread_line", "matched_live_total_line", "upload_spread_line", "upload_total_line", "base_spread_line", "base_total_line"}:
         if numeric_col in out.columns:
             out[numeric_col] = pd.to_numeric(out[numeric_col], errors="coerce")
     if "line_consistency_flag" in out.columns:
@@ -463,7 +484,8 @@ BEST_PICK_COLUMNS = [
     "best_available_runner_up_score", "best_available_score_gap",
     "best_available_candidate_count", "best_available_selection_verified",
     "best_available_ranking_verified", "final_pick_valid", "final_pick_valid_reason",
-    "best_available_selection_reason", "commercial_tier", "sellable_as_premium",
+    "best_available_selection_reason", "qualified_pick", "qualification_probability",
+    "qualification_reason", "display_pick", "commercial_tier", "sellable_as_premium",
     "best_available_only", "commercial_reason", "wager_approved", "export_role",
     "wager_instruction",
     "decimal_odds", "matchup_id",
@@ -494,7 +516,7 @@ BEST_PICK_COLUMNS = [
     # Verbatim per-book spread points + moneyline prices (see REQUIRED_BEST_PICK_EXPORT_COLUMNS);
     # listed here so it survives the BEST_PICK_COLUMNS reindex into the export.
     "raw_book_odds_diag",
-    "suspicious_data_flag", "suspicious_data_reasons", "status_metric_basis", "selection_probability_used", "selection_probability_source", "selection_probability_pair_normalized", "effective_expected_value", "effective_edge", "effective_win_probability",
+    "suspicious_data_flag", "suspicious_data_reasons", "status_metric_basis", "selection_probability_used", "selection_probability_source", "selection_probability_pair_normalized", "mlb_spread_finalist_penalty_applied", "mlb_spread_finalist_penalty_value", "mlb_spread_finalist_penalty_reason", "effective_expected_value", "effective_edge", "effective_win_probability",
     "empirical_win_probability", "empirical_edge", "empirical_bucket", "status_blocker_reason", "status_blocker_stage",
     "nba_stats_fetch_status", "nba_stats_fetch_source", "nba_stats_fetch_retries_used", "stats_source_counts", "fallback_summary_by_league", "fallback_heavy_slate_flag", "run_health_warning",
     "degraded_feature_subset_flag", "degraded_feature_subset_reason",
@@ -3375,6 +3397,72 @@ def apply_no_bet_pick_quality(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def _evidence_gated_mlb_spread_finalist_penalty(
+    bucket_stats: dict | None,
+) -> tuple[float, dict[str, object]]:
+    """Return an MLB spread handicap only when fresh history earns it.
+
+    The old unconditional subtraction could make a sub-50% total beat a
+    materially stronger side. The caller separately verifies that the fitted
+    artifact is fresh for the slate being selected.
+    """
+
+    buckets = bucket_stats.get("buckets", {}) if isinstance(bucket_stats, dict) else {}
+
+    def _family_summary(families: set[str]) -> tuple[int, float | None]:
+        sample = 0
+        weighted_rate = 0.0
+        for key, payload in buckets.items():
+            parts = str(key).split(":")
+            if len(parts) < 2 or parts[0].upper() != "MLB" or parts[1].lower() not in families:
+                continue
+            try:
+                n = int(payload.get("n", 0) or 0)
+                rate = float(payload.get("win_rate"))
+            except (AttributeError, TypeError, ValueError):
+                continue
+            if n <= 0 or not np.isfinite(rate):
+                continue
+            sample += n
+            weighted_rate += n * rate
+        return sample, (weighted_rate / sample if sample else None)
+
+    side_n, side_rate = _family_summary({"side"})
+    total_n, total_rate = _family_summary({"over", "under"})
+    diagnostics: dict[str, object] = {
+        "side_sample": side_n,
+        "side_rate": side_rate,
+        "total_sample": total_n,
+        "total_rate": total_rate,
+        "minimum_family_sample": int(MLB_SPREAD_FINALIST_PENALTY_MIN_FAMILY_N),
+        "minimum_rate_gap": float(MLB_SPREAD_FINALIST_PENALTY_MIN_RATE_GAP),
+        "applied": False,
+        "reason": "missing_empirical_history",
+        "penalty": 0.0,
+    }
+    minimum = int(MLB_SPREAD_FINALIST_PENALTY_MIN_FAMILY_N)
+    if side_n < minimum or total_n < minimum or side_rate is None or total_rate is None:
+        diagnostics["reason"] = "insufficient_family_history"
+        return 0.0, diagnostics
+
+    gap = float(total_rate - side_rate)
+    diagnostics["rate_gap"] = gap
+    if gap <= float(MLB_SPREAD_FINALIST_PENALTY_MIN_RATE_GAP):
+        diagnostics["reason"] = "totals_do_not_materially_outperform_sides"
+        return 0.0, diagnostics
+
+    penalty = min(
+        float(MLB_SPREAD_FINALIST_SCORE_PENALTY),
+        max(0.0, gap - float(MLB_SPREAD_FINALIST_PENALTY_MIN_RATE_GAP)),
+    )
+    diagnostics.update({
+        "applied": penalty > 0,
+        "reason": "fresh_empirical_totals_advantage",
+        "penalty": penalty,
+    })
+    return penalty, diagnostics
+
+
 
 def classify_best_available_picks(best_picks_df: pd.DataFrame) -> pd.DataFrame:
     """Separate the full-board rank-1 pick from the premium, funded product.
@@ -3396,20 +3484,14 @@ def classify_best_available_picks(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         if "production_bet_amount" in out.columns
         else _numeric_series(out, "Kelly_Bet_Size", 0.0)
     ).fillna(0.0)
-    production_ev = (
-        _numeric_series(out, "production_expected_value")
-        if "production_expected_value" in out.columns
-        else _numeric_series(out, "effective_expected_value")
-        if "effective_expected_value" in out.columns
-        else _numeric_series(out, "expected_value")
-    )
-    production_edge = (
-        _numeric_series(out, "production_edge")
-        if "production_edge" in out.columns
-        else _numeric_series(out, "effective_edge")
-        if "effective_edge" in out.columns
-        else _numeric_series(out, "edge")
-    )
+    # Production columns can be present but sparse on research rows. Fall back
+    # row by row so a missing production metric cannot masquerade as failed EV.
+    production_ev = _numeric_series(out, "production_expected_value")
+    production_ev = production_ev.fillna(_numeric_series(out, "effective_expected_value"))
+    production_ev = production_ev.fillna(_numeric_series(out, "expected_value"))
+    production_edge = _numeric_series(out, "production_edge")
+    production_edge = production_edge.fillna(_numeric_series(out, "effective_edge"))
+    production_edge = production_edge.fillna(_numeric_series(out, "edge"))
     line_source = _string_series(out, "market_line_source").str.strip().str.lower()
     line_ok = pd.Series(
         out.get("line_consistency_flag", True), index=out.index
@@ -3428,16 +3510,63 @@ def classify_best_available_picks(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         & line_ok
         & event_ok
     )
-    lean = (~premium) & production_ev.gt(0) & production_edge.gt(0)
+    selection_probability = _numeric_series(out, "selection_probability_used")
+    selection_probability = selection_probability.fillna(
+        _numeric_series(out, "effective_win_probability")
+    )
+    selection_probability = selection_probability.fillna(_numeric_series(out, "WinProbability"))
+    selection_probability = selection_probability.fillna(
+        _numeric_series(out, "calibrated_probability")
+    )
+    research_qualified = (
+        selection_probability.ge(float(BEST_AVAILABLE_QUALIFIED_MIN_WIN_PROB))
+        & production_ev.gt(float(BEST_AVAILABLE_QUALIFIED_MIN_EV))
+        & production_edge.gt(float(BEST_AVAILABLE_QUALIFIED_MIN_EDGE))
+        & line_source.eq("live")
+        & line_ok
+        & event_ok
+    )
+    qualified = premium | research_qualified
+    lean = qualified & ~premium
 
     out["sellable_as_premium"] = premium
     out["best_available_only"] = ~premium
-    out["commercial_tier"] = "Best Available / Pass"
-    out.loc[lean, "commercial_tier"] = "Best Available / Lean"
+    out["qualified_pick"] = qualified
+    out["qualification_probability"] = selection_probability
+    out["qualification_reason"] = "NO QUALIFIED PICK: selection does not clear the absolute display gate."
+    out.loc[selection_probability.isna(), "qualification_reason"] = (
+        "NO QUALIFIED PICK: selection probability is unavailable."
+    )
+    out.loc[selection_probability.lt(float(BEST_AVAILABLE_QUALIFIED_MIN_WIN_PROB)), "qualification_reason"] = (
+        f"NO QUALIFIED PICK: win probability is below {BEST_AVAILABLE_QUALIFIED_MIN_WIN_PROB:.0%}."
+    )
+    out.loc[selection_probability.ge(float(BEST_AVAILABLE_QUALIFIED_MIN_WIN_PROB)) & ~production_ev.gt(float(BEST_AVAILABLE_QUALIFIED_MIN_EV)), "qualification_reason"] = (
+        "NO QUALIFIED PICK: expected value is not positive."
+    )
+    out.loc[selection_probability.ge(float(BEST_AVAILABLE_QUALIFIED_MIN_WIN_PROB)) & production_ev.gt(float(BEST_AVAILABLE_QUALIFIED_MIN_EV)) & ~production_edge.gt(float(BEST_AVAILABLE_QUALIFIED_MIN_EDGE)), "qualification_reason"] = (
+        "NO QUALIFIED PICK: edge is not positive."
+    )
+    out.loc[~line_source.eq("live") | ~line_ok | ~event_ok, "qualification_reason"] = (
+        "NO QUALIFIED PICK: live line or event identity is not verified."
+    )
+    out.loc[lean, "qualification_reason"] = (
+        "Qualified research lean: clears the absolute display gate but is not funded."
+    )
+    out.loc[premium, "qualification_reason"] = (
+        "Production-qualified pick with a verified live line and funded stake."
+    )
+    out["display_pick"] = "NO QUALIFIED PICK"
+    if "best_pick" in out.columns:
+        out.loc[qualified, "display_pick"] = out.loc[qualified, "best_pick"].astype(str)
+
+    out["commercial_tier"] = "No Qualified Pick"
+    out.loc[lean, "commercial_tier"] = "Qualified Lean / Pass"
     out.loc[premium, "commercial_tier"] = "Premium Pick"
-    out["commercial_reason"] = "Best available only: no proven positive edge at this price."
+    out["commercial_reason"] = (
+        "Research candidate retained for grading; no pick is recommended for this game."
+    )
     out.loc[lean, "commercial_reason"] = (
-        "Best available only: positive indication, but no funded production edge."
+        "Qualified directional lean, but no funded production edge."
     )
     out.loc[premium, "commercial_reason"] = (
         "Production-qualified positive edge with a funded stake and verified live line."
@@ -3455,10 +3584,14 @@ def classify_best_available_picks(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             out.loc[~premium, stake_column] = 0.0
 
     out["wager_approved"] = premium
-    out["export_role"] = "COVERAGE PICK - PASS"
+    out["export_role"] = "NO QUALIFIED PICK - RESEARCH"
+    out.loc[lean, "export_role"] = "QUALIFIED LEAN - PASS"
     out.loc[premium, "export_role"] = "PRODUCTION WAGER"
     out["wager_instruction"] = (
-        "DO NOT TREAT AS AN APPROVED BET; this is the best available coverage pick."
+        "DO NOT BET; no candidate clears the absolute qualified-pick gate."
+    )
+    out.loc[lean, "wager_instruction"] = (
+        "DO NOT BET; qualified research lean without a funded production edge."
     )
     out.loc[premium, "wager_instruction"] = "APPROVED: use the exported production stake."
     return out
@@ -3602,14 +3735,11 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 pool.loc[_usable_empirical, "_selection_probability"] = (
                     _empirical_prob.loc[_usable_empirical]
                 )
-                _empirical_total = _usable_empirical & pool["_market_family"].eq("total")
-                _empirical_side = _usable_empirical & pool["_market_family"].eq("side")
+                # Every family now uses the same calibrated + bounded empirical
+                # decision scale before sides and totals are compared.
                 pool.loc[
-                    _empirical_total, "selection_probability_source"
+                    _usable_empirical, "selection_probability_source"
                 ] = "empirical_bucket_blend"
-                pool.loc[
-                    _empirical_side, "selection_probability_source"
-                ] = "global_isotonic_calibration"
             elif _selection_bucket_stats:
                 logger.warning(
                     "Selection bucket statistics are stale; finalist ranking is using "
@@ -3715,11 +3845,38 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         float(TOTAL_UNDER_FINALIST_SCORE_PENALTY),
         0.0,
     )
+    _spread_penalty_stats = (
+        locals().get("_selection_bucket_stats")
+        if locals().get("_selection_bucket_stats_fresh", False)
+        else None
+    )
+    _mlb_spread_penalty_value, _mlb_spread_penalty_diagnostics = (
+        _evidence_gated_mlb_spread_finalist_penalty(_spread_penalty_stats)
+    )
+    if (
+        locals().get("_selection_bucket_stats")
+        and not locals().get("_selection_bucket_stats_fresh", False)
+    ):
+        _mlb_spread_penalty_diagnostics["reason"] = "stale_empirical_history"
+    if diagnostics_out is not None:
+        diagnostics_out["mlb_spread_finalist_penalty"] = dict(
+            _mlb_spread_penalty_diagnostics
+        )
+    _mlb_spread_rows = (
+        pool["league"].astype(str).str.upper().eq("MLB")
+        & pool["market_type"].astype(str).str.lower().str.contains("spread", na=False)
+    )
     pool["_mlb_spread_finalist_penalty"] = np.where(
-        (pool["league"].astype(str).str.upper().eq("MLB"))
-        & (pool["market_type"].astype(str).str.lower().str.contains("spread", na=False)),
-        float(MLB_SPREAD_FINALIST_SCORE_PENALTY),
+        _mlb_spread_rows,
+        float(_mlb_spread_penalty_value),
         0.0,
+    )
+    pool["mlb_spread_finalist_penalty_applied"] = (
+        _mlb_spread_rows & (float(_mlb_spread_penalty_value) > 0.0)
+    )
+    pool["mlb_spread_finalist_penalty_value"] = pool["_mlb_spread_finalist_penalty"]
+    pool["mlb_spread_finalist_penalty_reason"] = str(
+        _mlb_spread_penalty_diagnostics.get("reason", "not_evaluated")
     )
     pool["_family_selection_penalty"] = pool["_under_selection_penalty"] + pool["_mlb_spread_finalist_penalty"]
     pool["final_family_score"] = pool["final_family_score"] - pool["_family_selection_penalty"]
@@ -4009,6 +4166,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         "orientation_source", "raw_book_odds_diag",
         "selection_probability_used", "selection_probability_source",
         "selection_probability_pair_normalized",
+        "mlb_spread_finalist_penalty_applied",
+        "mlb_spread_finalist_penalty_value",
+        "mlb_spread_finalist_penalty_reason",
         "expected_value", "edge", "tier_score", "final_family_score",
         "_market_family", "best_available_rank", "best_available_family_rank",
         "best_available_finalist", "best_available_final_rank",

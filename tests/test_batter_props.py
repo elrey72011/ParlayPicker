@@ -41,11 +41,18 @@ def test_prop_export_is_stamped_without_mutating_scored_card():
         "best_pick": ["Juan Soto Over 0.5 Hits"],
     })
 
-    out = stamp_prop_export(card, "2026-07-30a-export-transparency")
+    out = stamp_prop_export(
+        card,
+        "2026-07-30a-export-transparency",
+        export_run_id="20260730T120000Z",
+    )
 
     assert out.columns[0] == "pipeline_build"
+    assert out.columns[1] == "export_run_id"
     assert out["pipeline_build"].eq("2026-07-30a-export-transparency").all()
+    assert out["export_run_id"].eq("20260730T120000Z").all()
     assert card.loc[0, "pipeline_build"] == "stale-build"
+    assert "export_run_id" not in card.columns
 
 
 def test_batter_market_parses_participant_type():

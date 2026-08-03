@@ -166,8 +166,7 @@ def test_diagnostics_blocked_rows_and_shadow_cards_populate():
     assert "actionable_counts_by_league_family" in diagnostics
 
 
-def test_mlb_spread_finalist_penalty_can_demote_weak_spread_winner(monkeypatch):
-    # Isolate the spread handicap from the separate empirical-direction selector.
+def test_mlb_spread_finalist_penalty_is_zero_without_empirical_evidence(monkeypatch):
     monkeypatch.setattr("core.empirical_tiers.load_bucket_stats", lambda: None)
     matchup_id = "2026-08-01|home1|away1"
     df = pd.DataFrame(
@@ -180,8 +179,41 @@ def test_mlb_spread_finalist_penalty_can_demote_weak_spread_winner(monkeypatch):
     diagnostics = {}
     out = build_best_picks_df(df, diagnostics_out=diagnostics)
     assert len(out) == 1
+    assert out.iloc[0]["market_type"] == "spread_home"
+    assert diagnostics["demoted_by_mlb_spread_finalist_score_penalty"] == 0
+    assert diagnostics["mlb_spread_finalist_penalty"]["applied"] is False
+
+
+def test_mlb_spread_finalist_penalty_requires_large_fresh_family_samples(monkeypatch):
+    stats = {
+        "overall": {"n": 200, "win_rate": 0.50},
+        "buckets": {
+            # Candidate-specific Neutral buckets are equal so the family-scale
+            # calibration does not itself decide this matchup.
+            "MLB:side:Neutral": {"n": 20, "wins": 10, "win_rate": 0.50},
+            "MLB:over:Neutral": {"n": 20, "wins": 10, "win_rate": 0.50},
+            # Independent family history earns the bounded spread adjustment.
+            "MLB:side:Agrees": {"n": 80, "wins": 32, "win_rate": 0.40},
+            "MLB:under:Agrees": {"n": 80, "wins": 52, "win_rate": 0.65},
+        },
+    }
+    monkeypatch.setattr("core.empirical_tiers.load_bucket_stats", lambda: stats)
+    matchup_id = "2026-08-01|home1|away1"
+    df = pd.DataFrame(
+        [
+            _row(idx=1, league="MLB", market_type="spread_home", win_prob=0.60, ev=0.20, edge=0.20, kalshi_probability=0.50),
+            _row(idx=1, league="MLB", market_type="total_over", win_prob=0.60, ev=0.19, edge=0.19, kalshi_probability=0.50),
+        ]
+    )
+    df["matchup_id"] = matchup_id
+    diagnostics = {}
+
+    out = build_best_picks_df(df, diagnostics_out=diagnostics)
+
     assert out.iloc[0]["market_type"] == "total_over"
     assert diagnostics["demoted_by_mlb_spread_finalist_score_penalty"] >= 1
+    assert diagnostics["mlb_spread_finalist_penalty"]["applied"] is True
+    assert diagnostics["mlb_spread_finalist_penalty"]["penalty"] == 0.05
 
 
 def test_nba_side_bonus_cannot_bypass_downstream_production_guards():
