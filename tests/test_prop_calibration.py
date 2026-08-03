@@ -2,11 +2,13 @@ import pandas as pd
 
 from app_core.prop_calibration import (
     DEFAULT_PROP_RESULTS_PATH,
+    DEFAULT_PROP_RESULTS_RUNTIME_PATH,
     apply_prop_calibration,
     directional_market_key,
     fit_prop_calibration,
     load_prop_results_log,
     normalize_prop_results,
+    persist_prop_results_log,
 )
 from app_core.prop_runner import (
     apply_market_probation,
@@ -28,10 +30,48 @@ def _card(market_type="pitcher_strikeouts_over", probability=0.72):
 
 def test_repo_bundled_prop_ledger_loads_independent_of_working_directory():
     assert DEFAULT_PROP_RESULTS_PATH.is_absolute()
+    assert DEFAULT_PROP_RESULTS_RUNTIME_PATH.is_absolute()
     ledger = load_prop_results_log()
     assert ledger is not None
-    assert len(ledger) >= 470
-    assert ledger["result"].isin(["WIN", "LOSS"]).sum() >= 441
+    assert len(ledger) >= 572
+    assert ledger["result"].isin(["WIN", "LOSS"]).sum() >= 539
+    assert pd.to_datetime(ledger["game_date"]).max() >= pd.Timestamp("2026-08-02")
+
+
+def test_runtime_prop_ledger_is_persisted_and_restored_over_baseline(tmp_path):
+    baseline_path = tmp_path / "baseline.csv"
+    runtime_path = tmp_path / "runtime.csv"
+    baseline = pd.DataFrame({
+        "game_date": ["2026-08-01"],
+        "player": ["Player One"],
+        "pick": ["Player One Over 0.5 Hits"],
+        "market_type": ["batter_hits_over"],
+        "result": ["LOSS"],
+        "raw_probability": [0.65],
+    })
+    cumulative = pd.concat([
+        baseline.assign(result="WIN"),
+        pd.DataFrame({
+            "game_date": ["2026-08-02"],
+            "player": ["Player Two"],
+            "pick": ["Player Two Under 1.5 Hits"],
+            "market_type": ["batter_hits_under"],
+            "result": ["LOSS"],
+            "raw_probability": [0.62],
+        }),
+    ], ignore_index=True)
+    baseline.to_csv(baseline_path, index=False)
+
+    assert persist_prop_results_log(cumulative, runtime_path)
+    restored = load_prop_results_log(
+        baseline_path,
+        runtime_path=runtime_path,
+    )
+
+    assert restored is not None
+    assert len(restored) == 2
+    assert restored.loc[restored["player"].eq("Player One"), "result"].item() == "WIN"
+    assert restored["game_date"].max() == "2026-08-02"
 
 
 def test_directional_market_keys_do_not_pool_over_and_under():
