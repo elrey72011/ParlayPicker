@@ -1,6 +1,7 @@
 import pandas as pd
 
 from app_core.export_scope import label_wager_export
+from app_core.prop_calibration import load_prop_results_log
 from app_core.prop_runner import (
     apply_controlled_prop_rollout,
     apply_prop_stake_status,
@@ -122,3 +123,23 @@ def test_rollout_excludes_pre_fix_and_same_day_results_from_graduation():
     assert out.loc[0, "controlled_pilot_post_fix_graded"] == 0
     assert not bool(out.loc[0, "controlled_pilot_graduated"])
     assert out.loc[0, "Kelly_Bet_Size"] == 1.0
+
+
+def test_bundled_ledger_restores_current_hit_pilot_evidence_after_restart():
+    """A fresh deployment must not silently reset the active pilot to zero."""
+    card = _qualified_card(
+        ["batter_hits_over", "batter_hits_under"], stakes=[8.0, 8.0]
+    )
+
+    out = apply_controlled_prop_rollout(
+        card,
+        load_prop_results_log(),
+        as_of_date="2026-08-03",
+    )
+
+    assert out["controlled_pilot_post_fix_graded"].tolist() == [20, 15]
+    assert out["controlled_pilot_post_fix_hit_rate"].tolist() == [0.65, 8 / 15]
+    assert out.loc[0, "controlled_pilot_post_fix_roi"] > 0
+    assert out.loc[1, "controlled_pilot_post_fix_roi"] < 0
+    assert out["controlled_pilot_graduated"].tolist() == [False, False]
+    assert out["Kelly_Bet_Size"].tolist() == [1.0, 1.0]

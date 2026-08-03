@@ -60,6 +60,9 @@ Thumbs.db
 # Logs
 *.log
 old_streamlit/secrets.toml
+# Runtime copy of uploaded/generated prop history. The cumulative deploy-time
+# baseline remains tracked at data/prop_results/prop_results_log.csv.
+data/prop_results/prop_results_runtime.csv
 # Streamlit backups
 streamlit_app.py.bak*
 *.bak

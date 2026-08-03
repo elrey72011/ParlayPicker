@@ -30,7 +30,7 @@ def _read_uploaded_prop_ledgers(uploaded_files) -> pd.DataFrame:
 
 
 def _read_bundled_prop_ledger() -> pd.DataFrame:
-    """Load the repo-backed cumulative ledger used after every deployment."""
+    """Load the deploy baseline with any locally recovered newer history."""
     from app_core.prop_calibration import load_prop_results_log
 
     ledger = load_prop_results_log()
@@ -193,6 +193,20 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
     )
     st.session_state["active_prop_results_log"] = active_ledger
 
+    uploaded_history_present = bool(prop_results_log)
+    generated_history_present = (
+        isinstance(generated_ledger, pd.DataFrame) and not generated_ledger.empty
+    )
+    recovery_saved = True
+    if (
+        isinstance(active_ledger, pd.DataFrame)
+        and not active_ledger.empty
+        and (uploaded_history_present or generated_history_present)
+    ):
+        from app_core.prop_calibration import persist_prop_results_log
+
+        recovery_saved = persist_prop_results_log(active_ledger)
+
     if isinstance(active_ledger, pd.DataFrame) and not active_ledger.empty:
         from app_core.prop_grading import ledger_coverage_summary
 
@@ -206,6 +220,16 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
             f"Prop calibration history: {coverage['settled']} settled rows "
             f"across {coverage['date_count']} slate date(s) ({date_range})."
         )
+        if uploaded_history_present or generated_history_present:
+            if recovery_saved:
+                st.sidebar.caption(
+                    "Newest prop history is saved for automatic restart recovery."
+                )
+            else:
+                st.sidebar.warning(
+                    "The newest prop history could not be saved for restart "
+                    "recovery. Download the updated ledger before leaving this session."
+                )
         if coverage["settled"] <= 0:
             st.sidebar.error(
                 "The uploaded prop ledger has no settled WIN/LOSS rows. "
@@ -214,8 +238,7 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
         elif coverage["date_count"] <= 1:
             st.sidebar.warning(
                 "Only one slate date is loaded. This is not yet a cumulative "
-                "calibration history; download the updated ledger and upload it "
-                "again at the start of the next app session."
+                "calibration history; keep the downloaded ledger as a portable backup."
             )
     else:
         st.sidebar.error(
