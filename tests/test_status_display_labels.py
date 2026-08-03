@@ -10,7 +10,11 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from streamlit_app import STATUS_DISPLAY_LABELS, apply_status_display_labels
+from streamlit_app import (
+    STATUS_DISPLAY_LABELS,
+    _bet_decision_mask,
+    apply_status_display_labels,
+)
 
 
 def test_statuses_relabelled_for_display():
@@ -31,6 +35,14 @@ def test_original_frame_not_mutated():
     df = pd.DataFrame({"Pick_Status": ["No Play"]})
     apply_status_display_labels(df)
     assert df.loc[0, "Pick_Status"] == "No Play"
+
+
+def test_bet_decision_mask_uses_series_equality_and_fails_closed():
+    df = pd.DataFrame({
+        "Bet Decision": ["BET", " BEST AVAILABLE - PASS ", None],
+    })
+
+    assert _bet_decision_mask(df).tolist() == [True, False, False]
 
 
 def test_grade_slate_accepts_new_no_edge_label():
