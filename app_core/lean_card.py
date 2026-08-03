@@ -188,6 +188,17 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
             "upload_total_fallback_after_rejected_live"
         )
     playable = ~(started | unavailable_line | unsafe_line_identity)
+    public_qualified_pick = qualified_pick.copy()
+    if "qualified_pick" in df.columns:
+        public_qualified_pick = qualified_pick & tier.isin({"BET", "LEAN"}) & playable
+    qualification_reason = _first_col(df, "qualification_reason").fillna("").astype(str).copy()
+    final_tier_downgrade = qualified_pick & ~public_qualified_pick
+    qualification_reason.loc[final_tier_downgrade & playable] = (
+        "PASS: final empirical tier is AVOID at the offered price."
+    )
+    qualification_reason.loc[final_tier_downgrade & ~playable] = (
+        "PASS: final line is unavailable or failed identity validation."
+    )
     production_gate_pass = (
         tier.eq("BET")
         & gate["production_gate_pass"]
@@ -214,14 +225,14 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
         # This only states that a valid pregame line is present; wager approval
         # remains exclusively in Production_Gate_Pass / Wager_Approved.
         "Line_Available": playable,
-        "Selection_Mode": qualified_pick.map(
+        "Selection_Mode": public_qualified_pick.map(
             {True: "Qualified Pick / Pass", False: "Best Available Pick / Pass"}
         ),
         "Bet_Decision": pd.Series("BEST AVAILABLE - PASS", index=df.index)
-        .where(~(qualification_known & qualified_pick), "QUALIFIED LEAN - PASS")
+        .where(~(qualification_known & public_qualified_pick), "QUALIFIED LEAN - PASS")
         .where(~production_gate_pass, "BET"),
-        "Qualified_Pick": qualified_pick,
-        "Qualification_Reason": _first_col(df, "qualification_reason"),
+        "Qualified_Pick": public_qualified_pick,
+        "Qualification_Reason": qualification_reason,
         "Production_Gate_Pass": production_gate_pass,
         "Production_Gate_Reason": production_gate_reason,
         "Absolute_Edge": gate["absolute_production_edge"],
