@@ -2126,9 +2126,8 @@ def main() -> None:
         # Same display hygiene as the CSV export: $0-stake picks read as "No Bet", not a tier.
         display_df = apply_no_bet_pick_quality(display_df)
 
-        # Keep one directional read per game, but independently label whether the
-        # offered price clears the absolute production gate. Nonqualified rows
-        # remain visible as BEST AVAILABLE - PASS and carry $0.
+        # Keep the raw rank-one direction for grading, but expose it publicly only
+        # when it clears the absolute display gate. Other games show an abstention.
         if not display_df.empty:
             try:
                 from app_core.lean_card import attach_play_stakes as _aps, score_best_picks_rows as _sbr
@@ -2143,6 +2142,10 @@ def main() -> None:
                     display_df["Production Gate Reason"] = _scored["Production_Gate_Reason"]
             except Exception as _tier_exc:  # tiers are additive; never break the card
                 logger.warning("main-card play tiers failed: %s", _tier_exc)
+
+        if "display_pick" in display_df.columns:
+            display_df["best_pick"] = display_df["display_pick"]
+            display_df = display_df.drop(columns=["display_pick"])
 
         # Relabel statuses for everything the user reads ("Actionable" is unchanged,
         # so the qualified/no-edge split below still keys off it safely).
@@ -2197,17 +2200,20 @@ def main() -> None:
             else:
                 st.info(
                     f"🚫 **No production-staked game picks today** — the model has no proven edge "
-                    f"at current prices, so the Kelly bankroll sits out. Every game below still "
-                    f"shows the best available direction, but failed rows are explicit PASSes at $0. Best action: "
+                    f"at current prices, so the Kelly bankroll sits out. Games that fail the absolute "
+                    f"display gate show NO QUALIFIED PICK instead of a weak direction. Best action: "
                     f"the 🏆 Pick of the Day above and the ⚾ strikeout props below."
                 )
 
             if not no_edge_df.empty:
                 _playable = no_edge_df
                 _n_lean = int((_playable.get("Play Tier", pd.Series(dtype=str)) == "LEAN").sum())
+                _n_abstain = int(
+                    (_playable.get("Bet Decision", pd.Series(dtype=str)) == "NO QUALIFIED PICK").sum()
+                )
                 with st.expander(
-                    f"📋 Best Available — Pass — {len(no_edge_df)} game(s), {_n_lean} LEAN "
-                    f"(all failed the production price gate; tap for reasons)",
+                    f"📋 Research Card — {len(no_edge_df)} game(s), {_n_lean} qualified lean, "
+                    f"{_n_abstain} abstention(s) (tap for reasons)",
                     expanded=False,
                 ):
                     no_edge_view = no_edge_df.copy()
@@ -2221,9 +2227,9 @@ def main() -> None:
                     ]
                     st.dataframe(no_edge_view[compact_cols], width="stretch")
                     st.caption(
-                        "These are directional reads, not wagers. A BET requires positive model EV "
-                        "and calibrated probability at least two percentage points above the exact "
-                        "sportsbook break-even price. Every PASS remains visible at $0."
+                        "Qualified leans are directional research reads, not wagers. NO QUALIFIED PICK "
+                        "means the raw rank-one candidate was retained only for grading. A funded BET "
+                        "still requires the stricter production price gate."
                     )
 
             export_prep_df = best_picks_df.copy()
@@ -2248,7 +2254,9 @@ def main() -> None:
             target_export_cols = [
                 "Bet_Decision", "Play_Tier", "Play_Stake", "Absolute_Edge", "Production_Gate_Reason",
                 "Pick_Status", "Status_Reason", "Triple_Filter_Rank", "Pick_Quality", "parlay_rank", "league", "Home", "Away", "Local Date",
-                "Commence (Local)", "market_type", "candidate_source", "orientation_source", "upload_match_reason", "best_pick", "Kelly_Bet_Size", "WinProbability", "expected_value",
+                "Commence (Local)", "market_type", "candidate_source", "orientation_source", "upload_match_reason",
+                "display_pick", "qualified_pick", "qualification_probability", "qualification_reason",
+                "best_pick", "Kelly_Bet_Size", "WinProbability", "expected_value",
                 "edge", "Conviction_Score", "consensus_agreement", "odds_american", "odds_source", "market_probability",
                 "kalshi_probability", "ml_probability", "ml_probability_source", "ml_target", "ml_projection",
                 "ml_residual_scale", "ml_feature_quality", "gemini_pick", "gemini_explanation", "gemini_risk_notes",
@@ -2404,9 +2412,9 @@ def main() -> None:
                         f"calibrated edge over the exact price. LEAN = its "
                         f"calibrated win beats break-even (your call). AVOID = negative-EV, fading "
                         f"Kalshi, or calibrated win below break-even. Calib_Win% = the model's "
-                        f"probability after the bucket-conditional calibration correction. Every valid "
-                        f"pregame row remains visible as the Best Available pick, but only absolute-gate "
-                        f"BET rows receive a stake; every LEAN/AVOID row is an explicit $0 PASS."
+                        f"probability after the bucket-conditional calibration correction. A game that "
+                        f"does not clear the display gate shows NO QUALIFIED PICK; only absolute-gate "
+                        f"BET rows receive a stake."
                     )
                     # Keep unit control for qualified BET rows only. LEAN/AVOID
                     # rows stay visible but the absolute gate holds them at $0.
@@ -2420,8 +2428,8 @@ def main() -> None:
                     _play_count = int(pd.to_numeric(lean_card["Play_Stake"], errors="coerce").fillna(0).gt(0).sum())
                     st.caption(
                         f"Play_Stake puts ${_play_total:.2f} on {_play_count}/{len(lean_card)} "
-                        f"absolute-gate BET rows at a ${play_unit:.0f} unit. LEAN and AVOID rows "
-                        f"are best-available directions for reference and remain explicit $0 PASSes."
+                        f"absolute-gate BET rows at a ${play_unit:.0f} unit. Qualified leans remain "
+                        f"$0 research rows; failed display gates are explicit abstentions."
                     )
                     st.dataframe(lean_card, width="stretch")
                     st.download_button(
@@ -2440,7 +2448,17 @@ def main() -> None:
 
                 # All funded, all-grading, and research prop CSVs inherit this
                 # self-identifying build stamp before they are split.
-                prop_card = stamp_prop_export(prop_card, PIPELINE_BUILD)
+                shared_export_run_id = ""
+                if "best_picks_export" in locals() and "export_run_id" in best_picks_export.columns:
+                    run_ids = best_picks_export["export_run_id"].dropna().astype(str).str.strip()
+                    run_ids = run_ids[run_ids.ne("")]
+                    if not run_ids.empty:
+                        shared_export_run_id = run_ids.iloc[0]
+                prop_card = stamp_prop_export(
+                    prop_card,
+                    PIPELINE_BUILD,
+                    export_run_id=shared_export_run_id or None,
+                )
                 from app_core.export_scope import label_wager_export
 
                 prop_card = label_wager_export(prop_card)

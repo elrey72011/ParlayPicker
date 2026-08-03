@@ -196,7 +196,18 @@ MLB_SPREAD_HIGH_EV_MIN_WIN_PROB = 0.44
 MLB_SPREAD_ACTIONABLE_BONUS = 0.00
 MLB_SPREAD_EXTRA_ACTIONABLE_PENALTY = 0.01
 MLB_SPREAD_ACTIONABLE_PENALTY = 0.03
+# Maximum cross-family finalist penalty. It is no longer applied blindly: the
+# selector activates it only when fresh, sufficiently large empirical samples
+# show MLB sides trailing MLB totals by a material margin.
 MLB_SPREAD_FINALIST_SCORE_PENALTY = 0.05
+MLB_SPREAD_FINALIST_PENALTY_MIN_FAMILY_N = 50
+MLB_SPREAD_FINALIST_PENALTY_MIN_RATE_GAP = 0.03
+
+# A full-board research candidate remains available for grading, but the public
+# card must abstain instead of presenting weak/negative-value coverage as a pick.
+BEST_AVAILABLE_QUALIFIED_MIN_WIN_PROB = 0.55
+BEST_AVAILABLE_QUALIFIED_MIN_EV = 0.0
+BEST_AVAILABLE_QUALIFIED_MIN_EDGE = 0.0
 NBA_SIDE_ACTIONABLE_BONUS = 0.01
 NBA_OVER_ACTIONABLE_BONUS = 0.00
 # Checked against POST-SHRINKAGE win probability (shrinkage is now applied in the

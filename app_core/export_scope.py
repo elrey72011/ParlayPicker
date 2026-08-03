@@ -74,6 +74,12 @@ def label_wager_export(frame: pd.DataFrame) -> pd.DataFrame:
     out["Bettable"] = funded
     out["Export_Scope"] = "COVERAGE / RESEARCH"
     out["Wager_Instruction"] = "DO NOT BET - $0 PASS / RESEARCH"
+    if "qualified_pick" in out.columns:
+        qualified = out["qualified_pick"].fillna(False).astype(bool)
+        out.loc[~qualified, "Export_Scope"] = "NO QUALIFIED PICK / RESEARCH"
+        out.loc[~qualified, "Wager_Instruction"] = (
+            "DO NOT BET - NO CANDIDATE CLEARS THE QUALIFIED-PICK GATE"
+        )
     out.loc[funded, "Export_Scope"] = "PRODUCTION BET"
     out.loc[funded, "Wager_Instruction"] = "BET - APP APPROVED"
     return out

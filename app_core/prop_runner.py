@@ -53,23 +53,36 @@ MLB_SPORT_KEY = "baseball_mlb"
 MLB_PROP_DEFAULT_ENABLED_MARKETS = PROP_DEFAULT_ENABLED_MARKETS + BATTER_DEFAULT_ENABLED_MARKETS
 
 
-def stamp_prop_export(card, pipeline_build: str):
-    """Return a self-identifying prop export without mutating the scored card."""
+def stamp_prop_export(
+    card,
+    pipeline_build: str,
+    *,
+    export_run_id: str | None = None,
+):
+    """Return a snapshot-identifiable prop export without mutating the scored card."""
     import pandas as pd
 
     if card is None:
-        return pd.DataFrame(columns=["pipeline_build"])
+        return pd.DataFrame(columns=["pipeline_build", "export_run_id"])
 
     out = card.copy()
     build = str(pipeline_build or "").strip()
+    run_id = str(export_run_id or "").strip()
+    if not run_id:
+        run_id = pd.Timestamp.now(tz="UTC").strftime("%Y%m%dT%H%M%SZ")
     if "pipeline_build" in out.columns:
         out["pipeline_build"] = build
-        ordered = ["pipeline_build"] + [
-            column for column in out.columns if column != "pipeline_build"
-        ]
-        out = out[ordered]
     else:
         out.insert(0, "pipeline_build", build)
+    if "export_run_id" in out.columns:
+        out["export_run_id"] = run_id
+    else:
+        out.insert(1, "export_run_id", run_id)
+    ordered = ["pipeline_build", "export_run_id"] + [
+        column for column in out.columns
+        if column not in {"pipeline_build", "export_run_id"}
+    ]
+    out = out[ordered]
     return out
 
 

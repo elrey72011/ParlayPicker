@@ -253,27 +253,27 @@ def empirical_selection_probabilities(
     selected: list[float] = []
     for (_, row), probability, bucket in zip(df.iterrows(), calibrated, buckets):
         family = bucket.split(":")[1] if ":" in bucket else "side"
-        # The diagnosed regression is directional: Over/Under alternatives were
-        # chosen before their realized direction buckets were considered. Keep
-        # side-vs-total comparisons on the existing calibrated scale so the
-        # established spread/moneyline finalist guards retain their semantics.
+        # Put sides and totals on the same leak-safe calibration path before the
+        # cross-family comparison. Previously totals received a realized-bucket
+        # adjustment while sides stayed on a different global-only scale.
+        eligible_family = family in ("over", "under", "side")
         target = (
             empirical_win_probability(probability, bucket, bucket_stats)
-            if family in ("over", "under")
+            if eligible_family
             else float(probability)
         )
         rate, n = smoothed_bucket_rate(bucket, bucket_stats)
         decimal = _decimal_odds(row)
         breakeven = 1.0 / decimal if pd.notna(decimal) and decimal > 1.0 else float("nan")
         if (
-            family in ("over", "under")
+            eligible_family
             and n >= PROVEN_LOSING_BUCKET_MIN_N
             and pd.notna(breakeven)
             and rate - breakeven <= -PROVEN_LOSING_BUCKET_EDGE_MARGIN
         ):
             target = min(float(target), float(rate))
 
-        if family in ("over", "under") and n >= EMPIRICAL_SELECTION_MIN_N:
+        if eligible_family and n >= EMPIRICAL_SELECTION_MIN_N:
             selection_weight = min(
                 float(EMPIRICAL_SELECTION_MAX_WEIGHT),
                 n / (n + float(EMPIRICAL_SELECTION_SHRINK_N)),

@@ -12,6 +12,8 @@ REQUIRED_PROP_EXPORT_COLUMNS = frozenset({
 })
 
 PROP_AUDIT_COLUMNS = (
+    "pipeline_build",
+    "export_run_id",
     "directional_market",
     "MarketProbability",
     "CalibratedProbability",
