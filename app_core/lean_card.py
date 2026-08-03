@@ -154,6 +154,9 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
         if "qualified_pick" in df.columns
         else pd.Series(True, index=df.index, dtype=bool)
     )
+    qualification_known = pd.Series(
+        "qualified_pick" in df.columns, index=df.index, dtype=bool
+    )
     tier = pd.Series(tier, index=df.index).where(qualified_pick, "AVOID")
 
     # Empirical edge = bucket-aware calibrated win minus break-even. This - NOT model EV - is
@@ -171,7 +174,7 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
         started = started | df["status_blocker_stage"].astype(str).eq("game_already_started")
     if "Play_Tier" in df.columns:
         started = started | df["Play_Tier"].astype(str).str.strip().str.upper().eq("STARTED")
-    pick_text = _first_col(df, "display_pick", "best_pick").fillna("").astype(str)
+    pick_text = _first_col(df, "best_pick", "display_pick").fillna("").astype(str)
     unavailable_line = pick_text.str.lower().str.contains(
         r"unresolved|\(no line\)|missing line|rejected", regex=True, na=False
     )
@@ -199,7 +202,7 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
     return pd.DataFrame({
         "League": _first_col(df, "league", "League"),
         "Matchup": (away + " @ " + home).str.strip(" @"),
-        "Pick": _first_col(df, "display_pick", "best_pick"),
+        "Pick": _first_col(df, "best_pick", "display_pick"),
         "Win%": win,
         "Calib_Win%": calib_num,
         "Emp_Edge": emp_edge,
@@ -212,12 +215,11 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
         # remains exclusively in Production_Gate_Pass / Wager_Approved.
         "Line_Available": playable,
         "Selection_Mode": qualified_pick.map(
-            {True: "Qualified Pick", False: "Research Candidate / Abstain"}
+            {True: "Qualified Pick / Pass", False: "Best Available Pick / Pass"}
         ),
-        "Bet_Decision": pd.Series("NO QUALIFIED PICK", index=df.index).where(
-            ~qualified_pick,
-            "BEST AVAILABLE - PASS",
-        ).where(~production_gate_pass, "BET"),
+        "Bet_Decision": pd.Series("BEST AVAILABLE - PASS", index=df.index)
+        .where(~(qualification_known & qualified_pick), "QUALIFIED LEAN - PASS")
+        .where(~production_gate_pass, "BET"),
         "Qualified_Pick": qualified_pick,
         "Qualification_Reason": _first_col(df, "qualification_reason"),
         "Production_Gate_Pass": production_gate_pass,
@@ -340,11 +342,22 @@ def attach_play_stakes(card: pd.DataFrame, unit: float = 1.0) -> pd.DataFrame:
         if "Qualified_Pick" in out.columns
         else pd.Series(True, index=out.index, dtype=bool)
     )
-    out["Export_Role"] = "NO QUALIFIED PICK - RESEARCH"
-    out.loc[qualified, "Export_Role"] = "COVERAGE PICK - PASS"
+    qualification_known = "Qualified_Pick" in out.columns
+    out["Export_Role"] = (
+        "BEST AVAILABLE PICK - PASS / RESEARCH"
+        if qualification_known
+        else "COVERAGE PICK - PASS"
+    )
+    if qualification_known:
+        out.loc[qualified, "Export_Role"] = "QUALIFIED LEAN - PASS"
     out.loc[out["Wager_Approved"], "Export_Role"] = "PRODUCTION WAGER"
-    out["Wager_Instruction"] = "DO NOT BET: no candidate clears the qualified-pick gate."
-    out.loc[qualified, "Wager_Instruction"] = "DO NOT BET: qualified research lean without a funded edge."
+    out["Wager_Instruction"] = (
+        "DO NOT BET: best available pick does not clear the wager qualification gate."
+        if qualification_known
+        else "DO NOT BET: coverage row without explicit wager qualification."
+    )
+    if qualification_known:
+        out.loc[qualified, "Wager_Instruction"] = "DO NOT BET: qualified research lean without a funded edge."
     out.loc[out["Wager_Approved"], "Wager_Instruction"] = (
         "APPROVED: wager the exported Play_Stake amount."
     )

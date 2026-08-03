@@ -98,7 +98,7 @@ def test_compact_export_keeps_truthful_price_provenance():
     ]
 
 
-def test_compact_export_uses_public_display_pick_and_keeps_legacy_fallback():
+def test_compact_export_prefers_ranked_pick_and_keeps_display_fallback():
     source = pd.DataFrame([
         _compact_source(
             best_pick="Under 11.5",
@@ -125,7 +125,7 @@ def test_compact_export_uses_public_display_pick_and_keeps_legacy_fallback():
     compact = _build_compact_export_frame(source)
 
     assert compact["best_pick"].tolist() == [
-        "NO QUALIFIED PICK",
+        "Under 11.5",
         "Washington +1.5",
         "Pittsburgh +1.5",
     ]

@@ -39,6 +39,11 @@ def test_best_picks_returns_one_pick_per_game_key_even_without_positive_ev():
     # G2 should still be present even though both candidate EVs are negative.
     g2_row = best[(best["home_team"] == "Lakers") & (best["away_team"] == "Warriors")].iloc[0]
     assert g2_row["expected_value"] == -0.01
+    assert g2_row["display_pick"] == g2_row["best_pick"]
+    assert g2_row["display_pick"] not in {"", "NO QUALIFIED PICK"}
+    assert not bool(g2_row["qualified_pick"])
+    assert g2_row["commercial_tier"] == "Best Available / Pass"
+    assert float(g2_row["Kelly_Bet_Size"]) == 0.0
 
 
 def test_best_picks_marks_no_edge_when_ev_missing():
