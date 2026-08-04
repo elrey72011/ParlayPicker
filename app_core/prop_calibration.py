@@ -6,9 +6,10 @@ turning a durable graded ledger into the probability used for staking.
 
 Calibration is deliberately directional: ``batter_hits_over`` and
 ``batter_hits_under`` are different betting markets and must earn trust separately.
-When a directional sample is thin, the model is shrunk toward the de-vigged market and
-receives an uncertainty haircut.  Missing history therefore creates research rows, not
-false high-confidence production picks.
+Fitted curves are shrink-only until an out-of-sample promotion proves that probability
+uplift is durable.  When a directional sample is thin, the model is shrunk toward the
+de-vigged market and receives an uncertainty haircut.  Missing history therefore
+creates research rows, not false high-confidence production picks.
 """
 from __future__ import annotations
 
@@ -238,10 +239,11 @@ def apply_prop_calibration(
         else:
             # With no settled evidence, trust only a quarter of model/market disagreement.
             calibrated = p_market + 0.25 * (p_raw - p_market)
-        # A pooled curve may shrink a thin direction, but it cannot manufacture
-        # extra confidence for that side. Directional evidence must independently
-        # earn any probability uplift.
-        if source == "pooled":
+        # In-sample isotonic tails can end in a tiny perfect plateau.  They are useful
+        # for identifying overconfidence, but must not turn a raw rank signal into a
+        # stronger probability without a separately promoted, out-of-sample curve.
+        # Keep both pooled and directional calibration shrink-only in production.
+        if source in {"directional", "pooled"}:
             calibrated = min(calibrated, p_raw)
         calibrated = min(0.95, max(0.05, calibrated))
         uncertainty = 0.0
