@@ -166,3 +166,31 @@ def test_pooled_calibration_is_shrink_only_and_uses_directional_uncertainty():
     assert row["CalibrationProfileSampleSize"] == 100
     assert row["CalibratedProbability"] <= row["RawWinProbability"]
     assert row["ConservativeWinProbability"] < row["CalibratedProbability"]
+
+
+def test_directional_calibration_cannot_inflate_raw_prop_probability():
+    # A small perfect high-probability plateau must not manufacture the kind of
+    # 0.75-0.83 confidence band that failed out of sample on the 3 Aug slate.
+    ledger = pd.DataFrame({
+        "market_type": ["batter_hits_over"] * 20,
+        "result": ["WIN"] * 18 + ["LOSS"] * 2,
+        "raw_probability": [0.70] * 20,
+        "odds_american": [-110] * 20,
+        "game_date": ["2026-08-02"] * 20,
+    })
+    card = pd.DataFrame([{
+        "market_type": "batter_hits_over",
+        "best_pick": "Test Batter Over 0.5 Hits",
+        "WinProbability": 0.70,
+        "edge": 0.08,
+        "odds_american": -110,
+        "Kelly_Bet_Size": 1.0,
+    }])
+
+    out = apply_prop_calibration(card, ledger, as_of_date="2026-08-03")
+    row = out.iloc[0]
+
+    assert row["CalibrationSource"] == "directional"
+    assert row["DirectionalCalibrationSampleSize"] == 20
+    assert row["CalibratedProbability"] <= row["RawWinProbability"]
+    assert row["ConservativeWinProbability"] < row["CalibratedProbability"]
