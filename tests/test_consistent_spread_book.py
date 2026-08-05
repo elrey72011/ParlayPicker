@@ -564,6 +564,133 @@ def test_aug5_dodgers_cubs_two_two_split_keeps_novig_team_bound_quote():
     ).all()
 
 
+def _assert_unanimous_aug5_team_binding_survives(
+    live_row,
+    *,
+    expected_home_point,
+    expected_home_price,
+    expected_away_point,
+    expected_away_price,
+):
+    expanded, _ = _expand_live_odds_to_bet_rows(
+        pd.DataFrame([live_row]), None
+    )
+    spreads = expanded[
+        expanded["market_type"].isin(["spread_home", "spread_away"])
+    ].set_index("market_type")
+
+    assert float(spreads.loc["spread_home", "spread_line"]) == expected_home_point
+    assert float(spreads.loc["spread_home", "odds_american"]) == expected_home_price
+    assert float(spreads.loc["spread_away", "spread_line"]) == expected_away_point
+    assert float(spreads.loc["spread_away", "odds_american"]) == expected_away_price
+    assert spreads["line_source"].eq("novig_team_bound_quote").all()
+    assert spreads["odds_source"].eq("novig").all()
+    assert spreads["orientation_source"].str.endswith(
+        "|cross_book_signed_pair_consensus|novig_execution_venue_tiebreak"
+    ).all()
+
+    retained = _filter_preselection_line_integrity(expanded)
+    retained_spreads = retained[
+        retained["market_type"].isin(["spread_home", "spread_away"])
+    ]
+    assert len(retained_spreads) == 2
+
+
+def test_aug5_minnesota_kansas_city_keeps_unanimous_team_bound_quote():
+    # The 18:43 Novig screen showed MIN -1.5/+178 and KC +1.5/-182.
+    # Every exported book carried that same signed pair, but the pipeline forced
+    # the narrow moneyline favorite Kansas City onto -1.5 and relabeled its
+    # +1.5/-182 outcome as Minnesota. Cross-book spread agreement must outrank
+    # that moneyline heuristic.
+    live_row = {
+        "league": "MLB",
+        "home_team": "Kansas City",
+        "away_team": "Minnesota",
+        "game_date": "2026-08-05",
+        "matchup_id": "2026-08-05|kansas city|minnesota",
+        "commence_time_raw": "2026-08-05T23:40:00Z",
+        "novig_home_point": 1.5,
+        "novig_home_price": -182,
+        "novig_away_point": -1.5,
+        "novig_away_price": 178,
+        "novig_h2h_home_price": -113,
+        "novig_h2h_away_price": 111,
+        "fanduel_home_point": 1.5,
+        "fanduel_home_price": -200,
+        "fanduel_away_point": -1.5,
+        "fanduel_away_price": 164,
+        "fanduel_h2h_home_price": -114,
+        "fanduel_h2h_away_price": 106,
+        "draftkings_home_point": 1.5,
+        "draftkings_home_price": -191,
+        "draftkings_away_point": -1.5,
+        "draftkings_away_price": 157,
+        "draftkings_h2h_home_price": -108,
+        "draftkings_h2h_away_price": 102,
+        "betmgm_home_point": 1.5,
+        "betmgm_home_price": -200,
+        "betmgm_away_point": -1.5,
+        "betmgm_away_price": 165,
+        "betmgm_h2h_home_price": -120,
+        "betmgm_h2h_away_price": 100,
+    }
+
+    _assert_unanimous_aug5_team_binding_survives(
+        live_row,
+        expected_home_point=1.5,
+        expected_home_price=-182.0,
+        expected_away_point=-1.5,
+        expected_away_price=178.0,
+    )
+
+
+def test_aug5_mets_cleveland_keeps_unanimous_team_bound_quote():
+    # The exported pregame snapshot carried CLE +1.5/-178 and NYM -1.5/+170
+    # at Novig, with all three standard books publishing the same signed pair.
+    # Do not silently swap those named outcomes to make the -104 Cleveland
+    # moneyline favorite carry -1.5.
+    live_row = {
+        "league": "MLB",
+        "home_team": "Cleveland",
+        "away_team": "New York Mets",
+        "game_date": "2026-08-05",
+        "matchup_id": "2026-08-05|cleveland|new york mets",
+        "commence_time_raw": "2026-08-05T22:40:00Z",
+        "novig_home_point": 1.5,
+        "novig_home_price": -178,
+        "novig_away_point": -1.5,
+        "novig_away_price": 170,
+        "novig_h2h_home_price": -104,
+        "novig_h2h_away_price": 102,
+        "fanduel_home_point": 1.5,
+        "fanduel_home_price": -192,
+        "fanduel_away_point": -1.5,
+        "fanduel_away_price": 158,
+        "fanduel_h2h_home_price": -108,
+        "fanduel_h2h_away_price": 100,
+        "draftkings_home_point": 1.5,
+        "draftkings_home_price": -188,
+        "draftkings_away_point": -1.5,
+        "draftkings_away_price": 155,
+        "draftkings_h2h_home_price": -107,
+        "draftkings_h2h_away_price": 101,
+        "betmgm_home_point": 1.5,
+        "betmgm_home_price": -190,
+        "betmgm_away_point": -1.5,
+        "betmgm_away_price": 155,
+        "betmgm_h2h_home_price": -115,
+        "betmgm_h2h_away_price": -105,
+    }
+
+    _assert_unanimous_aug5_team_binding_survives(
+        live_row,
+        expected_home_point=1.5,
+        expected_home_price=-178.0,
+        expected_away_point=-1.5,
+        expected_away_price=170.0,
+    )
+
+
 def test_replaces_washington_plus_5_5_alt_line_with_standard_consensus():
     # 29 Jul production regression: Novig exposed the alternate WAS +5.5 at
     # -1150 while every standard book carried the normal MLB run line at 1.5.

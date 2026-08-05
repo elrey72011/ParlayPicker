@@ -150,7 +150,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-08-05f-controlled-value-label-fix"
+PIPELINE_BUILD = "2026-08-05g-novig-team-binding-consensus"
 
 # Best Available must compare standard, reasonably priced markets. A P2P exchange can
 # expose alternate run lines (for example +5.5 at -1150) beside the standard MLB +1.5.
@@ -1242,6 +1242,10 @@ def _filter_preselection_line_integrity(
         line_source.eq("novig_theover_moneyline_reoriented")
         & orientation.str.contains("theover_moneyline_favorite", na=False)
     )
+    independently_corroborated_team_binding = (
+        line_source.eq("novig_team_bound_quote")
+        & orientation.str.contains("novig_execution_venue_tiebreak", na=False)
+    )
     mlb_spread_orientation_fault = (
         is_spread
         & league.eq("MLB")
@@ -1250,6 +1254,7 @@ def _filter_preselection_line_integrity(
         & displayed_spread.ne(0.0)
         & displayed_spread.lt(0.0).ne(selected_is_moneyline_favorite)
         & ~independently_reoriented_from_theover
+        & ~independently_corroborated_team_binding
     )
 
     plausible_live = (
@@ -4700,9 +4705,11 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         # Final defense in depth: every MLB run-line candidate must agree with the
         # independently carried two-way moneyline. The feed can repeat the same
         # reversed team labels across multiple books, so a trusted source label or
-        # raw majority is not enough to bypass this invariant. Only a line explicitly
-        # reoriented from an independent TheOver favorite is exempt from the raw-game
-        # moneyline comparison.
+        # raw majority is not enough to bypass this invariant. A line explicitly
+        # reoriented from an independent TheOver favorite is exempt, as is a direct
+        # Novig team binding corroborated by the cross-book signed spread pair. The
+        # latter matters because a narrow MLB moneyline favorite can legitimately be
+        # offered at +1.5; forcing it onto -1.5 would synthesize the opposite quote.
         spread_orientation_fault_flag = False
         spread_orientation_fault_reason = ""
         _mt_row = str(best.at[idx, "market_type"]).strip().lower() if "market_type" in best.columns else ""
@@ -4720,9 +4727,15 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             _line_source_for_orient == "novig_theover_moneyline_reoriented"
             and "theover_moneyline_favorite" in _orientation_source_for_orient
         )
+        _independently_corroborated_team_binding = (
+            _line_source_for_orient == "novig_team_bound_quote"
+            and "novig_execution_venue_tiebreak"
+            in _orientation_source_for_orient
+        )
         if (
             _mt_row in {"spread_home", "spread_away"}
             and not _independently_reoriented_spread
+            and not _independently_corroborated_team_binding
         ):
             _line_for_orient = next(
                 (best.at[idx, c] for c in ("market_line_used", "spread_line", "base_spread_line")
@@ -7244,19 +7257,26 @@ def _novig_spread_conflicts_with_standard_signed_pair(row) -> bool:
     )
 
 
-def _novig_spread_wins_cross_book_signed_pair_tie(row) -> bool:
-    """Prefer the execution venue in a tied vote corroborated by DraftKings.
+def _novig_spread_team_binding_basis(row) -> str:
+    """Return the evidence that makes Novig's direct team binding authoritative.
 
     The standard-book orientation filter uses each book's moneyline as an
     independent tiebreaker. That is useful when an upstream feed reverses several
-    team labels, but it can silently replace a real Novig quote when the books are
-    genuinely split. If Novig plus one standard book publish one complete signed
-    pair while two other standard books publish the opposite pair, the four raw
-    sources are tied 2-2. Historical Houston/Cleveland and Texas regressions show
-    FanDuel/BetMGM can repeat the same upstream reversal; DraftKings supplied the
-    correctly named signed outcome in both cases. Use that stable signed-outcome
-    tiebreaker: if DraftKings corroborates Novig, keep Novig's executable quote;
-    otherwise retain the established standard-book correction path.
+    team labels, but a moneyline favorite is not required to carry the negative
+    1.5 run line. Novig may legitimately offer the narrow moneyline favorite at
+    +1.5 with a heavily juiced price. Rebinding a complete spread solely to force
+    the moneyline favorite onto -1.5 creates a synthetic bet on the wrong team.
+
+    Preserve Novig's direct point/price pair in either of two independently
+    corroborated cases:
+
+    * At least two standard books publish Novig's same signed home/away pair and
+      none publishes the opposite pair.
+    * The four raw sources are split 2-2 and DraftKings corroborates Novig, the
+      established execution-venue tiebreak used by prior regressions.
+
+    Otherwise return an empty basis so the existing standard-consensus or
+    moneyline repair path can handle a genuinely reversed upstream binding.
     """
     novig_home = pd.to_numeric(row.get("novig_home_point"), errors="coerce")
     novig_away = pd.to_numeric(row.get("novig_away_point"), errors="coerce")
@@ -7275,14 +7295,14 @@ def _novig_spread_wins_cross_book_signed_pair_tie(row) -> bool:
             novig_away_price,
         )
     ):
-        return False
+        return ""
     if (
         abs(float(novig_home) + float(novig_away)) > 1e-9
         or float(novig_home) == 0.0
         or float(novig_home_price) == 0.0
         or float(novig_away_price) == 0.0
     ):
-        return False
+        return ""
 
     novig_pair = (round(float(novig_home), 4), round(float(novig_away), 4))
     opposite_pair = (-novig_pair[0], -novig_pair[1])
@@ -7321,12 +7341,16 @@ def _novig_spread_wins_cross_book_signed_pair_tie(row) -> bool:
         elif pair == opposite_pair:
             opposed += 1
 
-    return bool(
+    if aligned >= 2 and opposed == 0:
+        return "cross_book_signed_pair_consensus"
+
+    tied_execution_venue_vote = bool(
         draftkings_aligned
         and aligned >= 1
         and opposed >= 1
         and aligned + 1 == opposed
     )
+    return "cross_book_signed_pair_tie" if tied_execution_venue_vote else ""
 
 
 def _oriented_standard_spread_pair(row, side: str, favorite_side: str):
@@ -7651,12 +7675,13 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
             if not orientation_hints.empty:
                 orientation_favorite_side = str(orientation_hints.iloc[0])
 
-        # Bind Novig spread outcomes to Novig's own live moneyline whenever it is
-        # available. An uploaded TheOver moneyline can be stale or parse a different
-        # market snapshot; allowing it to override a complete Novig market can swap
-        # the two run-line outcomes (for example, Toronto -1.5/+141 became
-        # Toronto +1.5/-150 on 29 Jul). The upload remains a fallback only when
-        # Novig did not publish a usable two-way moneyline.
+        # Novig's own live moneyline is an orientation signal, not an unconditional
+        # spread-binding rule. It can repair a reversed upstream outcome mapping,
+        # but a narrow moneyline favorite may legitimately be offered at +1.5.
+        # Cross-book corroboration of Novig's signed team pair therefore takes
+        # precedence over reassigning its point/price outcomes by favorite status.
+        # An uploaded TheOver moneyline remains a fallback only when Novig did not
+        # publish a usable two-way moneyline.
         novig_moneyline_favorite_side = ""
         novig_home_ml = pd.to_numeric(row.get("novig_h2h_home_price"), errors="coerce")
         novig_away_ml = pd.to_numeric(row.get("novig_h2h_away_price"), errors="coerce")
@@ -7747,13 +7772,14 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
             spread_line_source = "live_odds"
             if market_type.startswith("spread"):
                 side = "home" if market_type == "spread_home" else "away"
-                novig_execution_tie = (
-                    league_str == "MLB"
-                    and _novig_spread_wins_cross_book_signed_pair_tie(row)
+                novig_team_binding_basis = (
+                    _novig_spread_team_binding_basis(row)
+                    if league_str == "MLB"
+                    else ""
                 )
                 signed_pair_conflict = (
                     _novig_spread_conflicts_with_standard_signed_pair(row)
-                    and not novig_execution_tie
+                    and not novig_team_binding_basis
                 )
                 signed_standard_point = signed_standard_price = pd.NA
                 signed_standard_opposing_price = pd.NA
@@ -7782,7 +7808,7 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
                     and pd.notna(signed_standard_opposing_price)
                     and signed_standard_book is not None
                 )
-                if novig_execution_tie:
+                if novig_team_binding_basis:
                     direct_point = pd.to_numeric(
                         row.get(f"novig_{side}_point"), errors="coerce"
                     )
@@ -7810,7 +7836,7 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
                         market_dict["opposing_odds_source"] = "novig"
                         spread_line_source = "novig_team_bound_quote"
                         market_dict["orientation_source"] = (
-                            f"{orientation_source}|cross_book_signed_pair_tie"
+                            f"{orientation_source}|{novig_team_binding_basis}"
                             "|novig_execution_venue_tiebreak"
                         )
                 elif signed_pair_conflict and signed_standard_pair_is_usable:
