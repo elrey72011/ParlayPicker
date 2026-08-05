@@ -506,6 +506,64 @@ def test_aug3_texas_novig_reversal_is_corrected_before_candidate_ranking():
     assert len(retained_spreads) == 2
     assert set(retained_spreads["spread_line"].astype(float)) == {-1.5, 1.5}
 
+
+def test_aug5_dodgers_cubs_two_two_split_keeps_novig_team_bound_quote():
+    # Production regression: Novig and DraftKings showed Cubs +1.5 while
+    # FanDuel and BetMGM showed Dodgers +1.5. Filtering the standard books by
+    # their moneylines turned the raw 2-2 split into an apparent FanDuel/BetMGM
+    # consensus and exported Dodgers +1.5. A tied conflict must remain bound to
+    # the execution venue instead of silently substituting another book's side.
+    live_row = {
+        "league": "MLB",
+        "home_team": "Chicago Cubs",
+        "away_team": "Los Angeles Dodgers",
+        "game_date": "2026-08-05",
+        "matchup_id": "2026-08-05|chicago cubs|los angeles dodgers",
+        "commence_time_raw": "2026-08-06T00:05:00Z",
+        "novig_home_point": 1.5,
+        "novig_home_price": -174,
+        "novig_away_point": -1.5,
+        "novig_away_price": 167,
+        "novig_h2h_home_price": -111,
+        "novig_h2h_away_price": 108,
+        "fanduel_home_point": -1.5,
+        "fanduel_home_price": 162,
+        "fanduel_away_point": 1.5,
+        "fanduel_away_price": -196,
+        "fanduel_h2h_home_price": -116,
+        "fanduel_h2h_away_price": 106,
+        "draftkings_home_point": 1.5,
+        "draftkings_home_price": -185,
+        "draftkings_away_point": -1.5,
+        "draftkings_away_price": 152,
+        "draftkings_h2h_home_price": -108,
+        "draftkings_h2h_away_price": 102,
+        "betmgm_home_point": -1.5,
+        "betmgm_home_price": 150,
+        "betmgm_away_point": 1.5,
+        "betmgm_away_price": -200,
+        "betmgm_h2h_home_price": -120,
+        "betmgm_h2h_away_price": 100,
+    }
+
+    expanded, _ = _expand_live_odds_to_bet_rows(
+        pd.DataFrame([live_row]), None
+    )
+    spreads = expanded[
+        expanded["market_type"].isin(["spread_home", "spread_away"])
+    ].set_index("market_type")
+
+    assert float(spreads.loc["spread_home", "spread_line"]) == 1.5
+    assert float(spreads.loc["spread_home", "odds_american"]) == -174.0
+    assert float(spreads.loc["spread_away", "spread_line"]) == -1.5
+    assert float(spreads.loc["spread_away", "odds_american"]) == 167.0
+    assert spreads["line_source"].eq("novig_team_bound_quote").all()
+    assert spreads["odds_source"].eq("novig").all()
+    assert spreads["orientation_source"].str.endswith(
+        "|cross_book_signed_pair_tie|novig_execution_venue_tiebreak"
+    ).all()
+
+
 def test_replaces_washington_plus_5_5_alt_line_with_standard_consensus():
     # 29 Jul production regression: Novig exposed the alternate WAS +5.5 at
     # -1150 while every standard book carried the normal MLB run line at 1.5.
