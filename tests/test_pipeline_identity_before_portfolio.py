@@ -101,3 +101,127 @@ def test_empty_card_recovery_publishes_separate_controlled_value_card(monkeypatc
     assert state["diagnostics"]["empty_card_recovery_enabled"] is True
     assert state["diagnostics"]["empty_card_recovery_triggered"] is True
     assert state["diagnostics"]["controlled_value_pick_count"] == 2
+
+
+def test_controlled_value_recovery_uses_empirical_price_edge_not_legacy_edge(monkeypatch):
+    """The exact Aug. 5 pattern must not be rejected by a second edge basis."""
+
+    def fake_run_analysis_pipeline(**kwargs):
+        analysis = pd.DataFrame([
+            {
+                "league": "MLB",
+                "home_team": "Cincinnati",
+                "away_team": "Athletics",
+                "game_date": "2026-08-05",
+                "market_type": "spread_home",
+                "expected_value": 0.0341137278,
+                "edge": 0.0282599410,
+                "calibrated_probability": 0.4400483948,
+            }
+        ])
+        return analysis, pd.DataFrame(), {}
+
+    def fake_build_best_picks_df(analysis_df, diagnostics_out=None):
+        return pd.DataFrame([
+            {
+                "league": "MLB",
+                "home_team": "Cincinnati",
+                "away_team": "Athletics",
+                "game_date": "2026-08-05",
+                "market_type": "spread_home",
+                "best_pick": "Cincinnati -1.5",
+                "Pick_Status": "High Variance/Speculative",
+                "expected_value": 0.0341137278,
+                "edge": 0.0282599410,
+                "effective_expected_value": 0.0341137278,
+                "effective_edge": 0.0282599410,
+                "effective_win_probability": 0.4400483948,
+                "empirical_win_probability": 0.4624687484,
+                "consensus_agreement": "Disagrees",
+                "odds_american": 135,
+                "production_expected_value": 0.0341137278,
+                # This is intentionally below the legacy 2% edge floor. The
+                # empirical price edge is +3.69 points and is authoritative.
+                "production_edge": 0.0145164793,
+                "production_win_probability": 0.4400483948,
+                "line_consistency_flag": True,
+                "line_event_identity_match_flag": True,
+                "market_line_source": "live",
+                "market_line_used": -1.5,
+                "best_available_selection_verified": True,
+                "best_available_ranking_verified": True,
+                "final_pick_valid": True,
+            },
+            {
+                "league": "MLB",
+                "home_team": "New York Yankees",
+                "away_team": "Saint Louis",
+                "game_date": "2026-08-05",
+                "market_type": "spread_home",
+                "best_pick": "New York Yankees -1.5",
+                "Pick_Status": "High Variance/Speculative",
+                "expected_value": 0.0430743718,
+                "edge": 0.0306599743,
+                "effective_expected_value": 0.0430743718,
+                "effective_edge": 0.0306599743,
+                "effective_win_probability": 0.4328109426,
+                "empirical_win_probability": 0.4485899256,
+                "consensus_agreement": "Disagrees",
+                "odds_american": 141,
+                "production_expected_value": 0.0430743718,
+                "production_edge": 0.0178727687,
+                "production_win_probability": 0.4328109426,
+                "line_consistency_flag": True,
+                "line_event_identity_match_flag": True,
+                "market_line_source": "live",
+                "market_line_used": -1.5,
+                "best_available_selection_verified": True,
+                "best_available_ranking_verified": True,
+                "final_pick_valid": True,
+            },
+        ])
+
+    monkeypatch.setattr("core.probability_calibration.load_calibration", lambda *a, **k: None)
+    monkeypatch.setattr(app, "run_analysis_pipeline", fake_run_analysis_pipeline)
+    monkeypatch.setattr(sp, "build_best_picks_df", fake_build_best_picks_df)
+    monkeypatch.setattr(
+        app,
+        "optimize_portfolio_allocation",
+        lambda df, bankroll=1000.0: pd.DataFrame([
+            {
+                "canonical_pick_key": key,
+                "production_bet_amount": 5.0,
+                "raw_kelly_amount": 10.0,
+                "kelly_cap_reason": "",
+                "production_eligible": True,
+            }
+            for key in df["canonical_pick_key"].tolist()
+        ]),
+    )
+    monkeypatch.setattr(app, "generate_parlays", lambda *args, **kwargs: pd.DataFrame())
+    monkeypatch.setattr(app, "run_bankroll_simulation", lambda *args, **kwargs: {})
+    monkeypatch.setattr(app, "_enrich_with_kalshi_safe", lambda df: (df, None))
+    monkeypatch.setattr(app, "_recompute_consensus_from_kalshi", lambda df, require_ml=False: df)
+
+    controls = {
+        "sports": ["MLB"],
+        "use_ml": False,
+        "theover_spreads": None,
+        "theover_totals": None,
+        "bankroll": 1000.0,
+        "use_gemini": False,
+    }
+    state, _, _ = app._run_pipeline(controls)
+    out = state["best_picks_df"]
+    controlled = out[out["controlled_card_recovery"].fillna(False).astype(bool)]
+
+    assert controlled["best_pick"].tolist() == [
+        "Cincinnati -1.5",
+        "New York Yankees -1.5",
+    ]
+    assert controlled["sellable_as_value_card"].all()
+    assert controlled["wager_approved"].all()
+    assert controlled["commercial_tier"].eq("Controlled Value Pick").all()
+    assert controlled["Kelly_Bet_Size"].gt(0).all()
+    assert state["diagnostics"]["empty_card_recovery_candidate_count"] == 2
+    assert state["diagnostics"]["empty_card_recovery_promoted_count"] == 2
