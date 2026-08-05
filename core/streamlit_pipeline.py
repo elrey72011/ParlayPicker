@@ -150,7 +150,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-08-05a-value-dominance-market-bounded-props"
+PIPELINE_BUILD = "2026-08-05b-novig-execution-tie"
 
 # Best Available must compare standard, reasonably priced markets. A P2P exchange can
 # expose alternate run lines (for example +5.5 at -1150) beside the standard MLB +1.5.
@@ -7202,6 +7202,91 @@ def _novig_spread_conflicts_with_standard_signed_pair(row) -> bool:
     )
 
 
+def _novig_spread_wins_cross_book_signed_pair_tie(row) -> bool:
+    """Prefer the execution venue in a tied vote corroborated by DraftKings.
+
+    The standard-book orientation filter uses each book's moneyline as an
+    independent tiebreaker. That is useful when an upstream feed reverses several
+    team labels, but it can silently replace a real Novig quote when the books are
+    genuinely split. If Novig plus one standard book publish one complete signed
+    pair while two other standard books publish the opposite pair, the four raw
+    sources are tied 2-2. Historical Houston/Cleveland and Texas regressions show
+    FanDuel/BetMGM can repeat the same upstream reversal; DraftKings supplied the
+    correctly named signed outcome in both cases. Use that stable signed-outcome
+    tiebreaker: if DraftKings corroborates Novig, keep Novig's executable quote;
+    otherwise retain the established standard-book correction path.
+    """
+    novig_home = pd.to_numeric(row.get("novig_home_point"), errors="coerce")
+    novig_away = pd.to_numeric(row.get("novig_away_point"), errors="coerce")
+    novig_home_price = pd.to_numeric(
+        row.get("novig_home_price"), errors="coerce"
+    )
+    novig_away_price = pd.to_numeric(
+        row.get("novig_away_price"), errors="coerce"
+    )
+    if any(
+        pd.isna(value)
+        for value in (
+            novig_home,
+            novig_away,
+            novig_home_price,
+            novig_away_price,
+        )
+    ):
+        return False
+    if (
+        abs(float(novig_home) + float(novig_away)) > 1e-9
+        or float(novig_home) == 0.0
+        or float(novig_home_price) == 0.0
+        or float(novig_away_price) == 0.0
+    ):
+        return False
+
+    novig_pair = (round(float(novig_home), 4), round(float(novig_away), 4))
+    opposite_pair = (-novig_pair[0], -novig_pair[1])
+    aligned = 0
+    opposed = 0
+    draftkings_aligned = False
+    for book in ("fanduel", "draftkings", "betmgm"):
+        home_point = pd.to_numeric(
+            row.get(f"{book}_home_point"), errors="coerce"
+        )
+        away_point = pd.to_numeric(
+            row.get(f"{book}_away_point"), errors="coerce"
+        )
+        home_price = pd.to_numeric(
+            row.get(f"{book}_home_price"), errors="coerce"
+        )
+        away_price = pd.to_numeric(
+            row.get(f"{book}_away_price"), errors="coerce"
+        )
+        if any(
+            pd.isna(value)
+            for value in (home_point, away_point, home_price, away_price)
+        ):
+            continue
+        if (
+            abs(float(home_point) + float(away_point)) > 1e-9
+            or abs(abs(float(home_point)) - abs(float(novig_home)))
+            > NOVIG_MLB_SPREAD_OUTLIER_TOL
+        ):
+            continue
+        pair = (round(float(home_point), 4), round(float(away_point), 4))
+        if pair == novig_pair:
+            aligned += 1
+            if book == "draftkings":
+                draftkings_aligned = True
+        elif pair == opposite_pair:
+            opposed += 1
+
+    return bool(
+        draftkings_aligned
+        and aligned >= 1
+        and opposed >= 1
+        and aligned + 1 == opposed
+    )
+
+
 def _oriented_standard_spread_pair(row, side: str, favorite_side: str):
     """Compatibility wrapper that never rebinds a quote to the other team.
 
@@ -7620,8 +7705,13 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
             spread_line_source = "live_odds"
             if market_type.startswith("spread"):
                 side = "home" if market_type == "spread_home" else "away"
+                novig_execution_tie = (
+                    league_str == "MLB"
+                    and _novig_spread_wins_cross_book_signed_pair_tie(row)
+                )
                 signed_pair_conflict = (
                     _novig_spread_conflicts_with_standard_signed_pair(row)
+                    and not novig_execution_tie
                 )
                 signed_standard_point = signed_standard_price = pd.NA
                 signed_standard_opposing_price = pd.NA
@@ -7650,7 +7740,38 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
                     and pd.notna(signed_standard_opposing_price)
                     and signed_standard_book is not None
                 )
-                if signed_pair_conflict and signed_standard_pair_is_usable:
+                if novig_execution_tie:
+                    direct_point = pd.to_numeric(
+                        row.get(f"novig_{side}_point"), errors="coerce"
+                    )
+                    direct_price = pd.to_numeric(
+                        row.get(f"novig_{side}_price"), errors="coerce"
+                    )
+                    opposing_side = "away" if side == "home" else "home"
+                    direct_opposing_price = pd.to_numeric(
+                        row.get(f"novig_{opposing_side}_price"), errors="coerce"
+                    )
+                    if all(
+                        pd.notna(value)
+                        for value in (
+                            direct_point,
+                            direct_price,
+                            direct_opposing_price,
+                        )
+                    ):
+                        point_val = float(direct_point)
+                        market_dict["odds_american"] = float(direct_price)
+                        market_dict["opposing_odds_american"] = float(
+                            direct_opposing_price
+                        )
+                        market_dict["odds_source"] = "novig"
+                        market_dict["opposing_odds_source"] = "novig"
+                        spread_line_source = "novig_team_bound_quote"
+                        market_dict["orientation_source"] = (
+                            f"{orientation_source}|cross_book_signed_pair_tie"
+                            "|novig_execution_venue_tiebreak"
+                        )
+                elif signed_pair_conflict and signed_standard_pair_is_usable:
                     point_val = float(signed_standard_point)
                     market_dict["odds_american"] = float(signed_standard_price)
                     market_dict["opposing_odds_american"] = float(
