@@ -1166,7 +1166,14 @@ def apply_controlled_prop_rollout(
 
     # Even a fully production-qualified pitcher or other prop remains visible
     # for grading but cannot receive a stake during the controlled rollout.
-    outside_scope = eligible & ~allowed
+    rejected = out.get(
+        "Pick_Status", pd.Series("", index=index)
+    ).fillna("").astype(str).str.strip().eq("Rejected")
+    calibration_ready = out.get(
+        "production_calibration_ready", eligible
+    )
+    calibration_ready = pd.Series(calibration_ready, index=index).fillna(False).astype(bool)
+    outside_scope = ~allowed & ~rejected & calibration_ready
     if outside_scope.any():
         reason = (
             "Research only: controlled rollout currently funds batter-hit "

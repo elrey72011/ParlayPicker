@@ -29,6 +29,9 @@ from app_core.weights_config import (
             MLB_SPREAD_ACTIONABLE_PENALTY, MLB_SPREAD_FINALIST_SCORE_PENALTY,
             MLB_SPREAD_FINALIST_PENALTY_MIN_FAMILY_N,
             MLB_SPREAD_FINALIST_PENALTY_MIN_RATE_GAP,
+            BEST_AVAILABLE_VALUE_OVERRIDE_MIN_WIN_PROB,
+            BEST_AVAILABLE_VALUE_OVERRIDE_MIN_EV,
+            BEST_AVAILABLE_VALUE_OVERRIDE_MIN_EV_GAIN,
             BEST_AVAILABLE_QUALIFIED_MIN_WIN_PROB,
             BEST_AVAILABLE_QUALIFIED_MIN_EV,
             BEST_AVAILABLE_QUALIFIED_MIN_EDGE,
@@ -147,7 +150,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-08-04a-prop-calibration-shrink-only"
+PIPELINE_BUILD = "2026-08-05a-value-dominance-market-bounded-props"
 
 # Best Available must compare standard, reasonably priced markets. A P2P exchange can
 # expose alternate run lines (for example +5.5 at -1150) beside the standard MLB +1.5.
@@ -164,6 +167,9 @@ REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
     "mlb_spread_finalist_penalty_applied",
     "mlb_spread_finalist_penalty_value",
     "mlb_spread_finalist_penalty_reason",
+    "best_available_value_override_applied",
+    "best_available_value_override_from_pick",
+    "best_available_value_override_ev_gain",
     "best_available_rank",
     "best_available_family_rank",
     "best_available_score",
@@ -313,6 +319,9 @@ def ensure_best_pick_export_columns(
         "mlb_spread_finalist_penalty_applied": False,
         "mlb_spread_finalist_penalty_value": 0.0,
         "mlb_spread_finalist_penalty_reason": "not_evaluated",
+        "best_available_value_override_applied": False,
+        "best_available_value_override_from_pick": "",
+        "best_available_value_override_ev_gain": pd.NA,
         "best_available_rank": pd.NA,
         "best_available_family_rank": pd.NA,
         "best_available_score": pd.NA,
@@ -377,7 +386,7 @@ def ensure_best_pick_export_columns(
     missing_cols = [c for c in req_cols if c not in out.columns]
 
     for col in req_cols:
-        if col in {"status_blocker_reason", "status_blocker_stage", "nba_stats_fetch_status", "fallback_summary_by_league", "run_health_warning", "degraded_feature_subset_reason", "status_metric_basis", "selection_probability_source", "mlb_spread_finalist_penalty_reason", "market_line_source", "market_line_source_detail", "line_consistency_reason", "line_provenance_warning", "line_event_identity_reason", "live_event_match_key", "selected_live_event_source", "raw_book_odds_diag", "best_available_runner_up_pick", "best_available_runner_up_market_type", "best_available_selection_reason", "qualification_reason", "display_pick", "commercial_tier", "commercial_reason", "final_pick_valid_reason"}:
+        if col in {"status_blocker_reason", "status_blocker_stage", "nba_stats_fetch_status", "fallback_summary_by_league", "run_health_warning", "degraded_feature_subset_reason", "status_metric_basis", "selection_probability_source", "mlb_spread_finalist_penalty_reason", "best_available_value_override_from_pick", "market_line_source", "market_line_source_detail", "line_consistency_reason", "line_provenance_warning", "line_event_identity_reason", "live_event_match_key", "selected_live_event_source", "raw_book_odds_diag", "best_available_runner_up_pick", "best_available_runner_up_market_type", "best_available_selection_reason", "qualification_reason", "display_pick", "commercial_tier", "commercial_reason", "final_pick_valid_reason"}:
             out[col] = out[col].fillna(default_values.get(col, "")).astype(str)
 
     # The public card always answers which candidate ranked first for the game.
@@ -399,6 +408,7 @@ def ensure_best_pick_export_columns(
         "qualified_pick": False,
         "selection_probability_pair_normalized": False,
         "mlb_spread_finalist_penalty_applied": False,
+        "best_available_value_override_applied": False,
     }.items():
         if bool_col in out.columns:
             out[bool_col] = out[bool_col].fillna(default).astype(bool)
@@ -415,7 +425,7 @@ def ensure_best_pick_export_columns(
         out["side_promoted_by_balance_guard_count"] = pd.to_numeric(out["side_promoted_by_balance_guard_count"], errors="coerce").fillna(0).astype(int)
     if "side_balance_guard_reason" in out.columns:
         out["side_balance_guard_reason"] = out["side_balance_guard_reason"].fillna("MISSING_COMPUTATION").astype(str)
-    for numeric_col in {"selection_probability_used", "mlb_spread_finalist_penalty_value", "qualification_probability", "market_line_used", "matched_live_spread_line", "matched_live_total_line", "upload_spread_line", "upload_total_line", "base_spread_line", "base_total_line"}:
+    for numeric_col in {"selection_probability_used", "mlb_spread_finalist_penalty_value", "best_available_value_override_ev_gain", "qualification_probability", "market_line_used", "matched_live_spread_line", "matched_live_total_line", "upload_spread_line", "upload_total_line", "base_spread_line", "base_total_line"}:
         if numeric_col in out.columns:
             out[numeric_col] = pd.to_numeric(out[numeric_col], errors="coerce")
     if "line_consistency_flag" in out.columns:
@@ -488,6 +498,8 @@ BEST_PICK_COLUMNS = [
     "league", "home_team", "away_team", "game_date", "game_time_est", "market_type", "candidate_source", "orientation_source", "upload_match_reason", "best_pick", "Kelly_Bet_Size", "Pick_Status", "Status_Reason",
     "calibrated_probability", "expected_value", "edge", "consensus_agreement",
     "best_available_rank", "best_available_family_rank", "best_available_score",
+    "best_available_value_override_applied", "best_available_value_override_from_pick",
+    "best_available_value_override_ev_gain",
     "best_available_runner_up_pick", "best_available_runner_up_market_type",
     "best_available_runner_up_score", "best_available_score_gap",
     "best_available_candidate_count", "best_available_selection_verified",
@@ -1537,6 +1549,9 @@ def _sync_selected_candidate_audit(
         "selection_probability_used",
         "selection_probability_source",
         "selection_probability_pair_normalized",
+        "best_available_value_override_applied",
+        "best_available_value_override_from_pick",
+        "best_available_value_override_ev_gain",
         "expected_value",
         "edge",
         "best_available_score",
@@ -4035,6 +4050,79 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         "_edge_numeric",
     ]
     best_available_sort_ascending = [False, True, False, False, False]
+
+    # A probability-first score can make an expensive, negative-EV +1.5 line
+    # structurally unbeatable. Preserve that ranking by default, but let a credible
+    # positive-EV candidate dominate when it is materially better value and no
+    # empirical direction penalty opposes it. The score boost is only the epsilon
+    # needed to preserve the single global-argmax contract.
+    pool["best_available_value_override_applied"] = False
+    pool["best_available_value_override_from_pick"] = ""
+    pool["best_available_value_override_ev_gain"] = np.nan
+    value_override_count = 0
+    for matchup, group in pool.groupby("matchup_id", sort=False):
+        provisional = group.sort_values(
+            by=best_available_sort_columns,
+            ascending=best_available_sort_ascending,
+            na_position="last",
+            kind="mergesort",
+        )
+        if provisional.empty:
+            continue
+        incumbent = provisional.iloc[0]
+        incumbent_ev = pd.to_numeric(incumbent.get("_ev_numeric"), errors="coerce")
+        incumbent_score = pd.to_numeric(
+            incumbent.get("final_family_score"), errors="coerce"
+        )
+        if pd.isna(incumbent_ev) or pd.isna(incumbent_score):
+            continue
+        evidence_penalty = (
+            pd.to_numeric(group["_family_selection_penalty"], errors="coerce").fillna(0.0)
+            + pd.to_numeric(group["_direction_conflict_penalty"], errors="coerce").fillna(0.0)
+        )
+        challengers = group[
+            pd.to_numeric(group["selection_probability_used"], errors="coerce").ge(
+                float(BEST_AVAILABLE_VALUE_OVERRIDE_MIN_WIN_PROB)
+            )
+            & pd.to_numeric(group["_ev_numeric"], errors="coerce").ge(
+                float(BEST_AVAILABLE_VALUE_OVERRIDE_MIN_EV)
+            )
+            & pd.to_numeric(group["_ev_numeric"], errors="coerce").ge(
+                float(incumbent_ev) + float(BEST_AVAILABLE_VALUE_OVERRIDE_MIN_EV_GAIN)
+            )
+            & evidence_penalty.le(1e-12)
+        ]
+        if challengers.empty:
+            continue
+        challenger = challengers.sort_values(
+            by=["_ev_numeric", "_edge_numeric", "selection_probability_used", "final_family_score"],
+            ascending=[False, False, False, False],
+            na_position="last",
+            kind="mergesort",
+        ).iloc[0]
+        if challenger.name == incumbent.name:
+            continue
+        challenger_score = pd.to_numeric(
+            challenger.get("final_family_score"), errors="coerce"
+        )
+        if pd.isna(challenger_score):
+            continue
+        pool.loc[challenger.name, "final_family_score"] = max(
+            float(challenger_score),
+            float(incumbent_score) + 1e-9,
+        )
+        pool.loc[challenger.name, "best_available_value_override_applied"] = True
+        pool.loc[challenger.name, "best_available_value_override_from_pick"] = str(
+            incumbent.get("best_pick", "")
+        )
+        pool.loc[challenger.name, "best_available_value_override_ev_gain"] = float(
+            challenger["_ev_numeric"] - incumbent_ev
+        )
+        value_override_count += 1
+
+    if diagnostics_out is not None:
+        diagnostics_out["best_available_value_override_count"] = int(value_override_count)
+
     pool = pool.sort_values(
         by=best_available_sort_columns,
         ascending=best_available_sort_ascending,
@@ -4211,6 +4299,14 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     pool["best_available_selection_reason"] = (
         "Highest deterministic candidate score after validity, identity, and line-integrity gates"
     )
+    value_override_selected = (
+        pool["best_available_selected"]
+        & pool["best_available_value_override_applied"].fillna(False).astype(bool)
+    )
+    pool.loc[value_override_selected, "best_available_selection_reason"] = (
+        "Positive-EV value dominance over a materially worse provisional winner; "
+        "minimum probability and evidence-penalty guards passed"
+    )
     pool["best_available_rejection_reason"] = "lower_score_within_market_family"
     pool.loc[
         pool["best_available_finalist"] & ~pool["best_available_selected"],
@@ -4231,6 +4327,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         "mlb_spread_finalist_penalty_applied",
         "mlb_spread_finalist_penalty_value",
         "mlb_spread_finalist_penalty_reason",
+        "best_available_value_override_applied",
+        "best_available_value_override_from_pick",
+        "best_available_value_override_ev_gain",
         "expected_value", "edge", "tier_score", "final_family_score",
         "_market_family", "best_available_rank", "best_available_family_rank",
         "best_available_finalist", "best_available_final_rank",
