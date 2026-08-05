@@ -79,3 +79,55 @@ def test_portfolio_allocator_funds_actionable_pick_that_clears_gate():
     assert bool(result.iloc[0]["absolute_production_gate_pass"])
     assert float(result.iloc[0]["recommended_bet"]) > 0.0
 
+
+def test_controlled_value_allocator_uses_empirical_exact_price_probability():
+    """A recovered plus-money value row must survive its second sizing pass."""
+    row = _portfolio_row(empirical_probability=0.4485899256, expected_value=0.0430743718)
+    row.update({
+        "home_team": "New York Yankees",
+        "away_team": "Saint Louis",
+        "best_pick": "New York Yankees -1.5",
+        "market_line_used": -1.5,
+        "odds_american": 141,
+        "decimal_odds": 2.41,
+        "production_win_probability": 0.4328109426,
+        "production_expected_value": 0.0430743718,
+        "consensus_agreement": "Disagrees",
+        "controlled_card_recovery": True,
+    })
+
+    result = optimize_portfolio_allocation(pd.DataFrame([row]), bankroll=1000.0)
+    recovered = result.iloc[0]
+
+    assert recovered["kelly_probability_source"] == (
+        "controlled_value_empirical_price_probability"
+    )
+    assert float(recovered["kelly_probability_used"]) == 0.4485899256
+    assert bool(recovered["production_eligible"])
+    assert bool(recovered["absolute_production_gate_pass"])
+    assert float(recovered["recommended_bet"]) > 0.0
+
+
+def test_controlled_value_allocator_rechecks_stricter_disagrees_margin():
+    row = _portfolio_row(empirical_probability=0.44, expected_value=0.04)
+    row.update({
+        "odds_american": 140,
+        "decimal_odds": 2.4,
+        "production_win_probability": 0.43,
+        "production_expected_value": 0.04,
+        "consensus_agreement": "Disagrees",
+        "controlled_card_recovery": True,
+    })
+
+    result = optimize_portfolio_allocation(pd.DataFrame([row]), bankroll=1000.0)
+    rejected = result.iloc[0]
+
+    # +140 breaks even at 41.67%; 44% clears the normal 2-point gate but not
+    # the controlled contrarian 3-point requirement.
+    assert not bool(rejected["production_eligible"])
+    assert not bool(rejected["absolute_production_gate_pass"])
+    assert rejected["absolute_production_gate_reason"] == (
+        "controlled value exact-price gate failed"
+    )
+    assert float(rejected["recommended_bet"]) == 0.0
+
