@@ -45,7 +45,6 @@ from app_core.weights_config import (
     ENABLE_EMPTY_CARD_RECOVERY,
     EMPTY_CARD_RECOVERY_MAX_PICKS,
     EMPTY_CARD_RECOVERY_MIN_PRODUCTION_EV,
-    EMPTY_CARD_RECOVERY_MIN_PRODUCTION_EDGE,
     EMPTY_CARD_RECOVERY_MIN_PRODUCTION_WIN_PROB,
     EMPTY_CARD_RECOVERY_MIN_ABSOLUTE_EDGE,
     EMPTY_CARD_RECOVERY_DISAGREES_MIN_ABSOLUTE_EDGE,
@@ -1070,7 +1069,6 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
         line_ok0 = pd.Series(best_picks_df.get("line_consistency_flag", True), index=best_picks_df.index).fillna(True).astype(bool)
         id_ok0 = pd.Series(best_picks_df.get("line_event_identity_match_flag", True), index=best_picks_df.index).fillna(True).astype(bool)
         prod_ev0 = pd.to_numeric(best_picks_df.get("production_expected_value", best_picks_df.get("effective_expected_value", 0)), errors="coerce").fillna(-999)
-        prod_edge0 = pd.to_numeric(best_picks_df.get("production_edge", best_picks_df.get("effective_edge", 0)), errors="coerce").fillna(-999)
         prod_prob0 = pd.to_numeric(best_picks_df.get("production_win_probability", best_picks_df.get("effective_win_probability", 0.5)), errors="coerce").fillna(0)
         eff_ev0 = pd.to_numeric(best_picks_df.get("effective_expected_value", best_picks_df.get("expected_value", 0)), errors="coerce").fillna(-999)
         eff_edge0 = pd.to_numeric(best_picks_df.get("effective_edge", best_picks_df.get("edge", 0)), errors="coerce").fillna(-999)
@@ -1081,7 +1079,16 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
         diagnostics["empty_card_recovery_excluded_total_over_count"] = int(excluded_total_over.sum())
         excluded_source = src0.isin([s.lower() for s in EMPTY_CARD_RECOVERY_EXCLUDE_SOURCES]) | ~src0.eq("live")
         diagnostics["empty_card_recovery_excluded_line_source_count"] = int(excluded_source.sum())
-        threshold_fail = (prod_ev0 < float(EMPTY_CARD_RECOVERY_MIN_PRODUCTION_EV)) | (prod_edge0 < float(EMPTY_CARD_RECOVERY_MIN_PRODUCTION_EDGE)) | (prod_prob0 < float(EMPTY_CARD_RECOVERY_MIN_PRODUCTION_WIN_PROB))
+        # Controlled Value uses the empirical, exact-price edge gate below as
+        # its single edge authority. Requiring the legacy ``production_edge``
+        # here as well mixes two probability bases and can make their
+        # intersection empty even when a verified plus-money pick clears the
+        # stricter empirical price margin. Keep only the independent EV and
+        # absolute probability sanity floors at this stage.
+        threshold_fail = (
+            (prod_ev0 < float(EMPTY_CARD_RECOVERY_MIN_PRODUCTION_EV))
+            | (prod_prob0 < float(EMPTY_CARD_RECOVERY_MIN_PRODUCTION_WIN_PROB))
+        )
         diagnostics["empty_card_recovery_excluded_threshold_count"] = int(threshold_fail.sum())
         # Consensus + calibration guards. Controlled recovery may take a
         # contrarian (Disagrees) price only at a stricter calibrated-edge bar;
