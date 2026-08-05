@@ -75,6 +75,29 @@ def test_compact_export_retains_only_explicitly_approved_stake():
     assert compact.loc[0, "Play_Tier"] == "BET"
 
 
+def test_compact_export_preserves_controlled_value_disclosure():
+    source = pd.DataFrame([_compact_source(
+        Wager_Instruction="BET - CONTROLLED VALUE CARD / SMALL STAKE / NOT PREMIUM",
+        Export_Scope="CONTROLLED VALUE BET",
+        Bettable=True,
+        Play_Tier="BET",
+        Play_Stake=5.0,
+        Kelly_Bet_Size=5.0,
+        commercial_tier="Controlled Value Pick",
+        sellable_as_premium=False,
+        sellable_as_value_card=True,
+        controlled_card_recovery=True,
+    )])
+
+    compact = _build_compact_export_frame(source)
+
+    assert compact.loc[0, "commercial_tier"] == "Controlled Value Pick"
+    assert not bool(compact.loc[0, "sellable_as_premium"])
+    assert bool(compact.loc[0, "sellable_as_value_card"])
+    assert bool(compact.loc[0, "controlled_card_recovery"])
+    assert compact.loc[0, "Play_Stake"] == 5.0
+
+
 def test_compact_export_reconciles_unfunded_qualified_bet_tier_to_lean():
     source = pd.DataFrame([
         _compact_source(

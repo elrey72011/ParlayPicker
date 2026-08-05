@@ -231,6 +231,7 @@ from app_core.lean_card import (  # noqa: E402
     PLAY_UNITS_AVOID_FAR,
     PLAY_UNITS_AVOID_NEAR,
     PLAY_UNITS_BET,
+    PLAY_UNITS_CONTROLLED_VALUE,
     PLAY_UNITS_LEAN,
     attach_play_stakes,
 )
@@ -266,6 +267,26 @@ def test_bet_tier_keeps_larger_kelly_stake():
     card.loc[0, "Suggested_Stake"] = 25.0  # Kelly above 2u at $5
     out = attach_play_stakes(card, unit=5.0)
     assert out.set_index("Matchup").loc["A @ B", "Play_Stake"] == 25.0
+
+
+def test_controlled_value_bet_uses_small_units_and_distinct_public_label():
+    card = pd.DataFrame({
+        "Matchup": ["Athletics @ Cincinnati"],
+        "Tier": ["BET"],
+        "Emp_Edge": [0.042],
+        "Suggested_Stake": [0.0],
+        "Qualified_Pick": [True],
+        "Controlled_Value_Card": [True],
+    })
+
+    out = attach_play_stakes(card, unit=5.0)
+    row = out.iloc[0]
+
+    assert row["Play_Units"] == PLAY_UNITS_CONTROLLED_VALUE
+    assert row["Play_Stake"] == 2.5
+    assert bool(row["Wager_Approved"])
+    assert row["Export_Role"] == "CONTROLLED VALUE WAGER"
+    assert "not a Premium pick" in row["Wager_Instruction"]
 
 
 def test_empty_card_is_safe():

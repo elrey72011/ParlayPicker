@@ -65,7 +65,7 @@ def test_empty_production_card_sets_final_empty_diagnostics(monkeypatch):
     assert state["diagnostics"]["actionable_family_counts"] == {}
 
 
-def test_empty_card_recovery_stays_disabled_in_production(monkeypatch):
+def test_empty_card_recovery_publishes_separate_controlled_value_card(monkeypatch):
     def fake_run_analysis_pipeline(**kwargs):
         analysis = pd.DataFrame([{"league":"NBA","home_team":"A","away_team":"B","game_date":"2026-05-03","market_type":"spread_home","expected_value":0.2,"edge":0.2,"calibrated_probability":0.65}])
         return analysis, pd.DataFrame(), {}
@@ -75,7 +75,7 @@ def test_empty_card_recovery_stays_disabled_in_production(monkeypatch):
         for i, mt in enumerate(["spread_home", "total_under", "total_over"]):
             # consensus_agreement + odds_american + effective_win_probability are now required
             # by the recovery guards (Neutral consensus, real price, calibrated win > break-even).
-            rows.append({"league":"NBA","home_team":f"H{i}","away_team":f"A{i}","game_date":"2026-05-03","market_type":mt,"best_pick":"Team -3.5" if "spread" in mt else ("Under 220.5" if mt=="total_under" else "Over 220.5"),"Pick_Status":"High Variance/Speculative","expected_value":0.2,"edge":0.2,"effective_expected_value":0.2,"effective_edge":0.2,"effective_win_probability":0.62,"consensus_agreement":"Neutral","odds_american":-110,"production_expected_value":0.12,"production_edge":0.08,"production_win_probability":0.62,"line_consistency_flag":True,"line_event_identity_match_flag":True,"market_line_source":"live","line_provenance_warning":"","market_line_used":220.5})
+            rows.append({"league":"NBA","home_team":f"H{i}","away_team":f"A{i}","game_date":"2026-05-03","market_type":mt,"best_pick":"Team -3.5" if "spread" in mt else ("Under 220.5" if mt=="total_under" else "Over 220.5"),"Pick_Status":"High Variance/Speculative","expected_value":0.2,"edge":0.2,"effective_expected_value":0.2,"effective_edge":0.2,"effective_win_probability":0.62,"empirical_win_probability":0.62,"consensus_agreement":"Neutral","odds_american":-110,"production_expected_value":0.12,"production_edge":0.08,"production_win_probability":0.62,"line_consistency_flag":True,"line_event_identity_match_flag":True,"market_line_source":"live","line_provenance_warning":"","market_line_used":220.5,"best_available_selection_verified":True,"best_available_ranking_verified":True,"final_pick_valid":True})
         return pd.DataFrame(rows)
 
     # Pin the recovery calibration gate to raw mode (no table) so the test is deterministic and
@@ -92,6 +92,12 @@ def test_empty_card_recovery_stays_disabled_in_production(monkeypatch):
     state, _, _ = app._run_pipeline(controls)
     out = state["best_picks_df"]
     actionable = out[out["Pick_Status"] == "Actionable"]
-    assert actionable.empty
-    assert state["diagnostics"]["empty_card_recovery_enabled"] is False
-    assert state["diagnostics"]["empty_card_recovery_triggered"] is False
+    assert len(actionable) == 2
+    assert actionable["controlled_card_recovery"].all()
+    assert actionable["sellable_as_value_card"].all()
+    assert not actionable["sellable_as_premium"].any()
+    assert actionable["wager_approved"].all()
+    assert actionable["commercial_tier"].eq("Controlled Value Pick").all()
+    assert state["diagnostics"]["empty_card_recovery_enabled"] is True
+    assert state["diagnostics"]["empty_card_recovery_triggered"] is True
+    assert state["diagnostics"]["controlled_value_pick_count"] == 2

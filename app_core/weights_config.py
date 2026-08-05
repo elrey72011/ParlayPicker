@@ -615,29 +615,34 @@ MLB_TOTAL_OVER_MIN_PRODUCTION_EDGE = 0.04
 DEGRADED_FEATURE_KELLY_MULTIPLIER = 0.50
 DEGRADED_FEATURE_MAX_SLATE_EXPOSURE_PCT = 0.12
 DEGRADED_FEATURE_MAX_PICK_EXPOSURE_PCT = 0.02
-# Keep the production record honest: the all-games Best Available card remains
-# fully playable, but a thin near-miss may not be relabeled as Actionable merely
-# because the qualified production card is empty.
+# Keep the strict Premium record honest: the pipeline-level recovery remains
+# disabled, but the downstream app may publish a separately labelled, tightly
+# capped Controlled Value Card when the Premium card is empty. Controlled rows
+# must still beat their exact price after calibration and never count as Premium.
 ALLOW_EMPTY_CARD_RECOVERY = False
-ENABLE_EMPTY_CARD_RECOVERY = False
+ENABLE_EMPTY_CARD_RECOVERY = True
 EMPTY_CARD_RECOVERY_MAX_PICKS = 2
-# Speculative-lean tuning (22 Jun, user-directed): when the card is otherwise empty, surface
-# the best CLEAN positive-EV near-miss at SMALL size for daily action. The user accepted that
-# these thin edges bleed slowly to the vig; harm is limited by (a) positive EV/edge required,
-# (b) win-prob floor 0.50 (no outright dogs), (c) consensus must NOT be Disagrees -- never bet
-# AGAINST Kalshi, the losing bucket, (d) small Kelly caps below, (e) overs still excluded
-# (they bleed worst). Raise these back toward 0.07/0.05/0.57 to return to strict no-play.
+# Controlled value tuning: a fixed 50%/53% win-rate floor is not price-aware and
+# incorrectly rejects plus-money bets that clear break-even by a real margin.
+# Recovery therefore uses a low absolute probability sanity floor plus an exact
+# price-edge requirement below. Contrarian (Disagrees) rows face a stricter edge
+# bar and the card is limited to two small, clearly labelled wagers.
 EMPTY_CARD_RECOVERY_MIN_PRODUCTION_EV = 0.02
 EMPTY_CARD_RECOVERY_MIN_PRODUCTION_EDGE = 0.02
-EMPTY_CARD_RECOVERY_MIN_PRODUCTION_WIN_PROB = 0.50
+EMPTY_CARD_RECOVERY_MIN_PRODUCTION_WIN_PROB = 0.38
+EMPTY_CARD_RECOVERY_MIN_ABSOLUTE_EDGE = 0.02
+EMPTY_CARD_RECOVERY_DISAGREES_MIN_ABSOLUTE_EDGE = 0.03
+EMPTY_CARD_RECOVERY_MIN_AMERICAN_ODDS = -200
+EMPTY_CARD_RECOVERY_MAX_AMERICAN_ODDS = 200
 EMPTY_CARD_RECOVERY_EXCLUDE_MARKET_TYPES = []
 EMPTY_CARD_RECOVERY_EXCLUDE_SOURCES = ["rejected_live"]
-# Stake kept small because these are thin/speculative edges, not vetted Actionable plays.
-EMPTY_CARD_RECOVERY_MAX_KELLY_TOTAL_PCT = 0.03
-EMPTY_CARD_RECOVERY_MAX_KELLY_PER_PICK_PCT = 0.015
-# Consensus gate for speculative-lean recovery: only Agrees/Neutral picks. A "Disagrees"
-# pick means Kalshi backs the other side (the graded-loser bucket), so it is never recovered.
-EMPTY_CARD_RECOVERY_CONSENSUS = ("Agrees", "Neutral")
+# Stake is deliberately smaller than the Premium production ceiling: at most
+# 0.5% bankroll per pick and 1% across the controlled card.
+EMPTY_CARD_RECOVERY_MAX_KELLY_TOTAL_PCT = 0.01
+EMPTY_CARD_RECOVERY_MAX_KELLY_PER_PICK_PCT = 0.005
+# Disagrees is allowed only through the stricter 3-point calibrated-edge bar.
+# Blank/No-Kalshi rows remain excluded because they provide no corroborating market.
+EMPTY_CARD_RECOVERY_CONSENSUS = ("Agrees", "Neutral", "Disagrees")
 ALLOW_MLB_TOTAL_OVER_EMPTY_CARD_RECOVERY = False
 # Unders re-allowed into speculative recovery 22 Jun (user-directed thin-edge action): the
 # under side is the data-supported one (under:Agrees 61%), and the small-stake + positive-EV

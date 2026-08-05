@@ -5,7 +5,8 @@ though the model has a directional read on every game. This view re-presents the
 (it adds no staking and changes no guard) so a bettor who wants action across the board can
 see, per game: the model's side, its confidence, and an honest tier -
 
-  * BET   - the pick the system would actually stake (Actionable: a real, priced edge).
+  * BET   - a strict Premium pick or an explicitly labelled, small-stake
+            Controlled Value pick that clears the exact calibrated price gate.
   * LEAN  - the model has a positive-EV side but below the stake bar, and it is not fading
             Kalshi. A read worth knowing; NOT a proven +EV bet. Bet at your own risk.
   * AVOID - negative EV at the price, or the model is fading consensus (Disagrees). The
@@ -169,6 +170,7 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
     qualification_known = pd.Series(
         "qualified_pick" in df.columns, index=df.index, dtype=bool
     )
+    controlled_value = _strict_bool_col(df, "controlled_card_recovery")
     tier = pd.Series(tier, index=df.index).where(qualified_pick, "AVOID")
 
     # Empirical edge = bucket-aware calibrated win minus break-even. This - NOT model EV - is
@@ -252,6 +254,14 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
         & ~explicitly_authorized
     ] = "explicit wager approval or funded production stake is missing"
 
+    selection_mode = public_qualified_pick.map(
+        {True: "Qualified Pick / Pass", False: "Best Available Pick / Pass"}
+    )
+    selection_mode.loc[production_gate_pass & controlled_value] = (
+        "Controlled Value Pick"
+    )
+    selection_mode.loc[production_gate_pass & ~controlled_value] = "Premium Pick"
+
     return pd.DataFrame({
         "League": _first_col(df, "league", "League"),
         "Matchup": (away + " @ " + home).str.strip(" @"),
@@ -267,9 +277,7 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
         # This only states that a valid pregame line is present; wager approval
         # remains exclusively in Production_Gate_Pass / Wager_Approved.
         "Line_Available": playable,
-        "Selection_Mode": public_qualified_pick.map(
-            {True: "Qualified Pick / Pass", False: "Best Available Pick / Pass"}
-        ),
+        "Selection_Mode": selection_mode,
         "Bet_Decision": pd.Series("BEST AVAILABLE - PASS", index=df.index)
         .where(~(qualification_known & public_qualified_pick), "QUALIFIED LEAN - PASS")
         .where(~production_gate_pass, "BET"),
@@ -279,6 +287,7 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
         "Production_Gate_Reason": production_gate_reason,
         "Absolute_Edge": gate["absolute_production_edge"],
         "Calibrated_EV": gate["calibrated_expected_value"],
+        "Controlled_Value_Card": controlled_value & production_gate_pass,
         # Stake only on rows that pass the independent absolute price gate.
         "Suggested_Stake": kelly.where(production_gate_pass, 0.0),
     }, index=df.index)
@@ -322,6 +331,7 @@ def build_all_games_lean_card(best_picks_df: pd.DataFrame, *, calibration: objec
 # stake. LEAN and AVOID remain useful reads, but assigning dollars to them
 # contradicts the production gate and makes an abstaining card look bettable.
 PLAY_UNITS_BET = 2.0
+PLAY_UNITS_CONTROLLED_VALUE = 0.5
 PLAY_UNITS_LEAN = 0.0
 PLAY_UNITS_AVOID_NEAR = 0.0
 PLAY_UNITS_AVOID_FAR = 0.0
@@ -333,13 +343,14 @@ PLAY_NO_PRICE_EDGE = -0.20
 
 
 def attach_play_stakes(card: pd.DataFrame, unit: float = 1.0) -> pd.DataFrame:
-    """Attach a dollar stake only to production-quality BET rows.
+    """Attach a dollar stake only to approved BET rows.
 
     LEAN and AVOID rows remain visible so the model's full-board read is useful,
     but they receive zero dollars. This keeps Play_Stake aligned with the app's
     positive-EV production decision:
 
-      BET    2.0u (or the pick's own Kelly stake if larger - a real edge)
+      Premium BET     2.0u (or the pick's own Kelly stake if larger)
+      Controlled BET  0.5u (or its tightly capped production stake if larger)
       LEAN   0u
       AVOID  0u
 
@@ -353,6 +364,8 @@ def attach_play_stakes(card: pd.DataFrame, unit: float = 1.0) -> pd.DataFrame:
 
     units = pd.Series(0.0, index=out.index)
     units[tier.eq("BET")] = PLAY_UNITS_BET
+    controlled_value = _strict_bool_col(out, "Controlled_Value_Card")
+    units[tier.eq("BET") & controlled_value] = PLAY_UNITS_CONTROLLED_VALUE
     # Hopeless prices (deeply below break-even) get $0 at any tier except a
     # genuine BET: paying -1700 juice for "action" isn't recreation, it's a fee.
     units[emp_edge.lt(PLAY_NO_PRICE_EDGE) & ~tier.eq("BET")] = 0.0
@@ -404,6 +417,9 @@ def attach_play_stakes(card: pd.DataFrame, unit: float = 1.0) -> pd.DataFrame:
     if qualification_known:
         out.loc[qualified, "Export_Role"] = "QUALIFIED LEAN - PASS"
     out.loc[out["Wager_Approved"], "Export_Role"] = "PRODUCTION WAGER"
+    out.loc[out["Wager_Approved"] & controlled_value, "Export_Role"] = (
+        "CONTROLLED VALUE WAGER"
+    )
     out["Wager_Instruction"] = (
         "DO NOT BET: best available pick does not clear the wager qualification gate."
         if qualification_known
@@ -413,5 +429,8 @@ def attach_play_stakes(card: pd.DataFrame, unit: float = 1.0) -> pd.DataFrame:
         out.loc[qualified, "Wager_Instruction"] = "DO NOT BET: qualified research lean without a funded edge."
     out.loc[out["Wager_Approved"], "Wager_Instruction"] = (
         "APPROVED: wager the exported Play_Stake amount."
+    )
+    out.loc[out["Wager_Approved"] & controlled_value, "Wager_Instruction"] = (
+        "APPROVED CONTROLLED VALUE: use the exported small stake; not a Premium pick."
     )
     return out
