@@ -150,7 +150,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-08-05e-controlled-value-funding-fix"
+PIPELINE_BUILD = "2026-08-05f-controlled-value-label-fix"
 
 # Best Available must compare standard, reasonably priced markets. A P2P exchange can
 # expose alternate run lines (for example +5.5 at -1150) beside the standard MLB +1.5.
@@ -3659,6 +3659,15 @@ def classify_best_available_picks(best_picks_df: pd.DataFrame) -> pd.DataFrame:
     out.loc[lean, "commercial_tier"] = "Qualified Lean / Pass"
     out.loc[controlled_value, "commercial_tier"] = "Controlled Value Pick"
     out.loc[premium, "commercial_tier"] = "Premium Pick"
+    # Pick_Quality's legacy S/A/B/C/D rules use fixed win-rate cutoffs, so a
+    # legitimate plus-money recovery pick below 45% can retain the misleading
+    # label "D-Tier (Weak/Negative)" even after clearing the stricter empirical
+    # exact-price edge gate. Keep the internal tier_score for diagnostics, but
+    # make the public label agree with the funded commercial boundary.
+    if "Pick_Quality" in out.columns:
+        out.loc[controlled_value, "Pick_Quality"] = (
+            "Controlled Value (Price Edge)"
+        )
     out["commercial_reason"] = (
         "Top-ranked pick for this game; shown for full-board coverage but not approved as a wager."
     )
