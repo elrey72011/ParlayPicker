@@ -192,6 +192,33 @@ def test_commercial_tier_never_upgrades_an_unfunded_best_available_row():
     assert classified.loc[1, "wager_instruction"].startswith("DO NOT BET")
 
 
+def test_controlled_recovery_is_sellable_but_never_branded_as_premium():
+    frame = pd.DataFrame([{
+        "best_pick": "Cincinnati -1.5",
+        "Pick_Status": "Actionable",
+        "production_eligible": True,
+        "production_bet_amount": 5.0,
+        "production_expected_value": 0.04,
+        "production_edge": 0.03,
+        "market_line_source": "live",
+        "line_consistency_flag": True,
+        "line_event_identity_match_flag": True,
+        "controlled_card_recovery": True,
+    }])
+
+    classified = classify_best_available_picks(frame)
+    row = classified.iloc[0]
+
+    assert row["commercial_tier"] == "Controlled Value Pick"
+    assert bool(row["sellable_as_value_card"])
+    assert not bool(row["sellable_as_premium"])
+    assert bool(row["wager_approved"])
+    assert bool(row["qualified_pick"])
+    assert row["export_role"] == "CONTROLLED VALUE WAGER"
+    assert "not a Premium pick" in row["wager_instruction"]
+    assert float(row["production_bet_amount"]) == 5.0
+
+
 def test_public_pick_stays_visible_below_absolute_probability_or_value_gate():
     frame = pd.DataFrame([
         {

@@ -69,14 +69,18 @@ def label_wager_export(frame: pd.DataFrame) -> pd.DataFrame:
     """Label and reconcile every public wager field from one funded mask.
 
     The export is a betting artifact, so a stale upstream ``BET`` tier or stake must
-    not coexist with ``Bettable=False``.  Every non-funded row is forced to zero and
+    not coexist with ``Bettable=False``. Every non-funded row is forced to zero and
     receives the matching pass/lean label; every funded row is explicitly marked BET.
+    Controlled Value wagers remain distinguishable from strict Premium production bets.
     """
 
     if frame is None:
         return frame
     out = _drop_case_insensitive_export_aliases(frame.copy())
     funded = _positive_stake(out)
+    controlled_value = _strict_bool_series(
+        out, "controlled_card_recovery"
+    )
 
     if "production_eligible" in out.columns:
         funded &= _strict_bool_series(out, "production_eligible")
@@ -156,6 +160,10 @@ def label_wager_export(frame: pd.DataFrame) -> pd.DataFrame:
                 out.loc[qualified_pass, quality_column] = "No Bet - Qualified Lean"
     out.loc[funded, "Export_Scope"] = "PRODUCTION BET"
     out.loc[funded, "Wager_Instruction"] = "BET - APP APPROVED"
+    out.loc[funded & controlled_value, "Export_Scope"] = "CONTROLLED VALUE BET"
+    out.loc[funded & controlled_value, "Wager_Instruction"] = (
+        "BET - CONTROLLED VALUE CARD / SMALL STAKE / NOT PREMIUM"
+    )
     return out
 
 

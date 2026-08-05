@@ -47,6 +47,10 @@ from app_core.weights_config import (
     EMPTY_CARD_RECOVERY_MIN_PRODUCTION_EV,
     EMPTY_CARD_RECOVERY_MIN_PRODUCTION_EDGE,
     EMPTY_CARD_RECOVERY_MIN_PRODUCTION_WIN_PROB,
+    EMPTY_CARD_RECOVERY_MIN_ABSOLUTE_EDGE,
+    EMPTY_CARD_RECOVERY_DISAGREES_MIN_ABSOLUTE_EDGE,
+    EMPTY_CARD_RECOVERY_MIN_AMERICAN_ODDS,
+    EMPTY_CARD_RECOVERY_MAX_AMERICAN_ODDS,
     EMPTY_CARD_RECOVERY_EXCLUDE_MARKET_TYPES,
     EMPTY_CARD_RECOVERY_EXCLUDE_SOURCES,
     EMPTY_CARD_RECOVERY_MAX_KELLY_TOTAL_PCT,
@@ -185,6 +189,8 @@ def _bet_decision_mask(df: pd.DataFrame) -> pd.Series:
 _COMPACT_EXPORT_COLUMNS = [
     "pipeline_build",
     "Wager_Instruction", "Export_Scope", "Bettable",
+    "commercial_tier", "sellable_as_premium", "sellable_as_value_card",
+    "controlled_card_recovery",
     "WinProbability", "expected_value", "edge",
     "Conviction_Score", "market_probability", "kalshi_probability", "ml_probability",
     "effective_expected_value", "effective_edge", "effective_win_probability",
@@ -1035,6 +1041,12 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
     best_picks_df = _attach_kelly_to_best_picks(best_picks_df, portfolio_df, diagnostics)
     best_picks_df = classify_best_available_picks(best_picks_df)
     diagnostics["premium_pick_count"] = int(best_picks_df["sellable_as_premium"].sum())
+    diagnostics["controlled_value_pick_count"] = int(
+        best_picks_df.get(
+            "sellable_as_value_card",
+            pd.Series(False, index=best_picks_df.index),
+        ).fillna(False).astype(bool).sum()
+    )
     diagnostics["best_available_only_count"] = int(best_picks_df["best_available_only"].sum())
     diagnostics["empty_card_recovery_enabled"] = bool(ENABLE_EMPTY_CARD_RECOVERY)
     # Preserve True if the pipeline's internal recovery already fired; only default to False
@@ -1071,10 +1083,9 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
         diagnostics["empty_card_recovery_excluded_line_source_count"] = int(excluded_source.sum())
         threshold_fail = (prod_ev0 < float(EMPTY_CARD_RECOVERY_MIN_PRODUCTION_EV)) | (prod_edge0 < float(EMPTY_CARD_RECOVERY_MIN_PRODUCTION_EDGE)) | (prod_prob0 < float(EMPTY_CARD_RECOVERY_MIN_PRODUCTION_WIN_PROB))
         diagnostics["empty_card_recovery_excluded_threshold_count"] = int(threshold_fail.sum())
-        # Consensus + calibration guards (parity with the build_best_picks_df recovery path):
-        # never recover a pick that fades Kalshi (Disagrees / No Kalshi) or whose CALIBRATED
-        # win can't beat break-even. Without these this path staked a Disagrees under and a
-        # calibrated-negative spread (24 Jun).
+        # Consensus + calibration guards. Controlled recovery may take a
+        # contrarian (Disagrees) price only at a stricter calibrated-edge bar;
+        # blank/No-Kalshi rows and calibration failures remain fail-closed.
         consensus0 = _safe_str_series(best_picks_df, "consensus_agreement").str.strip()
         try:
             from core.streamlit_pipeline import _calibrated_beats_breakeven
@@ -1104,17 +1115,15 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
             ).reindex(best_picks_df.index).fillna(False)
         except Exception as _cal_exc:
             logger.warning("recovery calibration gate unavailable: %s", _cal_exc)
-            _calib_gate0 = pd.Series(True, index=best_picks_df.index)
-            _RECOVERY_CONSENSUS = ("Agrees", "Neutral")
+            _calib_gate0 = pd.Series(False, index=best_picks_df.index)
+            _RECOVERY_CONSENSUS = ()
         consensus_ok0 = consensus0.isin(_RECOVERY_CONSENSUS)
         diagnostics["empty_card_recovery_excluded_calibration_count"] = int(
             (status_s0.isin(["High Variance/Speculative", "Below Threshold"]) & ~_calib_gate0).sum()
         )
-        # Owner win-probability floor (parity with the pipeline recovery path,
-        # 9 Jul): empirical-first probability must clear MIN_STAKE_WIN_PROBABILITY.
-        # Without this, Cincinnati +1.5 (empirical 54.9%, Kalshi 50.5%) re-entered
-        # through THIS door at $15 on the strength of the ML blend's 59.8%.
-        from app_core.weights_config import MIN_STAKE_WIN_PROBABILITY as _REC_MIN_PROB
+        # Price-aware controlled-card gate. A plus-money wager can be valuable
+        # below 50% win probability; what matters is whether the empirical-first
+        # probability clears the exact offered break-even price by a real margin.
         _rec_floor_prob0 = pd.to_numeric(
             best_picks_df.get("empirical_win_probability", pd.Series(index=best_picks_df.index, dtype=float)),
             errors="coerce",
@@ -1122,6 +1131,56 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
             best_picks_df.get("effective_win_probability", pd.Series(index=best_picks_df.index, dtype=float)),
             errors="coerce",
         ))
+        from app_core.card_recovery import controlled_value_price_gate
+        _controlled_price_gate0 = controlled_value_price_gate(
+            _rec_floor_prob0,
+            best_picks_df.get(
+                "odds_american",
+                pd.Series(index=best_picks_df.index, dtype=float),
+            ),
+            consensus0,
+            min_absolute_edge=float(EMPTY_CARD_RECOVERY_MIN_ABSOLUTE_EDGE),
+            disagrees_min_absolute_edge=float(
+                EMPTY_CARD_RECOVERY_DISAGREES_MIN_ABSOLUTE_EDGE
+            ),
+            min_american_odds=float(EMPTY_CARD_RECOVERY_MIN_AMERICAN_ODDS),
+            max_american_odds=float(EMPTY_CARD_RECOVERY_MAX_AMERICAN_ODDS),
+        )
+        _recovery_absolute_edge0 = _controlled_price_gate0[
+            "controlled_value_absolute_edge"
+        ]
+        _price_value_ok0 = _controlled_price_gate0[
+            "controlled_value_price_gate_pass"
+        ]
+        _price_allowed0 = _controlled_price_gate0[
+            "controlled_value_price_allowed"
+        ]
+        _selection_ok0 = pd.Series(
+            best_picks_df.get("best_available_selection_verified", False),
+            index=best_picks_df.index,
+        ).fillna(False).astype(bool)
+        _ranking_ok0 = pd.Series(
+            best_picks_df.get("best_available_ranking_verified", False),
+            index=best_picks_df.index,
+        ).fillna(False).astype(bool)
+        _final_pick_ok0 = pd.Series(
+            best_picks_df.get("final_pick_valid", False),
+            index=best_picks_df.index,
+        ).fillna(False).astype(bool)
+        _started0 = pd.Series(
+            best_picks_df.get("game_already_started_flag", False),
+            index=best_picks_df.index,
+        ).fillna(False).astype(bool) | blocked_stage0.eq("game_already_started")
+        _degraded0 = pd.Series(
+            best_picks_df.get("degraded_feature_subset_flag", False),
+            index=best_picks_df.index,
+        ).fillna(False).astype(bool)
+        _suspicious0 = pd.Series(
+            best_picks_df.get("suspicious_data_flag", False),
+            index=best_picks_df.index,
+        ).fillna(False).astype(bool)
+        threshold_fail = threshold_fail | ~_price_value_ok0 | ~_price_allowed0
+        diagnostics["empty_card_recovery_excluded_threshold_count"] = int(threshold_fail.sum())
         recovery_mask = (
             status_s0.isin(["High Variance/Speculative", "Below Threshold"])
             & (~excluded_total_over)
@@ -1129,11 +1188,12 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
             & line_ok0 & id_ok0
             & (~pick0.str.contains("unresolved", na=False))
             & eff_ev0.gt(0) & eff_edge0.gt(0)
-            & (~blocked_stage0.isin(["line_provenance", "value_guardrail"]))
+            & (~blocked_stage0.isin(["game_already_started", "line_provenance", "value_guardrail"]))
             & (~threshold_fail)
             & consensus_ok0
             & _calib_gate0
-            & _rec_floor_prob0.ge(float(_REC_MIN_PROB))
+            & _selection_ok0 & _ranking_ok0 & _final_pick_ok0
+            & ~_started0 & ~_degraded0 & ~_suspicious0
         )
         diagnostics["empty_card_recovery_candidate_count"] = int(recovery_mask.sum())
         if recovery_mask.any():
@@ -1142,14 +1202,22 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
             ranked["_ev"] = pd.to_numeric(ranked["production_expected_value"], errors="coerce").fillna(-999) if "production_expected_value" in ranked.columns else -999
             ranked["_edge"] = pd.to_numeric(ranked["production_edge"], errors="coerce").fillna(-999) if "production_edge" in ranked.columns else -999
             ranked["_prob"] = pd.to_numeric(ranked["production_win_probability"], errors="coerce").fillna(0) if "production_win_probability" in ranked.columns else 0
-            # Win-probability-first (owner doctrine): the recovered pick is the
-            # LIKELIEST winner among candidates, not the best-paying one.
-            ranked = ranked.sort_values(by=["_prob", "_rank", "_ev", "_edge"], ascending=[False, True, False, False])
+            ranked["_absolute_edge"] = _recovery_absolute_edge0.reindex(ranked.index).fillna(-999)
+            # Controlled value is price-aware: rank by calibrated advantage over
+            # break-even, then EV/probability. This avoids the old fixed-win-rate
+            # bias against legitimate plus-money value.
+            ranked = ranked.sort_values(
+                by=["_absolute_edge", "_ev", "_prob", "_rank"],
+                ascending=[False, False, False, True],
+            )
             promote_idx = ranked.head(int(EMPTY_CARD_RECOVERY_MAX_PICKS)).index.tolist()
             best_picks_df.loc[promote_idx, "Pick_Status"] = "Actionable"
-            best_picks_df.loc[promote_idx, "Status_Reason"] = "Actionable: recovered by empty-card recovery guard"
+            best_picks_df.loc[promote_idx, "Status_Reason"] = "Actionable: controlled value card selected after Premium card was empty"
             best_picks_df.loc[promote_idx, "status_blocker_stage"] = "empty_card_recovery"
-            best_picks_df.loc[promote_idx, "status_blocker_reason"] = "Recovered strongest clean non-over candidate after strict guards emptied card"
+            best_picks_df.loc[promote_idx, "status_blocker_reason"] = "Controlled small-stake value pick; verified price edge but not a Premium pick"
+            if "controlled_card_recovery" not in best_picks_df.columns:
+                best_picks_df["controlled_card_recovery"] = False
+            best_picks_df.loc[promote_idx, "controlled_card_recovery"] = True
             best_picks_df.loc[promote_idx, "production_eligible"] = True
             best_picks_df.loc[promote_idx, "kelly_zero_reason"] = ""
             portfolio_df2 = optimize_portfolio_allocation(best_picks_df, bankroll=float(controls["bankroll"]))
@@ -1165,7 +1233,7 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
             diagnostics["empty_card_recovery_triggered"] = True
             diagnostics["empty_card_recovery_promoted_count"] = int(len(promote_idx))
             diagnostics["empty_card_recovery_kelly_total"] = float(pd.to_numeric(best_picks_df.get("Kelly_Bet_Size", 0), errors="coerce").fillna(0).sum())
-            diagnostics["production_card_recovery_reason"] = "Recovered strongest clean non-over candidates"
+            diagnostics["production_card_recovery_reason"] = "Published controlled small-stake value picks after strict Premium card was empty"
     # Recompute final production-card diagnostics after all guards + Kelly attachment.
     status_s = _safe_str_series(best_picks_df, "Pick_Status").str.strip()
     mt_s = _safe_str_series(best_picks_df, "market_type").str.lower()
@@ -1217,6 +1285,12 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
     # the commercial boundary so the export never carries stale Premium labels.
     best_picks_df = classify_best_available_picks(best_picks_df)
     diagnostics["premium_pick_count"] = int(best_picks_df["sellable_as_premium"].sum())
+    diagnostics["controlled_value_pick_count"] = int(
+        best_picks_df.get(
+            "sellable_as_value_card",
+            pd.Series(False, index=best_picks_df.index),
+        ).fillna(False).astype(bool).sum()
+    )
     diagnostics["best_available_only_count"] = int(best_picks_df["best_available_only"].sum())
 
     required_portfolio_cols = {"calibrated_probability", "decimal_odds", "recommended_bet"}
@@ -2207,6 +2281,7 @@ def main() -> None:
                 "odds_american": "Odds",
                 "odds_source": "Source",
                 "consensus_agreement": "Consensus",
+                "commercial_tier": "Card Tier",
                 "kalshi_match_status": "Kalshi Status",
                 "ml_probability": "ML Prob",
             }
@@ -2214,7 +2289,7 @@ def main() -> None:
             if "kalshi_probability" in display_df.columns:
                 kalshi_display = pd.to_numeric(display_df["kalshi_probability"], errors="coerce")
                 display_df["kalshi_probability_display"] = kalshi_display.map(lambda x: "No Kalshi" if pd.isna(x) else f"{x:.4f}")
-            preferred = ["Bet Decision", "Play Tier", "Play Stake", "Pick_Status", "Triple Filter Rank", "Pick Quality", "parlay_rank", "League", "Home Team", "Away Team", "Game Date", "Game Time (ET)", "Best Pick", "Gemini Pick", "Prob", "ML Prob", "Odds", "Source", "EV", "Edge", "Calibrated Edge", "Consensus", "Kalshi Status", "kalshi_probability_display", "Production Gate Reason"]
+            preferred = ["Bet Decision", "Card Tier", "Play Tier", "Play Stake", "Pick_Status", "Triple Filter Rank", "Pick Quality", "parlay_rank", "League", "Home Team", "Away Team", "Game Date", "Game Time (ET)", "Best Pick", "Gemini Pick", "Prob", "ML Prob", "Odds", "Source", "EV", "Edge", "Calibrated Edge", "Consensus", "Kalshi Status", "kalshi_probability_display", "Production Gate Reason"]
             ordered = [c for c in preferred if c in display_df.columns] + [c for c in display_df.columns if c not in preferred]
             display_df = display_df[ordered]
 
@@ -2231,7 +2306,15 @@ def main() -> None:
             no_edge_df = display_df.drop(index=qualified_df.index)
 
             if not qualified_df.empty:
-                st.success(f"✅ {len(qualified_df)} qualified game pick(s) today")
+                _controlled_count = int(
+                    qualified_df.get(
+                        "Card Tier", pd.Series("", index=qualified_df.index)
+                    ).astype(str).eq("Controlled Value Pick").sum()
+                )
+                st.success(
+                    f"✅ {len(qualified_df)} approved game pick(s) today"
+                    + (f" ({_controlled_count} controlled-value)" if _controlled_count else "")
+                )
                 st.dataframe(qualified_df, width="stretch")
             else:
                 st.info(
@@ -2268,8 +2351,9 @@ def main() -> None:
                     st.dataframe(no_edge_view[compact_cols], width="stretch")
                     st.caption(
                         "Every game shows its rank-one model direction. BEST AVAILABLE - PASS and "
-                        "QUALIFIED LEAN - PASS are directional research reads, not wagers. Only BET "
-                        "rows clear the stricter production price gate and receive a stake."
+                        "QUALIFIED LEAN - PASS are directional research reads, not wagers. BET rows "
+                        "are either strict Premium picks or explicitly labelled, small-stake Controlled "
+                        "Value picks selected only when the Premium card is empty."
                     )
 
             export_prep_df = best_picks_df.copy()

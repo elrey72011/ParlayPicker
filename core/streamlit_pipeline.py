@@ -150,7 +150,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-08-05b-novig-execution-tie"
+PIPELINE_BUILD = "2026-08-05c-controlled-value-card"
 
 # Best Available must compare standard, reasonably priced markets. A P2P exchange can
 # expose alternate run lines (for example +5.5 at -1150) beside the standard MLB +1.5.
@@ -189,6 +189,8 @@ REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
     "display_pick",
     "commercial_tier",
     "sellable_as_premium",
+    "sellable_as_value_card",
+    "controlled_card_recovery",
     "best_available_only",
     "commercial_reason",
     "wager_approved",
@@ -341,6 +343,8 @@ def ensure_best_pick_export_columns(
         "display_pick": "",
         "commercial_tier": "Best Available / Pass",
         "sellable_as_premium": False,
+        "sellable_as_value_card": False,
+        "controlled_card_recovery": False,
         "best_available_only": True,
         "commercial_reason": "Best available only; no production-qualified edge.",
         "effective_expected_value": pd.NA,
@@ -404,6 +408,8 @@ def ensure_best_pick_export_columns(
         "best_available_ranking_verified": False,
         "final_pick_valid": False,
         "sellable_as_premium": False,
+        "sellable_as_value_card": False,
+        "controlled_card_recovery": False,
         "best_available_only": True,
         "qualified_pick": False,
         "selection_probability_pair_normalized": False,
@@ -506,6 +512,7 @@ BEST_PICK_COLUMNS = [
     "best_available_ranking_verified", "final_pick_valid", "final_pick_valid_reason",
     "best_available_selection_reason", "qualified_pick", "qualification_probability",
     "qualification_reason", "display_pick", "commercial_tier", "sellable_as_premium",
+    "sellable_as_value_card", "controlled_card_recovery",
     "best_available_only", "commercial_reason", "wager_approved", "export_role",
     "wager_instruction",
     "decimal_odds", "matchup_id",
@@ -3518,12 +3525,13 @@ def _evidence_gated_mlb_spread_finalist_penalty(
 
 
 def classify_best_available_picks(best_picks_df: pd.DataFrame) -> pd.DataFrame:
-    """Separate the full-board rank-1 pick from the premium, funded product.
+    """Separate full-board coverage, Controlled Value, and Premium picks.
 
     Every row may be the model's best available choice for its game. Only rows with
     explicit production eligibility, positive priced edge, and a positive funded
-    stake are sellable as Premium. This prevents an all-games card from silently
-    marketing a negative-EV pass as a proven bet.
+    stake may become wagers. Empty-card recovery wagers remain a separately labelled,
+    small-stake Controlled Value tier and never count as Premium. This prevents an
+    all-games card from marketing a negative-EV pass or controlled pilot as proven.
     """
     if best_picks_df is None or best_picks_df.empty:
         return best_picks_df
@@ -3553,7 +3561,7 @@ def classify_best_available_picks(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         out.get("line_event_identity_match_flag", True), index=out.index
     ).fillna(True).astype(bool)
 
-    premium = (
+    funded_approved = (
         status.eq("Actionable")
         & production_eligible
         & production_bet.gt(0)
@@ -3596,11 +3604,19 @@ def classify_best_available_picks(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         & line_ok
         & event_ok
     )
-    qualified = premium | research_qualified
-    lean = qualified & ~premium
+    controlled_marker = pd.Series(
+        out.get("controlled_card_recovery", False), index=out.index
+    ).fillna(False).astype(bool)
+    controlled_value = funded_approved & controlled_marker
+    premium = funded_approved & ~controlled_marker
+    approved = premium | controlled_value
+    qualified = approved | research_qualified
+    lean = qualified & ~approved
 
     out["sellable_as_premium"] = premium
-    out["best_available_only"] = ~premium
+    out["sellable_as_value_card"] = controlled_value
+    out["controlled_card_recovery"] = controlled_marker
+    out["best_available_only"] = ~approved
     out["qualified_pick"] = qualified
     out["qualification_probability"] = qualification_probability
     out["qualification_reason"] = "PASS: selection does not clear the wager qualification gate."
@@ -3616,10 +3632,10 @@ def classify_best_available_picks(best_picks_df: pd.DataFrame) -> pd.DataFrame:
     out.loc[qualification_probability.ge(float(BEST_AVAILABLE_QUALIFIED_MIN_WIN_PROB)) & production_ev.gt(float(BEST_AVAILABLE_QUALIFIED_MIN_EV)) & ~qualification_edge.gt(float(BEST_AVAILABLE_QUALIFIED_MIN_EDGE)), "qualification_reason"] = (
         "PASS: final calibrated edge is not positive at the offered price."
     )
-    out.loc[~research_status_ok & ~premium, "qualification_reason"] = (
+    out.loc[~research_status_ok & ~approved, "qualification_reason"] = (
         "PASS: final safety status is not eligible for a qualified lean."
     )
-    out.loc[~consensus_ok & ~premium, "qualification_reason"] = (
+    out.loc[~consensus_ok & ~approved, "qualification_reason"] = (
         "PASS: market consensus opposes the selected direction."
     )
     out.loc[~line_source.eq("live") | ~line_ok | ~event_ok, "qualification_reason"] = (
@@ -3631,6 +3647,9 @@ def classify_best_available_picks(best_picks_df: pd.DataFrame) -> pd.DataFrame:
     out.loc[premium, "qualification_reason"] = (
         "Production-qualified pick with a verified live line and funded stake."
     )
+    out.loc[controlled_value, "qualification_reason"] = (
+        "Controlled value wager: verified pregame line and calibrated price edge; stake is capped because the Premium card was empty."
+    )
     ranked_pick = _string_series(out, "best_pick").str.strip()
     out["display_pick"] = ranked_pick.where(
         ranked_pick.ne(""), "BEST PICK UNAVAILABLE"
@@ -3638,6 +3657,7 @@ def classify_best_available_picks(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
     out["commercial_tier"] = "Best Available / Pass"
     out.loc[lean, "commercial_tier"] = "Qualified Lean / Pass"
+    out.loc[controlled_value, "commercial_tier"] = "Controlled Value Pick"
     out.loc[premium, "commercial_tier"] = "Premium Pick"
     out["commercial_reason"] = (
         "Top-ranked pick for this game; shown for full-board coverage but not approved as a wager."
@@ -3647,6 +3667,9 @@ def classify_best_available_picks(best_picks_df: pd.DataFrame) -> pd.DataFrame:
     )
     out.loc[premium, "commercial_reason"] = (
         "Production-qualified positive edge with a funded stake and verified live line."
+    )
+    out.loc[controlled_value, "commercial_reason"] = (
+        "Small-stake, price-aware value pick selected only after the strict Premium card was empty; not a Premium lock."
     )
     # Fail closed on every stake-like export field. A coverage/lean row must not
     # retain a dollar value from an earlier recovery or classification stage.
@@ -3658,17 +3681,21 @@ def classify_best_available_picks(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         "Suggested_Stake",
     ):
         if stake_column in out.columns:
-            out.loc[~premium, stake_column] = 0.0
+            out.loc[~approved, stake_column] = 0.0
 
-    out["wager_approved"] = premium
+    out["wager_approved"] = approved
     out["export_role"] = "BEST AVAILABLE PICK - PASS / RESEARCH"
     out.loc[lean, "export_role"] = "QUALIFIED LEAN - PASS"
+    out.loc[controlled_value, "export_role"] = "CONTROLLED VALUE WAGER"
     out.loc[premium, "export_role"] = "PRODUCTION WAGER"
     out["wager_instruction"] = (
         "DO NOT BET; best available pick does not clear the wager qualification gate."
     )
     out.loc[lean, "wager_instruction"] = (
         "DO NOT BET; qualified research lean without a funded production edge."
+    )
+    out.loc[controlled_value, "wager_instruction"] = (
+        "APPROVED CONTROLLED VALUE: use the exported small stake; this is not a Premium pick."
     )
     out.loc[premium, "wager_instruction"] = "APPROVED: use the exported production stake."
     return out
@@ -6763,6 +6790,12 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     final_best_df = classify_best_available_picks(final_best_df)
     if diagnostics_out is not None:
         diagnostics_out["premium_pick_count"] = int(final_best_df["sellable_as_premium"].sum())
+        diagnostics_out["controlled_value_pick_count"] = int(
+            final_best_df.get(
+                "sellable_as_value_card",
+                pd.Series(False, index=final_best_df.index),
+            ).fillna(False).astype(bool).sum()
+        )
         diagnostics_out["best_available_only_count"] = int(final_best_df["best_available_only"].sum())
 
     return final_best_df

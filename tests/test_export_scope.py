@@ -26,6 +26,26 @@ def test_game_export_separates_production_bets_from_coverage():
     assert production_wagers(frame)["best_pick"].tolist() == ["Over 8.5"]
 
 
+def test_controlled_value_wager_has_distinct_sellable_scope():
+    frame = pd.DataFrame({
+        "best_pick": ["Cincinnati -1.5"],
+        "Bet_Decision": ["BET"],
+        "production_eligible": [True],
+        "wager_approved": [True],
+        "controlled_card_recovery": [True],
+        "Play_Stake": [5.0],
+    })
+
+    labeled = label_wager_export(frame)
+
+    assert bool(labeled.loc[0, "Bettable"])
+    assert labeled.loc[0, "Export_Scope"] == "CONTROLLED VALUE BET"
+    assert labeled.loc[0, "Wager_Instruction"] == (
+        "BET - CONTROLLED VALUE CARD / SMALL STAKE / NOT PREMIUM"
+    )
+    assert production_wagers(frame)["best_pick"].tolist() == ["Cincinnati -1.5"]
+
+
 def test_prop_grading_export_keeps_research_but_marks_it_do_not_bet():
     frame = pd.DataFrame(
         {
