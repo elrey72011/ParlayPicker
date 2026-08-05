@@ -194,3 +194,31 @@ def test_directional_calibration_cannot_inflate_raw_prop_probability():
     assert row["DirectionalCalibrationSampleSize"] == 20
     assert row["CalibratedProbability"] <= row["RawWinProbability"]
     assert row["ConservativeWinProbability"] < row["CalibratedProbability"]
+
+
+def test_directional_calibration_is_bounded_to_five_points_from_market():
+    # Shrink-only protects against confidence inflation, but an in-sample isotonic
+    # tail can also collapse a credible market-backed signal far below the market.
+    ledger = pd.DataFrame({
+        "market_type": ["batter_hits_over"] * 40,
+        "result": ["WIN"] * 4 + ["LOSS"] * 36,
+        "raw_probability": [0.70] * 40,
+        "odds_american": [-110] * 40,
+        "game_date": ["2026-08-02"] * 40,
+    })
+    card = pd.DataFrame([{
+        "market_type": "batter_hits_over",
+        "best_pick": "Test Batter Over 0.5 Hits",
+        "WinProbability": 0.70,
+        "edge": 0.10,
+        "odds_american": -110,
+        "Kelly_Bet_Size": 1.0,
+    }])
+
+    out = apply_prop_calibration(card, ledger, as_of_date="2026-08-03")
+    row = out.iloc[0]
+
+    assert row["MarketProbability"] == 0.60
+    assert row["CalibratedProbability"] == 0.55
+    assert row["CalibrationMarketDeviationCap"] == 0.05
+    assert row["ConservativeWinProbability"] < row["CalibratedProbability"]

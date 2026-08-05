@@ -38,6 +38,10 @@ PROP_CALIBRATION_PRIOR_WEIGHT = 35.0
 PROP_CALIBRATION_Z = 0.75
 PROP_UNCALIBRATED_EXTRA_HAIRCUT = 0.025
 PROP_CALIBRATION_MAX_ROWS_PER_PROFILE = 250
+# In-sample isotonic curves are shrink signals, not permission to move arbitrarily
+# far from the de-vigged market. Bound the pre-haircut move until a separately
+# validated promotion path exists.
+PROP_CALIBRATION_MAX_MARKET_DEVIATION = 0.05
 
 
 def directional_market_key(market_type: object, pick: object = None) -> str:
@@ -239,6 +243,10 @@ def apply_prop_calibration(
         else:
             # With no settled evidence, trust only a quarter of model/market disagreement.
             calibrated = p_market + 0.25 * (p_raw - p_market)
+        calibrated = min(
+            p_market + PROP_CALIBRATION_MAX_MARKET_DEVIATION,
+            max(p_market - PROP_CALIBRATION_MAX_MARKET_DEVIATION, calibrated),
+        )
         # In-sample isotonic tails can end in a tiny perfect plateau.  They are useful
         # for identifying overconfidence, but must not turn a raw rank signal into a
         # stronger probability without a separately promoted, out-of-sample curve.
@@ -277,6 +285,7 @@ def apply_prop_calibration(
     out["CalibrationProfileSampleSize"] = profile_sample_sizes
     out["DirectionalCalibrationSampleSize"] = directional_sample_sizes
     out["CalibrationSource"] = sources
+    out["CalibrationMarketDeviationCap"] = PROP_CALIBRATION_MAX_MARKET_DEVIATION
     out["WinProbability"] = conservative.round(4)
     out["edge"] = (conservative - market_prob).round(4)
     out["expected_value"] = (conservative * decimals - 1.0).round(4)
