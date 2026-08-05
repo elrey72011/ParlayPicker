@@ -204,12 +204,16 @@ def test_controlled_recovery_is_sellable_but_never_branded_as_premium():
         "line_consistency_flag": True,
         "line_event_identity_match_flag": True,
         "controlled_card_recovery": True,
+        "Pick_Quality": "D-Tier (Weak/Negative)",
+        "tier_score": 5,
     }])
 
     classified = classify_best_available_picks(frame)
     row = classified.iloc[0]
 
     assert row["commercial_tier"] == "Controlled Value Pick"
+    assert row["Pick_Quality"] == "Controlled Value (Price Edge)"
+    assert row["tier_score"] == 5
     assert bool(row["sellable_as_value_card"])
     assert not bool(row["sellable_as_premium"])
     assert bool(row["wager_approved"])
