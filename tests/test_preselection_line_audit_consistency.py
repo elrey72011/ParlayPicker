@@ -171,6 +171,62 @@ def test_reoriented_novig_spread_is_trusted_through_final_validation():
     assert diagnostics["preselection_invalid_spread_candidate_count"] == 0
 
 
+def test_corroborated_team_bound_spread_is_trusted_through_final_validation():
+    df = pd.DataFrame([
+        _candidate(
+            "spread_home",
+            win_prob=0.72,
+            ev=0.20,
+            edge=0.16,
+            spread_line=1.5,
+            live_spread_line=1.5,
+            line_source="novig_team_bound_quote",
+            orientation_source=(
+                "exact_match|cross_book_signed_pair_consensus"
+                "|novig_execution_venue_tiebreak"
+            ),
+            home_team="Kansas City",
+            away_team="Minnesota",
+            matchup_id="2026-08-05|kansas city|minnesota",
+            odds_american=-182,
+            opposing_odds_american=178,
+            odds_source="novig",
+            # Kansas City is the narrow moneyline favorite while Novig and all
+            # standard books explicitly bind the +1.5 quote to Kansas City.
+            game_home_ml_price=-113,
+            game_away_ml_price=111,
+        ),
+        _candidate(
+            "total_under",
+            win_prob=0.55,
+            ev=0.01,
+            edge=0.01,
+            home_team="Kansas City",
+            away_team="Minnesota",
+            matchup_id="2026-08-05|kansas city|minnesota",
+            total_line=8.5,
+            live_total_line=8.5,
+            uploaded_total_line=8.5,
+            upload_total_line=8.5,
+        ),
+    ])
+    diagnostics = {}
+
+    row = build_best_picks_df(df, diagnostics_out=diagnostics).iloc[0]
+
+    assert row["market_type"] == "spread_home"
+    assert row["best_pick"] == "Kansas City +1.5"
+    assert float(row["market_line_used"]) == 1.5
+    assert row["market_line_source_detail"] == "novig_team_bound_quote"
+    assert bool(row["line_consistency_flag"])
+    assert bool(row["line_event_identity_match_flag"])
+    assert bool(row["final_pick_valid"])
+    assert row["final_pick_valid_reason"] == "validated_live_line"
+    assert row["status_blocker_stage"] != "spread_orientation_guardrail"
+    assert "spread_orientation_fault" not in str(row["Status_Reason"])
+    assert diagnostics["preselection_invalid_spread_candidate_count"] == 0
+
+
 def test_invalid_spread_is_removed_and_valid_total_becomes_fallback():
     df = pd.DataFrame([
         _candidate(
