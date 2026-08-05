@@ -150,7 +150,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-08-05d-controlled-value-edge-fix"
+PIPELINE_BUILD = "2026-08-05e-controlled-value-funding-fix"
 
 # Best Available must compare standard, reasonably priced markets. A P2P exchange can
 # expose alternate run lines (for example +5.5 at -1150) beside the standard MLB +1.5.
@@ -9835,6 +9835,10 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
         portfolio.get("empirical_win_probability", pd.Series(np.nan, index=portfolio.index)),
         errors="coerce",
     )
+    controlled_value = pd.Series(
+        portfolio.get("controlled_card_recovery", False),
+        index=portfolio.index,
+    ).fillna(False).astype(bool)
     effective_p = pd.to_numeric(
         portfolio.get("effective_win_probability", pd.Series(np.nan, index=portfolio.index)),
         errors="coerce",
@@ -9900,6 +9904,17 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
     legacy_mask = p.isna() & effective_p.isna() & legacy_calibrated_p.notna()
     p.loc[legacy_mask] = legacy_calibrated_p.loc[legacy_mask]
     probability_source.loc[legacy_mask] = "legacy_calibrated_probability"
+    # Empty-card recovery is admitted by a stricter empirical, exact-price
+    # gate after the normal production card is empty. On its second portfolio
+    # pass, size and validate those marked rows with that same probability.
+    # Reusing production_win_probability here silently reapplies the legacy
+    # edge basis and can zero a row that the controlled-value gate just
+    # promoted (Aug. 5: Yankees -1.5 +141).
+    controlled_empirical = controlled_value & empirical_p.notna()
+    p.loc[controlled_empirical] = empirical_p.loc[controlled_empirical]
+    probability_source.loc[controlled_empirical] = (
+        "controlled_value_empirical_price_probability"
+    )
     missing_probability = p.isna()
     probability_source.loc[missing_probability] = "missing_fitted_calibration"
     production_eligible = production_eligible & (~missing_probability)
@@ -9953,6 +9968,37 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
         portfolio_break_even,
         portfolio_model_ev,
     )
+    # Defense in depth for callers that pass a controlled marker directly:
+    # retain the recovery price range and require its larger 3-point margin
+    # when consensus Disagrees. Non-controlled production rows are unchanged.
+    from app_core.card_recovery import controlled_value_price_gate
+    from app_core.weights_config import (
+        EMPTY_CARD_RECOVERY_DISAGREES_MIN_ABSOLUTE_EDGE,
+        EMPTY_CARD_RECOVERY_MAX_AMERICAN_ODDS,
+        EMPTY_CARD_RECOVERY_MIN_ABSOLUTE_EDGE,
+        EMPTY_CARD_RECOVERY_MIN_AMERICAN_ODDS,
+    )
+    controlled_gate = controlled_value_price_gate(
+        empirical_p,
+        portfolio.get("odds_american", pd.Series(np.nan, index=portfolio.index)),
+        portfolio.get("consensus_agreement", pd.Series("", index=portfolio.index)),
+        min_absolute_edge=float(EMPTY_CARD_RECOVERY_MIN_ABSOLUTE_EDGE),
+        disagrees_min_absolute_edge=float(
+            EMPTY_CARD_RECOVERY_DISAGREES_MIN_ABSOLUTE_EDGE
+        ),
+        min_american_odds=float(EMPTY_CARD_RECOVERY_MIN_AMERICAN_ODDS),
+        max_american_odds=float(EMPTY_CARD_RECOVERY_MAX_AMERICAN_ODDS),
+    )
+    controlled_price_pass = controlled_gate[
+        "controlled_value_price_gate_pass"
+    ].reindex(portfolio.index).fillna(False)
+    portfolio_gate.loc[controlled_value, "production_gate_pass"] &= (
+        controlled_price_pass.loc[controlled_value]
+    )
+    failed_controlled_price = controlled_value & ~controlled_price_pass
+    portfolio_gate.loc[
+        failed_controlled_price, "production_gate_reason"
+    ] = "controlled value exact-price gate failed"
     portfolio["absolute_production_edge"] = portfolio_gate["absolute_production_edge"]
     portfolio["absolute_production_gate_pass"] = portfolio_gate["production_gate_pass"]
     portfolio["absolute_production_gate_reason"] = portfolio_gate["production_gate_reason"]
