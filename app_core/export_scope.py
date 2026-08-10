@@ -78,9 +78,7 @@ def label_wager_export(frame: pd.DataFrame) -> pd.DataFrame:
         return frame
     out = _drop_case_insensitive_export_aliases(frame.copy())
     funded = _positive_stake(out)
-    controlled_value = _strict_bool_series(
-        out, "controlled_card_recovery"
-    )
+    controlled_marker = _strict_bool_series(out, "controlled_card_recovery")
 
     if "production_eligible" in out.columns:
         funded &= _strict_bool_series(out, "production_eligible")
@@ -94,6 +92,12 @@ def label_wager_export(frame: pd.DataFrame) -> pd.DataFrame:
         stake_status = out["Stake_Status"].fillna("").astype(str).str.casefold().str.strip()
         if stake_status.ne("").any():
             funded &= stake_status.eq("funded")
+
+    # A recovery marker describes how a wager was approved; it is not itself
+    # approval.  Derive every public Controlled Value field from the final funded
+    # mask so an upstream recovery attempt cannot survive as a sellable $0 pass.
+    controlled_value = controlled_marker & funded
+    premium = funded & ~controlled_value
 
     qualified = (
         _strict_bool_series(out, "qualified_pick")
@@ -164,6 +168,104 @@ def label_wager_export(frame: pd.DataFrame) -> pd.DataFrame:
     out.loc[funded & controlled_value, "Wager_Instruction"] = (
         "BET - CONTROLLED VALUE CARD / SMALL STAKE / NOT PREMIUM"
     )
+
+    # Reconcile the commercial contract and recovery diagnostics from the same
+    # funded mask used above.  These fields are repeated on export rows, so a
+    # stale pre-display recovery state otherwise makes an empty card claim that
+    # it published a Controlled Value wager.
+    has_commercial_contract = any(
+        column in out.columns
+        for column in (
+            "controlled_card_recovery",
+            "sellable_as_premium",
+            "sellable_as_value_card",
+            "commercial_tier",
+            "commercial_reason",
+            "export_role",
+            "Export_Role",
+        )
+    )
+    if has_commercial_contract:
+        if "controlled_card_recovery" in out.columns:
+            out["controlled_card_recovery"] = controlled_value
+        out["sellable_as_premium"] = premium
+        out["sellable_as_value_card"] = controlled_value
+        if "best_available_only" in out.columns:
+            out["best_available_only"] = ~funded
+
+        if "commercial_tier" in out.columns:
+            out["commercial_tier"] = "Best Available / Pass"
+            out.loc[qualified_pass, "commercial_tier"] = "Qualified Lean / Pass"
+            out.loc[premium, "commercial_tier"] = "Premium Pick"
+            out.loc[controlled_value, "commercial_tier"] = "Controlled Value Pick"
+        if "commercial_reason" in out.columns:
+            out["commercial_reason"] = (
+                "Top-ranked pick for this game; shown for full-board coverage but not approved as a wager."
+            )
+            out.loc[qualified_pass, "commercial_reason"] = (
+                "Qualified directional lean, but no funded production edge."
+            )
+            out.loc[premium, "commercial_reason"] = (
+                "Production-qualified positive edge with a funded stake and verified live line."
+            )
+            out.loc[controlled_value, "commercial_reason"] = (
+                "Small-stake, price-aware value pick selected only after the strict Premium card was empty; not a Premium lock."
+            )
+        for role_column in ("export_role", "Export_Role"):
+            if role_column not in out.columns:
+                continue
+            out[role_column] = "BEST AVAILABLE PICK - PASS / RESEARCH"
+            out.loc[qualified_pass, role_column] = "QUALIFIED LEAN - PASS"
+            out.loc[premium, role_column] = "PRODUCTION WAGER"
+            out.loc[controlled_value, role_column] = "CONTROLLED VALUE WAGER"
+
+    controlled_count = int(controlled_value.sum())
+    funded_count = int(funded.sum())
+    if "Kelly_Bet_Size" in out.columns:
+        final_stake = pd.to_numeric(out["Kelly_Bet_Size"], errors="coerce").fillna(0.0)
+    else:
+        stake_columns = [
+            column
+            for column in (
+                "Play_Stake",
+                "production_bet_amount",
+                "recommended_bet",
+                "Suggested_Stake",
+            )
+            if column in out.columns
+        ]
+        final_stake = (
+            pd.concat(
+                [pd.to_numeric(out[column], errors="coerce").fillna(0.0) for column in stake_columns],
+                axis=1,
+            ).max(axis=1)
+            if stake_columns
+            else pd.Series(0.0, index=out.index)
+        )
+    final_stake = final_stake.where(funded, 0.0)
+
+    diagnostic_values = {
+        "empty_card_recovery_triggered": controlled_count > 0,
+        "empty_card_recovery_promoted_count": controlled_count,
+        "empty_card_recovery_kelly_total": float(final_stake.where(controlled_value, 0.0).sum()),
+        "final_actionable_count": funded_count,
+        "final_positive_kelly_count": int(final_stake.gt(0.0).sum()),
+        "production_card_empty_flag": funded_count == 0,
+        "production_card_empty_after_recovery_flag": funded_count == 0,
+        "production_card_recovery_reason": (
+            "Published controlled small-stake value picks after strict Premium card was empty"
+            if controlled_count > 0
+            else ""
+        ),
+        "production_card_empty_reason": (
+            "No funded wagers remain after final public wager reconciliation."
+            if funded_count == 0
+            else ""
+        ),
+    }
+    for column, value in diagnostic_values.items():
+        if column in out.columns:
+            out[column] = value
     return out
 
 

@@ -8,6 +8,22 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from core import streamlit_pipeline as sp
 
 
+def test_exact_midnight_live_timestamp_converts_to_prior_eastern_slate_date():
+    frame = pd.DataFrame({"game_date": ["2026-08-11T00:00:00Z"]})
+
+    formatted = sp._format_game_time_est(frame, source_is_timestamp=True)
+
+    assert formatted.loc[0] == "2026-08-10 8:00 PM ET"
+
+
+def test_exact_midnight_date_placeholder_remains_date_only():
+    frame = pd.DataFrame({"game_date": ["2026-08-11T00:00:00Z"]})
+
+    formatted = sp._format_game_time_est(frame)
+
+    assert formatted.loc[0] == "2026-08-11"
+
+
 def test_game_time_est_is_converted_from_utc_game_date(monkeypatch):
     base_df = pd.DataFrame()
     bet_rows_df = pd.DataFrame(

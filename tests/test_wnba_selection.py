@@ -71,6 +71,35 @@ def test_wnba_uses_official_odds_api_sport_key(monkeypatch):
     assert ODDS_API_SPORTS["WNBA"] == "basketball_wnba"
 
 
+def test_live_exact_midnight_utc_game_keeps_eastern_slate_date(monkeypatch):
+    live_game = _wnba_live_game()
+    live_game["id"] = "wnba-midnight"
+    live_game["matchup_id"] = (
+        "basketball_wnba:toronto tempo:atlanta dream:2026-08-11"
+    )
+    live_game["home_team"] = "Atlanta Dream"
+    live_game["away_team"] = "Toronto Tempo"
+    live_game["commence_time"] = "2026-08-11T00:00:00Z"
+    live_game["bookmakers"] = []
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            pass
+
+        def get_odds(self, sport_key, date=None):
+            return [live_game]
+
+    monkeypatch.setattr(odds_api, "TheOddsAPIClient", FakeClient)
+    monkeypatch.setattr(sp, "_get_odds_api_key", lambda: "fake")
+
+    frame = sp.fetch_live_odds_dataframe(
+        sports=["WNBA"], date="2026-08-10T16:00:00Z"
+    )
+
+    assert frame.loc[0, "game_date"] == "2026-08-10"
+    assert frame.loc[0, "game_time_est"] == "2026-08-10 8:00 PM ET"
+
+
 def test_wnba_full_names_normalize_to_theover_city_names():
     assert normalize_team_name("Las Vegas Aces") == normalize_team_name("Las Vegas")
     assert normalize_team_name("Indiana Fever") == normalize_team_name("Indiana")

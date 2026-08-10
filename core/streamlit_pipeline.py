@@ -150,7 +150,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-08-10a-validated-calibration-win-floor"
+PIPELINE_BUILD = "2026-08-10b-recovery-export-midnight-date"
 
 # Best Available must compare standard, reasonably priced markets. A P2P exchange can
 # expose alternate run lines (for example +5.5 at -1150) beside the standard MLB +1.5.
@@ -1726,8 +1726,16 @@ def _game_dates(df: pd.DataFrame) -> pd.Series:
 
 
 
-def _format_game_time_est(df: pd.DataFrame) -> pd.Series:
-    """Return game times formatted in ET. If only a fallback date exists, return the date."""
+def _format_game_time_est(
+    df: pd.DataFrame, *, source_is_timestamp: bool = False
+) -> pd.Series:
+    """Return game times formatted in ET, preserving genuine midnight timestamps.
+
+    A date-only fallback parses as midnight UTC too, so callers must identify
+    when the source is a real API timestamp.  Exact-midnight games are then
+    converted to the prior Eastern evening instead of being shifted to the next
+    slate date.
+    """
     if df is None or df.empty:
         return pd.Series(dtype="string")
 
@@ -1748,7 +1756,12 @@ def _format_game_time_est(df: pd.DataFrame) -> pd.Series:
         if pd.notna(d_obj):
             # Check if it's a midnight fallback placeholder
             # If the user passed in exactly YYYY-MM-DDT00:00:00Z, we map it to date-only.
-            if d_obj.hour == 0 and d_obj.minute == 0 and d_obj.second == 0:
+            if (
+                not source_is_timestamp
+                and d_obj.hour == 0
+                and d_obj.minute == 0
+                and d_obj.second == 0
+            ):
                 out[idx] = d_obj.strftime("%Y-%m-%d")
             else:
                 # It has a real clock time, convert to ET
@@ -6879,6 +6892,25 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
                     continue
 
                 if matchup_id not in game_dict:
+                    commence_time = game.get('commence_time')
+                    game_date = game.get('game_date')
+                    game_time_est = game.get('game_time_est')
+                    try:
+                        commence_utc = pd.to_datetime(
+                            commence_time, errors="coerce", utc=True
+                        )
+                        if pd.notna(commence_utc):
+                            commence_et = commence_utc.tz_convert("America/New_York")
+                            if not str(game_date or "").strip():
+                                game_date = commence_et.strftime("%Y-%m-%d")
+                            if not str(game_time_est or "").strip():
+                                game_time_est = commence_et.strftime(
+                                    "%Y-%m-%d %I:%M %p ET"
+                                ).replace(" 0", " ")
+                    except (TypeError, ValueError, AttributeError):
+                        # Keep the raw timestamp for downstream validation; a
+                        # malformed optional display field must not drop a game.
+                        pass
                     game_dict[matchup_id] = {
                         'game_id': game.get('id'),
                         'league': game.get('sport_key', '').split('_')[-1].upper(),
@@ -6886,8 +6918,10 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
                         'raw_away_team': game.get('away_team'),
                         'home_team': game.get('home_team'),
                         'away_team': game.get('away_team'),
-                        'commence_time': game.get('commence_time'),
-                        'commence_time_raw': game.get('commence_time'),
+                        'commence_time': commence_time,
+                        'commence_time_raw': commence_time,
+                        'game_date': game_date,
+                        'game_time_est': game_time_est,
                         'matchup_id': matchup_id,
                     }
 
@@ -9592,7 +9626,10 @@ def run_analysis_pipeline(
 
         # 2. Format using a temporary view that preserves the Index
         temp_df = analysis_df[[src_col]].rename(columns={src_col: "game_date"})
-        analysis_df["game_time_est"] = _format_game_time_est(temp_df)
+        analysis_df["game_time_est"] = _format_game_time_est(
+            temp_df,
+            source_is_timestamp=(src_col == "commence_time_raw"),
+        )
 
         # 3. Final Cleanup
         analysis_df = analysis_df.drop(columns=["commence_time_raw"], errors="ignore")
