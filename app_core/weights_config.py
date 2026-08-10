@@ -203,14 +203,6 @@ MLB_SPREAD_FINALIST_SCORE_PENALTY = 0.05
 MLB_SPREAD_FINALIST_PENALTY_MIN_FAMILY_N = 50
 MLB_SPREAD_FINALIST_PENALTY_MIN_RATE_GAP = 0.03
 
-# Best Available is a pick-quality ranking, not a raw hit-probability contest. A
-# heavily juiced +1.5 line can have the highest cover probability while remaining
-# materially worse value than another credible candidate for the same game.
-# Existing evidence penalties still block this override in the selector.
-BEST_AVAILABLE_VALUE_OVERRIDE_MIN_WIN_PROB = 0.40
-BEST_AVAILABLE_VALUE_OVERRIDE_MIN_EV = 0.01
-BEST_AVAILABLE_VALUE_OVERRIDE_MIN_EV_GAIN = 0.05
-
 # A full-board research candidate remains available for grading, but the public
 # card must abstain instead of presenting weak/negative-value coverage as a pick.
 BEST_AVAILABLE_QUALIFIED_MIN_WIN_PROB = 0.55

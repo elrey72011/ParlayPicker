@@ -105,7 +105,7 @@ def test_best_available_audit_compares_side_and_total_families(monkeypatch):
     assert int(best.iloc[0]["best_available_candidate_count"]) == 4
 
 
-def test_positive_ev_candidate_can_displace_materially_negative_ev_probability_winner(monkeypatch):
+def test_positive_ev_candidate_cannot_displace_probability_winner(monkeypatch):
     monkeypatch.setattr("core.empirical_tiers.load_bucket_stats", lambda: {})
     monkeypatch.setattr("core.probability_calibration.load_calibration", lambda: None)
 
@@ -119,20 +119,20 @@ def test_positive_ev_candidate_can_displace_materially_negative_ev_probability_w
 
     assert len(best) == 1
     winner = best.iloc[0]
-    assert winner["market_type"] == "spread_home"
-    assert bool(winner["best_available_value_override_applied"])
-    assert winner["best_available_value_override_from_pick"] == "Pittsburgh Pirates +1.5"
-    assert float(winner["best_available_value_override_ev_gain"]) == 0.11
-    assert "value dominance" in winner["best_available_selection_reason"].lower()
-    assert diagnostics["best_available_value_override_count"] == 1
+    assert winner["market_type"] == "spread_away"
+    assert not bool(winner["best_available_value_override_applied"])
+    assert winner["best_available_value_override_from_pick"] == ""
+    assert pd.isna(winner["best_available_value_override_ev_gain"])
+    assert "win probability" in winner["best_available_selection_reason"].lower()
+    assert diagnostics["best_available_value_override_count"] == 0
 
     audit = diagnostics["candidate_audit_df"]
     selected = audit[audit["best_available_selected"]].iloc[0]
-    assert bool(selected["best_available_value_override_applied"])
+    assert not bool(selected["best_available_value_override_applied"])
     assert int(selected["best_available_rank"]) == 1
 
 
-def test_value_override_cannot_bypass_direction_evidence_penalty(monkeypatch):
+def test_direction_evidence_penalty_still_blocks_opposed_candidate(monkeypatch):
     monkeypatch.setattr("core.empirical_tiers.load_bucket_stats", lambda: {})
     monkeypatch.setattr("core.probability_calibration.load_calibration", lambda: None)
 

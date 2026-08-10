@@ -30,7 +30,7 @@ def _candidate(matchup, home, away, market_type, probability, ev):
     }
 
 
-def test_material_positive_ev_advantage_can_displace_probability_winner(monkeypatch):
+def test_probability_leads_and_ev_only_breaks_ties(monkeypatch):
     monkeypatch.setattr("core.empirical_tiers.load_bucket_stats", lambda: {})
 
     frame = pd.DataFrame([
@@ -49,12 +49,12 @@ def test_material_positive_ev_advantage_can_displace_probability_winner(monkeypa
 
     g1 = best[(best["home_team"] == "A") & (best["away_team"] == "B")].iloc[0]
     g2 = best[(best["home_team"] == "C") & (best["away_team"] == "D")].iloc[0]
-    assert g1["market_type"] == "total_over"
-    assert bool(g1["best_available_value_override_applied"])
+    assert g1["market_type"] == "spread_home"
+    assert not bool(g1["best_available_value_override_applied"])
     assert g2["market_type"] == "total_over"
 
 
-def test_unrelated_slate_rows_cannot_flip_a_games_value_dominance_winner(monkeypatch):
+def test_unrelated_slate_rows_cannot_flip_a_games_probability_winner(monkeypatch):
     monkeypatch.setattr("core.empirical_tiers.load_bucket_stats", lambda: {})
 
     target = pd.DataFrame([
@@ -78,5 +78,5 @@ def test_unrelated_slate_rows_cannot_flip_a_games_value_dominance_winner(monkeyp
     expanded_pick = sp.build_best_picks_df(expanded)
     expanded_pick = expanded_pick[expanded_pick["home_team"] == "A"].iloc[0]["market_type"]
 
-    assert target_pick == "total_over"
+    assert target_pick == "spread_home"
     assert expanded_pick == target_pick
