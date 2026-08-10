@@ -128,6 +128,10 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
     eff_ev = _first_col(df, "effective_expected_value", "expected_value")
     consensus = _first_col(df, "consensus_agreement")
     win = pd.to_numeric(_first_col(df, "effective_win_probability", "WinProbability"), errors="coerce")
+    controlled_value = _strict_bool_col(df, "controlled_card_recovery")
+    controlled_empirical_win = pd.to_numeric(
+        _first_col(df, "empirical_win_probability"), errors="coerce"
+    )
     edge = _first_col(df, "effective_edge", "edge")
     odds = _first_col(df, "odds_american")
     kelly = pd.to_numeric(_first_col(df, "Kelly_Bet_Size"), errors="coerce").fillna(0.0)
@@ -153,6 +157,15 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
         # calibrated value on legacy/no-artifact runs. Using it as the explicit
         # fallback keeps the gate price-aware instead of silently funding blind.
         calib_win = win.copy()
+    # Controlled Value recovery is approved against the empirical probability at
+    # the exact offered price.  Keep that same authority through the public card
+    # and exports; re-gating a recovered row with the legacy effective probability
+    # could turn an approved $5 wager into a contradictory $0 pass.
+    controlled_empirical_available = controlled_value & controlled_empirical_win.notna()
+    calib_win = pd.Series(calib_win, index=df.index, dtype=float).where(
+        ~controlled_empirical_available,
+        controlled_empirical_win,
+    )
     breakeven = pd.Series([_american_breakeven(o) for o in odds], index=df.index)
     calib_num = pd.to_numeric(calib_win, errors="coerce")
     break_even_num = pd.to_numeric(breakeven, errors="coerce")
@@ -170,7 +183,6 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
     qualification_known = pd.Series(
         "qualified_pick" in df.columns, index=df.index, dtype=bool
     )
-    controlled_value = _strict_bool_col(df, "controlled_card_recovery")
     tier = pd.Series(tier, index=df.index).where(qualified_pick, "AVOID")
 
     # Empirical edge = bucket-aware calibrated win minus break-even. This - NOT model EV - is

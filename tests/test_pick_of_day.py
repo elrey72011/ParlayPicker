@@ -143,3 +143,20 @@ def test_probability_basis_prefers_empirical_over_calibrated():
     potd = select_pick_of_the_day(games, props)
     assert potd["board"] == "prop"
     assert potd["runner_up"]["win_probability"] == 0.49
+
+
+def test_final_public_rejection_cannot_become_pick_of_the_day():
+    games = _games(
+        empirical_win_probability=[0.91],
+        Pick_Status=["Actionable"],
+        production_eligible=[True],
+        Kelly_Bet_Size=[10.0],
+        wager_approved=[False],
+        Bettable=[False],
+        Bet_Decision=["QUALIFIED LEAN - PASS"],
+        Wager_Instruction=["DO NOT BET - QUALIFIED LEAN HAS NO APPROVED STAKE"],
+    )
+
+    potd = select_pick_of_the_day(games, _props())
+
+    assert potd["board"] == "prop"

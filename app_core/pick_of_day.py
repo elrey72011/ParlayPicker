@@ -41,6 +41,18 @@ def _num(series_like, default=np.nan, index=None) -> pd.Series:
     return pd.to_numeric(pd.Series(series_like, index=index), errors="coerce").fillna(default)
 
 
+def _strict_bool(series_like, *, index, default: bool = False) -> pd.Series:
+    """Parse optional public authorization flags without truthy string leakage."""
+
+    if series_like is None:
+        return pd.Series(default, index=index, dtype=bool)
+    values = pd.Series(series_like, index=index)
+    if pd.api.types.is_bool_dtype(values.dtype):
+        return values.fillna(default).astype(bool)
+    normalized = values.astype("string").fillna("").str.strip().str.casefold()
+    return normalized.isin({"true", "1", "yes", "y"})
+
+
 def _game_candidates(best_picks_df: pd.DataFrame | None) -> pd.DataFrame:
     if best_picks_df is None or best_picks_df.empty:
         return pd.DataFrame()
@@ -53,10 +65,22 @@ def _game_candidates(best_picks_df: pd.DataFrame | None) -> pd.DataFrame:
         keep &= ~df["status_blocker_stage"].astype(str).isin(_GAME_DISQUALIFYING_STAGES)
     status = df.get("Pick_Status", pd.Series("", index=df.index)).astype(str).str.strip()
     stake = _num(df.get("Kelly_Bet_Size"), default=0.0, index=df.index)
-    production_eligible = pd.Series(
+    production_eligible = _strict_bool(
         df.get("production_eligible", True), index=df.index
-    ).fillna(False).astype(bool)
+    )
     keep &= status.eq("Actionable") & production_eligible & stake.gt(0)
+    # If a final public authorization field exists, fail closed on it.  This
+    # keeps a stale Actionable/Kelly pair from becoming Pick of the Day after
+    # the export reconciler has correctly marked the row as a $0 pass.
+    for approval_column in ("wager_approved", "Wager_Approved", "Bettable"):
+        if approval_column in df.columns:
+            keep &= _strict_bool(df[approval_column], index=df.index)
+    if "Bet_Decision" in df.columns:
+        keep &= df["Bet_Decision"].astype("string").fillna("").str.strip().str.upper().eq("BET")
+    if "Wager_Instruction" in df.columns:
+        keep &= ~df["Wager_Instruction"].astype("string").fillna("").str.strip().str.upper().str.startswith(
+            "DO NOT BET"
+        )
     if "best_pick" in df.columns:
         bp = df["best_pick"].astype(str)
         keep &= bp.str.strip().ne("") & ~bp.str.contains("Unresolved|Rejected", case=False, na=False)

@@ -34,6 +34,16 @@ def test_controlled_value_wager_has_distinct_sellable_scope():
         "wager_approved": [True],
         "controlled_card_recovery": [True],
         "Play_Stake": [5.0],
+        "Kelly_Bet_Size": [5.0],
+        "sellable_as_value_card": [False],
+        "commercial_tier": ["Best Available / Pass"],
+        "export_role": ["BEST AVAILABLE PICK - PASS / RESEARCH"],
+        "empty_card_recovery_triggered": [False],
+        "empty_card_recovery_promoted_count": [0],
+        "empty_card_recovery_kelly_total": [0.0],
+        "final_actionable_count": [0],
+        "production_card_empty_flag": [True],
+        "production_card_empty_after_recovery_flag": [True],
     })
 
     labeled = label_wager_export(frame)
@@ -43,7 +53,63 @@ def test_controlled_value_wager_has_distinct_sellable_scope():
     assert labeled.loc[0, "Wager_Instruction"] == (
         "BET - CONTROLLED VALUE CARD / SMALL STAKE / NOT PREMIUM"
     )
+    assert bool(labeled.loc[0, "controlled_card_recovery"])
+    assert bool(labeled.loc[0, "sellable_as_value_card"])
+    assert labeled.loc[0, "commercial_tier"] == "Controlled Value Pick"
+    assert labeled.loc[0, "export_role"] == "CONTROLLED VALUE WAGER"
+    assert bool(labeled.loc[0, "empty_card_recovery_triggered"])
+    assert labeled.loc[0, "empty_card_recovery_promoted_count"] == 1
+    assert labeled.loc[0, "empty_card_recovery_kelly_total"] == 5.0
+    assert labeled.loc[0, "final_actionable_count"] == 1
+    assert not bool(labeled.loc[0, "production_card_empty_flag"])
+    assert not bool(labeled.loc[0, "production_card_empty_after_recovery_flag"])
     assert production_wagers(frame)["best_pick"].tolist() == ["Cincinnati -1.5"]
+
+
+def test_unfunded_recovery_attempt_cannot_remain_sellable_or_claim_promotion():
+    frame = pd.DataFrame({
+        "best_pick": ["San Francisco +1.5"],
+        "qualified_pick": [True],
+        "Bet_Decision": ["QUALIFIED LEAN - PASS"],
+        "Play_Tier": ["LEAN"],
+        "production_eligible": [True],
+        "wager_approved": [True],
+        "controlled_card_recovery": [True],
+        "Play_Stake": [5.0],
+        "Kelly_Bet_Size": [5.0],
+        "sellable_as_value_card": [True],
+        "commercial_tier": ["Controlled Value Pick"],
+        "commercial_reason": ["stale recovery promotion"],
+        "export_role": ["CONTROLLED VALUE WAGER"],
+        "empty_card_recovery_triggered": [True],
+        "empty_card_recovery_promoted_count": [1],
+        "empty_card_recovery_kelly_total": [5.0],
+        "final_actionable_count": [1],
+        "final_positive_kelly_count": [1],
+        "production_card_empty_flag": [False],
+        "production_card_empty_after_recovery_flag": [False],
+        "production_card_recovery_reason": ["stale recovery success"],
+        "production_card_empty_reason": [""],
+    })
+
+    labeled = label_wager_export(frame)
+
+    assert not bool(labeled.loc[0, "Bettable"])
+    assert not bool(labeled.loc[0, "controlled_card_recovery"])
+    assert not bool(labeled.loc[0, "sellable_as_value_card"])
+    assert labeled.loc[0, "commercial_tier"] == "Qualified Lean / Pass"
+    assert labeled.loc[0, "export_role"] == "QUALIFIED LEAN - PASS"
+    assert labeled.loc[0, "Play_Stake"] == 0.0
+    assert labeled.loc[0, "Kelly_Bet_Size"] == 0.0
+    assert not bool(labeled.loc[0, "empty_card_recovery_triggered"])
+    assert labeled.loc[0, "empty_card_recovery_promoted_count"] == 0
+    assert labeled.loc[0, "empty_card_recovery_kelly_total"] == 0.0
+    assert labeled.loc[0, "final_actionable_count"] == 0
+    assert labeled.loc[0, "final_positive_kelly_count"] == 0
+    assert bool(labeled.loc[0, "production_card_empty_flag"])
+    assert bool(labeled.loc[0, "production_card_empty_after_recovery_flag"])
+    assert labeled.loc[0, "production_card_recovery_reason"] == ""
+    assert labeled.loc[0, "production_card_empty_reason"]
 
 
 def test_prop_grading_export_keeps_research_but_marks_it_do_not_bet():

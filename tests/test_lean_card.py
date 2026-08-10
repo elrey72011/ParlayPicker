@@ -8,6 +8,7 @@ import os
 import sys
 
 import pandas as pd
+import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -384,6 +385,46 @@ def test_actionable_row_with_positive_ev_and_absolute_edge_is_funded():
     assert staked.iloc[0]["Bet_Decision"] == "BET"
     assert bool(staked.iloc[0]["Production_Gate_Pass"])
     assert float(staked.iloc[0]["Play_Stake"]) == 10.0
+
+
+def test_controlled_recovery_keeps_empirical_price_authority_in_public_card():
+    # The recovered row cleared its exact-price gate on empirical probability.
+    # Its legacy effective probability is deliberately below the absolute edge
+    # margin and must not be used to reverse the final public wager decision.
+    df = pd.DataFrame({
+        "league": ["MLB"],
+        "home_team": ["San Francisco"],
+        "away_team": ["Texas"],
+        "Pick_Status": ["Actionable"],
+        "best_pick": ["San Francisco +1.5"],
+        "qualified_pick": [True],
+        "controlled_card_recovery": [True],
+        "wager_approved": [True],
+        "production_eligible": [True],
+        "production_bet_amount": [5.0],
+        "effective_expected_value": [0.04],
+        "consensus_agreement": ["Agrees"],
+        "effective_win_probability": [0.56023],
+        "empirical_win_probability": [0.573626],
+        "effective_edge": [0.03],
+        "odds_american": [-120],
+        "line_consistency_flag": [True],
+        "line_event_identity_match_flag": [True],
+        "Kelly_Bet_Size": [5.0],
+    })
+
+    scored = score_best_picks_rows(df, calibration=None, bucket_stats=None)
+    staked = attach_play_stakes(scored, unit=5.0)
+
+    assert scored.loc[0, "Calib_Win%"] == pytest.approx(0.573626)
+    assert scored.loc[0, "Absolute_Edge"] == pytest.approx(
+        0.573626 - (120 / 220)
+    )
+    assert scored.loc[0, "Tier"] == "BET"
+    assert scored.loc[0, "Bet_Decision"] == "BET"
+    assert bool(scored.loc[0, "Production_Gate_Pass"])
+    assert bool(scored.loc[0, "Controlled_Value_Card"])
+    assert float(staked.loc[0, "Play_Stake"]) == 5.0
 
 
 def test_explicit_unfunded_authorization_downgrades_mathematical_bet_to_lean():
