@@ -78,6 +78,46 @@ def _load_meta(path: Path) -> dict:
         return {}
 
 
+def _run_refits(exports_dir: Path = EXPORTS_DIR) -> bool:
+    """Refresh both artifacts; return whether global calibration promoted.
+
+    ``fit_calibration.py`` uses exit code 2 for a statistically valid refusal to
+    promote. That is not a pipeline failure and must not prevent bucket history
+    from incorporating the newly graded slate. Any other non-zero status remains
+    a real error.
+    """
+    print("\n=== fit_calibration.py ===")
+    calibration = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "fit_calibration.py"),
+            str(exports_dir),
+            str(CAL_JSON),
+        ],
+        check=False,
+    )
+    if calibration.returncode not in (0, 2):
+        calibration.check_returncode()
+    calibration_promoted = calibration.returncode == 0
+    if not calibration_promoted:
+        print(
+            "Global calibration promotion was rejected by chronological validation; "
+            "retaining the prior artifact and continuing with bucket statistics."
+        )
+
+    print("\n=== fit_bucket_stats.py ===")
+    subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "fit_bucket_stats.py"),
+            str(exports_dir),
+            str(BUCKET_JSON),
+        ],
+        check=True,
+    )
+    return calibration_promoted
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("raw_dir", help="folder holding export + recap CSV pairs")
@@ -126,16 +166,15 @@ def main() -> int:
         return 0
 
     before_cal, before_bkt = _load_meta(CAL_JSON), _load_meta(BUCKET_JSON)
-    for script, out_json in (("fit_calibration.py", CAL_JSON), ("fit_bucket_stats.py", BUCKET_JSON)):
-        print(f"\n=== {script} ===")
-        subprocess.run([sys.executable, str(ROOT / "scripts" / script),
-                        str(EXPORTS_DIR), str(out_json)], check=True)
+    calibration_promoted = _run_refits(EXPORTS_DIR)
 
     after_cal, after_bkt = _load_meta(CAL_JSON), _load_meta(BUCKET_JSON)
     print("\n=== refit summary ===")
     print(f"calibration  n_graded: {before_cal.get('n_graded')} -> {after_cal.get('n_graded')}"
           f"   fitted_on: {before_cal.get('fitted_on')} -> {after_cal.get('fitted_on')}")
     print(f"bucket_stats fitted_on: {before_bkt.get('fitted_on')} -> {after_bkt.get('fitted_on')}")
+    if not calibration_promoted:
+        print("calibration  promotion: BLOCKED (production falls back to upstream probabilities)")
     return 0
 
 

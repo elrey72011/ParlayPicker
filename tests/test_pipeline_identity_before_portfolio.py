@@ -103,8 +103,8 @@ def test_empty_card_recovery_publishes_separate_controlled_value_card(monkeypatc
     assert state["diagnostics"]["controlled_value_pick_count"] == 2
 
 
-def test_controlled_value_recovery_uses_empirical_price_edge_not_legacy_edge(monkeypatch):
-    """The exact Aug. 5 pattern must not be rejected by a second edge basis."""
+def test_controlled_value_recovery_rejects_low_probability_plus_money_rows(monkeypatch):
+    """Price edge cannot bypass the owner's likely-to-win production floor."""
 
     def fake_run_analysis_pipeline(**kwargs):
         analysis = pd.DataFrame([
@@ -215,13 +215,7 @@ def test_controlled_value_recovery_uses_empirical_price_edge_not_legacy_edge(mon
     out = state["best_picks_df"]
     controlled = out[out["controlled_card_recovery"].fillna(False).astype(bool)]
 
-    assert controlled["best_pick"].tolist() == [
-        "Cincinnati -1.5",
-        "New York Yankees -1.5",
-    ]
-    assert controlled["sellable_as_value_card"].all()
-    assert controlled["wager_approved"].all()
-    assert controlled["commercial_tier"].eq("Controlled Value Pick").all()
-    assert controlled["Kelly_Bet_Size"].gt(0).all()
-    assert state["diagnostics"]["empty_card_recovery_candidate_count"] == 2
-    assert state["diagnostics"]["empty_card_recovery_promoted_count"] == 2
+    assert controlled.empty
+    assert not out["wager_approved"].any()
+    assert state["diagnostics"]["empty_card_recovery_candidate_count"] == 0
+    assert state["diagnostics"]["empty_card_recovery_promoted_count"] == 0
