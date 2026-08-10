@@ -75,6 +75,31 @@ def test_calibration_save_load_roundtrip(tmp_path):
     assert load_calibration(tmp_path / "missing.json") is None
 
 
+def test_production_calibration_requires_chronological_promotion(tmp_path, monkeypatch):
+    knots = [[0.5, 0.45], [0.7, 0.60]]
+    path = tmp_path / "cal.json"
+    monkeypatch.setattr(
+        "core.probability_calibration.DEFAULT_CALIBRATION_PATH", path
+    )
+
+    save_calibration(knots, path, meta={"n_graded": 200})
+    assert load_calibration() is None
+
+    save_calibration(
+        knots,
+        path,
+        meta={"validation": {"promotable": False}},
+    )
+    assert load_calibration() is None
+
+    save_calibration(
+        knots,
+        path,
+        meta={"validation": {"promotable": True}},
+    )
+    assert load_calibration() == knots
+
+
 def test_below_threshold_legs_are_eligible():
     bets = _bets(Pick_Status=["Below Threshold", "Below Threshold", "Below Threshold"])
     parlays = generate_smart_parlays(bets)

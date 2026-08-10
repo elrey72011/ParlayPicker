@@ -126,10 +126,13 @@ def test_empirical_direction_overlay_can_override_generic_family_priors():
             _row(idx=3, league="MLB", market_type="total_under", win_prob=0.60, ev=0.05, edge=0.05, kalshi_probability=0.55),
         ]
     )
+    # Evaluate against the refreshed artifact at its fit date; using the generic
+    # fixture's Aug. 1 date would correctly reject the Aug. 10 table as look-ahead.
+    df["game_date"] = "2026-08-10"
     out = build_best_picks_df(df)
-    # The refreshed graded sample makes the MLB Under the only production-qualified
-    # direction here. Generic family preferences must not override that evidence.
-    assert out.loc[out["market_type"] == "spread_home", "Pick_Status"].iloc[0] == "Below Threshold"
+    # The refreshed sample supports both MLB side:Agrees (57%, effective n=75)
+    # and under:Agrees (62%, effective n=122). The mid-line Over remains benched.
+    assert out.loc[out["market_type"] == "spread_home", "Pick_Status"].iloc[0] == "Actionable"
     assert out.loc[out["market_type"] == "total_over", "Pick_Status"].iloc[0] == "Below Threshold"
     assert out.loc[out["market_type"] == "total_under", "Pick_Status"].iloc[0] == "Actionable"
 
@@ -276,6 +279,7 @@ def test_low_line_over_guardrail_is_consensus_aware():
         df.loc[0, "best_pick"] = "Over 7.5"
         df.loc[0, "total_line"] = 7.5
         df.loc[0, "live_total_line"] = 7.5
+        df.loc[0, "game_date"] = "2026-08-10"
         return build_best_picks_df(df).iloc[0]
 
     # Neutral case uses a Kalshi pick'em (~0.50): under directional consensus a clear
@@ -297,19 +301,13 @@ def test_low_line_over_guardrail_is_consensus_aware():
         "empirical_proven_losing_bucket",
     }
 
-    # 1-Jul recency refit: over:Agrees realized ~47% recency-weighted (44% over the last
-    # 21 days) — a proven-losing bucket — so even Agrees low-line overs are benched by the
-    # proven-losing suppression (or the overlay/guardrail, depending on the current fitted
-    # table). The guardrail stays consensus-aware in code; whichever stage catches it first,
-    # a sub-8.0 over is held Below Threshold while the over buckets are cold.
+    # Aug. 10 recency refit: over:Agrees is near break-even (52%, effective n=86),
+    # so it is not a proven-losing bucket, but the low-line guard still limits it
+    # to High Variance rather than a funded Actionable play.
     agrees = _low_over(0.60)
     assert agrees["consensus_agreement"] == "Agrees"
-    assert agrees["Pick_Status"] == "Below Threshold"
-    assert agrees["status_blocker_stage"] in {
-        "low_line_over_guardrail",
-        "empirical_tier_overlay",
-        "empirical_proven_losing_bucket",
-    }
+    assert agrees["Pick_Status"] == "High Variance/Speculative"
+    assert agrees["status_blocker_stage"] == "low_line_over_guardrail"
 
 
 def test_consensus_is_directional_same_side_is_agrees():

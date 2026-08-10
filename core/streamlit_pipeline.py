@@ -150,7 +150,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-08-05g-novig-team-binding-consensus"
+PIPELINE_BUILD = "2026-08-10a-validated-calibration-win-floor"
 
 # Best Available must compare standard, reasonably priced markets. A P2P exchange can
 # expose alternate run lines (for example +5.5 at -1150) beside the standard MLB +1.5.
@@ -10012,6 +10012,7 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
         EMPTY_CARD_RECOVERY_MAX_AMERICAN_ODDS,
         EMPTY_CARD_RECOVERY_MIN_ABSOLUTE_EDGE,
         EMPTY_CARD_RECOVERY_MIN_AMERICAN_ODDS,
+        EMPTY_CARD_RECOVERY_MIN_PRODUCTION_WIN_PROB,
     )
     controlled_gate = controlled_value_price_gate(
         empirical_p,
@@ -10027,10 +10028,22 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
     controlled_price_pass = controlled_gate[
         "controlled_value_price_gate_pass"
     ].reindex(portfolio.index).fillna(False)
+    controlled_probability_pass = empirical_p.ge(
+        float(EMPTY_CARD_RECOVERY_MIN_PRODUCTION_WIN_PROB)
+    ).fillna(False)
     portfolio_gate.loc[controlled_value, "production_gate_pass"] &= (
         controlled_price_pass.loc[controlled_value]
+        & controlled_probability_pass.loc[controlled_value]
     )
-    failed_controlled_price = controlled_value & ~controlled_price_pass
+    failed_controlled_probability = controlled_value & ~controlled_probability_pass
+    portfolio_gate.loc[
+        failed_controlled_probability, "production_gate_reason"
+    ] = "controlled value win-probability floor failed"
+    failed_controlled_price = (
+        controlled_value
+        & controlled_probability_pass
+        & ~controlled_price_pass
+    )
     portfolio_gate.loc[
         failed_controlled_price, "production_gate_reason"
     ] = "controlled value exact-price gate failed"

@@ -116,11 +116,24 @@ def save_calibration(table: list[list[float]], path: Path | str, meta: dict | No
     path.write_text(json.dumps(payload, indent=2))
 
 
-def load_calibration(path: Path | str = DEFAULT_CALIBRATION_PATH) -> list[list[float]] | None:
-    """Load a fitted calibration table; returns None when absent or unreadable
-    so callers degrade gracefully to uncalibrated probabilities."""
+def load_calibration(path: Path | str | None = None) -> list[list[float]] | None:
+    """Load a fitted calibration table, failing closed for production.
+
+    The default artifact drives live selection, tiers, recovery, Kelly sizing,
+    and parlays, so it is eligible only after the chronological promotion test
+    in :mod:`scripts.fit_calibration` records ``validation.promotable=true``.
+    Explicit paths remain permissive for tests, research, and legacy imports.
+    Missing, unreadable, or unapproved production artifacts return ``None`` so
+    callers fall back to the upstream effective probability.
+    """
+    production_default = path is None
+    calibration_path = DEFAULT_CALIBRATION_PATH if path is None else Path(path)
     try:
-        payload = json.loads(Path(path).read_text())
+        payload = json.loads(calibration_path.read_text())
+        if production_default:
+            validation = (payload.get("meta") or {}).get("validation") or {}
+            if validation.get("promotable") is not True:
+                return None
         knots = payload.get("knots")
         return knots if knots else None
     except (OSError, ValueError):

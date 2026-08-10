@@ -1128,9 +1128,10 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
         diagnostics["empty_card_recovery_excluded_calibration_count"] = int(
             (status_s0.isin(["High Variance/Speculative", "Below Threshold"]) & ~_calib_gate0).sum()
         )
-        # Price-aware controlled-card gate. A plus-money wager can be valuable
-        # below 50% win probability; what matters is whether the empirical-first
-        # probability clears the exact offered break-even price by a real margin.
+        # Price-aware controlled-card gate. Exact-price value is necessary, but
+        # the public recovery card also honors the same calibrated win-probability
+        # floor as every other funded pick. This prevents a 43%-45% plus-money
+        # longshot from becoming Actionable merely because the Premium card is empty.
         _rec_floor_prob0 = pd.to_numeric(
             best_picks_df.get("empirical_win_probability", pd.Series(index=best_picks_df.index, dtype=float)),
             errors="coerce",
@@ -1186,7 +1187,12 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
             best_picks_df.get("suspicious_data_flag", False),
             index=best_picks_df.index,
         ).fillna(False).astype(bool)
-        threshold_fail = threshold_fail | ~_price_value_ok0 | ~_price_allowed0
+        threshold_fail = (
+            threshold_fail
+            | _rec_floor_prob0.lt(float(EMPTY_CARD_RECOVERY_MIN_PRODUCTION_WIN_PROB))
+            | ~_price_value_ok0
+            | ~_price_allowed0
+        )
         diagnostics["empty_card_recovery_excluded_threshold_count"] = int(threshold_fail.sum())
         recovery_mask = (
             status_s0.isin(["High Variance/Speculative", "Below Threshold"])
@@ -1208,13 +1214,13 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
             ranked["_rank"] = pd.to_numeric(ranked["Triple_Filter_Rank"], errors="coerce").fillna(9999) if "Triple_Filter_Rank" in ranked.columns else 9999
             ranked["_ev"] = pd.to_numeric(ranked["production_expected_value"], errors="coerce").fillna(-999) if "production_expected_value" in ranked.columns else -999
             ranked["_edge"] = pd.to_numeric(ranked["production_edge"], errors="coerce").fillna(-999) if "production_edge" in ranked.columns else -999
-            ranked["_prob"] = pd.to_numeric(ranked["production_win_probability"], errors="coerce").fillna(0) if "production_win_probability" in ranked.columns else 0
+            ranked["_prob"] = _rec_floor_prob0.reindex(ranked.index).fillna(0)
             ranked["_absolute_edge"] = _recovery_absolute_edge0.reindex(ranked.index).fillna(-999)
-            # Controlled value is price-aware: rank by calibrated advantage over
-            # break-even, then EV/probability. This avoids the old fixed-win-rate
-            # bias against legitimate plus-money value.
+            # The product goal is the pick most likely to win. Among rows that
+            # clear both the probability floor and exact-price gate, calibrated
+            # probability leads; edge and EV break ties.
             ranked = ranked.sort_values(
-                by=["_absolute_edge", "_ev", "_prob", "_rank"],
+                by=["_prob", "_absolute_edge", "_ev", "_rank"],
                 ascending=[False, False, False, True],
             )
             promote_idx = ranked.head(int(EMPTY_CARD_RECOVERY_MAX_PICKS)).index.tolist()

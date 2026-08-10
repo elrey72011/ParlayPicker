@@ -622,14 +622,14 @@ DEGRADED_FEATURE_MAX_PICK_EXPOSURE_PCT = 0.02
 ALLOW_EMPTY_CARD_RECOVERY = False
 ENABLE_EMPTY_CARD_RECOVERY = True
 EMPTY_CARD_RECOVERY_MAX_PICKS = 2
-# Controlled value tuning: a fixed 50%/53% win-rate floor is not price-aware and
-# incorrectly rejects plus-money bets that clear break-even by a real margin.
-# Recovery therefore uses a low absolute probability sanity floor plus an exact
-# price-edge requirement below. Contrarian (Disagrees) rows face a stricter edge
-# bar and the card is limited to two small, clearly labelled wagers.
+# Controlled value tuning: recovery is allowed only for picks that remain more
+# likely than not after calibration and also clear the owner's 55% production
+# floor. Exact-price edge is still required below, but price alone cannot turn a
+# 43%-45% plus-money longshot into the slate's public Actionable pick. Contrarian
+# rows face a stricter edge bar and the card is limited to two small wagers.
 EMPTY_CARD_RECOVERY_MIN_PRODUCTION_EV = 0.02
 EMPTY_CARD_RECOVERY_MIN_PRODUCTION_EDGE = 0.02
-EMPTY_CARD_RECOVERY_MIN_PRODUCTION_WIN_PROB = 0.38
+EMPTY_CARD_RECOVERY_MIN_PRODUCTION_WIN_PROB = MIN_STAKE_WIN_PROBABILITY
 EMPTY_CARD_RECOVERY_MIN_ABSOLUTE_EDGE = 0.02
 EMPTY_CARD_RECOVERY_DISAGREES_MIN_ABSOLUTE_EDGE = 0.03
 EMPTY_CARD_RECOVERY_MIN_AMERICAN_ODDS = -200
