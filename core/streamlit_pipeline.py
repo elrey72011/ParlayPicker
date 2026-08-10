@@ -29,9 +29,6 @@ from app_core.weights_config import (
             MLB_SPREAD_ACTIONABLE_PENALTY, MLB_SPREAD_FINALIST_SCORE_PENALTY,
             MLB_SPREAD_FINALIST_PENALTY_MIN_FAMILY_N,
             MLB_SPREAD_FINALIST_PENALTY_MIN_RATE_GAP,
-            BEST_AVAILABLE_VALUE_OVERRIDE_MIN_WIN_PROB,
-            BEST_AVAILABLE_VALUE_OVERRIDE_MIN_EV,
-            BEST_AVAILABLE_VALUE_OVERRIDE_MIN_EV_GAIN,
             BEST_AVAILABLE_QUALIFIED_MIN_WIN_PROB,
             BEST_AVAILABLE_QUALIFIED_MIN_EV,
             BEST_AVAILABLE_QUALIFIED_MIN_EDGE,
@@ -150,7 +147,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-08-10b-recovery-export-midnight-date"
+PIPELINE_BUILD = "2026-08-10c-probability-first-best-picks"
 
 # Best Available must compare standard, reasonably priced markets. A P2P exchange can
 # expose alternate run lines (for example +5.5 at -1150) beside the standard MLB +1.5.
@@ -3954,16 +3951,13 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     # Finalist score â€” absolute WIN PROBABILITY first. The old score z-scored
     # candidates against the rest of the slate, so a merely "less bad" 47% row could
     # look elite on a weak day and a game's selection could change when an unrelated
-    # game was added. Keep EV and edge only as bounded tiebreakers; production funding
-    # still passes through the separate absolute price/EV gate below.
+    # game was added. EV and edge are tiebreakers only; production funding still
+    # passes through the separate absolute price/EV gate below.
     pool["_absolute_probability_score"] = pool["_prob_numeric"].clip(0.01, 0.99)
-    pool["_absolute_ev_tiebreak"] = pool["_ev_numeric"].clip(-1.0, 1.0).fillna(0.0)
-    pool["_absolute_edge_tiebreak"] = pool["_edge_numeric"].clip(-1.0, 1.0).fillna(0.0)
-    pool["final_family_score"] = (
-        0.90 * pool["_absolute_probability_score"]
-        + 0.05 * pool["_absolute_ev_tiebreak"]
-        + 0.05 * pool["_absolute_edge_tiebreak"]
-    )
+    # Expected value and edge belong in wager qualification and deterministic
+    # tiebreaks; they must not make a less-likely outcome the public Best Pick.
+    # Evidence penalties below remain active and adjust this probability score.
+    pool["final_family_score"] = pool["_absolute_probability_score"]
 
     for family in ["total", "side"]:
         family_mask = pool["_market_family"] == family
@@ -4098,84 +4092,21 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     # to the global argmax because both stages use this exact same sort contract.
     best_available_sort_columns = [
         "final_family_score",
-        "tier_score",
         "selection_probability_used",
+        "tier_score",
         "_ev_numeric",
         "_edge_numeric",
     ]
-    best_available_sort_ascending = [False, True, False, False, False]
+    best_available_sort_ascending = [False, False, True, False, False]
 
-    # A probability-first score can make an expensive, negative-EV +1.5 line
-    # structurally unbeatable. Preserve that ranking by default, but let a credible
-    # positive-EV candidate dominate when it is materially better value and no
-    # empirical direction penalty opposes it. The score boost is only the epsilon
-    # needed to preserve the single global-argmax contract.
+    # Retain the legacy audit fields as an explicit, always-false compatibility
+    # contract. Value belongs in wager qualification, never in Best Pick identity.
     pool["best_available_value_override_applied"] = False
     pool["best_available_value_override_from_pick"] = ""
     pool["best_available_value_override_ev_gain"] = np.nan
-    value_override_count = 0
-    for matchup, group in pool.groupby("matchup_id", sort=False):
-        provisional = group.sort_values(
-            by=best_available_sort_columns,
-            ascending=best_available_sort_ascending,
-            na_position="last",
-            kind="mergesort",
-        )
-        if provisional.empty:
-            continue
-        incumbent = provisional.iloc[0]
-        incumbent_ev = pd.to_numeric(incumbent.get("_ev_numeric"), errors="coerce")
-        incumbent_score = pd.to_numeric(
-            incumbent.get("final_family_score"), errors="coerce"
-        )
-        if pd.isna(incumbent_ev) or pd.isna(incumbent_score):
-            continue
-        evidence_penalty = (
-            pd.to_numeric(group["_family_selection_penalty"], errors="coerce").fillna(0.0)
-            + pd.to_numeric(group["_direction_conflict_penalty"], errors="coerce").fillna(0.0)
-        )
-        challengers = group[
-            pd.to_numeric(group["selection_probability_used"], errors="coerce").ge(
-                float(BEST_AVAILABLE_VALUE_OVERRIDE_MIN_WIN_PROB)
-            )
-            & pd.to_numeric(group["_ev_numeric"], errors="coerce").ge(
-                float(BEST_AVAILABLE_VALUE_OVERRIDE_MIN_EV)
-            )
-            & pd.to_numeric(group["_ev_numeric"], errors="coerce").ge(
-                float(incumbent_ev) + float(BEST_AVAILABLE_VALUE_OVERRIDE_MIN_EV_GAIN)
-            )
-            & evidence_penalty.le(1e-12)
-        ]
-        if challengers.empty:
-            continue
-        challenger = challengers.sort_values(
-            by=["_ev_numeric", "_edge_numeric", "selection_probability_used", "final_family_score"],
-            ascending=[False, False, False, False],
-            na_position="last",
-            kind="mergesort",
-        ).iloc[0]
-        if challenger.name == incumbent.name:
-            continue
-        challenger_score = pd.to_numeric(
-            challenger.get("final_family_score"), errors="coerce"
-        )
-        if pd.isna(challenger_score):
-            continue
-        pool.loc[challenger.name, "final_family_score"] = max(
-            float(challenger_score),
-            float(incumbent_score) + 1e-9,
-        )
-        pool.loc[challenger.name, "best_available_value_override_applied"] = True
-        pool.loc[challenger.name, "best_available_value_override_from_pick"] = str(
-            incumbent.get("best_pick", "")
-        )
-        pool.loc[challenger.name, "best_available_value_override_ev_gain"] = float(
-            challenger["_ev_numeric"] - incumbent_ev
-        )
-        value_override_count += 1
 
     if diagnostics_out is not None:
-        diagnostics_out["best_available_value_override_count"] = int(value_override_count)
+        diagnostics_out["best_available_value_override_count"] = 0
 
     pool = pool.sort_values(
         by=best_available_sort_columns,
@@ -4241,8 +4172,8 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             kind="mergesort",
         )
         group_sorted_no_mlb_spread_penalty = group.sort_values(
-            by=["final_family_score_no_mlb_spread_penalty", "tier_score", "selection_probability_used", "_ev_numeric", "_edge_numeric"],
-            ascending=[False, True, False, False, False],
+            by=["final_family_score_no_mlb_spread_penalty", "selection_probability_used", "tier_score", "_ev_numeric", "_edge_numeric"],
+            ascending=[False, False, True, False, False],
             na_position="last",
             kind="mergesort",
         )
@@ -4351,15 +4282,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         "best_available_selection_verified"
     ].fillna(False).astype(bool)
     pool["best_available_selection_reason"] = (
-        "Highest deterministic candidate score after validity, identity, and line-integrity gates"
-    )
-    value_override_selected = (
-        pool["best_available_selected"]
-        & pool["best_available_value_override_applied"].fillna(False).astype(bool)
-    )
-    pool.loc[value_override_selected, "best_available_selection_reason"] = (
-        "Positive-EV value dominance over a materially worse provisional winner; "
-        "minimum probability and evidence-penalty guards passed"
+        "Highest evidence-adjusted win probability after validity, identity, and line-integrity gates"
     )
     pool["best_available_rejection_reason"] = "lower_score_within_market_family"
     pool.loc[
