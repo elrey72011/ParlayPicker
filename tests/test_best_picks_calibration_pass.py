@@ -918,6 +918,66 @@ def test_verified_cross_book_spread_consensus_overrides_stale_upload():
     assert float(row["Kelly_Bet_Size"]) == 0.0
 
 
+def test_direct_live_odds_with_verified_book_consensus_overrides_stale_upload():
+    """All books agreed on NY +3.5, but the generic source label hid that proof."""
+    df = pd.DataFrame([
+        _row(
+            idx=7013,
+            league="WNBA",
+            market_type="spread_away",
+            win_prob=0.54,
+            ev=-0.02,
+            edge=-0.01,
+            kalshi_probability=0.52,
+        )
+    ])
+    df.loc[0, "home_team"] = "Indiana"
+    df.loc[0, "away_team"] = "New York"
+    df.loc[0, "game_time_est"] = "2026-08-11 7:30 PM ET"
+    df.loc[0, "line_source"] = "live_odds"
+    df.loc[0, "orientation_source"] = "exact_match"
+    df.loc[0, "spread_line"] = 3.5
+    df.loc[0, "live_spread_line"] = 3.5
+    df.loc[0, "uploaded_spread_line"] = -1.5
+    df.loc[0, "odds_american"] = -106
+    for book, home_price, away_price, home_ml, away_ml in (
+        ("fanduel", -114, -106, -170, 138),
+        ("draftkings", -112, -108, -162, 136),
+        ("betmgm", -115, -105, -170, 140),
+    ):
+        df.loc[0, f"{book}_home_point"] = -3.5
+        df.loc[0, f"{book}_away_point"] = 3.5
+        df.loc[0, f"{book}_home_price"] = home_price
+        df.loc[0, f"{book}_away_price"] = away_price
+        df.loc[0, f"{book}_h2h_home_price"] = home_ml
+        df.loc[0, f"{book}_h2h_away_price"] = away_ml
+
+    row = build_best_picks_df(df).iloc[0]
+
+    assert row["best_pick"] == "New York +3.5"
+    assert float(row["market_line_used"]) == 3.5
+    assert row["market_line_source"] == "live"
+    assert row["market_line_source_detail"] == "verified_cross_book_spread_consensus"
+    assert bool(row["line_consistency_flag"]) is True
+    assert row["line_consistency_reason"] == (
+        "verified_cross_book_live_spread_overrode_stale_upload"
+    )
+    assert row["line_provenance_warning"] == ""
+    assert bool(row["line_event_identity_match_flag"]) is True
+    assert row["status_blocker_stage"] != "line_provenance"
+    assert float(row["Kelly_Bet_Size"]) == 0.0
+
+    # Cross-book agreement on the point alone is insufficient.  A selected price
+    # that is not attached to that signed outcome at any live book must still fail
+    # closed instead of borrowing the consensus line.
+    unbound_price = df.copy()
+    unbound_price.loc[0, "odds_american"] = -107
+    blocked = build_best_picks_df(unbound_price).iloc[0]
+    assert blocked["best_pick"] == "New York line unresolved"
+    assert blocked["market_line_source"] == "rejected_live"
+    assert pd.isna(blocked["market_line_used"])
+
+
 def test_single_book_spread_cannot_override_material_upload_disagreement():
     df = pd.DataFrame([
         _row(
