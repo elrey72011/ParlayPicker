@@ -29,6 +29,9 @@ from app_core.weights_config import (
             MLB_SPREAD_ACTIONABLE_PENALTY, MLB_SPREAD_FINALIST_SCORE_PENALTY,
             MLB_SPREAD_FINALIST_PENALTY_MIN_FAMILY_N,
             MLB_SPREAD_FINALIST_PENALTY_MIN_RATE_GAP,
+            WNBA_UNDER_FINALIST_SCORE_PENALTY,
+            WNBA_UNDER_FINALIST_PENALTY_MIN_N,
+            WNBA_UNDER_FINALIST_PENALTY_MAX_WIN_RATE,
             BEST_AVAILABLE_QUALIFIED_MIN_WIN_PROB,
             BEST_AVAILABLE_QUALIFIED_MIN_EV,
             BEST_AVAILABLE_QUALIFIED_MIN_EDGE,
@@ -147,7 +150,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-08-10c-probability-first-best-picks"
+PIPELINE_BUILD = "2026-08-11a-wnba-under-empirical-guard"
 
 # Best Available must compare standard, reasonably priced markets. A P2P exchange can
 # expose alternate run lines (for example +5.5 at -1150) beside the standard MLB +1.5.
@@ -3538,6 +3541,63 @@ def _evidence_gated_mlb_spread_finalist_penalty(
     return penalty, diagnostics
 
 
+def _evidence_gated_wnba_under_finalist_penalty(
+    bucket_stats: dict | None,
+) -> tuple[float, dict[str, object]]:
+    """Bound WNBA Under finalists only while fresh history confirms the leak.
+
+    The cold-start model has too little target-specific history for the general
+    empirical selector's 20-row threshold. Aggregate all WNBA Under consensus
+    buckets here, require a minimum sample, and apply only a small, reversible
+    finalist adjustment when the realized rate is materially below break-even.
+    """
+
+    buckets = bucket_stats.get("buckets", {}) if isinstance(bucket_stats, dict) else {}
+    sample = 0
+    weighted_rate = 0.0
+    for key, payload in buckets.items():
+        parts = str(key).split(":")
+        if len(parts) < 2 or parts[0].upper() != "WNBA" or parts[1].lower() != "under":
+            continue
+        try:
+            n = int(payload.get("n", 0) or 0)
+            rate = float(payload.get("win_rate"))
+        except (AttributeError, TypeError, ValueError):
+            continue
+        if n <= 0 or not np.isfinite(rate):
+            continue
+        sample += n
+        weighted_rate += n * rate
+
+    realized_rate = weighted_rate / sample if sample else None
+    diagnostics: dict[str, object] = {
+        "under_sample": sample,
+        "under_rate": realized_rate,
+        "minimum_sample": int(WNBA_UNDER_FINALIST_PENALTY_MIN_N),
+        "maximum_rate": float(WNBA_UNDER_FINALIST_PENALTY_MAX_WIN_RATE),
+        "applied": False,
+        "reason": "missing_empirical_history",
+        "penalty": 0.0,
+    }
+    if sample < int(WNBA_UNDER_FINALIST_PENALTY_MIN_N) or realized_rate is None:
+        diagnostics["reason"] = "insufficient_direction_history"
+        return 0.0, diagnostics
+    if realized_rate > float(WNBA_UNDER_FINALIST_PENALTY_MAX_WIN_RATE):
+        diagnostics["reason"] = "wnba_unders_not_materially_underperforming"
+        return 0.0, diagnostics
+
+    penalty = min(
+        float(WNBA_UNDER_FINALIST_SCORE_PENALTY),
+        max(0.0, 0.50 - float(realized_rate)),
+    )
+    diagnostics.update({
+        "applied": penalty > 0.0,
+        "reason": "fresh_empirical_wnba_under_regression",
+        "penalty": penalty,
+    })
+    return penalty, diagnostics
+
+
 
 def classify_best_available_picks(best_picks_df: pd.DataFrame) -> pd.DataFrame:
     """Separate full-board coverage, Controlled Value, and Premium picks.
@@ -3978,14 +4038,21 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     _mlb_spread_penalty_value, _mlb_spread_penalty_diagnostics = (
         _evidence_gated_mlb_spread_finalist_penalty(_spread_penalty_stats)
     )
+    _wnba_under_penalty_value, _wnba_under_penalty_diagnostics = (
+        _evidence_gated_wnba_under_finalist_penalty(_spread_penalty_stats)
+    )
     if (
         locals().get("_selection_bucket_stats")
         and not locals().get("_selection_bucket_stats_fresh", False)
     ):
         _mlb_spread_penalty_diagnostics["reason"] = "stale_empirical_history"
+        _wnba_under_penalty_diagnostics["reason"] = "stale_empirical_history"
     if diagnostics_out is not None:
         diagnostics_out["mlb_spread_finalist_penalty"] = dict(
             _mlb_spread_penalty_diagnostics
+        )
+        diagnostics_out["wnba_under_finalist_penalty"] = dict(
+            _wnba_under_penalty_diagnostics
         )
     _mlb_spread_rows = (
         pool["league"].astype(str).str.upper().eq("MLB")
@@ -4003,7 +4070,27 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     pool["mlb_spread_finalist_penalty_reason"] = str(
         _mlb_spread_penalty_diagnostics.get("reason", "not_evaluated")
     )
-    pool["_family_selection_penalty"] = pool["_under_selection_penalty"] + pool["_mlb_spread_finalist_penalty"]
+    _wnba_under_rows = (
+        pool["league"].astype(str).str.upper().eq("WNBA")
+        & pool["market_type"].astype(str).str.lower().eq("total_under")
+    )
+    pool["_wnba_under_finalist_penalty"] = np.where(
+        _wnba_under_rows,
+        float(_wnba_under_penalty_value),
+        0.0,
+    )
+    pool["wnba_under_finalist_penalty_applied"] = (
+        _wnba_under_rows & (float(_wnba_under_penalty_value) > 0.0)
+    )
+    pool["wnba_under_finalist_penalty_value"] = pool["_wnba_under_finalist_penalty"]
+    pool["wnba_under_finalist_penalty_reason"] = str(
+        _wnba_under_penalty_diagnostics.get("reason", "not_evaluated")
+    )
+    pool["_family_selection_penalty"] = (
+        pool["_under_selection_penalty"]
+        + pool["_mlb_spread_finalist_penalty"]
+        + pool["_wnba_under_finalist_penalty"]
+    )
     pool["final_family_score"] = pool["final_family_score"] - pool["_family_selection_penalty"]
     pool["final_family_score_no_mlb_spread_penalty"] = pool["final_family_score"] + pool["_mlb_spread_finalist_penalty"]
 
@@ -4304,6 +4391,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         "mlb_spread_finalist_penalty_applied",
         "mlb_spread_finalist_penalty_value",
         "mlb_spread_finalist_penalty_reason",
+        "wnba_under_finalist_penalty_applied",
+        "wnba_under_finalist_penalty_value",
+        "wnba_under_finalist_penalty_reason",
         "best_available_value_override_applied",
         "best_available_value_override_from_pick",
         "best_available_value_override_ev_gain",
@@ -4337,7 +4427,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     final_market_type_counts = best["market_type"].value_counts().to_dict()
 
     # Cleanup temporary score inputs while preserving the public audit contract.
-    best = best.drop(columns=["_market_family", "_normalized_ev", "_normalized_edge", "final_family_score", "final_family_score_no_mlb_spread_penalty", "_ev_numeric", "_edge_numeric", "_family_selection_penalty", "_under_selection_penalty", "_mlb_spread_finalist_penalty", "_selection_probability", "best_available_finalist", "best_available_final_rank", "best_available_selected", "best_available_rejection_reason"])
+    best = best.drop(columns=["_market_family", "_normalized_ev", "_normalized_edge", "final_family_score", "final_family_score_no_mlb_spread_penalty", "_ev_numeric", "_edge_numeric", "_family_selection_penalty", "_under_selection_penalty", "_mlb_spread_finalist_penalty", "_wnba_under_finalist_penalty", "_selection_probability", "best_available_finalist", "best_available_final_rank", "best_available_selected", "best_available_rejection_reason"])
 
     logger.info(
         "BEST PICKS AUDIT: Rows after verified two-stage comparison: %s "

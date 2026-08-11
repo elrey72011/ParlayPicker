@@ -203,6 +203,17 @@ MLB_SPREAD_FINALIST_SCORE_PENALTY = 0.05
 MLB_SPREAD_FINALIST_PENALTY_MIN_FAMILY_N = 50
 MLB_SPREAD_FINALIST_PENALTY_MIN_RATE_GAP = 0.03
 
+# WNBA Under finalist guard. This is evidence-gated in the selector: it only
+# activates while a fresh graded artifact contains at least six WNBA Unders and
+# their aggregate realized rate remains at or below 35%. Through 9 Aug the
+# point-in-time record was 1-5; the 10 Aug refit is 1-7. Both 10 Aug Unders then
+# lost while the side runner-up won, so a four-point bounded adjustment is enough
+# to stop the cold-start totals model from overruling the stronger market-backed
+# side without banning Unders or changing wager qualification.
+WNBA_UNDER_FINALIST_SCORE_PENALTY = 0.04
+WNBA_UNDER_FINALIST_PENALTY_MIN_N = 6
+WNBA_UNDER_FINALIST_PENALTY_MAX_WIN_RATE = 0.35
+
 # A full-board research candidate remains available for grading, but the public
 # card must abstain instead of presenting weak/negative-value coverage as a pick.
 BEST_AVAILABLE_QUALIFIED_MIN_WIN_PROB = 0.55
