@@ -150,7 +150,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-08-11a-wnba-under-empirical-guard"
+PIPELINE_BUILD = "2026-08-11b-cross-book-live-spread-recovery"
 
 # Best Available must compare standard, reasonably priced markets. A P2P exchange can
 # expose alternate run lines (for example +5.5 at -1150) beside the standard MLB +1.5.
@@ -5858,6 +5858,33 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         # would just re-select the same alt line) â€” force them past resolution into the
         # rejected-live -> uploaded-reference fallback below.
         resolved_unambiguous = suspicious_or_warned & strict_candidate_count.eq(1) & trusted_live_match & ~alt_priced_total
+
+        # A stale uploaded spread must not veto a current, price-bound consensus from
+        # at least two standard books.  ``*_standard_spread_consensus`` is emitted only
+        # after the upstream quote builder verifies that the books agree on the exact
+        # signed team line and that each line orientation agrees with its own moneyline.
+        # Keep the recovery deliberately narrow: exact team/date/time matching is
+        # required, fuzzy orientation and ordinary single-book live sources still fail
+        # closed when they differ materially from the upload.
+        exact_orientation = best.get(
+            "orientation_source", pd.Series([""] * len(best), index=best.index)
+        ).fillna("").astype(str).str.lower()
+        complete_event_identity = (
+            home_key.ne("")
+            & away_key.ne("")
+            & game_date_key.ne("")
+            & commence_key.ne("")
+            & exact_orientation.str.contains("exact_match", na=False)
+            & ~exact_orientation.str.contains("fuzzy", na=False)
+        )
+        verified_cross_book_spread = (
+            resolved_unambiguous
+            & suspicious_spread
+            & line_source_norm.str.endswith("_standard_spread_consensus")
+            & complete_event_identity
+            & best["line_event_identity_match_flag"]
+            & best["line_consistency_reason"].astype(str).eq("suspicious_live_line_delta")
+        )
         unresolved_suspicious = suspicious_or_warned & ~resolved_unambiguous
         unresolved_total_before_recovery = unresolved_suspicious & is_total
 
@@ -5867,6 +5894,29 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         best.loc[resolved_unambiguous, "selected_live_event_source"] = "strict_live_reresolved"
         best.loc[resolved_unambiguous, "line_event_identity_match_flag"] = True
         best.loc[resolved_unambiguous, "line_event_identity_reason"] = "strict_live_event_identity_reresolved"
+
+        best.loc[verified_cross_book_spread, "market_line_source"] = "live"
+        best.loc[verified_cross_book_spread, "market_line_source_detail"] = (
+            "verified_cross_book_spread_consensus"
+        )
+        best.loc[verified_cross_book_spread, "selected_live_event_source"] = (
+            line_source_norm.loc[verified_cross_book_spread]
+        )
+        best.loc[verified_cross_book_spread, "line_consistency_flag"] = True
+        best.loc[verified_cross_book_spread, "line_consistency_reason"] = (
+            "verified_cross_book_live_spread_overrode_stale_upload"
+        )
+        # The reason/detail fields preserve the override audit trail.  Keep the
+        # production-warning field empty because this is a verified live line, not
+        # an unresolved provenance risk; a future positive-value row must still be
+        # allowed to pass the independent staking gates.
+        best.loc[verified_cross_book_spread, "line_provenance_warning"] = ""
+        best.loc[verified_cross_book_spread, "line_event_identity_reason"] = (
+            "exact_live_event_identity_cross_book_consensus"
+        )
+        best.loc[verified_cross_book_spread, "best_pick"] = best.loc[
+            verified_cross_book_spread
+        ].apply(_format_best_pick, axis=1)
 
         # A strict single-candidate re-resolution is treated as clean even when upload/base differ materially.
         best.loc[unresolved_suspicious, "line_event_identity_match_flag"] = False
