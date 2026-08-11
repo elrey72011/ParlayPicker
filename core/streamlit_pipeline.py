@@ -150,7 +150,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-08-11b-cross-book-live-spread-recovery"
+PIPELINE_BUILD = "2026-08-11c-direct-cross-book-consensus"
 
 # Best Available must compare standard, reasonably priced markets. A P2P exchange can
 # expose alternate run lines (for example +5.5 at -1150) beside the standard MLB +1.5.
@@ -5877,10 +5877,20 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             & exact_orientation.str.contains("exact_match", na=False)
             & ~exact_orientation.str.contains("fuzzy", na=False)
         )
+        source_certified_cross_book_spread = line_source_norm.str.endswith(
+            "_standard_spread_consensus"
+        )
+        quote_certified_cross_book_spread = best.apply(
+            _selected_spread_has_verified_cross_book_quote,
+            axis=1,
+        ).fillna(False).astype(bool)
         verified_cross_book_spread = (
             resolved_unambiguous
             & suspicious_spread
-            & line_source_norm.str.endswith("_standard_spread_consensus")
+            & (
+                source_certified_cross_book_spread
+                | quote_certified_cross_book_spread
+            )
             & complete_event_identity
             & best["line_event_identity_match_flag"]
             & best["line_consistency_reason"].astype(str).eq("suspicious_live_line_delta")
@@ -7227,6 +7237,52 @@ def _standard_spread_consensus_quote(row, side: str):
         if pd.notna(price):
             return float(point), float(price), book
     return pd.NA, pd.NA, None
+
+
+def _selected_spread_has_verified_cross_book_quote(row) -> bool:
+    """Confirm the selected signed spread and price against independent books.
+
+    Most generated candidates carry an explicit ``*_standard_spread_consensus``
+    source label.  When every live book already agrees, the direct candidate path
+    legitimately retains the generic ``live_odds`` label instead.  Re-run the same
+    standard-book consensus proof on the selected row so that a stale upload cannot
+    erase that otherwise stronger evidence.
+
+    The selected price must be bound to the same signed line at a real book.  This
+    prevents a corroborated point from legitimizing an unrelated or fabricated price.
+    """
+    market_type_value = row.get("market_type", "")
+    market_type = (
+        "" if pd.isna(market_type_value) else str(market_type_value).strip().lower()
+    )
+    if market_type == "spread_home":
+        side = "home"
+    elif market_type == "spread_away":
+        side = "away"
+    else:
+        return False
+
+    selected_line = pd.to_numeric(
+        row.get("matched_live_spread_line", row.get("live_spread_line")),
+        errors="coerce",
+    )
+    selected_price = pd.to_numeric(row.get("odds_american"), errors="coerce")
+    consensus_line, _, _ = _standard_spread_consensus_quote(row, side)
+    if any(pd.isna(value) for value in (selected_line, selected_price, consensus_line)):
+        return False
+    if not np.isclose(float(selected_line), float(consensus_line), atol=1e-9):
+        return False
+
+    for book in ("novig", "fanduel", "draftkings", "betmgm"):
+        book_line = pd.to_numeric(row.get(f"{book}_{side}_point"), errors="coerce")
+        book_price = pd.to_numeric(row.get(f"{book}_{side}_price"), errors="coerce")
+        if pd.isna(book_line) or pd.isna(book_price):
+            continue
+        if np.isclose(float(book_line), float(consensus_line), atol=1e-9) and np.isclose(
+            float(book_price), float(selected_price), atol=1e-9
+        ):
+            return True
+    return False
 
 
 def _consistent_standard_spread_pair(row, side: str):
