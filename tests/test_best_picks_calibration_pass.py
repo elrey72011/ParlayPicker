@@ -872,6 +872,81 @@ def test_suspicious_unresolved_lines_become_no_play_and_not_viable():
     assert not out["Pick_Status"].astype(str).isin(["Actionable", "High Variance/Speculative"]).any()
 
 
+def test_verified_cross_book_spread_consensus_overrides_stale_upload():
+    """Reproduce the 11 Aug New York/Indiana stale-upload reversal."""
+    df = pd.DataFrame([
+        _row(
+            idx=7011,
+            league="WNBA",
+            market_type="spread_away",
+            win_prob=0.54,
+            ev=-0.02,
+            edge=-0.01,
+            kalshi_probability=0.52,
+        )
+    ])
+    df.loc[0, "home_team"] = "Indiana"
+    df.loc[0, "away_team"] = "New York"
+    df.loc[0, "game_time_est"] = "2026-08-11 7:30 PM ET"
+    df.loc[0, "line_source"] = "fanduel_standard_spread_consensus"
+    df.loc[0, "orientation_source"] = (
+        "exact_match|novig_moneyline_favorite|standard_spread_consensus|"
+        "standard_signed_pair_override"
+    )
+    df.loc[0, "spread_line"] = 4.5
+    df.loc[0, "live_spread_line"] = 4.5
+    df.loc[0, "uploaded_spread_line"] = -1.5
+    df.loc[0, "odds_american"] = -120
+
+    row = build_best_picks_df(df).iloc[0]
+
+    assert row["best_pick"] == "New York +4.5"
+    assert float(row["market_line_used"]) == 4.5
+    assert row["market_line_source"] == "live"
+    assert row["market_line_source_detail"] == "verified_cross_book_spread_consensus"
+    assert bool(row["line_consistency_flag"]) is True
+    assert row["line_consistency_reason"] == (
+        "verified_cross_book_live_spread_overrode_stale_upload"
+    )
+    assert row["line_provenance_warning"] == ""
+    assert bool(row["line_event_identity_match_flag"]) is True
+    # This weak-value fixture remains a no-stake research pick for its independent
+    # baseline/value reason; the important invariant is that line provenance no
+    # longer erases the verified pick or becomes its blocker.
+    assert row["status_blocker_stage"] == "baseline_guardrail"
+    assert row["status_blocker_stage"] != "line_provenance"
+    assert float(row["Kelly_Bet_Size"]) == 0.0
+
+
+def test_single_book_spread_cannot_override_material_upload_disagreement():
+    df = pd.DataFrame([
+        _row(
+            idx=7012,
+            league="WNBA",
+            market_type="spread_away",
+            win_prob=0.54,
+            ev=-0.02,
+            edge=-0.01,
+            kalshi_probability=0.52,
+        )
+    ])
+    df.loc[0, "home_team"] = "Indiana"
+    df.loc[0, "away_team"] = "New York"
+    df.loc[0, "game_time_est"] = "2026-08-11 7:30 PM ET"
+    df.loc[0, "line_source"] = "live_matched"
+    df.loc[0, "orientation_source"] = "exact_match"
+    df.loc[0, "spread_line"] = 4.5
+    df.loc[0, "live_spread_line"] = 4.5
+    df.loc[0, "uploaded_spread_line"] = -1.5
+
+    row = build_best_picks_df(df).iloc[0]
+
+    assert row["Pick_Status"] == "No Play"
+    assert row["best_pick"] == "New York line unresolved"
+    assert row["market_line_source"] == "rejected_live"
+    assert pd.isna(row["market_line_used"])
+
+
 def test_spread_away_uses_away_signed_live_line_for_denver_minnesota_shape():
     df = pd.DataFrame([
         _row(idx=702, league="NBA", market_type="spread_away", win_prob=0.60, ev=0.05, edge=0.05, kalshi_probability=0.56)
