@@ -130,9 +130,11 @@ def test_empirical_direction_overlay_can_override_generic_family_priors():
     # fixture's Aug. 1 date would correctly reject the Aug. 10 table as look-ahead.
     df["game_date"] = "2026-08-10"
     out = build_best_picks_df(df)
-    # The refreshed sample supports both MLB side:Agrees (57%, effective n=75)
-    # and under:Agrees (62%, effective n=122). The mid-line Over remains benched.
-    assert out.loc[out["market_type"] == "spread_home", "Pick_Status"].iloc[0] == "Actionable"
+    # The Aug. 10 refit leaves side:Agrees positive (57%, effective n=83) but its
+    # smoothed realized edge now sits just below the +4% Actionable bar, so it is
+    # correctly capped at High Variance. Under:Agrees remains proven (62%, n=122),
+    # while the mid-line Over remains benched.
+    assert out.loc[out["market_type"] == "spread_home", "Pick_Status"].iloc[0] == "High Variance/Speculative"
     assert out.loc[out["market_type"] == "total_over", "Pick_Status"].iloc[0] == "Below Threshold"
     assert out.loc[out["market_type"] == "total_under", "Pick_Status"].iloc[0] == "Actionable"
 

@@ -5,22 +5,30 @@ import pandas as pd
 
 from core.smart_parlay_engine import generate_smart_parlays
 from core.streamlit_pipeline import (
+    _evidence_gated_wnba_under_finalist_penalty,
     build_best_picks_df,
     classify_best_available_picks,
 )
 
 
-def _candidate(market_type: str, probability: float, ev: float) -> dict:
+def _candidate(
+    market_type: str,
+    probability: float,
+    ev: float,
+    *,
+    league: str = "MLB",
+) -> dict:
     is_total = market_type.startswith("total")
     spread_line = -1.5 if market_type == "spread_home" else 1.5 if market_type == "spread_away" else pd.NA
+    total_line = 178.5 if league == "WNBA" else 8.5
     return {
         "game_id": "best-available-audit",
-        "league": "MLB",
+        "league": league,
         "home_team": "Chicago Cubs",
         "away_team": "Pittsburgh Pirates",
         "game_date": pd.Timestamp("2026-07-27", tz="UTC"),
         "market_type": market_type,
-        "total_line": 8.5 if is_total else pd.NA,
+        "total_line": total_line if is_total else pd.NA,
         "spread_line": spread_line,
         "calibrated_probability": probability,
         "model_probability": probability,
@@ -34,7 +42,7 @@ def _candidate(market_type: str, probability: float, ev: float) -> dict:
         "odds_source": "test",
         "line_source": "live",
         "market_line_source": "live",
-        "live_total_line": 8.5,
+        "live_total_line": total_line,
         "is_live_data": True,
         "used_stale_features": False,
     }
@@ -148,6 +156,86 @@ def test_direction_evidence_penalty_still_blocks_opposed_candidate(monkeypatch):
     assert best.iloc[0]["market_type"] == "spread_away"
     assert not bool(best.iloc[0]["best_available_value_override_applied"])
     assert diagnostics["best_available_value_override_count"] == 0
+
+
+def test_wnba_under_guard_requires_fresh_settled_direction_history():
+    insufficient = {
+        "buckets": {
+            "WNBA:under:Agrees": {"n": 5, "win_rate": 0.0},
+        }
+    }
+    recovered = {
+        "buckets": {
+            "WNBA:under:Agrees": {"n": 4, "win_rate": 0.50},
+            "WNBA:under:Neutral": {"n": 4, "win_rate": 0.50},
+        }
+    }
+    regressed = {
+        "buckets": {
+            "WNBA:under:Agrees": {"n": 5, "win_rate": 0.0},
+            "WNBA:under:Neutral": {"n": 2, "win_rate": 0.50},
+            "WNBA:under:Disagrees": {"n": 1, "win_rate": 0.0},
+        }
+    }
+
+    penalty, diagnostics = _evidence_gated_wnba_under_finalist_penalty(insufficient)
+    assert penalty == 0.0
+    assert diagnostics["reason"] == "insufficient_direction_history"
+
+    penalty, diagnostics = _evidence_gated_wnba_under_finalist_penalty(recovered)
+    assert penalty == 0.0
+    assert diagnostics["reason"] == "wnba_unders_not_materially_underperforming"
+
+    penalty, diagnostics = _evidence_gated_wnba_under_finalist_penalty(regressed)
+    assert penalty == 0.04
+    assert diagnostics["applied"] is True
+    assert diagnostics["under_sample"] == 8
+    assert diagnostics["under_rate"] == 0.125
+
+
+def test_fresh_wnba_under_regression_moves_close_finalist_to_side(monkeypatch):
+    stats = {
+        "overall": {"n": 200, "win_rate": 0.54},
+        "buckets": {
+            "WNBA:under:Agrees": {
+                "n": 5,
+                "wins": 0,
+                "win_rate": 0.0,
+            },
+            "WNBA:under:Neutral": {
+                "n": 2,
+                "wins": 1,
+                "win_rate": 0.50,
+            },
+            "WNBA:under:Disagrees": {
+                "n": 1,
+                "wins": 0,
+                "win_rate": 0.0,
+            },
+        },
+    }
+    monkeypatch.setattr("core.empirical_tiers.load_bucket_stats", lambda: stats)
+    monkeypatch.setattr("core.probability_calibration.load_calibration", lambda: None)
+
+    analysis = pd.DataFrame([
+        _candidate("spread_home", probability=0.51, ev=0.00, league="WNBA"),
+        _candidate("spread_away", probability=0.49, ev=0.00, league="WNBA"),
+        _candidate("total_under", probability=0.54, ev=0.02, league="WNBA"),
+        _candidate("total_over", probability=0.46, ev=-0.02, league="WNBA"),
+    ])
+    diagnostics: dict = {}
+
+    best = build_best_picks_df(analysis, diagnostics_out=diagnostics)
+
+    assert best.iloc[0]["market_type"] == "spread_home"
+    assert diagnostics["wnba_under_finalist_penalty"]["applied"] is True
+    audit = diagnostics["candidate_audit_df"]
+    under = audit[audit["market_type"].eq("total_under")].iloc[0]
+    assert bool(under["wnba_under_finalist_penalty_applied"])
+    assert float(under["wnba_under_finalist_penalty_value"]) == 0.04
+    assert under["wnba_under_finalist_penalty_reason"] == (
+        "fresh_empirical_wnba_under_regression"
+    )
 
 
 def test_commercial_tier_never_upgrades_an_unfunded_best_available_row():
