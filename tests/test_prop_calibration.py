@@ -33,9 +33,9 @@ def test_repo_bundled_prop_ledger_loads_independent_of_working_directory():
     assert DEFAULT_PROP_RESULTS_RUNTIME_PATH.is_absolute()
     ledger = load_prop_results_log()
     assert ledger is not None
-    assert len(ledger) >= 572
-    assert ledger["result"].isin(["WIN", "LOSS"]).sum() >= 539
-    assert pd.to_datetime(ledger["game_date"]).max() >= pd.Timestamp("2026-08-02")
+    assert len(ledger) >= 729
+    assert ledger["result"].isin(["WIN", "LOSS"]).sum() >= 684
+    assert pd.to_datetime(ledger["game_date"]).max() >= pd.Timestamp("2026-08-11")
 
 
 def test_runtime_prop_ledger_is_persisted_and_restored_over_baseline(tmp_path):
@@ -122,6 +122,27 @@ def test_directional_probation_requires_that_side_to_be_profitable():
     assert not bool(out.loc[0, "Market_Probation"])
     assert bool(out.loc[1, "Market_Probation"])
     assert out.loc[1, "Kelly_Bet_Size"] == 1.0
+
+
+def test_future_results_cannot_prove_market_for_historical_slate():
+    ledger = pd.DataFrame({
+        "game_date": ["2026-08-11"] * 20,
+        "market_type": ["batter_hits_over"] * 20,
+        "pick": ["Player Over 0.5 Hits"] * 20,
+        "result": ["WIN"] * 20,
+        "RawWinProbability": [0.65] * 20,
+        "odds_american": [-110] * 20,
+    })
+
+    clean = normalize_prop_results(ledger, as_of_date="2026-08-10")
+    out = apply_market_probation(
+        _card("batter_hits_over"),
+        market_records_from_log(clean, detailed=True),
+    )
+
+    assert clean.empty
+    assert bool(out.loc[0, "Market_Probation"])
+    assert out.loc[0, "Kelly_Bet_Size"] == 1.0
 
 
 def test_pooled_calibration_can_rank_but_cannot_fund_an_unproven_direction():

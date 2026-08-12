@@ -451,16 +451,18 @@ def build_prop_card(
     if total > cap_total and total > 0:
         card["Kelly_Bet_Size"] = (card["Kelly_Bet_Size"] * (cap_total / total)).round(2)
     card = card.drop(columns=["_stake_pct"])
-    # Per-market probation: stakes follow the graded record (see module tail).
+    # Per-market probation must use the same pre-slate cutoff as calibration.
+    # Passing the full cumulative ledger here would let future results prove an
+    # older market during replay/backtesting.
+    clean_history = normalize_prop_results(results_history, as_of_date=date)
     try:
         card = apply_market_probation(
-            card, market_records_from_log(results_history, detailed=True)
+            card, market_records_from_log(clean_history, detailed=True)
         )
     except Exception:
         pass  # probation is protective, never card-breaking
     diagnostics = card_kwargs.get("diagnostics")
     if diagnostics is not None:
-        clean_history = normalize_prop_results(results_history, as_of_date=date)
         diagnostics["prop_calibration_graded_count"] = int(len(clean_history))
         diagnostics["prop_calibration_status"] = (
             "ready"
