@@ -287,3 +287,35 @@ def ledger_coverage_summary(ledger: pd.DataFrame | None) -> dict[str, object]:
         "start_date": unique_dates[0] if unique_dates else None,
         "end_date": unique_dates[-1] if unique_dates else None,
     }
+
+
+def ledger_history_gap_summary(
+    ledger: pd.DataFrame | None,
+    target_date: object,
+    *,
+    max_gap_days: int = 1,
+) -> dict[str, object]:
+    """Flag grading that could silently skip a newer cumulative ledger.
+
+    Streamlit's local recovery file is not durable across every deployment. If
+    the bundled/uploaded ledger ends several days before the slate being graded,
+    require an explicit acknowledgement so a fresh deployment cannot quietly
+    replace recent calibration history with only the newly graded slate.
+    """
+    coverage = ledger_coverage_summary(ledger)
+    latest = pd.to_datetime(coverage.get("end_date"), errors="coerce", utc=True)
+    target = pd.to_datetime(target_date, errors="coerce", utc=True)
+    gap_days = None
+    if pd.notna(latest) and pd.notna(target):
+        gap_days = int((target.normalize() - latest.normalize()).days)
+    requires_confirmation = bool(
+        gap_days is not None and gap_days > max(0, int(max_gap_days))
+    )
+    return {
+        "latest_date": coverage.get("end_date"),
+        "target_date": (
+            target.strftime("%Y-%m-%d") if pd.notna(target) else None
+        ),
+        "gap_days": gap_days,
+        "requires_confirmation": requires_confirmation,
+    }

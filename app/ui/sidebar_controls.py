@@ -103,14 +103,15 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
     theover_spreads = st.sidebar.file_uploader("Upload TheOver Spreads CSV", type=["csv"], key="theover_spreads")
     theover_totals = st.sidebar.file_uploader("Upload TheOver Totals CSV", type=["csv"], key="theover_totals")
     prop_results_log = st.sidebar.file_uploader(
-        "Upload Newer Graded Prop Ledger(s) (optional)",
+        "Upload Latest Downloaded Graded Prop Ledger(s)",
         type=["csv"],
         accept_multiple_files=True,
         key="prop_results_log",
         help=(
             "The app starts with the cumulative ledger bundled in the repo. Upload "
-            "newer ledgers here to append or correct rows before calibration; all "
-            "sources are merged and deduplicated automatically."
+            "your latest downloaded ledger whenever it is newer than that baseline, "
+            "especially after an app deployment or restart. All sources are merged "
+            "and deduplicated automatically."
         ),
     )
     bundled_ledger = _read_bundled_prop_ledger()
@@ -131,6 +132,30 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
         max_value=date.today(),
         key="previous_prop_date",
     )
+    generated_prior = st.session_state.get("generated_prop_results_log")
+    pregrade_ledger = _assemble_active_prop_ledger(
+        prop_results_log,
+        generated_prior,
+        bundled_ledger,
+    )
+    from app_core.prop_grading import ledger_history_gap_summary
+
+    selected_gap = ledger_history_gap_summary(
+        pregrade_ledger, previous_prop_date.isoformat()
+    )
+    confirm_history_gap = False
+    if selected_gap["requires_confirmation"]:
+        st.sidebar.warning(
+            "The loaded cumulative prop ledger ends on "
+            f"{selected_gap['latest_date']}, but you selected "
+            f"{selected_gap['target_date']}. Upload the newest downloaded graded "
+            "ledger first so intervening calibration results are not lost."
+        )
+        confirm_history_gap = st.sidebar.checkbox(
+            "I confirm no newer graded prop ledger exists",
+            value=False,
+            key="confirm_prop_history_gap",
+        )
     if st.sidebar.button("Grade Uploaded Player Props", key="grade_previous_props"):
         if not previous_prop_exports:
             st.sidebar.error("Upload at least one previous player-prop export first.")
@@ -165,23 +190,30 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
                         inferred_date = dates[0]
                 grade_date = inferred_date or previous_prop_date.isoformat()
 
-                generated_prior = st.session_state.get("generated_prop_results_log")
                 prior_ledger = _assemble_active_prop_ledger(
                     prop_results_log,
                     generated_prior,
                     bundled_ledger,
                 )
-                with st.spinner(f"Grading MLB player props for {grade_date}..."):
-                    graded = grade_prop_export(previous_card, grade_date)
-                    ledger = merge_prop_ledgers(prior_ledger, graded)
-                st.session_state["generated_prop_results_log"] = ledger
-                st.session_state["active_prop_results_log"] = ledger
-                summary = grading_summary(graded)
-                st.sidebar.success(
-                    f"Graded {summary['graded']} props: "
-                    f"{summary['wins']}-{summary['losses']} "
-                    f"({summary['unresolved']} unresolved)."
-                )
+                actual_gap = ledger_history_gap_summary(prior_ledger, grade_date)
+                if actual_gap["requires_confirmation"] and not confirm_history_gap:
+                    st.sidebar.error(
+                        "Grading stopped to protect cumulative calibration history. "
+                        "Upload the latest downloaded graded prop ledger, or confirm "
+                        "that no newer ledger exists."
+                    )
+                else:
+                    with st.spinner(f"Grading MLB player props for {grade_date}..."):
+                        graded = grade_prop_export(previous_card, grade_date)
+                        ledger = merge_prop_ledgers(prior_ledger, graded)
+                    st.session_state["generated_prop_results_log"] = ledger
+                    st.session_state["active_prop_results_log"] = ledger
+                    summary = grading_summary(graded)
+                    st.sidebar.success(
+                        f"Graded {summary['graded']} props: "
+                        f"{summary['wins']}-{summary['losses']} "
+                        f"({summary['unresolved']} unresolved)."
+                    )
             except Exception as exc:
                 st.sidebar.error(f"Player-prop grading failed: {exc}")
 

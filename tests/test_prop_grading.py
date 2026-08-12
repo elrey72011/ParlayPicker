@@ -4,6 +4,7 @@ from app_core.prop_grading import (
     assemble_prop_ledgers,
     grade_prop_export,
     grading_summary,
+    ledger_history_gap_summary,
     ledger_coverage_summary,
     merge_prop_ledgers,
     validate_prop_export,
@@ -150,6 +151,34 @@ def test_ledger_coverage_summary_reports_cumulative_date_range():
     assert summary["date_count"] == 3
     assert summary["start_date"] == "2026-07-21"
     assert summary["end_date"] == "2026-07-23"
+
+
+def test_history_gap_requires_confirmation_before_skipping_recent_slates():
+    ledger = pd.DataFrame({
+        "game_date": ["2026-08-02"],
+        "result": ["WIN"],
+    })
+
+    summary = ledger_history_gap_summary(ledger, "2026-08-11")
+
+    assert summary == {
+        "latest_date": "2026-08-02",
+        "target_date": "2026-08-11",
+        "gap_days": 9,
+        "requires_confirmation": True,
+    }
+
+
+def test_history_gap_accepts_the_immediately_following_slate():
+    ledger = pd.DataFrame({
+        "game_date": ["2026-08-10"],
+        "result": ["WIN"],
+    })
+
+    summary = ledger_history_gap_summary(ledger, "2026-08-11")
+
+    assert summary["gap_days"] == 1
+    assert summary["requires_confirmation"] is False
 
 
 def test_invalid_export_reports_missing_columns():
