@@ -173,3 +173,30 @@ def test_compact_export_prefers_ranked_pick_and_keeps_display_fallback():
         "Pittsburgh +1.5",
     ]
     assert "display_pick" not in compact.columns
+
+
+def test_compact_export_preserves_precision_shortlist_disclosure():
+    source = pd.DataFrame([
+        _compact_source(
+            Precision_Card=True,
+            Precision_Rank=1,
+            Precision_Probability=0.71,
+            Precision_Target_Hit_Rate=0.75,
+            Precision_Wager_Approved=False,
+            Precision_Card_Instruction=(
+                "PRECISION SHORTLIST - NO APP-APPROVED STAKE"
+            ),
+            Precision_Card_Reason=(
+                "Selected by global calibrated win probability; "
+                "75% is a monitoring target, not a guarantee."
+            ),
+        )
+    ])
+
+    compact = _build_compact_export_frame(source)
+
+    assert bool(compact.loc[0, "Precision_Card"])
+    assert compact.loc[0, "Precision_Rank"] == 1
+    assert compact.loc[0, "Precision_Probability"] == 0.71
+    assert not bool(compact.loc[0, "Precision_Wager_Approved"])
+    assert compact.loc[0, "Play_Stake"] == 0.0

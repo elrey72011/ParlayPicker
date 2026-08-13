@@ -190,6 +190,9 @@ _COMPACT_EXPORT_COLUMNS = [
     "Wager_Instruction", "Export_Scope", "Bettable",
     "commercial_tier", "sellable_as_premium", "sellable_as_value_card",
     "controlled_card_recovery",
+    "Precision_Card", "Precision_Rank", "Precision_Probability",
+    "Precision_Target_Hit_Rate", "Precision_Wager_Approved",
+    "Precision_Card_Instruction", "Precision_Card_Reason",
     "WinProbability", "expected_value", "edge",
     "Conviction_Score", "market_probability", "kalshi_probability", "ml_probability",
     "effective_expected_value", "effective_edge", "effective_win_probability",
@@ -2472,13 +2475,16 @@ def main() -> None:
             # off the internal names.
             best_picks_export = apply_status_display_labels(best_picks_export)
             from app_core.export_scope import label_wager_export, production_wagers
+            from app_core.precision_card import attach_precision_card, precision_shortlist
 
             best_picks_export = label_wager_export(best_picks_export)
+            best_picks_export = attach_precision_card(best_picks_export)
             _scope_cols = ["Wager_Instruction", "Export_Scope", "Bettable"]
             best_picks_export = best_picks_export[
                 _scope_cols + [column for column in best_picks_export.columns if column not in _scope_cols]
             ]
             production_game_export = production_wagers(best_picks_export)
+            precision_game_export = precision_shortlist(best_picks_export)
 
             if "Home" in best_picks_export.columns and not best_picks_export.empty:
                 if not best_picks_export["Home"].notna().all():
@@ -2508,6 +2514,25 @@ def main() -> None:
                 st.caption(
                     "Production-only game export: 0 approved wagers. The all-picks CSV is "
                     "coverage and marks every row as a $0 PASS."
+                )
+            if precision_game_export is not None and not precision_game_export.empty:
+                st.download_button(
+                    "Export Precision Shortlist (Top 2)",
+                    precision_game_export.to_csv(index=False, encoding="utf-8-sig"),
+                    "precision_game_card.csv",
+                    mime="text/csv",
+                    key="export_precision_game_card",
+                )
+                st.caption(
+                    "Accuracy-first pilot: at most two globally ranked, live-line-verified "
+                    "picks with at least 60% calibrated probability and a price of -220 or "
+                    "better. The 75% hit rate is a monitoring target, not a guarantee; only "
+                    "Wager_Instruction and a positive Play_Stake authorize a bet."
+                )
+            else:
+                st.caption(
+                    "Precision shortlist: no live-line-verified pick cleared the 60% "
+                    "probability and -220 price floors."
                 )
 
             candidate_audit_df = diagnostics.get("candidate_audit_df")
