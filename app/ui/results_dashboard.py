@@ -291,6 +291,18 @@ def _production_wager_mask(frame: pd.DataFrame) -> pd.Series:
     return amounts.max(axis=1).gt(0.0)
 
 
+def _precision_card_mask(frame: pd.DataFrame) -> pd.Series:
+    """True only for rows explicitly exported on the precision shortlist."""
+
+    if frame is None or frame.empty or "Precision_Card" not in frame.columns:
+        return pd.Series(False, index=getattr(frame, "index", None), dtype=bool)
+    values = frame["Precision_Card"]
+    if pd.api.types.is_bool_dtype(values.dtype):
+        return values.fillna(False).astype(bool)
+    normalized = values.astype("string").fillna("").str.strip().str.casefold()
+    return normalized.isin({"true", "1", "yes", "y"})
+
+
 def _format_candidate_summary(summary: pd.DataFrame) -> pd.DataFrame:
     out = summary.copy()
     for column in ("Hit Rate", "Avg Probability", "Avg EV"):
@@ -640,6 +652,40 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
         prod_cols[2].metric("Flat-Bet P&L (Units)", f"{net_profit_prod:+.2f}")
         prod_cols[3].metric("Rows Settled", f"{settled_prod}/{len(production_df)}")
 
+    precision_df = display_df[_precision_card_mask(display_df)].copy()
+    st.markdown("#### Precision Shortlist Performance")
+    if precision_df.empty:
+        st.info(
+            "This recap contains no precision-shortlist rows. Export the current top-two "
+            "precision card to begin tracking the accuracy-first pilot."
+        )
+    else:
+        (
+            wins_precision,
+            losses_precision,
+            pushes_precision,
+            win_rate_precision,
+            net_profit_precision,
+        ) = calculate_metrics(precision_df)
+        settled_precision = wins_precision + losses_precision + pushes_precision
+        precision_cols = st.columns(4)
+        precision_cols[0].metric(
+            "Settled Record",
+            f"{wins_precision}-{losses_precision}-{pushes_precision}",
+        )
+        precision_cols[1].metric("Precision Win Rate", f"{win_rate_precision:.1%}")
+        precision_cols[2].metric(
+            "Flat-Bet P&L (Units)", f"{net_profit_precision:+.2f}"
+        )
+        precision_cols[3].metric(
+            "Rows Settled", f"{settled_precision}/{len(precision_df)}"
+        )
+    st.caption(
+        "The precision shortlist is an accuracy-first pilot with a 75% monitoring target, "
+        "not a guaranteed result or automatic wager. Bettable plus a positive exported "
+        "stake remains the only wagering authority."
+    )
+
     wins_all, losses_all, pushes_all, win_rate_all, net_profit_all = calculate_metrics(display_df)
     settled_all = wins_all + losses_all + pushes_all
     st.markdown("#### Coverage Board Performance (Diagnostic)")
@@ -692,7 +738,8 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
     cols_to_show = [
         'league', 'home_team', 'away_team', 'best_pick',
         'actual_home_score', 'actual_away_score', 'Outcome',
-        'grading_status', 'grading_issue', 'Pick_Status', 'export_run_id',
+        'grading_status', 'grading_issue', 'Precision_Card', 'Precision_Rank',
+        'Precision_Card_Instruction', 'Pick_Status', 'export_run_id',
     ]
     # Filter to only existing columns
     cols_to_show = [c for c in cols_to_show if c in display_df.columns]
@@ -705,6 +752,9 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
          'best_pick': 'Pick Taken',
          'grading_status': 'Grading Status',
          'grading_issue': 'Grading Issue',
+         'Precision_Card': 'Precision Shortlist',
+         'Precision_Rank': 'Precision Rank',
+         'Precision_Card_Instruction': 'Precision Instruction',
          'Pick_Status': 'Status'
     }
 
@@ -716,7 +766,8 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
         width="stretch",
         disabled=[
             "League", "Home", "Away", "Pick Taken", "Grading Status",
-            "Grading Issue", "Status", "export_run_id",
+            "Grading Issue", "Precision Shortlist", "Precision Rank",
+            "Precision Instruction", "Status", "export_run_id",
         ],
         column_config={
             "actual_home_score": st.column_config.NumberColumn(
