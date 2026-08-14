@@ -847,7 +847,7 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
         totals_df=totals_df,
     )
 
-    parlay_columns = ["parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "legs", "unique_game_count", "one_leg_per_game", "risk_tier", "group_id", "best_payout_book", "Conviction_Score", "min_leg_prob", "has_actionable_anchor", "production_safety_mode", "parlay_class", "premium_eligible", "sellable_as_premium", "commercial_warning", "kelly_fraction", "recommended_bet"]
+    parlay_columns = ["parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "legs", "unique_game_count", "one_leg_per_game", "parlay_source", "risk_tier", "group_id", "best_payout_book", "Conviction_Score", "min_leg_prob", "has_actionable_anchor", "production_safety_mode", "parlay_class", "premium_eligible", "sellable_as_premium", "commercial_warning", "kelly_fraction", "recommended_bet"]
     empty_per_leg = {f"parlays_{lc}_df": pd.DataFrame(columns=parlay_columns) for lc in (2, 3)}
 
     empty_state: dict = {
@@ -1031,6 +1031,11 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
     diagnostics["best_pick_nonempty_rows"] = int(_safe_str_series(best_picks_df, "best_pick").str.strip().str.len().gt(0).sum()) if not best_picks_df.empty else 0
 
     parlays_df = generate_parlays(best_picks_df, max_legs=3)
+    diagnostics["probability_ranked_parlay_fallback_count"] = int(
+        _safe_str_series(parlays_df, "parlay_source")
+        .eq("probability_ranked_fallback")
+        .sum()
+    ) if not parlays_df.empty else 0
     per_leg: dict = {}
     for lc in (2, 3):
         parlay_slice = parlays_df[_safe_numeric_series(parlays_df, "legs").eq(lc)].copy()
@@ -1452,7 +1457,11 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
         parlays_df.loc[premium_parlay, "parlay_class"] = "Premium"
         if "commercial_warning" not in parlays_df.columns:
             parlays_df["commercial_warning"] = ""
-        parlays_df.loc[~premium_parlay, "commercial_warning"] = (
+        missing_research_warning = (
+            ~premium_parlay
+            & _safe_str_series(parlays_df, "commercial_warning").str.strip().eq("")
+        )
+        parlays_df.loc[missing_research_warning, "commercial_warning"] = (
             "Not production-qualified; research/recreational only."
         )
         for stake_col in ("recommended_bet", "kelly_fraction"):
@@ -2883,13 +2892,25 @@ def main() -> None:
     with tab4:
         st.subheader("Best Parlays")
         base_parlays_df = parlays_df if parlays_df is not None and not parlays_df.empty else pd.DataFrame()
+        st.caption(
+            "Parlays are ordered from highest combined win probability to lowest. "
+            "Every leg comes from a different game; research rows always carry a $0 approved stake."
+        )
 
         view_mode = st.radio("Parlay View", ["Ranked Parlays", "Top Combinations"], horizontal=True)
 
         if base_parlays_df.empty:
             st.info("No parlays available for this view yet.")
         elif view_mode == "Ranked Parlays":
-            ranked = base_parlays_df.sort_values("parlay_ev", ascending=False).reset_index(drop=True)
+            probability_sort_columns = [
+                column for column in ("combined_probability", "min_leg_prob", "parlay_ev")
+                if column in base_parlays_df.columns
+            ]
+            ranked = base_parlays_df.sort_values(
+                probability_sort_columns,
+                ascending=[False] * len(probability_sort_columns),
+                kind="mergesort",
+            ).reset_index(drop=True)
             for idx, row in ranked.iterrows():
                 tier = row.get("risk_tier", "")
                 tier_label = f" — {tier}" if tier else ""
@@ -2899,12 +2920,26 @@ def main() -> None:
                 st.markdown(f"- **Parlay EV:** {float(row.get('parlay_ev', 0.0)):.3f}")
                 kf = row.get("kelly_fraction", 0.0)
                 st.markdown(f"- **Kelly Fraction (1/8):** {float(kf) if pd.notna(kf) else 0.0:.2%}")
+                stake = row.get("recommended_bet", 0.0)
+                st.markdown(f"- **App-Approved Stake:** ${float(stake) if pd.notna(stake) else 0.0:.2f}")
                 legs = [leg.strip() for leg in str(row.get("parlay_legs", "")).split("|") if leg.strip()]
                 for leg in legs:
                     st.markdown(f"- {leg}")
+                warning_value = row.get("commercial_warning", "")
+                warning = "" if pd.isna(warning_value) else str(warning_value).strip()
+                if warning:
+                    st.caption(warning)
                 st.divider()
         else:
-            top_combo = base_parlays_df.sort_values("parlay_ev", ascending=False).head(10).reset_index(drop=True)
+            probability_sort_columns = [
+                column for column in ("combined_probability", "min_leg_prob", "parlay_ev")
+                if column in base_parlays_df.columns
+            ]
+            top_combo = base_parlays_df.sort_values(
+                probability_sort_columns,
+                ascending=[False] * len(probability_sort_columns),
+                kind="mergesort",
+            ).head(10).reset_index(drop=True)
             table_cols = [c for c in ["combined_probability", "combined_decimal_odds", "parlay_ev", "kelly_fraction", "legs", "unique_game_count", "one_leg_per_game", "risk_tier"] if c in top_combo.columns]
             table_df = top_combo[table_cols].copy()
             table_df.insert(0, "Parlay", ["<br>".join([leg.strip() for leg in str(v).split("|") if leg.strip()]) for v in top_combo["parlay_legs"]])
@@ -2915,7 +2950,7 @@ def main() -> None:
             "parlay_class", "premium_eligible", "sellable_as_premium", "commercial_warning",
             "risk_tier", "group_id", "parlay_legs", "combined_probability", "combined_decimal_odds",
             "parlay_ev", "legs", "combined_market_prob", "ev_boost_pct", "is_high_correlation",
-            "unique_game_count", "one_leg_per_game",
+            "unique_game_count", "one_leg_per_game", "parlay_source",
             "production_safety_mode", "best_payout_book", "Conviction_Score", "min_leg_prob",
             "kelly_fraction", "recommended_bet"
         ]

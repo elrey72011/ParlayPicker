@@ -72,6 +72,8 @@ MIN_LEG_EDGE = 0.02
 # the graded Jun 5-10 recaps, so an Actionable anchor is not evidence a combo is
 # better — parlays rank purely on EV computed from calibrated leg probabilities.
 MAX_ACTIONABLE_ANCHORS = 5
+PROBABILITY_FALLBACK_MAX_CANDIDATES = 20
+PROBABILITY_FALLBACK_MAX_PARLAYS = 10
 
 # Non-Actionable MLB total picks must clear a stricter floor for parlay legs.
 # May 27: MLB HV/Spec totals went 0-6 while Actionable MLB totals went 2-2 (100%).
@@ -197,6 +199,203 @@ def _leg_labels(legs: pd.DataFrame, label_cols: list[str]) -> list[str]:
     return labels
 
 
+def _strict_bool_mask(df: pd.DataFrame, column: str, *, default: bool) -> pd.Series:
+    """Fail-closed parsing for optional public eligibility fields."""
+    if column not in df.columns:
+        return pd.Series(default, index=df.index, dtype=bool)
+    values = df[column]
+    if pd.api.types.is_bool_dtype(values.dtype):
+        return values.fillna(default).astype(bool)
+    normalized = values.astype("string").fillna("").str.strip().str.casefold()
+    return normalized.isin({"true", "1", "yes", "y"})
+
+
+def _best_available_probability(df: pd.DataFrame) -> pd.Series:
+    """Use the same honest probability precedence as Pick of the Day."""
+    probability = pd.Series(float("nan"), index=df.index, dtype=float)
+    for column in (
+        "empirical_win_probability",
+        "effective_win_probability",
+        "calibrated_probability",
+        "WinProbability",
+    ):
+        if column in df.columns:
+            probability = probability.fillna(
+                pd.to_numeric(df[column], errors="coerce")
+            )
+    return probability.where(probability.between(0.0, 1.0))
+
+
+def _fallback_decimal_odds(df: pd.DataFrame) -> pd.Series:
+    decimal = pd.to_numeric(
+        df.get("decimal_odds", pd.Series(float("nan"), index=df.index)),
+        errors="coerce",
+    )
+    american = pd.to_numeric(
+        df.get("odds_american", pd.Series(float("nan"), index=df.index)),
+        errors="coerce",
+    )
+    derived = pd.Series(float("nan"), index=df.index, dtype=float)
+    positive = american.gt(0)
+    negative = american.lt(0)
+    derived.loc[positive] = 1.0 + american.loc[positive] / 100.0
+    derived.loc[negative] = 1.0 + 100.0 / american.loc[negative].abs()
+    return decimal.where(decimal.gt(1.0), derived)
+
+
+def generate_probability_ranked_parlays(
+    df: pd.DataFrame,
+    *,
+    max_candidates: int = PROBABILITY_FALLBACK_MAX_CANDIDATES,
+    max_parlays: int = PROBABILITY_FALLBACK_MAX_PARLAYS,
+) -> pd.DataFrame:
+    """Populate a research parlay board from valid best-available game picks.
+
+    This path is used only when the production parlay gate correctly abstains.
+    It never promotes or sizes a wager: every record is research/recreational,
+    carries a zero stake, and is ordered by conservative combined probability.
+    Every combination still enforces one leg per unique game.
+    """
+    if df is None or df.empty or "best_pick" not in df.columns:
+        return pd.DataFrame()
+
+    candidates = df.copy()
+    for canonical, aliases in {
+        "away_team": ("Away", "away"),
+        "home_team": ("Home", "home"),
+    }.items():
+        if canonical not in candidates.columns:
+            alias = next((name for name in aliases if name in candidates.columns), None)
+            if alias:
+                candidates[canonical] = candidates[alias]
+    pick = candidates["best_pick"].astype("string").fillna("").str.strip()
+    valid = pick.ne("") & ~pick.str.contains(
+        r"unresolved|rejected|missing line|no valid pick", case=False, regex=True
+    )
+    for column in (
+        "final_pick_valid",
+        "best_available_selection_verified",
+        "best_available_ranking_verified",
+        "line_consistency_flag",
+        "line_event_identity_match_flag",
+    ):
+        if column in candidates.columns:
+            valid &= _strict_bool_mask(candidates, column, default=False)
+    if "game_already_started_flag" in candidates.columns:
+        valid &= ~_strict_bool_mask(
+            candidates, "game_already_started_flag", default=False
+        )
+    if "market_line_source" in candidates.columns:
+        source = (
+            candidates["market_line_source"]
+            .astype("string").fillna("").str.strip().str.casefold()
+        )
+        valid &= ~source.str.contains(r"rejected|unresolved|missing", regex=True)
+
+    candidates["_parlay_probability"] = _best_available_probability(candidates)
+    candidates["_parlay_decimal_odds"] = _fallback_decimal_odds(candidates)
+    valid &= candidates["_parlay_probability"].gt(0.5)
+    valid &= candidates["_parlay_decimal_odds"].gt(1.0)
+    candidates = candidates[valid].copy()
+    if len(candidates) < 2:
+        return pd.DataFrame()
+
+    candidates = candidates.sort_values(
+        ["_parlay_probability", "_parlay_decimal_odds"],
+        ascending=[False, False],
+        kind="mergesort",
+    ).head(max(2, int(max_candidates)))
+
+    label_cols = [
+        column for column in ("best_pick", "away_team", "home_team")
+        if column in candidates.columns
+    ]
+    records: list[dict] = []
+    for combo_number, combo in enumerate(combinations(candidates.index, 2), start=1):
+        legs = candidates.loc[list(combo)]
+        if not has_unique_games(legs) or _violates_direction_cap(legs):
+            continue
+
+        probabilities = legs["_parlay_probability"].astype(float)
+        decimals = legs["_parlay_decimal_odds"].astype(float)
+        combined_probability = conservative_joint_probability(
+            probabilities.tolist(), haircut=PARLAY_PROBABILITY_HAIRCUT
+        )
+        combined_decimal_odds = float(decimals.prod())
+        parlay_ev = combined_probability * combined_decimal_odds - 1.0
+        market_probability = pd.to_numeric(
+            legs.get("market_probability", 1.0 / decimals), errors="coerce"
+        )
+        if market_probability.isna().any():
+            market_probability = 1.0 / decimals
+        combined_market_probability = float(market_probability.prod())
+
+        source_column = next(
+            (column for column in ("odds_source", "book") if column in legs.columns),
+            None,
+        )
+        sources = (
+            legs[source_column].astype("string").fillna("").str.strip().str.casefold()
+            if source_column else pd.Series("", index=legs.index)
+        )
+        common_source = sources.iloc[0] if sources.ne("").all() and sources.nunique() == 1 else ""
+        book_display = common_source.replace("_", " ").title() if common_source else "Verify Same-Book Price"
+
+        records.append({
+            "parlay_legs": " | ".join(_leg_labels(legs, label_cols)),
+            "combined_probability": combined_probability,
+            "combined_decimal_odds": combined_decimal_odds,
+            "parlay_ev": parlay_ev,
+            "legs": 2,
+            "combined_market_prob": combined_market_probability,
+            "ev_boost_pct": (
+                (combined_probability - combined_market_probability)
+                / combined_market_probability
+                if combined_market_probability > 0 else 0.0
+            ),
+            "is_high_correlation": _has_same_direction_pair(legs),
+            "risk_tier": "Probability Ranked / No Stake",
+            "group_id": f"probability_ranked_{combo_number}",
+            "best_payout_book": book_display,
+            "Conviction_Score": (
+                float(pd.to_numeric(legs["Conviction_Score"], errors="coerce").mean())
+                if "Conviction_Score" in legs.columns else pd.NA
+            ),
+            "min_leg_prob": float(probabilities.min()),
+            "has_actionable_anchor": (
+                legs["Pick_Status"].astype(str).eq("Actionable").any()
+                if "Pick_Status" in legs.columns else False
+            ),
+            "production_safety_mode": False,
+            "model_risk_haircut": PARLAY_PROBABILITY_HAIRCUT,
+            "parlay_class": "Research / Recreational",
+            "premium_eligible": False,
+            "sellable_as_premium": False,
+            "commercial_warning": (
+                "Probability-ranked fallback; no app-approved stake. Verify all legs "
+                "and prices at one sportsbook before use."
+            ),
+            "unique_game_count": 2,
+            "one_leg_per_game": True,
+            "kelly_fraction": 0.0,
+            "recommended_bet": 0.0,
+            "parlay_source": "probability_ranked_fallback",
+        })
+
+    if not records:
+        return pd.DataFrame()
+    return (
+        pd.DataFrame(records)
+        .sort_values(
+            ["combined_probability", "min_leg_prob", "parlay_ev"],
+            ascending=[False, False, False],
+            kind="mergesort",
+        )
+        .head(max(1, int(max_parlays)))
+        .reset_index(drop=True)
+    )
+
+
 def _build_record(legs: pd.DataFrame, label_cols: list[str], leg_count: int,
                   risk_tier: str, group_id=pd.NA, prob_col: str = "calibrated_probability",
                   strict_mode: bool = False) -> dict | None:
@@ -265,6 +464,7 @@ def _build_record(legs: pd.DataFrame, label_cols: list[str], leg_count: int,
         ),
         "unique_game_count": leg_count,
         "one_leg_per_game": True,
+        "parlay_source": "production_strict" if strict_mode else "smart_research",
     }
 
 
@@ -313,6 +513,7 @@ def generate_smart_parlays(
         "has_actionable_anchor", "production_safety_mode", "model_risk_haircut",
         "parlay_class", "premium_eligible", "sellable_as_premium", "commercial_warning",
         "unique_game_count", "one_leg_per_game",
+        "parlay_source",
     ]
     if df is None or df.empty:
         return pd.DataFrame(columns=columns)
