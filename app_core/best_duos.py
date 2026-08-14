@@ -166,7 +166,7 @@ def build_best_duos(
             if book_a in {"", "nan", "none"} or book_a != book_b:
                 continue  # cannot quote or place a cross-book parlay
             common_book = book_a
-        if a["_toks"] & b["_toks"]:
+        if a["_toks"] & b["_toks"] or shares_game(a, b):
             continue  # same game — correlated, skip
         if a["board"] == "prop" and b["board"] == "prop":
             participant_a = str(a.get("participant", "") or "").strip()
@@ -180,8 +180,6 @@ def build_best_duos(
                 continue
         if require_mixed and a["board"] == b["board"]:
             continue  # one game leg + one prop leg only
-        if strict and shares_game(a, b):
-            continue
         raw_p = float(a["win_probability"]) * float(b["win_probability"])
         p = conservative_joint_probability(
             [float(a["win_probability"]), float(b["win_probability"])],
@@ -223,6 +221,8 @@ def build_best_duos(
             "production_safety_mode": bool(strict and not allow_probation),
             "probation_parlay_mode": bool(strict and allow_probation),
             "model_risk_haircut": DUO_PROBABILITY_HAIRCUT if strict else 1.0,
+            "unique_game_count": 2,
+            "one_leg_per_game": True,
         })
         used.update((i, j))
         if len(rows) >= max_duos:
@@ -272,6 +272,8 @@ def duos_to_smart_parlays(duos: pd.DataFrame | None, bankroll: float = 1000.0) -
             "production_safety_mode": bool(duo.get("production_safety_mode", True)),
             "probation_parlay_mode": probation_mode,
             "model_risk_haircut": duo.get("model_risk_haircut"),
+            "unique_game_count": 2,
+            "one_leg_per_game": True,
         })
     return pd.DataFrame(rows)
 

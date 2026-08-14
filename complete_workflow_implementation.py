@@ -17,6 +17,7 @@ from core.schema.schema_utils import ensure_column
 from core.odds_normalizer import normalize_odds
 from core.probability_engine import american_odds_to_probability
 from core.ev_engine import calculate_ev
+from core.parlay_safety import has_unique_games
 
 logger = logging.getLogger(__name__)
 
@@ -640,6 +641,11 @@ def build_optimal_parlays(
         for combo in combinations(best_bets.iterrows(), size):
             # Extract rows
             bets = [row for idx, row in combo]
+
+            # One leg per unique game is mandatory. The optional correlation
+            # control may add stricter filters, but it cannot disable this rule.
+            if not has_unique_games(bets):
+                continue
             
             # Check correlation if enabled
             if check_correlation:
@@ -662,7 +668,9 @@ def build_optimal_parlays(
                 'legs': bets,
                 'probability': parlay_prob,
                 'odds': parlay_odds,
-                'expected_value': parlay_ev
+                'expected_value': parlay_ev,
+                'unique_game_count': len(bets),
+                'one_leg_per_game': True,
             })
         
         # Sort by EV and keep top N

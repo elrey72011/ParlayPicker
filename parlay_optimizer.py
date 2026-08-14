@@ -13,6 +13,7 @@ from pathlib import Path
 import logging
 from parlaypicker.core.probability_engine import american_to_prob
 from parlaypicker.core.ev_engine import expected_value
+from core.parlay_safety import has_unique_games, shares_game
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -411,19 +412,14 @@ class ParlayOptimizer:
             bets_df: DataFrame with analyzed bets
             parlay_size: Number of legs per parlay
             max_parlays: Maximum number of parlays to return
-            allow_correlation: Whether to allow correlated bets
+            allow_correlation: Whether to allow non-game correlation. Same-game
+                legs are always rejected.
             
         Returns:
             List of optimal parlays
         """
         logger.info(f"Generating {parlay_size}-leg parlays")
         
-        try:
-            from config import SAME_GAME_DISALLOWED
-            same_game_disallowed = SAME_GAME_DISALLOWED
-        except ImportError:
-            same_game_disallowed = True
-
         # Filter to high-confidence bets
         high_value_bets = bets_df[bets_df['ExpectedValue'] > self.min_edge].to_dict('records')
         
@@ -436,6 +432,11 @@ class ParlayOptimizer:
         # Generate all possible combinations
         for combo in combinations(high_value_bets, parlay_size):
             legs = list(combo)
+
+            # Hard product invariant: correlation settings can never permit two
+            # legs from the same game.
+            if not has_unique_games(legs):
+                continue
             
             # Check for correlation if not allowed
             if not allow_correlation:
@@ -451,12 +452,6 @@ class ParlayOptimizer:
                 if has_correlation:
                     continue
 
-            # Explicitly disallow same game legs based on config
-            if same_game_disallowed:
-                games_in_parlay = [str(leg.get('GameID') or leg.get('game') or leg.get('game_id', '')) for leg in legs]
-                if len(set(games_in_parlay)) < len(games_in_parlay):
-                    continue
-            
             # Calculate parlay metrics
             parlay_prob = self.calculate_parlay_probability(legs)
             parlay_odds = self.calculate_parlay_odds(legs)
@@ -474,7 +469,9 @@ class ParlayOptimizer:
                     'american_odds': self.decimal_to_american(parlay_odds),
                     'expected_value': ev,
                     'kelly_fraction': self.calculate_kelly(parlay_prob, parlay_odds),
-                    'type': self.determine_parlay_type(legs)
+                    'type': self.determine_parlay_type(legs),
+                    'unique_game_count': len(legs),
+                    'one_leg_per_game': True,
                 })
         
         # Sort by expected value
@@ -751,21 +748,15 @@ class ParlayOptimizer:
         # Generate all 2-leg combinations
         parlay_candidates = []
 
-        try:
-            from config import SAME_GAME_DISALLOWED
-            same_game_disallowed = SAME_GAME_DISALLOWED
-        except ImportError:
-            same_game_disallowed = True
-
         for i, row1 in playable.iterrows():
             for j, row2 in playable.iterrows():
                 if i >= j:  # Avoid duplicates and self-pairing
                     continue
 
-                # Avoid same-game parlays (correlated) based on config
+                # Same-game legs are never allowed, regardless of correlation mode.
                 game1 = row1.get("Game") or row1.get("game_id") or row1.get("id") or ""
                 game2 = row2.get("Game") or row2.get("game_id") or row2.get("id") or ""
-                if same_game_disallowed and game1 and game2 and str(game1) == str(game2):
+                if shares_game(row1, row2):
                     continue
 
                 # Calculate parlay metrics using logic from calculate_parlay_probability
@@ -925,7 +916,9 @@ class ParlayOptimizer:
                     "ev": ev,
                     "combined_edge": row1["AI_Edge"] + row2["AI_Edge"],
                     "avg_consensus_ratio": avg_consensus_ratio,
-                    "games_used": {str(game1), str(game2)}
+                    "games_used": {str(game1), str(game2)},
+                    "unique_game_count": 2,
+                    "one_leg_per_game": True,
                 })
 
         if not parlay_candidates:

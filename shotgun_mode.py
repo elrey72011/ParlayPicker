@@ -9,6 +9,7 @@ import logging
 from typing import Dict, List, Tuple, Optional
 from datetime import datetime
 from itertools import combinations
+from core.parlay_safety import shares_game
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -93,12 +94,7 @@ def is_correlated(pick1: Dict, pick2: Dict) -> bool:
     Returns:
         True if correlated, False if independent
     """
-    # Same game check - both Home and Away must match
-    if (pick1.get('Home') == pick2.get('Home') and
-        pick1.get('Away') == pick2.get('Away')):
-        return True
-
-    return False
+    return shares_game(pick1, pick2)
 
 
 def is_correlated_3leg(pick1: Dict, pick2: Dict, pick3: Dict) -> bool:
@@ -350,6 +346,8 @@ def generate_2leg_parlays(
                 'avg_quality': avg_quality,
                 'ev_score': ev_score,
                 'risk_tier': risk_tier,
+                'unique_game_count': 2,
+                'one_leg_per_game': True,
                 'leagues': [league1, league2],
                 'markets': [pick1.get('Market', 'Unknown'), pick2.get('Market', 'Unknown')]
             }
@@ -478,6 +476,8 @@ def generate_3leg_parlays(
                     'avg_quality': avg_quality,
                     'ev_score': ev_score,
                     'risk_tier': risk_tier,
+                    'unique_game_count': 3,
+                    'one_leg_per_game': True,
                     'leagues': [league1, league2, league3],
                     'markets': [pick1.get('Market', 'Unknown'), pick2.get('Market', 'Unknown'), pick3.get('Market', 'Unknown')]
                 }

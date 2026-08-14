@@ -175,6 +175,8 @@ ODDS_PRIORITY = ['novig', 'fanduel', 'draftkings', 'betmgm']
 NOVIG_SPREAD_CAP = 0.68  # For totals cap logic
 
 # Correlation Config
+# Compatibility flag only: every parlay path now enforces one leg per game and
+# does not permit callers to disable that invariant.
 SAME_GAME_DISALLOWED = True
 SAME_LEAGUE_CORR_FACTOR = 0.95
 

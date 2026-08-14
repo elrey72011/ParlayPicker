@@ -113,6 +113,22 @@ def test_no_three_leg_parlays_while_cap_is_two():
     assert set(parlays["legs"].unique()) == {2}
 
 
+def test_research_parlays_also_enforce_one_leg_per_game():
+    bets = _bets(
+        best_pick=["Same Game Spread", "Same Game Total", "Other Game Side"],
+        matchup_id=["g1", "g1", "g2"],
+        league=["NBA", "NBA", "WNBA"],
+    )
+    parlays = generate_smart_parlays(bets)
+    assert not parlays.empty
+    assert parlays["one_leg_per_game"].eq(True).all()
+    assert parlays["unique_game_count"].eq(parlays["legs"]).all()
+    assert not parlays["parlay_legs"].str.contains(
+        r"Same Game Spread.*Same Game Total|Same Game Total.*Same Game Spread",
+        regex=True,
+    ).any()
+
+
 def test_proven_losing_bucket_leg_is_excluded_from_parlays():
     # A leg the empirical overlay flagged as a proven loser must not become a parlay
     # leg even when its raw edge/prob clear the floors (the overlay tags it because

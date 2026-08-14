@@ -29,6 +29,8 @@ def test_parlay_correlation_filter():
     )
     out = generate_parlays(df)
     assert len(out) == 2
+    assert out["one_leg_per_game"].eq(True).all()
+    assert out["unique_game_count"].eq(out["legs"]).all()
 
 
 def test_pipeline_adds_best_pick_and_consensus():
