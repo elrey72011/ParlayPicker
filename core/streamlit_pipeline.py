@@ -9877,7 +9877,11 @@ def run_analysis_pipeline(
 def generate_parlays(best_picks_df: pd.DataFrame, max_legs: int = 3) -> pd.DataFrame:
     from core.kelly_optimizer import add_kelly_bet_sizing, apply_simultaneous_kelly
     from core.probability_calibration import load_calibration
-    from core.smart_parlay_engine import downweight_correlated_parlay_kelly, generate_smart_parlays
+    from core.smart_parlay_engine import (
+        downweight_correlated_parlay_kelly,
+        generate_probability_ranked_parlays,
+        generate_smart_parlays,
+    )
 
     if best_picks_df is None or best_picks_df.empty:
         return pd.DataFrame()
@@ -9897,23 +9901,38 @@ def generate_parlays(best_picks_df: pd.DataFrame, max_legs: int = 3) -> pd.DataF
     )
     calibration = load_calibration() if production_frame else None
     parlays_df = generate_smart_parlays(best_picks_df, num_rr_candidates=5, calibration=calibration)
+    probability_fallback = parlays_df.empty
 
-    if parlays_df.empty:
-        return parlays_df
+    if probability_fallback:
+        # A slate can have a valid best pick for every game while correctly
+        # funding none of them. Keep the production gate intact, but populate a
+        # clearly labeled $0 research board ranked by combined probability.
+        parlays_df = generate_probability_ranked_parlays(best_picks_df)
+        if parlays_df.empty:
+            return parlays_df
 
     # Cap at top 10 per leg count so the UI stays readable.
-    # Already sorted by EV desc inside generate_smart_parlays, so head(10) = best 10.
+    # Accuracy-first product contract: highest combined probability first.
     parlays_df = (
-        parlays_df.groupby("legs", group_keys=False)
-        .apply(lambda g: g.head(10))
+        parlays_df.sort_values(
+            ["combined_probability", "min_leg_prob", "parlay_ev"],
+            ascending=[False, False, False],
+            kind="mergesort",
+        )
+        .groupby("legs", group_keys=False, sort=False)
+        .head(10)
         .reset_index(drop=True)
     )
 
-    parlays_df = add_kelly_bet_sizing(parlays_df, bankroll=1000.0, fraction=0.125)
-    # Correlated combos (same-game legs or a same-direction Agrees pair) carry
-    # block variance â€” halve their stake before exposure caps are applied.
-    parlays_df = downweight_correlated_parlay_kelly(parlays_df)
-    parlays_df = apply_simultaneous_kelly(parlays_df, bankroll=1000.0, max_exposure=0.05)
+    if probability_fallback:
+        parlays_df["kelly_fraction"] = 0.0
+        parlays_df["recommended_bet"] = 0.0
+    else:
+        parlays_df = add_kelly_bet_sizing(parlays_df, bankroll=1000.0, fraction=0.125)
+        # Same-direction Agrees pairs still carry block variance; halve their
+        # stake before exposure caps are applied.
+        parlays_df = downweight_correlated_parlay_kelly(parlays_df)
+        parlays_df = apply_simultaneous_kelly(parlays_df, bankroll=1000.0, max_exposure=0.05)
 
     # Persist the day's recommended parlays so they can be graded alongside the
     # slate. Recaps grade single picks only, so the parlay engine has never
