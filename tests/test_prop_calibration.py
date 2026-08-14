@@ -33,9 +33,13 @@ def test_repo_bundled_prop_ledger_loads_independent_of_working_directory():
     assert DEFAULT_PROP_RESULTS_RUNTIME_PATH.is_absolute()
     ledger = load_prop_results_log()
     assert ledger is not None
-    assert len(ledger) >= 729
-    assert ledger["result"].isin(["WIN", "LOSS"]).sum() >= 684
-    assert pd.to_datetime(ledger["game_date"]).max() >= pd.Timestamp("2026-08-11")
+    assert len(ledger) >= 792
+    assert ledger["result"].isin(["WIN", "LOSS"]).sum() >= 741
+    assert pd.to_datetime(ledger["game_date"]).max() >= pd.Timestamp("2026-08-13")
+    aug_13 = ledger[ledger["game_date"].astype(str).str[:10].eq("2026-08-13")]
+    assert len(aug_13) == 63
+    assert aug_13["pipeline_build"].eq("2026-08-13a-precision-shortlist").all()
+    assert aug_13["export_run_id"].nunique() == 1
 
 
 def test_runtime_prop_ledger_is_persisted_and_restored_over_baseline(tmp_path):
