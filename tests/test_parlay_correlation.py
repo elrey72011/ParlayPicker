@@ -49,10 +49,11 @@ class TestParlayCorrelation(unittest.TestCase):
         res = self.optimizer.generate_shotgun_parlays(df)
         self.assertIsNone(res['best_overall']) # Should have failed to form a parlay because it's the same game
 
-        # Now change config and ensure it does generate
+        # The product invariant overrides this legacy switch: changing the
+        # configuration must never re-enable a same-game parlay.
         config.SAME_GAME_DISALLOWED = False
         res2 = self.optimizer.generate_shotgun_parlays(df)
-        self.assertIsNotNone(res2['best_overall'])
+        self.assertIsNone(res2['best_overall'])
 
 if __name__ == '__main__':
     unittest.main()

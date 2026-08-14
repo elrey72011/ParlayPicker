@@ -4,18 +4,28 @@ from itertools import combinations
 
 import pandas as pd
 
+from core.parlay_safety import shares_game
 from core.smart_parlay_engine import generate_smart_parlays
+
+
+_OUTPUT_COLUMNS = [
+    "parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev",
+    "legs", "unique_game_count", "one_leg_per_game",
+]
 
 
 def _fallback_parlays(df: pd.DataFrame) -> pd.DataFrame:
     candidates = df[df.get("expected_value", 0) > 0].copy()
     if candidates.empty:
-        return pd.DataFrame(columns=["parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "legs"])
+        return pd.DataFrame(columns=_OUTPUT_COLUMNS)
 
     records = []
     for i, j in combinations(candidates.index, 2):
         left = candidates.loc[i]
         right = candidates.loc[j]
+
+        if shares_game(left, right):
+            continue
 
         # simple anti-correlation guard for duplicate away teams
         if str(left.get("away_team", "")).lower() == str(right.get("away_team", "")).lower():
@@ -31,10 +41,12 @@ def _fallback_parlays(df: pd.DataFrame) -> pd.DataFrame:
                 "combined_decimal_odds": 0.0,
                 "parlay_ev": float(left.get("expected_value", 0)) + float(right.get("expected_value", 0)),
                 "legs": 2,
+                "unique_game_count": 2,
+                "one_leg_per_game": True,
             }
         )
 
-    return pd.DataFrame(records).sort_values("parlay_ev", ascending=False).reset_index(drop=True) if records else pd.DataFrame(columns=["parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "legs"])
+    return pd.DataFrame(records).sort_values("parlay_ev", ascending=False).reset_index(drop=True) if records else pd.DataFrame(columns=_OUTPUT_COLUMNS)
 
 
 def generate_parlays(df: pd.DataFrame) -> pd.DataFrame:

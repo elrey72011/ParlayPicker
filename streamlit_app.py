@@ -847,7 +847,7 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
         totals_df=totals_df,
     )
 
-    parlay_columns = ["parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "legs", "risk_tier", "group_id", "best_payout_book", "Conviction_Score", "min_leg_prob", "has_actionable_anchor", "production_safety_mode", "parlay_class", "premium_eligible", "sellable_as_premium", "commercial_warning", "kelly_fraction", "recommended_bet"]
+    parlay_columns = ["parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "legs", "unique_game_count", "one_leg_per_game", "risk_tier", "group_id", "best_payout_book", "Conviction_Score", "min_leg_prob", "has_actionable_anchor", "production_safety_mode", "parlay_class", "premium_eligible", "sellable_as_premium", "commercial_warning", "kelly_fraction", "recommended_bet"]
     empty_per_leg = {f"parlays_{lc}_df": pd.DataFrame(columns=parlay_columns) for lc in (2, 3)}
 
     empty_state: dict = {
@@ -1424,6 +1424,18 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
     # recreational output and can never carry a funded recommendation.
     if parlays_df is not None and not parlays_df.empty:
         parlays_df = parlays_df.copy()
+        # Product-level fail closed: only show/export parlays whose generator
+        # explicitly verified one leg per unique game. This also suppresses stale
+        # session-state rows created before the invariant was introduced.
+        uniqueness_verified = _compact_bool_series(
+            parlays_df, "one_leg_per_game"
+        )
+        diagnostics["duplicate_or_unverified_game_parlays_dropped"] = int(
+            (~uniqueness_verified).sum()
+        )
+        parlays_df = parlays_df[uniqueness_verified].copy()
+
+    if parlays_df is not None and not parlays_df.empty:
         probation = pd.Series(
             parlays_df.get("probation_parlay_mode", False), index=parlays_df.index
         ).fillna(False).astype(bool)
@@ -2893,7 +2905,7 @@ def main() -> None:
                 st.divider()
         else:
             top_combo = base_parlays_df.sort_values("parlay_ev", ascending=False).head(10).reset_index(drop=True)
-            table_cols = [c for c in ["combined_probability", "combined_decimal_odds", "parlay_ev", "kelly_fraction", "legs", "risk_tier"] if c in top_combo.columns]
+            table_cols = [c for c in ["combined_probability", "combined_decimal_odds", "parlay_ev", "kelly_fraction", "legs", "unique_game_count", "one_leg_per_game", "risk_tier"] if c in top_combo.columns]
             table_df = top_combo[table_cols].copy()
             table_df.insert(0, "Parlay", ["<br>".join([leg.strip() for leg in str(v).split("|") if leg.strip()]) for v in top_combo["parlay_legs"]])
             st.write(table_df.to_html(escape=False, index=False), unsafe_allow_html=True)
@@ -2903,6 +2915,7 @@ def main() -> None:
             "parlay_class", "premium_eligible", "sellable_as_premium", "commercial_warning",
             "risk_tier", "group_id", "parlay_legs", "combined_probability", "combined_decimal_odds",
             "parlay_ev", "legs", "combined_market_prob", "ev_boost_pct", "is_high_correlation",
+            "unique_game_count", "one_leg_per_game",
             "production_safety_mode", "best_payout_book", "Conviction_Score", "min_leg_prob",
             "kelly_fraction", "recommended_bet"
         ]

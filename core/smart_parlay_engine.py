@@ -9,8 +9,8 @@ import json
 from core.probability_calibration import apply_calibration
 from core.parlay_safety import (
     conservative_joint_probability,
+    has_unique_games,
     production_candidate_mask,
-    shares_game,
 )
 
 # Only picks with these statuses qualify as parlay legs.
@@ -43,8 +43,9 @@ MAX_PARLAY_LEGS = 2
 MAX_SAME_DIRECTION_TOTAL_LEGS = 1
 MAX_SAME_DIRECTION_AGREES_TOTAL_LEGS = 2
 
-# Stake multiplier for parlays flagged is_high_correlation (same-game legs or a
-# same-direction Agrees pair). Joint outcomes are positively correlated, so these
+# Stake multiplier for parlays flagged is_high_correlation (currently a
+# same-direction Agrees pair). Same-game legs are never admitted. Joint outcomes
+# can still be positively correlated, so these
 # boom/bust as a unit; half stake keeps the EV exposure with half the block variance.
 CORRELATED_PARLAY_KELLY_MULTIPLIER = 0.5
 
@@ -229,9 +230,7 @@ def _build_record(legs: pd.DataFrame, label_cols: list[str], leg_count: int,
         (combined_probability - combined_market_prob) / combined_market_prob
         if combined_market_prob > 0 else 0.0
     )
-    is_high_correlation = (
-        len(legs["matchup_id"].unique()) < leg_count or _has_same_direction_pair(legs)
-    )
+    is_high_correlation = _has_same_direction_pair(legs)
     parlay_conviction = float(legs["Conviction_Score"].mean()) if "Conviction_Score" in legs.columns else pd.NA
     min_leg_prob = float(legs[prob_col].min())
 
@@ -264,6 +263,8 @@ def _build_record(legs: pd.DataFrame, label_cols: list[str], leg_count: int,
             "" if strict_mode
             else "Not production-qualified; research/recreational only."
         ),
+        "unique_game_count": leg_count,
+        "one_leg_per_game": True,
     }
 
 
@@ -301,6 +302,9 @@ def generate_smart_parlays(
     (calibrated) ``rank_col`` used for ranking/gating, NOT the raw
     ``calibrated_probability``, so the EV>0 drop and the EV-desc sort run on the
     de-biased number and inflated all-Over parlays no longer pass the gate.
+
+    Game uniqueness is unconditional: every output parlay contains at most one
+    leg from any game, including research and Sweet Spot calls.
     """
     columns = [
         "parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev",
@@ -308,6 +312,7 @@ def generate_smart_parlays(
         "risk_tier", "group_id", "best_payout_book", "Conviction_Score", "min_leg_prob",
         "has_actionable_anchor", "production_safety_mode", "model_risk_haircut",
         "parlay_class", "premium_eligible", "sellable_as_premium", "commercial_warning",
+        "unique_game_count", "one_leg_per_game",
     ]
     if df is None or df.empty:
         return pd.DataFrame(columns=columns)
@@ -496,10 +501,7 @@ def generate_smart_parlays(
             legs = candidate_bets.loc[list(combo)]
             if _violates_direction_cap(legs):
                 continue
-            if strict_mode and any(
-                shares_game(legs.iloc[a], legs.iloc[b])
-                for a, b in combinations(range(len(legs)), 2)
-            ):
+            if not has_unique_games(legs):
                 continue
             risk_tier = "Bankroll Builder" if leg_count == 2 else "Standard"
             rec = _build_record(legs, label_cols, leg_count, risk_tier, prob_col=rank_col, strict_mode=strict_mode)
@@ -519,10 +521,7 @@ def generate_smart_parlays(
                 legs = rr_candidates.loc[list(combo)]
                 if _violates_direction_cap(legs):
                     continue
-                if strict_mode and any(
-                    shares_game(legs.iloc[a], legs.iloc[b])
-                    for a, b in combinations(range(len(legs)), 2)
-                ):
+                if not has_unique_games(legs):
                     continue
                 rec = _build_record(legs, label_cols, leg_count, "Round Robin", rr_group_id, prob_col=rank_col, strict_mode=strict_mode)
                 if rec is not None:

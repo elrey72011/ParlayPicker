@@ -55,6 +55,8 @@ def test_top_duo_is_highest_joint_probability_without_overlap():
 
 def test_same_game_legs_never_pair():
     duos = build_best_duos(_games(), _props(), max_duos=10)
+    assert duos["one_leg_per_game"].eq(True).all()
+    assert duos["unique_game_count"].eq(2).all()
     for _, d in duos.iterrows():
         joined = f"{d['leg1']} | {d['leg2']}".lower()
         # Wheeler prop and the Cincinnati/Philadelphia total must never co-occur

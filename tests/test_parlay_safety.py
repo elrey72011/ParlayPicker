@@ -3,6 +3,7 @@ import pandas as pd
 
 from core.parlay_safety import (
     conservative_joint_probability,
+    has_unique_games,
     parlay_expected_value,
     production_candidate_mask,
     row_is_untrusted,
@@ -43,6 +44,28 @@ class TestParlaySafety(unittest.TestCase):
         left = {"matchup_id": "MLB|A|B|2026-07-09"}
         right = {"matchup_id": "MLB|A|B|2026-07-09"}
         self.assertTrue(shares_game(left, right))
+
+    def test_matching_teams_reject_provider_specific_event_ids(self):
+        left = {
+            "matchup_id": "odds-api-123",
+            "away_team": "Chicago Cubs",
+            "home_team": "Los Angeles Dodgers",
+        }
+        right = {
+            "game_id": "novig-987",
+            "away_team": "Los Angeles Dodgers",
+            "home_team": "Chicago Cubs",
+        }
+        self.assertTrue(shares_game(left, right))
+
+    def test_unique_game_validator_is_pairwise(self):
+        legs = pd.DataFrame([
+            {"matchup_id": "g1"},
+            {"matchup_id": "g2"},
+            {"matchup_id": "g1"},
+        ])
+        self.assertFalse(has_unique_games(legs))
+        self.assertTrue(has_unique_games(legs.iloc[:2]))
 
 
 if __name__ == "__main__":
