@@ -61,6 +61,25 @@ def test_precision_card_fails_closed_on_price_and_verification_gates():
     assert result.loc[2, "Precision_Card_Reason"].startswith("Excluded: final selection")
 
 
+def test_precision_card_excludes_started_game_from_public_export_status():
+    source = pd.DataFrame(
+        [
+            _row("Started decision", 0.80, Bet_Decision="STARTED"),
+            _row("Started tier", 0.79, Play_Tier="started"),
+            _row("Live candidate", 0.70, Bet_Decision="BEST AVAILABLE - PASS"),
+        ]
+    )
+
+    result = attach_precision_card(source)
+    shortlist = precision_shortlist(result)
+
+    assert shortlist["best_pick"].tolist() == ["Live candidate"]
+    assert not result.loc[0, "Precision_Card"]
+    assert not result.loc[1, "Precision_Card"]
+    assert result.loc[0, "Precision_Card_Reason"] == "Excluded: game has started."
+    assert result.loc[1, "Precision_Card_Reason"] == "Excluded: game has started."
+
+
 def test_precision_shortlist_never_promotes_an_unfunded_row_to_a_bet():
     source = pd.DataFrame([_row("Research pick", 0.72)])
 
