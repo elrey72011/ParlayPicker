@@ -9881,6 +9881,7 @@ def generate_parlays(best_picks_df: pd.DataFrame, max_legs: int = 3) -> pd.DataF
         downweight_correlated_parlay_kelly,
         generate_probability_ranked_parlays,
         generate_smart_parlays,
+        select_card_unique_parlays,
     )
 
     if best_picks_df is None or best_picks_df.empty:
@@ -9911,18 +9912,14 @@ def generate_parlays(best_picks_df: pd.DataFrame, max_legs: int = 3) -> pd.DataF
         if parlays_df.empty:
             return parlays_df
 
-    # Cap at top 10 per leg count so the UI stays readable.
-    # Accuracy-first product contract: highest combined probability first.
-    parlays_df = (
-        parlays_df.sort_values(
-            ["combined_probability", "min_leg_prob", "parlay_ev"],
-            ascending=[False, False, False],
-            kind="mergesort",
-        )
-        .groupby("legs", group_keys=False, sort=False)
-        .head(10)
-        .reset_index(drop=True)
-    )
+    # Accuracy-first product contract: select from highest combined probability
+    # downward while allowing each game to appear on the exported card once.
+    # This considers the full combination pool before capping, so a repeated
+    # top anchor cannot crowd every independent alternative out of the top 10.
+    parlays_df = select_card_unique_parlays(parlays_df, max_parlays=10)
+    if parlays_df.empty:
+        return parlays_df
+    parlays_df["parlay_rank"] = range(1, len(parlays_df) + 1)
 
     if probability_fallback:
         parlays_df["kelly_fraction"] = 0.0
@@ -9934,6 +9931,26 @@ def generate_parlays(best_picks_df: pd.DataFrame, max_legs: int = 3) -> pd.DataF
         parlays_df = downweight_correlated_parlay_kelly(parlays_df)
         parlays_df = apply_simultaneous_kelly(parlays_df, bankroll=1000.0, max_exposure=0.05)
 
+    def _shared_snapshot_value(columns: tuple[str, ...]) -> object:
+        for column in columns:
+            if column not in best_picks_df.columns:
+                continue
+            values = best_picks_df[column].dropna().astype(str).str.strip()
+            values = values[~values.str.casefold().isin({"", "nan", "none", "<na>"})]
+            unique = values.drop_duplicates()
+            if len(unique) == 1:
+                return unique.iloc[0]
+        return pd.NA
+
+    slate_date = _shared_snapshot_value(
+        ("game_date", "slate_date", "date", "Local Date")
+    )
+    if pd.notna(slate_date):
+        slate_date = str(slate_date)[:10]
+    parlays_df["slate_date"] = slate_date
+    parlays_df["export_run_id"] = _shared_snapshot_value(("export_run_id",))
+    parlays_df["pipeline_build"] = _shared_snapshot_value(("pipeline_build",))
+
     # Persist the day's recommended parlays so they can be graded alongside the
     # slate. Recaps grade single picks only, so the parlay engine has never
     # received realized feedback; this log is the input for that. Last run of the
@@ -9941,10 +9958,14 @@ def generate_parlays(best_picks_df: pd.DataFrame, max_legs: int = 3) -> pd.DataF
     try:
         log_dir = Path("data/parlay_log")
         log_dir.mkdir(parents=True, exist_ok=True)
-        slate_date = pd.Timestamp.now().strftime("%Y-%m-%d")
+        log_slate_date = (
+            str(slate_date)
+            if pd.notna(slate_date) and str(slate_date).strip()
+            else pd.Timestamp.now().strftime("%Y-%m-%d")
+        )
         logged = parlays_df.copy()
-        logged.insert(0, "generated_date", slate_date)
-        logged.to_csv(log_dir / f"{slate_date}.csv", index=False)
+        logged.insert(0, "generated_date", log_slate_date)
+        logged.to_csv(log_dir / f"{log_slate_date}.csv", index=False)
     except Exception as e:
         logger.warning(f"Failed to write parlay log: {e}")
 

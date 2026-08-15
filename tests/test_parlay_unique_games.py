@@ -1,7 +1,10 @@
 import pandas as pd
 
 from core.parlay_engine import generate_parlays
-from core.smart_parlay_engine import generate_probability_ranked_parlays
+from core.smart_parlay_engine import (
+    generate_probability_ranked_parlays,
+    select_card_unique_parlays,
+)
 from shotgun_mode import is_correlated
 
 
@@ -81,7 +84,7 @@ def test_probability_fallback_populates_and_sorts_high_to_low():
         _best_available_frame(), max_parlays=6
     )
 
-    assert len(out) == 6
+    assert len(out) == 2
     assert out["combined_probability"].is_monotonic_decreasing
     assert "A @ B: A +1.5" in out.iloc[0]["parlay_legs"]
     assert "C @ D: C +1.5" in out.iloc[0]["parlay_legs"]
@@ -90,6 +93,13 @@ def test_probability_fallback_populates_and_sorts_high_to_low():
     assert out["parlay_class"].eq("Research / Recreational").all()
     assert out["recommended_bet"].eq(0.0).all()
     assert out["kelly_fraction"].eq(0.0).all()
+    assert out["card_unique_games"].eq(True).all()
+    assert out["card_game_exposure_cap"].eq(1).all()
+    assert out["card_unique_game_count"].eq(4).all()
+    assert out["group_id"].tolist() == [
+        "probability_ranked_1",
+        "probability_ranked_2",
+    ]
 
 
 def test_probability_fallback_rejects_invalid_and_duplicate_games():
@@ -106,3 +116,25 @@ def test_probability_fallback_rejects_invalid_and_duplicate_games():
         r"A \+1\.5.*A total|A total.*A \+1\.5", regex=True
     ).any()
     assert not out["parlay_legs"].str.contains("G @ H", regex=False).any()
+
+
+def test_card_unique_selector_drops_repeated_anchor_parlays():
+    rows = pd.DataFrame({
+        "parlay_legs": [
+            "A @ B: A +1.5 | C @ D: C +1.5",
+            "A @ B: A +1.5 | E @ F: E +1.5",
+            "C @ D: C +1.5 | E @ F: E +1.5",
+            "E @ F: E +1.5 | G @ H: G +1.5",
+        ],
+        "combined_probability": [0.49, 0.48, 0.47, 0.46],
+        "min_leg_prob": [0.69, 0.68, 0.67, 0.66],
+        "parlay_ev": [0.05, 0.04, 0.03, 0.02],
+    })
+
+    out = select_card_unique_parlays(rows, max_parlays=10)
+
+    assert out["parlay_legs"].tolist() == [
+        "A @ B: A +1.5 | C @ D: C +1.5",
+        "E @ F: E +1.5 | G @ H: G +1.5",
+    ]
+    assert out["card_unique_game_count"].eq(4).all()

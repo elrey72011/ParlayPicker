@@ -847,7 +847,7 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
         totals_df=totals_df,
     )
 
-    parlay_columns = ["parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "legs", "unique_game_count", "one_leg_per_game", "parlay_source", "risk_tier", "group_id", "best_payout_book", "Conviction_Score", "min_leg_prob", "has_actionable_anchor", "production_safety_mode", "parlay_class", "premium_eligible", "sellable_as_premium", "commercial_warning", "kelly_fraction", "recommended_bet"]
+    parlay_columns = ["slate_date", "pipeline_build", "export_run_id", "parlay_rank", "parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "legs", "unique_game_count", "one_leg_per_game", "card_unique_games", "card_game_exposure_cap", "card_unique_game_count", "parlay_source", "risk_tier", "group_id", "best_payout_book", "Conviction_Score", "min_leg_prob", "has_actionable_anchor", "production_safety_mode", "parlay_class", "premium_eligible", "sellable_as_premium", "commercial_warning", "kelly_fraction", "recommended_bet"]
     empty_per_leg = {f"parlays_{lc}_df": pd.DataFrame(columns=parlay_columns) for lc in (2, 3)}
 
     empty_state: dict = {
@@ -1439,6 +1439,50 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
             (~uniqueness_verified).sum()
         )
         parlays_df = parlays_df[uniqueness_verified].copy()
+        if not parlays_df.empty:
+            from core.smart_parlay_engine import select_card_unique_parlays
+
+            pre_card_unique_count = len(parlays_df)
+            parlays_df = select_card_unique_parlays(parlays_df, max_parlays=10)
+            diagnostics["recurring_game_parlays_dropped"] = int(
+                pre_card_unique_count - len(parlays_df)
+            )
+            if not parlays_df.empty:
+                parlays_df["parlay_rank"] = range(1, len(parlays_df) + 1)
+
+                def _best_pick_snapshot_value(columns: tuple[str, ...]) -> object:
+                    for column in columns:
+                        if column not in best_picks_df.columns:
+                            continue
+                        values = best_picks_df[column].dropna().astype(str).str.strip()
+                        values = values[
+                            ~values.str.casefold().isin({"", "nan", "none", "<na>"})
+                        ]
+                        unique = values.drop_duplicates()
+                        if len(unique) == 1:
+                            return unique.iloc[0]
+                    return pd.NA
+
+                snapshot_values = {
+                    "slate_date": _best_pick_snapshot_value(
+                        ("game_date", "slate_date", "date", "Local Date")
+                    ),
+                    "pipeline_build": _best_pick_snapshot_value(("pipeline_build",)),
+                    "export_run_id": _best_pick_snapshot_value(("export_run_id",)),
+                }
+                for column, value in snapshot_values.items():
+                    if column == "slate_date" and pd.notna(value):
+                        value = str(value)[:10]
+                    if column not in parlays_df.columns:
+                        parlays_df[column] = value
+                    else:
+                        missing = (
+                            _safe_str_series(parlays_df, column)
+                            .str.strip()
+                            .str.casefold()
+                            .isin({"", "nan", "none", "<na>"})
+                        )
+                        parlays_df.loc[missing, column] = value
 
     if parlays_df is not None and not parlays_df.empty:
         probation = pd.Series(
@@ -2651,6 +2695,22 @@ def main() -> None:
                 funded_prop_card = prop_card[_prop_status.eq("Funded")].copy()
                 research_prop_card = prop_card[~_prop_status.eq("Funded")].copy()
 
+                _precision_mask = _compact_bool_series(
+                    prop_card, "Prop_Precision_Shortlist"
+                )
+                precision_prop_card = prop_card[_precision_mask].copy()
+                if not precision_prop_card.empty:
+                    precision_prop_card = precision_prop_card.sort_values(
+                        "Prop_Precision_Rank", ascending=True, kind="mergesort"
+                    )
+                    st.subheader("🎯 Accuracy-First Prop Shortlist")
+                    st.caption(
+                        "Up to eight props ranked by calibration-adjusted probability. "
+                        "This is a display shortlist only: conservative probability still "
+                        "controls eligibility and stake, and research rows remain $0."
+                    )
+                    st.dataframe(precision_prop_card, width="stretch")
+
                 st.subheader("⚾ MLB Player Props — Production Picks")
                 st.caption(
                     "The controlled rollout currently funds only approved batter-hit Overs and Unders. "
@@ -2894,7 +2954,8 @@ def main() -> None:
         base_parlays_df = parlays_df if parlays_df is not None and not parlays_df.empty else pd.DataFrame()
         st.caption(
             "Parlays are ordered from highest combined win probability to lowest. "
-            "Every leg comes from a different game; research rows always carry a $0 approved stake."
+            "Each game may appear only once across the entire card; research rows "
+            "always carry a $0 approved stake."
         )
 
         view_mode = st.radio("Parlay View", ["Ranked Parlays", "Top Combinations"], horizontal=True)
@@ -2947,10 +3008,12 @@ def main() -> None:
 
         # Rearrange columns for the export
         parlay_export_columns = [
+            "slate_date", "pipeline_build", "export_run_id", "parlay_rank",
             "parlay_class", "premium_eligible", "sellable_as_premium", "commercial_warning",
             "risk_tier", "group_id", "parlay_legs", "combined_probability", "combined_decimal_odds",
             "parlay_ev", "legs", "combined_market_prob", "ev_boost_pct", "is_high_correlation",
-            "unique_game_count", "one_leg_per_game", "parlay_source",
+            "unique_game_count", "one_leg_per_game", "card_unique_games",
+            "card_game_exposure_cap", "card_unique_game_count", "parlay_source",
             "production_safety_mode", "best_payout_book", "Conviction_Score", "min_leg_prob",
             "kelly_fraction", "recommended_bet"
         ]
