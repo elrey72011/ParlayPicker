@@ -6,6 +6,7 @@ import streamlit as st
 
 
 FALLBACK_SPORTS = ["NBA", "WNBA", "NHL", "NCAAB", "NFL", "MLB"]
+ALL_SPORTS_LABEL = "All Sports"
 
 
 def _read_uploaded_prop_ledgers(uploaded_files) -> pd.DataFrame:
@@ -67,6 +68,39 @@ def _resolve_sports_options(dynamic_sports: list[str] | None = None) -> list[str
     return FALLBACK_SPORTS.copy()
 
 
+def _sports_for_view(selected_view: str, sports_options: list[str]) -> list[str]:
+    """Resolve the single sidebar view to the leagues sent to the pipeline."""
+    options = list(dict.fromkeys(
+        str(sport).strip().upper()
+        for sport in sports_options
+        if str(sport).strip()
+    ))
+    normalized = str(selected_view or "").strip().upper()
+    if normalized == ALL_SPORTS_LABEL.upper():
+        return options
+    option_lookup = {option.upper(): option for option in options}
+    selected = option_lookup.get(normalized)
+    return [selected] if selected else options
+
+
+def _initial_sport_view(previous_sports, sports_options: list[str]) -> str:
+    """Migrate the old multiselect state without changing existing all-sport runs."""
+    previous = (
+        list(previous_sports)
+        if isinstance(previous_sports, (list, tuple, set))
+        else [previous_sports] if previous_sports else []
+    )
+    resolved = [
+        str(sport).strip().upper()
+        for sport in previous
+        if str(sport).strip()
+    ]
+    option_lookup = {option.upper(): option for option in sports_options}
+    if len(resolved) == 1 and resolved[0] in option_lookup:
+        return option_lookup[resolved[0]]
+    return ALL_SPORTS_LABEL
+
+
 def render_sidebar(dynamic_sports: list[str] | None = None):
     st.sidebar.header("ParlayPicker Controls")
 
@@ -74,18 +108,25 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
     if not sports_options:
         sports_options = FALLBACK_SPORTS.copy()
 
-    # Initialise once — do NOT pass default= to a keyed widget; Streamlit owns
-    # the value after first render and the mismatch causes an infinite rerun.
-    if "selected_sports" not in st.session_state:
-        st.session_state["selected_sports"] = sports_options.copy()
+    # The old multiselect initialized every sport as selected. Clicking "NFL"
+    # therefore did not mean NFL-only and could remove NFL instead. Use an
+    # explicit single-sport view while retaining an unambiguous all-sports mode.
+    view_options = [ALL_SPORTS_LABEL, *sports_options]
+    if "selected_sport_view" not in st.session_state:
+        st.session_state["selected_sport_view"] = _initial_sport_view(
+            st.session_state.get("selected_sports"), sports_options
+        )
+    elif st.session_state["selected_sport_view"] not in view_options:
+        st.session_state["selected_sport_view"] = ALL_SPORTS_LABEL
 
-    sports = st.sidebar.multiselect(
-        "Select Sports",
-        sports_options,
-        key="selected_sports",
+    selected_view = st.sidebar.selectbox(
+        "Select Sport",
+        view_options,
+        key="selected_sport_view",
     )
-    if not sports:
-        sports = sports_options.copy()
+    sports = _sports_for_view(selected_view, sports_options)
+    # Preserve the legacy state key used by Data Diagnostics and maintenance tools.
+    st.session_state["selected_sports"] = sports
 
     bankroll = st.sidebar.number_input("Bankroll", min_value=100.0, value=1000.0, step=50.0, key="bankroll")
 
