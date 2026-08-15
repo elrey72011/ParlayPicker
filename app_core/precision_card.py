@@ -89,6 +89,20 @@ def attach_precision_card(
     for column in ("Started", "started", "is_started"):
         if column in out.columns:
             started |= _strict_bool(out, column)
+    # The public best-picks export intentionally omits the internal ``Started``
+    # boolean, but preserves the closure as ``Bet_Decision=STARTED`` and/or
+    # ``Play_Tier=STARTED``.  Read both representations so a shortlist built
+    # from the export cannot resurrect an already-started game.
+    for column in ("Bet_Decision", "Play_Tier", "Tier"):
+        if column in out.columns:
+            status = (
+                out[column]
+                .astype("string")
+                .fillna("")
+                .str.strip()
+                .str.casefold()
+            )
+            started |= status.eq("started")
 
     probability_ok = probability.ge(float(min_win_probability))
     price_ok = odds.notna() & odds.ne(0) & odds.ge(float(min_american_odds))
