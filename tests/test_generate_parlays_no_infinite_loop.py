@@ -35,32 +35,39 @@ def test_generate_parlays_advances_past_duplicate_game_slices():
 def test_generate_parlays_populates_probability_ranked_research_fallback():
     df = pd.DataFrame(
         {
-            "league": ["MLB", "MLB", "MLB"],
-            "matchup_id": ["g1", "g2", "g3"],
-            "home_team": ["B", "D", "F"],
-            "away_team": ["A", "C", "E"],
-            "best_pick": ["A +1.5", "C +1.5", "E +1.5"],
-            "Pick_Status": ["Best Available / Pass"] * 3,
-            "production_eligible": [False] * 3,
-            "effective_win_probability": [0.66, 0.64, 0.62],
-            "calibrated_probability": [0.66, 0.64, 0.62],
-            "market_probability": [0.52, 0.52, 0.52],
-            "decimal_odds": [1.90, 1.91, 1.92],
-            "odds_american": [-111, -110, -109],
-            "edge": [0.01, 0.00, -0.01],
-            "market_line_source": ["live"] * 3,
-            "final_pick_valid": [True] * 3,
-            "best_available_selection_verified": [True] * 3,
-            "best_available_ranking_verified": [True] * 3,
-            "line_consistency_flag": [True] * 3,
-            "line_event_identity_match_flag": [True] * 3,
+            "league": ["MLB"] * 4,
+            "matchup_id": ["g1", "g2", "g3", "g4"],
+            "home_team": ["B", "D", "F", "H"],
+            "away_team": ["A", "C", "E", "G"],
+            "best_pick": ["A +1.5", "C +1.5", "E +1.5", "G +1.5"],
+            "Pick_Status": ["Best Available / Pass"] * 4,
+            "production_eligible": [False] * 4,
+            "effective_win_probability": [0.66, 0.64, 0.62, 0.60],
+            "calibrated_probability": [0.66, 0.64, 0.62, 0.60],
+            "market_probability": [0.52] * 4,
+            "decimal_odds": [1.90, 1.91, 1.92, 1.93],
+            "odds_american": [-111, -110, -109, -108],
+            "edge": [0.01, 0.00, -0.01, -0.02],
+            "market_line_source": ["live"] * 4,
+            "final_pick_valid": [True] * 4,
+            "best_available_selection_verified": [True] * 4,
+            "best_available_ranking_verified": [True] * 4,
+            "line_consistency_flag": [True] * 4,
+            "line_event_identity_match_flag": [True] * 4,
+            "game_date": ["2026-08-15"] * 4,
+            "export_run_id": ["20260815T120000Z"] * 4,
+            "pipeline_build": ["test-build"] * 4,
         }
     )
 
     out = generate_parlays(df)
 
-    assert len(out) == 3
+    assert len(out) == 2
     assert out["combined_probability"].is_monotonic_decreasing
     assert out["parlay_source"].eq("probability_ranked_fallback").all()
     assert out["recommended_bet"].eq(0.0).all()
     assert out["one_leg_per_game"].eq(True).all()
+    assert out["card_unique_games"].eq(True).all()
+    assert out["slate_date"].eq("2026-08-15").all()
+    assert out["export_run_id"].eq("20260815T120000Z").all()
+    assert out["pipeline_build"].eq("test-build").all()

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import hashlib
 from itertools import combinations
+import json
+import re
 
 import pandas as pd
-import hashlib
-import json
 
 from core.probability_calibration import apply_calibration
 from core.parlay_safety import (
@@ -199,6 +200,128 @@ def _leg_labels(legs: pd.DataFrame, label_cols: list[str]) -> list[str]:
     return labels
 
 
+def _normalized_game_value(value: object) -> str:
+    text = "" if value is None or pd.isna(value) else str(value)
+    return "".join(re.findall(r"[a-z0-9]+", text.casefold()))
+
+
+def _card_game_key(row: pd.Series) -> str:
+    """Return a stable game identity for card-level exposure control."""
+    away = next(
+        (
+            str(row.get(column)).strip()
+            for column in ("away_team", "Away", "away")
+            if pd.notna(row.get(column)) and str(row.get(column)).strip()
+        ),
+        "",
+    )
+    home = next(
+        (
+            str(row.get(column)).strip()
+            for column in ("home_team", "Home", "home")
+            if pd.notna(row.get(column)) and str(row.get(column)).strip()
+        ),
+        "",
+    )
+    if away and home:
+        teams = sorted((_normalized_game_value(away), _normalized_game_value(home)))
+        return f"teams:{teams[0]}|{teams[1]}"
+
+    for column in ("matchup_id", "game_id", "GameID", "event_id", "Game", "game"):
+        value = row.get(column)
+        if pd.notna(value) and str(value).strip():
+            return f"id:{_normalized_game_value(value)}"
+
+    matchup = row.get("matchup", "")
+    if pd.notna(matchup) and str(matchup).strip():
+        return f"matchup:{_normalized_game_value(matchup)}"
+    return ""
+
+
+def _record_game_keys(legs: pd.DataFrame) -> tuple[str, ...]:
+    return tuple(key for key in (_card_game_key(row) for _, row in legs.iterrows()) if key)
+
+
+def _parlay_label_game_keys(value: object) -> tuple[str, ...]:
+    """Recover game identities from public labels for legacy/session-state rows."""
+    keys: list[str] = []
+    label = "" if value is None or pd.isna(value) else str(value)
+    for raw_leg in label.split("|"):
+        leg = raw_leg.strip()
+        if not leg:
+            continue
+        context = leg.split(":", 1)[0].strip() if ":" in leg else ""
+        if " @ " not in context:
+            parenthetical = re.findall(r"\(([^()]+ @ [^()]+)\)", leg)
+            context = parenthetical[-1].strip() if parenthetical else ""
+        if " @ " in context:
+            away, home = (part.strip() for part in context.split(" @ ", 1))
+            teams = sorted((_normalized_game_value(away), _normalized_game_value(home)))
+            keys.append(f"teams:{teams[0]}|{teams[1]}")
+        else:
+            keys.append(f"leg:{_normalized_game_value(leg)}")
+    return tuple(keys)
+
+
+def select_card_unique_parlays(
+    parlays: pd.DataFrame,
+    *,
+    max_parlays: int | None = None,
+) -> pd.DataFrame:
+    """Select the strongest disjoint parlays so no game repeats on the card.
+
+    Rows are considered from highest combined probability to lowest, with weakest
+    leg and EV as deterministic tie-breakers. This is deliberately a card-level
+    invariant; ``one_leg_per_game`` only proves uniqueness inside one row.
+    """
+    if parlays is None or parlays.empty:
+        return parlays
+
+    out = parlays.copy()
+    sort_columns = [
+        column
+        for column in ("combined_probability", "min_leg_prob", "parlay_ev")
+        if column in out.columns
+    ]
+    if sort_columns:
+        out = out.sort_values(
+            sort_columns,
+            ascending=[False] * len(sort_columns),
+            kind="mergesort",
+        )
+
+    used_games: set[str] = set()
+    selected: list[object] = []
+    limit = None if max_parlays is None else max(0, int(max_parlays))
+    if limit == 0:
+        result = out.iloc[0:0].drop(columns=["_card_game_keys"], errors="ignore")
+        result["card_unique_games"] = pd.Series(dtype=bool)
+        result["card_game_exposure_cap"] = pd.Series(dtype=int)
+        result["card_unique_game_count"] = pd.Series(dtype=int)
+        return result
+    for index, row in out.iterrows():
+        raw_keys = row.get("_card_game_keys")
+        keys = (
+            tuple(raw_keys)
+            if isinstance(raw_keys, (list, tuple, set))
+            else _parlay_label_game_keys(row.get("parlay_legs", ""))
+        )
+        keys = tuple(key for key in keys if key)
+        if not keys or len(set(keys)) != len(keys) or used_games.intersection(keys):
+            continue
+        selected.append(index)
+        used_games.update(keys)
+        if limit is not None and len(selected) >= limit:
+            break
+
+    result = out.loc[selected].copy().reset_index(drop=True)
+    result = result.drop(columns=["_card_game_keys"], errors="ignore")
+    result["card_unique_games"] = True
+    result["card_game_exposure_cap"] = 1
+    result["card_unique_game_count"] = len(used_games)
+    return result
+
+
 def _strict_bool_mask(df: pd.DataFrame, column: str, *, default: bool) -> pd.Series:
     """Fail-closed parsing for optional public eligibility fields."""
     if column not in df.columns:
@@ -380,20 +503,19 @@ def generate_probability_ranked_parlays(
             "kelly_fraction": 0.0,
             "recommended_bet": 0.0,
             "parlay_source": "probability_ranked_fallback",
+            "_card_game_keys": _record_game_keys(legs),
         })
 
     if not records:
         return pd.DataFrame()
-    return (
-        pd.DataFrame(records)
-        .sort_values(
-            ["combined_probability", "min_leg_prob", "parlay_ev"],
-            ascending=[False, False, False],
-            kind="mergesort",
-        )
-        .head(max(1, int(max_parlays)))
-        .reset_index(drop=True)
+    result = select_card_unique_parlays(
+        pd.DataFrame(records), max_parlays=max(1, int(max_parlays))
     )
+    if not result.empty:
+        result["group_id"] = [
+            f"probability_ranked_{rank}" for rank in range(1, len(result) + 1)
+        ]
+    return result
 
 
 def _build_record(legs: pd.DataFrame, label_cols: list[str], leg_count: int,

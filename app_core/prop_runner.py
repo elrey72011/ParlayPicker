@@ -486,8 +486,12 @@ def build_prop_card(
     card = apply_extended_prop_stake_cap(card)
     card = apply_probation_share_guard(card)
     card = apply_prop_stake_status(card)
+    card = apply_prop_precision_shortlist(card)
     card = card.sort_values(
-        ["WinProbability", "edge"], ascending=[False, False]
+        ["Prop_Precision_Shortlist", "Prop_Precision_Rank", "WinProbability", "edge"],
+        ascending=[False, True, False, False],
+        na_position="last",
+        kind="mergesort",
     ).reset_index(drop=True)
     return card
 
@@ -508,6 +512,7 @@ PROBATION_PORTFOLIO_TOTAL_PCT = 0.008  # max eight $1 research tickets per $1,00
 PROBATION_MAX_PER_MARKET = 2
 PROBATION_MAX_PER_GAME = 1
 PROBATION_MAX_FUNDED_TICKETS = 2
+PROP_PRECISION_SHORTLIST_MAX = 8
 PROBATION_MAX_PORTFOLIO_SHARE = 0.25
 PROP_MAX_FUNDED_PER_PLAYER = 1
 PROBATION_MIN_WIN_PROBABILITY = 0.62
@@ -1353,6 +1358,76 @@ def apply_prop_slate_guard(
     out.loc[dropped, "Status_Reason"] = research_reason
     out["slate_guard_applied"] = bool(len(dropped))
     out["slate_funded_after"] = int(len(selected))
+    return out
+
+
+def apply_prop_precision_shortlist(
+    card,
+    max_rows: int = PROP_PRECISION_SHORTLIST_MAX,
+):
+    """Mark an accuracy-first research shortlist without changing stake gates.
+
+    The available realized-history calibration is used for presentation rank.
+    Conservative probability remains the probability used for Kelly sizing and
+    every production decision.
+    """
+    import pandas as pd
+
+    if card is None or card.empty:
+        return card
+    out = card.copy()
+    index = out.index
+    calibrated = pd.to_numeric(
+        out.get("CalibratedProbability", pd.Series(float("nan"), index=index)),
+        errors="coerce",
+    )
+    conservative = pd.to_numeric(
+        out.get("ConservativeWinProbability", out.get(
+            "WinProbability", pd.Series(float("nan"), index=index)
+        )),
+        errors="coerce",
+    )
+    win_probability = pd.to_numeric(
+        out.get("WinProbability", pd.Series(float("nan"), index=index)),
+        errors="coerce",
+    )
+    ev = pd.to_numeric(
+        out.get("expected_value", pd.Series(float("nan"), index=index)),
+        errors="coerce",
+    )
+    edge = pd.to_numeric(
+        out.get("edge", pd.Series(float("nan"), index=index)),
+        errors="coerce",
+    )
+    ranking_probability = calibrated.where(calibrated.notna(), conservative)
+    ranked = pd.DataFrame({
+        "ranking_probability": ranking_probability,
+        "conservative_probability": conservative,
+        "win_probability": win_probability,
+        "ev": ev,
+        "edge": edge,
+    }).dropna(subset=["ranking_probability"]).sort_values(
+        [
+            "ranking_probability",
+            "conservative_probability",
+            "win_probability",
+            "ev",
+            "edge",
+        ],
+        ascending=[False, False, False, False, False],
+        kind="mergesort",
+    )
+    selected = ranked.head(max(0, int(max_rows))).index
+    out["Prop_Precision_Shortlist"] = False
+    out["Prop_Precision_Rank"] = pd.Series(pd.NA, index=index, dtype="Int64")
+    out["Prop_Ranking_Probability"] = ranking_probability.round(4)
+    out["Prop_Ranking_Source"] = "ConservativeWinProbability"
+    out.loc[calibrated.notna(), "Prop_Ranking_Source"] = "CalibratedProbability"
+    out.loc[selected, "Prop_Precision_Shortlist"] = True
+    if len(selected):
+        out.loc[selected, "Prop_Precision_Rank"] = pd.array(
+            range(1, len(selected) + 1), dtype="Int64"
+        )
     return out
 
 

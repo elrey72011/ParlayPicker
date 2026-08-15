@@ -16,11 +16,36 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from app_core.mlb_pitcher_stats import parse_schedule_probables
 from app_core.prop_pipeline import PROP_MAX_PLAUSIBLE_EDGE
 from app_core.prop_runner import (
+    apply_prop_precision_shortlist,
     _resolve_prop_results_history,
     build_prop_card,
     build_resolvers,
     build_strikeout_card,
 )
+
+
+def test_prop_precision_shortlist_uses_calibrated_rank_without_changing_stakes():
+    card = pd.DataFrame({
+        "player": [f"P{i}" for i in range(10)],
+        "CalibratedProbability": [0.60 + i / 100 for i in range(10)],
+        "ConservativeWinProbability": [0.80 - i / 100 for i in range(10)],
+        "WinProbability": [0.80 - i / 100 for i in range(10)],
+        "expected_value": [0.05] * 10,
+        "edge": [0.04] * 10,
+        "Kelly_Bet_Size": [float(i) for i in range(10)],
+    })
+
+    out = apply_prop_precision_shortlist(card, max_rows=8)
+
+    shortlisted = out[out["Prop_Precision_Shortlist"]].sort_values(
+        "Prop_Precision_Rank"
+    )
+    assert shortlisted["player"].tolist() == [
+        "P9", "P8", "P7", "P6", "P5", "P4", "P3", "P2"
+    ]
+    assert shortlisted["Prop_Precision_Rank"].tolist() == list(range(1, 9))
+    assert out["Prop_Ranking_Source"].eq("CalibratedProbability").all()
+    assert out["Kelly_Bet_Size"].tolist() == card["Kelly_Bet_Size"].tolist()
 
 
 _SCHEDULE = {
