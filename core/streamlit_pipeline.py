@@ -6937,6 +6937,12 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
                 sport_keys.append("basketball_wnba")
             elif s_up == "NHL":
                 sport_keys.append("icehockey_nhl")
+            elif s_up == "NFL":
+                # The Odds API exposes preseason and regular-season NFL as
+                # separate sport keys. Query both so the NFL sidebar selection
+                # remains populated across the August-to-September transition.
+                sport_keys.append("americanfootball_nfl_preseason")
+                sport_keys.append("americanfootball_nfl")
             elif s_up == "MLB":
                 sport_keys.append("baseball_mlb_preseason")
                 sport_keys.append("baseball_mlb")
@@ -6984,9 +6990,20 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
                         # Keep the raw timestamp for downstream validation; a
                         # malformed optional display field must not drop a game.
                         pass
+                    raw_sport_key = str(game.get("sport_key") or sk).strip().lower()
+                    canonical_league = {
+                        "americanfootball_nfl": "NFL",
+                        "americanfootball_nfl_preseason": "NFL",
+                        "baseball_mlb": "MLB",
+                        "baseball_mlb_preseason": "MLB",
+                        "basketball_nba": "NBA",
+                        "basketball_wnba": "WNBA",
+                        "basketball_ncaab": "NCAAB",
+                        "icehockey_nhl": "NHL",
+                    }.get(raw_sport_key, raw_sport_key.split("_")[-1].upper())
                     game_dict[matchup_id] = {
                         'game_id': game.get('id'),
-                        'league': game.get('sport_key', '').split('_')[-1].upper(),
+                        'league': canonical_league,
                         'raw_home_team': game.get('home_team'),
                         'raw_away_team': game.get('away_team'),
                         'home_team': game.get('home_team'),
