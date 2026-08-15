@@ -564,7 +564,7 @@ def test_aug5_dodgers_cubs_two_two_split_keeps_novig_team_bound_quote():
     ).all()
 
 
-def _assert_unanimous_aug5_team_binding_survives(
+def _assert_corroborated_team_binding_survives(
     live_row,
     *,
     expected_home_point,
@@ -635,7 +635,7 @@ def test_aug5_minnesota_kansas_city_keeps_unanimous_team_bound_quote():
         "betmgm_h2h_away_price": 100,
     }
 
-    _assert_unanimous_aug5_team_binding_survives(
+    _assert_corroborated_team_binding_survives(
         live_row,
         expected_home_point=1.5,
         expected_home_price=-182.0,
@@ -682,12 +682,60 @@ def test_aug5_mets_cleveland_keeps_unanimous_team_bound_quote():
         "betmgm_h2h_away_price": -105,
     }
 
-    _assert_unanimous_aug5_team_binding_survives(
+    _assert_corroborated_team_binding_survives(
         live_row,
         expected_home_point=1.5,
         expected_home_price=-178.0,
         expected_away_point=-1.5,
         expected_away_price=170.0,
+    )
+
+
+def test_aug15_san_diego_cleveland_keeps_draftkings_backed_majority_binding():
+    # Production regression: Novig, FanDuel, and DraftKings all bound +1.5 to
+    # Cleveland, while BetMGM alone published the opposite pair. Requiring zero
+    # dissent discarded this DraftKings-backed 3-1 raw-source majority and
+    # synthetically relabeled Novig's Cleveland +1.5/-190 quote as San Diego
+    # +1.5/-190.
+    live_row = {
+        "league": "MLB",
+        "home_team": "Cleveland",
+        "away_team": "San Diego",
+        "game_date": "2026-08-15",
+        "matchup_id": "2026-08-15|cleveland|san diego",
+        "commence_time_raw": "2026-08-15T22:10:00Z",
+        "novig_home_point": 1.5,
+        "novig_home_price": -190,
+        "novig_away_point": -1.5,
+        "novig_away_price": 178,
+        "novig_h2h_home_price": -111,
+        "novig_h2h_away_price": 106,
+        "fanduel_home_point": 1.5,
+        "fanduel_home_price": -210,
+        "fanduel_away_point": -1.5,
+        "fanduel_away_price": 172,
+        "fanduel_h2h_home_price": -116,
+        "fanduel_h2h_away_price": 106,
+        "draftkings_home_point": 1.5,
+        "draftkings_home_price": -205,
+        "draftkings_away_point": -1.5,
+        "draftkings_away_price": 167,
+        "draftkings_h2h_home_price": -116,
+        "draftkings_h2h_away_price": 108,
+        "betmgm_home_point": -1.5,
+        "betmgm_home_price": 165,
+        "betmgm_away_point": 1.5,
+        "betmgm_away_price": -220,
+        "betmgm_h2h_home_price": -120,
+        "betmgm_h2h_away_price": 100,
+    }
+
+    _assert_corroborated_team_binding_survives(
+        live_row,
+        expected_home_point=1.5,
+        expected_home_price=-190.0,
+        expected_away_point=-1.5,
+        expected_away_price=178.0,
     )
 
 

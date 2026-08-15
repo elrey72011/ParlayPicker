@@ -7423,8 +7423,10 @@ def _novig_spread_team_binding_basis(row) -> str:
     Preserve Novig's direct point/price pair in either of two independently
     corroborated cases:
 
-    * At least two standard books publish Novig's same signed home/away pair and
-      none publishes the opposite pair.
+    * At least two standard books, including DraftKings, publish Novig's same
+      signed home/away pair and those aligned books outnumber any standard books
+      publishing the opposite pair. Together with Novig, that is a clear
+      raw-source majority using the established execution-venue tiebreak.
     * The four raw sources are split 2-2 and DraftKings corroborates Novig, the
       established execution-venue tiebreak used by prior regressions.
 
@@ -7494,7 +7496,7 @@ def _novig_spread_team_binding_basis(row) -> str:
         elif pair == opposite_pair:
             opposed += 1
 
-    if aligned >= 2 and opposed == 0:
+    if draftkings_aligned and aligned >= 2 and aligned > opposed:
         return "cross_book_signed_pair_consensus"
 
     tied_execution_venue_vote = bool(
