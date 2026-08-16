@@ -1529,6 +1529,24 @@ def _sync_selected_candidate_audit(
 
     audit = candidate_audit_df.copy()
 
+    # Every candidate belongs to the same analysis snapshot as the exported
+    # rank-one winners. Carry that identity on all audit rows so a later recap
+    # cannot silently grade alternatives from a stale run.
+    if "export_run_id" in final_best_df.columns:
+        run_ids = (
+            final_best_df["export_run_id"]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+        )
+        run_ids = run_ids[run_ids.ne("")].unique().tolist()
+        if len(run_ids) == 1:
+            if "export_run_id" in audit.columns:
+                audit["export_run_id"] = run_ids[0]
+            else:
+                insert_at = 1 if "pipeline_build" in audit.columns else 0
+                audit.insert(insert_at, "export_run_id", run_ids[0])
+
     def _keys(df: pd.DataFrame) -> pd.Series:
         norm = lambda col: _string_series(df, col).str.strip().str.lower().str.replace(
             r"[^a-z0-9]+", "", regex=True
@@ -1555,6 +1573,7 @@ def _sync_selected_candidate_audit(
     final_keys = _keys(final_best_df)
     sync_columns = [
         "pipeline_build",
+        "export_run_id",
         "market_type",
         "candidate_source",
         "best_pick",

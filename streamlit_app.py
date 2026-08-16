@@ -187,6 +187,7 @@ def _bet_decision_mask(df: pd.DataFrame) -> pd.Series:
 
 _COMPACT_EXPORT_COLUMNS = [
     "pipeline_build",
+    "export_run_id",
     "Wager_Instruction", "Export_Scope", "Bettable",
     "commercial_tier", "sellable_as_premium", "sellable_as_value_card",
     "controlled_card_recovery",

@@ -6,6 +6,7 @@ from streamlit_app import _build_compact_export_frame
 def _compact_source(**overrides):
     row = {
         "pipeline_build": "2026-08-01c-compact-export-stake-safety",
+        "export_run_id": "20260816T145118Z",
         "Wager_Instruction": "DO NOT BET - $0 PASS / RESEARCH",
         "Export_Scope": "COVERAGE / RESEARCH",
         "Bettable": False,
@@ -54,6 +55,7 @@ def test_compact_export_zeroes_stale_kelly_for_non_bettable_rows():
     assert compact["pipeline_build"].eq(
         "2026-08-01c-compact-export-stake-safety"
     ).all()
+    assert compact["export_run_id"].eq("20260816T145118Z").all()
 
 
 def test_compact_export_retains_only_explicitly_approved_stake():
