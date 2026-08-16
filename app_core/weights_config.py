@@ -215,8 +215,12 @@ WNBA_UNDER_FINALIST_PENALTY_MIN_N = 6
 WNBA_UNDER_FINALIST_PENALTY_MAX_WIN_RATE = 0.35
 
 # A full-board research candidate remains available for grading, but the public
-# card must abstain instead of presenting weak/negative-value coverage as a pick.
-BEST_AVAILABLE_QUALIFIED_MIN_WIN_PROB = 0.55
+# card must abstain instead of presenting weak/negative-value coverage as a lean.
+# On the six matched 10-15 Aug slates, 55-60% Qualified Lean rows finished 4-5,
+# while the 60%+ subset finished 1-0 and the precision shortlist finished 5-1.
+# Keep every game's best direction visible, but reserve the stronger public lean
+# label for the same minimum probability used by the accuracy-first shortlist.
+BEST_AVAILABLE_QUALIFIED_MIN_WIN_PROB = 0.60
 BEST_AVAILABLE_QUALIFIED_MIN_EV = 0.0
 BEST_AVAILABLE_QUALIFIED_MIN_EDGE = 0.0
 NBA_SIDE_ACTIONABLE_BONUS = 0.01

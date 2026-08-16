@@ -303,6 +303,55 @@ def _precision_card_mask(frame: pd.DataFrame) -> pd.Series:
     return normalized.isin({"true", "1", "yes", "y"})
 
 
+_PERFORMANCE_RECAP_RENAME_MAP = {
+    "league": "League",
+    "home_team": "Home",
+    "away_team": "Away",
+    "best_pick": "Pick Taken",
+    "grading_status": "Grading Status",
+    "grading_issue": "Grading Issue",
+    "Evaluation_Scope": "Evaluation Scope",
+    "Production_Record": "Production Record",
+    "Precision_Card": "Precision Shortlist",
+    "Precision_Rank": "Precision Rank",
+    "Precision_Card_Instruction": "Precision Instruction",
+    "Precision_Wager_Approved": "Precision Wager Approved",
+    "Bettable": "App-Approved Wager",
+    "Play_Stake": "Approved Stake",
+    "Wager_Instruction": "Wager Instruction",
+    "Export_Scope": "Export Scope",
+    "market_type": "Market Type",
+    "selection_probability_used": "Selection Probability",
+    "Pick_Status": "Status",
+}
+
+
+def _performance_recap_table(display_df: pd.DataFrame) -> pd.DataFrame:
+    """Build a self-describing recap that separates wagers from coverage."""
+
+    if display_df is None or display_df.empty:
+        return pd.DataFrame()
+    out = display_df.copy()
+    production = _production_wager_mask(out)
+    precision = _precision_card_mask(out)
+    out["Evaluation_Scope"] = "COVERAGE BOARD / DIAGNOSTIC"
+    out.loc[precision, "Evaluation_Scope"] = "PRECISION SHORTLIST / RESEARCH"
+    out.loc[production, "Evaluation_Scope"] = "PRODUCTION-APPROVED WAGER"
+    out["Production_Record"] = production
+
+    columns = [
+        "league", "home_team", "away_team", "best_pick",
+        "actual_home_score", "actual_away_score", "Outcome",
+        "grading_status", "grading_issue", "Evaluation_Scope",
+        "Production_Record", "Bettable", "Play_Stake", "Wager_Instruction",
+        "Export_Scope", "Precision_Card", "Precision_Rank",
+        "Precision_Card_Instruction", "Precision_Wager_Approved",
+        "market_type", "selection_probability_used", "Pick_Status", "export_run_id",
+    ]
+    available = [column for column in columns if column in out.columns]
+    return out[available].rename(columns=_PERFORMANCE_RECAP_RENAME_MAP)
+
+
 def _format_candidate_summary(summary: pd.DataFrame) -> pd.DataFrame:
     out = summary.copy()
     for column in ("Hit Rate", "Avg Probability", "Avg EV"):
@@ -730,44 +779,19 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
     if 'Away' in display_df.columns and 'away_team' not in display_df.columns:
         display_df = display_df.rename(columns={'Away': 'away_team'})
     
-    # Select columns to show. export_run_id is carried through so a downloaded
-    # recap stays traceable to the pipeline run that produced the card —
-    # scripts/grade_slate.py warns when a recap's run id doesn't match the
-    # export being graded (11 Jun: a recap built from a stale morning card
-    # graded lines the final card never played).
-    cols_to_show = [
-        'league', 'home_team', 'away_team', 'best_pick',
-        'actual_home_score', 'actual_away_score', 'Outcome',
-        'grading_status', 'grading_issue', 'Precision_Card', 'Precision_Rank',
-        'Precision_Card_Instruction', 'Pick_Status', 'export_run_id',
-    ]
-    # Filter to only existing columns
-    cols_to_show = [c for c in cols_to_show if c in display_df.columns]
-
-    # Rename columns for presentation
-    rename_map = {
-         'league': 'League',
-         'home_team': 'Home',
-         'away_team': 'Away',
-         'best_pick': 'Pick Taken',
-         'grading_status': 'Grading Status',
-         'grading_issue': 'Grading Issue',
-         'Precision_Card': 'Precision Shortlist',
-         'Precision_Rank': 'Precision Rank',
-         'Precision_Card_Instruction': 'Precision Instruction',
-         'Pick_Status': 'Status'
-    }
-
-    table_df = display_df[cols_to_show].rename(columns=rename_map)
+    # Keep the downloaded recap self-describing: production-approved wagers,
+    # precision research, and full-board diagnostic coverage are separate scopes.
+    # export_run_id remains attached so stale-card grading can still be detected.
+    table_df = _performance_recap_table(display_df)
 
     # Render st.data_editor
     edited_df = st.data_editor(
         table_df,
         width="stretch",
         disabled=[
-            "League", "Home", "Away", "Pick Taken", "Grading Status",
-            "Grading Issue", "Precision Shortlist", "Precision Rank",
-            "Precision Instruction", "Status", "export_run_id",
+            column
+            for column in table_df.columns
+            if column not in {"actual_home_score", "actual_away_score", "Outcome"}
         ],
         column_config={
             "actual_home_score": st.column_config.NumberColumn(
@@ -795,12 +819,11 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
 
     # Check for changes and update session state
     if not edited_df.equals(table_df):
-        # We need to map edited columns back to our session state current_df
-        # Create mapping of presentation names to original names
-        reverse_rename_map = {v: k for k, v in rename_map.items()}
-        for col in edited_df.columns:
-            orig_col = reverse_rename_map.get(col, col)
-            current_df[orig_col] = edited_df[col]
+        # Only the two scores and Outcome are editable; derived scope columns
+        # must never be written back into the source card.
+        for col in ("actual_home_score", "actual_away_score", "Outcome"):
+            if col in edited_df.columns:
+                current_df[col] = edited_df[col]
 
         # Save back to session state
         st.session_state["perf_edited_picks"] = current_df
