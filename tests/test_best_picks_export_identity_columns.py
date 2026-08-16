@@ -1,6 +1,6 @@
 import pandas as pd
 
-from core.streamlit_pipeline import ensure_best_pick_export_columns
+from core.streamlit_pipeline import PIPELINE_BUILD, ensure_best_pick_export_columns
 
 
 def test_best_picks_export_identity_columns_present_without_regression():
@@ -12,3 +12,7 @@ def test_best_picks_export_identity_columns_present_without_regression():
         assert col in out.columns
     assert out.loc[0, "pick_id"].startswith("pick_")
     assert "mlb::a::b" in out.loc[0, "canonical_pick_key"]
+
+
+def test_pipeline_build_identifies_current_export_contract():
+    assert PIPELINE_BUILD == "2026-08-16a-complete-export-run-traceability"
