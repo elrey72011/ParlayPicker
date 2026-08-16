@@ -178,10 +178,11 @@ def test_final_avoid_tier_downgrades_stale_qualified_lean_label():
     assert exported.loc[0, "Export_Role"] == "BEST AVAILABLE PICK - PASS / RESEARCH"
 
 
-def test_play_card_preserves_pipeline_build_stamp():
+def test_play_card_preserves_pipeline_and_run_stamps():
     df = _df([
         {
             "pipeline_build": "2026-07-30e-spread-price-pairing-guard",
+            "export_run_id": "20260816T145118Z",
             "League": "WNBA",
             "Home": "Chicago",
             "Away": "Connecticut",
@@ -202,6 +203,8 @@ def test_play_card_preserves_pipeline_build_stamp():
     assert card["pipeline_build"].eq(
         "2026-07-30e-spread-price-pairing-guard"
     ).all()
+    assert card.columns[1] == "export_run_id"
+    assert card["export_run_id"].eq("20260816T145118Z").all()
 
 
 def test_build_applies_calibration_gate_end_to_end():

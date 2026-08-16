@@ -74,6 +74,8 @@ def test_corrupt_live_totals_cannot_beat_valid_spreads_before_selection():
     assert float(selected.iloc[0]["best_available_score"]) == float(
         out.iloc[0]["best_available_score"]
     )
+    assert audit["export_run_id"].nunique() == 1
+    assert audit["export_run_id"].eq(out.iloc[0]["export_run_id"]).all()
 
 
 def test_lone_repaired_total_is_value_neutral_and_audit_matches_export():
