@@ -333,14 +333,27 @@ def test_public_pick_stays_visible_below_absolute_probability_or_value_gate():
             "line_consistency_flag": True,
             "line_event_identity_match_flag": True,
         },
+        {
+            "best_pick": "Seattle +1.5",
+            "Pick_Status": "Below Threshold",
+            "selection_probability_used": 0.60,
+            "effective_expected_value": 0.03,
+            "effective_edge": 0.02,
+            "market_line_source": "live",
+            "line_consistency_flag": True,
+            "line_event_identity_match_flag": True,
+        },
     ])
 
     classified = classify_best_available_picks(frame)
 
-    assert classified["qualified_pick"].tolist() == [False, True]
-    assert classified["display_pick"].tolist() == ["Under 8.5", "Chicago +1.5"]
-    assert "below 55%" in classified.loc[0, "qualification_reason"]
-    assert classified.loc[1, "commercial_tier"] == "Qualified Lean / Pass"
+    assert classified["qualified_pick"].tolist() == [False, False, True]
+    assert classified["display_pick"].tolist() == [
+        "Under 8.5", "Chicago +1.5", "Seattle +1.5"
+    ]
+    assert "below 60%" in classified.loc[0, "qualification_reason"]
+    assert "below 60%" in classified.loc[1, "qualification_reason"]
+    assert classified.loc[2, "commercial_tier"] == "Qualified Lean / Pass"
 
 
 def test_qualified_pick_uses_rowwise_fallback_when_production_metrics_are_sparse():
@@ -348,7 +361,7 @@ def test_qualified_pick_uses_rowwise_fallback_when_production_metrics_are_sparse
         "best_pick": "Chicago +1.5",
         "Pick_Status": "Below Threshold",
         "selection_probability_used": pd.NA,
-        "effective_win_probability": 0.57,
+        "effective_win_probability": 0.61,
         "production_expected_value": pd.NA,
         "effective_expected_value": 0.03,
         "production_edge": pd.NA,
@@ -361,7 +374,7 @@ def test_qualified_pick_uses_rowwise_fallback_when_production_metrics_are_sparse
     classified = classify_best_available_picks(frame)
 
     assert bool(classified.loc[0, "qualified_pick"])
-    assert classified.loc[0, "qualification_probability"] == 0.57
+    assert classified.loc[0, "qualification_probability"] == 0.61
     assert classified.loc[0, "display_pick"] == "Chicago +1.5"
 
 
@@ -387,7 +400,7 @@ def test_final_empirical_edge_downgrades_preoverlay_qualified_lean_label():
     assert classified.loc[0, "commercial_tier"] == "Best Available / Pass"
     assert classified.loc[0, "export_role"] == "BEST AVAILABLE PICK - PASS / RESEARCH"
     assert classified.loc[0, "display_pick"] == "Washington +1.5"
-    assert "below 55%" in classified.loc[0, "qualification_reason"]
+    assert "below 60%" in classified.loc[0, "qualification_reason"]
 
 
 def _parlay_leg(matchup_id: str, pick: str) -> dict:
