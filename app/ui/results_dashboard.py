@@ -168,11 +168,11 @@ def summarize_prop_results(results: pd.DataFrame) -> dict:
 
 
 def _render_prop_results_recap() -> None:
-    """Upload, grade, and recap the funded MLB player-prop card."""
+    """Upload, grade, and recap the funded multi-league player-prop card."""
 
     st.markdown("#### Player Prop Performance")
     uploaded = st.file_uploader(
-        "Upload Yesterday's MLB Player Props Export",
+        "Upload Yesterday's Player Props Export",
         type=["csv"],
         key="perf_props_uploader",
     )
@@ -200,30 +200,15 @@ def _render_prop_results_recap() -> None:
         key="perf_props_date",
     )
 
-    if st.button("Fetch MLB Player Prop Results", key="perf_props_fetch", disabled=funded.empty):
-        with st.spinner("Fetching MLB player results and grading the funded card..."):
+    if st.button("Fetch Player Prop Results", key="perf_props_fetch", disabled=funded.empty):
+        with st.spinner("Fetching player results and grading the funded card..."):
             try:
-                from scripts.grade_props import (
-                    _build_name_to_id,
-                    fetch_actual_batter,
-                    fetch_actual_ks,
-                    grade_card,
-                )
+                from app_core.prop_grading import grade_prop_export
 
                 date_text = game_date.isoformat()
-                season = game_date.year
-                name_to_id = _build_name_to_id(date_text, funded)
-                rows = grade_card(
-                    funded,
-                    date_text,
-                    name_to_id,
-                    lambda player_id, participant_type: (
-                        fetch_actual_batter(player_id, date_text, season)
-                        if participant_type == "batter"
-                        else fetch_actual_ks(player_id, date_text, season)
-                    ),
+                st.session_state["perf_props_results"] = grade_prop_export(
+                    funded, date_text
                 )
-                st.session_state["perf_props_results"] = pd.DataFrame(rows)
             except Exception as exc:
                 st.error(f"Error fetching or grading player props: {exc}")
 
@@ -242,7 +227,7 @@ def _render_prop_results_recap() -> None:
 
     if summary["unresolved"]:
         st.warning(
-            f"{summary['unresolved']} funded prop(s) could not be resolved from MLB StatsAPI "
+            f"{summary['unresolved']} funded prop(s) could not be resolved from the league results feed "
             "and are excluded from the record and ROI."
         )
 

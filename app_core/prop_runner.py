@@ -316,6 +316,24 @@ def _resolve_prop_results_history(uploaded_results):
     return load_prop_results_log(uploaded=uploaded_results)
 
 
+def _prop_history_for_league(history, league: str) -> pd.DataFrame | None:
+    """Keep calibration and market records isolated by sport.
+
+    Historical ledgers predate the ``league`` column and contain MLB rows only;
+    those rows retain MLB as their explicit compatibility default. NFL results
+    may share the portable ledger, but can never alter baseball calibration.
+    """
+    if not isinstance(history, pd.DataFrame) or history.empty:
+        return history
+    out = history.copy()
+    if "league" not in out.columns:
+        return out if str(league).upper() == "MLB" else out.iloc[0:0].copy()
+    normalized = out["league"].fillna("").astype(str).str.strip().str.upper()
+    if str(league).upper() == "MLB":
+        normalized = normalized.mask(normalized.eq(""), "MLB")
+    return out[normalized.eq(str(league).upper())].copy()
+
+
 def build_prop_card(
     odds_client: Any,
     date: str,
@@ -422,7 +440,9 @@ def build_prop_card(
             )
         except (ImportError, RuntimeError, AttributeError):
             uploaded_results = None
-    results_history = _resolve_prop_results_history(uploaded_results)
+    results_history = _prop_history_for_league(
+        _resolve_prop_results_history(uploaded_results), "MLB"
+    )
     card = apply_prop_calibration(card, results_history, as_of_date=date)
 
     # Re-size from the conservative probability. Raw-model Kelly is intentionally

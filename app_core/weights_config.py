@@ -780,6 +780,9 @@ MONEYLINE_PARLAY_MIN_EDGE = 0.03
 # market has proven out. The +EV / min-edge discipline (PROP_MIN_EDGE) still gates every
 # pick, so only real edges bet.
 ENABLE_STRIKEOUT_PROPS_PRODUCTION = True
+# NFL props launch in research-only mode. The separate switch allows the feed,
+# display, export, and grading loop to run without granting production stakes.
+ENABLE_NFL_PLAYER_PROPS = True
 # Fraction of bankroll per prop pick / across all prop picks. Small because uncalibrated.
 STRIKEOUT_PROP_KELLY_PER_PICK_PCT = 0.01
 STRIKEOUT_PROP_KELLY_TOTAL_PCT = 0.03

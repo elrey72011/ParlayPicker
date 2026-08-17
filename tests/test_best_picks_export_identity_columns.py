@@ -15,4 +15,4 @@ def test_best_picks_export_identity_columns_present_without_regression():
 
 
 def test_pipeline_build_identifies_current_export_contract():
-    assert PIPELINE_BUILD == "2026-08-16a-complete-export-run-traceability"
+    assert PIPELINE_BUILD == "2026-08-17a-nfl-player-props"
