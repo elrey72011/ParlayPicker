@@ -57,32 +57,54 @@ def _player_name(row: pd.Series) -> str:
 
 def _participant_type(row: pd.Series) -> str:
     explicit = str(row.get("participant_type") or "").strip().lower()
-    if explicit in {"batter", "pitcher"}:
+    if explicit in {"batter", "pitcher", "nfl_player"}:
         return explicit
+    if str(row.get("league") or "").strip().upper() == "NFL":
+        return "nfl_player"
     return "batter" if str(row.get("market_type", "")).startswith("batter_") else "pitcher"
 
 
-def _default_name_resolver(card: pd.DataFrame, game_date: str) -> dict[str, int]:
+def _default_name_resolver(card: pd.DataFrame, game_date: str) -> dict[str, object]:
     from scripts.grade_props import _build_name_to_id
     from app_core.mlb_batter_stats import resolve_batter_id
 
-    ids = _build_name_to_id(game_date, card)
-    for _, row in card.iterrows():
+    league = card.get(
+        "league", pd.Series("MLB", index=card.index)
+    ).fillna("MLB").astype(str).str.upper()
+    mlb_card = card[~league.eq("NFL")]
+    ids = _build_name_to_id(game_date, mlb_card) if not mlb_card.empty else {}
+    for _, row in mlb_card.iterrows():
         name = _player_name(row)
         if not name or name.lower() in ids:
             continue
         player_id = resolve_batter_id(name)
         if player_id is not None:
             ids[name.lower()] = player_id
+    for _, row in card[league.eq("NFL")].iterrows():
+        name = _player_name(row)
+        if name:
+            ids[name.lower()] = f"nfl:{name.lower()}"
     return ids
 
 
-def _default_actual_fetcher(game_date: str):
+def _default_actual_fetcher(game_date: str, card: pd.DataFrame | None = None):
     from scripts.grade_props import fetch_actual_batter, fetch_actual_ks
 
     season = int(str(game_date)[:4])
+    nfl_actuals: dict[str, dict[str, float]] = {}
+    if isinstance(card, pd.DataFrame) and not card.empty:
+        league = card.get(
+            "league", pd.Series("MLB", index=card.index)
+        ).fillna("MLB").astype(str).str.upper()
+        if league.eq("NFL").any():
+            from app_core.nfl_prop_pipeline import fetch_nfl_actuals
 
-    def fetch(player_id: int, participant_type: str):
+            nfl_actuals = fetch_nfl_actuals(game_date)
+
+    def fetch(player_id: object, participant_type: str):
+        if participant_type == "nfl_player":
+            key = str(player_id).removeprefix("nfl:").strip().lower()
+            return nfl_actuals.get(key)
         if participant_type == "batter":
             return fetch_actual_batter(player_id, game_date, season)
         return fetch_actual_ks(player_id, game_date, season)
@@ -111,13 +133,13 @@ def grade_prop_export(
     game_date = str(game_date)[:10]
     resolver = name_resolver or _default_name_resolver
     name_to_id = resolver(card, game_date)
-    fetch_actual = actual_fetcher or _default_actual_fetcher(game_date)
+    fetch_actual = actual_fetcher or _default_actual_fetcher(game_date, card)
     try:
         accepts_participant_type = len(inspect.signature(fetch_actual).parameters) >= 2
     except (TypeError, ValueError):
         accepts_participant_type = True
 
-    actual_cache: dict[tuple[int, str], object] = {}
+    actual_cache: dict[tuple[str, str], object] = {}
     rows: list[dict] = []
     for _, source in card.iterrows():
         name = _player_name(source)
@@ -135,7 +157,7 @@ def grade_prop_export(
         player_id = name_to_id.get(name.lower())
         actual = None
         if player_id is not None:
-            cache_key = (int(player_id), participant_type)
+            cache_key = (str(player_id), participant_type)
             if cache_key not in actual_cache:
                 actual_cache[cache_key] = (
                     fetch_actual(player_id, participant_type)
@@ -170,6 +192,7 @@ def grade_prop_export(
         if pd.isna(raw_probability) if raw_probability is not None else True:
             raw_probability = source.get("WinProbability")
         graded_row = {
+            "league": str(source.get("league") or "MLB").strip().upper(),
             "game_date": game_date,
             "date": game_date,
             "player": name,
@@ -217,8 +240,12 @@ def merge_prop_ledgers(
     date = combined.get("game_date", combined.get("date", pd.Series("", index=combined.index)))
     player = combined.get("player", combined.get("pitcher", pd.Series("", index=combined.index)))
     pick = combined.get("pick", combined.get("best_pick", pd.Series("", index=combined.index)))
+    league = combined.get(
+        "league", pd.Series("MLB", index=combined.index)
+    ).fillna("MLB").astype(str).str.upper().str.strip()
     combined["_ledger_key"] = (
-        date.astype(str).str[:10].str.strip()
+        league
+        + "|" + date.astype(str).str[:10].str.strip()
         + "|" + player.astype(str).str.lower().str.strip()
         + "|" + pick.astype(str).str.lower().str.strip()
     )

@@ -244,7 +244,7 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
                         "that no newer ledger exists."
                     )
                 else:
-                    with st.spinner(f"Grading MLB player props for {grade_date}..."):
+                    with st.spinner(f"Grading player props for {grade_date}..."):
                         graded = grade_prop_export(previous_card, grade_date)
                         ledger = merge_prop_ledgers(prior_ledger, graded)
                     st.session_state["generated_prop_results_log"] = ledger

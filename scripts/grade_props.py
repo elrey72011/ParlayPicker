@@ -67,6 +67,14 @@ def _stat_for_market(market_type: object, best_pick: object) -> str:
     # stat words — "Walker Buehler Under 15.5 Outs" matched "walk" and graded
     # his OUTS pick against his WALKS (6 Jul).
     mt = str(market_type or "").lower()
+    if "player_reception_yds" in mt:
+        return "receiving_yards"
+    if "player_receptions" in mt:
+        return "receptions"
+    if "player_pass_yds" in mt:
+        return "passing_yards"
+    if "player_rush_yds" in mt:
+        return "rushing_yards"
     if "batter_total_bases" in mt:
         return "total_bases"
     if "batter_hits" in mt:
@@ -78,6 +86,14 @@ def _stat_for_market(market_type: object, best_pick: object) -> str:
     if "out" in mt:
         return "outs"
     text = f" {str(best_pick or '').lower()} "
+    if " receiving yards " in text:
+        return "receiving_yards"
+    if " receptions " in text:
+        return "receptions"
+    if " pass yards " in text or " passing yards " in text:
+        return "passing_yards"
+    if " rush yards " in text or " rushing yards " in text:
+        return "rushing_yards"
     if " tb " in text or " total bases " in text:
         return "total_bases"
     if " hits " in text:

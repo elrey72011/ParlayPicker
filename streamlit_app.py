@@ -1340,18 +1340,19 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
         else analysis_df.iloc[0:0]
     )
 
-    # MLB player-prop card (separate from the main best-picks card so a prop-feed hiccup
-    # can never break it). Softer market than MLB run totals, so this is where the real
-    # edges live; staked at small caps because the prop model is still uncalibrated.
+    # League-isolated player-prop cards. MLB retains its evidence-gated controlled
+    # rollout; NFL launches research-only until its own graded history proves a market.
+    # A prop-feed hiccup can never break the main game card.
     strikeout_prop_card = pd.DataFrame()
     try:
         from app_core.weights_config import (
+            ENABLE_NFL_PLAYER_PROPS,
             ENABLE_STRIKEOUT_PROPS_PRODUCTION,
             STRIKEOUT_PROP_KELLY_PER_PICK_PCT,
             STRIKEOUT_PROP_KELLY_TOTAL_PCT,
             STRIKEOUT_PROP_KELLY_FRACTION,
         )
-        if ENABLE_STRIKEOUT_PROPS_PRODUCTION:
+        if ENABLE_STRIKEOUT_PROPS_PRODUCTION or ENABLE_NFL_PLAYER_PROPS:
             from datetime import datetime
             import pytz
             from app_core.odds_api import TheOddsAPIClient
@@ -1361,17 +1362,41 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
             _prop_key = _get_odds_api_key()
             if _prop_key:
                 _prop_date = datetime.now(pytz.timezone("America/New_York")).strftime("%Y-%m-%d")
-                strikeout_prop_card = build_prop_card(
-                    TheOddsAPIClient(api_key=_prop_key, markets="h2h"),
-                    _prop_date,
-                    int(_prop_date[:4]),
-                    float(controls["bankroll"]),
-                    kelly_per_pick_pct=STRIKEOUT_PROP_KELLY_PER_PICK_PCT,
-                    kelly_total_pct=STRIKEOUT_PROP_KELLY_TOTAL_PCT,
-                    kelly_fraction=STRIKEOUT_PROP_KELLY_FRACTION,
-                    prop_results_log=controls.get("prop_results_log"),
-                    diagnostics=diagnostics,
-                )
+                _selected_prop_sports = {
+                    str(value).strip().upper()
+                    for value in controls.get("sports", [])
+                }
+                _prop_client = TheOddsAPIClient(api_key=_prop_key, markets="h2h")
+                _prop_frames = []
+                if ENABLE_STRIKEOUT_PROPS_PRODUCTION and "MLB" in _selected_prop_sports:
+                    _mlb_prop_card = build_prop_card(
+                        _prop_client,
+                        _prop_date,
+                        int(_prop_date[:4]),
+                        float(controls["bankroll"]),
+                        kelly_per_pick_pct=STRIKEOUT_PROP_KELLY_PER_PICK_PCT,
+                        kelly_total_pct=STRIKEOUT_PROP_KELLY_TOTAL_PCT,
+                        kelly_fraction=STRIKEOUT_PROP_KELLY_FRACTION,
+                        prop_results_log=controls.get("prop_results_log"),
+                        diagnostics=diagnostics,
+                    )
+                    if not _mlb_prop_card.empty:
+                        _prop_frames.append(_mlb_prop_card)
+                if ENABLE_NFL_PLAYER_PROPS and "NFL" in _selected_prop_sports:
+                    from app_core.nfl_prop_pipeline import build_nfl_prop_card
+
+                    _nfl_prop_card = build_nfl_prop_card(
+                        _prop_client,
+                        _prop_date,
+                        int(_prop_date[:4]),
+                        diagnostics=diagnostics,
+                    )
+                    if not _nfl_prop_card.empty:
+                        _prop_frames.append(_nfl_prop_card)
+                if _prop_frames:
+                    strikeout_prop_card = pd.concat(
+                        _prop_frames, ignore_index=True, sort=False
+                    )
                 _prop_stake_status = strikeout_prop_card.get(
                     "Stake_Status", pd.Series("", index=strikeout_prop_card.index)
                 ).astype(str).str.strip()
@@ -2712,35 +2737,60 @@ def main() -> None:
                     )
                     st.dataframe(precision_prop_card, width="stretch")
 
-                st.subheader("⚾ MLB Player Props — Production Picks")
+                _prop_league = prop_card.get(
+                    "league", pd.Series("MLB", index=prop_card.index)
+                ).fillna("MLB").astype(str).str.upper()
+                mlb_prop_card = prop_card[_prop_league.eq("MLB")].copy()
+                nfl_prop_card = prop_card[_prop_league.eq("NFL")].copy()
+
+                st.subheader("Player Props")
                 st.caption(
-                    "The controlled rollout currently funds only approved batter-hit Overs and Unders. "
+                    "MLB's controlled rollout currently funds only approved batter-hit Overs and Unders. "
                     "Each pilot ticket is capped at $1 until its direction records 50 new settled picks "
                     "with at least 55% accuracy and positive price-adjusted ROI. Core props require at "
                     "least 62% conservative calibrated win probability; Extended props cover the 60–62% "
                     "band. Both tiers also require at least 3% expected value, a 0.50-stat model advantage, "
                     "valid odds of -150 or better, and sufficient directional calibration. Batter total-base "
                     "and pitcher markets remain research-only. The card funds at most two props per game "
-                    "and five total. Parlays use funded rows only."
+                    "and five total. NFL passing, rushing, receiving-yard, and reception props are now "
+                    "collected and ranked in a separate research-only model; they stay at $0 until NFL's "
+                    "own market/direction history earns production eligibility. Parlays use funded rows only."
                 )
                 if funded_prop_card.empty:
                     st.info("No player props qualify for a production wager today.")
                 else:
                     st.dataframe(funded_prop_card, width="stretch")
                     st.download_button(
-                        "Export Funded MLB Player Props",
+                        "Export Funded Player Props",
                         funded_prop_card.to_csv(index=False, encoding="utf-8-sig"),
-                        "mlb_player_props_export.csv",
+                        "player_props_export.csv",
                         mime="text/csv",
                     )
 
                 st.download_button(
-                    "Export All MLB Props for Grading (includes DO NOT BET research)",
+                    "Export All Player Props for Grading (includes DO NOT BET research)",
                     prop_card.to_csv(index=False, encoding="utf-8-sig"),
-                    "mlb_player_props_all_export.csv",
+                    "player_props_all_export.csv",
                     mime="text/csv",
-                    key="download_all_mlb_props_for_grading",
+                    key="download_all_player_props_for_grading",
                 )
+
+                if not mlb_prop_card.empty:
+                    st.download_button(
+                        "Export MLB Player Props",
+                        mlb_prop_card.to_csv(index=False, encoding="utf-8-sig"),
+                        "mlb_player_props_all_export.csv",
+                        mime="text/csv",
+                        key="download_mlb_props_for_grading",
+                    )
+                if not nfl_prop_card.empty:
+                    st.download_button(
+                        "Export NFL Player Props — Research / Grading",
+                        nfl_prop_card.to_csv(index=False, encoding="utf-8-sig"),
+                        "nfl_player_props_all_export.csv",
+                        mime="text/csv",
+                        key="download_nfl_props_for_grading",
+                    )
 
                 if not research_prop_card.empty:
                     with st.expander(
@@ -2753,9 +2803,9 @@ def main() -> None:
                         )
                         st.dataframe(research_prop_card, width="stretch")
                         st.download_button(
-                            "Export Research-Only MLB Props",
+                            "Export Research-Only Player Props",
                             research_prop_card.to_csv(index=False, encoding="utf-8-sig"),
-                            "mlb_player_props_research_export.csv",
+                            "player_props_research_export.csv",
                             mime="text/csv",
                         )
             elif st.session_state.get("diagnostics", {}).get("strikeout_prop_error"):
@@ -2766,7 +2816,7 @@ def main() -> None:
                     ),
                 )
                 st.caption(
-                    f"⚾ MLB player props unavailable after retry ({_prop_err_type}). "
+                    f"Player props unavailable after retry ({_prop_err_type}). "
                     "Run the slate again; the game card remains valid."
                 )
             elif st.session_state.get("diagnostics", {}).get("strikeout_prop_feed_status") in {
@@ -2774,11 +2824,11 @@ def main() -> None:
             }:
                 _prop_stage = st.session_state.get("diagnostics", {}).get("strikeout_prop_feed_status")
                 st.caption(
-                    f"⚾ Pitcher-prop feed did not respond after retry ({_prop_stage}). "
+                    f"Player-prop feed did not respond after retry ({_prop_stage}). "
                     "Run the slate again; no stale props were used."
                 )
             else:
-                st.caption("⚾ No MLB player props cleared the edge bar today.")
+                st.caption("No player props were available for the selected sport today.")
 
             # Compact export (.xlsx): a readable Excel table with only the columns
             # needed to scan a slate left-to-right, matching the Strategy Lab layout.

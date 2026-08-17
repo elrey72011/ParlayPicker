@@ -1,4 +1,4 @@
-"""Odds API player-prop ingestion. v1: MLB pitcher strikeouts.
+"""Odds API player-prop ingestion for MLB and NFL over/under markets.
 
 Player props live on the per-event odds endpoint under market keys like
 ``pitcher_strikeouts``. Each outcome carries the player in ``description``, the side in
@@ -18,6 +18,15 @@ STRIKEOUT_MARKET_KEY = "pitcher_strikeouts"
 PITCHER_PROP_MARKET_KEYS = ("pitcher_strikeouts", "pitcher_outs", "pitcher_walks")
 BATTER_PROP_MARKET_KEYS = ("batter_hits", "batter_total_bases")
 MLB_PLAYER_PROP_MARKET_KEYS = PITCHER_PROP_MARKET_KEYS + BATTER_PROP_MARKET_KEYS
+# NFL v1 deliberately starts with repeatable volume markets. Touchdowns and
+# interceptions are low-frequency binary/count outcomes and need a separately
+# validated model before they can be ranked honestly.
+NFL_PLAYER_PROP_MARKET_KEYS = (
+    "player_pass_yds",
+    "player_rush_yds",
+    "player_reception_yds",
+    "player_receptions",
+)
 _DEFAULT_BOOK_PRIORITY = ("novig", "draftkings", "fanduel", "betmgm")
 _PROP_FETCH_ATTEMPTS = 3
 
@@ -34,7 +43,7 @@ def parse_pitcher_props(
     market_key: str = STRIKEOUT_MARKET_KEY,
     book_priority: tuple[str, ...] = _DEFAULT_BOOK_PRIORITY,
 ) -> list[dict]:
-    """Extract per-pitcher over/under lines for ONE prop market from an event payload.
+    """Extract per-player over/under lines for ONE prop market from an event payload.
 
     Returns one row per player: ``{pitcher, line, over_odds, under_odds, book,
     home_team, away_team, market_key}``. For each player, uses the first complete
@@ -76,7 +85,12 @@ def parse_pitcher_props(
                 slot["over_odds"] = price
             elif side.startswith("u"):
                 slot["under_odds"] = price
-        participant_type = "batter" if str(market_key).startswith("batter_") else "pitcher"
+        if str(market_key).startswith("batter_"):
+            participant_type = "batter"
+        elif str(market_key).startswith("player_"):
+            participant_type = "nfl_player"
+        else:
+            participant_type = "pitcher"
         for player, quote in by_pitcher.items():
             if "over_odds" not in quote or "under_odds" not in quote:
                 continue
@@ -95,6 +109,8 @@ def parse_pitcher_props(
                 "home_team": home,
                 "away_team": away,
                 "market_key": market_key,
+                "event_id": event_json.get("id"),
+                "commence_time": event_json.get("commence_time"),
             }
     return list(selected_by_player.values())
 
@@ -165,5 +181,20 @@ def fetch_mlb_player_props(
     market_keys: tuple[str, ...] = MLB_PLAYER_PROP_MARKET_KEYS,
 ) -> list[dict]:
     """Fetch the supported pitcher + batter markets in one event request."""
+    return fetch_pitcher_props(client, sport_key, event_id, market_keys)
+
+
+def fetch_nfl_player_props(
+    client: Any,
+    sport_key: str,
+    event_id: str,
+    market_keys: tuple[str, ...] = NFL_PLAYER_PROP_MARKET_KEYS,
+) -> list[dict]:
+    """Fetch the supported NFL volume markets in one event request.
+
+    The transport and quote shape are identical to MLB props; returned records
+    carry ``participant_type=nfl_player`` so modeling, grading, and calibration
+    remain league isolated downstream.
+    """
     return fetch_pitcher_props(client, sport_key, event_id, market_keys)
 
