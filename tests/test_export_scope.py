@@ -119,12 +119,14 @@ def test_prop_grading_export_keeps_research_but_marks_it_do_not_bet():
             "Stake_Status": ["Funded", "Research / No Stake"],
             "production_eligible": [True, False],
             "Kelly_Bet_Size": [1.0, 0.0],
+            "extended_flat_stake": [1.0, 1.0],
         }
     )
 
     labeled = label_wager_export(frame)
 
     assert labeled["Export_Scope"].tolist() == ["PRODUCTION BET", "COVERAGE / RESEARCH"]
+    assert labeled["extended_flat_stake"].tolist() == [1.0, 0.0]
     assert production_wagers(frame)["player_name"].tolist() == ["Funded Player"]
 
 
