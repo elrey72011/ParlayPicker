@@ -629,14 +629,19 @@ DEGRADED_FEATURE_MAX_PICK_EXPOSURE_PCT = 0.02
 ALLOW_EMPTY_CARD_RECOVERY = False
 ENABLE_EMPTY_CARD_RECOVERY = True
 EMPTY_CARD_RECOVERY_MAX_PICKS = 2
-# Controlled value tuning: recovery is allowed only for picks that remain more
-# likely than not after calibration and also clear the owner's 55% production
-# floor. Exact-price edge is still required below, but price alone cannot turn a
-# 43%-45% plus-money longshot into the slate's public Actionable pick. Contrarian
-# rows face a stricter edge bar and the card is limited to two small wagers.
+# Controlled value tuning: a funded fallback must clear the same 60% probability
+# floor as the accuracy-first precision shortlist.  The 17 Aug card funded a
+# 56.9% empirical pick that was explicitly excluded from the precision shortlist;
+# that inverted the product hierarchy and the pick lost.  Exact-price edge is
+# still required below, but price alone cannot promote a lower-confidence row
+# when the stated goal is accuracy first. Contrarian rows face a stricter edge
+# bar and the card is limited to two small wagers.
 EMPTY_CARD_RECOVERY_MIN_PRODUCTION_EV = 0.02
 EMPTY_CARD_RECOVERY_MIN_PRODUCTION_EDGE = 0.02
-EMPTY_CARD_RECOVERY_MIN_PRODUCTION_WIN_PROB = MIN_STAKE_WIN_PROBABILITY
+EMPTY_CARD_RECOVERY_MIN_PRODUCTION_WIN_PROB = max(
+    MIN_STAKE_WIN_PROBABILITY,
+    0.60,
+)
 EMPTY_CARD_RECOVERY_MIN_ABSOLUTE_EDGE = 0.02
 EMPTY_CARD_RECOVERY_DISAGREES_MIN_ABSOLUTE_EDGE = 0.03
 EMPTY_CARD_RECOVERY_MIN_AMERICAN_ODDS = -200

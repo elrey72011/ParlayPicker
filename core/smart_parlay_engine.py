@@ -75,6 +75,15 @@ MIN_LEG_EDGE = 0.02
 MAX_ACTIONABLE_ANCHORS = 5
 PROBABILITY_FALLBACK_MAX_CANDIDATES = 20
 PROBABILITY_FALLBACK_MAX_PARLAYS = 10
+# Research fallback combinations still need a credible leg floor and positive
+# price-adjusted expectation.  The 17 Aug export contained four negative-EV
+# parlays among five rows; the no-stake label was correct, but calling those
+# combinations "smart" added noise to the accuracy surface.  Keep the fallback
+# populated only when both legs clear the owner's ordinary probability floor and
+# the conservatively haircutted joint probability beats the offered same-book
+# price.
+PROBABILITY_FALLBACK_MIN_LEG_PROBABILITY = 0.55
+PROBABILITY_FALLBACK_MIN_PARLAY_EV = 0.0
 
 # Non-Actionable MLB total picks must clear a stricter floor for parlay legs.
 # May 27: MLB HV/Spec totals went 0-6 while Actionable MLB totals went 2-2 (100%).
@@ -417,7 +426,9 @@ def generate_probability_ranked_parlays(
 
     candidates["_parlay_probability"] = _best_available_probability(candidates)
     candidates["_parlay_decimal_odds"] = _fallback_decimal_odds(candidates)
-    valid &= candidates["_parlay_probability"].gt(0.5)
+    valid &= candidates["_parlay_probability"].ge(
+        float(PROBABILITY_FALLBACK_MIN_LEG_PROBABILITY)
+    )
     valid &= candidates["_parlay_decimal_odds"].gt(1.0)
     candidates = candidates[valid].copy()
     if len(candidates) < 2:
@@ -446,6 +457,8 @@ def generate_probability_ranked_parlays(
         )
         combined_decimal_odds = float(decimals.prod())
         parlay_ev = combined_probability * combined_decimal_odds - 1.0
+        if parlay_ev <= float(PROBABILITY_FALLBACK_MIN_PARLAY_EV):
+            continue
         market_probability = pd.to_numeric(
             legs.get("market_probability", 1.0 / decimals), errors="coerce"
         )
@@ -495,8 +508,8 @@ def generate_probability_ranked_parlays(
             "premium_eligible": False,
             "sellable_as_premium": False,
             "commercial_warning": (
-                "Probability-ranked fallback; no app-approved stake. Verify all legs "
-                "and prices at one sportsbook before use."
+                "Positive-EV probability-ranked fallback; no app-approved stake. "
+                "Verify all legs and prices at one sportsbook before use."
             ),
             "unique_game_count": 2,
             "one_leg_per_game": True,
