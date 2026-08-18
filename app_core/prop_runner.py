@@ -1455,7 +1455,7 @@ def apply_extended_prop_stake_cap(
     card,
     flat_stake: float = PROP_EXTENDED_FLAT_STAKE,
 ):
-    """Use a flat $1 stake for the lower-confidence Extended tier."""
+    """Use a flat $1 stake only for funded lower-confidence Extended rows."""
     import pandas as pd
 
     if card is None or card.empty:
@@ -1472,14 +1472,19 @@ def apply_extended_prop_stake_cap(
         "production_eligible", pd.Series(False, index=out.index)
     ).fillna(False).astype(bool)
     extended = tier.eq("Extended") & eligible & stakes.gt(0)
-    out.loc[extended, "Kelly_Bet_Size"] = round(max(0.0, float(flat_stake)), 2)
+    flat_stake_value = round(max(0.0, float(flat_stake)), 2)
+    out.loc[extended, "Kelly_Bet_Size"] = flat_stake_value
     if "novig_exposure_after" in out.columns:
         exposure_after = pd.to_numeric(
             out["Kelly_Bet_Size"], errors="coerce"
         ).fillna(0.0).sum()
         out["novig_exposure_after"] = round(float(exposure_after), 2)
-    out["extended_flat_stake"] = round(max(0.0, float(flat_stake)), 2)
-    out["extended_stake_cap_applied"] = bool(extended.any())
+    # This is a row-level export field, not a global configuration value.  A
+    # broadcast $1 value on research rows contradicts their $0/no-stake label
+    # and can be mistaken for an approved wager amount.
+    out["extended_flat_stake"] = 0.0
+    out.loc[extended, "extended_flat_stake"] = flat_stake_value
+    out["extended_stake_cap_applied"] = extended
     return out
 
 

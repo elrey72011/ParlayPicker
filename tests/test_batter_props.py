@@ -330,7 +330,8 @@ def test_extended_props_are_flat_one_dollar_after_novig_selection():
     })
     out = apply_extended_prop_stake_cap(card)
     assert out["Kelly_Bet_Size"].tolist() == [2.5, 1.0]
-    assert bool(out["extended_stake_cap_applied"].iloc[0])
+    assert out["extended_flat_stake"].tolist() == [0.0, 1.0]
+    assert out["extended_stake_cap_applied"].tolist() == [False, True]
 
 
 def test_production_gate_rejects_malformed_identity():

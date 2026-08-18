@@ -134,6 +134,7 @@ def label_wager_export(frame: pd.DataFrame) -> pd.DataFrame:
         "Play_Units",
         "production_bet_amount",
         "Kelly_Bet_Size",
+        "extended_flat_stake",
         "recommended_bet",
         "Suggested_Stake",
     ):
