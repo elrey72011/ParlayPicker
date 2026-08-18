@@ -118,6 +118,21 @@ def test_probability_fallback_rejects_invalid_and_duplicate_games():
     assert not out["parlay_legs"].str.contains("G @ H", regex=False).any()
 
 
+def test_probability_fallback_rejects_low_probability_and_negative_ev_rows():
+    frame = _best_available_frame()
+    frame.loc[frame["matchup_id"].eq("g4"), "effective_win_probability"] = 0.54
+
+    out = generate_probability_ranked_parlays(frame, max_parlays=20)
+
+    assert not out["parlay_legs"].str.contains("G @ H", regex=False).any()
+    assert out["min_leg_prob"].ge(0.55).all()
+    assert out["parlay_ev"].gt(0.0).all()
+
+    negative_price = _best_available_frame()
+    negative_price["decimal_odds"] = 1.10
+    assert generate_probability_ranked_parlays(negative_price).empty
+
+
 def test_card_unique_selector_drops_repeated_anchor_parlays():
     rows = pd.DataFrame({
         "parlay_legs": [

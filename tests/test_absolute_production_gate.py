@@ -82,7 +82,7 @@ def test_portfolio_allocator_funds_actionable_pick_that_clears_gate():
 
 def test_controlled_value_allocator_uses_empirical_exact_price_probability():
     """A recovered plus-money value row must survive its second sizing pass."""
-    row = _portfolio_row(empirical_probability=0.58, expected_value=0.04)
+    row = _portfolio_row(empirical_probability=0.61, expected_value=0.04)
     row.update({
         "home_team": "New York Yankees",
         "away_team": "Saint Louis",
@@ -90,7 +90,7 @@ def test_controlled_value_allocator_uses_empirical_exact_price_probability():
         "market_line_used": -1.5,
         "odds_american": 141,
         "decimal_odds": 2.41,
-        "production_win_probability": 0.56,
+        "production_win_probability": 0.61,
         "production_expected_value": 0.04,
         "consensus_agreement": "Disagrees",
         "controlled_card_recovery": True,
@@ -102,18 +102,40 @@ def test_controlled_value_allocator_uses_empirical_exact_price_probability():
     assert recovered["kelly_probability_source"] == (
         "controlled_value_empirical_price_probability"
     )
-    assert float(recovered["kelly_probability_used"]) == 0.58
+    assert float(recovered["kelly_probability_used"]) == 0.61
     assert bool(recovered["production_eligible"])
     assert bool(recovered["absolute_production_gate_pass"])
     assert float(recovered["recommended_bet"]) > 0.0
 
 
-def test_controlled_value_allocator_rechecks_stricter_disagrees_margin():
-    row = _portfolio_row(empirical_probability=0.56, expected_value=0.04)
+def test_controlled_value_allocator_requires_precision_probability_floor():
+    row = _portfolio_row(empirical_probability=0.59, expected_value=0.08)
     row.update({
-        "odds_american": -115,
-        "decimal_odds": 1.0 + (100.0 / 115.0),
-        "production_win_probability": 0.56,
+        "odds_american": 100,
+        "decimal_odds": 2.0,
+        "production_win_probability": 0.59,
+        "production_expected_value": 0.08,
+        "consensus_agreement": "Agrees",
+        "controlled_card_recovery": True,
+    })
+
+    result = optimize_portfolio_allocation(pd.DataFrame([row]), bankroll=1000.0)
+    rejected = result.iloc[0]
+
+    assert not bool(rejected["production_eligible"])
+    assert not bool(rejected["absolute_production_gate_pass"])
+    assert rejected["absolute_production_gate_reason"] == (
+        "controlled value win-probability floor failed"
+    )
+    assert float(rejected["recommended_bet"]) == 0.0
+
+
+def test_controlled_value_allocator_rechecks_stricter_disagrees_margin():
+    row = _portfolio_row(empirical_probability=0.61, expected_value=0.04)
+    row.update({
+        "odds_american": -145,
+        "decimal_odds": 1.0 + (100.0 / 145.0),
+        "production_win_probability": 0.61,
         "production_expected_value": 0.04,
         "consensus_agreement": "Disagrees",
         "controlled_card_recovery": True,
@@ -122,8 +144,8 @@ def test_controlled_value_allocator_rechecks_stricter_disagrees_margin():
     result = optimize_portfolio_allocation(pd.DataFrame([row]), bankroll=1000.0)
     rejected = result.iloc[0]
 
-    # -115 breaks even at 53.49%; 56% clears the normal 2-point gate but not
-    # the controlled contrarian 3-point requirement.
+    # -145 breaks even at 59.18%; 61% clears the absolute probability floor but
+    # not the controlled contrarian 3-point price-edge requirement.
     assert not bool(rejected["production_eligible"])
     assert not bool(rejected["absolute_production_gate_pass"])
     assert rejected["absolute_production_gate_reason"] == (
