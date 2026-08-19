@@ -133,6 +133,34 @@ def test_probability_fallback_rejects_low_probability_and_negative_ev_rows():
     assert generate_probability_ranked_parlays(negative_price).empty
 
 
+def test_probability_fallback_uses_final_selection_probability_for_math():
+    frame = _best_available_frame().iloc[:2].copy()
+    frame["selection_probability_used"] = [0.62, 0.61]
+    frame["empirical_win_probability"] = [0.70, 0.69]
+    frame["effective_win_probability"] = [0.70, 0.69]
+    frame["decimal_odds"] = [1.90, 1.90]
+
+    out = generate_probability_ranked_parlays(frame, max_parlays=5)
+
+    assert len(out) == 1
+    expected_probability = 0.62 * 0.61 * 0.97
+    assert abs(out.iloc[0]["combined_probability"] - expected_probability) < 1e-12
+    assert abs(out.iloc[0]["min_leg_prob"] - 0.61) < 1e-12
+    assert abs(out.iloc[0]["parlay_ev"] - (expected_probability * 1.90**2 - 1.0)) < 1e-12
+
+
+def test_probability_fallback_rejects_leg_with_negative_final_selection_ev():
+    frame = _best_available_frame().iloc[:2].copy()
+    frame["selection_probability_used"] = [0.60, 0.60]
+    frame["empirical_win_probability"] = [0.70, 0.70]
+    frame["effective_win_probability"] = [0.70, 0.70]
+    frame["decimal_odds"] = [1.60, 1.60]
+
+    # The legacy empirical values make the pair look positive-EV, but each leg
+    # is -4% at the canonical final-selection probability and must be rejected.
+    assert generate_probability_ranked_parlays(frame, max_parlays=5).empty
+
+
 def test_card_unique_selector_drops_repeated_anchor_parlays():
     rows = pd.DataFrame({
         "parlay_legs": [
