@@ -42,6 +42,29 @@ def test_precision_card_selects_global_top_two_by_calibrated_probability():
     assert shortlist["Precision_Rank"].astype(int).tolist() == [1, 2]
 
 
+def test_precision_card_uses_adjusted_selection_probability_before_display_probability():
+    source = pd.DataFrame(
+        [
+            _row(
+                "Display probability is inflated",
+                0.68,
+                selection_probability_used=0.619,
+            ),
+            _row(
+                "Adjusted probability clears",
+                0.61,
+                selection_probability_used=0.63,
+            ),
+        ]
+    )
+
+    result = attach_precision_card(source)
+
+    assert result["Precision_Card"].tolist() == [False, True]
+    assert result["Precision_Probability"].tolist() == [0.619, 0.63]
+    assert "below 62%" in result.loc[0, "Precision_Card_Reason"]
+
+
 def test_precision_card_fails_closed_on_price_and_verification_gates():
     source = pd.DataFrame(
         [

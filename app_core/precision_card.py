@@ -11,7 +11,7 @@ import pandas as pd
 
 
 PRECISION_CARD_MAX_PICKS = 2
-PRECISION_CARD_MIN_WIN_PROBABILITY = 0.60
+PRECISION_CARD_MIN_WIN_PROBABILITY = 0.62
 PRECISION_CARD_MIN_AMERICAN_ODDS = -220
 PRECISION_CARD_TARGET_HIT_RATE = 0.75
 
@@ -27,18 +27,24 @@ def _strict_bool(frame: pd.DataFrame, column: str, *, default: bool = False) -> 
 
 
 def _probability(frame: pd.DataFrame) -> pd.Series:
-    probability = pd.to_numeric(
-        frame.get("WinProbability", pd.Series(float("nan"), index=frame.index)),
-        errors="coerce",
-    )
-    for fallback in (
+    """Return the same empirically adjusted probability used by selection.
+
+    ``WinProbability`` is a display/calibration value.  The best-pick selector
+    can subsequently pair-normalize and empirically blend it into
+    ``selection_probability_used``.  Precision ranking must not resurrect the
+    pre-adjustment value after selection has already reduced the candidate.
+    """
+
+    probability = pd.Series(float("nan"), index=frame.index, dtype="float64")
+    for source in (
+        "selection_probability_used",
         "effective_win_probability",
         "empirical_win_probability",
-        "selection_probability_used",
+        "WinProbability",
     ):
-        if fallback in frame.columns:
+        if source in frame.columns:
             probability = probability.fillna(
-                pd.to_numeric(frame[fallback], errors="coerce")
+                pd.to_numeric(frame[source], errors="coerce")
             )
     return probability
 
@@ -58,11 +64,11 @@ def attach_precision_card(
 ) -> pd.DataFrame | None:
     """Annotate a best-picks slate with a fail-closed top-confidence shortlist.
 
-    Ranking is global across the slate, not tier-first.  A row must have a
-    verified final selection, verified live event/line identity, at least the
-    minimum calibrated win probability, and a price no shorter than the policy
-    floor.  Selection is informational unless the ordinary production gate has
-    independently approved a positive stake.
+    Ranking is global across the slate, not tier-first.  A row must have an
+    empirically adjusted selection probability that clears the precision floor,
+    a verified final selection, verified live event/line identity, and a price no
+    shorter than the policy floor. Selection is informational unless the ordinary
+    production gate has independently approved a positive stake.
     """
 
     if frame is None or frame.empty:
@@ -154,13 +160,13 @@ def attach_precision_card(
     reason.loc[~verified] = "Excluded: final selection or live line identity is not verified."
     reason.loc[started] = "Excluded: game has started."
     reason.loc[verified & ~started & ~probability_ok] = (
-        f"Excluded: calibrated win probability is below {float(min_win_probability):.0%}."
+        f"Excluded: adjusted selection probability is below {float(min_win_probability):.0%}."
     )
     reason.loc[verified & ~started & probability_ok & ~price_ok] = (
         f"Excluded: offered price is shorter than {int(min_american_odds):+d}."
     )
     reason.loc[selected] = (
-        "Selected by global calibrated win probability; 75% is a monitoring target, not a guarantee."
+        "Selected by global adjusted selection probability; 75% is a monitoring target, not a guarantee."
     )
     out["Precision_Card_Reason"] = reason
     return out
