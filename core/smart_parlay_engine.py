@@ -79,9 +79,9 @@ PROBABILITY_FALLBACK_MAX_PARLAYS = 10
 # price-adjusted expectation.  The 17 Aug export contained four negative-EV
 # parlays among five rows; the no-stake label was correct, but calling those
 # combinations "smart" added noise to the accuracy surface.  Keep the fallback
-# populated only when both legs clear the owner's ordinary probability floor and
-# the conservatively haircutted joint probability beats the offered same-book
-# price.
+# populated only when both legs clear the owner's ordinary probability floor,
+# each leg is nonnegative value at its own price, and the conservatively
+# haircutted joint probability beats the offered same-book price.
 PROBABILITY_FALLBACK_MIN_LEG_PROBABILITY = 0.55
 PROBABILITY_FALLBACK_MIN_PARLAY_EV = 0.0
 
@@ -343,9 +343,16 @@ def _strict_bool_mask(df: pd.DataFrame, column: str, *, default: bool) -> pd.Ser
 
 
 def _best_available_probability(df: pd.DataFrame) -> pd.Series:
-    """Use the same honest probability precedence as Pick of the Day."""
+    """Use the canonical final-selection probability for research parlays.
+
+    Best Available can pair-normalize and empirically blend a candidate after
+    the display probability is produced.  The parlay fallback must not restore
+    that earlier, more optimistic value after the final selector reduced it.
+    Legacy callers without selection metadata retain the prior fallbacks.
+    """
     probability = pd.Series(float("nan"), index=df.index, dtype=float)
     for column in (
+        "selection_probability_used",
         "empirical_win_probability",
         "effective_win_probability",
         "calibrated_probability",
@@ -426,10 +433,16 @@ def generate_probability_ranked_parlays(
 
     candidates["_parlay_probability"] = _best_available_probability(candidates)
     candidates["_parlay_decimal_odds"] = _fallback_decimal_odds(candidates)
+    candidates["_parlay_leg_ev"] = (
+        candidates["_parlay_probability"]
+        * candidates["_parlay_decimal_odds"]
+        - 1.0
+    )
     valid &= candidates["_parlay_probability"].ge(
         float(PROBABILITY_FALLBACK_MIN_LEG_PROBABILITY)
     )
     valid &= candidates["_parlay_decimal_odds"].gt(1.0)
+    valid &= candidates["_parlay_leg_ev"].ge(0.0)
     candidates = candidates[valid].copy()
     if len(candidates) < 2:
         return pd.DataFrame()
