@@ -1,7 +1,13 @@
 import pandas as pd
 
 from app.ui.results_dashboard import _precision_card_mask
-from app_core.precision_card import attach_precision_card, precision_shortlist
+from app_core.precision_card import (
+    attach_precision_card,
+    precision_download_label,
+    precision_empty_caption,
+    precision_policy_caption,
+    precision_shortlist,
+)
 
 
 def _row(name: str, probability: float, odds: int = -110, **overrides):
@@ -146,3 +152,17 @@ def test_precision_recap_mask_parses_exported_booleans_fail_closed():
 
     assert _precision_card_mask(source).tolist() == [True, True, True, False, False, False]
     assert not _precision_card_mask(pd.DataFrame({"other": [True]})).any()
+
+
+def test_precision_ui_copy_matches_enforced_policy_constants():
+    label = precision_download_label()
+    policy = precision_policy_caption()
+    empty = precision_empty_caption()
+
+    assert label == "Export Precision Shortlist (Top 2)"
+    assert "62% adjusted selection probability" in policy
+    assert "-220 or better" in policy
+    assert "75% hit rate" in policy
+    assert "62% adjusted selection probability" in empty
+    assert "-220 price floors" in empty
+    assert "60% calibrated" not in policy

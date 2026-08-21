@@ -2583,7 +2583,13 @@ def main() -> None:
             # off the internal names.
             best_picks_export = apply_status_display_labels(best_picks_export)
             from app_core.export_scope import label_wager_export, production_wagers
-            from app_core.precision_card import attach_precision_card, precision_shortlist
+            from app_core.precision_card import (
+                attach_precision_card,
+                precision_download_label,
+                precision_empty_caption,
+                precision_policy_caption,
+                precision_shortlist,
+            )
 
             best_picks_export = label_wager_export(best_picks_export)
             best_picks_export = attach_precision_card(best_picks_export)
@@ -2625,23 +2631,15 @@ def main() -> None:
                 )
             if precision_game_export is not None and not precision_game_export.empty:
                 st.download_button(
-                    "Export Precision Shortlist (Top 2)",
+                    precision_download_label(),
                     precision_game_export.to_csv(index=False, encoding="utf-8-sig"),
                     "precision_game_card.csv",
                     mime="text/csv",
                     key="export_precision_game_card",
                 )
-                st.caption(
-                    "Accuracy-first pilot: at most two globally ranked, live-line-verified "
-                    "picks with at least 60% calibrated probability and a price of -220 or "
-                    "better. The 75% hit rate is a monitoring target, not a guarantee; only "
-                    "Wager_Instruction and a positive Play_Stake authorize a bet."
-                )
+                st.caption(precision_policy_caption())
             else:
-                st.caption(
-                    "Precision shortlist: no live-line-verified pick cleared the 60% "
-                    "probability and -220 price floors."
-                )
+                st.caption(precision_empty_caption())
 
             candidate_audit_df = diagnostics.get("candidate_audit_df")
             if isinstance(candidate_audit_df, pd.DataFrame) and not candidate_audit_df.empty:
