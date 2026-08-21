@@ -1368,6 +1368,15 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
                 }
                 _prop_client = TheOddsAPIClient(api_key=_prop_key, markets="h2h")
                 _prop_frames = []
+                _nfl_game_count = int(
+                    best_picks_df.get(
+                        "league", pd.Series("", index=best_picks_df.index)
+                    ).fillna("").astype(str).str.upper().eq("NFL").sum()
+                )
+                diagnostics["nfl_prop_requested"] = bool(
+                    ENABLE_NFL_PLAYER_PROPS and "NFL" in _selected_prop_sports
+                )
+                diagnostics["nfl_selected_game_count"] = _nfl_game_count
                 if ENABLE_STRIKEOUT_PROPS_PRODUCTION and "MLB" in _selected_prop_sports:
                     _mlb_prop_card = build_prop_card(
                         _prop_client,
@@ -1396,6 +1405,14 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
                 if _prop_frames:
                     strikeout_prop_card = pd.concat(
                         _prop_frames, ignore_index=True, sort=False
+                    )
+                    from app_core.nfl_prop_pipeline import attach_nfl_prop_coverage
+
+                    strikeout_prop_card = attach_nfl_prop_coverage(
+                        strikeout_prop_card,
+                        _selected_prop_sports,
+                        diagnostics,
+                        nfl_game_count=_nfl_game_count,
                     )
                 _prop_stake_status = strikeout_prop_card.get(
                     "Stake_Status", pd.Series("", index=strikeout_prop_card.index)
@@ -2743,6 +2760,16 @@ def main() -> None:
                 mlb_prop_card = prop_card[_prop_league.eq("MLB")].copy()
                 nfl_prop_card = prop_card[_prop_league.eq("NFL")].copy()
 
+                _prop_diagnostics = st.session_state.get("diagnostics", {})
+                if (
+                    bool(_prop_diagnostics.get("nfl_prop_requested"))
+                    and int(_prop_diagnostics.get("nfl_selected_game_count", 0) or 0) > 0
+                    and nfl_prop_card.empty
+                ):
+                    from app_core.nfl_prop_pipeline import nfl_prop_feed_message
+
+                    st.warning(nfl_prop_feed_message(_prop_diagnostics))
+
                 st.subheader("Player Props")
                 st.caption(
                     "MLB's controlled rollout currently funds only approved batter-hit Overs and Unders. "
@@ -2826,6 +2853,23 @@ def main() -> None:
                 st.caption(
                     f"Player-prop feed did not respond after retry ({_prop_stage}). "
                     "Run the slate again; no stale props were used."
+                )
+            elif (
+                st.session_state.get("diagnostics", {}).get("nfl_prop_requested")
+                and int(
+                    st.session_state.get("diagnostics", {}).get(
+                        "nfl_selected_game_count", 0
+                    )
+                    or 0
+                )
+                > 0
+                and st.session_state.get("diagnostics", {}).get("nfl_prop_feed_status")
+                != "ready"
+            ):
+                from app_core.nfl_prop_pipeline import nfl_prop_feed_message
+
+                st.warning(
+                    nfl_prop_feed_message(st.session_state.get("diagnostics", {}))
                 )
             else:
                 st.caption("No player props were available for the selected sport today.")
