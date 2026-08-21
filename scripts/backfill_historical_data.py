@@ -20,7 +20,7 @@ except ImportError:
     st = None
 
 # Define target sports
-TARGET_SPORTS = ['basketball_nba', 'icehockey_nhl', 'basketball_ncaab']
+TARGET_SPORTS = ['basketball_nba', 'icehockey_nhl', 'basketball_ncaab', 'americanfootball_ncaaf']
 DAYS_TO_BACKFILL = 7
 
 # Bookmakers to check for closing lines
@@ -304,7 +304,7 @@ def main():
         existing_ids = set()
 
     all_new_games = []
-    league_counts = {"NBA": 0, "NHL": 0, "NCAAB": 0}
+    league_counts = {"NBA": 0, "NHL": 0, "NCAAB": 0, "NCAAF": 0}
 
     for sport in TARGET_SPORTS:
         # Fetch all scores for the past X days

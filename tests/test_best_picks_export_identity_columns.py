@@ -15,4 +15,4 @@ def test_best_picks_export_identity_columns_present_without_regression():
 
 
 def test_pipeline_build_identifies_current_export_contract():
-    assert PIPELINE_BUILD == "2026-08-21-prop-ledger-history-guard"
+    assert PIPELINE_BUILD == "2026-08-21-ncaaf-live-audit"

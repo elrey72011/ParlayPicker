@@ -6,6 +6,9 @@ __pycache__/
 .Python
 env/
 venv/
+.test-deps/
+.pytest_cache/
+.pytest-tmp/
 .claude/.venv/
 ENV/
 build/

@@ -59,3 +59,7 @@ def test_live_odds_empty_fallback_preserves_theover_probability(monkeypatch):
     totals = analysis_df[analysis_df["market_type"].astype(str).str.contains("total")]
     assert totals["theover_probability"].notna().all()
     assert set(totals["theover_probability"].round(2)) == {0.62, 0.38}
+    # TheOver remains its own signal. It must not also be copied into the ML
+    # slot when no target-specific totals model is available.
+    assert totals["ml_probability"].isna().all()
+    assert totals["model_probability"].isna().all()

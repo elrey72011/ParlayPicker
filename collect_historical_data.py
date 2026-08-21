@@ -340,7 +340,7 @@ def collect_historical_data(days: int, sports: List[str], output_file: str = "ma
 def main():
     parser = argparse.ArgumentParser(description="Collect historical data using The Odds API")
     parser.add_argument("--days", type=int, default=45, help="Number of days to look back (default 45)")
-    parser.add_argument("--sports", nargs="+", default=["NBA", "NHL", "NCAAB"],
+    parser.add_argument("--sports", nargs="+", default=["NBA", "NHL", "NCAAB", "NCAAF"],
                        choices=["NBA", "WNBA", "NHL", "NCAAB", "NFL", "NCAAF"])
     parser.add_argument("--output", type=str, default="master_all_sports.csv")
     parser.add_argument("--api-key", type=str)

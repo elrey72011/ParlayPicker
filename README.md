@@ -1,6 +1,6 @@
 # ParlayPicker
 
-ParlayPicker is a robust, data-driven sports betting pipeline designed to generate +EV (Expected Value) betting recommendations. It combines live market odds, statistical baselines, and machine learning predictions to identify actionable edges across multiple sports leagues (NFL, NBA, NHL, MLB, and NCAAB).
+ParlayPicker is a robust, data-driven sports betting pipeline designed to generate +EV (Expected Value) betting recommendations. It combines live market odds, statistical baselines, and machine learning predictions to identify actionable edges across multiple sports leagues (NFL, NCAAF, NBA, WNBA, NHL, MLB, and NCAAB).
 
 ## Current Architecture & Operation
 
@@ -15,6 +15,7 @@ We use strict string sanitization, canonical game keys (`League|Home|Away|Date`)
 ### 3. ML Prediction Engine
 We use a cached XGBoost `PredictionEngine` to generate win probabilities.
 * **Resilience:** If the ML engine fails or feature matrices are empty, the system gracefully and unconditionally falls back to statistical baseline probabilities without crashing.
+* **Target Integrity:** The game-winner model is used only for moneylines. Spread and total rows require a separately validated target-specific model; otherwise ML stays unavailable and the blend uses each remaining independent source once.
 
 ### 4. Expected Value (EV) Engine
 * **Probability Calibration:** We do not blindly trust the ML. We calibrate probabilities using a conservative split (typically 30% Model / 70% Market) to respect efficient markets.

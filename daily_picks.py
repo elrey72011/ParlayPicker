@@ -17,7 +17,7 @@ def fetch_todays_odds():
     """Fetches LIVE upcoming odds from The Odds API"""
     print("📡 Fetching live odds from API...")
     all_games = []
-    sports = ['basketball_nba', 'icehockey_nhl', 'basketball_ncaab']
+    sports = ['basketball_nba', 'icehockey_nhl', 'basketball_ncaab', 'americanfootball_ncaaf']
     
     for sport in sports:
         try:

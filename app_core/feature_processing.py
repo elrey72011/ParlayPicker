@@ -1850,13 +1850,14 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
     """
     Fetch NCAAF stats using direct requests to api.collegefootballdata.com.
 
-    Returns empty list if API is unavailable, unauthorized, or disabled for this session.
+    Falls back to ESPN when CFBD is unavailable, unauthorized, or disabled.
     """
     # Check if CFBD was disabled earlier in this session (e.g., due to 401)
     if st is not None and hasattr(st, "session_state"):
         if st.session_state.get("cfbd_disabled_reason"):
-            # Already disabled - skip silently to avoid repeated warnings
-            return []
+            # Already disabled: retain NCAAF feature coverage through the public
+            # ESPN standings fallback instead of needlessly excluding every row.
+            return fetch_from_espn_ncaaf(season_year)
 
     def _normalize_cfbd_token(raw: Any) -> str:
         if raw is None:
@@ -1931,6 +1932,15 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
     try:
         # 1) requested year
         season_stats = _fetch_from_api("/stats/season", {"year": season_year})
+
+        # A 401 disables CFBD for the session. Do not issue two more doomed CFBD
+        # calls; immediately use the documented fallback for this and later runs.
+        if (
+            st is not None
+            and hasattr(st, "session_state")
+            and st.session_state.get("cfbd_disabled_reason")
+        ):
+            return fetch_from_espn_ncaaf(season_year)
 
         # 2) fallback to prior year if empty
         if not season_stats:
@@ -2012,12 +2022,18 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
                     except Exception:
                         return 0.0
 
+                team_norm = normalize_team_for_stats(team, league="NCAAF")
                 stats.append(
                     {
-                        "team_norm": normalize_team_for_stats(team, league="NCAAF"),
+                        "team_norm": team_norm,
+                        "stats_team_key": team_norm.strip().lower(),
+                        "team_name_source": team,
+                        "league_key": "NCAAF",
                         "wins": wins,
                         "losses": losses,
                         "win_pct": float(win_pct),
+                        "home_win_pct": float(win_pct),
+                        "away_win_pct": float(win_pct),
                         "points_per_game": _to_float(ppg),
                         "points_allowed_per_game": _to_float(oppg),
                         "yards_per_game": _to_float(ypg),
@@ -2055,11 +2071,17 @@ def fetch_ncaaf_stats(season_year: int) -> List[Dict[str, Any]]:
                 games_played = wins + losses
                 win_pct = (wins / games_played) if games_played > 0 else 0.0
 
+                team_norm = normalize_team_for_stats(t, league="NCAAF")
                 stats.append({
-                    "team_norm": normalize_team_for_stats(t, league="NCAAF"),
+                    "team_norm": team_norm,
+                    "stats_team_key": team_norm.strip().lower(),
+                    "team_name_source": t,
+                    "league_key": "NCAAF",
                     "wins": wins,
                     "losses": losses,
                     "win_pct": float(win_pct),
+                    "home_win_pct": float(win_pct),
+                    "away_win_pct": float(win_pct),
                     "points_per_game": float(data.get("points_per_game", 0.0)),
                     "points_allowed_per_game": float(data.get("points_allowed_per_game", 0.0)),
                     "yards_per_game": float(data.get("yards_per_game", 0.0)),

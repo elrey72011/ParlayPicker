@@ -5,7 +5,7 @@ import pandas as pd
 import streamlit as st
 
 
-FALLBACK_SPORTS = ["NBA", "WNBA", "NHL", "NCAAB", "NFL", "MLB"]
+FALLBACK_SPORTS = ["NBA", "WNBA", "NHL", "NCAAB", "NFL", "NCAAF", "MLB"]
 ALL_SPORTS_LABEL = "All Sports"
 
 

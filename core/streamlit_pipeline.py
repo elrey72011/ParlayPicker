@@ -130,7 +130,15 @@ except Exception as e:
 
 VALID_MARKETS = {"spread_home", "spread_away", "total_over", "total_under", "moneyline_home", "moneyline_away"}
 DATE_ALIASES = ["game_date", "game_date_est", "commence_time", "start_time", "time", "date", "event_date"]
-LEAGUE_ALIASES = {"NCAAM": "NCAAB", "NCAA MEN'S BASKETBALL": "NCAAB", "NCAA MENS BASKETBALL": "NCAAB"}
+LEAGUE_ALIASES = {
+    "NCAAM": "NCAAB",
+    "NCAA MEN'S BASKETBALL": "NCAAB",
+    "NCAA MENS BASKETBALL": "NCAAB",
+    "AMERICANFOOTBALL_NCAAF": "NCAAF",
+    "NCAA FOOTBALL": "NCAAF",
+    "COLLEGE FOOTBALL": "NCAAF",
+    "CFB": "NCAAF",
+}
 _KNOWN_NCAAB_TEAM_TOKENS = {
     "wichita st", "wichita state", "oklahoma st", "oklahoma state", "davidson",
 }
@@ -150,7 +158,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-08-21-prop-ledger-history-guard"
+PIPELINE_BUILD = "2026-08-21-ncaaf-live-audit"
 
 # Best Available must compare standard, reasonably priced markets. A P2P exchange can
 # expose alternate run lines (for example +5.5 at -1150) beside the standard MLB +1.5.
@@ -841,7 +849,7 @@ def _infer_missing_league_from_base(df: pd.DataFrame, base_df: pd.DataFrame) -> 
 
 
 def _infer_missing_league_from_team_sets(df: pd.DataFrame, selected_sports: list[str] | None) -> pd.DataFrame:
-    """Fill missing league labels using known pro-team sets, defaulting remaining blanks to NCAAB when selected."""
+    """Fill missing league labels from explicit source hints and known team sets."""
     out = df.copy()
     if out.empty:
         return out
@@ -850,6 +858,21 @@ def _infer_missing_league_from_team_sets(df: pd.DataFrame, selected_sports: list
     missing_mask = out["league"].str.len().eq(0)
     if not missing_mask.any():
         return out
+
+    # NCAAB and NCAAF share school names and mascots. Source metadata is the only
+    # safe discriminator when league is blank, so honor explicit football hints
+    # before applying basketball-oriented college-team recovery.
+    source_text = pd.Series([""] * len(out), index=out.index, dtype="string")
+    for src_col in ["sport", "source", "data_source", "odds_source", "event_name", "matchup", "league_source"]:
+        if src_col in out.columns:
+            source_text = source_text + " " + _clean_text_placeholders(_string_series(out, src_col)).str.lower()
+    ncaaf_source = source_text.str.contains(
+        r"americanfootball_ncaaf|\bncaaf\b|\bcfb\b|college football|ncaa football",
+        regex=True,
+        na=False,
+    )
+    out.loc[missing_mask & ncaaf_source, "league"] = "NCAAF"
+    missing_mask = out["league"].str.len().eq(0)
 
     # 1. Check NCAAB keyword recovery regex FIRST to prevent college teams from being swallowed by pro city names
     keyword_pattern = r"\b(?:" + "|".join(sorted(re.escape(k) for k in _NCAAB_LEAGUE_RECOVERY_KEYWORDS)) + r")\b"
@@ -6962,11 +6985,20 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
                 # remains populated across the August-to-September transition.
                 sport_keys.append("americanfootball_nfl_preseason")
                 sport_keys.append("americanfootball_nfl")
+            elif s_up == "NCAAF":
+                sport_keys.append("americanfootball_ncaaf")
             elif s_up == "MLB":
                 sport_keys.append("baseball_mlb_preseason")
                 sport_keys.append("baseball_mlb")
     else:
-        sport_keys = ["basketball_ncaab", "basketball_nba", "basketball_wnba", "icehockey_nhl", "baseball_mlb"]
+        sport_keys = [
+            "basketball_ncaab",
+            "basketball_nba",
+            "basketball_wnba",
+            "icehockey_nhl",
+            "americanfootball_ncaaf",
+            "baseball_mlb",
+        ]
 
     game_dict = {}
     for sk in sport_keys:
@@ -7013,6 +7045,7 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
                     canonical_league = {
                         "americanfootball_nfl": "NFL",
                         "americanfootball_nfl_preseason": "NFL",
+                        "americanfootball_ncaaf": "NCAAF",
                         "baseball_mlb": "MLB",
                         "baseball_mlb_preseason": "MLB",
                         "basketball_nba": "NBA",
@@ -9390,15 +9423,15 @@ def run_analysis_pipeline(
     ml_probability = _numeric_series(merged, "ml_probability")
 
     market_type = _string_series(merged, "market_type").str.lower()
-    spread_model = ml_probability.where(ml_probability.notna(), theover_probability)
+    spread_model = ml_probability
 
-    # spread_model is already P(cover): either the target-specific score model
-    # or TheOver's selected-side probability. Do not run the legacy
-    # moneyline-to-runline conversion on an already-oriented probability.
+    # For spread rows this is P(cover) only when a target-specific score model
+    # produced it. Do not run the legacy moneyline-to-runline conversion or
+    # relabel TheOver as an ML prediction.
 
     # Keep TheOver separate from the model signal. The downstream blend receives
     # both inputs independently, so pre-mixing would count TheOver twice.
-    total_model = ml_probability.where(ml_probability.notna(), theover_probability)
+    total_model = ml_probability
 
     is_side = market_type.str.contains("spread", case=False, na=False)
     model_probability = pd.Series(
@@ -9408,7 +9441,7 @@ def run_analysis_pipeline(
     )
     # Moneyline is the model's NATIVE output: ml_probability already = P(pick team wins)
     # (oriented to home/away upstream in prediction_engine), so use it as-is -- no run-line
-    # cover conversion, no totals blend. Falls back to total_model only if ML is missing.
+    # cover conversion and no totals blend.
     is_moneyline = market_type.str.contains("moneyline", case=False, na=False)
     if is_moneyline.any():
         model_probability = model_probability.mask(

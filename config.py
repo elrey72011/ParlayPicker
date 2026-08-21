@@ -237,4 +237,4 @@ VERTEX_CONFIG = {
 MASTER_DATA_FILE = DATA_DIR / 'master_all_sports.csv'
 
 # API-Sports Supported Leagues for Results Fetching
-SUPPORTED_RESULTS_LEAGUES = ["NBA", "NCAAB", "NHL", "MLB", "NFL"]
+SUPPORTED_RESULTS_LEAGUES = ["NBA", "WNBA", "NCAAB", "NHL", "MLB", "NFL", "NCAAF"]

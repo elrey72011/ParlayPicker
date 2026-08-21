@@ -12,6 +12,7 @@ ESPN_ENDPOINTS = {
     'NHL': 'https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard',
     'MLB': 'https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard',
     'NFL': 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard',
+    'NCAAF': 'https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard',
     'NCAAB': 'https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard'
 }
 
