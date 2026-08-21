@@ -153,7 +153,7 @@ def test_ledger_coverage_summary_reports_cumulative_date_range():
     assert summary["end_date"] == "2026-07-23"
 
 
-def test_history_gap_requires_confirmation_before_skipping_recent_slates():
+def test_history_gap_blocks_grading_before_skipping_recent_slates():
     ledger = pd.DataFrame({
         "game_date": ["2026-08-02"],
         "result": ["WIN"],
@@ -166,6 +166,7 @@ def test_history_gap_requires_confirmation_before_skipping_recent_slates():
         "target_date": "2026-08-11",
         "gap_days": 9,
         "requires_confirmation": True,
+        "grading_blocked": True,
     }
 
 
@@ -179,6 +180,7 @@ def test_history_gap_accepts_the_immediately_following_slate():
 
     assert summary["gap_days"] == 1
     assert summary["requires_confirmation"] is False
+    assert summary["grading_blocked"] is False
 
 
 def test_invalid_export_reports_missing_columns():
