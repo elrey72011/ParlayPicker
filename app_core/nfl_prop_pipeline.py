@@ -25,6 +25,18 @@ NFL_PROP_MIN_FORM_GAMES = 3
 NFL_PROP_MODEL_WEIGHT = 0.35
 NFL_PROP_UNCERTAINTY_Z = 0.35
 
+NFL_PROP_COVERAGE_DIAGNOSTIC_COLUMNS = (
+    "prop_selected_sports",
+    "nfl_prop_requested",
+    "nfl_selected_game_count",
+    "nfl_prop_feed_status",
+    "nfl_prop_event_count",
+    "nfl_prop_event_fetch_errors",
+    "nfl_prop_events_without_rows",
+    "nfl_prop_raw_count",
+    "nfl_prop_scored_count",
+)
+
 NFL_PROP_SPECS = {
     "player_pass_yds": {
         "stat": "passing_yards",
@@ -333,6 +345,7 @@ def build_nfl_prop_card(
     props: list[dict] = []
     event_count = 0
     fetch_errors = 0
+    events_without_rows = 0
     for sport_key in sport_keys:
         try:
             events = list_events(odds_client, sport_key, date) or []
@@ -348,6 +361,8 @@ def build_nfl_prop_card(
             except Exception:
                 fetch_errors += 1
                 continue
+            if not rows:
+                events_without_rows += 1
             for row in rows:
                 merged = dict(row)
                 merged.setdefault("event_id", event.get("id"))
@@ -360,6 +375,7 @@ def build_nfl_prop_card(
     if diagnostics is not None:
         diagnostics["nfl_prop_event_count"] = event_count
         diagnostics["nfl_prop_event_fetch_errors"] = fetch_errors
+        diagnostics["nfl_prop_events_without_rows"] = events_without_rows
         diagnostics["nfl_prop_raw_count"] = len(props)
     if not props:
         if diagnostics is not None:
@@ -372,7 +388,11 @@ def build_nfl_prop_card(
     card = pd.DataFrame([row for row in rows if row is not None])
     if card.empty:
         if diagnostics is not None:
-            diagnostics["nfl_prop_feed_status"] = "no_matched_player_form"
+            # Missing form cannot empty the card: score_nfl_prop deliberately
+            # retains a market-baseline research row. An empty scored card means
+            # the returned quotes were malformed or outside the supported schema.
+            diagnostics["nfl_prop_feed_status"] = "no_scorable_quotes"
+            diagnostics["nfl_prop_scored_count"] = 0
         return card
     card = card.drop_duplicates(
         ["event_id", "player", "market_type", "line"], keep="first"
@@ -387,6 +407,91 @@ def build_nfl_prop_card(
         diagnostics["nfl_prop_feed_status"] = "ready"
         diagnostics["nfl_prop_scored_count"] = int(len(card))
     return card
+
+
+def attach_nfl_prop_coverage(
+    card: pd.DataFrame,
+    selected_sports: object,
+    diagnostics: dict | None,
+    *,
+    nfl_game_count: int = 0,
+) -> pd.DataFrame:
+    """Stamp mixed-league prop exports with explicit NFL feed coverage.
+
+    A non-empty MLB card previously hid an empty NFL feed: the combined export
+    looked complete while containing only MLB rows. Broadcast the feed outcome
+    onto every exported prop row so the grading file remains tabular and can
+    explain why NFL rows are absent without fabricating a wager or placeholder.
+    """
+    if card is None or card.empty:
+        return card
+    out = card.copy()
+    sports = {
+        str(value).strip().upper()
+        for value in (
+            selected_sports
+            if isinstance(selected_sports, (list, tuple, set))
+            else [selected_sports]
+        )
+        if str(value or "").strip()
+    }
+    requested = "NFL" in sports
+    details = diagnostics if isinstance(diagnostics, dict) else {}
+    status = str(details.get("nfl_prop_feed_status") or "").strip()
+    if not requested:
+        status = "not_requested"
+    elif int(nfl_game_count or 0) <= 0:
+        status = "no_selected_games"
+    elif not status:
+        status = "unknown"
+
+    values = {
+        "prop_selected_sports": "|".join(sorted(sports)),
+        "nfl_prop_requested": requested,
+        "nfl_selected_game_count": max(0, int(nfl_game_count or 0)),
+        "nfl_prop_feed_status": status,
+        "nfl_prop_event_count": int(details.get("nfl_prop_event_count", 0) or 0),
+        "nfl_prop_event_fetch_errors": int(
+            details.get("nfl_prop_event_fetch_errors", 0) or 0
+        ),
+        "nfl_prop_events_without_rows": int(
+            details.get("nfl_prop_events_without_rows", 0) or 0
+        ),
+        "nfl_prop_raw_count": int(details.get("nfl_prop_raw_count", 0) or 0),
+        "nfl_prop_scored_count": int(
+            details.get("nfl_prop_scored_count", 0) or 0
+        ),
+    }
+    for column in NFL_PROP_COVERAGE_DIAGNOSTIC_COLUMNS:
+        out[column] = values[column]
+    return out
+
+
+def nfl_prop_feed_message(diagnostics: dict | None) -> str:
+    """Return a user-facing explanation for an empty requested NFL prop card."""
+    details = diagnostics if isinstance(diagnostics, dict) else {}
+    status = str(details.get("nfl_prop_feed_status") or "unknown").strip()
+    messages = {
+        "no_prop_markets": (
+            "NFL games are on the slate, but supported sportsbook player-prop "
+            "markets are not open yet. Rerun closer to kickoff; no NFL prop "
+            "rows were fabricated."
+        ),
+        "event_fetch_failed": (
+            "NFL event or player-prop requests failed. Rerun the slate; the "
+            "combined export is incomplete until NFL rows load."
+        ),
+        "no_scorable_quotes": (
+            "NFL prop quotes were returned but none had a complete supported "
+            "Over/Under line. Rerun later; no malformed rows were exported."
+        ),
+        "no_selected_games": "No NFL games were selected for this slate.",
+    }
+    return messages.get(
+        status,
+        "NFL props were requested but no gradeable rows were returned. Rerun "
+        "the slate and review the exported NFL feed-status columns.",
+    )
 
 
 def _number(value: object) -> float | None:
