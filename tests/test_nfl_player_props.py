@@ -1,13 +1,15 @@
 import pandas as pd
 
 from app_core.nfl_prop_pipeline import (
+    attach_nfl_prop_coverage,
     build_nfl_prop_card,
     fetch_nfl_actuals,
     load_nfl_player_forms,
+    nfl_prop_feed_message,
     score_nfl_prop,
 )
 from app_core.prop_grading import grade_prop_export, merge_prop_ledgers
-from app_core.prop_odds_ingest import parse_pitcher_props
+from app_core.prop_odds_ingest import fetch_nfl_player_props, parse_pitcher_props
 from app_core.prop_runner import _prop_history_for_league
 from scripts.grade_props import _stat_for_market
 
@@ -127,6 +129,80 @@ def test_nfl_card_queries_preseason_and_regular_season_keys():
     assert calls == ["americanfootball_nfl_preseason", "americanfootball_nfl"]
     assert len(card) == 1  # duplicate event across keys is collapsed
     assert card.iloc[0]["NFL_Research_Rank"] == 1
+
+
+def test_nfl_fetch_recovers_available_market_when_empty_batch_is_returned(monkeypatch):
+    calls = []
+
+    def fake_fetch(client, sport_key, event_id, market_keys):
+        calls.append(tuple(market_keys))
+        if len(market_keys) > 1:
+            return []
+        if market_keys == ("player_pass_yds",):
+            return [{"market_key": "player_pass_yds", "player": "Josh Allen"}]
+        return []
+
+    monkeypatch.setattr(
+        "app_core.prop_odds_ingest.fetch_pitcher_props", fake_fetch
+    )
+    rows = fetch_nfl_player_props(object(), "americanfootball_nfl", "event-1")
+
+    assert rows == [{"market_key": "player_pass_yds", "player": "Josh Allen"}]
+    assert calls[0] == (
+        "player_pass_yds",
+        "player_rush_yds",
+        "player_reception_yds",
+        "player_receptions",
+    )
+    assert calls[1:] == [
+        ("player_pass_yds",),
+        ("player_rush_yds",),
+        ("player_reception_yds",),
+        ("player_receptions",),
+    ]
+
+
+def test_empty_nfl_feed_is_visible_on_combined_mlb_export():
+    mlb = pd.DataFrame([{
+        "league": "MLB",
+        "player": "Juan Soto",
+        "best_pick": "Juan Soto Over 0.5 Hits",
+    }])
+    diagnostics = {
+        "nfl_prop_feed_status": "no_prop_markets",
+        "nfl_prop_event_count": 3,
+        "nfl_prop_events_without_rows": 3,
+        "nfl_prop_raw_count": 0,
+    }
+
+    combined = attach_nfl_prop_coverage(
+        mlb, {"MLB", "NFL"}, diagnostics, nfl_game_count=3
+    )
+
+    assert bool(combined.loc[0, "nfl_prop_requested"])
+    assert combined.loc[0, "nfl_selected_game_count"] == 3
+    assert combined.loc[0, "nfl_prop_feed_status"] == "no_prop_markets"
+    assert combined.loc[0, "nfl_prop_event_count"] == 3
+    assert combined.loc[0, "nfl_prop_events_without_rows"] == 3
+    assert "Rerun closer to kickoff" in nfl_prop_feed_message(diagnostics)
+
+
+def test_nfl_card_diagnostics_count_events_without_rows():
+    diagnostics = {}
+    card = build_nfl_prop_card(
+        object(),
+        "2026-08-21",
+        2026,
+        diagnostics=diagnostics,
+        list_events=lambda client, sport_key, date: [{"id": sport_key}],
+        props_fetch=lambda client, sport_key, event_id: [],
+        form_loader=lambda season, date: {},
+    )
+
+    assert card.empty
+    assert diagnostics["nfl_prop_feed_status"] == "no_prop_markets"
+    assert diagnostics["nfl_prop_event_count"] == 2
+    assert diagnostics["nfl_prop_events_without_rows"] == 2
 
 
 def test_nfl_market_stat_mapping_and_generic_grading():

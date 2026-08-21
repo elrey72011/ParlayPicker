@@ -196,5 +196,20 @@ def fetch_nfl_player_props(
     carry ``participant_type=nfl_player`` so modeling, grading, and calibration
     remain league isolated downstream.
     """
-    return fetch_pitcher_props(client, sport_key, event_id, market_keys)
+    rows = fetch_pitcher_props(client, sport_key, event_id, market_keys)
+    if rows or len(market_keys) <= 1:
+        return rows
+
+    # Some event feeds return an empty response when a requested non-featured
+    # market has not opened yet, even though another requested player market is
+    # already available. Recover the available subset one market at a time so a
+    # missing receptions board cannot hide an open passing-yards board. This is
+    # deliberately an empty-batch fallback; successful batched requests retain
+    # the lower request count.
+    recovered: list[dict] = []
+    for market_key in market_keys:
+        recovered.extend(
+            fetch_pitcher_props(client, sport_key, event_id, (market_key,))
+        )
+    return recovered
 
