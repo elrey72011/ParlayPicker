@@ -54,7 +54,7 @@ def run_headless():
 
     try:
         # Run with MLB, NBA, NHL, NCAAB to cover the bases, or just let it default to all
-        sports = ["NBA", "NHL", "NCAAB", "NFL", "MLB"]
+        sports = ["NBA", "NHL", "NCAAB", "NFL", "NCAAF", "MLB"]
         analysis_df, best_picks_df, diagnostics = run_analysis_pipeline(
             sports=sports,
             max_rows=1000,

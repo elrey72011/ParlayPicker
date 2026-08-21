@@ -582,6 +582,7 @@ class PredictionEngine:
         LEAGUE_STATS = {
             "NBA": {"win_pct": 0.50, "ppg": 114.0},
             "NCAAB": {"win_pct": 0.50, "ppg": 72.0},
+            "NCAAF": {"win_pct": 0.50, "ppg": 28.0},
             "NHL": {"win_pct": 0.50, "ppg": 3.1},
             "MLB": {"win_pct": 0.50, "ppg": 4.5},
             "NFL": {"win_pct": 0.50, "ppg": 46.0}
@@ -1895,8 +1896,8 @@ class PredictionEngine:
                             else:
                                 line = row.get('total_line')
                                 if pd.notna(line):
-                                    league_median = {'NBA': 228.0, 'NCAAB': 142.0, 'NFL': 45.0, 'NHL': 6.0}.get(league_str, 150.0)
-                                    band = {'NBA': 20.0, 'NCAAB': 20.0, 'NFL': 10.0, 'NHL': 1.5}.get(league_str, 20.0)
+                                    league_median = {'NBA': 228.0, 'NCAAB': 142.0, 'NFL': 45.0, 'NCAAF': 55.0, 'NHL': 6.0}.get(league_str, 150.0)
+                                    band = {'NBA': 20.0, 'NCAAB': 20.0, 'NFL': 10.0, 'NCAAF': 15.0, 'NHL': 1.5}.get(league_str, 20.0)
                                     norm = min(abs(float(line) - league_median) / band, 1.0)
                                     mag_comp = 0.50 + 0.10 * norm
                     except Exception:
@@ -1919,7 +1920,9 @@ class PredictionEngine:
                             h_ppg = inference_data.iloc[idx_batch].get('feature_home_ppg', 0.0)
                             a_ppg = inference_data.iloc[idx_batch].get('feature_away_ppg', 0.0)
                             proxy = (float(h_ppg) + float(a_ppg)) / 2.0
-                            median_ppg = {'NBA': 114.0, 'NCAAB': 72.0, 'NFL': 22.0, 'NHL': 3.0}.get(league_str, 100.0)
+                            # NCAAF PPG features are scaled 4x during enrichment to
+                            # match the model's basketball-sized training magnitude.
+                            median_ppg = {'NBA': 114.0, 'NCAAB': 72.0, 'NFL': 22.0, 'NCAAF': 112.0, 'NHL': 3.0}.get(league_str, 100.0)
                             norm = (proxy - median_ppg) / (median_ppg * 0.2)
                             norm = max(-1.0, min(1.0, norm))
                             if is_under:

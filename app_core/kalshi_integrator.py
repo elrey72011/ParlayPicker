@@ -102,6 +102,7 @@ MAX_LINE_TOLERANCE = {
     "NBA": 5.5,
     "WNBA": 5.5,
     "NCAAB": 10.5,
+    "NCAAF": 2.5,
     "NHL": 5.5,
     "MLB": 8.5,
     "NFL": 2.5,
@@ -121,6 +122,7 @@ MAX_TOTAL_LINE_TOLERANCE = {
     "NBA": 4.5,
     "WNBA": 4.5,
     "NCAAB": 6.5,
+    "NCAAF": 3.5,
     "NHL": 1.0,
     "MLB": 1.0,
     "NFL": 3.5,
@@ -168,6 +170,7 @@ API_URL = API_BASE
 
 LEAGUE_SERIES_MAP = {
     "NCAAB": {"spread": "KXNCAAMBSPREAD", "total": "KXNCAAMBTOTAL", "moneyline": "KXNCAABGAME"},
+    "NCAAF": {"spread": "KXNCAAFSPREAD", "total": "KXNCAAFTOTAL", "moneyline": "KXNCAAFGAME"},
     "NBA": {"spread": "KXNBASPREAD", "total": "KXNBATOTAL", "moneyline": "KXNBAGAME"},
     "WNBA": {"spread": "KXWNBASPREAD", "total": "KXWNBATOTAL", "moneyline": "KXWNBAGAME"},
     "NHL": {"spread": "KXNHLSPREAD", "total": "KXNHLTOTAL", "moneyline": "KXNHLGAME"},
@@ -471,6 +474,7 @@ def _fetch_event_markets_legacy(league: str, game_date: Any, home_team: str, awa
         "NBA": ["KXNBATOTAL", "KXNBASPREAD"],
         "WNBA": ["KXWNBATOTAL", "KXWNBASPREAD"],
         "NCAAB": ["KXNCAAMBTOTAL", "KXNCAAMBSPREAD"],
+        "NCAAF": ["KXNCAAFTOTAL", "KXNCAAFSPREAD"],
         "NHL": ["KXNHLTOTAL", "KXNHLSPREAD"],
     }
     league_text = str(league).upper() if pd.notna(league) else ""
