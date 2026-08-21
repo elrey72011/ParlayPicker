@@ -158,13 +158,15 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
     bundled_ledger = _read_bundled_prop_ledger()
 
     previous_prop_exports = st.sidebar.file_uploader(
-        "Upload Yesterday's Player-Prop Export(s)",
+        "Upload Yesterday's Combined Player-Prop Export(s)",
         type=["csv"],
         accept_multiple_files=True,
         key="previous_prop_exports",
         help=(
-            "Upload the all-props export. For older slates, upload both the funded "
-            "and research exports so every prediction can be graded."
+            "Prefer player_props_all_export.csv, which includes every selected "
+            "league and all DO NOT BET research rows. League-specific exports can "
+            "silently omit another league. For older slates, upload every funded "
+            "and research export so every prediction can be graded."
         ),
     )
     previous_prop_date = st.sidebar.date_input(
@@ -184,18 +186,13 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
     selected_gap = ledger_history_gap_summary(
         pregrade_ledger, previous_prop_date.isoformat()
     )
-    confirm_history_gap = False
-    if selected_gap["requires_confirmation"]:
-        st.sidebar.warning(
+    if selected_gap["grading_blocked"]:
+        st.sidebar.error(
             "The loaded cumulative prop ledger ends on "
             f"{selected_gap['latest_date']}, but you selected "
-            f"{selected_gap['target_date']}. Upload the newest downloaded graded "
-            "ledger first so intervening calibration results are not lost."
-        )
-        confirm_history_gap = st.sidebar.checkbox(
-            "I confirm no newer graded prop ledger exists",
-            value=False,
-            key="confirm_prop_history_gap",
+            f"{selected_gap['target_date']}. Grading is blocked until you upload "
+            "the newest downloaded cumulative ledger so intervening calibration "
+            "results cannot be lost."
         )
     if st.sidebar.button("Grade Uploaded Player Props", key="grade_previous_props"):
         if not previous_prop_exports:
@@ -209,7 +206,9 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
                 )
 
                 cards = []
+                upload_names = []
                 for uploaded in previous_prop_exports:
+                    upload_names.append(str(getattr(uploaded, "name", "")))
                     uploaded.seek(0)
                     cards.append(pd.read_csv(uploaded))
                 previous_card = pd.concat(cards, ignore_index=True, sort=False)
@@ -221,6 +220,28 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
                     ],
                     keep="last",
                 )
+                _league_counts = previous_card.get(
+                    "league", pd.Series("MLB", index=previous_card.index)
+                ).fillna("MLB").astype(str).str.upper().value_counts().to_dict()
+                st.sidebar.caption(
+                    "Uploaded grading rows by league: "
+                    + ", ".join(
+                        f"{league} {count}" for league, count in sorted(_league_counts.items())
+                    )
+                )
+                _normalized_upload_names = [name.lower() for name in upload_names]
+                _combined_export_present = any(
+                    "player_props_all_export" in name
+                    and "mlb_player_props_all_export" not in name
+                    and "nfl_player_props_all_export" not in name
+                    for name in _normalized_upload_names
+                )
+                if not _combined_export_present:
+                    st.sidebar.warning(
+                        "No combined player_props_all_export.csv was detected. "
+                        "Verify that you uploaded every league-specific prop export; "
+                        "otherwise the downloaded ledger will be incomplete."
+                    )
                 inferred_date = None
                 if "game_date" in previous_card.columns:
                     dates = (
@@ -237,11 +258,11 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
                     bundled_ledger,
                 )
                 actual_gap = ledger_history_gap_summary(prior_ledger, grade_date)
-                if actual_gap["requires_confirmation"] and not confirm_history_gap:
+                if actual_gap["grading_blocked"]:
                     st.sidebar.error(
                         "Grading stopped to protect cumulative calibration history. "
-                        "Upload the latest downloaded graded prop ledger, or confirm "
-                        "that no newer ledger exists."
+                        "Upload the latest downloaded graded prop ledger before "
+                        "grading this slate."
                     )
                 else:
                     with st.spinner(f"Grading player props for {grade_date}..."):

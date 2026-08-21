@@ -2768,7 +2768,7 @@ def main() -> None:
                     )
 
                 st.download_button(
-                    "Export All Player Props for Grading (includes DO NOT BET research)",
+                    "PRIMARY — Export Combined Player Props for Next-Day Grading",
                     prop_card.to_csv(index=False, encoding="utf-8-sig"),
                     "player_props_all_export.csv",
                     mime="text/csv",
@@ -2777,7 +2777,7 @@ def main() -> None:
 
                 if not mlb_prop_card.empty:
                     st.download_button(
-                        "Export MLB Player Props",
+                        "Optional Diagnostic — Export MLB-Only Player Props",
                         mlb_prop_card.to_csv(index=False, encoding="utf-8-sig"),
                         "mlb_player_props_all_export.csv",
                         mime="text/csv",
@@ -2785,7 +2785,7 @@ def main() -> None:
                     )
                 if not nfl_prop_card.empty:
                     st.download_button(
-                        "Export NFL Player Props — Research / Grading",
+                        "Optional Diagnostic — Export NFL-Only Player Props",
                         nfl_prop_card.to_csv(index=False, encoding="utf-8-sig"),
                         "nfl_player_props_all_export.csv",
                         mime="text/csv",
