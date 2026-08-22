@@ -35,6 +35,12 @@ NFL_PROP_COVERAGE_DIAGNOSTIC_COLUMNS = (
     "nfl_prop_events_without_rows",
     "nfl_prop_raw_count",
     "nfl_prop_scored_count",
+    "nfl_prop_market_discovery_success_count",
+    "nfl_prop_market_discovery_error_count",
+    "nfl_prop_events_with_supported_markets",
+    "nfl_prop_events_without_supported_markets",
+    "nfl_prop_broad_book_fallback_count",
+    "nfl_prop_available_market_keys",
 )
 
 NFL_PROP_SPECS = {
@@ -43,10 +49,28 @@ NFL_PROP_SPECS = {
         "label": "Pass Yards",
         "sigma_floor": 35.0,
     },
+    "player_pass_attempts": {
+        "stat": "pass_attempts",
+        "weekly_stat": "attempts",
+        "label": "Pass Attempts",
+        "sigma_floor": 4.0,
+    },
+    "player_pass_completions": {
+        "stat": "completions",
+        "weekly_stat": "completions",
+        "label": "Pass Completions",
+        "sigma_floor": 3.0,
+    },
     "player_rush_yds": {
         "stat": "rushing_yards",
         "label": "Rush Yards",
         "sigma_floor": 12.0,
+    },
+    "player_rush_attempts": {
+        "stat": "rush_attempts",
+        "weekly_stat": "carries",
+        "label": "Rush Attempts",
+        "sigma_floor": 2.5,
     },
     "player_reception_yds": {
         "stat": "receiving_yards",
@@ -178,9 +202,12 @@ def load_nfl_player_forms(
         profile: dict[str, dict[str, float]] = {}
         for spec in NFL_PROP_SPECS.values():
             stat = spec["stat"]
-            if stat not in player_rows.columns:
+            weekly_stat = spec.get("weekly_stat", stat)
+            if weekly_stat not in player_rows.columns:
                 continue
-            values = pd.to_numeric(player_rows[stat], errors="coerce").dropna()
+            values = pd.to_numeric(
+                player_rows[weekly_stat], errors="coerce"
+            ).dropna()
             if len(values) < NFL_PROP_MIN_FORM_GAMES:
                 continue
             recent = values.tail(NFL_PROP_LOOKBACK_GAMES)
@@ -329,13 +356,21 @@ def build_nfl_prop_card(
     sport_keys: tuple[str, ...] = NFL_SPORT_KEYS,
     diagnostics: dict | None = None,
     list_events: Callable | None = None,
-    props_fetch: Callable = fetch_nfl_player_props,
+    props_fetch: Callable | None = None,
     form_loader: Callable = load_nfl_player_forms,
 ) -> pd.DataFrame:
     """Fetch, score, and rank NFL props without assigning a production stake."""
     if list_events is None:
         def list_events(client, sport_key, slate_date):  # noqa: ANN001
             return client.get_odds(sport_key, date=slate_date) or []
+    if props_fetch is None:
+        def props_fetch(client, sport_key, event_id):  # noqa: ANN001
+            return fetch_nfl_player_props(
+                client,
+                sport_key,
+                event_id,
+                diagnostics=diagnostics,
+            )
     try:
         forms = form_loader(int(season), date)
     except Exception:
@@ -379,9 +414,23 @@ def build_nfl_prop_card(
         diagnostics["nfl_prop_raw_count"] = len(props)
     if not props:
         if diagnostics is not None:
-            diagnostics["nfl_prop_feed_status"] = (
-                "event_fetch_failed" if fetch_errors else "no_prop_markets"
+            discovery_successes = int(
+                diagnostics.get("nfl_prop_market_discovery_success_count", 0) or 0
             )
+            unsupported_events = int(
+                diagnostics.get("nfl_prop_events_without_supported_markets", 0)
+                or 0
+            )
+            if fetch_errors:
+                diagnostics["nfl_prop_feed_status"] = "event_fetch_failed"
+            elif (
+                event_count
+                and discovery_successes >= event_count
+                and unsupported_events >= event_count
+            ):
+                diagnostics["nfl_prop_feed_status"] = "no_supported_prop_markets"
+            else:
+                diagnostics["nfl_prop_feed_status"] = "no_prop_markets"
         return pd.DataFrame()
 
     rows = [score_nfl_prop(prop, forms) for prop in props]
@@ -461,6 +510,24 @@ def attach_nfl_prop_coverage(
         "nfl_prop_scored_count": int(
             details.get("nfl_prop_scored_count", 0) or 0
         ),
+        "nfl_prop_market_discovery_success_count": int(
+            details.get("nfl_prop_market_discovery_success_count", 0) or 0
+        ),
+        "nfl_prop_market_discovery_error_count": int(
+            details.get("nfl_prop_market_discovery_error_count", 0) or 0
+        ),
+        "nfl_prop_events_with_supported_markets": int(
+            details.get("nfl_prop_events_with_supported_markets", 0) or 0
+        ),
+        "nfl_prop_events_without_supported_markets": int(
+            details.get("nfl_prop_events_without_supported_markets", 0) or 0
+        ),
+        "nfl_prop_broad_book_fallback_count": int(
+            details.get("nfl_prop_broad_book_fallback_count", 0) or 0
+        ),
+        "nfl_prop_available_market_keys": str(
+            details.get("nfl_prop_available_market_keys", "") or ""
+        ),
     }
     for column in NFL_PROP_COVERAGE_DIAGNOSTIC_COLUMNS:
         out[column] = values[column]
@@ -472,6 +539,11 @@ def nfl_prop_feed_message(diagnostics: dict | None) -> str:
     details = diagnostics if isinstance(diagnostics, dict) else {}
     status = str(details.get("nfl_prop_feed_status") or "unknown").strip()
     messages = {
+        "no_supported_prop_markets": (
+            "NFL games are on the slate, but the provider's event-market inventory "
+            "shows no supported player-prop markets at any queried U.S. book. "
+            "Rerun closer to kickoff; no NFL prop rows were fabricated."
+        ),
         "no_prop_markets": (
             "NFL games are on the slate, but supported sportsbook player-prop "
             "markets are not open yet. Rerun closer to kickoff; no NFL prop "

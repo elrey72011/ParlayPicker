@@ -9,7 +9,12 @@ from app_core.nfl_prop_pipeline import (
     score_nfl_prop,
 )
 from app_core.prop_grading import grade_prop_export, merge_prop_ledgers
-from app_core.prop_odds_ingest import fetch_nfl_player_props, parse_pitcher_props
+from app_core.prop_odds_ingest import (
+    PropOddsFetchError,
+    fetch_event_player_prop_markets,
+    fetch_nfl_player_props,
+    parse_pitcher_props,
+)
 from app_core.prop_runner import _prop_history_for_league
 from scripts.grade_props import _stat_for_market
 
@@ -57,7 +62,10 @@ def test_nfl_form_loader_excludes_future_current_season_weeks():
         "week": [15, 16, 17, 1, 2],
         "player_display_name": ["Josh Allen"] * 5,
         "passing_yards": [250, 260, 270, 280, 999],
+        "attempts": [30, 31, 32, 33, 99],
+        "completions": [20, 21, 22, 23, 99],
         "rushing_yards": [20, 25, 30, 35, 999],
+        "carries": [5, 6, 7, 8, 99],
         "receiving_yards": [None] * 5,
         "receptions": [None] * 5,
     })
@@ -77,6 +85,9 @@ def test_nfl_form_loader_excludes_future_current_season_weeks():
     assert passing["games"] == 4.0
     assert passing["expected"] < 280.0
     assert passing["expected"] > 250.0
+    assert forms["josh allen"]["pass_attempts"]["expected"] < 40.0
+    assert forms["josh allen"]["completions"]["expected"] < 30.0
+    assert forms["josh allen"]["rush_attempts"]["expected"] < 10.0
 
 
 def test_nfl_prop_scoring_is_explicitly_research_only():
@@ -131,35 +142,145 @@ def test_nfl_card_queries_preseason_and_regular_season_keys():
     assert card.iloc[0]["NFL_Research_Rank"] == 1
 
 
-def test_nfl_fetch_recovers_available_market_when_empty_batch_is_returned(monkeypatch):
+def test_nfl_fetch_recovers_supported_market_across_all_us_books(monkeypatch):
     calls = []
 
-    def fake_fetch(client, sport_key, event_id, market_keys):
-        calls.append(tuple(market_keys))
-        if len(market_keys) > 1:
-            return []
-        if market_keys == ("player_pass_yds",):
+    def fake_fetch(client, sport_key, event_id, market_keys, **kwargs):
+        calls.append((tuple(market_keys), kwargs))
+        if "bookmakers" in kwargs and kwargs["bookmakers"] is None:
             return [{"market_key": "player_pass_yds", "player": "Josh Allen"}]
         return []
 
     monkeypatch.setattr(
         "app_core.prop_odds_ingest.fetch_pitcher_props", fake_fetch
     )
-    rows = fetch_nfl_player_props(object(), "americanfootball_nfl", "event-1")
+    monkeypatch.setattr(
+        "app_core.prop_odds_ingest.fetch_event_player_prop_markets",
+        lambda client, sport_key, event_id, regions: {"player_pass_yds"},
+    )
+    diagnostics = {}
+    rows = fetch_nfl_player_props(
+        object(),
+        "americanfootball_nfl",
+        "event-1",
+        diagnostics=diagnostics,
+    )
 
     assert rows == [{"market_key": "player_pass_yds", "player": "Josh Allen"}]
-    assert calls[0] == (
+    assert calls[0][0] == (
         "player_pass_yds",
+        "player_pass_attempts",
+        "player_pass_completions",
         "player_rush_yds",
+        "player_rush_attempts",
         "player_reception_yds",
         "player_receptions",
     )
-    assert calls[1:] == [
-        ("player_pass_yds",),
-        ("player_rush_yds",),
-        ("player_reception_yds",),
-        ("player_receptions",),
-    ]
+    assert calls[1][0] == ("player_pass_yds",)
+    assert calls[1][1]["bookmakers"] is None
+    assert set(calls[1][1]["regions"].split(",")) == {"us", "us2"}
+    assert diagnostics["nfl_prop_market_discovery_success_count"] == 1
+    assert diagnostics["nfl_prop_events_with_supported_markets"] == 1
+    assert diagnostics["nfl_prop_broad_book_fallback_count"] == 1
+
+
+def test_nfl_market_discovery_queries_all_us_books_without_a_book_filter(monkeypatch):
+    request = {}
+
+    class Response:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return {
+                "bookmakers": [
+                    {
+                        "key": "caesars",
+                        "markets": [
+                            {"key": "player_pass_attempts"},
+                            {"key": "h2h"},
+                        ],
+                    },
+                    {
+                        "key": "espnbet",
+                        "markets": [{"key": "player_receptions"}],
+                    },
+                ]
+            }
+
+    def http_get(url, params, timeout):
+        request.update({"url": url, "params": params, "timeout": timeout})
+        return Response()
+
+    monkeypatch.setattr("requests.get", http_get)
+
+    class Client:
+        BASE_URL = "https://example.test/v4"
+        api_key = "test"
+        regions = "us2,eu"
+
+    keys = fetch_event_player_prop_markets(
+        Client(), "americanfootball_nfl_preseason", "event-1"
+    )
+
+    assert keys == {"player_pass_attempts", "player_receptions"}
+    assert request["url"].endswith(
+        "/americanfootball_nfl_preseason/events/event-1/markets"
+    )
+    assert set(request["params"]["regions"].split(",")) == {"us", "us2"}
+    assert "bookmakers" not in request["params"]
+
+
+def test_nfl_fetch_stops_when_market_inventory_has_no_supported_props(monkeypatch):
+    calls = []
+
+    def fake_fetch(client, sport_key, event_id, market_keys, **kwargs):
+        calls.append(tuple(market_keys))
+        return []
+
+    monkeypatch.setattr(
+        "app_core.prop_odds_ingest.fetch_pitcher_props", fake_fetch
+    )
+    monkeypatch.setattr(
+        "app_core.prop_odds_ingest.fetch_event_player_prop_markets",
+        lambda client, sport_key, event_id, regions: {"player_anytime_td"},
+    )
+    diagnostics = {}
+
+    rows = fetch_nfl_player_props(
+        object(),
+        "americanfootball_nfl_preseason",
+        "event-1",
+        diagnostics=diagnostics,
+    )
+
+    assert rows == []
+    assert len(calls) == 1
+    assert diagnostics["nfl_prop_market_discovery_success_count"] == 1
+    assert diagnostics["nfl_prop_events_without_supported_markets"] == 1
+    assert diagnostics["nfl_prop_available_market_keys"] == "player_anytime_td"
+
+
+def test_nfl_card_exposes_prop_transport_failures():
+    diagnostics = {}
+
+    def failed_fetch(client, sport_key, event_id):
+        raise PropOddsFetchError("player_prop_http_401")
+
+    card = build_nfl_prop_card(
+        object(),
+        "2026-08-22",
+        2026,
+        sport_keys=("americanfootball_nfl_preseason",),
+        diagnostics=diagnostics,
+        list_events=lambda client, sport_key, date: [{"id": "event-1"}],
+        props_fetch=failed_fetch,
+        form_loader=lambda season, date: {},
+    )
+
+    assert card.empty
+    assert diagnostics["nfl_prop_feed_status"] == "event_fetch_failed"
+    assert diagnostics["nfl_prop_event_fetch_errors"] == 1
 
 
 def test_empty_nfl_feed_is_visible_on_combined_mlb_export():
@@ -205,7 +326,36 @@ def test_nfl_card_diagnostics_count_events_without_rows():
     assert diagnostics["nfl_prop_events_without_rows"] == 2
 
 
+def test_nfl_card_reports_discovered_but_unsupported_markets():
+    diagnostics = {
+        "nfl_prop_market_discovery_success_count": 2,
+        "nfl_prop_events_without_supported_markets": 2,
+    }
+    card = build_nfl_prop_card(
+        object(),
+        "2026-08-22",
+        2026,
+        diagnostics=diagnostics,
+        list_events=lambda client, sport_key, date: [{"id": sport_key}],
+        props_fetch=lambda client, sport_key, event_id: [],
+        form_loader=lambda season, date: {},
+    )
+
+    assert card.empty
+    assert diagnostics["nfl_prop_feed_status"] == "no_supported_prop_markets"
+    assert "event-market inventory" in nfl_prop_feed_message(diagnostics)
+
+
 def test_nfl_market_stat_mapping_and_generic_grading():
+    assert _stat_for_market(
+        "player_pass_attempts_over", "Josh Allen Over 31.5 Pass Attempts"
+    ) == "pass_attempts"
+    assert _stat_for_market(
+        "player_pass_completions_under", "Josh Allen Under 21.5 Pass Completions"
+    ) == "completions"
+    assert _stat_for_market(
+        "player_rush_attempts_over", "Player Over 9.5 Rush Attempts"
+    ) == "rush_attempts"
     assert _stat_for_market("player_pass_yds_over", "Josh Allen Over 244.5 Pass Yards") == "passing_yards"
     assert _stat_for_market("player_rush_yds_under", "Player Under 45.5 Rush Yards") == "rushing_yards"
     assert _stat_for_market("player_reception_yds_over", "Player Over 70.5 Receiving Yards") == "receiving_yards"
@@ -278,6 +428,7 @@ def test_espn_nfl_actuals_parse_passing_rushing_and_receiving():
     assert actuals["josh allen"]["passing_yards"] == 275
     assert actuals["josh allen"]["completions"] == 22
     assert actuals["josh allen"]["pass_attempts"] == 31
+    assert actuals["josh allen"]["rush_attempts"] == 8
     assert actuals["josh allen"]["rushing_yards"] == 42
     assert actuals["keon coleman"]["receptions"] == 6
     assert actuals["keon coleman"]["receiving_yards"] == 81
