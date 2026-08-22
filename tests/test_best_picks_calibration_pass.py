@@ -4,6 +4,42 @@ import numpy as np
 from core.streamlit_pipeline import build_best_picks_df
 
 
+def _aug_10_bucket_stats() -> dict:
+    """Stable dated evidence for tests that exercise the Aug. 10 policy."""
+
+    return {
+        "overall": {"n": 825, "win_rate": 0.5421399998459575},
+        "buckets": {
+            "MLB:side:Agrees": {
+                "n": 83,
+                "wins": 47,
+                "win_rate": 0.5682136772705318,
+            },
+            "MLB:over:Agrees": {
+                "n": 86,
+                "wins": 45,
+                "win_rate": 0.5175012889801796,
+            },
+            "MLB:over:Disagrees": {
+                "n": 67,
+                "wins": 28,
+                "win_rate": 0.41237162605668887,
+            },
+            "MLB:over:Neutral": {
+                "n": 94,
+                "wins": 49,
+                "win_rate": 0.5218566563546576,
+            },
+            "MLB:under:Agrees": {
+                "n": 122,
+                "wins": 75,
+                "win_rate": 0.6151283844867554,
+            },
+        },
+        "meta": {"fitted_on": "2026-08-11", "recency_anchor": "2026-08-10"},
+    }
+
+
 def _row(
     *,
     idx: int,
@@ -114,7 +150,10 @@ def test_agrees_does_not_auto_promote_in_standard_mode():
     assert statuses == ["Below Threshold", "Below Threshold"]
 
 
-def test_empirical_direction_overlay_can_override_generic_family_priors():
+def test_empirical_direction_overlay_can_override_generic_family_priors(monkeypatch):
+    monkeypatch.setattr(
+        "core.empirical_tiers.load_bucket_stats", _aug_10_bucket_stats
+    )
     df = pd.DataFrame(
         [
             # Kalshi 0.48 -> 0.55 so it agrees with the home spread; a disagreeing Kalshi
@@ -267,7 +306,10 @@ def test_mlb_mid_line_over_no_stake_rule_blocks_even_high_raw_signal():
     assert out.iloc[1]["status_blocker_stage"] == "mlb_over_mid_line_no_stake"
 
 
-def test_low_line_over_guardrail_is_consensus_aware():
+def test_low_line_over_guardrail_is_consensus_aware(monkeypatch):
+    monkeypatch.setattr(
+        "core.empirical_tiers.load_bucket_stats", _aug_10_bucket_stats
+    )
     # Sub-8.0 MLB overs are not a uniformly weak bucket, and consensus drives the call.
     # The 20 Jun calibration refresh (graded through 18 Jun) puts Neutral (~50%) and
     # Disagrees (~49%) low-line overs in the weak zone — both held at Below Threshold by
