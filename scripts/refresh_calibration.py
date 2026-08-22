@@ -38,6 +38,16 @@ EXPORTS_DIR = ROOT / "data" / "backtest_exports"
 CAL_JSON = ROOT / "data" / "calibration" / "effective_prob_calibration.json"
 BUCKET_JSON = ROOT / "data" / "calibration" / "bucket_stats.json"
 
+_SCOPED_EXPORT_PREFIXES = (
+    "all_games_play_card",
+    "best_picks_candidate_audit",
+    "mlb_player_props_all_export",
+    "player_props_all_export",
+    "precision_game_card",
+    "production_game_bets",
+)
+_REQUIRED_BEST_PICKS_COLUMNS = {"league", "Home", "Away", "best_pick"}
+
 
 def _run_id(df: pd.DataFrame) -> str | None:
     if "export_run_id" not in df.columns:
@@ -54,8 +64,20 @@ def _game_date(run_id: str) -> str | None:
 
 
 def _classify(raw_dir: Path):
-    """Return ({run_id: export_path}, [(recap_path, run_id)]) found under raw_dir."""
+    """Return full-card exports and recaps found under ``raw_dir``.
+
+    Several downloadable artifacts preserve ``best_pick`` and ``export_run_id``
+    for traceability.  They are not interchangeable calibration inputs: a
+    production-only or precision-only export contains a selected subset, while
+    a player-prop export describes a different prediction target entirely.  The
+    old last-filename-wins rule silently replaced ``best_picks_export`` with
+    those scoped files when they shared a run id.
+
+    Prefer the named full-card export, reject known scoped artifacts, and use
+    schema/coverage only as deterministic tie-breakers for renamed full cards.
+    """
     exports: dict[str, Path] = {}
+    export_ranks: dict[str, tuple[int, int, int]] = {}
     recaps: list[tuple[Path, str]] = []
     for f in sorted(raw_dir.glob("*.csv")):
         try:
@@ -66,8 +88,23 @@ def _classify(raw_dir: Path):
         rid = _run_id(head)
         if {"Pick Taken", "Outcome"} <= cols:
             recaps.append((f, rid))
-        elif "best_pick" in cols and rid:
-            exports[rid] = f  # later file with same run id overwrites; harmless
+            continue
+        if not rid or not _REQUIRED_BEST_PICKS_COLUMNS <= cols:
+            continue
+        if not ({"effective_win_probability", "WinProbability"} & cols):
+            continue
+
+        normalized_name = f.stem.casefold().replace(" ", "_")
+        if normalized_name.startswith(_SCOPED_EXPORT_PREFIXES):
+            continue
+        named_full_card = int(normalized_name.startswith("best_picks_export"))
+        unique_games = int(
+            head[["Home", "Away"]].fillna("").drop_duplicates().shape[0]
+        )
+        rank = (named_full_card, unique_games, int(len(head)))
+        if rid not in exports or rank > export_ranks[rid]:
+            exports[rid] = f
+            export_ranks[rid] = rank
     return exports, recaps
 
 
