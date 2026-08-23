@@ -119,17 +119,9 @@ def funded_prop_rows(card: pd.DataFrame) -> pd.DataFrame:
 
     if card is None or card.empty:
         return pd.DataFrame(columns=[] if card is None else card.columns)
+    from app_core.prop_grading import prop_funded_mask
 
-    out = card.copy()
-    if "Stake_Status" in out.columns:
-        stake_status = out["Stake_Status"].fillna("").astype(str).str.strip()
-        if stake_status.ne("").any():
-            return out[stake_status.str.casefold().eq("funded")].copy()
-
-    pick_status = out.get("Pick_Status", pd.Series("", index=out.index))
-    status_mask = pick_status.fillna("").astype(str).str.strip().str.casefold().eq("actionable")
-    stake = pd.to_numeric(out.get("Kelly_Bet_Size", pd.Series(0.0, index=out.index)), errors="coerce").fillna(0.0)
-    return out[status_mask & stake.gt(0)].copy()
+    return card.loc[prop_funded_mask(card)].copy()
 
 
 def summarize_prop_results(results: pd.DataFrame) -> dict:
@@ -168,7 +160,7 @@ def summarize_prop_results(results: pd.DataFrame) -> dict:
 
 
 def _render_prop_results_recap() -> None:
-    """Upload, grade, and recap the funded multi-league player-prop card."""
+    """Grade every exported prop while keeping wager accounting funded-only."""
 
     st.markdown("#### Player Prop Performance")
     uploaded = st.file_uploader(
@@ -177,7 +169,10 @@ def _render_prop_results_recap() -> None:
         key="perf_props_uploader",
     )
     if uploaded is None:
-        st.caption("Upload the player-props export to grade only the bets marked Funded.")
+        st.caption(
+            "Upload the combined player-props export. Every valid row is graded for "
+            "calibration; only rows marked Funded count in wager P&L."
+        )
         return
 
     file_identifier = f"{uploaded.name}_{uploaded.size}"
@@ -192,43 +187,85 @@ def _render_prop_results_recap() -> None:
         st.error(f"Error reading player-props export: {exc}")
         return
 
+    from app_core.prop_grading import validate_prop_export
+
+    valid, validation_error = validate_prop_export(card)
     funded = funded_prop_rows(card)
-    st.caption(f"{len(funded)} funded prop(s) will be graded; unfunded research rows are excluded.")
+    research_count = max(0, len(card) - len(funded))
+    st.caption(
+        f"{len(card)} prop row(s) will be graded: {len(funded)} funded and "
+        f"{research_count} research. Research results update calibration but never "
+        "count in the wager record or ROI."
+    )
+    if not valid:
+        st.error(validation_error)
     game_date = st.date_input(
         "Player-prop slate date",
         value=date.today() - timedelta(days=1),
         key="perf_props_date",
     )
 
-    if st.button("Fetch Player Prop Results", key="perf_props_fetch", disabled=funded.empty):
-        with st.spinner("Fetching player results and grading the funded card..."):
+    result_identifier = f"{file_identifier}_{game_date.isoformat()}"
+    if st.session_state.get("perf_props_result_identifier") != result_identifier:
+        st.session_state["perf_props_result_identifier"] = result_identifier
+        st.session_state.pop("perf_props_results", None)
+
+    if st.button("Fetch Player Prop Results", key="perf_props_fetch", disabled=not valid):
+        with st.spinner("Fetching player results and grading the exported prop card..."):
             try:
                 from app_core.prop_grading import grade_prop_export
 
                 date_text = game_date.isoformat()
                 st.session_state["perf_props_results"] = grade_prop_export(
-                    funded, date_text
+                    card, date_text
                 )
             except Exception as exc:
                 st.error(f"Error fetching or grading player props: {exc}")
 
     results = st.session_state.get("perf_props_results")
     if not isinstance(results, pd.DataFrame) or results.empty:
-        if funded.empty:
-            st.info("This export contains no funded player props.")
         return
 
-    summary = summarize_prop_results(results)
-    cols = st.columns(4)
-    cols[0].metric("Funded Prop Record", f"{summary['wins']}-{summary['losses']}-{summary['pushes']}")
-    cols[1].metric("Funded Prop Win Rate", f"{summary['win_rate']:.1%}")
-    cols[2].metric("Funded Prop P&L", f"${summary['pnl']:+.2f}")
-    cols[3].metric("Funded Prop ROI", f"{summary['roi']:+.1%}", f"${summary['staked']:.2f} staked")
+    all_summary = summarize_prop_results(results)
+    funded_results = funded_prop_rows(results)
+    funded_summary = summarize_prop_results(funded_results)
 
-    if summary["unresolved"]:
+    st.markdown("##### All Exported Props (Calibration / Research)")
+    cols = st.columns(4)
+    cols[0].metric(
+        "Graded Record",
+        f"{all_summary['wins']}-{all_summary['losses']}-{all_summary['pushes']}",
+    )
+    cols[1].metric("All-Row Win Rate", f"{all_summary['win_rate']:.1%}")
+    cols[2].metric("Rows Returned", str(len(results)))
+    cols[3].metric("Unresolved", str(all_summary["unresolved"]))
+
+    if all_summary["unresolved"]:
         st.warning(
-            f"{summary['unresolved']} funded prop(s) could not be resolved from the league results feed "
+            f"{all_summary['unresolved']} prop(s) could not be resolved from the league results feed "
             "and are excluded from the record and ROI."
+        )
+
+    st.markdown("##### Production-Approved Prop Wagers")
+    if funded_results.empty:
+        st.info(
+            "This export contains no funded player props. The wager record is 0 bets "
+            "and P&L remains $0; the graded rows above are calibration research."
+        )
+    else:
+        funded_cols = st.columns(4)
+        funded_cols[0].metric(
+            "Funded Prop Record",
+            f"{funded_summary['wins']}-{funded_summary['losses']}-{funded_summary['pushes']}",
+        )
+        funded_cols[1].metric(
+            "Funded Prop Win Rate", f"{funded_summary['win_rate']:.1%}"
+        )
+        funded_cols[2].metric("Funded Prop P&L", f"${funded_summary['pnl']:+.2f}")
+        funded_cols[3].metric(
+            "Funded Prop ROI",
+            f"{funded_summary['roi']:+.1%}",
+            f"${funded_summary['staked']:.2f} staked",
         )
 
     if "market_type" in results.columns and "result" in results.columns:
@@ -236,7 +273,7 @@ def _render_prop_results_recap() -> None:
             results["market_type"].fillna("unknown"),
             results["result"].fillna("UNRESOLVED"),
         ).reset_index()
-        st.markdown("##### Results by Prop Market")
+        st.markdown("##### All Graded Results by Prop Market")
         st.dataframe(market_recap, width="stretch", hide_index=True)
 
     st.dataframe(results, width="stretch", hide_index=True)
@@ -715,8 +752,8 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
             "Rows Settled", f"{settled_precision}/{len(precision_df)}"
         )
     st.caption(
-        "The precision shortlist is an accuracy-first pilot with a 75% monitoring target, "
-        "not a guaranteed result or automatic wager. Bettable plus a positive exported "
+        "The precision shortlist is a research confidence ranking with no claimed fixed "
+        "hit-rate target or automatic wager authority. Bettable plus a positive exported "
         "stake remains the only wagering authority."
     )
 

@@ -49,6 +49,53 @@ def validate_prop_export(card: pd.DataFrame | None) -> tuple[bool, str]:
     return True, ""
 
 
+def prop_funded_mask(card: pd.DataFrame | None) -> pd.Series:
+    """Identify rows that were actually authorized for a production stake.
+
+    Normal exports carry ``Stake_Status``/``Kelly_Bet_Size`` while graded rows
+    preserve those fields as ``source_stake_status``/``stake``. Use the same
+    fail-closed rule for both representations so research rows can be graded
+    without ever leaking into wager P&L.
+    """
+    if card is None:
+        return pd.Series(dtype=bool)
+    if card.empty:
+        return pd.Series(False, index=card.index, dtype=bool)
+
+    if "source_funded" in card.columns:
+        values = card["source_funded"]
+        if pd.api.types.is_bool_dtype(values.dtype):
+            return values.fillna(False).astype(bool)
+        normalized = values.astype("string").fillna("").str.strip().str.casefold()
+        return normalized.isin({"true", "1", "yes", "y"})
+
+    for column in ("Stake_Status", "source_stake_status"):
+        if column not in card.columns:
+            continue
+        status = card[column].astype("string").fillna("").str.strip()
+        if status.ne("").any():
+            return status.str.casefold().eq("funded")
+
+    pick_status = pd.Series("", index=card.index, dtype="object")
+    for column in ("Pick_Status", "source_pick_status"):
+        if column in card.columns:
+            pick_status = card[column]
+            break
+    stake = pd.Series(0.0, index=card.index, dtype="float64")
+    for column in ("Kelly_Bet_Size", "stake"):
+        if column in card.columns:
+            stake = pd.to_numeric(card[column], errors="coerce").fillna(0.0)
+            break
+    actionable = (
+        pick_status.astype("string")
+        .fillna("")
+        .str.strip()
+        .str.casefold()
+        .eq("actionable")
+    )
+    return actionable & stake.gt(0.0)
+
+
 def _player_name(row: pd.Series) -> str:
     return str(
         row.get("player") or row.get("batter") or row.get("pitcher") or ""
@@ -134,6 +181,7 @@ def grade_prop_export(
     resolver = name_resolver or _default_name_resolver
     name_to_id = resolver(card, game_date)
     fetch_actual = actual_fetcher or _default_actual_fetcher(game_date, card)
+    funded_mask = prop_funded_mask(card)
     try:
         accepts_participant_type = len(inspect.signature(fetch_actual).parameters) >= 2
     except (TypeError, ValueError):
@@ -141,7 +189,7 @@ def grade_prop_export(
 
     actual_cache: dict[tuple[str, str], object] = {}
     rows: list[dict] = []
-    for _, source in card.iterrows():
+    for position, (_, source) in enumerate(card.iterrows()):
         name = _player_name(source)
         market_type = str(source.get("market_type") or "")
         pick = source.get("best_pick") or source.get("pick")
@@ -177,9 +225,11 @@ def grade_prop_export(
         )
         if str(result or "").upper() not in {"WIN", "LOSS", "PUSH"}:
             result = "PENDING"
-        stake = float(pd.to_numeric(
+        recommended_stake = float(pd.to_numeric(
             pd.Series([source.get("Kelly_Bet_Size", 0.0)]), errors="coerce"
         ).fillna(0.0).iloc[0])
+        source_funded = bool(funded_mask.iloc[position])
+        stake = recommended_stake if source_funded else 0.0
         if result == "WIN":
             profit = stake * (_decimal(float(odds)) - 1.0)
         elif result == "LOSS":
@@ -211,6 +261,13 @@ def grade_prop_export(
             "edge": source.get("edge"),
             "odds_american": float(odds),
             "stake": round(stake, 2),
+            "source_recommended_stake": round(recommended_stake, 2),
+            "source_funded": source_funded,
+            "evaluation_scope": (
+                "PRODUCTION-APPROVED WAGER"
+                if source_funded
+                else "RESEARCH / CALIBRATION"
+            ),
             "actual_value": actual_value,
             "result": result,
             "profit": round(profit, 2) if profit is not None else None,
@@ -322,13 +379,13 @@ def ledger_history_gap_summary(
     *,
     max_gap_days: int = 1,
 ) -> dict[str, object]:
-    """Block grading that could silently skip a newer cumulative ledger.
+    """Warn when a cumulative ledger has a calendar gap before the target slate.
 
-    Streamlit's local recovery file is not durable across every deployment. If
-    the bundled/uploaded ledger ends several days before the slate being graded,
-    fail closed so a fresh deployment cannot replace recent calibration history
-    with only the newly graded slate. ``requires_confirmation`` remains as a
-    compatibility alias for older callers; the UI no longer offers a bypass.
+    A calendar gap does not prove that prop rows are missing: a slate can have no
+    supported markets, and the ledger merge is additive and deduplicated. The
+    old hard block made it impossible to resume grading after such a day. Keep
+    the gap visible, but allow the current export to be appended without
+    deleting any loaded history; missing ledgers can still be backfilled later.
     """
     coverage = ledger_coverage_summary(ledger)
     latest = pd.to_datetime(coverage.get("end_date"), errors="coerce", utc=True)
@@ -336,7 +393,7 @@ def ledger_history_gap_summary(
     gap_days = None
     if pd.notna(latest) and pd.notna(target):
         gap_days = int((target.normalize() - latest.normalize()).days)
-    grading_blocked = bool(
+    gap_detected = bool(
         gap_days is not None and gap_days > max(0, int(max_gap_days))
     )
     return {
@@ -345,6 +402,7 @@ def ledger_history_gap_summary(
             target.strftime("%Y-%m-%d") if pd.notna(target) else None
         ),
         "gap_days": gap_days,
-        "requires_confirmation": grading_blocked,
-        "grading_blocked": grading_blocked,
+        "gap_detected": gap_detected,
+        "requires_confirmation": False,
+        "grading_blocked": False,
     }

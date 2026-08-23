@@ -186,13 +186,13 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
     selected_gap = ledger_history_gap_summary(
         pregrade_ledger, previous_prop_date.isoformat()
     )
-    if selected_gap["grading_blocked"]:
-        st.sidebar.error(
+    if selected_gap["gap_detected"]:
+        st.sidebar.warning(
             "The loaded cumulative prop ledger ends on "
             f"{selected_gap['latest_date']}, but you selected "
-            f"{selected_gap['target_date']}. Grading is blocked until you upload "
-            "the newest downloaded cumulative ledger so intervening calibration "
-            "results cannot be lost."
+            f"{selected_gap['target_date']}. Grading remains available because the "
+            "merge is additive, but upload any missing downloaded ledgers when "
+            "available so calibration coverage stays complete."
         )
     if st.sidebar.button("Grade Uploaded Player Props", key="grade_previous_props"):
         if not previous_prop_exports:
@@ -258,24 +258,23 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
                     bundled_ledger,
                 )
                 actual_gap = ledger_history_gap_summary(prior_ledger, grade_date)
-                if actual_gap["grading_blocked"]:
-                    st.sidebar.error(
-                        "Grading stopped to protect cumulative calibration history. "
-                        "Upload the latest downloaded graded prop ledger before "
-                        "grading this slate."
+                if actual_gap["gap_detected"]:
+                    st.sidebar.warning(
+                        "This slate will be appended across a calendar gap. Existing "
+                        "rows will be preserved; upload missing ledgers later to backfill "
+                        "the uncovered dates."
                     )
-                else:
-                    with st.spinner(f"Grading player props for {grade_date}..."):
-                        graded = grade_prop_export(previous_card, grade_date)
-                        ledger = merge_prop_ledgers(prior_ledger, graded)
-                    st.session_state["generated_prop_results_log"] = ledger
-                    st.session_state["active_prop_results_log"] = ledger
-                    summary = grading_summary(graded)
-                    st.sidebar.success(
-                        f"Graded {summary['graded']} props: "
-                        f"{summary['wins']}-{summary['losses']} "
-                        f"({summary['unresolved']} unresolved)."
-                    )
+                with st.spinner(f"Grading player props for {grade_date}..."):
+                    graded = grade_prop_export(previous_card, grade_date)
+                    ledger = merge_prop_ledgers(prior_ledger, graded)
+                st.session_state["generated_prop_results_log"] = ledger
+                st.session_state["active_prop_results_log"] = ledger
+                summary = grading_summary(graded)
+                st.sidebar.success(
+                    f"Graded {summary['graded']} props: "
+                    f"{summary['wins']}-{summary['losses']} "
+                    f"({summary['unresolved']} unresolved)."
+                )
             except Exception as exc:
                 st.sidebar.error(f"Player-prop grading failed: {exc}")
 
