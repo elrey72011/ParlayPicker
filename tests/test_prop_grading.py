@@ -7,6 +7,7 @@ from app_core.prop_grading import (
     ledger_history_gap_summary,
     ledger_coverage_summary,
     merge_prop_ledgers,
+    prop_funded_mask,
     validate_prop_export,
 )
 
@@ -72,7 +73,32 @@ def test_normal_export_grades_funded_and_research_rows_and_preserves_raw_probabi
     assert graded["pipeline_build"].eq("build-a").all()
     assert graded["export_run_id"].eq("run-a").all()
     assert graded["game_date"].eq("2026-07-21").all()
+    assert graded["source_funded"].tolist() == [True, False]
+    assert graded["evaluation_scope"].tolist() == [
+        "PRODUCTION-APPROVED WAGER",
+        "RESEARCH / CALIBRATION",
+    ]
     assert calls == [(1, "batter")]
+
+
+def test_research_row_with_nonzero_recommended_stake_cannot_create_wager_pnl():
+    card = _card().iloc[[0]].copy()
+    card["Stake_Status"] = "Blocked - player exposure"
+    card["Kelly_Bet_Size"] = 5.0
+
+    graded = grade_prop_export(
+        card,
+        "2026-07-21",
+        name_resolver=lambda _card, _date: {"juan soto": 1},
+        actual_fetcher=lambda _player_id, _participant_type: {"hits": 1},
+    )
+
+    assert graded.iloc[0]["result"] == "WIN"
+    assert graded.iloc[0]["source_recommended_stake"] == 5.0
+    assert graded.iloc[0]["stake"] == 0.0
+    assert graded.iloc[0]["profit"] == 0.0
+    assert not bool(graded.iloc[0]["source_funded"])
+    assert not prop_funded_mask(graded).any()
 
 
 def test_ledger_merge_replaces_repeat_upload_without_duplication():
@@ -153,7 +179,7 @@ def test_ledger_coverage_summary_reports_cumulative_date_range():
     assert summary["end_date"] == "2026-07-23"
 
 
-def test_history_gap_blocks_grading_before_skipping_recent_slates():
+def test_history_gap_warns_but_allows_additive_backfill():
     ledger = pd.DataFrame({
         "game_date": ["2026-08-02"],
         "result": ["WIN"],
@@ -165,8 +191,9 @@ def test_history_gap_blocks_grading_before_skipping_recent_slates():
         "latest_date": "2026-08-02",
         "target_date": "2026-08-11",
         "gap_days": 9,
-        "requires_confirmation": True,
-        "grading_blocked": True,
+        "gap_detected": True,
+        "requires_confirmation": False,
+        "grading_blocked": False,
     }
 
 
@@ -179,6 +206,7 @@ def test_history_gap_accepts_the_immediately_following_slate():
     summary = ledger_history_gap_summary(ledger, "2026-08-11")
 
     assert summary["gap_days"] == 1
+    assert summary["gap_detected"] is False
     assert summary["requires_confirmation"] is False
     assert summary["grading_blocked"] is False
 

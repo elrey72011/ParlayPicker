@@ -115,6 +115,8 @@ def test_precision_shortlist_never_promotes_an_unfunded_row_to_a_bet():
     assert result.loc[0, "Precision_Card_Instruction"] == (
         "PRECISION SHORTLIST - NO APP-APPROVED STAKE"
     )
+    assert pd.isna(result.loc[0, "Precision_Target_Hit_Rate"])
+    assert "no fixed hit-rate target" in result.loc[0, "Precision_Card_Reason"]
 
 
 def test_precision_shortlist_recognizes_independently_approved_positive_stake():

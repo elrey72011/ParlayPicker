@@ -2583,7 +2583,11 @@ def main() -> None:
             # off the internal names.
             best_picks_export = apply_status_display_labels(best_picks_export)
             from app_core.export_scope import label_wager_export, production_wagers
-            from app_core.precision_card import attach_precision_card, precision_shortlist
+            from app_core.precision_card import (
+                PRECISION_CARD_MIN_WIN_PROBABILITY,
+                attach_precision_card,
+                precision_shortlist,
+            )
 
             best_picks_export = label_wager_export(best_picks_export)
             best_picks_export = attach_precision_card(best_picks_export)
@@ -2632,15 +2636,17 @@ def main() -> None:
                     key="export_precision_game_card",
                 )
                 st.caption(
-                    "Accuracy-first pilot: at most two globally ranked, live-line-verified "
-                    "picks with at least 60% calibrated probability and a price of -220 or "
-                    "better. The 75% hit rate is a monitoring target, not a guarantee; only "
+                    "Research confidence shortlist: at most two globally ranked, "
+                    "live-line-verified picks with at least "
+                    f"{PRECISION_CARD_MIN_WIN_PROBABILITY:.0%} adjusted probability and "
+                    "a price of -220 or better. No fixed hit-rate target is claimed; only "
                     "Wager_Instruction and a positive Play_Stake authorize a bet."
                 )
             else:
                 st.caption(
-                    "Precision shortlist: no live-line-verified pick cleared the 60% "
-                    "probability and -220 price floors."
+                    "Precision shortlist: no live-line-verified pick cleared the "
+                    f"{PRECISION_CARD_MIN_WIN_PROBABILITY:.0%} probability and -220 "
+                    "price floors."
                 )
 
             candidate_audit_df = diagnostics.get("candidate_audit_df")

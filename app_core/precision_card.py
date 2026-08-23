@@ -13,7 +13,11 @@ import pandas as pd
 PRECISION_CARD_MAX_PICKS = 2
 PRECISION_CARD_MIN_WIN_PROBABILITY = 0.62
 PRECISION_CARD_MIN_AMERICAN_ODDS = -220
-PRECISION_CARD_TARGET_HIT_RATE = 0.75
+# The shortlist is a research ranking, not a calibrated promise. A fixed 75%
+# label outlived its small pilot sample and was misleading once the holdout
+# record regressed. Keep the field for export compatibility, but leave it blank
+# until a future out-of-sample evaluation supports a defensible target.
+PRECISION_CARD_TARGET_HIT_RATE = None
 
 
 def _strict_bool(frame: pd.DataFrame, column: str, *, default: bool = False) -> pd.Series:
@@ -148,7 +152,9 @@ def attach_precision_card(
     out["Precision_Card"] = selected
     out["Precision_Rank"] = rank
     out["Precision_Probability"] = probability
-    out["Precision_Target_Hit_Rate"] = float(PRECISION_CARD_TARGET_HIT_RATE)
+    out["Precision_Target_Hit_Rate"] = pd.Series(
+        pd.NA, index=out.index, dtype="Float64"
+    )
     out["Precision_Wager_Approved"] = approved
     out["Precision_Card_Instruction"] = "NOT ON PRECISION SHORTLIST"
     out.loc[selected, "Precision_Card_Instruction"] = (
@@ -166,7 +172,8 @@ def attach_precision_card(
         f"Excluded: offered price is shorter than {int(min_american_odds):+d}."
     )
     reason.loc[selected] = (
-        "Selected by global adjusted selection probability; 75% is a monitoring target, not a guarantee."
+        "Selected by global adjusted selection probability for research monitoring; "
+        "no fixed hit-rate target is claimed."
     )
     out["Precision_Card_Reason"] = reason
     return out

@@ -19,6 +19,19 @@ def test_funded_prop_rows_excludes_blocked_actionable_research_rows():
     assert funded["player"].tolist() == ["Funded Player"]
 
 
+def test_funded_prop_rows_recognizes_graded_export_representation():
+    graded = pd.DataFrame(
+        [
+            {"player": "Funded", "source_funded": True, "stake": 4.0},
+            {"player": "Research", "source_funded": False, "stake": 0.0},
+        ]
+    )
+
+    funded = funded_prop_rows(graded)
+
+    assert funded["player"].tolist() == ["Funded"]
+
+
 def test_prop_summary_counts_push_stake_and_excludes_unresolved():
     results = pd.DataFrame(
         [
