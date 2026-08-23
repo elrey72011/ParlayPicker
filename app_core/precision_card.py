@@ -16,6 +16,36 @@ PRECISION_CARD_MIN_AMERICAN_ODDS = -220
 PRECISION_CARD_TARGET_HIT_RATE = 0.75
 
 
+def precision_download_label() -> str:
+    """Return the export label derived from the enforced shortlist size."""
+
+    return f"Export Precision Shortlist (Top {PRECISION_CARD_MAX_PICKS})"
+
+
+def precision_policy_caption() -> str:
+    """Return user-facing policy copy derived from the enforced thresholds."""
+
+    return (
+        "Accuracy-first pilot: at most "
+        f"{PRECISION_CARD_MAX_PICKS} globally ranked, live-line-verified picks "
+        f"with at least {PRECISION_CARD_MIN_WIN_PROBABILITY:.0%} adjusted selection "
+        f"probability and a price of {PRECISION_CARD_MIN_AMERICAN_ODDS:+d} or better. "
+        f"The {PRECISION_CARD_TARGET_HIT_RATE:.0%} hit rate is a monitoring target, "
+        "not a guarantee; only Wager_Instruction and a positive Play_Stake authorize "
+        "a bet."
+    )
+
+
+def precision_empty_caption() -> str:
+    """Return policy-derived copy for a slate with no precision selections."""
+
+    return (
+        "Precision shortlist: no live-line-verified pick cleared the "
+        f"{PRECISION_CARD_MIN_WIN_PROBABILITY:.0%} adjusted selection probability "
+        f"and {PRECISION_CARD_MIN_AMERICAN_ODDS:+d} price floors."
+    )
+
+
 def _strict_bool(frame: pd.DataFrame, column: str, *, default: bool = False) -> pd.Series:
     if column not in frame.columns:
         return pd.Series(default, index=frame.index, dtype=bool)
@@ -166,7 +196,8 @@ def attach_precision_card(
         f"Excluded: offered price is shorter than {int(min_american_odds):+d}."
     )
     reason.loc[selected] = (
-        "Selected by global adjusted selection probability; 75% is a monitoring target, not a guarantee."
+        "Selected by global adjusted selection probability; "
+        f"{PRECISION_CARD_TARGET_HIT_RATE:.0%} is a monitoring target, not a guarantee."
     )
     out["Precision_Card_Reason"] = reason
     return out
