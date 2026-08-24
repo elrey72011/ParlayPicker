@@ -31,16 +31,20 @@ def _strict_bool(frame: pd.DataFrame, column: str, *, default: bool = False) -> 
 
 
 def _probability(frame: pd.DataFrame) -> pd.Series:
-    """Return the same empirically adjusted probability used by selection.
+    """Return the final evidence-adjusted score used by selection.
 
     ``WinProbability`` is a display/calibration value.  The best-pick selector
     can subsequently pair-normalize and empirically blend it into
-    ``selection_probability_used``.  Precision ranking must not resurrect the
-    pre-adjustment value after selection has already reduced the candidate.
+    ``selection_probability_used``, then apply evidence-backed family and
+    short-horizon regime penalties in ``best_available_score``.  Precision
+    ranking must not resurrect any earlier value after selection has already
+    reduced the candidate.  Older exports without the final score retain the
+    previous fail-closed fallback chain.
     """
 
     probability = pd.Series(float("nan"), index=frame.index, dtype="float64")
     for source in (
+        "best_available_score",
         "selection_probability_used",
         "effective_win_probability",
         "empirical_win_probability",

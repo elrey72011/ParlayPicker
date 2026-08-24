@@ -49,11 +49,13 @@ def test_precision_card_uses_adjusted_selection_probability_before_display_proba
                 "Display probability is inflated",
                 0.68,
                 selection_probability_used=0.619,
+                best_available_score=0.619,
             ),
             _row(
                 "Adjusted probability clears",
                 0.61,
                 selection_probability_used=0.63,
+                best_available_score=0.63,
             ),
         ]
     )
@@ -63,6 +65,36 @@ def test_precision_card_uses_adjusted_selection_probability_before_display_proba
     assert result["Precision_Card"].tolist() == [False, True]
     assert result["Precision_Probability"].tolist() == [0.619, 0.63]
     assert "below 62%" in result.loc[0, "Precision_Card_Reason"]
+
+
+def test_precision_card_uses_final_score_after_recent_regime_penalty():
+    source = pd.DataFrame([
+        _row(
+            "Recently regressing side",
+            0.625,
+            selection_probability_used=0.6458,
+            best_available_score=0.5835,
+            recent_regime_penalty_applied=True,
+            recent_regime_penalty_value=0.0623,
+        )
+    ])
+
+    result = attach_precision_card(source)
+
+    assert result["Precision_Probability"].tolist() == [0.5835]
+    assert not bool(result.loc[0, "Precision_Card"])
+    assert "below 62%" in result.loc[0, "Precision_Card_Reason"]
+
+
+def test_precision_card_falls_back_for_exports_without_final_score():
+    source = pd.DataFrame([
+        _row("Older export", 0.61, selection_probability_used=0.63)
+    ]).drop(columns=["best_available_score"])
+
+    result = attach_precision_card(source)
+
+    assert result["Precision_Probability"].tolist() == [0.63]
+    assert bool(result.loc[0, "Precision_Card"])
 
 
 def test_precision_card_fails_closed_on_price_and_verification_gates():
