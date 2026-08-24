@@ -158,7 +158,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-08-22b-nfl-prop-market-discovery"
+PIPELINE_BUILD = "2026-08-24a-recent-regime-selection-guard"
 
 # Best Available must compare standard, reasonably priced markets. A P2P exchange can
 # expose alternate run lines (for example +5.5 at -1150) beside the standard MLB +1.5.
@@ -175,6 +175,13 @@ REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
     "mlb_spread_finalist_penalty_applied",
     "mlb_spread_finalist_penalty_value",
     "mlb_spread_finalist_penalty_reason",
+    "recent_regime_penalty_applied",
+    "recent_regime_penalty_value",
+    "recent_regime_penalty_reason",
+    "recent_regime_bucket",
+    "recent_regime_bucket_n",
+    "recent_regime_bucket_win_rate",
+    "recent_regime_long_win_rate",
     "best_available_value_override_applied",
     "best_available_value_override_from_pick",
     "best_available_value_override_ev_gain",
@@ -329,6 +336,13 @@ def ensure_best_pick_export_columns(
         "mlb_spread_finalist_penalty_applied": False,
         "mlb_spread_finalist_penalty_value": 0.0,
         "mlb_spread_finalist_penalty_reason": "not_evaluated",
+        "recent_regime_penalty_applied": False,
+        "recent_regime_penalty_value": 0.0,
+        "recent_regime_penalty_reason": "not_evaluated",
+        "recent_regime_bucket": "",
+        "recent_regime_bucket_n": 0,
+        "recent_regime_bucket_win_rate": pd.NA,
+        "recent_regime_long_win_rate": pd.NA,
         "best_available_value_override_applied": False,
         "best_available_value_override_from_pick": "",
         "best_available_value_override_ev_gain": pd.NA,
@@ -398,7 +412,7 @@ def ensure_best_pick_export_columns(
     missing_cols = [c for c in req_cols if c not in out.columns]
 
     for col in req_cols:
-        if col in {"status_blocker_reason", "status_blocker_stage", "nba_stats_fetch_status", "fallback_summary_by_league", "run_health_warning", "degraded_feature_subset_reason", "status_metric_basis", "selection_probability_source", "mlb_spread_finalist_penalty_reason", "best_available_value_override_from_pick", "market_line_source", "market_line_source_detail", "line_consistency_reason", "line_provenance_warning", "line_event_identity_reason", "live_event_match_key", "selected_live_event_source", "raw_book_odds_diag", "best_available_runner_up_pick", "best_available_runner_up_market_type", "best_available_selection_reason", "qualification_reason", "display_pick", "commercial_tier", "commercial_reason", "final_pick_valid_reason"}:
+        if col in {"status_blocker_reason", "status_blocker_stage", "nba_stats_fetch_status", "fallback_summary_by_league", "run_health_warning", "degraded_feature_subset_reason", "status_metric_basis", "selection_probability_source", "mlb_spread_finalist_penalty_reason", "recent_regime_penalty_reason", "recent_regime_bucket", "best_available_value_override_from_pick", "market_line_source", "market_line_source_detail", "line_consistency_reason", "line_provenance_warning", "line_event_identity_reason", "live_event_match_key", "selected_live_event_source", "raw_book_odds_diag", "best_available_runner_up_pick", "best_available_runner_up_market_type", "best_available_selection_reason", "qualification_reason", "display_pick", "commercial_tier", "commercial_reason", "final_pick_valid_reason"}:
             out[col] = out[col].fillna(default_values.get(col, "")).astype(str)
 
     # The public card always answers which candidate ranked first for the game.
@@ -422,6 +436,7 @@ def ensure_best_pick_export_columns(
         "qualified_pick": False,
         "selection_probability_pair_normalized": False,
         "mlb_spread_finalist_penalty_applied": False,
+        "recent_regime_penalty_applied": False,
         "best_available_value_override_applied": False,
     }.items():
         if bool_col in out.columns:
@@ -439,7 +454,7 @@ def ensure_best_pick_export_columns(
         out["side_promoted_by_balance_guard_count"] = pd.to_numeric(out["side_promoted_by_balance_guard_count"], errors="coerce").fillna(0).astype(int)
     if "side_balance_guard_reason" in out.columns:
         out["side_balance_guard_reason"] = out["side_balance_guard_reason"].fillna("MISSING_COMPUTATION").astype(str)
-    for numeric_col in {"selection_probability_used", "mlb_spread_finalist_penalty_value", "best_available_value_override_ev_gain", "qualification_probability", "market_line_used", "matched_live_spread_line", "matched_live_total_line", "upload_spread_line", "upload_total_line", "base_spread_line", "base_total_line"}:
+    for numeric_col in {"selection_probability_used", "mlb_spread_finalist_penalty_value", "recent_regime_penalty_value", "recent_regime_bucket_win_rate", "recent_regime_long_win_rate", "best_available_value_override_ev_gain", "qualification_probability", "market_line_used", "matched_live_spread_line", "matched_live_total_line", "upload_spread_line", "upload_total_line", "base_spread_line", "base_total_line"}:
         if numeric_col in out.columns:
             out[numeric_col] = pd.to_numeric(out[numeric_col], errors="coerce")
     if "line_consistency_flag" in out.columns:
@@ -448,6 +463,10 @@ def ensure_best_pick_export_columns(
         out["line_event_identity_match_flag"] = out["line_event_identity_match_flag"].fillna(True).astype(bool)
     if "line_candidate_count" in out.columns:
         out["line_candidate_count"] = pd.to_numeric(out["line_candidate_count"], errors="coerce").fillna(0).astype(int)
+    if "recent_regime_bucket_n" in out.columns:
+        out["recent_regime_bucket_n"] = pd.to_numeric(
+            out["recent_regime_bucket_n"], errors="coerce"
+        ).fillna(0).astype(int)
     if "export_run_id" in out.columns:
         out["export_run_id"] = out["export_run_id"].fillna("").astype(str)
     if "pick_id" in out.columns:
@@ -551,7 +570,7 @@ BEST_PICK_COLUMNS = [
     # Verbatim per-book spread points + moneyline prices (see REQUIRED_BEST_PICK_EXPORT_COLUMNS);
     # listed here so it survives the BEST_PICK_COLUMNS reindex into the export.
     "raw_book_odds_diag",
-    "suspicious_data_flag", "suspicious_data_reasons", "status_metric_basis", "selection_probability_used", "selection_probability_source", "selection_probability_pair_normalized", "mlb_spread_finalist_penalty_applied", "mlb_spread_finalist_penalty_value", "mlb_spread_finalist_penalty_reason", "effective_expected_value", "effective_edge", "effective_win_probability",
+    "suspicious_data_flag", "suspicious_data_reasons", "status_metric_basis", "selection_probability_used", "selection_probability_source", "selection_probability_pair_normalized", "mlb_spread_finalist_penalty_applied", "mlb_spread_finalist_penalty_value", "mlb_spread_finalist_penalty_reason", "recent_regime_penalty_applied", "recent_regime_penalty_value", "recent_regime_penalty_reason", "recent_regime_bucket", "recent_regime_bucket_n", "recent_regime_bucket_win_rate", "recent_regime_long_win_rate", "effective_expected_value", "effective_edge", "effective_win_probability",
     "empirical_win_probability", "empirical_edge", "empirical_bucket", "status_blocker_reason", "status_blocker_stage",
     "nba_stats_fetch_status", "nba_stats_fetch_source", "nba_stats_fetch_retries_used", "stats_source_counts", "fallback_summary_by_league", "fallback_heavy_slate_flag", "run_health_warning",
     "degraded_feature_subset_flag", "degraded_feature_subset_reason",
@@ -3936,6 +3955,14 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         pool["calibrated_probability"], errors="coerce"
     )
     pool["selection_probability_source"] = "calibrated_probability"
+    pool["_recent_regime_score_penalty"] = 0.0
+    pool["recent_regime_penalty_applied"] = False
+    pool["recent_regime_penalty_value"] = 0.0
+    pool["recent_regime_penalty_reason"] = "missing_empirical_history"
+    pool["recent_regime_bucket"] = ""
+    pool["recent_regime_bucket_n"] = 0
+    pool["recent_regime_bucket_win_rate"] = np.nan
+    pool["recent_regime_long_win_rate"] = np.nan
     try:
         from app_core.weights_config import (
             EMPIRICAL_TIER_OVERLAY_ENABLED as _empirical_selection_enabled,
@@ -3970,7 +3997,18 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 pool.loc[
                     _usable_empirical, "selection_probability_source"
                 ] = "empirical_bucket_blend"
+                from core.empirical_tiers import recent_regime_score_adjustments
+
+                _recent_regime = recent_regime_score_adjustments(
+                    pool, _selection_bucket_stats
+                )
+                for _column in _recent_regime.columns:
+                    pool[_column] = _recent_regime[_column]
+                pool["_recent_regime_score_penalty"] = pd.to_numeric(
+                    pool["recent_regime_penalty_value"], errors="coerce"
+                ).fillna(0.0)
             elif _selection_bucket_stats:
+                pool["recent_regime_penalty_reason"] = "stale_empirical_history"
                 logger.warning(
                     "Selection bucket statistics are stale; finalist ranking is using "
                     "current calibrated probabilities without the dated bucket overlay."
@@ -4013,6 +4051,14 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         )
         diagnostics_out["selection_bucket_stats_fresh"] = bool(
             locals().get("_selection_bucket_stats_fresh", False)
+        )
+        diagnostics_out["recent_regime_penalty_count"] = int(
+            pool["recent_regime_penalty_applied"].fillna(False).astype(bool).sum()
+        )
+        diagnostics_out["recent_regime_penalty_max"] = float(
+            pd.to_numeric(
+                pool["recent_regime_penalty_value"], errors="coerce"
+            ).fillna(0.0).max()
         )
         diagnostics_out["pair_probability_normalized_count"] = int(
             _pair_probability_normalized.sum()
@@ -4132,6 +4178,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         pool["_under_selection_penalty"]
         + pool["_mlb_spread_finalist_penalty"]
         + pool["_wnba_under_finalist_penalty"]
+        + pool["_recent_regime_score_penalty"]
     )
     pool["final_family_score"] = pool["final_family_score"] - pool["_family_selection_penalty"]
     pool["final_family_score_no_mlb_spread_penalty"] = pool["final_family_score"] + pool["_mlb_spread_finalist_penalty"]
@@ -4433,6 +4480,13 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         "mlb_spread_finalist_penalty_applied",
         "mlb_spread_finalist_penalty_value",
         "mlb_spread_finalist_penalty_reason",
+        "recent_regime_penalty_applied",
+        "recent_regime_penalty_value",
+        "recent_regime_penalty_reason",
+        "recent_regime_bucket",
+        "recent_regime_bucket_n",
+        "recent_regime_bucket_win_rate",
+        "recent_regime_long_win_rate",
         "wnba_under_finalist_penalty_applied",
         "wnba_under_finalist_penalty_value",
         "wnba_under_finalist_penalty_reason",
@@ -4469,7 +4523,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     final_market_type_counts = best["market_type"].value_counts().to_dict()
 
     # Cleanup temporary score inputs while preserving the public audit contract.
-    best = best.drop(columns=["_market_family", "_normalized_ev", "_normalized_edge", "final_family_score", "final_family_score_no_mlb_spread_penalty", "_ev_numeric", "_edge_numeric", "_family_selection_penalty", "_under_selection_penalty", "_mlb_spread_finalist_penalty", "_wnba_under_finalist_penalty", "_selection_probability", "best_available_finalist", "best_available_final_rank", "best_available_selected", "best_available_rejection_reason"])
+    best = best.drop(columns=["_market_family", "_normalized_ev", "_normalized_edge", "final_family_score", "final_family_score_no_mlb_spread_penalty", "_ev_numeric", "_edge_numeric", "_family_selection_penalty", "_under_selection_penalty", "_mlb_spread_finalist_penalty", "_wnba_under_finalist_penalty", "_recent_regime_score_penalty", "_selection_probability", "best_available_finalist", "best_available_final_rank", "best_available_selected", "best_available_rejection_reason"])
 
     logger.info(
         "BEST PICKS AUDIT: Rows after verified two-stage comparison: %s "

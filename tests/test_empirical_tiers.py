@@ -14,6 +14,8 @@ from core.empirical_tiers import (
     empirical_selection_probabilities,
     empirical_win_probability,
     load_bucket_stats,
+    recent_regime_bucket_summary,
+    recent_regime_score_adjustments,
     smoothed_bucket_rate,
 )
 
@@ -81,6 +83,67 @@ def test_smoothed_bucket_rate_laplace():
     assert abs(rate - (36 + 0.53 * 10) / 70) < 1e-9
     rate0, n0 = smoothed_bucket_rate("missing", STATS)
     assert (rate0, n0) == (0.53, 0)
+
+
+def test_recent_regime_guard_requires_large_material_shortfall():
+    stats = {
+        "overall": {"n": 300, "win_rate": 0.54},
+        "buckets": {
+            "MLB:side:Agrees": {
+                "n": 100,
+                "wins": 60,
+                "win_rate": 0.60,
+                "recent_n": 30,
+                "recent_wins": 12,
+                "recent_win_rate": 0.40,
+            },
+            "MLB:over:Agrees": {
+                "n": 100,
+                "wins": 60,
+                "win_rate": 0.60,
+                "recent_n": 10,
+                "recent_wins": 1,
+                "recent_win_rate": 0.10,
+            },
+        },
+    }
+
+    regressed = recent_regime_bucket_summary("MLB:side:Agrees", stats)
+    thin = recent_regime_bucket_summary("MLB:over:Agrees", stats)
+
+    assert regressed["applied"] is True
+    assert regressed["reason"] == "fresh_recent_bucket_regression"
+    assert 0.05 <= regressed["penalty"] <= 0.10
+    assert thin["applied"] is False
+    assert thin["reason"] == "insufficient_recent_bucket_history"
+
+
+def test_recent_regime_adjustment_recomputes_oriented_consensus():
+    stats = {
+        "overall": {"n": 300, "win_rate": 0.54},
+        "buckets": {
+            "MLB:side:Agrees": {
+                "n": 100,
+                "wins": 60,
+                "win_rate": 0.60,
+                "recent_n": 30,
+                "recent_wins": 12,
+                "recent_win_rate": 0.40,
+            }
+        },
+    }
+    frame = pd.DataFrame({
+        "league": ["MLB"],
+        "market_type": ["spread_home"],
+        "consensus_agreement": ["Neutral"],
+        "kalshi_probability": [0.60],
+    })
+
+    adjustment = recent_regime_score_adjustments(frame, stats).iloc[0]
+
+    assert adjustment["recent_regime_bucket"] == "MLB:side:Agrees"
+    assert bool(adjustment["recent_regime_penalty_applied"])
+    assert float(adjustment["recent_regime_penalty_value"]) > 0.05
 
 
 def _frame():

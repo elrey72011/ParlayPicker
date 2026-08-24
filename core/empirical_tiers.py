@@ -82,6 +82,18 @@ EMPIRICAL_SELECTION_MIN_N = 20
 EMPIRICAL_SELECTION_SHRINK_N = 100
 EMPIRICAL_SELECTION_MAX_WEIGHT = 0.10
 
+# Short-horizon regime guard for finalist ranking.  The fitted artifact carries
+# a trailing seven-day record alongside the 21-day-decayed history.  A bucket
+# must have at least 20 recent decisions and trail its long-horizon smoothed
+# rate by five percentage points before any adjustment is allowed.  The score
+# haircut is capped at ten points and never changes the exported probability or
+# grants wager authority; it only stops stale confidence from winning a close
+# cross-family comparison.
+RECENT_REGIME_MIN_N = 20
+RECENT_REGIME_MIN_RATE_DROP = 0.05
+RECENT_REGIME_MAX_SCORE_PENALTY = 0.10
+RECENT_REGIME_PRIOR_N = 10.0
+
 # Actionable ALSO requires market AGREEMENT. Across the graded history the only
 # slice that clears the -110 break-even (52.4%) by a real margin is the buckets
 # where Kalshi agrees with the model's direction: MLB over:Agrees 61% (n=41) and
@@ -295,6 +307,102 @@ def smoothed_bucket_rate(bucket: str, stats: dict) -> tuple[float, int]:
         return overall, 0
     n = int(b["n"])
     return (int(b["wins"]) + overall * 10.0) / (n + 10.0), n
+
+
+def recent_regime_bucket_summary(bucket: str, stats: dict) -> dict[str, object]:
+    """Describe a material short-horizon regression for one empirical bucket."""
+
+    long_rate, long_n = smoothed_bucket_rate(bucket, stats)
+    payload = (stats.get("buckets") or {}).get(bucket) if stats else None
+    recent_n = int((payload or {}).get("recent_n", 0) or 0)
+    recent_wins = int((payload or {}).get("recent_wins", 0) or 0)
+    raw_recent_rate = (
+        float(recent_wins / recent_n) if recent_n > 0 else float("nan")
+    )
+    summary: dict[str, object] = {
+        "bucket": bucket,
+        "applied": False,
+        "reason": (
+            "missing_bucket_history"
+            if not payload
+            else "insufficient_recent_bucket_history"
+        ),
+        "penalty": 0.0,
+        "long_n": int(long_n),
+        "long_rate": float(long_rate),
+        "recent_n": recent_n,
+        "recent_rate": raw_recent_rate,
+        "recent_smoothed_rate": raw_recent_rate,
+    }
+    if recent_n < RECENT_REGIME_MIN_N:
+        return summary
+
+    recent_smoothed = (
+        recent_wins + float(long_rate) * RECENT_REGIME_PRIOR_N
+    ) / (recent_n + RECENT_REGIME_PRIOR_N)
+    rate_drop = float(long_rate - recent_smoothed)
+    summary.update({
+        "reason": "recent_bucket_not_materially_worse",
+        "recent_smoothed_rate": float(recent_smoothed),
+        "rate_drop": rate_drop,
+    })
+    if rate_drop < RECENT_REGIME_MIN_RATE_DROP:
+        return summary
+
+    penalty = min(RECENT_REGIME_MAX_SCORE_PENALTY, max(0.0, rate_drop))
+    summary.update({
+        "applied": penalty > 0.0,
+        "reason": "fresh_recent_bucket_regression",
+        "penalty": float(penalty),
+    })
+    return summary
+
+
+def recent_regime_score_adjustments(
+    df: pd.DataFrame,
+    bucket_stats: dict,
+) -> pd.DataFrame:
+    """Return auditable finalist-score haircuts aligned to ``df``.
+
+    Consensus is recomputed from the oriented Kalshi probability exactly as it
+    is for empirical selection, so the guard cannot be routed through stale
+    pre-merge labels.
+    """
+
+    columns = [
+        "recent_regime_penalty_applied",
+        "recent_regime_penalty_value",
+        "recent_regime_penalty_reason",
+        "recent_regime_bucket",
+        "recent_regime_bucket_n",
+        "recent_regime_bucket_win_rate",
+        "recent_regime_long_win_rate",
+    ]
+    if df is None or df.empty:
+        return pd.DataFrame(index=getattr(df, "index", None), columns=columns)
+
+    consensus = _selection_consensus(df)
+    buckets = [
+        bucket_key(league, market, agreement)
+        for league, market, agreement in zip(
+            df.get("league", pd.Series("", index=df.index)),
+            df.get("market_type", pd.Series("", index=df.index)),
+            consensus,
+        )
+    ]
+    rows = []
+    for bucket in buckets:
+        summary = recent_regime_bucket_summary(bucket, bucket_stats)
+        rows.append({
+            "recent_regime_penalty_applied": bool(summary["applied"]),
+            "recent_regime_penalty_value": float(summary["penalty"]),
+            "recent_regime_penalty_reason": str(summary["reason"]),
+            "recent_regime_bucket": bucket,
+            "recent_regime_bucket_n": int(summary["recent_n"]),
+            "recent_regime_bucket_win_rate": summary["recent_rate"],
+            "recent_regime_long_win_rate": float(summary["long_rate"]),
+        })
+    return pd.DataFrame(rows, index=df.index, columns=columns)
 
 
 def _decimal_odds(row: pd.Series) -> float:

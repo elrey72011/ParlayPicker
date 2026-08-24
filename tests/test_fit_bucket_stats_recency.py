@@ -57,6 +57,20 @@ def test_equal_dates_reproduce_unweighted_rates(tmp_path):
     assert stats["overall"]["win_rate"] == 0.5
 
 
+def test_fit_persists_trailing_seven_day_bucket_evidence(tmp_path):
+    _write_slate(tmp_path, "2026-04-01", ["W", "W"])
+    _write_slate(tmp_path, "2026-05-25", ["W", "L"])
+    _write_slate(tmp_path, "2026-05-31", ["L", "L", "L"])
+
+    stats = fit_bucket_stats(tmp_path, half_life_days=21.0)
+    bucket = stats["buckets"]["MLB:over:Agrees"]
+
+    assert bucket["recent_n"] == 5
+    assert bucket["recent_wins"] == 1
+    assert bucket["recent_win_rate"] == 0.2
+    assert stats["meta"]["recent_window_days"] == 7
+
+
 def test_anchor_is_newest_slate_not_wall_clock(tmp_path):
     # Deterministic: the anchor comes from the exports, so refitting later with no
     # new slates yields identical numbers.
