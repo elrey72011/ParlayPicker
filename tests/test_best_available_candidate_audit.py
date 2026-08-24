@@ -238,6 +238,42 @@ def test_fresh_wnba_under_regression_moves_close_finalist_to_side(monkeypatch):
     )
 
 
+def test_recent_bucket_regression_demotes_stale_confidence_from_finalist(monkeypatch):
+    stats = {
+        "overall": {"n": 300, "win_rate": 0.54},
+        "buckets": {
+            "MLB:side:Neutral": {
+                "n": 100,
+                "wins": 60,
+                "win_rate": 0.60,
+                "recent_n": 30,
+                "recent_wins": 12,
+                "recent_win_rate": 0.40,
+            },
+        },
+    }
+    monkeypatch.setattr("core.empirical_tiers.load_bucket_stats", lambda: stats)
+    monkeypatch.setattr("core.probability_calibration.load_calibration", lambda: None)
+
+    analysis = pd.DataFrame([
+        _candidate("spread_home", probability=0.60, ev=-0.03),
+        _candidate("spread_away", probability=0.40, ev=0.03),
+        _candidate("total_over", probability=0.55, ev=0.01),
+        _candidate("total_under", probability=0.45, ev=-0.01),
+    ])
+    diagnostics: dict = {}
+
+    best = build_best_picks_df(analysis, diagnostics_out=diagnostics)
+
+    assert best.iloc[0]["market_type"] == "total_over"
+    assert diagnostics["recent_regime_penalty_count"] == 2
+    audit = diagnostics["candidate_audit_df"]
+    side = audit[audit["market_type"].eq("spread_home")].iloc[0]
+    assert bool(side["recent_regime_penalty_applied"])
+    assert float(side["recent_regime_penalty_value"]) > 0.05
+    assert side["recent_regime_penalty_reason"] == "fresh_recent_bucket_regression"
+
+
 def test_commercial_tier_never_upgrades_an_unfunded_best_available_row():
     frame = pd.DataFrame([
         {

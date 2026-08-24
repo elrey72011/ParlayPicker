@@ -345,13 +345,13 @@ def test_low_line_over_guardrail_is_consensus_aware(monkeypatch):
         "empirical_proven_losing_bucket",
     }
 
-    # Aug. 10 recency refit: over:Agrees is near break-even (52%, effective n=86),
-    # so it is not a proven-losing bucket, but the low-line guard still limits it
-    # to High Variance rather than a funded Actionable play.
+    # The Aug. 23 global refit maps this raw 60% row to only a +1.3% empirical
+    # edge.  That no longer clears the High Variance bar, so the safer current
+    # contract is Below Threshold rather than the pre-refit speculative tier.
     agrees = _low_over(0.60)
     assert agrees["consensus_agreement"] == "Agrees"
-    assert agrees["Pick_Status"] == "High Variance/Speculative"
-    assert agrees["status_blocker_stage"] == "low_line_over_guardrail"
+    assert agrees["Pick_Status"] == "Below Threshold"
+    assert agrees["status_blocker_stage"] == "empirical_tier_overlay"
 
 
 def test_consensus_is_directional_same_side_is_agrees():

@@ -53,6 +53,11 @@ from scripts.fit_calibration import _WL_CELL_RE  # noqa: E402
 # fitted table is not very sensitive to the exact value (21/28/35 all flag the
 # same decayed buckets and keep under:Agrees proven).
 DEFAULT_HALF_LIFE_DAYS = 21.0
+# A second, short horizon lets the selector react when a well-established
+# bucket changes regime faster than the 21-day decay can absorb.  These fields
+# are diagnostic inputs only; the runtime still requires a material drop and a
+# settled sample before it changes finalist ranking.
+RECENT_REGIME_WINDOW_DAYS = 7
 ROOT = Path(__file__).resolve().parents[1]
 
 _FILE_DATE_RE = re.compile(r"(\d{4}-\d{2}-\d{2})")
@@ -151,6 +156,12 @@ def fit_bucket_stats(exports_dir: Path, half_life_days: float = DEFAULT_HALF_LIF
         print(f"WARNING: {int(dates.isna().sum())} rows from undated files get full weight", file=sys.stderr)
     age_days = (anchor - dates).dt.days.fillna(0).clip(lower=0)
     graded["weight"] = 0.5 ** (age_days / float(half_life_days))
+    graded["date_parsed"] = dates
+    recent_cutoff = (
+        anchor - pd.Timedelta(days=RECENT_REGIME_WINDOW_DAYS - 1)
+        if pd.notna(anchor)
+        else pd.NaT
+    )
 
     overall_rate = float((graded["win"] * graded["weight"]).sum() / graded["weight"].sum())
 
@@ -160,12 +171,22 @@ def fit_bucket_stats(exports_dir: Path, half_life_days: float = DEFAULT_HALF_LIF
         rate = float((sub["win"] * w).sum() / w.sum())
         eff_n = float(w.sum() ** 2 / (w**2).sum())  # Kish effective sample size
         n = max(1, int(round(eff_n)))
+        recent = (
+            sub[sub["date_parsed"].ge(recent_cutoff)]
+            if pd.notna(recent_cutoff)
+            else sub.iloc[0:0]
+        )
+        recent_n = int(len(recent))
+        recent_wins = int(recent["win"].sum()) if recent_n else 0
         buckets[b] = {
             "n": n,
             "wins": int(round(rate * n)),
             "win_rate": rate,
             "raw_n": int(len(sub)),
             "raw_wins": int(sub["win"].sum()),
+            "recent_n": recent_n,
+            "recent_wins": recent_wins,
+            "recent_win_rate": (recent_wins / recent_n) if recent_n else None,
         }
 
     return {
@@ -175,6 +196,7 @@ def fit_bucket_stats(exports_dir: Path, half_life_days: float = DEFAULT_HALF_LIF
             "source": _source_label(exports_dir),
             "fitted_on": pd.Timestamp.now().strftime("%Y-%m-%d"),
             "half_life_days": float(half_life_days),
+            "recent_window_days": int(RECENT_REGIME_WINDOW_DAYS),
             "recency_anchor": anchor.strftime("%Y-%m-%d") if pd.notna(anchor) else None,
         },
     }
