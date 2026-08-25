@@ -343,7 +343,9 @@ _PERFORMANCE_RECAP_RENAME_MAP = {
     "Wager_Instruction": "Wager Instruction",
     "Export_Scope": "Export Scope",
     "market_type": "Market Type",
-    "selection_probability_used": "Selection Probability",
+    "performance_probability_used": "Selection Probability",
+    "performance_probability_source": "Selection Probability Source",
+    "selection_probability_used": "Pre-Adjustment Selection Probability",
     "Pick_Status": "Status",
 }
 
@@ -361,6 +363,24 @@ def _performance_recap_table(display_df: pd.DataFrame) -> pd.DataFrame:
     out.loc[production, "Evaluation_Scope"] = "PRODUCTION-APPROVED WAGER"
     out["Production_Record"] = production
 
+    # Best Available applies evidence/regime haircuts after the initial market
+    # probability is chosen.  The recap must grade and report the same final
+    # confidence that ranked the exported pick; otherwise penalized selections
+    # appear materially more confident (and less calibrated) than they were.
+    pre_adjustment = pd.to_numeric(
+        out.get("selection_probability_used"), errors="coerce"
+    )
+    if "best_available_score" in out.columns:
+        final_score = pd.to_numeric(out["best_available_score"], errors="coerce")
+        out["performance_probability_used"] = final_score.fillna(pre_adjustment)
+        out["performance_probability_source"] = "FINAL BEST AVAILABLE SCORE"
+        out.loc[final_score.isna(), "performance_probability_source"] = (
+            "PRE-ADJUSTMENT FALLBACK"
+        )
+    else:
+        out["performance_probability_used"] = pre_adjustment
+        out["performance_probability_source"] = "PRE-ADJUSTMENT FALLBACK"
+
     columns = [
         "league", "home_team", "away_team", "best_pick",
         "actual_home_score", "actual_away_score", "Outcome",
@@ -368,7 +388,9 @@ def _performance_recap_table(display_df: pd.DataFrame) -> pd.DataFrame:
         "Production_Record", "Bettable", "Play_Stake", "Wager_Instruction",
         "Export_Scope", "Precision_Card", "Precision_Rank",
         "Precision_Card_Instruction", "Precision_Wager_Approved",
-        "market_type", "selection_probability_used", "Pick_Status", "export_run_id",
+        "market_type", "performance_probability_used",
+        "performance_probability_source", "selection_probability_used",
+        "Pick_Status", "export_run_id",
     ]
     available = [column for column in columns if column in out.columns]
     return out[available].rename(columns=_PERFORMANCE_RECAP_RENAME_MAP)
