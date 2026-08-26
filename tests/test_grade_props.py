@@ -6,7 +6,23 @@ import pandas as pd
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from scripts.grade_props import grade_card, grade_side, summarize
+from scripts.grade_props import (
+    fetch_boxscore_actuals,
+    grade_card,
+    grade_side,
+    summarize,
+)
+
+
+class _FakeResponse:
+    def __init__(self, payload):
+        self.payload = payload
+
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return self.payload
 
 
 def test_grade_side_over_under_and_push():
@@ -50,3 +66,127 @@ def test_summarize_record_and_roi():
     assert abs(s["pnl"] - (5.8 - 5.0 + 7.65)) < 1e-6
     assert abs(s["staked"] - 15.0) < 1e-6        # PUSH stake not counted
     assert abs(s["roi"] - (8.45 / 15.0)) < 1e-6
+
+
+def test_final_boxscore_resolves_appearances_and_voids_confirmed_dnps():
+    schedule = {
+        "dates": [{
+            "games": [{
+                "gamePk": 123,
+                "status": {"abstractGameState": "Final"},
+                "teams": {
+                    "away": {"team": {"name": "Boston Red Sox"}},
+                    "home": {"team": {"name": "Miami Marlins"}},
+                },
+            }],
+        }],
+    }
+    boxscore = {
+        "teams": {
+            "away": {
+                "players": {
+                    "ID1": {
+                        "person": {"id": 1},
+                        "stats": {
+                            "batting": {
+                                "plateAppearances": 4,
+                                "hits": 2,
+                                "totalBases": 3,
+                            }
+                        },
+                    },
+                    "ID2": {"person": {"id": 2}, "stats": {"batting": {}}},
+                },
+            },
+            "home": {
+                "players": {
+                    "ID3": {
+                        "person": {"id": 3},
+                        "stats": {
+                            "pitching": {
+                                "battersFaced": 20,
+                                "strikeOuts": 6,
+                                "baseOnBalls": 2,
+                                "inningsPitched": "5.2",
+                            }
+                        },
+                    },
+                },
+            },
+        },
+    }
+
+    def fake_get(url, **_kwargs):
+        return _FakeResponse(schedule if url.endswith("/schedule") else boxscore)
+
+    expected = {
+        ("1", "batter"): "Boston Red Sox @ Miami Marlins",
+        ("2", "batter"): "Boston Red Sox @ Miami Marlins",
+        ("3", "pitcher"): "Boston Red Sox @ Miami Marlins",
+        ("4", "batter"): "Boston Red Sox @ Miami Marlins",
+    }
+
+    actuals = fetch_boxscore_actuals("2026-08-25", expected, http_get=fake_get)
+
+    assert actuals[("1", "batter")]["hits"] == 2
+    assert actuals[("1", "batter")]["total_bases"] == 3
+    assert actuals[("3", "pitcher")]["ks"] == 6
+    assert actuals[("3", "pitcher")]["walks"] == 2
+    assert actuals[("3", "pitcher")]["outs"] == 17
+    assert actuals[("2", "batter")]["_grading_result"] == "VOID"
+    assert actuals[("4", "batter")]["_grading_result"] == "VOID"
+
+
+def test_boxscore_fallback_does_not_void_before_game_is_final():
+    schedule = {
+        "dates": [{
+            "games": [{
+                "gamePk": 123,
+                "status": {"abstractGameState": "Live"},
+                "teams": {
+                    "away": {"team": {"name": "Boston Red Sox"}},
+                    "home": {"team": {"name": "Miami Marlins"}},
+                },
+            }],
+        }],
+    }
+    calls = []
+
+    def fake_get(url, **_kwargs):
+        calls.append(url)
+        return _FakeResponse(schedule)
+
+    actuals = fetch_boxscore_actuals(
+        "2026-08-25",
+        {("1", "batter"): "Boston Red Sox @ Miami Marlins"},
+        http_get=fake_get,
+    )
+
+    assert actuals == {}
+    assert len(calls) == 1
+
+
+def test_boxscore_fallback_leaves_ambiguous_doubleheader_pending():
+    game = {
+        "gamePk": 123,
+        "status": {"abstractGameState": "Final"},
+        "teams": {
+            "away": {"team": {"name": "Boston Red Sox"}},
+            "home": {"team": {"name": "Miami Marlins"}},
+        },
+    }
+    schedule = {"dates": [{"games": [game, {**game, "gamePk": 456}]}]}
+    calls = []
+
+    def fake_get(url, **_kwargs):
+        calls.append(url)
+        return _FakeResponse(schedule)
+
+    actuals = fetch_boxscore_actuals(
+        "2026-08-25",
+        {("1", "batter"): "Boston Red Sox @ Miami Marlins"},
+        http_get=fake_get,
+    )
+
+    assert actuals == {}
+    assert len(calls) == 1

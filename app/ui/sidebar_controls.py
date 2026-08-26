@@ -273,7 +273,8 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
                 st.sidebar.success(
                     f"Graded {summary['graded']} props: "
                     f"{summary['wins']}-{summary['losses']} "
-                    f"({summary['unresolved']} unresolved)."
+                    f"({summary['voids']} void/DNP, "
+                    f"{summary['unresolved']} unresolved)."
                 )
             except Exception as exc:
                 st.sidebar.error(f"Player-prop grading failed: {exc}")

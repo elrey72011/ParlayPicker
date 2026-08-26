@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import sys
 import inspect
+import re
 from pathlib import Path
 
 import pandas as pd
@@ -260,6 +261,174 @@ def fetch_actual_batter(batter_id, date: str, season: int, http_get=requests.get
     except (requests.RequestException, ValueError, KeyError, IndexError, TypeError):
         return None
     return None
+
+
+def _canonical_matchup(value: object) -> tuple[str, str] | None:
+    """Normalize ``Away @ Home`` labels for schedule-to-export matching."""
+
+    parts = re.split(r"\s+(?:@|vs?\.?)\s+", str(value or ""), maxsplit=1, flags=re.I)
+    if len(parts) != 2:
+        return None
+
+    def normalize(team: str) -> str:
+        return re.sub(r"[^a-z0-9]+", " ", team.casefold()).strip()
+
+    away, home = (normalize(part) for part in parts)
+    return (away, home) if away and home else None
+
+
+def _safe_int(value: object) -> int:
+    try:
+        return int(float(value or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _is_final_game(game: dict) -> bool:
+    status = game.get("status") or {}
+    abstract = str(status.get("abstractGameState") or "").strip().casefold()
+    detailed = str(status.get("detailedState") or "").strip().casefold()
+    return abstract == "final" or detailed in {
+        "final",
+        "game over",
+        "completed early",
+    }
+
+
+def fetch_boxscore_actuals(
+    date: str,
+    expected_players: dict[tuple[str, str], str],
+    http_get=requests.get,
+) -> dict[tuple[str, str], dict[str, object]]:
+    """Resolve delayed MLB game logs from final boxscores.
+
+    ``expected_players`` maps ``(player_id, participant_type)`` to the exported
+    matchup. A player is marked ``VOID`` only when the matchup maps to exactly
+    one final game, its boxscore was fetched successfully, and the player
+    recorded no gradeable appearance. Feed errors, unfinished games, and
+    ambiguous doubleheaders remain absent so the caller keeps them ``PENDING``.
+    """
+
+    if not expected_players:
+        return {}
+    try:
+        response = http_get(
+            f"{_BASE}/schedule",
+            params={"sportId": 1, "date": date},
+            timeout=_TIMEOUT,
+        )
+        response.raise_for_status()
+        games = [
+            game
+            for date_block in response.json().get("dates", [])
+            for game in date_block.get("games", [])
+        ]
+    except (
+        requests.RequestException,
+        AttributeError,
+        ValueError,
+        KeyError,
+        TypeError,
+    ):
+        return {}
+
+    games_by_matchup: dict[tuple[str, str], list[dict]] = {}
+    for game in games:
+        teams = game.get("teams") or {}
+        away = ((teams.get("away") or {}).get("team") or {}).get("name")
+        home = ((teams.get("home") or {}).get("team") or {}).get("name")
+        matchup = _canonical_matchup(f"{away or ''} @ {home or ''}")
+        if matchup is not None:
+            games_by_matchup.setdefault(matchup, []).append(game)
+
+    expected_by_matchup: dict[tuple[str, str], set[tuple[str, str]]] = {}
+    for (player_id, participant_type), matchup_text in expected_players.items():
+        matchup = _canonical_matchup(matchup_text)
+        if matchup is not None:
+            expected_by_matchup.setdefault(matchup, set()).add(
+                (str(player_id), str(participant_type))
+            )
+
+    actuals: dict[tuple[str, str], dict[str, object]] = {}
+    for matchup, expected in expected_by_matchup.items():
+        matchup_games = games_by_matchup.get(matchup, [])
+        if len(matchup_games) != 1 or not _is_final_game(matchup_games[0]):
+            continue
+
+        boxscores: list[dict] = []
+        boxscore_failed = False
+        for game in matchup_games:
+            try:
+                response = http_get(
+                    f"{_BASE}/game/{game['gamePk']}/boxscore",
+                    timeout=_TIMEOUT,
+                )
+                response.raise_for_status()
+                boxscores.append(response.json())
+            except (
+                requests.RequestException,
+                AttributeError,
+                ValueError,
+                KeyError,
+                TypeError,
+            ):
+                boxscore_failed = True
+                break
+        if boxscore_failed:
+            continue
+
+        appeared: set[tuple[str, str]] = set()
+        for boxscore in boxscores:
+            for team_side in ("away", "home"):
+                players = ((boxscore.get("teams") or {}).get(team_side) or {}).get(
+                    "players", {}
+                )
+                for player in players.values():
+                    player_id = str(((player.get("person") or {}).get("id") or ""))
+                    stats = player.get("stats") or {}
+
+                    batter_key = (player_id, "batter")
+                    if batter_key in expected:
+                        batting = stats.get("batting") or {}
+                        plate_appearances = _safe_int(batting.get("plateAppearances"))
+                        if not plate_appearances:
+                            plate_appearances = sum(
+                                _safe_int(batting.get(field))
+                                for field in (
+                                    "atBats", "baseOnBalls", "hitByPitch",
+                                    "sacFlies", "sacBunts",
+                                )
+                            )
+                        if plate_appearances > 0:
+                            actuals[batter_key] = {
+                                "hits": _safe_int(batting.get("hits")),
+                                "total_bases": _safe_int(batting.get("totalBases")),
+                                "_grading_source": "mlb_final_boxscore",
+                            }
+                            appeared.add(batter_key)
+
+                    pitcher_key = (player_id, "pitcher")
+                    if pitcher_key in expected:
+                        pitching = stats.get("pitching") or {}
+                        outs = _ip_to_outs(pitching.get("inningsPitched"))
+                        faced_batter = _safe_int(pitching.get("battersFaced")) > 0
+                        if faced_batter or (outs or 0) > 0:
+                            actuals[pitcher_key] = {
+                                "ks": _safe_int(pitching.get("strikeOuts")),
+                                "walks": _safe_int(pitching.get("baseOnBalls")),
+                                "outs": outs,
+                                "_grading_source": "mlb_final_boxscore",
+                            }
+                            appeared.add(pitcher_key)
+
+        for player_key in expected - appeared:
+            actuals[player_key] = {
+                "_grading_result": "VOID",
+                "_grading_source": "mlb_final_boxscore",
+                "_void_reason": "DNP / no recorded appearance in final boxscore",
+            }
+
+    return actuals
 
 
 def _build_name_to_id(date: str, card: pd.DataFrame | None = None) -> dict:

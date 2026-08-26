@@ -32,12 +32,13 @@ def test_funded_prop_rows_recognizes_graded_export_representation():
     assert funded["player"].tolist() == ["Funded"]
 
 
-def test_prop_summary_counts_push_stake_and_excludes_unresolved():
+def test_prop_summary_counts_push_stake_and_excludes_voids_and_unresolved():
     results = pd.DataFrame(
         [
             {"result": "WIN", "stake": 5.0, "profit": 4.0},
             {"result": "LOSS", "stake": 4.0, "profit": -4.0},
             {"result": "PUSH", "stake": 3.0, "profit": 0.0},
+            {"result": "VOID", "stake": 7.0, "profit": 0.0},
             {"result": None, "stake": 10.0, "profit": None},
         ]
     )
@@ -47,6 +48,7 @@ def test_prop_summary_counts_push_stake_and_excludes_unresolved():
     assert summary["wins"] == 1
     assert summary["losses"] == 1
     assert summary["pushes"] == 1
+    assert summary["voids"] == 1
     assert summary["unresolved"] == 1
     assert summary["staked"] == pytest.approx(12.0)
     assert summary["pnl"] == pytest.approx(0.0)

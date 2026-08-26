@@ -134,11 +134,20 @@ def _default_name_resolver(card: pd.DataFrame, game_date: str) -> dict[str, obje
     return ids
 
 
-def _default_actual_fetcher(game_date: str, card: pd.DataFrame | None = None):
-    from scripts.grade_props import fetch_actual_batter, fetch_actual_ks
+def _default_actual_fetcher(
+    game_date: str,
+    card: pd.DataFrame | None = None,
+    name_to_id: dict[str, object] | None = None,
+):
+    from scripts.grade_props import (
+        fetch_actual_batter,
+        fetch_actual_ks,
+        fetch_boxscore_actuals,
+    )
 
     season = int(str(game_date)[:4])
     nfl_actuals: dict[str, dict[str, float]] = {}
+    mlb_boxscore_actuals: dict[tuple[str, str], dict[str, object]] = {}
     if isinstance(card, pd.DataFrame) and not card.empty:
         league = card.get(
             "league", pd.Series("MLB", index=card.index)
@@ -147,14 +156,33 @@ def _default_actual_fetcher(game_date: str, card: pd.DataFrame | None = None):
             from app_core.nfl_prop_pipeline import fetch_nfl_actuals
 
             nfl_actuals = fetch_nfl_actuals(game_date)
+        mlb_rows = card[~league.eq("NFL")]
+        if not mlb_rows.empty and name_to_id:
+            expected_players: dict[tuple[str, str], str] = {}
+            for _, row in mlb_rows.iterrows():
+                name = _player_name(row)
+                player_id = name_to_id.get(name.lower()) if name else None
+                if player_id is None:
+                    continue
+                expected_players[(str(player_id), _participant_type(row))] = str(
+                    row.get("matchup") or ""
+                )
+            if expected_players:
+                mlb_boxscore_actuals = fetch_boxscore_actuals(
+                    game_date, expected_players
+                )
 
     def fetch(player_id: object, participant_type: str):
         if participant_type == "nfl_player":
             key = str(player_id).removeprefix("nfl:").strip().lower()
             return nfl_actuals.get(key)
         if participant_type == "batter":
-            return fetch_actual_batter(player_id, game_date, season)
-        return fetch_actual_ks(player_id, game_date, season)
+            game_log = fetch_actual_batter(player_id, game_date, season)
+        else:
+            game_log = fetch_actual_ks(player_id, game_date, season)
+        if game_log is not None:
+            return game_log
+        return mlb_boxscore_actuals.get((str(player_id), participant_type))
 
     return fetch
 
@@ -180,7 +208,9 @@ def grade_prop_export(
     game_date = str(game_date)[:10]
     resolver = name_resolver or _default_name_resolver
     name_to_id = resolver(card, game_date)
-    fetch_actual = actual_fetcher or _default_actual_fetcher(game_date, card)
+    fetch_actual = actual_fetcher or _default_actual_fetcher(
+        game_date, card, name_to_id
+    )
     funded_mask = prop_funded_mask(card)
     try:
         accepts_participant_type = len(inspect.signature(fetch_actual).parameters) >= 2
@@ -213,17 +243,27 @@ def grade_prop_export(
                     else fetch_actual(player_id)
                 )
             actual = actual_cache[cache_key]
+        grading_override = (
+            str(actual.get("_grading_result") or "").strip().upper()
+            if isinstance(actual, dict)
+            else ""
+        )
+        grading_source = (
+            actual.get("_grading_source") if isinstance(actual, dict) else None
+        )
+        void_reason = actual.get("_void_reason") if isinstance(actual, dict) else None
         actual_value = actual.get(stat) if isinstance(actual, dict) else actual
         try:
             actual_missing = actual_value is None or bool(pd.isna(actual_value))
         except (TypeError, ValueError):
             actual_missing = actual_value is None
-        result = (
-            "PENDING"
-            if actual_missing
-            else grade_side(side, float(line), actual_value)
-        )
-        if str(result or "").upper() not in {"WIN", "LOSS", "PUSH"}:
+        if grading_override == "VOID":
+            result = "VOID"
+        elif actual_missing:
+            result = "PENDING"
+        else:
+            result = grade_side(side, float(line), actual_value)
+        if str(result or "").upper() not in {"WIN", "LOSS", "PUSH", "VOID"}:
             result = "PENDING"
         recommended_stake = float(pd.to_numeric(
             pd.Series([source.get("Kelly_Bet_Size", 0.0)]), errors="coerce"
@@ -234,7 +274,7 @@ def grade_prop_export(
             profit = stake * (_decimal(float(odds)) - 1.0)
         elif result == "LOSS":
             profit = -stake
-        elif result == "PUSH":
+        elif result in {"PUSH", "VOID"}:
             profit = 0.0
         else:
             profit = None
@@ -271,6 +311,8 @@ def grade_prop_export(
             "actual_value": actual_value,
             "result": result,
             "profit": round(profit, 2) if profit is not None else None,
+            "grading_source": grading_source,
+            "void_reason": void_reason,
             "source_stake_status": source.get("Stake_Status"),
             "source_pick_status": source.get("Pick_Status"),
         }
@@ -322,17 +364,26 @@ def assemble_prop_ledgers(
 
 def grading_summary(ledger: pd.DataFrame | None) -> dict[str, int | float]:
     if ledger is None or ledger.empty or "result" not in ledger.columns:
-        return {"graded": 0, "wins": 0, "losses": 0, "pushes": 0, "unresolved": 0}
+        return {
+            "graded": 0,
+            "wins": 0,
+            "losses": 0,
+            "pushes": 0,
+            "voids": 0,
+            "unresolved": 0,
+        }
     result = ledger["result"].fillna("").astype(str).str.upper()
     wins = int(result.eq("WIN").sum())
     losses = int(result.eq("LOSS").sum())
     pushes = int(result.eq("PUSH").sum())
-    unresolved = int((~result.isin(["WIN", "LOSS", "PUSH"])).sum())
+    voids = int(result.eq("VOID").sum())
+    unresolved = int((~result.isin(["WIN", "LOSS", "PUSH", "VOID"])).sum())
     return {
         "graded": wins + losses,
         "wins": wins,
         "losses": losses,
         "pushes": pushes,
+        "voids": voids,
         "unresolved": unresolved,
         "win_rate": wins / (wins + losses) if wins + losses else 0.0,
     }

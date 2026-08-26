@@ -145,12 +145,34 @@ def test_active_ledger_applies_upload_and_generated_overrides_in_order():
 
 
 def test_summary_separates_pushes_and_unresolved_rows():
-    ledger = pd.DataFrame({"result": ["WIN", "LOSS", "PUSH", None]})
+    ledger = pd.DataFrame({"result": ["WIN", "LOSS", "PUSH", "VOID", None]})
     summary = grading_summary(ledger)
     assert summary == {
         "graded": 2, "wins": 1, "losses": 1,
-        "pushes": 1, "unresolved": 1, "win_rate": 0.5,
+        "pushes": 1, "voids": 1, "unresolved": 1, "win_rate": 0.5,
     }
+
+
+def test_confirmed_dnp_is_void_with_audit_metadata_and_zero_pnl():
+    graded = grade_prop_export(
+        _card().iloc[[0]],
+        "2026-08-25",
+        name_resolver=lambda _card, _date: {"juan soto": 1},
+        actual_fetcher=lambda _player_id, _participant_type: {
+            "_grading_result": "VOID",
+            "_grading_source": "mlb_final_boxscore",
+            "_void_reason": "DNP / no recorded appearance in final boxscore",
+        },
+    )
+
+    row = graded.iloc[0]
+    assert row["result"] == "VOID"
+    assert pd.isna(row["actual_value"])
+    assert row["profit"] == 0.0
+    assert row["grading_source"] == "mlb_final_boxscore"
+    assert row["void_reason"] == "DNP / no recorded appearance in final boxscore"
+    assert grading_summary(graded)["voids"] == 1
+    assert grading_summary(graded)["unresolved"] == 0
 
 
 def test_ledger_coverage_summary_exposes_single_day_history():
