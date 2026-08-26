@@ -128,7 +128,7 @@ def summarize_prop_results(results: pd.DataFrame) -> dict:
     """Summarize funded prop results without counting unresolved rows."""
 
     empty = {
-        "wins": 0, "losses": 0, "pushes": 0, "unresolved": 0,
+        "wins": 0, "losses": 0, "pushes": 0, "voids": 0, "unresolved": 0,
         "staked": 0.0, "pnl": 0.0, "roi": 0.0, "win_rate": 0.0,
     }
     if results is None or results.empty or "result" not in results.columns:
@@ -136,6 +136,7 @@ def summarize_prop_results(results: pd.DataFrame) -> dict:
 
     outcome = results["result"].fillna("").astype(str).str.upper()
     settled_mask = outcome.isin(["WIN", "LOSS", "PUSH"])
+    resolved_mask = settled_mask | outcome.eq("VOID")
     settled = results[settled_mask]
     settled_outcome = outcome[settled_mask]
     stake = pd.to_numeric(settled.get("stake", pd.Series(0.0, index=settled.index)), errors="coerce").fillna(0.0)
@@ -151,7 +152,8 @@ def summarize_prop_results(results: pd.DataFrame) -> dict:
         "wins": wins,
         "losses": losses,
         "pushes": pushes,
-        "unresolved": int((~settled_mask).sum()),
+        "voids": int(outcome.eq("VOID").sum()),
+        "unresolved": int((~resolved_mask).sum()),
         "staked": staked,
         "pnl": pnl,
         "roi": (pnl / staked) if staked else 0.0,
@@ -231,14 +233,21 @@ def _render_prop_results_recap() -> None:
     funded_summary = summarize_prop_results(funded_results)
 
     st.markdown("##### All Exported Props (Calibration / Research)")
-    cols = st.columns(4)
+    cols = st.columns(5)
     cols[0].metric(
         "Graded Record",
         f"{all_summary['wins']}-{all_summary['losses']}-{all_summary['pushes']}",
     )
     cols[1].metric("All-Row Win Rate", f"{all_summary['win_rate']:.1%}")
     cols[2].metric("Rows Returned", str(len(results)))
-    cols[3].metric("Unresolved", str(all_summary["unresolved"]))
+    cols[3].metric("Void / DNP", str(all_summary["voids"]))
+    cols[4].metric("Unresolved", str(all_summary["unresolved"]))
+
+    if all_summary["voids"]:
+        st.info(
+            f"{all_summary['voids']} prop(s) were confirmed as DNP/void from final "
+            "league boxscores and are excluded from the record and ROI."
+        )
 
     if all_summary["unresolved"]:
         st.warning(
