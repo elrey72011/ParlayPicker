@@ -5,7 +5,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import pandas as pd
 
-from core.streamlit_pipeline import build_theover_bet_rows
+from core.streamlit_pipeline import _theover_upload_coverage, build_theover_bet_rows
 
 
 EXPECTED_COLUMNS = [
@@ -99,6 +99,51 @@ def test_build_theover_bet_rows_only_spreads_upload():
     assert len(out) == 2
     assert set(out["market_type"].tolist()) == {"spread_home", "spread_away"}
     assert sorted(out["spread_line"].tolist()) == [-3.5, 3.5]
+    assert out["matchup_id"].notna().all()
+    assert out["matchup_id"].astype(str).str.len().gt(0).all()
+
+
+def test_theover_coverage_separates_file_rows_from_usable_side_signals():
+    sides_df = pd.DataFrame(
+        {
+            "League": ["MLB", "WNBA"],
+            "HomeTeam": ["Atlanta", "Seattle"],
+            "AwayTeam": ["Boston", "Toronto"],
+            "Pick": ["ATL", "TOR"],
+            "Line": [-130, 6.5],
+            "WinProbability": [pd.NA, pd.NA],
+            "Market": ["Moneyline", "Spread"],
+        }
+    )
+
+    coverage = _theover_upload_coverage(sides_df, "spreads")
+
+    assert coverage == {
+        "file_game_count": 2,
+        "market_game_count": 1,
+        "probability_game_count": 0,
+    }
+
+
+def test_theover_totals_coverage_counts_normalized_loader_headers():
+    totals_df = pd.DataFrame(
+        {
+            "league": ["MLB", "WNBA"],
+            "home_team": ["Atlanta", "Seattle"],
+            "away_team": ["Boston", "Toronto"],
+            "line": [8.5, 177.5],
+            "winprobability": [0.61, 0.55],
+            "market": ["Total", "Total"],
+        }
+    )
+
+    coverage = _theover_upload_coverage(totals_df, "totals")
+
+    assert coverage == {
+        "file_game_count": 2,
+        "market_game_count": 2,
+        "probability_game_count": 2,
+    }
 
 
 def test_build_theover_bet_rows_empty_uploads_returns_stable_schema():

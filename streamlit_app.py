@@ -11,6 +11,7 @@ os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
 
 import traceback
 import warnings
+import hashlib
 from typing import Any
 
 import logging
@@ -306,6 +307,55 @@ def _friendly_no_bet_reason(row: pd.Series | dict) -> str:
     return reason if reason and reason.lower() != "nan" else "Did not qualify"
 
 
+def _upload_fingerprint(uploaded_file: Any) -> tuple[Any, ...] | None:
+    """Return a stable content fingerprint without advancing an upload cursor."""
+    if uploaded_file is None:
+        return None
+    if isinstance(uploaded_file, (list, tuple)):
+        return tuple(_upload_fingerprint(item) for item in uploaded_file)
+
+    name = str(getattr(uploaded_file, "name", ""))
+    size = getattr(uploaded_file, "size", None)
+    payload = None
+    if isinstance(uploaded_file, bytes):
+        payload = uploaded_file
+    elif hasattr(uploaded_file, "getvalue"):
+        try:
+            payload = uploaded_file.getvalue()
+        except Exception:
+            payload = None
+    if isinstance(payload, str):
+        payload = payload.encode("utf-8")
+    digest = hashlib.sha256(payload).hexdigest() if isinstance(payload, bytes) else ""
+    payload_size = len(payload) if isinstance(payload, bytes) else size
+    return (type(uploaded_file).__name__, name, payload_size, digest)
+
+
+def _analysis_input_signature(controls: dict[str, Any] | None) -> tuple[Any, ...]:
+    """Identify every control that changes the game-analysis result."""
+    controls = controls or {}
+    return (
+        tuple(sorted(str(s) for s in controls.get("sports", []))),
+        bool(controls.get("use_ml")),
+        bool(controls.get("use_gemini")),
+        float(controls.get("bankroll", 0.0)),
+        _upload_fingerprint(controls.get("theover_spreads")),
+        _upload_fingerprint(controls.get("theover_totals")),
+    )
+
+
+def _analysis_inputs_stale(state: dict[str, Any], controls: dict[str, Any]) -> bool:
+    """Return True when displayed results predate the current analysis inputs."""
+    analysis = state.get("analysis_df")
+    has_results = isinstance(analysis, pd.DataFrame) and not analysis.empty
+    if not has_results:
+        return False
+    last_successful = state.get("last_successful_pipeline_signature")
+    if last_successful is None:
+        return True
+    return last_successful != _analysis_input_signature(controls)
+
+
 def _should_run_pipeline(state: dict[str, Any], run_counter: int, controls: dict[str, Any] | None = None) -> bool:
     """Run once per monotonically increasing sidebar run counter.
 
@@ -316,15 +366,7 @@ def _should_run_pipeline(state: dict[str, Any], run_counter: int, controls: dict
     if run_counter <= last_processed:
         return False
     if controls is not None:
-        signature = (
-            int(run_counter),
-            tuple(sorted(str(s) for s in controls.get("sports", []))),
-            bool(controls.get("use_ml")),
-            bool(controls.get("use_gemini")),
-            float(controls.get("bankroll", 0.0)),
-            bool(controls.get("theover_spreads") is not None),
-            bool(controls.get("theover_totals") is not None),
-        )
+        signature = (int(run_counter), _analysis_input_signature(controls))
         if signature == state.get("last_pipeline_signature"):
             logger.info("PIPELINE DIAGNOSTIC: Suppressing duplicate pipeline invocation for identical run signature.")
             return False
@@ -1641,6 +1683,9 @@ def main() -> None:
             with st.spinner("Running analysis..."):
                 state_updates, pipe_warnings, pipe_errors = _run_pipeline(controls)
             st.session_state.update(state_updates)
+            st.session_state["last_successful_pipeline_signature"] = (
+                _analysis_input_signature(controls)
+            )
             for msg in pipe_warnings:
                 st.warning(msg)
             for msg in pipe_errors:
@@ -1668,6 +1713,14 @@ def main() -> None:
     best_picks_df = st.session_state["best_picks_df"]
 
     diagnostics = st.session_state.get("diagnostics", {})
+
+    if _analysis_inputs_stale(st.session_state, controls):
+        st.error(
+            "Analysis inputs changed after the displayed results were generated. "
+            "Click **Run Master Analysis** to apply the current TheOver files. "
+            "Stale picks and exports are hidden until the rerun completes."
+        )
+        return
 
     pipeline_status = st.session_state.get("pipeline_status", "idle")
     if not st.session_state["analysis_df"].empty:
@@ -1736,8 +1789,8 @@ def main() -> None:
         m3.metric("Best picks", best_rows)
         m4.metric("Kalshi matches", kalshi_matches)
         m5.metric("Match rate", f"{match_rate:.0%}")
-        m6.metric("TheOver totals games", f"{totals_games}/{games_count}")
-        m7.metric("TheOver spreads games", f"{spreads_games}/{games_count}")
+        m6.metric("TheOver totals file", f"{totals_games}/{games_count}")
+        m7.metric("TheOver sides file", f"{spreads_games}/{games_count}")
         m8.metric("Date fill success", f"{date_fill_filled}/{date_fill_attempted} ({date_fill_rate:.0%})")
         m9.metric("Positive EV rows", positive_ev_rows)
         m10.metric("Consensus ✅", consensus_agrees)
@@ -1750,6 +1803,32 @@ def main() -> None:
 
         st.progress(max(0.0, min(1.0, match_rate)), text=f"Kalshi match rate: {match_rate:.0%}")
         st.caption(f"Merge keys used: {diagnostics.get('merge_keys_used', [])}")
+        totals_signal_games = int(
+            diagnostics.get("theover_totals_probability_games", 0)
+        )
+        spreads_market_games = int(
+            diagnostics.get("theover_spreads_market_games", 0)
+        )
+        spreads_signal_games = int(
+            diagnostics.get("theover_spreads_probability_games", 0)
+        )
+        st.caption(
+            "TheOver usable probability coverage: "
+            f"totals {totals_signal_games}/{games_count}; "
+            f"sides {spreads_signal_games}/{games_count} "
+            f"({spreads_market_games} direct spread matchup(s) in the sides file)."
+        )
+        if totals_games and totals_games < games_count:
+            st.warning(
+                f"TheOver totals upload covers {totals_games} of {games_count} games; "
+                "missing games use the remaining market/model signals."
+            )
+        if spreads_games and spreads_signal_games == 0:
+            st.warning(
+                "TheOver sides upload contains no usable spread WinProbability values. "
+                "Moneyline rows can still provide team-orientation hints, but they are "
+                "not spread probability signals."
+            )
         st.caption(f"Odds/base schedule loaded: {odds_base_loaded}")
         st.caption(f"Stale base schedule: {bool(diagnostics.get('stale_base_schedule', False))}")
         if diagnostics.get("stale_base_schedule") and diagnostics.get("has_normalized_bet_rows", False):

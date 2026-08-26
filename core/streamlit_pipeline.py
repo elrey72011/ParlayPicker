@@ -158,7 +158,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-08-26a-prop-boxscore-voids"
+PIPELINE_BUILD = "2026-08-26c-theover-upload-state"
 
 # Best Available must compare standard, reasonably priced markets. A P2P exchange can
 # expose alternate run lines (for example +5.5 at -1150) beside the standard MLB +1.5.
@@ -2813,6 +2813,55 @@ def _build_total_rows(normalized: pd.DataFrame) -> list[pd.DataFrame]:
     return [total_over, total_under]
 
 
+def _theover_upload_coverage(
+    upload_df: pd.DataFrame | None,
+    file_type: str,
+) -> dict[str, int]:
+    """Separate uploaded matchup coverage from usable probability coverage."""
+    empty = {
+        "file_game_count": 0,
+        "market_game_count": 0,
+        "probability_game_count": 0,
+    }
+    if upload_df is None or upload_df.empty:
+        return empty
+
+    normalized = _normalize_upload(upload_df)
+    if normalized.empty:
+        return empty
+
+    matchup_ids = _matchup_id(normalized)
+    home_present = _clean_text_placeholders(
+        _string_series(normalized, "home_team")
+    ).str.len().gt(0)
+    away_present = _clean_text_placeholders(
+        _string_series(normalized, "away_team")
+    ).str.len().gt(0)
+    valid_identity = (
+        matchup_ids.notna()
+        & matchup_ids.astype("string").str.len().gt(0)
+        & home_present
+        & away_present
+    )
+    market = _string_series(normalized, "market").str.lower().str.strip()
+    if file_type == "spreads" and market.str.len().gt(0).any():
+        market_mask = ~market.eq("moneyline")
+    else:
+        market_mask = pd.Series(True, index=normalized.index, dtype=bool)
+    probability = _first_existing_numeric(
+        normalized,
+        ["theover_probability", "winprobability", "win_probability", "probability"],
+    )
+
+    return {
+        "file_game_count": int(matchup_ids[valid_identity].nunique()),
+        "market_game_count": int(matchup_ids[valid_identity & market_mask].nunique()),
+        "probability_game_count": int(
+            matchup_ids[valid_identity & market_mask & probability.notna()].nunique()
+        ),
+    }
+
+
 def build_theover_bet_rows(
     spreads_df: pd.DataFrame | None,
     totals_df: pd.DataFrame | None,
@@ -2904,6 +2953,16 @@ def build_theover_bet_rows(
             # out = out[league_series.isin(selected) | league_series.str.len().eq(0)].copy()
         out["game_key"] = _mk_game_key(out)
         out = _apply_analysis_calculations(out)
+
+    # The row builders intentionally select only display/market fields, so the
+    # upload's temporary matchup_id does not survive their expansion. Recompute it
+    # after final team/date normalization; otherwise exact TheOver enrichment and
+    # missing-upload diagnostics silently receive all-NA identifiers.
+    computed_matchup_id = _matchup_id(out)
+    existing_matchup_id = _clean_text_placeholders(_string_series(out, "matchup_id"))
+    out["matchup_id"] = existing_matchup_id.where(
+        existing_matchup_id.str.len().gt(0), computed_matchup_id
+    )
 
     for col in CANONICAL_BET_COLUMNS:
         if col not in out.columns:
@@ -9763,6 +9822,9 @@ def run_analysis_pipeline(
 
     base_coverage = float(_game_dates(base_df).notna().mean()) if not base_df.empty else 0.0
 
+    totals_coverage = _theover_upload_coverage(totals_df, "totals")
+    spreads_coverage = _theover_upload_coverage(spreads_df, "spreads")
+
     diagnostics = {
         "candidate_generation_diagnostics": diag_counts,
         "unmatched_live_games": diag_counts.get("unmatched_live_games", []),
@@ -9782,8 +9844,12 @@ def run_analysis_pipeline(
         "kalshi_matches": 0,
         "kalshi_match_rate": 0.0,
         "match_rate": 0.0,
-        "theover_totals_games": int(_matchup_id(_coerce_identity_columns(_normalize_upload_columns(totals_df))).nunique()) if totals_df is not None and not totals_df.empty else 0,
-        "theover_spreads_games": int(_matchup_id(_coerce_identity_columns(_normalize_upload_columns(spreads_df))).nunique()) if spreads_df is not None and not spreads_df.empty else 0,
+        "theover_totals_games": totals_coverage["file_game_count"],
+        "theover_totals_market_games": totals_coverage["market_game_count"],
+        "theover_totals_probability_games": totals_coverage["probability_game_count"],
+        "theover_spreads_games": spreads_coverage["file_game_count"],
+        "theover_spreads_market_games": spreads_coverage["market_game_count"],
+        "theover_spreads_probability_games": spreads_coverage["probability_game_count"],
         "date_fill_total_rows": int(date_stats["date_fill_total_rows"]),
         "date_fill_success_rows": int(date_stats["date_fill_success_rows"]),
         "date_fill_success_rate": float(date_stats["date_fill_success_rate"]),
