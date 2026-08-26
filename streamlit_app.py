@@ -292,6 +292,56 @@ def _build_compact_export_frame(best_picks_export: pd.DataFrame) -> pd.DataFrame
     return compact_export
 
 
+def _compact_win_amount_formula(
+    stake_column: str,
+    price_column: str,
+    excel_row: int,
+) -> str:
+    """Return the compact-card net-win formula for one approved stake."""
+    stake = f"{stake_column}{excel_row}"
+    price = f"{price_column}{excel_row}"
+    return (
+        f'=IF(OR({stake}="",{price}="",{price}=0),"",'
+        f"{stake}*IF({price}>0,{price}/100,100/ABS({price})))"
+    )
+
+
+def _compact_total_amount_formula(
+    result_column: str,
+    win_column: str,
+    stake_column: str,
+    excel_row: int,
+) -> str:
+    """Return settled P&L: profit on wins, lost stake on losses, zero on pushes."""
+    result = f"{result_column}{excel_row}"
+    return (
+        f'=IF({result}="W",{win_column}{excel_row},'
+        f'IF({result}="L",-{stake_column}{excel_row},'
+        f'IF({result}="P",0,"")))'
+    )
+
+
+def _compact_summary_pnl_formula(
+    stake_range: str,
+    win_range: str,
+    result_range: str,
+    actionable_range: str | None = None,
+) -> str:
+    """Return live compact-card P&L, refunding winning and pushed stakes."""
+    if actionable_range:
+        return (
+            f'=SUMIFS({win_range},{actionable_range},"Actionable",{result_range},"W")'
+            f'-SUMIF({actionable_range},"Actionable",{stake_range})'
+            f'+SUMIFS({stake_range},{actionable_range},"Actionable",{result_range},"W")'
+            f'+SUMIFS({stake_range},{actionable_range},"Actionable",{result_range},"P")'
+        )
+    return (
+        f'=SUMIF({result_range},"W",{win_range})-SUM({stake_range})'
+        f'+SUMIF({result_range},"W",{stake_range})'
+        f'+SUMIF({result_range},"P",{stake_range})'
+    )
+
+
 def _friendly_no_bet_reason(row: pd.Series | dict) -> str:
     """One plain-English line for why a non-Actionable pick isn't bettable.
 
@@ -2961,7 +3011,7 @@ def main() -> None:
 
             # Compact export (.xlsx): a readable Excel table with only the columns
             # needed to scan a slate left-to-right, matching the Strategy Lab layout.
-            # Win Amount is auto-computed from the Kelly stake and odds; W/L is left
+            # Win Amount is auto-computed from the approved Play_Stake and odds; W/L is left
             # blank for manual entry; Total Amount is a P&L formula that resolves
             # once W/L is filled in (+Win Amount on a win, -stake on a loss).
             from io import BytesIO
@@ -2978,7 +3028,7 @@ def main() -> None:
                 "market_probability", "kalshi_probability", "ml_probability",
                 "effective_expected_value", "effective_edge", "effective_win_probability",
             }
-            money_cols = {"Kelly_Bet_Size", "Win Amount", "Total Amount"}
+            money_cols = {"Play_Stake", "Kelly_Bet_Size", "Win Amount", "Total Amount"}
             odds_cols = {"Pick Price"}  # American odds, shown with explicit sign (e.g. +109 / -114)
 
             def _col_num(x):
@@ -2990,7 +3040,13 @@ def main() -> None:
 
             wl_L = _letter("W/L")
             win_L = _letter("Win Amount")
-            kelly_L = _letter("Kelly_Bet_Size") if "Kelly_Bet_Size" in final_cols else None
+            price_L = _letter("Pick Price") if "Pick Price" in final_cols else None
+            stake_col = (
+                "Play_Stake" if "Play_Stake" in final_cols
+                else "Kelly_Bet_Size" if "Kelly_Bet_Size" in final_cols
+                else None
+            )
+            stake_L = _letter(stake_col) if stake_col else None
 
             wb = openpyxl.Workbook()
             ws = wb.active
@@ -3005,11 +3061,17 @@ def main() -> None:
                 excel_row = i + 2  # row 1 is the header
                 values = []
                 for col in final_cols:
-                    if col == "Total Amount":
+                    if col == "Win Amount":
                         values.append(
-                            f'=IF({wl_L}{excel_row}="W",{win_L}{excel_row},'
-                            f'IF({wl_L}{excel_row}="L",-{kelly_L}{excel_row},""))'
-                            if kelly_L else None
+                            _compact_win_amount_formula(stake_L, price_L, excel_row)
+                            if stake_L and price_L else None
+                        )
+                    elif col == "Total Amount":
+                        values.append(
+                            _compact_total_amount_formula(
+                                wl_L, win_L, stake_L, excel_row
+                            )
+                            if stake_L else None
                         )
                     elif col == "W/L":
                         values.append(None)
@@ -3059,20 +3121,20 @@ def main() -> None:
                 # Summary rows below the table: "Actionable Totals" (Actionable tier
                 # only) and "Totals" (all picks). All values are live formulas over the
                 # data range, so they update as Win Amount / W/L are filled in. Net P&L
-                # counts a win as +Win Amount and anything not yet won as -stake (money
-                # at risk), matching the Strategy Lab convention.
+                # counts a win as +Win Amount and anything not yet settled as -stake
+                # (money at risk), while a push refunds its approved stake.
                 label_col = "best_pick" if "best_pick" in final_cols else final_cols[0]
                 status_L = _letter("Pick_Status") if "Pick_Status" in final_cols else None
-                stake_rng = f"{kelly_L}2:{kelly_L}{last_row}"
+                stake_rng = f"{stake_L}2:{stake_L}{last_row}"
                 win_rng = f"{win_L}2:{win_L}{last_row}"
                 wl_rng = f"{wl_L}2:{wl_L}{last_row}"
 
-                def _write_summary(excel_row, label, kelly_f, win_f, wl_f, tot_f):
+                def _write_summary(excel_row, label, stake_f, win_f, wl_f, tot_f):
                     c = ws.cell(row=excel_row, column=final_cols.index(label_col) + 1, value=label)
                     c.font = Font(bold=True)
-                    kc = ws.cell(row=excel_row, column=final_cols.index("Kelly_Bet_Size") + 1, value=kelly_f)
-                    kc.number_format = money_fmt
-                    kc.font = Font(bold=True)
+                    sc = ws.cell(row=excel_row, column=final_cols.index(stake_col) + 1, value=stake_f)
+                    sc.number_format = money_fmt
+                    sc.font = Font(bold=True)
                     wc = ws.cell(row=excel_row, column=final_cols.index("Win Amount") + 1, value=win_f)
                     wc.number_format = money_fmt
                     wc.font = Font(bold=True)
@@ -3082,7 +3144,7 @@ def main() -> None:
                     tc.number_format = pnl_fmt
                     tc.font = Font(bold=True)
 
-                if kelly_L and status_L:
+                if stake_L and status_L:
                     act = f'{status_L}2:{status_L}{last_row}'
                     _write_summary(
                         last_row + 2,
@@ -3090,16 +3152,16 @@ def main() -> None:
                         f'=SUMIF({act},"Actionable",{stake_rng})',
                         f'=SUMIF({act},"Actionable",{win_rng})',
                         f'=COUNTIFS({act},"Actionable",{wl_rng},"W")&"-"&COUNTIFS({act},"Actionable",{wl_rng},"L")',
-                        f'=SUMIFS({win_rng},{act},"Actionable",{wl_rng},"W")'
-                        f'-SUMIF({act},"Actionable",{stake_rng})'
-                        f'+SUMIFS({stake_rng},{act},"Actionable",{wl_rng},"W")',
+                        _compact_summary_pnl_formula(
+                            stake_rng, win_rng, wl_rng, actionable_range=act
+                        ),
                     )
 
                 # 🏆 Pick of the Day line so the export carries the day's single
                 # best cross-board pick (games + props) alongside the table.
                 if _potd is not None:
                     _potd_cell = ws.cell(
-                        row=last_row + 4 if kelly_L else last_row + 2,
+                        row=last_row + 4 if stake_L else last_row + 2,
                         column=final_cols.index(label_col) + 1,
                         value=(
                             f"🏆 Pick of the Day: {_potd['pick']} "
@@ -3109,14 +3171,14 @@ def main() -> None:
                     )
                     _potd_cell.font = Font(bold=True)
 
-                if kelly_L:
+                if stake_L:
                     _write_summary(
                         last_row + 3,
                         "Totals",
                         f'=SUM({stake_rng})',
                         f'=SUM({win_rng})',
                         f'=COUNTIF({wl_rng},"W")&"-"&COUNTIF({wl_rng},"L")',
-                        f'=SUMIF({wl_rng},"W",{win_rng})-SUM({stake_rng})+SUMIF({wl_rng},"W",{stake_rng})',
+                        _compact_summary_pnl_formula(stake_rng, win_rng, wl_rng),
                     )
 
             buf = BytesIO()
