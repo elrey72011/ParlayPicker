@@ -1,6 +1,11 @@
 import pandas as pd
 
-from streamlit_app import _build_compact_export_frame
+from streamlit_app import (
+    _build_compact_export_frame,
+    _compact_summary_pnl_formula,
+    _compact_total_amount_formula,
+    _compact_win_amount_formula,
+)
 
 
 def _compact_source(**overrides):
@@ -202,3 +207,48 @@ def test_compact_export_preserves_precision_shortlist_disclosure():
     assert compact.loc[0, "Precision_Probability"] == 0.71
     assert not bool(compact.loc[0, "Precision_Wager_Approved"])
     assert compact.loc[0, "Play_Stake"] == 0.0
+
+
+def test_compact_win_amount_formula_uses_approved_stake_for_positive_odds():
+    formula = _compact_win_amount_formula("AC", "AJ", 2)
+
+    assert formula == (
+        '=IF(OR(AC2="",AJ2="",AJ2=0),"",'
+        'AC2*IF(AJ2>0,AJ2/100,100/ABS(AJ2)))'
+    )
+
+
+def test_compact_win_amount_formula_handles_negative_odds():
+    formula = _compact_win_amount_formula("AC", "AJ", 9)
+
+    assert "100/ABS(AJ9)" in formula
+    assert "AC9*IF(AJ9>0" in formula
+
+
+def test_compact_total_amount_formula_handles_win_loss_and_push():
+    formula = _compact_total_amount_formula("AO", "AN", "AC", 2)
+
+    assert formula == (
+        '=IF(AO2="W",AN2,IF(AO2="L",-AC2,IF(AO2="P",0,"")))'
+    )
+
+
+def test_compact_summary_pnl_uses_approved_stake_and_refunds_pushes():
+    formula = _compact_summary_pnl_formula("AC2:AC18", "AN2:AN18", "AO2:AO18")
+    actionable = _compact_summary_pnl_formula(
+        "AC2:AC18",
+        "AN2:AN18",
+        "AO2:AO18",
+        actionable_range="AD2:AD18",
+    )
+
+    assert formula == (
+        '=SUMIF(AO2:AO18,"W",AN2:AN18)-SUM(AC2:AC18)'
+        '+SUMIF(AO2:AO18,"W",AC2:AC18)+SUMIF(AO2:AO18,"P",AC2:AC18)'
+    )
+    assert actionable == (
+        '=SUMIFS(AN2:AN18,AD2:AD18,"Actionable",AO2:AO18,"W")'
+        '-SUMIF(AD2:AD18,"Actionable",AC2:AC18)'
+        '+SUMIFS(AC2:AC18,AD2:AD18,"Actionable",AO2:AO18,"W")'
+        '+SUMIFS(AC2:AC18,AD2:AD18,"Actionable",AO2:AO18,"P")'
+    )
