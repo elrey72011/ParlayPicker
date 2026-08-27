@@ -23,6 +23,12 @@ def test_performance_recap_separates_wagers_precision_and_coverage():
             ],
             "Precision_Card": [False, True, False],
             "Precision_Rank": [pd.NA, 1, pd.NA],
+            "Precision_Probability": [0.58, 0.67, 0.59],
+            "Precision_Probability_Source": [
+                "INDEPENDENT ML PROBABILITY",
+                "INDEPENDENT ML PROBABILITY",
+                "INDEPENDENT ML PROBABILITY",
+            ],
             "Precision_Wager_Approved": [False, False, False],
             "selection_probability_used": [0.647, 0.586, 0.570],
             "best_available_score": [0.585, 0.524, 0.570],
@@ -50,6 +56,12 @@ def test_performance_recap_separates_wagers_precision_and_coverage():
         "FINAL BEST AVAILABLE SCORE",
         "FINAL BEST AVAILABLE SCORE",
         "FINAL BEST AVAILABLE SCORE",
+    ]
+    assert recap["Precision Probability"].tolist() == [0.58, 0.67, 0.59]
+    assert recap["Precision Probability Source"].tolist() == [
+        "INDEPENDENT ML PROBABILITY",
+        "INDEPENDENT ML PROBABILITY",
+        "INDEPENDENT ML PROBABILITY",
     ]
 
 

@@ -8,6 +8,7 @@ def _row(name: str, probability: float, odds: int = -110, **overrides):
     row = {
         "best_pick": name,
         "WinProbability": probability,
+        "ml_probability": probability,
         "odds_american": odds,
         "final_pick_valid": True,
         "best_available_selection_verified": True,
@@ -24,7 +25,7 @@ def _row(name: str, probability: float, odds: int = -110, **overrides):
     return row
 
 
-def test_precision_card_selects_global_top_two_by_calibrated_probability():
+def test_precision_card_selects_one_global_top_pick_by_independent_ml_probability():
     source = pd.DataFrame(
         [
             _row("Third", 0.64),
@@ -37,25 +38,30 @@ def test_precision_card_selects_global_top_two_by_calibrated_probability():
     result = attach_precision_card(source)
     shortlist = precision_shortlist(result)
 
-    assert result["Precision_Card"].tolist() == [False, True, True, False]
-    assert shortlist["best_pick"].tolist() == ["First", "Second"]
-    assert shortlist["Precision_Rank"].astype(int).tolist() == [1, 2]
+    assert result["Precision_Card"].tolist() == [False, True, False, False]
+    assert shortlist["best_pick"].tolist() == ["First"]
+    assert shortlist["Precision_Rank"].astype(int).tolist() == [1]
+    assert shortlist["Precision_Probability_Source"].tolist() == [
+        "INDEPENDENT ML PROBABILITY"
+    ]
 
 
-def test_precision_card_uses_adjusted_selection_probability_before_display_probability():
+def test_precision_card_uses_ml_probability_not_composite_selection_score():
     source = pd.DataFrame(
         [
             _row(
-                "Display probability is inflated",
+                "Composite score is inflated",
                 0.68,
-                selection_probability_used=0.619,
-                best_available_score=0.619,
+                ml_probability=0.59,
+                selection_probability_used=0.75,
+                best_available_score=0.75,
             ),
             _row(
-                "Adjusted probability clears",
+                "Independent model clears",
                 0.61,
-                selection_probability_used=0.63,
-                best_available_score=0.63,
+                ml_probability=0.61,
+                selection_probability_used=0.58,
+                best_available_score=0.58,
             ),
         ]
     )
@@ -63,38 +69,50 @@ def test_precision_card_uses_adjusted_selection_probability_before_display_proba
     result = attach_precision_card(source)
 
     assert result["Precision_Card"].tolist() == [False, True]
-    assert result["Precision_Probability"].tolist() == [0.619, 0.63]
-    assert "below 62%" in result.loc[0, "Precision_Card_Reason"]
+    assert result["Precision_Probability"].tolist() == [0.59, 0.61]
+    assert "below 60%" in result.loc[0, "Precision_Card_Reason"]
 
 
-def test_precision_card_uses_final_score_after_recent_regime_penalty():
+def test_precision_card_uses_composite_score_only_as_a_tiebreaker():
+    source = pd.DataFrame(
+        [
+            _row(
+                "Lower tie-breaker",
+                0.65,
+                ml_probability=0.64,
+                best_available_score=0.58,
+            ),
+            _row(
+                "Higher tie-breaker",
+                0.65,
+                ml_probability=0.64,
+                best_available_score=0.63,
+            ),
+        ]
+    )
+
+    result = attach_precision_card(source)
+
+    assert result["Precision_Probability"].tolist() == [0.64, 0.64]
+    assert result["Precision_Card"].tolist() == [False, True]
+
+
+def test_precision_card_fails_closed_without_independent_ml_probability():
     source = pd.DataFrame([
         _row(
-            "Recently regressing side",
-            0.625,
-            selection_probability_used=0.6458,
-            best_available_score=0.5835,
-            recent_regime_penalty_applied=True,
-            recent_regime_penalty_value=0.0623,
+            "Incomplete export",
+            0.90,
+            selection_probability_used=0.90,
+            best_available_score=0.90,
         )
-    ])
+    ]).drop(columns=["ml_probability"])
 
     result = attach_precision_card(source)
 
-    assert result["Precision_Probability"].tolist() == [0.5835]
+    assert pd.isna(result.loc[0, "Precision_Probability"])
+    assert result.loc[0, "Precision_Probability_Source"] == ""
     assert not bool(result.loc[0, "Precision_Card"])
-    assert "below 62%" in result.loc[0, "Precision_Card_Reason"]
-
-
-def test_precision_card_falls_back_for_exports_without_final_score():
-    source = pd.DataFrame([
-        _row("Older export", 0.61, selection_probability_used=0.63)
-    ]).drop(columns=["best_available_score"])
-
-    result = attach_precision_card(source)
-
-    assert result["Precision_Probability"].tolist() == [0.63]
-    assert bool(result.loc[0, "Precision_Card"])
+    assert "unavailable" in result.loc[0, "Precision_Card_Reason"]
 
 
 def test_precision_card_fails_closed_on_price_and_verification_gates():
