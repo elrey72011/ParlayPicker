@@ -87,3 +87,19 @@ def test_changed_theover_upload_marks_existing_results_stale():
 
     controls["theover_spreads"] = _Upload("sides.csv", b"new")
     assert _analysis_inputs_stale(state, controls) is True
+
+
+def test_analysis_signature_changes_when_pipeline_build_changes(monkeypatch):
+    controls = {
+        "sports": ["NCAAF"],
+        "use_ml": True,
+        "use_gemini": False,
+        "bankroll": 100.0,
+        "theover_spreads": None,
+        "theover_totals": None,
+    }
+    before = _analysis_input_signature(controls)
+
+    monkeypatch.setattr("streamlit_app.PIPELINE_BUILD", "next-build")
+
+    assert _analysis_input_signature(controls) != before

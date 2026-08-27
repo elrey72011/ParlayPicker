@@ -208,6 +208,63 @@ def test_ncaaf_fcs_fallback_fills_missing_primary_games_and_stays_nonproduction(
     assert sp._is_nonproduction_odds_source(expanded.iloc[0]["odds_source"])
 
 
+def test_ncaaf_fallback_keeps_slate_date_and_kickoff_through_theover_merge(monkeypatch):
+    slate_date = "2026-08-29"
+    kickoff = "2026-08-29T16:00:00Z"
+    live_odds_df = pd.DataFrame(
+        [
+            {
+                "league": "NCAAF",
+                "home_team": "Ohio State Buckeyes",
+                "away_team": "Texas Longhorns",
+                "game_date": slate_date,
+                "matchup_id": "americanfootball_ncaaf:texaslonghorns:ohiostatebuckeyes:2026-08-29",
+                "game_time_est": "2026-08-29 12:00 PM ET",
+                "commence_time_raw": kickoff,
+                "odds_feed_source": "espn_ncaaf_fcs_scoreboard",
+                "draftkings_home_point": -3.5,
+                "draftkings_home_price": -110,
+                "draftkings_away_point": 3.5,
+                "draftkings_away_price": -110,
+                "draftkings_over_point": 55.5,
+                "draftkings_over_price": -108,
+                "draftkings_under_point": 55.5,
+                "draftkings_under_price": -112,
+            }
+        ]
+    )
+    totals_df = pd.DataFrame(
+        [
+            {
+                "league": "NCAAF",
+                "home_team": "Ohio State Buckeyes",
+                "away_team": "Texas Longhorns",
+                "game_date": slate_date,
+                "line": 55.5,
+                "pick": "Under 55.5",
+                "winprobability": 0.57,
+                "odds_american": -110,
+            }
+        ]
+    )
+
+    monkeypatch.setattr(sp, "load_base_data", lambda: pd.DataFrame())
+    monkeypatch.setattr(sp, "fetch_live_odds_dataframe", lambda _sports: live_odds_df)
+
+    analysis, _best, _diagnostics = sp.run_analysis_pipeline(
+        sports=["NCAAF"],
+        max_rows=20,
+        use_ml=False,
+        spreads_df=None,
+        totals_df=totals_df,
+    )
+
+    assert not analysis.empty
+    assert sp._et_day_string(sp._game_dates(analysis)).eq(slate_date).all()
+    assert analysis["matchup_id"].astype(str).str.endswith(f"|{slate_date}").all()
+    assert analysis["game_time_est"].astype(str).eq("2026-08-29 12:00 PM ET").all()
+
+
 def test_ncaaf_fallback_never_replaces_a_primary_game():
     primary = [_ncaaf_live_game()]
     fallback = [dict(_ncaaf_live_game(), id="espn-duplicate", odds_feed_source="espn_ncaaf_fcs_scoreboard")]

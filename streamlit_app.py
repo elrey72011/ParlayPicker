@@ -387,6 +387,7 @@ def _analysis_input_signature(controls: dict[str, Any] | None) -> tuple[Any, ...
     """Identify every control that changes the game-analysis result."""
     controls = controls or {}
     return (
+        PIPELINE_BUILD,
         tuple(sorted(str(s) for s in controls.get("sports", []))),
         bool(controls.get("use_ml")),
         bool(controls.get("use_gemini")),

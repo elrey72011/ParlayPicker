@@ -158,7 +158,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-08-27b-ncaaf-fcs-fallback"
+PIPELINE_BUILD = "2026-08-27c-ncaaf-slate-identity"
 
 # Best Available must compare standard, reasonably priced markets. A P2P exchange can
 # expose alternate run lines (for example +5.5 at -1150) beside the standard MLB +1.5.
@@ -8954,10 +8954,15 @@ def run_analysis_pipeline(
 
     # 3. Invert the Merge (Odds API is Base, TheOver is Enrichment)
     if not theover_rows.empty and not merged.empty:
-        # Standardize both sides of the merge to ET day boundaries before join.
-        merged["game_date"] = pd.to_datetime(merged["game_date"], errors="coerce", utc=True).dt.tz_convert("America/New_York").dt.floor("D")
-        theover_rows["game_date"] = pd.to_datetime(theover_rows["game_date"], errors="coerce", utc=True).dt.tz_convert("America/New_York").dt.floor("D")
-        fallback_merge_day = pd.Timestamp.now(tz="America/New_York").floor("D")
+        # Standardize both sides to the canonical slate-day representation. A
+        # date-only value is already the user's ET slate date; parsing it as
+        # midnight UTC and then converting to ET incorrectly moves it back one
+        # day (for example 2026-08-27 -> 2026-08-26). _utc_day_key preserves
+        # nominal dates while still converting genuine kickoff timestamps to
+        # their Eastern game day.
+        merged["game_date"] = _utc_day_key(merged["game_date"])
+        theover_rows["game_date"] = _utc_day_key(theover_rows["game_date"])
+        fallback_merge_day = _game_date_fallback()
         merged["game_date"] = merged["game_date"].fillna(fallback_merge_day)
         theover_rows["game_date"] = theover_rows["game_date"].fillna(fallback_merge_day)
 
