@@ -188,14 +188,15 @@ def test_compact_export_preserves_precision_shortlist_disclosure():
             Precision_Card=True,
             Precision_Rank=1,
             Precision_Probability=0.71,
-            Precision_Target_Hit_Rate=0.75,
+            Precision_Probability_Source="INDEPENDENT ML PROBABILITY",
+            Precision_Target_Hit_Rate=pd.NA,
             Precision_Wager_Approved=False,
             Precision_Card_Instruction=(
                 "PRECISION SHORTLIST - NO APP-APPROVED STAKE"
             ),
             Precision_Card_Reason=(
-                "Selected by global calibrated win probability; "
-                "75% is a monitoring target, not a guarantee."
+                "Selected by global independent ML probability for research monitoring; "
+                "no fixed hit-rate target is claimed."
             ),
         )
     ])
@@ -205,6 +206,9 @@ def test_compact_export_preserves_precision_shortlist_disclosure():
     assert bool(compact.loc[0, "Precision_Card"])
     assert compact.loc[0, "Precision_Rank"] == 1
     assert compact.loc[0, "Precision_Probability"] == 0.71
+    assert compact.loc[0, "Precision_Probability_Source"] == (
+        "INDEPENDENT ML PROBABILITY"
+    )
     assert not bool(compact.loc[0, "Precision_Wager_Approved"])
     assert compact.loc[0, "Play_Stake"] == 0.0
 

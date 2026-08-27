@@ -193,6 +193,7 @@ _COMPACT_EXPORT_COLUMNS = [
     "commercial_tier", "sellable_as_premium", "sellable_as_value_card",
     "controlled_card_recovery",
     "Precision_Card", "Precision_Rank", "Precision_Probability",
+    "Precision_Probability_Source",
     "Precision_Target_Hit_Rate", "Precision_Wager_Approved",
     "Precision_Card_Instruction", "Precision_Card_Reason",
     "WinProbability", "expected_value", "edge",
@@ -2713,6 +2714,7 @@ def main() -> None:
             best_picks_export = apply_status_display_labels(best_picks_export)
             from app_core.export_scope import label_wager_export, production_wagers
             from app_core.precision_card import (
+                PRECISION_CARD_MAX_PICKS,
                 PRECISION_CARD_MIN_WIN_PROBABILITY,
                 attach_precision_card,
                 precision_shortlist,
@@ -2758,23 +2760,24 @@ def main() -> None:
                 )
             if precision_game_export is not None and not precision_game_export.empty:
                 st.download_button(
-                    "Export Precision Shortlist (Top 2)",
+                    f"Export Precision Pick (Top {PRECISION_CARD_MAX_PICKS})",
                     precision_game_export.to_csv(index=False, encoding="utf-8-sig"),
                     "precision_game_card.csv",
                     mime="text/csv",
                     key="export_precision_game_card",
                 )
                 st.caption(
-                    "Research confidence shortlist: at most two globally ranked, "
-                    "live-line-verified picks with at least "
-                    f"{PRECISION_CARD_MIN_WIN_PROBABILITY:.0%} adjusted probability and "
+                    f"Research confidence shortlist: at most {PRECISION_CARD_MAX_PICKS} globally ranked "
+                    "pick, using only "
+                    "live-line-verified candidates with at least "
+                    f"{PRECISION_CARD_MIN_WIN_PROBABILITY:.0%} independent ML probability and "
                     "a price of -220 or better. No fixed hit-rate target is claimed; only "
                     "Wager_Instruction and a positive Play_Stake authorize a bet."
                 )
             else:
                 st.caption(
                     "Precision shortlist: no live-line-verified pick cleared the "
-                    f"{PRECISION_CARD_MIN_WIN_PROBABILITY:.0%} probability and -220 "
+                    f"{PRECISION_CARD_MIN_WIN_PROBABILITY:.0%} independent ML probability and -220 "
                     "price floors."
                 )
 

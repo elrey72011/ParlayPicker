@@ -10,9 +10,11 @@ from __future__ import annotations
 import pandas as pd
 
 
-PRECISION_CARD_MAX_PICKS = 2
-PRECISION_CARD_MIN_WIN_PROBABILITY = 0.62
+PRECISION_CARD_MAX_PICKS = 1
+PRECISION_CARD_MIN_WIN_PROBABILITY = 0.60
 PRECISION_CARD_MIN_AMERICAN_ODDS = -220
+PRECISION_CARD_PROBABILITY_SOURCE = "ml_probability"
+PRECISION_CARD_PROBABILITY_SOURCE_LABEL = "INDEPENDENT ML PROBABILITY"
 # The shortlist is a research ranking, not a calibrated promise. A fixed 75%
 # label outlived its small pilot sample and was misleading once the holdout
 # record regressed. Keep the field for export compatibility, but leave it blank
@@ -31,30 +33,20 @@ def _strict_bool(frame: pd.DataFrame, column: str, *, default: bool = False) -> 
 
 
 def _probability(frame: pd.DataFrame) -> pd.Series:
-    """Return the final evidence-adjusted score used by selection.
+    """Return the independent model probability, failing closed when absent.
 
-    ``WinProbability`` is a display/calibration value.  The best-pick selector
-    can subsequently pair-normalize and empirically blend it into
-    ``selection_probability_used``, then apply evidence-backed family and
-    short-horizon regime penalties in ``best_available_score``.  Precision
-    ranking must not resurrect any earlier value after selection has already
-    reduced the candidate.  Older exports without the final score retain the
-    previous fail-closed fallback chain.
+    ``best_available_score`` and ``selection_probability_used`` are composite
+    ranking scores.  They are useful tie-breakers, but they are not calibrated
+    win probabilities and must not be compared with a probability floor.  The
+    precision card therefore has one explicit probability contract and does not
+    silently substitute display or composite values in older/incomplete exports.
     """
 
-    probability = pd.Series(float("nan"), index=frame.index, dtype="float64")
-    for source in (
-        "best_available_score",
-        "selection_probability_used",
-        "effective_win_probability",
-        "empirical_win_probability",
-        "WinProbability",
-    ):
-        if source in frame.columns:
-            probability = probability.fillna(
-                pd.to_numeric(frame[source], errors="coerce")
-            )
-    return probability
+    if PRECISION_CARD_PROBABILITY_SOURCE not in frame.columns:
+        return pd.Series(float("nan"), index=frame.index, dtype="float64")
+    return pd.to_numeric(
+        frame[PRECISION_CARD_PROBABILITY_SOURCE], errors="coerce"
+    )
 
 
 def _numeric_series(frame: pd.DataFrame, column: str) -> pd.Series:
@@ -72,11 +64,11 @@ def attach_precision_card(
 ) -> pd.DataFrame | None:
     """Annotate a best-picks slate with a fail-closed top-confidence shortlist.
 
-    Ranking is global across the slate, not tier-first.  A row must have an
-    empirically adjusted selection probability that clears the precision floor,
-    a verified final selection, verified live event/line identity, and a price no
-    shorter than the policy floor. Selection is informational unless the ordinary
-    production gate has independently approved a positive stake.
+    Ranking is global across the slate, not tier-first. A row must have an
+    independent ML probability that clears the precision floor, a verified final
+    selection, verified live event/line identity, and a price no shorter than the
+    policy floor. Selection is informational unless the ordinary production gate
+    has independently approved a positive stake.
     """
 
     if frame is None or frame.empty:
@@ -156,6 +148,10 @@ def attach_precision_card(
     out["Precision_Card"] = selected
     out["Precision_Rank"] = rank
     out["Precision_Probability"] = probability
+    out["Precision_Probability_Source"] = ""
+    out.loc[probability.notna(), "Precision_Probability_Source"] = (
+        PRECISION_CARD_PROBABILITY_SOURCE_LABEL
+    )
     out["Precision_Target_Hit_Rate"] = pd.Series(
         pd.NA, index=out.index, dtype="Float64"
     )
@@ -169,14 +165,17 @@ def attach_precision_card(
     reason = pd.Series("Outside the top-confidence slots.", index=out.index, dtype="object")
     reason.loc[~verified] = "Excluded: final selection or live line identity is not verified."
     reason.loc[started] = "Excluded: game has started."
-    reason.loc[verified & ~started & ~probability_ok] = (
-        f"Excluded: adjusted selection probability is below {float(min_win_probability):.0%}."
+    reason.loc[verified & ~started & probability.isna()] = (
+        "Excluded: independent ML probability is unavailable."
+    )
+    reason.loc[verified & ~started & probability.notna() & ~probability_ok] = (
+        f"Excluded: independent ML probability is below {float(min_win_probability):.0%}."
     )
     reason.loc[verified & ~started & probability_ok & ~price_ok] = (
         f"Excluded: offered price is shorter than {int(min_american_odds):+d}."
     )
     reason.loc[selected] = (
-        "Selected by global adjusted selection probability for research monitoring; "
+        "Selected by global independent ML probability for research monitoring; "
         "no fixed hit-rate target is claimed."
     )
     out["Precision_Card_Reason"] = reason
