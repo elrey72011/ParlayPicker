@@ -24,6 +24,23 @@ def test_exact_midnight_date_placeholder_remains_date_only():
     assert formatted.loc[0] == "2026-08-11"
 
 
+def test_mixed_slate_preserves_existing_time_when_raw_timestamp_is_missing():
+    frame = pd.DataFrame(
+        {
+            "game_date": ["2026-08-27", "2026-08-27"],
+            "commence_time_raw": ["2026-08-27T23:00:00Z", pd.NA],
+            "game_time_est": ["", "2026-08-27 6:00 PM ET"],
+        }
+    )
+
+    formatted = sp._coalesce_game_time_est(frame)
+
+    assert formatted.tolist() == [
+        "2026-08-27 7:00 PM ET",
+        "2026-08-27 6:00 PM ET",
+    ]
+
+
 def test_game_time_est_is_converted_from_utc_game_date(monkeypatch):
     base_df = pd.DataFrame()
     bet_rows_df = pd.DataFrame(

@@ -256,6 +256,18 @@ def fetch_espn_ncaaf_fcs_odds(target_date: str | None = None) -> list[dict[str, 
         commence_time = str(event.get("date") or competition.get("date") or "").strip()
         if not home_team or not away_team or not commence_time:
             continue
+        try:
+            commence_datetime = datetime.fromisoformat(
+                commence_time.replace("Z", "+00:00")
+            )
+            if commence_datetime.tzinfo is None:
+                commence_datetime = commence_datetime.replace(tzinfo=ZoneInfo("UTC"))
+            commence_et = commence_datetime.astimezone(ZoneInfo("America/New_York"))
+            game_time_est = commence_et.strftime(
+                "%Y-%m-%d %I:%M %p ET"
+            ).replace(" 0", " ")
+        except (TypeError, ValueError):
+            game_time_est = ""
 
         bookmakers: list[dict[str, Any]] = []
         for odds in competition.get("odds") or []:
@@ -288,6 +300,7 @@ def fetch_espn_ncaaf_fcs_odds(target_date: str | None = None) -> list[dict[str, 
                 "away_team": away_team,
                 "commence_time": commence_time,
                 "game_date": slate_date.isoformat(),
+                "game_time_est": game_time_est,
                 "odds_feed_source": ESPN_FALLBACK_SOURCE,
                 "bookmakers": bookmakers,
             }

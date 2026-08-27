@@ -158,7 +158,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-08-27c-ncaaf-slate-identity"
+PIPELINE_BUILD = "2026-08-27d-ncaaf-kickoff-export"
 
 # Best Available must compare standard, reasonably priced markets. A P2P exchange can
 # expose alternate run lines (for example +5.5 at -1150) beside the standard MLB +1.5.
@@ -1841,6 +1841,41 @@ def _format_game_time_est(
                 out[idx] = est.strftime("%Y-%m-%d %I:%M %p ET").replace(" 0", " ")
 
     return out
+
+
+def _coalesce_game_time_est(df: pd.DataFrame) -> pd.Series:
+    """Resolve each row's display time without erasing a valid upstream value.
+
+    Mixed-provider slates can contain a ``commence_time_raw`` column even when
+    only some rows have a raw timestamp. Formatting that column wholesale and
+    assigning it over ``game_time_est`` blanks the other rows. Prefer a valid
+    raw timestamp per row, then the provider-normalized display time, and use
+    the nominal slate date only as the final fallback.
+    """
+    if df is None or df.empty:
+        return pd.Series(dtype="string")
+
+    empty_tokens = {"nan": "", "None": "", "<NA>": "", "NaT": ""}
+    resolved = pd.Series([""] * len(df), index=df.index, dtype="string")
+    if "commence_time_raw" in df.columns:
+        raw_frame = df[["commence_time_raw"]].rename(
+            columns={"commence_time_raw": "game_date"}
+        )
+        resolved = _format_game_time_est(
+            raw_frame,
+            source_is_timestamp=True,
+        ).replace(empty_tokens)
+
+    existing = _string_series(df, "game_time_est").str.strip().replace(empty_tokens)
+    resolved = resolved.where(resolved.str.strip().ne(""), existing)
+
+    date_frame = (
+        df[["game_date"]]
+        if "game_date" in df.columns
+        else pd.DataFrame({"game_date": pd.Series(pd.NA, index=df.index)})
+    )
+    date_fallback = _format_game_time_est(date_frame).replace(empty_tokens)
+    return resolved.where(resolved.str.strip().ne(""), date_fallback)
 
 
 
@@ -9988,20 +10023,15 @@ def run_analysis_pipeline(
         else:
             analysis_df["game_already_started_flag"] = False
 
-        # 1. Identify best source for time
-        src_col = "commence_time_raw" if "commence_time_raw" in analysis_df.columns else "game_date"
+        # Resolve time row by row. A mixed slate may have a raw timestamp for
+        # primary-feed games and only a provider-normalized display time for a
+        # fallback row; the latter must not be overwritten with a blank.
+        analysis_df["game_time_est"] = _coalesce_game_time_est(analysis_df)
 
-        # 2. Format using a temporary view that preserves the Index
-        temp_df = analysis_df[[src_col]].rename(columns={src_col: "game_date"})
-        analysis_df["game_time_est"] = _format_game_time_est(
-            temp_df,
-            source_is_timestamp=(src_col == "commence_time_raw"),
-        )
-
-        # 3. Final Cleanup
+        # Final Cleanup
         analysis_df = analysis_df.drop(columns=["commence_time_raw"], errors="ignore")
 
-        # 4. Sync the slate date with actual start time
+        # Sync the slate date with actual start time
         # Strip the ' ET' label and use mixed format parsing to handle cases where time is missing
         analysis_df["game_date"] = pd.to_datetime(analysis_df["game_time_est"].astype(str).str.replace(" ET", "", regex=False), format='mixed', errors='coerce').dt.date.fillna(analysis_df["game_date"])
 
