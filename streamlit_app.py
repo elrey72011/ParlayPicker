@@ -201,6 +201,7 @@ _COMPACT_EXPORT_COLUMNS = [
     "effective_expected_value", "effective_edge", "effective_win_probability",
     "consensus_agreement", "Play_Tier", "Play_Stake", "Pick_Status", "Pick_Quality",
     "league", "Home", "Away", "Commence (Local)", "odds_american", "odds_source",
+    "odds_feed_source",
     "market_line_source_detail", "best_pick", "gemini_pick", "Kelly_Bet_Size",
 ]
 
@@ -2635,7 +2636,7 @@ def main() -> None:
                 "Commence (Local)", "market_type", "candidate_source", "orientation_source", "upload_match_reason",
                 "display_pick", "qualified_pick", "qualification_probability", "qualification_reason",
                 "best_pick", "Kelly_Bet_Size", "WinProbability", "expected_value",
-                "edge", "Conviction_Score", "consensus_agreement", "odds_american", "odds_source", "market_probability",
+                "edge", "Conviction_Score", "consensus_agreement", "odds_american", "odds_source", "odds_feed_source", "market_probability",
                 "kalshi_probability", "ml_probability", "ml_probability_source", "ml_target", "ml_projection",
                 "ml_residual_scale", "ml_feature_quality", "gemini_pick", "gemini_explanation", "gemini_risk_notes",
                 "status_metric_basis", "effective_expected_value", "effective_edge", "effective_win_probability",
@@ -2737,6 +2738,20 @@ def main() -> None:
                 null_pct = best_picks_export["WinProbability"].isna().mean()
                 if null_pct > 0.10:
                     st.warning(f"Warning: {null_pct:.1%} of Best Picks are missing ML Probability. Check upstream ML data flow.")
+
+            if (
+                "odds_feed_source" in best_picks_export.columns
+                and best_picks_export["odds_feed_source"]
+                .astype("string")
+                .eq("espn_ncaaf_fcs_scoreboard")
+                .any()
+            ):
+                st.warning(
+                    "NCAAF FCS coverage was recovered from ESPN's DraftKings feed because "
+                    "the primary odds response omitted those games. These rows are research-only, "
+                    "remain $0/PASS, and are not Novig execution quotes; confirm the current Novig "
+                    "line before making any decision."
+                )
 
             best_picks_csv = best_picks_export.to_csv(index=False, encoding="utf-8-sig")
             st.download_button(

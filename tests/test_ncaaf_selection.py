@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import pandas as pd
 
 from app.ui.sidebar_controls import FALLBACK_SPORTS, _resolve_sports_options
-from app_core import espn_results, feature_processing, odds_api
+from app_core import espn_ncaaf_odds, espn_results, feature_processing, odds_api
 from app_core.kalshi_integrator import (
     MAX_LINE_TOLERANCE,
     MAX_TOTAL_LINE_TOLERANCE,
@@ -60,6 +60,7 @@ def test_ncaaf_is_selectable_and_uses_official_odds_api_key(monkeypatch):
 
     monkeypatch.setattr(odds_api, "TheOddsAPIClient", FakeClient)
     monkeypatch.setattr(sp, "_get_odds_api_key", lambda: "fake")
+    monkeypatch.setattr(espn_ncaaf_odds, "fetch_espn_ncaaf_fcs_odds", lambda date: [])
 
     frame = sp.fetch_live_odds_dataframe(
         sports=["NCAAF"], date="2026-08-29T12:00:00Z"
@@ -72,6 +73,186 @@ def test_ncaaf_is_selectable_and_uses_official_odds_api_key(monkeypatch):
     assert frame["league"].eq("NCAAF").all()
     assert float(frame.iloc[0]["novig_home_point"]) == -3.5
     assert float(frame.iloc[0]["novig_over_point"]) == 55.5
+    assert frame.iloc[0]["odds_feed_source"] == "the_odds_api"
+
+
+def _espn_fcs_payload():
+    return {
+        "events": [
+            {
+                "id": "401999001",
+                "date": "2026-08-27T22:00:00Z",
+                "competitions": [
+                    {
+                        "competitors": [
+                            {
+                                "homeAway": "home",
+                                "team": {"displayName": "Delaware State Hornets"},
+                            },
+                            {
+                                "homeAway": "away",
+                                "team": {"displayName": "Stony Brook Seawolves"},
+                            },
+                        ],
+                        "odds": [
+                            {
+                                "provider": {"name": "DraftKings"},
+                                "moneyline": {
+                                    "home": {"close": {"odds": "+153"}},
+                                    "away": {"close": {"odds": "-192"}},
+                                },
+                                "pointSpread": {
+                                    "home": {"close": {"line": "+4.5", "odds": "-110"}},
+                                    "away": {"close": {"line": "-4.5", "odds": "-110"}},
+                                },
+                                "total": {
+                                    "over": {"close": {"line": "o50.5", "odds": "-108"}},
+                                    "under": {"close": {"line": "u50.5", "odds": "-112"}},
+                                },
+                            }
+                        ],
+                    }
+                ],
+            },
+            {
+                "id": "401999002",
+                "date": "2026-08-27T23:00:00Z",
+                "competitions": [
+                    {
+                        "competitors": [
+                            {"homeAway": "home", "team": {"displayName": "Home Team"}},
+                            {"homeAway": "away", "team": {"displayName": "Away Team"}},
+                        ],
+                        "odds": [],
+                    }
+                ],
+            },
+        ]
+    }
+
+
+def test_espn_fcs_fallback_parses_complete_draftkings_markets(monkeypatch):
+    requested = []
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return _espn_fcs_payload()
+
+    def fake_get(url, params, timeout):
+        requested.append((url, params, timeout))
+        return FakeResponse()
+
+    monkeypatch.setattr(espn_ncaaf_odds.requests, "get", fake_get)
+
+    games = espn_ncaaf_odds.fetch_espn_ncaaf_fcs_odds("2026-08-27T11:00:00Z")
+
+    assert len(games) == 1
+    assert requested[0][1]["dates"] == "20260827"
+    assert requested[0][1]["groups"] == "81"
+    assert games[0]["odds_feed_source"] == "espn_ncaaf_fcs_scoreboard"
+    markets = {item["key"]: item for item in games[0]["bookmakers"][0]["markets"]}
+    assert markets["spreads"]["outcomes"][0]["point"] == 4.5
+    assert markets["totals"]["outcomes"][0]["point"] == 50.5
+    assert markets["h2h"]["outcomes"][1]["price"] == -192.0
+
+
+def test_ncaaf_fcs_fallback_fills_missing_primary_games_and_stays_nonproduction(monkeypatch):
+    class FakeClient:
+        def __init__(self, **kwargs):
+            pass
+
+        def get_odds(self, sport_key, date=None):
+            return []
+
+    monkeypatch.setattr(odds_api, "TheOddsAPIClient", FakeClient)
+    monkeypatch.setattr(sp, "_get_odds_api_key", lambda: "fake")
+    # Use the real parser's compatible result without allowing a network call.
+    monkeypatch.setattr(espn_ncaaf_odds, "fetch_espn_ncaaf_fcs_odds", lambda date: [
+        {
+            "id": "espn-401999001",
+            "matchup_id": "americanfootball_ncaaf:delawarestatehornets:stonybrookseawolves:2026-08-27",
+            "sport_key": "americanfootball_ncaaf",
+            "home_team": "Delaware State Hornets",
+            "away_team": "Stony Brook Seawolves",
+            "commence_time": "2026-08-27T22:00:00Z",
+            "game_date": "2026-08-27",
+            "odds_feed_source": "espn_ncaaf_fcs_scoreboard",
+            "bookmakers": [{
+                "key": "draftkings",
+                "markets": [
+                    {"key": "spreads", "outcomes": [
+                        {"name": "Delaware State Hornets", "point": 4.5, "price": -110},
+                        {"name": "Stony Brook Seawolves", "point": -4.5, "price": -110},
+                    ]},
+                    {"key": "totals", "outcomes": [
+                        {"name": "Over", "point": 50.5, "price": -108},
+                        {"name": "Under", "point": 50.5, "price": -112},
+                    ]},
+                ],
+            }],
+        }
+    ])
+
+    frame = sp.fetch_live_odds_dataframe(sports=["NCAAF"], date="2026-08-27")
+    expanded, _ = sp._expand_live_odds_to_bet_rows(frame)
+
+    assert len(frame) == 1
+    assert frame.iloc[0]["odds_feed_source"] == "espn_ncaaf_fcs_scoreboard"
+    assert float(frame.iloc[0]["draftkings_home_point"]) == 4.5
+    assert not expanded.empty
+    assert expanded["odds_source"].eq("espn_draftkings_fallback").all()
+    assert expanded["odds_feed_source"].eq("espn_ncaaf_fcs_scoreboard").all()
+    assert sp._is_nonproduction_odds_source(expanded.iloc[0]["odds_source"])
+
+
+def test_ncaaf_fallback_never_replaces_a_primary_game():
+    primary = [_ncaaf_live_game()]
+    fallback = [dict(_ncaaf_live_game(), id="espn-duplicate", odds_feed_source="espn_ncaaf_fcs_scoreboard")]
+
+    merged = espn_ncaaf_odds.merge_missing_ncaaf_games(primary, fallback)
+
+    assert merged == primary
+
+
+def test_espn_ncaaf_fallback_can_rank_but_cannot_be_wager_approved():
+    analysis = pd.DataFrame(
+        [
+            {
+                "league": "NCAAF",
+                "home_team": "Delaware State Hornets",
+                "away_team": "Stony Brook Seawolves",
+                "game_date": pd.Timestamp("2026-08-27", tz="UTC"),
+                "matchup_id": "ncaaf-fcs-1",
+                "market_type": "spread_home",
+                "spread_line": 4.5,
+                "total_line": pd.NA,
+                "line_source": "live_odds",
+                "edge": 0.08,
+                "expected_value": 0.10,
+                "model_probability": 0.60,
+                "theover_probability": 0.60,
+                "ml_probability": pd.NA,
+                "calibrated_probability": 0.60,
+                "odds_american": -110,
+                "market_probability": 0.52,
+                "odds_source": "espn_draftkings_fallback",
+                "odds_feed_source": "espn_ncaaf_fcs_scoreboard",
+                "is_live_data": True,
+                "used_stale_features": False,
+            }
+        ]
+    )
+
+    best = sp.build_best_picks_df(analysis)
+
+    assert len(best) == 1
+    assert best.loc[0, "odds_source"] == "espn_draftkings_fallback"
+    assert not bool(best.loc[0, "wager_approved"])
+    assert float(best.loc[0, "production_bet_amount"]) == 0.0
+    assert "fallback" in str(best.loc[0, "status_blocker_reason"]).lower()
 
 
 def test_ncaaf_source_hint_wins_over_shared_college_mascots():
