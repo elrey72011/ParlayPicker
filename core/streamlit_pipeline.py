@@ -158,7 +158,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-08-27a-precision-ml-top1"
+PIPELINE_BUILD = "2026-08-27b-ncaaf-fcs-fallback"
 
 # Best Available must compare standard, reasonably priced markets. A P2P exchange can
 # expose alternate run lines (for example +5.5 at -1150) beside the standard MLB +1.5.
@@ -166,8 +166,18 @@ PIPELINE_BUILD = "2026-08-27a-precision-ml-top1"
 # a standard spread picker and must never win merely because their hit probability is high.
 NOVIG_MLB_SPREAD_OUTLIER_TOL = 0.5
 BEST_AVAILABLE_SPREAD_MIN_AMERICAN_ODDS = -400.0
+
+
+def _is_nonproduction_odds_source(value: object) -> bool:
+    """Return True for price sources that may be ranked but never funded."""
+
+    source = "" if value is None else str(value).strip().lower()
+    return "fallback_novig" in source or "espn_draftkings_fallback" in source
+
+
 REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
     "pipeline_build",
+    "odds_feed_source",
     "status_metric_basis",
     "selection_probability_used",
     "selection_probability_source",
@@ -329,6 +339,7 @@ def ensure_best_pick_export_columns(
     out = export_df.copy()
     req_cols = list(required_columns or REQUIRED_BEST_PICK_EXPORT_COLUMNS)
     default_values: dict[str, object] = {
+        "odds_feed_source": "",
         "status_metric_basis": "raw",
         "selection_probability_used": pd.NA,
         "selection_probability_source": "calibrated_probability",
@@ -412,7 +423,7 @@ def ensure_best_pick_export_columns(
     missing_cols = [c for c in req_cols if c not in out.columns]
 
     for col in req_cols:
-        if col in {"status_blocker_reason", "status_blocker_stage", "nba_stats_fetch_status", "fallback_summary_by_league", "run_health_warning", "degraded_feature_subset_reason", "status_metric_basis", "selection_probability_source", "mlb_spread_finalist_penalty_reason", "recent_regime_penalty_reason", "recent_regime_bucket", "best_available_value_override_from_pick", "market_line_source", "market_line_source_detail", "line_consistency_reason", "line_provenance_warning", "line_event_identity_reason", "live_event_match_key", "selected_live_event_source", "raw_book_odds_diag", "best_available_runner_up_pick", "best_available_runner_up_market_type", "best_available_selection_reason", "qualification_reason", "display_pick", "commercial_tier", "commercial_reason", "final_pick_valid_reason"}:
+        if col in {"odds_feed_source", "status_blocker_reason", "status_blocker_stage", "nba_stats_fetch_status", "fallback_summary_by_league", "run_health_warning", "degraded_feature_subset_reason", "status_metric_basis", "selection_probability_source", "mlb_spread_finalist_penalty_reason", "recent_regime_penalty_reason", "recent_regime_bucket", "best_available_value_override_from_pick", "market_line_source", "market_line_source_detail", "line_consistency_reason", "line_provenance_warning", "line_event_identity_reason", "live_event_match_key", "selected_live_event_source", "raw_book_odds_diag", "best_available_runner_up_pick", "best_available_runner_up_market_type", "best_available_selection_reason", "qualification_reason", "display_pick", "commercial_tier", "commercial_reason", "final_pick_valid_reason"}:
             out[col] = out[col].fillna(default_values.get(col, "")).astype(str)
 
     # The public card always answers which candidate ranked first for the game.
@@ -543,7 +554,7 @@ BEST_PICK_COLUMNS = [
     "best_available_only", "commercial_reason", "wager_approved", "export_role",
     "wager_instruction",
     "decimal_odds", "matchup_id",
-    "odds_american", "odds_source", "market_probability", "ml_probability", "ml_probability_source", "ml_target", "ml_projection", "ml_residual_scale", "ml_feature_quality", "theover_probability", "win_prob_source", "display_probability",
+    "odds_american", "odds_source", "odds_feed_source", "market_probability", "ml_probability", "ml_probability_source", "ml_target", "ml_projection", "ml_residual_scale", "ml_feature_quality", "theover_probability", "win_prob_source", "display_probability",
     "kalshi_probability", "kalshi_match_status", "kalshi_match_reason",
     # Kalshi match instrumentation: the contract line actually used, its distance from
     # the pick line, and the raw P(over) before orientation/decay â€” for diagnosing a
@@ -585,7 +596,7 @@ CANONICAL_BET_COLUMNS = [
     "league", "home_team", "away_team", "game_date", "game_time_est", "game_key",
     "market_type", "candidate_source", "orientation_source", "upload_match_reason", "spread_line", "total_line",
     "orientation_favorite_side",
-    "theover_probability", "win_prob_source", "odds_american", "odds_source", "market_probability",
+    "theover_probability", "win_prob_source", "odds_american", "odds_source", "odds_feed_source", "market_probability",
     "ml_probability", "ml_probability_source", "ml_target", "ml_projection", "ml_residual_scale", "ml_feature_quality", "display_probability", "calibrated_probability", "expected_value", "edge", "best_pick", "used_stale_features", "matchup_id", "Conviction_Score",
     "uploaded_spread_line", "uploaded_total_line", "live_spread_line", "live_total_line", "line_source", "line_delta", "upload_market_match",
     # Carried so a TheOver-feed degradation warning set by _apply_analysis_calculations
@@ -4529,7 +4540,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     candidate_audit_columns = [
         "pipeline_build", "league", "home_team", "away_team", "game_date", "game_time_est",
         "matchup_id", "market_type", "candidate_source", "best_pick",
-        "odds_american", "opposing_odds_american", "odds_source",
+        "odds_american", "opposing_odds_american", "odds_source", "odds_feed_source",
         "opposing_odds_source", "market_probability", "line_source",
         "ml_probability", "ml_probability_source", "ml_target", "ml_projection",
         "ml_residual_scale", "ml_feature_quality", "theover_probability",
@@ -4737,7 +4748,11 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         # Additional row-specific fallback signals based on requirement
         is_live_data = bool(best.at[idx, "is_live_data"]) if "is_live_data" in best.columns and pd.notna(best.at[idx, "is_live_data"]) else True
 
-        is_fallback_or_stale = (stale or not is_live_data or "fallback_novig" in odds_source)
+        is_fallback_or_stale = (
+            stale
+            or not is_live_data
+            or _is_nonproduction_odds_source(odds_source)
+        )
 
         # Determine status (strict precedence)
         is_missing_line = False
@@ -7065,6 +7080,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
 
 
 def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None = None) -> pd.DataFrame:
+    from app_core.espn_ncaaf_odds import (
+        fetch_espn_ncaaf_fcs_odds,
+        merge_missing_ncaaf_games,
+    )
     from app_core.odds_api import TheOddsAPIClient, filter_games_today_only
     import pandas as pd
 
@@ -7075,10 +7094,11 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
 
     api_key = _get_odds_api_key()
     if not api_key:
-        logger.error("No ODDS_API_KEY found.")
-        return pd.DataFrame()
+        logger.error(
+            "No ODDS_API_KEY found; only the research-only NCAAF FCS fallback can run."
+        )
 
-    client = TheOddsAPIClient(api_key=api_key)
+    client = TheOddsAPIClient(api_key=api_key) if api_key else None
 
     sport_keys = []
     if sports:
@@ -7115,12 +7135,30 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
 
     game_dict = {}
     for sk in sport_keys:
+        games = []
         try:
-            games = client.get_odds(sk, date=date)
-            if not games:
-                continue
+            if client is not None:
+                games = client.get_odds(sk, date=date)
             if isinstance(games, dict) and "message" in games:
                 logger.error(f"Odds API error for {sk}: {games.get('message')}")
+                games = []
+        except Exception as e:
+            logger.error(f"Network/API failure for {sk}: {e}")
+            games = []
+
+        if sk == "americanfootball_ncaaf":
+            # ESPN's default college-football scoreboard and some paid feeds can
+            # omit an FCS-only opening-day slate. Query ESPN group 81 explicitly,
+            # append only missing games, and keep the recovered DraftKings prices
+            # visibly separate from Novig/the primary source downstream.
+            try:
+                fallback_games = fetch_espn_ncaaf_fcs_odds(date)
+                games = merge_missing_ncaaf_games(games, fallback_games)
+            except Exception as e:
+                logger.error("NCAAF FCS fallback normalization failed closed: %s", e)
+
+        try:
+            if not games:
                 continue
 
             # Historical/backfill requests must honor the caller's explicit date.
@@ -7178,6 +7216,9 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
                         'game_date': game_date,
                         'game_time_est': game_time_est,
                         'matchup_id': matchup_id,
+                        'odds_feed_source': str(
+                            game.get('odds_feed_source') or 'the_odds_api'
+                        ),
                     }
 
                 row = game_dict[matchup_id]
@@ -7216,7 +7257,7 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
                                     row[f'{book_key}_h2h_away_price'] = o.get('price')
 
         except Exception as e:
-            logger.error(f"Network/API failure for {sk}: {e}")
+            logger.error(f"Odds normalization failure for {sk}: {e}")
             continue
 
     if not game_dict:
@@ -7800,7 +7841,10 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
     out_rows = []
 
     # Required identity columns
-    id_cols = ["league", "home_team", "away_team", "game_date", "matchup_id", "commence_time_raw"]
+    id_cols = [
+        "league", "home_team", "away_team", "game_date", "matchup_id",
+        "commence_time_raw", "odds_feed_source",
+    ]
     # Check for game_time_est if exists
     if "game_time_est" in live_odds_df.columns:
         id_cols.append("game_time_est")
@@ -8680,6 +8724,14 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
                         if getattr(weights_config, 'LOCK_UPLOAD_LINES_FOR_MATCHED_ROWS', False) and pd.notna(market_dict["uploaded_total_line"]):
                             market_dict["total_line"] = market_dict["uploaded_total_line"]
                             market_dict["line_source"] = "uploaded_theover"
+
+            if str(market_dict.get("odds_feed_source", "")).strip() == "espn_ncaaf_fcs_scoreboard":
+                # These quotes came from ESPN's DraftKings payload, not Novig.
+                # Preserve the usable live line for research/ranking, but stamp a
+                # non-production odds source so the status gate forces No Play/$0.
+                current_odds_source = str(market_dict.get("odds_source", ""))
+                if not current_odds_source.startswith("rejected_"):
+                    market_dict["odds_source"] = "espn_draftkings_fallback"
 
             out_rows.append(market_dict)
 
