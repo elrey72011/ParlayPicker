@@ -82,3 +82,44 @@ def test_unsupported_rows_are_explicit_not_silently_pending(monkeypatch):
     assert graded.loc[0, "grading_status"] == "UNSUPPORTED LEAGUE"
     assert graded.loc[0, "grading_issue"] == "no_results_provider_configured"
     assert graded.attrs["unsupported_leagues"] == ["XYZ"]
+
+
+def test_ncaaf_fcs_final_with_mascot_variant_grades_pick(monkeypatch):
+    picks = pd.DataFrame(
+        [
+            {
+                "league": "NCAAF",
+                "home_team": "West Florida Argonauts",
+                "away_team": "Southern Illinois",
+                "best_pick": "Under 55.5",
+            }
+        ]
+    )
+
+    def fake_fetch(leagues, target_date=None, attempts=2):
+        out = pd.DataFrame(
+            [
+                {
+                    "league": "NCAAF",
+                    "home_team": "WEST FLORIDA ARGONAUTS",
+                    "away_team": "SOUTHERN ILLINOIS SALUKIS",
+                    "home_score": 34,
+                    "away_score": 31,
+                    "date": "2026-08-27",
+                }
+            ]
+        )
+        out.attrs["unsupported_leagues"] = []
+        return out
+
+    monkeypatch.setattr(
+        "app_core.performance_pipeline.fetch_yesterdays_results", fake_fetch
+    )
+    graded = grade_picks_with_live_results(picks)
+
+    assert graded.loc[0, "actual_home_score"] == 34
+    assert graded.loc[0, "actual_away_score"] == 31
+    assert graded.loc[0, "Pick_Outcome"] == "LOSS"
+    assert graded.loc[0, "grading_status"] == "GRADED"
+    assert graded.attrs["settled_count"] == 1
+    assert graded.attrs["unresolved_count"] == 0

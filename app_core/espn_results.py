@@ -16,6 +16,9 @@ ESPN_ENDPOINTS = {
     'NCAAB': 'https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard'
 }
 
+ESPN_NCAAF_FCS_GROUP_ID = "81"
+ESPN_NCAAF_FCS_LIMIT = 300
+
 
 def _requested_leagues(leagues: list) -> list[str]:
     """Return normalized, de-duplicated league keys in request order."""
@@ -26,6 +29,21 @@ def _requested_leagues(leagues: list) -> list[str]:
         if normalized and normalized not in requested:
             requested.append(normalized)
     return requested
+
+
+def _scoreboard_urls(league: str, date_str: str) -> list[str]:
+    """Return every ESPN scoreboard view required for complete league coverage."""
+
+    base_url = ESPN_ENDPOINTS[league]
+    urls = [f"{base_url}?dates={date_str}"]
+    if league == "NCAAF":
+        # ESPN's default college-football scoreboard can omit FCS-only slates.
+        # Query the explicit FCS group as well, then de-duplicate final games.
+        urls.append(
+            f"{base_url}?dates={date_str}&groups={ESPN_NCAAF_FCS_GROUP_ID}"
+            f"&limit={ESPN_NCAAF_FCS_LIMIT}"
+        )
+    return urls
 
 
 def fetch_espn_results(
@@ -52,77 +70,77 @@ def fetch_espn_results(
         if league_upper not in ESPN_ENDPOINTS:
             continue
 
-        url = f"{ESPN_ENDPOINTS[league_upper]}?dates={date_str}"
         league_results = []
         max_attempts = max(1, int(attempts or 1))
 
-        for attempt in range(1, max_attempts + 1):
-            try:
-                response = requests.get(url, timeout=10)
-                if response.status_code != 200:
+        for url in _scoreboard_urls(league_upper, date_str):
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    response = requests.get(url, timeout=10)
+                    if response.status_code != 200:
+                        logger.warning(
+                            "Failed to fetch %s from ESPN (attempt %s/%s). Status: %s",
+                            league_upper,
+                            attempt,
+                            max_attempts,
+                            response.status_code,
+                        )
+                        continue
+
+                    data = response.json()
+                    events = data.get('events', [])
+
+                    for event in events:
+                        competitions = event.get('competitions', [])
+                        if not competitions:
+                            continue
+
+                        match = competitions[0]
+                        competitors = match.get('competitors', [])
+
+                        if len(competitors) != 2:
+                            continue
+
+                        home_team_data = next((team for team in competitors if team.get('homeAway') == 'home'), None)
+                        away_team_data = next((team for team in competitors if team.get('homeAway') == 'away'), None)
+
+                        if not home_team_data or not away_team_data:
+                            continue
+
+                        status = match.get('status', {}).get('type', {}).get('state')
+                        if status != 'post':
+                            continue
+
+                        home_name = home_team_data.get('team', {}).get('displayName')
+                        away_name = away_team_data.get('team', {}).get('displayName')
+                        home_score = home_team_data.get('score')
+                        away_score = away_team_data.get('score')
+
+                        # A zero is a valid final score (notably MLB shutouts). Only
+                        # absent scores should keep a final from entering grading.
+                        if home_score is not None and away_score is not None:
+                            league_results.append({
+                                'league': league_upper,
+                                'home_team': home_name,
+                                'away_team': away_name,
+                                'home_score': int(home_score),
+                                'away_score': int(away_score),
+                                'date': target_date.strftime("%Y-%m-%d")
+                            })
+
+                    # A successful response should not be retried just because every
+                    # event is still in progress. The dashboard's explicit backfill
+                    # control handles games that become final later.
+                    break
+
+                except Exception as e:
                     logger.warning(
-                        "Failed to fetch %s from ESPN (attempt %s/%s). Status: %s",
+                        "Error fetching/parsing ESPN data for %s (attempt %s/%s): %s",
                         league_upper,
                         attempt,
                         max_attempts,
-                        response.status_code,
+                        e,
                     )
-                    continue
-
-                data = response.json()
-                events = data.get('events', [])
-
-                for event in events:
-                    competitions = event.get('competitions', [])
-                    if not competitions:
-                        continue
-
-                    match = competitions[0]
-                    competitors = match.get('competitors', [])
-
-                    if len(competitors) != 2:
-                        continue
-
-                    home_team_data = next((team for team in competitors if team.get('homeAway') == 'home'), None)
-                    away_team_data = next((team for team in competitors if team.get('homeAway') == 'away'), None)
-
-                    if not home_team_data or not away_team_data:
-                        continue
-
-                    status = match.get('status', {}).get('type', {}).get('state')
-                    if status != 'post':
-                        continue
-
-                    home_name = home_team_data.get('team', {}).get('displayName')
-                    away_name = away_team_data.get('team', {}).get('displayName')
-                    home_score = home_team_data.get('score')
-                    away_score = away_team_data.get('score')
-
-                    # A zero is a valid final score (notably MLB shutouts). Only
-                    # absent scores should keep a final from entering grading.
-                    if home_score is not None and away_score is not None:
-                        league_results.append({
-                            'league': league_upper,
-                            'home_team': home_name,
-                            'away_team': away_name,
-                            'home_score': int(home_score),
-                            'away_score': int(away_score),
-                            'date': target_date.strftime("%Y-%m-%d")
-                        })
-
-                # A successful response should not be retried just because every
-                # event is still in progress. The dashboard's explicit backfill
-                # control handles games that become final later.
-                break
-
-            except Exception as e:
-                logger.warning(
-                    "Error fetching/parsing ESPN data for %s (attempt %s/%s): %s",
-                    league_upper,
-                    attempt,
-                    max_attempts,
-                    e,
-                )
 
         results.extend(league_results)
 
@@ -133,6 +151,10 @@ def fetch_espn_results(
 
         df['home_team'] = df['home_team'].apply(lambda x: normalize_result_team(x) if pd.notnull(x) else x)
         df['away_team'] = df['away_team'].apply(lambda x: normalize_result_team(x) if pd.notnull(x) else x)
+        df = df.drop_duplicates(
+            subset=['league', 'home_team', 'away_team', 'date'],
+            keep='last',
+        ).reset_index(drop=True)
 
     df.attrs["requested_leagues"] = requested_leagues
     df.attrs["unsupported_leagues"] = unsupported_leagues
