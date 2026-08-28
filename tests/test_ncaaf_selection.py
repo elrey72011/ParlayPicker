@@ -394,10 +394,84 @@ def test_ncaaf_results_are_gradeable_through_espn(monkeypatch):
     assert espn_results.ESPN_ENDPOINTS["NCAAF"].endswith(
         "/football/college-football/scoreboard"
     )
-    assert requested_urls and "dates=20260829" in requested_urls[0]
+    assert len(requested_urls) == 2
+    assert "dates=20260829" in requested_urls[0]
+    assert "groups=81" in requested_urls[1]
+    assert "limit=300" in requested_urls[1]
     assert results.attrs["unsupported_leagues"] == []
+    assert len(results) == 1
     assert results.loc[0, "league"] == "NCAAF"
     assert int(results.loc[0, "home_score"]) == 31
+
+
+def test_ncaaf_results_merge_default_and_fcs_scoreboards(monkeypatch):
+    def payload(home, away, home_score, away_score):
+        return {
+            "events": [
+                {
+                    "competitions": [
+                        {
+                            "status": {"type": {"state": "post"}},
+                            "competitors": [
+                                {
+                                    "homeAway": "home",
+                                    "score": home_score,
+                                    "team": {"displayName": home},
+                                },
+                                {
+                                    "homeAway": "away",
+                                    "score": away_score,
+                                    "team": {"displayName": away},
+                                },
+                            ],
+                        }
+                    ]
+                }
+            ]
+        }
+
+    class FakeResponse:
+        status_code = 200
+
+        def __init__(self, body):
+            self.body = body
+
+        def json(self):
+            return self.body
+
+    requested_urls = []
+
+    def fake_get(url, timeout):
+        requested_urls.append(url)
+        assert timeout == 10
+        if "groups=81" in url:
+            return FakeResponse(
+                payload(
+                    "West Florida Argonauts",
+                    "Southern Illinois Salukis",
+                    "31",
+                    "28",
+                )
+            )
+        return FakeResponse(
+            payload("Ohio State Buckeyes", "Texas Longhorns", "35", "24")
+        )
+
+    monkeypatch.setattr(espn_results.requests, "get", fake_get)
+    results = espn_results.fetch_espn_results(
+        ["NCAAF"], target_date=pd.Timestamp("2026-08-27").date(), attempts=1
+    )
+
+    assert len(requested_urls) == 2
+    assert set(results["home_team"]) == {
+        "OHIO STATE",
+        "WEST FLORIDA ARGONAUTS",
+    }
+    assert set(results["away_team"]) == {
+        "TEXAS",
+        "SOUTHERN ILLINOIS SALUKIS",
+    }
+    assert results["home_score"].tolist() == [35, 31]
 
 
 def test_disabled_cfbd_session_uses_espn_ncaaf_fallback(monkeypatch):
