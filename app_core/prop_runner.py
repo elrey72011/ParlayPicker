@@ -235,9 +235,18 @@ def build_strikeout_card(
             diagnostics["strikeout_prop_event_list_attempts"] = attempts
         return []
 
-    event_ids = [e.get("id") for e in events if isinstance(e, dict) and e.get("id")]
+    raw_event_ids = [
+        e.get("id") for e in events if isinstance(e, dict) and e.get("id")
+    ]
+    # Provider event lists can repeat the same id. Fetching it twice can capture
+    # two successive prices for one prop and leak both into the grading export.
+    # Ordered de-duplication preserves distinct doubleheader event ids.
+    event_ids = list(dict.fromkeys(raw_event_ids))
     if diagnostics is not None:
         diagnostics["strikeout_prop_event_count"] = len(event_ids)
+        diagnostics["strikeout_prop_duplicate_event_count"] = (
+            len(raw_event_ids) - len(event_ids)
+        )
     if not event_ids:
         if diagnostics is not None:
             diagnostics["strikeout_prop_feed_status"] = "no_events"
@@ -303,6 +312,61 @@ def build_strikeout_card(
 def _decimal_odds(american: float) -> float:
     a = float(american)
     return 1.0 + (a / 100.0 if a > 0 else 100.0 / -a)
+
+
+def _dedupe_prop_card_rows(card: pd.DataFrame) -> tuple[pd.DataFrame, int]:
+    """Collapse repeated quotes for one event/participant/market/book.
+
+    ``event_id`` is retained internally through card construction so two games
+    between the same teams on the same date remain distinct. If an injected or
+    legacy row has no event id, commence time plus matchup/date is the fallback.
+    The bettor-favorable American price is retained when duplicate snapshots
+    disagree (for example, -155 is better than -160).
+    """
+    if card is None or card.empty:
+        return card, 0
+
+    out = card.copy()
+    index = out.index
+    event_id = out.get("_event_id", pd.Series("", index=index)).fillna("").astype(str).str.strip()
+    commence = out.get("_commence_time", pd.Series("", index=index)).fillna("").astype(str).str.strip()
+    matchup = out.get("matchup", pd.Series("", index=index)).fillna("").astype(str).str.strip().str.lower()
+    game_date = out.get("game_date", pd.Series("", index=index)).fillna("").astype(str).str.strip()
+    fallback_event = game_date + "|" + commence + "|" + matchup
+    out["_dedupe_event"] = event_id.where(event_id.ne(""), fallback_event)
+    out["_dedupe_player"] = out.get(
+        "player", pd.Series("", index=index)
+    ).fillna("").astype(str).str.strip().str.lower()
+    out["_dedupe_market"] = out.get(
+        "market_type", pd.Series("", index=index)
+    ).fillna("").astype(str).str.strip().str.lower()
+    out["_dedupe_line"] = pd.to_numeric(
+        out.get("line", pd.Series(float("nan"), index=index)), errors="coerce"
+    ).round(4)
+    out["_dedupe_book"] = out.get(
+        "book", pd.Series("", index=index)
+    ).fillna("").astype(str).str.strip().str.lower()
+    out["_dedupe_price"] = pd.to_numeric(
+        out.get("odds_american", pd.Series(float("nan"), index=index)),
+        errors="coerce",
+    )
+    identity = [
+        "_dedupe_event", "_dedupe_player", "_dedupe_market",
+        "_dedupe_line", "_dedupe_book",
+    ]
+    before = len(out)
+    out = out.sort_values(
+        [*identity, "_dedupe_price"],
+        ascending=[True, True, True, True, True, False],
+        na_position="last",
+        kind="mergesort",
+    ).drop_duplicates(identity, keep="first")
+    dropped = before - len(out)
+    helper_columns = [
+        *identity, "_dedupe_price", "_event_id", "_commence_time",
+    ]
+    out = out.drop(columns=[c for c in helper_columns if c in out.columns])
+    return out.reset_index(drop=True), int(dropped)
 
 
 def _resolve_prop_results_history(uploaded_results):
@@ -418,11 +482,17 @@ def build_prop_card(
             "book": r.get("book"),
             "Pick_Status": "Actionable",
             "_stake_pct": stake_pct,
+            "_event_id": r.get("event_id"),
+            "_commence_time": r.get("commence_time"),
         })
 
     card = pd.DataFrame(rows)
     if card.empty:
         return card
+    card, duplicate_quote_count = _dedupe_prop_card_rows(card)
+    diagnostics = card_kwargs.get("diagnostics")
+    if diagnostics is not None:
+        diagnostics["strikeout_prop_duplicate_quote_count"] = duplicate_quote_count
 
     uploaded_results = prop_results_log
     if uploaded_results is None:
@@ -481,7 +551,6 @@ def build_prop_card(
         )
     except Exception:
         pass  # probation is protective, never card-breaking
-    diagnostics = card_kwargs.get("diagnostics")
     if diagnostics is not None:
         diagnostics["prop_calibration_graded_count"] = int(len(clean_history))
         diagnostics["prop_calibration_status"] = (
