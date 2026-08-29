@@ -345,13 +345,16 @@ def test_low_line_over_guardrail_is_consensus_aware(monkeypatch):
         "empirical_proven_losing_bucket",
     }
 
-    # The Aug. 23 global refit maps this raw 60% row to only a +1.3% empirical
-    # edge.  That no longer clears the High Variance bar, so the safer current
-    # contract is Below Threshold rather than the pre-refit speculative tier.
+    # The Aug. 29 chronological refit maps this raw 60% row just above the
+    # research-only High Variance threshold.  Market agreement keeps it out of
+    # the low-line Neutral/Disagrees veto, but it still receives no wager stake;
+    # the aggregate recent-Over guard acts in finalist ranking when the current
+    # fitted family evidence is present.
     agrees = _low_over(0.60)
     assert agrees["consensus_agreement"] == "Agrees"
-    assert agrees["Pick_Status"] == "Below Threshold"
-    assert agrees["status_blocker_stage"] == "empirical_tier_overlay"
+    assert agrees["Pick_Status"] == "High Variance/Speculative"
+    assert not bool(agrees["production_eligible"])
+    assert float(agrees["Kelly_Bet_Size"]) == 0.0
 
 
 def test_consensus_is_directional_same_side_is_agrees():

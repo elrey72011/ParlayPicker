@@ -146,6 +146,15 @@ def fit_bucket_stats(exports_dir: Path, half_life_days: float = DEFAULT_HALF_LIF
     graded["bucket"] = [
         bucket_key(l, m, c) for l, m, c in zip(graded["league"], graded["market_type"], graded["consensus"])
     ]
+    graded["market_family"] = graded["market_type"].map(
+        lambda market: (
+            "over"
+            if str(market).lower() == "total_over"
+            else "under"
+            if str(market).lower() == "total_under"
+            else "side"
+        )
+    )
 
     # Age each pick against the newest dated slate (deterministic anchor). An
     # undated file cannot be aged, so its rows get full weight — with a warning,
@@ -165,33 +174,39 @@ def fit_bucket_stats(exports_dir: Path, half_life_days: float = DEFAULT_HALF_LIF
 
     overall_rate = float((graded["win"] * graded["weight"]).sum() / graded["weight"].sum())
 
-    buckets: dict[str, dict] = {}
-    for b, sub in graded.groupby("bucket"):
-        w = sub["weight"]
-        rate = float((sub["win"] * w).sum() / w.sum())
-        eff_n = float(w.sum() ** 2 / (w**2).sum())  # Kish effective sample size
-        n = max(1, int(round(eff_n)))
-        recent = (
-            sub[sub["date_parsed"].ge(recent_cutoff)]
-            if pd.notna(recent_cutoff)
-            else sub.iloc[0:0]
-        )
-        recent_n = int(len(recent))
-        recent_wins = int(recent["win"].sum()) if recent_n else 0
-        buckets[b] = {
-            "n": n,
-            "wins": int(round(rate * n)),
-            "win_rate": rate,
-            "raw_n": int(len(sub)),
-            "raw_wins": int(sub["win"].sum()),
-            "recent_n": recent_n,
-            "recent_wins": recent_wins,
-            "recent_win_rate": (recent_wins / recent_n) if recent_n else None,
-        }
+    def _summarize(grouped) -> dict[str, dict]:
+        summaries: dict[str, dict] = {}
+        for name, sub in grouped:
+            w = sub["weight"]
+            rate = float((sub["win"] * w).sum() / w.sum())
+            eff_n = float(w.sum() ** 2 / (w**2).sum())
+            n = max(1, int(round(eff_n)))
+            recent = (
+                sub[sub["date_parsed"].ge(recent_cutoff)]
+                if pd.notna(recent_cutoff)
+                else sub.iloc[0:0]
+            )
+            recent_n = int(len(recent))
+            recent_wins = int(recent["win"].sum()) if recent_n else 0
+            summaries[str(name)] = {
+                "n": n,
+                "wins": int(round(rate * n)),
+                "win_rate": rate,
+                "raw_n": int(len(sub)),
+                "raw_wins": int(sub["win"].sum()),
+                "recent_n": recent_n,
+                "recent_wins": recent_wins,
+                "recent_win_rate": (recent_wins / recent_n) if recent_n else None,
+            }
+        return summaries
+
+    buckets = _summarize(graded.groupby("bucket"))
+    families = _summarize(graded.groupby("market_family"))
 
     return {
         "overall": {"n": int(len(graded)), "win_rate": overall_rate},
         "buckets": buckets,
+        "families": families,
         "meta": {
             "source": _source_label(exports_dir),
             "fitted_on": pd.Timestamp.now().strftime("%Y-%m-%d"),

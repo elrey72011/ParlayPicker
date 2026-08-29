@@ -274,6 +274,53 @@ def test_recent_bucket_regression_demotes_stale_confidence_from_finalist(monkeyp
     assert side["recent_regime_penalty_reason"] == "fresh_recent_bucket_regression"
 
 
+def test_recent_family_regression_demotes_sparse_over_buckets(monkeypatch):
+    stats = {
+        "overall": {"n": 500, "win_rate": 0.54},
+        "buckets": {
+            "NFL:over:Neutral": {
+                "n": 8, "wins": 1, "win_rate": 0.125,
+                "recent_n": 6, "recent_wins": 0,
+            },
+            "NFL:side:Neutral": {
+                "n": 20, "wins": 11, "win_rate": 0.55,
+                "recent_n": 12, "recent_wins": 7,
+            },
+        },
+        "families": {
+            "over": {
+                "n": 120, "wins": 58, "win_rate": 0.48,
+                "recent_n": 15, "recent_wins": 4,
+            },
+            "side": {
+                "n": 300, "wins": 162, "win_rate": 0.54,
+                "recent_n": 40, "recent_wins": 23,
+            },
+        },
+    }
+    monkeypatch.setattr("core.empirical_tiers.load_bucket_stats", lambda: stats)
+    monkeypatch.setattr("core.probability_calibration.load_calibration", lambda: None)
+    analysis = pd.DataFrame([
+        _candidate("spread_home", probability=0.55, ev=0.00, league="NFL"),
+        _candidate("spread_away", probability=0.45, ev=0.00, league="NFL"),
+        _candidate("total_over", probability=0.59, ev=0.01, league="NFL"),
+        _candidate("total_under", probability=0.41, ev=-0.01, league="NFL"),
+    ])
+    total_mask = analysis["market_type"].str.startswith("total")
+    analysis.loc[total_mask, ["total_line", "live_total_line"]] = 36.5
+    diagnostics: dict = {}
+
+    best = build_best_picks_df(analysis, diagnostics_out=diagnostics)
+
+    assert best.iloc[0]["market_type"] == "spread_home"
+    audit = diagnostics["candidate_audit_df"]
+    over = audit[audit["market_type"].eq("total_over")].iloc[0]
+    assert bool(over["recent_regime_penalty_applied"])
+    assert over["recent_regime_penalty_reason"] == (
+        "fresh_recent_family_regression"
+    )
+
+
 def test_commercial_tier_never_upgrades_an_unfunded_best_available_row():
     frame = pd.DataFrame([
         {
