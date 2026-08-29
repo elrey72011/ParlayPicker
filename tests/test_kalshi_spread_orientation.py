@@ -11,7 +11,11 @@ import pandas as pd
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from app_core.kalshi_integrator import orient_spread_kalshi_prob
+from app_core.kalshi_integrator import (
+    _signed_spread_line,
+    orient_spread_kalshi_prob,
+    spread_market_subject_is_home,
+)
 
 
 # raw_prob = P(subject wins by > L)
@@ -51,3 +55,23 @@ def test_away_favorite_on_its_own_market_is_priced():
 
 def test_missing_line_is_unpriceable():
     assert orient_spread_kalshi_prob(0.40, subject_is_home=True, pick_is_home=True, pick_line=pd.NA) is None
+
+
+def test_signed_spread_line_falls_back_to_exported_pick_label():
+    row = pd.Series({"spread_line": pd.NA, "best_pick": "North Carolina +7.5"})
+    assert _signed_spread_line(row) == 7.5
+
+
+def test_signed_spread_line_preserves_favorite_sign_from_pick_label():
+    row = pd.Series({"spread_line": "", "best_pick": "Montana -15.5"})
+    assert _signed_spread_line(row) == -15.5
+
+
+def test_short_ncaaf_title_resolves_subject_without_guessed_ticker_code():
+    market = {
+        "ticker": "KXNCAAFSPREAD-26AUG29UNCTCU-TCU8",
+        "title": "TCU wins by over 7.5 points?",
+    }
+    assert spread_market_subject_is_home(
+        market, "NCAAF", "Tcu", "North Carolina"
+    ) is True

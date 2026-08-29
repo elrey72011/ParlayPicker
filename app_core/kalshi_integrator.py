@@ -5,7 +5,7 @@ import logging
 import re
 import time
 import math
-from datetime import timedelta
+from datetime import datetime, timedelta
 from dataclasses import dataclass
 import os
 from typing import Any, Optional, Tuple
@@ -1036,29 +1036,63 @@ def _fetch_series_cache(series_set: set[str], date_codes: set[str] | None = None
 
 
 
+_KALSHI_EVENT_DATE_RE = re.compile(
+    r"(?:^|-)(\d{2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\d{2})(?=[A-Z0-9-]|$)",
+    re.IGNORECASE,
+)
+
+
+def _event_date_from_ticker(item: dict[str, Any]) -> pd.Timestamp | None:
+    """Extract Kalshi's authoritative event day from an event/market ticker."""
+    for key in ("event_ticker", "ticker"):
+        ticker = _safe_text(item.get(key)).upper()
+        match = _KALSHI_EVENT_DATE_RE.search(ticker)
+        if not match:
+            continue
+        try:
+            return pd.Timestamp(
+                datetime.strptime("".join(match.groups()), "%y%b%d"),
+                tz="UTC",
+            )
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
 def _is_within_72h(item: dict[str, Any], game_date_obj: pd.Timestamp) -> bool:
+    """Return whether an event belongs near the requested game day.
+
+    Kalshi event payloads commonly omit ``close_time``.  ``last_updated_ts`` is
+    metadata freshness, not kickoff time, and previously caused the matcher to
+    discard the correct slate while admitting unrelated future events.  The
+    date embedded in the ticker (for example ``-26AUG29``) is authoritative.
+    """
     if pd.isna(game_date_obj):
         return True
 
-    close_time_str = _safe_first_present(
+    game_dt = pd.to_datetime(game_date_obj, errors="coerce", utc=True)
+    if pd.isna(game_dt):
+        return True
+
+    ticker_date = _event_date_from_ticker(item)
+    if ticker_date is not None:
+        return abs(ticker_date.normalize() - game_dt.normalize()) <= pd.Timedelta(hours=72)
+
+    scheduled_time_str = _safe_first_present(
         item.get("close_time"),
         item.get("expiration_time"),
-        item.get("last_updated_ts"),
+        item.get("expected_expiration_time"),
     )
-    if not close_time_str:
+    if not scheduled_time_str:
         return True
 
     try:
-        kalshi_dt = pd.to_datetime(close_time_str, utc=True)
-        # Ensure game_date_obj is strictly timezone aware (UTC)
-        if getattr(game_date_obj, 'tz', None) is None:
-            game_date_obj = game_date_obj.tz_localize('UTC')
-        else:
-            game_date_obj = game_date_obj.tz_convert('UTC')
-
-        return abs(kalshi_dt - game_date_obj) <= pd.Timedelta(hours=72)
-    except Exception as e:
-        logger.warning(f"Timezone matching error: {e}")
+        kalshi_dt = pd.to_datetime(scheduled_time_str, errors="coerce", utc=True)
+        if pd.isna(kalshi_dt):
+            return True
+        return abs(kalshi_dt - game_dt) <= pd.Timedelta(hours=72)
+    except Exception as exc:
+        logger.warning("Timezone matching error: %s", exc)
         return True
 
 
@@ -1165,6 +1199,17 @@ def spread_market_subject_is_home(
     home_idx = find_team_reference(norm_title, normalize_team_name(home_team))
     away_idx = find_team_reference(norm_title, normalize_team_name(away_team))
     if home_idx < 0 and away_idx < 0:
+        # Canonical team expansion is useful for most schools, but it can turn a
+        # short display name into a mascot-bearing name (``TCU`` -> ``TCU Horned
+        # Frogs``) while the contract title remains simply ``TCU wins...``.
+        # Retry the literal normalized upload names before declaring the subject
+        # unknown. This also avoids relying on guessed NCAAF ticker codes.
+        literal_title = re.sub(r"[^a-z0-9]+", " ", title_text.lower()).strip()
+        literal_home = re.sub(r"[^a-z0-9]+", " ", str(home_team).lower()).strip()
+        literal_away = re.sub(r"[^a-z0-9]+", " ", str(away_team).lower()).strip()
+        home_idx = find_team_reference(literal_title, literal_home)
+        away_idx = find_team_reference(literal_title, literal_away)
+    if home_idx < 0 and away_idx < 0:
         return None
     return home_idx >= 0 and (away_idx < 0 or home_idx <= away_idx)
 
@@ -1258,6 +1303,27 @@ def orient_spread_kalshi_prob(raw_prob, subject_is_home, pick_is_home, pick_line
     if (not pick_is_subject) and (not pick_is_favorite):
         return 1.0 - float(raw_prob)      # pick == Opp(S) +L (the NO side)
     return None                           # unpriceable from this contract
+
+
+def _signed_spread_line(row: pd.Series) -> float | None:
+    """Return the signed book line, falling back to the exported pick label.
+
+    Candidate-audit exports intentionally keep the human-readable ``best_pick``
+    but can leave ``spread_line`` blank. Treating that blank as a moneyline made
+    the matcher select the first spread contract and later reject every spread as
+    ``spread_side_unpriceable``. A spread label ends in an explicit signed line
+    (for example, ``North Carolina +7.5``), so it is a safe fallback.
+    """
+    line = pd.to_numeric(row.get("spread_line"), errors="coerce")
+    if pd.notna(line):
+        return float(line)
+
+    best_pick = _safe_text(row.get("best_pick")).strip()
+    match = re.search(r"([+-])\s*(\d+(?:\.\d+)?)\s*$", best_pick)
+    if not match:
+        return None
+    magnitude = float(match.group(2))
+    return -magnitude if match.group(1) == "-" else magnitude
 
 
 def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
@@ -1624,12 +1690,8 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                 or _infer_market_family_from_text(m.get('title'), m.get('subtitle'), row_market_type) == "spread"
             ]
 
-            raw_spread_line = _safe_text(row.get("spread_line"))
-            match = re.search(r"[-+]?\s*(\d+(?:\.\d+)?)", raw_spread_line)
-
-            target_line = None
-            if match:
-                target_line = float(match.group(1))
+            signed_spread_line = _signed_spread_line(row)
+            target_line = abs(signed_spread_line) if signed_spread_line is not None else None
 
             # Moneyline fallback
             is_ml_pick = any(x in _safe_text(row.get("market_type")).lower() for x in ["moneyline", "h2h"]) or target_line == 0.0 or target_line is None
@@ -1708,10 +1770,6 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                     m_subtitle = str(mkt.get("subtitle") or "").lower()
                     combined_text = f"{m_title} {m_subtitle}"
 
-                    m_type = market_type
-                    book_line = pd.to_numeric(row.get("spread_line"), errors="coerce")
-                    is_favorite_bet = book_line < 0
-
                     home_t = home_team_name
                     away_t = away_team_name
 
@@ -1733,18 +1791,6 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                     # Identify subject using both name tokens AND tickers
                     kalshi_subject_is_home = bool(home_shared) or (h_code != "" and h_code in combined_upper)
                     kalshi_subject_is_away = bool(away_shared) or (a_code != "" and a_code in combined_upper)
-
-                    # 1. Identify which team the pick is actually on
-                    pick_team_name = _safe_text(row.get("pick_team")).strip()
-                    # home_team_name was defined earlier as home_team_val, we'll re-extract to be safe
-                    home_team_name_for_match = _safe_text(row.get("home_team")).strip()
-
-                    # 2. Determine if the pick is on the Home or Away team
-                    # We use this to know which Kalshi subject we are looking for
-                    if pick_team_name == home_team_name_for_match:
-                        expected_subject_is_home = True
-                    else:
-                        expected_subject_is_home = False
 
                     # Loosen the filter: Accept the market if it's about EITHER team in the game.
                     # The orientation logic (around line 1150) will handle the probability inversion.
@@ -1779,37 +1825,37 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
                 if kalshi_lines:
                     target_line_abs = abs(float(target_line))
+                    pick_is_home = "home" in str(market_type).lower()
 
-                    # Side-aware tie-break (7 Jul): a run-line event carries TWO
-                    # markets at the same strike — "Toronto wins by over 1.5" and
-                    # "San Francisco wins by over 1.5". A pick on SF +1.5 is only
-                    # priceable off the TORONTO-subject contract (its NO side);
-                    # picking the same-line market by list order chose the SF one
-                    # and orientation correctly refused it -> permanent
-                    # spread_side_unpriceable miss. Among equal-|Δline| candidates,
-                    # prefer a market whose subject makes the pick priceable.
-                    def _spread_unpriceable_rank(mkt) -> int:
-                        try:
-                            subj_is_home = spread_market_subject_is_home(
-                                mkt,
-                                league,
-                                _safe_text(row.get("home_team")),
-                                _safe_text(row.get("away_team")),
-                            )
-                            if subj_is_home is None:
-                                return 1
-                            ok = orient_spread_kalshi_prob(
-                                0.5, subj_is_home, "home" in str(market_type).lower(),
-                                pd.to_numeric(row.get("spread_line"), errors="coerce"),
-                            )
-                            return 0 if ok is not None else 1
-                        except Exception:
-                            return 1
+                    # Select only contracts that can actually price this side.
+                    # Ranking line distance first and checking orientation later
+                    # lets a closer wrong-subject contract crowd out a valid one.
+                    priceable_lines = []
+                    for candidate in kalshi_lines:
+                        subject_is_home = spread_market_subject_is_home(
+                            candidate[2],
+                            league,
+                            _safe_text(row.get("home_team")),
+                            _safe_text(row.get("away_team")),
+                        )
+                        if subject_is_home is None:
+                            continue
+                        oriented = orient_spread_kalshi_prob(
+                            candidate[1],
+                            subject_is_home,
+                            pick_is_home,
+                            signed_spread_line,
+                        )
+                        if oriented is not None:
+                            priceable_lines.append(candidate)
 
-                    nearest = min(
-                        kalshi_lines,
-                        key=lambda x: (abs(float(x[0]) - target_line_abs), _spread_unpriceable_rank(x[2])),
-                    )
+                    if not priceable_lines:
+                        out.at[idx, "kalshi_match_status"] = "miss"
+                        out.at[idx, "kalshi_match_reason"] = "spread_side_unpriceable"
+                        out.at[idx, "kalshi_match_quality"] = "line_mismatched"
+                        continue
+
+                    nearest = min(priceable_lines, key=lambda x: abs(float(x[0]) - target_line_abs))
                     delta = abs(float(nearest[0]) - target_line_abs)
                     league_tolerance = MAX_LINE_TOLERANCE.get(league, 3.5)
 
@@ -1969,7 +2015,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                         raw_prob,
                         spread_subject_is_home,
                         "home" in market_type_str,
-                        pd.to_numeric(row.get("spread_line"), errors="coerce"),
+                        _signed_spread_line(row),
                     )
                 )
                 if _oriented is None:
