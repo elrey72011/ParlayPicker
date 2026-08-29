@@ -142,13 +142,17 @@ def test_nfl_card_queries_preseason_and_regular_season_keys():
     assert card.iloc[0]["NFL_Research_Rank"] == 1
 
 
-def test_nfl_fetch_recovers_supported_market_across_all_us_books(monkeypatch):
+def test_nfl_fetch_requests_draftkings_across_all_us_regions(monkeypatch):
     calls = []
 
     def fake_fetch(client, sport_key, event_id, market_keys, **kwargs):
         calls.append((tuple(market_keys), kwargs))
-        if "bookmakers" in kwargs and kwargs["bookmakers"] is None:
-            return [{"market_key": "player_pass_yds", "player": "Josh Allen"}]
+        if kwargs.get("bookmakers") == "draftkings":
+            return [{
+                "market_key": "player_pass_yds",
+                "player": "Josh Allen",
+                "book": "draftkings",
+            }]
         return []
 
     monkeypatch.setattr(
@@ -156,7 +160,7 @@ def test_nfl_fetch_recovers_supported_market_across_all_us_books(monkeypatch):
     )
     monkeypatch.setattr(
         "app_core.prop_odds_ingest.fetch_event_player_prop_markets",
-        lambda client, sport_key, event_id, regions: {"player_pass_yds"},
+        lambda client, sport_key, event_id, regions, bookmakers: {"player_pass_yds"},
     )
     diagnostics = {}
     rows = fetch_nfl_player_props(
@@ -166,7 +170,11 @@ def test_nfl_fetch_recovers_supported_market_across_all_us_books(monkeypatch):
         diagnostics=diagnostics,
     )
 
-    assert rows == [{"market_key": "player_pass_yds", "player": "Josh Allen"}]
+    assert rows == [{
+        "market_key": "player_pass_yds",
+        "player": "Josh Allen",
+        "book": "draftkings",
+    }]
     assert calls[0][0] == (
         "player_pass_yds",
         "player_pass_attempts",
@@ -176,12 +184,9 @@ def test_nfl_fetch_recovers_supported_market_across_all_us_books(monkeypatch):
         "player_reception_yds",
         "player_receptions",
     )
-    assert calls[1][0] == ("player_pass_yds",)
-    assert calls[1][1]["bookmakers"] is None
-    assert set(calls[1][1]["regions"].split(",")) == {"us", "us2"}
-    assert diagnostics["nfl_prop_market_discovery_success_count"] == 1
-    assert diagnostics["nfl_prop_events_with_supported_markets"] == 1
-    assert diagnostics["nfl_prop_broad_book_fallback_count"] == 1
+    assert calls[0][1]["bookmakers"] == "draftkings"
+    assert set(calls[0][1]["regions"].split(",")) == {"us", "us2"}
+    assert diagnostics["nfl_prop_target_bookmaker"] == "draftkings"
 
 
 def test_nfl_market_discovery_queries_all_us_books_without_a_book_filter(monkeypatch):
@@ -231,6 +236,43 @@ def test_nfl_market_discovery_queries_all_us_books_without_a_book_filter(monkeyp
     assert "bookmakers" not in request["params"]
 
 
+def test_nfl_market_discovery_can_scope_inventory_to_draftkings(monkeypatch):
+    request = {}
+
+    class Response:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return {
+                "bookmakers": [{
+                    "key": "draftkings",
+                    "markets": [{"key": "player_pass_yds"}],
+                }]
+            }
+
+    def http_get(url, params, timeout):
+        request.update(params)
+        return Response()
+
+    monkeypatch.setattr("requests.get", http_get)
+
+    class Client:
+        BASE_URL = "https://example.test/v4"
+        api_key = "test"
+        regions = "us2"
+
+    keys = fetch_event_player_prop_markets(
+        Client(),
+        "americanfootball_nfl",
+        "event-1",
+        bookmakers="draftkings",
+    )
+
+    assert keys == {"player_pass_yds"}
+    assert request["bookmakers"] == "draftkings"
+
+
 def test_nfl_fetch_stops_when_market_inventory_has_no_supported_props(monkeypatch):
     calls = []
 
@@ -243,7 +285,7 @@ def test_nfl_fetch_stops_when_market_inventory_has_no_supported_props(monkeypatc
     )
     monkeypatch.setattr(
         "app_core.prop_odds_ingest.fetch_event_player_prop_markets",
-        lambda client, sport_key, event_id, regions: {"player_anytime_td"},
+        lambda client, sport_key, event_id, regions, bookmakers: {"player_anytime_td"},
     )
     diagnostics = {}
 
@@ -259,6 +301,27 @@ def test_nfl_fetch_stops_when_market_inventory_has_no_supported_props(monkeypatc
     assert diagnostics["nfl_prop_market_discovery_success_count"] == 1
     assert diagnostics["nfl_prop_events_without_supported_markets"] == 1
     assert diagnostics["nfl_prop_available_market_keys"] == "player_anytime_td"
+
+
+def test_nfl_fetch_rejects_non_draftkings_quotes(monkeypatch):
+    monkeypatch.setattr(
+        "app_core.prop_odds_ingest.fetch_pitcher_props",
+        lambda *args, **kwargs: [{
+            "market_key": "player_pass_yds",
+            "player": "Josh Allen",
+            "book": "fanduel",
+        }],
+    )
+    monkeypatch.setattr(
+        "app_core.prop_odds_ingest.fetch_event_player_prop_markets",
+        lambda client, sport_key, event_id, regions, bookmakers: set(),
+    )
+
+    rows = fetch_nfl_player_props(
+        object(), "americanfootball_nfl", "event-1", diagnostics={}
+    )
+
+    assert rows == []
 
 
 def test_nfl_card_exposes_prop_transport_failures():
@@ -305,6 +368,7 @@ def test_empty_nfl_feed_is_visible_on_combined_mlb_export():
     assert combined.loc[0, "nfl_prop_feed_status"] == "no_prop_markets"
     assert combined.loc[0, "nfl_prop_event_count"] == 3
     assert combined.loc[0, "nfl_prop_events_without_rows"] == 3
+    assert combined.loc[0, "nfl_prop_target_bookmaker"] == "draftkings"
     assert "Rerun closer to kickoff" in nfl_prop_feed_message(diagnostics)
 
 
@@ -324,6 +388,34 @@ def test_nfl_card_diagnostics_count_events_without_rows():
     assert diagnostics["nfl_prop_feed_status"] == "no_prop_markets"
     assert diagnostics["nfl_prop_event_count"] == 2
     assert diagnostics["nfl_prop_events_without_rows"] == 2
+
+
+def test_nfl_card_reports_draftkings_event_and_quote_counts():
+    diagnostics = {}
+    prop = parse_pitcher_props({
+        **_event_payload(),
+        "bookmakers": [{
+            "key": "draftkings",
+            "markets": _event_payload()["bookmakers"][0]["markets"],
+        }],
+    }, "player_pass_yds")[0]
+
+    card = build_nfl_prop_card(
+        object(),
+        "2026-09-13",
+        2026,
+        sport_keys=("americanfootball_nfl",),
+        diagnostics=diagnostics,
+        list_events=lambda client, sport_key, date: [{"id": "event-1"}],
+        props_fetch=lambda client, sport_key, event_id: [prop],
+        form_loader=lambda season, date: _forms(),
+    )
+
+    assert len(card) == 1
+    assert card.iloc[0]["book"] == "draftkings"
+    assert diagnostics["nfl_prop_target_bookmaker"] == "draftkings"
+    assert diagnostics["nfl_prop_target_bookmaker_event_count"] == 1
+    assert diagnostics["nfl_prop_target_bookmaker_quote_count"] == 1
 
 
 def test_nfl_card_reports_discovered_but_unsupported_markets():

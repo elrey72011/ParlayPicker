@@ -15,6 +15,7 @@ import pandas as pd
 
 from app_core.prop_odds_ingest import (
     NFL_PLAYER_PROP_MARKET_KEYS,
+    NFL_PROP_TARGET_BOOKMAKER,
     fetch_nfl_player_props,
 )
 
@@ -28,6 +29,9 @@ NFL_PROP_UNCERTAINTY_Z = 0.35
 NFL_PROP_COVERAGE_DIAGNOSTIC_COLUMNS = (
     "prop_selected_sports",
     "nfl_prop_requested",
+    "nfl_prop_target_bookmaker",
+    "nfl_prop_target_bookmaker_event_count",
+    "nfl_prop_target_bookmaker_quote_count",
     "nfl_selected_game_count",
     "nfl_prop_feed_status",
     "nfl_prop_event_count",
@@ -377,6 +381,7 @@ def build_nfl_prop_card(
         forms = {}
     if diagnostics is not None:
         diagnostics["nfl_prop_form_player_count"] = int(len(forms))
+        diagnostics["nfl_prop_target_bookmaker"] = NFL_PROP_TARGET_BOOKMAKER
     props: list[dict] = []
     event_count = 0
     fetch_errors = 0
@@ -412,6 +417,10 @@ def build_nfl_prop_card(
         diagnostics["nfl_prop_event_fetch_errors"] = fetch_errors
         diagnostics["nfl_prop_events_without_rows"] = events_without_rows
         diagnostics["nfl_prop_raw_count"] = len(props)
+        diagnostics["nfl_prop_target_bookmaker_event_count"] = max(
+            0, event_count - events_without_rows
+        )
+        diagnostics["nfl_prop_target_bookmaker_quote_count"] = len(props)
     if not props:
         if diagnostics is not None:
             discovery_successes = int(
@@ -497,6 +506,16 @@ def attach_nfl_prop_coverage(
     values = {
         "prop_selected_sports": "|".join(sorted(sports)),
         "nfl_prop_requested": requested,
+        "nfl_prop_target_bookmaker": str(
+            details.get("nfl_prop_target_bookmaker")
+            or NFL_PROP_TARGET_BOOKMAKER
+        ),
+        "nfl_prop_target_bookmaker_event_count": int(
+            details.get("nfl_prop_target_bookmaker_event_count", 0) or 0
+        ),
+        "nfl_prop_target_bookmaker_quote_count": int(
+            details.get("nfl_prop_target_bookmaker_quote_count", 0) or 0
+        ),
         "nfl_selected_game_count": max(0, int(nfl_game_count or 0)),
         "nfl_prop_feed_status": status,
         "nfl_prop_event_count": int(details.get("nfl_prop_event_count", 0) or 0),
@@ -540,13 +559,13 @@ def nfl_prop_feed_message(diagnostics: dict | None) -> str:
     status = str(details.get("nfl_prop_feed_status") or "unknown").strip()
     messages = {
         "no_supported_prop_markets": (
-            "NFL games are on the slate, but the provider's event-market inventory "
-            "shows no supported player-prop markets at any queried U.S. book. "
+            "NFL games are on the slate, but DraftKings' event-market inventory "
+            "shows no supported passing, rushing, or receiving prop markets. "
             "Rerun closer to kickoff; no NFL prop rows were fabricated."
         ),
         "no_prop_markets": (
-            "NFL games are on the slate, but supported sportsbook player-prop "
-            "markets are not open yet. Rerun closer to kickoff; no NFL prop "
+            "NFL games are on the slate, but DraftKings player-prop markets are "
+            "not open yet. Rerun closer to kickoff; no NFL prop "
             "rows were fabricated."
         ),
         "event_fetch_failed": (

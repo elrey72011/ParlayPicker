@@ -2961,10 +2961,61 @@ def main() -> None:
                     "band. Both tiers also require at least 3% expected value, a 0.50-stat model advantage, "
                     "valid odds of -150 or better, and sufficient directional calibration. Batter total-base "
                     "and pitcher markets remain research-only. The card funds at most two props per game "
-                    "and five total. NFL passing, rushing, receiving-yard, and reception props are now "
-                    "collected and ranked in a separate research-only model; they stay at $0 until NFL's "
+                    "and five total. DraftKings NFL passing, rushing, receiving-yard, and reception props "
+                    "are collected and ranked in a separate research-only model; they stay at $0 until NFL's "
                     "own market/direction history earns production eligibility. Parlays use funded rows only."
                 )
+                with st.expander("DraftKings NFL Classic — Top 5 by Position"):
+                    st.caption(
+                        "Upload the official player-pool CSV from the exact DraftKings Classic contest. "
+                        "The slate-specific salary file is required because Classic uses a $50,000 cap. "
+                        "Uploaded projections are ranked first; when none are present, DraftKings average "
+                        "fantasy points per game is shown as a labeled fallback. Rankings weight projection "
+                        "70% and salary value 30%. This is a shortlist, not "
+                        "a guarantee that every displayed player fits in one lineup."
+                    )
+                    _dk_classic_upload = st.file_uploader(
+                        "Upload DraftKings NFL Classic salary CSV",
+                        type=["csv"],
+                        key="draftkings_nfl_classic_salary_csv",
+                    )
+                    if _dk_classic_upload is not None:
+                        try:
+                            from app_core.draftkings_classic import (
+                                build_draftkings_classic_shortlist,
+                                parse_draftkings_classic_salary_csv,
+                            )
+
+                            _dk_classic_pool = parse_draftkings_classic_salary_csv(
+                                _dk_classic_upload
+                            )
+                            _dk_classic_shortlist = build_draftkings_classic_shortlist(
+                                _dk_classic_pool,
+                                top_n=5,
+                            )
+                            if _dk_classic_shortlist.empty:
+                                st.warning(
+                                    "No active NFL Classic players with salary and projection/FPPG data "
+                                    "were found in this file."
+                                )
+                            else:
+                                st.dataframe(
+                                    _dk_classic_shortlist,
+                                    width="stretch",
+                                    hide_index=True,
+                                )
+                                st.download_button(
+                                    "Export DraftKings Classic Top 5 by Position",
+                                    _dk_classic_shortlist.to_csv(
+                                        index=False,
+                                        encoding="utf-8-sig",
+                                    ),
+                                    "draftkings_nfl_classic_top5.csv",
+                                    mime="text/csv",
+                                    key="download_draftkings_nfl_classic_top5",
+                                )
+                        except Exception as exc:
+                            st.error(f"Unable to read the DraftKings salary CSV: {exc}")
                 if funded_prop_card.empty:
                     st.info("No player props qualify for a production wager today.")
                 else:
