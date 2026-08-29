@@ -927,10 +927,14 @@ def _select_probability(market: dict[str, Any]) -> float | None:
 
 
 
+_SERIES_FETCH_ERRORS: dict[str, str] = {}
+
+
 def _fetch_series_events(series_ticker: str) -> list[dict[str, Any]]:
     """Fetch all open events for a specific series with pagination."""
     events = []
     params = {"series_ticker": series_ticker, "status": "open", "limit": 100}
+    _SERIES_FETCH_ERRORS.pop(series_ticker, None)
 
     try:
         # Loop up to 20 times for massive slates like NCAAB
@@ -951,8 +955,10 @@ def _fetch_series_events(series_ticker: str) -> list[dict[str, Any]]:
             params["cursor"] = cursor
 
     except KalshiAPIError as exc:
+        _SERIES_FETCH_ERRORS[series_ticker] = f"{type(exc).__name__}: {exc}"
         logger.warning(f"Kalshi series events fetch failed for {series_ticker}: {exc}")
     except Exception as exc:
+        _SERIES_FETCH_ERRORS[series_ticker] = f"{type(exc).__name__}: {exc}"
         logger.warning(f"Kalshi series events fetch failed for {series_ticker}: {exc}")
 
     return events
@@ -1270,9 +1276,15 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         "kalshi_event_ticker",
         "kalshi_market_ticker",
         "kalshi_line_diff",
+        "kalshi_series_ticker",
+        "kalshi_series_fetch_error",
+        "kalshi_best_event_score",
     ]:
         if col not in out.columns:
             out[col] = pd.NA
+    for col in ["kalshi_candidate_event_count", "kalshi_dated_candidate_event_count"]:
+        if col not in out.columns:
+            out[col] = 0
     out["kalshi_match_status"] = "miss"
     out["kalshi_match_reason"] = "no_market_for_tickers"
 
@@ -1302,6 +1314,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
              family = "spread" if family_guess == "spread" else "total"
 
         series = league_series_ticker(league, family)
+        out.at[idx, "kalshi_series_ticker"] = series
 
         game_date = pd.to_datetime(row.get("game_date"), errors="coerce", utc=True)
         game_date_date = game_date.date() if pd.notna(game_date) else None
@@ -1369,6 +1382,13 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
             combined_series_events.extend(
                 enrich_with_kalshi_markets.series_cache.get(event_series, [])
             )
+        series_fetch_errors = [
+            _SERIES_FETCH_ERRORS[event_series]
+            for event_series in series_candidates
+            if event_series in _SERIES_FETCH_ERRORS
+        ]
+        if series_fetch_errors:
+            out.at[idx, "kalshi_series_fetch_error"] = " | ".join(series_fetch_errors)
 
         deduped_series_events: dict[str, dict[str, Any]] = {}
         for event in combined_series_events:
@@ -1394,6 +1414,8 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                         deduped[ticker] = event
                 series_events = list(deduped.values())
 
+        out.at[idx, "kalshi_candidate_event_count"] = len(series_events)
+
         home_team_name = str(home_team_val).strip() if pd.notna(home_team_val) else ""
         away_team_name = str(away_team_val).strip() if pd.notna(away_team_val) else ""
         if league == "NCAAB":
@@ -1402,17 +1424,17 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
         best_event_match = None
         best_event_score = -1
+        dated_series_events = [
+            event for event in series_events if _is_within_72h(event, game_date)
+        ]
+        out.at[idx, "kalshi_dated_candidate_event_count"] = len(dated_series_events)
 
-        for event in series_events:
-            if not _is_within_72h(event, game_date):
-                continue
-
-
-
+        for event in dated_series_events:
             score = _event_match_score(event, home_team_name, away_team_name, league, date_code=date_code)
             if score > best_event_score:
                 best_event_score = score
                 best_event_match = event
+        out.at[idx, "kalshi_best_event_score"] = best_event_score if dated_series_events else pd.NA
 
         # Conservative acceptance threshold; tuned to reduce false misses for abbreviated Kalshi events.
         if best_event_score < 25:
@@ -1422,7 +1444,15 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
 
         if not best_event_match:
             out.at[idx, "kalshi_match_status"] = "miss"
-            out.at[idx, "kalshi_match_reason"] = "no_fuzzy_event_match"
+            if not series_events and series_fetch_errors:
+                match_reason = "series_fetch_failed"
+            elif not series_events:
+                match_reason = "no_series_events"
+            elif not dated_series_events:
+                match_reason = "no_events_in_date_window"
+            else:
+                match_reason = "team_match_below_threshold"
+            out.at[idx, "kalshi_match_reason"] = match_reason
 
             # Queue unmatched row for offline LLM resolution (Tier 5)
             queue_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "unmatched_queue.json")
@@ -1436,7 +1466,7 @@ def enrich_with_kalshi_markets(best_picks_df: pd.DataFrame) -> pd.DataFrame:
                     {
                         "title": str(e.get("title")),
                         "subtitle": str(e.get("sub_title"))
-                    } for e in series_events if _is_within_72h(e, game_date)
+                    } for e in dated_series_events
                 ]
 
                 unmatched_list.append({

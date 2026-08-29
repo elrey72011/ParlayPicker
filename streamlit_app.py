@@ -439,6 +439,36 @@ def _safe_numeric_series(df: pd.DataFrame, col: str, default: float | int | None
     return s
 
 
+def _kalshi_coverage_metrics(df: pd.DataFrame) -> dict[str, int | float]:
+    """Return distinct row and game coverage so the dashboard cannot conflate them."""
+    attempted_rows = int(len(df)) if isinstance(df, pd.DataFrame) else 0
+    if attempted_rows and "kalshi_match_status" in df.columns:
+        matched_mask = df["kalshi_match_status"].astype("string").fillna("").str.lower().eq("matched")
+    elif attempted_rows and "kalshi_probability" in df.columns:
+        matched_mask = pd.to_numeric(df["kalshi_probability"], errors="coerce").gt(0)
+    else:
+        matched_mask = pd.Series(False, index=getattr(df, "index", pd.RangeIndex(0)), dtype=bool)
+
+    matched_rows = int(matched_mask.sum())
+    game_keys = ["league", "home_team", "away_team", "game_date"]
+    attempted_games = matched_games = 0
+    if attempted_rows and all(column in df.columns for column in game_keys):
+        game_frame = df[game_keys].copy()
+        game_frame["_kalshi_matched"] = matched_mask.to_numpy(dtype=bool)
+        game_coverage = game_frame.groupby(game_keys, dropna=False)["_kalshi_matched"].any()
+        attempted_games = int(len(game_coverage))
+        matched_games = int(game_coverage.sum())
+
+    return {
+        "kalshi_attempted": attempted_rows,
+        "kalshi_matches": matched_rows,
+        "kalshi_match_rate": matched_rows / max(attempted_rows, 1),
+        "kalshi_game_attempted": attempted_games,
+        "kalshi_game_matches": matched_games,
+        "kalshi_game_match_rate": matched_games / max(attempted_games, 1),
+    }
+
+
 def _et_floor_day(series: pd.Series) -> pd.Series:
     """Normalize any datetime-like series to ET day boundaries for deterministic joins."""
     return (
@@ -1033,13 +1063,9 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
     # Update Kalshi Diagnostics
     # -----------------------------
     if "kalshi_probability" in analysis_df.columns:
-        if "kalshi_match_status" in analysis_df.columns:
-            matched = int(analysis_df["kalshi_match_status"].astype(str).str.lower().eq("matched").sum())
-        else:
-            matched = int(analysis_df["kalshi_probability"].notna().sum())
-
-        diagnostics["kalshi_matches"] = matched
-        diagnostics["kalshi_match_rate"] = matched / max(len(analysis_df), 1)
+        coverage = _kalshi_coverage_metrics(analysis_df)
+        diagnostics.update(coverage)
+        matched = int(coverage["kalshi_matches"])
         if "kalshi_line_diff" in analysis_df.columns and matched > 0:
             avg_diff = analysis_df.loc[analysis_df["kalshi_match_status"].astype(str).str.lower().eq("matched"), "kalshi_line_diff"].mean() if "kalshi_match_status" in analysis_df.columns else analysis_df.loc[analysis_df["kalshi_probability"].notna(), "kalshi_line_diff"].mean()
             diagnostics["kalshi_avg_line_diff"] = avg_diff
@@ -1108,15 +1134,10 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
         except Exception as e:
             deferred_warnings.append(f"Gemini analysis failed: {e}")
 
-    attempted = int(len(analysis_df)) if isinstance(analysis_df, pd.DataFrame) else 0
-    if isinstance(analysis_df, pd.DataFrame) and "kalshi_match_status" in analysis_df.columns:
-        matched = int(analysis_df["kalshi_match_status"].astype(str).str.lower().eq("matched").sum())
-    else:
-        matched = int(analysis_df["kalshi_probability"].notna().sum()) if "kalshi_probability" in analysis_df.columns else 0
-
-    diagnostics["kalshi_attempted"] = attempted
-    diagnostics["kalshi_matches"] = matched
-    diagnostics["kalshi_match_rate"] = float(matched / max(attempted, 1))
+    coverage = _kalshi_coverage_metrics(analysis_df)
+    diagnostics.update(coverage)
+    attempted = int(coverage["kalshi_attempted"])
+    matched = int(coverage["kalshi_matches"])
     diagnostics["match_rate"] = diagnostics["kalshi_match_rate"]
     diagnostics["kalshi_missing_date_rows"] = int(analysis_df["kalshi_match_reason"].astype(str).eq("missing_date").sum()) if attempted and "kalshi_match_reason" in analysis_df.columns else 0
     diagnostics["kalshi_missing_team_code_rows"] = int(analysis_df["kalshi_match_reason"].astype(str).eq("missing_team_code").sum()) if attempted and "kalshi_match_reason" in analysis_df.columns else 0
@@ -1822,6 +1843,11 @@ def main() -> None:
     best_rows = int(diagnostics.get("best_picks", len(best_picks_df) if isinstance(best_picks_df, pd.DataFrame) else 0))
     kalshi_matches = int(diagnostics.get("kalshi_matches", 0))
     match_rate = float(diagnostics.get("match_rate", diagnostics.get("kalshi_match_rate", kalshi_matches / max(1, best_rows))))
+    kalshi_game_matches = int(diagnostics.get("kalshi_game_matches", 0))
+    kalshi_game_attempted = int(diagnostics.get("kalshi_game_attempted", games_count))
+    kalshi_game_match_rate = float(
+        diagnostics.get("kalshi_game_match_rate", kalshi_game_matches / max(1, kalshi_game_attempted))
+    )
     totals_games = int(diagnostics.get("theover_totals_games", 0))
     spreads_games = int(diagnostics.get("theover_spreads_games", 0))
     date_fill_attempted = int(diagnostics.get("date_fill_total_rows", 0))
@@ -1840,21 +1866,23 @@ def main() -> None:
         m1.metric("Total games", games_count)
         m2.metric("Bet rows", bet_rows)
         m3.metric("Best picks", best_rows)
-        m4.metric("Kalshi matches", kalshi_matches)
-        m5.metric("Match rate", f"{match_rate:.0%}")
+        m4.metric("Kalshi row matches", kalshi_matches)
+        m5.metric("Kalshi row coverage", f"{match_rate:.0%}")
         m6.metric("TheOver totals file", f"{totals_games}/{games_count}")
         m7.metric("TheOver sides file", f"{spreads_games}/{games_count}")
         m8.metric("Date fill success", f"{date_fill_filled}/{date_fill_attempted} ({date_fill_rate:.0%})")
         m9.metric("Positive EV rows", positive_ev_rows)
         m10.metric("Consensus ✅", consensus_agrees)
 
-        kalshi_hits = int(analysis_df["kalshi_match_status"].astype(str).str.lower().eq("matched").sum()) if analysis_df is not None and not analysis_df.empty and "kalshi_match_status" in analysis_df.columns else (
-            analysis_df["kalshi_probability"].notna().sum() if analysis_df is not None and not analysis_df.empty and "kalshi_probability" in analysis_df.columns else 0
+        m11.metric(
+            "Kalshi game coverage",
+            f"{kalshi_game_matches}/{kalshi_game_attempted} ({kalshi_game_match_rate:.0%})",
         )
-        total_analysis_len = len(analysis_df) if analysis_df is not None and not analysis_df.empty else 1
-        m11.metric("Kalshi Matches", f"{kalshi_hits}/{len(analysis_df) if analysis_df is not None else 0} ({kalshi_hits/total_analysis_len*100:.0f}%)")
 
-        st.progress(max(0.0, min(1.0, match_rate)), text=f"Kalshi match rate: {match_rate:.0%}")
+        st.progress(
+            max(0.0, min(1.0, match_rate)),
+            text=f"Kalshi candidate-row coverage: {match_rate:.0%}",
+        )
         st.caption(f"Merge keys used: {diagnostics.get('merge_keys_used', [])}")
         totals_signal_games = int(
             diagnostics.get("theover_totals_probability_games", 0)
