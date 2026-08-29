@@ -81,7 +81,7 @@ def test_find_team_reference_needs_four_char_fragment():
     assert find_team_reference(" Cincinnati Wins ", "") == -1
 
 
-def test_same_line_spread_pair_prefers_priceable_subject(monkeypatch):
+def test_blank_exported_line_uses_pick_label_and_priceable_subject(monkeypatch):
     """A run-line event has two markets at the same strike (one per subject).
     A pick on HOME +1.5 is only priceable off the AWAY-subject contract; the
     selector must prefer it over list order (7 Jul: SF +1.5 went
@@ -121,7 +121,10 @@ def test_same_line_spread_pair_prefers_priceable_subject(monkeypatch):
     df = pd.DataFrame([{
         "league": "MLB", "home_team": "San Francisco", "away_team": "Toronto",
         "game_date": "2026-07-08T01:46:00Z", "market_type": "spread_home",
-        "spread_line": 1.5, "best_pick": "San Francisco +1.5",
+        # Candidate-audit exports can leave this machine column blank even though
+        # the signed line remains in best_pick. This must stay a spread, not fall
+        # into the moneyline path and later fail as spread_side_unpriceable.
+        "spread_line": pd.NA, "best_pick": "San Francisco +1.5",
         "pick_team": "San Francisco",
     }])
     out = ki.enrich_with_kalshi_markets(df)
