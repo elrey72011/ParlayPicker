@@ -16,12 +16,66 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from app_core.mlb_pitcher_stats import parse_schedule_probables
 from app_core.prop_pipeline import PROP_MAX_PLAUSIBLE_EDGE
 from app_core.prop_runner import (
+    _dedupe_prop_card_rows,
     apply_prop_precision_shortlist,
     _resolve_prop_results_history,
     build_prop_card,
     build_resolvers,
     build_strikeout_card,
 )
+
+
+def test_duplicate_provider_event_ids_are_fetched_once():
+    calls = []
+    diagnostics = {}
+
+    def props_fetch(client, sport_key, event_id):
+        calls.append(event_id)
+        return []
+
+    card = build_strikeout_card(
+        odds_client=object(), date="2026-08-29", season=2026,
+        diagnostics=diagnostics,
+        list_events=lambda c, sk, d: [{"id": "evt1"}, {"id": "evt1"}],
+        props_fetch=props_fetch,
+        schedule_fetch=lambda d: [],
+    )
+
+    assert card == []
+    assert calls == ["evt1"]
+    assert diagnostics["strikeout_prop_event_count"] == 1
+    assert diagnostics["strikeout_prop_duplicate_event_count"] == 1
+
+
+def test_prop_card_quote_dedupe_keeps_better_price_and_distinct_events():
+    rows = pd.DataFrame([
+        {
+            "_event_id": "evt1", "_commence_time": "2026-08-29T23:00:00Z",
+            "game_date": "2026-08-29", "matchup": "Boston @ New York",
+            "player": "George Lombard Jr.", "market_type": "batter_total_bases_over",
+            "line": 0.5, "book": "betmgm", "odds_american": -160,
+        },
+        {
+            "_event_id": "evt1", "_commence_time": "2026-08-29T23:00:00Z",
+            "game_date": "2026-08-29", "matchup": "Boston @ New York",
+            "player": "George Lombard Jr.", "market_type": "batter_total_bases_over",
+            "line": 0.5, "book": "betmgm", "odds_american": -155,
+        },
+        {
+            # A separate event id must survive (for example, a doubleheader).
+            "_event_id": "evt2", "_commence_time": "2026-08-29T18:00:00Z",
+            "game_date": "2026-08-29", "matchup": "Boston @ New York",
+            "player": "George Lombard Jr.", "market_type": "batter_total_bases_over",
+            "line": 0.5, "book": "betmgm", "odds_american": -150,
+        },
+    ])
+
+    out, dropped = _dedupe_prop_card_rows(rows)
+
+    assert dropped == 1
+    assert sorted(out["odds_american"].tolist()) == [-155, -150]
+    assert "_event_id" not in out.columns
+    assert "_commence_time" not in out.columns
 
 
 def test_prop_precision_shortlist_uses_calibrated_rank_without_changing_stakes():
