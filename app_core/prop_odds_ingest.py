@@ -30,6 +30,7 @@ NFL_PLAYER_PROP_MARKET_KEYS = (
     "player_reception_yds",
     "player_receptions",
 )
+NFL_PROP_TARGET_BOOKMAKER = "draftkings"
 _DEFAULT_BOOK_PRIORITY = ("novig", "draftkings", "fanduel", "betmgm")
 _PROP_FETCH_ATTEMPTS = 3
 _USE_CLIENT_BOOKMAKERS = object()
@@ -256,14 +257,22 @@ def fetch_event_player_prop_markets(
     event_id: str,
     *,
     regions: str | None = None,
+    bookmakers: str | None = None,
 ) -> set[str]:
-    """Discover recently open player-prop keys across bookmakers for one event."""
+    """Discover recently open player-prop keys for one event.
+
+    ``bookmakers`` can scope discovery to the intended execution venue. This is
+    important for NFL props: a market being open at another sportsbook does not
+    imply that DraftKings has a quote the user can actually place.
+    """
     url = f"{client.BASE_URL}/sports/{sport_key}/events/{event_id}/markets"
     params = {
         "apiKey": client.api_key,
         "regions": regions or _prop_regions_with_full_us_coverage(client),
         "dateFormat": "iso",
     }
+    if bookmakers:
+        params["bookmakers"] = str(bookmakers)
     payload = _request_prop_json(
         url,
         params,
@@ -300,20 +309,38 @@ def fetch_nfl_player_props(
     *,
     diagnostics: dict | None = None,
 ) -> list[dict]:
-    """Fetch the supported NFL volume markets in one event request.
+    """Fetch DraftKings quotes for supported NFL volume markets.
 
     The transport and quote shape are identical to MLB props; returned records
     carry ``participant_type=nfl_player`` so modeling, grading, and calibration
-    remain league isolated downstream.
+    remain league isolated downstream. DraftKings is deliberately requested by
+    bookmaker key instead of inheriting the mixed-book client configuration, so
+    a NoVig/FanDuel quote cannot masquerade as DraftKings availability.
     """
+    target_bookmaker = NFL_PROP_TARGET_BOOKMAKER
+    broad_regions = _prop_regions_with_full_us_coverage(client)
+    if isinstance(diagnostics, dict):
+        diagnostics["nfl_prop_target_bookmaker"] = target_bookmaker
+
+    def target_rows(rows: list[dict] | None) -> list[dict]:
+        return [
+            row
+            for row in (rows or [])
+            if str(row.get("book") or "").strip().lower() == target_bookmaker
+        ]
+
     first_error: PropOddsFetchError | None = None
     try:
-        rows = fetch_pitcher_props(
-            client,
-            sport_key,
-            event_id,
-            market_keys,
-            raise_on_error=True,
+        rows = target_rows(
+            fetch_pitcher_props(
+                client,
+                sport_key,
+                event_id,
+                market_keys,
+                regions=broad_regions,
+                bookmakers=target_bookmaker,
+                raise_on_error=True,
+            )
         )
     except PropOddsFetchError as exc:
         first_error = exc
@@ -321,13 +348,13 @@ def fetch_nfl_player_props(
     if rows:
         return rows
 
-    broad_regions = _prop_regions_with_full_us_coverage(client)
     try:
         open_market_keys = fetch_event_player_prop_markets(
             client,
             sport_key,
             event_id,
             regions=broad_regions,
+            bookmakers=target_bookmaker,
         )
         _increment_diagnostic(
             diagnostics, "nfl_prop_market_discovery_success_count"
@@ -348,11 +375,14 @@ def fetch_nfl_player_props(
                         sport_key,
                         event_id,
                         (market_key,),
+                        regions=broad_regions,
+                        bookmakers=target_bookmaker,
                         raise_on_error=True,
                     )
                 )
             except PropOddsFetchError:
                 fallback_errors += 1
+        recovered = target_rows(recovered)
         if recovered:
             return recovered
         if first_error is not None or fallback_errors == len(market_keys):
@@ -380,14 +410,16 @@ def fetch_nfl_player_props(
         diagnostics, "nfl_prop_events_with_supported_markets"
     )
     try:
-        rows = fetch_pitcher_props(
-            client,
-            sport_key,
-            event_id,
-            available,
-            regions=broad_regions,
-            bookmakers=None,
-            raise_on_error=True,
+        rows = target_rows(
+            fetch_pitcher_props(
+                client,
+                sport_key,
+                event_id,
+                available,
+                regions=broad_regions,
+                bookmakers=target_bookmaker,
+                raise_on_error=True,
+            )
         )
     except PropOddsFetchError:
         rows = []
@@ -411,12 +443,13 @@ def fetch_nfl_player_props(
                     event_id,
                     (market_key,),
                     regions=broad_regions,
-                    bookmakers=None,
+                    bookmakers=target_bookmaker,
                     raise_on_error=True,
                 )
             )
         except PropOddsFetchError:
             fetch_errors += 1
+    recovered = target_rows(recovered)
     if recovered:
         _increment_diagnostic(
             diagnostics, "nfl_prop_broad_book_fallback_count"
