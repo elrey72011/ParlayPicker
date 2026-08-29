@@ -19,6 +19,7 @@ Then re-run:  python3 scripts/backtest_theover_direction.py data/backtest_export
 from __future__ import annotations
 
 import sys
+import re
 from pathlib import Path
 
 import pandas as pd
@@ -42,6 +43,50 @@ def _norm_result(v: object) -> str:
     if s.startswith("P"):
         return "PUSH"
     return ""
+
+
+_LINE_RE = re.compile(r"([+-]?\d+(?:\.\d+)?)\s*$")
+
+
+def _result_from_final_scores(row: pd.Series) -> str:
+    """Recover a settled result when the recap's Outcome cell is stale/blank.
+
+    The recap can carry trustworthy final scores even when its provider-specific
+    grading step failed (Aug 27 NCAAF FCS rows).  Recomputing from the exact
+    exported pick preserves that evidence without guessing from a different
+    market or line.  Missing scores, 0-0 placeholders, and unparseable picks
+    remain unresolved.
+    """
+
+    home_score = pd.to_numeric(row.get("actual_home_score"), errors="coerce")
+    away_score = pd.to_numeric(row.get("actual_away_score"), errors="coerce")
+    if pd.isna(home_score) or pd.isna(away_score):
+        return ""
+    home_score = float(home_score)
+    away_score = float(away_score)
+    if home_score == 0.0 and away_score == 0.0:
+        return ""
+
+    pick = _norm(row.get("Pick Taken"))
+    line_match = _LINE_RE.search(pick)
+    if not line_match:
+        return ""
+    line = float(line_match.group(1))
+    if pick.startswith("over"):
+        margin = home_score + away_score - line
+    elif pick.startswith("under"):
+        margin = line - (home_score + away_score)
+    else:
+        selected_team = _norm(pick[: line_match.start()])
+        home_team = _norm(row.get("Home"))
+        away_team = _norm(row.get("Away"))
+        if selected_team == home_team:
+            margin = home_score + line - away_score
+        elif selected_team == away_team:
+            margin = away_score + line - home_score
+        else:
+            return ""
+    return "WIN" if margin > 0 else "LOSS" if margin < 0 else "PUSH"
 
 
 OUT_COLS = [
@@ -174,18 +219,28 @@ def grade(export_csv: Path, recap_csv: Path, out_csv: Path) -> None:
             return False
         return True
 
-    rec_key = {
-        (_norm(r.get("Home")), _norm(r.get("Away")), _norm(r.get("Pick Taken"))): _norm_result(r.get("Outcome"))
-        for _, r in rec.iterrows()
-        if _gradeable(r)
-    }
+    rec_key = {}
+    recovered_from_scores = 0
+    for _, r in rec.iterrows():
+        if not _gradeable(r):
+            continue
+        result = _norm_result(r.get("Outcome"))
+        if not result:
+            result = _result_from_final_scores(r)
+            recovered_from_scores += int(bool(result))
+        key = (
+            _norm(r.get("Home")),
+            _norm(r.get("Away")),
+            _norm(r.get("Pick Taken")),
+        )
+        rec_key[key] = result
 
     drifted_games = {(_norm(d["Home"]), _norm(d["Away"])) for d in drift}
     rows, unmatched = [], []
     for _, e in exp.iterrows():
         key = (_norm(e.get("Home")), _norm(e.get("Away")), _norm(e.get("best_pick")))
         result = rec_key.get(key)
-        if result is None:
+        if not result:
             if (key[0], key[1]) not in drifted_games:  # drift already reported above
                 unmatched.append(key)
             continue
@@ -211,6 +266,11 @@ def grade(export_csv: Path, recap_csv: Path, out_csv: Path) -> None:
     w = sum(1 for r in rows if r["W/L"] == "WIN")
     l = sum(1 for r in rows if r["W/L"] == "LOSS")
     print(f"wrote {out_csv}: {len(out)} graded picks, {w}-{l}")
+    if recovered_from_scores:
+        print(
+            f"  recovered {recovered_from_scores} outcome(s) from exact pick lines "
+            "and attached final scores"
+        )
     if unmatched:
         print(f"  [WARN] {len(unmatched)} export rows had no recap match: {unmatched[:5]}", file=sys.stderr)
 

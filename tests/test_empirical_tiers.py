@@ -15,9 +15,76 @@ from core.empirical_tiers import (
     empirical_win_probability,
     load_bucket_stats,
     recent_regime_bucket_summary,
+    recent_regime_family_summary,
     recent_regime_score_adjustments,
     smoothed_bucket_rate,
 )
+
+
+def test_recent_family_regression_fills_sparse_exact_bucket_gap():
+    stats = {
+        "overall": {"n": 400, "win_rate": 0.54},
+        "buckets": {
+            "NFL:over:Neutral": {
+                "n": 8, "wins": 1, "win_rate": 0.125,
+                "recent_n": 6, "recent_wins": 0,
+            },
+        },
+        "families": {
+            "over": {
+                "n": 120, "wins": 58, "win_rate": 0.48,
+                "recent_n": 15, "recent_wins": 4,
+            },
+        },
+    }
+    candidates = pd.DataFrame({
+        "league": ["NFL"],
+        "market_type": ["total_over"],
+        "consensus_agreement": ["Neutral"],
+        "kalshi_probability": [0.50],
+    })
+
+    family = recent_regime_family_summary("over", stats)
+    adjusted = recent_regime_score_adjustments(candidates, stats).iloc[0]
+
+    assert family["reason"] == "fresh_recent_family_regression"
+    assert bool(adjusted["recent_regime_penalty_applied"])
+    assert adjusted["recent_regime_penalty_reason"] == (
+        "fresh_recent_family_regression"
+    )
+    assert adjusted["recent_regime_bucket"] == "ALL:over:ALL"
+    assert float(adjusted["recent_regime_penalty_value"]) > 0.05
+
+
+def test_recent_family_regression_does_not_override_sampled_healthy_bucket():
+    stats = {
+        "overall": {"n": 400, "win_rate": 0.54},
+        "buckets": {
+            "MLB:over:Agrees": {
+                "n": 80, "wins": 46, "win_rate": 0.575,
+                "recent_n": 20, "recent_wins": 12,
+            },
+        },
+        "families": {
+            "over": {
+                "n": 120, "wins": 58, "win_rate": 0.48,
+                "recent_n": 15, "recent_wins": 4,
+            },
+        },
+    }
+    candidates = pd.DataFrame({
+        "league": ["MLB"],
+        "market_type": ["total_over"],
+        "consensus_agreement": ["Agrees"],
+        "kalshi_probability": [0.58],
+    })
+
+    adjusted = recent_regime_score_adjustments(candidates, stats).iloc[0]
+
+    assert not bool(adjusted["recent_regime_penalty_applied"])
+    assert adjusted["recent_regime_penalty_reason"] == (
+        "recent_bucket_not_materially_worse"
+    )
 
 # Overall 53%; Agrees unders proven hot (60%, n=60), Neutral overs cold (48%, n=60),
 # tiny bucket for shrink testing.

@@ -71,6 +71,27 @@ def test_fit_persists_trailing_seven_day_bucket_evidence(tmp_path):
     assert stats["meta"]["recent_window_days"] == 7
 
 
+def test_fit_persists_cross_league_market_family_evidence(tmp_path):
+    rows = []
+    for league, outcomes in (("MLB", ["W", "L", "L"]), ("NFL", ["L"] * 4)):
+        rows.extend({
+            "league": league,
+            "Home": "H",
+            "Away": "A",
+            "best_pick": "Over 8.5",
+            "consensus_agreement": "Neutral",
+            "W/L": outcome,
+        } for outcome in outcomes)
+    pd.DataFrame(rows).to_csv(tmp_path / "2026-08-28.csv", index=False)
+
+    stats = fit_bucket_stats(tmp_path, half_life_days=21.0)
+    family = stats["families"]["over"]
+
+    assert family["raw_n"] == family["recent_n"] == 7
+    assert family["raw_wins"] == family["recent_wins"] == 1
+    assert family["recent_win_rate"] == 1 / 7
+
+
 def test_anchor_is_newest_slate_not_wall_clock(tmp_path):
     # Deterministic: the anchor comes from the exports, so refitting later with no
     # new slates yields identical numbers.

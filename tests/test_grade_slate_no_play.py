@@ -98,3 +98,57 @@ def test_zero_zero_no_play_voided_even_when_clean(tmp_path):
     }]
     out = _grade(tmp_path, export_rows, recap_rows)
     assert len(out) == 0
+
+
+def test_blank_outcomes_recover_from_exact_final_scores(tmp_path):
+    export_rows = [
+        {
+            "league": "NCAAF", "Home": "West Florida", "Away": "Southern Illinois",
+            "best_pick": "Under 55.5", "market_type": "total_under",
+            "consensus_agreement": "Agrees", "Kelly_Bet_Size": 0.0,
+            "odds_american": -110, "line_provenance_warning": "",
+            "line_consistency_flag": True,
+        },
+        {
+            "league": "NCAAF", "Home": "Murray State", "Away": "Eastern Illinois",
+            "best_pick": "Eastern Illinois +3.0", "market_type": "spread_away",
+            "consensus_agreement": "Neutral", "Kelly_Bet_Size": 0.0,
+            "odds_american": -110, "line_provenance_warning": "",
+            "line_consistency_flag": True,
+        },
+    ]
+    recap_rows = [
+        {
+            "Home": "West Florida", "Away": "Southern Illinois",
+            "Pick Taken": "Under 55.5", "actual_home_score": 17,
+            "actual_away_score": 20, "Outcome": "N/A", "Status": "Best Available / Pass",
+        },
+        {
+            "Home": "Murray State", "Away": "Eastern Illinois",
+            "Pick Taken": "Eastern Illinois +3.0", "actual_home_score": 21,
+            "actual_away_score": 20, "Outcome": "", "Status": "Best Available / Pass",
+        },
+    ]
+
+    out = _grade(tmp_path, export_rows, recap_rows)
+
+    assert out["W/L"].tolist() == ["WIN", "WIN"]
+
+
+def test_blank_outcome_with_unmatched_spread_team_stays_ungraded(tmp_path):
+    export_rows = [{
+        "league": "NCAAF", "Home": "West Florida", "Away": "Southern Illinois",
+        "best_pick": "Unknown Team +3.0", "market_type": "spread_away",
+        "consensus_agreement": "Neutral", "Kelly_Bet_Size": 0.0,
+        "odds_american": -110, "line_provenance_warning": "",
+        "line_consistency_flag": True,
+    }]
+    recap_rows = [{
+        "Home": "West Florida", "Away": "Southern Illinois",
+        "Pick Taken": "Unknown Team +3.0", "actual_home_score": 17,
+        "actual_away_score": 20, "Outcome": "N/A", "Status": "Best Available / Pass",
+    }]
+
+    out = _grade(tmp_path, export_rows, recap_rows)
+
+    assert out.empty

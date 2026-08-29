@@ -94,6 +94,18 @@ RECENT_REGIME_MIN_RATE_DROP = 0.05
 RECENT_REGIME_MAX_SCORE_PENALTY = 0.10
 RECENT_REGIME_PRIOR_N = 10.0
 
+# A league+consensus bucket can remain too small to arm the exact-bucket guard
+# even when the same market direction is failing across the whole board.  That
+# happened on Aug 22-28: the selected Over family went 5-17, but its losses were
+# split across MLB/NFL/WNBA/NCAAF and several consensus labels, so no individual
+# bucket reached RECENT_REGIME_MIN_N.  The aggregate fallback needs a smaller
+# sample because it only subtracts a bounded finalist score, never grants wager
+# authority.  Requiring a larger rate drop than the exact-bucket path keeps an
+# ordinary small-sample wobble from moving the card.
+RECENT_FAMILY_REGIME_MIN_N = 12
+RECENT_FAMILY_REGIME_MIN_RATE_DROP = 0.08
+RECENT_FAMILY_REGIME_MAX_SCORE_PENALTY = 0.08
+
 # Actionable ALSO requires market AGREEMENT. Across the graded history the only
 # slice that clears the -110 break-even (52.4%) by a real margin is the buckets
 # where Kalshi agrees with the model's direction: MLB over:Agrees 61% (n=41) and
@@ -358,6 +370,63 @@ def recent_regime_bucket_summary(bucket: str, stats: dict) -> dict[str, object]:
     return summary
 
 
+def recent_regime_family_summary(family: str, stats: dict) -> dict[str, object]:
+    """Describe a broad directional regression when exact buckets are sparse."""
+
+    payload = (stats.get("families") or {}).get(family) if stats else None
+    long_rate = float((payload or {}).get("win_rate", float("nan")))
+    long_n = int((payload or {}).get("n", 0) or 0)
+    recent_n = int((payload or {}).get("recent_n", 0) or 0)
+    recent_wins = int((payload or {}).get("recent_wins", 0) or 0)
+    raw_recent_rate = (
+        float(recent_wins / recent_n) if recent_n > 0 else float("nan")
+    )
+    summary: dict[str, object] = {
+        "bucket": f"ALL:{family}:ALL",
+        "applied": False,
+        "reason": (
+            "missing_family_history"
+            if not payload
+            else "insufficient_recent_family_history"
+        ),
+        "penalty": 0.0,
+        "long_n": long_n,
+        "long_rate": long_rate,
+        "recent_n": recent_n,
+        "recent_rate": raw_recent_rate,
+        "recent_smoothed_rate": raw_recent_rate,
+    }
+    if (
+        not payload
+        or recent_n < RECENT_FAMILY_REGIME_MIN_N
+        or pd.isna(long_rate)
+    ):
+        return summary
+
+    recent_smoothed = (
+        recent_wins + long_rate * RECENT_REGIME_PRIOR_N
+    ) / (recent_n + RECENT_REGIME_PRIOR_N)
+    rate_drop = float(long_rate - recent_smoothed)
+    summary.update({
+        "reason": "recent_family_not_materially_worse",
+        "recent_smoothed_rate": float(recent_smoothed),
+        "rate_drop": rate_drop,
+    })
+    if rate_drop < RECENT_FAMILY_REGIME_MIN_RATE_DROP:
+        return summary
+
+    penalty = min(
+        RECENT_FAMILY_REGIME_MAX_SCORE_PENALTY,
+        max(0.0, rate_drop),
+    )
+    summary.update({
+        "applied": penalty > 0.0,
+        "reason": "fresh_recent_family_regression",
+        "penalty": float(penalty),
+    })
+    return summary
+
+
 def recent_regime_score_adjustments(
     df: pd.DataFrame,
     bucket_stats: dict,
@@ -393,11 +462,20 @@ def recent_regime_score_adjustments(
     rows = []
     for bucket in buckets:
         summary = recent_regime_bucket_summary(bucket, bucket_stats)
+        # Prefer sufficiently sampled bucket evidence.  Fall back to the
+        # cross-league market family only when the exact bucket cannot reach the
+        # recent sample floor; a healthy, well-sampled bucket must not be
+        # overridden by a coarser aggregate.
+        if int(summary["recent_n"]) < RECENT_REGIME_MIN_N:
+            family = bucket.split(":")[1] if ":" in bucket else "side"
+            family_summary = recent_regime_family_summary(family, bucket_stats)
+            if bool(family_summary["applied"]):
+                summary = family_summary
         rows.append({
             "recent_regime_penalty_applied": bool(summary["applied"]),
             "recent_regime_penalty_value": float(summary["penalty"]),
             "recent_regime_penalty_reason": str(summary["reason"]),
-            "recent_regime_bucket": bucket,
+            "recent_regime_bucket": str(summary["bucket"]),
             "recent_regime_bucket_n": int(summary["recent_n"]),
             "recent_regime_bucket_win_rate": summary["recent_rate"],
             "recent_regime_long_win_rate": float(summary["long_rate"]),
