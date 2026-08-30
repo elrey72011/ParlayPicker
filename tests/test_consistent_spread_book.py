@@ -417,7 +417,7 @@ def test_partial_novig_side_uses_oriented_standard_consensus_and_survives_presel
 
 
 
-def test_aug3_texas_novig_reversal_is_corrected_before_candidate_ranking():
+def test_aug3_texas_novig_reversal_fails_closed_before_candidate_ranking():
     # Production regression from the 14:55 export: the Odds API attached Novig's
     # Texas/San Francisco run-line outcomes to the opposite team names. The exact
     # Novig screen showed SF +1.5/-194 and TEX -1.5/+182, while the raw row carried
@@ -481,30 +481,26 @@ def test_aug3_texas_novig_reversal_is_corrected_before_candidate_ranking():
     assert pd.isna(_consistent_standard_spread_pair(live_row, "home")[0])
     assert pd.isna(_consistent_standard_spread_pair(live_row, "away")[0])
 
-    expanded, _ = _expand_live_odds_to_bet_rows(pd.DataFrame([live_row]), hint)
+    expanded, diagnostics = _expand_live_odds_to_bet_rows(
+        pd.DataFrame([live_row]), hint
+    )
     spreads = expanded[
         expanded["market_type"].isin(["spread_home", "spread_away"])
-    ].set_index("market_type")
+    ]
 
-    assert float(spreads.loc["spread_home", "spread_line"]) == -1.5
-    assert float(spreads.loc["spread_home", "odds_american"]) == 182.0
-    assert float(spreads.loc["spread_home", "opposing_odds_american"]) == -194.0
-    assert float(spreads.loc["spread_away", "spread_line"]) == 1.5
-    assert float(spreads.loc["spread_away", "odds_american"]) == -194.0
-    assert float(spreads.loc["spread_away", "opposing_odds_american"]) == 182.0
-    assert spreads["line_source"].eq("novig_moneyline_reoriented").all()
-    assert spreads["odds_source"].eq("novig").all()
-    assert spreads["opposing_odds_source"].eq("novig").all()
-    assert spreads["orientation_source"].str.endswith(
-        "|novig_signed_pair_rebound"
+    assert spreads["spread_line"].isna().all()
+    assert spreads["odds_american"].isna().all()
+    assert spreads["opposing_odds_american"].isna().all()
+    assert spreads["line_source"].eq(
+        "rejected_live_spread_binding_conflict"
     ).all()
+    assert spreads["orientation_source"].str.endswith(
+        "|unresolved_cross_book_signed_pair"
+    ).all()
+    assert diagnostics["unresolved_novig_spread_binding_conflicts"] == 2
 
     retained = _filter_preselection_line_integrity(expanded)
-    retained_spreads = retained[
-        retained["market_type"].isin(["spread_home", "spread_away"])
-    ]
-    assert len(retained_spreads) == 2
-    assert set(retained_spreads["spread_line"].astype(float)) == {-1.5, 1.5}
+    assert set(retained["market_type"]) == {"total_over", "total_under"}
 
 
 def test_aug5_dodgers_cubs_two_two_split_keeps_novig_team_bound_quote():
@@ -591,6 +587,66 @@ def test_aug30_cws_minnesota_split_binding_is_rejected_until_resolved():
         "fanduel_home_price": -194,
         "fanduel_away_point": -1.5,
         "fanduel_away_price": 160,
+        "fanduel_h2h_home_price": -114,
+        "fanduel_h2h_away_price": 104,
+        "draftkings_home_point": -1.5,
+        "draftkings_home_price": 162,
+        "draftkings_away_point": 1.5,
+        "draftkings_away_price": -198,
+        "draftkings_h2h_home_price": -114,
+        "draftkings_h2h_away_price": 106,
+        "betmgm_h2h_home_price": -120,
+        "betmgm_h2h_away_price": 100,
+    }
+
+    expanded, diagnostics = _expand_live_odds_to_bet_rows(
+        pd.DataFrame([live_row]), None
+    )
+    spreads = expanded[
+        expanded["market_type"].isin(["spread_home", "spread_away"])
+    ]
+
+    assert len(spreads) == 2
+    assert spreads["spread_line"].isna().all()
+    assert spreads["odds_american"].isna().all()
+    assert spreads["line_source"].eq(
+        "rejected_live_spread_binding_conflict"
+    ).all()
+    assert spreads["orientation_source"].str.endswith(
+        "|unresolved_cross_book_signed_pair"
+    ).all()
+    assert diagnostics["unresolved_novig_spread_binding_conflicts"] == 2
+
+    retained = _filter_preselection_line_integrity(expanded)
+    assert set(retained["market_type"]) == {"total_over", "total_under"}
+
+
+def test_aug30_noon_cws_minnesota_moneyline_cannot_flip_novig_run_line():
+    # The 12:01 export's raw quote correctly bound CWS -1.5/+178 and Minnesota
+    # +1.5/-186 at both Novig and FanDuel. DraftKings published the opposite pair.
+    # The old moneyline heuristic overrode the execution venue and exported CWS
+    # +1.5/-186. A moneyline favorite cannot resolve a separate run-line binding.
+    live_row = {
+        "league": "MLB",
+        "home_team": "Minnesota",
+        "away_team": "Chicago White Sox",
+        "game_date": "2026-08-30",
+        "matchup_id": "2026-08-30|minnesota|chicago white sox",
+        "commence_time_raw": "2026-08-30T18:11:00Z",
+        "novig_home_point": 1.5,
+        "novig_home_price": -186,
+        "novig_away_point": -1.5,
+        "novig_away_price": 178,
+        "novig_h2h_home_price": -108,
+        "novig_h2h_away_price": 106,
+        "novig_over_point": 8.5,
+        "novig_over_price": -113,
+        "novig_under_point": 8.5,
+        "novig_under_price": 108,
+        "fanduel_home_point": 1.5,
+        "fanduel_home_price": -184,
+        "fanduel_away_point": -1.5,
+        "fanduel_away_price": 155,
         "fanduel_h2h_home_price": -114,
         "fanduel_h2h_away_price": 104,
         "draftkings_home_point": -1.5,
