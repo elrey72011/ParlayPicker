@@ -564,6 +564,67 @@ def test_aug5_dodgers_cubs_two_two_split_keeps_novig_team_bound_quote():
     ).all()
 
 
+def test_aug30_cws_minnesota_split_binding_is_rejected_until_resolved():
+    # The 11:26 export bound Novig's -190/+1.5 quote to CWS while the 11:39
+    # Novig screen bound that exact price/line to Minnesota.  Novig and
+    # DraftKings agreed in the feed, FanDuel showed the opposite pair, and BetMGM
+    # did not publish a spread.  That partial 2-1 snapshot is not enough evidence
+    # to present either team-bound run line as an executable Novig instruction.
+    live_row = {
+        "league": "MLB",
+        "home_team": "Minnesota",
+        "away_team": "Chicago White Sox",
+        "game_date": "2026-08-30",
+        "matchup_id": "2026-08-30|minnesota|chicago white sox",
+        "commence_time_raw": "2026-08-30T18:11:00Z",
+        "novig_home_point": -1.5,
+        "novig_home_price": 174,
+        "novig_away_point": 1.5,
+        "novig_away_price": -190,
+        "novig_h2h_home_price": -108,
+        "novig_h2h_away_price": 106,
+        "novig_over_point": 8.5,
+        "novig_over_price": -111,
+        "novig_under_point": 8.5,
+        "novig_under_price": 106,
+        "fanduel_home_point": 1.5,
+        "fanduel_home_price": -194,
+        "fanduel_away_point": -1.5,
+        "fanduel_away_price": 160,
+        "fanduel_h2h_home_price": -114,
+        "fanduel_h2h_away_price": 104,
+        "draftkings_home_point": -1.5,
+        "draftkings_home_price": 162,
+        "draftkings_away_point": 1.5,
+        "draftkings_away_price": -198,
+        "draftkings_h2h_home_price": -114,
+        "draftkings_h2h_away_price": 106,
+        "betmgm_h2h_home_price": -120,
+        "betmgm_h2h_away_price": 100,
+    }
+
+    expanded, diagnostics = _expand_live_odds_to_bet_rows(
+        pd.DataFrame([live_row]), None
+    )
+    spreads = expanded[
+        expanded["market_type"].isin(["spread_home", "spread_away"])
+    ]
+
+    assert len(spreads) == 2
+    assert spreads["spread_line"].isna().all()
+    assert spreads["odds_american"].isna().all()
+    assert spreads["line_source"].eq(
+        "rejected_live_spread_binding_conflict"
+    ).all()
+    assert spreads["orientation_source"].str.endswith(
+        "|unresolved_cross_book_signed_pair"
+    ).all()
+    assert diagnostics["unresolved_novig_spread_binding_conflicts"] == 2
+
+    retained = _filter_preselection_line_integrity(expanded)
+    assert set(retained["market_type"]) == {"total_over", "total_under"}
+
+
 def _assert_corroborated_team_binding_survives(
     live_row,
     *,
