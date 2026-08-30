@@ -158,7 +158,7 @@ _COLLEGE_SOURCE_HINTS = {"college", "ncaa", "ncaab", "ncaam", "mens basketball",
 # should be observable in the export so a deployed app's code version is unambiguous:
 # if PIPELINE_BUILD in the export doesn't match the latest value, the running app is
 # serving stale code (e.g. a Streamlit deploy that didn't advance to the new commit).
-PIPELINE_BUILD = "2026-08-27d-ncaaf-kickoff-export"
+PIPELINE_BUILD = "2026-08-30a-novig-spread-conflict-fail-closed"
 
 # Best Available must compare standard, reasonably priced markets. A P2P exchange can
 # expose alternate run lines (for example +5.5 at -1150) beside the standard MLB +1.5.
@@ -7779,8 +7779,9 @@ def _novig_spread_has_unresolved_standard_conflict(
     state while Novig's screen showed the reverse binding.
 
     Keep the established decisive cases: a corroborated Novig binding basis, or
-    a two-book verified standard pair.  Otherwise fail closed so totals can win
-    the per-game selection instead of exporting a potentially inverted spread.
+    a two-book verified standard pair. A moneyline favorite is not proof of which
+    team owns a separate run-line outcome. Otherwise fail closed so totals can
+    win the per-game selection instead of exporting a potentially inverted spread.
     """
     if team_binding_basis or _novig_spread_team_binding_basis(row):
         return False
@@ -7809,25 +7810,6 @@ def _novig_spread_has_unresolved_standard_conflict(
     ):
         return False
     if abs(float(novig_home) + float(novig_away)) > 1e-9:
-        return False
-
-    # If Novig's raw pair contradicts its own complete moneyline, the existing
-    # Novig-moneyline repair has independent evidence for a deterministic swap.
-    # This guard is for the harder case where Novig looks self-consistent while
-    # another live book exposes the opposite team binding.
-    novig_home_ml = pd.to_numeric(
-        row.get("novig_h2h_home_price"), errors="coerce"
-    )
-    novig_away_ml = pd.to_numeric(
-        row.get("novig_h2h_away_price"), errors="coerce"
-    )
-    if (
-        pd.notna(novig_home_ml)
-        and pd.notna(novig_away_ml)
-        and float(novig_home_ml) != float(novig_away_ml)
-        and (float(novig_home) < 0.0)
-        != (float(novig_home_ml) < float(novig_away_ml))
-    ):
         return False
 
     opposite_pair = (
