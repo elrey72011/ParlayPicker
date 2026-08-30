@@ -7766,6 +7766,100 @@ def _novig_spread_team_binding_basis(row) -> str:
     return "cross_book_signed_pair_tie" if tied_execution_venue_vote else ""
 
 
+def _novig_spread_has_unresolved_standard_conflict(
+    row,
+    team_binding_basis: str = "",
+) -> bool:
+    """Reject a Novig run line when the available books split without a quorum.
+
+    A complete Novig point/price pair is still only a feed snapshot.  When at
+    least one standard book binds the same ``+/-1.5`` pair to the opposite teams,
+    neither Novig's own moneyline nor a single agreeing book can prove which
+    outcome names are current.  The Odds API has exposed exactly that transient
+    state while Novig's screen showed the reverse binding.
+
+    Keep the established decisive cases: a corroborated Novig binding basis, or
+    a two-book verified standard pair.  Otherwise fail closed so totals can win
+    the per-game selection instead of exporting a potentially inverted spread.
+    """
+    if team_binding_basis or _novig_spread_team_binding_basis(row):
+        return False
+
+    standard_home, _, _, _ = _consistent_standard_spread_pair(row, "home")
+    standard_away, _, _, _ = _consistent_standard_spread_pair(row, "away")
+    if pd.notna(standard_home) and pd.notna(standard_away):
+        return False
+
+    novig_home = pd.to_numeric(row.get("novig_home_point"), errors="coerce")
+    novig_away = pd.to_numeric(row.get("novig_away_point"), errors="coerce")
+    novig_home_price = pd.to_numeric(
+        row.get("novig_home_price"), errors="coerce"
+    )
+    novig_away_price = pd.to_numeric(
+        row.get("novig_away_price"), errors="coerce"
+    )
+    if any(
+        pd.isna(value)
+        for value in (
+            novig_home,
+            novig_away,
+            novig_home_price,
+            novig_away_price,
+        )
+    ):
+        return False
+    if abs(float(novig_home) + float(novig_away)) > 1e-9:
+        return False
+
+    # If Novig's raw pair contradicts its own complete moneyline, the existing
+    # Novig-moneyline repair has independent evidence for a deterministic swap.
+    # This guard is for the harder case where Novig looks self-consistent while
+    # another live book exposes the opposite team binding.
+    novig_home_ml = pd.to_numeric(
+        row.get("novig_h2h_home_price"), errors="coerce"
+    )
+    novig_away_ml = pd.to_numeric(
+        row.get("novig_h2h_away_price"), errors="coerce"
+    )
+    if (
+        pd.notna(novig_home_ml)
+        and pd.notna(novig_away_ml)
+        and float(novig_home_ml) != float(novig_away_ml)
+        and (float(novig_home) < 0.0)
+        != (float(novig_home_ml) < float(novig_away_ml))
+    ):
+        return False
+
+    opposite_pair = (
+        round(-float(novig_home), 4),
+        round(-float(novig_away), 4),
+    )
+    for book in ("fanduel", "draftkings", "betmgm"):
+        home_point = pd.to_numeric(
+            row.get(f"{book}_home_point"), errors="coerce"
+        )
+        away_point = pd.to_numeric(
+            row.get(f"{book}_away_point"), errors="coerce"
+        )
+        home_price = pd.to_numeric(
+            row.get(f"{book}_home_price"), errors="coerce"
+        )
+        away_price = pd.to_numeric(
+            row.get(f"{book}_away_price"), errors="coerce"
+        )
+        if any(
+            pd.isna(value)
+            for value in (home_point, away_point, home_price, away_price)
+        ):
+            continue
+        if abs(float(home_point) + float(away_point)) > 1e-9:
+            continue
+        pair = (round(float(home_point), 4), round(float(away_point), 4))
+        if pair == opposite_pair:
+            return True
+    return False
+
+
 def _oriented_standard_spread_pair(row, side: str, favorite_side: str):
     """Compatibility wrapper that never rebinds a quote to the other team.
 
@@ -7900,6 +7994,7 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
         "missing_live_moneyline_price": 0,
         "upload_matched_rows": 0,
         "upload_matched_drifted_rows": 0,
+        "unresolved_novig_spread_binding_conflicts": 0,
         "absolute_line_drifts": [],
         "drift_breakdown": {"total_over": 0, "total_under": 0, "spread_home": 0, "spread_away": 0},
     }
@@ -8193,6 +8288,12 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
                     if league_str == "MLB"
                     else ""
                 )
+                unresolved_signed_pair_conflict = (
+                    league_str == "MLB"
+                    and _novig_spread_has_unresolved_standard_conflict(
+                        row, novig_team_binding_basis
+                    )
+                )
                 signed_pair_conflict = (
                     _novig_spread_conflicts_with_standard_signed_pair(row)
                     and not novig_team_binding_basis
@@ -8224,7 +8325,22 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
                     and pd.notna(signed_standard_opposing_price)
                     and signed_standard_book is not None
                 )
-                if novig_team_binding_basis:
+                if unresolved_signed_pair_conflict:
+                    point_val = pd.NA
+                    market_dict["odds_american"] = pd.NA
+                    market_dict["opposing_odds_american"] = pd.NA
+                    market_dict["odds_source"] = (
+                        "rejected_live_spread_binding_conflict"
+                    )
+                    market_dict["opposing_odds_source"] = "rejected"
+                    spread_line_source = "rejected_live_spread_binding_conflict"
+                    market_dict["orientation_source"] = (
+                        f"{orientation_source}|unresolved_cross_book_signed_pair"
+                    )
+                    diag_counts[
+                        "unresolved_novig_spread_binding_conflicts"
+                    ] += 1
+                elif novig_team_binding_basis:
                     direct_point = pd.to_numeric(
                         row.get(f"novig_{side}_point"), errors="coerce"
                     )
