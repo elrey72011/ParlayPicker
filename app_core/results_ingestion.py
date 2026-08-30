@@ -173,6 +173,32 @@ def attach_results(master_df: pd.DataFrame, results_df: pd.DataFrame) -> pd.Data
             mask3_raw = match_name(raw_away, res_df[away_col].fillna("").str.lower())
             match_mask = mask1 & mask2_raw & mask3_raw
 
+        # Neutral-site providers do not always agree on which participant is
+        # labelled home. Match the unordered pair as a fallback, but preserve
+        # the master row's orientation by swapping the result scores below.
+        scores_reversed = False
+        if not match_mask.any():
+            reverse_mask = (
+                mask1
+                & match_name(away, res_df['_norm_home'])
+                & match_name(home, res_df['_norm_away'])
+            )
+            if not reverse_mask.any():
+                reverse_mask = (
+                    mask1
+                    & match_name(away_clean, res_df['_clean_home'])
+                    & match_name(home_clean, res_df['_clean_away'])
+                )
+            if not reverse_mask.any():
+                reverse_mask = (
+                    mask1
+                    & match_name(away_name.lower(), res_df[home_col].fillna("").str.lower())
+                    & match_name(home_name.lower(), res_df[away_col].fillna("").str.lower())
+                )
+            if reverse_mask.any():
+                match_mask = reverse_mask
+                scores_reversed = True
+
         if master_date_str and date_col:
             # Try strict date match first
             strict_mask = match_mask & (res_df['_date_str'] == master_date_str).fillna(False).astype(bool)
@@ -185,8 +211,12 @@ def attach_results(master_df: pd.DataFrame, results_df: pd.DataFrame) -> pd.Data
             # Use first match
             match = matches.iloc[0]
 
-            h_score = _safefloat(match[h_score_col])
-            a_score = _safefloat(match[a_score_col])
+            if scores_reversed:
+                h_score = _safefloat(match[a_score_col])
+                a_score = _safefloat(match[h_score_col])
+            else:
+                h_score = _safefloat(match[h_score_col])
+                a_score = _safefloat(match[a_score_col])
 
             if h_score is not None and a_score is not None:
                 df.loc[idx, 'actual_home_score'] = h_score

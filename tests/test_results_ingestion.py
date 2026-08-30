@@ -49,5 +49,35 @@ class TestResultsIngestion(unittest.TestCase):
          self.assertTrue(pd.isna(enriched_df.iloc[0]['actual_home_score']))
          self.assertEqual(enriched_df.iloc[0]['spread_result'], 'N/A')
 
+    def test_neutral_site_result_with_reversed_home_away_orientation(self):
+        master_df = pd.DataFrame(
+            {
+                'league': ['NCAAF', 'NCAAF'],
+                'home_team': ['Alabama State', 'Howard'],
+                'away_team': ['Southern', 'Alabama Am'],
+                'Commence (UTC)': ['2026-08-29', '2026-08-29'],
+                'best_pick': ['Southern +19.5', 'Howard -1.5'],
+                'spread_pick_line': [19.5, -1.5],
+                'spread_pick_side': ['away', 'home'],
+            }
+        )
+        results_df = pd.DataFrame(
+            {
+                'league': ['NCAAF', 'NCAAF'],
+                'home_team': ['Southern Jaguars', 'Alabama A&M Bulldogs'],
+                'away_team': ['Alabama State Hornets', 'Howard Bison'],
+                'date': ['2026-08-29', '2026-08-29'],
+                'home_score': [17, 24],
+                'away_score': [30, 31],
+            }
+        )
+
+        enriched_df = attach_results(master_df, results_df)
+
+        self.assertEqual(enriched_df['actual_home_score'].tolist(), [30.0, 31.0])
+        self.assertEqual(enriched_df['actual_away_score'].tolist(), [17.0, 24.0])
+        self.assertEqual(enriched_df['spread_result'].tolist(), ['WIN', 'WIN'])
+        self.assertEqual(enriched_df['Pick_Outcome'].tolist(), ['WIN', 'WIN'])
+
 if __name__ == '__main__':
     unittest.main()
