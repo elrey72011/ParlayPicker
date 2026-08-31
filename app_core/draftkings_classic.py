@@ -7,6 +7,7 @@ shortlist, and optimizes complete salary-cap-compliant lineups for both sports.
 """
 from __future__ import annotations
 
+import csv
 import re
 from io import BytesIO, StringIO
 from typing import Any
@@ -28,6 +29,17 @@ DK_NFL_CLASSIC_ROSTER_SLOTS = (
     "FLEX",
     "DST",
 )
+DK_NFL_CLASSIC_POSITION_HEADERS = (
+    "QB",
+    "RB",
+    "RB",
+    "WR",
+    "WR",
+    "WR",
+    "TE",
+    "FLEX",
+    "DST",
+)
 DK_MLB_CLASSIC_POSITION_ORDER = ("P", "C", "1B", "2B", "3B", "SS", "OF")
 DK_MLB_CLASSIC_POSITIONS = frozenset(DK_MLB_CLASSIC_POSITION_ORDER)
 DK_MLB_CLASSIC_ROSTER_SLOTS = (
@@ -42,6 +54,33 @@ DK_MLB_CLASSIC_ROSTER_SLOTS = (
     "OF2",
     "OF3",
 )
+DK_MLB_CLASSIC_POSITION_HEADERS = (
+    "P",
+    "P",
+    "C",
+    "1B",
+    "2B",
+    "3B",
+    "SS",
+    "OF",
+    "OF",
+    "OF",
+)
+
+_INACTIVE_NFL_STATUSES = frozenset(
+    {
+        "O",
+        "OUT",
+        "IR",
+        "INACTIVE",
+        "NFI",
+        "PUP",
+        "RESERVE",
+        "SUS",
+        "SUSPENDED",
+    }
+)
+_QUESTIONABLE_NFL_STATUSES = frozenset({"Q", "QUESTIONABLE", "D", "DOUBTFUL"})
 
 _COLUMN_ALIASES = {
     "position": ("position", "pos"),
@@ -145,7 +184,88 @@ def _classic_score(ranked: pd.DataFrame) -> pd.Series:
     return (0.70 * projection_score + 0.30 * value_score).round(4)
 
 
-def parse_draftkings_classic_salary_csv(source: Any) -> pd.DataFrame:
+def _projection_identity(value: object) -> str:
+    raw = "" if value is None or pd.isna(value) else str(value).strip()
+    if re.fullmatch(r"\d+\.0", raw):
+        raw = raw[:-2]
+    return raw
+
+
+def _projection_name(value: object) -> str:
+    raw = "" if value is None or pd.isna(value) else str(value).strip().lower()
+    return re.sub(r"[^a-z0-9]+", "", raw)
+
+
+def attach_draftkings_projections(
+    player_pool: pd.DataFrame,
+    projection_source: Any,
+) -> pd.DataFrame:
+    """Attach a separate forward-projection CSV to a normalized player pool.
+
+    DraftKings player ID is the preferred join key; normalized player name is a
+    fallback when IDs are unavailable. Only positive numeric projections are
+    applied, and the match count is retained in ``DataFrame.attrs`` for UI
+    diagnostics.
+    """
+
+    if player_pool is None or player_pool.empty:
+        return pd.DataFrame()
+    raw = _read_salary_source(projection_source)
+    projection_column = _find_column(raw, _COLUMN_ALIASES["projection"])
+    id_column = _find_column(raw, _COLUMN_ALIASES["id"])
+    name_column = _find_column(raw, _COLUMN_ALIASES["name"])
+    if not projection_column:
+        raise ValueError("Projection CSV is missing a Projected Points column")
+    if not id_column and not name_column:
+        raise ValueError("Projection CSV must include player ID or player name")
+
+    projection = pd.to_numeric(raw[projection_column], errors="coerce")
+    valid = projection.notna() & projection.gt(0)
+    if not valid.any():
+        raise ValueError("Projection CSV contains no positive numeric projections")
+
+    id_map: dict[str, float] = {}
+    if id_column:
+        for identity, value in zip(raw.loc[valid, id_column], projection.loc[valid]):
+            key = _projection_identity(identity)
+            if key:
+                id_map[key] = float(value)
+    name_map: dict[str, float] = {}
+    if name_column:
+        for name, value in zip(raw.loc[valid, name_column], projection.loc[valid]):
+            key = _projection_name(name)
+            if key:
+                name_map[key] = float(value)
+
+    out = player_pool.copy()
+    matched = pd.Series(float("nan"), index=out.index, dtype=float)
+    for index, player in out.iterrows():
+        identity = _projection_identity(player.get("ID", ""))
+        value = id_map.get(identity) if identity else None
+        if value is None:
+            value = name_map.get(_projection_name(player.get("Name", "")))
+        if value is not None:
+            matched.at[index] = float(value)
+    if not matched.notna().any():
+        raise ValueError("Projection CSV did not match any DraftKings players")
+
+    out.loc[matched.notna(), "ProjectedPoints"] = matched[matched.notna()]
+    out.loc[matched.notna(), "ProjectionSource"] = "uploaded_projection"
+    out["ValuePer1000"] = (
+        pd.to_numeric(out["ProjectedPoints"], errors="coerce")
+        * 1000.0
+        / pd.to_numeric(out["Salary"], errors="coerce")
+    ).round(3)
+    out.attrs["projection_match_count"] = int(matched.notna().sum())
+    out.attrs["projection_unmatched_count"] = int(matched.isna().sum())
+    return out
+
+
+def parse_draftkings_classic_salary_csv(
+    source: Any,
+    *,
+    exclude_questionable: bool = False,
+) -> pd.DataFrame:
     """Normalize an official DraftKings NFL Classic player-pool CSV.
 
     The standard DraftKings fields are supported along with common projection
@@ -217,7 +337,10 @@ def parse_draftkings_classic_salary_csv(source: Any) -> pd.DataFrame:
         else ""
     )
 
-    active = ~out["Status"].isin({"O", "OUT", "IR", "INACTIVE", "SUSPENDED"})
+    excluded_statuses = set(_INACTIVE_NFL_STATUSES)
+    if exclude_questionable:
+        excluded_statuses.update(_QUESTIONABLE_NFL_STATUSES)
+    active = ~out["Status"].isin(excluded_statuses)
     valid_position = out["Position"].isin({"QB", "RB", "WR", "TE", "DST"})
     valid_identity = out["Name"].ne("")
     valid_salary = out["Salary"].notna() & out["Salary"].gt(0)
@@ -309,6 +432,7 @@ def build_draftkings_classic_lineups(
     salary_cap: int = DK_CLASSIC_SALARY_CAP,
     require_qb_pass_catcher: bool = True,
     avoid_offense_against_dst: bool = True,
+    min_unique_players_between_lineups: int = 2,
 ) -> pd.DataFrame:
     """Optimize the top complete DraftKings NFL Classic lineups.
 
@@ -316,6 +440,8 @@ def build_draftkings_classic_lineups(
     lineup stays under the salary cap, uses each player once, and draws from at
     least two teams. The default tournament construction requires a same-team
     WR/TE with the quarterback and excludes offensive players facing the DST.
+    Successive lineups differ by at least ``min_unique_players_between_lineups``
+    players, preventing near-duplicate portfolio rows.
     """
 
     if player_pool is None or player_pool.empty:
@@ -324,6 +450,13 @@ def build_draftkings_classic_lineups(
         raise ValueError("top_n must be positive")
     if int(salary_cap) <= 0:
         raise ValueError("salary_cap must be positive")
+    if not 1 <= int(min_unique_players_between_lineups) <= len(
+        DK_NFL_CLASSIC_ROSTER_SLOTS
+    ):
+        raise ValueError(
+            "min_unique_players_between_lineups must be between 1 and "
+            f"{len(DK_NFL_CLASSIC_ROSTER_SLOTS)}"
+        )
 
     required = {
         "Position",
@@ -354,6 +487,8 @@ def build_draftkings_classic_lineups(
         pool["ProjectedPoints"], errors="coerce"
     )
     pool["Team"] = pool["Team"].fillna("").astype(str).str.strip().str.upper()
+    if "Status" in pool.columns:
+        pool["Status"] = pool["Status"].fillna("").astype(str).str.strip().str.upper()
     pool = pool[
         pool["Position"].isin({"QB", "RB", "WR", "TE", "DST"})
         & pool["Salary"].notna()
@@ -484,7 +619,8 @@ def build_draftkings_classic_lineups(
                 (
                     {index: 1.0 for index in no_good_indices},
                     -np.inf,
-                    len(DK_NFL_CLASSIC_ROSTER_SLOTS) - 1.0,
+                    len(DK_NFL_CLASSIC_ROSTER_SLOTS)
+                    - float(min_unique_players_between_lineups),
                 )
             )
 
@@ -553,6 +689,14 @@ def build_draftkings_classic_lineups(
         lineup["Teams"] = int(pool.loc[ordered_players, "Team"].nunique())
         lineup["Unique Players"] = len(selected_players)
         lineup["QB Stack Team"] = str(pool.at[selected_by_slot["QB"], "Team"])
+        roster_alerts = []
+        if "Status" in pool.columns:
+            roster_alerts = [
+                f"{pool.at[index, 'Name']} ({pool.at[index, 'Status']})"
+                for index in ordered_players
+                if str(pool.at[index, "Status"] or "").strip()
+            ]
+        lineup["Roster Alerts"] = "; ".join(roster_alerts)
         lineup["Projection Sources"] = ", ".join(
             sorted(pool.loc[ordered_players, "ProjectionSource"].astype(str).unique())
         )
@@ -703,6 +847,17 @@ def _mlb_slot_position(slot: str) -> str:
     return slot
 
 
+def _is_confirmed_mlb_hitter(value: object) -> bool:
+    raw = "" if value is None or pd.isna(value) else str(value).strip().upper()
+    if raw in {str(number) for number in range(1, 10)}:
+        return True
+    try:
+        numeric = float(raw)
+    except (TypeError, ValueError):
+        return False
+    return numeric.is_integer() and 1 <= numeric <= 9
+
+
 def _mlb_opponent_team(team: object, game_info: object) -> str:
     matchup = str(game_info or "").strip().upper().split(" ", 1)[0]
     parts = re.split(r"@|VS\.?", matchup)
@@ -724,14 +879,17 @@ def build_draftkings_mlb_classic_lineups(
     salary_cap: int = DK_CLASSIC_SALARY_CAP,
     max_hitters_per_team: int = 5,
     avoid_pitcher_hitter_conflicts: bool = True,
+    require_confirmed_hitters: bool = True,
+    min_unique_players_between_lineups: int = 2,
 ) -> pd.DataFrame:
     """Optimize the top complete DraftKings MLB Classic lineups.
 
     Every lineup contains two pitchers and eight hitters in the standard Classic
     roster, stays at or below the supplied salary cap, uses each player once,
     and includes no more than five hitters from one team. By default, a lineup
-    cannot roster a hitter opposing one of its pitchers. Repeated solves add a
-    no-good constraint on the player set, yielding the next-best unique lineup.
+    cannot roster a hitter opposing one of its pitchers. Confirmed batting-order
+    positions are required by default. Repeated solves require meaningful player
+    changes, yielding diversified rather than one-player-different lineups.
     """
 
     if player_pool is None or player_pool.empty:
@@ -742,6 +900,13 @@ def build_draftkings_mlb_classic_lineups(
         raise ValueError("salary_cap must be positive")
     if int(max_hitters_per_team) <= 0:
         raise ValueError("max_hitters_per_team must be positive")
+    if not 1 <= int(min_unique_players_between_lineups) <= len(
+        DK_MLB_CLASSIC_ROSTER_SLOTS
+    ):
+        raise ValueError(
+            "min_unique_players_between_lineups must be between 1 and "
+            f"{len(DK_MLB_CLASSIC_ROSTER_SLOTS)}"
+        )
 
     required = {
         "Position",
@@ -791,6 +956,15 @@ def build_draftkings_mlb_classic_lineups(
                 lambda value: "P" in _mlb_position_tokens(value)
             )
             pool = pool[~pitcher | probable_pitcher].reset_index(drop=True)
+        if require_confirmed_hitters:
+            positions = pool["EligiblePositions"].fillna("").astype(str).map(
+                _mlb_position_tokens
+            )
+            hitter = positions.map(lambda values: "P" not in values)
+            confirmed_hitter = pool["Starting"].map(_is_confirmed_mlb_hitter)
+            pool = pool[~hitter | confirmed_hitter].reset_index(drop=True)
+    elif require_confirmed_hitters:
+        return pd.DataFrame()
     if pool.empty:
         return pd.DataFrame()
 
@@ -924,7 +1098,8 @@ def build_draftkings_mlb_classic_lineups(
                 (
                     {index: 1.0 for index in indices},
                     -np.inf,
-                    len(DK_MLB_CLASSIC_ROSTER_SLOTS) - 1.0,
+                    len(DK_MLB_CLASSIC_ROSTER_SLOTS)
+                    - float(min_unique_players_between_lineups),
                 )
             )
 
@@ -1002,6 +1177,16 @@ def build_draftkings_mlb_classic_lineups(
         lineup["Teams"] = int(pool.loc[ordered_players, "Team"].nunique())
         lineup["Max Hitters / Team"] = int(team_counts.max()) if not team_counts.empty else 0
         lineup["Unique Players"] = len(selected_players)
+        confirmed_hitters = 0
+        unconfirmed_hitters: list[str] = []
+        if "Starting" in pool.columns:
+            for index in selected_hitter_players:
+                if _is_confirmed_mlb_hitter(pool.at[index, "Starting"]):
+                    confirmed_hitters += 1
+                else:
+                    unconfirmed_hitters.append(str(pool.at[index, "Name"]))
+        lineup["Confirmed Hitters"] = confirmed_hitters
+        lineup["Unconfirmed Hitters"] = "; ".join(sorted(unconfirmed_hitters))
         lineup["Projection Sources"] = ", ".join(
             sorted(pool.loc[ordered_players, "ProjectionSource"].astype(str).unique())
         )
@@ -1014,3 +1199,40 @@ def build_draftkings_mlb_classic_lineups(
         lineup_rows.append(lineup)
 
     return pd.DataFrame(lineup_rows)
+
+
+def export_draftkings_classic_position_csv(
+    lineups: pd.DataFrame,
+    *,
+    sport: str,
+) -> str:
+    """Return a clean position-only CSV using DraftKings player ``Name + ID``.
+
+    This intentionally omits diagnostic columns. Contest-entry templates can
+    prepend their own entry metadata while retaining these position columns.
+    """
+
+    normalized_sport = str(sport or "").strip().upper()
+    if normalized_sport == "NFL":
+        slots = DK_NFL_CLASSIC_ROSTER_SLOTS
+        headers = DK_NFL_CLASSIC_POSITION_HEADERS
+    elif normalized_sport == "MLB":
+        slots = DK_MLB_CLASSIC_ROSTER_SLOTS
+        headers = DK_MLB_CLASSIC_POSITION_HEADERS
+    else:
+        raise ValueError("sport must be NFL or MLB")
+    if lineups is None or lineups.empty:
+        raise ValueError("lineups must contain at least one complete lineup")
+    missing = [slot for slot in slots if slot not in lineups.columns]
+    if missing:
+        raise ValueError("lineups are missing roster slot(s): " + ", ".join(missing))
+
+    output = StringIO(newline="")
+    writer = csv.writer(output, lineterminator="\n")
+    writer.writerow(headers)
+    for _, lineup in lineups.iterrows():
+        values = [str(lineup[slot] or "").strip() for slot in slots]
+        if any(not value for value in values):
+            raise ValueError("lineups contain an empty roster slot")
+        writer.writerow(values)
+    return output.getvalue()

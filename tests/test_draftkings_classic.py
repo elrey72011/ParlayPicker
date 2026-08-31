@@ -1,10 +1,16 @@
+import csv
+from io import StringIO
+from itertools import combinations
+
 import pandas as pd
 import pytest
 
 from app_core.draftkings_classic import (
     DK_NFL_CLASSIC_ROSTER_SLOTS,
+    attach_draftkings_projections,
     build_draftkings_classic_lineups,
     build_draftkings_classic_shortlist,
+    export_draftkings_classic_position_csv,
     parse_draftkings_classic_salary_csv,
 )
 
@@ -165,6 +171,10 @@ def test_nfl_optimizer_returns_five_complete_valid_and_unique_lineups():
     assert lineups["Teams"].ge(2).all()
     assert lineups["Projected Points"].is_monotonic_decreasing
     assert lineups[list(DK_NFL_CLASSIC_ROSTER_SLOTS)].notna().all().all()
+    for (_, first), (_, second) in combinations(lineups.iterrows(), 2):
+        first_players = {first[slot] for slot in DK_NFL_CLASSIC_ROSTER_SLOTS}
+        second_players = {second[slot] for slot in DK_NFL_CLASSIC_ROSTER_SLOTS}
+        assert len(first_players.intersection(second_players)) <= 7
 
 
 def test_nfl_optimizer_honors_slots_qb_stack_and_dst_conflict_guard():
@@ -204,3 +214,72 @@ def test_missing_required_salary_columns_are_explained():
             "Position": ["QB"],
             "Name": ["Player"],
         }))
+
+
+def test_nfl_parser_can_exclude_questionable_and_doubtful_players():
+    frame = _salary_rows()
+    frame.loc[frame["Name"].eq("QB Player 5"), "Status"] = "Q"
+    frame.loc[frame["Name"].eq("RB Player 5"), "Status"] = "D"
+
+    research_pool = parse_draftkings_classic_salary_csv(frame)
+    playable_pool = parse_draftkings_classic_salary_csv(
+        frame,
+        exclude_questionable=True,
+    )
+
+    assert {"QB Player 5", "RB Player 5"}.issubset(set(research_pool["Name"]))
+    assert {"QB Player 5", "RB Player 5"}.isdisjoint(set(playable_pool["Name"]))
+
+
+def test_nfl_position_export_contains_only_classic_slots():
+    pool = parse_draftkings_classic_salary_csv(_nfl_lineup_rows())
+    lineups = build_draftkings_classic_lineups(pool, top_n=2)
+
+    rows = list(csv.reader(StringIO(
+        export_draftkings_classic_position_csv(lineups, sport="NFL")
+    )))
+
+    assert rows[0] == ["QB", "RB", "RB", "WR", "WR", "WR", "TE", "FLEX", "DST"]
+    assert len(rows) == 3
+    assert all(len(row) == 9 for row in rows)
+
+
+def test_nfl_optimizer_rejects_invalid_diversity_requirement():
+    pool = parse_draftkings_classic_salary_csv(_nfl_lineup_rows())
+
+    with pytest.raises(ValueError, match="min_unique_players_between_lineups"):
+        build_draftkings_classic_lineups(
+            pool,
+            min_unique_players_between_lineups=10,
+        )
+
+
+def test_separate_projection_csv_overrides_fppg_by_id_and_name():
+    pool = parse_draftkings_classic_salary_csv(
+        _salary_rows().drop(columns=["Projected Points"])
+    )
+    projection_file = pd.DataFrame({
+        "Player ID": ["QB0", ""],
+        "Player Name": ["", "RB Player 0"],
+        "Projected Points": [31.5, 22.25],
+    })
+
+    projected = attach_draftkings_projections(pool, projection_file)
+
+    assert projected.loc[projected["ID"].eq("QB0"), "ProjectedPoints"].iloc[0] == 31.5
+    assert projected.loc[projected["Name"].eq("RB Player 0"), "ProjectedPoints"].iloc[0] == 22.25
+    assert projected.loc[projected["ID"].eq("QB0"), "ProjectionSource"].iloc[0] == "uploaded_projection"
+    assert projected.attrs["projection_match_count"] == 2
+    assert projected.attrs["projection_unmatched_count"] == len(pool) - 2
+
+
+def test_projection_csv_requires_projection_and_identity_columns():
+    pool = parse_draftkings_classic_salary_csv(_salary_rows())
+
+    with pytest.raises(ValueError, match="Projected Points"):
+        attach_draftkings_projections(pool, pd.DataFrame({"ID": ["QB0"]}))
+    with pytest.raises(ValueError, match="player ID or player name"):
+        attach_draftkings_projections(
+            pool,
+            pd.DataFrame({"Projected Points": [20]}),
+        )

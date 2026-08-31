@@ -1,4 +1,7 @@
 from collections import Counter
+import csv
+from io import StringIO
+from itertools import combinations
 
 import pandas as pd
 import pytest
@@ -6,6 +9,7 @@ import pytest
 from app_core.draftkings_classic import (
     DK_MLB_CLASSIC_ROSTER_SLOTS,
     build_draftkings_mlb_classic_lineups,
+    export_draftkings_classic_position_csv,
     parse_draftkings_mlb_classic_salary_csv,
 )
 
@@ -38,6 +42,7 @@ def _mlb_salary_rows() -> pd.DataFrame:
             "AvgPointsPerGame": 18 + number * 0.5,
             "Projected Points": 20 + number * 0.7,
             "Status": "",
+            "Starting": "SP",
         })
 
     positions = ("C", "1B", "2B", "3B", "SS", "OF")
@@ -62,6 +67,7 @@ def _mlb_salary_rows() -> pd.DataFrame:
                 "AvgPointsPerGame": 7 + position_number * 0.4 + number * 0.15,
                 "Projected Points": 8 + position_number * 0.5 + number * 0.2,
                 "Status": "",
+                "Starting": str((position_number + number) % 9 + 1),
             })
     return pd.DataFrame(rows)
 
@@ -97,6 +103,12 @@ def test_optimizer_returns_five_complete_valid_and_unique_lineups():
     assert lineups["Teams"].ge(2).all()
     assert lineups["Projected Points"].is_monotonic_decreasing
     assert lineups[list(DK_MLB_CLASSIC_ROSTER_SLOTS)].notna().all().all()
+    assert lineups["Confirmed Hitters"].eq(8).all()
+    assert lineups["Unconfirmed Hitters"].eq("").all()
+    for (_, first), (_, second) in combinations(lineups.iterrows(), 2):
+        first_players = {first[slot] for slot in DK_MLB_CLASSIC_ROSTER_SLOTS}
+        second_players = {second[slot] for slot in DK_MLB_CLASSIC_ROSTER_SLOTS}
+        assert len(first_players.intersection(second_players)) <= 8
 
 
 def test_optimizer_honors_positions_team_cap_and_pitcher_hitter_conflicts():
@@ -153,6 +165,7 @@ def test_optimizer_uses_confirmed_probable_starters_when_available():
         pool,
         top_n=1,
         avoid_pitcher_hitter_conflicts=False,
+        require_confirmed_hitters=False,
     )
 
     selected_pitchers = {lineups.iloc[0]["P1"], lineups.iloc[0]["P2"]}
@@ -201,3 +214,34 @@ def test_mlb_parser_and_optimizer_explain_invalid_inputs():
     pool = parse_draftkings_mlb_classic_salary_csv(_mlb_salary_rows())
     with pytest.raises(ValueError, match="top_n"):
         build_draftkings_mlb_classic_lineups(pool, top_n=0)
+
+
+def test_mlb_optimizer_fails_closed_until_all_hitter_slots_are_confirmed():
+    frame = _mlb_salary_rows()
+    frame.loc[~frame["Position"].eq("SP"), "Starting"] = ""
+    pool = parse_draftkings_mlb_classic_salary_csv(frame)
+
+    assert build_draftkings_mlb_classic_lineups(pool, top_n=1).empty
+    assert len(build_draftkings_mlb_classic_lineups(
+        pool,
+        top_n=1,
+        require_confirmed_hitters=False,
+    )) == 1
+
+
+def test_mlb_position_export_contains_only_classic_slots():
+    pool = parse_draftkings_mlb_classic_salary_csv(_mlb_salary_rows())
+    lineups = build_draftkings_mlb_classic_lineups(pool, top_n=2)
+
+    rows = list(csv.reader(StringIO(
+        export_draftkings_classic_position_csv(lineups, sport="MLB")
+    )))
+
+    assert rows[0] == ["P", "P", "C", "1B", "2B", "3B", "SS", "OF", "OF", "OF"]
+    assert len(rows) == 3
+    assert all(len(row) == 10 for row in rows)
+
+
+def test_position_export_rejects_unknown_sport():
+    with pytest.raises(ValueError, match="NFL or MLB"):
+        export_draftkings_classic_position_csv(pd.DataFrame({"QB": ["QB"]}), sport="NBA")
