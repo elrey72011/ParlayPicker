@@ -20,6 +20,7 @@ cryptography>=42.0.0
 # ML — native packages are pinned together to prevent ABI/OpenMP crashes.
 scikit-learn==1.6.1
 xgboost==2.1.4
+scipy>=1.11.0,<2.0.0
 
 # Live Stats Integrations
 nba_api>=1.4.0
