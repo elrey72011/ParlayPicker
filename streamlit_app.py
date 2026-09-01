@@ -202,7 +202,9 @@ _COMPACT_EXPORT_COLUMNS = [
     "consensus_agreement", "Play_Tier", "Play_Stake", "Pick_Status", "Pick_Quality",
     "league", "Home", "Away", "Commence (Local)", "odds_american", "odds_source",
     "odds_feed_source",
-    "market_line_source_detail", "best_pick", "gemini_pick", "Kelly_Bet_Size",
+    "market_line_source_detail", "best_pick", "gemini_pick", "gemini_confidence",
+    "gemini_review_status", "gemini_gate_reason", "gemini_stake_multiplier",
+    "Kelly_Bet_Size",
 ]
 
 
@@ -352,6 +354,15 @@ def _friendly_no_bet_reason(row: pd.Series | dict) -> str:
     raw Status_Reason as fallback. Exports and grading keep the raw statuses.
     """
     get = row.get if hasattr(row, "get") else lambda k, d="": d
+    gemini_enabled = str(get("gemini_gate_enabled", "")).strip().lower() in {
+        "true", "1", "yes", "y"
+    }
+    gemini_approved = str(get("gemini_approved", "")).strip().lower() in {
+        "true", "1", "yes", "y"
+    }
+    if gemini_enabled and not gemini_approved:
+        gemini_reason = str(get("gemini_gate_reason", "") or "").strip()
+        return gemini_reason or "Gemini review did not approve this wager"
     stage = str(get("status_blocker_stage", "") or "").strip()
     if stage in _NO_BET_STAGE_REASONS:
         return _NO_BET_STAGE_REASONS[stage]
@@ -1093,8 +1104,11 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
     if "gemini_pick" not in analysis_df.columns:
         analysis_df["gemini_pick"] = ""
 
-    # Gemini Integration for Top Picks
-    if controls.get("use_gemini") and not best_picks_df.empty:
+    # Gemini is a real, fail-closed wager review when enabled. It may confirm or
+    # reduce/hold a quantitatively qualified bet, but can never promote a row or
+    # flip to an opposing side without a separately validated line and price.
+    gemini_gate_enabled = bool(controls.get("use_gemini"))
+    if gemini_gate_enabled and not best_picks_df.empty:
         try:
             logger.info(f"Firing Gemini API for {len(best_picks_df)} best picks...")
             from integrations.gemini_client import run_gemini_analysis
@@ -1105,34 +1119,58 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
             # head-to-head comparison instead of a one-sided audit.
             best_picks_df = run_gemini_analysis(best_picks_df, st.session_state, analysis_df=analysis_df)
             logger.info("Gemini analysis payload unpacked successfully.")
-
-            bearish_keywords = ["slow pace", "defensive struggle", "risk of blowout", "key player absences", "grind-it-out"]
-
-            for idx, row in best_picks_df.iterrows():
-                risks = str(row.get("gemini_risk_notes", ""))
-                pick = str(row.get("gemini_pick", "No Gemini pick"))
-
-                # Phase 4: Qualitative LLM Synergy
-                # Apply a 0.85 fractional discount to EV if bearish keywords are detected in the LLM risk notes
-                risk_lower = risks.lower()
-                if any(kw in risk_lower for kw in bearish_keywords):
-                    current_ev = best_picks_df.at[idx, "expected_value"]
-                    if pd.notna(current_ev):
-                        best_picks_df.at[idx, "expected_value"] = float(current_ev) * 0.85
-
-                # Update analysis_df to reflect these rows were analyzed (for diagnostics tab)
-                home = row.get("home_team")
-                away = row.get("away_team")
-                explanation = row.get("gemini_explanation", "Analyzed")
-                if pd.notna(home) and pd.notna(away):
-                    mask = (analysis_df["home_team"].eq(home).fillna(False)) & (analysis_df["away_team"].eq(away).fillna(False))
-                    analysis_df.loc[mask, "gemini_analysis"] = explanation
-                    analysis_df.loc[mask, "gemini_explanation"] = explanation
-                    analysis_df.loc[mask, "gemini_risk_notes"] = risks
-                    analysis_df.loc[mask, "gemini_pick"] = pick
-
         except Exception as e:
             deferred_warnings.append(f"Gemini analysis failed: {e}")
+            for column, value in {
+                "gemini_explanation": "Gemini analysis unavailable",
+                "gemini_risk_notes": "Gemini analysis unavailable",
+                "gemini_pick": "No Gemini pick",
+                "gemini_confidence": "",
+                "gemini_flags": "",
+                "gemini_reviewed": False,
+            }.items():
+                best_picks_df[column] = value
+
+    if not best_picks_df.empty:
+        from app_core.gemini_bet_gate import apply_gemini_bet_gate
+
+        best_picks_df = apply_gemini_bet_gate(
+            best_picks_df,
+            enabled=gemini_gate_enabled,
+            product="best_pick",
+            diagnostics=diagnostics,
+        )
+        if gemini_gate_enabled:
+            held_count = int((~best_picks_df["gemini_approved"]).sum())
+            if held_count:
+                deferred_warnings.append(
+                    f"Gemini held {held_count} best-pick review(s) at $0 because "
+                    "they were unavailable, low-confidence, opposed, or risk-flagged."
+                )
+
+            # Update the full candidate frame for diagnostics without leaking the
+            # production decision into the prompt that created the review.
+            for _, row in best_picks_df.iterrows():
+                home = row.get("home_team")
+                away = row.get("away_team")
+                if pd.notna(home) and pd.notna(away):
+                    mask = (
+                        analysis_df["home_team"].eq(home).fillna(False)
+                        & analysis_df["away_team"].eq(away).fillna(False)
+                    )
+                    for column, default in {
+                        "gemini_analysis": "Gemini analysis unavailable",
+                        "gemini_explanation": "Gemini analysis unavailable",
+                        "gemini_risk_notes": "Gemini analysis unavailable",
+                        "gemini_pick": "No Gemini pick",
+                        "gemini_confidence": "",
+                        "gemini_flags": "",
+                        "gemini_review_status": "UNAVAILABLE",
+                        "gemini_gate_reason": "Gemini review unavailable; wager held at $0",
+                        "gemini_approved": False,
+                    }.items():
+                        source_column = "gemini_explanation" if column == "gemini_analysis" else column
+                        analysis_df.loc[mask, column] = row.get(source_column, default)
 
     coverage = _kalshi_coverage_metrics(analysis_df)
     diagnostics.update(coverage)
@@ -1312,6 +1350,18 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
             best_picks_df.get("suspicious_data_flag", False),
             index=best_picks_df.index,
         ).fillna(False).astype(bool)
+        _gemini_enabled0 = pd.Series(
+            best_picks_df.get("gemini_gate_enabled", False),
+            index=best_picks_df.index,
+        ).fillna(False).astype(bool)
+        _gemini_approved0 = pd.Series(
+            best_picks_df.get("gemini_approved", False),
+            index=best_picks_df.index,
+        ).fillna(False).astype(bool)
+        _gemini_ok0 = ~_gemini_enabled0 | _gemini_approved0
+        diagnostics["empty_card_recovery_excluded_gemini_count"] = int(
+            (~_gemini_ok0).sum()
+        )
         threshold_fail = (
             threshold_fail
             | _rec_floor_prob0.lt(float(EMPTY_CARD_RECOVERY_MIN_PRODUCTION_WIN_PROB))
@@ -1332,6 +1382,7 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
             & _calib_gate0
             & _selection_ok0 & _ranking_ok0 & _final_pick_ok0
             & ~_started0 & ~_degraded0 & ~_suspicious0
+            & _gemini_ok0
         )
         diagnostics["empty_card_recovery_candidate_count"] = int(recovery_mask.sum())
         if recovery_mask.any():
@@ -1530,6 +1581,32 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
                         diagnostics,
                         nfl_game_count=_nfl_game_count,
                     )
+                    if gemini_gate_enabled:
+                        from integrations.gemini_client import run_gemini_prop_analysis
+
+                        logger.info(
+                            "Firing Gemini API for %s player props...",
+                            len(strikeout_prop_card),
+                        )
+                        strikeout_prop_card = run_gemini_prop_analysis(
+                            strikeout_prop_card,
+                            st.session_state,
+                        )
+                    from app_core.gemini_bet_gate import apply_gemini_bet_gate
+
+                    strikeout_prop_card = apply_gemini_bet_gate(
+                        strikeout_prop_card,
+                        enabled=gemini_gate_enabled,
+                        product="prop",
+                        diagnostics=diagnostics,
+                    )
+                    if gemini_gate_enabled:
+                        # Re-label rows after the secondary gate zeroes held stakes.
+                        from app_core.prop_runner import apply_prop_stake_status
+
+                        strikeout_prop_card = apply_prop_stake_status(
+                            strikeout_prop_card
+                        )
                 _prop_stake_status = strikeout_prop_card.get(
                     "Stake_Status", pd.Series("", index=strikeout_prop_card.index)
                 ).astype(str).str.strip()
@@ -2559,6 +2636,10 @@ def main() -> None:
                 "game_time_est": "Game Time (ET)",
                 "best_pick": "Best Pick",
                 "gemini_pick": "Gemini Pick",
+                "gemini_confidence": "Gemini Confidence",
+                "gemini_review_status": "Gemini Verdict",
+                "gemini_gate_reason": "Gemini Gate Reason",
+                "gemini_stake_multiplier": "Gemini Stake Multiplier",
                 "calibrated_probability": "Prob",
                 "expected_value": "EV",
                 "edge": "Edge",
@@ -2573,7 +2654,7 @@ def main() -> None:
             if "kalshi_probability" in display_df.columns:
                 kalshi_display = pd.to_numeric(display_df["kalshi_probability"], errors="coerce")
                 display_df["kalshi_probability_display"] = kalshi_display.map(lambda x: "No Kalshi" if pd.isna(x) else f"{x:.4f}")
-            preferred = ["Bet Decision", "Card Tier", "Play Tier", "Play Stake", "Pick_Status", "Triple Filter Rank", "Pick Quality", "parlay_rank", "League", "Home Team", "Away Team", "Game Date", "Game Time (ET)", "Best Pick", "Gemini Pick", "Prob", "ML Prob", "Odds", "Source", "EV", "Edge", "Calibrated Edge", "Consensus", "Kalshi Status", "kalshi_probability_display", "Production Gate Reason"]
+            preferred = ["Bet Decision", "Card Tier", "Play Tier", "Play Stake", "Pick_Status", "Triple Filter Rank", "Pick Quality", "parlay_rank", "League", "Home Team", "Away Team", "Game Date", "Game Time (ET)", "Best Pick", "Gemini Pick", "Gemini Confidence", "Gemini Verdict", "Gemini Stake Multiplier", "Gemini Gate Reason", "Prob", "ML Prob", "Odds", "Source", "EV", "Edge", "Calibrated Edge", "Consensus", "Kalshi Status", "kalshi_probability_display", "Production Gate Reason"]
             ordered = [c for c in preferred if c in display_df.columns] + [c for c in display_df.columns if c not in preferred]
             display_df = display_df[ordered]
 
@@ -2667,7 +2748,10 @@ def main() -> None:
                 "best_pick", "Kelly_Bet_Size", "WinProbability", "expected_value",
                 "edge", "Conviction_Score", "consensus_agreement", "odds_american", "odds_source", "odds_feed_source", "market_probability",
                 "kalshi_probability", "ml_probability", "ml_probability_source", "ml_target", "ml_projection",
-                "ml_residual_scale", "ml_feature_quality", "gemini_pick", "gemini_explanation", "gemini_risk_notes",
+                "ml_residual_scale", "ml_feature_quality", "gemini_pick", "gemini_confidence",
+                "gemini_flags", "gemini_reviewed", "gemini_explanation", "gemini_risk_notes",
+                "gemini_gate_enabled", "gemini_review_status", "gemini_gate_reason",
+                "gemini_approved", "gemini_stake_multiplier",
                 "status_metric_basis", "effective_expected_value", "effective_edge", "effective_win_probability",
                 "empirical_win_probability", "empirical_edge", "empirical_bucket",
                 "status_blocker_reason", "status_blocker_stage", "nba_stats_fetch_status", "fallback_summary_by_league",

@@ -39,3 +39,19 @@ The `results_dashboard.py` auto-grades historical exports. It uses safe boolean 
 
 ### 8. Infrastructure Resilience
 The pipeline is hardened for headless/server deployment. It catches unhandled network timeouts, safely defaults zero-division errors in odds math to `-110`, and skips rate-limited APIs without crashing the main loop.
+
+### 9. Gemini Wager Review
+
+Gemini is integrated as a bounded secondary reviewer for both game picks and
+player props. When **Require Gemini Review for Bets** is enabled:
+
+* A funded wager must receive a structured Gemini review that selects the exact
+  same pick with `MEDIUM` or `HIGH` confidence and no blocking risk flag.
+* `HIGH` confidence preserves the deterministic stake; `MEDIUM` uses 75% of it.
+* Disagreement, low confidence, missing live inputs, invalid JSON, quota/API
+  failure, or a missing key holds the wager at `$0`.
+* Gemini can never promote a model-rejected row or flip to an opposing pick
+  without a separately validated sportsbook line and price.
+
+Set either `GOOGLE_API_KEY` or `GEMINI_API_KEY` in Streamlit secrets or the
+deployment environment. Never commit the key to this repository.

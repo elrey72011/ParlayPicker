@@ -568,7 +568,10 @@ BEST_PICK_COLUMNS = [
     "blend_in_kalshi", "blend_in_market", "blend_in_ml", "blend_in_theover", "blend_tier",
     # Readable per-signal win-% breakdown (Kalshi/Market/ML/TheOver) â€” see REQUIRED_BEST_PICK_EXPORT_COLUMNS.
     "signal_breakdown",
-    "gemini_explanation", "gemini_risk_notes", "used_stale_features", "Pick_Quality", "Conviction_Score",
+    "gemini_pick", "gemini_confidence", "gemini_flags", "gemini_reviewed",
+    "gemini_explanation", "gemini_risk_notes", "gemini_gate_enabled",
+    "gemini_review_status", "gemini_gate_reason", "gemini_approved",
+    "gemini_stake_multiplier", "used_stale_features", "Pick_Quality", "Conviction_Score",
     "game_already_started_flag",
     "uploaded_spread_line", "uploaded_total_line", "live_spread_line", "live_total_line", "line_source", "line_delta", "upload_market_match",
     "market_line_used", "market_line_source", "market_line_source_detail", "matched_live_spread_line", "matched_live_total_line", "upload_spread_line", "upload_total_line", "base_spread_line", "base_total_line",
@@ -3801,6 +3804,13 @@ def classify_best_available_picks(best_picks_df: pd.DataFrame) -> pd.DataFrame:
     event_ok = pd.Series(
         out.get("line_event_identity_match_flag", True), index=out.index
     ).fillna(True).astype(bool)
+    gemini_gate_enabled = pd.Series(
+        out.get("gemini_gate_enabled", False), index=out.index
+    ).fillna(False).astype(bool)
+    gemini_approved = pd.Series(
+        out.get("gemini_approved", False), index=out.index
+    ).fillna(False).astype(bool)
+    gemini_ok = ~gemini_gate_enabled | gemini_approved
 
     funded_approved = (
         status.eq("Actionable")
@@ -3811,6 +3821,7 @@ def classify_best_available_picks(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         & line_source.eq("live")
         & line_ok
         & event_ok
+        & gemini_ok
     )
     selection_probability = _numeric_series(out, "selection_probability_used")
     selection_probability = selection_probability.fillna(
@@ -3844,6 +3855,7 @@ def classify_best_available_picks(best_picks_df: pd.DataFrame) -> pd.DataFrame:
         & line_source.eq("live")
         & line_ok
         & event_ok
+        & gemini_ok
     )
     controlled_marker = pd.Series(
         out.get("controlled_card_recovery", False), index=out.index
@@ -3882,6 +3894,10 @@ def classify_best_available_picks(best_picks_df: pd.DataFrame) -> pd.DataFrame:
     out.loc[~line_source.eq("live") | ~line_ok | ~event_ok, "qualification_reason"] = (
         "PASS: live line or event identity is not verified."
     )
+    out.loc[~gemini_ok, "qualification_reason"] = out.get(
+        "gemini_gate_reason",
+        pd.Series("PASS: Gemini review did not approve this wager.", index=out.index),
+    ).fillna("PASS: Gemini review did not approve this wager.")
     out.loc[lean, "qualification_reason"] = (
         "Qualified research lean: final calibrated probability and edge clear the offered price, but no production stake is funded."
     )
@@ -10404,6 +10420,16 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
         & (~best_pick_norm.str.contains("unresolved", na=False))
         & (~untrusted_model)
     )
+    gemini_gate_enabled = pd.Series(
+        portfolio.get("gemini_gate_enabled", False), index=portfolio.index
+    ).fillna(False).astype(bool)
+    gemini_approved = pd.Series(
+        portfolio.get("gemini_approved", False), index=portfolio.index
+    ).fillna(False).astype(bool)
+    gemini_gate_ok = ~gemini_gate_enabled | gemini_approved
+    # Enabling Gemini makes it a real secondary approval gate. It only narrows
+    # deterministic eligibility; it can never promote a row on its own.
+    production_eligible &= gemini_gate_ok
     portfolio["production_eligible"] = production_eligible
 
     portfolio["decimal_odds"] = _numeric_series(portfolio, "decimal_odds").fillna(
@@ -10730,6 +10756,7 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
             & line_consistent & event_identity_ok
             & (~best_pick_norm.str.contains("unresolved", na=False))
             & (~untrusted_model)
+            & gemini_gate_ok
         )
         _act_tier = _data_safe & status.eq("actionable")
         # Non-Actionable staking tier: High Variance only by default. Below Threshold
@@ -10806,6 +10833,40 @@ def optimize_portfolio_allocation(best_picks_df: pd.DataFrame, bankroll: float =
             prior.str.len().gt(0),
             prior + "; final slate ceiling",
             "Final slate ceiling",
+        )
+
+    # Gemini sizing runs last and can only reduce exposure. HIGH keeps the
+    # deterministic amount, MEDIUM uses 75%, and every non-approved review is
+    # held at $0. Applying this after optional force-deploy logic makes the gate
+    # non-bypassable.
+    gemini_multiplier = pd.to_numeric(
+        pd.Series(
+            portfolio.get("gemini_stake_multiplier", 1.0),
+            index=portfolio.index,
+        ),
+        errors="coerce",
+    ).fillna(0.0).clip(lower=0.0, upper=1.0)
+    gemini_multiplier = gemini_multiplier.where(gemini_gate_enabled, 1.0)
+    pre_gemini_amount = pd.to_numeric(
+        portfolio["production_bet_amount"], errors="coerce"
+    ).fillna(0.0)
+    portfolio["production_bet_amount"] = (
+        pre_gemini_amount * gemini_multiplier
+    ).where(gemini_gate_ok, 0.0)
+    portfolio.loc[~gemini_gate_ok, "production_eligible"] = False
+    portfolio.loc[~gemini_gate_ok, "kelly_cap_reason"] = "Gemini review hold"
+    medium_reduction = (
+        gemini_gate_enabled
+        & gemini_gate_ok
+        & gemini_multiplier.lt(1.0)
+        & pre_gemini_amount.gt(0.0)
+    )
+    if medium_reduction.any():
+        prior = portfolio.loc[medium_reduction, "kelly_cap_reason"].fillna("").astype(str)
+        portfolio.loc[medium_reduction, "kelly_cap_reason"] = np.where(
+            prior.str.len().gt(0),
+            prior + "; Gemini MEDIUM 75% multiplier",
+            "Gemini MEDIUM 75% multiplier",
         )
     portfolio["production_bet_amount"] = portfolio["production_bet_amount"].round(2)
     portfolio["recommended_bet"] = portfolio["production_bet_amount"]
