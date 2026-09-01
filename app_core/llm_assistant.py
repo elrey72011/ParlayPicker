@@ -336,7 +336,7 @@ def generate_batch_confidence_explanation(games_data: List[Dict[str, Any]], sess
         # Build prompt
         current_time_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
         prompt = f"""Current Time: {current_time_str}
-You are an independent sports betting analyst. Do not assume any side has already
+You are an independent sports betting risk reviewer. Do not assume any side has already
 been approved or rejected — some games here are ones the system declined, others
 are ones it bet, and you are not told which is which.
 
@@ -348,7 +348,11 @@ total_under, side_b is total_over for the same total line). When side_b is
 present, do a genuine head-to-head comparison of side_a vs side_b using both
 sides' full data and pick whichever you believe is the better bet — your pick is
 NOT required to be side_a just because it's listed first. When side_b is null,
-evaluate side_a on its own.
+evaluate side_a on its own. Rows with is_player_prop=true are player propositions;
+use their projection, exact line/price, market probability, form sample, and
+calibration evidence. Do not invent or claim injuries, lineups, weather, news,
+or any other fact not present in the payload. You are a bounded reviewer, not a
+source of new odds or probabilities.
 
 For each game, return a JSON object with:
 - game_id: The identifier provided in input
@@ -356,7 +360,11 @@ For each game, return a JSON object with:
 - confidence: HIGH/MEDIUM/LOW — and LOW (not 'none') is how you flag a side with little or no betting value at the given price
 - explanation: Brief 1-sentence rationale for the pick, grounded in the probabilities/edge given for both sides considered (max 240 chars)
 - risk_notes: Specific risks or reasons for caution (max 240 chars) — if the price doesn't justify a bet, say so here (e.g. "edge does not clear the vig at this price"). If the 'is_live_data' flag is false, you must output the exact risk note: "Analysis used league-average fallbacks due to missing live stats."
-- flags: Array of short flag strings (e.g. "missing_odds", "contrarian", "no_value_at_price", "picked_opposing_side")
+- flags: Array of short flag strings (e.g. "missing_odds", "missing_live_stats",
+  "contrarian", "no_value_at_price", "picked_opposing_side"). Use
+  "no_value_at_price" whenever the recommended side does not have positive value
+  at the exact offered price. Use "picked_opposing_side" whenever recommended_bet
+  differs from side_a.best_pick.
 
 Games to analyze:
 {json.dumps(batch, indent=2, default=str)}
@@ -370,7 +378,11 @@ Return ONLY a JSON array of objects. No markdown formatting.
 
             resp = client.models.generate_content(
                 model=ACTIVE_MODEL,
-                contents=prompt
+                contents=prompt,
+                config=genai.types.GenerateContentConfig(
+                    temperature=0.1,
+                    response_mime_type="application/json",
+                ),
             )
             text = getattr(resp, "text", "") or ""
 

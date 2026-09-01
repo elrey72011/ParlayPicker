@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 import pandas as pd
 
@@ -39,6 +40,75 @@ OPPOSITE_MARKET_TYPE = {
     "h2h_home": "h2h_away", "h2h_away": "h2h_home",
     "moneyline_home": "moneyline_away", "moneyline_away": "moneyline_home",
 }
+
+
+PROP_PAYLOAD_MAP = {
+    "best_pick": "best_pick",
+    "odds_american": "odds_american",
+    "MarketProbability": "market_probability",
+    "RawWinProbability": "raw_model_probability",
+    "CalibratedProbability": "calibrated_probability",
+    "ConservativeWinProbability": "conservative_probability",
+    "WinProbability": "win_probability",
+    "expected_value": "expected_value",
+    "edge": "edge",
+    "raw_model_edge": "raw_model_edge",
+    "line": "line",
+    "expected_count": "projected_count",
+    "FormSampleSize": "form_sample_size",
+    "CalibrationSampleSize": "calibration_sample_size",
+    "CalibrationSource": "calibration_source",
+    "book": "book",
+}
+
+
+def _normalized_flags(value: Any) -> list[str]:
+    if isinstance(value, (list, tuple, set)):
+        return [str(item).strip() for item in value if str(item).strip()][:12]
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, list):
+                return [str(item).strip() for item in parsed if str(item).strip()][:12]
+        except (TypeError, ValueError, json.JSONDecodeError):
+            pass
+        return [value.strip()[:120]]
+    return []
+
+
+def _attach_gemini_results(
+    result: pd.DataFrame,
+    row_ids: list[str],
+    analyses: dict[str, dict[str, Any]],
+) -> pd.DataFrame:
+    """Map validated batch results onto a card without granting wager authority."""
+    explanations: list[str] = []
+    risk_notes: list[str] = []
+    picks: list[str] = []
+    confidences: list[str] = []
+    flags: list[str] = []
+    reviewed: list[bool] = []
+    for row_id in row_ids:
+        payload = analyses.get(str(row_id), {})
+        explanation = str(payload.get("explanation") or "Gemini analysis unavailable")
+        risk = str(payload.get("risk_notes") or "Gemini analysis unavailable")
+        pick = str(payload.get("recommended_bet") or "No Gemini pick")
+        confidence = str(payload.get("confidence") or "").strip().upper()
+        normalized_flags = _normalized_flags(payload.get("flags"))
+        explanations.append(explanation)
+        risk_notes.append(risk)
+        picks.append(pick)
+        confidences.append(confidence)
+        flags.append("|".join(normalized_flags))
+        reviewed.append(bool(payload) and bool(pick) and confidence in {"HIGH", "MEDIUM", "LOW"})
+
+    result["gemini_explanation"] = explanations
+    result["gemini_risk_notes"] = risk_notes
+    result["gemini_pick"] = picks
+    result["gemini_confidence"] = confidences
+    result["gemini_flags"] = flags
+    result["gemini_reviewed"] = reviewed
+    return result
 
 
 def _opposing_side_lookup(analysis_df: pd.DataFrame) -> dict:
@@ -115,34 +185,11 @@ def run_gemini_analysis(df: pd.DataFrame, session_state: Any = None, analysis_df
         # Call with session_state
         analyses = generate_batch_confidence_explanation(games_list, session_state)
 
-        # Unpack dictionary into the two expected export columns based on game_id
-        # Use result.index to ensure alignment
-        analyses_results = [analyses.get(str(gid), {}) for gid in llm_payload["game_id"]]
-
-        explanations = []
-        risk_notes = []
-        picks = []
-        for res in analyses_results:
-            expl = res.get("explanation")
-            if expl is None or expl == "":
-                expl = "Gemini analysis unavailable"
-
-            risk = res.get("risk_notes")
-            if risk is None or risk == "":
-                # The user specified defaulting gemini_risk_notes to "Gemini analysis unavailable" if it's missing
-                risk = "Gemini analysis unavailable"
-
-            pick = res.get("recommended_bet")
-            if pick is None or pick == "":
-                pick = "No Gemini pick"
-
-            explanations.append(str(expl))
-            risk_notes.append(str(risk))
-            picks.append(str(pick))
-
-        result["gemini_explanation"] = explanations
-        result["gemini_risk_notes"] = risk_notes
-        result["gemini_pick"] = picks
+        result = _attach_gemini_results(
+            result,
+            [str(value) for value in llm_payload["game_id"].tolist()],
+            analyses,
+        )
 
     except Exception as exc:  # pragma: no cover
         import logging
@@ -151,5 +198,71 @@ def run_gemini_analysis(df: pd.DataFrame, session_state: Any = None, analysis_df
         result["gemini_explanation"] = "Gemini analysis unavailable"
         result["gemini_risk_notes"] = "Gemini analysis unavailable"
         result["gemini_pick"] = "No Gemini pick"
+        result["gemini_confidence"] = ""
+        result["gemini_flags"] = ""
+        result["gemini_reviewed"] = False
 
     return result
+
+
+def run_gemini_prop_analysis(
+    df: pd.DataFrame,
+    session_state: Any = None,
+) -> pd.DataFrame:
+    """Run the same structured Gemini review over MLB and NFL player props.
+
+    The payload intentionally excludes the existing production verdict and
+    stake. Gemini sees the offered price, model/market probabilities, projection,
+    and calibration evidence, then reviews the selected side independently.
+    """
+    if df is None or df.empty:
+        return pd.DataFrame() if df is None else df.copy()
+    result = df.copy()
+    try:
+        from app_core.llm_assistant import generate_batch_confidence_explanation
+
+        games: list[dict[str, Any]] = []
+        row_ids: list[str] = []
+        for position, (_, row) in enumerate(result.iterrows()):
+            row_id = f"prop-{position}"
+            row_ids.append(row_id)
+            side = {
+                payload_name: row.get(column_name)
+                for column_name, payload_name in PROP_PAYLOAD_MAP.items()
+                if column_name in result.columns
+            }
+            live_fields = (
+                pd.notna(row.get("odds_american"))
+                and pd.notna(row.get("line"))
+                and pd.notna(row.get("expected_count"))
+            )
+            games.append(
+                {
+                    "game_id": row_id,
+                    "league": row.get("league"),
+                    "matchup": row.get("matchup"),
+                    "player": row.get("player"),
+                    "participant_type": row.get("participant_type"),
+                    "market_type": row.get("market_type"),
+                    "game_date": row.get("game_date"),
+                    "is_player_prop": True,
+                    "is_live_data": bool(live_fields),
+                    "side_a": side,
+                    "side_b": None,
+                }
+            )
+        analyses = generate_batch_confidence_explanation(games, session_state)
+        return _attach_gemini_results(result, row_ids, analyses)
+    except Exception as exc:  # pragma: no cover - external SDK/runtime boundary
+        import logging
+
+        logging.getLogger(__name__).error(
+            "Gemini prop integration mapping failed: %s", exc, exc_info=True
+        )
+        result["gemini_explanation"] = "Gemini analysis unavailable"
+        result["gemini_risk_notes"] = "Gemini analysis unavailable"
+        result["gemini_pick"] = "No Gemini pick"
+        result["gemini_confidence"] = ""
+        result["gemini_flags"] = ""
+        result["gemini_reviewed"] = False
+        return result

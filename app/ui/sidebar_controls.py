@@ -133,7 +133,16 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
     st.sidebar.subheader("Analysis Engines")
 
     use_ml = st.sidebar.checkbox("Enable ML Predictions", True, key="use_ml")
-    use_gemini = st.sidebar.checkbox("Enable Gemini Analysis", key="use_gemini")
+    use_gemini = st.sidebar.checkbox(
+        "Require Gemini Review for Bets",
+        value=True,
+        key="use_gemini",
+        help=(
+            "When enabled, funded game picks and player props require a matching "
+            "MEDIUM/HIGH Gemini review. MEDIUM uses 75% of the normal stake; "
+            "disagreement, weak/missing analysis, or API failure holds the bet at $0."
+        ),
+    )
 
     st.sidebar.subheader("Diagnostics")
     show_debug = st.sidebar.checkbox("Display Debug Information", value=False, key="show_debug")
