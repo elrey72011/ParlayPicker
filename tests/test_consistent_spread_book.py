@@ -1,8 +1,8 @@
-"""Source the run line from a book whose spread agrees with its own moneyline (19 Jun).
+"""Verify sportsbook spread orientation and fail-closed binding safeguards.
 
-The 10:49 raw_book_odds_diag proved novig + fanduel published HOU/CLE with the spread
-flipped vs their own moneyline, while draftkings + betmgm had it right. We now take the
-line AND price from the first internally-consistent book.
+Standard-book consensus can repair non-MLB orientation, but MLB run lines are rejected
+whenever a same-magnitude signed pair is bound to opposite teams across available books.
+That prevents a stale Odds API snapshot from becoming a reversed Novig instruction.
 """
 import os
 import sys
@@ -62,13 +62,19 @@ def test_none_when_no_book_consistent():
     assert _consistent_spread_book(row) is None
 
 
-def test_expand_orients_cleveland_to_plus_1_5_from_consistent_book():
-    out, _ = _expand_live_odds_to_bet_rows(pd.DataFrame([_cleveland_row()]), None)
-    away = out[out.market_type == "spread_away"].iloc[0]
-    home = out[out.market_type == "spread_home"].iloc[0]
-    assert float(away["spread_line"]) == 1.5      # Cleveland +1.5 (was -1.5)
-    assert float(away["odds_american"]) == -190.0  # draftkings' away price, not novig's
-    assert float(home["spread_line"]) == -1.5     # Houston -1.5
+def test_expand_rejects_cleveland_spread_when_books_reverse_the_signed_pair():
+    out, diagnostics = _expand_live_odds_to_bet_rows(
+        pd.DataFrame([_cleveland_row()]), None
+    )
+    spreads = out[out["market_type"].isin(["spread_home", "spread_away"])]
+
+    assert len(spreads) == 2
+    assert spreads["spread_line"].isna().all()
+    assert spreads["odds_american"].isna().all()
+    assert spreads["line_source"].eq(
+        "rejected_live_spread_binding_conflict"
+    ).all()
+    assert diagnostics["unresolved_novig_spread_binding_conflicts"] == 2
 
 
 def _same_magnitude_signed_pair_conflict_row(league="WNBA"):
@@ -117,19 +123,19 @@ def test_wnba_signed_pair_conflict_uses_corroborated_portland_line():
     )
 
 
-def test_mlb_signed_pair_conflict_cannot_survive_on_internal_moneyline_agreement():
-    out, _ = _expand_live_odds_to_bet_rows(
+def test_mlb_signed_pair_conflict_cannot_survive_on_book_majority():
+    out, diagnostics = _expand_live_odds_to_bet_rows(
         pd.DataFrame([_same_magnitude_signed_pair_conflict_row("MLB")]), None
     )
-    home = out[out["market_type"].eq("spread_home")].iloc[0]
-    away = out[out["market_type"].eq("spread_away")].iloc[0]
+    spreads = out[out["market_type"].isin(["spread_home", "spread_away"])]
 
-    assert float(home["spread_line"]) == -1.5
-    assert float(home["odds_american"]) == -106.0
-    assert float(away["spread_line"]) == 1.5
-    assert float(away["odds_american"]) == -114.0
-    assert home["line_source"] == "fanduel_standard_spread_consensus"
-    assert away["line_source"] == "fanduel_standard_spread_consensus"
+    assert len(spreads) == 2
+    assert spreads["spread_line"].isna().all()
+    assert spreads["odds_american"].isna().all()
+    assert spreads["line_source"].eq(
+        "rejected_live_spread_binding_conflict"
+    ).all()
+    assert diagnostics["unresolved_novig_spread_binding_conflicts"] == 2
 
 
 def test_moneyline_export_preserves_favorite_orientation_without_creating_a_bet():
@@ -503,12 +509,13 @@ def test_aug3_texas_novig_reversal_fails_closed_before_candidate_ranking():
     assert set(retained["market_type"]) == {"total_over", "total_under"}
 
 
-def test_aug5_dodgers_cubs_two_two_split_keeps_novig_team_bound_quote():
+def test_aug5_dodgers_cubs_two_two_split_rejects_team_bound_quote():
     # Production regression: Novig and DraftKings showed Cubs +1.5 while
     # FanDuel and BetMGM showed Dodgers +1.5. Filtering the standard books by
     # their moneylines turned the raw 2-2 split into an apparent FanDuel/BetMGM
-    # consensus and exported Dodgers +1.5. A tied conflict must remain bound to
-    # the execution venue instead of silently substituting another book's side.
+    # consensus and exported Dodgers +1.5. The later Novig UI reversals show the
+    # API's Novig labels cannot resolve that disagreement, so the spread must be
+    # rejected instead of silently substituting either side.
     live_row = {
         "league": "MLB",
         "home_team": "Chicago Cubs",
@@ -542,22 +549,20 @@ def test_aug5_dodgers_cubs_two_two_split_keeps_novig_team_bound_quote():
         "betmgm_h2h_away_price": 100,
     }
 
-    expanded, _ = _expand_live_odds_to_bet_rows(
+    expanded, diagnostics = _expand_live_odds_to_bet_rows(
         pd.DataFrame([live_row]), None
     )
     spreads = expanded[
         expanded["market_type"].isin(["spread_home", "spread_away"])
-    ].set_index("market_type")
+    ]
 
-    assert float(spreads.loc["spread_home", "spread_line"]) == 1.5
-    assert float(spreads.loc["spread_home", "odds_american"]) == -174.0
-    assert float(spreads.loc["spread_away", "spread_line"]) == -1.5
-    assert float(spreads.loc["spread_away", "odds_american"]) == 167.0
-    assert spreads["line_source"].eq("novig_team_bound_quote").all()
-    assert spreads["odds_source"].eq("novig").all()
-    assert spreads["orientation_source"].str.endswith(
-        "|cross_book_signed_pair_tie|novig_execution_venue_tiebreak"
+    assert len(spreads) == 2
+    assert spreads["spread_line"].isna().all()
+    assert spreads["odds_american"].isna().all()
+    assert spreads["line_source"].eq(
+        "rejected_live_spread_binding_conflict"
     ).all()
+    assert diagnostics["unresolved_novig_spread_binding_conflicts"] == 2
 
 
 def test_aug30_cws_minnesota_split_binding_is_rejected_until_resolved():
@@ -657,6 +662,72 @@ def test_aug30_noon_cws_minnesota_moneyline_cannot_flip_novig_run_line():
         "draftkings_h2h_away_price": 106,
         "betmgm_h2h_home_price": -120,
         "betmgm_h2h_away_price": 100,
+    }
+
+    expanded, diagnostics = _expand_live_odds_to_bet_rows(
+        pd.DataFrame([live_row]), None
+    )
+    spreads = expanded[
+        expanded["market_type"].isin(["spread_home", "spread_away"])
+    ]
+
+    assert len(spreads) == 2
+    assert spreads["spread_line"].isna().all()
+    assert spreads["odds_american"].isna().all()
+    assert spreads["line_source"].eq(
+        "rejected_live_spread_binding_conflict"
+    ).all()
+    assert spreads["orientation_source"].str.endswith(
+        "|unresolved_cross_book_signed_pair"
+    ).all()
+    assert diagnostics["unresolved_novig_spread_binding_conflicts"] == 2
+
+    retained = _filter_preselection_line_integrity(expanded)
+    assert set(retained["market_type"]) == {"total_over", "total_under"}
+
+
+def test_sep1_mets_tampa_bay_dissent_is_rejected_until_novig_binding_resolves():
+    # The 11:55 export bound TB -1.5/+178 and NYM +1.5/-182 because Novig,
+    # DraftKings, and BetMGM shared that feed pair. The live Novig screen instead
+    # showed NYM -1.5 and TB +1.5, matching the lone FanDuel pair. A raw-source
+    # majority is therefore not proof that Novig's current execution labels are
+    # correct. Reject the spread while any same-magnitude book publishes the
+    # opposite signed pair; totals can remain eligible for the game.
+    live_row = {
+        "league": "MLB",
+        "home_team": "Tampa Bay",
+        "away_team": "New York Mets",
+        "game_date": "2026-09-01",
+        "matchup_id": "2026-09-01|tampa bay|new york mets",
+        "commence_time_raw": "2026-09-01T22:40:00Z",
+        "novig_home_point": -1.5,
+        "novig_home_price": 178,
+        "novig_away_point": 1.5,
+        "novig_away_price": -182,
+        "novig_h2h_home_price": -120,
+        "novig_h2h_away_price": 117,
+        "novig_over_point": 7.5,
+        "novig_over_price": -106,
+        "novig_under_point": 7.5,
+        "novig_under_price": 100,
+        "fanduel_home_point": 1.5,
+        "fanduel_home_price": -205,
+        "fanduel_away_point": -1.5,
+        "fanduel_away_price": 168,
+        "fanduel_h2h_home_price": -126,
+        "fanduel_h2h_away_price": 108,
+        "draftkings_home_point": -1.5,
+        "draftkings_home_price": 162,
+        "draftkings_away_point": 1.5,
+        "draftkings_away_price": -198,
+        "draftkings_h2h_home_price": -124,
+        "draftkings_h2h_away_price": 116,
+        "betmgm_home_point": -1.5,
+        "betmgm_home_price": 165,
+        "betmgm_away_point": 1.5,
+        "betmgm_away_price": -200,
+        "betmgm_h2h_home_price": -130,
+        "betmgm_h2h_away_price": 110,
     }
 
     expanded, diagnostics = _expand_live_odds_to_bet_rows(
@@ -808,12 +879,12 @@ def test_aug5_mets_cleveland_keeps_unanimous_team_bound_quote():
     )
 
 
-def test_aug15_san_diego_cleveland_keeps_draftkings_backed_majority_binding():
+def test_aug15_san_diego_cleveland_rejects_one_book_dissent():
     # Production regression: Novig, FanDuel, and DraftKings all bound +1.5 to
-    # Cleveland, while BetMGM alone published the opposite pair. Requiring zero
-    # dissent discarded this DraftKings-backed 3-1 raw-source majority and
-    # synthetically relabeled Novig's Cleveland +1.5/-190 quote as San Diego
-    # +1.5/-190.
+    # Cleveland, while BetMGM alone published the opposite pair. The Sep. 1 Mets
+    # reversal demonstrated that even a 3-1 API majority can disagree with the
+    # current Novig execution screen, so one dissenting signed pair is enough to
+    # make the run-line binding unsafe.
     live_row = {
         "league": "MLB",
         "home_team": "Cleveland",
@@ -847,13 +918,20 @@ def test_aug15_san_diego_cleveland_keeps_draftkings_backed_majority_binding():
         "betmgm_h2h_away_price": 100,
     }
 
-    _assert_corroborated_team_binding_survives(
-        live_row,
-        expected_home_point=1.5,
-        expected_home_price=-190.0,
-        expected_away_point=-1.5,
-        expected_away_price=178.0,
+    expanded, diagnostics = _expand_live_odds_to_bet_rows(
+        pd.DataFrame([live_row]), None
     )
+    spreads = expanded[
+        expanded["market_type"].isin(["spread_home", "spread_away"])
+    ]
+
+    assert len(spreads) == 2
+    assert spreads["spread_line"].isna().all()
+    assert spreads["odds_american"].isna().all()
+    assert spreads["line_source"].eq(
+        "rejected_live_spread_binding_conflict"
+    ).all()
+    assert diagnostics["unresolved_novig_spread_binding_conflicts"] == 2
 
 
 def test_replaces_washington_plus_5_5_alt_line_with_standard_consensus():
