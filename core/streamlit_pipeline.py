@@ -7678,18 +7678,12 @@ def _novig_spread_team_binding_basis(row) -> str:
     +1.5 with a heavily juiced price. Rebinding a complete spread solely to force
     the moneyline favorite onto -1.5 creates a synthetic bet on the wrong team.
 
-    Preserve Novig's direct point/price pair in either of two independently
-    corroborated cases:
-
-    * At least two standard books, including DraftKings, publish Novig's same
-      signed home/away pair and those aligned books outnumber any standard books
-      publishing the opposite pair. Together with Novig, that is a clear
-      raw-source majority using the established execution-venue tiebreak.
-    * The four raw sources are split 2-2 and DraftKings corroborates Novig, the
-      established execution-venue tiebreak used by prior regressions.
-
-    Otherwise return an empty basis so the existing standard-consensus or
-    moneyline repair path can handle a genuinely reversed upstream binding.
+    Preserve Novig's direct point/price pair only when at least two standard
+    books, including DraftKings, publish the same signed home/away pair and no
+    same-magnitude standard book publishes the opposite pair. A majority is not
+    enough: the Odds API can lag Novig's execution screen while several books
+    share the stale alternate binding. Any dissent therefore leaves the current
+    execution labels unresolved and must fail closed downstream.
     """
     novig_home = pd.to_numeric(row.get("novig_home_point"), errors="coerce")
     novig_away = pd.to_numeric(row.get("novig_away_point"), errors="coerce")
@@ -7754,23 +7748,16 @@ def _novig_spread_team_binding_basis(row) -> str:
         elif pair == opposite_pair:
             opposed += 1
 
-    if draftkings_aligned and aligned >= 2 and aligned > opposed:
+    if draftkings_aligned and aligned >= 2 and opposed == 0:
         return "cross_book_signed_pair_consensus"
-
-    tied_execution_venue_vote = bool(
-        draftkings_aligned
-        and aligned >= 1
-        and opposed >= 1
-        and aligned + 1 == opposed
-    )
-    return "cross_book_signed_pair_tie" if tied_execution_venue_vote else ""
+    return ""
 
 
 def _novig_spread_has_unresolved_standard_conflict(
     row,
     team_binding_basis: str = "",
 ) -> bool:
-    """Reject a Novig run line when the available books split without a quorum.
+    """Reject a Novig run line when any available book reverses its signed pair.
 
     A complete Novig point/price pair is still only a feed snapshot.  When at
     least one standard book binds the same ``+/-1.5`` pair to the opposite teams,
@@ -7778,17 +7765,13 @@ def _novig_spread_has_unresolved_standard_conflict(
     outcome names are current.  The Odds API has exposed exactly that transient
     state while Novig's screen showed the reverse binding.
 
-    Keep the established decisive cases: a corroborated Novig binding basis, or
-    a two-book verified standard pair. A moneyline favorite is not proof of which
-    team owns a separate run-line outcome. Otherwise fail closed so totals can
-    win the per-game selection instead of exporting a potentially inverted spread.
+    Keep only a unanimously corroborated Novig binding basis. A two-book majority
+    and a moneyline favorite are not proof of which alternate run-line pair is
+    currently displayed at the execution venue. Otherwise fail closed so totals
+    can win the per-game selection instead of exporting a potentially inverted
+    spread.
     """
     if team_binding_basis or _novig_spread_team_binding_basis(row):
-        return False
-
-    standard_home, _, _, _ = _consistent_standard_spread_pair(row, "home")
-    standard_away, _, _, _ = _consistent_standard_spread_pair(row, "away")
-    if pd.notna(standard_home) and pd.notna(standard_away):
         return False
 
     novig_home = pd.to_numeric(row.get("novig_home_point"), errors="coerce")
