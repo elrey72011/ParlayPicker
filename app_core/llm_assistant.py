@@ -31,6 +31,47 @@ ACTIVE_MODEL = "gemini-2.5-flash"
 # Fallback list (still useful for internal tracking, though implementation focuses on ACTIVE_MODEL)
 MODEL_FALLBACKS = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
 
+GEMINI_REVIEW_ITEM_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "game_id": {
+            "type": "string",
+            "description": "The exact identifier supplied for this input row.",
+        },
+        "recommended_bet": {
+            "type": "string",
+            "description": "The chosen side's best_pick label verbatim, or none only when both sides lack enough data.",
+        },
+        "confidence": {
+            "type": "string",
+            "enum": ["HIGH", "MEDIUM", "LOW"],
+            "description": "Confidence in the exact offered side and price.",
+        },
+        "explanation": {
+            "type": "string",
+            "description": "A brief rationale grounded only in the supplied probabilities, edge, and price.",
+        },
+        "risk_notes": {
+            "type": "string",
+            "description": "Specific price, data-quality, or variance risks; state when the edge does not clear the vig.",
+        },
+        "flags": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Zero or more short risk flags such as no_value_at_price or missing_live_stats.",
+        },
+    },
+    "required": [
+        "game_id",
+        "recommended_bet",
+        "confidence",
+        "explanation",
+        "risk_notes",
+        "flags",
+    ],
+}
+
 _GEMINI_CLIENT = None
 
 def initialize_gemini():
@@ -312,6 +353,16 @@ def _complete_batch_review(payload: Any) -> bool:
     return "flags" in payload and isinstance(payload.get("flags"), list)
 
 
+def _batch_review_schema(expected_count: int) -> Dict[str, Any]:
+    """Constrain Gemini to return one complete review object per input row."""
+    return {
+        "type": "array",
+        "minItems": expected_count,
+        "maxItems": expected_count,
+        "items": GEMINI_REVIEW_ITEM_SCHEMA,
+    }
+
+
 def generate_batch_confidence_explanation(
     games_data: List[Dict[str, Any]],
     session_state: Optional[Any] = None,
@@ -400,6 +451,7 @@ Return ONLY a JSON array of objects. No markdown formatting.
                 config=genai.types.GenerateContentConfig(
                     temperature=0.1,
                     response_mime_type="application/json",
+                    response_json_schema=_batch_review_schema(len(batch)),
                 ),
             )
             text = getattr(resp, "text", "") or ""
