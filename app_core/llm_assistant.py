@@ -28,6 +28,12 @@ except ImportError:
 # Global holding the currently active model name
 ACTIVE_MODEL = "gemini-2.5-flash"
 
+# Structured-output requests become unreliable when an exact-count array schema
+# asks Gemini for a large number of objects at once. Game cards are normally
+# small, but prop slates routinely contain 50+ rows. Keep enough headroom below
+# the largest production batch that has completed successfully.
+GEMINI_STRUCTURED_BATCH_SIZE = 12
+
 # Fallback list (still useful for internal tracking, though implementation focuses on ACTIVE_MODEL)
 MODEL_FALLBACKS = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
 
@@ -267,8 +273,8 @@ CONTEXT:
     except Exception as e:
         exc_str = str(e)
 
-        # Check for APIKEYINVALID error
-        if "API_KEY_INVALID" in exc_str or "API key not valid" in exc_str or "INVALID_ARGUMENT" in exc_str or "400" in exc_str:
+        # Only authentication failures should disable the rest of the session.
+        if _is_invalid_api_key_error(e):
             # Disable Gemini for the rest of this session
             if session_state is not None:
                 if hasattr(session_state, "gemini_disabled_reason"):
@@ -276,7 +282,7 @@ CONTEXT:
                 else:
                     session_state["gemini_disabled_reason"] = "APIKEYINVALID"
             # Log ONE warning and return
-            logger.warning(f"⚠️ Gemini API key invalid/error. Disabling Gemini for this session. Error: {exc_str}")
+            logger.warning(f"⚠️ Gemini API key invalid. Disabling Gemini for this session. Error: {exc_str}")
             return []
 
         logger.warning(f"LLM assistant call failed: {e}")
@@ -325,8 +331,9 @@ def generate_confidence_explanation(prompt: str, session_state: Optional[Any] = 
     except Exception as exc:
         exc_str = str(exc)
 
-        # Check for APIKEYINVALID error (Google API returns 400 with this message)
-        if "API_KEY_INVALID" in exc_str or "API key not valid" in exc_str or "INVALID_ARGUMENT" in exc_str or "400" in exc_str:
+        # A generic HTTP 400/INVALID_ARGUMENT can be a request-shape error;
+        # reserve the session-wide disable for explicit authentication failures.
+        if _is_invalid_api_key_error(exc):
             # Disable Gemini for the rest of this session
             if session_state is not None:
                 if hasattr(session_state, "gemini_disabled_reason"):
@@ -363,6 +370,20 @@ def _batch_review_schema(expected_count: int) -> Dict[str, Any]:
     }
 
 
+def _is_invalid_api_key_error(exc: Exception) -> bool:
+    """Identify authentication failures without misclassifying every HTTP 400."""
+    message = str(exc).upper()
+    return any(
+        marker in message
+        for marker in (
+            "API_KEY_INVALID",
+            "API KEY NOT VALID",
+            "INVALID API KEY",
+            "API KEY IS INVALID",
+        )
+    )
+
+
 def generate_batch_confidence_explanation(
     games_data: List[Dict[str, Any]],
     session_state: Optional[Any] = None,
@@ -393,14 +414,19 @@ def generate_batch_confidence_explanation(
     if client is None:
         return {}
 
-    # Limit batch size to avoid token limits.
-    BATCH_SIZE = 50
+    # Limit structured batches to avoid Gemini rejecting complex exact-count
+    # schemas or truncating a long response on large player-prop slates.
+    batch_size = GEMINI_STRUCTURED_BATCH_SIZE
     all_results = {}
 
-    logger.info(f"Processing {len(games_data)} games in {max(1, (len(games_data) + BATCH_SIZE - 1) // BATCH_SIZE)} batches")
+    logger.info(
+        "Processing %s games in %s structured Gemini batches",
+        len(games_data),
+        max(1, (len(games_data) + batch_size - 1) // batch_size),
+    )
 
-    for i in range(0, len(games_data), BATCH_SIZE):
-        batch = games_data[i:i+BATCH_SIZE]
+    for i in range(0, len(games_data), batch_size):
+        batch = games_data[i:i + batch_size]
 
         # Build prompt
         current_time_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -491,8 +517,10 @@ Return ONLY a JSON array of objects. No markdown formatting.
 
         except Exception as exc:
              exc_str = str(exc)
-             # Check for APIKEYINVALID error
-             if "API_KEY_INVALID" in exc_str or "API key not valid" in exc_str or "INVALID_ARGUMENT" in exc_str or "400" in exc_str:
+             # INVALID_ARGUMENT/HTTP 400 can also mean a schema or request-shape
+             # problem. Only disable the session for an explicit key failure;
+             # otherwise later batches and the targeted retry still get a chance.
+             if _is_invalid_api_key_error(exc):
                 if session_state is not None:
                     if hasattr(session_state, "gemini_disabled_reason"):
                         session_state.gemini_disabled_reason = "APIKEYINVALID"

@@ -342,3 +342,85 @@ def test_batch_retries_only_incomplete_gemini_reviews(monkeypatch):
     ]
     assert result["g1"]["explanation"] == "Complete first review."
     assert result["g2"]["risk_notes"] == "The edge is thin."
+
+
+def test_structured_gemini_batches_stay_below_schema_complexity_limit(monkeypatch):
+    class FakeModels:
+        def __init__(self):
+            self.batch_sizes = []
+
+        def generate_content(self, *, model, contents, config):
+            expected = config["response_json_schema"]["maxItems"]
+            self.batch_sizes.append(expected)
+            start = sum(self.batch_sizes[:-1])
+            reviews = [
+                {
+                    "game_id": f"g{position}",
+                    "recommended_bet": "Home +1.5",
+                    "confidence": "MEDIUM",
+                    "explanation": "The supplied model probability clears the market price.",
+                    "risk_notes": "Normal variance and line movement risk.",
+                    "flags": [],
+                }
+                for position in range(start, start + expected)
+            ]
+            return SimpleNamespace(text=json.dumps(reviews))
+
+    models = FakeModels()
+    monkeypatch.setattr(llm_assistant, "_GEMINI_AVAILABLE", True)
+    monkeypatch.setattr(llm_assistant, "initialize_gemini", lambda: (SimpleNamespace(models=models), None))
+    monkeypatch.setattr(llm_assistant.time, "sleep", lambda _: None)
+    monkeypatch.setattr(
+        llm_assistant,
+        "genai",
+        SimpleNamespace(types=SimpleNamespace(GenerateContentConfig=lambda **kwargs: kwargs)),
+    )
+
+    games = [{"game_id": f"g{position}"} for position in range(25)]
+    result = llm_assistant.generate_batch_confidence_explanation(games)
+
+    assert models.batch_sizes == [12, 12, 1]
+    assert set(result) == {f"g{position}" for position in range(25)}
+
+
+def test_generic_invalid_argument_does_not_disable_remaining_gemini_batches(monkeypatch):
+    class FakeModels:
+        def __init__(self):
+            self.calls = 0
+
+        def generate_content(self, *, model, contents, config):
+            self.calls += 1
+            if self.calls == 1:
+                raise RuntimeError("400 INVALID_ARGUMENT: response schema was too complex")
+            return SimpleNamespace(text=json.dumps([
+                {
+                    "game_id": "g12",
+                    "recommended_bet": "Home +1.5",
+                    "confidence": "LOW",
+                    "explanation": "The final row still received an independent review.",
+                    "risk_notes": "The price offers little value.",
+                    "flags": ["no_value_at_price"],
+                }
+            ]))
+
+    models = FakeModels()
+    session_state = {}
+    monkeypatch.setattr(llm_assistant, "_GEMINI_AVAILABLE", True)
+    monkeypatch.setattr(llm_assistant, "initialize_gemini", lambda: (SimpleNamespace(models=models), None))
+    monkeypatch.setattr(llm_assistant.time, "sleep", lambda _: None)
+    monkeypatch.setattr(
+        llm_assistant,
+        "genai",
+        SimpleNamespace(types=SimpleNamespace(GenerateContentConfig=lambda **kwargs: kwargs)),
+    )
+
+    games = [{"game_id": f"g{position}"} for position in range(13)]
+    result = llm_assistant.generate_batch_confidence_explanation(
+        games,
+        session_state,
+        _retry_incomplete=False,
+    )
+
+    assert models.calls == 2
+    assert "gemini_disabled_reason" not in session_state
+    assert result["g12"]["confidence"] == "LOW"
