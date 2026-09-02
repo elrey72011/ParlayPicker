@@ -139,8 +139,9 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
         key="use_gemini",
         help=(
             "When enabled, funded game picks and player props require a matching "
-            "MEDIUM/HIGH Gemini review. MEDIUM uses 75% of the normal stake; "
-            "disagreement, weak/missing analysis, or API failure holds the bet at $0."
+            "complete MEDIUM/HIGH Gemini review plus positive exact-price EV. "
+            "MEDIUM uses 75% of the normal stake; disagreement, invalid/missing "
+            "fields, non-positive EV, weak analysis, or API failure holds the bet at $0."
         ),
     )
 

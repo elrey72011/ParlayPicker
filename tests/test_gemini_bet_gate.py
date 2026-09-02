@@ -15,6 +15,10 @@ def _review_row(**overrides) -> dict:
         "gemini_flags": "",
         "gemini_explanation": "The calibrated probability clears the offered price.",
         "gemini_risk_notes": "Normal market movement risk.",
+        "gemini_reviewed": True,
+        "gemini_response_valid": True,
+        "gemini_response_error": "",
+        "expected_value": 0.05,
         "production_eligible": True,
         "Kelly_Bet_Size": 10.0,
     }
@@ -86,6 +90,9 @@ def test_disagreement_low_confidence_and_blocking_flags_hold_at_zero():
             gemini_confidence="",
             gemini_explanation="Gemini analysis unavailable",
             gemini_risk_notes="Gemini analysis unavailable",
+            gemini_reviewed=False,
+            gemini_response_valid=False,
+            gemini_response_error="No Gemini response returned for this row",
         ),
     ]
     result = apply_gemini_bet_gate(
@@ -93,7 +100,7 @@ def test_disagreement_low_confidence_and_blocking_flags_hold_at_zero():
     )
 
     assert result["gemini_review_status"].tolist() == [
-        "OPPOSE", "LOW_CONFIDENCE", "HOLD", "UNAVAILABLE"
+        "OPPOSE", "LOW_CONFIDENCE", "HOLD", "INVALID_RESPONSE"
     ]
     assert not result["gemini_approved"].any()
     assert result["Kelly_Bet_Size"].eq(0.0).all()
@@ -109,6 +116,47 @@ def test_gemini_never_promotes_an_ineligible_row():
 
     assert bool(result["gemini_approved"])
     assert not bool(result["production_eligible"])
+
+
+def test_complete_gemini_approval_cannot_override_nonpositive_price_ev():
+    result = apply_gemini_bet_gate(
+        pd.DataFrame([_review_row(expected_value=-0.0271)]),
+        enabled=True,
+        product="prop",
+    ).iloc[0]
+
+    assert result["gemini_review_status"] == "NO_VALUE_AT_PRICE"
+    assert "-0.0271" in result["gemini_gate_reason"]
+    assert not bool(result["gemini_approved"])
+    assert not bool(result["production_eligible"])
+    assert result["Kelly_Bet_Size"] == 0.0
+
+
+def test_game_hold_overwrites_stale_qualified_production_reason():
+    result = apply_gemini_bet_gate(
+        pd.DataFrame([_review_row(Production_Gate_Reason="qualified")]),
+        enabled=True,
+        product="best_pick",
+    ).iloc[0]
+
+    assert result["gemini_review_status"] == "APPROVE"
+    assert result["Production_Gate_Reason"] == "qualified"
+
+    held = apply_gemini_bet_gate(
+        pd.DataFrame([
+            _review_row(
+                Production_Gate_Reason="qualified",
+                gemini_reviewed=False,
+                gemini_response_valid=False,
+                gemini_response_error="Gemini response missing required field(s): risk_notes",
+            )
+        ]),
+        enabled=True,
+        product="best_pick",
+    ).iloc[0]
+    assert held["gemini_review_status"] == "INVALID_RESPONSE"
+    assert held["Production_Gate_Reason"] == held["gemini_gate_reason"]
+    assert held["production_gate_reason"] == held["gemini_gate_reason"]
 
 
 def test_explicit_gemini_abstention_is_audited_separately_from_api_failure():
@@ -171,6 +219,7 @@ def test_game_and_prop_wrappers_preserve_structured_review_fields(monkeypatch):
     def fake_batch(payload, session_state=None):
         return {
             str(item["game_id"]): {
+                "game_id": str(item["game_id"]),
                 "recommended_bet": item["side_a"]["best_pick"],
                 "confidence": "MEDIUM",
                 "explanation": "Price and calibrated probability align.",
@@ -221,4 +270,45 @@ def test_game_and_prop_wrappers_preserve_structured_review_fields(monkeypatch):
         assert result["gemini_confidence"] == "MEDIUM"
         assert result["gemini_flags"] == "contrarian"
         assert bool(result["gemini_reviewed"])
+        assert bool(result["gemini_response_valid"])
+        assert result["gemini_response_error"] == ""
         assert classify_gemini_review(result)[0] == "APPROVE"
+
+
+def test_partial_structured_response_is_not_counted_as_reviewed(monkeypatch):
+    def partial_batch(payload, session_state=None):
+        item = payload[0]
+        return {
+            str(item["game_id"]): {
+                "game_id": str(item["game_id"]),
+                "recommended_bet": item["side_a"]["best_pick"],
+                "confidence": "HIGH",
+                "explanation": "The edge appears favorable.",
+                "flags": [],
+            }
+        }
+
+    monkeypatch.setattr(
+        "app_core.llm_assistant.generate_batch_confidence_explanation",
+        partial_batch,
+    )
+    prop = pd.DataFrame([{
+        "league": "MLB",
+        "matchup": "Away @ Home",
+        "player": "Player One",
+        "market_type": "batter_hits_over",
+        "best_pick": "Player One Over 0.5 Hits",
+        "line": 0.5,
+        "expected_count": 0.8,
+        "odds_american": -110,
+        "MarketProbability": 0.50,
+        "WinProbability": 0.58,
+        "expected_value": 0.10,
+        "edge": 0.08,
+    }])
+
+    reviewed = run_gemini_prop_analysis(prop).iloc[0]
+    assert not bool(reviewed["gemini_reviewed"])
+    assert not bool(reviewed["gemini_response_valid"])
+    assert "risk_notes" in reviewed["gemini_response_error"]
+    assert classify_gemini_review(reviewed)[0] == "INVALID_RESPONSE"

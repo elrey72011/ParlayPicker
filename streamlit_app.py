@@ -203,6 +203,7 @@ _COMPACT_EXPORT_COLUMNS = [
     "league", "Home", "Away", "Commence (Local)", "odds_american", "odds_source",
     "odds_feed_source",
     "market_line_source_detail", "best_pick", "gemini_pick", "gemini_confidence",
+    "gemini_reviewed", "gemini_response_valid", "gemini_response_error",
     "gemini_review_status", "gemini_gate_reason", "gemini_stake_multiplier",
     "Kelly_Bet_Size",
 ]
@@ -1128,6 +1129,8 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
                 "gemini_confidence": "",
                 "gemini_flags": "",
                 "gemini_reviewed": False,
+                "gemini_response_valid": False,
+                "gemini_response_error": f"Gemini analysis failed: {e}",
             }.items():
                 best_picks_df[column] = value
 
@@ -1145,7 +1148,8 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
             if held_count:
                 deferred_warnings.append(
                     f"Gemini held {held_count} best-pick review(s) at $0 because "
-                    "they were unavailable, low-confidence, opposed, or risk-flagged."
+                    "they were incomplete, unavailable, non-positive-EV, "
+                    "low-confidence, opposed, or risk-flagged."
                 )
 
             # Update the full candidate frame for diagnostics without leaking the
@@ -1165,8 +1169,11 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
                         "gemini_pick": "No Gemini pick",
                         "gemini_confidence": "",
                         "gemini_flags": "",
-                        "gemini_review_status": "UNAVAILABLE",
-                        "gemini_gate_reason": "Gemini review unavailable; wager held at $0",
+                        "gemini_reviewed": False,
+                        "gemini_response_valid": False,
+                        "gemini_response_error": "Gemini response unavailable",
+                        "gemini_review_status": "INVALID_RESPONSE",
+                        "gemini_gate_reason": "Gemini response unavailable; wager held at $0",
                         "gemini_approved": False,
                     }.items():
                         source_column = "gemini_explanation" if column == "gemini_analysis" else column
@@ -2637,6 +2644,9 @@ def main() -> None:
                 "best_pick": "Best Pick",
                 "gemini_pick": "Gemini Pick",
                 "gemini_confidence": "Gemini Confidence",
+                "gemini_reviewed": "Gemini Reviewed",
+                "gemini_response_valid": "Gemini Response Valid",
+                "gemini_response_error": "Gemini Response Error",
                 "gemini_review_status": "Gemini Verdict",
                 "gemini_gate_reason": "Gemini Gate Reason",
                 "gemini_stake_multiplier": "Gemini Stake Multiplier",
@@ -2654,7 +2664,7 @@ def main() -> None:
             if "kalshi_probability" in display_df.columns:
                 kalshi_display = pd.to_numeric(display_df["kalshi_probability"], errors="coerce")
                 display_df["kalshi_probability_display"] = kalshi_display.map(lambda x: "No Kalshi" if pd.isna(x) else f"{x:.4f}")
-            preferred = ["Bet Decision", "Card Tier", "Play Tier", "Play Stake", "Pick_Status", "Triple Filter Rank", "Pick Quality", "parlay_rank", "League", "Home Team", "Away Team", "Game Date", "Game Time (ET)", "Best Pick", "Gemini Pick", "Gemini Confidence", "Gemini Verdict", "Gemini Stake Multiplier", "Gemini Gate Reason", "Prob", "ML Prob", "Odds", "Source", "EV", "Edge", "Calibrated Edge", "Consensus", "Kalshi Status", "kalshi_probability_display", "Production Gate Reason"]
+            preferred = ["Bet Decision", "Card Tier", "Play Tier", "Play Stake", "Pick_Status", "Triple Filter Rank", "Pick Quality", "parlay_rank", "League", "Home Team", "Away Team", "Game Date", "Game Time (ET)", "Best Pick", "Gemini Pick", "Gemini Confidence", "Gemini Reviewed", "Gemini Response Valid", "Gemini Response Error", "Gemini Verdict", "Gemini Stake Multiplier", "Gemini Gate Reason", "Prob", "ML Prob", "Odds", "Source", "EV", "Edge", "Calibrated Edge", "Consensus", "Kalshi Status", "kalshi_probability_display", "Production Gate Reason"]
             ordered = [c for c in preferred if c in display_df.columns] + [c for c in display_df.columns if c not in preferred]
             display_df = display_df[ordered]
 
@@ -2750,6 +2760,7 @@ def main() -> None:
                 "kalshi_probability", "ml_probability", "ml_probability_source", "ml_target", "ml_projection",
                 "ml_residual_scale", "ml_feature_quality", "gemini_pick", "gemini_confidence",
                 "gemini_flags", "gemini_reviewed", "gemini_explanation", "gemini_risk_notes",
+                "gemini_response_valid", "gemini_response_error",
                 "gemini_gate_enabled", "gemini_review_status", "gemini_gate_reason",
                 "gemini_approved", "gemini_stake_multiplier",
                 "status_metric_basis", "effective_expected_value", "effective_edge", "effective_win_probability",

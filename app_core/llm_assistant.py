@@ -31,6 +31,46 @@ ACTIVE_MODEL = "gemini-2.5-flash"
 # Fallback list (still useful for internal tracking, though implementation focuses on ACTIVE_MODEL)
 MODEL_FALLBACKS = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
 
+GEMINI_BATCH_RESPONSE_JSON_SCHEMA = {
+    "type": "array",
+    "minItems": 1,
+    "maxItems": 50,
+    "items": {
+        "type": "object",
+        "additionalProperties": False,
+        "required": [
+            "game_id",
+            "recommended_bet",
+            "confidence",
+            "explanation",
+            "risk_notes",
+            "flags",
+        ],
+        "propertyOrdering": [
+            "game_id",
+            "recommended_bet",
+            "confidence",
+            "explanation",
+            "risk_notes",
+            "flags",
+        ],
+        "properties": {
+            "game_id": {"type": "string"},
+            "recommended_bet": {"type": "string"},
+            "confidence": {
+                "type": "string",
+                "enum": ["HIGH", "MEDIUM", "LOW"],
+            },
+            "explanation": {"type": "string"},
+            "risk_notes": {"type": "string"},
+            "flags": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
+        },
+    },
+}
+
 _GEMINI_CLIENT = None
 
 def initialize_gemini():
@@ -366,6 +406,16 @@ For each game, return a JSON object with:
   at the exact offered price. Use "picked_opposing_side" whenever recommended_bet
   differs from side_a.best_pick.
 
+Exact-price rule: expected_value is the authoritative value at the offered odds.
+The edge field is measured against a de-vigged market probability and may be
+positive even when the offered price still has negative expected value. If a
+side's expected_value is missing or <= 0, confidence MUST be LOW and flags MUST
+include "no_value_at_price". Never call a merely positive edge positive betting
+value when expected_value is non-positive.
+
+Every response object must contain all six fields, including a non-empty
+risk_notes string and a flags array (use [] when there are no flags).
+
 Games to analyze:
 {json.dumps(batch, indent=2, default=str)}
 
@@ -380,8 +430,10 @@ Return ONLY a JSON array of objects. No markdown formatting.
                 model=ACTIVE_MODEL,
                 contents=prompt,
                 config=genai.types.GenerateContentConfig(
-                    temperature=0.1,
+                    temperature=0.0,
                     response_mime_type="application/json",
+                    response_json_schema=GEMINI_BATCH_RESPONSE_JSON_SCHEMA,
+                    max_output_tokens=16384,
                 ),
             )
             text = getattr(resp, "text", "") or ""

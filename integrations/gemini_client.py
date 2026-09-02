@@ -61,6 +61,15 @@ PROP_PAYLOAD_MAP = {
     "book": "book",
 }
 
+GEMINI_REQUIRED_RESPONSE_FIELDS = (
+    "game_id",
+    "recommended_bet",
+    "confidence",
+    "explanation",
+    "risk_notes",
+    "flags",
+)
+
 
 def _normalized_flags(value: Any) -> list[str]:
     if isinstance(value, (list, tuple, set)):
@@ -76,6 +85,35 @@ def _normalized_flags(value: Any) -> list[str]:
     return []
 
 
+def _gemini_payload_error(payload: Any, expected_id: str) -> str:
+    """Return a compact validation error for an incomplete Gemini row."""
+    if not isinstance(payload, dict) or not payload:
+        return "No Gemini response returned for this row"
+    missing = [field for field in GEMINI_REQUIRED_RESPONSE_FIELDS if field not in payload]
+    if missing:
+        return f"Gemini response missing required field(s): {', '.join(missing)}"
+    for field in ("game_id", "recommended_bet", "confidence", "explanation", "risk_notes"):
+        if not isinstance(payload.get(field), str):
+            return f"Gemini response field must be a string: {field}"
+    response_id = str(payload.get("game_id") or "").strip()
+    if response_id != str(expected_id):
+        return "Gemini response game_id does not match the requested row"
+    for field in ("recommended_bet", "confidence", "explanation", "risk_notes"):
+        if not str(payload.get(field) or "").strip():
+            return f"Gemini response field is empty: {field}"
+    if str(payload.get("confidence") or "").strip().upper() not in {
+        "HIGH",
+        "MEDIUM",
+        "LOW",
+    }:
+        return "Gemini response confidence is invalid"
+    if not isinstance(payload.get("flags"), list):
+        return "Gemini response flags must be an array"
+    if any(not isinstance(flag, str) or not flag.strip() for flag in payload.get("flags", [])):
+        return "Gemini response flags must contain non-empty strings"
+    return ""
+
+
 def _attach_gemini_results(
     result: pd.DataFrame,
     row_ids: list[str],
@@ -88,8 +126,12 @@ def _attach_gemini_results(
     confidences: list[str] = []
     flags: list[str] = []
     reviewed: list[bool] = []
+    response_valid: list[bool] = []
+    response_errors: list[str] = []
     for row_id in row_ids:
-        payload = analyses.get(str(row_id), {})
+        raw_payload = analyses.get(str(row_id), {})
+        validation_error = _gemini_payload_error(raw_payload, str(row_id))
+        payload = raw_payload if isinstance(raw_payload, dict) else {}
         explanation = str(payload.get("explanation") or "Gemini analysis unavailable")
         risk = str(payload.get("risk_notes") or "Gemini analysis unavailable")
         pick = str(payload.get("recommended_bet") or "No Gemini pick")
@@ -100,7 +142,10 @@ def _attach_gemini_results(
         picks.append(pick)
         confidences.append(confidence)
         flags.append("|".join(normalized_flags))
-        reviewed.append(bool(payload) and bool(pick) and confidence in {"HIGH", "MEDIUM", "LOW"})
+        valid = not validation_error
+        reviewed.append(valid)
+        response_valid.append(valid)
+        response_errors.append(validation_error)
 
     result["gemini_explanation"] = explanations
     result["gemini_risk_notes"] = risk_notes
@@ -108,6 +153,8 @@ def _attach_gemini_results(
     result["gemini_confidence"] = confidences
     result["gemini_flags"] = flags
     result["gemini_reviewed"] = reviewed
+    result["gemini_response_valid"] = response_valid
+    result["gemini_response_error"] = response_errors
     return result
 
 
@@ -201,6 +248,8 @@ def run_gemini_analysis(df: pd.DataFrame, session_state: Any = None, analysis_df
         result["gemini_confidence"] = ""
         result["gemini_flags"] = ""
         result["gemini_reviewed"] = False
+        result["gemini_response_valid"] = False
+        result["gemini_response_error"] = f"Gemini integration mapping failed: {exc}"
 
     return result
 
@@ -265,4 +314,6 @@ def run_gemini_prop_analysis(
         result["gemini_confidence"] = ""
         result["gemini_flags"] = ""
         result["gemini_reviewed"] = False
+        result["gemini_response_valid"] = False
+        result["gemini_response_error"] = f"Gemini integration mapping failed: {exc}"
         return result

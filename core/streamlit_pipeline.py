@@ -221,6 +221,19 @@ REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
     "wager_approved",
     "export_role",
     "wager_instruction",
+    "gemini_pick",
+    "gemini_confidence",
+    "gemini_flags",
+    "gemini_reviewed",
+    "gemini_response_valid",
+    "gemini_response_error",
+    "gemini_explanation",
+    "gemini_risk_notes",
+    "gemini_gate_enabled",
+    "gemini_review_status",
+    "gemini_gate_reason",
+    "gemini_approved",
+    "gemini_stake_multiplier",
     "effective_expected_value",
     "effective_edge",
     "effective_win_probability",
@@ -380,6 +393,19 @@ def ensure_best_pick_export_columns(
         "controlled_card_recovery": False,
         "best_available_only": True,
         "commercial_reason": "Best available only; no production-qualified edge.",
+        "gemini_pick": "",
+        "gemini_confidence": "",
+        "gemini_flags": "",
+        "gemini_reviewed": False,
+        "gemini_response_valid": False,
+        "gemini_response_error": "",
+        "gemini_explanation": "",
+        "gemini_risk_notes": "",
+        "gemini_gate_enabled": False,
+        "gemini_review_status": "DISABLED",
+        "gemini_gate_reason": "Gemini wager gate disabled",
+        "gemini_approved": False,
+        "gemini_stake_multiplier": 1.0,
         "effective_expected_value": pd.NA,
         "effective_edge": pd.NA,
         "effective_win_probability": pd.NA,
@@ -423,7 +449,7 @@ def ensure_best_pick_export_columns(
     missing_cols = [c for c in req_cols if c not in out.columns]
 
     for col in req_cols:
-        if col in {"odds_feed_source", "status_blocker_reason", "status_blocker_stage", "nba_stats_fetch_status", "fallback_summary_by_league", "run_health_warning", "degraded_feature_subset_reason", "status_metric_basis", "selection_probability_source", "mlb_spread_finalist_penalty_reason", "recent_regime_penalty_reason", "recent_regime_bucket", "best_available_value_override_from_pick", "market_line_source", "market_line_source_detail", "line_consistency_reason", "line_provenance_warning", "line_event_identity_reason", "live_event_match_key", "selected_live_event_source", "raw_book_odds_diag", "best_available_runner_up_pick", "best_available_runner_up_market_type", "best_available_selection_reason", "qualification_reason", "display_pick", "commercial_tier", "commercial_reason", "final_pick_valid_reason"}:
+        if col in {"odds_feed_source", "status_blocker_reason", "status_blocker_stage", "nba_stats_fetch_status", "fallback_summary_by_league", "run_health_warning", "degraded_feature_subset_reason", "status_metric_basis", "selection_probability_source", "mlb_spread_finalist_penalty_reason", "recent_regime_penalty_reason", "recent_regime_bucket", "best_available_value_override_from_pick", "market_line_source", "market_line_source_detail", "line_consistency_reason", "line_provenance_warning", "line_event_identity_reason", "live_event_match_key", "selected_live_event_source", "raw_book_odds_diag", "best_available_runner_up_pick", "best_available_runner_up_market_type", "best_available_selection_reason", "qualification_reason", "display_pick", "commercial_tier", "commercial_reason", "final_pick_valid_reason", "gemini_pick", "gemini_confidence", "gemini_flags", "gemini_response_error", "gemini_explanation", "gemini_risk_notes", "gemini_review_status", "gemini_gate_reason"}:
             out[col] = out[col].fillna(default_values.get(col, "")).astype(str)
 
     # The public card always answers which candidate ranked first for the game.
@@ -449,6 +475,10 @@ def ensure_best_pick_export_columns(
         "mlb_spread_finalist_penalty_applied": False,
         "recent_regime_penalty_applied": False,
         "best_available_value_override_applied": False,
+        "gemini_reviewed": False,
+        "gemini_response_valid": False,
+        "gemini_gate_enabled": False,
+        "gemini_approved": False,
     }.items():
         if bool_col in out.columns:
             out[bool_col] = out[bool_col].fillna(default).astype(bool)
@@ -465,7 +495,7 @@ def ensure_best_pick_export_columns(
         out["side_promoted_by_balance_guard_count"] = pd.to_numeric(out["side_promoted_by_balance_guard_count"], errors="coerce").fillna(0).astype(int)
     if "side_balance_guard_reason" in out.columns:
         out["side_balance_guard_reason"] = out["side_balance_guard_reason"].fillna("MISSING_COMPUTATION").astype(str)
-    for numeric_col in {"selection_probability_used", "mlb_spread_finalist_penalty_value", "recent_regime_penalty_value", "recent_regime_bucket_win_rate", "recent_regime_long_win_rate", "best_available_value_override_ev_gain", "qualification_probability", "market_line_used", "matched_live_spread_line", "matched_live_total_line", "upload_spread_line", "upload_total_line", "base_spread_line", "base_total_line"}:
+    for numeric_col in {"selection_probability_used", "mlb_spread_finalist_penalty_value", "recent_regime_penalty_value", "recent_regime_bucket_win_rate", "recent_regime_long_win_rate", "best_available_value_override_ev_gain", "qualification_probability", "market_line_used", "matched_live_spread_line", "matched_live_total_line", "upload_spread_line", "upload_total_line", "base_spread_line", "base_total_line", "gemini_stake_multiplier"}:
         if numeric_col in out.columns:
             out[numeric_col] = pd.to_numeric(out[numeric_col], errors="coerce")
     if "line_consistency_flag" in out.columns:
@@ -569,6 +599,7 @@ BEST_PICK_COLUMNS = [
     # Readable per-signal win-% breakdown (Kalshi/Market/ML/TheOver) â€” see REQUIRED_BEST_PICK_EXPORT_COLUMNS.
     "signal_breakdown",
     "gemini_pick", "gemini_confidence", "gemini_flags", "gemini_reviewed",
+    "gemini_response_valid", "gemini_response_error",
     "gemini_explanation", "gemini_risk_notes", "gemini_gate_enabled",
     "gemini_review_status", "gemini_gate_reason", "gemini_approved",
     "gemini_stake_multiplier", "used_stale_features", "Pick_Quality", "Conviction_Score",
