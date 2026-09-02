@@ -135,6 +135,18 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
     edge = _first_col(df, "effective_edge", "edge")
     odds = _first_col(df, "odds_american")
     kelly = pd.to_numeric(_first_col(df, "Kelly_Bet_Size"), errors="coerce").fillna(0.0)
+    gemini_gate_enabled = _strict_bool_col(df, "gemini_gate_enabled")
+    gemini_reviewed = _strict_bool_col(df, "gemini_reviewed")
+    gemini_response_valid = _strict_bool_col(df, "gemini_response_valid")
+    gemini_approved = _strict_bool_col(df, "gemini_approved")
+    gemini_review_status = _first_col(df, "gemini_review_status").fillna("").astype(str)
+    gemini_gate_reason = _first_col(df, "gemini_gate_reason").fillna("").astype(str)
+    gemini_response_error = _first_col(df, "gemini_response_error").fillna("").astype(str)
+    gemini_confidence = _first_col(df, "gemini_confidence").fillna("").astype(str)
+    gemini_stake_multiplier = pd.to_numeric(
+        _first_col(df, "gemini_stake_multiplier"), errors="coerce"
+    )
+    gemini_hold = gemini_gate_enabled & ~gemini_approved
 
     # Calibrated win probability + break-even, for the LEAN gate and transparency. Bucket-
     # conditional (global curve + per-bucket realized tilt) so a proven bucket (e.g.
@@ -265,6 +277,10 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
         & playable
         & ~explicitly_authorized
     ] = "explicit wager approval or funded production stake is missing"
+    production_gate_reason.loc[gemini_hold] = gemini_gate_reason.where(
+        gemini_gate_reason.str.strip().ne(""),
+        "Gemini review did not approve this wager",
+    )
 
     selection_mode = public_qualified_pick.map(
         {True: "Qualified Pick / Pass", False: "Best Available Pick / Pass"}
@@ -297,6 +313,15 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
         "Qualification_Reason": qualification_reason,
         "Production_Gate_Pass": production_gate_pass,
         "Production_Gate_Reason": production_gate_reason,
+        "gemini_gate_enabled": gemini_gate_enabled,
+        "gemini_reviewed": gemini_reviewed,
+        "gemini_response_valid": gemini_response_valid,
+        "gemini_response_error": gemini_response_error,
+        "gemini_confidence": gemini_confidence,
+        "gemini_review_status": gemini_review_status,
+        "gemini_gate_reason": gemini_gate_reason,
+        "gemini_approved": gemini_approved,
+        "gemini_stake_multiplier": gemini_stake_multiplier,
         "Absolute_Edge": gate["absolute_production_edge"],
         "Calibrated_EV": gate["calibrated_expected_value"],
         "Controlled_Value_Card": controlled_value & production_gate_pass,
@@ -444,6 +469,16 @@ def attach_play_stakes(card: pd.DataFrame, unit: float = 1.0) -> pd.DataFrame:
     )
     if qualification_known:
         out.loc[qualified, "Wager_Instruction"] = "DO NOT BET: qualified research lean without a funded edge."
+    gemini_hold = _strict_bool_col(out, "gemini_gate_enabled") & ~_strict_bool_col(
+        out, "gemini_approved"
+    )
+    if "gemini_gate_reason" in out.columns:
+        gemini_reason = out["gemini_gate_reason"].fillna("").astype(str).str.strip()
+        out.loc[gemini_hold, "Wager_Instruction"] = (
+            "DO NOT BET: " + gemini_reason.where(
+                gemini_reason.ne(""), "Gemini review did not approve this wager"
+            )
+        )
     out.loc[out["Wager_Approved"], "Wager_Instruction"] = (
         "APPROVED: wager the exported Play_Stake amount."
     )

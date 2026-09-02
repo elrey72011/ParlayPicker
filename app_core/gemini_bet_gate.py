@@ -68,6 +68,25 @@ def _flag_set(value: Any) -> set[str]:
     }
 
 
+def _strict_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    return _text(value).casefold() in {"true", "1", "yes", "y"}
+
+
+def _price_expected_value(row: pd.Series | dict[str, Any]) -> float | None:
+    """Return the final exact-price EV authority available on the row."""
+    for column in (
+        "effective_expected_value",
+        "production_expected_value",
+        "expected_value",
+    ):
+        value = pd.to_numeric(pd.Series([row.get(column)]), errors="coerce").iloc[0]
+        if pd.notna(value):
+            return float(value)
+    return None
+
+
 def classify_gemini_review(row: pd.Series | dict[str, Any]) -> tuple[str, str, float]:
     """Return ``(status, reason, stake_multiplier)`` for one Gemini review."""
     get = row.get
@@ -78,6 +97,12 @@ def classify_gemini_review(row: pd.Series | dict[str, Any]) -> tuple[str, str, f
     flags = _flag_set(get("gemini_flags"))
     explanation = _text(get("gemini_explanation"))
     risk_notes = _text(get("gemini_risk_notes"))
+    response_error = _text(get("gemini_response_error"))
+    response_valid = _strict_bool(get("gemini_response_valid"))
+    reviewed = _strict_bool(get("gemini_reviewed"))
+    if not response_valid or not reviewed:
+        detail = response_error or "Gemini returned an incomplete structured response"
+        return "INVALID_RESPONSE", f"{detail}; wager held at $0", 0.0
     unavailable = (
         not recommended
         or recommended_raw.casefold() in {
@@ -99,6 +124,20 @@ def classify_gemini_review(row: pd.Series | dict[str, Any]) -> tuple[str, str, f
         )
     if confidence not in APPROVED_CONFIDENCE:
         return "LOW_CONFIDENCE", "Gemini confidence is below MEDIUM; wager held at $0", 0.0
+
+    price_ev = _price_expected_value(row)
+    if price_ev is None:
+        return (
+            "MISSING_PRICE_EV",
+            "Exact-price expected value is unavailable; wager held at $0",
+            0.0,
+        )
+    if price_ev <= 0.0:
+        return (
+            "NO_VALUE_AT_PRICE",
+            f"Exact-price expected value is non-positive ({price_ev:+.4f}); wager held at $0",
+            0.0,
+        )
 
     combined_notes = f"{explanation} {risk_notes}".casefold()
     if "league-average fallbacks" in combined_notes or "missing live stats" in combined_notes:
@@ -174,14 +213,21 @@ def apply_gemini_bet_gate(
                     ).fillna(0.0)
                 ).round(2)
 
-    if enabled and product == "prop":
+    if enabled:
         held = ~gate_ok
-        if "production_gate_reason" not in out.columns:
-            out["production_gate_reason"] = ""
-        out.loc[held, "production_gate_reason"] = out.loc[held, "gemini_gate_reason"]
-        if "Status_Reason" not in out.columns:
-            out["Status_Reason"] = ""
-        out.loc[held, "Status_Reason"] = out.loc[held, "gemini_gate_reason"]
+        for reason_column in (
+            "production_gate_reason",
+            "Production_Gate_Reason",
+            "Status_Reason",
+        ):
+            if (
+                reason_column in out.columns
+                or reason_column == "production_gate_reason"
+                or product == "prop"
+            ):
+                if reason_column not in out.columns:
+                    out[reason_column] = ""
+                out.loc[held, reason_column] = out.loc[held, "gemini_gate_reason"]
         if "Wager_Instruction" in out.columns:
             out.loc[held, "Wager_Instruction"] = "DO NOT BET - GEMINI REVIEW HOLD / $0"
 
@@ -189,7 +235,10 @@ def apply_gemini_bet_gate(
         prefix = "gemini_prop" if product == "prop" else "gemini_best_pick"
         diagnostics[f"{prefix}_gate_enabled"] = bool(enabled)
         diagnostics[f"{prefix}_reviewed_count"] = int(
-            (~out["gemini_review_status"].isin({"DISABLED", "UNAVAILABLE"})).sum()
+            pd.Series(out.get("gemini_reviewed", False), index=out.index)
+            .fillna(False)
+            .astype(bool)
+            .sum()
         )
         diagnostics[f"{prefix}_approved_count"] = int(out["gemini_approved"].sum())
         diagnostics[f"{prefix}_held_count"] = int((enabled & ~out["gemini_approved"]).sum())

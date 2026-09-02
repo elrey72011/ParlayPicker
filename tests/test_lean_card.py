@@ -637,3 +637,49 @@ def test_play_card_labels_production_wagers_and_coverage_passes_explicitly():
     assert out.loc[approved, "Wager_Instruction"].str.startswith("APPROVED").all()
     assert out.loc[~approved, "Export_Role"].eq("COVERAGE PICK - PASS").all()
     assert out.loc[~approved, "Wager_Instruction"].str.startswith("DO NOT BET").all()
+
+
+def test_all_games_export_preserves_final_gemini_hold_audit_fields():
+    reason = "Gemini response missing required field(s): risk_notes; wager held at $0"
+    source = pd.DataFrame([{
+        "league": "MLB",
+        "home_team": "Colorado",
+        "away_team": "Baltimore",
+        "best_pick": "Under 11.5",
+        "Pick_Status": "Actionable",
+        "effective_expected_value": 0.05,
+        "expected_value": 0.05,
+        "effective_win_probability": 0.58,
+        "edge": 0.06,
+        "odds_american": -110,
+        "consensus_agreement": "Agrees",
+        "production_eligible": False,
+        "production_bet_amount": 0.0,
+        "Kelly_Bet_Size": 0.0,
+        "qualified_pick": False,
+        "qualification_reason": reason,
+        "gemini_gate_enabled": True,
+        "gemini_reviewed": False,
+        "gemini_response_valid": False,
+        "gemini_response_error": "Gemini response missing required field(s): risk_notes",
+        "gemini_confidence": "MEDIUM",
+        "gemini_review_status": "INVALID_RESPONSE",
+        "gemini_gate_reason": reason,
+        "gemini_approved": False,
+        "gemini_stake_multiplier": 0.0,
+    }])
+
+    out = attach_play_stakes(
+        build_all_games_lean_card(source, calibration=None, bucket_stats=None),
+        unit=5.0,
+    ).iloc[0]
+
+    assert not bool(out["Wager_Approved"])
+    assert out["Play_Stake"] == 0.0
+    assert out["Production_Gate_Reason"] == reason
+    assert out["gemini_review_status"] == "INVALID_RESPONSE"
+    assert not bool(out["gemini_reviewed"])
+    assert not bool(out["gemini_response_valid"])
+    assert out["gemini_response_error"].endswith("risk_notes")
+    assert out["gemini_gate_reason"] == reason
+    assert out["Wager_Instruction"] == f"DO NOT BET: {reason}"

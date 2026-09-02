@@ -47,11 +47,17 @@ player props. When **Require Gemini Review for Bets** is enabled:
 
 * A funded wager must receive a structured Gemini review that selects the exact
   same pick with `MEDIUM` or `HIGH` confidence and no blocking risk flag.
+* Gemini output is constrained by a JSON schema and then validated locally;
+  incomplete rows are marked `INVALID_RESPONSE`, not reviewed, and held at `$0`.
+* Exact-price expected value is authoritative. A missing or non-positive EV can
+  never receive Gemini approval, even when the de-vigged probability edge is positive.
 * `HIGH` confidence preserves the deterministic stake; `MEDIUM` uses 75% of it.
 * Disagreement, low confidence, missing live inputs, invalid JSON, quota/API
   failure, or a missing key holds the wager at `$0`.
 * Gemini can never promote a model-rejected row or flip to an opposing pick
   without a separately validated sportsbook line and price.
+* Game, all-games, compact, and prop exports carry response-validity, verdict,
+  reason, and multiplier fields for a consistent audit trail.
 
 Set either `GOOGLE_API_KEY` or `GEMINI_API_KEY` in Streamlit secrets or the
 deployment environment. Never commit the key to this repository.
