@@ -12,9 +12,12 @@ import pandas as pd
 
 PRECISION_CARD_MAX_PICKS = 1
 PRECISION_CARD_MIN_WIN_PROBABILITY = 0.60
+PRECISION_CARD_MIN_CORROBORATING_SCORE = 0.55
 PRECISION_CARD_MIN_AMERICAN_ODDS = -220
 PRECISION_CARD_PROBABILITY_SOURCE = "ml_probability"
 PRECISION_CARD_PROBABILITY_SOURCE_LABEL = "INDEPENDENT ML PROBABILITY"
+PRECISION_CARD_CORROBORATING_SOURCE = "best_available_score"
+PRECISION_CARD_CORROBORATING_SOURCE_LABEL = "FINAL EVIDENCE SCORE"
 # The shortlist is a research ranking, not a calibrated promise. A fixed 75%
 # label outlived its small pilot sample and was misleading once the holdout
 # record regressed. Keep the field for export compatibility, but leave it blank
@@ -60,12 +63,14 @@ def attach_precision_card(
     *,
     max_picks: int = PRECISION_CARD_MAX_PICKS,
     min_win_probability: float = PRECISION_CARD_MIN_WIN_PROBABILITY,
+    min_corroborating_score: float = PRECISION_CARD_MIN_CORROBORATING_SCORE,
     min_american_odds: int = PRECISION_CARD_MIN_AMERICAN_ODDS,
 ) -> pd.DataFrame | None:
     """Annotate a best-picks slate with a fail-closed top-confidence shortlist.
 
     Ranking is global across the slate, not tier-first. A row must have an
-    independent ML probability that clears the precision floor, a verified final
+    independent ML probability that clears the precision floor, a final evidence
+    score that independently clears a lower corroboration floor, a verified final
     selection, verified live event/line identity, and a price no shorter than the
     policy floor. Selection is informational unless the ordinary production gate
     has independently approved a positive stake.
@@ -75,6 +80,9 @@ def attach_precision_card(
         return frame
     out = frame.copy()
     probability = _probability(out)
+    corroborating_score = _numeric_series(
+        out, PRECISION_CARD_CORROBORATING_SOURCE
+    )
     odds = pd.to_numeric(
         out.get("odds_american", pd.Series(float("nan"), index=out.index)),
         errors="coerce",
@@ -111,8 +119,9 @@ def attach_precision_card(
             started |= status.eq("started")
 
     probability_ok = probability.ge(float(min_win_probability))
+    corroboration_ok = corroborating_score.ge(float(min_corroborating_score))
     price_ok = odds.notna() & odds.ne(0) & odds.ge(float(min_american_odds))
-    eligible = verified & ~started & probability_ok & price_ok
+    eligible = verified & ~started & probability_ok & corroboration_ok & price_ok
 
     rank = pd.Series(pd.NA, index=out.index, dtype="Int64")
     if eligible.any():
@@ -152,6 +161,12 @@ def attach_precision_card(
     out.loc[probability.notna(), "Precision_Probability_Source"] = (
         PRECISION_CARD_PROBABILITY_SOURCE_LABEL
     )
+    out["Precision_Corroborating_Score"] = corroborating_score
+    out["Precision_Corroborating_Source"] = ""
+    out.loc[corroborating_score.notna(), "Precision_Corroborating_Source"] = (
+        PRECISION_CARD_CORROBORATING_SOURCE_LABEL
+    )
+    out["Precision_Signal_Corroborated"] = corroboration_ok
     out["Precision_Target_Hit_Rate"] = pd.Series(
         pd.NA, index=out.index, dtype="Float64"
     )
@@ -171,12 +186,26 @@ def attach_precision_card(
     reason.loc[verified & ~started & probability.notna() & ~probability_ok] = (
         f"Excluded: independent ML probability is below {float(min_win_probability):.0%}."
     )
-    reason.loc[verified & ~started & probability_ok & ~price_ok] = (
+    reason.loc[
+        verified & ~started & probability_ok & corroborating_score.isna()
+    ] = "Excluded: final evidence score is unavailable."
+    reason.loc[
+        verified
+        & ~started
+        & probability_ok
+        & corroborating_score.notna()
+        & ~corroboration_ok
+    ] = (
+        f"Excluded: final evidence score is below {float(min_corroborating_score):.0%}."
+    )
+    reason.loc[
+        verified & ~started & probability_ok & corroboration_ok & ~price_ok
+    ] = (
         f"Excluded: offered price is shorter than {int(min_american_odds):+d}."
     )
     reason.loc[selected] = (
-        "Selected by global independent ML probability for research monitoring; "
-        "no fixed hit-rate target is claimed."
+        "Selected by global independent ML probability after the final evidence "
+        "score corroborated the signal; no fixed hit-rate target is claimed."
     )
     out["Precision_Card_Reason"] = reason
     return out

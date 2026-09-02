@@ -189,6 +189,9 @@ def test_compact_export_preserves_precision_shortlist_disclosure():
             Precision_Rank=1,
             Precision_Probability=0.71,
             Precision_Probability_Source="INDEPENDENT ML PROBABILITY",
+            Precision_Corroborating_Score=0.63,
+            Precision_Corroborating_Source="FINAL EVIDENCE SCORE",
+            Precision_Signal_Corroborated=True,
             Precision_Target_Hit_Rate=pd.NA,
             Precision_Wager_Approved=False,
             Precision_Card_Instruction=(
@@ -209,6 +212,11 @@ def test_compact_export_preserves_precision_shortlist_disclosure():
     assert compact.loc[0, "Precision_Probability_Source"] == (
         "INDEPENDENT ML PROBABILITY"
     )
+    assert compact.loc[0, "Precision_Corroborating_Score"] == 0.63
+    assert compact.loc[0, "Precision_Corroborating_Source"] == (
+        "FINAL EVIDENCE SCORE"
+    )
+    assert bool(compact.loc[0, "Precision_Signal_Corroborated"])
     assert not bool(compact.loc[0, "Precision_Wager_Approved"])
     assert compact.loc[0, "Play_Stake"] == 0.0
 

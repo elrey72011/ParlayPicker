@@ -97,6 +97,48 @@ def test_precision_card_uses_composite_score_only_as_a_tiebreaker():
     assert result["Precision_Card"].tolist() == [False, True]
 
 
+def test_precision_card_requires_final_evidence_corroboration():
+    source = pd.DataFrame(
+        [
+            _row(
+                "Raw ML outlier",
+                0.65,
+                ml_probability=0.65,
+                best_available_score=0.52,
+            ),
+            _row(
+                "Corroborated signal",
+                0.62,
+                ml_probability=0.62,
+                best_available_score=0.56,
+            ),
+        ]
+    )
+
+    result = attach_precision_card(source)
+
+    assert result["Precision_Card"].tolist() == [False, True]
+    assert not bool(result.loc[0, "Precision_Signal_Corroborated"])
+    assert bool(result.loc[1, "Precision_Signal_Corroborated"])
+    assert result.loc[1, "Precision_Corroborating_Source"] == (
+        "FINAL EVIDENCE SCORE"
+    )
+    assert "below 55%" in result.loc[0, "Precision_Card_Reason"]
+
+
+def test_precision_card_fails_closed_without_final_evidence_score():
+    source = pd.DataFrame([_row("Raw-only candidate", 0.70)]).drop(
+        columns=["best_available_score"]
+    )
+
+    result = attach_precision_card(source)
+
+    assert not bool(result.loc[0, "Precision_Card"])
+    assert not bool(result.loc[0, "Precision_Signal_Corroborated"])
+    assert result.loc[0, "Precision_Corroborating_Source"] == ""
+    assert "evidence score is unavailable" in result.loc[0, "Precision_Card_Reason"]
+
+
 def test_precision_card_fails_closed_without_independent_ml_probability():
     source = pd.DataFrame([
         _row(

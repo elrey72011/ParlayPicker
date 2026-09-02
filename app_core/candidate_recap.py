@@ -7,6 +7,7 @@ and whether a market family is carrying or hurting the card.
 """
 from __future__ import annotations
 
+import math
 import re
 from typing import Iterable
 
@@ -14,6 +15,9 @@ import pandas as pd
 
 
 _OUTCOMES = {"WIN", "LOSS", "PUSH"}
+MIN_SELECTED_DECISIONS_FOR_TREND = 50
+MIN_SELECTED_SLATES_FOR_TREND = 5
+_TREND_ALPHA_Z = 1.959963984540054
 
 
 def _series(frame: pd.DataFrame, names: Iterable[str], default: object = pd.NA) -> pd.Series:
@@ -29,11 +33,54 @@ def _canonical_text(value: object) -> str:
     return re.sub(r"[^a-z0-9]+", "", str(value).casefold())
 
 
+def _strict_bool(values: pd.Series) -> pd.Series:
+    """Parse exported booleans without treating the string ``"False"`` as true."""
+
+    if pd.api.types.is_bool_dtype(values.dtype):
+        return values.fillna(False).astype(bool)
+    normalized = values.astype("string").fillna("").str.strip().str.casefold()
+    return normalized.isin({"true", "1", "yes", "y"})
+
+
 def _event_key(frame: pd.DataFrame) -> pd.Series:
     league = _series(frame, ("league", "League"), "").map(_canonical_text)
     home = _series(frame, ("home_team", "Home Team", "Home"), "").map(_canonical_text)
     away = _series(frame, ("away_team", "Away Team", "Away"), "").map(_canonical_text)
     return league + "|" + away + "|" + home
+
+
+def _slate_day(frame: pd.DataFrame) -> pd.Series:
+    """Return a stable calendar day for candidate-ledger grouping."""
+
+    raw = _series(frame, ("game_date", "slate_date"), "").fillna("").astype(str)
+    parsed = pd.to_datetime(raw, errors="coerce", utc=True)
+    day = parsed.dt.strftime("%Y-%m-%d")
+    matchup = _series(frame, ("matchup_id",), "").fillna("").astype(str)
+    matchup_day = matchup.str.extract(r"^(\d{4}-\d{2}-\d{2})", expand=False)
+    raw_day = raw.str.extract(r"^(\d{4}-\d{2}-\d{2})", expand=False)
+    return day.fillna(matchup_day).fillna(raw_day).fillna("").astype(str)
+
+
+def _latest_event_snapshots(frame: pd.DataFrame) -> pd.DataFrame:
+    """Keep one auditable pregame snapshot per event when run IDs are available.
+
+    A cumulative ledger may be assembled from several intraday downloads.  If a
+    line or selected direction changed between runs, candidate-key de-duplication
+    alone retained both versions and counted the same final score repeatedly.
+    Prefer the latest export run for each event while preserving legacy rows that
+    have no run ID at all.
+    """
+
+    if frame is None or frame.empty or "export_run_id" not in frame.columns:
+        return frame.copy()
+    out = frame.copy()
+    event = _slate_day(out) + "|" + _event_key(out)
+    run = _series(out, ("export_run_id",), "").fillna("").map(_canonical_text)
+    has_run = run.ne("")
+    event_has_run = has_run.groupby(event, dropna=False).transform("any")
+    latest_run = run.groupby(event, dropna=False).transform("max")
+    keep = (~event_has_run) | (has_run & run.eq(latest_run))
+    return out.loc[keep].copy()
 
 
 def _parse_number(text: object, pattern: str) -> float | None:
@@ -206,6 +253,7 @@ def merge_candidate_ledgers(
         return pd.DataFrame()
 
     ledger = pd.concat(frames, ignore_index=True, sort=False)
+    ledger = _latest_event_snapshots(ledger)
     ledger["candidate_outcome"] = _series(
         ledger, ("candidate_outcome", "Outcome"), "N/A"
     ).fillna("N/A").astype(str).str.upper()
@@ -240,7 +288,7 @@ def _summarize(ledger: pd.DataFrame, group_column: str, output_column: str) -> p
     )
     work["_ev"] = pd.to_numeric(_series(work, ("expected_value",)), errors="coerce")
     selected = _series(work, ("best_available_selected",), False)
-    work["_selected"] = selected.fillna(False).astype(bool)
+    work["_selected"] = _strict_bool(selected)
 
     rows = []
     for value, group in work.groupby("_group", dropna=False, sort=False):
@@ -291,4 +339,141 @@ def summarize_candidate_performance(ledger: pd.DataFrame) -> dict[str, pd.DataFr
         "rank": rank,
         "family_rank": family_rank,
         "market_family": market_family,
+    }
+
+
+def _wilson_interval(wins: int, decisions: int) -> tuple[float | None, float | None]:
+    if decisions <= 0:
+        return None, None
+    rate = wins / decisions
+    z = _TREND_ALPHA_Z
+    denominator = 1.0 + z * z / decisions
+    center = (rate + z * z / (2.0 * decisions)) / denominator
+    half_width = (
+        z
+        * math.sqrt(rate * (1.0 - rate) / decisions + z * z / (4.0 * decisions**2))
+        / denominator
+    )
+    return max(0.0, center - half_width), min(1.0, center + half_width)
+
+
+def _poisson_binomial_lower_tail(probabilities: list[float], wins: int) -> float | None:
+    """Exact P(X <= wins) for independent, non-identical pick probabilities."""
+
+    if not probabilities:
+        return None
+    mass = [1.0]
+    for probability in probabilities:
+        next_mass = [0.0] * (len(mass) + 1)
+        for count, value in enumerate(mass):
+            next_mass[count] += value * (1.0 - probability)
+            next_mass[count + 1] += value * probability
+        mass = next_mass
+    return float(sum(mass[: min(max(0, wins), len(mass) - 1) + 1]))
+
+
+def summarize_selected_trend(ledger: pd.DataFrame) -> dict[str, object]:
+    """Summarize whether selected-pick results support a regression claim.
+
+    The status deliberately requires multiple slates and at least 50 decisions.
+    A one-day record remains visible, but it cannot trigger a selector rewrite.
+    """
+
+    work = _latest_event_snapshots(ledger) if ledger is not None else pd.DataFrame()
+    if work.empty:
+        return {
+            "status": "NO_DECISIONS",
+            "decisions": 0,
+            "wins": 0,
+            "losses": 0,
+            "slates": 0,
+            "minimum_decisions": MIN_SELECTED_DECISIONS_FOR_TREND,
+            "minimum_slates": MIN_SELECTED_SLATES_FOR_TREND,
+        }
+
+    outcomes = _series(work, ("candidate_outcome", "Outcome"), "N/A").fillna("N/A")
+    outcomes = outcomes.astype(str).str.upper()
+    selected = _strict_bool(_series(work, ("best_available_selected",), False))
+    settled = selected & outcomes.isin({"WIN", "LOSS"})
+    decisions = int(settled.sum())
+    wins = int((settled & outcomes.eq("WIN")).sum())
+    losses = decisions - wins
+    slate_days = _slate_day(work).loc[settled]
+    slates = int(slate_days[slate_days.ne("")].nunique())
+    hit_rate = wins / decisions if decisions else None
+    interval_low, interval_high = _wilson_interval(wins, decisions)
+
+    probability = pd.to_numeric(
+        _series(work, ("selection_probability_used",)), errors="coerce"
+    ).loc[settled]
+    usable_probability = probability[probability.between(0.0, 1.0, inclusive="both")]
+    expected_decisions = int(usable_probability.count())
+    expected_wins = float(usable_probability.sum()) if expected_decisions else None
+    expected_hit_rate = (
+        float(usable_probability.mean()) if expected_decisions else None
+    )
+    lower_tail = (
+        _poisson_binomial_lower_tail(usable_probability.tolist(), wins)
+        if expected_decisions == decisions and decisions
+        else None
+    )
+
+    if decisions == 0:
+        status = "NO_DECISIONS"
+        reason = "No selected candidate decisions are graded."
+    elif (
+        decisions < MIN_SELECTED_DECISIONS_FOR_TREND
+        or slates < MIN_SELECTED_SLATES_FOR_TREND
+    ):
+        status = "INSUFFICIENT_HISTORY"
+        reason = (
+            "Current results are a monitoring sample, not enough independent "
+            "history to diagnose a selector regression."
+        )
+    elif expected_decisions != decisions:
+        status = "INSUFFICIENT_EXPECTATION_DATA"
+        reason = (
+            "Some selected decisions lack a valid final selection probability, "
+            "so expected-versus-observed regression testing is unavailable."
+        )
+    elif (
+        expected_hit_rate is not None
+        and hit_rate is not None
+        and hit_rate < expected_hit_rate
+        and lower_tail is not None
+        and lower_tail < 0.05
+    ):
+        status = "REGRESSION_SIGNAL"
+        reason = (
+            "Observed selected-pick accuracy is below the model expectation with "
+            "a lower-tail probability under 5%."
+        )
+    else:
+        status = "WITHIN_EXPECTED_VARIANCE"
+        reason = (
+            "Observed selected-pick accuracy remains within ordinary sampling "
+            "variation around the exported probabilities."
+        )
+
+    return {
+        "status": status,
+        "reason": reason,
+        "decisions": decisions,
+        "wins": wins,
+        "losses": losses,
+        "slates": slates,
+        "hit_rate": hit_rate,
+        "confidence_interval_low": interval_low,
+        "confidence_interval_high": interval_high,
+        "expected_decisions": expected_decisions,
+        "expected_wins": expected_wins,
+        "expected_hit_rate": expected_hit_rate,
+        "observed_minus_expected": (
+            hit_rate - expected_hit_rate
+            if hit_rate is not None and expected_hit_rate is not None
+            else None
+        ),
+        "lower_tail_probability": lower_tail,
+        "minimum_decisions": MIN_SELECTED_DECISIONS_FOR_TREND,
+        "minimum_slates": MIN_SELECTED_SLATES_FOR_TREND,
     }

@@ -8,6 +8,7 @@ from app_core.candidate_recap import (
     grade_candidate_audit,
     merge_candidate_ledgers,
     summarize_candidate_performance,
+    summarize_selected_trend,
 )
 
 
@@ -347,6 +348,9 @@ _PERFORMANCE_RECAP_RENAME_MAP = {
     "Precision_Rank": "Precision Rank",
     "Precision_Probability": "Precision Probability",
     "Precision_Probability_Source": "Precision Probability Source",
+    "Precision_Corroborating_Score": "Precision Evidence Score",
+    "Precision_Corroborating_Source": "Precision Evidence Source",
+    "Precision_Signal_Corroborated": "Precision Signal Corroborated",
     "Precision_Card_Instruction": "Precision Instruction",
     "Precision_Wager_Approved": "Precision Wager Approved",
     "Bettable": "App-Approved Wager",
@@ -399,6 +403,8 @@ def _performance_recap_table(display_df: pd.DataFrame) -> pd.DataFrame:
         "Production_Record", "Bettable", "Play_Stake", "Wager_Instruction",
         "Export_Scope", "Precision_Card", "Precision_Rank",
         "Precision_Probability", "Precision_Probability_Source",
+        "Precision_Corroborating_Score", "Precision_Corroborating_Source",
+        "Precision_Signal_Corroborated",
         "Precision_Card_Instruction", "Precision_Wager_Approved",
         "market_type", "performance_probability_used",
         "performance_probability_source", "selection_probability_used",
@@ -458,15 +464,14 @@ def _render_candidate_results_recap(
         .dropna()
         .astype(str)
     )
-    prior_keys: set[str] = set()
-    if prior_ledger is not None and not prior_ledger.empty:
-        normalized_prior = merge_candidate_ledgers(pd.DataFrame(), prior_ledger)
-        prior_keys = set(
-            normalized_prior.get("candidate_ledger_key", pd.Series(dtype=str))
-            .dropna()
-            .astype(str)
-        )
-    prior_history_rows = len(prior_keys - current_keys)
+    ledger_keys = set(
+        ledger.get("candidate_ledger_key", pd.Series(dtype=str))
+        .dropna()
+        .astype(str)
+    )
+    # Derive scope from the final de-duplicated ledger. Older intraday snapshots
+    # of today's same games do not make the result a cumulative history.
+    prior_history_rows = len(ledger_keys - current_keys)
     ledger_is_cumulative = prior_history_rows > 0
 
     if ledger_is_cumulative:
@@ -487,10 +492,53 @@ def _render_candidate_results_recap(
         )
 
     if total_settled:
+        trend = summarize_selected_trend(ledger)
+        decisions = int(trend.get("decisions", 0) or 0)
+        wins = int(trend.get("wins", 0) or 0)
+        losses = int(trend.get("losses", 0) or 0)
+        slates = int(trend.get("slates", 0) or 0)
+        hit_rate = trend.get("hit_rate")
+        expected_wins = trend.get("expected_wins")
+        expected_hit_rate = trend.get("expected_hit_rate")
+        interval_low = trend.get("confidence_interval_low")
+        interval_high = trend.get("confidence_interval_high")
+        lower_tail = trend.get("lower_tail_probability")
+        summary_bits = [
+            f"Selected Best Available: {wins}-{losses}"
+            + (f" ({float(hit_rate):.1%})" if hit_rate is not None else ""),
+            f"{decisions} decisions across {slates} slate(s)",
+        ]
+        if expected_wins is not None and expected_hit_rate is not None:
+            summary_bits.append(
+                f"exported probabilities expected {float(expected_wins):.1f} wins "
+                f"({float(expected_hit_rate):.1%})"
+            )
+        if interval_low is not None and interval_high is not None:
+            summary_bits.append(
+                f"observed 95% interval {float(interval_low):.1%}-{float(interval_high):.1%}"
+            )
+        if lower_tail is not None:
+            summary_bits.append(
+                f"chance of this result or worse {float(lower_tail):.1%}"
+            )
+        trend_message = "; ".join(summary_bits) + ". " + str(
+            trend.get("reason", "")
+        )
+        if trend.get("status") == "REGRESSION_SIGNAL":
+            st.warning(trend_message)
+        elif trend.get("status") in {
+            "INSUFFICIENT_HISTORY",
+            "INSUFFICIENT_EXPECTATION_DATA",
+        }:
+            st.info(trend_message)
+        else:
+            st.caption(trend_message)
+
         summaries = summarize_candidate_performance(ledger)
         left, right = st.columns(2)
         with left:
-            st.markdown("##### By Overall Candidate Rank")
+            rank_scope = "Cumulative" if ledger_is_cumulative else "Current Slate Only"
+            st.markdown(f"##### By Overall Candidate Rank - {rank_scope}")
             st.dataframe(_format_candidate_summary(summaries["rank"]), width="stretch", hide_index=True)
         with right:
             st.markdown("##### By Market Family")

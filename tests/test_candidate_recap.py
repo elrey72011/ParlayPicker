@@ -4,6 +4,7 @@ from app_core.candidate_recap import (
     grade_candidate_audit,
     merge_candidate_ledgers,
     summarize_candidate_performance,
+    summarize_selected_trend,
 )
 
 
@@ -138,3 +139,91 @@ def test_merge_candidate_ledgers_replaces_duplicate_with_current_grade():
     assert len(ledger) == 1
     assert ledger.loc[0, "candidate_outcome"] == "WIN"
     assert bool(ledger.loc[0, "candidate_graded"])
+
+
+def test_merge_candidate_ledgers_keeps_only_latest_snapshot_per_event():
+    prior = _audit_rows().copy()
+    prior["export_run_id"] = "20260829T120000Z"
+    prior["candidate_outcome"] = "LOSS"
+    prior.loc[0, "best_pick"] = "Home Club -2.5"
+    prior.loc[2, "best_pick"] = "Away Club +2.5"
+
+    current = _audit_rows().copy()
+    current["export_run_id"] = "20260829T130000Z"
+    current["candidate_outcome"] = "WIN"
+    current["best_available_selected"] = [False, True, False, False]
+
+    ledger = merge_candidate_ledgers(current, prior)
+
+    assert len(ledger) == 4
+    assert ledger["export_run_id"].eq("20260829T130000Z").all()
+    assert ledger.loc[ledger["best_available_selected"], "best_pick"].tolist() == [
+        "Over 6.5"
+    ]
+
+
+def test_candidate_summary_parses_exported_false_string_fail_closed():
+    ledger = _audit_rows().iloc[:2].copy()
+    ledger["candidate_outcome"] = ["WIN", "LOSS"]
+    ledger["best_available_selected"] = ["TRUE", "False"]
+
+    summary = summarize_candidate_performance(ledger)["rank"].set_index(
+        "Candidate Rank"
+    )
+
+    assert summary["Selected Rows"].sum() == 1
+
+
+def test_selected_trend_marks_one_slate_as_insufficient_history():
+    rows = []
+    for index in range(15):
+        rows.append(
+            {
+                "league": "MLB",
+                "home_team": f"Home {index}",
+                "away_team": f"Away {index}",
+                "game_date": "2026-09-01",
+                "matchup_id": f"2026-09-01|home {index}|away {index}",
+                "export_run_id": "20260901T230644Z",
+                "best_available_selected": True,
+                "candidate_outcome": "WIN" if index < 7 else "LOSS",
+                "selection_probability_used": 0.5628133777456431,
+            }
+        )
+
+    trend = summarize_selected_trend(pd.DataFrame(rows))
+
+    assert trend["status"] == "INSUFFICIENT_HISTORY"
+    assert trend["decisions"] == 15
+    assert trend["wins"] == 7
+    assert trend["slates"] == 1
+    assert round(float(trend["expected_wins"]), 3) == 8.442
+    assert 0.24 < float(trend["confidence_interval_low"]) < 0.26
+    assert 0.69 < float(trend["confidence_interval_high"]) < 0.71
+    assert 0.30 < float(trend["lower_tail_probability"]) < 0.32
+
+
+def test_selected_trend_flags_large_multi_slate_shortfall():
+    rows = []
+    for index in range(50):
+        slate = index // 10 + 1
+        rows.append(
+            {
+                "league": "MLB",
+                "home_team": f"Home {index}",
+                "away_team": f"Away {index}",
+                "game_date": f"2026-08-{slate:02d}",
+                "matchup_id": f"2026-08-{slate:02d}|home {index}|away {index}",
+                "export_run_id": f"202608{slate:02d}T120000Z",
+                "best_available_selected": True,
+                "candidate_outcome": "WIN" if index < 25 else "LOSS",
+                "selection_probability_used": 0.80,
+            }
+        )
+
+    trend = summarize_selected_trend(pd.DataFrame(rows))
+
+    assert trend["status"] == "REGRESSION_SIGNAL"
+    assert trend["decisions"] == 50
+    assert trend["slates"] == 5
+    assert float(trend["lower_tail_probability"]) < 0.05
