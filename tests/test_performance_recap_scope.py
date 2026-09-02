@@ -29,6 +29,13 @@ def test_performance_recap_separates_wagers_precision_and_coverage():
                 "INDEPENDENT ML PROBABILITY",
                 "INDEPENDENT ML PROBABILITY",
             ],
+            "Precision_Corroborating_Score": [0.58, 0.56, 0.57],
+            "Precision_Corroborating_Source": [
+                "FINAL EVIDENCE SCORE",
+                "FINAL EVIDENCE SCORE",
+                "FINAL EVIDENCE SCORE",
+            ],
+            "Precision_Signal_Corroborated": [True, True, True],
             "Precision_Wager_Approved": [False, False, False],
             "selection_probability_used": [0.647, 0.586, 0.570],
             "best_available_score": [0.585, 0.524, 0.570],
@@ -63,6 +70,13 @@ def test_performance_recap_separates_wagers_precision_and_coverage():
         "INDEPENDENT ML PROBABILITY",
         "INDEPENDENT ML PROBABILITY",
     ]
+    assert recap["Precision Evidence Score"].tolist() == [0.58, 0.56, 0.57]
+    assert recap["Precision Evidence Source"].tolist() == [
+        "FINAL EVIDENCE SCORE",
+        "FINAL EVIDENCE SCORE",
+        "FINAL EVIDENCE SCORE",
+    ]
+    assert recap["Precision Signal Corroborated"].tolist() == [True, True, True]
 
 
 def test_performance_recap_falls_back_for_legacy_exports_without_final_score():

@@ -194,6 +194,8 @@ _COMPACT_EXPORT_COLUMNS = [
     "controlled_card_recovery",
     "Precision_Card", "Precision_Rank", "Precision_Probability",
     "Precision_Probability_Source",
+    "Precision_Corroborating_Score", "Precision_Corroborating_Source",
+    "Precision_Signal_Corroborated",
     "Precision_Target_Hit_Rate", "Precision_Wager_Approved",
     "Precision_Card_Instruction", "Precision_Card_Reason",
     "WinProbability", "expected_value", "edge",
