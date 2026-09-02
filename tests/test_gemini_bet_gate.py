@@ -301,9 +301,11 @@ def test_batch_retries_only_incomplete_gemini_reviews(monkeypatch):
     class FakeModels:
         def __init__(self):
             self.prompts = []
+            self.configs = []
 
         def generate_content(self, *, model, contents, config):
             self.prompts.append(contents)
+            self.configs.append(config)
             return SimpleNamespace(text=json.dumps(responses[len(self.prompts) - 1]))
 
     models = FakeModels()
@@ -327,5 +329,16 @@ def test_batch_retries_only_incomplete_gemini_reviews(monkeypatch):
     assert '"game_id": "g2"' in models.prompts[0]
     assert '"game_id": "g1"' not in models.prompts[1]
     assert '"game_id": "g2"' in models.prompts[1]
+    first_schema = models.configs[0]["response_json_schema"]
+    assert first_schema["minItems"] == 2
+    assert first_schema["maxItems"] == 2
+    assert first_schema["items"]["required"] == [
+        "game_id",
+        "recommended_bet",
+        "confidence",
+        "explanation",
+        "risk_notes",
+        "flags",
+    ]
     assert result["g1"]["explanation"] == "Complete first review."
     assert result["g2"]["risk_notes"] == "The edge is thin."
