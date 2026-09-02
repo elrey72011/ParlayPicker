@@ -299,7 +299,25 @@ def generate_confidence_explanation(prompt: str, session_state: Optional[Any] = 
         logger.warning(f"Gemini confidence call failed: {exc_str}")
         return {}
 
-def generate_batch_confidence_explanation(games_data: List[Dict[str, Any]], session_state: Optional[Any] = None) -> Dict[str, Dict[str, Any]]:
+
+def _complete_batch_review(payload: Any) -> bool:
+    """Return whether Gemini supplied every field required by the wager gate."""
+    if not isinstance(payload, dict):
+        return False
+    required_text = ("recommended_bet", "confidence", "explanation", "risk_notes")
+    if not all(str(payload.get(field) or "").strip() for field in required_text):
+        return False
+    if str(payload.get("confidence") or "").strip().upper() not in {"HIGH", "MEDIUM", "LOW"}:
+        return False
+    return "flags" in payload and isinstance(payload.get("flags"), list)
+
+
+def generate_batch_confidence_explanation(
+    games_data: List[Dict[str, Any]],
+    session_state: Optional[Any] = None,
+    *,
+    _retry_incomplete: bool = True,
+) -> Dict[str, Dict[str, Any]]:
     """
     Single Gemini call for all games at once (batch processing).
 
@@ -434,7 +452,26 @@ Return ONLY a JSON array of objects. No markdown formatting.
              logger.warning(f"Gemini batch call failed: {exc_str}")
              # We continue to next batch
 
+    if _retry_incomplete:
+        incomplete = [
+            game
+            for game in games_data
+            if not _complete_batch_review(all_results.get(str(game.get("game_id", ""))))
+        ]
+        if incomplete:
+            logger.warning(
+                "Gemini returned %s incomplete review(s); retrying those rows once",
+                len(incomplete),
+            )
+            retried = generate_batch_confidence_explanation(
+                incomplete,
+                session_state,
+                _retry_incomplete=False,
+            )
+            all_results.update(retried)
+
     return all_results
+
 
 def generate_pick_rationale(pick, home_team, away_team, market, prob, edge, session_state=None):
     """
