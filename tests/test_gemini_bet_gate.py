@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import json
+from types import SimpleNamespace
+
 import pandas as pd
 
+from app_core import llm_assistant
 from app_core.gemini_bet_gate import apply_gemini_bet_gate, classify_gemini_review
 from core.streamlit_pipeline import optimize_portfolio_allocation
 from integrations.gemini_client import run_gemini_analysis, run_gemini_prop_analysis
@@ -129,6 +133,7 @@ def test_disabled_gate_leaves_existing_eligibility_and_stake_untouched():
     ).iloc[0]
 
     assert result["gemini_review_status"] == "DISABLED"
+    assert not bool(result["gemini_reviewed"])
     assert bool(result["production_eligible"])
     assert result["Kelly_Bet_Size"] == 10.0
 
@@ -222,3 +227,105 @@ def test_game_and_prop_wrappers_preserve_structured_review_fields(monkeypatch):
         assert result["gemini_flags"] == "contrarian"
         assert bool(result["gemini_reviewed"])
         assert classify_gemini_review(result)[0] == "APPROVE"
+
+
+def test_incomplete_structured_review_is_not_marked_reviewed(monkeypatch):
+    monkeypatch.setattr(
+        "app_core.llm_assistant.generate_batch_confidence_explanation",
+        lambda payload, session_state=None: {
+            str(payload[0]["game_id"]): {
+                "recommended_bet": payload[0]["side_a"]["best_pick"],
+                "confidence": "MEDIUM",
+                "explanation": "The price and model evidence align.",
+                "flags": [],
+            }
+        },
+    )
+    game = pd.DataFrame([{
+        "game_id": "g1",
+        "league": "MLB",
+        "home_team": "Home",
+        "away_team": "Away",
+        "market_type": "spread_home",
+        "best_pick": "Home +1.5",
+        "odds_american": -110,
+        "market_probability": 0.52,
+        "ml_probability": 0.58,
+        "expected_value": 0.08,
+        "edge": 0.06,
+    }])
+
+    annotated = run_gemini_analysis(game).iloc[0]
+    assert not bool(annotated["gemini_reviewed"])
+    assert annotated["gemini_risk_notes"] == "Gemini analysis unavailable"
+
+    gated = apply_gemini_bet_gate(
+        pd.DataFrame([annotated]), enabled=True, product="best_pick"
+    ).iloc[0]
+    assert gated["gemini_review_status"] == "UNAVAILABLE"
+    assert not bool(gated["gemini_reviewed"])
+    assert not bool(gated["gemini_approved"])
+
+
+def test_batch_retries_only_incomplete_gemini_reviews(monkeypatch):
+    responses = [
+        [
+            {
+                "game_id": "g1",
+                "recommended_bet": "Home +1.5",
+                "confidence": "MEDIUM",
+                "explanation": "Complete first review.",
+                "risk_notes": "Normal variance.",
+                "flags": [],
+            },
+            {
+                "game_id": "g2",
+                "recommended_bet": "Under 8.5",
+                "confidence": "MEDIUM",
+                "explanation": "Risk notes were omitted.",
+                "flags": [],
+            },
+        ],
+        [
+            {
+                "game_id": "g2",
+                "recommended_bet": "Under 8.5",
+                "confidence": "LOW",
+                "explanation": "Completed on retry.",
+                "risk_notes": "The edge is thin.",
+                "flags": ["no_value_at_price"],
+            }
+        ],
+    ]
+
+    class FakeModels:
+        def __init__(self):
+            self.prompts = []
+
+        def generate_content(self, *, model, contents, config):
+            self.prompts.append(contents)
+            return SimpleNamespace(text=json.dumps(responses[len(self.prompts) - 1]))
+
+    models = FakeModels()
+    client = SimpleNamespace(models=models)
+    monkeypatch.setattr(llm_assistant, "_GEMINI_AVAILABLE", True)
+    monkeypatch.setattr(llm_assistant, "initialize_gemini", lambda: (client, None))
+    monkeypatch.setattr(llm_assistant.time, "sleep", lambda _: None)
+    monkeypatch.setattr(
+        llm_assistant,
+        "genai",
+        SimpleNamespace(types=SimpleNamespace(GenerateContentConfig=lambda **kwargs: kwargs)),
+    )
+
+    result = llm_assistant.generate_batch_confidence_explanation([
+        {"game_id": "g1", "side_a": {"best_pick": "Home +1.5"}},
+        {"game_id": "g2", "side_a": {"best_pick": "Under 8.5"}},
+    ])
+
+    assert len(models.prompts) == 2
+    assert '"game_id": "g1"' in models.prompts[0]
+    assert '"game_id": "g2"' in models.prompts[0]
+    assert '"game_id": "g1"' not in models.prompts[1]
+    assert '"game_id": "g2"' in models.prompts[1]
+    assert result["g1"]["explanation"] == "Complete first review."
+    assert result["g2"]["risk_notes"] == "The edge is thin."

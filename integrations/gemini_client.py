@@ -90,17 +90,28 @@ def _attach_gemini_results(
     reviewed: list[bool] = []
     for row_id in row_ids:
         payload = analyses.get(str(row_id), {})
-        explanation = str(payload.get("explanation") or "Gemini analysis unavailable")
-        risk = str(payload.get("risk_notes") or "Gemini analysis unavailable")
-        pick = str(payload.get("recommended_bet") or "No Gemini pick")
+        raw_explanation = str(payload.get("explanation") or "").strip()
+        raw_risk = str(payload.get("risk_notes") or "").strip()
+        raw_pick = str(payload.get("recommended_bet") or "").strip()
+        explanation = raw_explanation or "Gemini analysis unavailable"
+        risk = raw_risk or "Gemini analysis unavailable"
+        pick = raw_pick or "No Gemini pick"
         confidence = str(payload.get("confidence") or "").strip().upper()
-        normalized_flags = _normalized_flags(payload.get("flags"))
+        raw_flags = payload.get("flags")
+        normalized_flags = _normalized_flags(raw_flags)
         explanations.append(explanation)
         risk_notes.append(risk)
         picks.append(pick)
         confidences.append(confidence)
         flags.append("|".join(normalized_flags))
-        reviewed.append(bool(payload) and bool(pick) and confidence in {"HIGH", "MEDIUM", "LOW"})
+        reviewed.append(
+            bool(payload)
+            and bool(raw_pick)
+            and bool(raw_explanation)
+            and bool(raw_risk)
+            and confidence in {"HIGH", "MEDIUM", "LOW"}
+            and isinstance(raw_flags, list)
+        )
 
     result["gemini_explanation"] = explanations
     result["gemini_risk_notes"] = risk_notes

@@ -78,6 +78,7 @@ def classify_gemini_review(row: pd.Series | dict[str, Any]) -> tuple[str, str, f
     flags = _flag_set(get("gemini_flags"))
     explanation = _text(get("gemini_explanation"))
     risk_notes = _text(get("gemini_risk_notes"))
+    reviewed_marker = _text(get("gemini_reviewed"))
     unavailable = (
         not recommended
         or recommended_raw.casefold() in {
@@ -86,6 +87,10 @@ def classify_gemini_review(row: pd.Series | dict[str, Any]) -> tuple[str, str, f
         }
         or explanation.casefold() == "gemini analysis unavailable"
         or risk_notes.casefold() == "gemini analysis unavailable"
+        or (
+            bool(reviewed_marker)
+            and reviewed_marker.casefold() not in {"true", "1", "yes"}
+        )
     )
     if unavailable:
         return "UNAVAILABLE", "Gemini review unavailable; wager held at $0", 0.0
@@ -142,11 +147,13 @@ def apply_gemini_bet_gate(
         out["gemini_gate_reason"] = [item[1] for item in classified]
         out["gemini_stake_multiplier"] = [item[2] for item in classified]
         out["gemini_approved"] = out["gemini_review_status"].eq("APPROVE")
+        out["gemini_reviewed"] = ~out["gemini_review_status"].eq("UNAVAILABLE")
     else:
         out["gemini_review_status"] = "DISABLED"
         out["gemini_gate_reason"] = "Gemini wager gate disabled"
         out["gemini_stake_multiplier"] = 1.0
         out["gemini_approved"] = False
+        out["gemini_reviewed"] = False
 
     gate_ok = ~out["gemini_gate_enabled"] | out["gemini_approved"]
     if "production_eligible" in out.columns:
