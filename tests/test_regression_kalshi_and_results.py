@@ -104,7 +104,7 @@ def test_results_recap_upload_reset_behavior():
     # Setup our mock state dictionary that tests can read
     mock_state = {}
 
-    def mock_file_uploader(label, type=None, key=None):
+    def mock_file_uploader(label, type=None, key=None, **kwargs):
         if key == "perf_picks_uploader":
             return mock_state.get("_mock_uploaded_file")
         return None

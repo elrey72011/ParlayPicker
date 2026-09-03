@@ -6,7 +6,9 @@ from app_core.results_ingestion import attach_results
 from app_core.performance_pipeline import grade_picks_with_live_results
 from app_core.candidate_recap import (
     grade_candidate_audit,
+    load_candidate_results_ledger,
     merge_candidate_ledgers,
+    persist_candidate_results_ledger,
     summarize_candidate_performance,
     summarize_selected_trend,
 )
@@ -427,7 +429,7 @@ def _format_candidate_summary(summary: pd.DataFrame) -> pd.DataFrame:
 def _render_candidate_results_recap(
     scored_picks: pd.DataFrame,
     uploaded_candidate_audit,
-    uploaded_candidate_ledger,
+    uploaded_candidate_ledgers,
 ) -> None:
     """Grade the full candidate set and expose cumulative rank/family evidence."""
 
@@ -447,16 +449,13 @@ def _render_candidate_results_recap(
         st.error(f"Could not grade the candidate audit: {exc}")
         return
 
-    prior_ledger = None
-    if uploaded_candidate_ledger is not None:
-        try:
-            uploaded_candidate_ledger.seek(0)
-            prior_ledger = pd.read_csv(uploaded_candidate_ledger)
-        except Exception as exc:
-            st.error(f"Could not read the prior candidate ledger: {exc}")
-            return
-
+    prior_ledger = load_candidate_results_ledger(uploaded=uploaded_candidate_ledgers)
+    session_ledger = st.session_state.get("active_candidate_results_ledger")
+    if isinstance(session_ledger, pd.DataFrame) and not session_ledger.empty:
+        prior_ledger = merge_candidate_ledgers(session_ledger, prior_ledger)
     ledger = merge_candidate_ledgers(current_graded, prior_ledger)
+    st.session_state["active_candidate_results_ledger"] = ledger
+    history_saved = persist_candidate_results_ledger(ledger)
     current_settled = int(current_graded.get("candidate_graded", pd.Series(dtype=bool)).sum())
     total_settled = int(ledger.get("candidate_graded", pd.Series(dtype=bool)).sum())
     current_keys = set(
@@ -482,13 +481,18 @@ def _render_candidate_results_recap(
         )
     else:
         st.warning(
-            "No earlier unique candidate history was supplied. This download contains the "
+            "No earlier unique candidate history is available. This download contains the "
             "current slate only and must not be treated as cumulative calibration evidence. "
-            "Upload the previously downloaded candidate_results_ledger.csv on the next run."
+            "Upload any earlier candidate_results_ledger CSVs together to recover history."
         )
         st.caption(
             f"Graded {current_settled}/{len(current_graded)} current-slate candidates; "
             f"{total_settled}/{len(ledger)} rows are settled."
+        )
+    if not history_saved:
+        st.info(
+            "The cumulative candidate ledger could not be saved for restart recovery. "
+            "Download it below and upload it again with any other prior ledgers next time."
         )
 
     if total_settled:
@@ -503,6 +507,19 @@ def _render_candidate_results_recap(
         interval_low = trend.get("confidence_interval_low")
         interval_high = trend.get("confidence_interval_high")
         lower_tail = trend.get("lower_tail_probability")
+        metric_columns = st.columns(4)
+        metric_columns[0].metric("Selected Best Available", f"{wins}-{losses}")
+        metric_columns[1].metric(
+            "Selected Hit Rate",
+            f"{float(hit_rate):.1%}" if hit_rate is not None else "N/A",
+        )
+        metric_columns[2].metric(
+            "Exported Expected Rate",
+            f"{float(expected_hit_rate):.1%}"
+            if expected_hit_rate is not None
+            else "N/A",
+        )
+        metric_columns[3].metric("Cumulative History", f"{slates} slate(s)")
         summary_bits = [
             f"Selected Best Available: {wins}-{losses}"
             + (f" ({float(hit_rate):.1%})" if hit_rate is not None else ""),
@@ -535,6 +552,11 @@ def _render_candidate_results_recap(
             st.caption(trend_message)
 
         summaries = summarize_candidate_performance(ledger)
+        st.caption(
+            "Selected Best Available is the selector scorecard. The full candidate pool "
+            "contains competing and often opposing alternatives, so its aggregate hit rate "
+            "naturally trends toward 50% and is not the Best Picks win rate."
+        )
         left, right = st.columns(2)
         with left:
             rank_scope = "Cumulative" if ledger_is_cumulative else "Current Slate Only"
@@ -594,10 +616,15 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
         type=["csv"],
         key="perf_candidate_audit_uploader",
     )
-    uploaded_candidate_ledger = st.file_uploader(
-        "Upload Prior Candidate Results Ledger (optional)",
+    uploaded_candidate_ledgers = st.file_uploader(
+        "Upload Prior Candidate Results Ledger(s) (optional)",
         type=["csv"],
+        accept_multiple_files=True,
         key="perf_candidate_ledger_uploader",
+        help=(
+            "Select every downloaded candidate_results_ledger CSV you have. The app "
+            "merges and deduplicates them with locally recovered history automatically."
+        ),
     )
 
     st.subheader("Prior Day Performance")
@@ -872,7 +899,7 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
     _render_candidate_results_recap(
         display_df,
         uploaded_candidate_audit,
-        uploaded_candidate_ledger,
+        uploaded_candidate_ledgers,
     )
 
     st.divider()
