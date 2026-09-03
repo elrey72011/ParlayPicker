@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import math
 import re
+from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import Iterable
 
 import pandas as pd
@@ -18,6 +20,12 @@ _OUTCOMES = {"WIN", "LOSS", "PUSH"}
 MIN_SELECTED_DECISIONS_FOR_TREND = 50
 MIN_SELECTED_SLATES_FOR_TREND = 5
 _TREND_ALPHA_Z = 1.959963984540054
+DEFAULT_CANDIDATE_RESULTS_RUNTIME_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "data"
+    / "candidate_results"
+    / "candidate_results_runtime.csv"
+)
 
 
 def _series(frame: pd.DataFrame, names: Iterable[str], default: object = pd.NA) -> pd.Series:
@@ -260,6 +268,77 @@ def merge_candidate_ledgers(
     ledger["candidate_graded"] = ledger["candidate_outcome"].isin(_OUTCOMES)
     ledger["candidate_ledger_key"] = _ledger_key(ledger)
     return ledger.drop_duplicates("candidate_ledger_key", keep="last").reset_index(drop=True)
+
+
+def load_candidate_results_ledger(
+    path: Path | str = DEFAULT_CANDIDATE_RESULTS_RUNTIME_PATH,
+    uploaded: object = None,
+) -> pd.DataFrame | None:
+    """Restore persisted history and layer one or more downloaded ledgers over it.
+
+    Candidate results are monitoring evidence, so losing earlier slates can make a
+    normal one-day result look like a selector regression.  The runtime copy keeps
+    history across local app restarts, while accepting multiple uploads recovers it
+    after a deployment or on another machine.
+    """
+
+    merged = pd.DataFrame()
+    try:
+        file_path = Path(path)
+        if file_path.exists():
+            merged = merge_candidate_ledgers(pd.read_csv(file_path), merged)
+
+        uploads = (
+            list(uploaded)
+            if isinstance(uploaded, (list, tuple))
+            else [uploaded] if uploaded is not None else []
+        )
+        for item in uploads:
+            if item is None:
+                continue
+            if hasattr(item, "seek"):
+                item.seek(0)
+            frame = pd.read_csv(item)
+            if hasattr(item, "seek"):
+                item.seek(0)
+            merged = merge_candidate_ledgers(frame, merged)
+    except (OSError, ValueError, TypeError, pd.errors.ParserError):
+        return None
+    return merged if not merged.empty else None
+
+
+def persist_candidate_results_ledger(
+    ledger: pd.DataFrame | None,
+    path: Path | str = DEFAULT_CANDIDATE_RESULTS_RUNTIME_PATH,
+) -> bool:
+    """Atomically save cumulative candidate history for restart recovery."""
+
+    if not isinstance(ledger, pd.DataFrame) or ledger.empty:
+        return False
+    destination = Path(path)
+    temporary: Path | None = None
+    try:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            newline="",
+            suffix=".tmp",
+            prefix=f".{destination.stem}-",
+            dir=destination.parent,
+            delete=False,
+        ) as handle:
+            temporary = Path(handle.name)
+            ledger.to_csv(handle, index=False)
+        temporary.replace(destination)
+        return True
+    except (OSError, ValueError, TypeError):
+        if temporary is not None:
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                pass
+        return False
 
 
 def _summarize(ledger: pd.DataFrame, group_column: str, output_column: str) -> pd.DataFrame:

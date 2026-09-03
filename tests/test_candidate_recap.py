@@ -1,8 +1,12 @@
+from io import StringIO
+
 import pandas as pd
 
 from app_core.candidate_recap import (
     grade_candidate_audit,
+    load_candidate_results_ledger,
     merge_candidate_ledgers,
+    persist_candidate_results_ledger,
     summarize_candidate_performance,
     summarize_selected_trend,
 )
@@ -160,6 +164,58 @@ def test_merge_candidate_ledgers_keeps_only_latest_snapshot_per_event():
     assert ledger.loc[ledger["best_available_selected"], "best_pick"].tolist() == [
         "Over 6.5"
     ]
+
+
+def test_candidate_ledger_recovers_runtime_and_multiple_downloads(tmp_path):
+    runtime_path = tmp_path / "candidate_results_runtime.csv"
+    first = _audit_rows().copy()
+    first["candidate_outcome"] = ["WIN", "LOSS", "LOSS", "WIN"]
+    assert persist_candidate_results_ledger(first, runtime_path)
+
+    second = _audit_rows().copy()
+    second["game_date"] = "2026-07-29"
+    second["matchup_id"] = "2026-07-29|home club|away club"
+    second["candidate_outcome"] = ["LOSS", "WIN", "WIN", "LOSS"]
+    third = _audit_rows().copy()
+    third["game_date"] = "2026-07-30"
+    third["matchup_id"] = "2026-07-30|home club|away club"
+    third["candidate_outcome"] = ["WIN", "LOSS", "WIN", "LOSS"]
+
+    restored = load_candidate_results_ledger(
+        runtime_path,
+        uploaded=[
+            StringIO(second.to_csv(index=False)),
+            StringIO(third.to_csv(index=False)),
+        ],
+    )
+
+    assert restored is not None
+    assert len(restored) == 12
+    assert set(restored["game_date"]) == {
+        "2026-07-28",
+        "2026-07-29",
+        "2026-07-30",
+    }
+    assert restored["candidate_graded"].all()
+
+
+def test_candidate_ledger_upload_replaces_runtime_duplicate(tmp_path):
+    runtime_path = tmp_path / "candidate_results_runtime.csv"
+    prior = _audit_rows().iloc[[0]].copy()
+    prior["candidate_outcome"] = "N/A"
+    assert persist_candidate_results_ledger(prior, runtime_path)
+
+    current = prior.copy()
+    current["candidate_outcome"] = "WIN"
+    restored = load_candidate_results_ledger(
+        runtime_path,
+        uploaded=StringIO(current.to_csv(index=False)),
+    )
+
+    assert restored is not None
+    assert len(restored) == 1
+    assert restored.loc[0, "candidate_outcome"] == "WIN"
+    assert bool(restored.loc[0, "candidate_graded"])
 
 
 def test_candidate_summary_parses_exported_false_string_fail_closed():
