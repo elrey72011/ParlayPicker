@@ -65,6 +65,26 @@ def _positive_stake(frame: pd.DataFrame) -> pd.Series:
     return stakes.max(axis=1).gt(0.0)
 
 
+def _usable_reason(frame: pd.DataFrame, column: str) -> pd.Series:
+    """Return normalized reason text, excluding placeholders and stale pass labels."""
+
+    if column not in frame.columns:
+        return pd.Series("", index=frame.index, dtype="object")
+    reason = frame[column].astype("string").fillna("").str.strip()
+    unusable = reason.str.casefold().isin({"", "nan", "none", "null", "qualified"})
+    return reason.where(~unusable, "").astype("object")
+
+
+def _first_reason(frame: pd.DataFrame, *columns: str) -> pd.Series:
+    """Choose the first meaningful final-gate explanation from ``columns``."""
+
+    reason = pd.Series("", index=frame.index, dtype="object")
+    for column in columns:
+        candidate = _usable_reason(frame, column)
+        reason = reason.where(reason.astype(str).str.strip().ne(""), candidate)
+    return reason
+
+
 def label_wager_export(frame: pd.DataFrame) -> pd.DataFrame:
     """Label and reconcile every public wager field from one funded mask.
 
@@ -106,6 +126,48 @@ def label_wager_export(frame: pd.DataFrame) -> pd.DataFrame:
     )
     qualified_pass = qualified & ~funded
     best_available_pass = ~qualified & ~funded
+
+    # The model can mark a row Actionable at an intermediate empirical tier and
+    # reject it later at qualification, Gemini, or another terminal blocker. Keep
+    # final public explanations aligned with the funded mask: a $0 PASS must not
+    # leave behind "Actionable" or "qualified" text from an earlier gate.
+    best_available_reason = _first_reason(
+        out,
+        "qualification_reason",
+        "status_blocker_reason",
+        "gemini_gate_reason",
+        "Production_Gate_Reason",
+    )
+    qualified_pass_reason = _first_reason(
+        out,
+        "status_blocker_reason",
+        "gemini_gate_reason",
+        "Production_Gate_Reason",
+        "qualification_reason",
+    )
+    final_pass_reason = best_available_reason.where(
+        best_available_pass, qualified_pass_reason
+    )
+    final_pass_reason = final_pass_reason.where(
+        final_pass_reason.astype(str).str.strip().ne(""),
+        "No funded wager remains after final production checks.",
+    )
+
+    if "Production_Gate_Reason" in out.columns:
+        public_gate_reason = _usable_reason(out, "Production_Gate_Reason")
+        stale_gate_reason = ~funded & public_gate_reason.eq("")
+        out.loc[stale_gate_reason, "Production_Gate_Reason"] = final_pass_reason.loc[
+            stale_gate_reason
+        ]
+    if "Status_Reason" in out.columns:
+        status_reason = out["Status_Reason"].astype("string").fillna("").str.strip()
+        stale_actionable_reason = ~funded & (
+            status_reason.eq("")
+            | status_reason.str.casefold().str.startswith("actionable")
+        )
+        out.loc[stale_actionable_reason, "Status_Reason"] = final_pass_reason.loc[
+            stale_actionable_reason
+        ]
 
     # Reconcile every existing public approval/stake field before adding scope labels.
     # Preserve explicit STARTED/UNAVAILABLE blockers instead of relabeling them AVOID.
