@@ -17,6 +17,8 @@ import pandas as pd
 
 
 _OUTCOMES = {"WIN", "LOSS", "PUSH"}
+SELECTED_CANDIDATE_SCOPE = "SELECTED BEST AVAILABLE / SCORECARD"
+ALTERNATIVE_CANDIDATE_SCOPE = "ALTERNATIVE CANDIDATE / DIAGNOSTIC"
 MIN_SELECTED_DECISIONS_FOR_TREND = 50
 MIN_SELECTED_SLATES_FOR_TREND = 5
 _TREND_ALPHA_Z = 1.959963984540054
@@ -48,6 +50,32 @@ def _strict_bool(values: pd.Series) -> pd.Series:
         return values.fillna(False).astype(bool)
     normalized = values.astype("string").fillna("").str.strip().str.casefold()
     return normalized.isin({"true", "1", "yes", "y"})
+
+
+def annotate_candidate_evaluation_scope(ledger: pd.DataFrame) -> pd.DataFrame:
+    """Make selected-pick performance unambiguous in downloaded candidate data."""
+
+    if ledger is None or ledger.empty:
+        return pd.DataFrame() if ledger is None else ledger.copy()
+    out = ledger.copy()
+    selected = _strict_bool(_series(out, ("best_available_selected",), False))
+    outcomes = _series(out, ("candidate_outcome", "Outcome"), "N/A")
+    outcomes = outcomes.fillna("N/A").astype(str).str.upper()
+    out["candidate_evaluation_scope"] = ALTERNATIVE_CANDIDATE_SCOPE
+    out.loc[selected, "candidate_evaluation_scope"] = SELECTED_CANDIDATE_SCOPE
+    out["selected_scorecard_row"] = selected
+    out["selected_scorecard_decision"] = selected & outcomes.isin({"WIN", "LOSS"})
+    out["selected_scorecard_outcome"] = outcomes.where(selected, "NOT SELECTED")
+    return out
+
+
+def selected_candidate_results(ledger: pd.DataFrame) -> pd.DataFrame:
+    """Return the one-row-per-game Best Available scorecard export."""
+
+    annotated = annotate_candidate_evaluation_scope(ledger)
+    if annotated.empty:
+        return annotated
+    return annotated.loc[annotated["selected_scorecard_row"]].reset_index(drop=True)
 
 
 def _event_key(frame: pd.DataFrame) -> pd.Series:
@@ -193,7 +221,7 @@ def grade_candidate_audit(
         out["candidate_outcome"] = "N/A"
         out["candidate_graded"] = False
         out["candidate_ledger_key"] = _ledger_key(out)
-        return out
+        return annotate_candidate_evaluation_scope(out)
 
     out = candidate_audit.copy()
     rename = {}
@@ -243,7 +271,8 @@ def grade_candidate_audit(
     out["candidate_outcome"] = out.apply(_grade_candidate, axis=1)
     out["candidate_graded"] = out["candidate_outcome"].isin(_OUTCOMES)
     out["candidate_ledger_key"] = _ledger_key(out)
-    return out.drop(columns=["_candidate_event_key"], errors="ignore")
+    out = out.drop(columns=["_candidate_event_key"], errors="ignore")
+    return annotate_candidate_evaluation_scope(out)
 
 
 def merge_candidate_ledgers(
@@ -267,7 +296,10 @@ def merge_candidate_ledgers(
     ).fillna("N/A").astype(str).str.upper()
     ledger["candidate_graded"] = ledger["candidate_outcome"].isin(_OUTCOMES)
     ledger["candidate_ledger_key"] = _ledger_key(ledger)
-    return ledger.drop_duplicates("candidate_ledger_key", keep="last").reset_index(drop=True)
+    ledger = ledger.drop_duplicates(
+        "candidate_ledger_key", keep="last"
+    ).reset_index(drop=True)
+    return annotate_candidate_evaluation_scope(ledger)
 
 
 def load_candidate_results_ledger(

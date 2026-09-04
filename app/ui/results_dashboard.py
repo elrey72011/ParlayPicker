@@ -9,6 +9,7 @@ from app_core.candidate_recap import (
     load_candidate_results_ledger,
     merge_candidate_ledgers,
     persist_candidate_results_ledger,
+    selected_candidate_results,
     summarize_candidate_performance,
     summarize_selected_trend,
 )
@@ -483,7 +484,9 @@ def _render_candidate_results_recap(
         st.warning(
             "No earlier unique candidate history is available. This download contains the "
             "current slate only and must not be treated as cumulative calibration evidence. "
-            "Upload any earlier candidate_results_ledger CSVs together to recover history."
+            "Upload any earlier candidate_results_ledger CSVs together to recover history. "
+            "Use the selected-results download below for the Best Picks record; the full "
+            "candidate pool naturally remains near 50%."
         )
         st.caption(
             f"Graded {current_settled}/{len(current_graded)} current-slate candidates; "
@@ -585,11 +588,17 @@ def _render_candidate_results_recap(
             "the full candidate set will grade automatically."
         )
 
-    dl_left, dl_right = st.columns(2)
+    selected_results = selected_candidate_results(ledger)
+    dl_left, dl_middle, dl_right = st.columns(3)
     ledger_download_label = (
-        "Download Updated Cumulative Candidate Results Ledger"
+        "Download Updated Cumulative Full-Candidate Diagnostic Ledger"
         if ledger_is_cumulative
-        else "Download Current-Slate Candidate Results Ledger"
+        else "Download Current-Slate Full-Candidate Diagnostic Ledger"
+    )
+    selected_download_label = (
+        "Download Cumulative Selected Best Available Results"
+        if ledger_is_cumulative
+        else "Download This Slate's Selected Best Available Results"
     )
     dl_left.download_button(
         "Download This Slate's Graded Candidates",
@@ -597,6 +606,13 @@ def _render_candidate_results_recap(
         file_name="graded_candidate_audit.csv",
         mime="text/csv",
         key="download_current_candidate_grades",
+    )
+    dl_middle.download_button(
+        selected_download_label,
+        data=selected_results.to_csv(index=False, encoding="utf-8-sig"),
+        file_name="selected_best_available_results.csv",
+        mime="text/csv",
+        key="download_selected_candidate_results",
     )
     dl_right.download_button(
         ledger_download_label,
