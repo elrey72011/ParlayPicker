@@ -917,6 +917,25 @@ def test_suspicious_unresolved_lines_become_no_play_and_not_viable():
     assert not out["Pick_Status"].astype(str).isin(["Actionable", "High Variance/Speculative"]).any()
 
 
+def test_suspicious_unresolved_home_spread_keeps_home_team_direction():
+    df = pd.DataFrame([
+        _row(idx=7014, league="NCAAF", market_type="spread_home", win_prob=0.64, ev=0.08, edge=0.07, kalshi_probability=0.58),
+        _row(idx=7014, league="NCAAF", market_type="spread_home", win_prob=0.64, ev=0.08, edge=0.07, kalshi_probability=0.58),
+    ])
+    df["home_team"] = "Georgia State"
+    df["away_team"] = "North Carolina A&T"
+    df["line_source"] = "live_matched"
+    df["live_spread_line"] = [-28.5, -28.5]
+    df["uploaded_spread_line"] = [-6.5, -6.5]
+
+    out = build_best_picks_df(df)
+
+    assert (out["market_type"] == "spread_home").all()
+    assert (out["best_pick"] == "Georgia State line unresolved").all()
+    assert (out["Pick_Status"].astype(str) == "No Play").all()
+    assert out["market_line_used"].isna().all()
+
+
 def test_verified_cross_book_spread_consensus_overrides_stale_upload():
     """Reproduce the 11 Aug New York/Indiana stale-upload reversal."""
     df = pd.DataFrame([

@@ -2246,6 +2246,24 @@ def _format_best_pick(row: pd.Series) -> str:
     return ""
 
 
+def _unresolved_pick_labels(frame: pd.DataFrame) -> pd.Series:
+    """Describe a rejected line without changing the selected market direction."""
+
+    market = _string_series(frame, "market_type").str.strip().str.lower()
+    home = _string_series(frame, "home_team").str.strip()
+    away = _string_series(frame, "away_team").str.strip()
+    spread_team = away.where(~market.eq("spread_home"), home).replace("", "Spread")
+    return pd.Series(
+        np.where(
+            market.isin({"spread_home", "spread_away"}),
+            spread_team + " line unresolved",
+            "Total line unresolved",
+        ),
+        index=frame.index,
+        dtype="object",
+    )
+
+
 def compute_blended_probability(
     p_market: pd.Series,
     p_kalshi: pd.Series,
@@ -6177,13 +6195,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             best.loc[unresolved_suspicious, "line_provenance_warning"]
             .replace("", "Suspicious live line rejected; exact event/line unresolved")
         )
-        unresolved_label = np.where(
-            is_spread,
-            best.get("away_team", pd.Series([""] * len(best), index=best.index)).astype(str).str.strip().replace("", "Spread")
-            + " line unresolved",
-            "Total line unresolved",
-        )
-        best.loc[unresolved_suspicious, "best_pick"] = pd.Series(unresolved_label, index=best.index).loc[unresolved_suspicious]
+        unresolved_label = _unresolved_pick_labels(best)
+        best.loc[unresolved_suspicious, "best_pick"] = unresolved_label.loc[
+            unresolved_suspicious
+        ]
         best.loc[unresolved_suspicious, "market_line_used"] = np.nan
 
         # Conservative fallback: recover unresolved suspicious totals with plausible upload/reference totals.
@@ -6256,13 +6271,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         best.loc[final_rejected_line, "line_event_identity_match_flag"] = False
         best.loc[final_rejected_line, "line_event_identity_reason"] = "suspicious_live_line_rejected_after_validation"
         best.loc[final_rejected_line, "selected_live_event_source"] = "rejected_live"
-        rejected_label = np.where(
-            is_spread,
-            best.get("away_team", pd.Series([""] * len(best), index=best.index)).astype(str).str.strip().replace("", "Spread")
-            + " line unresolved",
-            "Total line unresolved",
-        )
-        best.loc[final_rejected_line, "best_pick"] = pd.Series(rejected_label, index=best.index).loc[final_rejected_line]
+        rejected_label = _unresolved_pick_labels(best)
+        best.loc[final_rejected_line, "best_pick"] = rejected_label.loc[
+            final_rejected_line
+        ]
         if diagnostics_out is not None:
             recovered_mask = best.get("market_line_source_detail", pd.Series([""] * len(best), index=best.index)).astype(str).eq("upload_total_fallback_after_rejected_live")
             diagnostics_out["total_upload_recovered_actionable_count"] = int((recovered_mask & best["Pick_Status"].astype(str).eq("Actionable")).sum())
