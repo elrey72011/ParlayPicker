@@ -68,6 +68,16 @@ def _flag_set(value: Any) -> set[str]:
     }
 
 
+def _first_numeric(row: pd.Series | dict[str, Any], *columns: str) -> float | None:
+    """Return the first usable scalar metric without inventing a missing value."""
+
+    for column in columns:
+        value = pd.to_numeric(row.get(column), errors="coerce")
+        if pd.notna(value):
+            return float(value)
+    return None
+
+
 def classify_gemini_review(row: pd.Series | dict[str, Any]) -> tuple[str, str, float]:
     """Return ``(status, reason, stake_multiplier)`` for one Gemini review."""
     get = row.get
@@ -104,6 +114,19 @@ def classify_gemini_review(row: pd.Series | dict[str, Any]) -> tuple[str, str, f
         )
     if confidence not in APPROVED_CONFIDENCE:
         return "LOW_CONFIDENCE", "Gemini confidence is below MEDIUM; wager held at $0", 0.0
+
+    # The review prompt requires no_value_at_price whenever the recommended
+    # side lacks positive value at its exact price. Enforce that contract from
+    # the exported metric as well: a generative omission must never become an
+    # audited APPROVE on a zero/negative-EV side.
+    priced_expected_value = _first_numeric(
+        row,
+        "effective_expected_value",
+        "production_expected_value",
+        "expected_value",
+    )
+    if priced_expected_value is not None and priced_expected_value <= 0.0:
+        flags.add("no_value_at_price")
 
     combined_notes = f"{explanation} {risk_notes}".casefold()
     if "league-average fallbacks" in combined_notes or "missing live stats" in combined_notes:

@@ -33,6 +33,8 @@ ACTIVE_MODEL = "gemini-2.5-flash"
 # small, but prop slates routinely contain 50+ rows. Keep enough headroom below
 # the largest production batch that has completed successfully.
 GEMINI_STRUCTURED_BATCH_SIZE = 12
+GEMINI_REVIEW_TEMPERATURE = 0.0
+GEMINI_REVIEW_SEED = 0
 
 # Fallback list (still useful for internal tracking, though implementation focuses on ACTIVE_MODEL)
 MODEL_FALLBACKS = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
@@ -429,8 +431,8 @@ def generate_batch_confidence_explanation(
         batch = games_data[i:i + batch_size]
 
         # Build prompt
-        current_time_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-        prompt = f"""Current Time: {current_time_str}
+        review_date_str = datetime.now(timezone.utc).date().isoformat()
+        prompt = f"""Review Date (UTC): {review_date_str}
 You are an independent sports betting risk reviewer. Do not assume any side has already
 been approved or rejected — some games here are ones the system declined, others
 are ones it bet, and you are not told which is which.
@@ -475,7 +477,8 @@ Return ONLY a JSON array of objects. No markdown formatting.
                 model=ACTIVE_MODEL,
                 contents=prompt,
                 config=genai.types.GenerateContentConfig(
-                    temperature=0.1,
+                    temperature=GEMINI_REVIEW_TEMPERATURE,
+                    seed=GEMINI_REVIEW_SEED,
                     response_mime_type="application/json",
                     response_json_schema=_batch_review_schema(len(batch)),
                 ),

@@ -19,6 +19,7 @@ def _review_row(**overrides) -> dict:
         "gemini_flags": "",
         "gemini_explanation": "The calibrated probability clears the offered price.",
         "gemini_risk_notes": "Normal market movement risk.",
+        "expected_value": 0.05,
         "production_eligible": True,
         "Kelly_Bet_Size": 10.0,
     }
@@ -102,6 +103,27 @@ def test_disagreement_low_confidence_and_blocking_flags_hold_at_zero():
     assert not result["gemini_approved"].any()
     assert result["Kelly_Bet_Size"].eq(0.0).all()
     assert not result["production_eligible"].any()
+
+
+def test_non_positive_priced_value_is_held_when_gemini_omits_required_flag():
+    result = apply_gemini_bet_gate(
+        pd.DataFrame([
+            _review_row(
+                expected_value=-0.01,
+                gemini_confidence="HIGH",
+                gemini_flags="",
+                gemini_risk_notes="The positive edge is small.",
+            )
+        ]),
+        enabled=True,
+        product="best_pick",
+    ).iloc[0]
+
+    assert result["gemini_review_status"] == "HOLD"
+    assert "no_value_at_price" in result["gemini_gate_reason"]
+    assert not bool(result["gemini_approved"])
+    assert not bool(result["production_eligible"])
+    assert result["Kelly_Bet_Size"] == 0.0
 
 
 def test_gemini_never_promotes_an_ineligible_row():
@@ -330,6 +352,8 @@ def test_batch_retries_only_incomplete_gemini_reviews(monkeypatch):
     assert '"game_id": "g1"' not in models.prompts[1]
     assert '"game_id": "g2"' in models.prompts[1]
     first_schema = models.configs[0]["response_json_schema"]
+    assert models.configs[0]["temperature"] == 0.0
+    assert models.configs[0]["seed"] == 0
     assert first_schema["minItems"] == 2
     assert first_schema["maxItems"] == 2
     assert first_schema["items"]["required"] == [
