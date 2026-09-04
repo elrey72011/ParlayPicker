@@ -3,10 +3,14 @@ from io import StringIO
 import pandas as pd
 
 from app_core.candidate_recap import (
+    ALTERNATIVE_CANDIDATE_SCOPE,
+    SELECTED_CANDIDATE_SCOPE,
+    annotate_candidate_evaluation_scope,
     grade_candidate_audit,
     load_candidate_results_ledger,
     merge_candidate_ledgers,
     persist_candidate_results_ledger,
+    selected_candidate_results,
     summarize_candidate_performance,
     summarize_selected_trend,
 )
@@ -84,6 +88,20 @@ def test_grade_candidate_audit_scores_every_alternative():
     assert graded["candidate_graded"].all()
     assert graded["candidate_ledger_key"].nunique() == 4
     assert graded["actual_home_score"].tolist() == [4, 4, 4, 4]
+    assert graded["candidate_evaluation_scope"].tolist() == [
+        SELECTED_CANDIDATE_SCOPE,
+        ALTERNATIVE_CANDIDATE_SCOPE,
+        ALTERNATIVE_CANDIDATE_SCOPE,
+        ALTERNATIVE_CANDIDATE_SCOPE,
+    ]
+    assert graded["selected_scorecard_row"].tolist() == [True, False, False, False]
+    assert graded["selected_scorecard_decision"].tolist() == [True, False, False, False]
+    assert graded["selected_scorecard_outcome"].tolist() == [
+        "LOSS",
+        "NOT SELECTED",
+        "NOT SELECTED",
+        "NOT SELECTED",
+    ]
 
 
 def test_grade_candidate_audit_leaves_postponed_zero_zero_ungraded():
@@ -228,6 +246,43 @@ def test_candidate_summary_parses_exported_false_string_fail_closed():
     )
 
     assert summary["Selected Rows"].sum() == 1
+
+
+def test_selected_candidate_results_excludes_alternatives_fail_closed():
+    ledger = _audit_rows().copy()
+    ledger["candidate_outcome"] = ["WIN", "LOSS", "LOSS", "WIN"]
+    ledger["best_available_selected"] = ["TRUE", "False", "false", "0"]
+
+    selected = selected_candidate_results(ledger)
+
+    assert len(selected) == 1
+    assert selected.loc[0, "best_pick"] == "Home Club -1.5"
+    assert selected.loc[0, "candidate_evaluation_scope"] == SELECTED_CANDIDATE_SCOPE
+    assert bool(selected.loc[0, "selected_scorecard_decision"])
+    assert selected.loc[0, "selected_scorecard_outcome"] == "WIN"
+
+
+def test_candidate_scope_annotation_backfills_legacy_ledger():
+    legacy = _audit_rows().iloc[:2].copy()
+    legacy["candidate_outcome"] = ["N/A", "LOSS"]
+    legacy = legacy.drop(
+        columns=[
+            "candidate_evaluation_scope",
+            "selected_scorecard_row",
+            "selected_scorecard_decision",
+            "selected_scorecard_outcome",
+        ],
+        errors="ignore",
+    )
+
+    annotated = annotate_candidate_evaluation_scope(legacy)
+
+    assert annotated["selected_scorecard_row"].tolist() == [True, False]
+    assert annotated["selected_scorecard_decision"].tolist() == [False, False]
+    assert annotated["selected_scorecard_outcome"].tolist() == [
+        "N/A",
+        "NOT SELECTED",
+    ]
 
 
 def test_selected_trend_marks_one_slate_as_insufficient_history():
