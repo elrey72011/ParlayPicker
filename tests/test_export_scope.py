@@ -200,6 +200,35 @@ def test_qualified_unfunded_export_cannot_retain_stale_bet_labels_or_stake():
     assert labeled.loc[0, "Wager_Instruction"].startswith("DO NOT BET")
 
 
+def test_unqualified_pass_replaces_stale_actionable_and_qualified_reasons():
+    frame = pd.DataFrame({
+        "best_pick": ["Athletics +1.5"],
+        "qualified_pick": [False],
+        "qualification_reason": [
+            "PASS: final calibrated win probability is below 60%."
+        ],
+        "Bet_Decision": ["BEST AVAILABLE - PASS"],
+        "Play_Tier": ["AVOID"],
+        "production_eligible": [False],
+        "Play_Stake": [0.0],
+        "Pick_Status": ["Actionable"],
+        "Status_Reason": [
+            "Actionable (empirical): proven-bucket realized edge +4.3%"
+        ],
+        "Production_Gate_Reason": ["qualified"],
+    })
+
+    labeled = label_wager_export(frame)
+
+    assert not bool(labeled.loc[0, "Bettable"])
+    assert labeled.loc[0, "Pick_Status"] == "Best Available / Pass"
+    assert labeled.loc[0, "Status_Reason"] == frame.loc[0, "qualification_reason"]
+    assert (
+        labeled.loc[0, "Production_Gate_Reason"]
+        == frame.loc[0, "qualification_reason"]
+    )
+
+
 def test_public_export_scope_columns_are_case_insensitively_unique():
     frame = pd.DataFrame(
         {
