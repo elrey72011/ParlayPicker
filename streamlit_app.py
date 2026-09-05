@@ -210,6 +210,35 @@ _COMPACT_EXPORT_COLUMNS = [
 ]
 
 
+def _render_main_tabs():
+    """Keep the selected section through filter and download reruns."""
+    return st.tabs(
+        ["Odds", "Analysis", "Best Picks", "Performance Recap", "Parlays", "Portfolio", "Debug", "Strategy Lab"],
+        key="main_navigation",
+        on_change="rerun",
+    )
+
+
+def _prepare_sweet_spot_card(frame: pd.DataFrame, *, unit: float = 1.0) -> pd.DataFrame:
+    """Retain the filter's candidates while publishing their final wager state."""
+    from app_core.export_scope import label_wager_export
+    from app_core.lean_card import attach_play_stakes, score_best_picks_rows
+
+    out = ensure_best_pick_export_columns(frame)
+    for column in out.select_dtypes(include="category").columns:
+        out[column] = out[column].astype(object)
+    out["Model_Pick_Status"] = out["Pick_Status"].astype("string")
+    scored = attach_play_stakes(score_best_picks_rows(out), unit=unit)
+    for target, source in {
+        "Play_Tier": "Tier", "Play_Stake": "Play_Stake",
+        "Bet_Decision": "Bet_Decision", "Absolute_Edge": "Absolute_Edge",
+        "Production_Gate_Reason": "Production_Gate_Reason",
+    }.items():
+        if source in scored:
+            out[target] = scored[source]
+    return label_wager_export(out)
+
+
 def _compact_bool_series(df: pd.DataFrame, column: str) -> pd.Series:
     """Fail-closed boolean parsing for user-facing wager exports."""
     if column not in df.columns:
@@ -1883,7 +1912,7 @@ def main() -> None:
 
 
 
-    tab1, tab2, tab3, tab_performance, tab4, tab5, tab6, tab7 = st.tabs(["Odds", "Analysis", "Best Picks", "Performance Recap", "Parlays", "Portfolio", "Debug", "Strategy Lab"])
+    tab1, tab2, tab3, tab_performance, tab4, tab5, tab6, tab7 = _render_main_tabs()
 
     with tab_performance:
         from app_core.performance_pipeline import run_performance_pipeline
@@ -2194,7 +2223,7 @@ def main() -> None:
                 diag_col1, diag_col2, diag_col3, diag_col4 = st.columns(4)
 
                 diag_col1.metric("Total Best Picks", len(best_picks_df))
-                diag_col1.metric("Actionable + High Var", actionable_count)
+                diag_col1.metric("Model status candidates", actionable_count)
                 diag_col1.metric("After Source Filter", source_count)
 
                 diag_col2.metric("After Prob Band", prob_count)
@@ -2214,6 +2243,14 @@ def main() -> None:
                 if not sweet_spot_df.empty:
                     m_counts = sweet_spot_df["market_type"].value_counts().to_dict()
                     st.write("**Market Types:**", m_counts)
+                    public_sweet_spot = _prepare_sweet_spot_card(
+                        sweet_spot_df,
+                        unit=float(st.session_state.get("lean_play_unit", 1.0) or 1.0),
+                    )
+                    st.caption(
+                        "Sweet Spot filters model candidates. Final wager checks still apply: "
+                        "only Bettable rows with a positive Play_Stake are approved wagers."
+                    )
 
                     # Ensure export logic uses string columns for status and categorical to prevent issues
                     target_export_cols = [
@@ -2230,8 +2267,10 @@ def main() -> None:
                         "game_time_est": "Commence (Local)",
                         "calibrated_probability": "WinProbability"
                     }
-                    export_prep_ss = sweet_spot_df.rename(columns=csv_rename_map)
-                    final_export_cols = [c for c in target_export_cols if c in export_prep_ss.columns]
+                    export_prep_ss = public_sweet_spot.rename(columns=csv_rename_map)
+                    scope_cols = ["Wager_Instruction", "Export_Scope", "Bettable", "Play_Stake"]
+                    final_export_cols = scope_cols + [c for c in target_export_cols if c in export_prep_ss.columns]
+                    final_export_cols += [c for c in export_prep_ss.columns if c not in final_export_cols]
                     ss_export_csv = export_prep_ss[final_export_cols].to_csv(index=False, encoding="utf-8-sig")
 
                     st.download_button(
@@ -2242,7 +2281,7 @@ def main() -> None:
                     )
 
                     st.markdown("#### Sweet Spot Picks")
-                    display_ss = sweet_spot_df.copy()
+                    display_ss = public_sweet_spot.copy()
                     display_ss = display_ss.rename(columns={
                         "Triple_Filter_Rank": "Triple Filter Rank",
                         "Pick_Quality": "Pick Quality",
@@ -2261,7 +2300,7 @@ def main() -> None:
                         "kalshi_match_status": "Kalshi Status",
                         "ml_probability": "ML Prob",
                     })
-                    preferred = ["Pick_Status", "Triple Filter Rank", "Pick Quality", "League", "Home Team", "Away Team", "Game Date", "Game Time (ET)", "Best Pick", "Prob", "ML Prob", "Odds", "Source", "EV", "Edge", "Consensus", "Kalshi Status"]
+                    preferred = ["Wager_Instruction", "Bettable", "Play_Stake", "Pick_Status", "Triple Filter Rank", "Pick Quality", "League", "Home Team", "Away Team", "Game Date", "Game Time (ET)", "Best Pick", "Prob", "ML Prob", "Odds", "Source", "EV", "Edge", "Consensus", "Kalshi Status"]
                     ordered = [c for c in preferred if c in display_ss.columns] + [c for c in display_ss.columns if c not in preferred]
                     st.dataframe(display_ss[ordered], width="stretch")
 
