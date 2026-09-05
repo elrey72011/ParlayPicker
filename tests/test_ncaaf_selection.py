@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 import pandas as pd
+import pytest
 
 from app.ui.sidebar_controls import FALLBACK_SPORTS, _resolve_sports_options
 from app_core import espn_ncaaf_odds, espn_results, feature_processing, odds_api
@@ -273,6 +274,34 @@ def test_ncaaf_fallback_never_replaces_a_primary_game():
     merged = espn_ncaaf_odds.merge_missing_ncaaf_games(primary, fallback)
 
     assert merged == primary
+
+
+@pytest.mark.parametrize("home,primary_away,fallback_away", [
+    ("Rice Owls", "Houston Baptist Huskies", "Houston Christian Huskies"),
+    ("Charlotte 49ers", "Citadel Bulldogs", "The Citadel Bulldogs"),
+    ("Kansas State Wildcats", "Nicholls State Colonels", "Nicholls Colonels"),
+    ("South Alabama Jaguars", "Southeastern Louisiana Lions", "SE Louisiana Lions"),
+])
+@pytest.mark.parametrize("reverse", [False, True])
+def test_ncaaf_fallback_aliases_preserve_one_primary_event(home, primary_away, fallback_away, reverse):
+    primary = dict(_ncaaf_live_game(), home_team=home, away_team=primary_away)
+    fallback = dict(
+        _ncaaf_live_game(), id="espn-duplicate", home_team=home, away_team=fallback_away,
+        odds_feed_source=espn_ncaaf_odds.ESPN_FALLBACK_SOURCE,
+        bookmakers=[{"key": "draftkings", "markets": []}],
+    )
+    if reverse:
+        fallback["home_team"], fallback["away_team"] = fallback["away_team"], fallback["home_team"]
+    distinct = dict(fallback, id="espn-distinct", home_team="Georgia Bulldogs", away_team="Auburn Tigers")
+    merged = espn_ncaaf_odds.merge_missing_ncaaf_games([primary], [fallback, distinct])
+    assert merged == [primary, distinct]
+    assert merged[0] is primary  # Retain exact primary prices and event provenance.
+
+
+def test_ncaaf_fallback_does_not_merge_distinct_houston_schools():
+    primary = [dict(_ncaaf_live_game(), home_team="Rice Owls", away_team="Houston Cougars")]
+    fallback = [dict(_ncaaf_live_game(), home_team="Rice Owls", away_team="Houston Christian Huskies")]
+    assert espn_ncaaf_odds.merge_missing_ncaaf_games(primary, fallback) == primary + fallback
 
 
 def test_espn_ncaaf_fallback_can_rank_but_cannot_be_wager_approved():
