@@ -26,6 +26,14 @@ from core.probability_calibration import apply_calibration
 DEFAULT_BUCKET_STATS_PATH = Path("data/calibration/bucket_stats.json")
 BUCKET_STATS_MAX_AGE_DAYS = 14
 
+# Short-horizon evidence expires much sooner than the long-horizon empirical
+# overlay.  The artifact's ``recent_*`` fields describe a trailing seven-day
+# window ending on ``meta.recency_anchor``.  Once that anchor is more than one
+# slate day old, the window no longer represents the current regime and must
+# not steer finalist selection.  Long-horizon bucket evidence may still remain
+# usable under BUCKET_STATS_MAX_AGE_DAYS.
+RECENT_REGIME_MAX_AGE_DAYS = 1
+
 VIABLE_STATUSES = {"Actionable", "High Variance/Speculative", "Below Threshold"}
 
 # Shrinkage: a bucket's delta from the overall win rate is weighted by
@@ -179,25 +187,50 @@ def bucket_stats_are_fresh(
     """Return whether dated bucket evidence is recent enough for decisions.
 
     Undated injected/test statistics remain backward compatible. Production
-    artifacts fail closed once their fit is older than ``max_age_days`` so the
-    finalist selector, tier overlay, recovery gate, and portfolio calibration
-    cannot silently use different evidence vintages.
+    artifacts fail closed once their newest graded slate is older than
+    ``max_age_days`` so the finalist selector, tier overlay, recovery gate, and
+    portfolio calibration cannot silently use different evidence vintages.
     """
     if not bucket_stats:
         return False
-    fitted_on = (bucket_stats.get("meta") or {}).get("fitted_on")
-    if not fitted_on:
+    meta = bucket_stats.get("meta") or {}
+    # Freshness is about the newest graded event in the evidence, not the day a
+    # script happened to rewrite the JSON.  Falling back to fitted_on preserves
+    # compatibility with older artifacts and injected tests.
+    evidence_date = meta.get("recency_anchor") or meta.get("fitted_on")
+    if not evidence_date:
         return True
-    fitted = pd.to_datetime(fitted_on, errors="coerce", utc=True)
-    if pd.isna(fitted):
+    evidence_anchor = pd.to_datetime(evidence_date, errors="coerce", utc=True)
+    if pd.isna(evidence_anchor):
         return False
     current = pd.Timestamp.now(tz="UTC") if now is None else pd.Timestamp(now)
     if current.tzinfo is None:
         current = current.tz_localize("UTC")
     else:
         current = current.tz_convert("UTC")
-    age_days = (current.normalize() - fitted.normalize()).days
+    age_days = (current.normalize() - evidence_anchor.normalize()).days
     return -1 <= age_days <= int(max_age_days)
+
+
+def recent_regime_stats_are_fresh(
+    bucket_stats: dict | None,
+    *,
+    now: pd.Timestamp | None = None,
+    max_age_days: int = RECENT_REGIME_MAX_AGE_DAYS,
+) -> bool:
+    """Whether the artifact's trailing-window fields may steer finalists.
+
+    The long-horizon bucket overlay and the seven-day regression guard have
+    different freshness requirements.  Keeping this decision separate lets a
+    mature empirical history continue to provide a bounded probability blend
+    while an expired short window fails closed to a zero score penalty.
+    """
+
+    return bucket_stats_are_fresh(
+        bucket_stats,
+        now=now,
+        max_age_days=max_age_days,
+    )
 
 
 def empirical_win_probability(

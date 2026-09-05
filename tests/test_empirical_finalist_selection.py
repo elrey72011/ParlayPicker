@@ -117,3 +117,50 @@ def test_side_candidates_use_same_bounded_empirical_selection_scale_as_totals():
 
     assert adjusted.iloc[0] > 0.60
     assert adjusted.iloc[0] < 0.62
+
+
+def test_expired_recent_window_cannot_penalize_finalist_score(monkeypatch):
+    stats = {
+        "overall": {"n": 300, "win_rate": 0.54},
+        "buckets": {
+            "MLB:over:Neutral": {
+                "n": 80,
+                "wins": 44,
+                "win_rate": 0.55,
+                "recent_n": 30,
+                "recent_wins": 6,
+            },
+            "MLB:under:Neutral": {
+                "n": 80,
+                "wins": 43,
+                "win_rate": 0.5375,
+                "recent_n": 30,
+                "recent_wins": 17,
+            },
+        },
+        "families": {},
+        "meta": {
+            "fitted_on": "2026-07-19",
+            "recency_anchor": "2026-07-18",
+        },
+    }
+    monkeypatch.setattr("core.empirical_tiers.load_bucket_stats", lambda: stats)
+    monkeypatch.setattr("core.probability_calibration.load_calibration", lambda: None)
+
+    diagnostics = {}
+    best = build_best_picks_df(
+        pd.DataFrame(
+            [
+                _candidate("total_over", probability=0.60, ev=0.05),
+                _candidate("total_under", probability=0.55, ev=0.02),
+            ]
+        ),
+        diagnostics_out=diagnostics,
+    )
+
+    assert diagnostics["selection_bucket_stats_fresh"] is True
+    assert diagnostics["recent_regime_stats_fresh"] is False
+    assert diagnostics["recent_regime_penalty_count"] == 0
+    assert best.iloc[0]["recent_regime_penalty_reason"] == (
+        "stale_recent_regime_history"
+    )

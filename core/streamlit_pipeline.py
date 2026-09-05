@@ -4110,6 +4110,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
             from core.empirical_tiers import (
                 empirical_selection_probabilities,
                 load_bucket_stats as _load_selection_bucket_stats,
+                recent_regime_stats_are_fresh,
             )
             from core.probability_calibration import (
                 load_calibration as _load_selection_calibration,
@@ -4117,6 +4118,10 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
 
             _selection_bucket_stats = _load_selection_bucket_stats()
             _selection_bucket_stats_fresh = _selection_bucket_stats_are_fresh(
+                _selection_bucket_stats,
+                now=_slate_as_of_timestamp(pool),
+            )
+            _recent_regime_stats_fresh = recent_regime_stats_are_fresh(
                 _selection_bucket_stats,
                 now=_slate_as_of_timestamp(pool),
             )
@@ -4136,16 +4141,26 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
                 pool.loc[
                     _usable_empirical, "selection_probability_source"
                 ] = "empirical_bucket_blend"
-                from core.empirical_tiers import recent_regime_score_adjustments
+                if _recent_regime_stats_fresh:
+                    from core.empirical_tiers import recent_regime_score_adjustments
 
-                _recent_regime = recent_regime_score_adjustments(
-                    pool, _selection_bucket_stats
-                )
-                for _column in _recent_regime.columns:
-                    pool[_column] = _recent_regime[_column]
-                pool["_recent_regime_score_penalty"] = pd.to_numeric(
-                    pool["recent_regime_penalty_value"], errors="coerce"
-                ).fillna(0.0)
+                    _recent_regime = recent_regime_score_adjustments(
+                        pool, _selection_bucket_stats
+                    )
+                    for _column in _recent_regime.columns:
+                        pool[_column] = _recent_regime[_column]
+                    pool["_recent_regime_score_penalty"] = pd.to_numeric(
+                        pool["recent_regime_penalty_value"], errors="coerce"
+                    ).fillna(0.0)
+                else:
+                    pool["recent_regime_penalty_reason"] = (
+                        "stale_recent_regime_history"
+                    )
+                    logger.warning(
+                        "Recent regime statistics are stale; keeping the bounded "
+                        "long-horizon empirical blend but applying no finalist-score "
+                        "haircut from the expired trailing window."
+                    )
             elif _selection_bucket_stats:
                 pool["recent_regime_penalty_reason"] = "stale_empirical_history"
                 logger.warning(
@@ -4190,6 +4205,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         )
         diagnostics_out["selection_bucket_stats_fresh"] = bool(
             locals().get("_selection_bucket_stats_fresh", False)
+        )
+        diagnostics_out["recent_regime_stats_fresh"] = bool(
+            locals().get("_recent_regime_stats_fresh", False)
         )
         diagnostics_out["recent_regime_penalty_count"] = int(
             pool["recent_regime_penalty_applied"].fillna(False).astype(bool).sum()
