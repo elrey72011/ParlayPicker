@@ -80,7 +80,7 @@ def test_corrupt_live_totals_cannot_beat_valid_spreads_before_selection():
 
 def test_lone_repaired_total_is_value_neutral_and_audit_matches_export():
     df = pd.DataFrame([
-        _candidate("total_under", win_prob=0.88, ev=0.35, edge=0.22),
+        _candidate("total_under", win_prob=0.88, ev=0.35, edge=0.22, opposing_odds_american=700),
     ])
     diagnostics = {}
 
@@ -88,6 +88,12 @@ def test_lone_repaired_total_is_value_neutral_and_audit_matches_export():
     audit = diagnostics["candidate_audit_df"]
     selected = audit[audit["best_available_selected"].astype(bool)].iloc[0]
     row = out.iloc[0]
+    for price_column in ("odds_american", "market_probability"):
+        assert pd.isna(row[price_column])
+        assert pd.isna(selected[price_column])
+    assert pd.isna(selected["opposing_odds_american"])
+    assert selected["odds_source"] == "unpriced_upload_fallback"
+    assert selected["line_source"] == "upload"
 
     assert row["best_pick"] == "Under 8.0"
     assert row["market_line_source_detail"] == "upload_total_fallback_after_rejected_live"
@@ -106,6 +112,36 @@ def test_lone_repaired_total_is_value_neutral_and_audit_matches_export():
     assert diagnostics["preselection_dropped_total_candidate_count"] == 0
     assert diagnostics["preselection_retained_only_candidate_count"] == 1
     assert diagnostics["postvalidation_candidate_audit_sync_count"] == 1
+
+
+def test_price_sync_preserves_unselected_quotes_and_raw_book_diagnostics():
+    from core.streamlit_pipeline import _sync_selected_candidate_audit
+
+    identity = {"league": "NCAAF", "home_team": "West Virginia", "away_team": "Coastal Carolina", "game_date": "2026-09-05"}
+    audit = pd.DataFrame([
+        {**identity, "best_available_selected": True, "odds_american": -9900.0,
+         "opposing_odds_american": 1500.0, "market_probability": 0.98,
+         "opposing_odds_source": "odds_api",
+         "odds_source": "odds_api", "line_source": "live_odds", "raw_book_odds_diag": "rejected quote evidence"},
+        {**identity, "best_available_selected": False, "odds_american": 120.0,
+         "opposing_odds_american": -130.0, "market_probability": 0.45,
+         "opposing_odds_source": "novig",
+         "odds_source": "novig", "line_source": "live_odds", "raw_book_odds_diag": "alternative quote evidence"},
+    ])
+    final = pd.DataFrame([{
+        **identity, "odds_american": float("nan"), "opposing_odds_american": float("nan"),
+        "market_probability": float("nan"), "odds_source": "unpriced_upload_fallback",
+        "market_line_source_detail": "upload_total_fallback_after_rejected_live",
+    }])
+    result, count = _sync_selected_candidate_audit(audit, final)
+    assert count == 1
+    assert result.loc[0, ["odds_american", "opposing_odds_american", "market_probability"]].isna().all()
+    assert result.loc[0, "odds_source"] == "unpriced_upload_fallback"
+    assert result.loc[0, "opposing_odds_source"] == "unpriced_upload_fallback"
+    assert result.loc[0, "line_source"] == "upload"
+    pd.testing.assert_series_equal(result.loc[1], audit.loc[1])
+    pd.testing.assert_series_equal(result.raw_book_odds_diag, audit.raw_book_odds_diag)
+    assert audit.loc[0, "odds_american"] == -9900.0
 
 
 def test_reoriented_novig_spread_is_trusted_through_final_validation():
