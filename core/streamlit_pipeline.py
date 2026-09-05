@@ -449,16 +449,22 @@ def ensure_best_pick_export_columns(
         "mlb_spread_finalist_penalty_applied": False,
         "recent_regime_penalty_applied": False,
         "best_available_value_override_applied": False,
+        "degraded_feature_subset_flag": False,
+        "totals_only_actionable_flag": False,
+        "line_consistency_flag": True,
+        "line_event_identity_match_flag": True,
     }.items():
         if bool_col in out.columns:
-            out[bool_col] = out[bool_col].fillna(default).astype(bool)
+            # CSV/string-backed inputs must retain explicit failed checks. Python
+            # truthiness would turn "False" and "0" into verified/qualified rows.
+            values = out[bool_col]
+            normalized = values.astype("string").str.strip().str.casefold()
+            out[bool_col] = normalized.isin({"true", "1", "1.0", "yes", "y"}).where(
+                values.notna(), default
+            ).astype(bool)
     for int_col in ("best_available_rank", "best_available_family_rank", "best_available_candidate_count"):
         if int_col in out.columns:
             out[int_col] = pd.to_numeric(out[int_col], errors="coerce").astype("Int64")
-    if "degraded_feature_subset_flag" in out.columns:
-        out["degraded_feature_subset_flag"] = out["degraded_feature_subset_flag"].fillna(False).astype(bool)
-    if "totals_only_actionable_flag" in out.columns:
-        out["totals_only_actionable_flag"] = out["totals_only_actionable_flag"].fillna(False).astype(bool)
     if "viable_side_candidates_count" in out.columns:
         out["viable_side_candidates_count"] = pd.to_numeric(out["viable_side_candidates_count"], errors="coerce").fillna(0).astype(int)
     if "side_promoted_by_balance_guard_count" in out.columns:
@@ -468,10 +474,6 @@ def ensure_best_pick_export_columns(
     for numeric_col in {"selection_probability_used", "mlb_spread_finalist_penalty_value", "recent_regime_penalty_value", "recent_regime_bucket_win_rate", "recent_regime_long_win_rate", "best_available_value_override_ev_gain", "qualification_probability", "market_line_used", "matched_live_spread_line", "matched_live_total_line", "upload_spread_line", "upload_total_line", "base_spread_line", "base_total_line"}:
         if numeric_col in out.columns:
             out[numeric_col] = pd.to_numeric(out[numeric_col], errors="coerce")
-    if "line_consistency_flag" in out.columns:
-        out["line_consistency_flag"] = out["line_consistency_flag"].fillna(True).astype(bool)
-    if "line_event_identity_match_flag" in out.columns:
-        out["line_event_identity_match_flag"] = out["line_event_identity_match_flag"].fillna(True).astype(bool)
     if "line_candidate_count" in out.columns:
         out["line_candidate_count"] = pd.to_numeric(out["line_candidate_count"], errors="coerce").fillna(0).astype(int)
     if "recent_regime_bucket_n" in out.columns:
