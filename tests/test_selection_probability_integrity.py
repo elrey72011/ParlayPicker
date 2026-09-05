@@ -5,7 +5,10 @@ from core.streamlit_pipeline import (
     _normalize_complementary_selection_probabilities,
     _selection_bucket_stats_are_fresh,
 )
-from core.empirical_tiers import bucket_stats_are_fresh
+from core.empirical_tiers import (
+    bucket_stats_are_fresh,
+    recent_regime_stats_are_fresh,
+)
 
 
 def test_complementary_rank_probabilities_are_coherent_without_touching_order():
@@ -56,3 +59,41 @@ def test_dated_empirical_overlay_fails_closed_when_stale():
     assert bucket_stats_are_fresh(fresh, now=now, max_age_days=14)
     assert not bucket_stats_are_fresh(stale, now=now, max_age_days=14)
     assert not bucket_stats_are_fresh(future, now=now, max_age_days=14)
+
+
+def test_empirical_freshness_uses_newest_graded_slate_not_file_write_date():
+    now = pd.Timestamp("2026-07-30", tz="UTC")
+    rewritten_without_new_results = {
+        "meta": {
+            "fitted_on": "2026-07-30",
+            "recency_anchor": "2026-07-10",
+        }
+    }
+
+    assert not bucket_stats_are_fresh(
+        rewritten_without_new_results,
+        now=now,
+        max_age_days=14,
+    )
+
+
+def test_recent_regime_window_expires_before_long_horizon_overlay():
+    stats = {
+        "meta": {
+            "fitted_on": "2026-07-25",
+            "recency_anchor": "2026-07-24",
+        }
+    }
+
+    assert bucket_stats_are_fresh(
+        stats,
+        now=pd.Timestamp("2026-07-27", tz="UTC"),
+    )
+    assert not recent_regime_stats_are_fresh(
+        stats,
+        now=pd.Timestamp("2026-07-27", tz="UTC"),
+    )
+    assert recent_regime_stats_are_fresh(
+        stats,
+        now=pd.Timestamp("2026-07-25", tz="UTC"),
+    )
