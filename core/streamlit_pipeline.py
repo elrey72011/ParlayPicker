@@ -1641,6 +1641,10 @@ def _sync_selected_candidate_audit(
         "best_available_value_override_applied",
         "best_available_value_override_from_pick",
         "best_available_value_override_ev_gain",
+        "odds_american",
+        "opposing_odds_american",
+        "market_probability",
+        "odds_source",
         "expected_value",
         "edge",
         "best_available_score",
@@ -1663,6 +1667,16 @@ def _sync_selected_candidate_audit(
                 audit.loc[mask, column] = row[column]
         recovered = str(row.get("market_line_source_detail", "")) == "upload_total_fallback_after_rejected_live"
         if recovered:
+            # A repaired upload line no longer has the rejected live quote.
+            # Keep selected audit provenance aligned with its unpriced export.
+            # The final card can omit opposing-price columns entirely, so those
+            # audit-only fields cannot be cleared by the shared-column sync.
+            if "opposing_odds_american" in audit.columns:
+                audit.loc[mask, "opposing_odds_american"] = np.nan
+            if "opposing_odds_source" in audit.columns:
+                audit.loc[mask, "opposing_odds_source"] = "unpriced_upload_fallback"
+            if "line_source" in audit.columns:
+                audit.loc[mask, "line_source"] = "upload"
             if "final_family_score" in audit.columns:
                 audit.loc[mask, "final_family_score"] = 0.0
             if "best_available_rejection_reason" in audit.columns:
