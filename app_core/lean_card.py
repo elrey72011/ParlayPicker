@@ -41,7 +41,7 @@ def _strict_bool_col(df: pd.DataFrame, name: str, *, default: bool = False) -> p
     if pd.api.types.is_bool_dtype(values.dtype):
         return values.fillna(default).astype(bool)
     normalized = values.astype("string").fillna("").str.strip().str.casefold()
-    return normalized.isin({"true", "1", "yes", "y"})
+    return normalized.isin({"true", "1", "1.0", "yes", "y"})
 
 
 def classify_lean_tier(status: object, eff_ev: object, consensus: object,
@@ -176,7 +176,7 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
         for s, e, c, cw, be in zip(status, eff_ev, consensus, calib_win, breakeven)
     ]
     qualified_pick = (
-        df["qualified_pick"].fillna(False).astype(bool)
+        _strict_bool_col(df, "qualified_pick")
         if "qualified_pick" in df.columns
         else pd.Series(True, index=df.index, dtype=bool)
     )
@@ -193,9 +193,7 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
 
     # A started game is never playable at ANY size - pre-game lines are stale
     # and the shown odds may be in-game. attach_play_stakes zeroes these rows.
-    started = _first_col(df, "game_already_started_flag").map(
-        lambda v: bool(v) if pd.notna(v) and v is not None else False
-    )
+    started = _strict_bool_col(df, "game_already_started_flag")
     if "status_blocker_stage" in df.columns:
         started = started | df["status_blocker_stage"].astype(str).eq("game_already_started")
     if "Play_Tier" in df.columns:
@@ -206,9 +204,9 @@ def score_best_picks_rows(best_picks_df: pd.DataFrame, *, calibration: object = 
     )
     unsafe_line_identity = pd.Series(False, index=df.index)
     if "line_consistency_flag" in df.columns:
-        unsafe_line_identity = unsafe_line_identity | ~df["line_consistency_flag"].fillna(False).astype(bool)
+        unsafe_line_identity = unsafe_line_identity | ~_strict_bool_col(df, "line_consistency_flag")
     if "line_event_identity_match_flag" in df.columns:
-        unsafe_line_identity = unsafe_line_identity | ~df["line_event_identity_match_flag"].fillna(False).astype(bool)
+        unsafe_line_identity = unsafe_line_identity | ~_strict_bool_col(df, "line_event_identity_match_flag")
     if "market_line_source_detail" in df.columns:
         unsafe_line_identity = unsafe_line_identity | df["market_line_source_detail"].astype(str).eq(
             "upload_total_fallback_after_rejected_live"
@@ -400,7 +398,7 @@ def attach_play_stakes(card: pd.DataFrame, unit: float = 1.0) -> pd.DataFrame:
         else None
     )
     if availability_column is not None:
-        line_available = out[availability_column].fillna(False).astype(bool)
+        line_available = _strict_bool_col(out, availability_column)
         units = units.where(line_available, 0.0)
         stake = stake.where(line_available, 0.0)
         out.loc[~line_available, "Tier"] = "UNAVAILABLE"
@@ -409,7 +407,7 @@ def attach_play_stakes(card: pd.DataFrame, unit: float = 1.0) -> pd.DataFrame:
 
     # Started games are unplayable at any size: the pre-game line is gone.
     if "Started" in out.columns:
-        started = out["Started"].fillna(False).astype(bool)
+        started = _strict_bool_col(out, "Started")
         units = units.where(~started, 0.0)
         stake = stake.where(~started, 0.0)
         out.loc[started, "Tier"] = "STARTED"
@@ -421,7 +419,7 @@ def attach_play_stakes(card: pd.DataFrame, unit: float = 1.0) -> pd.DataFrame:
     out["All_Row_Bet"] = stake.gt(0)
     out["Wager_Approved"] = out["Play_Stake"].gt(0)
     qualified = (
-        out["Qualified_Pick"].fillna(False).astype(bool)
+        _strict_bool_col(out, "Qualified_Pick")
         if "Qualified_Pick" in out.columns
         else pd.Series(True, index=out.index, dtype=bool)
     )

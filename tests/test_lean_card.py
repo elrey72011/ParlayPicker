@@ -15,6 +15,57 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from app_core.lean_card import build_all_games_lean_card, classify_lean_tier
 
 
+@pytest.mark.parametrize("flag", ["line_consistency_flag", "line_event_identity_match_flag"])
+def test_text_false_line_validation_cannot_fund_play_card(flag):
+    source = pd.DataFrame([{
+        "league": "MLB", "home_team": "A", "away_team": "B",
+        "best_pick": "Under 8.5", "market_type": "total_under",
+        "Pick_Status": "Actionable", "effective_expected_value": 0.10,
+        "effective_win_probability": 0.65, "effective_edge": 0.12,
+        "odds_american": -110, "consensus_agreement": "Agrees",
+        "Kelly_Bet_Size": 8.0, "qualified_pick": "True",
+        "wager_approved": "True", "production_eligible": "True",
+        "line_consistency_flag": "True", "line_event_identity_match_flag": "True",
+        flag: "False",
+    }])
+    card = build_all_games_lean_card(source, calibration=None, bucket_stats=None)
+    assert not bool(card.iloc[0]["Production_Gate_Pass"])
+    assert float(card.iloc[0]["Suggested_Stake"]) == 0.0
+    assert not bool(card.iloc[0]["Line_Available"])
+
+
+@pytest.mark.parametrize("qualified,expected_tier", [("False", "AVOID"), ("True", "LEAN")])
+def test_text_qualification_and_started_flags_keep_research_tier(qualified, expected_tier):
+    source = pd.DataFrame([{
+        "league": "MLB", "home_team": "A", "away_team": "B",
+        "best_pick": "Under 8.5", "Pick_Status": "Below Threshold",
+        "effective_expected_value": 0.1, "effective_win_probability": 0.65,
+        "odds_american": -110, "consensus_agreement": "Agrees",
+        "qualified_pick": qualified, "game_already_started_flag": "False",
+    }])
+    card = build_all_games_lean_card(source, calibration=None, bucket_stats=None)
+    assert not bool(card.iloc[0]["Started"])
+    assert card.iloc[0]["Tier"] == expected_tier
+    assert float(card.iloc[0]["Suggested_Stake"]) == 0.0
+
+
+@pytest.mark.parametrize("availability_column", ["Line_Available", "Playable"])
+def test_stake_attachment_respects_string_flags(availability_column):
+    card = pd.DataFrame({
+        "Tier": ["BET", "BET", "BET", "AVOID"],
+        "Emp_Edge": [0.1] * 4,
+        "Suggested_Stake": [8.0, 8.0, 8.0, 0.0],
+        availability_column: ["False", "True", "True", "True"],
+        "Started": ["False", "False", "True", "False"],
+        "Qualified_Pick": ["True", "True", "True", "False"],
+    })
+    result = attach_play_stakes(card)
+    assert result.Play_Stake.tolist() == [0.0, 8.0, 0.0, 0.0]
+    assert result.Tier.tolist() == ["UNAVAILABLE", "BET", "STARTED", "AVOID"]
+    assert result.Wager_Approved.tolist() == [False, True, False, False]
+    assert result.iloc[3].Export_Role == "BEST AVAILABLE PICK - PASS / RESEARCH"
+
+
 def test_classify_tiers():
     assert classify_lean_tier(
         "Actionable", 0.05, "Neutral", calibrated_win=0.58, break_even=0.524
