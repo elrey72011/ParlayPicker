@@ -1095,6 +1095,25 @@ TEAM_MAP.update(load_dynamic_aliases())
 
 # POST-PROCESSING OVERRIDES TO ENSURE EXACT MATCHES
 overrides = {
+    # Whole-name feed aliases. Keep renamed schools and mascot variants on one
+    # identity for odds recovery, candidate grouping, and upload matching.
+    "houston baptist": "Houston Christian",
+    "houston baptist huskies": "Houston Christian",
+    "houston christian": "Houston Christian",
+    "houston christian huskies": "Houston Christian",
+    "citadel": "Citadel",
+    "citadel bulldogs": "Citadel",
+    "the citadel": "Citadel",
+    "the citadel bulldogs": "Citadel",
+    "nicholls": "Nicholls State",
+    "nicholls colonels": "Nicholls State",
+    "nicholls state": "Nicholls State",
+    "nicholls state colonels": "Nicholls State",
+    "nicholls st colonels": "Nicholls State",
+    "se louisiana": "Southeastern Louisiana",
+    "se louisiana lions": "Southeastern Louisiana",
+    "southeastern louisiana": "Southeastern Louisiana",
+    "southeastern louisiana lions": "Southeastern Louisiana",
     "california baptist lancers": "California Baptist",
     "ca baptist lancers": "California Baptist",
     "california baptist": "California Baptist",

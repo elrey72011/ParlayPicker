@@ -17,6 +17,8 @@ from zoneinfo import ZoneInfo
 
 import requests
 
+from core.team_mapper import normalize_team_name
+
 
 logger = logging.getLogger(__name__)
 
@@ -168,7 +170,10 @@ def _market_outcomes(
 
 
 def _canonical_team(value: Any) -> str:
-    normalized = str(value or "").lower().replace("st. ", "saint ").replace("st ", "saint ")
+    # The fallback and primary feeds use different school names and mascots.
+    # Share the pipeline's exact aliases before comparing event identities so
+    # recovery cannot append a second game (or displace the primary quote).
+    normalized = normalize_team_name(str(value or "")).lower()
     return re.sub(r"[^a-z0-9]", "", normalized)
 
 
