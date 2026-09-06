@@ -12,6 +12,7 @@ os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
 import traceback
 import warnings
 import hashlib
+import json
 from typing import Any
 
 import logging
@@ -1974,6 +1975,17 @@ def main() -> None:
         # We still want to call render_results_dashboard to show the file uploader
         # even if perf_df is None
         render_results_dashboard(perf_df)
+
+    with st.expander("Prediction Evidence Status", expanded=False):
+        from app_core.evidence_health import evidence_health
+        health = evidence_health()
+        st.write(f"Store: {health['status']} · Saved runs: {health['snapshots']} · Score revisions: {health['score_revisions']}")
+        if health["latest_snapshot_id"]:
+            st.caption(f"Latest snapshot: {health['latest_snapshot_id']} · {health['latest_generated_at']}")
+            st.caption(f"Exact quote timestamps: {health['latest_exact_quote_times']}/{health['latest_candidates']} candidates")
+        st.caption(health["persistence_note"])
+        st.download_button("Download Evidence Status", json.dumps(health, indent=2),
+                           file_name="prediction-evidence-status.json", mime="application/json")
 
     if analysis_df is None or analysis_df.empty:
         st.info("Configure filters in the sidebar and click **Run Master Analysis**.")

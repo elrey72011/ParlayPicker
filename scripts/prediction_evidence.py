@@ -15,12 +15,16 @@ from core.selector_validation import build_report, render_markdown
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["refresh", "import-scores", "report"])
+    parser.add_argument("command", choices=["refresh", "import-scores", "report", "status"])
     parser.add_argument("--database", type=Path)
     parser.add_argument("--scores", type=Path, help="Final scores with snapshot_id and matchup_id")
     parser.add_argument("--train-through", help="Final development slate in Eastern time")
     parser.add_argument("--output", type=Path, default=Path("output/live-selector-validation"))
     args = parser.parse_args(argv)
+    if args.command == "status":
+        from app_core.evidence_health import evidence_health
+        print(json.dumps(evidence_health(args.database), indent=2))
+        return 0
     if args.command == "import-scores":
         if not args.scores:
             parser.error("--scores is required")

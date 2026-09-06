@@ -13,6 +13,7 @@ import uuid
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
+PROCESS_INSTANCE = uuid.uuid4().hex
 PROVENANCE_COLUMNS = [
     "snapshot_id", "prediction_generated_at", "model_version", "model_trained_through",
     "model_available_at", "training_cutoff_basis", "probability_semantics",
@@ -41,13 +42,15 @@ def connect(path=None):
             snapshot_id TEXT PRIMARY KEY, version TEXT NOT NULL REFERENCES bundles(version),
             generated_at TEXT NOT NULL, candidates TEXT NOT NULL, decisions TEXT NOT NULL,
             inputs TEXT NOT NULL, payload_hash TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS snapshot_runtime (
+            snapshot_id TEXT PRIMARY KEY REFERENCES snapshots(snapshot_id), process_instance TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS score_revisions (
             snapshot_id TEXT NOT NULL REFERENCES snapshots(snapshot_id),
             evidence_hash TEXT NOT NULL, recorded_at TEXT NOT NULL, scores TEXT NOT NULL,
             PRIMARY KEY(snapshot_id, evidence_hash));
     """)
     # Protect against accidental UPDATE/DELETE even from future application code.
-    for table in ("bundles", "snapshots", "score_revisions"):
+    for table in ("bundles", "snapshots", "score_revisions", "snapshot_runtime"):
         for action in ("UPDATE", "DELETE"):
             db.execute(f"CREATE TRIGGER IF NOT EXISTS immutable_{table}_{action} BEFORE {action} ON {table} "
                        "BEGIN SELECT RAISE(ABORT, 'prediction evidence is append-only'); END")
@@ -220,6 +223,7 @@ def capture_run(context, audit, final, inputs, *, path=None):
             raise ValueError("This run already has an immutable snapshot; start a new run")
         db.execute("INSERT INTO snapshots VALUES (?, ?, ?, ?, ?, ?, ?)",
                    (context["snapshot_id"], context["model_version"], generated, *payload, digest))
+        db.execute("INSERT INTO snapshot_runtime VALUES (?, ?)", (context["snapshot_id"], PROCESS_INSTANCE))
     return audit, final
 
 

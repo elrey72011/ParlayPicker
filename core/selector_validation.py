@@ -187,7 +187,7 @@ def _comparison(pool):
 
 
 def build_report(audits, *, train_through, probability_column="calibrated_probability",
-                 market_column="market_probability", selections=None, specification=None):
+                 market_column="market_probability", selections=None, specification=None, return_eligible=False):
     """Evaluate only complete, pregame snapshots with declared model provenance.
 
     Development/evaluation separation is by Eastern calendar slate. A model's
@@ -289,7 +289,7 @@ def build_report(audits, *, train_through, probability_column="calibrated_probab
                        if preregistered else "Specification does not establish a matching freeze before evaluation/prediction.")
     exclusions = [{"reason": reason, "rows": len(group), "events": int(group._event.nunique())}
                   for reason, group in f[f._reason.ne("")].groupby("_reason", sort=True)]
-    return {
+    report = {
         "configuration": configuration,
         "status": "evaluated" if len(eligible) else "insufficient_verified_data",
         "evidence": {"preregistered": preregistered, "note": spec_reason,
@@ -319,6 +319,8 @@ def build_report(audits, *, train_through, probability_column="calibrated_probab
             "No automatic model promotion or profitability conclusion; a freeze alone cannot prove data were never inspected.",
         ],
     }
+
+    return (report, eligible) if return_eligible else report
 
 
 def render_markdown(report):
