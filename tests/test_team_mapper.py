@@ -5,6 +5,7 @@ from core.team_mapper import normalize_team_name
 
 
 @pytest.mark.parametrize("aliases,canonical", [
+    (["Louisiana", "Louisiana Ragin Cajuns", "Louisiana Ragin' Cajuns", "Louisiana Ragin’ Cajuns"], "Louisiana"),
     (["Houston Baptist", "Houston Baptist Huskies", "Houston Christian", "Houston Christian Huskies"], "Houston Christian"),
     (["Citadel", "Citadel Bulldogs", "The Citadel", "The Citadel Bulldogs"], "Citadel"),
     (["Nicholls", "Nicholls Colonels", "Nicholls State", "Nicholls State Colonels", "Nicholls St Colonels"], "Nicholls State"),
@@ -26,6 +27,12 @@ def test_nba_mappings():
     assert normalize_team_name("Detroit Pistons") == "Detroit"
     assert normalize_team_name("Memphis Grizzlies") == "Memphis"
     assert normalize_team_name("Golden State Warriors") == "Golden State"
+
+
+def test_louisiana_alias_does_not_collapse_other_louisiana_schools():
+    schools = ["Louisiana", "Louisiana Tech Bulldogs", "Louisiana-Monroe Warhawks",
+               "Southeastern Louisiana Lions", "LSU Tigers"]
+    assert len({normalize_team_name(school) for school in schools}) == len(schools)
 
 def test_nhl_mappings():
     assert normalize_team_name("Toronto Maple Leafs") == "Toronto"

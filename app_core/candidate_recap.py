@@ -383,7 +383,7 @@ def _summarize(ledger: pd.DataFrame, group_column: str, output_column: str) -> p
         "Pushes",
         "Hit Rate",
         "Selected Rows",
-        "Avg Probability",
+        "Avg Ranking Score",
         "Avg EV",
     ]
     if ledger is None or ledger.empty or group_column not in ledger.columns:
@@ -418,7 +418,7 @@ def _summarize(ledger: pd.DataFrame, group_column: str, output_column: str) -> p
                 "Pushes": pushes,
                 "Hit Rate": (wins / decisions) if decisions else 0.0,
                 "Selected Rows": int(group["_selected"].sum()),
-                "Avg Probability": group["_probability"].mean(),
+                "Avg Ranking Score": group["_probability"].mean(),
                 "Avg EV": group["_ev"].mean(),
             }
         )
@@ -517,6 +517,12 @@ def summarize_selected_trend(ledger: pd.DataFrame) -> dict[str, object]:
     probability = pd.to_numeric(
         _series(work, ("selection_probability_used",)), errors="coerce"
     ).loc[settled]
+    # The selector's empirical blend ranks alternatives; it is not a calibrated
+    # forecast and must not power an expected-wins significance test.
+    ranking_only = _series(work, ("selection_probability_source",), "").astype(
+        "string"
+    ).str.strip().str.casefold().eq("empirical_bucket_blend").fillna(False)
+    probability = probability.mask(ranking_only.loc[settled])
     usable_probability = probability[probability.between(0.0, 1.0, inclusive="both")]
     expected_decisions = int(usable_probability.count())
     expected_wins = float(usable_probability.sum()) if expected_decisions else None
@@ -544,7 +550,7 @@ def summarize_selected_trend(ledger: pd.DataFrame) -> dict[str, object]:
     elif expected_decisions != decisions:
         status = "INSUFFICIENT_EXPECTATION_DATA"
         reason = (
-            "Some selected decisions lack a valid final selection probability, "
+            "Some selected decisions have ranking-only scores or lack a valid final selection probability, "
             "so expected-versus-observed regression testing is unavailable."
         )
     elif (

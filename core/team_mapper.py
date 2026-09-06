@@ -1095,6 +1095,10 @@ TEAM_MAP.update(load_dynamic_aliases())
 
 # POST-PROCESSING OVERRIDES TO ENSURE EXACT MATCHES
 overrides = {
+    "louisiana": "Louisiana",
+    "louisiana ragin cajuns": "Louisiana",
+    "louisiana ragin' cajuns": "Louisiana",
+    "louisiana ragin’ cajuns": "Louisiana",
     # Whole-name feed aliases. Keep renamed schools and mascot variants on one
     # identity for odds recovery, candidate grouping, and upload matching.
     "houston baptist": "Houston Christian",
