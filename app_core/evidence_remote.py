@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 import threading
 
-from app_core.evidence_config import safe_error
+from app_core.evidence_config import safe_error, EvidenceStorageError
 
 TABLES = {
     "bundles": ("version", "frozen_at", "manifest"),
@@ -32,7 +32,8 @@ def remote_status():
     return {"provider": "google_workspace_shared_drive", "configured": bool(bucket), "status": "not_configured" if not bucket else _status.get("status", "not_checked"),
             "restored_snapshots": _status.get("restored_snapshots", 0) if bucket else 0,
             "last_success_at": _status.get("last_success_at") if bucket else None,
-            "error": _status.get("error") if bucket else None}
+            "error": _status.get("error") if bucket else None,
+            "operation": _status.get("operation") if bucket else None}
 
 
 def _client():
@@ -51,18 +52,23 @@ def _key(table, row):
 
 
 def _decode(raw, table):
-    item = json.loads(raw)
+    try:
+        item = json.loads(raw)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        raise EvidenceStorageError("Remote evidence file is not valid JSON; preserve the file for inspection.") from None
+    if not isinstance(item, dict):
+        raise EvidenceStorageError("Remote evidence file must contain a JSON object")
     if item.get("schema") != 1 or item.get("table") != table:
-        raise ValueError("Unexpected remote evidence schema")
+        raise EvidenceStorageError("Unexpected remote evidence schema")
     row = item.get("row")
     if not isinstance(row, list) or len(row) != len(TABLES[table]) or not all(isinstance(v, str) for v in row):
-        raise ValueError("Invalid remote evidence record")
+        raise EvidenceStorageError("Invalid remote evidence record")
     if table == "bundles" and hashlib.sha256(row[2].encode()).hexdigest() != row[0]:
-        raise ValueError("Remote model manifest hash mismatch")
+        raise EvidenceStorageError("Remote model manifest hash mismatch")
     if table == "snapshots" and hashlib.sha256("\0".join(row[3:6]).encode()).hexdigest() != row[6]:
-        raise ValueError("Remote prediction hash mismatch")
+        raise EvidenceStorageError("Remote prediction hash mismatch")
     if table == "score_revisions" and hashlib.sha256(row[3].encode()).hexdigest() != row[1]:
-        raise ValueError("Remote score hash mismatch")
+        raise EvidenceStorageError("Remote score hash mismatch")
     return tuple(row)
 
 
@@ -90,11 +96,11 @@ def _put(client, table, row, *, choose_existing=False):
         # Idempotent score corrections may be observed at different times.
         same_score = table == "score_revisions" and existing[:2] == tuple(row[:2]) and existing[3] == row[3]
         if existing != tuple(row) and not same_score:
-            raise ValueError("Remote immutable record conflicts with local evidence")
+            raise EvidenceStorageError("Remote immutable record conflicts with local evidence")
     # Read back the object: successful PUT alone is not the verification result.
     verified = _decode(_get(client, key), table)
     if verified != tuple(row) and not (table == "score_revisions" and verified[:2] == tuple(row[:2]) and verified[3] == row[3]):
-        raise ValueError("Remote read-back differs from local evidence")
+        raise EvidenceStorageError("Remote read-back differs from local evidence")
     return verified
 
 
@@ -114,12 +120,13 @@ def restore(path=None, *, client=None):
     rows = {table: [] for table in TABLES}
     # Table-specific listing preserves referential order; all pages are consumed.
     for table in TABLES:
+        _status["operation"] = f"restore:{table}"
         pages = client.get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix=f"{prefix}/{table}/")
         for page in pages:
             for item in page.get("Contents", []):
                 row = _decode(_get(client, item["Key"]), table)
                 if item["Key"] != _key(table, row):
-                    raise ValueError("Remote record key does not match its identity")
+                    raise EvidenceStorageError("Remote record key does not match its identity")
                 rows[table].append(row)
     imported = 0
     with closing(connect(path or database_path())) as db, db:
@@ -132,7 +139,7 @@ def restore(path=None, *, client=None):
                 existing = db.execute(f"SELECT {','.join(TABLES[table])} FROM {table} WHERE {where}", identity).fetchone()
                 same_score = existing and table == "score_revisions" and existing[:2] == row[:2] and existing[3] == row[3]
                 if existing and existing != row and not same_score:
-                    raise ValueError("Restore conflicts with immutable local evidence")
+                    raise EvidenceStorageError("Restore conflicts with immutable local evidence")
                 if not existing:
                     db.execute(f"INSERT INTO {table} ({','.join(TABLES[table])}) VALUES ({','.join('?' for _ in row)})", row)
                     imported += int(table == "snapshots")
@@ -168,8 +175,9 @@ def sync(path=None, *, client=None):
                 records = {table: db.execute(f"SELECT {','.join(columns)} FROM {table}").fetchall() for table, columns in TABLES.items()}
             for table, rows in records.items():
                 for row in rows:
+                    _status["operation"] = f"upload_verify:{table}"
                     _put(client, table, row)
-            _status.update(status="synced", last_success_at=now_utc(), error=None)
+            _status.update(status="synced", last_success_at=now_utc(), error=None, operation="complete")
             return True
         except Exception as exc:
             # Local evidence survives a network outage; the UI explicitly shows it

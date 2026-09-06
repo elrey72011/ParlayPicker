@@ -110,6 +110,8 @@ def test_existing_remote_identity_cannot_be_overwritten(frozen, cloud):
     item['row'][1] = 'another-runtime'
     cloud.objects[key] = json.dumps(item).encode()
     assert not remote.sync(db)
+    assert 'conflicts with local evidence' in remote.remote_status()['error']
+    assert remote.remote_status()['operation'] == 'upload_verify:snapshot_runtime'
     assert json.loads(cloud.objects[key])['row'][1] == 'another-runtime'
 
 

@@ -1995,6 +1995,8 @@ def main() -> None:
         st.write(f"Remote backup: {remote['status']} · Snapshots restored: {remote['restored_snapshots']}")
         if remote["error"]:
             st.warning(remote["error"])
+            if remote.get("operation"):
+                st.caption(f"Storage operation: {remote['operation']}")
         st.write(f"Store: {health['status']} · Saved runs: {health['snapshots']} · Score revisions: {health['score_revisions']}")
         if health["latest_snapshot_id"]:
             st.caption(f"Latest snapshot: {health['latest_snapshot_id']} · {health['latest_generated_at']}")

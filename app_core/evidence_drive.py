@@ -4,6 +4,8 @@ import json
 import re
 import uuid
 
+from app_core.evidence_config import EvidenceStorageError
+
 API = "https://www.googleapis.com/drive/v3/files"
 
 
@@ -19,8 +21,9 @@ conflicting duplicates fail closed. No update/delete operation is implemented.
 """
     def __init__(self, folder, session=None):
         if not re.fullmatch(r"[A-Za-z0-9_-]+", folder):
-            raise ValueError("Use the Shared Drive folder ID, not a URL")
+            raise EvidenceStorageError("Use the Shared Drive folder ID, not a URL")
         self.folder = folder
+        self.created_ids = {}
         if session is None:
             from google.oauth2.service_account import Credentials
             from google.auth.transport.requests import AuthorizedSession
@@ -39,7 +42,7 @@ conflicting duplicates fail closed. No update/delete operation is implemented.
         response.raise_for_status()
         metadata = response.json()
         if not metadata.get("driveId") or metadata.get("trashed") or metadata.get("mimeType") != "application/vnd.google-apps.folder":
-            raise ValueError("Evidence folder must be an active Google Workspace Shared Drive folder")
+            raise EvidenceStorageError("Evidence folder must be an active Google Workspace Shared Drive folder")
         self.drive = metadata["driveId"]
 
     def _files(self, name=None):
@@ -57,7 +60,7 @@ conflicting duplicates fail closed. No update/delete operation is implemented.
             response.raise_for_status()
             data = response.json()
             if data.get("incompleteSearch"):
-                raise ValueError("Drive listing was incomplete; restore cannot be verified")
+                raise EvidenceStorageError("Drive listing was incomplete; restore cannot be verified")
             yield from data.get("files", [])
             token = data.get("nextPageToken")
             if not token:
@@ -65,20 +68,25 @@ conflicting duplicates fail closed. No update/delete operation is implemented.
 
     def get_object(self, *, Key, **kwargs):
         files = list(self._files(Key))
+        # A successful upload returns an authoritative file ID. Search indexing
+        # need not be used to rediscover the file before read-back verification.
+        created_id = self.created_ids.get(Key)
+        if created_id and all(item["id"] != created_id for item in files):
+            files.append({"id": created_id, "name": Key})
         if not files:
-            raise ValueError("Remote evidence object is missing")
+            raise EvidenceStorageError("Remote evidence object is missing")
         contents = []
         for item in files:
             response = self.session.get(f"{API}/{item['id']}", params={"alt": "media", "supportsAllDrives": "true"}, timeout=20)
             response.raise_for_status()
             contents.append(response.content)
         if any(raw != contents[0] for raw in contents):
-            raise ValueError("Drive contains conflicting duplicate evidence names")
+            raise EvidenceStorageError("Drive contains conflicting duplicate evidence names")
         return {"Body": BytesIO(contents[0])}
 
     def put_object(self, *, Key, Body, IfNoneMatch, **kwargs):
         if IfNoneMatch != "*":
-            raise ValueError("Only create-only evidence uploads are supported")
+            raise EvidenceStorageError("Only create-only evidence uploads are supported")
         if list(self._files(Key)):
             raise AlreadyExists()
         boundary = "evidence_" + uuid.uuid4().hex
@@ -90,12 +98,16 @@ conflicting duplicates fail closed. No update/delete operation is implemented.
                                      params={"uploadType": "multipart", "supportsAllDrives": "true", "fields": "id"},
                                      headers={"Content-Type": f"multipart/related; boundary={boundary}"}, data=body, timeout=30)
         response.raise_for_status()
+        file_id = response.json().get("id")
+        if not isinstance(file_id, str) or not file_id:
+            raise EvidenceStorageError("Drive accepted upload but returned no file ID; retry synchronization.")
+        self.created_ids[Key] = file_id
         # The caller reads every matching object back, detecting conflicts even
         # when another writer races this creation or a timed-out upload is retried.
 
     def get_paginator(self, name):
         if name != "list_objects_v2":
-            raise ValueError("Unsupported listing operation")
+            raise EvidenceStorageError("Unsupported listing operation")
         return self
 
     def paginate(self, *, Prefix, **kwargs):
