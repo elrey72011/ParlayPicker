@@ -566,3 +566,22 @@ def test_coverage_rows_cannot_retain_any_stake_like_value():
         "Suggested_Stake",
     ):
         assert float(row[column]) == 0.0
+
+def test_resolved_model_direction_survives_overlays_and_both_ranking_stages(monkeypatch):
+    monkeypatch.setattr('core.empirical_tiers.load_bucket_stats', lambda: {})
+    monkeypatch.setattr('core.probability_calibration.load_calibration', lambda: None)
+    rows = [_candidate('total_over', .49, .02), _candidate('total_under', .51, .02)]
+    for row, p in zip(rows, [.64, .36]):
+        row.update(ml_probability=p, ml_target=row['market_type'],
+                   ml_probability_source='score-distribution-v1:mlb',
+                   ml_feature_quality='resolved_team_scoring_stats')
+    diagnostics = {}
+    best = build_best_picks_df(pd.DataFrame(rows), diagnostics_out=diagnostics)
+    assert best.iloc[0].market_type == 'total_over'
+    audit = diagnostics['candidate_audit_df']
+    winner = audit[audit.best_available_selected].iloc[0]
+    assert winner.best_available_rank == 1
+    assert winner.best_available_family_rank == 1
+    assert bool(winner.best_available_selection_verified)
+    assert audit.loc[audit.market_type.eq('total_under'), 'model_direction_guard_applied'].all()
+    assert not audit.wager_approved.any()

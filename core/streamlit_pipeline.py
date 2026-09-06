@@ -4436,6 +4436,14 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         _direction_conflict & _kalshi_opp, float(MLB_THEOVER_CONFLICT_PENALTY), 0.0
     )
 
+    from core.model_direction import guard_model_direction
+
+    pool = guard_model_direction(pool)
+    if diagnostics_out is not None:
+        diagnostics_out["model_direction_guard_count"] = int(
+            pool["model_direction_guard_applied"].sum()
+        )
+
     # 4. Deterministic ranking contract. Every valid pregame candidate receives an
     # auditable rank. The two-stage family comparison is mathematically equivalent
     # to the global argmax because both stages use this exact same sort contract.
@@ -4650,6 +4658,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         "orientation_source", "raw_book_odds_diag",
         "selection_probability_used", "selection_probability_source",
         "selection_probability_pair_normalized",
+        "model_direction_pre_guard_score",
+        "model_direction_guard_applied", "model_direction_guard_penalty",
+        "model_direction_guard_reason",
         "mlb_spread_finalist_penalty_applied",
         "mlb_spread_finalist_penalty_value",
         "mlb_spread_finalist_penalty_reason",
