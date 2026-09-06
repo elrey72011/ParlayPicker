@@ -7472,16 +7472,33 @@ def _consensus_total_line(row):
         points.append(novig_point)
     return float(pd.Series(points).median()) if points else pd.NA
 
+def _usable_total_price_pair(row, book):
+    """Require two real prices at the same quoted total before using a book."""
+    points = [pd.to_numeric(row.get(f"{book}_{side}_point"), errors="coerce")
+              for side in ("over", "under")]
+    prices = [pd.to_numeric(row.get(f"{book}_{side}_price"), errors="coerce")
+              for side in ("over", "under")]
+    return bool(
+        all(pd.notna(v) and np.isfinite(float(v)) for v in points + prices)
+        and float(points[0]) > 0
+        and abs(float(points[0]) - float(points[1])) < 1e-9
+        and all(100 <= abs(float(v)) <= 10000 for v in prices)
+    )
+
+
 def _consistent_total_book(row, side):
-    """First book whose total line for ``side`` ("over"/"under") matches the cross-book
-    consensus, or None. A no-op for the common case where every book agrees (novig is
-    first and matches); only diverts off novig when it is the outlier."""
+    """First book with a complete priced total pair at the consensus line.
+
+    Skip missing or suspended prices and mismatched over/under lines, so recovery
+    cannot stop at an unpriced book while a usable quote exists later in the list.
+    """
     consensus = _consensus_total_line(row)
     if pd.isna(consensus):
         return None
     for bk in ("novig", "fanduel", "draftkings", "betmgm"):
         pt = pd.to_numeric(row.get(f"{bk}_{side}_point"), errors="coerce")
-        if pd.notna(pt) and abs(float(pt) - consensus) < 1e-9:
+        if (pd.notna(pt) and abs(float(pt) - consensus) < 1e-9
+                and _usable_total_price_pair(row, bk)):
             return bk
     return None
 
@@ -8856,7 +8873,8 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
                     pd.notna(point_val) and pd.notna(_cons_line)
                     and abs(float(point_val) - float(_cons_line)) > NOVIG_TOTAL_OUTLIER_TOL
                 )
-                if pd.isna(point_val) or _novig_outlier:
+                if (pd.isna(point_val) or _novig_outlier
+                        or not _usable_total_price_pair(row, "novig")):
                     cb = _consistent_total_book(row, t_side)
                     cb_point = pd.to_numeric(row.get(f"{cb}_{t_side}_point"), errors="coerce") if cb else pd.NA
                     if cb is not None and pd.notna(cb_point):
@@ -8878,6 +8896,15 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
                                 cb if pd.notna(cb_opposing_price) else "missing"
                             )
                             market_dict["odds_source"] = "odds_api"
+                            spread_line_source = f"{cb}_priced_total_consensus"
+                    else:
+                        # Keep an unresolved research row; never attach a default
+                        # price or the rejected exchange price to another line.
+                        market_dict["odds_american"] = pd.NA
+                        market_dict["opposing_odds_american"] = pd.NA
+                        market_dict["odds_source"] = "rejected_live_total_price"
+                        market_dict["opposing_odds_source"] = "rejected"
+                        # The quoted line remains useful for drift diagnostics.
                 if pd.isna(point_val):
                     # A live spread upload must not manufacture two unresolved
                     # total candidates when no book published a total market.
