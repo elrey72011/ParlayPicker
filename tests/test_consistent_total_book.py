@@ -27,6 +27,9 @@ def test_consensus_ignores_single_outlier():
         "betmgm_over_point": 8.5, "betmgm_under_point": 8.5,
     }
     assert _consensus_total_line(row) == 8.5
+    for book in ("novig", "fanduel", "draftkings", "betmgm"):
+        row.setdefault(f"{book}_over_price", -110)
+        row.setdefault(f"{book}_under_price", -110)
     assert _consistent_total_book(row, "over") == "fanduel"  # first book at consensus, skipping novig
 
 
@@ -35,6 +38,9 @@ def test_novig_used_when_it_agrees():
         "novig_over_point": 8.5, "novig_under_point": 8.5,
         "fanduel_over_point": 8.5, "fanduel_under_point": 8.5,
     }
+    for book in ("novig", "fanduel", "draftkings", "betmgm"):
+        row.setdefault(f"{book}_over_price", -110)
+        row.setdefault(f"{book}_under_price", -110)
     assert _consistent_total_book(row, "over") == "novig"
 
 
@@ -93,6 +99,9 @@ def test_standard_book_mode_prevents_unquoted_synthetic_median():
         "betmgm_over_point": 10.0, "betmgm_under_point": 10.0,
     }
     assert _consensus_total_line(row) == 10.0
+    for book in ("novig", "fanduel", "draftkings", "betmgm"):
+        row.setdefault(f"{book}_over_price", -110)
+        row.setdefault(f"{book}_under_price", -110)
     assert _consistent_total_book(row, "over") == "draftkings"
     assert _consistent_total_book(row, "under") == "draftkings"
 
@@ -121,3 +130,46 @@ def test_expand_recovers_totals_from_standard_book_agreement():
     assert float(over["odds_american"]) == -108.0
     assert float(under["odds_american"]) == -112.0
 
+
+
+def _recovery_row():
+    return {
+        "league": "MLB", "home_team": "Miami", "away_team": "Atlanta",
+        "game_date": "2026-09-07", "matchup_id": "recovery",
+        "commence_time_raw": "2026-09-07T23:00:00Z",
+        **{f"{book}_{side}_point": 8.5
+           for book in ("novig", "fanduel", "draftkings") for side in ("over", "under")},
+        "draftkings_over_price": -108, "draftkings_under_price": -112,
+    }
+
+
+def test_missing_novig_price_skips_unpriced_first_consensus_book():
+    out, _ = _expand_live_odds_to_bet_rows(pd.DataFrame([_recovery_row()]), None)
+    totals = out[out.market_type.str.startswith("total")].set_index("market_type")
+    assert totals.loc["total_over", "odds_american"] == -108
+    assert totals.loc["total_under", "odds_american"] == -112
+    assert set(totals.opposing_odds_source) == {"draftkings"}
+    assert set(totals.line_source) == {"draftkings_priced_total_consensus"}
+
+
+def test_invalid_or_mismatched_pair_recovers_without_mixing_books():
+    for invalid in (None, 0, -50, -100000, float("inf")):
+        row = _recovery_row()
+        row.update(novig_over_price=-105, novig_under_price=invalid,
+                   fanduel_over_price=-110, fanduel_under_price=-110,
+                   fanduel_under_point=9.5)
+        out, _ = _expand_live_odds_to_bet_rows(pd.DataFrame([row]), None)
+        totals = out[out.market_type.str.startswith("total")]
+        assert set(totals.odds_american) == {-108, -112}
+        assert set(totals.opposing_odds_source) == {"draftkings"}
+
+
+def test_no_priced_consensus_never_manufactures_total_price():
+    row = _recovery_row()
+    row.pop("draftkings_under_price")
+    out, _ = _expand_live_odds_to_bet_rows(pd.DataFrame([row]), None)
+    totals = out[out.market_type.str.startswith("total")]
+    assert len(totals) == 2
+    assert totals.odds_american.isna().all()
+    assert totals.opposing_odds_american.isna().all()
+    assert set(totals.odds_source) == {"rejected_live_total_price"}
