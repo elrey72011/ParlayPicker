@@ -649,6 +649,8 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
     )
 
     st.subheader("Prior Day Performance")
+    from app.ui.threshold_dashboard import render_threshold_dashboard
+    render_threshold_dashboard()
     if isinstance(picks_df, pd.DataFrame):
         for report_path in picks_df.attrs.get("prediction_validation_reports", []):
             from pathlib import Path

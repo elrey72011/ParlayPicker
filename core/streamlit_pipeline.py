@@ -337,6 +337,9 @@ def ensure_best_pick_export_columns(
         export_df = pd.DataFrame()
 
     out = export_df.copy()
+    # Compact cards retain their public alias and the canonical evidence field.
+    if "calibrated_probability" not in out.columns and "WinProbability" in out.columns:
+        out["calibrated_probability"] = pd.to_numeric(out["WinProbability"], errors="coerce")
     req_cols = list(required_columns or REQUIRED_BEST_PICK_EXPORT_COLUMNS)
     default_values: dict[str, object] = {
         "odds_feed_source": "",

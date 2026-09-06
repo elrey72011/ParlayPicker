@@ -146,3 +146,34 @@ python scripts/prediction_evidence.py report --train-through YYYY-MM-DD --output
 All commands accept `--database PATH` for an alternate evidence database. Scheduled
 execution is not installed: refreshing Performance Recap or running the command
 triggers the work. Original predictions are never rewritten by grading or reports.
+
+
+## Development threshold comparisons
+
+In Performance Recap, expand **Development Threshold Comparison**, load saved
+evidence, choose the training cutoff and development end date, and generate the
+comparison. Approved wagers are the default scope; coverage picks are a separate
+exploratory scope. The fixed probability grid reports volume, coverage, odds, hit
+rate, flat-stake ROI and a market-only comparison on the same games, by league and
+market. Markdown and JSON downloads include verification exclusions; JSON also
+includes calibration and uncertainty metrics. No production thresholds change.
+
+```powershell
+python scripts/compare_thresholds.py --train-through 2026-09-02 --development-through 2026-09-05 --output output/threshold-comparison
+python scripts/prediction_evidence.py status
+```
+
+The threshold command also accepts `--audits` CSV paths/globs and `--selections`
+final decision exports, or an alternate `--database`. It removes later slates
+before validation and snapshot selection. Compare rules only on development data,
+freeze a chosen rule, then evaluate untouched future slates. Exploring many
+thresholds increases selection bias; displayed intervals are pointwise, not a
+multiple-comparison adjustment. A small sample reaching 75% proves neither a
+sustainable win rate nor profitability.
+
+**Prediction Evidence Status** is visible before a new analysis run. Download its
+JSON to inspect snapshot counts, latest ID/time, payload health and quote binding.
+Access to snapshots written by a previous process provides a restart observation;
+it does not prove survival of a hosting redeployment. Older snapshots without
+process identifiers cannot supply this observation. Hosted durability remains
+unverified until separately tested with genuinely persistent storage.

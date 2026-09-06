@@ -46,6 +46,9 @@ jobs:
           tests/test_model_validation.py
           tests/test_selector_validation.py
           tests/test_prediction_evidence.py
+          tests/test_threshold_validation.py
+          tests/test_evidence_health.py
+          tests/test_compact_probability_export.py
           tests/test_walk_forward.py
           tests/test_ml_target_guard.py
           tests/test_parlay_safety.py
