@@ -4648,6 +4648,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         "ml_probability", "ml_probability_source", "ml_target", "ml_projection",
         "ml_residual_scale", "ml_feature_quality", "theover_probability",
         "orientation_source", "raw_book_odds_diag",
+        "blend_in_kalshi", "blend_in_market", "blend_in_theover", "blend_in_ml", "blend_tier",
         "selection_probability_used", "selection_probability_source",
         "selection_probability_pair_normalized",
         "mlb_spread_finalist_penalty_applied",

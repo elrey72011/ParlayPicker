@@ -566,3 +566,21 @@ def test_coverage_rows_cannot_retain_any_stake_like_value():
         "Suggested_Stake",
     ):
         assert float(row[column]) == 0.0
+
+def test_candidate_audit_retains_oriented_blend_inputs_for_all_alternatives(monkeypatch):
+    monkeypatch.setattr('core.empirical_tiers.load_bucket_stats', lambda: {})
+    monkeypatch.setattr('core.probability_calibration.load_calibration', lambda: None)
+    rows = [_candidate('total_over', .64, .10), _candidate('total_under', .36, -.10)]
+    for row, p in zip(rows, [.64, .36]):
+        row.update(blend_in_kalshi=p, blend_in_market=p, blend_in_theover=float('nan'),
+                   blend_in_ml=p, blend_tier='test')
+    diagnostics = {}
+    build_best_picks_df(pd.DataFrame(rows), diagnostics_out=diagnostics)
+    audit = diagnostics['candidate_audit_df'].set_index('market_type')
+    assert len(audit) == 2
+    for name in ['blend_in_kalshi', 'blend_in_market', 'blend_in_ml']:
+        assert audit.loc['total_over',name] == .64
+        assert audit.loc['total_under',name] == .36
+    assert audit.blend_in_theover.isna().all()
+    assert audit.blend_tier.eq('test').all()
+    assert not audit.wager_approved.any()
