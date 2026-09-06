@@ -338,3 +338,26 @@ def test_selected_trend_flags_large_multi_slate_shortfall():
     assert trend["decisions"] == 50
     assert trend["slates"] == 5
     assert float(trend["lower_tail_probability"]) < 0.05
+
+
+def test_ranking_blends_do_not_trigger_probability_regression_claims():
+    ledger = pd.DataFrame([
+        {
+            "game_date": f"2026-09-{index // 10 + 1:02d}",
+            "best_available_selected": True,
+            "candidate_outcome": "WIN" if index < 25 else "LOSS",
+            "selection_probability_used": 0.80,
+            "selection_probability_source": "empirical_bucket_blend",
+            "best_available_rank": 1,
+        }
+        for index in range(50)
+    ])
+    trend = summarize_selected_trend(ledger)
+    assert trend["status"] == "INSUFFICIENT_EXPECTATION_DATA"
+    assert trend["wins"] == trend["losses"] == 25
+    assert trend["expected_decisions"] == 0
+    assert trend["expected_wins"] is None
+    assert trend["lower_tail_probability"] is None
+    summary = summarize_candidate_performance(ledger)["rank"]
+    assert "Avg Probability" not in summary
+    assert abs(summary.iloc[0]["Avg Ranking Score"] - 0.80) < 1e-12

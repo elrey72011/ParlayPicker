@@ -277,6 +277,7 @@ def test_ncaaf_fallback_never_replaces_a_primary_game():
 
 
 @pytest.mark.parametrize("home,primary_away,fallback_away", [
+    ("Lamar Cardinals", "Louisiana Ragin Cajuns", "Louisiana"),
     ("Rice Owls", "Houston Baptist Huskies", "Houston Christian Huskies"),
     ("Charlotte 49ers", "Citadel Bulldogs", "The Citadel Bulldogs"),
     ("Kansas State Wildcats", "Nicholls State Colonels", "Nicholls Colonels"),

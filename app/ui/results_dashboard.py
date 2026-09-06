@@ -419,7 +419,7 @@ def _performance_recap_table(display_df: pd.DataFrame) -> pd.DataFrame:
 
 def _format_candidate_summary(summary: pd.DataFrame) -> pd.DataFrame:
     out = summary.copy()
-    for column in ("Hit Rate", "Avg Probability", "Avg EV"):
+    for column in ("Hit Rate", "Avg Ranking Score", "Avg EV"):
         if column in out.columns:
             out[column] = pd.to_numeric(out[column], errors="coerce").map(
                 lambda value: "" if pd.isna(value) else f"{value:.1%}"
@@ -559,6 +559,11 @@ def _render_candidate_results_recap(
             "Selected Best Available is the selector scorecard. The full candidate pool "
             "contains competing and often opposing alternatives, so its aggregate hit rate "
             "naturally trends toward 50% and is not the Best Picks win rate."
+        )
+        st.caption(
+            "Ranking scores order the coverage card; empirical bucket blends are not "
+            "calibrated win probabilities and are excluded from expected-win testing. "
+            "A best-available selection does not establish a 75% win expectation."
         )
         left, right = st.columns(2)
         with left:
