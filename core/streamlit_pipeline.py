@@ -597,6 +597,11 @@ BEST_PICK_COLUMNS = [
     "export_run_id", "pick_id", "canonical_pick_key",
 ]
 
+from app_core.prediction_evidence import PROVENANCE_COLUMNS as _EVIDENCE_EXPORT_COLUMNS
+REQUIRED_BEST_PICK_EXPORT_COLUMNS = list(dict.fromkeys(REQUIRED_BEST_PICK_EXPORT_COLUMNS + _EVIDENCE_EXPORT_COLUMNS + ["matchup_id"]))
+BEST_PICK_COLUMNS = list(dict.fromkeys(BEST_PICK_COLUMNS + _EVIDENCE_EXPORT_COLUMNS))
+
+
 CANONICAL_BET_COLUMNS = [
     "league", "home_team", "away_team", "game_date", "game_time_est", "game_key",
     "market_type", "candidate_source", "orientation_source", "upload_match_reason", "spread_line", "total_line",
@@ -4651,6 +4656,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     candidate_audit_columns = [
         "pipeline_build", "league", "home_team", "away_team", "game_date", "game_time_est",
         "matchup_id", "market_type", "candidate_source", "best_pick",
+        "provider_quotes", "game_start_utc", "spread_line", "total_line", "calibrated_probability",
         "odds_american", "opposing_odds_american", "odds_source", "odds_feed_source",
         "opposing_odds_source", "market_probability", "line_source",
         "ml_probability", "ml_probability_source", "ml_target", "ml_projection",
@@ -6930,7 +6936,9 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
     ).fillna("line_event_identity_failed").replace("", "line_event_identity_failed")
     best.loc[_final_unresolved, "final_pick_valid_reason"] = "unresolved_pick_text"
 
-    final_best_df = best[BEST_PICK_COLUMNS].copy()
+    from app_core.prediction_evidence import PROVENANCE_COLUMNS
+    evidence_columns = [c for c in PROVENANCE_COLUMNS if c in best and c not in BEST_PICK_COLUMNS]
+    final_best_df = best[BEST_PICK_COLUMNS + evidence_columns].copy()
     final_best_df = ensure_best_pick_export_columns(final_best_df, diagnostics_out=diagnostics_out)
     # Neutralize any lone research-only fallback before diagnostics and synchronize
     # the selected audit row to the exact line/pick/value that will be exported.
@@ -7331,6 +7339,8 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
                     }
 
                 row = game_dict[matchup_id]
+                from app_core.prediction_evidence import provider_quotes
+                row["provider_quotes"] = provider_quotes(game)
 
                 for book in game.get('bookmakers', []):
                     raw_book_key = str(book.get('key', '')).strip().lower()
@@ -8011,7 +8021,7 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
     # Required identity columns
     id_cols = [
         "league", "home_team", "away_team", "game_date", "matchup_id",
-        "commence_time_raw", "odds_feed_source",
+        "commence_time_raw", "odds_feed_source", "provider_quotes",
     ]
     # Check for game_time_est if exists
     if "game_time_est" in live_odds_df.columns:
@@ -9478,6 +9488,7 @@ def run_analysis_pipeline(
         "ml_flatness_root_cause_hint": "not_computed",
     }
     ml_prediction_diag: dict[str, Any] = {}
+    loaded_model_identity = {}
     market_model_predictions: pd.DataFrame | None = None
     if use_ml and ML_AVAILABLE and PredictionEngine is not None:
         logger.warning("ðŸ” ML DEBUG: use_ml=True, attempting predictions...")
@@ -9630,6 +9641,11 @@ def run_analysis_pipeline(
 
                 engine = get_cached_prediction_engine()
                 ml_model_actually_loaded = not getattr(engine, "use_fallback", True)
+                if ml_model_actually_loaded:
+                    loaded_model_identity = {
+                        "path": getattr(engine, "artifact_path", ""),
+                        "sha256": getattr(engine, "artifact_sha256", ""),
+                    }
 
                 # predict_batch expects a DataFrame, returns List[float]
                 logger.info(f"PIPELINE AUDIT: [6/9] Rows actually sent into predict_batch: {len(enriched_for_prediction)}")
@@ -10184,6 +10200,8 @@ def run_analysis_pipeline(
         analysis_df["game_time_est"] = _coalesce_game_time_est(analysis_df)
 
         # Final Cleanup
+        if "commence_time_raw" in analysis_df:
+            analysis_df["game_start_utc"] = analysis_df["commence_time_raw"]
         analysis_df = analysis_df.drop(columns=["commence_time_raw"], errors="ignore")
 
         # Sync the slate date with actual start time
@@ -10304,6 +10322,7 @@ def run_analysis_pipeline(
         finally:
              analysis_df = analysis_df.drop(columns=['generic_market'], errors='ignore')
 
+    diagnostics["loaded_model_identity"] = loaded_model_identity
     return (analysis_df, best_picks_df, diagnostics)
 
 

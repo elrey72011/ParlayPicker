@@ -55,3 +55,14 @@ player props. When **Require Gemini Review for Bets** is enabled:
 
 Set either `GOOGLE_API_KEY` or `GEMINI_API_KEY` in Streamlit secrets or the
 deployment environment. Never commit the key to this repository.
+
+## Selector validation
+
+Generate provenance-gated Markdown/JSON reports, compare the exported selector
+against market probability on the same games, and separate approved wagers from
+coverage picks. See [the validation guide](docs/selector-validation.md) for CSV
+contracts and the `scripts/validate_selector.py` report/freeze commands.
+
+Master Analysis now saves immutable prediction evidence automatically. Performance
+Recap grades the saved decisions and refreshes per-version validation reports.
+See the live evidence workflow in the validation guide for storage and CLI details.

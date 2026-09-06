@@ -435,17 +435,17 @@ def _render_candidate_results_recap(
     """Grade the full candidate set and expose cumulative rank/family evidence."""
 
     st.markdown("#### Candidate Ranking Backtest")
-    if uploaded_candidate_audit is None:
-        st.caption(
-            "Upload yesterday's Candidate Selection Audit to grade every side and total, "
-            "not only the one-row-per-game selection."
-        )
-        return
-
     try:
-        uploaded_candidate_audit.seek(0)
-        candidate_audit = pd.read_csv(uploaded_candidate_audit)
-        current_graded = grade_candidate_audit(candidate_audit, scored_picks)
+        if uploaded_candidate_audit is None:
+            from app_core.prediction_evidence import materialize
+            current_graded, _ = materialize()
+            if current_graded.empty:
+                st.caption("Run Master Analysis to save candidates automatically, or upload a prior Candidate Selection Audit.")
+                return
+        else:
+            uploaded_candidate_audit.seek(0)
+            candidate_audit = pd.read_csv(uploaded_candidate_audit)
+            current_graded = grade_candidate_audit(candidate_audit, scored_picks)
     except Exception as exc:
         st.error(f"Could not grade the candidate audit: {exc}")
         return
@@ -649,6 +649,15 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
     )
 
     st.subheader("Prior Day Performance")
+    if isinstance(picks_df, pd.DataFrame):
+        for report_path in picks_df.attrs.get("prediction_validation_reports", []):
+            from pathlib import Path
+            saved_report = Path(report_path)
+            if saved_report.exists():
+                st.download_button("Download Saved-Prediction Validation Report", saved_report.read_text(encoding="utf-8"),
+                                   file_name=saved_report.name, mime="text/markdown", key="validation_" + saved_report.stem)
+        if picks_df.attrs.get("prediction_evidence_error"):
+            st.warning("Results were graded, but saving validation evidence failed: " + str(picks_df.attrs["prediction_evidence_error"]))
 
     _render_prop_results_recap()
     st.divider()

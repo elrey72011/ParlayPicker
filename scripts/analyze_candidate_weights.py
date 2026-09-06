@@ -30,6 +30,7 @@ def run_analysis(audit_paths, train_through):
     # Exact time comparison: no final scores or grades are used to determine eligibility.
     f['kickoff']=pd.to_datetime(f.game_time_est.str.replace(' ET','',regex=False),format='%Y-%m-%d %I:%M %p',errors='coerce').dt.tz_localize('America/New_York').dt.tz_convert('UTC')
     f['run']=pd.to_datetime(f.export_run_id,format='%Y%m%dT%H%M%SZ',utc=True,errors='coerce')
+    f['run']=f['run'].fillna(pd.to_datetime(f.export_run_id,format='%Y%m%dT%H%M%S.%fZ',utc=True,errors='coerce'))
     stats={'raw_rows':len(f),'raw_events':f.matchup_id.nunique(),'not_pregame_events':f.loc[~f.run.lt(f.kickoff),'matchup_id'].nunique()}
     f=f[f.run.lt(f.kickoff)].copy()
     # Remove duplicate fallback events using the actual production merge identity.
