@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 
 from core.team_mapper import normalize_team_name
+from core.probability_semantics import conditional_probabilities
 
 
 REPORT_VERSION = "1"
@@ -223,6 +224,10 @@ def build_report(audits, *, train_through, probability_column="calibrated_probab
     f["_odds_time"] = time_column(f, "odds_recorded_at")
     f["_probability"] = number_column(f, probability_column)
     f["_market"] = number_column(f, market_column)
+    conditional = [conditional_probabilities(row, probability_column, market_column) for _, row in f.iterrows()]
+    f["_semantics_verified"] = [value is not None for value in conditional]
+    f["_probability"] = [value[0] if value is not None else raw for value, raw in zip(conditional, f._probability)]
+    f["_market"] = [value[1] if value is not None else raw for value, raw in zip(conditional, f._market)]
     f["_selected"] = bool_column(f, "best_available_selected").fillna(False).astype(bool)
     f["_family"] = text_column(f, "market_type").str.split("_").str[0].replace({"h2h": "moneyline"})
     f["candidate_outcome"] = text_column(f, "candidate_outcome").str.upper()
@@ -254,8 +259,9 @@ def build_report(audits, *, train_through, probability_column="calibrated_probab
     reject(text_column(f, "model_version").eq(""), "missing_model_version")
     reject(f._trained.isna() | ~f._trained.lt(evaluation_start) | ~f._trained.lt(f._prediction), "training_cutoff_unverified_or_leaking")
     reject(f._available.isna() | ~f._trained.le(f._available) | ~f._available.le(f._prediction), "model_availability_unverified")
+    reject(bool_column(f, "final_line_rejected").fillna(False), "final_line_rejected")
     reject(~f._probability.between(0, 1) | ~f._market.between(0, 1), "missing_or_invalid_probability")
-    reject(text_column(f, "probability_semantics").ne("win_conditional_on_decision"), "probability_semantics_unverified")
+    reject(~f._semantics_verified, "probability_semantics_unverified")
     reject(f._odds_time.isna() | ~f._odds_time.le(f._prediction), "odds_timestamp_unverified")
     source = text_column(f, "odds_source").str.lower()
     reject(~price.abs().ge(100) | ~np.isfinite(price) | source.eq("") |

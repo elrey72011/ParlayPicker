@@ -223,3 +223,45 @@ def test_performance_refresh_records_only_settled_snapshot_results(frozen, monke
     assert graded.attrs["prediction_score_revisions_saved"] == 1
     assert graded.attrs["prediction_validation_reports"]
     assert evidence.materialize(db)[0].candidate_outcome.tolist() == ["WIN", "LOSS"]
+
+
+def test_explicit_push_capture_settlement_and_conditional_scoring(frozen):
+    context, db, _ = frozen
+    a, f = fixture_frames()
+    for frame in (a, f):
+        frame["total_line"] = 8
+        frame["best_pick"] = frame.market_type.map({"total_over": "Over 8.0", "total_under": "Under 8.0"})
+        frame["provider_quotes"] = frame.provider_quotes.str.replace('8.5', '8.0', regex=False)
+        frame["probability_semantics"] = "win_unconditional_with_push"
+        frame["push_probability"] = .1
+        frame["market_push_probability"] = .1
+        frame["calibrated_probability"] = frame.market_type.map({"total_over": .54, "total_under": .36})
+        frame["market_probability"] = .45
+    saved, card = evidence.capture_run(context, a, f, a, path=db)
+    assert saved.probability_semantics.eq("win_unconditional_with_push").all()
+    scores = card[["snapshot_id", "matchup_id"]].copy()
+    scores["actual_home_score"], scores["actual_away_score"] = 5, 3
+    evidence.record_scores(scores, path=db)
+    graded, decisions = evidence.materialize(db)
+    assert graded.candidate_outcome.eq("PUSH").all()
+    report, eligible = build_report(graded, train_through="2026-09-02", selections=decisions, return_eligible=True)
+    assert report["inventory"]["eligible_events"] == 1
+    assert eligible.iloc[0]._probability == pytest.approx(.6)
+    assert eligible.iloc[0]._market == pytest.approx(.5)
+    metrics = report["comparisons"]["qualified_wagers"]["selector"]
+    assert metrics["pushes"] == 1 and metrics["wins"] == 0 and metrics["losses"] == 0
+
+
+def test_final_rejected_line_preserved_despite_exact_quote(frozen):
+    context, db, _ = frozen
+    a, f = fixture_frames()
+    for frame in (a, f):
+        frame.loc[frame.best_available_selected, "best_pick"] = "Total line unresolved"
+    f["market_line_source"] = "rejected_live"
+    saved, _ = evidence.capture_run(context, a, f, a, path=db)
+    selected = saved[saved.best_available_selected].iloc[0]
+    assert selected.quote_binding_verified
+    assert selected.final_line_rejected
+    saved["candidate_outcome"] = "WIN"
+    report = build_report(saved, train_through="2026-09-02")
+    assert report["inventory"]["eligible_events"] == 0
