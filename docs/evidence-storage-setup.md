@@ -120,3 +120,16 @@ All accept `--database PATH`. Restore to a new database path for an independent
 recovery check. Backup/restore commands fail rather than report success when the
 backend is unconfigured or unavailable. The Drive API implementation follows
 [Google's upload documentation](https://developers.google.com/workspace/drive/api/guides/manage-uploads).
+
+
+## Service-account JSON parsing error
+
+`configured: true` means the folder setting was detected; it does not prove that
+credentials parsed or that Drive permissions succeeded. If status reports a
+service-account JSON error, replace the complete secret using the original JSON
+file and the triple **single** quote example above. Triple double quotes process
+JSON backslash escapes as TOML escapes and can turn the private-key line breaks
+into invalid JSON. Do not wrap the entire JSON object in another JSON string.
+Save the secrets, then click **Restore and sync evidence storage**. An empty new
+folder may restore zero snapshots; run a new pregame analysis and require remote
+status `synced` to verify the first backup. Never send the private key in chat.

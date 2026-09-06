@@ -9,6 +9,8 @@ import os
 from pathlib import Path
 import threading
 
+from app_core.evidence_config import safe_error
+
 TABLES = {
     "bundles": ("version", "frozen_at", "manifest"),
     "snapshots": ("snapshot_id", "version", "generated_at", "candidates", "decisions", "inputs", "payload_hash"),
@@ -150,7 +152,7 @@ def restore_once(path=None):
                 restore(path)
                 _restored.add(identity)
             except Exception as exc:
-                _status.update(status="error", error=f"Restore failed ({type(exc).__name__}); check storage access/configuration.")
+                _status.update(status="error", error=safe_error(exc, "Restore"))
                 raise RuntimeError(_status["error"]) from None
 
 
@@ -172,5 +174,5 @@ def sync(path=None, *, client=None):
         except Exception as exc:
             # Local evidence survives a network outage; the UI explicitly shows it
             # is pending replication and retries on the next capture or button.
-            _status.update(status="error", error=f"Backup pending ({type(exc).__name__}); local evidence is saved. Retry synchronization.")
+            _status.update(status="error", error=safe_error(exc, "Backup") + " Local evidence is saved; retry synchronization after correcting the error.")
             return False

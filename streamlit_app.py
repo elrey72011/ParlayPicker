@@ -1987,8 +1987,9 @@ def main() -> None:
             try:
                 restore()
                 sync()
-            except Exception:
-                st.error("Evidence restore failed; check storage access and configuration.")
+            except Exception as exc:
+                from app_core.evidence_config import safe_error
+                st.error(safe_error(exc, "Restore"))
         health = evidence_health()
         remote = health["remote_storage"]
         st.write(f"Remote backup: {remote['status']} · Snapshots restored: {remote['restored_snapshots']}")

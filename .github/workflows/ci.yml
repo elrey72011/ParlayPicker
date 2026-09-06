@@ -50,6 +50,7 @@ jobs:
           tests/test_evidence_health.py
           tests/test_evidence_remote.py
           tests/test_evidence_drive.py
+          tests/test_evidence_config.py
           tests/test_ncaaf_stats_aliases.py
           tests/test_compact_probability_export.py
           tests/test_walk_forward.py
