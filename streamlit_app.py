@@ -2005,6 +2005,9 @@ def main() -> None:
         st.download_button("Download Evidence Status", json.dumps(health, indent=2),
                            file_name="prediction-evidence-status.json", mime="application/json")
 
+    from app.ui.readiness_dashboard import render_readiness_dashboard
+    render_readiness_dashboard(diagnostics.get("candidate_audit_df"), best_picks_df, diagnostics)
+
     if analysis_df is None or analysis_df.empty:
         st.info("Configure filters in the sidebar and click **Run Master Analysis**.")
         return

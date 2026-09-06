@@ -45,6 +45,7 @@ jobs:
           tests/test_production_card_calibration_guard.py
           tests/test_model_validation.py
           tests/test_selector_validation.py
+          tests/test_run_readiness.py
           tests/test_prediction_evidence.py
           tests/test_threshold_validation.py
           tests/test_evidence_health.py
