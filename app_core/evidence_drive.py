@@ -1,7 +1,6 @@
 """Create/read-only evidence objects in a Google Workspace Shared Drive folder."""
 from io import BytesIO
 import json
-import os
 import re
 import uuid
 
@@ -25,8 +24,15 @@ conflicting duplicates fail closed. No update/delete operation is implemented.
         if session is None:
             from google.oauth2.service_account import Credentials
             from google.auth.transport.requests import AuthorizedSession
-            info = json.loads(os.environ.get("PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT", "{}"))
-            credentials = Credentials.from_service_account_info(info, scopes=["https://www.googleapis.com/auth/drive"])
+            from app_core.evidence_config import service_account_info, EvidenceConfigurationError
+            info = service_account_info()
+            try:
+                credentials = Credentials.from_service_account_info(info, scopes=["https://www.googleapis.com/auth/drive"])
+            except (ValueError, TypeError) as exc:
+                raise EvidenceConfigurationError(
+                    "Service-account JSON parsed, but its signing key could not be loaded. "
+                    "Replace the secret with the complete original downloaded JSON in triple single quotes; "
+                    "do not edit the private-key contents.") from None
             session = AuthorizedSession(credentials)
         self.session = session
         response = self.session.get(f"{API}/{folder}", params={"supportsAllDrives": "true", "fields": "id,driveId,mimeType,trashed"}, timeout=20)
