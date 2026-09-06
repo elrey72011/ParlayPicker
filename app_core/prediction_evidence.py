@@ -79,10 +79,20 @@ def artifact_manifest(controls, root=ROOT):
 
 
 def begin_run(controls, *, path=None, root=ROOT):
+    if path is None:
+        from app_core.evidence_remote import restore_once
+        restore_once()
     manifest = artifact_manifest(controls, root)
     encoded = json.dumps(manifest, sort_keys=True, separators=(",", ":"))
     version = hashlib.sha256(encoded.encode()).hexdigest()
     frozen = now_utc()
+    with closing(connect(path)) as db:
+        existing_freeze = db.execute("SELECT frozen_at FROM bundles WHERE version=?", (version,)).fetchone()
+    if existing_freeze:
+        frozen = existing_freeze[0]
+    if path is None:
+        from app_core.evidence_remote import register_bundle
+        frozen = register_bundle(version, frozen, encoded)
     with closing(connect(path)) as db, db:
         db.execute("INSERT OR IGNORE INTO bundles VALUES (?, ?, ?)", (version, frozen, encoded))
         frozen = db.execute("SELECT frozen_at FROM bundles WHERE version=?", (version,)).fetchone()[0]
@@ -224,10 +234,16 @@ def capture_run(context, audit, final, inputs, *, path=None):
         db.execute("INSERT INTO snapshots VALUES (?, ?, ?, ?, ?, ?, ?)",
                    (context["snapshot_id"], context["model_version"], generated, *payload, digest))
         db.execute("INSERT INTO snapshot_runtime VALUES (?, ?)", (context["snapshot_id"], PROCESS_INSTANCE))
+    if path is None:
+        from app_core.evidence_remote import sync
+        sync()
     return audit, final
 
 
 def load_snapshots(path=None):
+    if path is None:
+        from app_core.evidence_remote import restore_once
+        restore_once()
     if not Path(path or database_path()).exists():
         return []
     with closing(connect(path)) as db:
@@ -269,8 +285,15 @@ def record_scores(scored, *, path=None):
                 continue
             raw = scores.sort_values("matchup_id").to_csv(index=False)
             digest = hashlib.sha256(raw.encode()).hexdigest()
+            recorded = pd.Timestamp(now_utc())
+            latest = db.execute("SELECT MAX(recorded_at) FROM score_revisions WHERE snapshot_id=?", (str(sid),)).fetchone()[0]
+            if latest and recorded <= pd.Timestamp(latest):
+                recorded = pd.Timestamp(latest) + pd.Timedelta(microseconds=1)
             saved += db.execute("INSERT OR IGNORE INTO score_revisions VALUES (?, ?, ?, ?)",
-                                (str(sid), digest, now_utc(), raw)).rowcount
+                                (str(sid), digest, recorded.isoformat(), raw)).rowcount
+    if path is None:
+        from app_core.evidence_remote import sync
+        sync()
     return saved
 
 
@@ -281,7 +304,7 @@ def materialize(path=None):
     audits, finals = [], []
     for sid, audit, final in load_snapshots(path):
         with closing(connect(path)) as db:
-            revisions = db.execute("SELECT scores FROM score_revisions WHERE snapshot_id=? ORDER BY rowid", (sid,)).fetchall()
+            revisions = db.execute("SELECT scores FROM score_revisions WHERE snapshot_id=? ORDER BY recorded_at, evidence_hash", (sid,)).fetchall()
         if revisions:
             scores = pd.concat([pd.read_csv(StringIO(raw)) for (raw,) in revisions], ignore_index=True)
             scores = scores.drop_duplicates("matchup_id", keep="last")

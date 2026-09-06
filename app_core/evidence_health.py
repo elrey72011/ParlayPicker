@@ -12,8 +12,9 @@ import pandas as pd
 def evidence_health(path=None, process_instance=None):
     from app_core.prediction_evidence import database_path, PROCESS_INSTANCE
 
+    from app_core.evidence_remote import remote_status
     location = Path(path or database_path()).resolve()
-    result = {"status": "missing", "snapshots": 0, "score_revisions": 0,
+    result = {"remote_storage": remote_status(), "status": "missing", "snapshots": 0, "score_revisions": 0,
               "storage_directory_configured": bool(os.environ.get("PARLAYPICKER_EVIDENCE_DIR")),
               "prior_process_snapshots_accessible": None,
               "durability_across_redeployment_verified": False,

@@ -2072,11 +2072,21 @@ def _concat_valid_bet_frames(frames: list[pd.DataFrame], expected_columns: list[
 
 
 
+def _identity_team_series(df: pd.DataFrame, column: str) -> pd.Series:
+    raw = _string_series(df, column)
+    normalized = raw.map(normalize_team_name)
+    football = _string_series(df, "league").str.upper().eq("NCAAF")
+    if football.any():
+        from app_core.feature_processing import normalize_team_for_stats
+        normalized.loc[football] = normalized.loc[football].map(lambda value: normalize_team_for_stats(value, "NCAAF"))
+    return clean_team_name(normalized).str.upper()
+
+
 def _canonical_matchup_key(df: pd.DataFrame) -> pd.Series:
     """Orientation-insensitive game key (league + sorted teams + date)."""
     league = _string_series(df, "league").str.upper()
-    home = clean_team_name(_string_series(df, "home_team").map(normalize_team_name)).str.upper()
-    away = clean_team_name(_string_series(df, "away_team").map(normalize_team_name)).str.upper()
+    home = _identity_team_series(df, "home_team")
+    away = _identity_team_series(df, "away_team")
     team_a = np.where(home <= away, home, away)
     team_b = np.where(home <= away, away, home)
     team_a = pd.Series(team_a, index=df.index, dtype="string")
@@ -2088,8 +2098,8 @@ def _canonical_matchup_key(df: pd.DataFrame) -> pd.Series:
 def _canonical_matchup_teams_key(df: pd.DataFrame) -> pd.Series:
     """Orientation-insensitive game key using league + sorted teams only (no date)."""
     league = _string_series(df, "league").str.upper()
-    home = clean_team_name(_string_series(df, "home_team").map(normalize_team_name)).str.upper()
-    away = clean_team_name(_string_series(df, "away_team").map(normalize_team_name)).str.upper()
+    home = _identity_team_series(df, "home_team")
+    away = _identity_team_series(df, "away_team")
     team_a = np.where(home <= away, home, away)
     team_b = np.where(home <= away, away, home)
     team_a = pd.Series(team_a, index=df.index, dtype="string")
@@ -2099,8 +2109,8 @@ def _canonical_matchup_teams_key(df: pd.DataFrame) -> pd.Series:
 
 def _matchup_id(df: pd.DataFrame) -> pd.Series:
     """Canonical matchup id using sorted normalized team names + ET day (direction-independent)."""
-    home = clean_team_name(_string_series(df, "home_team").map(normalize_team_name)).str.upper()
-    away = clean_team_name(_string_series(df, "away_team").map(normalize_team_name)).str.upper()
+    home = _identity_team_series(df, "home_team")
+    away = _identity_team_series(df, "away_team")
     # Use strict lexicographical sorting to prevent any inverted matchup mismatches
     team_a = np.where(home <= away, home, away)
     team_b = np.where(home <= away, away, home)

@@ -17,7 +17,7 @@ requests>=2.31.0
 # Kalshi auth
 cryptography>=42.0.0
 
-# ML — native packages are pinned together to prevent ABI/OpenMP crashes.
+# ML â€” native packages are pinned together to prevent ABI/OpenMP crashes.
 scikit-learn==1.6.1
 xgboost==2.1.4
 scipy>=1.11.0,<2.0.0
@@ -38,3 +38,6 @@ pytz>=2023.3
 
 # Visualization
 plotly>=5.0.0
+
+# Durable prediction evidence (Google Workspace Shared Drive)
+google-auth>=2.0,<3
