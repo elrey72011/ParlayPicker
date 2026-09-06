@@ -177,3 +177,9 @@ Access to snapshots written by a previous process provides a restart observation
 it does not prove survival of a hosting redeployment. Older snapshots without
 process identifiers cannot supply this observation. Hosted durability remains
 unverified until separately tested with genuinely persistent storage.
+
+
+For Streamlit Community Cloud, use the [Google Shared Drive setup guide](evidence-storage-setup.md)
+for immutable remote backup and automatic restore. The default local directory
+alone remains ephemeral. Evidence Status distinguishes local health from remote
+backup status; a successful read-back is required for `synced`.

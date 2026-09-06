@@ -1978,7 +1978,22 @@ def main() -> None:
 
     with st.expander("Prediction Evidence Status", expanded=False):
         from app_core.evidence_health import evidence_health
+        from app_core.evidence_remote import restore_once, restore, sync
+        try:
+            restore_once()
+        except RuntimeError as exc:
+            st.error(str(exc))
+        if st.button("Restore and sync evidence storage", key="sync_remote_evidence"):
+            try:
+                restore()
+                sync()
+            except Exception:
+                st.error("Evidence restore failed; check storage access and configuration.")
         health = evidence_health()
+        remote = health["remote_storage"]
+        st.write(f"Remote backup: {remote['status']} · Snapshots restored: {remote['restored_snapshots']}")
+        if remote["error"]:
+            st.warning(remote["error"])
         st.write(f"Store: {health['status']} · Saved runs: {health['snapshots']} · Score revisions: {health['score_revisions']}")
         if health["latest_snapshot_id"]:
             st.caption(f"Latest snapshot: {health['latest_snapshot_id']} · {health['latest_generated_at']}")
@@ -2428,7 +2443,7 @@ def main() -> None:
                 st.warning(f"Found {len(unmatched_live)} live games that couldn't be matched to uploaded data. Expand to see reasons.")
                 st.dataframe(pd.DataFrame(unmatched_live))
             if missing_uploads:
-                st.error(f"Found {len(missing_uploads)} uploaded games that did not make it into the final live slate.")
+                st.warning(f"Found {len(missing_uploads)} uploaded games without an upload-matched candidate. These games may still appear using live-market candidates.")
                 st.write("Missing Upload IDs:")
                 st.write(missing_uploads)
 

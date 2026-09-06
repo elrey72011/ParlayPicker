@@ -377,6 +377,22 @@ def normalize_team_for_stats(team_name: str, league: Optional[str]) -> str:
     key = str(normalized).strip().lower()
     if lg == "NHL" and key in {"utah", "utah hockey club", "utah hc", "utah mammoth"}:
         return "UTAH HOCKEY CLUB"
+    # Football feeds mix school names and full mascots. Use the existing
+    # explicit aliases on both query and stats-index sides before fuzzy matching.
+    if lg == "NCAAF":
+        football_aliases = {
+            "NOTRE DAME FIGHTING IRISH": "NOTRE DAME",
+            "WISCONSIN BADGERS": "WISCONSIN",
+            "LOUISVILLE CARDINALS": "LOUISVILLE",
+            "OLE MISS REBELS": "OLE MISS",
+            "MISSISSIPPI REBELS": "OLE MISS",
+            "WASHINGTON HUSKIES": "WASHINGTON",
+            "WASHINGTON STATE COUGARS": "WASHINGTON STATE",
+            "FLORIDA A M RATTLERS": "FLORIDA AM",
+            "FLORIDA A M": "FLORIDA AM",
+            "SOUTH CAROLINA STATE BULLDOGS": "SOUTH CAROLINA STATE",
+        }
+        return football_aliases.get(normalized, normalized)
     league_map = LEAGUE_TEAM_NAME_MAPPING.get(lg, {})
     if key in league_map:
         return _simple_norm(league_map[key])
