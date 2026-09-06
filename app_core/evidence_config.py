@@ -7,6 +7,10 @@ class EvidenceConfigurationError(ValueError):
     """Only developer-authored, credential-free messages may use this exception."""
 
 
+class EvidenceStorageError(ValueError):
+    """Developer-authored integrity/operation errors containing no credentials."""
+
+
 def service_account_info():
     raw = os.environ.get("PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT", "")
     if not raw.strip():
@@ -30,6 +34,6 @@ def service_account_info():
 
 
 def safe_error(exc, action):
-    if isinstance(exc, EvidenceConfigurationError):
+    if isinstance(exc, (EvidenceConfigurationError, EvidenceStorageError)):
         return str(exc)
     return f"{action} failed ({type(exc).__name__}); check storage access/configuration."

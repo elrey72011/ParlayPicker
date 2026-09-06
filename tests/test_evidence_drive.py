@@ -106,3 +106,23 @@ def test_full_replication_through_drive_adapter(frozen, tmp_path, monkeypatch):
     restored = tmp_path / 'fresh.sqlite3'
     assert remote.restore(restored) == 1
     assert evidence.load_snapshots(db)[0][1].to_csv(index=False) == evidence.load_snapshots(restored)[0][1].to_csv(index=False)
+
+
+def test_new_upload_readback_uses_id_when_search_has_not_found_it():
+    class DelayedSearch(DriveSession):
+        def get(self, url, params, timeout):
+            if url == API:
+                return Response({"files": []})
+            return super().get(url, params, timeout)
+    session = DelayedSearch()
+    store = DriveStore("folder", session=session)
+    store.put_object(Key="prefix/snapshots/new.json", Body=b'{"unchanged":true}', IfNoneMatch="*")
+    assert store.get_object(Key="prefix/snapshots/new.json")["Body"].read() == b'{"unchanged":true}'
+
+
+def test_delayed_search_does_not_bypass_readback_integrity():
+    session = DriveSession()
+    store = DriveStore("folder", session=session)
+    store.put_object(Key="prefix/snapshots/new.json", Body=b'original', IfNoneMatch="*")
+    session.files[0]["content"] = b'changed'
+    assert store.get_object(Key="prefix/snapshots/new.json")["Body"].read() == b'changed'
