@@ -22,14 +22,15 @@ class TestWalkForward(unittest.TestCase):
         self.assertTrue(result["log_loss"] < 0.2)
         self.assertEqual(len(result["calibration"]), 2)
 
-    def test_holdout_is_marked_out_of_sample(self):
+    def test_holdout_does_not_claim_unverified_training_provenance(self):
         frame = pd.DataFrame({
             "date": pd.date_range("2026-01-01", periods=10, freq="D"),
             "p": [0.6] * 10,
             "y": [1, 0] * 5,
         })
         result = walk_forward_evaluate(frame, "date", "p", "y", min_train_rows=6, test_fraction=0.4)
-        self.assertTrue(result["out_of_sample"])
+        self.assertFalse(result["out_of_sample"])
+        self.assertTrue(result["chronological_holdout"])
         self.assertEqual(result["train_rows"], 6)
         self.assertEqual(result["test_rows"], 4)
         self.assertLess(result["train_end"], result["test_start"])
@@ -37,3 +38,16 @@ class TestWalkForward(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_same_day_candidates_are_kept_together():
+    frame = pd.DataFrame({"date": ["2026-01-01"] * 3 + ["2026-01-02"] * 4 + ["2026-01-03"] * 3})
+    train, test = chronological_split(frame, "date", test_fraction=.5)
+    assert set(train.date).isdisjoint(test.date)
+    assert len(train) + len(test) == len(frame)
+
+
+def test_single_slate_cannot_be_called_a_holdout():
+    import pytest
+    with pytest.raises(ValueError, match="distinct calendar slates"):
+        chronological_split(pd.DataFrame({"date": ["2026-01-01"] * 10}), "date")

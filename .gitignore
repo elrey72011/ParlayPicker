@@ -72,3 +72,6 @@ data/candidate_results/candidate_results_runtime.csv
 streamlit_app.py.bak*
 *.bak
 
+
+# Append-only prediction evidence belongs on persistent runtime storage.
+data/prediction_evidence/

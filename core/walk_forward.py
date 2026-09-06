@@ -31,8 +31,14 @@ def chronological_split(
     if dates.isna().any():
         raise ValueError("date column contains invalid or missing values")
     out = out.assign(_evaluation_date=dates).sort_values("_evaluation_date", kind="stable")
-    cut = max(int(min_train_rows), int(np.floor(len(out) * (1.0 - float(test_fraction)))))
-    cut = min(max(cut, 1), len(out) - 1)
+    # Cut only between UTC calendar slates, never between rows on one day.
+    days = out["_evaluation_date"].dt.normalize()
+    boundaries = [i for i in range(1, len(out)) if days.iloc[i] != days.iloc[i - 1]
+                  and i >= int(min_train_rows)]
+    if not boundaries:
+        raise ValueError("Need distinct calendar slates and enough training rows for a nonempty holdout")
+    target = int(np.floor(len(out) * (1.0 - float(test_fraction))))
+    cut = min(boundaries, key=lambda i: (abs(i - target), -i))
     train = out.iloc[:cut].drop(columns="_evaluation_date")
     test = out.iloc[cut:].drop(columns="_evaluation_date")
     return train, test
@@ -97,6 +103,8 @@ def walk_forward_evaluate(
         "test_rows": int(len(test)),
         "train_end": str(pd.to_datetime(train[date_col], utc=True).max()),
         "test_start": str(pd.to_datetime(test[date_col], utc=True).min()),
-        "out_of_sample": True,
+        "out_of_sample": False,
+        "chronological_holdout": True,
+        "provenance_note": "Ordering alone does not establish training provenance; use scripts/validate_selector.py for provenance checks.",
     })
     return metrics

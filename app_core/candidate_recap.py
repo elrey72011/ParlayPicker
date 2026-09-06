@@ -223,6 +223,24 @@ def grade_candidate_audit(
         out["candidate_ledger_key"] = _ledger_key(out)
         return annotate_candidate_evaluation_scope(out)
 
+    if "snapshot_id" in candidate_audit and candidate_audit["snapshot_id"].notna().any():
+        # Versioned evidence uses exact immutable identities; never the legacy
+        # team-only join, even when a user uploads the audit manually.
+        out = candidate_audit.drop(columns=["actual_home_score", "actual_away_score"], errors="ignore").copy()
+        keys = ["snapshot_id", "matchup_id"]
+        score_columns = ["actual_home_score", "actual_away_score"]
+        if all(c in scored_picks for c in keys + score_columns):
+            scores = scored_picks[keys + score_columns].dropna().drop_duplicates()
+            scores = scores.loc[~scores.duplicated(keys, keep=False)]
+            out = out.merge(scores, on=keys, how="left", validate="many_to_one")
+        else:
+            out["actual_home_score"] = pd.NA
+            out["actual_away_score"] = pd.NA
+        out["candidate_outcome"] = out.apply(_grade_candidate, axis=1)
+        out["candidate_graded"] = out["candidate_outcome"].isin(_OUTCOMES)
+        out["candidate_ledger_key"] = _ledger_key(out)
+        return annotate_candidate_evaluation_scope(out)
+
     out = candidate_audit.copy()
     rename = {}
     for source, target in (

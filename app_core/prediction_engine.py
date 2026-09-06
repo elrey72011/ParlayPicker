@@ -435,6 +435,9 @@ class PredictionEngine:
             return
 
         resolved_model_path = resolved_model_path.resolve()
+        import hashlib
+        self.artifact_path = str(resolved_model_path)
+        self.artifact_sha256 = hashlib.sha256(resolved_model_path.read_bytes()).hexdigest()
         logger.info("[MODEL_LOAD] Attempting model load from %s", resolved_model_path)
 
         try:
@@ -459,7 +462,11 @@ class PredictionEngine:
                 logger.error("[MODEL_LOAD] Secondary model loading failed for %s: %s", resolved_model_path, fallback_error)
 
         if not self.use_fallback:
-            self._validate_model_behavior()
+            if hashlib.sha256(resolved_model_path.read_bytes()).hexdigest() != self.artifact_sha256:
+                self.use_fallback = True
+                logger.error("Model artifact changed while loading; using fallback")
+            else:
+                self._validate_model_behavior()
 
     def _validate_model_behavior(self):
         """

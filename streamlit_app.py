@@ -991,6 +991,12 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
     """
     deferred_warnings: list[str] = []
     deferred_errors: list[str] = []
+    evidence_context = None
+    try:
+        from app_core.prediction_evidence import begin_run
+        evidence_context = begin_run(controls)
+    except Exception as exc:
+        deferred_warnings.append(f"Prediction evidence could not initialize: {exc}")
 
     spreads_df, err = load_theover_csv(controls.get("theover_spreads"))
     if err:
@@ -1798,6 +1804,34 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
     diagnostics["research_recreational_parlay_count"] = int(
         (~parlays_df["premium_eligible"]).sum()
     ) if parlays_df is not None and not parlays_df.empty else 0
+
+    try:
+        from app_core.prediction_evidence import capture_run
+        from core.streamlit_pipeline import _sync_selected_candidate_audit
+        if evidence_context is not None:
+            loaded = diagnostics.get("loaded_model_identity", {})
+            if loaded:
+                model_path = Path(loaded.get("path", "")).resolve()
+                model_name = model_path.relative_to(ROOT).as_posix()
+                if loaded.get("sha256") != evidence_context["manifest"]["artifacts"].get(model_name):
+                    raise ValueError("Loaded model differs from the frozen artifact; restart analysis with the current model")
+            audit, _ = _sync_selected_candidate_audit(diagnostics.get("candidate_audit_df"), best_picks_df)
+            audit, saved_card = capture_run(evidence_context, audit, best_picks_df, analysis_df)
+            diagnostics["candidate_audit_df"] = audit
+            diagnostics["prediction_snapshot_id"] = evidence_context["snapshot_id"]
+            diagnostics["prediction_snapshot_saved"] = True
+            best_picks_df = saved_card
+            # All exports from the run share the final decision's microsecond run id.
+            for frame in (analysis_df, parlays_df, portfolio_df, strikeout_prop_card):
+                if isinstance(frame, pd.DataFrame) and not frame.empty:
+                    frame["export_run_id"] = saved_card["export_run_id"].iloc[0]
+            for frame in per_leg.values():
+                if not frame.empty:
+                    frame["export_run_id"] = saved_card["export_run_id"].iloc[0]
+    except Exception as exc:
+        diagnostics["prediction_snapshot_saved"] = False
+        diagnostics["prediction_snapshot_error"] = str(exc)
+        deferred_warnings.append(f"Prediction evidence was not saved: {exc}")
 
     state_updates = {
         "pipeline_status": "using stored results",

@@ -119,6 +119,15 @@ def grade_picks_with_live_results(picks_df: pd.DataFrame) -> pd.DataFrame:
             unresolved_count,
             len(enriched),
         )
+    try:
+        from app_core.prediction_evidence import record_scores, write_validation_reports
+        revisions = record_scores(enriched.loc[_settled_mask(enriched)])
+        enriched.attrs["prediction_score_revisions_saved"] = revisions
+        if revisions:
+            enriched.attrs["prediction_validation_reports"] = write_validation_reports()
+    except Exception as exc:
+        enriched.attrs["prediction_evidence_error"] = str(exc)
+        logger.warning("Final scores could not be saved to prediction evidence: %s", exc)
     return enriched
 
 def run_performance_pipeline() -> pd.DataFrame | None:
@@ -129,6 +138,19 @@ def run_performance_pipeline() -> pd.DataFrame | None:
     """
     global _no_export_logged
     export_path = find_yesterdays_export()
+    # Saved decisions work without a manual CSV download and preserve run identity.
+    try:
+        from app_core.prediction_evidence import load_snapshots
+        yesterday = (pd.Timestamp.now(tz="America/New_York") - pd.Timedelta(days=1)).strftime("%Y-%m-%d")
+        saved = []
+        for _, _, frame in load_snapshots():
+            start = pd.to_datetime(frame["game_start_utc"], errors="coerce", utc=True)
+            saved.append(frame[start.dt.tz_convert("America/New_York").dt.strftime("%Y-%m-%d").eq(yesterday)])
+        saved = pd.concat(saved, ignore_index=True) if saved else pd.DataFrame()
+        if not saved.empty:
+            return grade_picks_with_live_results(saved)
+    except Exception as exc:
+        logger.warning("Could not load saved prediction decisions: %s", exc)
     if not export_path:
          if not _no_export_logged:
              logger.info("No best picks export found for yesterday (only logging once per run).")

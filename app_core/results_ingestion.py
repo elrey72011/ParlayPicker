@@ -205,6 +205,31 @@ def attach_results(master_df: pd.DataFrame, results_df: pd.DataFrame) -> pd.Data
             if strict_mask.any():
                 match_mask = strict_mask
 
+        if pd.notna(row.get("snapshot_id")) and str(row.get("snapshot_id", "")).strip():
+            # Durable snapshots must never inherit a result from another date or
+            # the first game of a doubleheader. Older unversioned exports retain
+            # their existing matching behavior.
+            strict_forward = mask1 & res_df["_norm_home"].eq(home) & res_df["_norm_away"].eq(away)
+            strict_reverse = mask1 & res_df["_norm_home"].eq(away) & res_df["_norm_away"].eq(home)
+            scores_reversed = not strict_forward.any() and strict_reverse.any()
+            match_mask = strict_reverse if scores_reversed else strict_forward
+            saved_day = str(row.get("game_date", row.get("Local Date", "")))[:10]
+            if not date_col or not saved_day:
+                match_mask = pd.Series(False, index=res_df.index)
+            else:
+                match_mask = match_mask & res_df["_date_str"].eq(saved_day)
+            same_fixture = (
+                df.get("league", df.get("League", pd.Series("", index=df.index))).astype(str).str.upper().eq(league)
+                & df.get("home_team", df.get("Home", pd.Series("", index=df.index))).astype(str).map(lambda x: robust_normalize_team(x).lower()).eq(home)
+                & df.get("away_team", df.get("Away", pd.Series("", index=df.index))).astype(str).map(lambda x: robust_normalize_team(x).lower()).eq(away)
+                & df.get("game_date", df.get("Local Date", pd.Series("", index=df.index))).astype(str).str[:10].eq(saved_day)
+            )
+            starts_on_slate = df.loc[same_fixture, "game_start_utc"].nunique() if "game_start_utc" in df else 0
+            if int(match_mask.sum()) > 1 or starts_on_slate > 1:
+                start = pd.to_datetime(row.get("game_start_utc"), errors="coerce", utc=True)
+                result_starts = pd.to_datetime(res_df[date_col], errors="coerce", utc=True)
+                exact = match_mask & result_starts.eq(start) & result_starts.notna()
+                match_mask = exact if int(exact.sum()) == 1 else pd.Series(False, index=res_df.index)
         matches = res_df[match_mask.fillna(False).astype(bool)]
 
         if len(matches) > 0:
