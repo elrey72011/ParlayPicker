@@ -5,6 +5,7 @@ import math
 import pandas as pd
 
 from core.selector_validation import timestamp
+from core.probability_semantics import conditional_probabilities
 
 
 def text(value):
@@ -140,11 +141,22 @@ def build_readiness(audit, final=None, *, quote_warning_minutes=15, diagnostics=
                 issues.append("price_or_source_unverified")
             if probability(row.get("calibrated_probability")) is None or probability(row.get("market_probability")) is None:
                 issues.append("probability_missing_or_invalid")
-            if text(row.get("probability_semantics")) != "win_conditional_on_decision":
+            if conditional_probabilities(row) is None:
                 issues.append("probability_semantics_unverified")
+            rejected_line = (flag(row.get("final_line_rejected")) is True
+                             or text(row.get("market_line_source")).startswith("rejected")
+                             or "line unresolved" in text(row.get("best_pick")).lower())
+            if rejected_line:
+                issues.append("final_line_rejected")
+            kind = text(row.get("market_type"))
+            line = number(row.get("total_line" if kind.startswith("total") else "spread_line"))
+            push_possible = line is not None and line.is_integer() and kind.startswith(("spread", "total"))
             detail = {"snapshot_id": sid, "export_run_id": run, "matchup_id": game,
                       "pick": text(row.get("best_pick")), "market": text(row.get("market_type")),
                       "selected": flag(row.get("best_available_selected")), "quote_verified": exact,
+                      "line_eligible": not rejected_line, "quoted_line": line,
+                      "settlement_rule": "push_on_equal" if push_possible else "no_push" if line is not None else "unresolved",
+                      "probability_semantics": text(row.get("probability_semantics")),
                       "quote_age_minutes_at_capture": age, "odds_source": source,
                       "independent_model_probability": probability(row.get("ml_probability")),
                       "theover_probability": probability(row.get("theover_probability")),
@@ -201,7 +213,8 @@ def render_readiness(report):
     def escape(value):
         return str(value).replace("|", "\\|").replace("\n", " ")
     lines = ["# Run Readiness Report", "", "Read-only diagnostics. Ready for grading does not mean approved to bet or proven accurate.",
-             "Formal validation still checks outcomes, snapshot selection, provenance and the evaluation cutoff.", "",
+             "Formal validation still checks outcomes, snapshot selection, provenance and the evaluation cutoff.",
+             "A verified quote may still have a rejected final line. Integer lines can push; scoring requires explicit conditional probabilities or recorded model and market push probabilities.", "",
              f"Quote age warning: {report['quote_warning_minutes']} minutes at capture; diagnostic only.",
              "Feature freshness is unknown unless a source timestamp was exported. Missing model inputs remain unavailable.", "",
              "| Game | Pick | Evidence | Wager | Display probability | Production probability | Blockers / wager reasons |",

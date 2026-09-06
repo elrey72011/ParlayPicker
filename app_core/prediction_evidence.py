@@ -191,7 +191,9 @@ def capture_run(context, audit, final, inputs, *, path=None):
         final.at[idx, "matchup_id"] = audit.at[ai, "matchup_id"]
         for column in ("calibrated_probability", "odds_american", "odds_source", "spread_line", "total_line",
                        "Kelly_Bet_Size", "wager_approved", "Pick_Status", "Status_Reason", "qualification_reason",
-                       "gemini_approved", "gemini_flags", "production_gate_reason"):
+                       "gemini_approved", "gemini_flags", "production_gate_reason",
+                       "market_line_used", "market_line_source", "line_consistency_flag",
+                       "line_event_identity_match_flag", "line_provenance_warning"):
             if column in final:
                 audit.at[ai, column] = row[column]
 
@@ -208,7 +210,14 @@ def capture_run(context, audit, final, inputs, *, path=None):
         kind = str(row.get("market_type", ""))
         line = pd.to_numeric(row.get("total_line" if kind.startswith("total") else "spread_line"), errors="coerce")
         no_push = kind.startswith("moneyline") or (pd.notna(line) and abs(line % 1 - .5) < 1e-8)
-        audit.at[idx, "probability_semantics"] = "win_conditional_on_decision" if no_push else "push_semantics_unverified"
+        from core.probability_semantics import conditional_probabilities
+        explicit_push = str(row.get("probability_semantics", "")) == "win_unconditional_with_push" and conditional_probabilities(row) is not None
+        audit.at[idx, "probability_semantics"] = (
+            "win_unconditional_with_push" if explicit_push else
+            "win_conditional_on_decision" if no_push else "push_semantics_unverified"
+        )
+        rejected = str(row.get("market_line_source", "")).startswith("rejected") or "line unresolved" in str(row.get("best_pick", "")).lower()
+        audit.at[idx, "final_line_rejected"] = rejected
         if pd.isna(timestamp(row.get("game_start_utc"))):
             try:
                 start = pd.to_datetime(str(row.get("game_time_est", "")).replace(" ET", ""), format="%Y-%m-%d %I:%M %p")

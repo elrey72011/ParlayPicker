@@ -119,3 +119,25 @@ def test_mismatched_export_values_are_visible(frozen):
     row = build_readiness(audit, final)['games'][0]
     assert 'final_probability_mismatch' in row['evidence_blockers']
     assert 'final_price_mismatch' in row['evidence_blockers']
+
+
+def test_verified_quote_does_not_override_rejected_final_line(frozen):
+    audit, final = saved(frozen)
+    audit.loc[audit.best_available_selected, "best_pick"] = "Total line unresolved"
+    final["best_pick"] = "Total line unresolved"
+    report = build_readiness(audit, final)
+    candidate = report["candidates"][0]
+    assert candidate["quote_verified"] and not candidate["line_eligible"]
+    assert "final_line_rejected" in report["games"][0]["evidence_blockers"]
+
+
+def test_push_rows_require_explicit_push_mass(frozen):
+    audit, final = saved(frozen)
+    audit["total_line"] = 8
+    audit["probability_semantics"] = "win_unconditional_with_push"
+    audit["push_probability"] = .1
+    audit["market_push_probability"] = .1
+    assert build_readiness(audit, final)["games"][0]["readiness"] == "ready_for_grading"
+    assert build_readiness(audit, final)["candidates"][0]["settlement_rule"] == "push_on_equal"
+    audit.loc[~audit.best_available_selected, "market_push_probability"] = None
+    assert "probability_semantics_unverified" in build_readiness(audit, final)["games"][0]["evidence_blockers"]

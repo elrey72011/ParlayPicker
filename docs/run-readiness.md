@@ -35,3 +35,31 @@ python scripts/run_readiness.py --database data/prediction_evidence/evidence.sql
 
 Without CSV arguments, the command uses the latest saved snapshot, or the explicit
 snapshot ID. CSV input hashes accompany the JSON report. No source file is edited.
+
+
+### Quote binding and final line decisions
+
+`quote_verified` reports an exact provider quote match. `line_eligible` separately
+reports whether the final line was rejected; it does not approve a wager. A row
+can have a verified raw quote and an unresolved final pick after the line/event
+safety check. Capture preserves this rejection as `final_line_rejected`, and
+readiness and formal validation block it. Historical snapshots are unchanged;
+readiness also recognizes their unresolved labels and rejected line sources.
+
+### Push-capable probabilities
+
+Whole-number spreads and totals may settle as PUSH. The report exports
+`settlement_rule` and `probability_semantics`. Existing unverified records remain
+blocked, including when the problematic candidate was not selected.
+
+The validator accepts explicitly recorded `win_unconditional_with_push` inputs
+only with both `push_probability` and `market_push_probability`. Each must be
+finite, nonnegative and below one, and win plus push probability must not exceed
+one. For scoring it converts each probability using `P(win) / (1 - P(push))`.
+Original forecasts remain unchanged. PUSH settles at zero profit and remains in
+turnover, but is excluded from binary scoring and decided-wager hit rate.
+
+This support does not estimate push probabilities, relabel historical forecasts,
+change production probabilities, or loosen wager approval. The current model
+must supply verified push-aware forecasts before its integer-line records can
+use this path.

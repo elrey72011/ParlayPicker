@@ -41,9 +41,10 @@ def render_readiness_dashboard(audit=None, final=None, diagnostics=None):
         st.dataframe(table[visible], hide_index=True)
         for warning in report["run_warnings"]:
             st.warning(warning)
+        st.caption("Quote verified means the provider quote matched. Line eligible separately reflects final line rejection. Push-capable lines require verified probability semantics for validation.")
         candidates = pd.DataFrame(report["candidates"])
         candidates["issues"] = candidates["issues"].map(lambda values: "; ".join(values))
-        st.dataframe(candidates[["matchup_id", "pick", "selected", "quote_verified", "quote_age_minutes_at_capture", "odds_source", "issues"]], hide_index=True)
+        st.dataframe(candidates[["matchup_id", "pick", "selected", "quote_verified", "line_eligible", "quoted_line", "settlement_rule", "probability_semantics", "quote_age_minutes_at_capture", "odds_source", "issues"]], hide_index=True)
         st.download_button("Download Readiness Report", render_readiness(report), file_name="run-readiness.md", mime="text/markdown")
         st.download_button("Download Readiness Metrics", json.dumps(report, indent=2, allow_nan=False), file_name="run-readiness.json", mime="application/json")
         st.download_button("Download Game Readiness CSV", table.to_csv(index=False), file_name="game-readiness.csv", mime="text/csv")
