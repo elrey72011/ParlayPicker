@@ -361,3 +361,33 @@ def test_ranking_blends_do_not_trigger_probability_regression_claims():
     summary = summarize_candidate_performance(ledger)["rank"]
     assert "Avg Probability" not in summary
     assert abs(summary.iloc[0]["Avg Ranking Score"] - 0.80) < 1e-12
+
+
+def test_ledger_keeps_pregame_pool_instead_of_later_live_pool():
+    prior = _audit_rows().copy()
+    prior["export_run_id"] = "20260829T120000.123456Z"
+    prior["prediction_generated_at"] = "2026-08-29T12:00:00.123456Z"
+    prior["game_start_utc"] = "2026-08-29T13:00:00Z"
+    prior["candidate_outcome"] = "LOSS"
+    current = prior.copy()
+    current["export_run_id"] = "20260829T140000Z"
+    current["prediction_generated_at"] = "2026-08-29T14:00:00Z"
+    current["candidate_outcome"] = "WIN"
+    for outcome in ("WIN", "LOSS", "N/A"):
+        current["candidate_outcome"] = outcome
+        result = merge_candidate_ledgers(current, prior)
+        assert len(result) == len(prior)
+        assert result.export_run_id.eq("20260829T120000.123456Z").all()
+
+
+def test_ledger_chooses_latest_pregame_even_if_it_is_ungraded():
+    prior = _audit_rows().copy()
+    prior["export_run_id"] = "20260829T120000Z"
+    prior["prediction_generated_at"] = "2026-08-29T12:00:00Z"
+    prior["game_start_utc"] = "2026-08-29T15:00:00Z"
+    prior["candidate_outcome"] = "WIN"
+    current = prior.copy()
+    current["export_run_id"] = "20260829T140000Z"
+    current["prediction_generated_at"] = "2026-08-29T14:00:00Z"
+    current["candidate_outcome"] = "N/A"
+    assert merge_candidate_ledgers(current, prior).export_run_id.eq("20260829T140000Z").all()

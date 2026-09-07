@@ -103,8 +103,9 @@ def _latest_event_snapshots(frame: pd.DataFrame) -> pd.DataFrame:
     A cumulative ledger may be assembled from several intraday downloads.  If a
     line or selected direction changed between runs, candidate-key de-duplication
     alone retained both versions and counted the same final score repeatedly.
-    Prefer the latest export run for each event while preserving legacy rows that
-    have no run ID at all.
+    Prefer the latest verifiable pregame export when one exists. If none can
+    be verified, retain the latest run for diagnostics only. Never choose based
+    on outcomes. Preserve legacy rows with no run ID.
     """
 
     if frame is None or frame.empty or "export_run_id" not in frame.columns:
@@ -114,8 +115,21 @@ def _latest_event_snapshots(frame: pd.DataFrame) -> pd.DataFrame:
     run = _series(out, ("export_run_id",), "").fillna("").map(_canonical_text)
     has_run = run.ne("")
     event_has_run = has_run.groupby(event, dropna=False).transform("any")
+    raw_run = _series(out, ("export_run_id",), "").fillna("").astype(str)
+    exported = pd.to_datetime(raw_run, format="%Y%m%dT%H%M%S.%fZ", errors="coerce", utc=True)
+    exported = exported.fillna(pd.to_datetime(raw_run, format="%Y%m%dT%H%M%SZ", errors="coerce", utc=True))
+    from core.selector_validation import timestamp
+    start = pd.to_datetime(_series(out, ("game_start_utc",), "").map(timestamp), utc=True)
+    generated = pd.to_datetime(_series(out, ("prediction_generated_at",), "").map(timestamp), utc=True)
+    pregame = exported.notna() & start.notna() & generated.notna()
+    pregame &= generated.le(exported) & exported.lt(start)
+    # One bad timing record invalidates the entire candidate pool for this run.
+    pregame = pregame.groupby([event, run], dropna=False).transform("all")
+    has_pregame = pregame.groupby(event, dropna=False).transform("any")
+    latest_pregame = exported.where(pregame).groupby(event, dropna=False).transform("max")
     latest_run = run.groupby(event, dropna=False).transform("max")
     keep = (~event_has_run) | (has_run & run.eq(latest_run))
+    keep = keep.where(~has_pregame, pregame & exported.eq(latest_pregame))
     return out.loc[keep].copy()
 
 
