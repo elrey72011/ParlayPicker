@@ -18,7 +18,7 @@ The supplied `ParlayPicker Plan.md` is a requirements brief asking for an implem
 | Durable external evidence | Shared Drive adapters and read-back verification implemented | Run and verify each new prospective record backup in deployment. |
 | Prospective NCAAF predictions at dated market prices | Implemented by this change; live verification pending | Freeze, refresh, capture before kickoff, back up, and accumulate outcomes. |
 | ROI, hit rate, Brier/log loss and calibration | Research/paper reporting implemented | Adequate prospective sample; actual-execution evidence and stronger uncertainty analysis. |
-| Closing-line value, opening lines, line movement | Incomplete for this research workflow | Add timestamped closing observations and comparable-market CLV. |
+| Closing-line value, opening lines, line movement | Manual closing proxies and exact-line price CLV implemented; deployment verification pending | Automated final-close coverage, no-vig comparisons and opening-line history remain. |
 | Automated pregame batches, controlled refreshes and alerts | Incomplete | Prospective workflow is currently manual; scheduling/monitoring must be implemented separately. |
 | Dashboard, picks, parlays, portfolio and exports | Implemented foundations | Complete UX acceptance, accessibility and cross-league behavior checks. |
 | Retraining, drift detection, rollback | Partial | Version hashes exist; production monitoring and governed retraining/rollback need completion. |
@@ -38,7 +38,7 @@ The supplied `ParlayPicker Plan.md` is a requirements brief asking for an implem
 
 1. Verify a frozen cohort and a pregame capture in deployed Streamlit, including a successful Drive restore/read-back.
 2. Grade actual completed games and review capture exclusions, probability calibration and paper returns without outcome-based filter changes.
-3. Add closing-price capture and then controlled pregame scheduling with failure visibility.
+3. Verify manual closing-proxy capture, then add controlled pregame scheduling with failure visibility.
 4. Decide on model improvement using new evidence; require a new evaluation period for tuned models.
 5. Extend the same evidence discipline to remaining required leagues and complete the operational launch checklist.
 

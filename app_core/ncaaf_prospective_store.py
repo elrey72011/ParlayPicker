@@ -25,7 +25,7 @@ def connect(path=None):
 
 
 def insert(record, path=None):
-    if record.get("schema") != 1 or record.get("kind") not in ("model", "capture", "scores"):
+    if record.get("schema") != 1 or record.get("kind") not in ("model", "capture", "scores", "closing"):
         raise ValueError("Invalid prospective record")
     raw = encode(record)
     key = hashlib.sha256(raw).hexdigest()
@@ -36,7 +36,7 @@ def insert(record, path=None):
 
 def save(kind, data, path=None):
     created = datetime.now(timezone.utc).isoformat()
-    if kind == "capture":
+    if kind in ("capture", "closing"):
         from app_core.ncaaf_history import timestamp
         data = dict(data)
         data["events"] = [e for e in data["events"] if timestamp(e["start"]) > timestamp(created)]
