@@ -141,3 +141,33 @@ def test_push_rows_require_explicit_push_mass(frozen):
     assert build_readiness(audit, final)["candidates"][0]["settlement_rule"] == "push_on_equal"
     audit.loc[~audit.best_available_selected, "market_push_probability"] = None
     assert "probability_semantics_unverified" in build_readiness(audit, final)["games"][0]["evidence_blockers"]
+
+
+def test_unselected_missing_or_rejected_lines_are_ineligible(frozen):
+    audit, final = saved(frozen)
+    for changes in (
+        {"total_line": None},
+        {"total_line": float("inf")},
+        {"odds_source": "rejected_live_orientation"},
+        {"line_source": "rejected_live_spread_price"},
+        {"best_pick": "Away (No Line)"},
+        {"line_consistency_flag": False},
+        {"line_event_identity_match_flag": False},
+    ):
+        case = audit.copy()
+        for key, value in changes.items():
+            case.loc[~case.best_available_selected, key] = value
+        report = build_readiness(case, final)
+        candidate = next(c for c in report["candidates"] if not c["selected"])
+        assert not candidate["line_eligible"], changes
+        assert "final_line_rejected" in candidate["issues"]
+        assert report["games"][0]["readiness"] == "blocked"
+
+
+def test_moneyline_without_point_is_not_a_missing_spread(frozen):
+    audit, final = saved(frozen)
+    audit.loc[~audit.best_available_selected, "market_type"] = "moneyline_away"
+    audit.loc[~audit.best_available_selected, "total_line"] = None
+    report = build_readiness(audit, final)
+    candidate = next(c for c in report["candidates"] if not c["selected"])
+    assert candidate["line_eligible"]

@@ -63,3 +63,5 @@ This support does not estimate push probabilities, relabel historical forecasts,
 change production probabilities, or loosen wager approval. The current model
 must supply verified push-aware forecasts before its integer-line records can
 use this path.
+
+Line eligibility uses the same checks during capture and report generation, for selected and unselected candidates. Missing or non-finite spread/total points, rejected quote or line sources, unresolved labels, and explicit failed line/event checks make the line ineligible. Moneylines do not require a point. Historical snapshots are read without modification.

@@ -265,3 +265,12 @@ def test_final_rejected_line_preserved_despite_exact_quote(frozen):
     saved["candidate_outcome"] = "WIN"
     report = build_report(saved, train_through="2026-09-02")
     assert report["inventory"]["eligible_events"] == 0
+
+
+def test_capture_marks_unselected_rejected_line(frozen):
+    context, db, _ = frozen
+    audit, final = fixture_frames()
+    audit.loc[~audit.best_available_selected, "odds_source"] = "rejected_live_spread_price"
+    captured, _ = evidence.capture_run(context, audit, final, audit, path=db)
+    assert captured.loc[~captured.best_available_selected, "final_line_rejected"].all()
+    assert not captured.loc[captured.best_available_selected, "final_line_rejected"].any()
