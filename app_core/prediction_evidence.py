@@ -216,7 +216,8 @@ def capture_run(context, audit, final, inputs, *, path=None):
             "win_unconditional_with_push" if explicit_push else
             "win_conditional_on_decision" if no_push else "push_semantics_unverified"
         )
-        rejected = str(row.get("market_line_source", "")).startswith("rejected") or "line unresolved" in str(row.get("best_pick", "")).lower()
+        from core.line_evidence import line_rejected
+        rejected = line_rejected(row)
         audit.at[idx, "final_line_rejected"] = rejected
         if pd.isna(timestamp(row.get("game_start_utc"))):
             try:

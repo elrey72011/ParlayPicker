@@ -6,6 +6,7 @@ import pandas as pd
 
 from core.selector_validation import timestamp
 from core.probability_semantics import conditional_probabilities
+from core.line_evidence import line_rejected
 
 
 def text(value):
@@ -143,9 +144,7 @@ def build_readiness(audit, final=None, *, quote_warning_minutes=15, diagnostics=
                 issues.append("probability_missing_or_invalid")
             if conditional_probabilities(row) is None:
                 issues.append("probability_semantics_unverified")
-            rejected_line = (flag(row.get("final_line_rejected")) is True
-                             or text(row.get("market_line_source")).startswith("rejected")
-                             or "line unresolved" in text(row.get("best_pick")).lower())
+            rejected_line = line_rejected(row)
             if rejected_line:
                 issues.append("final_line_rejected")
             kind = text(row.get("market_type"))
