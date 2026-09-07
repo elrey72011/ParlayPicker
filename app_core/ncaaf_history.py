@@ -160,7 +160,7 @@ def _yards(team):
         return None
 
 
-def build_dataset(state):
+def build_dataset(state, *, feature_targets=None):
     games, stats, issues, seen, conflicts = {}, {}, [], {}, set()
     for b in state["batches"]:
         req = b["request"]
@@ -214,7 +214,7 @@ def build_dataset(state):
         for tid in (g["homeId"], g["awayId"]):
             history.setdefault((g["season"], tid), []).append(g)
     rows = []
-    for g in ordered:
+    for g in (ordered if feature_targets is None else feature_targets):
         gid = g["id"]
         if not all((gid, g[s + "Id"]) in stats for s in ("home", "away")):
             issues.append({"season": g["season"], "game_id": gid, "issue": "missing_or_conflicting_team_stats"})
@@ -225,7 +225,7 @@ def build_dataset(state):
                "historical_publication_time_verified": False, "production_eligible": False}
         for side in ("home", "away"):
             tid = g[side + "Id"]
-            prior = [p for p in history[(g["season"], tid)]
+            prior = [p for p in history.get((g["season"], tid), [])
                      if timestamp(p["startDate"]) < cutoff]
             own, against, yards = [], [], []
             for p in prior:
