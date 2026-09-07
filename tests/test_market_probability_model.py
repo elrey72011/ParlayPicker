@@ -101,3 +101,26 @@ def test_legacy_scaled_mlb_scoring_features_are_unscaled():
 
     assert scaled_out.loc[0, "ml_probability"] == pytest.approx(raw_out.loc[0, "ml_probability"])
 
+
+
+def test_ncaaf_missing_model_is_distinct_from_missing_stats():
+    frame = _resolved_rows(["total_over"], total_lines=[53.5], league="NCAAF")
+    out = predict_market_probabilities(frame)
+    assert out.ml_probability.isna().all()
+    assert out.ml_unavailable_reason.iloc[0] == "No market-specific model configured for NCAAF"
+
+
+@pytest.mark.parametrize("value", [False, "False", "false", "0", None])
+def test_exported_ineligible_flag_never_produces_probability(value):
+    frame = _resolved_rows(["total_over"], total_lines=[8.5])
+    frame["ml_feature_eligible"] = value
+    out = predict_market_probabilities(frame)
+    assert out.ml_probability.isna().all()
+    assert out.ml_unavailable_reason.iloc[0] == "Team features are not eligible or resolved"
+
+
+def test_mixed_league_column_falls_back_per_row():
+    frame = _resolved_rows(["total_over", "total_under"], total_lines=[8.5, 8.5])
+    frame.loc[1,"League"] = ""
+    frame["league"] = "MLB"
+    assert predict_market_probabilities(frame).ml_probability.notna().all()

@@ -269,7 +269,7 @@ REQUIRED_BEST_PICK_EXPORT_COLUMNS = [
     "ml_target",
     "ml_projection",
     "ml_residual_scale",
-    "ml_feature_quality",
+    "ml_feature_quality", "ml_unavailable_reason",
     # TheOver WinProbSource tag, surfaced for transparency + as a deploy/version
     # signal: if this column is absent or all-NaN in an export, the running app is
     # not on the build that gates untrusted MLB-total direction sources.
@@ -559,7 +559,7 @@ BEST_PICK_COLUMNS = [
     "best_available_only", "commercial_reason", "wager_approved", "export_role",
     "wager_instruction",
     "decimal_odds", "matchup_id",
-    "odds_american", "odds_source", "odds_feed_source", "market_probability", "ml_probability", "ml_probability_source", "ml_target", "ml_projection", "ml_residual_scale", "ml_feature_quality", "theover_probability", "win_prob_source", "display_probability",
+    "odds_american", "odds_source", "odds_feed_source", "market_probability", "ml_probability", "ml_probability_source", "ml_target", "ml_projection", "ml_residual_scale", "ml_feature_quality", "ml_unavailable_reason", "theover_probability", "win_prob_source", "display_probability",
     "kalshi_probability", "kalshi_match_status", "kalshi_match_reason",
     # Kalshi match instrumentation: the contract line actually used, its distance from
     # the pick line, and the raw P(over) before orientation/decay â€” for diagnosing a
@@ -610,7 +610,7 @@ CANONICAL_BET_COLUMNS = [
     "market_type", "candidate_source", "orientation_source", "upload_match_reason", "spread_line", "total_line",
     "orientation_favorite_side",
     "theover_probability", "win_prob_source", "odds_american", "odds_source", "odds_feed_source", "market_probability",
-    "ml_probability", "ml_probability_source", "ml_target", "ml_projection", "ml_residual_scale", "ml_feature_quality", "display_probability", "calibrated_probability", "expected_value", "edge", "best_pick", "used_stale_features", "matchup_id", "Conviction_Score",
+    "ml_probability", "ml_probability_source", "ml_target", "ml_projection", "ml_residual_scale", "ml_feature_quality", "ml_unavailable_reason", "display_probability", "calibrated_probability", "expected_value", "edge", "best_pick", "used_stale_features", "matchup_id", "Conviction_Score",
     "uploaded_spread_line", "uploaded_total_line", "live_spread_line", "live_total_line", "line_source", "line_delta", "upload_market_match",
     # Carried so a TheOver-feed degradation warning set by _apply_analysis_calculations
     # survives the canonical reindex and reaches the production degraded-run Kelly guard.
@@ -2587,7 +2587,7 @@ def _retire_game_winner_model_from_unsupported_markets(
         return df
 
     df.loc[retire_mask, "ml_probability"] = pd.NA
-    for column in ("ml_probability_source", "ml_target", "ml_projection", "ml_residual_scale", "ml_feature_quality"):
+    for column in ("ml_probability_source", "ml_target", "ml_projection", "ml_residual_scale", "ml_feature_quality", "ml_unavailable_reason"):
         if column in df.columns:
             df.loc[retire_mask, column] = pd.NA
     if "model_status" not in df.columns:
@@ -4686,7 +4686,7 @@ def build_best_picks_df(analysis_df: pd.DataFrame, diagnostics_out: dict | None 
         "odds_american", "opposing_odds_american", "odds_source", "odds_feed_source",
         "opposing_odds_source", "market_probability", "line_source",
         "ml_probability", "ml_probability_source", "ml_target", "ml_projection",
-        "ml_residual_scale", "ml_feature_quality", "theover_probability",
+        "ml_residual_scale", "ml_feature_quality", "ml_unavailable_reason", "theover_probability",
         "orientation_source", "raw_book_odds_diag",
         "blend_in_kalshi", "blend_in_market", "blend_in_theover", "blend_in_ml", "blend_tier",
         "selection_probability_used", "selection_probability_source",
@@ -9780,7 +9780,7 @@ def run_analysis_pipeline(
     if not use_ml:
         if "ml_probability" in merged.columns:
             merged["ml_probability"] = pd.NA
-        for column in ("ml_probability_source", "ml_target", "ml_projection", "ml_residual_scale", "ml_feature_quality"):
+        for column in ("ml_probability_source", "ml_target", "ml_projection", "ml_residual_scale", "ml_feature_quality", "ml_unavailable_reason"):
             merged[column] = pd.NA
         merged["model_status"] = "Model Disabled"
 
@@ -9815,7 +9815,7 @@ def run_analysis_pipeline(
             "ml_target",
             "ml_projection",
             "ml_residual_scale",
-            "ml_feature_quality",
+            "ml_feature_quality", "ml_unavailable_reason",
         ):
             if column not in merged.columns:
                 merged[column] = pd.NA
@@ -9823,6 +9823,8 @@ def run_analysis_pipeline(
                 merged.loc[market_available, column] = market_model_predictions.loc[
                     market_available, column
                 ]
+        if "ml_unavailable_reason" in market_model_predictions:
+            merged.loc[market_model_predictions.index, "ml_unavailable_reason"] = market_model_predictions["ml_unavailable_reason"]
         merged.loc[market_available, "model_status"] = "Market Score Model"
         logger.info(
             "MARKET MODEL: generated %s target-specific spread/total probabilities.",

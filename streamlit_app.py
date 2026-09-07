@@ -1094,8 +1094,12 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
             deferred_warnings.append(
                 f"Target-specific model probability is unavailable for "
                 f"{missing_target_market_predictions}/{int(target_market_rows.sum())} spread/total rows "
-                "because resolved team scoring features or an exact line were missing."
+                "because a supported model, eligible scoring features, or an exact line is unavailable."
             )
+        if "ml_unavailable_reason" in analysis_df:
+            reasons = analysis_df["ml_unavailable_reason"].fillna("").astype(str)
+            for reason, count in reasons[reasons.ne("")].value_counts().items():
+                deferred_warnings.append(f"{reason}: {count} candidate rows.")
     else:
         ml_required = False
 
