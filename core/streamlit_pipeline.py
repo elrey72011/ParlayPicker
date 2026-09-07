@@ -1985,6 +1985,17 @@ def _game_date_fallback() -> pd.Timestamp:
     return pd.Timestamp(year=now_est.year, month=now_est.month, day=now_est.day, tz="UTC")
 
 
+def _exclude_nonforecast_theover_values(frame: pd.DataFrame) -> pd.DataFrame:
+    """Exclude explicitly non-forecast sources without removing matchup/line data."""
+    out = frame.copy()
+    source = _string_series(out, "win_prob_source").str.strip().str.lower()
+    excluded = source.isin({"default_0.5", "public_betting_pct"})
+    for column in ("theover_probability", "winprobability", "win_probability", "probability"):
+        if column in out:
+            out.loc[excluded, column] = np.nan
+    return out
+
+
 def _normalize_upload(df: pd.DataFrame | None) -> pd.DataFrame:
     if df is None or df.empty:
         return pd.DataFrame()
@@ -1992,6 +2003,7 @@ def _normalize_upload(df: pd.DataFrame | None) -> pd.DataFrame:
     for src, dst in _UPLOAD_COLUMN_ALIASES.items():
         if src in out.columns and dst not in out.columns:
             out = out.rename(columns={src: dst})
+    out = _exclude_nonforecast_theover_values(out)
     out = _coerce_identity_columns(out)
     out["game_date"] = _utc_day_key(_game_dates(out))
     # Fill any missing dates with fallback
@@ -2021,6 +2033,7 @@ def _coerce_export_to_canonical(df: pd.DataFrame, selected_sports: list[str] | N
         if src in out.columns and dst not in out.columns:
             out = out.rename(columns={src: dst})
 
+    out = _exclude_nonforecast_theover_values(out)
     out = _coerce_identity_columns(out)
     required_identity = {"league", "home_team", "away_team", "market_type"}
     missing_cols = [c for c in sorted(required_identity) if c not in out.columns or _string_series(out, c).str.len().eq(0).all()]
@@ -2584,7 +2597,7 @@ def _retire_game_winner_model_from_unsupported_markets(
 
 
 def _apply_analysis_calculations(df: pd.DataFrame) -> pd.DataFrame:
-    out = df.copy()
+    out = _exclude_nonforecast_theover_values(df)
     out["odds_american"] = _numeric_series(out, "odds_american", pd.NA)
 
     # Phase 4: Implementation of Bayesian Shrinkage and Vig Removal
@@ -9817,6 +9830,7 @@ def run_analysis_pipeline(
         )
     ml_prediction_diag["market_specific_ml_predictions"] = market_ml_count
 
+    merged = _exclude_nonforecast_theover_values(merged)
     theover_probability = _numeric_series(merged, "theover_probability")
     theover_probability = theover_probability.where(theover_probability <= 1, theover_probability / 100.0)
 
