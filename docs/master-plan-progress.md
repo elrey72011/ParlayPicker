@@ -43,3 +43,7 @@ The supplied `ParlayPicker Plan.md` is a requirements brief asking for an implem
 5. Extend the same evidence discipline to remaining required leagues and complete the operational launch checklist.
 
 The user's 75% aspiration is not a completion criterion specified in the brief and is not demonstrated by implementing these features. Winner prediction accuracy and profitable approved wagers remain different measurements.
+
+## MLB historical dataset milestone
+
+A bounded, resumable [MLB CLI collector](mlb-historical-collection.md) now builds same-season features from prior completed games with source game IDs and separate targets. Full collection and chronological benchmark evaluation remain pending. This extends historical-data infrastructure; it does not establish MLB accuracy or production eligibility.
