@@ -69,6 +69,9 @@ def render_ncaaf_prospective():
                 st.warning(info["error"])
         report = prospective.report()
         st.caption(f"Captured games across cohorts: {report['captured_games_by_cohort']} · Graded model selections: {report['graded_selections']}")
+        if report.get("latest_exclusion_counts"):
+            st.caption("Latest capture exclusions: " + str(report.get("latest_capture_at")))
+            st.dataframe([{"reason": reason, "games": count} for reason, count in report["latest_exclusion_counts"].items()], hide_index=True)
         if report["summary"]:
             st.dataframe([{k:v for k,v in row.items() if k != "calibration"} for row in report["summary"]], hide_index=True)
         st.download_button("Download prospective evaluation", json.dumps(report, indent=2), "ncaaf-prospective-report.json", mime="application/json", key="ncaaf_prospective_report")

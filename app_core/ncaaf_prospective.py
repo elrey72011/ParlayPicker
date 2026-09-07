@@ -112,6 +112,46 @@ def _match(event, games):
     return matches[0] if len(matches) == 1 else None
 
 
+def exclusion_details(event, games, captured):
+    """Explain the existing match/time gate without relaxing it."""
+    from core.team_mapper import normalize_team_name
+    def name(value):
+        return normalize_team_name(str(value or "")).casefold()
+    home, away = name(event.get("home_team")), name(event.get("away_team"))
+    start = timestamp(event.get("commence_time"))
+    pairs = [g for g in games if home and away and name(g.get("homeTeam")) == home and name(g.get("awayTeam")) == away]
+    detail = {"event_id": event.get("id"), "home": event.get("home_team"), "away": event.get("away_team"),
+              "odds_start": event.get("commence_time"), "canonical_home": home, "canonical_away": away,
+              "same_pair_count": len(pairs), "schedule_candidates": [
+                  {"cfbd_id": g.get("id"), "start": g.get("startDate"), "start_time_tbd": g.get("startTimeTBD"),
+                   "completed": g.get("completed")} for g in pairs[:10]]}
+    if not start:
+        reason = "invalid_odds_start"
+    elif start <= captured:
+        reason = "already_started"
+    elif start > captured + timedelta(days=7):
+        reason = "outside_seven_day_window"
+    elif not home or not away:
+        reason = "missing_team_name"
+    elif not pairs:
+        reversed_pair = any(name(g.get("homeTeam")) == away and name(g.get("awayTeam")) == home for g in games)
+        reason = "home_away_reversed" if reversed_pair else "team_pair_not_found"
+    else:
+        timed = [g for g in pairs if timestamp(g.get("startDate")) and abs((timestamp(g["startDate"])-start).total_seconds()) <= 60]
+        if not timed:
+            reason = "kickoff_mismatch_or_missing"
+        elif all(g.get("startTimeTBD") is not False for g in timed):
+            reason = "schedule_start_unverified"
+        elif all(g.get("completed") is not False for g in timed if g.get("startTimeTBD") is False):
+            reason = "schedule_not_confirmed_uncompleted"
+        else:
+            valid = [g for g in timed if g.get("startTimeTBD") is False and g.get("completed") is False
+                     and integer(g.get("id")) and integer(g.get("homeId")) and integer(g.get("awayId")) and g["homeId"] != g["awayId"]]
+            reason = "ambiguous_schedule_match" if len(valid) > 1 else "invalid_schedule_ids"
+    detail["reason"] = reason
+    return detail
+
+
 def quote_candidates(event, model, feature, captured):
     from app_core.prediction_evidence import provider_quotes
     try:
@@ -172,7 +212,7 @@ def capture(state, model_record, odds_key, *, get=None, path=None):
         g = _match(event, games)
         start = timestamp(event.get("commence_time"))
         if not g or not start or start <= captured or start > captured+timedelta(days=7):
-            skipped.append({"event_id": event.get("id"), "reason": "unmatched_or_not_upcoming"})
+            skipped.append(exclusion_details(event, games, captured))
             continue
         _, features, _ = build_dataset(state, feature_targets=[g])
         feature = features[0]
@@ -277,7 +317,13 @@ def report(path=None):
                         "calibration": [{"bin": i, "n": len(bucket), "mean_win_probability": sum(r["win_probability"] for r in bucket)/len(bucket),
                                          "observed_win_rate": sum(r["outcome"]=="win" for r in bucket)/len(bucket)}
                                         for i in range(10) if (bucket := [r for r in rows if min(9,int(r["win_probability"]*10)) == i])]})
-    return {"captured_games_by_cohort": len(first), "graded_selections": len(results), "summary": summary, "results": results,
+    captures = [r for r in records if r["kind"] == "capture"]
+    latest = max(captures, key=lambda r: (r["data"]["captured_at"], r["id"])) if captures else None
+    exclusions = latest["data"].get("skipped", []) if latest else []
+    from collections import Counter
+    return {"latest_capture_at": latest["data"]["captured_at"] if latest else None,
+            "latest_exclusion_counts": dict(Counter(e["reason"] for e in exclusions)),
+            "latest_exclusions": exclusions, "captured_games_by_cohort": len(first), "graded_selections": len(results), "summary": summary, "results": results,
             "limitations": ["Paper evaluation only; quotes are observed offers, not confirmed executions.",
                             "No closing-line value or automatic schedule is implemented.",
                             "Models have separate frozen cohorts; repeated captures do not replace the first selection."]}

@@ -30,3 +30,9 @@ Scores are joined by exact CFBD game and home/away IDs. The initial grading work
 The report shows graded counts, paper hit rate excluding pushes, paper return per staked unit, three-way Brier score, log loss and calibration bins. Observed quotes do not prove actual execution. No closing-line value, market-independent significance claim, automatic scheduling, or production approval is provided by this workflow.
 
 References: [The Odds API v4](https://the-odds-api.com/liveapi/guides/v4/) and [CFBD games](https://api.collegefootballdata.com/api/games).
+
+## Exclusion diagnostics
+
+The report and sidebar summarize exclusions from the latest capture. Matching exclusions distinguish already-started events, the seven-day window, missing start/team information, absent or reversed team pairs, kickoff disagreement, uncertain/completed schedule entries, invalid IDs and ambiguous matches. The JSON includes source team names, normalized names and up to ten matching schedule candidates. These diagnostics preserve existing capture gates. Older captures retain their original combined reason; a new capture is needed for detailed reasons.
+
+After deploying this change, freeze the research models again to create a cohort with the updated implementation hash before capturing. Existing evidence remains preserved.

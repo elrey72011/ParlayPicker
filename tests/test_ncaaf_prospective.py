@@ -157,3 +157,39 @@ def test_ui_does_not_call_providers_on_rerun():
         app.run();app.run()
         assert not app.exception
         fetch.assert_not_called()
+
+
+@pytest.mark.parametrize('case,reason', [
+    ('started','already_started'), ('outside','outside_seven_day_window'),
+    ('invalid','invalid_odds_start'), ('reversed','home_away_reversed'),
+    ('missing','team_pair_not_found'), ('kickoff','kickoff_mismatch_or_missing'),
+    ('tbd','schedule_start_unverified'), ('completed','schedule_not_confirmed_uncompleted'),
+    ('ids','invalid_schedule_ids'), ('duplicate','ambiguous_schedule_match')])
+def test_detailed_exclusions(case,reason):
+    e=event()
+    games=[deepcopy(inputs()['batches'][0]['records'][-1])]
+    if case=='started': e['commence_time']='2026-10-28T12:00:00Z'
+    if case=='outside': e['commence_time']='2026-11-10T12:00:00Z'
+    if case=='invalid': e['commence_time']='bad'
+    if case=='reversed': e['home_team'],e['away_team']=e['away_team'],e['home_team']
+    if case=='missing': e['home_team']='Unknown Team'
+    if case=='kickoff': games[0]['startDate']='2026-10-30T14:00:00Z'
+    if case=='tbd': games[0]['startTimeTBD']=True
+    if case=='completed': games[0]['completed']=True
+    if case=='ids': games[0]['homeId']=None
+    if case=='duplicate': games.append(deepcopy(games[0]))
+    d=p.exclusion_details(e,games,NOW)
+    assert d['reason']==reason
+    assert d['home']==e['home_team']
+    assert len(d['schedule_candidates'])<=10
+
+
+def test_report_retains_legacy_and_latest_exclusion_details(tmp_path):
+    path=tmp_path/'p.sqlite3'
+    for day,reason in [('01','unmatched_or_not_upcoming'),('02','team_pair_not_found')]:
+        store.insert({'schema':1,'kind':'capture','created_at':f'2026-09-{day}T12:00:00Z',
+                      'data':{'model_id':'missing','captured_at':f'2026-09-{day}T12:00:00Z','events':[],
+                              'skipped':[{'event_id':'x','reason':reason}]}},path)
+    report=p.report(path)
+    assert report['latest_exclusion_counts']=={'team_pair_not_found':1}
+    assert len(store.records(path))==2
