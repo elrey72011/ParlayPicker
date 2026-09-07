@@ -47,3 +47,7 @@ The user's 75% aspiration is not a completion criterion specified in the brief a
 ## MLB historical dataset milestone
 
 A bounded, resumable [MLB CLI collector](mlb-historical-collection.md) now builds same-season features from prior completed games with source game IDs and separate targets. Full collection and chronological benchmark evaluation remain pending. This extends historical-data infrastructure; it does not establish MLB accuracy or production eligibility.
+
+## MLB fixed research comparison
+
+The [MLB protocol](mlb-research-protocol.md) now implements a 2023 train / 2024 calibration / 2025 test comparison of ridge regression, constant and lagged-scoring baselines. The first retrospective run used 2,273 / 2,270 / 2,274 eligible games. Ridge winner accuracy was 53.1% versus 53.7% for the scoring baseline; ridge also had worse Brier score and log loss. There is no demonstrated improvement supporting promotion. Historical odds, prospective MLB validation and the richer feature set remain outstanding.
