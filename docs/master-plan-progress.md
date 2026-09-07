@@ -51,3 +51,7 @@ A bounded, resumable [MLB CLI collector](mlb-historical-collection.md) now build
 ## MLB fixed research comparison
 
 The [MLB protocol](mlb-research-protocol.md) now implements a 2023 train / 2024 calibration / 2025 test comparison of ridge regression, constant and lagged-scoring baselines. The first retrospective run used 2,273 / 2,270 / 2,274 eligible games. Ridge winner accuracy was 53.1% versus 53.7% for the scoring baseline; ridge also had worse Brier score and log loss. There is no demonstrated improvement supporting promotion. Historical odds, prospective MLB validation and the richer feature set remain outstanding.
+
+## MLB pitcher feature development
+
+The [starter development workflow](mlb-pitcher-development.md) adds resumable 2023–2024 boxscore collection, strictly prior-appearance pitching rates, and a matched team-only versus starter-enhanced ridge comparison. Full pitcher collection and development metrics remain pending. Actual starters are retrospective; pregame announcement evidence and prospective evaluation remain required. No 2025 retest or production activation is included.
