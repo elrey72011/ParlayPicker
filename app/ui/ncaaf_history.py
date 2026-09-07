@@ -24,7 +24,7 @@ def render_ncaaf_history():
         state = st.session_state.get("ncaaf_history")
         if st.button("Collect next NCAAF batch", key="ncaaf_history_collect",
                      disabled=state is not None and not pending_requests(state)):
-            with st.spinner("Collecting up to six historical requests…"):
+            with st.spinner("Collecting up to six historical requestsâ€¦"):
                 state, status = collect_batch(state if state is not None else new_collection(), _token())
                 st.session_state["ncaaf_history"] = state
                 st.session_state["ncaaf_history_status"] = status
@@ -36,7 +36,7 @@ def render_ncaaf_history():
             st.warning(f"Collection stopped: {status}. Completed requests are retained. Correct access or wait for quota reset before continuing.")
         audit, archive = _outputs(state)
         remaining = audit["requests_remaining"]
-        st.caption(f"Requests saved: {audit['requests_finished']} · Pending: {remaining}. Weekly requests are discovered as season schedules arrive.")
+        st.caption(f"Requests saved: {audit['requests_finished']} Â· Pending: {remaining}. Weekly requests are discovered as season schedules arrive.")
         if not remaining:
             st.success("Planned requests complete. Review the audit for missing records before training.")
         st.dataframe(audit["seasons"], hide_index=True)
@@ -46,8 +46,12 @@ def render_ncaaf_history():
         st.download_button("Download NCAAF checkpoint", checkpoint_bytes(state), "ncaaf-history-checkpoint.json", mime="application/json", key="ncaaf_history_checkpoint")
         if st.button("Back up NCAAF checkpoint to Drive", key="ncaaf_history_backup"):
             try:
-                with st.spinner("Saving and verifying the historical checkpoint…"):
+                with st.spinner("Saving and verifying the historical checkpointâ€¦"):
                     backup_checkpoint(state)
                 st.success("NCAAF checkpoint saved to Drive and read-back verified. Download that history JSON from Drive to resume after a restart.")
             except Exception:
                 st.error("NCAAF backup could not be verified. Download the checkpoint now and check the existing Drive configuration.")
+
+        from app.ui.ncaaf_research import render_ncaaf_research
+
+        render_ncaaf_research(state)
