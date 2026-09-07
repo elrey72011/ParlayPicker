@@ -17,7 +17,7 @@ def utcnow():
 
 def runtime_hash():
     root = Path(__file__).resolve().parents[1]
-    names = ("app_core/ncaaf_prospective.py", "app_core/ncaaf_research.py", "app_core/ncaaf_history.py", "core/team_mapper.py")
+    names = ("app_core/ncaaf_prospective.py", "app_core/ncaaf_research.py", "app_core/ncaaf_history.py", "core/team_mapper.py", "app_core/ncaaf_identity.py")
     return digest({n: hashlib.sha256((root/n).read_bytes()).hexdigest() for n in names})
 
 
@@ -97,9 +97,9 @@ def refresh(state, token, *, get=None):
 
 
 def _match(event, games):
-    from core.team_mapper import normalize_team_name
+    from app_core.ncaaf_identity import normalize_ncaaf_team
     def name(x):
-        return normalize_team_name(str(x)).casefold()
+        return normalize_ncaaf_team(x)
     start = timestamp(event.get("commence_time"))
     if not start:
         return None
@@ -114,9 +114,9 @@ def _match(event, games):
 
 def exclusion_details(event, games, captured):
     """Explain the existing match/time gate without relaxing it."""
-    from core.team_mapper import normalize_team_name
+    from app_core.ncaaf_identity import normalize_ncaaf_team
     def name(value):
-        return normalize_team_name(str(value or "")).casefold()
+        return normalize_ncaaf_team(value)
     home, away = name(event.get("home_team")), name(event.get("away_team"))
     start = timestamp(event.get("commence_time"))
     pairs = [g for g in games if home and away and name(g.get("homeTeam")) == home and name(g.get("awayTeam")) == away]

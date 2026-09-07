@@ -36,3 +36,7 @@ References: [The Odds API v4](https://the-odds-api.com/liveapi/guides/v4/) and [
 The report and sidebar summarize exclusions from the latest capture. Matching exclusions distinguish already-started events, the seven-day window, missing start/team information, absent or reversed team pairs, kickoff disagreement, uncertain/completed schedule entries, invalid IDs and ambiguous matches. The JSON includes source team names, normalized names and up to ten matching schedule candidates. These diagnostics preserve existing capture gates. Older captures retain their original combined reason; a new capture is needed for detailed reasons.
 
 After deploying this change, freeze the research models again to create a cohort with the updated implementation hash before capturing. Existing evidence remains preserved.
+
+## NCAAF provider identities
+
+Prospective matching uses a scoped exact alias table in `app_core/ncaaf_identity.py` before the generic name mapper. This handles provider abbreviations, mascot names and accented spellings without fuzzy matching or changing other sports' aliases. The identity module is part of the frozen runtime fingerprint, so deploying alias changes requires a new cohort freeze. Matching a game still does not waive minimum history, freshness, ambiguity or kickoff checks.
