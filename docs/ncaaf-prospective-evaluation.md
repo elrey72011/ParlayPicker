@@ -27,7 +27,7 @@ Before outcomes exist, each model selects the highest-EV candidate per game, wit
 
 Scores are joined by exact CFBD game and home/away IDs. The initial grading workflow does not automatically revisit already graded games for provider corrections. Append-only capture and score records are stored separately from production evidence in `ncaaf-prospective.sqlite3`, with immutable Drive objects under `parlaypicker/ncaaf-prospective-v1/`. Drive restore merges records and verifies content hashes; backup verifies read-back.
 
-The report shows graded counts, paper hit rate excluding pushes, paper return per staked unit, three-way Brier score, log loss and calibration bins. Observed quotes do not prove actual execution. No closing-line value, market-independent significance claim, automatic scheduling, or production approval is provided by this workflow.
+The report shows graded counts, paper hit rate excluding pushes, paper return per staked unit, three-way Brier score, log loss and calibration bins. Observed quotes do not prove actual execution. No market-independent significance claim, automatic scheduling, or production approval is provided by this workflow. Closing proxies are described below.
 
 References: [The Odds API v4](https://the-odds-api.com/liveapi/guides/v4/) and [CFBD games](https://api.collegefootballdata.com/api/games).
 
@@ -40,3 +40,11 @@ After deploying this change, freeze the research models again to create a cohort
 ## NCAAF provider identities
 
 Prospective matching uses a scoped exact alias table in `app_core/ncaaf_identity.py` before the generic name mapper. This handles provider abbreviations, mascot names and accented spellings without fuzzy matching or changing other sports' aliases. The identity module is part of the frozen runtime fingerprint, so deploying alias changes requires a new cohort freeze. Matching a game still does not waive minimum history, freshness, ambiguity or kickoff checks.
+
+## Closing proxies
+
+Click **Capture NCAAF closing proxies** in the final 30 minutes before kickoff. The action is manual, uses one three-market odds request, and can save observations even before model history is sufficient. Both collection time and source quote time must precede kickoff; source quotes must be at most 15 minutes old and within the final 30-minute window. Back up prospective evidence afterward.
+
+Download **NCAAF closing-line report** for comparisons against the first eligible prediction per cohort. It uses the latest available observation of the selected book/market, with exact event ID, team orientation, kickoff and line equality. Changed lines, ambiguity and missing comparable quotes produce no price CLV. Price CLV is entry decimal odds divided by closing decimal odds minus one; positive means a better entry payout. This is raw price CLV, not no-vig value or proof of execution. These manual observations are closing proxies, not guaranteed final closes. No historical or in-play quotes are substituted.
+
+Closing records use the existing append-only store and verified Drive backup. This reporting addition does not change the frozen prediction runtime and does not require a new model freeze.

@@ -67,7 +67,23 @@ def render_ncaaf_prospective():
             st.info(f"Graded {info['graded']} games; {info['pending_before_request']} were pending. Repeat if needed.")
             if info["error"]:
                 st.warning(info["error"])
+        from app_core import ncaaf_closing
+        st.markdown("**Closing-line observations**")
+        st.caption("Manually capture during the final 30 minutes before kickoff. This uses one three-market odds request and records closing proxies even when no model prediction is eligible.")
+        if st.button("Capture NCAAF closing proxies", key="ncaaf_closing_capture"):
+            try:
+                with st.spinner("Capturing pregame closing proxies…"):
+                    closing_info = ncaaf_closing.capture(_odds_key())
+                st.success(f"Saved closing proxies for {closing_info['saved_events']} events. Back up prospective evidence to Drive.")
+            except ValueError as exc:
+                st.error(str(exc))
+        closing_report = ncaaf_closing.report()
+        st.caption(f"Closing records: {closing_report['closing_records']} · Comparable selected markets: {closing_report['comparable_markets']}")
+        st.download_button("Download NCAAF closing-line report", json.dumps(closing_report, indent=2),
+                           "ncaaf-closing-report.json", mime="application/json", key="ncaaf_closing_report")
+
         report = prospective.report()
+        report["limitations"] = ["Closing proxies are in the separate closing-line report; no automatic schedule is implemented." if text == "No closing-line value or automatic schedule is implemented." else text for text in report.get("limitations", [])]
         st.caption(f"Captured games across cohorts: {report['captured_games_by_cohort']} · Graded model selections: {report['graded_selections']}")
         if report.get("latest_exclusion_counts"):
             st.caption("Latest capture exclusions: " + str(report.get("latest_capture_at")))
