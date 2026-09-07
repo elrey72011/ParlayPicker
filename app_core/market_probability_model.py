@@ -84,14 +84,14 @@ def predict_market_probabilities(frame: pd.DataFrame) -> pd.DataFrame:
     result["ml_target"] = pd.Series("", index=result.index, dtype="string")
     result["ml_projection"] = pd.Series(np.nan, index=result.index, dtype="float64")
     result["ml_residual_scale"] = pd.Series(np.nan, index=result.index, dtype="float64")
+    result["ml_unavailable_reason"] = pd.Series("", index=result.index, dtype="string")
     result["ml_feature_quality"] = pd.Series("unavailable", index=result.index, dtype="string")
 
     if frame is None or frame.empty:
         return result
 
     league = _text(frame, "League").str.upper().str.strip()
-    if league.eq("").all():
-        league = _text(frame, "league").str.upper().str.strip()
+    league = league.where(league.ne(""), _text(frame, "league").str.upper().str.strip())
     market_type = _text(frame, "market_type").str.lower().str.strip()
     spread_line = _numeric(frame, "spread_line")
     spread_line = spread_line.where(spread_line.notna(), _numeric(frame, "spread"))
@@ -100,7 +100,7 @@ def predict_market_probabilities(frame: pd.DataFrame) -> pd.DataFrame:
 
     eligible = pd.Series(True, index=frame.index, dtype=bool)
     if "ml_feature_eligible" in frame.columns:
-        eligible &= frame["ml_feature_eligible"].fillna(False).astype(bool)
+        eligible &= frame["ml_feature_eligible"].astype("string").str.lower().str.strip().isin({"true", "1"})
     if "stats_resolution_status" in frame.columns:
         status = _text(frame, "stats_resolution_status").str.lower()
         eligible &= status.isin({"resolved", "live", "cached"})
@@ -113,7 +113,11 @@ def predict_market_probabilities(frame: pd.DataFrame) -> pd.DataFrame:
         lg = str(league.loc[idx])
         mt = str(market_type.loc[idx])
         params = _LEAGUE_PARAMS.get(lg)
-        if params is None or not bool(eligible.loc[idx]):
+        if params is None:
+            result.at[idx, "ml_unavailable_reason"] = f"No market-specific model configured for {lg or 'unknown league'}"
+            continue
+        if not bool(eligible.loc[idx]):
+            result.at[idx, "ml_unavailable_reason"] = "Team features are not eligible or resolved"
             continue
 
         h_ppg = _unscaled_scoring_stat(_numeric(frame, "feature_home_ppg").loc[idx], lg)
@@ -122,6 +126,7 @@ def predict_market_probabilities(frame: pd.DataFrame) -> pd.DataFrame:
         a_oppg = _unscaled_scoring_stat(_numeric(frame, "feature_away_oppg").loc[idx], lg)
         scoring = np.asarray([h_ppg, a_ppg, h_oppg, a_oppg], dtype="float64")
         if not np.isfinite(scoring).all() or (scoring <= 0).any():
+            result.at[idx, "ml_unavailable_reason"] = "Team scoring statistics are missing or invalid"
             continue
 
         expected_home = 0.5 * (h_ppg + a_oppg)
@@ -164,6 +169,7 @@ def predict_market_probabilities(frame: pd.DataFrame) -> pd.DataFrame:
             projection = expected_total
 
         if raw_probability is None or not np.isfinite(raw_probability):
+            result.at[idx, "ml_unavailable_reason"] = "Market target is unsupported or exact line is missing"
             continue
 
         probability = 0.5 + params["reliability"] * (raw_probability - 0.5)

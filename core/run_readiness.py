@@ -164,7 +164,7 @@ def build_readiness(audit, final=None, *, quote_warning_minutes=15, diagnostics=
             details.append(detail)
         model_p = probability(selected_row.get("ml_probability"))
         if model_p is None:
-            warnings.add("selected_independent_model_probability_unavailable")
+            warnings.add(text(selected_row.get("ml_unavailable_reason")) or "selected_independent_model_probability_unavailable")
         feature_time = timestamp(first(card, "features_generated_at", "stats_updated_at"))
         if pd.isna(feature_time):
             warnings.add("feature_freshness_unavailable")
