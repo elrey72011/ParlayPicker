@@ -5,7 +5,7 @@ import requests
 from app_core.research_schedule import is_open
 
 LIMITS = {"CFBD": {"daily": 25, "rolling_31_days": 500},
-          "ODDS": {"daily": 200, "rolling_31_days": 5000}}
+          "ODDS": {"daily": 200, "rolling_31_days": 7500}}
 
 
 class BudgetLimit(ValueError):
@@ -60,10 +60,18 @@ class Budget:
             raise ValueError("unbudgeted_provider_request")
         if parsed.netloc=="api.collegefootballdata.com" and parsed.path in ("/games","/games/teams"):
             provider,units="CFBD",1
-        elif parsed.netloc=="api.the-odds-api.com" and parsed.path=="/v4/sports/americanfootball_ncaaf/odds":
+        elif parsed.netloc=="api.the-odds-api.com" and parsed.path in ("/v4/sports/americanfootball_ncaaf/odds", "/v4/sports/americanfootball_nfl/odds"):
             if params.get("regions")!="us" or params.get("markets")!="h2h,spreads,totals" or params.get("bookmakers"):
                 raise ValueError("unbudgeted_odds_markets")
             provider,units="ODDS",3
+        elif parsed.netloc=="api.the-odds-api.com" and parsed.path=="/v4/sports/americanfootball_nfl/events":
+            if set(params)-{"apiKey", "dateFormat"}:
+                raise ValueError("unbudgeted_nfl_parameters")
+            provider,units="ODDS",0
+        elif parsed.netloc=="api.the-odds-api.com" and parsed.path=="/v4/sports/americanfootball_nfl/scores":
+            if params.get("daysFrom")!=3 or set(params)-{"apiKey", "dateFormat", "daysFrom", "eventIds"}:
+                raise ValueError("unbudgeted_nfl_parameters")
+            provider,units="ODDS",2
         else:
             raise ValueError("unbudgeted_provider_request")
         if self.state.get("api_budget_cost_mismatch"):
@@ -85,7 +93,7 @@ class Budget:
         return response
 
     def report(self):
-        return {"units":"CFBD requests; ODDS credits conservatively reserved at 3 per call",
+        return {"units":"CFBD requests; ODDS credits: odds 3, NFL scores 2, NFL events 0",
                 "usage":{p:self.usage(p) for p in self.limits},"limits":self.limits,
                 "paused":sorted(set(self.blocked)),
                 "cost_review_required":bool(self.state.get("api_budget_cost_mismatch")),

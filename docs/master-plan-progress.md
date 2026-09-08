@@ -67,3 +67,7 @@ An opt-in [GitHub Actions research scheduler](research-scheduler.md) now orchest
 ## Scheduler spending and hours
 
 Automation now reserves durable paid API budgets (500 CFBD requests / 5,000 Odds credits per rolling 31 days, with daily caps) and operates every 30 minutes from 11:45 a.m. through 2:15 a.m. Eastern the following morning, with a 2:30 a.m. cutoff. Manual/prior API usage is outside these counters. Scheduled NCAAF was temporarily paused during implementation; restore `RESEARCH_SPORTS=MLB,NCAAF` after merging and verifying this budgeted workflow.
+
+## NFL market-tracking milestone
+
+[Odds-only NFL tracking](nfl-market-tracking.md) adds scheduled pregame moneyline, spread and total snapshots, final-score comparisons, verified Drive backup, and a Streamlit restore/export panel. It uses the existing Odds key and shares a 7,500-credit rolling-31-day automation budget with NCAAF (200 credits/day). This addresses NFL data collection and operational evidence. Independent NFL features, model development, calibration, prospective prediction validation, and wager approval remain outstanding. A zero-record run can verify access but cannot establish capture/grading success or predictive quality.

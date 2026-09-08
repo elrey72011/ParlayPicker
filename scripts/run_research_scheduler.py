@@ -16,10 +16,10 @@ def main():
     try:
         if not is_open():
             result={"status":"outside_operating_window","errors":[]}
-            summary.write_text("Research scheduler skipped: outside 11:45 a.m.â€“10:30 p.m. Eastern.\n",encoding="utf-8")
+            summary.write_text("Research scheduler skipped: outside 11:45 a.m.-2:30 a.m. Eastern.\n",encoding="utf-8")
             print(json.dumps(result))
             return 0
-        if not sports or any(s not in ("MLB","NCAAF") for s in sports) or len(set(sports))!=len(sports):
+        if not sports or any(s not in ("MLB","NCAAF","NFL") for s in sports) or len(set(sports))!=len(sports):
             raise ValueError("Invalid sports")
         folder,_=settings()
         result=run(sports,Path(os.getenv("PARLAYPICKER_EVIDENCE_DIR","output/scheduled-research")),DriveStore(folder),folder,

@@ -90,3 +90,20 @@ def test_cron_yields_30_local_runs_in_winter_and_summer():
             if ((local.day==8 and local.hour>=11) or (local.day==9 and local.hour<3)) and at.hour in list(range(8))+list(range(15,24)) and at.minute in (15,45) and is_open(at):
                 runs.append(local.strftime("%H:%M"))
         assert len(runs)==30 and runs[0]=="11:45" and runs[-1]=="02:15"
+
+
+def test_nfl_and_ncaaf_share_7500_credit_ledger():
+    from app_core.research_api_budget import LIMITS
+    assert LIMITS['ODDS']=={'daily':200,'rolling_31_days':7500}
+    b=Budget({},lambda:None,clock=lambda:NOW,get=lambda *a,**kw:Response())
+    b.request(ODDS,params=PARAMS)
+    b.request(ODDS.replace('ncaaf','nfl'),params=PARAMS)
+    class Scores:headers={'x-requests-last':'2'}
+    b.get=lambda *a,**kw:Scores()
+    b.request(ODDS.replace('ncaaf/odds','nfl/scores'),params={'daysFrom':3})
+    class Events:headers={'x-requests-last':'0'}
+    b.get=lambda *a,**kw:Events()
+    b.request(ODDS.replace('ncaaf/odds','nfl/events'))
+    assert b.usage('ODDS')['daily']==8
+    for endpoint,params in [('nfl/scores',{'daysFrom':4}),('nfl/events',{'markets':'h2h'})]:
+        with pytest.raises(ValueError): b.request(ODDS.replace('ncaaf/odds',endpoint),params=params)

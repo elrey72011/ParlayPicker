@@ -4,6 +4,7 @@ import json
 from datetime import datetime, timezone, timedelta
 from app_core import mlb_prospective as mlb, mlb_prospective_store as ms
 from app_core import ncaaf_prospective as ncaaf, ncaaf_prospective_store as ns
+from app_core import nfl_market as nfl, nfl_market_store as fs
 from app_core.mlb_history import timestamp
 from app_core.research_api_budget import Budget, BudgetLimit
 from app_core.research_schedule import is_open
@@ -154,18 +155,23 @@ def run_ncaaf(path, state, cfbd_key, odds_key, backup, request_get=None):
 
 
 def run(sports, root, client, folder, cfbd_key=None, odds_key=None):
+    if not sports or any(s not in ("MLB", "NCAAF", "NFL") for s in sports) or len(set(sports)) != len(sports):
+        raise ValueError("Invalid sports")
     root.mkdir(parents=True,exist_ok=True)
     state=checkpoint(client,folder)
     budget=Budget(state,lambda:checkpoint(client,folder,state))
     report={"started_at":utcnow().isoformat(),"sports":{},"errors":[],"production_eligible":False}
     for sport in sports:
-        store=ms if sport=="MLB" else ns
-        path=root/(sport.lower()+"-prospective.sqlite3")
+        store={"MLB": ms, "NCAAF": ns, "NFL": fs}[sport]
+        path=root/("nfl-market.sqlite3" if sport=="NFL" else sport.lower()+"-prospective.sqlite3")
         def backup():return store.sync(path,client=client,folder=folder)
         try:
             backup()  # Restore must succeed before any capture or grading.
             try:
-                result=run_mlb(path,state,backup) if sport=="MLB" else run_ncaaf(path,state,cfbd_key,odds_key,backup,budget.request)
+                if sport=="NFL":
+                    result=nfl.run(path,odds_key,backup,budget.request)
+                else:
+                    result=run_mlb(path,state,backup) if sport=="MLB" else run_ncaaf(path,state,cfbd_key,odds_key,backup,budget.request)
                 report["sports"][sport]=result
                 report["errors"].extend(result["errors"])
             finally:
