@@ -2,7 +2,7 @@ name: Research capture and grading
 on:
   workflow_dispatch:
   schedule:
-    - cron: '7,22,37,52 * * * *'
+    - cron: '15,45 0-7,15-23 * * *'
 permissions:
   contents: read
 concurrency:
@@ -25,9 +25,14 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
+      - name: Check Eastern operating window
+        id: window
+        run: echo "active=$(python scripts/research_schedule_window.py)" >> "$GITHUB_OUTPUT"
       - name: Install runtime dependencies
+        if: steps.window.outputs.active == 'true'
         run: python -m pip install -r requirements.txt
       - name: Restore, capture, grade and verify backup
+        if: steps.window.outputs.active == 'true'
         env:
           PARLAYPICKER_EVIDENCE_DIR: ${{ runner.temp }}/research-evidence
         run: python scripts/run_research_scheduler.py

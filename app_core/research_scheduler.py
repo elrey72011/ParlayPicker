@@ -5,8 +5,11 @@ from datetime import datetime, timezone, timedelta
 from app_core import mlb_prospective as mlb, mlb_prospective_store as ms
 from app_core import ncaaf_prospective as ncaaf, ncaaf_prospective_store as ns
 from app_core.mlb_history import timestamp
+from app_core.research_api_budget import Budget, BudgetLimit
+from app_core.research_schedule import is_open
 
 PREFIX = "parlaypicker/research-scheduler-v1/"
+_last_checkpoint_time = None
 
 
 def utcnow():
@@ -24,6 +27,7 @@ def latest_model(records):
 
 
 def checkpoint(client, folder, state=None):
+    global _last_checkpoint_time
     prefix=PREFIX+"state/"
     if state is None:
         keys=[o["Key"] for page in client.get_paginator("list_objects_v2").paginate(Bucket=folder,Prefix=prefix) for o in page.get("Contents",[])]
@@ -32,9 +36,15 @@ def checkpoint(client, folder, state=None):
         with client.get_object(Bucket=folder,Key=key)["Body"] as b:raw=b.read(40_000_001)
         if len(raw)>40_000_000 or not key.endswith(hashlib.sha256(raw).hexdigest()+".json"):
             raise ValueError("scheduler_state_integrity")
+        written=datetime.strptime(key[len(prefix):].split("-")[0],"%Y%m%dT%H%M%S%f").replace(tzinfo=timezone.utc)
+        _last_checkpoint_time=max(_last_checkpoint_time or written,written)
         return json.loads(raw)
     raw=json.dumps(state,sort_keys=True,allow_nan=False).encode()
-    key=prefix+utcnow().strftime("%Y%m%dT%H%M%S%f")+"-"+hashlib.sha256(raw).hexdigest()+".json"
+    written=utcnow()
+    if _last_checkpoint_time is not None:
+        written=max(written,_last_checkpoint_time+timedelta(microseconds=1))
+    _last_checkpoint_time=written
+    key=prefix+written.strftime("%Y%m%dT%H%M%S%f")+"-"+hashlib.sha256(raw).hexdigest()+".json"
     client.put_object(Bucket=folder,Key=key,Body=raw,ContentType="application/json",IfNoneMatch="*")
     with client.get_object(Bucket=folder,Key=key)["Body"] as b:
         if b.read()!=raw:raise ValueError("scheduler_state_readback")
@@ -50,6 +60,7 @@ def run_mlb(path, state, backup):
     capture_attempts=state.setdefault("mlb_capture_attempts",{})
     candidates.sort(key=lambda g:(capture_attempts.get(str(g["gamePk"]),""),g["gameDate"],g["gamePk"]))
     for g in candidates[:6]:
+        if not is_open():break
         capture_attempts[str(g["gamePk"])]=utcnow().isoformat()
         try:
             mlb.capture(g["gamePk"],path)
@@ -69,6 +80,7 @@ def run_mlb(path, state, backup):
     events={e["game_id"]:e for r in records if r["kind"]=="capture" for e in r["data"]["events"] if timestamp(e["start"])<utcnow() and e["game_id"] not in completed}
     attempts=state.setdefault("mlb_grade_attempts",{})
     for gid,e in sorted(events.items(),key=lambda item:(attempts.get(str(item[0]),""),item[0]))[:6]:
+        if not is_open():break
         attempts[str(gid)]=utcnow().isoformat()
         try:
             feed=mlb.fetch(f"api/v1.1/game/{gid}/feed/live")
@@ -84,17 +96,18 @@ def run_mlb(path, state, backup):
     return counts
 
 
-def run_ncaaf(path, state, cfbd_key, odds_key, backup):
+def run_ncaaf(path, state, cfbd_key, odds_key, backup, request_get=None):
     records=ns.records(path);model=latest_model(records)
     if model["data"]["runtime_hash"]!=ncaaf.runtime_hash():raise ValueError("stale_frozen_model")
     if not cfbd_key or not odds_key:raise ValueError("missing_provider_keys")
     inputs=state.get("ncaaf_inputs")
     if inputs and (inputs["years"]!=[utcnow().year] or any(not 0 <= (utcnow()-timestamp(b["retrieved_at"])).total_seconds()<23*3600 for b in inputs["batches"])):
         inputs=None
-    inputs,status=ncaaf.refresh(inputs,cfbd_key)
+    provider_args={"get":request_get} if request_get is not None else {}
+    inputs,status=ncaaf.refresh(inputs,cfbd_key,**provider_args)
     state["ncaaf_inputs"]=inputs
     counts={"captured":0,"graded":0,"input_status":status,"errors":[]}
-    if status not in ("ready","continue"):
+    if status not in ("ready","continue") and not status.startswith("api_budget:"):
         counts["errors"].append("ncaaf_refresh_failed")
     if status=="ready":
         seen={e["cfbd_id"] for r in records if r["kind"]=="capture" and r["data"]["model_id"]==model["id"] for e in r["data"]["events"]}
@@ -112,7 +125,7 @@ def run_ncaaf(path, state, cfbd_key, odds_key, backup):
         if allowed:
             import requests
             def filtered_get(url,**kwargs):
-                response=requests.get(url,**kwargs)
+                response=(request_get or requests.get)(url,**kwargs)
                 if response.status_code!=200:return response
                 values=response.json()
                 if not isinstance(values,list):return response
@@ -128,12 +141,14 @@ def run_ncaaf(path, state, cfbd_key, odds_key, backup):
                 _,result=ncaaf.capture(inputs,model,odds_key,get=filtered_get,path=path)
                 counts["captured"]=result["saved_games"]
                 counts["excluded"]=result["skipped_games"]
+            except BudgetLimit:
+                counts["budget_paused"]=True
             except Exception:
                 counts["errors"].append("ncaaf_capture_failed")
             backup()
-    result=ncaaf.grade(cfbd_key,path=path)
+    result=ncaaf.grade(cfbd_key,path=path,**provider_args)
     counts["graded"]=result["graded"]
-    if result.get("error"):counts["errors"].append("ncaaf_grading_failed")
+    if result.get("error") and not result["error"].startswith("api_budget:"):counts["errors"].append("ncaaf_grading_failed")
     backup()
     return counts
 
@@ -141,6 +156,7 @@ def run_ncaaf(path, state, cfbd_key, odds_key, backup):
 def run(sports, root, client, folder, cfbd_key=None, odds_key=None):
     root.mkdir(parents=True,exist_ok=True)
     state=checkpoint(client,folder)
+    budget=Budget(state,lambda:checkpoint(client,folder,state))
     report={"started_at":utcnow().isoformat(),"sports":{},"errors":[],"production_eligible":False}
     for sport in sports:
         store=ms if sport=="MLB" else ns
@@ -149,7 +165,7 @@ def run(sports, root, client, folder, cfbd_key=None, odds_key=None):
         try:
             backup()  # Restore must succeed before any capture or grading.
             try:
-                result=run_mlb(path,state,backup) if sport=="MLB" else run_ncaaf(path,state,cfbd_key,odds_key,backup)
+                result=run_mlb(path,state,backup) if sport=="MLB" else run_ncaaf(path,state,cfbd_key,odds_key,backup,budget.request)
                 report["sports"][sport]=result
                 report["errors"].extend(result["errors"])
             finally:
@@ -160,6 +176,7 @@ def run(sports, root, client, folder, cfbd_key=None, odds_key=None):
             code=str(exc) if str(exc) in known else type(exc).__name__
             report["errors"].append(sport+":"+code)
     report["finished_at"]=utcnow().isoformat()
+    report["api_budget"]=budget.report()
     state["last_run"]=report
     checkpoint(client,folder,state)
     return report
