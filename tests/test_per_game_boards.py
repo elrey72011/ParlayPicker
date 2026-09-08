@@ -64,3 +64,33 @@ def test_missing_audit_keeps_every_game_in_each_view():
     board=pd.DataFrame([final(),final('g2')])
     assert len(per_game_board(board,None,'totals'))==2
     assert per_game_board(board,None,'totals')['pick'].eq('No Bet — market unavailable').all()
+
+def test_selection_label_is_separate_from_approval_and_missing_market():
+    board = pd.DataFrame([final(Bettable=False, Play_Stake=0, Production_Gate_Reason='model EV is not positive')])
+    overall = per_game_board(board).iloc[0]
+    assert overall.selection_label == 'Best Overall'
+    assert overall.status == 'PASS'
+    assert overall.approval_reason == 'model EV is not positive'
+    unavailable = per_game_board(board, family='totals').iloc[0]
+    assert unavailable.selection_label == 'Unavailable'
+    assert 'No matching ranked market' in unavailable.approval_reason
+
+
+def test_positive_ev_alternative_does_not_override_rank_or_gain_approval():
+    board = pd.DataFrame([final(best_available_score=.532)])
+    audit = pd.DataFrame([candidate(expected_value=.072, best_available_score=.509)])
+    overall = per_game_board(board, audit).iloc[0]
+    alternative = per_game_board(board, audit, 'totals').iloc[0]
+    assert overall['pick'] == 'Home -1.5'
+    assert alternative.selection_label == 'Best Total'
+    assert alternative.status == 'PASS' and alternative.Play_Stake == 0
+    assert 'has not passed final wager and portfolio checks' in alternative.approval_reason
+
+
+def test_approved_explanation_and_unfunded_qualified_fallback():
+    approved = per_game_board(pd.DataFrame([final()])).iloc[0]
+    assert approved.status == 'APPROVED'
+    assert 'Passed final wager checks' in approved.approval_reason
+    unfunded = per_game_board(pd.DataFrame([final(Play_Stake=0, Production_Gate_Reason='qualified')])).iloc[0]
+    assert unfunded.status == 'PASS'
+    assert 'No final wager authorization' in unfunded.approval_reason

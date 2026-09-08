@@ -84,6 +84,17 @@ def per_game_board(board, candidates=None, family='overall'):
                     break_even=100/(100+odds) if odds>0 else abs(odds)/(100+abs(odds))
                     edge=probability-break_even
             if probability is None or not 0<=probability<=1: probability=None;basis='Unavailable'
+        approval_reason = text(final,'Production_Gate_Reason','Status_Reason','qualification_reason') if same or family=='overall' else ''
+        if source is None:
+            approval_reason = 'No matching ranked market available; refresh analysis'
+        elif approved:
+            approval_reason = 'Passed final wager checks with a positive approved stake'
+        elif not (same or family=='overall'):
+            approval_reason = 'Alternative selection; has not passed final wager and portfolio checks'
+            if ev is not None and ev <= 0:
+                approval_reason += '; estimated EV is not positive'
+        elif not approval_reason or approval_reason.lower() == 'qualified':
+            approval_reason = 'No final wager authorization with a positive approved stake'
         rows.append({'league':text(final,'league','League'),'matchup':text(final,'Away','away_team')+' at '+text(final,'Home','home_team'),
                      'matchup_id':text(final,'matchup_id'),'game_date':text(final,'Local Date','game_date'),
                      'start':text(final,'Commence (Local)','game_time_est'),
@@ -91,8 +102,9 @@ def per_game_board(board, candidates=None, family='overall'):
                      'market_type':text(source,'market_type') if source is not None else '',
                      'odds':number(source,'odds_american') if source is not None else None,
                      'Bettable':approved,'Play_Stake':number(final,'Play_Stake') if approved else 0.0,
+                     'selection_label': {'overall':'Best Overall','sides':'Best Side','totals':'Best Total'}[family] if source is not None else 'Unavailable',
                      'status':'APPROVED' if approved else 'PASS', 'win_probability':probability,'probability_basis':basis,
                      'edge':edge,'ev':ev,'selection_score':number(selected,'best_available_score') if selected is not None else None,
-                     'reason':reason,'approval_reason':text(final,'Production_Gate_Reason','Status_Reason') if same or family=='overall' else 'Research candidate; not independently approved for a wager',
+                     'reason':reason,'approval_reason':approval_reason,
                      'export_run_id':text(final,'export_run_id')})
     return pd.DataFrame(rows)

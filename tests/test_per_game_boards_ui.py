@@ -18,3 +18,13 @@ def test_featured_research_card_has_pass_label_and_no_approved_export():
     assert any('PASS' in m.value for m in app.markdown)
     assert any('65.0%' in df.value.to_string() for df in app.dataframe)
     assert all(b.proto.label != 'Download approved game wagers' for b in app.get('download_button'))
+
+def test_game_table_separates_selection_and_wager_explanation():
+    from streamlit.testing.v1 import AppTest
+    app = AppTest.from_function(_app).run()
+    assert not app.exception
+    frame = app.dataframe[0].value
+    assert {'Selection', 'Wager status', 'Wager explanation'} <= set(frame.columns)
+    assert frame.iloc[0]['Selection'] == 'Best Overall'
+    assert frame.iloc[0]['Wager status'] == 'PASS'
+    assert frame.iloc[0]['Wager explanation']
