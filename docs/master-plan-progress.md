@@ -91,3 +91,11 @@ Today adds Overall Best Pick, Sides (moneylines/spreads), and Totals (over/under
 ## Per-game Overall, Sides and Totals boards
 
 The three Today views now retain one row for every game in the finalized slate. Overall preserves the final selection. Sides and Totals independently use the candidate audit's per-family rank, matched to the game and run; a missing category stays visible as No Bet/market unavailable. Exact final-ticket matches retain final production metrics and approval. Alternatives remain zero-stake research PASS rows with their own model estimates and candidate ranking scores. Composite scores are never displayed as probabilities. The earlier single-featured-pick view is superseded by these per-game boards.
+
+### Per-game selection and wager status clarification — September 8, 2026
+
+Each game board now labels the selection Best Overall, Best Side, or Best Total separately from wager status and displays its wager explanation. Missing markets are Unavailable. Alternatives retain zero approved stake and explain that final wager and portfolio checks have not approved them. Pick Details uses the same production EV and edge fields as the overall board.
+
+Ranking investigation: the supplied Athletics exports show Under 9.5 with selection score 0.531906 and EV -0.012129, versus Athletics +1.5 with score 0.509219 and EV +0.072360. This agrees with the existing composite-score-first ranking contract; it does not establish that the higher-EV alternative passes production checks. Ranking and approval thresholds remain unchanged. Existing gate explanations may describe an earlier calibration-stage value rather than the final displayed production edge; they remain preserved as the recorded decision explanation.
+
+Validation: 13 focused selection and Streamlit tests passed, including positive-EV alternatives, unavailable markets, and separation of selection from approval. Live deployment verification remains pending merge.
