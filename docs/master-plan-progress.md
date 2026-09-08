@@ -107,3 +107,11 @@ Primary game tables now show game, pick, odds, win estimate, EV estimate, and wa
 Structured reviews use a configurable local daily request budget (default 20, including retries) and ten-minute exact-batch caching. This is not an account-wide or redeployment-proof cap. Additional context is admitted only with a recent source timestamp; feeds without those fields remain unavailable. No new provider subscriptions or fetches were added, and ranking/probability/approval rules remain unchanged. See `docs/gemini-review.md` for configuration and limitations.
 
 Validation: full regression suite 1,559 passed; 40 focused tests passed after exact-candidate context recovery and capture-to-grading checks. Deployment and future statistical validation remain pending.
+
+### Local publishing foundation — September 8, 2026
+
+Added a strict public-data adapter, an offline three-tab preview, and explicit local publish/rollback commands. Game Picks contains Overall, Sides, and Totals; Player Props has sport/market filters; DraftKings DFS accepts a reviewed MLB or NFL Classic lineup export with explicit slate metadata. Only public display fields are emitted. Mixed-run game exports are rejected, approval is not promoted, and stale/started selections are visibly held.
+
+This is the local publishing milestone, not a deployed public website or one-click Streamlit integration. No host, domain, subscription or provider API is used. See `docs/local-publishing.md` for the daily workflow and remaining release scope.
+
+Validation: seven focused tests passed for privacy, mixed runs, status, script escaping, publish rollback, props timestamps and DFS checks. Real supplied game exports produced 45 rows across three tables; all tabs worked in a browser with no JavaScript errors. Desktop/mobile previews were generated.
