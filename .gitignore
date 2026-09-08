@@ -75,3 +75,6 @@ streamlit_app.py.bak*
 
 # Append-only prediction evidence belongs on persistent runtime storage.
 data/prediction_evidence/
+
+# Generated private previews and sanitized local publications
+outputs/public-board*/
