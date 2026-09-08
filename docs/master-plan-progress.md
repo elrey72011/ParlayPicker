@@ -59,3 +59,7 @@ The [starter development workflow](mlb-pitcher-development.md) adds resumable 20
 ## MLB prospective paired forecasts
 
 [Manual MLB prospective evaluation](mlb-prospective-evaluation.md) now freezes both development models and captures paired score forecasts with timestamped provider-listed probable pitchers. Grading retains starter changes and reports each cohort separately; Drive evidence is isolated from NCAAF. A local live capture was verified. Deployed Streamlit capture and Drive recovery remain to verify. This does not establish confirmed-lineup timing, betting returns or model promotion.
+
+## Scheduled research operation
+
+An opt-in [GitHub Actions research scheduler](research-scheduler.md) now orchestrates existing MLB/NCAAF frozen captures, bounded grading and verified Drive backup. Repository secret configuration, first live scheduled run and deployed restore verification remain pending. Scheduling is best-effort; no production wagering or predictive accuracy claim changes.

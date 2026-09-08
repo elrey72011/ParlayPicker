@@ -1,0 +1,33 @@
+name: Research capture and grading
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+permissions:
+  contents: read
+concurrency:
+  group: research-capture-and-grading
+  cancel-in-progress: false
+jobs:
+  research:
+    if: vars.RESEARCH_SCHEDULER_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    env:
+      PARLAYPICKER_DRIVE_FOLDER_ID: ${{ secrets.PARLAYPICKER_DRIVE_FOLDER_ID }}
+      PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT: ${{ secrets.PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT }}
+      CFBD_API_KEY: ${{ secrets.CFBD_API_KEY }}
+      ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+      RESEARCH_SPORTS: ${{ vars.RESEARCH_SPORTS || 'MLB,NCAAF' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install runtime dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Restore, capture, grade and verify backup
+        env:
+          PARLAYPICKER_EVIDENCE_DIR: ${{ runner.temp }}/research-evidence
+        run: python scripts/run_research_scheduler.py
