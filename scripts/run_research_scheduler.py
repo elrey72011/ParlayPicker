@@ -1,0 +1,29 @@
+"""Run one scheduled research cycle; nonzero exit means operator attention."""
+import json
+import os
+from pathlib import Path
+import sys
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from app_core.research_scheduler import run
+from app_core.evidence_drive import DriveStore
+from app_core.evidence_remote import settings
+
+
+def main():
+    sports=[s.strip().upper() for s in os.getenv("RESEARCH_SPORTS","MLB,NCAAF").split(",") if s.strip()]
+    summary=Path(os.getenv("GITHUB_STEP_SUMMARY","research-scheduler-summary.md"))
+    try:
+        if not sports or any(s not in ("MLB","NCAAF") for s in sports) or len(set(sports))!=len(sports):
+            raise ValueError("Invalid sports")
+        folder,_=settings()
+        result=run(sports,Path(os.getenv("PARLAYPICKER_EVIDENCE_DIR","output/scheduled-research")),DriveStore(folder),folder,
+                   os.getenv("CFBD_API_KEY"),os.getenv("ODDS_API_KEY"))
+    except Exception as exc:
+        result={"errors":["scheduler:"+type(exc).__name__]}
+    text=json.dumps(result,indent=2)
+    summary.write_text("# Research scheduler\n\n```json\n"+text+"\n```\n",encoding="utf-8")
+    print(text)
+    return 1 if result["errors"] else 0
+
+
+if __name__=="__main__":raise SystemExit(main())
