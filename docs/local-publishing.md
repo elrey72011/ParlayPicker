@@ -111,3 +111,10 @@ On Streamlit Cloud, this is the server filesystem, NOT your laptop, and may be
 lost during redeployment. Download the HTML to keep a portable copy. Publishing
 still does not upload to a public host or Google Drive. The existing local CLI
 rollback remains available to restore the previous publication.
+
+## Optional public hosting
+
+Netlify public publication is now available below the local publish controls.
+It is disabled until a dedicated site ID and token are configured. See
+`docs/netlify-publishing.md` for setup and the explicit public publish workflow.
+The local button still writes only to the local server filesystem.

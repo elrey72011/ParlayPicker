@@ -124,3 +124,13 @@ This is local server publication, not public hosting or Google Drive synchroniza
 
 Validation: 19 focused tests passed, including wrong/missing token, no-write preview, explicit publish, and changed-input invalidation. Main application syntax check passed.
 Full regression validation for this integration: 1,571 tests passed.
+
+### Public hosting adapter — September 8, 2026
+
+Added an optional Netlify connection behind the existing owner publishing gate.
+Destination verification precedes explicit public publication. Only validated
+HTML and cache headers are uploaded; daily data is not committed to GitHub.
+Submitted/deployed/published states are distinguished, and uncertain uploads are
+not retried automatically. Site configuration, first live deployment and browser
+verification remain owner setup steps. No Netlify account or paid plan was
+created. Setup: `docs/netlify-publishing.md`.
