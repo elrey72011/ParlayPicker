@@ -28,13 +28,14 @@ def _render_game_board(board, candidates, family):
         st.info("Run an analysis to populate the game board.")
         return
     display = result.rename(columns={"league":"Sport", "matchup":"Game", "start":"Start", "pick":"Best pick", "selection_label":"Selection", "status":"Wager status", "approval_reason":"Wager explanation", "odds":"Odds", "win_probability":"Win estimate", "edge":"Edge", "ev":"EV estimate", "selection_score":"Selection score", "probability_basis":"Win estimate source"})
-    columns = ["Sport", "Game", "Best pick", "Selection", "Wager status", "Wager explanation", "Odds", "Win estimate", "Edge", "EV estimate", "Selection score", "Win estimate source", "Start"]
+    columns = ["Game", "Best pick", "Odds", "Win estimate", "EV estimate", "Wager status"]
     display = display[columns].copy()
     for column in ("Win estimate", "EV estimate"):
         display[column] = display[column].map(lambda v: f"{v:.1%}" if pd.notna(v) else "Unavailable")
-    display["Edge"] = display["Edge"].map(lambda v: f"{v*100:+.1f} pp" if pd.notna(v) else "Unavailable")
     st.dataframe(display, hide_index=True, width="stretch", height=min(760, 38 * (len(display) + 1)), column_config={"Selection score": st.column_config.NumberColumn(format="%.3f"), "Odds": st.column_config.NumberColumn(format="%+.0f")})
-    st.caption("Best Overall, Best Side, and Best Total identify the selected pick for each game. Wager status is separate: PASS means no approved wager. Ranking uses the composite selection score first, followed by probability, tier, EV, and edge as tie-breakers; the highest EV does not necessarily rank first. Selection score is not a win probability. Edge compares the displayed estimate with price break-even. Alternate candidates use their calibrated estimates; only exact final tickets carry final production metrics and approval.")
+    with st.expander("Selection details and wager explanations", expanded=False):
+        st.dataframe(result[["matchup", "pick", "approval_reason", "edge", "selection_score", "probability_basis", "start"]], hide_index=True, width="stretch")
+        st.caption("Best Overall, Best Side, and Best Total identify the selected pick for each game. Wager status is separate: PASS means no approved wager. Ranking uses the composite selection score first, followed by probability, tier, EV, and edge as tie-breakers; the highest EV does not necessarily rank first. Selection score is not a win probability. Edge compares the displayed estimate with price break-even. Alternate candidates use their calibrated estimates; only exact final tickets carry final production metrics and approval.")
     st.download_button("Download this game board", result.to_csv(index=False), family+"-per-game.csv", "text/csv", key="per_game_export_"+family)
 
 
@@ -85,4 +86,10 @@ def render_daily_dashboard(today, details, frame: pd.DataFrame, candidates: pd.D
                   "production_expected_value": "Production expected return per dollar", "production_edge": "Production edge"}
         fields = [c for c in field_labels if c in board]
         st.table(pd.DataFrame({"Detail": [field_labels[c] for c in fields], "Value": [_text(row, c) for c in fields]}).set_index("Detail"))
+        with st.expander("Gemini review", expanded=False):
+            st.write("Agreement: " + _text(row, "gemini_agreement", default="Not reviewed"))
+            st.write(_text(row, "gemini_explanation", default="No saved review for this selection."))
+            st.write("Missing information: " + _text(row, "gemini_missing_information"))
+            st.caption("Reviewed: " + _text(row, "gemini_reviewed_at") + " · Model: " + _text(row, "gemini_review_model"))
+            st.caption("Gemini agreement is qualitative review, not a win probability or wager approval.")
         st.caption("Probabilities are model estimates, not observed win rates. Full candidate audits and research exports are in Workspace.")

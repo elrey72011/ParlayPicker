@@ -191,7 +191,7 @@ def capture_run(context, audit, final, inputs, *, path=None):
         final.at[idx, "matchup_id"] = audit.at[ai, "matchup_id"]
         for column in ("calibrated_probability", "odds_american", "odds_source", "spread_line", "total_line",
                        "Kelly_Bet_Size", "wager_approved", "Pick_Status", "Status_Reason", "qualification_reason",
-                       "gemini_approved", "gemini_flags", "production_gate_reason",
+                       "gemini_approved", "gemini_flags", "gemini_agreement", "gemini_reviewed_at", "gemini_review_model", "gemini_review_input_hash", "gemini_verified_context", "gemini_supporting_evidence", "gemini_missing_information", "gemini_explanation", "production_gate_reason",
                        "market_line_used", "market_line_source", "line_consistency_flag",
                        "line_event_identity_match_flag", "line_provenance_warning"):
             if column in final:

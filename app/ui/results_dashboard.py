@@ -574,6 +574,15 @@ def _render_candidate_results_recap(
         )
 
     selected_results = selected_candidate_results(ledger)
+    with st.expander("Gemini prospective review comparison", expanded=False):
+        from app_core.gemini_review_comparison import review_comparison
+        comparison = review_comparison(selected_results)
+        if comparison.empty:
+            st.info("No timestamped pregame Gemini review evidence in this ledger yet.")
+        else:
+            st.dataframe(comparison, hide_index=True, width="stretch")
+            st.download_button("Download Gemini review comparison", comparison.to_csv(index=False), "gemini-review-comparison.csv", "text/csv")
+        st.caption("First pregame reviewed selection per game and model only. The agreement subset overlaps the baseline. This is descriptive selection performance, not proof of improvement or actual betting returns. Opposing Gemini picks are not graded as if they were the original pick.")
     dl_left, dl_middle, dl_right = st.columns(3)
     ledger_download_label = (
         "Download Updated Cumulative Full-Candidate Diagnostic Ledger"

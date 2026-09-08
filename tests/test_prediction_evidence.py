@@ -274,3 +274,21 @@ def test_capture_marks_unselected_rejected_line(frozen):
     captured, _ = evidence.capture_run(context, audit, final, audit, path=db)
     assert captured.loc[~captured.best_available_selected, "final_line_rejected"].all()
     assert not captured.loc[captured.best_available_selected, "final_line_rejected"].any()
+
+def test_review_metadata_survives_capture_and_grading(frozen):
+    context, db, _ = frozen
+    audit, final = fixture_frames()
+    final['gemini_agreement'] = 'agree'
+    final['gemini_reviewed_at'] = '2026-09-03T14:30:00Z'
+    final['gemini_review_model'] = 'test-model'
+    final['gemini_review_input_hash'] = 'a' * 64
+    saved, card = evidence.capture_run(context, audit, final, audit, path=db)
+    assert saved.loc[0, 'gemini_agreement'] == 'agree'
+    scores = card[['snapshot_id', 'matchup_id']].copy()
+    scores['actual_home_score'], scores['actual_away_score'] = 6, 4
+    evidence.record_scores(scores, path=db)
+    graded, _ = evidence.materialize(db)
+    from app_core.gemini_review_comparison import review_comparison
+    report = review_comparison(graded)
+    assert report.Selections.tolist() == [1, 1]
+    assert report.Wins.tolist() == [1, 1]

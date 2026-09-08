@@ -153,6 +153,9 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
         ),
     )
 
+    advanced.caption("Gemini structured reviews: up to 20 requests per UTC day by default, shared by games and props on this deployment. Exact unchanged batches are cached for 10 minutes. Configure PARLAYPICKER_GEMINI_DAILY_REQUESTS in secrets; 0 disables new review requests. Local accounting resets if deployment storage is replaced.")
+    if st.session_state.get("gemini_review_limit_status"):
+        advanced.warning(st.session_state["gemini_review_limit_status"])
     advanced.subheader("Diagnostics")
     show_debug = advanced.checkbox("Display Debug Information", value=False, key="show_debug")
     show_kalshi_diagnostics = advanced.checkbox("Show Kalshi Diagnostics", value=False, key="show_kalshi_diagnostics")

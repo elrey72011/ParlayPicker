@@ -574,6 +574,8 @@ BEST_PICK_COLUMNS = [
     # Readable per-signal win-% breakdown (Kalshi/Market/ML/TheOver) â€” see REQUIRED_BEST_PICK_EXPORT_COLUMNS.
     "signal_breakdown",
     "gemini_pick", "gemini_confidence", "gemini_flags", "gemini_reviewed",
+    "gemini_agreement", "gemini_reviewed_at", "gemini_review_model", "gemini_review_input_hash",
+    "gemini_verified_context", "gemini_supporting_evidence", "gemini_missing_information",
     "gemini_explanation", "gemini_risk_notes", "gemini_gate_enabled",
     "gemini_review_status", "gemini_gate_reason", "gemini_approved",
     "gemini_stake_multiplier", "used_stale_features", "Pick_Quality", "Conviction_Score",
