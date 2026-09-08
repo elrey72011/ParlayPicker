@@ -1954,11 +1954,14 @@ def main() -> None:
 
 
 
+    publication_games = pd.DataFrame()
+    publication_props = pd.DataFrame()
+    publication_dfs = {}
     today_tab, details_tab, tab_performance, workspace_tab = _render_main_tabs()
     with workspace_tab:
         st.caption("Research, exports, and operational diagnostics. These tools retain the existing approval rules.")
-        tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
-            ["Odds", "Analysis", "Full Pick Board", "Parlays", "Portfolio", "Diagnostics", "Strategy Lab"],
+        tab1, tab2, tab3, tab4, tab5, tab6, tab7, publish_tab = st.tabs(
+            ["Odds", "Analysis", "Full Pick Board", "Parlays", "Portfolio", "Diagnostics", "Strategy Lab", "Preview & Publish"],
             key="workspace_navigation", on_change="rerun",
         )
     today_content = today_tab.empty()
@@ -2963,6 +2966,7 @@ def main() -> None:
                 _scope_cols + [column for column in best_picks_export.columns if column not in _scope_cols]
             ]
             production_game_export = production_wagers(best_picks_export)
+            publication_games = best_picks_export.copy()
             render_daily_dashboard(today_content, details_content, best_picks_export, diagnostics.get("candidate_audit_df"))
             precision_game_export = precision_shortlist(best_picks_export)
 
@@ -3121,6 +3125,7 @@ def main() -> None:
                 from app_core.export_scope import label_wager_export
 
                 prop_card = label_wager_export(prop_card)
+                publication_props = prop_card.copy()
                 _prop_status = prop_card.get(
                     "Stake_Status", pd.Series("", index=prop_card.index)
                 ).astype(str).str.strip()
@@ -3265,6 +3270,7 @@ def main() -> None:
                                     columns=["Lineup Key"],
                                     errors="ignore",
                                 )
+                                publication_dfs["NFL"] = _dk_nfl_lineup_export.copy()
                                 st.dataframe(
                                     _dk_nfl_lineup_export,
                                     width="stretch",
@@ -3393,6 +3399,7 @@ def main() -> None:
                                     columns=["Lineup Key"],
                                     errors="ignore",
                                 )
+                                publication_dfs["MLB"] = _dk_mlb_lineup_export.copy()
                                 st.dataframe(
                                     _dk_mlb_lineup_export,
                                     width="stretch",
@@ -3697,6 +3704,10 @@ def main() -> None:
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="export_best_picks_compact",
             )
+
+    with publish_tab:
+        from app.ui.publish_panel import render_publish_panel
+        render_publish_panel(publication_games, diagnostics.get("candidate_audit_df"), publication_props, publication_dfs)
 
     with tab4:
         st.subheader("Best Parlays")

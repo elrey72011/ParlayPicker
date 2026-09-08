@@ -35,6 +35,10 @@ def atomic_write(path, content):
 
 def publish(draft, destination):
     package = json.loads((Path(draft)/'public-board.json').read_text(encoding='utf-8'))
+    return publish_package(package, destination)
+
+
+def publish_package(package, destination):
     html = render(package)
     dest = Path(destination).resolve()
     if dest == ROOT or dest in ROOT.parents:
