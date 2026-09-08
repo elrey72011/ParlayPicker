@@ -16,7 +16,7 @@ import pandas as pd
 # allowlist also means newly added verdict/diagnostic columns don't leak in
 # by default.
 LLM_PAYLOAD_COLUMNS = [
-    "game_id", "league", "home_team", "Home", "away_team", "Away",
+    "game_id", "matchup_id", "game_date", "game_start_utc", "odds_recorded_at", "league", "home_team", "Home", "away_team", "Away",
     "market_type", "best_pick", "odds_american",
     "market_probability", "kalshi_probability", "ml_probability",
     "theover_probability", "calibrated_probability", "WinProbability",
@@ -88,8 +88,14 @@ def _attach_gemini_results(
     confidences: list[str] = []
     flags: list[str] = []
     reviewed: list[bool] = []
-    for row_id in row_ids:
+    for position, row_id in enumerate(row_ids):
         payload = analyses.get(str(row_id), {})
+        evidence = payload.get("supporting_evidence", [])
+        try:
+            known = json.loads(result.iloc[position].get("gemini_verified_context", "{}"))
+        except (ValueError, TypeError):
+            known = {}
+        evidence_valid = isinstance(evidence, list) and all(isinstance(k, str) and k in known for k in evidence)
         raw_explanation = str(payload.get("explanation") or "").strip()
         raw_risk = str(payload.get("risk_notes") or "").strip()
         raw_pick = str(payload.get("recommended_bet") or "").strip()
@@ -106,6 +112,7 @@ def _attach_gemini_results(
         flags.append("|".join(normalized_flags))
         reviewed.append(
             bool(payload)
+            and evidence_valid
             and bool(raw_pick)
             and bool(raw_explanation)
             and bool(raw_risk)
@@ -119,7 +126,24 @@ def _attach_gemini_results(
     result["gemini_confidence"] = confidences
     result["gemini_flags"] = flags
     result["gemini_reviewed"] = reviewed
+    for field in ("reviewed_at", "review_model", "review_input_hash", "supporting_evidence", "missing_information"):
+        result["gemini_" + field] = [json.dumps(analyses.get(str(r), {}).get(field, [])) if field in {"supporting_evidence", "missing_information"} else analyses.get(str(r), {}).get(field, "") for r in row_ids]
+    result["gemini_agreement"] = ["unavailable" if not ok else ("agree" if str(p).strip().casefold() == str(original).strip().casefold() else "disagree")
+                                 for ok, p, original in zip(reviewed, picks, result["best_pick"])]
     return result
+
+
+def verified_context(row):
+    """Only current, timestamped provider context is allowed into qualitative review."""
+    facts = {}
+    now = pd.Timestamp.now(tz="UTC")
+    for name in ("probable_pitchers", "lineups", "injuries", "weather"):
+        value, source = row.get(name), row.get(name + "_source")
+        at = pd.to_datetime(row.get(name + "_recorded_at"), utc=True, errors="coerce")
+        if isinstance(source, str) and source.strip() and value is not None and pd.notna(at) and pd.Timedelta(0) <= now-at <= pd.Timedelta(hours=1):
+            if str(value).strip() not in {"", "nan", "None"}:
+                facts[name] = {"value": value, "source": source, "recorded_at": at.isoformat()}
+    return facts
 
 
 def _opposing_side_lookup(analysis_df: pd.DataFrame) -> dict:
@@ -179,6 +203,22 @@ def run_gemini_analysis(df: pd.DataFrame, session_state: Any = None, analysis_df
             llm_payload["is_live_data"] = False
 
         games_list = llm_payload.to_dict('records') # Convert to List[Dict]
+        contexts = []
+        for _, row in result.iterrows():
+            context = verified_context(row)
+            # Canonical card exports can omit enrichment columns. Recover only
+            # the exact candidate's context, never another game or market.
+            if analysis_df is not None and {'matchup_id', 'market_type', 'best_pick'}.issubset(analysis_df.columns):
+                matches = analysis_df
+                for key in ('matchup_id', 'market_type', 'best_pick'):
+                    matches = matches[matches[key].astype(str).eq(str(row.get(key, '')))]
+                if len(matches) == 1:
+                    context = {**verified_context(matches.iloc[0]), **context}
+            contexts.append(context)
+        result['gemini_verified_context'] = [json.dumps(c, default=str) for c in contexts]
+        for game, context in zip(games_list, contexts):
+            game['verified_context'] = context
+            game['missing_context'] = [k for k in ('probable_pitchers', 'lineups', 'injuries', 'weather') if k not in context]
 
         # Pair each candidate with its opposing side, when available, for a
         # genuine head-to-head comparison rather than a one-sided audit.

@@ -99,3 +99,11 @@ Each game board now labels the selection Best Overall, Best Side, or Best Total 
 Ranking investigation: the supplied Athletics exports show Under 9.5 with selection score 0.531906 and EV -0.012129, versus Athletics +1.5 with score 0.509219 and EV +0.072360. This agrees with the existing composite-score-first ranking contract; it does not establish that the higher-EV alternative passes production checks. Ranking and approval thresholds remain unchanged. Existing gate explanations may describe an earlier calibration-stage value rather than the final displayed production edge; they remain preserved as the recorded decision explanation.
 
 Validation: 13 focused selection and Streamlit tests passed, including positive-EV alternatives, unavailable markets, and separation of selection from approval. Live deployment verification remains pending merge.
+
+### Cleaner boards and measurable Gemini review — September 8, 2026
+
+Primary game tables now show game, pick, odds, win estimate, EV estimate, and wager status. Full selection diagnostics remain expandable and downloadable. Gemini review metadata is visible in Pick Details and retained in immutable snapshots for future grading. Results includes a descriptive comparison of first pregame reviewed model selections against the Gemini-agreement subset, with model versions separated.
+
+Structured reviews use a configurable local daily request budget (default 20, including retries) and ten-minute exact-batch caching. This is not an account-wide or redeployment-proof cap. Additional context is admitted only with a recent source timestamp; feeds without those fields remain unavailable. No new provider subscriptions or fetches were added, and ranking/probability/approval rules remain unchanged. See `docs/gemini-review.md` for configuration and limitations.
+
+Validation: full regression suite 1,559 passed; 40 focused tests passed after exact-candidate context recovery and capture-to-grading checks. Deployment and future statistical validation remain pending.

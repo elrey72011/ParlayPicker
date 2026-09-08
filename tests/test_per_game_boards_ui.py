@@ -24,7 +24,6 @@ def test_game_table_separates_selection_and_wager_explanation():
     app = AppTest.from_function(_app).run()
     assert not app.exception
     frame = app.dataframe[0].value
-    assert {'Selection', 'Wager status', 'Wager explanation'} <= set(frame.columns)
-    assert frame.iloc[0]['Selection'] == 'Best Overall'
+    assert list(frame.columns) == ['Game', 'Best pick', 'Odds', 'Win estimate', 'EV estimate', 'Wager status']
     assert frame.iloc[0]['Wager status'] == 'PASS'
-    assert frame.iloc[0]['Wager explanation']
+    assert app.dataframe[1].value.iloc[0]['approval_reason']

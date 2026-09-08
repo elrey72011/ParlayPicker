@@ -448,3 +448,10 @@ def test_generic_invalid_argument_does_not_disable_remaining_gemini_batches(monk
     assert models.calls == 2
     assert "gemini_disabled_reason" not in session_state
     assert result["g12"]["confidence"] == "LOW"
+
+
+import pytest
+@pytest.fixture(autouse=True)
+def isolated_review_budget(tmp_path, monkeypatch):
+    monkeypatch.setenv("PARLAYPICKER_EVIDENCE_DIR", str(tmp_path / "evidence"))
+    monkeypatch.setenv("PARLAYPICKER_GEMINI_DAILY_REQUESTS", "100")
