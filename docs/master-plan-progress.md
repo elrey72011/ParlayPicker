@@ -71,3 +71,9 @@ Automation now reserves durable paid API budgets (500 CFBD requests / 5,000 Odds
 ## NFL market-tracking milestone
 
 [Odds-only NFL tracking](nfl-market-tracking.md) adds scheduled pregame moneyline, spread and total snapshots, final-score comparisons, verified Drive backup, and a Streamlit restore/export panel. It uses the existing Odds key and shares a 7,500-credit rolling-31-day automation budget with NCAAF (200 credits/day). This addresses NFL data collection and operational evidence. Independent NFL features, model development, calibration, prospective prediction validation, and wager approval remain outstanding. A zero-record run can verify access but cannot establish capture/grading success or predictive quality.
+
+## Cleaner daily interface
+
+The Streamlit private beta now opens on Today, followed by Pick Details and Results. Today uses the reconciled game export and displays only funded, approved game wagers; research passes retain their explanations in Pick Details. Player props, parlays, candidate exports, readiness and storage diagnostics remain in Workspace. Sidebar uploads, model controls and prospective tools are grouped under Settings & research. Final-score refresh is explicit instead of running automatically on first page load.
+
+This advances the brief's usable dashboard milestone. It does not complete the public subscription product: authentication, user isolation, payments, data redistribution permissions and evidence supporting public recommendation claims remain separate work. Prediction models, approval thresholds, frozen cohorts and scheduler budgets are unchanged.
