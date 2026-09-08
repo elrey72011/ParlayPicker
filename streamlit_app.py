@@ -2963,7 +2963,7 @@ def main() -> None:
                 _scope_cols + [column for column in best_picks_export.columns if column not in _scope_cols]
             ]
             production_game_export = production_wagers(best_picks_export)
-            render_daily_dashboard(today_content, details_content, best_picks_export)
+            render_daily_dashboard(today_content, details_content, best_picks_export, diagnostics.get("candidate_audit_df"))
             precision_game_export = precision_shortlist(best_picks_export)
 
             if "Home" in best_picks_export.columns and not best_picks_export.empty:

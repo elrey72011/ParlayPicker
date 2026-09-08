@@ -87,3 +87,7 @@ The evidence panel reads local MLB forecast comparisons, NCAAF paper reports by 
 ## Featured daily pick views
 
 Today adds Overall Best Pick, Sides (moneylines/spreads), and Totals (over/under) views. Each features one selection from the finalized game card, ranked by final production win probability, then production edge and EV. Approved rows lead; when none qualify, the best available research row remains explicitly PASS. A composite ranking score is never substituted for a win probability, and unavailable final probabilities, unusable prices, and explicitly started games are not featured. These are category views of the final one-selection-per-game export, not independent selections from every candidate market. Estimates explain the ranking and do not establish a win or achieved accuracy. No production thresholds or wager authorizations change.
+
+## Per-game Overall, Sides and Totals boards
+
+The three Today views now retain one row for every game in the finalized slate. Overall preserves the final selection. Sides and Totals independently use the candidate audit's per-family rank, matched to the game and run; a missing category stays visible as No Bet/market unavailable. Exact final-ticket matches retain final production metrics and approval. Alternatives remain zero-stake research PASS rows with their own model estimates and candidate ranking scores. Composite scores are never displayed as probabilities. The earlier single-featured-pick view is superseded by these per-game boards.

@@ -29,7 +29,7 @@ def test_pass_only_run_has_no_approved_download_and_explains_decision():
     app = AppTest.from_function(_app).run()
     assert not app.exception
     assert [m.value for m in app.metric] == ["1", "0", "1"]
-    assert not app.get("download_button")
+    assert all(b.proto.label != "Download approved game wagers" for b in app.get("download_button"))
     assert any("PASS" in m.value for m in app.markdown)
     app.selectbox[0].set_value(0).run()
     assert not app.exception
