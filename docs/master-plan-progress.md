@@ -55,3 +55,7 @@ The [MLB protocol](mlb-research-protocol.md) now implements a 2023 train / 2024 
 ## MLB pitcher feature development
 
 The [starter development workflow](mlb-pitcher-development.md) adds resumable 2023–2024 boxscore collection, strictly prior-appearance pitching rates, and a matched team-only versus starter-enhanced ridge comparison. Full pitcher collection and development metrics remain pending. Actual starters are retrospective; pregame announcement evidence and prospective evaluation remain required. No 2025 retest or production activation is included.
+
+## MLB prospective paired forecasts
+
+[Manual MLB prospective evaluation](mlb-prospective-evaluation.md) now freezes both development models and captures paired score forecasts with timestamped provider-listed probable pitchers. Grading retains starter changes and reports each cohort separately; Drive evidence is isolated from NCAAF. A local live capture was verified. Deployed Streamlit capture and Drive recovery remain to verify. This does not establish confirmed-lineup timing, betting returns or model promotion.
