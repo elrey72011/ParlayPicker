@@ -78,5 +78,36 @@ python scripts/publish_board.py rollback --destination outputs/public-board-site
 Choose a public host/domain and connect the sanitized publication output. Public
 data must be permitted by provider terms. Add authenticated delivery before
 placing paid content behind a subscription: static HTML embeds readable data.
-One-click Streamlit publishing, multiple DFS slates, historical Results, and
-subscriptions are subsequent milestones, not included in this PR.
+Multiple DFS slates, historical Results, and subscriptions are subsequent milestones.
+
+
+## Streamlit Preview & Publish panel
+
+Open **Workspace → Preview & Publish**. Configure an owner-only token in
+Streamlit secrets (or the local environment) first:
+
+```toml
+PARLAYPICKER_PUBLISH_TOKEN = "replace-with-a-long-random-private-token"
+```
+
+Use at least 16 characters. Enter this token in the password field to unlock the
+panel. This protects the publication controls; it is not a complete customer
+account system and does not make the rest of Streamlit private.
+
+Run Master Analysis as usual. The panel uses the finalized game card and its
+matching candidate audit from that render. Optionally include the current prop
+card. Generate DFS lineups under Full Pick Board to make that sport selectable;
+then supply the exact slate label and timezone-aware lock time. Missing sections
+remain empty rather than reusing an earlier slate.
+
+Click **Build preview**, review the embedded three-tab page, then click
+**Publish reviewed board locally**. Changing source data or inclusion options
+invalidates the preview. HTML and sanitized JSON downloads are available without
+publication. No CSV round trip or terminal command is required.
+
+The default destination is `outputs/public-board-site` on the computer running
+Streamlit. Optional `PARLAYPICKER_PUBLICATION_DIR` sets a different output folder.
+On Streamlit Cloud, this is the server filesystem, NOT your laptop, and may be
+lost during redeployment. Download the HTML to keep a portable copy. Publishing
+still does not upload to a public host or Google Drive. The existing local CLI
+rollback remains available to restore the previous publication.

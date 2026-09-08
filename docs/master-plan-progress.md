@@ -115,3 +115,12 @@ Added a strict public-data adapter, an offline three-tab preview, and explicit l
 This is the local publishing milestone, not a deployed public website or one-click Streamlit integration. No host, domain, subscription or provider API is used. See `docs/local-publishing.md` for the daily workflow and remaining release scope.
 
 Validation: seven focused tests passed for privacy, mixed runs, status, script escaping, publish rollback, props timestamps and DFS checks. Real supplied game exports produced 45 rows across three tables; all tabs worked in a browser with no JavaScript errors. Desktop/mobile previews were generated.
+
+### Private Streamlit publishing panel — September 8, 2026
+
+Workspace now includes Preview & Publish, protected by a configured publishing token. The panel takes the finalized current-render game card, candidate audit, optional current props, and generated DFS lineups directly. Build preview is separate from publish; source/options changes invalidate the preview. The sanitized HTML/data can be downloaded. Explicit publication uses the shared atomic local writer and retains its prior-version backup.
+
+This is local server publication, not public hosting or Google Drive synchronization. Streamlit Cloud files remain disposable; download the HTML to retain a copy. A token of at least 16 characters must be configured before controls unlock. This is an owner publishing gate, not customer authentication.
+
+Validation: 19 focused tests passed, including wrong/missing token, no-write preview, explicit publish, and changed-input invalidation. Main application syntax check passed.
+Full regression validation for this integration: 1,571 tests passed.
