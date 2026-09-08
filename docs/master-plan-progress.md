@@ -63,3 +63,7 @@ The [starter development workflow](mlb-pitcher-development.md) adds resumable 20
 ## Scheduled research operation
 
 An opt-in [GitHub Actions research scheduler](research-scheduler.md) now orchestrates existing MLB/NCAAF frozen captures, bounded grading and verified Drive backup. Repository secret configuration, first live scheduled run and deployed restore verification remain pending. Scheduling is best-effort; no production wagering or predictive accuracy claim changes.
+
+## Scheduler spending and hours
+
+Automation now reserves durable paid API budgets (500 CFBD requests / 5,000 Odds credits per rolling 31 days, with daily caps) and operates every 30 minutes from 11:45 a.m. through 2:15 a.m. Eastern the following morning, with a 2:30 a.m. cutoff. Manual/prior API usage is outside these counters. Scheduled NCAAF was temporarily paused during implementation; restore `RESEARCH_SPORTS=MLB,NCAAF` after merging and verifying this budgeted workflow.

@@ -3,6 +3,10 @@ from io import BytesIO
 import pytest
 from app_core import research_scheduler as s
 
+@pytest.fixture(autouse=True)
+def operating_window(monkeypatch):
+    monkeypatch.setattr(s,"is_open",lambda:True)
+
 
 class Cloud:
     def __init__(self):self.objects={}
@@ -122,3 +126,42 @@ def test_mlb_missing_probables_are_not_failure(tmp_path,monkeypatch):
     assert len(calls)==6 and not r["errors"]
     calls.clear();s.run_mlb(tmp_path/"x",state,lambda:None)
     assert calls[:4]==[6,7,8,9]
+
+
+def test_real_refresh_uses_persisted_budget_and_cap_pauses(tmp_path,monkeypatch):
+    import requests
+    from app_core import research_api_budget as budgets
+    monkeypatch.setattr(budgets,"is_open",lambda at:True)
+    cloud=Cloud();calls=[]
+    monkeypatch.setattr(s.ns,"sync",lambda *a,**kw:None)
+    monkeypatch.setattr(s.ns,"records",lambda *a:[{"kind":"model","id":"m","data":{"runtime_hash":"h"}}])
+    monkeypatch.setattr(s.ncaaf,"runtime_hash",lambda:"h")
+    class Response:
+        status_code=200
+        def json(self):return []
+    def get(*a,**kw):
+        # Reservation must already be durable before the provider call.
+        assert s.checkpoint(cloud,"folder")["api_budget_v1"]["CFBD"]
+        calls.append(1)
+        return Response()
+    monkeypatch.setattr(requests,"get",get)
+    result=s.run(["NCAAF"],tmp_path,cloud,"folder","cfbd","odds")
+    assert len(calls)==1 and result["api_budget"]["usage"]["CFBD"]["daily"]==1
+    today=datetime.now(timezone.utc).date().isoformat()
+    s.checkpoint(cloud,"folder",{"api_budget_v1":{"CFBD":{today:25}}})
+    result=s.run(["NCAAF"],tmp_path,cloud,"folder","cfbd","odds")
+    assert len(calls)==1 and not result["errors"]
+    assert result["api_budget"]["paused"]==["CFBD:daily"]
+
+
+def test_checkpoint_order_when_clock_does_not_advance(monkeypatch):
+    c=Cloud()
+    monkeypatch.setattr(s,"utcnow",lambda:datetime(2026,9,8,16,tzinfo=timezone.utc))
+    monkeypatch.setattr(s,"_last_checkpoint_time",None)
+    s.checkpoint(c,"f",{"usage":1})
+    s.checkpoint(c,"f",{"usage":2})
+    assert s.checkpoint(c,"f")=={"usage":2}
+    monkeypatch.setattr(s,"_last_checkpoint_time",None) # simulated process restart
+    state=s.checkpoint(c,"f")
+    state["usage"]=3;s.checkpoint(c,"f",state)
+    assert s.checkpoint(c,"f")["usage"]==3
