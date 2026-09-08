@@ -21,49 +21,28 @@ def daily_board(frame: pd.DataFrame) -> pd.DataFrame:
     return label_wager_export(frame).reset_index(drop=True)
 
 
-def _metric_value(row, column, *, points=False):
-    import math
-    value = pd.to_numeric(row.get(column), errors="coerce")
-    if pd.isna(value) or not math.isfinite(value):
-        return "Not available"
-    return f"{value * 100:+.1f} pp" if points else f"{value:.1%}"
-
-
-def _render_featured_card(board, family):
-    from app_core.featured_picks import featured_picks
-    ranked = featured_picks(board, family)
-    if ranked.empty:
-        st.info("No selection with a final win estimate and usable price is available in this category.")
+def _render_game_board(board, candidates, family):
+    from app_core.per_game_boards import per_game_board
+    result = per_game_board(board, candidates, family)
+    if result.empty:
+        st.info("Run an analysis to populate the game board.")
         return
-    row = ranked.iloc[0]
-    approved = bool(row["_featured_approved"])
-    with st.container(border=True):
-        st.caption(_text(row, "league") + " · " + _text(row, "Commence (Local)", "Local Date"))
-        st.markdown("### " + _text(row, "display_pick", "best_pick"))
-        st.write(_text(row, "Away") + " at " + _text(row, "Home"))
-        st.markdown("**" + ("APPROVED WAGER" if approved else "PASS · Best available research selection") + "**")
-        odds = float(row["odds_american"])
-        st.write(f"Price: {odds:+.0f} · " + _text(row, "odds_source"))
-        a, b, c = st.columns(3)
-        a.metric("Estimated win %", _metric_value(row, "production_win_probability"))
-        b.metric("Edge vs. break-even", _metric_value(row, "production_edge", points=True))
-        c.metric("Estimated EV", _metric_value(row, "production_expected_value"))
-        st.caption("Win % leads this ranking. Edge is the probability advantage over the price's break-even point; EV is the estimated return per dollar.")
-        if approved:
-            st.write("Why this pick: highest final estimated win probability among approved selections in this view; edge and EV break ties.")
-            st.caption("Approved stake: $" + _text(row, "Play_Stake", default="0"))
-        else:
-            st.write("Why it leads this view: highest final estimated win probability among the available research selections. It has not cleared the wager checks.")
-            st.caption(_text(row, "Production_Gate_Reason", "Status_Reason", "qualification_reason"))
-        st.caption("Quote captured: " + _text(row, "odds_recorded_at"))
-    st.caption("Estimated metrics explain the selection; they are not proof of a win or an achieved hit rate. Approval and price reflect the saved run.")
+    display = result.rename(columns={"league":"Sport", "matchup":"Game", "start":"Start", "pick":"Best pick", "status":"Decision", "odds":"Odds", "win_probability":"Win estimate", "edge":"Edge", "ev":"EV estimate", "selection_score":"Selection score", "probability_basis":"Win estimate source"})
+    columns = ["Sport", "Game", "Best pick", "Decision", "Odds", "Win estimate", "Edge", "EV estimate", "Selection score", "Win estimate source", "Start"]
+    display = display[columns].copy()
+    for column in ("Win estimate", "EV estimate"):
+        display[column] = display[column].map(lambda v: f"{v:.1%}" if pd.notna(v) else "Unavailable")
+    display["Edge"] = display["Edge"].map(lambda v: f"{v*100:+.1f} pp" if pd.notna(v) else "Unavailable")
+    st.dataframe(display, hide_index=True, width="stretch", height=min(760, 38 * (len(display) + 1)), column_config={"Selection score": st.column_config.NumberColumn(format="%.3f"), "Odds": st.column_config.NumberColumn(format="%+.0f")})
+    st.caption("One row per game. PASS means no approved wager. Selection score determines the candidate ranking and is not a win probability. Edge compares the displayed estimate with price break-even. Alternate candidates use their calibrated estimates; only exact final tickets carry final production metrics and approval.")
+    st.download_button("Download this game board", result.to_csv(index=False), family+"-per-game.csv", "text/csv", key="per_game_export_"+family)
 
 
-def render_daily_dashboard(today, details, frame: pd.DataFrame) -> None:
+def render_daily_dashboard(today, details, frame: pd.DataFrame, candidates: pd.DataFrame | None = None) -> None:
     board = daily_board(frame)
     with today.container():
         st.subheader("Best picks")
-        st.caption("Saved analysis · Ranked from the finalized game card. Game markets only. Player props and parlays remain in Workspace → Full Pick Board and Parlays.")
+        st.caption("Saved analysis · One selection per game in each view. Game markets only. Player props and parlays remain in Workspace → Full Pick Board and Parlays.")
         if board.empty:
             st.info("Start with your sport and bankroll, then select Run Master Analysis. Add optional files under Settings & research first.")
         else:
@@ -74,13 +53,13 @@ def render_daily_dashboard(today, details, frame: pd.DataFrame) -> None:
             c.metric("Passes", len(board) - len(approved))
             overall, sides, totals = st.tabs(["Overall Best Pick", "Sides", "Totals"], key="daily_market_navigation", on_change="rerun")
             with overall:
-                _render_featured_card(board, "overall")
+                _render_game_board(board, candidates, "overall")
             with sides:
-                st.caption("Moneylines and spreads from the finalized game card.")
-                _render_featured_card(board, "sides")
+                st.caption("Best moneyline or spread for each game, selected from the full ranked candidate audit.")
+                _render_game_board(board, candidates, "sides")
             with totals:
-                st.caption("Overs and unders from the finalized game card.")
-                _render_featured_card(board, "totals")
+                st.caption("Best over or under for each game, selected from the full ranked candidate audit.")
+                _render_game_board(board, candidates, "totals")
             if not approved.empty:
                 st.download_button("Download approved game wagers", approved.to_csv(index=False),
                                    "approved-game-wagers.csv", "text/csv", key="daily_approved_export")
