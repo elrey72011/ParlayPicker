@@ -51,3 +51,15 @@ def test_empty_store_and_legacy_runtime_metadata(frozen):
     result = evidence_health(path)
     assert result['status'] == 'healthy'
     assert result['prior_process_snapshots_accessible'] is None
+
+
+def test_health_reports_latest_saved_score_time(frozen, monkeypatch):
+    context, path, _ = frozen
+    audit, final = fixture_frames()
+    _, card = evidence.capture_run(context, audit, final, audit, path=path)
+    assert evidence_health(path)['latest_score_recorded_at'] is None
+    scores = card[['snapshot_id', 'matchup_id']].copy()
+    scores['actual_home_score'], scores['actual_away_score'] = 6, 4
+    monkeypatch.setattr(evidence, 'now_utc', lambda: '2026-09-04T01:00:00Z')
+    evidence.record_scores(scores, path=path)
+    assert evidence_health(path)['latest_score_recorded_at'] == '2026-09-04T01:00:00+00:00'

@@ -18,7 +18,7 @@ def evidence_health(path=None, process_instance=None):
               "storage_directory_configured": bool(os.environ.get("PARLAYPICKER_EVIDENCE_DIR")),
               "prior_process_snapshots_accessible": None,
               "durability_across_redeployment_verified": False,
-              "latest_snapshot_id": None, "latest_generated_at": None,
+              "latest_snapshot_id": None, "latest_generated_at": None, "latest_score_recorded_at": None,
               "latest_candidates": 0, "latest_exact_quote_times": 0, "latest_model_versions": [],
               "persistence_note": "A directory setting or healthy SQLite file does not prove persistent storage across redeployments."}
     if not location.exists():
@@ -29,6 +29,7 @@ def evidence_health(path=None, process_instance=None):
                 raise ValueError("SQLite integrity check failed")
             result["snapshots"] = db.execute("SELECT COUNT(*) FROM snapshots").fetchone()[0]
             result["score_revisions"] = db.execute("SELECT COUNT(*) FROM score_revisions").fetchone()[0]
+            result["latest_score_recorded_at"] = db.execute("SELECT MAX(recorded_at) FROM score_revisions").fetchone()[0]
             latest = db.execute("SELECT snapshot_id,generated_at,candidates,decisions,inputs,payload_hash FROM snapshots ORDER BY generated_at DESC LIMIT 1").fetchone()
             has_runtime = db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='snapshot_runtime'").fetchone()
             if has_runtime:

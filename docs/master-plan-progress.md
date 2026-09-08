@@ -77,3 +77,9 @@ Automation now reserves durable paid API budgets (500 CFBD requests / 5,000 Odds
 The Streamlit private beta now opens on Today, followed by Pick Details and Results. Today uses the reconciled game export and displays only funded, approved game wagers; research passes retain their explanations in Pick Details. Player props, parlays, candidate exports, readiness and storage diagnostics remain in Workspace. Sidebar uploads, model controls and prospective tools are grouped under Settings & research. Final-score refresh is explicit instead of running automatically on first page load.
 
 This advances the brief's usable dashboard milestone. It does not complete the public subscription product: authentication, user isolation, payments, data redistribution permissions and evidence supporting public recommendation claims remain separate work. Prediction models, approval thresholds, frozen cohorts and scheduler budgets are unchanged.
+
+## Results evidence overview
+
+Results now summarizes the loaded game recap by sport and separates explicitly approved positive-stake rows from research/unapproved rows. It displays win/loss/push counts, unresolved and void counts, and the decision denominator. Paper returns use one unit per settled row with valid exported American odds; unavailable prices are excluded without a replacement price. Actual betting returns remain unavailable without execution evidence.
+
+The evidence panel reads local MLB forecast comparisons, NCAAF paper reports by frozen cohort/model, and NFL market-tracking counts separately. It shows saved capture/score times and the general evidence store's process-local sync status without inferring separate sport-store or scheduler backup health. No new scheduled API calls are added. Score fetching is a one-click action, and refreshed recap data replaces stale cached source data while preserving edits on unchanged sources.
