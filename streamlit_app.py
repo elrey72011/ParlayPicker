@@ -213,8 +213,11 @@ _COMPACT_EXPORT_COLUMNS = [
 
 def _render_main_tabs():
     """Keep the selected section through filter and download reruns."""
+    legacy = st.session_state.get("main_navigation")
+    if legacy and legacy not in {"Today", "Pick Details", "Results", "Workspace"}:
+        st.session_state["main_navigation"] = "Results" if legacy == "Performance Recap" else "Workspace"
     return st.tabs(
-        ["Odds", "Analysis", "Best Picks", "Performance Recap", "Parlays", "Portfolio", "Debug", "Strategy Lab"],
+        ["Today", "Pick Details", "Results", "Workspace"],
         key="main_navigation",
         on_change="rerun",
     )
@@ -1951,17 +1954,24 @@ def main() -> None:
 
 
 
-    tab1, tab2, tab3, tab_performance, tab4, tab5, tab6, tab7 = _render_main_tabs()
+    today_tab, details_tab, tab_performance, workspace_tab = _render_main_tabs()
+    with workspace_tab:
+        st.caption("Research, exports, and operational diagnostics. These tools retain the existing approval rules.")
+        tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
+            ["Odds", "Analysis", "Full Pick Board", "Parlays", "Portfolio", "Diagnostics", "Strategy Lab"],
+            key="workspace_navigation", on_change="rerun",
+        )
+    today_content = today_tab.empty()
+    details_content = details_tab.empty()
+    from app.ui.daily_dashboard import render_daily_dashboard
+    render_daily_dashboard(today_content, details_content, pd.DataFrame())
 
     with tab_performance:
         from app_core.performance_pipeline import run_performance_pipeline
         from app.ui.results_dashboard import render_results_dashboard
 
-        # Load the performance metrics
-        if "performance_df" not in st.session_state:
-             with st.spinner("Fetching yesterday's results..."):
-                  st.session_state["performance_df"] = run_performance_pipeline()
-
+        st.subheader("Results")
+        st.caption("Review settled outcomes and distinguish research selections from funded wagers. Refresh scores when you need an update.")
         if st.button(
             "Refresh / Backfill Final Scores",
             key="refresh_performance_results",
@@ -1974,46 +1984,46 @@ def main() -> None:
         if perf_df is None:
              from datetime import datetime, timedelta
              yesterday = (datetime.now() - timedelta(days=1)).date()
-             st.info(f"No export data found for {yesterday.strftime('%Y-%m-%d')}.")
+             st.info("Load a results export below, or refresh final scores to retrieve available results.")
 
         # We still want to call render_results_dashboard to show the file uploader
         # even if perf_df is None
         render_results_dashboard(perf_df)
 
-    with st.expander("Prediction Evidence Status", expanded=False):
-        from app_core.evidence_health import evidence_health
-        from app_core.evidence_remote import restore_once, restore, sync
-        try:
-            restore_once()
-        except RuntimeError as exc:
-            st.error(str(exc))
-        if st.button("Restore and sync evidence storage", key="sync_remote_evidence"):
+    with tab6:
+        with st.expander("Prediction Evidence Status", expanded=False):
+            from app_core.evidence_health import evidence_health
+            from app_core.evidence_remote import restore_once, restore, sync
             try:
-                restore()
-                sync()
-            except Exception as exc:
-                from app_core.evidence_config import safe_error
-                st.error(safe_error(exc, "Restore"))
-        health = evidence_health()
-        remote = health["remote_storage"]
-        st.write(f"Remote backup: {remote['status']} · Snapshots restored: {remote['restored_snapshots']}")
-        if remote["error"]:
-            st.warning(remote["error"])
-            if remote.get("operation"):
-                st.caption(f"Storage operation: {remote['operation']}")
-        st.write(f"Store: {health['status']} · Saved runs: {health['snapshots']} · Score revisions: {health['score_revisions']}")
-        if health["latest_snapshot_id"]:
-            st.caption(f"Latest snapshot: {health['latest_snapshot_id']} · {health['latest_generated_at']}")
-            st.caption(f"Exact quote timestamps: {health['latest_exact_quote_times']}/{health['latest_candidates']} candidates")
-        st.caption(health["persistence_note"])
-        st.download_button("Download Evidence Status", json.dumps(health, indent=2),
-                           file_name="prediction-evidence-status.json", mime="application/json")
+                restore_once()
+            except RuntimeError as exc:
+                st.error(str(exc))
+            if st.button("Restore and sync evidence storage", key="sync_remote_evidence"):
+                try:
+                    restore()
+                    sync()
+                except Exception as exc:
+                    from app_core.evidence_config import safe_error
+                    st.error(safe_error(exc, "Restore"))
+            health = evidence_health()
+            remote = health["remote_storage"]
+            st.write(f"Remote backup: {remote['status']} · Snapshots restored: {remote['restored_snapshots']}")
+            if remote["error"]:
+                st.warning(remote["error"])
+                if remote.get("operation"):
+                    st.caption(f"Storage operation: {remote['operation']}")
+            st.write(f"Store: {health['status']} · Saved runs: {health['snapshots']} · Score revisions: {health['score_revisions']}")
+            if health["latest_snapshot_id"]:
+                st.caption(f"Latest snapshot: {health['latest_snapshot_id']} · {health['latest_generated_at']}")
+                st.caption(f"Exact quote timestamps: {health['latest_exact_quote_times']}/{health['latest_candidates']} candidates")
+            st.caption(health["persistence_note"])
+            st.download_button("Download Evidence Status", json.dumps(health, indent=2),
+                               file_name="prediction-evidence-status.json", mime="application/json")
 
-    from app.ui.readiness_dashboard import render_readiness_dashboard
-    render_readiness_dashboard(diagnostics.get("candidate_audit_df"), best_picks_df, diagnostics)
+        from app.ui.readiness_dashboard import render_readiness_dashboard
+        render_readiness_dashboard(diagnostics.get("candidate_audit_df"), best_picks_df, diagnostics)
 
     if analysis_df is None or analysis_df.empty:
-        st.info("Configure filters in the sidebar and click **Run Master Analysis**.")
         return
 
 
@@ -2040,7 +2050,7 @@ def main() -> None:
     )
     odds_base_loaded = bool(diagnostics.get("odds_schedule_loaded", False))
 
-    with st.container():
+    with tab6:
         m1, m2, m3, m4, m5, m6, m7, m8, m9, m10, m11 = st.columns(11)
         m1.metric("Total games", games_count)
         m2.metric("Bet rows", bet_rows)
@@ -2953,6 +2963,7 @@ def main() -> None:
                 _scope_cols + [column for column in best_picks_export.columns if column not in _scope_cols]
             ]
             production_game_export = production_wagers(best_picks_export)
+            render_daily_dashboard(today_content, details_content, best_picks_export)
             precision_game_export = precision_shortlist(best_picks_export)
 
             if "Home" in best_picks_export.columns and not best_picks_export.empty:

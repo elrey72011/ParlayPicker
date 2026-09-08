@@ -130,10 +130,19 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
 
     bankroll = st.sidebar.number_input("Bankroll", min_value=100.0, value=1000.0, step=50.0, key="bankroll")
 
-    st.sidebar.subheader("Analysis Engines")
+    st.sidebar.button(
+        "Run Master Analysis",
+        type="primary",
+        on_click=_request_run_analysis,
+        args=(st.session_state,),
+    )
 
-    use_ml = st.sidebar.checkbox("Enable ML Predictions", True, key="use_ml")
-    use_gemini = st.sidebar.checkbox(
+    st.sidebar.caption("Run after updating your inputs. Research and uploads are below.")
+    advanced = st.sidebar.expander("Settings & research", expanded=False)
+    advanced.subheader("Analysis Engines")
+
+    use_ml = advanced.checkbox("Enable ML Predictions", True, key="use_ml")
+    use_gemini = advanced.checkbox(
         "Require Gemini Review for Bets",
         value=True,
         key="use_gemini",
@@ -144,15 +153,15 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
         ),
     )
 
-    st.sidebar.subheader("Diagnostics")
-    show_debug = st.sidebar.checkbox("Display Debug Information", value=False, key="show_debug")
-    show_kalshi_diagnostics = st.sidebar.checkbox("Show Kalshi Diagnostics", value=False, key="show_kalshi_diagnostics")
+    advanced.subheader("Diagnostics")
+    show_debug = advanced.checkbox("Display Debug Information", value=False, key="show_debug")
+    show_kalshi_diagnostics = advanced.checkbox("Show Kalshi Diagnostics", value=False, key="show_kalshi_diagnostics")
 
-    st.sidebar.subheader("Data Uploads")
+    advanced.subheader("Data Uploads")
 
-    theover_spreads = st.sidebar.file_uploader("Upload TheOver Spreads CSV", type=["csv"], key="theover_spreads")
-    theover_totals = st.sidebar.file_uploader("Upload TheOver Totals CSV", type=["csv"], key="theover_totals")
-    prop_results_log = st.sidebar.file_uploader(
+    theover_spreads = advanced.file_uploader("Upload TheOver Spreads CSV", type=["csv"], key="theover_spreads")
+    theover_totals = advanced.file_uploader("Upload TheOver Totals CSV", type=["csv"], key="theover_totals")
+    prop_results_log = advanced.file_uploader(
         "Upload Latest Downloaded Graded Prop Ledger(s)",
         type=["csv"],
         accept_multiple_files=True,
@@ -166,7 +175,7 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
     )
     bundled_ledger = _read_bundled_prop_ledger()
 
-    previous_prop_exports = st.sidebar.file_uploader(
+    previous_prop_exports = advanced.file_uploader(
         "Upload Yesterday's Combined Player-Prop Export(s)",
         type=["csv"],
         accept_multiple_files=True,
@@ -178,7 +187,7 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
             "and research export so every prediction can be graded."
         ),
     )
-    previous_prop_date = st.sidebar.date_input(
+    previous_prop_date = advanced.date_input(
         "Prop Slate Date",
         value=date.today() - timedelta(days=1),
         max_value=date.today(),
@@ -196,16 +205,16 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
         pregrade_ledger, previous_prop_date.isoformat()
     )
     if selected_gap["gap_detected"]:
-        st.sidebar.warning(
+        advanced.warning(
             "The loaded cumulative prop ledger ends on "
             f"{selected_gap['latest_date']}, but you selected "
             f"{selected_gap['target_date']}. Grading remains available because the "
             "merge is additive, but upload any missing downloaded ledgers when "
             "available so calibration coverage stays complete."
         )
-    if st.sidebar.button("Grade Uploaded Player Props", key="grade_previous_props"):
+    if advanced.button("Grade Uploaded Player Props", key="grade_previous_props"):
         if not previous_prop_exports:
-            st.sidebar.error("Upload at least one previous player-prop export first.")
+            advanced.error("Upload at least one previous player-prop export first.")
         else:
             try:
                 from app_core.prop_grading import (
@@ -232,7 +241,7 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
                 _league_counts = previous_card.get(
                     "league", pd.Series("MLB", index=previous_card.index)
                 ).fillna("MLB").astype(str).str.upper().value_counts().to_dict()
-                st.sidebar.caption(
+                advanced.caption(
                     "Uploaded grading rows by league: "
                     + ", ".join(
                         f"{league} {count}" for league, count in sorted(_league_counts.items())
@@ -246,7 +255,7 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
                     for name in _normalized_upload_names
                 )
                 if not _combined_export_present:
-                    st.sidebar.warning(
+                    advanced.warning(
                         "No combined player_props_all_export.csv was detected. "
                         "Verify that you uploaded every league-specific prop export; "
                         "otherwise the downloaded ledger will be incomplete."
@@ -268,7 +277,7 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
                 )
                 actual_gap = ledger_history_gap_summary(prior_ledger, grade_date)
                 if actual_gap["gap_detected"]:
-                    st.sidebar.warning(
+                    advanced.warning(
                         "This slate will be appended across a calendar gap. Existing "
                         "rows will be preserved; upload missing ledgers later to backfill "
                         "the uncovered dates."
@@ -279,14 +288,14 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
                 st.session_state["generated_prop_results_log"] = ledger
                 st.session_state["active_prop_results_log"] = ledger
                 summary = grading_summary(graded)
-                st.sidebar.success(
+                advanced.success(
                     f"Graded {summary['graded']} props: "
                     f"{summary['wins']}-{summary['losses']} "
                     f"({summary['voids']} void/DNP, "
                     f"{summary['unresolved']} unresolved)."
                 )
             except Exception as exc:
-                st.sidebar.error(f"Player-prop grading failed: {exc}")
+                advanced.error(f"Player-prop grading failed: {exc}")
 
     generated_ledger = st.session_state.get("generated_prop_results_log")
     active_ledger = _assemble_active_prop_ledger(
@@ -319,38 +328,38 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
             if coverage["start_date"] == coverage["end_date"]
             else f"{coverage['start_date']} to {coverage['end_date']}"
         )
-        st.sidebar.caption(
+        advanced.caption(
             f"Prop calibration history: {coverage['settled']} settled rows "
             f"across {coverage['date_count']} slate date(s) ({date_range})."
         )
         if uploaded_history_present or generated_history_present:
             if recovery_saved:
-                st.sidebar.caption(
+                advanced.caption(
                     "Newest prop history is saved for automatic restart recovery."
                 )
             else:
-                st.sidebar.warning(
+                advanced.warning(
                     "The newest prop history could not be saved for restart "
                     "recovery. Download the updated ledger before leaving this session."
                 )
         if coverage["settled"] <= 0:
-            st.sidebar.error(
+            advanced.error(
                 "The uploaded prop ledger has no settled WIN/LOSS rows. "
                 "Player props will remain research-only."
             )
         elif coverage["date_count"] <= 1:
-            st.sidebar.warning(
+            advanced.warning(
                 "Only one slate date is loaded. This is not yet a cumulative "
                 "calibration history; keep the downloaded ledger as a portable backup."
             )
     else:
-        st.sidebar.error(
+        advanced.error(
             "No cumulative graded prop ledger is loaded. Player props will be "
             "research-only and cannot receive production stakes."
         )
 
     if isinstance(active_ledger, pd.DataFrame) and not active_ledger.empty:
-        st.sidebar.download_button(
+        advanced.download_button(
             "Download Updated Graded Prop Ledger",
             active_ledger.to_csv(index=False, encoding="utf-8-sig"),
             "prop_results_log.csv",
@@ -358,20 +367,14 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
             key="download_prop_results_log",
         )
 
-    st.sidebar.button(
-        "Run Master Analysis",
-        type="primary",
-        on_click=_request_run_analysis,
-        args=(st.session_state,),
-    )
 
     run_counter = int(st.session_state.get("run_analysis_counter", 0))
 
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("🛠️ Data Maintenance")
+    advanced.markdown("---")
+    advanced.subheader("🛠️ Data Maintenance")
     from app.ui.ncaaf_data_access import render_ncaaf_data_access
 
-    with st.sidebar:
+    with advanced:
         render_ncaaf_data_access()
         from app.ui.ncaaf_history import render_ncaaf_history
 
@@ -383,14 +386,14 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
         render_mlb_prospective()
         from app.ui.nfl_market import render_nfl_market
         render_nfl_market()
-    if st.sidebar.button("🔄 Sync Historical Rosters"):
+    if advanced.button("🔄 Sync Historical Rosters"):
         with st.spinner("Syncing rosters from The Odds API..."):
             try:
                 from collect_historical_data import run_backfill
                 run_backfill(sports=sports, days=2)
-                st.sidebar.success("✅ Database Synced!")
+                advanced.success("✅ Database Synced!")
             except Exception as e:
-                st.sidebar.error(f"Sync failed: {e}")
+                advanced.error(f"Sync failed: {e}")
 
     return {
         "sports": sports,
