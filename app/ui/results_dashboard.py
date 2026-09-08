@@ -1,4 +1,5 @@
 from datetime import date, timedelta
+import math
 
 import pandas as pd
 import streamlit as st
@@ -300,30 +301,9 @@ def _render_prop_results_recap() -> None:
 
 
 def _production_wager_mask(frame: pd.DataFrame) -> pd.Series:
-    """True only where the exported card assigned a positive production stake."""
-
-    if frame is None or frame.empty:
-        return pd.Series(False, index=getattr(frame, "index", None), dtype=bool)
-
-    stake_columns = [
-        name
-        for name in (
-            "Play_Stake",
-            "production_bet_amount",
-            "Kelly_Bet_Size",
-            "recommended_bet",
-            "Suggested_Stake",
-        )
-        if name in frame.columns
-    ]
-    if not stake_columns:
-        return pd.Series(False, index=frame.index, dtype=bool)
-
-    amounts = pd.concat(
-        [pd.to_numeric(frame[name], errors="coerce").fillna(0.0) for name in stake_columns],
-        axis=1,
-    )
-    return amounts.max(axis=1).gt(0.0)
+    """Require explicit approval and a positive exported stake."""
+    from app_core.results_overview import approved_wager_mask
+    return approved_wager_mask(frame)
 
 
 def _precision_card_mask(frame: pd.DataFrame) -> pd.Series:
@@ -629,6 +609,10 @@ def _render_candidate_results_recap(
 
 
 def render_results_dashboard(picks_df: pd.DataFrame) -> None:
+    from app.ui.results_overview import render_recap_overview, render_evidence_overview
+    overview = st.empty()
+    render_recap_overview(overview, None)
+    render_evidence_overview()
     # 1. File Uploader for Yesterday's Picks at the very top
     uploaded_picks_file = st.file_uploader("Upload Yesterday's Best Picks Export", type=["csv"], key="perf_picks_uploader")
 
@@ -718,14 +702,19 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
         return
 
     # Initialize editable picks in session state if not present, OR if a new file was uploaded
-    if "perf_edited_picks" not in st.session_state or new_upload_detected:
+    import hashlib
+    source_signature = hashlib.sha256(picks_df.to_csv(index=False).encode()).hexdigest()
+    source_changed = st.session_state.get("perf_source_signature") != source_signature
+    if "perf_edited_picks" not in st.session_state or new_upload_detected or source_changed:
+        st.session_state.pop("perf_data_editor", None)
+        st.session_state["perf_source_signature"] = source_signature
         st.session_state["perf_edited_picks"] = picks_df.copy()
 
     # Get the latest dataframe state (could be edited previously)
     current_df = st.session_state["perf_edited_picks"]
 
-    # 2. Toggle to fetch scores from API
-    fetch_api = st.toggle("Fetch Scores from API", value=False, key="perf_api_toggle")
+    # 2. Explicit one-shot fetch; navigation and download reruns must not fetch.
+    fetch_api = st.button("Fetch Scores from API", key="perf_fetch_scores_button")
 
     # 3. File Uploader for Manual Results
     uploaded_manual_results = st.file_uploader("Upload Manual Results CSV (If API restricted)", type=["csv"], key="perf_manual_results_uploader")
@@ -789,6 +778,7 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
               display_df[col] = pd.NA
 
     display_df['Outcome'] = display_df.apply(determine_display_outcome, axis=1)
+    render_recap_overview(overview, display_df)
 
     unresolved_mask = ~display_df["Outcome"].fillna("N/A").astype(str).str.upper().isin(
         ["WIN", "LOSS", "PUSH"]
@@ -829,11 +819,8 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
             outcome = row['Outcome']
             if outcome == 'WIN':
                  odds = pd.to_numeric(row.get('odds_american'), errors='coerce')
-                 if pd.isna(odds):
-                      odds = -110 # default
-
-                 if abs(odds) < 1.0:
-                      odds = -110
+                 if pd.isna(odds) or not math.isfinite(odds) or abs(odds) < 100:
+                      continue
 
                  # Calculate profit for 1 unit (e.g. $100 bet)
                  if odds < 0:
@@ -842,14 +829,17 @@ def render_results_dashboard(picks_df: pd.DataFrame) -> None:
                       profit = odds / 100.0
                  net_profit += profit
             elif outcome == 'LOSS':
-                 net_profit -= 1.0
+                 odds = pd.to_numeric(row.get('odds_american'), errors='coerce')
+                 if pd.notna(odds) and math.isfinite(odds) and abs(odds) >= 100:
+                      net_profit -= 1.0
 
         return wins, losses, pushes, win_rate, net_profit
 
     production_mask = _production_wager_mask(display_df)
     production_df = display_df[production_mask].copy()
 
-    st.markdown("#### Production-Approved Wager Performance")
+    st.caption("All return figures below are hypothetical. Rows with unavailable or invalid odds are excluded from P&L; no execution is verified.")
+    st.markdown("#### Production-Approved Wager Performance (Paper)")
     if production_df.empty:
         st.info(
             "No rows carried a positive app-approved stake on this slate. That means the "
