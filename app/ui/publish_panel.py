@@ -30,7 +30,7 @@ def source_fingerprint(games, candidates, props, dfs, options):
 
 def render_publish_panel(games, candidates, props=None, dfs=None):
     st.subheader('Preview & Publish')
-    st.caption('Private publishing workspace. Publishes to this Streamlit server’s local filesystem, not the internet or your laptop when using Streamlit Cloud. Download the HTML to keep a portable copy.')
+    st.caption('Private publishing workspace. Preview first, then choose local output or the separate configured public website controls below. Local output on Streamlit Cloud stays on the server; download the HTML to keep a copy.')
     token = str(setting('PARLAYPICKER_PUBLISH_TOKEN'))
     if len(token) < 16:
         st.info('Publishing is locked. Configure PARLAYPICKER_PUBLISH_TOKEN with at least 16 characters in Streamlit secrets or the local environment. Never put it in the repository.')
@@ -87,6 +87,9 @@ def render_publish_panel(games, candidates, props=None, dfs=None):
     if st.button('Publish reviewed board locally', key='publication_publish'):
         try:
             publish_package(package,destination)
-            st.success('Published locally. Public hosting is not connected. Download the reviewed HTML to retain this publication outside Streamlit.')
+            st.success('Published locally. This local action does not update the public website. Download the HTML or use the separate public publish controls below.')
         except (OSError,ValueError) as exc:
             st.error('Local publication failed: '+str(exc))
+
+    from app.ui.remote_publish import render_remote_publish
+    render_remote_publish(package, fingerprint, setting)
