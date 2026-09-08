@@ -379,6 +379,8 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
         from app.ui.ncaaf_prospective import render_ncaaf_prospective
 
         render_ncaaf_prospective()
+        from app.ui.mlb_prospective import render_mlb_prospective
+        render_mlb_prospective()
     if st.sidebar.button("🔄 Sync Historical Rosters"):
         with st.spinner("Syncing rosters from The Odds API..."):
             try:
