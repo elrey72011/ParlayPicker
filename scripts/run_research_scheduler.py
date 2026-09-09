@@ -26,6 +26,19 @@ def main():
                    os.getenv("CFBD_API_KEY"),os.getenv("ODDS_API_KEY"))
     except Exception as exc:
         result={"errors":["scheduler:"+type(exc).__name__]}
+    site=os.getenv("PARLAYPICKER_NETLIFY_SITE_ID", "").strip()
+    if site:
+        try:
+            from app_core.public_grading_scheduler import run as grade_public
+            folder,_=settings()
+            public=grade_public(site,folder,DriveStore(folder),sports)
+            result["public_grading"]=public
+            result["errors"].extend("public_grading:"+e for e in public["errors"])
+        except Exception as exc:
+            result["public_grading"]={"status":"error", "error":type(exc).__name__}
+            result["errors"].append("public_grading:"+type(exc).__name__)
+    else:
+        result["public_grading"]={"status":"not_configured", "action":"Set Actions variable PARLAYPICKER_NETLIFY_SITE_ID"}
     text=json.dumps(result,indent=2)
     summary.write_text("# Research scheduler\n\n```json\n"+text+"\n```\n",encoding="utf-8")
     print(text)
