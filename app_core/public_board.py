@@ -99,7 +99,9 @@ def build_package(overall, sides, totals, *, props=None, props_as_of=None, dfs=N
                             'salary':salary, 'salary_remaining':50000-salary,
                             'projected_points':number(row, 'Projected Points'),
                             'projection_basis':text(row, 'Projection Sources') or 'Unavailable'})
-    return {'schema_version':1, 'built_at':datetime.now(timezone.utc).isoformat(), 'stale_after_minutes':15,
+    from app_core.public_parlays import build_parlays
+    built_at = datetime.now(timezone.utc)
+    return {'schema_version':2, 'parlays':build_parlays(games['overall'], built_at), 'built_at':built_at.isoformat(), 'stale_after_minutes':15,
             'games':games, 'props':[] if props is None else [pick_record(row, prop=True, as_of=props_as_of) for _,row in props.iterrows()],
             'dfs':lineups}
 
@@ -109,8 +111,8 @@ def validate_package(package):
     def exact(obj, keys):
         if not isinstance(obj, dict) or set(obj) != set(keys.split()):
             raise ValueError('Unexpected or missing public fields')
-    exact(package, 'schema_version built_at stale_after_minutes games props dfs')
-    if package['schema_version'] != 1 or package['stale_after_minutes'] != 15:
+    exact(package, 'schema_version built_at stale_after_minutes games props dfs' + (' parlays' if package.get('schema_version') == 2 else ''))
+    if package['schema_version'] not in {1,2} or package['stale_after_minutes'] != 15:
         raise ValueError('Unsupported public package version/policy')
     timestamp(package['built_at'])
     exact(package['games'], 'overall sides totals')
@@ -149,4 +151,9 @@ def validate_package(package):
             exact(player, 'slot name')
             if not all(isinstance(v, str) and v.strip() for v in player.values()):
                 raise ValueError('Invalid player fields')
+    if package['schema_version'] == 2:
+        from app_core.public_parlays import build_parlays
+        expected = build_parlays(package['games']['overall'], datetime.fromisoformat(package['built_at']))
+        if package['parlays'] != expected:
+            raise ValueError('Parlays must match the original disjoint selections and estimates')
     return package
