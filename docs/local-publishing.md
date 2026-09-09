@@ -118,3 +118,11 @@ Netlify public publication is now available below the local publish controls.
 It is disabled until a dedicated site ID and token are configured. See
 `docs/netlify-publishing.md` for setup and the explicit public publish workflow.
 The local button still writes only to the local server filesystem.
+
+## Public parlay board
+
+New previews include a Parlays tab with at most three two-leg combinations drawn from Overall Best Picks. Teams cannot recur anywhere in the set, including as opponents. Both game start times and analysis timestamps must be available; started games, future analysis timestamps, and analysis older than 15 minutes are excluded at build time. The browser marks saved pairs expired when their legs age or start.
+
+Pairs with two individually approved legs rank first, then pairs rank by the product of leg probabilities. Remaining pairs may include PASS selections and are explicitly research only. All tickets remain research only: multiplied single-leg decimal prices and independence-based joint probabilities are illustrative, not verified bookmaker parlay quotes or ticket approval. No stakes are recommended and no extra API calls are made.
+
+Version 2 public packages retain the chosen legs and calculated estimates; older version 1 drafts remain readable. Download the public JSON to retain a copy. This change does not add durable publication history or automatic parlay settlement; those are follow-up work. Build a fresh preview and explicitly publish it to update Netlify.
