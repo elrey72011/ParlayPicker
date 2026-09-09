@@ -24,6 +24,7 @@ jobs:
       PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT: ${{ secrets.PARLAYPICKER_GOOGLE_SERVICE_ACCOUNT }}
       CFBD_API_KEY: ${{ secrets.CFBD_API_KEY }}
       ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+      PARLAYPICKER_NETLIFY_SITE_ID: ${{ vars.PARLAYPICKER_NETLIFY_SITE_ID }}
       RESEARCH_SPORTS: ${{ inputs.sports || vars.RESEARCH_SPORTS || 'MLB,NCAAF' }}
     steps:
       - uses: actions/checkout@v5

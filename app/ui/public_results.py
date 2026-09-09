@@ -30,7 +30,7 @@ def render_history(setting):
                             if status['state']=='ready':
                                 store.confirm(pending['deploy_id'],pending['package_hash'])
                 pubs=store.publications();revisions=store.all('scores');imports=store.all('imports')
-                st.session_state[key]={'publications':pubs,'revisions':revisions,'imports':imports,'rows':report(pubs,revisions,imports)}
+                st.session_state[key]={'publications':pubs,'revisions':revisions,'imports':imports,'grading_runs':store.all('grading_runs'),'rows':report(pubs,revisions,imports)}
                 st.success('Public history restored.')
             except Exception:
                 st.error('Public history restore failed. Check Shared Drive access; no history was replaced.')
@@ -38,6 +38,15 @@ def render_history(setting):
         if saved is None:
             st.info('Restore history before publishing so the public tracker includes its existing record.')
             return None
+        runs=saved.get('grading_runs',[])
+        if runs:
+            latest=max(runs,key=lambda r:r['started_at'])
+            st.caption('Automatic grading: '+latest['status']+' · Last successful run: '+str(latest.get('last_success_at') or 'None')+' · Pending category entries: '+str(latest.get('pending',0)))
+            if latest.get('errors'):
+                st.warning('Automatic grading needs attention: '+', '.join(latest['errors']))
+            st.caption('Status reflects the last Drive restore. Restore again to retrieve newer runs. Publishing remains manual.')
+        else:
+            st.info('No automatic public-grading run restored yet. Configure PARLAYPICKER_NETLIFY_SITE_ID in GitHub Actions variables; manual grading remains available.')
         st.markdown('**Import an older recap**')
         st.caption('Upload all three per-game CSVs from the same run. They remain Imported research, never verified public predictions or approved betting returns. Duplicate imports do not increase counts.')
         uploads=[st.file_uploader(label,type=['csv'],key='recap_import_'+family) for family,label in [('overall','Overall per-game CSV'),('sides','Sides per-game CSV'),('totals','Totals per-game CSV')]]
