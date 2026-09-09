@@ -989,10 +989,13 @@ def _attach_kelly_to_best_picks(best_picks_df: pd.DataFrame, portfolio_df: pd.Da
     diagnostics["kelly_zero_reason_counts"] = out.loc[pd.to_numeric(out["Kelly_Bet_Size"], errors="coerce").fillna(0).le(0), "kelly_zero_reason"].value_counts().to_dict()
     return out
 
-def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
+def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[str]]:
     """Run the full analysis pipeline. Returns (state_updates, warnings, errors).
     Contains NO st.* calls.
     """
+    from app_core.stage_timing import StageTimer
+    timer = StageTimer(progress)
+    timer.start("Load inputs and initialize evidence")
     deferred_warnings: list[str] = []
     deferred_errors: list[str] = []
     evidence_context = None
@@ -1017,6 +1020,7 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
             if team_col in upload_df.columns:
                 upload_df[team_col] = upload_df[team_col].apply(normalize_team)
 
+    timer.start("Fetch odds, team statistics and model predictions")
     analysis_df, pipeline_best_picks_df, diagnostics = run_analysis_pipeline(
         sports=controls["sports"],
         max_rows=10_000,
@@ -1025,6 +1029,8 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
         totals_df=totals_df,
     )
 
+    timer.start("Market enrichment and candidate selection")
+    diagnostics["stage_seconds"] = timer.timings
     parlay_columns = ["slate_date", "pipeline_build", "export_run_id", "parlay_rank", "parlay_legs", "combined_probability", "combined_decimal_odds", "parlay_ev", "legs", "unique_game_count", "one_leg_per_game", "card_unique_games", "card_game_exposure_cap", "card_unique_game_count", "parlay_source", "risk_tier", "group_id", "best_payout_book", "Conviction_Score", "min_leg_prob", "has_actionable_anchor", "production_safety_mode", "parlay_class", "premium_eligible", "sellable_as_premium", "commercial_warning", "kelly_fraction", "recommended_bet"]
     empty_per_leg = {f"parlays_{lc}_df": pd.DataFrame(columns=parlay_columns) for lc in (2, 3)}
 
@@ -1046,6 +1052,7 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
 
     if analysis_df is None or analysis_df.empty:
         deferred_warnings.append("No rows found for the selected sports.")
+        timer.finish()
         return empty_state, deferred_warnings, deferred_errors
 
     # Kalshi enrichment with hard timeout
@@ -1062,6 +1069,7 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
             analysis_df = _sync_ml_probabilities(analysis_df, pipeline_best_picks_df)
         except ValueError as exc:
             deferred_errors.append(f"ML Merge Failed: {exc}")
+            timer.finish()
             return empty_state, deferred_warnings, deferred_errors
 
         ml_eligible = _ml_eligible_market_mask(analysis_df)
@@ -1087,6 +1095,7 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
             deferred_errors.append(
                 "ML Merge Failed: target-matched model predictions could not be joined to the market odds."
             )
+            timer.finish()
             return empty_state, deferred_warnings, deferred_errors
         if not ml_required:
             deferred_warnings.append(
@@ -1113,6 +1122,7 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
         )
     except ValueError as exc:
         deferred_errors.append(f"ML Merge Failed: {exc}")
+        timer.finish()
         return empty_state, deferred_warnings, deferred_errors
 
     # -----------------------------
@@ -1152,6 +1162,7 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
     # Gemini is a real, fail-closed wager review when enabled. It may confirm or
     # reduce/hold a quantitatively qualified bet, but can never promote a row or
     # flip to an opposing side without a separately validated line and price.
+    timer.start("Gemini review and wager checks")
     gemini_gate_enabled = bool(controls.get("use_gemini"))
     if gemini_gate_enabled and not best_picks_df.empty:
         try:
@@ -1555,6 +1566,7 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
     # League-isolated player-prop cards. MLB retains its evidence-gated controlled
     # rollout; NFL launches research-only until its own graded history proves a market.
     # A prop-feed hiccup can never break the main game card.
+    timer.start("Player props and prop reviews")
     strikeout_prop_card = pd.DataFrame()
     try:
         from app_core.weights_config import (
@@ -1813,6 +1825,7 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
         (~parlays_df["premium_eligible"]).sum()
     ) if parlays_df is not None and not parlays_df.empty else 0
 
+    timer.start("Save prediction evidence")
     try:
         from app_core.prediction_evidence import capture_run
         from core.streamlit_pipeline import _sync_selected_candidate_audit
@@ -1841,6 +1854,7 @@ def _run_pipeline(controls: dict) -> tuple[dict, list[str], list[str]]:
         diagnostics["prediction_snapshot_error"] = str(exc)
         deferred_warnings.append(f"Prediction evidence was not saved: {exc}")
 
+    timer.finish()
     state_updates = {
         "pipeline_status": "using stored results",
         "pipeline_running": False,
@@ -1905,7 +1919,11 @@ def main() -> None:
         st.session_state["pipeline_running"] = True
         try:
             with st.spinner("Running analysis..."):
-                state_updates, pipe_warnings, pipe_errors = _run_pipeline(controls)
+                progress_text = st.empty()
+                state_updates, pipe_warnings, pipe_errors = _run_pipeline(
+                    controls, progress=lambda stage: progress_text.info("Running: " + stage)
+                )
+                progress_text.empty()
             st.session_state.update(state_updates)
             st.session_state["last_successful_pipeline_signature"] = (
                 _analysis_input_signature(controls)
@@ -1994,6 +2012,12 @@ def main() -> None:
         render_results_dashboard(perf_df)
 
     with tab6:
+        with st.expander("Last analysis stage timings", expanded=False):
+            stage_seconds = st.session_state.get("diagnostics", {}).get("stage_seconds", {})
+            if stage_seconds:
+                st.dataframe(pd.DataFrame([{"Stage": k, "Seconds": v} for k,v in stage_seconds.items()]), hide_index=True)
+            else:
+                st.caption("Run Master Analysis to collect timings.")
         with st.expander("Prediction Evidence Status", expanded=False):
             from app_core.evidence_health import evidence_health
             from app_core.evidence_remote import restore_once, restore, sync

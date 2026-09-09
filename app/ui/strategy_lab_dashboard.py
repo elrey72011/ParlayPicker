@@ -192,9 +192,13 @@ def _render_theoretical_strategy_lab(
 def _render_realized_strategy_lab(analysis_df: pd.DataFrame) -> None:
     st.caption("Realized results are sourced from the same graded performance pipeline used by Prior Day Performance recap.")
 
-    graded_df = run_performance_pipeline()
+    # Rendering inactive tabs must never trigger result-provider requests.
+    if st.button("Refresh Strategy Lab scores", key="strategy_refresh_scores"):
+        with st.spinner("Refreshing final scores..."):
+            st.session_state["performance_df"] = run_performance_pipeline()
+    graded_df = st.session_state.get("performance_df")
     if graded_df is None or graded_df.empty:
-        st.info("No graded recap source found from the performance pipeline.")
+        st.info("Refresh scores here or in Results to load a graded recap. Saved results are reused until you refresh.")
         return
 
     selected_mode = st.selectbox(

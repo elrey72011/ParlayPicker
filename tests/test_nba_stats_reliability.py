@@ -18,7 +18,7 @@ def test_wnba_rows_are_isolated_from_failed_nba_diagnostics(monkeypatch):
     monkeypatch.setattr(
         fp,
         "fetch_team_stats",
-        lambda _api_clients, season_year=None: pd.DataFrame(
+        lambda _api_clients, season_year=None, **kwargs: pd.DataFrame(
             columns=["team_norm", "league_key"]
         ),
     )
@@ -60,7 +60,7 @@ def test_mixed_slate_fallback_diagnostics_are_scoped_to_affected_league(monkeypa
     monkeypatch.setattr(
         fp,
         "fetch_team_stats",
-        lambda _api_clients, season_year=None: pd.DataFrame(
+        lambda _api_clients, season_year=None, **kwargs: pd.DataFrame(
             [
                 {
                     "team_norm": "BOSTON RED SOX",
@@ -403,7 +403,7 @@ def test_nba_fetch_failure_can_recover_from_previous_season_same_day_archive(mon
 
 
 def test_cached_success_does_not_inflate_unresolved_or_fallback(monkeypatch):
-    def fake_fetch_team_stats(_api_clients, season_year=None):
+    def fake_fetch_team_stats(_api_clients, season_year=None, **kwargs):
         return pd.DataFrame(
             [
                 {"team_norm": "BOSTON CELTICS", "league_key": "NBA", "win_pct": 0.61, "home_win_pct": 0.61, "away_win_pct": 0.61, "points_per_game": 118.0, "points_allowed_per_game": 111.0, "turnovers": 12.0, "streak": 0.0, "last5_win_pct": 0.6},
@@ -428,7 +428,7 @@ def test_cached_success_does_not_inflate_unresolved_or_fallback(monkeypatch):
 
 
 def test_nba_fetch_status_source_and_retries_reflect_final_source(monkeypatch):
-    def fake_fetch_team_stats(_api_clients, season_year=None):
+    def fake_fetch_team_stats(_api_clients, season_year=None, **kwargs):
         return pd.DataFrame(
             [
                 {"team_norm": "BOSTON CELTICS", "league_key": "NBA", "win_pct": 0.61, "home_win_pct": 0.61, "away_win_pct": 0.61, "points_per_game": 118.0, "points_allowed_per_game": 111.0, "turnovers": 12.0, "streak": 0.0, "last5_win_pct": 0.6},
@@ -454,7 +454,7 @@ def test_nba_fetch_status_source_and_retries_reflect_final_source(monkeypatch):
 
 
 def test_live_fail_cache_success_rows_show_cached_not_failed(monkeypatch):
-    def fake_fetch_team_stats(_api_clients, season_year=None):
+    def fake_fetch_team_stats(_api_clients, season_year=None, **kwargs):
         return pd.DataFrame(
             [
                 {"team_norm": "BOSTON CELTICS", "league_key": "NBA", "win_pct": 0.61, "home_win_pct": 0.61, "away_win_pct": 0.61, "points_per_game": 118.0, "points_allowed_per_game": 111.0, "turnovers": 12.0, "streak": 0.0, "last5_win_pct": 0.6},
@@ -475,7 +475,7 @@ def test_live_fail_cache_success_rows_show_cached_not_failed(monkeypatch):
 
 
 def test_live_fail_no_cache_rows_show_failed_with_warning(monkeypatch):
-    def fake_fetch_team_stats(_api_clients, season_year=None):
+    def fake_fetch_team_stats(_api_clients, season_year=None, **kwargs):
         return pd.DataFrame(columns=["team_norm", "league_key"])
 
     monkeypatch.setattr(fp, "fetch_team_stats", fake_fetch_team_stats)
@@ -494,7 +494,7 @@ def test_live_fail_no_cache_rows_show_failed_with_warning(monkeypatch):
 
 
 def test_nba_fetch_failure_is_not_reported_on_mlb_only_slate(monkeypatch):
-    def fake_fetch_team_stats(_api_clients, season_year=None):
+    def fake_fetch_team_stats(_api_clients, season_year=None, **kwargs):
         return pd.DataFrame(
             [
                 {"team_norm": "ARIZONA DIAMONDBACKS", "league_key": "MLB", "win_pct": 0.55, "home_win_pct": 0.55, "away_win_pct": 0.55, "points_per_game": 4.8, "points_allowed_per_game": 4.3, "turnovers": 0.0, "streak": 0.0, "last5_win_pct": 0.6},
@@ -516,7 +516,7 @@ def test_nba_fetch_failure_is_not_reported_on_mlb_only_slate(monkeypatch):
 
 
 def test_unresolved_nba_rows_marked_and_ml_ineligible(monkeypatch):
-    def fake_fetch_team_stats(_api_clients, season_year=None):
+    def fake_fetch_team_stats(_api_clients, season_year=None, **kwargs):
         return pd.DataFrame(
             [
                 {
@@ -571,7 +571,7 @@ def test_unresolved_nba_rows_marked_and_ml_ineligible(monkeypatch):
 
 
 def test_aggregated_stats_diagnostics_populate(monkeypatch):
-    def fake_fetch_team_stats(_api_clients, season_year=None):
+    def fake_fetch_team_stats(_api_clients, season_year=None, **kwargs):
         return pd.DataFrame(
             [
                 {
@@ -612,7 +612,7 @@ def test_aggregated_stats_diagnostics_populate(monkeypatch):
 
 
 def test_nba_fetch_failure_marks_rows_unresolved_and_nans_features(monkeypatch):
-    def fake_fetch_team_stats(_api_clients, season_year=None):
+    def fake_fetch_team_stats(_api_clients, season_year=None, **kwargs):
         return pd.DataFrame(columns=["team_norm", "league_key"])
 
     monkeypatch.setattr(fp, "fetch_team_stats", fake_fetch_team_stats)
@@ -636,7 +636,7 @@ def test_nba_fetch_failure_marks_rows_unresolved_and_nans_features(monkeypatch):
 
 
 def test_nhl_boston_buffalo_and_mlb_arizona_resolve_without_fallback(monkeypatch):
-    def fake_fetch_team_stats(_api_clients, season_year=None):
+    def fake_fetch_team_stats(_api_clients, season_year=None, **kwargs):
         return pd.DataFrame(
             [
                 {"team_norm": "Boston Bruins", "league_key": "NHL", "win_pct": 0.6, "home_win_pct": 0.6, "away_win_pct": 0.6, "points_per_game": 3.2, "points_allowed_per_game": 2.6, "turnovers": 0.0, "streak": 0.0, "last5_win_pct": 0.6},
@@ -659,7 +659,7 @@ def test_nhl_boston_buffalo_and_mlb_arizona_resolve_without_fallback(monkeypatch
 
 
 def test_run_health_warning_on_fallback_heavy_slate(monkeypatch):
-    def fake_fetch_team_stats(_api_clients, season_year=None):
+    def fake_fetch_team_stats(_api_clients, season_year=None, **kwargs):
         return pd.DataFrame(columns=["team_norm", "league_key"])
 
     monkeypatch.setattr(fp, "fetch_team_stats", fake_fetch_team_stats)
