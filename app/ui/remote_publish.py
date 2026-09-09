@@ -36,19 +36,31 @@ def render_remote_publish(package, fingerprint, setting):
         # Record submission before sending; uncertain responses must not be retried automatically.
         jobs[key]={'state':'uncertain'}
         try:
+            from app.ui.public_results import history
+            archive_hash=history(setting).archive(package)
             jobs[key]=remote.deploy(package,site_id,token)
-        except (ValueError,RuntimeError) as exc:
-            jobs[key]['message']=str(exc)
+            jobs[key]['archive_hash']=archive_hash
+            history(setting).submitted(jobs[key]['id'],archive_hash)
+        except Exception:
+            jobs[key]['message']='Publication or history backup failed; check Drive and Netlify before retrying.'
         st.rerun()
     if not job:
         return
     if job.get('id') and st.button('Check public deployment status',key='publication_remote_status'):
         try:
-            jobs[key]=remote.deployment_status(job['id'],site_id,token)
+            updated=remote.deployment_status(job['id'],site_id,token)
+            jobs[key]={**job, **updated}
             job=jobs[key]
         except (ValueError,RuntimeError) as exc:
             st.error(str(exc))
     if job['state']=='ready':
+        if not job.get('history_saved'):
+            try:
+                from app.ui.public_results import history
+                history(setting).confirm(job['id'],job['archive_hash'])
+                job['history_saved']=True
+            except Exception:
+                st.error('Website is published, but recording its public history failed. Check Drive access and retry status verification; it is not counted yet.')
         st.success('Netlify confirms this deployment is the published website.')
         st.link_button('Open public website',job['url'])
     elif job['state']=='uncertain':

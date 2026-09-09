@@ -39,6 +39,8 @@ def render_publish_panel(games, candidates, props=None, dfs=None):
     if not hmac.compare_digest(supplied.encode(), token.encode()):
         st.info('Enter the publishing token to preview or publish.')
         return
+    from app.ui.public_results import render_history
+    public_results = render_history(setting)
     if games is None or games.empty:
         st.info('Run Master Analysis to prepare game picks first.')
         return
@@ -54,7 +56,7 @@ def render_publish_panel(games, candidates, props=None, dfs=None):
     st.caption('DFS lineups must be generated in Full Pick Board during this run. Only one Classic slate is included per publication. Empty sections remain visible as empty tabs.')
     selected_props = props if include_props else pd.DataFrame()
     selected_dfs = dfs.get(chosen)
-    options = {'props':include_props, 'dfs':chosen, 'slate':slate, 'start':start}
+    options = {'results':public_results, 'props':include_props, 'dfs':chosen, 'slate':slate, 'start':start}
     fingerprint = source_fingerprint(games,candidates,selected_props,selected_dfs,options)
     saved = st.session_state.get('publication_preview')
     if saved and saved['fingerprint'] != fingerprint:
@@ -67,6 +69,8 @@ def render_publish_panel(games, candidates, props=None, dfs=None):
             package = build_package(*boards, props=selected_props,
                                     dfs=selected_dfs, dfs_sport=chosen if chosen!='None' else None,
                                     dfs_slate=slate, dfs_start=start)
+            package['schema_version'] = 3
+            package['results'] = public_results or []
             html = render(package)
             saved = {'fingerprint':fingerprint, 'package':package, 'html':html}
             st.session_state['publication_preview'] = saved
@@ -92,4 +96,7 @@ def render_publish_panel(games, candidates, props=None, dfs=None):
             st.error('Local publication failed: '+str(exc))
 
     from app.ui.remote_publish import render_remote_publish
-    render_remote_publish(package, fingerprint, setting)
+    if public_results is None:
+        st.info('Restore public history above to enable public publication. Preview and local downloads remain available.')
+    else:
+        render_remote_publish(package, fingerprint, setting)
