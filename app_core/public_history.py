@@ -85,11 +85,19 @@ class History:
         return result
 
 
+def team_name(value, sport):
+    # The generic alias table maps bare Seattle to Seattle University.
+    # Scope this explicit alias to MLB; never change college team identity.
+    if sport.upper() == 'MLB' and str(value).strip().casefold() == 'seattle':
+        value = 'Seattle Mariners'
+    return normalize_result_team(value)
+
+
 def event_key(leg):
     teams=re.split(r'\s+(?:at|@)\s+',leg['game'],flags=re.I)
     if len(teams)!=2 or not leg.get('start'):
         return None
-    return (leg['sport'].upper(), *(normalize_result_team(t) for t in teams), datetime.fromisoformat(leg['start']).isoformat())
+    return (leg['sport'].upper(), *(team_name(t,leg['sport']) for t in teams), datetime.fromisoformat(leg['start']).isoformat())
 
 
 def eligible(leg, confirmed):
@@ -122,7 +130,7 @@ def selections(publications):
     return list(chosen.values())
 
 
-def grade_leg(leg, scores):
+def grade_leg(leg, scores, *, imported=False):
     key=event_key(leg)
     if not key:
         return 'PENDING',None
@@ -131,7 +139,9 @@ def grade_leg(leg, scores):
         if (score['sport'],score['away'],score['home'])!=key[:3]:
             continue
         # Exact teams plus a narrow start-time tolerance disambiguate doubleheaders.
-        if abs((datetime.fromisoformat(score['start'])-datetime.fromisoformat(leg['start'])).total_seconds())<=1800:
+        score_start=datetime.fromisoformat(score['start']);leg_start=datetime.fromisoformat(leg['start'])
+        same_day=score_start.astimezone(ZoneInfo('America/New_York')).date()==leg_start.astimezone(ZoneInfo('America/New_York')).date()
+        if (imported and same_day) or (not imported and abs((score_start-leg_start).total_seconds())<=1800):
             matches.append(score)
     unique={s['event_id']:s for s in matches}
     if len(unique)!=1:
@@ -146,26 +156,27 @@ def grade_leg(leg, scores):
     elif market.startswith('spread_'):
         match=re.fullmatch(r'(.+)\s+([+-]\d+(?:\.\d+)?)',pick)
         team=score['home'] if market=='spread_home' else score['away']
-        if not match or normalize_result_team(match[1])!=team:return 'PENDING',None
+        if not match or team_name(match[1],leg['sport'])!=team:return 'PENDING',None
         margin=(h-a if market=='spread_home' else a-h)+float(match[2])
     elif market in {'moneyline_home','h2h_home','moneyline_away','h2h_away'}:
         team=score['home'] if market.endswith('home') else score['away']
         name=re.sub(r'\s+(?:ML|Moneyline)$','',pick,flags=re.I)
-        if normalize_result_team(name)!=team:return 'PENDING',None
+        if team_name(name,leg['sport'])!=team:return 'PENDING',None
         margin=h-a if market.endswith('home') else a-h
     else:
         return 'PENDING',None
     return ('WIN' if margin>0 else 'LOSS' if margin<0 else 'PUSH'),f'{a}–{h} (away–home)'
 
 
-def report(publications, revisions):
+def report(publications, revisions, imports=None):
     latest={}
     for revision in sorted(revisions,key=lambda x:x['recorded_at']):
         for score in revision['scores']:
             latest[(score['sport'],score['event_id'])]=score
     rows=[]
-    for item in selections(publications):
-        graded=[grade_leg(leg,list(latest.values())) for leg in item['legs']]
+    from app_core.imported_recaps import imported_selections
+    for item in selections(publications) + imported_selections(imports or []):
+        graded=[grade_leg(leg,list(latest.values()),imported=item['group']=='Imported research') for leg in item['legs']]
         outcomes=[x[0] for x in graded]
         # Wait for every leg; pushed/voided tickets excluded from win percentage.
         outcome='PENDING' if 'PENDING' in outcomes else 'LOSS' if 'LOSS' in outcomes else 'PUSH' if 'PUSH' in outcomes else 'WIN'
@@ -199,7 +210,7 @@ def fetch_scores(day, sports):
                         if not all(math.isfinite(n) and n>=0 and n.is_integer() for n in (a,h)):continue
                     except (ValueError,TypeError,KeyError):continue
                     scores[(sport,event['id'])]={'sport':sport,'event_id':event['id'],'start':start.replace('Z','+00:00'),
-                        'away':normalize_result_team(teams['away']['team']['displayName']),
-                        'home':normalize_result_team(teams['home']['team']['displayName']),
+                        'away':team_name(teams['away']['team']['displayName'],sport),
+                        'home':team_name(teams['home']['team']['displayName'],sport),
                         'away_score':int(a),'home_score':int(h)}
     return {'recorded_at':now(),'scores':list(scores.values())}

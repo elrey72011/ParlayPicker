@@ -165,9 +165,9 @@ def validate_package(package):
             if not all(isinstance(v,str) for v in row.values()) or row['id'] in seen:
                 raise ValueError('Invalid or duplicate result fields')
             seen.add(row['id'])
-            if row['category'] not in {'overall','sides','totals','parlays'} or row['group'] not in {'Approved','Research'} or row['outcome'] not in {'WIN','LOSS','PUSH','PENDING'}:
+            if row['category'] not in {'overall','sides','totals','parlays'} or row['group'] not in {'Approved','Research','Imported research'} or row['outcome'] not in {'WIN','LOSS','PUSH','PENDING'}:
                 raise ValueError('Invalid result category or outcome')
             datetime.strptime(row['date'], '%Y-%m-%d')
-            if not timestamp(row['published_at']):
+            if row['group'] != 'Imported research' and not timestamp(row['published_at']):
                 raise ValueError('Missing publication time')
     return package
