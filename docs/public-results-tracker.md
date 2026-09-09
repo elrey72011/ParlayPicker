@@ -29,3 +29,13 @@ A parlay waits for all legs. Any losing leg then makes the ticket a loss; otherw
 29 focused tests passed, including publication deduplication, late exclusion, immutable restore/site isolation, score corrections, ambiguity/push cases, explicit no-fetch reruns, and existing publishing compatibility. A mobile-sized browser check verified calculated percentages, detail rows, filter isolation and no JavaScript errors. No live deployment, Drive writes, or provider calls were made during validation.
 
 Prior CSVs and old deployments are not imported as verified public history. Use their separate research recap. Keep original Drive files: deleting evidence can remove it from the restored report. History loading is explicit and scales with accumulated records; no archival compaction or background synchronization is added here.
+
+## Importing historical per-game recaps
+
+After restoring history, upload Overall, Sides and Totals per-game CSVs from one run under Import an older recap. Click Import historical recap to Drive, select their game date and click Grade picks for selected date. Build and publish a new preview. Imports are immutable, deduplicated and restored from the site-specific imports prefix. They are always labeled Imported research, including source rows that say APPROVED. No publication timestamp or verified pregame provenance is invented. Rows whose export time is after their listed start, missing markets and missing odds are excluded. The earliest export per category/matchup/date is retained; no historical parlay tickets are synthesized.
+
+Imported records match exact normalized teams and date only when one final event exists for that matchup/date. Multiple events remain pending. Verified publications retain the 30-minute time tolerance. MLB's bare Seattle alias is explicitly resolved to Seattle Mariners instead of Seattle University.
+
+Results now defaults to All time and a group with settled data, or a group with pending data if none have settled. Each group remains separate. Empty-filter messages name the alternatives. The private panel lists available game dates so yesterday is not confused with today's pending picks.
+
+Validation: 33 focused tests passed. The user's September 8 CSVs were checked against live ESPN finals: Overall 11–4 (73.3%), Sides 9–3 (75.0%; three unavailable), Totals 8–7 (53.3%). Mobile browser checks verified populated defaults and displayed rates. No user CSVs or live results are committed, and no Drive write or production deployment was performed.

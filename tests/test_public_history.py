@@ -16,7 +16,7 @@ def pub():
 
 def scores():
     from app_core.result_team_names import normalize_result_team as norm
-    return [{'sport':'MLB','away':norm('Seattle'),'home':norm('Boston'),'event_id':'1','start':'2026-09-09T20:00:00+00:00','away_score':4,'home_score':3}]
+    return [{'sport':'MLB','away':norm('Seattle Mariners'),'home':norm('Boston'),'event_id':'1','start':'2026-09-09T20:00:00+00:00','away_score':4,'home_score':3}]
 
 
 def test_first_publication_dedup_and_late_exclusion():
