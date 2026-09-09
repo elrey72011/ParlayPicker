@@ -56,6 +56,8 @@ def ui_app():
 
 def test_ui_only_uploads_after_explicit_publish_and_waits_for_ready(monkeypatch):
     from streamlit.testing.v1 import AppTest
+    from app.ui import public_results
+    monkeypatch.setattr(public_results,'history',lambda setting:SimpleNamespace(archive=lambda p:'hash',submitted=lambda *a:None,confirm=lambda *a:None))
     calls=[]
     monkeypatch.setattr(remote,'site_info',lambda *a:{'id':'site-1234','url':'https://example.netlify.app'})
     monkeypatch.setattr(remote,'deploy',lambda *a:calls.append('upload') or {'id':'deploy-123','site_id':'site-1234','state':'processing'})
@@ -73,6 +75,8 @@ def test_ui_only_uploads_after_explicit_publish_and_waits_for_ready(monkeypatch)
 
 
 def test_uncertain_submission_blocks_automatic_retry(monkeypatch):
+    from app.ui import public_results
+    monkeypatch.setattr(public_results,'history',lambda setting:SimpleNamespace(archive=lambda p:'hash'))
     from streamlit.testing.v1 import AppTest
     monkeypatch.setattr(remote,'site_info',lambda *a:{'id':'site-1234','url':'https://example.netlify.app'})
     def fail(*a):raise RuntimeError('Unknown outcome')
