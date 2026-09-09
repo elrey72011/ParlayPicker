@@ -2560,7 +2560,7 @@ def fetch_ncaab_stats(season_year: int) -> List[Dict[str, Any]]:
 
 # -------------------------------------------------------------------------
 
-def fetch_team_stats(api_clients: Dict[str, Any], season_year: Optional[int] = None) -> pd.DataFrame:
+def fetch_team_stats(api_clients: Dict[str, Any], season_year: Optional[int] = None, *, leagues=None) -> pd.DataFrame:
     """
     Refactored function to fetch stats for all configured leagues using
     specific open-source libraries where requested.
@@ -2577,23 +2577,22 @@ def fetch_team_stats(api_clients: Dict[str, Any], season_year: Optional[int] = N
         if now.month < 8:
             season_year -= 1
 
-    # Get list of leagues we care about from keys
-    # leagues = list(api_clients.keys()) # unused, intentionally unconditional fetching
-
-    # Dispatch Logic
-    # Unconditionally fetch all leagues to ensure caches are populated
-    all_stats.extend(fetch_nba_stats(season_year))
-    all_stats.extend(fetch_nfl_stats(season_year))
-    all_stats.extend(fetch_ncaaf_stats(season_year))
-    all_stats.extend(fetch_nhl_stats(season_year))
-    all_stats.extend(fetch_ncaab_stats(season_year))
-    all_stats.extend(fetch_from_espn_mlb(season_year))
-    all_stats.extend(fetch_from_espn_wnba(season_year))
-
-    # API-Sports fallback logic REMOVED as per instruction to "replace" logic.
-    # If the user wants to keep API-Sports as a fallback for other leagues not listed,
-    # we can add it back, but the prompt said "replace broken API-Sports logic... with specific free libraries".
-    # We will assume these 5 are the core focus. If api_clients has others (MLB?), they get nothing for now.
+    # Omitted filter preserves compatibility for explicit all-league callers.
+    fetchers = {"NBA": fetch_nba_stats, "NFL": fetch_nfl_stats,
+                "NCAAF": fetch_ncaaf_stats, "NHL": fetch_nhl_stats,
+                "NCAAB": fetch_ncaab_stats, "MLB": fetch_from_espn_mlb,
+                "WNBA": fetch_from_espn_wnba}
+    requested = set(fetchers) if leagues is None else {_model_league_key(x) for x in leagues}
+    from time import perf_counter
+    for league, fetcher in fetchers.items():
+        if league not in requested:
+            continue
+        started = perf_counter()
+        try:
+            all_stats.extend(fetcher(season_year))
+        finally:
+            logger.warning("PERFORMANCE team_stats league=%s season=%s seconds=%.2f",
+                           league, season_year, perf_counter()-started)
 
     return pd.DataFrame(all_stats)
 
@@ -2675,14 +2674,14 @@ def enrich_with_model_features(df: pd.DataFrame, api_clients: Dict[str, Any], se
     # 3) Fetch stats AFTER league_keys exists (ok if empty)
     # ------------------------------------------------------------
     # Tier 1: Attempt Live Stats Fetching
-    stats_df = fetch_team_stats(api_clients, season_year=season_year)
+    stats_df = fetch_team_stats(api_clients, season_year=season_year, leagues=set(league_keys))
 
     # Tier 2: If live stats are missing or incomplete, attempt season averages fallback
     used_historical_stats = False
     if stats_df is None or stats_df.empty:
         if season_year is not None:
             logger.warning(f"Live stats mostly empty for {season_year}. Attempting fallback to previous season averages.")
-            fallback_stats = fetch_team_stats(api_clients, season_year=season_year - 1)
+            fallback_stats = fetch_team_stats(api_clients, season_year=season_year - 1, leagues=set(league_keys))
             if fallback_stats is not None and not fallback_stats.empty:
                 stats_df = fallback_stats
                 used_historical_stats = True

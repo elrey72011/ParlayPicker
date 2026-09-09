@@ -348,6 +348,11 @@ def test_strategy_lab_theoretical_render_still_works(monkeypatch):
             return False
 
     class DummySt:
+        session_state = {}
+        def button(self, *args, **kwargs):
+            return True
+        def spinner(self, *args, **kwargs):
+            return DummyContext()
         def subheader(self, *args, **kwargs):
             calls.append("subheader")
 
@@ -444,6 +449,11 @@ def test_warning_for_broad_mode(monkeypatch):
             return False
 
     class DummySt:
+        session_state = {}
+        def button(self, *args, **kwargs):
+            return True
+        def spinner(self, *args, **kwargs):
+            return DummyContext()
         def caption(self, *args, **kwargs):
             return None
 
