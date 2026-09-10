@@ -4,6 +4,13 @@ from app_core import netlify_publishing as remote
 
 
 def render_remote_publish(package, fingerprint, setting):
+    provider = str(setting('PARLAYPICKER_PUBLIC_PROVIDER') or 'netlify').strip().lower()
+    if provider == 'sftp':
+        from app.ui.sftp_publish import render_sftp_publish
+        return render_sftp_publish(package, fingerprint, setting)
+    if provider != 'netlify':
+        st.error('Unknown public hosting provider. Choose netlify or sftp.')
+        return
     st.subheader('Publish to public website')
     site_id=str(setting('PARLAYPICKER_NETLIFY_SITE_ID')).strip()
     token=str(setting('PARLAYPICKER_NETLIFY_TOKEN')).strip()
