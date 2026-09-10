@@ -6,7 +6,17 @@ from app_core.public_history import History, selections, report, fetch_scores, d
 
 
 def history(setting):
-    return History(str(setting('PARLAYPICKER_NETLIFY_SITE_ID')).strip(), str(setting('PARLAYPICKER_DRIVE_FOLDER_ID')).strip())
+    from app_core.evidence_config import EvidenceConfigurationError
+    from app_core.netlify_publishing import identifier
+    site = str(setting('PARLAYPICKER_NETLIFY_SITE_ID') or '').strip()
+    folder = str(setting('PARLAYPICKER_DRIVE_FOLDER_ID') or '').strip()
+    try:
+        identifier(site)
+    except ValueError:
+        raise EvidenceConfigurationError('Restore the original PARLAYPICKER_NETLIFY_SITE_ID in Streamlit Secrets. It remains the history identifier after switching to SFTP; do not replace it with the domain.') from None
+    if not folder:
+        raise EvidenceConfigurationError('PARLAYPICKER_DRIVE_FOLDER_ID is missing. Restore the original Shared Drive folder ID in Streamlit Secrets.')
+    return History(site, folder)
 
 
 def render_history(setting):
@@ -15,8 +25,10 @@ def render_history(setting):
     with st.expander('Public results history', expanded=False):
         st.caption('Only confirmed, fresh pregame publications count. Restore from Drive, grade a date, then build and publish a new preview to update the public tracker. These controls do not run during navigation.')
         if st.button('Restore public history from Drive',key='public_history_restore'):
+            stage = 'opening history storage'
             try:
                 store=history(setting)
+                stage = 'recovering unconfirmed publications'
                 # Recover known deployments after a Streamlit restart. Only the
                 # site's currently published deployment can be confirmed.
                 from app_core.netlify_publishing import deployment_status
@@ -25,23 +37,26 @@ def render_history(setting):
                     try:
                         store.read('confirmed/'+pending['deploy_id']+'.json')
                     except Exception:
-                        if pending['deploy_id'].startswith('sftp-'):
-                            from app_core import sftp_publishing
-                            try:
+                        status = None
+                        try:
+                            if pending['deploy_id'].startswith('sftp-'):
+                                from app_core import sftp_publishing
                                 status=sftp_publishing.deployment_status(pending['deploy_id'],sftp_publishing.configuration(setting))
-                                if status['state']=='ready':
-                                    store.confirm(pending['deploy_id'],pending['package_hash'])
-                            except (ValueError,RuntimeError):
-                                st.warning('An unconfirmed SFTP publication could not be verified. Existing results were restored; check public deployment status.')
-                        elif token:
-                            status=deployment_status(pending['deploy_id'],site,token)
-                            if status['state']=='ready':
-                                store.confirm(pending['deploy_id'],pending['package_hash'])
+                            elif token:
+                                status=deployment_status(pending['deploy_id'],site,token)
+                        except (ValueError,RuntimeError):
+                            st.warning('An unconfirmed hosting publication could not be verified. Continuing to restore confirmed history; the unverified publication will not be counted.')
+                        if status and status['state']=='ready':
+                            # Storage/integrity failures must still stop restore.
+                            store.confirm(pending['deploy_id'],pending['package_hash'])
+                stage = 'reading saved publications and results'
                 pubs=store.publications();revisions=store.all('scores');imports=store.all('imports')
                 st.session_state[key]={'publications':pubs,'revisions':revisions,'imports':imports,'grading_runs':store.all('grading_runs'),'prop_revisions':store.all('prop_stats'),'prop_imports':store.all('prop_imports'),'rows':report(pubs,revisions,imports)}
                 st.success('Public history restored.')
-            except Exception:
-                st.error('Public history restore failed. Check Shared Drive access; no history was replaced.')
+            except Exception as exc:
+                from app_core.evidence_config import safe_error
+                detail = safe_error(exc, 'History restore while ' + stage)
+                st.error('Public history restore failed while ' + stage + '. ' + detail + ' No saved history was replaced.')
         saved=st.session_state.get(key)
         if saved is None:
             st.info('Restore history before publishing so the public tracker includes its existing record.')
