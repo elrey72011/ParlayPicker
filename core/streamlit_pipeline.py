@@ -1219,6 +1219,12 @@ _TRUSTED_LIVE_LINE_SOURCES = frozenset({
     "novig_moneyline_verified",
     "novig_theover_moneyline_reoriented",
     "novig_theover_moneyline_verified",
+    # Emitted only after finding a complete, priced Over/Under pair at the
+    # consensus total. The same provenance must survive both line guards.
+    "novig_priced_total_consensus",
+    "fanduel_priced_total_consensus",
+    "draftkings_priced_total_consensus",
+    "betmgm_priced_total_consensus",
 })
 
 
