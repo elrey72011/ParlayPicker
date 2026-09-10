@@ -101,8 +101,11 @@ def build_package(overall, sides, totals, *, props=None, props_as_of=None, dfs=N
                             'projection_basis':text(row, 'Projection Sources') or 'Unavailable'})
     from app_core.public_parlays import build_parlays
     built_at = datetime.now(timezone.utc)
+    from app_core.public_prop_timing import with_game_starts
+    public_props=[] if props is None else [pick_record(row, prop=True, as_of=props_as_of) for _,row in props.iterrows()]
+    public_props=with_game_starts(public_props,games['overall'])
     return {'schema_version':2, 'parlays':build_parlays(games['overall'], built_at), 'built_at':built_at.isoformat(), 'stale_after_minutes':15,
-            'games':games, 'props':[] if props is None else [pick_record(row, prop=True, as_of=props_as_of) for _,row in props.iterrows()],
+            'games':games, 'props':public_props,
             'dfs':lineups}
 
 
