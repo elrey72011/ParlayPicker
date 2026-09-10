@@ -1,0 +1,123 @@
+from copy import deepcopy
+from datetime import date
+import pytest
+from app_core import public_prop_history as props
+from test_public_history import pub
+
+
+def publication():
+    p=deepcopy(pub());p['package']['props']=[{'sport':'MLB','game':'Seattle Mariners @ Boston Red Sox','player':'Test Batter','pick':'Test Batter Over 1.5 Hits','market':'batter_hits_over','odds':-110,'win_estimate':.6,'ev':.1,'status':'APPROVED','as_of':'2026-09-09T19:55:00+00:00','start':'2026-09-09T20:00:00+00:00'}]
+    return p
+
+
+def test_first_publication_timing_and_line_identity():
+    p=publication();later=deepcopy(p);later['confirmed_at']='2026-09-09T19:58:00+00:00';later['package']['props'][0]['pick']='Test Batter Under 2.5 Hits'
+    later['package']['props'][0]['market']='batter_hits_under'
+    entries=props.selections([later,p]);assert len(entries)==1 and entries[0]['leg']['pick']=='Test Batter Over 1.5 Hits'
+    stale=deepcopy(p);stale['confirmed_at']='2026-09-09T20:00:00+00:00'
+    assert props.selections([stale])==[]
+    stale['confirmed_at']='2026-09-09T19:59:00+00:00';stale['package']['props'][0]['as_of']='2026-09-09T19:00:00+00:00'
+    assert props.selections([stale])==[]
+
+
+def test_report_settlement_and_import_separation():
+    p=publication();leg=p['package']['props'][0];batch={'id':'original','as_of':leg['as_of'],'props':[leg]}
+    entries=props.selections([p],[batch]);assert len(entries)==2
+    revision={'recorded_at':'2026-09-10T01:00:00+00:00','actuals':[{'id':e['id'],'value':2} for e in entries]}
+    rows=props.report([p],[revision],[batch]);assert {r['group'] for r in rows}=={'Approved','Imported research'}
+    assert all(r['outcome']=='WIN' for r in rows)
+    assert len(props.selections([], [batch,batch]))==1
+    corrected={'recorded_at':'2026-09-10T02:00:00+00:00','actuals':[{'id':next(e['id'] for e in entries if e['group']=='Approved'),'value':1}]}
+    assert props.report([p],[revision,corrected])[0]['outcome']=='LOSS'
+
+
+def fixtures():
+    game={'gamePk':1,'gameDate':'2026-09-09T20:00:00Z','status':{'detailedState':'Final'},'teams':{'away':{'team':{'name':'Seattle Mariners'}},'home':{'team':{'name':'Boston Red Sox'}}}}
+    player={'person':{'id':123,'fullName':'Test Batter'},'stats':{'batting':{'plateAppearances':4,'hits':2}}}
+    return {'dates':[{'games':[game]}]},{'teams':{'away':{'players':{'ID123':player}}}}
+
+
+def fetcher(schedule,box,calls):
+    def get(url,**kw):
+        calls.append(url)
+        class Response:
+            def raise_for_status(self):pass
+            def json(self):return schedule if url.endswith('/schedule') else box
+        return Response()
+    return get
+
+
+def test_final_boxscore_is_game_and_player_specific_and_cached():
+    schedule,box=fixtures();entries=props.selections([publication()]);calls=[]
+    revision=props.fetch_actuals(date(2026,9,9),entries+entries,http_get=fetcher(schedule,box,calls))
+    assert len(calls)==2 and revision['actuals'][0]['value']==2
+    assert revision['actuals'][0]['player_id']=='123' and revision['actuals'][0]['game_id']=='1'
+
+
+@pytest.mark.parametrize('failure',['live','duplicate_game','wrong_start','duplicate_player','no_stat','dnp'])
+def test_uncertain_stats_remain_pending(failure):
+    schedule,box=fixtures();game=schedule['dates'][0]['games'][0];player=box['teams']['away']['players']['ID123']
+    if failure=='live':game['status']['detailedState']='In Progress'
+    if failure=='duplicate_game':schedule['dates'][0]['games'].append({**game,'gamePk':2})
+    if failure=='wrong_start':game['gameDate']='2026-09-09T23:00:00Z'
+    if failure=='duplicate_player':box['teams']['away']['players']['ID456']=deepcopy(player)
+    if failure=='no_stat':del player['stats']['batting']['hits']
+    if failure=='dnp':player['stats']['batting']['plateAppearances']=0
+    r=props.fetch_actuals(date(2026,9,9),props.selections([publication()]),http_get=fetcher(schedule,box,[]))
+    assert r['actuals']==[]
+
+
+def test_import_requires_original_times_and_ignores_supplied_grades():
+    import pandas as pd
+    leg=publication()['package']['props'][0]
+    row={'league':'MLB','player':leg['player'],'best_pick':leg['pick'],'market_type':leg['market'],'matchup':leg['game'],'odds_american':-110,'export_run_id':leg['as_of'],'game_start_utc':leg['start'],'result':'WIN','actual_value':99,'Bettable':True,'Kelly_Bet_Size':10}
+    batch=props.import_export(pd.DataFrame([row]));assert props.report([],[],[batch])[0]['outcome']=='PENDING'
+    assert props.report([],[],[batch])[0]['group']=='Imported research'
+    del row['game_start_utc']
+    with pytest.raises(ValueError):props.import_export(pd.DataFrame([row]))
+
+
+def test_package_v4_and_legacy_compatibility():
+    from app_core.public_board import validate_package
+    p=publication()['package'];p['schema_version']=4;p['parlays']=[];p['results']=props.report([publication()])
+    assert validate_package(p)==p
+    p['results'][0]['secret']='no'
+    with pytest.raises(ValueError):validate_package(p)
+
+
+def test_boxscore_limit_and_provider_failure():
+    schedule,box=fixtures();calls=[]
+    result=props.fetch_actuals(date(2026,9,9),props.selections([publication()]),http_get=fetcher(schedule,box,calls),max_games=0)
+    assert len(calls)==1 and not result['actuals']
+    def fail(*a,**kw):raise RuntimeError('provider unavailable')
+    with pytest.raises(RuntimeError):props.fetch_actuals(date(2026,9,9),props.selections([publication()]),http_get=fail)
+
+def history_app():
+    import streamlit as st
+    from app.ui.public_results import render_history
+    st.session_state['returned_rows']=render_history(lambda key:'site-1234' if key=='PARLAYPICKER_NETLIFY_SITE_ID' else 'folder')
+
+
+def test_owner_restore_and_explicit_grade_persist_to_drive(monkeypatch):
+    from streamlit.testing.v1 import AppTest
+    from app.ui import public_results
+    from app_core.public_history import History
+    from test_public_history import Memory
+    store=History('site-1234','folder',Memory());p=publication();key=store.archive(p['package']);store.confirm('deployment123',key,p['confirmed_at'])
+    monkeypatch.setattr(public_results,'history',lambda _:store)
+    calls=[]
+    def fetch(day,entries):
+        calls.append(day)
+        return {'recorded_at':'2026-09-10T01:00:00+00:00','actuals':[{'id':e['id'],'value':2} for e in entries]}
+    monkeypatch.setattr(props,'fetch_actuals',fetch)
+    at=AppTest.from_function(history_app).run()
+    at.button(key='public_history_restore').click().run()
+    assert not at.exception and not calls
+    assert any(r['category']=='props' and r['outcome']=='PENDING' for r in at.session_state['returned_rows'])
+    at.date_input(key='public_results_day').set_value(date(2026,9,9)).run()
+    at.button(key='public_props_grade').click().run()
+    assert not at.exception and len(calls)==1 and len(store.all('prop_stats'))==1
+    assert any(r['category']=='props' and r['outcome']=='WIN' for r in at.session_state['returned_rows'])
+    at.button(key='public_history_restore').click().run()
+    assert not at.exception and len(calls)==1
+    assert any(r['category']=='props' and r['outcome']=='WIN' for r in at.session_state['returned_rows'])

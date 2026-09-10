@@ -111,8 +111,8 @@ def validate_package(package):
     def exact(obj, keys):
         if not isinstance(obj, dict) or set(obj) != set(keys.split()):
             raise ValueError('Unexpected or missing public fields')
-    exact(package, 'schema_version built_at stale_after_minutes games props dfs' + (' parlays' if package.get('schema_version') in {2,3} else '') + (' results' if package.get('schema_version') == 3 else ''))
-    if package['schema_version'] not in {1,2,3} or package['stale_after_minutes'] != 15:
+    exact(package, 'schema_version built_at stale_after_minutes games props dfs' + (' parlays' if package.get('schema_version') in {2,3,4} else '') + (' results' if package.get('schema_version') in {3,4} else ''))
+    if package['schema_version'] not in {1,2,3,4} or package['stale_after_minutes'] != 15:
         raise ValueError('Unsupported public package version/policy')
     timestamp(package['built_at'])
     exact(package['games'], 'overall sides totals')
@@ -151,22 +151,25 @@ def validate_package(package):
             exact(player, 'slot name')
             if not all(isinstance(v, str) and v.strip() for v in player.values()):
                 raise ValueError('Invalid player fields')
-    if package['schema_version'] in {2,3}:
+    if package['schema_version'] in {2,3,4}:
         from app_core.public_parlays import build_parlays
         expected = build_parlays(package['games']['overall'], datetime.fromisoformat(package['built_at']))
         if package['parlays'] != expected:
             raise ValueError('Parlays must match the original disjoint selections and estimates')
-    if package['schema_version'] == 3:
+    if package['schema_version'] in {3,4}:
         if not isinstance(package['results'], list):
             raise ValueError('Invalid public results')
         seen=set()
         for row in package['results']:
-            exact(row, 'id category date group published_at outcome picks odds final_score')
+            exact(row, 'id category date group published_at outcome picks odds final_score' + (' sport market' if row.get('category')=='props' and package['schema_version']==4 else ''))
             if not all(isinstance(v,str) for v in row.values()) or row['id'] in seen:
                 raise ValueError('Invalid or duplicate result fields')
             seen.add(row['id'])
-            if row['category'] not in {'overall','sides','totals','parlays'} or row['group'] not in {'Approved','Research','Imported research'} or row['outcome'] not in {'WIN','LOSS','PUSH','PENDING'}:
+            if row['category'] not in ({'overall','sides','totals','parlays','props'} if package['schema_version']==4 else {'overall','sides','totals','parlays'}) or row['group'] not in {'Approved','Research','Imported research'} or row['outcome'] not in {'WIN','LOSS','PUSH','PENDING'}:
                 raise ValueError('Invalid result category or outcome')
+            if row['category']=='props':
+                from app_core.public_prop_history import MARKETS
+                if row['sport']!='MLB' or row['market'] not in MARKETS:raise ValueError('Unsupported prop results')
             datetime.strptime(row['date'], '%Y-%m-%d')
             if row['group'] != 'Imported research' and not timestamp(row['published_at']):
                 raise ValueError('Missing publication time')
