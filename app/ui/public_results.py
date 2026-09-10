@@ -88,6 +88,11 @@ def render_history(setting):
         render_prop_history(setting,saved,day)
         prop_rows=prop_history.report(saved['publications'],saved.get('prop_revisions',[]),saved.get('prop_imports',[]))
         st.caption(f"{len(saved['rows'])} game category entries and {len(prop_rows)} MLB prop entries. Automatic grading status above covers games; MLB props use the explicit grading button. DFS is excluded.")
+        review_rows=[r for r in prop_rows if r['outcome']=='NEEDS_REVIEW' and r['date']==day.isoformat()]
+        if review_rows:
+            with st.expander(f'MLB props needing review for {day}: {len(review_rows)}',expanded=True):
+                st.caption('Excluded from wins, losses and win rate. These are not confirmed sportsbook voids. Recheck only when new stats or matching evidence is available.')
+                st.dataframe(review_rows,hide_index=True)
         if saved['rows']+prop_rows:
             st.dataframe(saved['rows']+prop_rows,hide_index=True)
         return saved['rows']+prop_rows
@@ -103,7 +108,7 @@ def render_prop_history(setting,saved,day):
         st.info('Archived props were found, but none meet the supported-market, matching start-time and fresh pregame publication requirements. Postgame publications cannot be retroactively verified. An original historical export can be imported separately as research.')
     elif not archived:
         st.info('No MLB props were included in the restored publications. For older picks, import the original combined prop export.')
-    st.caption('Published props use their original pregame record. Missing stats, DNPs and ambiguous matches remain pending. MLB hits, total bases, strikeouts, walks and outs are supported; other leagues are not graded here.')
+    st.caption('Published props use their original pregame record. Missing stats, absent appearances and ambiguous matches are labeled Needs review, separate from games awaiting results. MLB hits, total bases, strikeouts, walks and outs are supported; other leagues are not graded here.')
     uploaded=st.file_uploader('Original combined player-prop CSV (optional historical import)',type=['csv'],key='public_prop_import_file')
     if st.button('Import historical MLB props to Drive',disabled=uploaded is None,key='public_prop_import'):
         try:
@@ -120,13 +125,14 @@ def render_prop_history(setting,saved,day):
         except Exception:
             st.error('Prop import or backup failed. Existing records remain available.')
     st.caption('Manual collection: one MLB schedule request plus at most 10 final-game boxscores per click. No CFBD or Odds API requests. Repeat if more completed games remain; settlement corrections can be requested explicitly.')
+    reviews=st.checkbox('Recheck props needing review',key='public_props_review')
     corrections=st.checkbox('Recheck already settled props for score corrections',key='public_props_recheck')
     if st.button('Grade MLB props for selected date',key='public_props_grade'):
         try:
             entries=props.selections(saved['publications'],saved.get('prop_imports',[]))
             rows=props.report(saved['publications'],saved.get('prop_revisions',[]),saved.get('prop_imports',[]))
-            pending={r['id'] for r in rows if r['outcome']=='PENDING'}
-            selected=[e for e in entries if e['date']==day.isoformat() and (corrections or e['id'] in pending)]
+            pending={r['id'] for r in rows if r['outcome']=='PENDING' or (reviews and r['outcome']=='NEEDS_REVIEW') or (corrections and r['outcome'] in {'WIN','LOSS','PUSH'})}
+            selected=[e for e in entries if e['date']==day.isoformat() and e['id'] in pending]
             if not selected:
                 st.info('No matching MLB props need grading for this date.')
             else:
@@ -142,7 +148,7 @@ def render_prop_history(setting,saved,day):
                     if revision.get('unresolved'):
                         from collections import Counter
                         reasons=Counter(item['reason'] for item in revision['unresolved'])
-                        st.info('Still pending: '+ '; '.join(f'{reason}: {count}' for reason,count in reasons.items()))
+                        st.info('Unresolved results: '+ '; '.join(f'{reason}: {count}' for reason,count in reasons.items()))
                 else:
                     st.info('No unambiguous final player statistics found. Props remain pending.')
         except Exception:

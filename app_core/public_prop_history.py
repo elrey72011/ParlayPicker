@@ -6,6 +6,14 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from app_core.public_history import digest, now
 
+REVIEW_REASONS={
+    'Ambiguous or missing game match',
+    'Publication timing conflicts with provider game start',
+    'Player missing or ambiguous in final box score',
+    'No recorded appearance in final box score; settlement unverified',
+    'Required statistic missing from final box score',
+}
+
 MARKETS={'batter_hits','batter_total_bases','pitcher_strikeouts','pitcher_walks','pitcher_outs'}
 
 def norm(value):
@@ -71,7 +79,7 @@ def report(publications,revisions=(),imports=()):
     for entry in selections(publications,imports):
         leg=entry['leg'];market,side,line=terms(leg);actual=latest.get(entry['id']);value=actual.get('value') if actual else None
         valid=isinstance(value,(int,float)) and not isinstance(value,bool) and math.isfinite(value) and value>=0
-        rows.append({**{k:v for k,v in entry.items() if k!='leg'},'outcome':grade_side(side,line,value) if valid else 'PENDING',
+        rows.append({**{k:v for k,v in entry.items() if k!='leg'},'outcome':grade_side(side,line,value) if valid else 'NEEDS_REVIEW' if reasons.get(entry['id']) in REVIEW_REASONS else 'PENDING',
             'picks':leg['game']+': '+leg['pick'],'odds':str(leg['odds']),
             'final_score':str(value)+' '+market.removeprefix('batter_').removeprefix('pitcher_') if valid else reasons.get(entry['id'],'Pending player statistics')})
     return rows
