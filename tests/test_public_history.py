@@ -114,3 +114,44 @@ def test_provider_only_accepts_completed_final_and_keeps_event_identity(monkeypa
     monkeypatch.setattr(requests,'get',lambda *a,**k:SimpleNamespace(raise_for_status=lambda:None,json=lambda:{'events':[{'id':'1','competitions':[game]},{'id':'2','competitions':[cancelled]}]}))
     result=fetch_scores(date(2026,9,9),{'MLB'})
     assert len(result['scores'])==1 and result['scores'][0]['home_score']==0
+
+
+def test_old_netlify_failure_does_not_block_confirmed_history(monkeypatch):
+    from streamlit.testing.v1 import AppTest
+    from app.ui import public_results as ui
+    from app_core import netlify_publishing as remote
+    client=Memory();store=History('site-1234','folder',client)
+    key=store.archive(pub()['package'])
+    store.confirm('deploy-good',key,pub()['confirmed_at'])
+    store.submitted('deploy-pending',key)
+    monkeypatch.setattr(ui,'history',lambda setting:store)
+    def fail(*args):raise RuntimeError('private-token provider error')
+    monkeypatch.setattr(remote,'deployment_status',fail)
+    at=AppTest.from_string("from app.ui.public_results import render_history\nrender_history(lambda key: 'site-1234' if key=='PARLAYPICKER_NETLIFY_SITE_ID' else 'folder')").run()
+    at.button(key='public_history_restore').click().run()
+    assert not at.exception and not at.error and at.success and at.warning
+    assert 'private-token' not in str(at.warning)
+    assert len(store.all('confirmed'))==1
+    assert len(at.session_state['public_results_site-1234']['publications'])==1
+
+
+def test_missing_history_settings_explain_migration_without_connecting():
+    from app.ui.public_results import history
+    from app_core.evidence_config import EvidenceConfigurationError
+    with pytest.raises(EvidenceConfigurationError,match='original PARLAYPICKER_NETLIFY_SITE_ID'):
+        history(lambda key:'')
+    with pytest.raises(EvidenceConfigurationError,match='PARLAYPICKER_DRIVE_FOLDER_ID'):
+        history(lambda key:'site-1234' if key=='PARLAYPICKER_NETLIFY_SITE_ID' else '')
+
+
+def test_restore_error_identifies_stage_without_exposing_exception(monkeypatch):
+    from streamlit.testing.v1 import AppTest
+    from app.ui import public_results as ui
+    def fail(setting):raise RuntimeError('private signing key')
+    monkeypatch.setattr(ui,'history',fail)
+    at=AppTest.from_string("from app.ui.public_results import render_history\nrender_history(lambda key: 'site-1234')").run()
+    at.button(key='public_history_restore').click().run()
+    assert not at.exception
+    assert 'opening history storage' in at.error[0].value
+    assert 'RuntimeError' in at.error[0].value
+    assert 'private signing key' not in at.error[0].value
