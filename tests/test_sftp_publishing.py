@@ -153,3 +153,24 @@ def test_failed_backup_does_not_upload_or_retry_on_rerun(monkeypatch):
     at.run()
     assert not calls and not at.exception
     assert at.button(key='sftp_publish').disabled
+
+
+@pytest.mark.parametrize('stage,expected',[
+    ('connecting and authenticating','SSH connection failed'),
+    ('opening the SFTP session','SSH login completed'),
+    ('checking the document root','document root could not be accessed'),
+    ('transferring the reviewed page','atomic replacement failed'),
+])
+def test_connection_errors_identify_stage_without_server_secrets(stage,expected):
+    message=remote.connection_error(OSError('private-password from server'),stage)
+    assert expected in message
+    assert 'private-password' not in message
+
+
+def test_authentication_and_network_errors_have_specific_guidance():
+    import socket
+    class AuthenticationException(Exception):pass
+    message=remote.connection_error(AuthenticationException('secret'),'connecting and authenticating')
+    assert 'cPanel username and password' in message and 'secret' not in message
+    assert 'hostname could not be resolved' in remote.connection_error(socket.gaierror('secret'),'connecting and authenticating')
+    assert 'Streamlit Cloud' in remote.connection_error(TimeoutError('secret'),'connecting and authenticating')

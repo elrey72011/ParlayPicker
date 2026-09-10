@@ -6,6 +6,7 @@ import hmac
 import io
 import re
 import stat
+import socket
 from urllib.parse import urlsplit
 from uuid import uuid4
 
@@ -47,6 +48,32 @@ def check_host_key(key, expected):
         raise ValueError('SSH host key does not match the configured fingerprint. Verify it with Namecheap.')
 
 
+def connection_error(exc, stage):
+    """Return actionable text without server responses or credential values."""
+    names = {kind.__name__ for kind in type(exc).__mro__}
+    if 'AuthenticationException' in names:
+        return ('SFTP login was rejected. Check PARLAYPICKER_SFTP_USER and '
+                'PARLAYPICKER_SFTP_PASSWORD: use the hosting cPanel username and password. '
+                'Namecheap account and publishing passwords are separate. '
+                'If those are correct, ask hosting support to check SFTP access for this account.')
+    if isinstance(exc, socket.gaierror):
+        return 'SFTP server hostname could not be resolved. Check PARLAYPICKER_SFTP_HOST.'
+    if isinstance(exc, (TimeoutError, ConnectionError)) or 'NoValidConnectionsError' in names:
+        return ('SFTP failed while ' + stage + '. Check server reachability on port 21098 '
+                'and ask Namecheap whether connections from Streamlit Cloud are blocked.')
+    if stage == 'opening the SFTP session':
+        return ('SSH login completed, but the SFTP session could not open. '
+                'Ask Namecheap support to check SFTP access for this hosting account.')
+    if stage == 'checking the document root':
+        return ('SFTP login completed, but the document root could not be accessed. '
+                'Check PARLAYPICKER_SFTP_DIRECTORY against cPanel File Manager and its permissions.')
+    if stage == 'transferring the reviewed page':
+        return ('SFTP transfer or atomic replacement failed. Check folder write permissions, '
+                'hosting disk quota and atomic rename support. Verify the public page before retrying.')
+    return ('SSH connection failed before SFTP opened. Check that SFTP is available on the '
+            'configured host and port; ask Namecheap support about SSH handshake or access restrictions.')
+
+
 @contextmanager
 def connection(config):
     import paramiko
@@ -55,20 +82,24 @@ def connection(config):
             check_host_key(key, config['host_key_sha256'])
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(PinnedKey())
+    stage = 'connecting and authenticating'
     try:
         client.connect(config['host'], port=config['port'], username=config['user'],
                        password=config['password'], timeout=10, banner_timeout=10,
                        auth_timeout=10, allow_agent=False, look_for_keys=False)
+        stage = 'opening the SFTP session'
         with client.open_sftp() as sftp:
             sftp.get_channel().settimeout(30)
+            stage = 'checking the document root'
             directory = config['directory']
             if sftp.normalize(directory) != directory or not stat.S_ISDIR(sftp.lstat(directory).st_mode):
                 raise ValueError('The configured document root must be a real, dedicated directory.')
+            stage = 'transferring the reviewed page'
             yield sftp
     except ValueError:
         raise
-    except Exception:
-        raise RuntimeError('SFTP connection or upload failed. Check hosting credentials, host key and directory; no automatic retry was made.') from None
+    except Exception as exc:
+        raise RuntimeError(connection_error(exc, stage) + ' No automatic retry was made.') from None
     finally:
         client.close()
 
