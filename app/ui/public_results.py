@@ -96,6 +96,13 @@ def render_history(setting):
 def render_prop_history(setting,saved,day):
     from app_core import public_prop_history as props
     st.markdown('**MLB player-prop results**')
+    archived=sum(leg.get('sport','').upper()=='MLB' for pub in saved['publications'] for leg in pub['package'].get('props',[]))
+    tracked=len(props.selections(saved['publications']))
+    st.caption(f'{archived} archived MLB prop rows across publications; {tracked} unique eligible published props. Start times may be recovered from a matching game in the same saved analysis.')
+    if archived and not tracked:
+        st.info('Archived props were found, but none meet the supported-market, matching start-time and fresh pregame publication requirements. Postgame publications cannot be retroactively verified. An original historical export can be imported separately as research.')
+    elif not archived:
+        st.info('No MLB props were included in the restored publications. For older picks, import the original combined prop export.')
     st.caption('Published props use their original pregame record. Missing stats, DNPs and ambiguous matches remain pending. MLB hits, total bases, strikeouts, walks and outs are supported; other leagues are not graded here.')
     uploaded=st.file_uploader('Original combined player-prop CSV (optional historical import)',type=['csv'],key='public_prop_import_file')
     if st.button('Import historical MLB props to Drive',disabled=uploaded is None,key='public_prop_import'):

@@ -26,8 +26,9 @@ def matchup(value):
     return tuple(norm(p) for p in parts) if len(parts)==2 else None
 
 def selections(publications,imports=()):
+    from app_core.public_prop_timing import with_game_starts
     chosen={}
-    sources=[(p['confirmed_at'],p['package_hash'],p['package'].get('props',[]),False) for p in publications]
+    sources=[(p['confirmed_at'],p['package_hash'],with_game_starts(p['package'].get('props',[]),p['package']['games']['overall']),False) for p in publications]
     sources += [(b['as_of'],b['id'],b['props'],True) for b in imports]
     for confirmed,key,legs,imported in sorted(sources):
         for leg in legs:
