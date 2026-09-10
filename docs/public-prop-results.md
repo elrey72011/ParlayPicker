@@ -17,3 +17,9 @@ Validation: unit tests cover publication timing, duplicate suppression, import s
 ## Missing start times in older publications
 
 Some earlier public packages saved props with `start: null` even though the same package's overall game board contained the start. Publishing now fills a missing MLB prop start only when exactly one same-league, same-matchup overall record has the identical original analysis timestamp. League-scoped aliases handle full team names versus city labels. Historical reads apply the same recovery to copies; archived JSON and hashes remain unchanged. Missing, ambiguous, reversed, different-run or different-league matches remain excluded. Existing explicit start times and pregame/freshness checks remain authoritative. Restore history after deployment to re-evaluate eligible old publications.
+
+## Pending reasons and corrected game times
+
+When the original 30-minute start match fails, the grader may use exactly one same-matchup game on the original Eastern game date. Both the original analysis and verified publication must precede the provider start; a corrected earlier start cannot validate a postgame pick. Multiple same-day games remain ambiguous. Each saved actual records the provider start and whether matching used the start window or unique matchup/date.
+
+Grading saves unresolved reasons alongside attempts: game not final, unmatched/ambiguous game, publication timing conflict, batch limit, missing/ambiguous player, no recorded appearance, or missing statistic. These appear in the public actual-statistic column after rebuilding and republishing. No appearance or absent player data does not establish sportsbook void settlement; those records remain pending and excluded from win percentage.

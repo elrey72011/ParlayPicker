@@ -62,9 +62,10 @@ def import_export(frame):
     return batch
 
 def report(publications,revisions=(),imports=()):
-    latest={}
+    latest={};reasons={}
     for revision in sorted(revisions,key=lambda r:r['recorded_at']):
         for actual in revision['actuals']:latest[actual['id']]=actual
+        for item in revision.get('unresolved',[]):reasons[item['id']]=item['reason']
     rows=[]
     from scripts.grade_props import grade_side
     for entry in selections(publications,imports):
@@ -72,7 +73,7 @@ def report(publications,revisions=(),imports=()):
         valid=isinstance(value,(int,float)) and not isinstance(value,bool) and math.isfinite(value) and value>=0
         rows.append({**{k:v for k,v in entry.items() if k!='leg'},'outcome':grade_side(side,line,value) if valid else 'PENDING',
             'picks':leg['game']+': '+leg['pick'],'odds':str(leg['odds']),
-            'final_score':str(value)+' '+market.removeprefix('batter_').removeprefix('pitcher_') if valid else 'Pending player statistics'})
+            'final_score':str(value)+' '+market.removeprefix('batter_').removeprefix('pitcher_') if valid else reasons.get(entry['id'],'Pending player statistics')})
     return rows
 
 def fetch_actuals(day,entries,*,http_get=None,max_games=10):
@@ -85,26 +86,41 @@ def fetch_actuals(day,entries,*,http_get=None,max_games=10):
         response=get(base+path,timeout=10,**kwargs);response.raise_for_status();return response.json()
     schedule=request('/schedule',params={'sportId':1,'date':day.isoformat()})
     games=[g for d in schedule.get('dates',[]) for g in d.get('games',[])]
-    actuals=[];boxes={};checked=[]
+    actuals=[];boxes={};checked=[];unresolved=[]
+    def pending(entry,reason):unresolved.append({'id':entry['id'],'reason':reason})
     for entry in entries:
         leg=entry['leg'];wanted=matchup(leg['game'])
-        matches=[g for g in games if matchup(g['teams']['away']['team']['name']+' @ '+g['teams']['home']['team']['name'])==wanted
-            and abs((datetime.fromisoformat(g['gameDate'].replace('Z','+00:00'))-datetime.fromisoformat(leg['start'])).total_seconds())<=1800]
-        if len(matches)!=1:continue
-        game=matches[0];game_id=str(game['gamePk'])
-        if game.get('status',{}).get('detailedState') not in {'Final','Game Over'}:continue
-        if game_id not in boxes:
-            if len(boxes)>=max_games:continue
-            boxes[game_id]=request('/game/'+game_id+'/boxscore')
         checked.append(entry['id'])
+        same_day=[g for g in games if matchup(g['teams']['away']['team']['name']+' @ '+g['teams']['home']['team']['name'])==wanted
+            and datetime.fromisoformat(g['gameDate'].replace('Z','+00:00')).astimezone(ZoneInfo('America/New_York')).date().isoformat()==entry['date']]
+        matches=[g for g in same_day if abs((datetime.fromisoformat(g['gameDate'].replace('Z','+00:00'))-datetime.fromisoformat(leg['start'])).total_seconds())<=1800]
+        fallback=False
+        if not matches and len(same_day)==1:
+            matches=same_day;fallback=True
+        if len(matches)!=1:
+            pending(entry,'Ambiguous or missing game match');continue
+        game=matches[0];game_id=str(game['gamePk'])
+        provider_start=datetime.fromisoformat(game['gameDate'].replace('Z','+00:00'))
+        # A corrected start may establish an earlier kickoff. Never grade a post-start publication as pregame.
+        if datetime.fromisoformat(leg['as_of'])>=provider_start or (entry['published_at'] and datetime.fromisoformat(entry['published_at'])>=provider_start):
+            pending(entry,'Publication timing conflicts with provider game start');continue
+        if game.get('status',{}).get('detailedState') not in {'Final','Game Over'}:
+            pending(entry,'Game not final');continue
+        if game_id not in boxes:
+            if len(boxes)>=max_games:
+                pending(entry,'Batch limit reached; run the next grading batch');continue
+            boxes[game_id]=request('/game/'+game_id+'/boxscore')
         players=[p for team in boxes[game_id].get('teams',{}).values() for p in team.get('players',{}).values() if norm(p.get('person',{}).get('fullName',''))==norm(leg['player'])]
-        if len(players)!=1:continue
+        if len(players)!=1:
+            pending(entry,'Player missing or ambiguous in final box score');continue
         player=players[0];market,_,_=terms(leg);batter=market.startswith('batter_');stats=player.get('stats',{}).get('batting' if batter else 'pitching',{})
         appearance=stats.get('plateAppearances' if batter else 'battersFaced')
-        if not isinstance(appearance,(int,float)) or appearance<=0:continue
+        if not isinstance(appearance,(int,float)) or appearance<=0:
+            pending(entry,'No recorded appearance in final box score; settlement unverified');continue
         stat=_stat_for_market(market,leg['pick']);field={'hits':'hits','total_bases':'totalBases','ks':'strikeOuts','walks':'baseOnBalls','outs':'inningsPitched'}[stat]
         value=stats.get(field)
         if stat=='outs':value=_ip_to_outs(value) if value is not None and re.fullmatch(r'\d+(?:\.[012])?',str(value)) else None
-        if not isinstance(value,(int,float)) or isinstance(value,bool) or not math.isfinite(value) or value<0:continue
-        actuals.append({'id':entry['id'],'value':value,'stat':stat,'game_id':game_id,'player_id':str(player['person']['id']),'source':'mlb_final_boxscore'})
-    return {'recorded_at':now(),'actuals':actuals,'checked':checked}
+        if not isinstance(value,(int,float)) or isinstance(value,bool) or not math.isfinite(value) or value<0:
+            pending(entry,'Required statistic missing from final box score');continue
+        actuals.append({'id':entry['id'],'value':value,'stat':stat,'game_id':game_id,'player_id':str(player['person']['id']),'source':'mlb_final_boxscore','provider_start':provider_start.isoformat(),'match_method':'unique_matchup_date' if fallback else 'start_time'})
+    return {'recorded_at':now(),'actuals':actuals,'checked':checked,'unresolved':unresolved}

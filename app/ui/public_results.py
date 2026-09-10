@@ -139,6 +139,10 @@ def render_prop_history(setting,saved,day):
                     history(setting).put('prop_stats/'+digest(revision)+'.json',revision)
                     saved.setdefault('prop_revisions',[]).append(revision)
                     st.success(f"Saved {len(revision['actuals'])} prop statistics to Drive. Build and publish a fresh preview.")
+                    if revision.get('unresolved'):
+                        from collections import Counter
+                        reasons=Counter(item['reason'] for item in revision['unresolved'])
+                        st.info('Still pending: '+ '; '.join(f'{reason}: {count}' for reason,count in reasons.items()))
                 else:
                     st.info('No unambiguous final player statistics found. Props remain pending.')
         except Exception:

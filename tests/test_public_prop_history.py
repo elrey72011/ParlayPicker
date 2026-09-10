@@ -54,12 +54,12 @@ def test_final_boxscore_is_game_and_player_specific_and_cached():
     assert revision['actuals'][0]['player_id']=='123' and revision['actuals'][0]['game_id']=='1'
 
 
-@pytest.mark.parametrize('failure',['live','duplicate_game','wrong_start','duplicate_player','no_stat','dnp'])
+@pytest.mark.parametrize('failure',['live','duplicate_game','wrong_day','duplicate_player','no_stat','dnp'])
 def test_uncertain_stats_remain_pending(failure):
     schedule,box=fixtures();game=schedule['dates'][0]['games'][0];player=box['teams']['away']['players']['ID123']
     if failure=='live':game['status']['detailedState']='In Progress'
     if failure=='duplicate_game':schedule['dates'][0]['games'].append({**game,'gamePk':2})
-    if failure=='wrong_start':game['gameDate']='2026-09-09T23:00:00Z'
+    if failure=='wrong_day':game['gameDate']='2026-09-10T23:00:00Z'
     if failure=='duplicate_player':box['teams']['away']['players']['ID456']=deepcopy(player)
     if failure=='no_stat':del player['stats']['batting']['hits']
     if failure=='dnp':player['stats']['batting']['plateAppearances']=0
@@ -121,3 +121,30 @@ def test_owner_restore_and_explicit_grade_persist_to_drive(monkeypatch):
     at.button(key='public_history_restore').click().run()
     assert not at.exception and len(calls)==1
     assert any(r['category']=='props' and r['outcome']=='WIN' for r in at.session_state['returned_rows'])
+
+
+def test_corrected_time_requires_unique_same_day_and_pregame_publication():
+    schedule,box=fixtures();entry=props.selections([publication()])[0]
+    entry['leg']['start']='2026-09-09T23:00:00+00:00'
+    revision=props.fetch_actuals(date(2026,9,9),[entry],http_get=fetcher(schedule,box,[]))
+    assert revision['actuals'][0]['match_method']=='unique_matchup_date'
+    assert revision['actuals'][0]['value']==2
+    entry['published_at']='2026-09-09T20:01:00+00:00'
+    blocked=props.fetch_actuals(date(2026,9,9),[entry],http_get=fetcher(schedule,box,[]))
+    assert not blocked['actuals'] and 'timing conflicts' in blocked['unresolved'][0]['reason']
+    entry['published_at']='2026-09-09T19:56:00+00:00'
+    second=deepcopy(schedule['dates'][0]['games'][0]);second['gamePk']=2;second['gameDate']='2026-09-09T17:00:00Z'
+    schedule['dates'][0]['games'].append(second)
+    blocked=props.fetch_actuals(date(2026,9,9),[entry],http_get=fetcher(schedule,box,[]))
+    assert not blocked['actuals'] and 'Ambiguous' in blocked['unresolved'][0]['reason']
+
+
+def test_pending_reason_survives_revision_and_is_replaced_by_real_stat():
+    p=publication();entry=props.selections([p])[0];schedule,box=fixtures()
+    box['teams']['away']['players']['ID123']['stats']['batting']={}
+    revision=props.fetch_actuals(date(2026,9,9),[entry],http_get=fetcher(schedule,box,[]))
+    row=props.report([p],[revision])[0]
+    assert row['outcome']=='PENDING' and 'No recorded appearance' in row['final_score']
+    revision2={'recorded_at':'2099-01-01T00:00:00+00:00','actuals':[{'id':entry['id'],'value':2}]}
+    row=props.report([p],[revision,revision2])[0]
+    assert row['outcome']=='WIN' and row['final_score']=='2 hits'
