@@ -8679,6 +8679,17 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
                     # lines; rejecting unpriced NBA/WNBA lines would erase legitimate
                     # line-drift diagnostics.
                     cb = _consistent_spread_book(row)
+                    if cb is None and league_str in {"NCAAF", "NFL"}:
+                        # Football can have priced spreads without a moneyline
+                        # (or any Novig market). Require two standard books to
+                        # corroborate the signed, priced pair instead of losing
+                        # the side merely because favorite metadata is absent.
+                        _, _, _, cb = _consistent_standard_spread_pair(row, side)
+                        if cb is not None:
+                            spread_line_source = f"{cb}_standard_spread_consensus"
+                            market_dict["orientation_source"] = (
+                                f"{orientation_source}|standard_spread_consensus"
+                            )
                     cb_point = pd.to_numeric(
                         row.get(f"{cb}_{side}_point"), errors="coerce"
                     ) if cb else pd.NA
