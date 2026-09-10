@@ -25,7 +25,15 @@ def render_history(setting):
                     try:
                         store.read('confirmed/'+pending['deploy_id']+'.json')
                     except Exception:
-                        if token:
+                        if pending['deploy_id'].startswith('sftp-'):
+                            from app_core import sftp_publishing
+                            try:
+                                status=sftp_publishing.deployment_status(pending['deploy_id'],sftp_publishing.configuration(setting))
+                                if status['state']=='ready':
+                                    store.confirm(pending['deploy_id'],pending['package_hash'])
+                            except (ValueError,RuntimeError):
+                                st.warning('An unconfirmed SFTP publication could not be verified. Existing results were restored; check public deployment status.')
+                        elif token:
                             status=deployment_status(pending['deploy_id'],site,token)
                             if status['state']=='ready':
                                 store.confirm(pending['deploy_id'],pending['package_hash'])
