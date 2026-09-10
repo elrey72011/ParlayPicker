@@ -69,7 +69,7 @@ def render_publish_panel(games, candidates, props=None, dfs=None):
             package = build_package(*boards, props=selected_props,
                                     dfs=selected_dfs, dfs_sport=chosen if chosen!='None' else None,
                                     dfs_slate=slate, dfs_start=start)
-            package['schema_version'] = 3
+            package['schema_version'] = 4
             package['results'] = public_results or []
             html = render(package)
             saved = {'fingerprint':fingerprint, 'package':package, 'html':html}
