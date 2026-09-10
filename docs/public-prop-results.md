@@ -23,3 +23,11 @@ Some earlier public packages saved props with `start: null` even though the same
 When the original 30-minute start match fails, the grader may use exactly one same-matchup game on the original Eastern game date. Both the original analysis and verified publication must precede the provider start; a corrected earlier start cannot validate a postgame pick. Multiple same-day games remain ambiguous. Each saved actual records the provider start and whether matching used the start window or unique matchup/date.
 
 Grading saves unresolved reasons alongside attempts: game not final, unmatched/ambiguous game, publication timing conflict, batch limit, missing/ambiguous player, no recorded appearance, or missing statistic. These appear in the public actual-statistic column after rebuilding and republishing. No appearance or absent player data does not establish sportsbook void settlement; those records remain pending and excluded from win percentage.
+
+## Awaiting results versus Needs review
+
+Public package version 5 introduces `NEEDS_REVIEW` for MLB props only. Stored unresolved reasons for missing/ambiguous game or player identity, publication-time conflicts, missing required final statistics and unverified appearances are classified as Needs review. Games not final, unprocessed records and batch limits remain Pending (displayed as Awaiting results in the prop summary). Existing saved reasons are reclassified on restore without changing the archived evidence or making provider requests.
+
+The public prop summary counts Needs review separately. Both review and pending records are excluded from settled counts and win percentage. Review does not mean a sportsbook void and never becomes an invented zero, win or loss. Streamlit shows a review queue for the selected date. Normal grading processes pending records only; select **Recheck props needing review** when new evidence may resolve them. The score-correction checkbox applies to settled wins/losses/pushes only. A valid later stat revision can resolve a reviewed entry through the normal grading calculation.
+
+After merge, restore history, build a fresh preview and publish. No grading request is required merely to update the labels. Versions 1–4 remain readable; review outcomes are restricted to prop results in version 5.

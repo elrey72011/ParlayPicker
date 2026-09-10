@@ -144,7 +144,52 @@ def test_pending_reason_survives_revision_and_is_replaced_by_real_stat():
     box['teams']['away']['players']['ID123']['stats']['batting']={}
     revision=props.fetch_actuals(date(2026,9,9),[entry],http_get=fetcher(schedule,box,[]))
     row=props.report([p],[revision])[0]
-    assert row['outcome']=='PENDING' and 'No recorded appearance' in row['final_score']
+    assert row['outcome']=='NEEDS_REVIEW' and 'No recorded appearance' in row['final_score']
     revision2={'recorded_at':'2099-01-01T00:00:00+00:00','actuals':[{'id':entry['id'],'value':2}]}
     row=props.report([p],[revision,revision2])[0]
     assert row['outcome']=='WIN' and row['final_score']=='2 hits'
+
+
+@pytest.mark.parametrize('reason',sorted(props.REVIEW_REASONS))
+def test_final_evidence_issues_are_needs_review(reason):
+    p=publication();entry=props.selections([p])[0]
+    revision={'recorded_at':'2026-09-10T01:00:00+00:00','actuals':[],'unresolved':[{'id':entry['id'],'reason':reason}]}
+    row=props.report([p],[revision])[0]
+    assert row['outcome']=='NEEDS_REVIEW' and row['final_score']==reason
+    from app_core.public_board import validate_package
+    package=deepcopy(p['package']);package.update(schema_version=5,parlays=[],results=[row])
+    validate_package(package)
+    package['schema_version']=4
+    with pytest.raises(ValueError):validate_package(package)
+    package['schema_version']=5;row['category']='overall';row.pop('sport');row.pop('market')
+    with pytest.raises(ValueError):validate_package(package)
+
+
+@pytest.mark.parametrize('reason',['Game not final','Batch limit reached; run the next grading batch'])
+def test_temporary_states_remain_pending(reason):
+    p=publication();entry=props.selections([p])[0]
+    revision={'recorded_at':'2026-09-10T01:00:00+00:00','actuals':[],'unresolved':[{'id':entry['id'],'reason':reason}]}
+    assert props.report([p],[revision])[0]['outcome']=='PENDING'
+
+
+def test_review_recheck_requires_explicit_selection(monkeypatch):
+    from streamlit.testing.v1 import AppTest
+    from app.ui import public_results
+    from app_core.public_history import History
+    from test_public_history import Memory
+    store=History('site-1234','folder',Memory());p=publication();key=store.archive(p['package']);store.confirm('deployment123',key,p['confirmed_at'])
+    entry=props.selections([p])[0]
+    revision={'recorded_at':'2026-09-10T01:00:00+00:00','actuals':[],'unresolved':[{'id':entry['id'],'reason':next(iter(props.REVIEW_REASONS))}]}
+    store.put('prop_stats/review.json',revision)
+    monkeypatch.setattr(public_results,'history',lambda _:store)
+    calls=[]
+    monkeypatch.setattr(props,'fetch_actuals',lambda day,entries:calls.append(entries) or {'recorded_at':'2026-09-10T02:00:00+00:00','actuals':[{'id':entry['id'],'value':2}]})
+    at=AppTest.from_function(history_app).run();at.button(key='public_history_restore').click().run()
+    at.date_input(key='public_results_day').set_value(date(2026,9,9)).run()
+    at.button(key='public_props_grade').click().run()
+    assert not at.exception and not calls
+    at.checkbox(key='public_props_recheck').check().run();at.button(key='public_props_grade').click().run()
+    assert not calls
+    at.checkbox(key='public_props_review').check().run();at.button(key='public_props_grade').click().run()
+    assert not at.exception and len(calls)==1
+    assert any(r['outcome']=='WIN' and r['category']=='props' for r in at.session_state['returned_rows'])
