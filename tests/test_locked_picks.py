@@ -53,6 +53,7 @@ def test_scheduler_grades_unpublished_locks(store,monkeypatch):
     assert result['newly_settled']==1 and result['pending']==0
 
 def test_explicit_button_only_and_rerun_idempotence(store,monkeypatch):
+    monkeypatch.setattr("app_core.public_record.START_DATE","2026-09-09")
     from streamlit.testing.v1 import AppTest
     from app.ui import public_results, lock_picks, sftp_publish
     published=[]
