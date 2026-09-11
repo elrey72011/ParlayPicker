@@ -42,7 +42,8 @@ def render_lock_picks(package, setting):
         locked_today=sum(r['date']==today for r in existing)
         st.caption(f'Locked today: {locked_today} · Not locked and eligible now: {len(choices)}')
         if not choices:
-            st.info('No new eligible picks to lock. Existing locks remain saved; refresh analysis for stale prices.')
+            st.info('No new eligible picks to lock. Click Refresh picks in the sidebar, then return here and select picks within 15 minutes. Run Player Props and Refresh preview do not refresh game quotes. Games without a verified Novig quote or that have started cannot be locked. Existing locks remain saved.')
+            st.button('Lock selected picks', key='lock_picks_action', disabled=True)
             return
         selected = st.multiselect('Picks to lock', list(choices), default=list(choices),
             format_func=lambda key: choices[key]['legs'][0]['game'] + ': ' + choices[key]['legs'][0]['pick'] + ' (' + str(choices[key]['legs'][0]['odds']) + ')',
