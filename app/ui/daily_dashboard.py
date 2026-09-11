@@ -45,7 +45,7 @@ def render_daily_dashboard(today, details, frame: pd.DataFrame, candidates: pd.D
         st.subheader("Best picks")
         st.caption("Saved analysis · One selection per game in each view. Game markets only. Player props and parlays remain in Workspace → Full Pick Board and Parlays.")
         if board.empty:
-            st.info("Start with your sport and bankroll, then select Run Master Analysis. Add optional files under Settings & research first.")
+            st.info("Start with your sport and bankroll, then select Run Game Analysis. Add optional files under Settings & research first.")
         else:
             approved = board.loc[board["Bettable"]]
             a, b, c = st.columns(3)

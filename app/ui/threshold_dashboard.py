@@ -22,7 +22,7 @@ def render_threshold_dashboard():
             return
         audit, final = evidence
         if audit.empty:
-            st.info("No snapshots are saved yet. Run Master Analysis first.")
+            st.info("No snapshots are saved yet. Run Game Analysis first.")
             return
         starts = pd.to_datetime(audit["game_start_utc"], errors="coerce", utc=True).dropna()
         if starts.empty:

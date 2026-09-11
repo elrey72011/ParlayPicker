@@ -14,7 +14,8 @@ class StageTimer:
         self.name = name
         self.started = perf_counter()
         if self.progress:
-            self.progress(name)
+            elapsed = sum(self.timings.values())
+            self.progress(f"{name} — {elapsed:.0f}s elapsed")
 
     def finish(self):
         if self.name is not None:

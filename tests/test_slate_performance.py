@@ -47,4 +47,4 @@ def test_timer_records_stages_and_reports_progress(monkeypatch):
     timer=StageTimer(messages.append)
     timer.start('Inputs');timer.start('Models');timer.finish()
     assert timer.timings=={'Inputs':2,'Models':3}
-    assert messages==['Inputs','Models']
+    assert messages==['Inputs — 0s elapsed','Models — 2s elapsed']
