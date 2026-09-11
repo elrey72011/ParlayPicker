@@ -75,6 +75,21 @@ class History:
                 values.append(self.read(item['Key'][len(self.prefix):]))
         return values
 
+    def lock_picks(self, package, selected_ids):
+        from app_core.locked_picks import lock_candidates
+        # Server time is authoritative; the caller cannot backdate a lock.
+        at = now()
+        choices = {row['id']: row for row in lock_candidates(package, at)}
+        requested = set(selected_ids)
+        if not requested or not requested <= choices.keys():
+            raise ValueError('Selections changed, started or became stale. Rebuild the preview before locking.')
+        self.archive(package)
+        saved = []
+        for identity in sorted(requested):
+            # First write wins, including concurrent clicks and later previews.
+            saved.append(self.put('locks/' + identity + '.json', choices[identity], first=True))
+        return saved
+
     def publications(self):
         result=[]
         for receipt in self.all('confirmed'):
@@ -172,14 +187,15 @@ def grade_leg(leg, scores, *, imported=False):
     return ('WIN' if margin>0 else 'LOSS' if margin<0 else 'PUSH'),f'{a}–{h} (away–home)'
 
 
-def report(publications, revisions, imports=None):
+def report(publications, revisions, imports=None, locks=None):
     latest={}
     for revision in sorted(revisions,key=lambda x:x['recorded_at']):
         for score in revision['scores']:
             latest[(score['sport'],score['event_id'])]=score
     rows=[]
     from app_core.imported_recaps import imported_selections
-    for item in selections(publications) + imported_selections(imports or []):
+    from app_core.locked_picks import locked_selections
+    for item in selections(publications) + imported_selections(imports or []) + locked_selections(locks or []):
         graded=[grade_leg(leg,list(latest.values()),imported=item['group']=='Imported research') for leg in item['legs']]
         outcomes=[x[0] for x in graded]
         # Wait for every leg; pushed/voided tickets excluded from win percentage.

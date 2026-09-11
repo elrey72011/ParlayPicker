@@ -1,0 +1,80 @@
+from copy import deepcopy
+from datetime import datetime, timezone
+import pytest
+from test_public_history import Memory, pub, scores
+from app_core import public_history as history
+from app_core.locked_picks import lock_candidates, locked_selections
+
+AT='2026-09-09T19:56:00+00:00'
+
+@pytest.fixture
+def store(monkeypatch):
+    monkeypatch.setattr(history,'now',lambda:AT)
+    return history.History('site-1234','folder',Memory())
+
+def test_original_pick_survives_rerun_and_separate_publication(store):
+    package=pub()['package'];ids=[r['id'] for r in lock_candidates(package,AT)]
+    original=store.lock_picks(package,ids)
+    newer=deepcopy(package);newer['games']['overall'][0].update(pick='Boston -1.5',odds=120)
+    assert store.lock_picks(newer,ids)==original
+    rows=history.report([dict(pub(),package=newer)], [{'recorded_at':AT,'scores':scores()}],locks=store.all('locks'))
+    locked=[r for r in rows if r['group']=='Locked']
+    assert len(locked)==1 and locked[0]['outcome']=='WIN'
+    assert 'Boston +1.5' in locked[0]['picks'] and locked[0]['odds']=='-110'
+    assert locked[0]['published_at']==AT
+    assert any(r['group']=='Approved' and r['category']=='overall' and r['outcome']=='LOSS' for r in rows)
+
+@pytest.mark.parametrize('at',['2026-09-09T20:00:00+00:00','2026-09-10T19:56:00+00:00','2026-09-09T19:54:00+00:00'])
+def test_rejects_started_other_day_future_quote(store,monkeypatch,at):
+    package=pub()['package'];ids=[r['id'] for r in lock_candidates(package,AT)]
+    monkeypatch.setattr(history,'now',lambda:at)
+    with pytest.raises(ValueError):store.lock_picks(package,ids)
+    assert store.all('locks')==[]
+
+def test_stale_empty_unknown_and_duplicate_games_fail_closed(store):
+    package=pub()['package']
+    for ids in ([],['invalid']):
+        with pytest.raises(ValueError):store.lock_picks(package,ids)
+    package['games']['overall'][0]['as_of']='2026-09-09T19:30:00+00:00'
+    assert lock_candidates(package,AT)==[]
+    package=pub()['package'];package['games']['overall'].append(deepcopy(package['games']['overall'][0]))
+    with pytest.raises(ValueError):lock_candidates(package,AT)
+    assert store.all('locks')==[]
+
+def test_restore_rejects_date_tampering(store):
+    rows=lock_candidates(pub()['package'],AT);rows[0]['date']='2026-09-08'
+    with pytest.raises(ValueError):locked_selections(rows)
+
+def test_scheduler_grades_unpublished_locks(store,monkeypatch):
+    from app_core import public_grading_scheduler as scheduler
+    monkeypatch.setattr(scheduler,'is_open',lambda:True)
+    package=pub()['package'];store.lock_picks(package,[r['id'] for r in lock_candidates(package,AT)])
+    result=scheduler.run('site-1234','folder',store.client,{'MLB'},clock=lambda:datetime(2026,9,10,tzinfo=timezone.utc),fetch=lambda *a:{'recorded_at':AT,'scores':scores()})
+    assert result['newly_settled']==1 and result['pending']==0
+
+def test_explicit_button_only_and_rerun_idempotence(store,monkeypatch):
+    from streamlit.testing.v1 import AppTest
+    from app.ui import public_results, lock_picks
+    monkeypatch.setattr(public_results,'history',lambda setting:store)
+    monkeypatch.setattr(lock_picks,'now',lambda:AT)
+    code="""import streamlit as st
+from app.ui.lock_picks import render_lock_picks
+if 'public_results_site-1234' not in st.session_state:
+    st.session_state['public_results_site-1234']={'publications':[],'revisions':[],'imports':[],'locks':[],'rows':[]}
+render_lock_picks(PACKAGE,lambda key:'site-1234')
+""".replace('PACKAGE',repr(pub()['package']))
+    app=AppTest.from_string(code).run()
+    assert not app.exception and store.all('locks')==[]
+    app.button(key='lock_picks_action').click().run()
+    assert not app.exception and len(store.all('locks'))==1
+    app.run()
+    assert not app.exception and len(store.all('locks'))==1
+
+def test_public_schema_scope(store):
+    from app_core.public_board import validate_package
+    from app_core.public_parlays import build_parlays
+    package=pub()['package'];locks=lock_candidates(package,AT)
+    package.update(schema_version=5,results=history.report([],[],locks=locks),parlays=build_parlays(package['games']['overall'],datetime.fromisoformat(package['built_at'])))
+    validate_package(package)
+    package['results'][0]['category']='sides'
+    with pytest.raises(ValueError):validate_package(package)

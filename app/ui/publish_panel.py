@@ -41,6 +41,8 @@ def render_publish_panel(games, candidates, props=None, dfs=None):
         return
     from app.ui.public_results import render_history
     public_results = render_history(setting)
+    if st.session_state.pop('lock_saved_notice', False):
+        st.success('Picks locked in Drive. Build a new preview and publish to update the Locked results on your website.')
     if games is None or games.empty:
         st.info('Run Game Analysis to prepare game picks first.')
         return
@@ -103,6 +105,8 @@ def render_publish_panel(games, candidates, props=None, dfs=None):
     st.write(f"{len(package['games']['overall'])} games · {len(package['props'])} props · {len(package['dfs'])} DFS lineups")
     import streamlit.components.v1 as components
     components.html(saved['html'], height=650, scrolling=True)
+    from app.ui.lock_picks import render_lock_picks
+    render_lock_picks(package, setting)
     st.download_button('Download preview HTML', saved['html'], 'parlaypicker-preview.html','text/html')
     st.download_button('Download public data', json.dumps(package,indent=2), 'public-board.json','application/json')
     destination = Path(str(setting('PARLAYPICKER_PUBLICATION_DIR', str(ROOT/'outputs/public-board-site'))))

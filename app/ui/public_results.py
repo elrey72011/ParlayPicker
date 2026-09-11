@@ -50,8 +50,8 @@ def render_history(setting):
                             # Storage/integrity failures must still stop restore.
                             store.confirm(pending['deploy_id'],pending['package_hash'])
                 stage = 'reading saved publications and results'
-                pubs=store.publications();revisions=store.all('scores');imports=store.all('imports')
-                st.session_state[key]={'publications':pubs,'revisions':revisions,'imports':imports,'grading_runs':store.all('grading_runs'),'prop_revisions':store.all('prop_stats'),'prop_imports':store.all('prop_imports'),'rows':report(pubs,revisions,imports)}
+                pubs=store.publications();revisions=store.all('scores');imports=store.all('imports');locks=store.all('locks')
+                st.session_state[key]={'publications':pubs,'revisions':revisions,'imports':imports,'grading_runs':store.all('grading_runs'),'prop_revisions':store.all('prop_stats'),'prop_imports':store.all('prop_imports'),'locks':locks,'rows':report(pubs,revisions,imports,locks)}
                 st.success('Public history restored.')
             except Exception as exc:
                 from app_core.evidence_config import safe_error
@@ -82,7 +82,7 @@ def render_history(setting):
                 history(setting).put('imports/'+batch['id']+'.json',batch)
                 imports=saved.setdefault('imports',[])
                 if not any(x['id']==batch['id'] for x in imports):imports.append(batch)
-                saved['rows']=report(saved['publications'],saved['revisions'],imports)
+                saved['rows']=report(saved['publications'],saved['revisions'],imports,saved.get('locks',[]))
                 st.success('Historical recap saved as Imported research. Select its game date below and grade it.')
             except ValueError as exc:
                 st.error('Import rejected: '+str(exc))
@@ -96,7 +96,8 @@ def render_history(setting):
         if st.button('Grade picks for selected date',key='public_history_grade'):
             try:
                 from app_core.imported_recaps import imported_selections
-                entries=[r for r in selections(saved['publications'])+imported_selections(saved.get('imports',[])) if r['date']==day.isoformat()]
+                from app_core.locked_picks import locked_selections
+                entries=[r for r in selections(saved['publications'])+imported_selections(saved.get('imports',[]))+locked_selections(saved.get('locks',[])) if r['date']==day.isoformat()]
                 sports={leg['sport'] for r in entries for leg in r['legs']}
                 if not entries:
                     st.info('No eligible records for this date. Check the available dates above or import the historical CSVs.')
@@ -104,7 +105,7 @@ def render_history(setting):
                     revision=fetch_scores(day,sports)
                     history(setting).put('scores/'+digest(revision)+'.json',revision)
                     saved['revisions'].append(revision)
-                    saved['rows']=report(saved['publications'],saved['revisions'],saved.get('imports',[]))
+                    saved['rows']=report(saved['publications'],saved['revisions'],saved.get('imports',[]),saved.get('locks',[]))
                     st.success('Final scores saved to Drive. Build a new preview and publish to update the website.')
             except Exception:
                 st.error('Grading or backup failed. Existing results remain available; retry explicitly.')
