@@ -33,3 +33,17 @@ def test_bounded_missing_response_and_existing_complete_quotes():
     complete=game();complete['bookmakers']=[{'key':'novig','markets':[{'key':k,'outcomes':[{}]} for k in ('spreads','totals')]}]
     calls.clear();assert recover_college_novig([complete],'test',get=get)==[complete]
     assert not calls
+
+
+def test_empty_success_is_visible_without_exposing_credentials(capsys):
+    original = game()
+    class Response:
+        status_code = 200
+        def json(self):
+            return original
+    result = recover_college_novig([original], 'private-api-secret', get=lambda *a, **k: Response())
+    assert result == [original]
+    output = capsys.readouterr().out
+    assert 'recovered_markets=0' in output
+    assert 'games=1 requests=1' in output
+    assert 'private-api-secret' not in output
