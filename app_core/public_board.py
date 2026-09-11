@@ -63,6 +63,9 @@ def pick_record(row, *, prop=False, as_of=None):
             'market':text(row, 'market_type'), 'odds':odds, 'win_estimate':probability,
             'ev':number(row, 'expected_value' if prop else 'ev'),
             'status':'APPROVED' if approved else 'PASS', 'start':start, 'as_of':at}
+    if not prop and 'quote_source' in row:
+        record['quote_source'] = text(row, 'quote_source')
+        record['quote_time'] = timestamp(text(row, 'quote_time'))
     if prop:
         projection = number(row, 'expected_count')
         if record['sport'].upper() == 'NFL' and (number(row, 'FormSampleSize') or 0) <= 0:
@@ -134,8 +137,13 @@ def validate_package(package):
         if not isinstance(rows, list):
             raise ValueError('Selections must be lists')
         for row in rows:
-            exact(row, 'sport game pick player market odds win_estimate ev status start as_of' + (' expected_stat' if rows is package['props'] and 'expected_stat' in row else ''))
+            exact(row, 'sport game pick player market odds win_estimate ev status start as_of' + (' quote_source quote_time' if rows is not package['props'] and 'quote_source' in row else '') + (' expected_stat' if rows is package['props'] and 'expected_stat' in row else ''))
             projection_metric(row)
+            if 'quote_source' in row:
+                if row['quote_source'] not in {'Novig', 'Unavailable'}:
+                    raise ValueError('Invalid quote source')
+                if row['quote_source']=='Novig' and not timestamp(row['quote_time']):
+                    raise ValueError('Missing Novig quote time')
             for key in ('sport','game','pick','player','market','status'):
                 if not isinstance(row[key], str):
                     raise ValueError('Public labels must be text')

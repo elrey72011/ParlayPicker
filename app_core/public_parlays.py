@@ -16,6 +16,11 @@ def build_parlays(rows, now=None):
         if len(teams) != 2:
             continue
         try:
+            if 'quote_source' in row:
+                if row['quote_source'] != 'Novig' or not row.get('quote_time'):
+                    continue
+                if not 0 <= (now-datetime.fromisoformat(row['quote_time'])).total_seconds() <= 900:
+                    continue
             age = (now-datetime.fromisoformat(row['as_of'])).total_seconds()
             start = datetime.fromisoformat(row['start'])
             p, odds = row['win_estimate'], row['odds']

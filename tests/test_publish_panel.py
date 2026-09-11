@@ -10,6 +10,11 @@ def app():
         'game_date':'2026-09-08','best_pick':st.session_state.get('test_pick','Over 8.5'),'market_type':'total_over',
         'odds_american':-110,'Bettable':False,'Play_Stake':0,'production_win_probability':.55,
         'game_time_est':'2026-09-08 7:00 PM ET'}])
+    import json
+    kind='total_under' if st.session_state.get('test_pick','').startswith('Under') else 'total_over'
+    frame['market_type']=kind
+    frame['total_line']=8.5
+    frame['provider_quotes']=json.dumps([{'book':'novig','market_type':kind,'point':8.5,'price':-110,'recorded_at':'2026-09-08T20:59:00Z'}])
     render_publish_panel(frame, None)
 
 
