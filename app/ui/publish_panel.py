@@ -23,6 +23,7 @@ def setting(name, default=''):
 
 def source_fingerprint(games, candidates, props, dfs, options):
     digest = hashlib.sha256(json.dumps(options, sort_keys=True).encode())
+    digest.update((ROOT / "publishing/board.html").read_bytes())
     for frame in (games, candidates, props, dfs):
         digest.update((frame.to_json(orient='split', date_format='iso') if isinstance(frame,pd.DataFrame) else '').encode())
     return digest.hexdigest()
