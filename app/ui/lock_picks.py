@@ -5,6 +5,7 @@ import pandas as pd
 import streamlit as st
 from app_core.locked_picks import lock_candidates
 from app_core.public_history import now, report
+from app_core.public_record import current_records
 
 
 def render_lock_picks(package, setting):
@@ -55,7 +56,7 @@ def render_lock_picks(package, setting):
                 from app_core import public_prop_history
                 from app.ui.sftp_publish import publish_action
                 updated=deepcopy(package)
-                updated['results']=saved['rows']+public_prop_history.report(saved['publications'],saved.get('prop_revisions',[]),saved.get('prop_imports',[]))
+                updated['results']=current_records(saved['rows']+public_prop_history.report(saved['publications'],saved.get('prop_revisions',[]),saved.get('prop_imports',[])))
                 st.session_state['lock_publish_notice']=publish_action(updated,setting)
                 st.session_state.pop('publication_preview', None)
                 st.session_state['lock_saved_notice'] = True

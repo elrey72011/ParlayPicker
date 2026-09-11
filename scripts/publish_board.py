@@ -14,6 +14,9 @@ from app_core.public_board import build_package, validate_package
 
 def render(package):
     validate_package(package)
+    from app_core.public_record import current_records
+    if 'results' in package:
+        package = {**package, 'results': current_records(package['results'])}
     # JSON cannot terminate the data script; all displayed strings use textContent.
     encoded = json.dumps(package, allow_nan=False).replace('&','\\u0026').replace('<','\\u003c').replace('>','\\u003e')
     from app_core.public_site_shell import STYLES, header

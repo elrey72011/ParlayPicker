@@ -3,6 +3,8 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import streamlit as st
 from app_core.public_history import History, selections, report, fetch_scores, digest
+from app_core import public_record
+from app_core.public_record import current_records
 
 
 def history(setting):
@@ -68,6 +70,7 @@ def render_history(setting):
         with st.spinner('Loading saved picks and results...'):
             restore_history(setting)
     saved=st.session_state.get(key)
+    st.caption('Public record starts September 11, 2026 (Eastern) for games and player props. Earlier history remains archived.')
     if st.button('Update results and publish',key='public_update_all',disabled=saved is None):
         try:
             if not restore_history(setting):
@@ -144,7 +147,7 @@ def render_history(setting):
                 st.dataframe(review_rows,hide_index=True)
         if saved['rows']+prop_rows:
             st.dataframe(saved['rows']+prop_rows,hide_index=True)
-        return saved['rows']+prop_rows
+        return current_records(saved['rows']+prop_rows)
 
 
 def render_prop_history(setting,saved,day):
@@ -209,7 +212,7 @@ def update_pending_results(setting,saved):
     from app_core.imported_recaps import imported_selections
     from app_core.locked_picks import locked_selections
     entries=selections(saved['publications'])+imported_selections(saved.get('imports',[]))+locked_selections(saved.get('locks',[]))
-    pending={r['id'] for r in saved['rows'] if r['outcome']=='PENDING'}
+    pending={r['id'] for r in saved['rows'] if r['outcome']=='PENDING' and r['date']>=public_record.START_DATE}
     today=datetime.now(ZoneInfo('America/New_York')).date().isoformat()
     dates=sorted({r['date'] for r in entries if r['id'] in pending and r['date']<=today})
     store=history(setting)
@@ -223,7 +226,7 @@ def update_pending_results(setting,saved):
     from app_core import public_prop_history as props
     prop_entries=props.selections(saved['publications'],saved.get('prop_imports',[]))
     prop_rows=props.report(saved['publications'],saved.get('prop_revisions',[]),saved.get('prop_imports',[]))
-    prop_pending={r['id'] for r in prop_rows if r['outcome']=='PENDING'}
+    prop_pending={r['id'] for r in prop_rows if r['outcome']=='PENDING' and r['date']>=public_record.START_DATE}
     for day in sorted({r['date'] for r in prop_entries if r['id'] in prop_pending and r['date']<=today}):
         selected=[r for r in prop_entries if r['id'] in prop_pending and r['date']==day]
         checked={entry_id:r['recorded_at'] for r in sorted(saved.get('prop_revisions',[]),key=lambda r:r['recorded_at']) for entry_id in r.get('checked',[])}

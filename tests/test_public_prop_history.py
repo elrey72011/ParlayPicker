@@ -99,6 +99,8 @@ def history_app():
 
 
 def test_owner_restore_and_explicit_grade_persist_to_drive(monkeypatch):
+    # Exercise historical grading independently of the owner-selected public epoch.
+    monkeypatch.setattr("app_core.public_record.START_DATE", "2026-09-09")
     from streamlit.testing.v1 import AppTest
     from app.ui import public_results
     from app_core.public_history import History
@@ -173,6 +175,8 @@ def test_temporary_states_remain_pending(reason):
 
 
 def test_review_recheck_requires_explicit_selection(monkeypatch):
+    # Exercise historical grading independently of the owner-selected public epoch.
+    monkeypatch.setattr("app_core.public_record.START_DATE", "2026-09-09")
     from streamlit.testing.v1 import AppTest
     from app.ui import public_results
     from app_core.public_history import History

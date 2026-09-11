@@ -33,6 +33,7 @@ def test_mismatched_live_page_not_confirmed(monkeypatch):
 
 
 def test_update_results_persists_before_reporting(monkeypatch):
+    monkeypatch.setattr("app_core.public_record.START_DATE","2026-09-09")
     store=History('site-1234','folder',Memory())
     saved={'publications':[pub()],'revisions':[],'imports':[],'locks':[],'rows':report([pub()],[])}
     monkeypatch.setattr(public_results,'history',lambda setting:store)
