@@ -166,3 +166,29 @@ assert.match(output[2],/2 wins · 1 losses · 1 pushes · 1 pending/);
 renderLockedWinRate(['2026-09-12','2026-09-12']);assert.equal(output[1],'Awaiting settled picks');
 """
     subprocess.run([node, '-e', script], check=True)
+
+
+def test_preview_navigation_prevents_streamlit_reload():
+    import os, shutil, subprocess
+    from pathlib import Path
+    node=os.environ.get('NODE_BINARY') or shutil.which('node')
+    if not node: pytest.skip('Node unavailable')
+    html=Path('publishing/board.html').read_text(encoding='utf-8')
+    handler=html.split("document.addEventListener('click',event=>")[1].split(";\nwindow.addEventListener('hashchange'")[0]
+    script="""
+const assert=require('node:assert/strict');
+const pages={games:1,props:1,parlays:1,results:1,dfs:1};
+let selected,opened,prevented;
+const selectPage=value=>selected=value;
+const window={self:{},top:{},open:(...args)=>opened=args};
+const click=event=>"""+handler[:-1]+""";
+for(const name of Object.keys(pages)){
+ prevented=false;const link={getAttribute:()=> '#'+name,classList:{contains:()=>false}};
+ click({target:{closest:()=>link},preventDefault:()=>prevented=true});
+ assert.equal(selected,name);assert.equal(prevented,true);
+}
+click({target:{closest:()=>({getAttribute:()=>'/how-picks-work/',classList:{contains:()=>false}})},preventDefault:()=>{}});
+assert.equal(opened[0],'https://picks.cmsvconsulting.com/how-picks-work/');
+assert.equal(opened[1],'_blank');
+"""
+    subprocess.run([node,'-e',script],check=True)
