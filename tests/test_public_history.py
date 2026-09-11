@@ -155,3 +155,19 @@ def test_restore_error_identifies_stage_without_exposing_exception(monkeypatch):
     assert 'opening history storage' in at.error[0].value
     assert 'RuntimeError' in at.error[0].value
     assert 'private signing key' not in at.error[0].value
+
+
+@pytest.mark.parametrize('away',['Florida A&M Rattlers','FLORIDA A M RATTLERS','FLORIDA A&M'])
+def test_famu_results_match_saved_alias_and_old_score_revisions(away):
+    from app_core.public_history import grade_leg,team_name
+    leg={'sport':'NCAAF','game':'Florida Am at Miami','start':'2026-09-11T00:00:00+00:00',
+         'market':'total_under','pick':'Under 63.5'}
+    score={'sport':'NCAAF','event_id':'synthetic-game','start':leg['start'],
+           'away':away,'home':'Miami Hurricanes','away_score':7,'home_score':70}
+    assert grade_leg(leg,[score])[0]=='LOSS'
+    leg.update(market='total_over',pick='Over 63.5')
+    assert grade_leg(leg,[score])[0]=='WIN'
+    leg.update(market='spread_away',pick='Florida Am +64.5')
+    assert grade_leg(leg,[score])[0]=='WIN'
+    assert team_name('Florida Am','NCAAF')=='FLORIDA A&M'
+    assert team_name('Florida Atlantic','NCAAF')!='FLORIDA A&M'

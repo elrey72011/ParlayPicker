@@ -88,6 +88,10 @@ class History:
 def team_name(value, sport):
     # The generic alias table maps bare Seattle to Seattle University.
     # Scope this explicit alias to MLB; never change college team identity.
+    if sport.upper() == 'NCAAF':
+        compact = re.sub(r'[^a-z0-9]', '', str(value).casefold())
+        if compact in {'floridaam', 'floridaamrattlers', 'famu', 'famurattlers'}:
+            return 'FLORIDA A&M'
     if sport.upper() == 'MLB' and str(value).strip().casefold() == 'seattle':
         value = 'Seattle Mariners'
     return normalize_result_team(value)
@@ -136,7 +140,7 @@ def grade_leg(leg, scores, *, imported=False):
         return 'PENDING',None
     matches=[]
     for score in scores:
-        if (score['sport'],score['away'],score['home'])!=key[:3]:
+        if (score['sport'],team_name(score['away'],score['sport']),team_name(score['home'],score['sport']))!=key[:3]:
             continue
         # Exact teams plus a narrow start-time tolerance disambiguate doubleheaders.
         score_start=datetime.fromisoformat(score['start']);leg_start=datetime.fromisoformat(leg['start'])
@@ -155,11 +159,11 @@ def grade_leg(leg, scores, *, imported=False):
         margin=(a+h-float(match[2]))*(1 if market=='total_over' else -1)
     elif market.startswith('spread_'):
         match=re.fullmatch(r'(.+)\s+([+-]\d+(?:\.\d+)?)',pick)
-        team=score['home'] if market=='spread_home' else score['away']
+        team=team_name(score['home'] if market=='spread_home' else score['away'],leg['sport'])
         if not match or team_name(match[1],leg['sport'])!=team:return 'PENDING',None
         margin=(h-a if market=='spread_home' else a-h)+float(match[2])
     elif market in {'moneyline_home','h2h_home','moneyline_away','h2h_away'}:
-        team=score['home'] if market.endswith('home') else score['away']
+        team=team_name(score['home'] if market.endswith('home') else score['away'],leg['sport'])
         name=re.sub(r'\s+(?:ML|Moneyline)$','',pick,flags=re.I)
         if team_name(name,leg['sport'])!=team:return 'PENDING',None
         margin=h-a if market.endswith('home') else a-h
