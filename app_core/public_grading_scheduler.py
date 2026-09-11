@@ -15,13 +15,15 @@ def run(site, folder, client, sports, *, clock=None, fetch=None):
     store=History(site,folder,client)
     # Restore must succeed before any scores are fetched or records changed.
     pubs=store.publications();imports=store.all('imports');revisions=store.all('scores')
+    locks=store.all('locks')
     statuses=store.all('grading_runs')
     checked={}
     for status in sorted(statuses,key=lambda r:r['started_at']):
         checked.update(status.get('checked',{}))
-    before=report(pubs,revisions,imports)
+    before=report(pubs,revisions,imports,locks)
     pending_ids={r['id'] for r in before if r['outcome']=='PENDING'}
-    entries=selections(pubs)+imported_selections(imports)
+    from app_core.locked_picks import locked_selections
+    entries=selections(pubs)+imported_selections(imports)+locked_selections(locks)
     eligible=set()
     for row in entries:
         if row['id'] not in pending_ids:continue
@@ -50,7 +52,7 @@ def run(site, folder, client, sports, *, clock=None, fetch=None):
             result['checked_batches']+=1
         except Exception as exc:
             result['errors'].append(sport+':'+type(exc).__name__)
-    after=report(pubs,revisions,imports)
+    after=report(pubs,revisions,imports,locks)
     result['pending']=sum(r['outcome']=='PENDING' for r in after)
     result['newly_settled']=sum(r['id'] in pending_ids and r['outcome']!='PENDING' for r in after)
     result['finished_at']=clock().isoformat()

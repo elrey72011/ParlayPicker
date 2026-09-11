@@ -168,8 +168,10 @@ def validate_package(package):
             if not all(isinstance(v,str) for v in row.values()) or row['id'] in seen:
                 raise ValueError('Invalid or duplicate result fields')
             seen.add(row['id'])
-            if row['category'] not in ({'overall','sides','totals','parlays','props'} if package['schema_version'] in {4,5} else {'overall','sides','totals','parlays'}) or row['group'] not in {'Approved','Research','Imported research'} or row['outcome'] not in ({'WIN','LOSS','PUSH','PENDING','NEEDS_REVIEW'} if package['schema_version']==5 and row['category']=='props' else {'WIN','LOSS','PUSH','PENDING'}):
+            if row['category'] not in ({'overall','sides','totals','parlays','props'} if package['schema_version'] in {4,5} else {'overall','sides','totals','parlays'}) or row['group'] not in ({'Approved','Research','Imported research','Locked'} if package['schema_version']==5 else {'Approved','Research','Imported research'}) or row['outcome'] not in ({'WIN','LOSS','PUSH','PENDING','NEEDS_REVIEW'} if package['schema_version']==5 and row['category']=='props' else {'WIN','LOSS','PUSH','PENDING'}):
                 raise ValueError('Invalid result category or outcome')
+            if row['group']=='Locked' and row['category']!='overall':
+                raise ValueError('Only overall picks can be locked')
             if row['category']=='props':
                 from app_core.public_prop_history import MARKETS
                 if row['sport']!='MLB' or row['market'] not in MARKETS:raise ValueError('Unsupported prop results')
