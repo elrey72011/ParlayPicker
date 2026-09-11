@@ -1,4 +1,5 @@
 """Immutable, site-scoped public publication records and conservative result grading."""
+from app_core.public_quote_policy import supported_quote
 import hashlib
 import json
 import math
@@ -149,7 +150,7 @@ def event_key(leg):
 def eligible(leg, confirmed):
     try:
         if 'quote_source' in leg:
-            if leg['quote_source'] != 'Novig' or not leg.get('quote_time'):
+            if not supported_quote(leg) or not leg.get('quote_time'):
                 return False
             age=(confirmed-datetime.fromisoformat(leg['quote_time'])).total_seconds()
             if not 0 <= age <= 900:
@@ -236,6 +237,7 @@ def report(publications, revisions, imports=None, locks=None):
         rows.append({**{k:v for k,v in item.items() if k!='legs'},'outcome':outcome,
                      'picks':' + '.join(x['game']+': '+x['pick'] for x in item['legs']),
                      'odds':' / '.join(str(x['odds']) for x in item['legs']),
+                     **({'quote_source':item['legs'][0]['quote_source']} if item['group']=='Locked' and item['legs'][0].get('quote_source') else {}),
                      'final_score':' / '.join(x[1] or 'Pending' for x in graded)})
     return rows
 

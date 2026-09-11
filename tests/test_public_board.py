@@ -192,3 +192,27 @@ assert.equal(opened[0],'https://picks.cmsvconsulting.com/how-picks-work/');
 assert.equal(opened[1],'_blank');
 """
     subprocess.run([node,'-e',script],check=True)
+
+
+def test_browser_college_fallback_label_and_freshness():
+    import os, shutil, subprocess
+    from pathlib import Path
+    node=os.environ.get('NODE_BINARY') or shutil.which('node')
+    if not node: pytest.skip('Node unavailable')
+    html=Path('publishing/board.html').read_text(encoding='utf-8')
+    funcs='\n'.join(line for line in html.splitlines() if line.startswith(('function supportedQuote(', 'function state(')))
+    script="""
+const assert=require('node:assert/strict');
+const data={stale_after_minutes:15};
+const now=Date.now();
+"""+funcs+"""
+const row={sport:'NCAAF',quote_source:'FanDuel',quote_time:new Date(now-60000).toISOString(),as_of:new Date(now-30000).toISOString(),start:new Date(now+3600000).toISOString(),status:'PASS'};
+assert.equal(state(row),'PASS');
+assert.equal(state({...row,sport:'MLB'}),'UNAVAILABLE');
+assert.equal(state({...row,quote_source:'Unknown'}),'UNAVAILABLE');
+assert.equal(state({...row,quote_time:new Date(now-16*60000).toISOString()}),'STALE');
+assert.equal(state({...row,start:new Date(now-1000).toISOString()}),'STARTED');
+"""
+    subprocess.run([node,'-e',script],check=True)
+    assert "supportedQuote(r)?r.quote_source+' · '" in html
+    assert "r.quote_source||'Not recorded'" in html

@@ -1,4 +1,5 @@
 """Allowlisted public data built from finalized exports; no provider requests."""
+from app_core.public_quote_policy import supported_quote
 import math
 import re
 from datetime import datetime, timezone
@@ -144,10 +145,10 @@ def validate_package(package):
             if 'quote_reason' in row and not isinstance(row['quote_reason'],str):
                 raise ValueError('Invalid quote reason')
             if 'quote_source' in row:
-                if row['quote_source'] not in {'Novig', 'Unavailable'}:
+                if row['quote_source'] != 'Unavailable' and not supported_quote(row):
                     raise ValueError('Invalid quote source')
-                if row['quote_source']=='Novig' and not timestamp(row['quote_time']):
-                    raise ValueError('Missing Novig quote time')
+                if supported_quote(row) and not timestamp(row['quote_time']):
+                    raise ValueError('Missing sportsbook quote time')
             for key in ('sport','game','pick','player','market','status'):
                 if not isinstance(row[key], str):
                     raise ValueError('Public labels must be text')
@@ -188,7 +189,7 @@ def validate_package(package):
             raise ValueError('Invalid public results')
         seen=set()
         for row in package['results']:
-            exact(row, 'id category date group published_at outcome picks odds final_score' + (' sport market' if row.get('category')=='props' and package['schema_version'] in {4,5} else '') + (' expected_stat' if row.get('category')=='props' and 'expected_stat' in row else ''))
+            exact(row, 'id category date group published_at outcome picks odds final_score' + (' quote_source' if 'quote_source' in row else '') + (' sport market' if row.get('category')=='props' and package['schema_version'] in {4,5} else '') + (' expected_stat' if row.get('category')=='props' and 'expected_stat' in row else ''))
             projection_metric(row)
             if not all(isinstance(v,str) for k,v in row.items() if k != 'expected_stat') or row['id'] in seen:
                 raise ValueError('Invalid or duplicate result fields')
@@ -201,6 +202,8 @@ def validate_package(package):
                 from app_core.public_prop_history import MARKETS
                 if row['sport']!='MLB' or row['market'] not in MARKETS:raise ValueError('Unsupported prop results')
             datetime.strptime(row['date'], '%Y-%m-%d')
+            if 'quote_source' in row and (row['group'] != 'Locked' or row['quote_source'] not in {'Novig', 'DraftKings', 'FanDuel', 'BetMGM'}):
+                raise ValueError('Invalid locked sportsbook label')
             if row['group'] != 'Imported research' and not timestamp(row['published_at']):
                 raise ValueError('Missing publication time')
     return package

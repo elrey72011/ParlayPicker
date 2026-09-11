@@ -28,13 +28,13 @@ def family_of(row):
     return ''
 
 
-def novig_quote(row):
-    """Require exact original team/market/line/price evidence from Novig."""
+def exact_book_quote(row, book):
+    """Require exact original team/market/line/price evidence from the requested bookmaker."""
     from app_core.prediction_evidence import bind_quote
     candidate = dict(row)
-    candidate['opposing_odds_source'] = 'novig'
+    candidate['opposing_odds_source'] = book
     bound = bind_quote(candidate)
-    if not bound['quote_binding_verified'] or bound['quote_bookmaker'] != 'novig':
+    if not bound['quote_binding_verified'] or bound['quote_bookmaker'] != book:
         return None
     quoted = pd.to_datetime(bound['odds_recorded_at'], utc=True, errors='coerce')
     run = text(row, 'export_run_id')
@@ -44,6 +44,21 @@ def novig_quote(row):
     if pd.isna(at) or not 0 <= (at-quoted).total_seconds() <= 900:
         return None
     return bound['odds_recorded_at']
+
+
+def novig_quote(row):
+    return exact_book_quote(row, 'novig')
+
+
+def public_quote(row, college_fallback=False):
+    books = [('novig', 'Novig')]
+    if college_fallback and text(row, 'league', 'League').upper() == 'NCAAF':
+        books += [('draftkings', 'DraftKings'), ('fanduel', 'FanDuel'), ('betmgm', 'BetMGM')]
+    for book, label in books:
+        at = exact_book_quote(row, book)
+        if at:
+            return label, at
+    return None
 
 
 def novig_unavailable_reason(final, candidates, family):
@@ -68,12 +83,13 @@ def novig_unavailable_reason(final, candidates, family):
             else 'Novig market missing from this API snapshot')
 
 
-def per_game_board(board, candidates=None, family='overall', *, novig_only=False):
+def per_game_board(board, candidates=None, family='overall', *, novig_only=False, college_fallback=False):
     if family not in {'overall','sides','totals'}: raise ValueError('Unknown family')
     if board is None or board.empty: return pd.DataFrame()
     candidates=candidates if isinstance(candidates,pd.DataFrame) else pd.DataFrame()
     rows=[]
     for _, final in board.iterrows():
+        allow_fallback = college_fallback and text(final, 'league', 'League').upper() == 'NCAAF'
         selected=final if family=='overall' and not novig_only else None
         reason='Final overall selection'
         if family!='overall' or novig_only:
@@ -81,7 +97,7 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
             key=identity(final)
             for _, candidate in candidates.iterrows():
                 if family!='overall' and family_of(candidate)!=family: continue
-                if novig_only and not novig_quote(candidate): continue
+                if novig_only and not public_quote(candidate, allow_fallback): continue
                 run, other_run=text(final,'export_run_id'),text(candidate,'export_run_id')
                 if run and other_run!=run: continue
                 fid,cid=text(final,'matchup_id'),text(candidate,'matchup_id')
@@ -100,19 +116,21 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
             if not text(final,'matchup_id') and (len(event_ids)>1 or sum(identity(row)==key for _,row in board.iterrows())>1):
                 pool=[]
             if pool:
-                pool.sort(key=lambda c:(number(c,'best_available_rank' if family=='overall' else 'best_available_family_rank'),number(c,'best_available_rank') or math.inf,text(c,'best_pick')))
+                pool.sort(key=lambda c:((0 if not novig_only or novig_quote(c) else 1),number(c,'best_available_rank' if family=='overall' else 'best_available_family_rank'),number(c,'best_available_rank') or math.inf,text(c,'best_pick')))
                 selected=pool[0]
                 reason='Highest-ranked '+family+' candidate in this game'
-            elif (family=='overall' or family_of(final)==family) and (not novig_only or novig_quote(final)):
+            elif (family=='overall' or family_of(final)==family) and (not novig_only or public_quote(final, allow_fallback)):
                 selected=final
                 reason='Final overall pick; no matching family audit available'
             else:
                 reason='No matching ranked '+family+' candidate available; rerun analysis to refresh the audit'
+        quote = public_quote(selected, allow_fallback) if selected is not None and novig_only else None
+        fallback_selected = quote is not None and quote[0] != 'Novig'
         same = selected is not None and family_of(selected)==family_of(final) and text(selected,'best_pick')==text(final,'best_pick') and number(selected,'odds_american')==number(final,'odds_american') and text(selected,'odds_source')==text(final,'odds_source')
         # Only the exact final ticket can inherit the finalized approval or stake.
         source=selected if novig_only else final if same or family=='overall' else selected
         final_ticket = same or (family=='overall' and not novig_only)
-        approved=source is not None and final_ticket and text(final,'Bettable').lower() in {'true','1','yes'} and (number(final,'Play_Stake') or 0)>0
+        approved=not fallback_selected and source is not None and final_ticket and text(final,'Bettable').lower() in {'true','1','yes'} and (number(final,'Play_Stake') or 0)>0
         probability=None; basis='Unavailable'; edge=None; ev=None
         if source is not None:
             if final_ticket:
@@ -129,6 +147,8 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
         approval_reason = text(final,'Production_Gate_Reason','Status_Reason','qualification_reason') if final_ticket else ''
         if source is None:
             approval_reason = 'No matching ranked market available; refresh analysis'
+        elif fallback_selected:
+            approval_reason = 'College sportsbook fallback; research selection, not wager approval'
         elif approved:
             approval_reason = 'Passed final wager checks with a positive approved stake'
         elif not final_ticket:
@@ -140,7 +160,7 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
         rows.append({'league':text(final,'league','League'),'matchup':text(final,'Away','away_team')+' at '+text(final,'Home','home_team'),
                      'matchup_id':text(final,'matchup_id'),'game_date':text(final,'Local Date','game_date'),
                      'start':text(final,'Commence (Local)','game_time_est'),
-                     'pick':text(source,'display_pick','best_pick') if source is not None else ('Novig quote unavailable' if novig_only else 'No Bet — market unavailable'),
+                     'pick':text(source,'display_pick','best_pick') if source is not None else ('Sportsbook quote unavailable' if allow_fallback else 'Novig quote unavailable' if novig_only else 'No Bet — market unavailable'),
                      'market_type':text(source,'market_type') if source is not None else '',
                      'odds':number(source,'odds_american') if source is not None else None,
                      'Bettable':approved,'Play_Stake':number(final,'Play_Stake') if approved else 0.0,
@@ -148,6 +168,6 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
                      'status':'APPROVED' if approved else 'PASS', 'win_probability':probability,'probability_basis':basis,
                      'edge':edge,'ev':ev,'selection_score':number(selected,'best_available_score') if selected is not None else None,
                      'reason':reason,'approval_reason':approval_reason,
-                     **({'quote_source':'Novig' if source is not None else 'Unavailable', 'quote_time':novig_quote(source) if source is not None else '', 'quote_reason':'' if source is not None else novig_unavailable_reason(final,candidates,family)} if novig_only else {}),
+                     **({'quote_source':quote[0] if quote else 'Unavailable', 'quote_time':quote[1] if quote else '', 'quote_reason':('College fallback: no eligible Novig candidate in this view' if fallback_selected else '') if source is not None else ('No exact fresh Novig or supported sportsbook quote in this analysis' if allow_fallback else novig_unavailable_reason(final,candidates,family))} if novig_only else {}),
                      'export_run_id':text(final,'export_run_id')})
     return pd.DataFrame(rows)
