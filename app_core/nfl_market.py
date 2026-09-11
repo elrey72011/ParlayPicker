@@ -193,8 +193,13 @@ def run(path, odds_key, backup, request_get):
                     if score:
                         store.save("scores", {"sport": "NFL", **score}, path)
                         result["graded"] += 1
-                except (ValueError, TypeError, KeyError, OverflowError):
-                    result["errors"].append("nfl_score_validation")
+                except (ValueError, TypeError, KeyError, OverflowError) as exc:
+                    allowed={"nfl_score_identity_or_schedule_changed","nfl_score_timing","nfl_score_timestamp","nfl_score_pair","nfl_invalid_score","nfl_invalid_number"}
+                    reason=str(exc) if str(exc) in allowed else "nfl_score_validation"
+                    result["errors"].append(reason)
+                    result.setdefault("score_rejections",[]).append({"event_id":gid,"reason":reason,
+                        "captured_start":pending[gid].get("start"),"reported_start":event.get("commence_time"),
+                        "captured_at":pending[gid].get("captured_at"),"reported_update":event.get("last_update")})
             backup()
         except BudgetLimit:
             result["budget_paused"] = True

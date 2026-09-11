@@ -51,12 +51,25 @@ def checkpoint(client, folder, state=None):
         if b.read()!=raw:raise ValueError("scheduler_state_readback")
 
 
+def retry_schedule(fetch):
+    """Retry only the read-only MLB schedule, without changing frozen model code."""
+    import requests
+    import time
+    for attempt in range(3):
+        try:
+            return fetch()
+        except (requests.Timeout, requests.ConnectionError):
+            if attempt==2:
+                raise
+            time.sleep(attempt+1)
+
+
 def run_mlb(path, state, backup):
     records=ms.records(path);model=latest_model(records)
     if model["data"]["runtime_hash"]!=mlb.runtime_hash():raise ValueError("stale_frozen_model")
     seen={e["game_id"] for r in records if r["kind"]=="capture" and r["data"]["model_id"]==model["id"] for e in r["data"]["events"]}
     counts={"captured":0,"graded":0,"blocked_captures":0,"errors":[]}
-    games=sorted(mlb.upcoming(),key=lambda g:(g["gameDate"],g["gamePk"]))
+    games=sorted(retry_schedule(mlb.upcoming),key=lambda g:(g["gameDate"],g["gamePk"]))
     candidates=[g for g in games if g["gamePk"] not in seen and due(g["gameDate"],utcnow())]
     capture_attempts=state.setdefault("mlb_capture_attempts",{})
     candidates.sort(key=lambda g:(capture_attempts.get(str(g["gamePk"]),""),g["gameDate"],g["gamePk"]))
