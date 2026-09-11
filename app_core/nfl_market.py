@@ -111,11 +111,15 @@ def captures(records):
 
 def final_score(event, captured, observed):
     ident = identity(event)
-    if any(ident[k] != captured[k] for k in ("event_id", "home", "away", "start")):
+    if any(ident[k] != captured[k] for k in ("event_id", "home", "away")):
+        raise ValueError("nfl_score_identity_or_schedule_changed")
+    original_start=timestamp(captured['start'])
+    reported_start=timestamp(ident['start'])
+    if original_start is None or abs(reported_start-original_start)>timedelta(minutes=15):
         raise ValueError("nfl_score_identity_or_schedule_changed")
     if event.get("completed") is not True:
         return None
-    if not timestamp(captured["captured_at"]) < timestamp(ident["start"]) <= observed:
+    if not timestamp(captured["captured_at"]) < min(original_start,reported_start) or max(original_start,reported_start)>observed:
         raise ValueError("nfl_score_timing")
     updated = timestamp(event.get("last_update"))
     if updated is None or not timestamp(ident["start"]) <= updated <= observed:
@@ -126,7 +130,7 @@ def final_score(event, captured, observed):
     scores = {s["name"]: number(s["score"]) for s in values}
     if any(v < 0 or v != int(v) for v in scores.values()):
         raise ValueError("nfl_invalid_score")
-    return {**ident, "home_score": int(scores[ident["home"]]), "away_score": int(scores[ident["away"]]),
+    return {**ident, "start":captured["start"], "reported_start":ident["start"], "home_score": int(scores[ident["home"]]), "away_score": int(scores[ident["away"]]),
             "provider_updated_at": updated.isoformat()}
 
 

@@ -59,7 +59,7 @@ def test_mlb_skips_existing_and_outside_window(tmp_path,monkeypatch):
              {"kind":"capture","data":{"model_id":"m","events":[{"game_id":1,"start":(now+timedelta(hours=1)).isoformat()}]}}]
     monkeypatch.setattr(s.ms,"records",lambda *a:records)
     monkeypatch.setattr(s.mlb,"runtime_hash",lambda:"h")
-    monkeypatch.setattr(s.mlb,"upcoming",lambda:[{"gamePk":1,"gameDate":(now+timedelta(hours=1)).isoformat()},
+    monkeypatch.setattr(s,"upcoming_mlb",lambda:[{"gamePk":1,"gameDate":(now+timedelta(hours=1)).isoformat()},
         {"gamePk":2,"gameDate":(now+timedelta(hours=3)).isoformat()}])
     monkeypatch.setattr(s.mlb,"capture",lambda *a:saved.append(a))
     r=s.run_mlb(tmp_path/"x",{},lambda:None)
@@ -115,7 +115,7 @@ def test_mlb_missing_probables_are_not_failure(tmp_path,monkeypatch):
     records=[{"kind":"model","id":"m","data":{"runtime_hash":"h"}}]
     monkeypatch.setattr(s.ms,"records",lambda *a:records)
     monkeypatch.setattr(s.mlb,"runtime_hash",lambda:"h")
-    monkeypatch.setattr(s.mlb,"upcoming",lambda:[{"gamePk":i,"gameDate":(now+timedelta(hours=1)).isoformat()} for i in range(10)])
+    monkeypatch.setattr(s,"upcoming_mlb",lambda:[{"gamePk":i,"gameDate":(now+timedelta(hours=1)).isoformat()} for i in range(10)])
     calls=[]
     def capture(gid,path):
         calls.append(gid)
@@ -165,3 +165,40 @@ def test_checkpoint_order_when_clock_does_not_advance(monkeypatch):
     state=s.checkpoint(c,"f")
     state["usage"]=3;s.checkpoint(c,"f",state)
     assert s.checkpoint(c,"f")["usage"]==3
+
+
+def test_schedule_retry_is_bounded_and_recovers(monkeypatch):
+    import requests
+    monkeypatch.setattr('time.sleep',lambda _:None)
+    calls=[]
+    def transient():
+        calls.append(1)
+        if len(calls)<3:raise requests.ReadTimeout('private URL')
+        return ['schedule']
+    assert s.retry_schedule(transient)==['schedule']
+    assert len(calls)==3
+    calls.clear()
+    def failed():
+        calls.append(1)
+        raise requests.ReadTimeout('private URL')
+    with pytest.raises(requests.ReadTimeout):s.retry_schedule(failed)
+    assert len(calls)==3
+
+
+def test_schedule_validation_errors_are_not_retried():
+    calls=[]
+    def invalid():
+        calls.append(1)
+        raise ValueError('invalid payload')
+    with pytest.raises(ValueError):s.retry_schedule(invalid)
+    assert calls==[1]
+
+
+def test_mlb_schedule_dates_cover_midnight_without_entire_season(monkeypatch):
+    monkeypatch.setattr(s,'utcnow',lambda:datetime(2026,9,12,3,30,tzinfo=timezone.utc))
+    calls=[]
+    monkeypatch.setattr(s.mlb,'fetch',lambda endpoint,params:calls.append(params) or {'dates':[]})
+    assert s.upcoming_mlb()==[]
+    assert calls[0]['startDate']=='2026-09-11'
+    assert calls[0]['endDate']=='2026-09-12'
+    assert 'season' not in calls[0]
