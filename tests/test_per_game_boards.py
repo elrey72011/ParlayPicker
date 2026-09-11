@@ -141,3 +141,46 @@ def test_novig_quote_age_and_roundtrip_public_metadata():
     assert leg['quote_source']=='Novig' and leg['quote_time']=='2026-09-11T19:59:00+00:00'
     assert eligible(leg,datetime.fromisoformat('2026-09-11T20:01:00+00:00'))
     assert not eligible(leg,datetime.fromisoformat('2026-09-11T20:14:30+00:00'))
+
+
+def test_college_fallback_prefers_novig_then_exact_ranked_sportsbook():
+    board=pd.DataFrame([final(league='NCAAF',export_run_id='20260911T200000.000000Z')])
+    dk=quoted_candidate('draftkings',league='NCAAF',best_available_rank=1)
+    nv=quoted_candidate(league='NCAAF',best_available_rank=2)
+    for family in ('overall','totals'):
+        row=per_game_board(board,pd.DataFrame([dk,nv]),family,novig_only=True,college_fallback=True).iloc[0]
+        assert row.quote_source=='Novig'
+        row=per_game_board(board,pd.DataFrame([dk]),family,novig_only=True,college_fallback=True).iloc[0]
+        assert row.quote_source=='DraftKings' and row.odds==-105
+        assert row.win_probability==.55 and row.Play_Stake==0 and row.status=='PASS'
+        assert 'fallback' in row.quote_reason.lower()
+    for bad in (dict(dk,total_line=9),dict(dk,odds_american=-115),dict(dk,market_type='total_over'),dict(dk,export_run_id='20260911T210000.000000Z')):
+        row=per_game_board(board,pd.DataFrame([bad]),novig_only=True,college_fallback=True).iloc[0]
+        assert row.quote_source=='Unavailable'
+    mlb=pd.DataFrame([final(export_run_id='20260911T200000.000000Z')])
+    assert per_game_board(mlb,pd.DataFrame([quoted_candidate('draftkings')]),novig_only=True,college_fallback=True).iloc[0].quote_source=='Unavailable'
+
+
+def test_college_sportsbook_package_lock_and_report_preserve_source():
+    from app_core.public_board import build_package, validate_package
+    from app_core.public_history import eligible, report
+    from app_core.locked_picks import lock_candidates, locked_selections
+    from datetime import datetime
+    board=pd.DataFrame([final(league='NCAAF',export_run_id='20260911T200000.000000Z',game_time_est='2026-09-11 7:00 PM ET')])
+    audit=pd.DataFrame([quoted_candidate('fanduel',league='NCAAF')])
+    package=build_package(*[per_game_board(board,audit,f,novig_only=True,college_fallback=True) for f in ('overall','sides','totals')])
+    validate_package(package)
+    leg=package['games']['overall'][0]
+    assert leg['quote_source']=='FanDuel'
+    at='2026-09-11T20:01:00+00:00'
+    assert eligible(leg,datetime.fromisoformat(at))
+    assert not eligible(dict(leg,sport='MLB'),datetime.fromisoformat(at))
+    assert not eligible(leg,datetime.fromisoformat('2026-09-11T20:16:00+00:00'))
+    locks=lock_candidates(package,at)
+    assert len(locks)==1 and locked_selections(locks)[0]['legs'][0]['quote_source']=='FanDuel'
+    result=report([],[],locks=locks)[0]
+    assert result['quote_source']=='FanDuel'
+    assert result['picks'].endswith('Under 8.5')
+
+    package.update(schema_version=5,results=[result])
+    validate_package(package)

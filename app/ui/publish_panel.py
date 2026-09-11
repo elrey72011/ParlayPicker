@@ -124,7 +124,7 @@ def render_publish_panel(games, candidates, props=None, dfs=None):
     rebuild = st.button('Refresh preview', key='publication_build')
     if saved is None or rebuild:
         try:
-            boards = [per_game_board(games,candidates,family,novig_only=True) for family in ('overall','sides','totals')]
+            boards = [per_game_board(games,candidates,family,novig_only=True,college_fallback=True) for family in ('overall','sides','totals')]
             package = build_package(*boards, props=selected_props,
                                     dfs=selected_dfs, dfs_sport=chosen if chosen!='None' else None,
                                     dfs_slate=slate, dfs_start=start)

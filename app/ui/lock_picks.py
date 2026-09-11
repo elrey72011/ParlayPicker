@@ -30,6 +30,7 @@ def render_lock_picks(package, setting):
         if existing:
             st.dataframe(pd.DataFrame([{'Date':r['date'], 'Game':r['legs'][0]['game'],
                 'Locked pick':r['legs'][0]['pick'], 'Odds':r['legs'][0]['odds'],
+                'Sportsbook':r['legs'][0].get('quote_source','Not recorded'),
                 'Locked at (UTC)':r['published_at'],
                 'Website':'Published' if r['id'] in published_ids else 'Not verified as published'} for r in existing]), hide_index=True)
         render_lock_correction(package, setting, saved)
@@ -42,7 +43,7 @@ def render_lock_picks(package, setting):
         locked_today=sum(r['date']==today for r in existing)
         st.caption(f'Locked today: {locked_today} · Not locked and eligible now: {len(choices)}')
         if not choices:
-            st.info('No new eligible picks to lock. Click Refresh picks in the sidebar, then return here and select picks within 15 minutes. Run Player Props and Refresh preview do not refresh game quotes. Games without a verified Novig quote or that have started cannot be locked. Existing locks remain saved.')
+            st.info('No new eligible picks to lock. Click Refresh picks in the sidebar, then return here and select picks within 15 minutes. Run Player Props and Refresh preview do not refresh game quotes. Games without a verified sportsbook quote or that have started cannot be locked. Existing locks remain saved.')
             st.button('Lock selected picks', key='lock_picks_action', disabled=True)
             return
         selected = st.multiselect('Picks to lock', list(choices), default=list(choices),
