@@ -78,3 +78,49 @@ def test_dfs_requires_complete_unique_roster_and_slate():
     assert validate_package(package)['dfs'][0]['salary_remaining']==1000
     df['RB1']=df['QB']
     with pytest.raises(ValueError):build_package(*boards(),**kwargs)
+
+
+def test_navigation_survives_cached_legacy_renderer():
+    from scripts.publish_board import ROOT
+    from app_core.public_site_shell import header, STYLES
+    template = (ROOT / 'publishing/board.html').read_text(encoding='utf-8')
+    # A running Streamlit worker can retain the renderer from before navigation.
+    legacy_html = template.replace('__PUBLIC_DATA__', json.dumps(build_package(*boards())))
+    assert '__SITE_' not in legacy_html
+    assert header(board=True) in legacy_html
+    assert STYLES in legacy_html
+    assert 'href="/how-picks-work/"' in legacy_html
+
+
+def test_locked_selection_render_keeps_original_record(tmp_path):
+    import os
+    import shutil
+    import subprocess
+    from scripts.publish_board import ROOT
+    node = os.environ.get('NODE_BINARY') or shutil.which('node')
+    if not node:
+        pytest.skip('Node is required for the browser rendering regression')
+    template = (ROOT / 'publishing/board.html').read_text(encoding='utf-8')
+    functions = template.split('function lockedRows(', 1)[1].split('function renderParlays(', 1)[0]
+    script = r"""
+const assert=require('node:assert/strict');
+class Element {constructor(tag,text=''){this.tag=tag;this.textContent=text;this.children=[];} append(...v){this.children.push(...v)} replaceChildren(){this.children=[]} addEventListener(){} }
+const el=(tag,text)=>new Element(tag,text);
+const root=new Element('div');const document={getElementById:()=>root};
+const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York'}).format(new Date());
+const original={group:'Locked',category:'overall',date:today,picks:'A at B: Over 65.5',odds:'-115',published_at:new Date().toISOString(),outcome:'PENDING'};
+const availableResults=[original,{...original,group:'Research',picks:'A at B: Under 63.5'},{...original,date:'2000-01-01'}];
+""" + 'function lockedRows(' + functions + r"""
+renderLockedPicks();
+const content=JSON.stringify(root);
+assert.ok(content.includes('Over 65.5'));
+assert.ok(content.includes('-115'));
+assert.ok(content.includes('LOCKED'));
+assert.ok(!content.includes('Under 63.5'));
+assert.equal(lockedRows(availableResults,today).length,1);
+assert.equal(original.outcome,'PENDING');
+availableResults.length=0;renderLockedPicks();assert.ok(JSON.stringify(root).includes('No locked picks for today'));
+"""
+    target=tmp_path/'locked-render.cjs'
+    target.write_text(script,encoding='utf-8')
+    subprocess.run([node,str(target)],check=True,capture_output=True,text=True)
