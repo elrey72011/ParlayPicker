@@ -990,7 +990,7 @@ def _attach_kelly_to_best_picks(best_picks_df: pd.DataFrame, portfolio_df: pd.Da
     return out
 
 def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[str]]:
-    """Run the full analysis pipeline. Returns (state_updates, warnings, errors).
+    """Run game analysis without collecting or reviewing player props. Returns (state_updates, warnings, errors).
     Contains NO st.* calls.
     """
     from app_core.stage_timing import StageTimer
@@ -1563,159 +1563,6 @@ def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[
         else analysis_df.iloc[0:0]
     )
 
-    # League-isolated player-prop cards. MLB retains its evidence-gated controlled
-    # rollout; NFL launches research-only until its own graded history proves a market.
-    # A prop-feed hiccup can never break the main game card.
-    timer.start("Player props and prop reviews")
-    strikeout_prop_card = pd.DataFrame()
-    try:
-        from app_core.weights_config import (
-            ENABLE_NFL_PLAYER_PROPS,
-            ENABLE_STRIKEOUT_PROPS_PRODUCTION,
-            STRIKEOUT_PROP_KELLY_PER_PICK_PCT,
-            STRIKEOUT_PROP_KELLY_TOTAL_PCT,
-            STRIKEOUT_PROP_KELLY_FRACTION,
-        )
-        if ENABLE_STRIKEOUT_PROPS_PRODUCTION or ENABLE_NFL_PLAYER_PROPS:
-            from datetime import datetime
-            import pytz
-            from app_core.odds_api import TheOddsAPIClient
-            from app_core.prop_runner import build_prop_card
-            from core.streamlit_pipeline import _get_odds_api_key
-
-            _prop_key = _get_odds_api_key()
-            if _prop_key:
-                _prop_date = datetime.now(pytz.timezone("America/New_York")).strftime("%Y-%m-%d")
-                _selected_prop_sports = {
-                    str(value).strip().upper()
-                    for value in controls.get("sports", [])
-                }
-                _prop_client = TheOddsAPIClient(api_key=_prop_key, markets="h2h")
-                _prop_frames = []
-                _nfl_game_count = int(
-                    best_picks_df.get(
-                        "league", pd.Series("", index=best_picks_df.index)
-                    ).fillna("").astype(str).str.upper().eq("NFL").sum()
-                )
-                diagnostics["nfl_prop_requested"] = bool(
-                    ENABLE_NFL_PLAYER_PROPS and "NFL" in _selected_prop_sports
-                )
-                diagnostics["nfl_selected_game_count"] = _nfl_game_count
-                if ENABLE_STRIKEOUT_PROPS_PRODUCTION and "MLB" in _selected_prop_sports:
-                    _mlb_prop_card = build_prop_card(
-                        _prop_client,
-                        _prop_date,
-                        int(_prop_date[:4]),
-                        float(controls["bankroll"]),
-                        kelly_per_pick_pct=STRIKEOUT_PROP_KELLY_PER_PICK_PCT,
-                        kelly_total_pct=STRIKEOUT_PROP_KELLY_TOTAL_PCT,
-                        kelly_fraction=STRIKEOUT_PROP_KELLY_FRACTION,
-                        prop_results_log=controls.get("prop_results_log"),
-                        diagnostics=diagnostics,
-                    )
-                    if not _mlb_prop_card.empty:
-                        _prop_frames.append(_mlb_prop_card)
-                if ENABLE_NFL_PLAYER_PROPS and "NFL" in _selected_prop_sports:
-                    from app_core.nfl_prop_pipeline import build_nfl_prop_card
-
-                    _nfl_prop_card = build_nfl_prop_card(
-                        _prop_client,
-                        _prop_date,
-                        int(_prop_date[:4]),
-                        diagnostics=diagnostics,
-                    )
-                    if not _nfl_prop_card.empty:
-                        _prop_frames.append(_nfl_prop_card)
-                if _prop_frames:
-                    strikeout_prop_card = pd.concat(
-                        _prop_frames, ignore_index=True, sort=False
-                    )
-                    from app_core.nfl_prop_pipeline import attach_nfl_prop_coverage
-
-                    strikeout_prop_card = attach_nfl_prop_coverage(
-                        strikeout_prop_card,
-                        _selected_prop_sports,
-                        diagnostics,
-                        nfl_game_count=_nfl_game_count,
-                    )
-                    if gemini_gate_enabled:
-                        from integrations.gemini_client import run_gemini_prop_analysis
-
-                        logger.info(
-                            "Firing Gemini API for %s player props...",
-                            len(strikeout_prop_card),
-                        )
-                        strikeout_prop_card = run_gemini_prop_analysis(
-                            strikeout_prop_card,
-                            st.session_state,
-                        )
-                    from app_core.gemini_bet_gate import apply_gemini_bet_gate
-
-                    strikeout_prop_card = apply_gemini_bet_gate(
-                        strikeout_prop_card,
-                        enabled=gemini_gate_enabled,
-                        product="prop",
-                        diagnostics=diagnostics,
-                    )
-                    if gemini_gate_enabled:
-                        # Re-label rows after the secondary gate zeroes held stakes.
-                        from app_core.prop_runner import apply_prop_stake_status
-
-                        strikeout_prop_card = apply_prop_stake_status(
-                            strikeout_prop_card
-                        )
-                _prop_stake_status = strikeout_prop_card.get(
-                    "Stake_Status", pd.Series("", index=strikeout_prop_card.index)
-                ).astype(str).str.strip()
-                diagnostics["strikeout_prop_actionable_count"] = int(
-                    _prop_stake_status.eq("Funded").sum()
-                )
-                diagnostics["strikeout_prop_research_count"] = int(
-                    _prop_stake_status.isin(
-                        ["Research / No Stake", "Qualified / No Stake"]
-                    ).sum()
-                )
-
-                # The legacy strategic-parlay engine only sees game picks. When
-                # that board correctly abstains, publish the same strict cross-
-                # board duos shown on Best Picks so the parlay export can still
-                # use proven player props. Probationary markets are excluded by
-                # build_best_duos(strict=True).
-                if parlays_df is None or parlays_df.empty:
-                    from app_core.best_duos import build_tiered_prop_parlays
-
-                    _prop_parlays = build_tiered_prop_parlays(
-                        best_picks_df,
-                        strikeout_prop_card,
-                        bankroll=float(controls["bankroll"]),
-                    )
-                    if not _prop_parlays.empty:
-                        parlays_df = _prop_parlays
-                        diagnostics["strict_prop_parlay_fallback_count"] = int(len(parlays_df))
-                        diagnostics["controlled_prop_parlay_count"] = int(
-                            _prop_parlays["risk_tier"].eq("Controlled").sum()
-                        )
-                        diagnostics["research_prop_parlay_count"] = int(
-                            _prop_parlays["risk_tier"].eq("Probation / Research").sum()
-                        )
-                        diagnostics["probation_parlay_fallback"] = bool(
-                            _prop_parlays.get(
-                                "probation_parlay_mode",
-                                pd.Series(False, index=_prop_parlays.index),
-                            ).fillna(False).astype(bool).any()
-                        )
-    except Exception as exc:  # never let the prop slice break the main card
-        logger.warning("strikeout prop card build failed: %s", exc)
-        diagnostics["strikeout_prop_error"] = str(exc)
-        diagnostics["strikeout_prop_feed_status"] = "unexpected_error"
-        diagnostics["strikeout_prop_feed_error_type"] = type(exc).__name__
-        _prop_error_detail = type(exc).__name__
-        if isinstance(exc, SyntaxError):
-            _syntax_file = str(getattr(exc, "filename", "") or "").replace("\\", "/").rsplit("/", 1)[-1]
-            _syntax_line = getattr(exc, "lineno", None)
-            _prop_error_detail = f"SyntaxError in {_syntax_file or 'unknown file'}:{_syntax_line or '?'}"
-        diagnostics["strikeout_prop_error_detail"] = _prop_error_detail
-
     # Final parlay product boundary. Game parlays produced by the strict engine
     # already carry premium_eligible=True. Prop fallback parlays are Premium only
     # when they are Controlled and not probationary; research rows are explicit
@@ -1843,7 +1690,7 @@ def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[
             diagnostics["prediction_snapshot_saved"] = True
             best_picks_df = saved_card
             # All exports from the run share the final decision's microsecond run id.
-            for frame in (analysis_df, parlays_df, portfolio_df, strikeout_prop_card):
+            for frame in (analysis_df, parlays_df, portfolio_df):
                 if isinstance(frame, pd.DataFrame) and not frame.empty:
                     frame["export_run_id"] = saved_card["export_run_id"].iloc[0]
             for frame in per_leg.values():
@@ -1858,7 +1705,7 @@ def _run_pipeline(controls: dict, progress=None) -> tuple[dict, list[str], list[
     state_updates = {
         "pipeline_status": "using stored results",
         "pipeline_running": False,
-        "strikeout_prop_card": strikeout_prop_card,
+        "games_analyzed_at": pd.Timestamp.now(tz="UTC").isoformat(),
         "analysis_df": analysis_df,
         "parlays_df": parlays_df,
         "portfolio_df": portfolio_df,
@@ -1918,12 +1765,14 @@ def main() -> None:
     if should_run and not st.session_state.get("pipeline_running", False):
         st.session_state["pipeline_running"] = True
         try:
-            with st.spinner("Running analysis..."):
+            with st.status("Running game analysis...", expanded=True) as game_status:
                 progress_text = st.empty()
                 state_updates, pipe_warnings, pipe_errors = _run_pipeline(
-                    controls, progress=lambda stage: progress_text.info("Running: " + stage)
+                    controls, progress=lambda stage: game_status.write(stage)
                 )
                 progress_text.empty()
+                game_seconds = sum(state_updates.get("diagnostics", {}).get("stage_seconds", {}).values())
+                game_status.update(label=f"Game analysis finished in {game_seconds:.0f}s", state="complete")
             st.session_state.update(state_updates)
             st.session_state["last_successful_pipeline_signature"] = (
                 _analysis_input_signature(controls)
@@ -1942,6 +1791,23 @@ def main() -> None:
             # CRITICAL: Always release the pipeline lock so future runs are not blocked
             st.session_state["pipeline_running"] = False
 
+    if controls.get("run_player_props") and not st.session_state.get("pipeline_running", False):
+        from app_core.prop_analysis import run_prop_analysis
+        st.session_state["pipeline_running"] = True
+        try:
+            with st.status("Running player props...", expanded=True) as prop_status:
+                def prop_progress(stage):
+                    prop_status.write(stage)
+                updates = run_prop_analysis(controls, st.session_state,
+                    st.session_state.get("best_picks_df"), progress=prop_progress)
+                st.session_state.update(updates)
+                seconds = sum(updates["props_diagnostics"]["stage_seconds"].values())
+                prop_status.update(label=f"Player props completed in {seconds:.0f}s", state="complete")
+        except Exception as exc:
+            st.error("Player prop analysis did not complete. Previous game and prop results were retained. " + type(exc).__name__)
+        finally:
+            st.session_state["pipeline_running"] = False
+
     analysis_df = st.session_state["analysis_df"]
 
     parlays_df = st.session_state["parlays_df"]
@@ -1954,12 +1820,13 @@ def main() -> None:
 
     best_picks_df = st.session_state["best_picks_df"]
 
-    diagnostics = st.session_state.get("diagnostics", {})
+    diagnostics = dict(st.session_state.get("diagnostics", {}))
+    diagnostics.update({k: v for k, v in st.session_state.get("props_diagnostics", {}).items() if k != "stage_seconds"})
 
     if _analysis_inputs_stale(st.session_state, controls):
         st.error(
             "Analysis inputs changed after the displayed results were generated. "
-            "Click **Run Master Analysis** to apply the current TheOver files. "
+            "Click **Run Game Analysis** to apply the current TheOver files. "
             "Stale picks and exports are hidden until the rerun completes."
         )
         return
@@ -1973,7 +1840,7 @@ def main() -> None:
 
 
     publication_games = pd.DataFrame()
-    publication_props = pd.DataFrame()
+    publication_props = st.session_state.get("strikeout_prop_card", pd.DataFrame()).copy()
     publication_dfs = {}
     today_tab, details_tab, tab_performance, workspace_tab = _render_main_tabs()
     with workspace_tab:
@@ -2012,12 +1879,18 @@ def main() -> None:
         render_results_dashboard(perf_df)
 
     with tab6:
+        with st.expander("Last player-prop stage timings", expanded=False):
+            prop_timings = st.session_state.get("props_diagnostics", {}).get("stage_seconds", {})
+            if prop_timings:
+                st.dataframe(pd.DataFrame([{"Stage": k, "Seconds": v} for k,v in prop_timings.items()]), hide_index=True)
+            else:
+                st.caption("Run Player Props to collect timings.")
         with st.expander("Last analysis stage timings", expanded=False):
             stage_seconds = st.session_state.get("diagnostics", {}).get("stage_seconds", {})
             if stage_seconds:
                 st.dataframe(pd.DataFrame([{"Stage": k, "Seconds": v} for k,v in stage_seconds.items()]), hide_index=True)
             else:
-                st.caption("Run Master Analysis to collect timings.")
+                st.caption("Run Game Analysis to collect timings.")
         with st.expander("Prediction Evidence Status", expanded=False):
             from app_core.evidence_health import evidence_health
             from app_core.evidence_remote import restore_once, restore, sync
@@ -2051,6 +1924,12 @@ def main() -> None:
         render_readiness_dashboard(diagnostics.get("candidate_audit_df"), best_picks_df, diagnostics)
 
     if analysis_df is None or analysis_df.empty:
+        saved_props = st.session_state.get("strikeout_prop_card", pd.DataFrame())
+        if not saved_props.empty:
+            with tab3:
+                st.subheader("Saved player props")
+                st.caption("Run Game Analysis to prepare the game boards and combined publishing preview.")
+                st.dataframe(saved_props, hide_index=True)
         return
 
 
@@ -3128,24 +3007,16 @@ def main() -> None:
             except Exception as exc:  # never let the lean view break the main card
                 logger.warning("all-games lean card failed: %s", exc)
 
+            prop_parlays = st.session_state.get("prop_parlays_df", pd.DataFrame())
+            if not prop_parlays.empty:
+                st.subheader("Player-prop parlays")
+                st.caption("From the saved player-prop run; separate from the game-parlay card.")
+                st.dataframe(prop_parlays, hide_index=True)
             # ── MLB player props (separate softer-market card) ──
             prop_card = st.session_state.get("strikeout_prop_card")
             if prop_card is not None and not prop_card.empty:
-                from app_core.prop_runner import stamp_prop_export
-
-                # All funded, all-grading, and research prop CSVs inherit this
-                # self-identifying build stamp before they are split.
-                shared_export_run_id = ""
-                if "best_picks_export" in locals() and "export_run_id" in best_picks_export.columns:
-                    run_ids = best_picks_export["export_run_id"].dropna().astype(str).str.strip()
-                    run_ids = run_ids[run_ids.ne("")]
-                    if not run_ids.empty:
-                        shared_export_run_id = run_ids.iloc[0]
-                prop_card = stamp_prop_export(
-                    prop_card,
-                    PIPELINE_BUILD,
-                    export_run_id=shared_export_run_id or None,
-                )
+                # Keep the original prop run ID, build and timestamps on navigation.
+                prop_card = prop_card.copy()
                 from app_core.export_scope import label_wager_export
 
                 prop_card = label_wager_export(prop_card)

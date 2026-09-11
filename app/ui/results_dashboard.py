@@ -420,7 +420,7 @@ def _render_candidate_results_recap(
             from app_core.prediction_evidence import materialize
             current_graded, _ = materialize()
             if current_graded.empty:
-                st.caption("Run Master Analysis to save candidates automatically, or upload a prior Candidate Selection Audit.")
+                st.caption("Run Game Analysis to save candidates automatically, or upload a prior Candidate Selection Audit.")
                 return
         else:
             uploaded_candidate_audit.seek(0)

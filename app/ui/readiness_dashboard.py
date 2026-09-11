@@ -28,7 +28,7 @@ def render_readiness_dashboard(audit=None, final=None, diagnostics=None):
             audit, final = by_id[sid]
             diagnostics = None  # Current run warnings must not describe an older run.
         if audit is None or audit.empty:
-            st.info("No candidate evidence is available for this run. Run Master Analysis or select a saved snapshot.")
+            st.info("No candidate evidence is available for this run. Run Game Analysis or select a saved snapshot.")
             return
         report = build_readiness(audit, final, diagnostics=diagnostics)
         counts = report["counts"]

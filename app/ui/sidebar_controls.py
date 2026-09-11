@@ -131,13 +131,14 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
     bankroll = st.sidebar.number_input("Bankroll", min_value=100.0, value=1000.0, step=50.0, key="bankroll")
 
     st.sidebar.button(
-        "Run Master Analysis",
+        "Run Game Analysis",
         type="primary",
         on_click=_request_run_analysis,
         args=(st.session_state,),
     )
 
-    st.sidebar.caption("Run after updating your inputs. Research and uploads are below.")
+    run_player_props = st.sidebar.button("Run Player Props", key="run_player_props_button")
+    st.sidebar.caption("Game and prop analysis run separately. Each keeps its own saved results.")
     advanced = st.sidebar.expander("Settings & research", expanded=False)
     advanced.subheader("Analysis Engines")
 
@@ -409,4 +410,5 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
         "theover_totals": theover_totals,
         "prop_results_log": active_ledger,
         "run_analysis_counter": run_counter,
+        "run_player_props": run_player_props,
     }

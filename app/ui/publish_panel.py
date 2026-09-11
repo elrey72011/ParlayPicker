@@ -42,11 +42,30 @@ def render_publish_panel(games, candidates, props=None, dfs=None):
     from app.ui.public_results import render_history
     public_results = render_history(setting)
     if games is None or games.empty:
-        st.info('Run Master Analysis to prepare game picks first.')
+        st.info('Run Game Analysis to prepare game picks first.')
         return
     props = props if isinstance(props,pd.DataFrame) else pd.DataFrame()
+    def describe_dates(frame):
+        from app_core.public_board import timestamp
+        values = []
+        for _, row in frame.iterrows():
+            raw = row.get('prediction_generated_at')
+            if pd.isna(raw) or not str(raw or '').strip():
+                raw = row.get('export_run_id')
+            try:
+                value = timestamp(raw)
+                if value:
+                    values.append(value)
+            except (ValueError, TypeError):
+                pass
+        return min(values) if values else None
+    game_date, prop_date = describe_dates(games), describe_dates(props)
+    st.caption('Game analysis (UTC): ' + str(game_date or 'Unknown') +
+               ' · Player props (UTC): ' + str(prop_date or 'Not run'))
+    if prop_date and pd.Timestamp.now(tz='UTC') - pd.Timestamp(prop_date) > pd.Timedelta(minutes=15):
+        st.warning('Saved player props are older than 15 minutes. Run Player Props to refresh them before including them as current selections.')
     dfs = dfs or {}
-    include_props = st.checkbox('Include current player props', value=False, disabled=props.empty)
+    include_props = st.checkbox('Include saved player props', value=False, disabled=props.empty)
     choices = ['None', *sorted(k for k,v in dfs.items() if isinstance(v,pd.DataFrame) and not v.empty)]
     chosen = st.selectbox('DraftKings slate to include', choices)
     slate = start = ''
