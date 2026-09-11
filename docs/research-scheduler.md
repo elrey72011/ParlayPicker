@@ -52,3 +52,10 @@ Each operating-window cycle restores confirmed publications, imported research r
 New score revisions and grading status are immutable and verified in Drive. Already settled entries are not automatically rechecked; use manual grading for score corrections or older unresolved games. Imported recaps remain separately labeled research, with no claim of verified pregame publication. Provider/storage errors fail the workflow and expose only exception classes in its summary.
 
 In Streamlit, open **Workspace > Preview & Publish > Public results history**, enter the publishing token and select **Restore public history from Drive**. The panel shows the latest saved automatic grading status, last successful cycle and pending category count. A successful cycle means the scheduled check completed, not that every game settled. Build a fresh preview and publish it manually to update Netlify. The scheduled job never deploys the public site. Verify one workflow run and restore its status after enabling this setting.
+
+
+## Schedule and final-score resilience
+
+The MLB scheduler requests only the Eastern dates intersecting its two-hour capture window, rather than a full season of hydrated schedule data. Schedule reads retry timeouts and connection failures at most twice, with short backoff. Exhausted retries still fail visibly. This does not change frozen model files or require refreezing.
+
+NFL score grading requires the same provider event ID and exact home/away teams. Kickoff revisions of at most 15 minutes are accepted only when the original capture predates both scheduled times, both times are in the past, and the final-score timestamp and score pair validate. Scores retain the original start and a separate reported start for audit. Larger schedule shifts and identity changes remain rejected. Rejection diagnostics contain safe reason codes and timing fields; invalid results are never marked as wins or losses.

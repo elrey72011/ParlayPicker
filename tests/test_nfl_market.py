@@ -159,3 +159,21 @@ def test_duplicate_events_and_post_kickoff_odds_rejected(tmp_path,monkeypatch):
     def get(url,**kw):return Response([e] if url.endswith('events') else [event(start=NOW-timedelta(seconds=1))])
     r=n.run(tmp_path/'x','key',lambda:None,get)
     assert r['captured']==0 and r['excluded_markets']['identity_or_pregame_window']==1
+
+
+def test_minor_kickoff_corrections_preserve_original_capture(tmp_path):
+    e,captured=saved_capture(tmp_path/'timing',NOW-timedelta(hours=4))
+    e.update(completed=True,last_update=NOW.isoformat(),scores=[{'name':e['home_team'],'score':'23'},{'name':e['away_team'],'score':'20'}])
+    for seconds in (202,145,-202):
+        changed={**e,'commence_time':(n.timestamp(captured['start'])+timedelta(seconds=seconds)).isoformat()}
+        score=n.final_score(changed,captured,NOW)
+        assert score['start']==captured['start']
+        assert score['reported_start']==changed['commence_time']
+        assert score['home_score']==23
+    with pytest.raises(ValueError):
+        n.final_score({**changed,'home_team':'Different team'},captured,NOW)
+    with pytest.raises(ValueError):
+        n.final_score({**e,'commence_time':(n.timestamp(captured['start'])+timedelta(minutes=16)).isoformat()},captured,NOW)
+    late={**captured,'captured_at':(n.timestamp(captured['start'])-timedelta(seconds=30)).isoformat()}
+    with pytest.raises(ValueError,match='timing'):
+        n.final_score({**e,'commence_time':(n.timestamp(captured['start'])-timedelta(minutes=2)).isoformat()},late,NOW)
