@@ -4,13 +4,15 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 import streamlit as st
 from app_core.locked_picks import lock_candidates
-from app_core.public_history import now, report
+from app_core.public_history import now, report, digest
 from app_core.public_record import current_records
 
 
 def render_lock_picks(package, setting):
     from app.ui.public_results import history
     key = 'public_results_' + str(setting('PARLAYPICKER_NETLIFY_SITE_ID')).strip()
+    notice=st.session_state.pop('lock_correction_notice',None)
+    if notice:st.info(notice)
     saved = st.session_state.get(key)
     if saved is None:
         return
@@ -30,6 +32,7 @@ def render_lock_picks(package, setting):
                 'Locked pick':r['legs'][0]['pick'], 'Odds':r['legs'][0]['odds'],
                 'Locked at (UTC)':r['published_at'],
                 'Website':'Published' if r['id'] in published_ids else 'Not verified as published'} for r in existing]), hide_index=True)
+        render_lock_correction(package, setting, saved)
         try:
             choices = {r['id']:r for r in lock_candidates(package, now()) if r['id'] not in {x['id'] for x in existing}}
         except ValueError:
@@ -65,3 +68,33 @@ def render_lock_picks(package, setting):
                 st.error('Lock could not complete. Restore history to check saved locks, then rebuild the preview.')
             except Exception:
                 st.error('Drive lock save or verification failed. Some selections may have saved; restore history before retrying.')
+
+
+def render_lock_correction(package, setting, saved):
+    from app.ui.public_results import history
+    today = datetime.fromisoformat(now()).astimezone(ZoneInfo('America/New_York')).date().isoformat()
+    rows = {digest(r):r for r in saved.get('locks',[]) if r['date']==today}
+    if not rows:
+        return
+    with st.expander("Correct today's locks"):
+        st.caption('Keep the checked locks. Unchecked locks are archived as removed by owner and excluded from the locked record. This does not cancel bets. Relocking requires a fresh pregame quote.')
+        keep = st.multiselect('Locks to keep',list(rows),default=list(rows),
+            format_func=lambda key:rows[key]['legs'][0]['game']+': '+rows[key]['legs'][0]['pick'],key='locks_to_keep')
+        removed = set(rows)-set(keep)
+        st.write(f'{len(keep)} locks kept; {len(removed)} locks will be removed.')
+        reason = st.text_input('Correction reason',value='Locked unintentionally before Novig quote audit',key='lock_correction_reason')
+        if st.button('Remove unchecked locks and publish',key='remove_locks_action',disabled=not removed or not reason.strip()):
+            try:
+                store=history(setting)
+                saved['locks']=store.remove_locks(removed,reason)
+                saved['rows']=report(saved['publications'],saved['revisions'],saved.get('imports',[]),saved['locks'])
+                from copy import deepcopy
+                from app_core import public_prop_history
+                from app.ui.sftp_publish import publish_action
+                updated=deepcopy(package)
+                updated['results']=current_records(saved['rows']+public_prop_history.report(saved['publications'],saved.get('prop_revisions',[]),saved.get('prop_imports',[])))
+                st.session_state['lock_correction_notice']='Lock correction saved. '+publish_action(updated,setting)
+                st.session_state.pop('publication_preview',None)
+                st.rerun()
+            except Exception:
+                st.error('Correction or publication could not complete. Restore history to check saved changes before retrying.')
