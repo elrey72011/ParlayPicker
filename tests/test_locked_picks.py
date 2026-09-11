@@ -83,3 +83,39 @@ def test_public_schema_scope(store):
     validate_package(package)
     package['results'][0]['category']='sides'
     with pytest.raises(ValueError):validate_package(package)
+
+
+def test_removal_is_archived_idempotent_and_excluded_after_restore(store):
+    package=pub()['package'];ids=[r['id'] for r in lock_candidates(package,AT)]
+    original=store.lock_picks(package,ids)[0]
+    key=history.digest(original)
+    assert store.remove_locks([key],'Owner correction')==[]
+    assert store.remove_locks([key],'Retry')==[]
+    restored=history.History('site-1234','folder',store.client)
+    assert restored.all('locks')==[]
+    assert restored._all('locks')==[original]
+    assert restored.all('lock_removals')[0]['lock']==original
+    assert not history.report([],[],locks=restored.all('locks'))
+
+
+def test_relock_uses_new_quote_and_old_removal_does_not_remove_it(store,monkeypatch):
+    package=pub()['package'];ids=[r['id'] for r in lock_candidates(package,AT)]
+    original=store.lock_picks(package,ids)[0]
+    store.remove_locks([history.digest(original)],'Wrong selection')
+    newer=deepcopy(package);newer['games']['overall'][0].update(pick='Boston -1.5',odds=120)
+    monkeypatch.setattr(history,'now',lambda:'2026-09-09T19:57:00+00:00')
+    replacement=store.lock_picks(newer,ids)[0]
+    assert replacement['legs'][0]['pick']=='Boston -1.5'
+    store.remove_locks([history.digest(original)],'Repeated request')
+    assert store.all('locks')==[replacement]
+    assert len(store._all('locks'))==2
+    assert store.lock_picks(package,ids)==[replacement]
+
+
+def test_correction_preserves_other_lock_exactly(store):
+    package=pub()['package'];first=store.lock_picks(package,[r['id'] for r in lock_candidates(package,AT)])[0]
+    other=deepcopy(package)
+    other['games']['overall'][0]['game']='Pittsburgh at Chicago Cubs'
+    second=store.lock_picks(other,[r['id'] for r in lock_candidates(other,AT)])[0]
+    assert store.remove_locks([history.digest(first)],'Keep PIT/CHC')==[second]
+    with pytest.raises(ValueError):store.remove_locks(['unknown'],'Bad request')

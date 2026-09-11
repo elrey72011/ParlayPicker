@@ -68,12 +68,32 @@ class History:
             raise ValueError('Deployment history conflict')
         return saved
 
-    def all(self, kind):
+    def _all(self, kind):
         values=[]
         for page in self.client.get_paginator('list_objects_v2').paginate(Prefix=self.prefix+kind+'/'):
             for item in page.get('Contents',[]):
                 values.append(self.read(item['Key'][len(self.prefix):]))
         return values
+
+    def all(self, kind):
+        values = self._all(kind)
+        if kind == 'locks':
+            removed = {r['lock_hash'] for r in self._all('lock_removals')}
+            values = [r for r in values if digest(r) not in removed]
+        return values
+
+    def remove_locks(self, selected_hashes, reason):
+        """Append owner corrections; never delete original locks or remove later relocks."""
+        if not reason.strip() or not selected_hashes:
+            raise ValueError('Select locks and provide a correction reason.')
+        originals = {digest(r): r for r in self._all('locks')}
+        if not set(selected_hashes) <= originals.keys():
+            raise ValueError('Lock history changed. Restore history before correcting it.')
+        for key in sorted(set(selected_hashes)):
+            self.put('lock_removals/'+key+'.json',
+                     {'lock_hash':key, 'lock_id':originals[key]['id'],
+                      'removed_at':now(), 'reason':reason.strip(), 'lock':originals[key]}, first=True)
+        return self.all('locks')
 
     def lock_picks(self, package, selected_ids):
         from app_core.locked_picks import lock_candidates
@@ -85,9 +105,16 @@ class History:
             raise ValueError('Selections changed, started or became stale. Rebuild the preview before locking.')
         self.archive(package)
         saved = []
+        active = {r['id']:r for r in self.all('locks')}
+        removals = self._all('lock_removals')
         for identity in sorted(requested):
             # First write wins, including concurrent clicks and later previews.
-            saved.append(self.put('locks/' + identity + '.json', choices[identity], first=True))
+            if identity in active:
+                saved.append(active[identity])
+                continue
+            generation = sorted(r['lock_hash'] for r in removals if r['lock_id']==identity)
+            suffix = '-'+digest(generation) if generation else ''
+            saved.append(self.put('locks/' + identity + suffix + '.json', choices[identity], first=True))
         return saved
 
     def publications(self):
