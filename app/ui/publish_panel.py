@@ -3,6 +3,8 @@ import hashlib
 import hmac
 import json
 import os
+from datetime import datetime, time
+from zoneinfo import ZoneInfo
 from pathlib import Path
 import pandas as pd
 import streamlit as st
@@ -27,6 +29,23 @@ def source_fingerprint(games, candidates, props, dfs, options):
     for frame in (games, candidates, props, dfs):
         digest.update((frame.to_json(orient='split', date_format='iso') if isinstance(frame,pd.DataFrame) else '').encode())
     return digest.hexdigest()
+
+
+def dfs_lock_timestamp(day, clock):
+    return datetime.combine(day, clock, tzinfo=ZoneInfo('America/New_York')).isoformat()
+
+
+def render_dfs_lock_picker():
+    date_column, time_column = st.columns(2)
+    with date_column:
+        day = st.date_input('DFS lock date', value=datetime.now(ZoneInfo('America/New_York')).date(),
+                            key='dfs_lock_date', format='MM/DD/YYYY')
+    with time_column:
+        clock = st.time_input('DFS lock time', value=time(13, 0), key='dfs_lock_clock', step=60)
+    start = dfs_lock_timestamp(day, clock)
+    display = datetime.fromisoformat(start)
+    st.caption('Locks '+display.strftime('%A, %B %d, %Y at %I:%M %p')+' Eastern time. Daylight saving time is handled automatically.')
+    return start
 
 
 def render_publish_panel(games, candidates, props=None, dfs=None):
@@ -91,7 +110,7 @@ def render_publish_panel(games, candidates, props=None, dfs=None):
     slate = start = ''
     if chosen != 'None':
         slate = st.text_input('DFS slate name', help='Use the exact contest slate label.')
-        start = st.text_input('DFS lock time (with timezone)', placeholder='2026-09-13T13:00:00-04:00')
+        start = render_dfs_lock_picker()
     st.caption('DFS lineups must be generated in Full Pick Board during this run. Only one Classic slate is included per publication. Empty sections remain visible as empty tabs.')
     selected_props = props if include_props else pd.DataFrame()
     selected_dfs = dfs.get(chosen)
