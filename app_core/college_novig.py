@@ -51,7 +51,8 @@ def recover_college_novig(games, api_key, *, get=None, max_requests=5):
                     books.append({**book,'markets':markets})
                     count+=len(markets)
             game['bookmakers']=books
-            log.info('NCAAF Novig event recovery %s: %s markets recovered',event,count)
+            print(f'NCAAF Novig event recovery event={event} requested={sorted(missing)} recovered_markets={count}', flush=True)
         except (requests.RequestException,ValueError,TypeError,AttributeError):
             log.warning('NCAAF Novig event recovery failed for %s; original quotes retained',event)
+    print(f'NCAAF Novig recovery summary games={len(result)} requests={calls}', flush=True)
     return result
