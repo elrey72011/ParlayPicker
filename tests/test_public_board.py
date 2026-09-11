@@ -124,3 +124,45 @@ availableResults.length=0;renderLockedPicks();assert.ok(JSON.stringify(root).inc
     target=tmp_path/'locked-render.cjs'
     target.write_text(script,encoding='utf-8')
     subprocess.run([node,str(target)],check=True,capture_output=True,text=True)
+
+
+def test_public_prop_projection_is_model_count_and_validated():
+    from app_core.public_board import pick_record
+    row = dict(boards()[0].iloc[0], player='Pitcher', best_pick='Pitcher Over 5.5 Ks',
+               expected_count=6.2, odds_american=-110)
+    prop = pick_record(row, prop=True)
+    assert prop['expected_stat'] == 6.2
+    package = build_package(*boards()); package['props'] = [prop]
+    validate_package(package)
+    for invalid in (-1, float('nan'), True, '6.2'):
+        prop['expected_stat'] = invalid
+        with pytest.raises(ValueError): validate_package(package)
+    del prop['expected_stat']
+    validate_package(package)  # Existing saved packages remain valid.
+    row.update(league='NFL', FormSampleSize=0)
+    assert 'expected_stat' not in pick_record(row, prop=True)
+    row['FormSampleSize'] = 5
+    assert pick_record(row, prop=True)['expected_stat'] == 6.2
+
+
+def test_locked_rate_excludes_other_groups_pending_and_pushes():
+    import os, shutil, subprocess
+    from pathlib import Path
+    node = os.environ.get('NODE_BINARY') or shutil.which('node')
+    if not node: pytest.skip('Node unavailable')
+    html = Path('publishing/board.html').read_text(encoding='utf-8')
+    function = html.split('function renderLockedWinRate(')[1].split('function renderResults(')[0]
+    script = """
+const assert=require('node:assert/strict');
+let output=[];
+const document={getElementById:()=>({replaceChildren:(...items)=>output=items})};
+const el=(tag,text)=>text;
+const fmt=value=>(value*100).toFixed(1)+'%';
+const availableResults=['WIN','WIN','LOSS','PUSH','PENDING'].map(outcome=>({group:'Locked',category:'overall',date:'2026-09-11',outcome}));
+availableResults.push({group:'Research',category:'overall',date:'2026-09-11',outcome:'WIN'});
+""" + 'function renderLockedWinRate(' + function + """
+renderLockedWinRate(null); assert.equal(output[1],'66.7%');
+assert.match(output[2],/2 wins · 1 losses · 1 pushes · 1 pending/);
+renderLockedWinRate(['2026-09-12','2026-09-12']);assert.equal(output[1],'Awaiting settled picks');
+"""
+    subprocess.run([node, '-e', script], check=True)

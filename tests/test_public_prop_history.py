@@ -197,3 +197,11 @@ def test_review_recheck_requires_explicit_selection(monkeypatch):
     at.checkbox(key='public_props_review').check().run();at.button(key='public_props_grade').click().run()
     assert not at.exception and len(calls)==1
     assert any(r['outcome']=='WIN' and r['category']=='props' for r in at.session_state['returned_rows'])
+
+
+def test_original_projection_survives_later_analysis():
+    p=publication();p['package']['props'][0]['expected_stat']=1.8
+    later=deepcopy(p);later['confirmed_at']='2026-09-09T19:58:00+00:00'
+    later['package']['props'][0]['expected_stat']=2.4
+    assert props.report([later,p])[0]['expected_stat']==1.8
+    assert 'expected_stat' not in props.report([publication()])[0]

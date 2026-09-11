@@ -58,11 +58,18 @@ def pick_record(row, *, prop=False, as_of=None):
     if odds is None or probability is None:
         approved = False
     pick = text(row, 'best_pick' if prop else 'pick')
-    return {'sport':text(row, 'league','League'), 'game':text(row, 'matchup'),
+    record = {'sport':text(row, 'league','League'), 'game':text(row, 'matchup'),
             'pick':pick, 'player':text(row, 'player') if prop else '',
             'market':text(row, 'market_type'), 'odds':odds, 'win_estimate':probability,
             'ev':number(row, 'expected_value' if prop else 'ev'),
             'status':'APPROVED' if approved else 'PASS', 'start':start, 'as_of':at}
+    if prop:
+        projection = number(row, 'expected_count')
+        if record['sport'].upper() == 'NFL' and (number(row, 'FormSampleSize') or 0) <= 0:
+            projection = None
+        if projection is not None and projection >= 0:
+            record['expected_stat'] = projection
+    return record
 
 
 def build_package(overall, sides, totals, *, props=None, props_as_of=None, dfs=None, dfs_sport=None, dfs_slate=None, dfs_start=None):
@@ -114,6 +121,10 @@ def validate_package(package):
     def exact(obj, keys):
         if not isinstance(obj, dict) or set(obj) != set(keys.split()):
             raise ValueError('Unexpected or missing public fields')
+    def projection_metric(row):
+        value = row.get('expected_stat')
+        if 'expected_stat' in row and (isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0):
+            raise ValueError('Invalid expected statistic')
     exact(package, 'schema_version built_at stale_after_minutes games props dfs' + (' parlays' if package.get('schema_version') in {2,3,4,5} else '') + (' results' if package.get('schema_version') in {3,4,5} else ''))
     if package['schema_version'] not in {1,2,3,4,5} or package['stale_after_minutes'] != 15:
         raise ValueError('Unsupported public package version/policy')
@@ -123,7 +134,8 @@ def validate_package(package):
         if not isinstance(rows, list):
             raise ValueError('Selections must be lists')
         for row in rows:
-            exact(row, 'sport game pick player market odds win_estimate ev status start as_of')
+            exact(row, 'sport game pick player market odds win_estimate ev status start as_of' + (' expected_stat' if rows is package['props'] and 'expected_stat' in row else ''))
+            projection_metric(row)
             for key in ('sport','game','pick','player','market','status'):
                 if not isinstance(row[key], str):
                     raise ValueError('Public labels must be text')
@@ -164,8 +176,9 @@ def validate_package(package):
             raise ValueError('Invalid public results')
         seen=set()
         for row in package['results']:
-            exact(row, 'id category date group published_at outcome picks odds final_score' + (' sport market' if row.get('category')=='props' and package['schema_version'] in {4,5} else ''))
-            if not all(isinstance(v,str) for v in row.values()) or row['id'] in seen:
+            exact(row, 'id category date group published_at outcome picks odds final_score' + (' sport market' if row.get('category')=='props' and package['schema_version'] in {4,5} else '') + (' expected_stat' if row.get('category')=='props' and 'expected_stat' in row else ''))
+            projection_metric(row)
+            if not all(isinstance(v,str) for k,v in row.items() if k != 'expected_stat') or row['id'] in seen:
                 raise ValueError('Invalid or duplicate result fields')
             seen.add(row['id'])
             if row['category'] not in ({'overall','sides','totals','parlays','props'} if package['schema_version'] in {4,5} else {'overall','sides','totals','parlays'}) or row['group'] not in ({'Approved','Research','Imported research','Locked'} if package['schema_version']==5 else {'Approved','Research','Imported research'}) or row['outcome'] not in ({'WIN','LOSS','PUSH','PENDING','NEEDS_REVIEW'} if package['schema_version']==5 and row['category']=='props' else {'WIN','LOSS','PUSH','PENDING'}):

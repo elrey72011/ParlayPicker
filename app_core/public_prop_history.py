@@ -81,6 +81,7 @@ def report(publications,revisions=(),imports=()):
         valid=isinstance(value,(int,float)) and not isinstance(value,bool) and math.isfinite(value) and value>=0
         rows.append({**{k:v for k,v in entry.items() if k!='leg'},'outcome':grade_side(side,line,value) if valid else 'NEEDS_REVIEW' if reasons.get(entry['id']) in REVIEW_REASONS else 'PENDING',
             'picks':leg['game']+': '+leg['pick'],'odds':str(leg['odds']),
+            **({'expected_stat':leg['expected_stat']} if 'expected_stat' in leg else {}),
             'final_score':str(value)+' '+market.removeprefix('batter_').removeprefix('pitcher_') if valid else reasons.get(entry['id'],'Pending player statistics')})
     return rows
 
