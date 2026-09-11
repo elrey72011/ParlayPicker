@@ -121,6 +121,12 @@ def event_key(leg):
 
 def eligible(leg, confirmed):
     try:
+        if 'quote_source' in leg:
+            if leg['quote_source'] != 'Novig' or not leg.get('quote_time'):
+                return False
+            age=(confirmed-datetime.fromisoformat(leg['quote_time'])).total_seconds()
+            if not 0 <= age <= 900:
+                return False
         at=datetime.fromisoformat(leg['as_of']);start=datetime.fromisoformat(leg['start'])
         return event_key(leg) is not None and at<=confirmed<start and (confirmed-at).total_seconds()<=900 and leg.get('market') in {'spread_home','spread_away','total_over','total_under','moneyline_home','moneyline_away','h2h_home','h2h_away'} and leg.get('odds') is not None and abs(leg['odds'])>=100
     except (TypeError,ValueError):

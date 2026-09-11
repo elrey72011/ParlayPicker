@@ -94,3 +94,50 @@ def test_approved_explanation_and_unfunded_qualified_fallback():
     unfunded = per_game_board(pd.DataFrame([final(Play_Stake=0, Production_Gate_Reason='qualified')])).iloc[0]
     assert unfunded.status == 'PASS'
     assert 'No final wager authorization' in unfunded.approval_reason
+
+
+def quoted_candidate(book='novig', **updates):
+    import json
+    row=candidate(**{'export_run_id':'20260911T200000.000000Z', 'total_line':8.5, **updates})
+    row['provider_quotes']=json.dumps([{'book':book,'market_type':'total_under','point':8.5,
+        'price':-105,'recorded_at':'2026-09-11T19:59:00Z'}])
+    return row
+
+
+def test_novig_only_selects_exact_quote_without_inheriting_approval():
+    board=pd.DataFrame([final(export_run_id='20260911T200000.000000Z')])
+    audit=pd.DataFrame([quoted_candidate('draftkings',best_available_rank=1),quoted_candidate(best_available_rank=2)])
+    row=per_game_board(board,audit,novig_only=True).iloc[0]
+    assert row['pick']=='Under 8.5' and row['quote_source']=='Novig'
+    assert row['odds']==-105 and not row['Bettable'] and row['Play_Stake']==0
+    assert row['win_probability']==.55
+
+
+def test_novig_only_rejects_missing_wrong_side_price_line_and_old_quotes():
+    board=pd.DataFrame([final(export_run_id='20260911T200000.000000Z')])
+    cases=[quoted_candidate('draftkings'), quoted_candidate(odds_american=-110),
+           quoted_candidate(total_line=9.5), quoted_candidate(market_type='total_over'),
+           quoted_candidate(provider_unused=True)]
+    cases[-1]['export_run_id']='20260911T210000.000000Z'
+    for candidate_row in cases:
+        row=per_game_board(board,pd.DataFrame([candidate_row]),novig_only=True).iloc[0]
+        assert row['pick']=='Novig quote unavailable'
+        assert pd.isna(row['odds']) and row['quote_source']=='Unavailable'
+    assert per_game_board(board,novig_only=True).iloc[0]['pick']=='Novig quote unavailable'
+
+
+def test_novig_quote_age_and_roundtrip_public_metadata():
+    from app_core.per_game_boards import novig_quote
+    from app_core.public_board import build_package, validate_package
+    from app_core.public_history import eligible
+    from datetime import datetime
+    assert novig_quote(quoted_candidate(export_run_id='20260911T210000.000000Z')) is None
+    assert novig_quote(quoted_candidate(export_run_id='20260911T195800.000000Z')) is None
+    board=pd.DataFrame([final(export_run_id='20260911T200000.000000Z',game_time_est='2026-09-11 7:00 PM ET')])
+    audit=pd.DataFrame([quoted_candidate()])
+    package=build_package(*[per_game_board(board,audit,f,novig_only=True) for f in ('overall','sides','totals')])
+    validate_package(package)
+    leg=package['games']['overall'][0]
+    assert leg['quote_source']=='Novig' and leg['quote_time']=='2026-09-11T19:59:00+00:00'
+    assert eligible(leg,datetime.fromisoformat('2026-09-11T20:01:00+00:00'))
+    assert not eligible(leg,datetime.fromisoformat('2026-09-11T20:14:30+00:00'))
