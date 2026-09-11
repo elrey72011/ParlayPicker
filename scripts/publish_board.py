@@ -16,7 +16,9 @@ def render(package):
     validate_package(package)
     # JSON cannot terminate the data script; all displayed strings use textContent.
     encoded = json.dumps(package, allow_nan=False).replace('&','\\u0026').replace('<','\\u003c').replace('>','\\u003e')
-    return (ROOT/'publishing/board.html').read_text(encoding='utf-8-sig').replace('__PUBLIC_DATA__', encoded)
+    from app_core.public_site_shell import STYLES, header
+    template = (ROOT/'publishing/board.html').read_text(encoding='utf-8-sig')
+    return template.replace('__SITE_STYLES__', STYLES).replace('__SITE_HEADER__', header(board=True)).replace('__PUBLIC_DATA__', encoded)
 
 
 def atomic_write(path, content):
