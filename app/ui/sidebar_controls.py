@@ -131,7 +131,7 @@ def render_sidebar(dynamic_sports: list[str] | None = None):
     bankroll = st.sidebar.number_input("Bankroll", min_value=100.0, value=1000.0, step=50.0, key="bankroll")
 
     st.sidebar.button(
-        "Run Game Analysis",
+        "Refresh picks",
         type="primary",
         on_click=_request_run_analysis,
         args=(st.session_state,),

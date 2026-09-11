@@ -1774,6 +1774,7 @@ def main() -> None:
                 game_seconds = sum(state_updates.get("diagnostics", {}).get("stage_seconds", {}).values())
                 game_status.update(label=f"Game analysis finished in {game_seconds:.0f}s", state="complete")
             st.session_state.update(state_updates)
+            st.session_state["history_refresh_requested"] = True
             st.session_state["last_successful_pipeline_signature"] = (
                 _analysis_input_signature(controls)
             )

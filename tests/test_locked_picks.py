@@ -54,7 +54,9 @@ def test_scheduler_grades_unpublished_locks(store,monkeypatch):
 
 def test_explicit_button_only_and_rerun_idempotence(store,monkeypatch):
     from streamlit.testing.v1 import AppTest
-    from app.ui import public_results, lock_picks
+    from app.ui import public_results, lock_picks, sftp_publish
+    published=[]
+    monkeypatch.setattr(sftp_publish,"publish_action",lambda package,setting:published.append(package) or "Published")
     monkeypatch.setattr(public_results,'history',lambda setting:store)
     monkeypatch.setattr(lock_picks,'now',lambda:AT)
     code="""import streamlit as st
@@ -69,6 +71,8 @@ render_lock_picks(PACKAGE,lambda key:'site-1234')
     assert not app.exception and len(store.all('locks'))==1
     app.run()
     assert not app.exception and len(store.all('locks'))==1
+    assert len(published)==1
+    assert published[0]['results'][0]['group']=='Locked'
 
 def test_public_schema_scope(store):
     from app_core.public_board import validate_package
