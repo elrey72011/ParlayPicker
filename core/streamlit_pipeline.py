@@ -7298,6 +7298,8 @@ def fetch_live_odds_dataframe(sports: list[str] | None = None, date: str | None 
             games = []
 
         if sk == "americanfootball_ncaaf":
+            from app_core.college_novig import recover_college_novig
+            games = recover_college_novig(games, api_key)
             # ESPN's default college-football scoreboard and some paid feeds can
             # omit an FCS-only opening-day slate. Query ESPN group 81 explicitly,
             # append only missing games, and keep the recovered DraftKings prices
