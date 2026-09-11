@@ -1215,6 +1215,7 @@ def _apply_mlb_runline_cover(
 
 _TRUSTED_LIVE_LINE_SOURCES = frozenset({
     "novig_team_bound_quote",
+    "novig_exact_half_run_quote",
     "novig_moneyline_reoriented",
     "novig_moneyline_verified",
     "novig_theover_moneyline_reoriented",
@@ -9005,6 +9006,10 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
                 if not current_odds_source.startswith("rejected_"):
                     market_dict["odds_source"] = "espn_draftkings_fallback"
 
+            # Restore valid half-run Novig markets BEFORE feature/probability work.
+            # Standard 1.5 consensus is a different bet, not a quote repair.
+            from app_core.novig_candidates import preserve_half_run_quote
+            market_dict = preserve_half_run_quote(market_dict)
             out_rows.append(market_dict)
 
     # Calculate drift metrics

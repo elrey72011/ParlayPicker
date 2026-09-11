@@ -46,6 +46,28 @@ def novig_quote(row):
     return bound['odds_recorded_at']
 
 
+def novig_unavailable_reason(final, candidates, family):
+    import json
+    matches=[]
+    for _,row in candidates.iterrows():
+        if text(row,'matchup_id')!=text(final,'matchup_id') or text(row,'export_run_id')!=text(final,'export_run_id'):
+            continue
+        if family!='overall' and family_of(row)!=family:
+            continue
+        matches.append(row)
+    if not matches:
+        return 'No ranked candidate evidence; refresh analysis'
+    offered=False
+    for row in matches:
+        try:
+            quotes=json.loads(row.get('provider_quotes') or '[]')
+            offered |= any(q.get('book')=='novig' and q.get('market_type')==row.get('market_type') for q in quotes)
+        except (TypeError,ValueError):
+            pass
+    return ('Novig quote could not be verified: line, price or timestamp mismatch' if offered
+            else 'Novig market missing from this API snapshot')
+
+
 def per_game_board(board, candidates=None, family='overall', *, novig_only=False):
     if family not in {'overall','sides','totals'}: raise ValueError('Unknown family')
     if board is None or board.empty: return pd.DataFrame()
@@ -126,6 +148,6 @@ def per_game_board(board, candidates=None, family='overall', *, novig_only=False
                      'status':'APPROVED' if approved else 'PASS', 'win_probability':probability,'probability_basis':basis,
                      'edge':edge,'ev':ev,'selection_score':number(selected,'best_available_score') if selected is not None else None,
                      'reason':reason,'approval_reason':approval_reason,
-                     **({'quote_source':'Novig' if source is not None else 'Unavailable', 'quote_time':novig_quote(source) if source is not None else ''} if novig_only else {}),
+                     **({'quote_source':'Novig' if source is not None else 'Unavailable', 'quote_time':novig_quote(source) if source is not None else '', 'quote_reason':'' if source is not None else novig_unavailable_reason(final,candidates,family)} if novig_only else {}),
                      'export_run_id':text(final,'export_run_id')})
     return pd.DataFrame(rows)

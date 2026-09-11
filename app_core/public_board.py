@@ -66,6 +66,8 @@ def pick_record(row, *, prop=False, as_of=None):
     if not prop and 'quote_source' in row:
         record['quote_source'] = text(row, 'quote_source')
         record['quote_time'] = timestamp(text(row, 'quote_time'))
+        if 'quote_reason' in row:
+            record['quote_reason'] = text(row, 'quote_reason')
     if prop:
         projection = number(row, 'expected_count')
         if record['sport'].upper() == 'NFL' and (number(row, 'FormSampleSize') or 0) <= 0:
@@ -137,8 +139,10 @@ def validate_package(package):
         if not isinstance(rows, list):
             raise ValueError('Selections must be lists')
         for row in rows:
-            exact(row, 'sport game pick player market odds win_estimate ev status start as_of' + (' quote_source quote_time' if rows is not package['props'] and 'quote_source' in row else '') + (' expected_stat' if rows is package['props'] and 'expected_stat' in row else ''))
+            exact(row, 'sport game pick player market odds win_estimate ev status start as_of' + ((' quote_source quote_time' + (' quote_reason' if 'quote_reason' in row else '')) if rows is not package['props'] and 'quote_source' in row else '') + (' expected_stat' if rows is package['props'] and 'expected_stat' in row else ''))
             projection_metric(row)
+            if 'quote_reason' in row and not isinstance(row['quote_reason'],str):
+                raise ValueError('Invalid quote reason')
             if 'quote_source' in row:
                 if row['quote_source'] not in {'Novig', 'Unavailable'}:
                     raise ValueError('Invalid quote source')
